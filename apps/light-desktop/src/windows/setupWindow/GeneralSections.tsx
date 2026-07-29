@@ -67,9 +67,7 @@ export function ShowsRecoverySection({
 	);
 }
 
-export function UsersSessionsSection({
-	controller,
-}: {
+export function UsersSessionsSection(_props: {
 	controller: SetupWindowController;
 }) {
 	const bootstrap = useBootstrapSnapshot();

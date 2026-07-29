@@ -10,6 +10,7 @@ function group(kind = "group") {
 		revision: 3,
 		updated_at: "2026-07-20T00:00:00Z",
 		body: { name: "Front", fixtures: ["fixture-1"] },
+		validationError: null,
 	};
 }
 

@@ -9,6 +9,14 @@ use uuid::Uuid;
 pub const VISUALIZATION_PROTOCOL_VERSION: u16 = 1;
 pub const VISUALIZATION_MAX_RATE_HZ: u8 = 10;
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct VisualizationScope {
+    /// The authoritative Show that produced this frame. `None` represents the
+    /// no-active-Show runtime state and prevents a previous Show frame from
+    /// being mistaken for the replacement Show at the same revision.
+    pub show_id: Option<Uuid>,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum VisualizationLane {
@@ -81,6 +89,7 @@ pub struct VisualizationDynamicStackEntry {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct VisualizationLaneSnapshot {
+    pub scope: VisualizationScope,
     #[ts(type = "number")]
     pub revision: u64,
     pub generated_at: String,
@@ -95,6 +104,7 @@ pub struct VisualizationLaneSnapshot {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct VisualizationLaneDelta {
+    pub scope: VisualizationScope,
     #[ts(type = "number")]
     pub revision: u64,
     pub generated_at: String,
@@ -115,9 +125,11 @@ pub enum VisualizationServerMessage {
         protocol_version: u16,
         max_rate_hz: u8,
         lanes: Vec<VisualizationLane>,
+        scope: VisualizationScope,
     },
     Snapshot {
         lane: VisualizationLane,
+        scope: VisualizationScope,
         #[ts(type = "number")]
         sequence: u64,
         #[ts(type = "number")]
@@ -128,6 +140,7 @@ pub enum VisualizationServerMessage {
     },
     Delta {
         lane: VisualizationLane,
+        scope: VisualizationScope,
         #[ts(type = "number")]
         sequence: u64,
         #[ts(type = "number")]
@@ -137,11 +150,13 @@ pub enum VisualizationServerMessage {
         delta: VisualizationLaneDelta,
     },
     Heartbeat {
+        scope: VisualizationScope,
         #[ts(type = "number")]
         sequence: u64,
         published_at: String,
     },
     StructuralInvalidation {
+        scope: VisualizationScope,
         #[ts(type = "number")]
         revision: u64,
     },
@@ -171,5 +186,27 @@ mod tests {
                 max_rate_hz: 10,
             }
         );
+    }
+
+    #[test]
+    fn structural_invalidation_carries_show_identity_at_same_revision() {
+        let first = VisualizationServerMessage::StructuralInvalidation {
+            scope: VisualizationScope {
+                show_id: Some(Uuid::parse_str("11111111-1111-4111-8111-111111111111").unwrap()),
+            },
+            revision: 7,
+        };
+        let replacement = VisualizationServerMessage::StructuralInvalidation {
+            scope: VisualizationScope {
+                show_id: Some(Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap()),
+            },
+            revision: 7,
+        };
+
+        let first = serde_json::to_value(first).unwrap();
+        let replacement = serde_json::to_value(replacement).unwrap();
+
+        assert_eq!(first["revision"], replacement["revision"]);
+        assert_ne!(first["scope"]["show_id"], replacement["scope"]["show_id"]);
     }
 }

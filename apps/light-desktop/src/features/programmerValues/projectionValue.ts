@@ -1,5 +1,6 @@
 import type { AttributeValue } from "../../api/types/playback";
 import type {
+	ProgrammerDynamicValue,
 	ProgrammerFixtureValue,
 	ProgrammerGroupValue,
 	ProgrammerValuesProjection,
@@ -16,16 +17,38 @@ export function canonicalProjection(
 		);
 	const fixtureValues = projection.fixtureValues.map(canonicalFixtureValue);
 	const groupValues = projection.groupValues.map(canonicalGroupValue);
+	const dynamicValues = (projection.dynamicValues ?? []).map((entry) =>
+		Object.freeze({ ...entry }),
+	);
 	assertUnique(fixtureValues, (entry) => `${entry.fixtureId}\u0000${entry.attribute}`);
 	assertUnique(groupValues, (entry) => `${entry.groupId}\u0000${entry.attribute}`);
+	assertUnique(
+		dynamicValues,
+		(entry) => `${entry.fixtureId}\u0000${entry.attribute}`,
+	);
 	fixtureValues.sort(compareFixtureValues);
 	groupValues.sort(compareGroupValues);
+	dynamicValues.sort(compareDynamicValues);
 	return Object.freeze({
 		userId: projection.userId,
 		revision: projection.revision,
 		fixtureValues: Object.freeze(fixtureValues),
 		groupValues: Object.freeze(groupValues),
+		...(dynamicValues.length > 0
+			? { dynamicValues: Object.freeze(dynamicValues) }
+			: {}),
 	});
+}
+
+function compareDynamicValues(
+	left: ProgrammerDynamicValue,
+	right: ProgrammerDynamicValue,
+) {
+	return (
+		left.programmerOrder - right.programmerOrder ||
+		left.fixtureId.localeCompare(right.fixtureId) ||
+		left.attribute.localeCompare(right.attribute)
+	);
 }
 
 export function sameProjection(

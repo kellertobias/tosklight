@@ -22,6 +22,6 @@ pub use external::{
     ExternalDeviceIntent, ExternalDeviceObservation, ExternalIntentBatch, ExternalObservationBatch,
 };
 pub use frame::{DMX_SLOTS, DmxFrame};
-pub use health::OutputHealth;
+pub use health::{OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS, OutputHealth};
 pub use route::{DeliveryMode, OutputRoute, Protocol};
 pub use scheduler::{run_scheduler, run_scheduler_dynamic};

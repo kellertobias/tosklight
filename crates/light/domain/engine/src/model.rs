@@ -138,6 +138,25 @@ impl EngineSnapshot {
                     "page references a missing playback".into(),
                 ));
             }
+            for playback in page.virtual_playbacks.values() {
+                match &playback.target {
+                    PlaybackTarget::CueList { cue_list_id }
+                        if !self.cue_lists.iter().any(|cue| cue.id == *cue_list_id) =>
+                    {
+                        return Err(EngineError::Invalid(
+                            "virtual playback references a missing cue list".into(),
+                        ));
+                    }
+                    PlaybackTarget::Group { group_id }
+                        if !self.groups.iter().any(|group| group.id == *group_id) =>
+                    {
+                        return Err(EngineError::Invalid(
+                            "virtual playback references a missing group".into(),
+                        ));
+                    }
+                    _ => {}
+                }
+            }
         }
         for route in self.routes.iter().filter(|_| routes_changed) {
             if route.destination_universe == 0 || route.logical_universe == 0 {

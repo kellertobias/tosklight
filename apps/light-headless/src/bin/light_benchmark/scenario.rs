@@ -402,159 +402,8 @@ impl BenchmarkDynamic {
         attribute: AttributeKey,
         started_at: chrono::DateTime<Utc>,
     ) -> Self {
-        let lane = DynamicLane {
-            id: fixed_uuid(0x5a, 2),
-            attribute: attribute.clone(),
-            mode: DynamicLaneMode::Keyframes,
-            keyframes: KeyframeConfiguration {
-                points: vec![
-                    DynamicKeyframe {
-                        position: 0.0,
-                        source: ScalarSource::Value { value: 0.1 },
-                        interpolation: ScalarInterpolation::Linear,
-                    },
-                    DynamicKeyframe {
-                        position: 0.5,
-                        source: ScalarSource::Value { value: 0.9 },
-                        interpolation: ScalarInterpolation::Linear,
-                    },
-                ],
-                size: 1.0,
-            },
-            max_min: MaxMinConfiguration {
-                minimum: ScalarSource::Value { value: 0.1 },
-                maximum: ScalarSource::Value { value: 0.9 },
-                function: PeriodicFunction::Sinus,
-                size: 1.0,
-                pwm: PwmShape::default(),
-            },
-            middle_amplitude: MiddleAmplitudeConfiguration {
-                middle: ScalarSource::Current,
-                amplitude: 0.4,
-                function: PeriodicFunction::Sinus,
-                size: 1.0,
-                pwm: PwmShape::default(),
-            },
-            speed_multiplier: Rational::ONE,
-            width: 1.0,
-            phase: None,
-            random_group_id: None,
-        };
-        let definition = DynamicDefinition {
-            id: fixed_uuid(0x5a, 1),
-            pool_number: 1,
-            revision: 1,
-            name: "Benchmark keyframe Current/Preset wave".into(),
-            color: None,
-            icon: None,
-            target_binding: DynamicTargetBinding::FrozenTargets {
-                targets: targets.to_vec(),
-            },
-            lanes: vec![DynamicLane {
-                keyframes: KeyframeConfiguration {
-                    points: vec![
-                        DynamicKeyframe {
-                            position: 0.0,
-                            source: ScalarSource::Current,
-                            interpolation: ScalarInterpolation::Linear,
-                        },
-                        DynamicKeyframe {
-                            position: 0.5,
-                            source: ScalarSource::Preset {
-                                preset_id: "benchmark:1".into(),
-                                attribute,
-                                last_valid_by_target: Vec::new(),
-                            },
-                            interpolation: ScalarInterpolation::EaseInOut,
-                        },
-                    ],
-                    size: 1.0,
-                },
-                ..lane
-            }],
-            random_groups: vec![],
-            phase_spread_mode: light_dynamics::DynamicPhaseSpreadMode::Uniform,
-            phase: PhaseDistribution {
-                ordering: PhaseOrdering::Selection,
-                offset_degrees: 0.0,
-                span_degrees: 360.0,
-                block_size: 1,
-                repeats: 1,
-                wings: false,
-                anchors_degrees: vec![],
-            },
-            speed: DynamicSpeed::Fixed {
-                duration_millis: 100,
-            },
-            overall_speed_multiplier: Rational::ONE,
-            run_mode: light_dynamics::DynamicRunMode::Loop,
-            default_activation: ActivationPolicy::StartNow,
-            activation_boundary: ActivationBoundary::Beat,
-        };
-        let mut pwm = definition.clone();
-        pwm.id = fixed_uuid(0x5a, 4);
-        pwm.pool_number = 2;
-        pwm.name = "Benchmark PWM Speed Group".into();
-        pwm.lanes[0].mode = DynamicLaneMode::MaxMin;
-        pwm.lanes[0].max_min.function = PeriodicFunction::Pwm;
-        pwm.lanes[0].max_min.pwm = PwmShape {
-            attack: 0.1,
-            on: 0.35,
-            decay: 0.15,
-            off: 0.4,
-            attack_interpolation: ScalarInterpolation::EaseIn,
-            decay_interpolation: ScalarInterpolation::EaseOut,
-        };
-        pwm.speed = DynamicSpeed::SpeedGroup {
-            group: SpeedGroup::A,
-            beats_per_cycle: Rational {
-                numerator: 2,
-                denominator: 1,
-            },
-        };
-        pwm.default_activation = ActivationPolicy::JoinSyncNow;
-        pwm.phase.ordering = PhaseOrdering::GridLinear {
-            angle_degrees: 45.0,
-        };
-
-        let mut middle = definition.clone();
-        middle.id = fixed_uuid(0x5a, 5);
-        middle.pool_number = 3;
-        middle.name = "Benchmark Current wet/dry wave".into();
-        middle.lanes[0].mode = DynamicLaneMode::MiddleAmplitude;
-        middle.lanes[0].middle_amplitude.middle = ScalarSource::Current;
-        middle.lanes[0].middle_amplitude.amplitude = 0.45;
-        middle.speed = DynamicSpeed::Fixed {
-            duration_millis: 180,
-        };
-        middle.phase.ordering = PhaseOrdering::RadialOut {
-            center_x: 0.5,
-            center_z: 0.5,
-        };
-
-        let random_group_id = fixed_uuid(0x5a, 6);
-        let mut random = definition.clone();
-        random.id = fixed_uuid(0x5a, 7);
-        random.pool_number = 4;
-        random.name = "Benchmark seeded Random pulses".into();
-        random.lanes[0].mode = DynamicLaneMode::Random;
-        random.lanes[0].random_group_id = Some(random_group_id);
-        random.random_groups = vec![DynamicRandomGroup {
-            id: random_group_id,
-            seed: 0x5a17,
-            low: ScalarSource::Value { value: 0.05 },
-            high: ScalarSource::Value { value: 0.95 },
-            decision_interval_millis: 80,
-            start_probability: 0.55,
-            mean_duration_millis: 160,
-            duration_spread_millis: 40,
-            attack_ratio: 0.15,
-            decay_ratio: 0.25,
-        }];
-        random.speed = DynamicSpeed::Fixed {
-            duration_millis: 640,
-        };
-        random.phase.ordering = PhaseOrdering::RandomEachLoop { seed: 0x5a18 };
+        let definition = benchmark_dynamic_definition(targets, attribute);
+        let [pwm, middle, random] = benchmark_dynamic_variants(&definition);
         let count = targets.len().max(1) as f32;
         let phase_degrees = (0..targets.len())
             .map(|index| index as f32 / count * 360.0)
@@ -648,6 +497,152 @@ impl BenchmarkDynamic {
         }
         ContributionBatch::new(samples)
     }
+}
+
+fn benchmark_dynamic_definition(
+    targets: &[FixtureId],
+    attribute: AttributeKey,
+) -> DynamicDefinition {
+    let lane = DynamicLane {
+        id: fixed_uuid(0x5a, 2),
+        attribute: attribute.clone(),
+        mode: DynamicLaneMode::Keyframes,
+        keyframes: KeyframeConfiguration {
+            points: vec![
+                DynamicKeyframe {
+                    position: 0.0,
+                    source: ScalarSource::Current,
+                    interpolation: ScalarInterpolation::Linear,
+                },
+                DynamicKeyframe {
+                    position: 0.5,
+                    source: ScalarSource::Preset {
+                        preset_id: "benchmark:1".into(),
+                        attribute,
+                        last_valid_by_target: Vec::new(),
+                    },
+                    interpolation: ScalarInterpolation::EaseInOut,
+                },
+            ],
+            size: 1.0,
+        },
+        max_min: MaxMinConfiguration {
+            minimum: ScalarSource::Value { value: 0.1 },
+            maximum: ScalarSource::Value { value: 0.9 },
+            function: PeriodicFunction::Sinus,
+            size: 1.0,
+            pwm: PwmShape::default(),
+        },
+        middle_amplitude: MiddleAmplitudeConfiguration {
+            middle: ScalarSource::Current,
+            amplitude: 0.4,
+            function: PeriodicFunction::Sinus,
+            size: 1.0,
+            pwm: PwmShape::default(),
+        },
+        speed_multiplier: Rational::ONE,
+        width: 1.0,
+        phase: None,
+        random_group_id: None,
+    };
+    DynamicDefinition {
+        id: fixed_uuid(0x5a, 1),
+        pool_number: 1,
+        revision: 1,
+        name: "Benchmark keyframe Current/Preset wave".into(),
+        color: None,
+        icon: None,
+        target_binding: DynamicTargetBinding::FrozenTargets {
+            targets: targets.to_vec(),
+        },
+        lanes: vec![lane],
+        random_groups: vec![],
+        phase_spread_mode: light_dynamics::DynamicPhaseSpreadMode::Uniform,
+        phase: PhaseDistribution {
+            ordering: PhaseOrdering::Selection,
+            offset_degrees: 0.0,
+            span_degrees: 360.0,
+            block_size: 1,
+            repeats: 1,
+            wings: false,
+            anchors_degrees: vec![],
+        },
+        speed: DynamicSpeed::Fixed {
+            duration_millis: 100,
+        },
+        overall_speed_multiplier: Rational::ONE,
+        run_mode: light_dynamics::DynamicRunMode::Loop,
+        default_activation: ActivationPolicy::StartNow,
+        activation_boundary: ActivationBoundary::Beat,
+    }
+}
+
+fn benchmark_dynamic_variants(definition: &DynamicDefinition) -> [DynamicDefinition; 3] {
+    let mut pwm = definition.clone();
+    pwm.id = fixed_uuid(0x5a, 4);
+    pwm.pool_number = 2;
+    pwm.name = "Benchmark PWM Speed Group".into();
+    pwm.lanes[0].mode = DynamicLaneMode::MaxMin;
+    pwm.lanes[0].max_min.function = PeriodicFunction::Pwm;
+    pwm.lanes[0].max_min.pwm = PwmShape {
+        attack: 0.1,
+        on: 0.35,
+        decay: 0.15,
+        off: 0.4,
+        attack_interpolation: ScalarInterpolation::EaseIn,
+        decay_interpolation: ScalarInterpolation::EaseOut,
+    };
+    pwm.speed = DynamicSpeed::SpeedGroup {
+        group: SpeedGroup::A,
+        beats_per_cycle: Rational {
+            numerator: 2,
+            denominator: 1,
+        },
+    };
+    pwm.default_activation = ActivationPolicy::JoinSyncNow;
+    pwm.phase.ordering = PhaseOrdering::GridLinear {
+        angle_degrees: 45.0,
+    };
+
+    let mut middle = definition.clone();
+    middle.id = fixed_uuid(0x5a, 5);
+    middle.pool_number = 3;
+    middle.name = "Benchmark Current wet/dry wave".into();
+    middle.lanes[0].mode = DynamicLaneMode::MiddleAmplitude;
+    middle.lanes[0].middle_amplitude.middle = ScalarSource::Current;
+    middle.lanes[0].middle_amplitude.amplitude = 0.45;
+    middle.speed = DynamicSpeed::Fixed {
+        duration_millis: 180,
+    };
+    middle.phase.ordering = PhaseOrdering::RadialOut {
+        center_x: 0.5,
+        center_z: 0.5,
+    };
+
+    let random_group_id = fixed_uuid(0x5a, 6);
+    let mut random = definition.clone();
+    random.id = fixed_uuid(0x5a, 7);
+    random.pool_number = 4;
+    random.name = "Benchmark seeded Random pulses".into();
+    random.lanes[0].mode = DynamicLaneMode::Random;
+    random.lanes[0].random_group_id = Some(random_group_id);
+    random.random_groups = vec![DynamicRandomGroup {
+        id: random_group_id,
+        seed: 0x5a17,
+        low: ScalarSource::Value { value: 0.05 },
+        high: ScalarSource::Value { value: 0.95 },
+        decision_interval_millis: 80,
+        start_probability: 0.55,
+        mean_duration_millis: 160,
+        duration_spread_millis: 40,
+        attack_ratio: 0.15,
+        decay_ratio: 0.25,
+    }];
+    random.speed = DynamicSpeed::Fixed {
+        duration_millis: 640,
+    };
+    random.phase.ordering = PhaseOrdering::RandomEachLoop { seed: 0x5a18 };
+    [pwm, middle, random]
 }
 
 struct BenchmarkSources;

@@ -253,9 +253,15 @@ fn changed_events(
     before: HashMap<PlaybackRuntimeIdentity, light_application::PlaybackRuntimeProjection>,
     after: HashMap<PlaybackRuntimeIdentity, light_application::PlaybackRuntimeProjection>,
 ) -> Vec<EventDraft> {
-    after
-        .keys()
-        .into_iter()
+    let mut identities = after.keys().cloned().collect::<Vec<_>>();
+    identities.sort_by_key(|identity| {
+        before
+            .get(identity)
+            .and_then(|projection| projection.playback_number)
+            .unwrap_or(u16::MAX)
+    });
+    identities
+        .iter()
         .filter_map(|identity| {
             committed_playback_event(
                 context,

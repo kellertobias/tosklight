@@ -94,6 +94,10 @@ pub struct RuntimeOutputHealth {
     pub last_tick_micros: u64,
     #[ts(type = "number")]
     pub maximum_tick_micros: u64,
+    #[ts(type = "number[]")]
+    pub tick_duration_bucket_bounds_micros: Vec<u64>,
+    #[ts(type = "number[]")]
+    pub tick_duration_bucket_counts: Vec<u64>,
     pub scheduler_utilization: f32,
 }
 
@@ -213,6 +217,22 @@ pub struct RuntimeVisualizationDiagnostics {
     pub snapshot_source_frame: u64,
     #[ts(type = "number")]
     pub snapshot_source_age_millis: u64,
+    #[ts(type = "number")]
+    pub stream_serializations: u64,
+    #[ts(type = "number")]
+    pub stream_serialization_micros: u64,
+    #[ts(type = "number")]
+    pub stream_payload_bytes: u64,
+    #[ts(type = "number")]
+    pub stream_sends: u64,
+    #[ts(type = "number")]
+    pub stream_send_micros: u64,
+    #[ts(type = "number")]
+    pub stream_send_failures: u64,
+    #[ts(type = "number")]
+    pub stream_queue_depth: u64,
+    #[ts(type = "number")]
+    pub stream_queue_drops: u64,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]

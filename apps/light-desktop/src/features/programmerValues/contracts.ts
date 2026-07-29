@@ -1,4 +1,8 @@
-import type { ProgrammingDynamicSemanticValue } from "../../api/generated/light-wire";
+import type {
+	DynamicDefinitionProjection,
+	DynamicReferenceProjection,
+	ProgrammingDynamicSemanticValue,
+} from "../../api/types";
 import type { AttributeValue } from "../../api/types/playback";
 
 export interface ProgrammerValueTiming {
@@ -24,10 +28,23 @@ export interface ProgrammerGroupValue extends ProgrammerValueTiming {
 export interface ProgrammerDynamicValue {
 	fixtureId: string;
 	attribute: string;
-	value: ProgrammingDynamicSemanticValue;
+	value: HydratedProgrammingDynamicSemanticValue;
 	programmerOrder: number;
 	changedAtMillis: number;
 }
+
+type HydratedDynamicOn = Extract<
+	ProgrammingDynamicSemanticValue,
+	{ type: "dynamic_on" }
+> & {
+	dynamic: DynamicReferenceProjection & {
+		embedded_fallback: DynamicDefinitionProjection;
+	};
+};
+
+export type HydratedProgrammingDynamicSemanticValue =
+	| Exclude<ProgrammingDynamicSemanticValue, { type: "dynamic_on" }>
+	| HydratedDynamicOn;
 
 /** Normal, recordable Programmer values owned by one user. */
 export interface ProgrammerValuesProjection {
@@ -43,9 +60,37 @@ export interface ProgrammerValuesSnapshot {
 	projection: ProgrammerValuesProjection;
 }
 
+export interface ProgrammerFixtureValueAddress {
+	fixtureId: string;
+	attribute: string;
+}
+
+export interface ProgrammerGroupValueAddress {
+	groupId: string;
+	attribute: string;
+}
+
+export interface ProgrammerValuesChange {
+	userId: string;
+	revision: number;
+	fixtureValues: readonly ProgrammerFixtureValue[];
+	removedFixtureValues: readonly ProgrammerFixtureValueAddress[];
+	groupValues: readonly ProgrammerGroupValue[];
+	removedGroupValues: readonly ProgrammerGroupValueAddress[];
+	dynamicValues: readonly ProgrammerDynamicValue[];
+	removedDynamicValues: readonly ProgrammerFixtureValueAddress[];
+}
+
 export type ProgrammerValuesEventMessage =
 	| { type: "ready"; cursor: number }
 	| {
+			type: "event";
+			sequence: number;
+			correlationId: string | null;
+			change: ProgrammerValuesChange;
+	  }
+	| {
+			/** @deprecated Compatibility for already-buffered in-process projections. */
 			type: "event";
 			sequence: number;
 			correlationId: string | null;

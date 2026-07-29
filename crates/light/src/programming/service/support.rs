@@ -110,17 +110,36 @@ pub(super) struct Snapshot {
     pub(super) command_line: CommandLineState,
     pub(super) selection_revision: u64,
     pub(super) capture_mode: ProgrammerCaptureMode,
-    pub(super) values_generation: u64,
+    pub(super) values_content: super::super::values_projection::ProgrammingValuesContent,
     pub(super) preload_values_generation: u64,
     pub(super) preload_playback_queue_generation: u64,
 }
 
 impl Snapshot {
+    pub(super) fn read_without_values(
+        programmers: &ProgrammerRegistry,
+        desk_id: Uuid,
+        session: SessionId,
+        user_id: UserId,
+    ) -> Result<Self, ActionError> {
+        Self::read_with_values(programmers, desk_id, session, user_id, false)
+    }
+
     pub(super) fn read(
+        programmers: &ProgrammerRegistry,
+        desk_id: Uuid,
+        session: SessionId,
+        user_id: UserId,
+    ) -> Result<Self, ActionError> {
+        Self::read_with_values(programmers, desk_id, session, user_id, true)
+    }
+
+    fn read_with_values(
         programmers: &ProgrammerRegistry,
         _desk_id: Uuid,
         session: SessionId,
         user_id: UserId,
+        include_values: bool,
     ) -> Result<Self, ActionError> {
         // An authenticated session without a live Programmer has no Programmer state to reconcile.
         // This happens when a playback GO/release runs over the compatibility routes before any
@@ -142,9 +161,15 @@ impl Snapshot {
             command_line: version.command_line,
             selection_revision: version.selection_revision,
             capture_mode: version.capture_mode,
-            values_generation: programmers
-                .normal_values_generation(session)
-                .unwrap_or_default(),
+            values_content: if include_values {
+                super::super::values_projection::ProgrammingValuesContent::read_for_diff(
+                    programmers,
+                    session,
+                    user_id,
+                )?
+            } else {
+                Default::default()
+            },
             preload_values_generation: programmers
                 .preload_values_generation(session)
                 .unwrap_or_default(),

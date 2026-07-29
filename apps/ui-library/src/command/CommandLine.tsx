@@ -19,7 +19,7 @@ export interface CommandHistoryItem {
 	command: string;
 	status: "accepted" | "rejected";
 	feedback: string;
-	source: "software" | "osc";
+	source: "software" | "osc" | "window";
 	at: string;
 }
 
@@ -216,11 +216,12 @@ function CommandErrorBanner({
 	onAcknowledge: () => void;
 }) {
 	if (!message) return null;
-	return (
+	return createPortal(
 		<div className="command-error-message" role="alert">
 			<span>{message}</span>
 			<Button onClick={onAcknowledge}>Acknowledge</Button>
-		</div>
+		</div>,
+		document.body,
 	);
 }
 
@@ -380,11 +381,18 @@ function CommandHistoryPanel({
 										minute: "2-digit",
 										second: "2-digit",
 									})}{" "}
-									· {entry.source === "osc" ? "attached hardware" : "desk"}
+									·{" "}
+									{entry.source === "osc"
+										? "attached hardware"
+										: entry.source === "window"
+											? "content window"
+											: "desk"}
 								</small>
 							</div>
 							<p>{entry.feedback}</p>
-							<Button onClick={() => onReuse(entry.command)}>Reuse</Button>
+							{entry.source !== "window" && (
+								<Button onClick={() => onReuse(entry.command)}>Reuse</Button>
+							)}
 						</article>
 					))
 				)}

@@ -265,7 +265,12 @@ pub struct DynamicReferenceProjection {
     #[ts(optional = nullable)]
     pub dynamic_id: Option<Uuid>,
     pub last_known_pool_number: u16,
-    pub embedded_fallback: DynamicDefinitionProjection,
+    pub embedded_fallback_id: Uuid,
+    #[ts(type = "number")]
+    pub embedded_fallback_revision: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub embedded_fallback: Option<DynamicDefinitionProjection>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Default, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -309,6 +314,9 @@ pub struct DynamicStartActionRequest {
     pub overrides: DynamicInstanceOverridesProjection,
     #[serde(default)]
     pub timing: DynamicValueTimingProjection,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub undo_group: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

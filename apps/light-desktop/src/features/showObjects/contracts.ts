@@ -1,4 +1,4 @@
-import type { DynamicDefinitionProjection } from "../../api/generated/light-wire";
+import type { DynamicDefinitionProjection } from "../../api/types";
 import type {
 	CueList,
 	PatchLayer,

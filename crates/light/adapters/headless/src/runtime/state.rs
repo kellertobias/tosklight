@@ -138,6 +138,8 @@ pub(super) struct OutputControl {
     pub(super) grand_master_flash: bool,
     pub(super) hold: bool,
     pub(super) last_frames: HashMap<light_core::Universe, light_output::DmxFrame>,
+    pub(super) last_routes: Arc<[light_output::OutputRoute]>,
+    pub(super) last_patched_slots: HashMap<light_core::Universe, u16>,
     pub(super) raw_overrides: HashMap<(light_core::Universe, light_core::DmxAddress), u8>,
 }
 

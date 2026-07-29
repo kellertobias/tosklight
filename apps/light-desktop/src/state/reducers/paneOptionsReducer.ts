@@ -1,9 +1,13 @@
 import type { AppState } from "../../types";
+import {
+	MAX_PLAYBACK_PAGE,
+	VIRTUAL_PLAYBACKS_PER_PAGE,
+} from "../../api/virtualPlaybackAddress";
 import type { Action } from "../appActions";
 import { clamp } from "../reducerHelpers";
 
-export const MAX_VIRTUAL_PLAYBACK_CELLS = 8_998;
-export const MAX_PLAYBACK_PAGE = 127;
+export const MAX_VIRTUAL_PLAYBACK_CELLS = VIRTUAL_PLAYBACKS_PER_PAGE;
+export { MAX_PLAYBACK_PAGE };
 
 export function reducePaneOptions(
 	state: AppState,

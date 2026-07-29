@@ -389,6 +389,7 @@ fn playback_and_page_batch_prepares_backs_up_commits_and_installs_once() {
         "number": 9,
         "name": "Main",
         "slots": {"1": 1},
+        "virtual_playbacks": {},
         "future_page": "kept"
     });
 

@@ -125,12 +125,7 @@ impl ProgrammingService {
             &before,
             &after,
         );
-        let values = self.values_change(
-            user_id,
-            session,
-            before.values_generation,
-            after.values_generation,
-        )?;
+        let values = self.values_change(user_id, &before.values_content, &after.values_content)?;
         let interaction_event_sequence = self.publish_interaction(&action.context, interaction);
         let outcome = self.values_outcome(&action.context, values, revision_before);
         self.publish_lifecycle_for_context(&action.context, lifecycle_before);

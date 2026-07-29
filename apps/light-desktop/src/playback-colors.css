@@ -18,22 +18,6 @@
 	color: var(--text);
 	text-shadow: 0 1px 2px #000;
 }
-.playback-colored.running:not(.virtual-playback-box) {
-	border-color: var(--playback-color) !important;
-	background-color: color-mix(
-		in srgb,
-		var(--playback-color) 30%,
-		#101419
-	) !important;
-	background-image: linear-gradient(
-		180deg,
-		color-mix(in srgb, var(--playback-color) 42%, transparent),
-		color-mix(in srgb, var(--playback-color) 16%, transparent)
-	) !important;
-	box-shadow:
-		inset 0 0 0 1px color-mix(in srgb, var(--playback-color) 72%, #fff),
-		0 0 14px color-mix(in srgb, var(--playback-color) 28%, transparent);
-}
 .playback-colored.selected,
 .playback-fader-bank article.playback-colored.selected {
 	outline: 2px solid

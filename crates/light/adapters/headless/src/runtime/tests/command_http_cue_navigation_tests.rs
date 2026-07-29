@@ -93,7 +93,12 @@ async fn install_cue_navigation_show(
             "playback_page",
             "1",
             0,
-            serde_json::json!({"number":1,"name":"Main","slots":{"1":1,"2":2}}),
+            serde_json::json!({
+                "number":1,
+                "name":"Main",
+                "slots":{"1":1,"2":2},
+                "virtual_playbacks":{}
+            }),
         )
         .await;
     assert_eq!(response.status(), StatusCode::OK);

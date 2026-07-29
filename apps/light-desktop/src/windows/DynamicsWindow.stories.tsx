@@ -7,7 +7,7 @@ import type {
 	DynamicRuntimeSnapshotProjection,
 	DynamicUpdateIntent,
 	SpeedGroupId,
-} from "../api/generated/light-wire";
+} from "../api/types";
 import { DynamicEditorTaskTabs } from "../components/control/parameterControls/ParameterFamilyTabs";
 import { DynamicDefinitionEncoderSurface } from "../components/control/parameterControls/ProgrammerDynamicsSurface";
 import { AppShellView } from "../components/shell/AppShell";
@@ -312,6 +312,51 @@ function FullApplicationDynamicsMock({
 		setMessage(`Applied ${intent.type.replaceAll("_", " ")} locally`);
 	};
 	return (
+		<FullApplicationDynamicsView
+			hardware={hardware}
+			marketing={marketing}
+			dynamic={dynamic}
+			message={message}
+			view={view}
+			speedGroupBpms={speedGroupBpms}
+			storyRuntime={storyRuntime}
+			onView={setView}
+			onMutate={mutate}
+			onSpeedGroupTap={tapSpeedGroup}
+			onMessage={setMessage}
+			onDynamic={setDynamic}
+		/>
+	);
+}
+
+function FullApplicationDynamicsView({
+	hardware,
+	marketing,
+	dynamic,
+	message,
+	view,
+	speedGroupBpms,
+	storyRuntime,
+	onView,
+	onMutate,
+	onSpeedGroupTap,
+	onMessage,
+	onDynamic,
+}: {
+	hardware: boolean;
+	marketing: boolean;
+	dynamic: DynamicObject;
+	message: string;
+	view: DynamicEditorView;
+	speedGroupBpms: Record<SpeedGroupId, number>;
+	storyRuntime: DynamicRuntimeSnapshotProjection;
+	onView(view: DynamicEditorView): void;
+	onMutate(intent: DynamicUpdateIntent, mutationGroup?: string): Promise<void>;
+	onSpeedGroupTap(group: SpeedGroupId): void;
+	onMessage(message: string): void;
+	onDynamic(update: (current: DynamicObject) => DynamicObject): void;
+}) {
+	return (
 		<ApplicationStateHarness
 			actions={[
 				{ type: "SET_DOCK_MODE", mode: "builtins" },
@@ -374,17 +419,17 @@ function FullApplicationDynamicsMock({
 									selection={runtime.instances[0].targets}
 									selectedGroupId="group-front-wash"
 									view={view}
-									onViewChange={setView}
-									onBack={() => setMessage("Back to Pool requested")}
+									onViewChange={onView}
+									onBack={() => onMessage("Back to Pool requested")}
 									onMutate={async (_object, intent, mutationGroup) =>
-										mutate(intent, mutationGroup)
+										onMutate(intent, mutationGroup)
 									}
-									onSpeedGroupTap={tapSpeedGroup}
+									onSpeedGroupTap={onSpeedGroupTap}
 									onDelete={() =>
-										setMessage("Delete requested · ignored by offline mock")
+										onMessage("Delete requested · ignored by offline mock")
 									}
 									onMove={(poolNumber) => {
-										setDynamic((current) => ({
+										onDynamic((current) => ({
 											...current,
 											revision: current.revision + 1,
 											body: {
@@ -393,10 +438,10 @@ function FullApplicationDynamicsMock({
 												revision: current.revision + 1,
 											},
 										}));
-										setMessage(`Moved locally to Dynamic ${poolNumber}`);
+										onMessage(`Moved locally to Dynamic ${poolNumber}`);
 									}}
 									onCopy={(poolNumber) =>
-										setMessage(`Copy requested for Dynamic ${poolNumber}`)
+										onMessage(`Copy requested for Dynamic ${poolNumber}`)
 									}
 								/>
 							</div>
@@ -411,9 +456,9 @@ function FullApplicationDynamicsMock({
 						programmer={
 							<DynamicsProgrammerSurface
 								dynamic={dynamic}
-								onMutate={mutate}
+								onMutate={onMutate}
 								view={view}
-								onView={setView}
+								onView={onView}
 							/>
 						}
 					/>

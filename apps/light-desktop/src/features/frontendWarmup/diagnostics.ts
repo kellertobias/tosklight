@@ -1,3 +1,4 @@
+import type { StageRenderQuality } from "../../types";
 import type { FrontendWarmupDiagnostics } from "./coordinator";
 
 export interface FrontendSnapshotRequestDiagnostic {
@@ -60,15 +61,32 @@ export interface FrontendStageSceneBuildDiagnostic {
 }
 
 export interface FrontendStageRenderDiagnostic {
+	lane: "normal" | "preload";
+	renderQuality: StageRenderQuality;
+	paneId: string | null;
 	submittedAt: number;
 	durationMs: number;
 	calls: number;
+	transparentDrawCalls: number;
 	triangles: number;
 	lines: number;
 	points: number;
 	geometries: number;
 	textures: number;
+	visibleObjects: {
+		beamVolumes: number;
+		improvedBeamVolumes: number;
+		improvedBeamLights: number;
+		centerLines: number;
+		groundFootprints: number;
+		directionGuides: number;
+		selectionOutlines: number;
+	};
 }
+
+type SequencedFrontendStageRenderDiagnostic = FrontendStageRenderDiagnostic & {
+	benchmarkSequence: number;
+};
 
 export interface FrontendStageModelLoadDiagnostic {
 	startedAt: number;
@@ -79,6 +97,8 @@ export interface FrontendStageModelLoadDiagnostic {
 
 export interface FrontendStageFrameDiagnostic {
 	lane: "normal" | "preload";
+	showId: string;
+	scopeActivation: number;
 	sourceFrame: number | null;
 	sourceGeneratedAt: string;
 	publishedAt: string | null;
@@ -90,11 +110,29 @@ export interface FrontendStageFrameDiagnostic {
 	sourceToReceiveMs: number | null;
 	projectionToReceiveMs: number | null;
 	sourceToSettledCanvasMs: number | null;
+	visibleChanged: boolean | null;
+}
+
+export interface FrontendStageClaimDiagnostic {
+	recordedAt: number;
+	normal: readonly string[];
+	preload: readonly string[];
+}
+
+export interface FrontendStageRendererCapabilities {
+	isWebGL2: boolean;
+	precision: string;
+	maxTextures: number;
+	maxTextureSize: number | null;
+	maxRenderbufferSize: number | null;
+	renderer: string | null;
+	vendor: string | null;
 }
 
 export interface FrontendStageDiagnostics {
 	visualizationRequests: readonly FrontendStageVisualizationDiagnostic[];
 	frames: readonly FrontendStageFrameDiagnostic[];
+	claims: readonly FrontendStageClaimDiagnostic[];
 	sceneBuilds: readonly FrontendStageSceneBuildDiagnostic[];
 	modelLoads: readonly FrontendStageModelLoadDiagnostic[];
 	modelCacheHits: number;
@@ -105,7 +143,11 @@ export interface FrontendStageDiagnostics {
 	sceneDisposals: number;
 	rendererContextsCreated: number;
 	rendererContextsDisposed: number;
+	rendererContextLosses: number;
+	rendererContextRestores: number;
+	desktopMirrorRenders: number;
 	rafCallbacks: number;
+	rendererCapabilities: FrontendStageRendererCapabilities | null;
 }
 
 export interface FrontendPerformanceSnapshot {
@@ -145,9 +187,11 @@ class FrontendPerformanceDiagnostics {
 	private readonly stageVisualizationRequests: FrontendStageVisualizationDiagnostic[] =
 		[];
 	private readonly stageFrames: FrontendStageFrameDiagnostic[] = [];
+	private readonly stageClaims: FrontendStageClaimDiagnostic[] = [];
 	private readonly stageSceneBuilds: FrontendStageSceneBuildDiagnostic[] = [];
 	private readonly stageModelLoads: FrontendStageModelLoadDiagnostic[] = [];
-	private readonly stageRenders: FrontendStageRenderDiagnostic[] = [];
+	private readonly stageRenders: SequencedFrontendStageRenderDiagnostic[] = [];
+	private stageRenderSequence = 0;
 	private stageSceneDisposals = 0;
 	private stageModelCacheHits = 0;
 	private stageModelCacheMisses = 0;
@@ -155,7 +199,12 @@ class FrontendPerformanceDiagnostics {
 	private stageModelCacheDisposals = 0;
 	private stageRendererContextsCreated = 0;
 	private stageRendererContextsDisposed = 0;
+	private stageRendererContextLosses = 0;
+	private stageRendererContextRestores = 0;
+	private stageDesktopMirrorRenders = 0;
 	private stageRafCallbacks = 0;
+	private stageRendererCapabilities: FrontendStageRendererCapabilities | null =
+		null;
 	private activeRequests = 0;
 	private maxSnapshotConcurrency = 0;
 	private longTaskObserver: PerformanceObserver | null = null;
@@ -375,11 +424,15 @@ class FrontendPerformanceDiagnostics {
 
 	recordStageFrameReceived({
 		lane,
+		showId,
+		scopeActivation,
 		sourceFrame = null,
 		sourceGeneratedAt,
 		publishedAt = null,
 	}: {
 		lane: "normal" | "preload";
+		showId: string;
+		scopeActivation: number;
 		sourceFrame?: number | null;
 		sourceGeneratedAt: string;
 		publishedAt?: string | null;
@@ -392,6 +445,8 @@ class FrontendPerformanceDiagnostics {
 			this.stageFrames,
 			{
 				lane,
+				showId,
+				scopeActivation,
 				sourceFrame,
 				sourceGeneratedAt,
 				publishedAt,
@@ -407,8 +462,24 @@ class FrontendPerformanceDiagnostics {
 					? Math.max(0, receivedAt - projectionAt)
 					: null,
 				sourceToSettledCanvasMs: null,
+				visibleChanged: null,
 			},
-			4_096,
+			// A canonical packaged run records two lanes for five minutes at
+			// ten hertz. Retain that complete window so the final report reads
+			// finalized frame records instead of a sampled or truncated tail.
+			8_192,
+		);
+	}
+
+	recordStageLaneClaims(normal: readonly string[], preload: readonly string[]) {
+		pushBounded(
+			this.stageClaims,
+			{
+				recordedAt: Date.now(),
+				normal: [...normal],
+				preload: [...preload],
+			},
+			512,
 		);
 	}
 
@@ -416,12 +487,14 @@ class FrontendPerformanceDiagnostics {
 		sourceGeneratedAt: string | undefined,
 		settled: boolean,
 		lane?: "normal" | "preload",
+		visibleChanged?: boolean,
 	) {
 		const sample = this.latestStageFrame(sourceGeneratedAt, lane);
 		if (!sample) return;
 		const appliedAt = Date.now();
 		sample.firstAppliedAt ??= appliedAt;
 		if (settled) sample.settledAppliedAt ??= appliedAt;
+		if (visibleChanged !== undefined) sample.visibleChanged ??= visibleChanged;
 	}
 
 	recordStageFrameCanvasSubmitted(
@@ -450,8 +523,26 @@ class FrontendPerformanceDiagnostics {
 		this.stageRendererContextsCreated++;
 	}
 
+	recordStageRendererCapabilities(
+		capabilities: FrontendStageRendererCapabilities,
+	) {
+		this.stageRendererCapabilities = { ...capabilities };
+	}
+
 	recordStageRendererDisposed() {
 		this.stageRendererContextsDisposed++;
+	}
+
+	recordStageRendererContextLost() {
+		this.stageRendererContextLosses++;
+	}
+
+	recordStageRendererContextRestored() {
+		this.stageRendererContextRestores++;
+	}
+
+	recordStageDesktopMirrorRender() {
+		this.stageDesktopMirrorRenders++;
 	}
 
 	recordStageRafCallback() {
@@ -459,7 +550,44 @@ class FrontendPerformanceDiagnostics {
 	}
 
 	recordStageRender(sample: FrontendStageRenderDiagnostic) {
-		pushBounded(this.stageRenders, sample, 4_096);
+		this.stageRenderSequence++;
+		pushBounded(
+			this.stageRenders,
+			{ ...sample, benchmarkSequence: this.stageRenderSequence },
+			4_096,
+		);
+	}
+
+	stageBenchmarkSample(afterRenderSequence?: number) {
+		return {
+			recordedAt: Date.now(),
+			latestFrames: {
+				normal: this.latestStageFrameForLane("normal"),
+				preload: this.latestStageFrameForLane("preload"),
+			},
+			latestRender: this.stageRenders.at(-1) ?? null,
+			latestRenderSequence: this.stageRenderSequence,
+			newRenders:
+				afterRenderSequence === undefined
+					? []
+					: this.stageRenders.filter(
+							(render) => render.benchmarkSequence > afterRenderSequence,
+						),
+			sceneBuilds: this.stageSceneBuilds.length,
+			renders: this.stageRenders.length,
+			modelCacheHits: this.stageModelCacheHits,
+			modelCacheMisses: this.stageModelCacheMisses,
+			modelCacheDisposals: this.stageModelCacheDisposals,
+			rendererContextsCreated: this.stageRendererContextsCreated,
+			rendererContextsDisposed: this.stageRendererContextsDisposed,
+			rendererContextLosses: this.stageRendererContextLosses,
+			rendererContextRestores: this.stageRendererContextRestores,
+			desktopMirrorRenders: this.stageDesktopMirrorRenders,
+			rafCallbacks: this.stageRafCallbacks,
+			rendererCapabilities: this.stageRendererCapabilities
+				? { ...this.stageRendererCapabilities }
+				: null,
+		};
 	}
 
 	snapshot(): FrontendPerformanceSnapshot {
@@ -496,6 +624,11 @@ class FrontendPerformanceDiagnostics {
 					}),
 				),
 				frames: this.stageFrames.map((sample) => ({ ...sample })),
+				claims: this.stageClaims.map((sample) => ({
+					...sample,
+					normal: [...sample.normal],
+					preload: [...sample.preload],
+				})),
 				sceneBuilds: this.stageSceneBuilds.map((sample) => ({ ...sample })),
 				modelLoads: this.stageModelLoads.map((sample) => ({ ...sample })),
 				modelCacheHits: this.stageModelCacheHits,
@@ -506,7 +639,13 @@ class FrontendPerformanceDiagnostics {
 				sceneDisposals: this.stageSceneDisposals,
 				rendererContextsCreated: this.stageRendererContextsCreated,
 				rendererContextsDisposed: this.stageRendererContextsDisposed,
+				rendererContextLosses: this.stageRendererContextLosses,
+				rendererContextRestores: this.stageRendererContextRestores,
+				desktopMirrorRenders: this.stageDesktopMirrorRenders,
 				rafCallbacks: this.stageRafCallbacks,
+				rendererCapabilities: this.stageRendererCapabilities
+					? { ...this.stageRendererCapabilities }
+					: null,
 			},
 		};
 	}
@@ -543,6 +682,14 @@ class FrontendPerformanceDiagnostics {
 				return sample;
 		}
 		return undefined;
+	}
+
+	private latestStageFrameForLane(lane: "normal" | "preload") {
+		for (let index = this.stageFrames.length - 1; index >= 0; index--) {
+			const sample = this.stageFrames[index];
+			if (sample?.lane === lane) return { ...sample };
+		}
+		return null;
 	}
 
 	private observeLongTasks() {

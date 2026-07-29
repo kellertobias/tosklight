@@ -1541,6 +1541,16 @@
 	text-align: left;
 }
 
+/*
+ * Large numbered pools intentionally retain their complete desk address space.
+ * Skip off-screen cell contents while preserving every DOM address and square
+ * grid position for scrolling, selection, and automation.
+ */
+.pool-window-grid > * {
+	content-visibility: auto;
+	contain-intrinsic-size: auto 100px;
+}
+
 .pool-filled-outline .pool-card {
 	background: var(--panel2);
 }
@@ -1824,6 +1834,11 @@
 	aspect-ratio: auto;
 }
 
+.virtual-playback-visible-cells > .virtual-playback-box {
+	height: 100%;
+	aspect-ratio: auto;
+}
+
 .virtual-playback-box.vacant {
 	border-style: solid;
 	color: var(--muted);
@@ -1874,7 +1889,58 @@
 }
 
 .virtual-playback-box.exclusion-member {
-	box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--amber) 55%, transparent);
+	--exclusion-fence-top-width: 0;
+	--exclusion-fence-right-width: 0;
+	--exclusion-fence-bottom-width: 0;
+	--exclusion-fence-left-width: 0;
+	overflow: visible;
+}
+
+.virtual-playback-box.exclusion-member::after {
+	content: "";
+	position: absolute;
+	z-index: 20;
+	inset: calc(var(--button-grid-gap, 2px) / -2);
+	border-color: var(--amber);
+	border-style: solid;
+	border-width:
+		var(--exclusion-fence-top-width)
+		var(--exclusion-fence-right-width)
+		var(--exclusion-fence-bottom-width)
+		var(--exclusion-fence-left-width);
+	pointer-events: none;
+}
+
+.virtual-playback-box.exclusion-fence-top {
+	--exclusion-fence-top-width: 3px;
+}
+
+.virtual-playback-box.exclusion-fence-right {
+	--exclusion-fence-right-width: 3px;
+}
+
+.virtual-playback-box.exclusion-fence-bottom {
+	--exclusion-fence-bottom-width: 3px;
+}
+
+.virtual-playback-box.exclusion-fence-left {
+	--exclusion-fence-left-width: 3px;
+}
+
+.virtual-playback-box.exclusion-fence-top.exclusion-fence-left::after {
+	border-top-left-radius: 8px;
+}
+
+.virtual-playback-box.exclusion-fence-top.exclusion-fence-right::after {
+	border-top-right-radius: 8px;
+}
+
+.virtual-playback-box.exclusion-fence-bottom.exclusion-fence-right::after {
+	border-bottom-right-radius: 8px;
+}
+
+.virtual-playback-box.exclusion-fence-bottom.exclusion-fence-left::after {
+	border-bottom-left-radius: 8px;
 }
 
 .virtual-playback-box.exclusion-selected {

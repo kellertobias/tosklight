@@ -1,7 +1,9 @@
 import { cleanup, fireEvent, render as rtlRender, screen } from "@testing-library/react";
 import { ModalProvider } from "@tosklight/ui/modals";
+import type { PropsWithChildren } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { VisualizationSnapshot } from "../../api/types";
+import { DynamicEditorSessionProvider } from "../../features/dynamics/DynamicEditorSessionContext";
 import { selectFixturesForSelection } from "../../features/patch/selectors";
 import type {
 	ProgrammerFixtureValue,
@@ -9,7 +11,16 @@ import type {
 } from "../../features/programmerValues/contracts";
 import { ParameterControls } from "./ParameterControls";
 
-const render = (ui: Parameters<typeof rtlRender>[0]) => rtlRender(ui, { wrapper: ModalProvider });
+function TestProviders({ children }: PropsWithChildren) {
+	return (
+		<ModalProvider>
+			<DynamicEditorSessionProvider>{children}</DynamicEditorSessionProvider>
+		</ModalProvider>
+	);
+}
+
+const render = (ui: Parameters<typeof rtlRender>[0]) =>
+	rtlRender(ui, { wrapper: TestProviders });
 
 const state = {
 	stageMode: "select",
@@ -466,6 +477,7 @@ describe("ParameterControls hardware encoders", () => {
 			attribute: "intensity",
 			operation: { type: "relative_step", delta: 0.01 },
 			timing: { fade: false, fadeMillis: null, delayMillis: null },
+			undoGroup: expect.any(String),
 		});
 		window.dispatchEvent(
 			new CustomEvent("light:encoder-action", {
@@ -479,6 +491,7 @@ describe("ParameterControls hardware encoders", () => {
 				attribute: "intensity",
 				operation: { type: "relative_step", delta: 0.1 },
 				timing: { fade: false, fadeMillis: null, delayMillis: null },
+				undoGroup: expect.any(String),
 			}),
 		);
 
@@ -607,6 +620,7 @@ describe("ParameterControls hardware encoders", () => {
 				attribute: "tilt",
 				operation: { type: "relative_step", delta: -0.1 },
 				timing: { fade: false, fadeMillis: null, delayMillis: null },
+				undoGroup: expect.any(String),
 			}),
 		);
 

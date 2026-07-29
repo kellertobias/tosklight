@@ -2,8 +2,8 @@ import { useCallback, useMemo, useRef } from "react";
 import type { ServerState } from "../features/server/useServerState";
 import { HttpVirtualPlaybackZonesTransport } from "../features/virtualPlaybackZones/transport";
 import { configuredServerUrl } from "./client/serverLocation";
-import { HttpPlaybackTopologyTransport } from "./PlaybackTopologyTransport";
 import { browserDeskBoundaryToken } from "./PatchTransport";
+import { HttpPlaybackTopologyTransport } from "./PlaybackTopologyTransport";
 
 export function usePlaybackTopologyBoundaries(state: ServerState) {
 	const playbackClientRef = useRef(state.api.playback);
@@ -29,17 +29,15 @@ export function usePlaybackTopologyBoundaries(state: ServerState) {
 		[options],
 	);
 	const showId = state.bootstrap?.active_show?.id ?? null;
-	const deskId = state.session?.desk.id ?? null;
 	const authorityId = [
 		serverUrl,
 		state.connectionGeneration,
 		state.session?.session_id ?? "",
 		state.session?.client_id ?? "",
 	].join("|");
-	const virtualPlaybackZonesAuthority =
-		showId && deskId
-			? { authorityId, scope: { showId, deskId } }
-			: null;
+	const virtualPlaybackZonesAuthority = showId
+		? { authorityId, scope: { showId } }
+		: null;
 	const applyPlaybackRuntimeAction = useCallback(
 		(
 			_show: string,

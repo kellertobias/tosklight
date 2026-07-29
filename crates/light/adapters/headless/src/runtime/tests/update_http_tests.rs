@@ -99,7 +99,7 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
 
     // Rebuild the HTTP surface around configuration decoded from the persisted desk setting,
     // matching the configuration boundary used by a process restart.
-    let mut reloaded_state = state.clone();
+    let reloaded_state = state.clone();
     reloaded_state
         .installation
         .replace_configuration(reloaded_configuration);

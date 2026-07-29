@@ -215,7 +215,23 @@ impl ProgrammingService {
         user_id: UserId,
         ports: &dyn ProgrammingPorts,
     ) -> Result<AppliedProgramming, ActionError> {
-        let before = Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)?;
+        let tracks_values = !matches!(
+            &action.command,
+            ProgrammingCommand::ReplaceCommandLine { .. }
+        );
+        let read_snapshot = || {
+            if tracks_values {
+                Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)
+            } else {
+                Snapshot::read_without_values(
+                    &self.programmers,
+                    action.context.desk_id,
+                    session,
+                    user_id,
+                )
+            }
+        };
+        let before = read_snapshot()?;
         let outcome = match &action.command {
             ProgrammingCommand::ApplyKey {
                 key,
@@ -257,11 +273,11 @@ impl ProgrammingService {
                 self.apply_selection(session, command, &action.context, ports)?
             }
         };
-        let mutated = Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)?;
+        let mutated = read_snapshot()?;
         if let Some(reason) = reconciliation(&before, &mutated, &outcome) {
             ports.reconcile(&action.context, reason);
         }
-        let after = Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)?;
+        let after = read_snapshot()?;
         let interaction = interaction_change(
             &self.programmers,
             action.context.desk_id,
@@ -278,12 +294,11 @@ impl ProgrammingService {
         } else {
             None
         };
-        let values = self.values_change(
-            user_id,
-            session,
-            before.values_generation,
-            after.values_generation,
-        )?;
+        let values = if tracks_values {
+            self.values_change(user_id, &before.values_content, &after.values_content)?
+        } else {
+            None
+        };
         let preload_values = self.preload_values_change(
             user_id,
             session,

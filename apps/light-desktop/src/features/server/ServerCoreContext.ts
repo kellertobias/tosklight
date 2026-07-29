@@ -1,8 +1,6 @@
 import type {
 	BootstrapSnapshot,
 	CommandHistoryEntry,
-	ConnectionStatus,
-	DeskConfiguration,
 	FixtureDefinition,
 	FixtureProfile,
 	HighlightAction,
@@ -21,7 +19,6 @@ import type { ScreenCapabilities } from "../screens/types";
 import type {
 	PendingCommandChoice,
 	StoredDeskLayout,
-	StoredStageLayout,
 } from "./contracts";
 
 export interface ServerCoreContext

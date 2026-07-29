@@ -213,6 +213,9 @@ describe("useCueThumbnails portable Group authority", () => {
 				value: { kind: "normalized", value: 0.05 },
 			},
 		]);
+		expect(mocks.renderStageThumbnail.mock.calls[0]?.[2]).toBe(
+			"lines_and_beams",
+		);
 		expect(mocks.legacyPlaybackAccess).not.toHaveBeenCalled();
 		mocks.desktopAvailable = false;
 		rerender();

@@ -295,9 +295,7 @@ impl ProgrammingService {
             return None;
         }
         let revision = self.programmers.advance_normal_values_revision(user_id);
-        Some(ProgrammingValuesChange {
-            projection: Arc::new(after.projection(user_id, revision)),
-        })
+        Some(after.change(&before, user_id, revision))
     }
 
     fn lifecycle_preload_values_change(

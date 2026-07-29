@@ -168,12 +168,9 @@ impl PlaybackEngine {
                 PlaybackIdentity::physical(playback.playback_number)
                     .expect("persisted physical Dynamic Playback number")
             });
-            if !self
-                .definition_at(identity)
-                .is_some_and(|definition| {
-                    matches!(definition.target, PlaybackTarget::Dynamic { .. })
-                })
-                || !playback.fader_value.is_finite()
+            if !self.definition_at(identity).is_some_and(|definition| {
+                matches!(definition.target, PlaybackTarget::Dynamic { .. })
+            }) || !playback.fader_value.is_finite()
                 || !playback.size.is_finite()
                 || !playback.master.is_finite()
                 || playback.local_speed_multiplier.denominator == 0
@@ -205,9 +202,9 @@ impl PlaybackEngine {
                             matches!(definition.target, PlaybackTarget::Dynamic { .. })
                         })
                 }) || next_definitions.iter().any(|definition| {
-                        definition.number == active.playback_number
-                            && matches!(definition.target, PlaybackTarget::Dynamic { .. })
-                    })
+                    definition.number == active.playback_number
+                        && matches!(definition.target, PlaybackTarget::Dynamic { .. })
+                })
             })
             .cloned()
             .collect()

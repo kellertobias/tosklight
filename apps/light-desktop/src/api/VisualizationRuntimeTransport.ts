@@ -27,6 +27,8 @@ import { programmingUuidAt } from "./programmingWireProjection";
 import type { AttributeValue, VisualizationSnapshot } from "./types";
 import { WireValidationError } from "./wireValidation";
 
+let nextVisualizationDiagnosticScopeActivation = 0;
+
 export interface HttpVisualizationRuntimeTransportOptions {
 	baseUrl: string;
 	sessionToken: string;
@@ -44,6 +46,8 @@ export class HttpVisualizationRuntimeTransport
 {
 	private readonly baseUrl: string;
 	private readonly fetchImplementation: typeof globalThis.fetch;
+	private readonly diagnosticScopeActivation =
+		++nextVisualizationDiagnosticScopeActivation;
 
 	constructor(
 		private readonly options: HttpVisualizationRuntimeTransportOptions,
@@ -83,6 +87,8 @@ export class HttpVisualizationRuntimeTransport
 			if (source.timestamp)
 				frontendPerformanceDiagnostics.recordStageFrameReceived({
 					lane,
+					showId: scope.showId,
+					scopeActivation: this.diagnosticScopeActivation,
 					sourceFrame: source.frame,
 					sourceGeneratedAt: source.timestamp,
 					publishedAt: decoded.generated_at,
@@ -103,6 +109,8 @@ export class HttpVisualizationRuntimeTransport
 		return new WebSocketVisualizationRuntimeStream(
 			this.baseUrl,
 			this.options.sessionToken,
+			scope.showId,
+			this.diagnosticScopeActivation,
 			observer,
 			this.options.webSocket ?? globalThis.WebSocket,
 		);
@@ -155,6 +163,8 @@ class WebSocketVisualizationRuntimeStream
 	constructor(
 		private readonly baseUrl: string,
 		private readonly sessionToken: string,
+		private readonly expectedShowId: string,
+		private readonly diagnosticScopeActivation: number,
 		private readonly observer: VisualizationRuntimeStreamObserver,
 		private readonly WebSocketImplementation: typeof globalThis.WebSocket,
 	) {}
@@ -231,9 +241,15 @@ class WebSocketVisualizationRuntimeStream
 					throw new VisualizationRuntimeProtocolError(
 						"Visualization stream protocol version is unsupported",
 					);
+				this.assertExpectedScope(
+					decodeVisualizationScope(message.scope, "$.scope"),
+					"$.scope",
+				);
 				return;
 			}
 			if (type === "snapshot") {
+				const scope = decodeVisualizationScope(message.scope, "$.scope");
+				this.assertExpectedScope(scope, "$.scope");
 				const lane = enumAt(message.lane, "$.lane", ["normal", "preload"]);
 				const sequence = integerAt(message.sequence, "$.sequence");
 				const sourceFrame = integerAt(message.source_frame, "$.source_frame");
@@ -249,9 +265,12 @@ class WebSocketVisualizationRuntimeStream
 					message.snapshot,
 					lane,
 				);
+				assertVisualizationScope(scope, snapshot.scope, "$.snapshot.scope");
 				this.snapshots[lane] = snapshot;
 				frontendPerformanceDiagnostics.recordStageFrameReceived({
 					lane,
+					showId: this.expectedShowId,
+					scopeActivation: this.diagnosticScopeActivation,
 					sourceFrame,
 					sourceGeneratedAt,
 					publishedAt,
@@ -260,6 +279,8 @@ class WebSocketVisualizationRuntimeStream
 				return;
 			}
 			if (type === "delta") {
+				const scope = decodeVisualizationScope(message.scope, "$.scope");
+				this.assertExpectedScope(scope, "$.scope");
 				const lane = enumAt(message.lane, "$.lane", ["normal", "preload"]);
 				const sequence = integerAt(message.sequence, "$.sequence");
 				const sourceFrame = integerAt(message.source_frame, "$.source_frame");
@@ -279,10 +300,13 @@ class WebSocketVisualizationRuntimeStream
 					this.send({ type: "resynchronize", lane });
 					return;
 				}
+				assertVisualizationScope(scope, current.scope, "$.scope");
 				const snapshot = applyVisualizationDelta(current, message.delta, lane);
 				this.snapshots[lane] = snapshot;
 				frontendPerformanceDiagnostics.recordStageFrameReceived({
 					lane,
+					showId: this.expectedShowId,
+					scopeActivation: this.diagnosticScopeActivation,
 					sourceFrame,
 					sourceGeneratedAt,
 					publishedAt,
@@ -291,6 +315,10 @@ class WebSocketVisualizationRuntimeStream
 				return;
 			}
 			if (type === "structural_invalidation") {
+				this.assertExpectedScope(
+					decodeVisualizationScope(message.scope, "$.scope"),
+					"$.scope",
+				);
 				for (const lane of this.claims) {
 					this.snapshots[lane] = null;
 					this.send({ type: "resynchronize", lane });
@@ -298,6 +326,10 @@ class WebSocketVisualizationRuntimeStream
 				return;
 			}
 			if (type === "heartbeat") {
+				this.assertExpectedScope(
+					decodeVisualizationScope(message.scope, "$.scope"),
+					"$.scope",
+				);
 				const sequence = integerAt(message.sequence, "$.sequence");
 				if (this.lastSequence && sequence !== this.lastSequence + 1)
 					for (const lane of this.claims)
@@ -309,6 +341,9 @@ class WebSocketVisualizationRuntimeStream
 				throw new VisualizationRuntimeProtocolError(
 					stringAt(message.message, "$.message"),
 				);
+			throw new VisualizationRuntimeProtocolError(
+				`Visualization stream message type ${type} is unsupported`,
+			);
 		} catch (reason) {
 			this.observer.error(asError(reason));
 		}
@@ -321,6 +356,18 @@ class WebSocketVisualizationRuntimeStream
 			lanes: [...this.claims],
 			max_rate_hz: this.maxRateHz,
 		});
+	}
+
+	private assertExpectedScope(
+		scope: NonNullable<VisualizationSnapshot["scope"]>,
+		path: string,
+	) {
+		if (!sameUuid(scope.show_id ?? "", this.expectedShowId))
+			throw new WireValidationError(
+				path,
+				"configured visualization Show scope",
+				scope,
+			);
 	}
 
 	private send(message: unknown) {
@@ -352,12 +399,15 @@ function applyVisualizationDelta(
 	lane: VisualizationRuntimeLane,
 ): VisualizationSnapshot {
 	const delta = recordAt(value, "$.delta");
+	const scope = decodeVisualizationScope(delta.scope, "$.delta.scope");
+	assertVisualizationScope(scope, current.scope, "$.delta.scope");
 	const preload = booleanAt(delta.preload, "$.delta.preload");
 	if (preload !== (lane === "preload"))
 		throw new VisualizationRuntimeProtocolError(
 			"Visualization delta belongs to a different lane",
 		);
 	return {
+		scope,
 		revision: integerAt(delta.revision, "$.delta.revision"),
 		generated_at: timestampAt(delta.generated_at, "$.delta.generated_at"),
 		grand_master: normalizedAt(delta.grand_master, "$.delta.grand_master"),
@@ -429,6 +479,7 @@ export function decodeVisualizationRuntimeSnapshot(
 		);
 	const generatedAt = timestampAt(snapshot.generated_at, "$.generated_at");
 	return {
+		scope: decodeVisualizationScope(snapshot.scope, "$.scope"),
 		revision: integerAt(snapshot.revision, "$.revision"),
 		generated_at: generatedAt,
 		grand_master: normalizedAt(snapshot.grand_master, "$.grand_master"),
@@ -444,6 +495,29 @@ export function decodeVisualizationRuntimeSnapshot(
 			"$.profile_output_values",
 		),
 	};
+}
+
+function decodeVisualizationScope(value: unknown, path: string) {
+	const scope = recordAt(value, path);
+	return {
+		show_id:
+			scope.show_id === null
+				? null
+				: stringAt(scope.show_id, `${path}.show_id`),
+	};
+}
+
+function assertVisualizationScope(
+	expected: NonNullable<VisualizationSnapshot["scope"]>,
+	actual: VisualizationSnapshot["scope"],
+	path: string,
+) {
+	if (expected.show_id !== actual?.show_id)
+		throw new WireValidationError(
+			path,
+			"matching visualization Show scope",
+			actual,
+		);
 }
 
 function decodeVisualizationHttpSource(value: unknown) {

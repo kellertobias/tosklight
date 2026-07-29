@@ -58,6 +58,7 @@ function projection(userId = USER_ID) {
 			},
 		],
 		group_values: [],
+		dynamic_values: [],
 	};
 }
 
@@ -76,6 +77,7 @@ function changedOutcome() {
 }
 
 function event(userId = USER_ID) {
+	const changed = projection(userId);
 	return {
 		type: "event",
 		event: {
@@ -90,10 +92,15 @@ function event(userId = USER_ID) {
 			related_objects: [],
 			source: { kind: "action", source: "http" },
 			correlation_id: CORRELATION_ID,
-			delivery: "replaceable",
+			delivery: "lossless",
 			payload: {
 				type: "programming_values_changed",
-				change: { projection: projection(userId) },
+				change: {
+					...changed,
+					removed_fixture_values: [],
+					removed_group_values: [],
+					removed_dynamic_values: [],
+				},
 			},
 		},
 	};
@@ -244,7 +251,7 @@ describe("HttpProgrammerValuesTransport HTTP", () => {
 });
 
 describe("HttpProgrammerValuesTransport events", () => {
-	it("subscribes only to the current user's replaceable projection object", () => {
+	it("subscribes only to the current user's lossless delta object", () => {
 		const { transport } = createHarness();
 		const observer = { message: vi.fn(), error: vi.fn(), closed: vi.fn() };
 		const stream = transport.subscribe(scope, 10, observer);

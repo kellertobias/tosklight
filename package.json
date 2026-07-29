@@ -59,6 +59,7 @@
     "test:help-screenshots:update": "UPDATE_HELP_SCREENSHOTS=1 bash tools/test.sh help-screenshots",
     "test:help-screenshots-live": "bash tools/test.sh help-screenshots-live",
     "benchmark:sustained-output": "node tools/run-sustained-output-benchmark.mjs",
+    "benchmark:packaged-stage": "node tools/run-packaged-stage-benchmark.mjs",
     "test:record": "bash tools/test.sh record",
     "test:demo": "bash tools/test.sh demo",
     "test:all": "bash tools/test.sh all",

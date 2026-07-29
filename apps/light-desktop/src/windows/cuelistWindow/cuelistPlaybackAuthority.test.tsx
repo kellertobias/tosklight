@@ -11,7 +11,6 @@ import { identityKey } from "../../features/playbackRuntime/contracts";
 import { PlaybackRuntimeViewProvider } from "../../features/playbackRuntime/PlaybackRuntimeView";
 import { PlaybackRuntimeStore } from "../../features/playbackRuntime/store";
 import {
-	CUE_LIST_ID,
 	cueProjection,
 	DESK_ID,
 	deskProjection,

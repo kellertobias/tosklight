@@ -67,6 +67,7 @@ pub(super) fn preload_batch_commands(
             };
             Ok(PlaybackBatchCommand {
                 number: pending.playback_number,
+                page: pending.page,
                 action,
                 exclusion_zones: std::sync::Arc::default(),
                 activation_origin: None,

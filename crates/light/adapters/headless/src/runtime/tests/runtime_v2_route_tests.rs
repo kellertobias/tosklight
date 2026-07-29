@@ -150,7 +150,12 @@ async fn visualization_snapshot_reports_authoritative_source_and_route_costs() {
             )
             .expect("render one authoritative output frame")
     };
-    state.output.render_frames_and_publish(&rendered);
+    state.output.render_frames_and_publish(
+        &rendered,
+        light_wire::v2::visualization::VisualizationScope {
+            show_id: state.active_show.current().map(|show| show.id.0),
+        },
+    );
     let app = router(state);
     let (token, _) = login(&app, "Operator").await;
 
@@ -167,6 +172,10 @@ async fn visualization_snapshot_reports_authoritative_source_and_route_costs() {
     assert_eq!(visualization.status(), StatusCode::OK);
     let visualization = json(visualization).await;
     assert_eq!(visualization["source_frame"], 1);
+    assert!(
+        visualization["scope"].get("show_id").is_some(),
+        "visualization snapshots carry explicit Show scope even with no active Show"
+    );
     assert!(
         chrono::DateTime::parse_from_rfc3339(
             visualization["source_timestamp"]

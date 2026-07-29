@@ -116,6 +116,7 @@ const page: PlaybackPage = {
 	number: 1,
 	name: "Main",
 	slots: { "1": 1 },
+	virtual_playbacks: {},
 };
 
 function versioned<T>(kind: string, id: string, body: T): VersionedObject<T> {

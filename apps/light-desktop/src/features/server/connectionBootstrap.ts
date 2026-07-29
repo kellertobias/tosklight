@@ -2,7 +2,6 @@ import type { LightApi } from "../../api/client/api";
 import type {
 	BootstrapSnapshot,
 	DeskUser,
-	ProgrammerState,
 	SessionResponse,
 } from "../../api/types";
 import type { FrontendWarmupTask } from "../frontendWarmup/coordinator";
@@ -11,6 +10,7 @@ import {
 	measureFrontendSnapshot,
 	serializedModelBytes,
 } from "../frontendWarmup/diagnostics";
+import type { ProgrammingSnapshot } from "../programmingInteraction/contracts";
 import {
 	mayCreateSession,
 	requirePrimarySession,
@@ -61,16 +61,16 @@ async function ensureActiveShow(
 	return next;
 }
 
-async function loadForegroundResources(api: LightApi) {
-	const [programmers, configuration, fixtureLibrary, commandHistory] =
+async function loadForegroundResources(api: LightApi, deskId: string) {
+	const [programming, configuration, fixtureLibrary, commandHistory] =
 		await Promise.all([
-			api.desk.programmers(),
+			api.programming.programmingInteractionSnapshot(deskId),
 			api.desk.configuration(),
 			api.fixtures.fixtureLibrary(),
 			api.desk.commandHistory(),
 		]);
 	return {
-		programmers,
+		programming,
 		configuration,
 		fixtureLibrary,
 		commandHistory,
@@ -145,25 +145,16 @@ function deferredResourceTask<T>(
 
 function restoreProgrammerState(
 	state: ServerState,
-	session: SessionResponse,
-	programmers: ProgrammerState[],
+	programming: ProgrammingSnapshot,
 ) {
-	const own = programmers.find(
-		(item) => item.session_id === session.session_id,
-	);
-	const command =
-		own?.command_line?.trim() || state.commandTargetModeRef.current;
-	const target =
-		command === "GROUP"
-			? "GROUP"
-			: command === "FIXTURE"
-				? "FIXTURE"
-				: state.commandTargetModeRef.current;
+	const commandLine = programming.projection.commandLine;
+	const command = commandLine.text.trim() || commandLine.target;
+	const target = commandLine.target;
 	state.commandTargetModeRef.current = target;
 	state.setCommandTargetMode(target);
 	state.setCommandLineState(command);
-	state.setCommandLinePristine(command === target);
-	state.setSelectedFixtures(own?.selected ?? []);
+	state.setCommandLinePristine(commandLine.pristine);
+	state.setSelectedFixtures([...programming.projection.selection.selected]);
 }
 
 export async function bootstrapConnection(
@@ -188,7 +179,7 @@ export async function bootstrapConnection(
 	const bootstrap = await ensureActiveShow(state, initial, deskLock.locked);
 	const finishResources =
 		frontendPerformanceDiagnostics.beginPhase("initial-resources");
-	const resources = await loadForegroundResources(state.api);
+	const resources = await loadForegroundResources(state.api, session.desk.id);
 	finishResources();
 	if (isCancelled()) {
 		finishBootstrap();
@@ -202,7 +193,7 @@ export async function bootstrapConnection(
 		bootstrap.active_show_error ? null : (bootstrap.active_show?.id ?? null),
 		session.user.id,
 	);
-	restoreProgrammerState(state, session, resources.programmers);
+	restoreProgrammerState(state, resources.programming);
 	finishBootstrap();
 	return session;
 }

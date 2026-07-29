@@ -33,11 +33,13 @@ export class DynamicsApiClient {
 		targets: string[] = [],
 		overrides: DynamicInstanceOverridesProjection = DEFAULT_OVERRIDES,
 		timing: DynamicValueTimingProjection = NO_TIMING,
+		undoGroup?: string,
 	): Promise<DynamicInstanceActionOutcome> {
 		const request: Omit<DynamicStartActionRequest, "request_id"> = {
 			targets,
 			overrides,
 			timing,
+			undo_group: undoGroup,
 		};
 		return this.post(
 			`/api/v2/dynamics/${encodeURIComponent(dynamicId)}/start`,
@@ -51,6 +53,7 @@ export class DynamicsApiClient {
 		targets: string[] = [],
 		overrides: DynamicInstanceOverridesProjection = DEFAULT_OVERRIDES,
 		timing: DynamicValueTimingProjection = NO_TIMING,
+		undoGroup?: string,
 	): Promise<DynamicInstanceActionOutcome> {
 		const requestId = crypto.randomUUID();
 		const request: DynamicStartActionRequest = {
@@ -58,6 +61,7 @@ export class DynamicsApiClient {
 			targets,
 			overrides,
 			timing,
+			undo_group: undoGroup,
 		};
 		return this.transport.sendAction(
 			{

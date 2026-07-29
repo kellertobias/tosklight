@@ -95,6 +95,7 @@ impl Engine {
         let fixtures_changed = !Arc::ptr_eq(&snapshot.fixtures, &previous.fixtures);
         let playback_changed = !Arc::ptr_eq(&snapshot.cue_lists, &previous.cue_lists)
             || !Arc::ptr_eq(&snapshot.playbacks, &previous.playbacks)
+            || !Arc::ptr_eq(&snapshot.playback_pages, &previous.playback_pages)
             || !Arc::ptr_eq(&snapshot.groups, &previous.groups);
         let (profile_encodings, profile_projections) = if fixtures_changed {
             (
@@ -323,6 +324,15 @@ fn register_playback_definitions(
         playback
             .register_definition(definition.clone())
             .map_err(EngineError::Invalid)?;
+    }
+    for page in snapshot.playback_pages.iter() {
+        for (&number, definition) in &page.virtual_playbacks {
+            let address = light_playback::VirtualPlaybackAddress::new(page.number, number)
+                .map_err(EngineError::Invalid)?;
+            playback
+                .register_virtual_definition(address, definition.clone())
+                .map_err(EngineError::Invalid)?;
+        }
     }
     Ok(())
 }

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { GeometryEmitter } from "../../api/types";
 import type { StageRenderQuality } from "../../types";
 import { normalized } from "./attributeValues";
+import type { StageProceduralResourceCache } from "./resources";
 import { emitterSurfaceMaterial, millimetres } from "./sceneObjects";
 import type { FixtureAttributeValues } from "./types";
 
@@ -21,6 +22,7 @@ type EmitterSourceContext = {
 	metrics: BeamMetrics;
 	showBeamGuides: boolean;
 	renderQuality: StageRenderQuality;
+	resources?: StageProceduralResourceCache;
 };
 
 function matrixOffsets(
@@ -89,10 +91,13 @@ function resolveBeamMetrics(
 	};
 }
 
-function createConeGeometry(radius: number, distance: number) {
-	const geometry = new THREE.ConeGeometry(radius, distance, 24, 1, true);
-	geometry.translate(0, -distance / 2, 0);
-	return geometry;
+function createConeGeometry(resources?: StageProceduralResourceCache) {
+	const create = () => {
+		const geometry = new THREE.ConeGeometry(1, 1, 24, 1, true);
+		geometry.translate(0, -0.5, 0);
+		return geometry;
+	};
+	return resources?.geometry("beam-cone:24:unit", create) ?? create();
 }
 
 function createBeamMesh(
@@ -100,6 +105,8 @@ function createBeamMesh(
 	color: THREE.Color,
 	opacity: number,
 	name: string,
+	radius: number,
+	distance: number,
 ) {
 	const mesh = new THREE.Mesh(
 		geometry,
@@ -113,11 +120,11 @@ function createBeamMesh(
 		}),
 	);
 	mesh.name = name;
-	mesh.userData.stageBaseRadius = geometry.boundingSphere?.radius ?? 1;
+	mesh.scale.set(radius, distance, radius);
 	return mesh;
 }
 
-function createImprovedBeamMesh(
+export function createImprovedBeamMesh(
 	geometry: THREE.BufferGeometry,
 	color: THREE.Color,
 	intensity: number,
@@ -175,34 +182,6 @@ function createSourceSurface(context: EmitterSourceContext) {
 	return source;
 }
 
-function createBeamOutline(
-	geometry: THREE.BufferGeometry,
-	color: THREE.Color,
-	intensity: number,
-) {
-	const active = intensity > 0.001;
-	const material = active
-		? new THREE.LineBasicMaterial({
-				color,
-				transparent: true,
-				opacity: 0.25 + intensity * 0.5,
-			})
-		: new THREE.LineDashedMaterial({
-				color: 0x7b858d,
-				transparent: true,
-				opacity: 0.3,
-				dashSize: 0.18,
-				gapSize: 0.14,
-			});
-	const outline = new THREE.LineSegments(
-		new THREE.EdgesGeometry(geometry, 28),
-		material,
-	);
-	outline.name = "beam-outline";
-	if (!active) outline.computeLineDistances();
-	return outline;
-}
-
 function createInactiveBeamGuide(distance: number) {
 	const geometry = new THREE.BufferGeometry().setFromPoints([
 		new THREE.Vector3(),
@@ -237,11 +216,12 @@ function createEmitterSource(
 	beam.userData.layout = emitter.layout.type;
 	beam.userData.stageDirectionalBeam = emitter.directional ?? true;
 	beam.userData.stageBeamActive = intensity > 0.001;
+	beam.userData.stageBeamIntensity = intensity;
 	beam.userData.stageBeamColor = `#${color.getHexString()}`;
 	beam.userData.stageBeamRadius = metrics.radius;
 	beam.userData.stageBeamDistance = metrics.distance;
 	beam.userData.stageRenderQuality = context.renderQuality;
-	const cone = createConeGeometry(metrics.radius, metrics.distance);
+	const cone = createConeGeometry(context.resources);
 	const volumeOpacity =
 		intensity * (0.025 + (1 - emitter.feather) * 0.035 + metrics.focus * 0.04);
 	const active = intensity > 0.001;
@@ -253,35 +233,39 @@ function createEmitterSource(
 		(context.renderQuality === "lines_only" ||
 			context.renderQuality === "lines_and_beams") &&
 		active;
-	const volume = createBeamMesh(cone, color, volumeOpacity, "beam-volume");
+	const volume = createBeamMesh(
+		cone,
+		color,
+		volumeOpacity,
+		"beam-volume",
+		metrics.radius,
+		metrics.distance,
+	);
 	const core = createBeamMesh(
-		createConeGeometry(metrics.beamRadius, metrics.distance),
+		cone,
 		color,
 		intensity * (0.02 + metrics.focus * 0.045),
 		"beam-core",
+		metrics.beamRadius,
+		metrics.distance,
 	);
 	volume.visible = drawBeams && context.renderQuality !== "improved_beams";
 	core.visible = drawBeams && context.renderQuality !== "improved_beams";
 	beam.add(volume, core);
 	if (context.renderQuality === "improved_beams") {
 		const improved = createImprovedBeamMesh(
-			cone.clone(),
+			cone,
 			color,
 			intensity,
 			metrics.focus,
 		);
+		improved.scale.set(metrics.radius, metrics.distance, metrics.radius);
 		improved.visible = drawBeams;
 		beam.add(improved);
 	}
-	const outline = createBeamOutline(cone, color, Math.max(intensity, 1));
-	const center = createActiveCenterLine(
-		metrics.distance,
-		color,
-		Math.max(intensity, 1),
-	);
-	outline.visible = drawLines;
+	const center = createActiveCenterLine(metrics.distance, color, intensity);
 	center.visible = drawLines;
-	beam.add(outline, center);
+	beam.add(center);
 	const guide = createInactiveBeamGuide(metrics.distance);
 	guide.visible = !active && context.showBeamGuides;
 	beam.add(guide);
@@ -343,6 +327,7 @@ function updateSourceBeam(
 	const { intensity, color, metrics, renderQuality } = context;
 	const active = intensity > 0.001;
 	source.userData.stageBeamActive = active;
+	source.userData.stageBeamIntensity = intensity;
 	source.userData.stageBeamColor = `#${color.getHexString()}`;
 	const previousRadius =
 		Number(source.userData.stageBeamRadius) || metrics.radius;
@@ -371,7 +356,8 @@ function updateSourceBeam(
 		}
 	} else if (renderQuality !== "improved_beams" && existingImproved) {
 		if (existingImproved instanceof THREE.Mesh) {
-			existingImproved.geometry.dispose();
+			if (!existingImproved.geometry.userData.stageSharedProceduralResource)
+				existingImproved.geometry.dispose();
 			const materials = Array.isArray(existingImproved.material)
 				? existingImproved.material
 				: [existingImproved.material];
@@ -410,12 +396,8 @@ function updateSourceBeam(
 				}
 			}
 		}
-		if (object.name === "beam-outline" || object.name === "beam-centerline") {
+		if (object.name === "beam-centerline") {
 			object.visible = drawLines;
-			if (object.name === "beam-outline") {
-				object.scale.x *= radiusScale;
-				object.scale.z *= radiusScale;
-			}
 			const line = object as THREE.Line;
 			setMaterialColor(
 				line.material as THREE.Material,
@@ -436,6 +418,7 @@ export function updateGeometryBeam(
 	color: THREE.Color,
 	showBeamGuides: boolean,
 	renderQuality: StageRenderQuality,
+	resources?: StageProceduralResourceCache,
 ) {
 	const metrics = resolveBeamMetrics(emitter, attributes);
 	group.userData.beamAngleDegrees = metrics.beamAngle;
@@ -450,6 +433,7 @@ export function updateGeometryBeam(
 		metrics,
 		showBeamGuides,
 		renderQuality,
+		resources,
 	};
 	for (const source of group.children) updateSourceBeam(source, context);
 }
@@ -506,6 +490,7 @@ export function buildGeometryBeam(
 	color: THREE.Color,
 	showBeamGuides: boolean,
 	renderQuality: StageRenderQuality,
+	resources?: StageProceduralResourceCache,
 ) {
 	const metrics = resolveBeamMetrics(emitter, attributes);
 	const offsets = layoutOffsets(emitter.layout);
@@ -517,6 +502,7 @@ export function buildGeometryBeam(
 		metrics,
 		showBeamGuides,
 		renderQuality,
+		resources,
 	};
 	offsets.forEach((offset, index) => {
 		group.add(createEmitterSource(offset, index, context));

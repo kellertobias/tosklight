@@ -134,6 +134,7 @@ fn pool_operation(
             phase_offset_degrees: 0.0,
         },
         timing: DynamicValueTiming::default(),
+        undo_group: None,
     };
     match action {
         "toggle" => state

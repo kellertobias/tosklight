@@ -369,6 +369,43 @@ function useTouchEncoderInteraction({
 	};
 }
 
+function createEncoderKeyDownHandler({
+	disabled,
+	indexed,
+	canRelease,
+	openEditor,
+	onStep,
+	slowStep,
+}: {
+	disabled: boolean;
+	indexed: boolean;
+	canRelease: boolean;
+	openEditor(): void;
+	onStep(delta: number): void;
+	slowStep: number;
+}) {
+	return (event: ReactKeyboardEvent<HTMLElement>) => {
+		if (disabled) return;
+		if (indexed) {
+			if (canRelease && (event.key === "Enter" || event.key === " ")) {
+				event.preventDefault();
+				openEditor();
+			}
+			return;
+		}
+		if (event.key === "ArrowUp" || event.key === "ArrowRight") {
+			event.preventDefault();
+			onStep(slowStep);
+		} else if (event.key === "ArrowDown" || event.key === "ArrowLeft") {
+			event.preventDefault();
+			onStep(-slowStep);
+		} else if (event.key === "Enter" || event.key === " ") {
+			event.preventDefault();
+			openEditor();
+		}
+	};
+}
+
 export function TouchEncoder({
 	label,
 	slot,
@@ -436,26 +473,14 @@ export function TouchEncoder({
 		event.preventDefault();
 		onStep(Math.sign(-event.deltaY) * (event.shiftKey ? fastStep : slowStep));
 	};
-	const onKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
-		if (disabled) return;
-		if (indexed) {
-			if (canRelease && (event.key === "Enter" || event.key === " ")) {
-				event.preventDefault();
-				openEditor();
-			}
-			return;
-		}
-		if (event.key === "ArrowUp" || event.key === "ArrowRight") {
-			event.preventDefault();
-			onStep(slowStep);
-		} else if (event.key === "ArrowDown" || event.key === "ArrowLeft") {
-			event.preventDefault();
-			onStep(-slowStep);
-		} else if (event.key === "Enter" || event.key === " ") {
-			event.preventDefault();
-			openEditor();
-		}
-	};
+	const onKeyDown = createEncoderKeyDownHandler({
+		disabled,
+		indexed,
+		canRelease,
+		openEditor,
+		onStep,
+		slowStep,
+	});
 	const instructionsId = `touch-encoder-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-instructions`;
 	return (
 		<>

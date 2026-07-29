@@ -47,7 +47,7 @@ export class HttpOutputRuntimeTransport implements OutputRuntimeTransport {
 
 	async loadSnapshot(scope: OutputRuntimeScope) {
 		this.validateScope(scope);
-		const response = await this.fetchRequest(this.outputPath(scope), {
+			const response = await this.fetchRequest(this.outputPath(), {
 			headers: this.headers(),
 		});
 		return decodeOutputRuntimeSnapshot(
@@ -65,7 +65,7 @@ export class HttpOutputRuntimeTransport implements OutputRuntimeTransport {
 			return this.options.applyAction(scope, request);
 		const headers = this.headers();
 		headers.set("content-type", "application/json");
-		const response = await this.fetchRequest(this.outputPath(scope), {
+		const response = await this.fetchRequest(this.outputPath(), {
 			method: "POST",
 			headers,
 			body: JSON.stringify(encodeOutputRuntimeActionRequest(request)),
@@ -113,7 +113,7 @@ export class HttpOutputRuntimeTransport implements OutputRuntimeTransport {
 			);
 	}
 
-	private outputPath(scope: OutputRuntimeScope) {
+	private outputPath() {
 		return `${this.baseUrl}/api/v2/output-runtime/global-master`;
 	}
 

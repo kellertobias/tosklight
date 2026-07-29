@@ -73,7 +73,11 @@ export function controllableBrowserDesktopBridge(
 		closeConsoleScreen: (screenId) =>
 			perform({ type: "close_console_screen", screen_id: screenId }),
 		openStageViewWindow: () => perform({ type: "open_stage_view_window" }),
-		currentWindowState: async () => decodeWindowState(await port.currentWindowState()),
+		packagedStageBenchmarkConfig: async () => null,
+		packagedStageBenchmarkPrepared: async () => false,
+		appendPackagedStageBenchmarkSample: async () => undefined,
+		currentWindowState: async () =>
+			decodeWindowState(await port.currentWindowState()),
 		currentWindowFullscreen: async () =>
 			decodeWindowState(await port.currentWindowState()).fullscreen,
 		setCurrentWindowFullscreen: (fullscreen) =>
@@ -92,7 +96,8 @@ export function controllableBrowserDesktopBridge(
 }
 
 function decodeDisplays(value: unknown): DesktopDisplay[] {
-	if (!Array.isArray(value)) throw new Error("Invalid controllable display list");
+	if (!Array.isArray(value))
+		throw new Error("Invalid controllable display list");
 	return value.map((item) => {
 		const display = record(item, "controllable display");
 		return {

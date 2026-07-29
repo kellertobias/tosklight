@@ -1,6 +1,4 @@
 import type {
-	CueList,
-	PlaybackDefinition,
 	PlaybackPage,
 	PlaybackSurfaceLayout,
 	PlaybackSurfaceRow,

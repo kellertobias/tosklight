@@ -43,7 +43,7 @@ function StageSettings({
 								]}
 							/>
 							<SwitchField
-								label="Groups shortcuts"
+								label="Group shortcuts"
 								offLabel="Hidden"
 								onLabel="Visible"
 								checked={options.groupsVisible}
@@ -55,7 +55,7 @@ function StageSettings({
 								}
 							/>
 							<SwitchField
-								label="Show Selection"
+								label="Show selection"
 								offLabel="Hidden"
 								onLabel="Visible"
 								checked={state.stageShowSelection}
@@ -79,7 +79,7 @@ function StageSettings({
 								}
 							/>
 							<SwitchField
-								label="Beam direction guides"
+								label="Beam direction guidelines"
 								offLabel="Hidden"
 								onLabel="Visible"
 								checked={state.stageShowBeamGuides}
@@ -92,7 +92,7 @@ function StageSettings({
 							/>
 							<MultiValueToggleField
 								label="Render quality"
-								description="Improved beams adds bounded feathered falloff. Surface lighting, opaque-beam occlusion, and cast shadows are not available in the embedded Stage; use Viz for those rendering features."
+								description="Improved beams adds feathered falloff. Up to eight highest-contributing directional sources also light opaque Stage surfaces, stop at the first opaque intersection, and cast bounded soft shadows; other sources retain their feathered volume."
 								value={options.renderQuality}
 								onChange={(renderQuality) =>
 									dispatch({

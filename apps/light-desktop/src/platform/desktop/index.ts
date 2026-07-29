@@ -27,6 +27,12 @@ export function createDesktopBridge(
 		: browserDesktopBridge;
 }
 
+export function desktopRuntimeAvailable(
+	runtime: ControllableDesktopWindow | undefined = browserWindow(),
+) {
+	return Boolean(runtime && "__TAURI_INTERNALS__" in runtime);
+}
+
 function browserWindow(): ControllableDesktopWindow | undefined {
 	return typeof window === "undefined"
 		? undefined

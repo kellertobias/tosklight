@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PatchedFixture, VisualizationSnapshot } from "../api/types";
 import {
 	blankChannel,
@@ -17,10 +17,13 @@ import {
 	applyStageVisualization,
 	buildStageScene,
 	cueVisualization,
+	disposeScene,
 	fallbackEmitterIsDirectional,
 	migrateStagePosition,
 	mountFixtureModel,
+	reconcileStageFixtures,
 } from "./stage3dScene";
+import { StageProceduralResourceCache } from "./stage3dScene/resources";
 
 const fixture = (device_type: string, name: string) =>
 	({
@@ -117,6 +120,172 @@ describe("3D stage presentation and cue state", () => {
 		const hidden = buildStageScene([], null, new Set(), 1, false);
 		expect(hidden.scene.getObjectByName("stage-floor")).toBeUndefined();
 		expect(hidden.scene.getObjectByName("stage-floor-grid")).toBeUndefined();
+	});
+
+	it("creates selection outlines only while a fixture is selected", () => {
+		const mover = fixture("moving wash", "A7 LED Wash");
+		const fixtures = [
+			{
+				fixture: mover,
+				index: 0,
+				position: {
+					x: 0,
+					y: 0,
+					z: 3,
+					rotationX: 0,
+					rotationY: 0,
+					rotationZ: 0,
+				},
+			},
+		];
+		const built = buildStageScene(fixtures, null);
+		expect(built.scene.getObjectByName("selection-outline")).toBeUndefined();
+
+		applyStageVisualization(
+			fixtures,
+			null,
+			built.fixtureObjects,
+			true,
+			"lines_and_beams",
+			new Set(),
+			new Set(["fixture"]),
+			true,
+		);
+		expect(built.scene.getObjectByName("selection-outline")).toBeTruthy();
+
+		applyStageVisualization(
+			fixtures,
+			null,
+			built.fixtureObjects,
+			true,
+			"lines_and_beams",
+		);
+		expect(built.scene.getObjectByName("selection-outline")).toBeUndefined();
+	});
+
+	it("reconciles only the affected fixture root and updates transforms in place", () => {
+		const firstFixture = {
+			...fixture("moving wash", "First"),
+			fixture_id: "first",
+			definition: {
+				...fixture("moving wash", "First").definition,
+				id: "first-profile",
+				revision: 1,
+			},
+		};
+		const secondFixture = {
+			...fixture("moving wash", "Second"),
+			fixture_id: "second",
+			definition: {
+				...fixture("moving wash", "Second").definition,
+				id: "second-profile",
+				revision: 1,
+			},
+		};
+		const item = (patched: PatchedFixture, x: number) => ({
+			fixture: patched,
+			index: 0,
+			position: {
+				x,
+				y: 0,
+				z: 3,
+				rotationX: 0,
+				rotationY: 0,
+				rotationZ: 0,
+			},
+		});
+		const initial = [item(firstFixture, 0), item(secondFixture, 2)];
+		const built = buildStageScene(initial, null);
+		const firstRoot = built.fixtureObjects.get("first");
+		const secondRoot = built.fixtureObjects.get("second");
+		const resources = built.scene.userData
+			.stageProceduralResources as StageProceduralResourceCache;
+
+		reconcileStageFixtures(
+			built.scene,
+			built.fixtureObjects,
+			[item(firstFixture, 1), item(secondFixture, 2)],
+			null,
+			new Set(),
+			true,
+			new Set(),
+			"lines_and_beams",
+			resources,
+		);
+		expect(built.fixtureObjects.get("first")).toBe(firstRoot);
+		expect(firstRoot?.position.x).toBe(1);
+		expect(built.fixtureObjects.get("second")).toBe(secondRoot);
+
+		const revisedFirst = {
+			...firstFixture,
+			definition: { ...firstFixture.definition, revision: 2 },
+		};
+		const result = reconcileStageFixtures(
+			built.scene,
+			built.fixtureObjects,
+			[item(revisedFirst, 1), item(secondFixture, 2)],
+			null,
+			new Set(),
+			true,
+			new Set(),
+			"lines_and_beams",
+			resources,
+		);
+		expect(result.changedFixtures).toHaveLength(1);
+		expect(built.fixtureObjects.get("first")).not.toBe(firstRoot);
+		expect(built.fixtureObjects.get("second")).toBe(secondRoot);
+	});
+
+	it("reuses surface-owned beam geometry without disposing it during a scene swap", () => {
+		const resources = new StageProceduralResourceCache();
+		const mover = fixture("moving wash", "A7 LED Wash");
+		const stageFixture = {
+			fixture: mover,
+			index: 0,
+			position: {
+				x: 0,
+				y: 0,
+				z: 3,
+				rotationX: 0,
+				rotationY: 0,
+				rotationZ: 0,
+			},
+		};
+		const first = buildStageScene(
+			[stageFixture],
+			null,
+			new Set(),
+			1,
+			true,
+			true,
+			new Set(),
+			"lines_and_beams",
+			resources,
+		);
+		const second = buildStageScene(
+			[{ ...stageFixture, instanceId: "second" }],
+			null,
+			new Set(),
+			1,
+			true,
+			true,
+			new Set(),
+			"lines_and_beams",
+			resources,
+		);
+		const firstGeometry = (
+			first.scene.getObjectByName("beam-volume") as THREE.Mesh
+		).geometry;
+		const secondGeometry = (
+			second.scene.getObjectByName("beam-volume") as THREE.Mesh
+		).geometry;
+		const dispose = vi.spyOn(firstGeometry, "dispose");
+		expect(secondGeometry).toBe(firstGeometry);
+
+		disposeScene(first.scene);
+		expect(dispose).not.toHaveBeenCalled();
+		resources.dispose();
+		expect(dispose).toHaveBeenCalledOnce();
 	});
 
 	it("migrates legacy percentage positions into the meter-based stage", () => {
@@ -445,6 +614,7 @@ describe("emitter direction and Patch selection", () => {
 		expect(lines.getObjectByName("beam-centerline")?.visible).toBe(true);
 		expect(lines.getObjectByName("beam-ground-footprint")?.visible).toBe(true);
 		expect(lines.getObjectByName("beam-volume")?.visible).toBe(false);
+		expect(lines.getObjectByName("beam-outline")).toBeUndefined();
 		const combined = sceneFor("lines_and_beams");
 		expect(combined.getObjectByName("beam-centerline")?.visible).toBe(true);
 		expect(combined.getObjectByName("beam-ground-footprint")?.visible).toBe(
@@ -517,6 +687,182 @@ describe("emitter direction and Patch selection", () => {
 		).scene;
 		expect(withoutFloor.getObjectByName("stage-floor")).toBeUndefined();
 		expect(withoutFloor.getObjectByName("beam-ground-footprint")).toBeTruthy();
+	});
+
+	it("intersects the authored field cone with the ground exactly and hides non-finite footprints", () => {
+		const sceneAt = (
+			orientationX: number,
+			defaultRaw = 255,
+			showFloorGrid = true,
+		) => {
+			const profile = blankFixtureProfile();
+			const mode = profile.modes[0];
+			mode.channels = [
+				{
+					...blankChannel(mode),
+					attribute: "intensity",
+					default_raw: defaultRaw,
+				},
+			];
+			mode.geometry = geometryTemplate("fixed", [mode.heads[0].id]);
+			mode.geometry.emitters[0].orientation_degrees.x = orientationX;
+			const fixture = {
+				fixture_id: profile.id,
+				universe: 1,
+				address: 1,
+				definition: fixtureDefinitionFromProfileMode(profile, mode),
+				logical_heads: [],
+			} as PatchedFixture;
+			return buildStageScene(
+				[
+					{
+						fixture,
+						index: 0,
+						position: {
+							x: 0,
+							y: 0,
+							z: 3,
+							rotationX: 0,
+							rotationY: 0,
+							rotationZ: 0,
+						},
+					},
+				],
+				null,
+				new Set(),
+				1,
+				showFloorGrid,
+				true,
+				new Set(),
+				"lines_only",
+			).scene;
+		};
+		const footprintPoints = (scene: THREE.Scene) => {
+			const footprint = scene.getObjectByName(
+				"beam-ground-footprint",
+			) as THREE.LineLoop;
+			const positions = footprint.geometry.getAttribute(
+				"position",
+			) as THREE.BufferAttribute;
+			return {
+				footprint,
+				points: Array.from({ length: positions.count }, (_, index) =>
+					new THREE.Vector3().fromBufferAttribute(positions, index),
+				),
+			};
+		};
+
+		const perpendicular = sceneAt(0);
+		const perpendicularFootprint = footprintPoints(perpendicular);
+		expect(perpendicularFootprint.footprint.visible).toBe(true);
+		const perpendicularX = perpendicularFootprint.points.map(({ x }) => x);
+		const perpendicularZ = perpendicularFootprint.points.map(({ z }) => z);
+		expect(
+			Math.max(...perpendicularX) - Math.min(...perpendicularX),
+		).toBeCloseTo(Math.max(...perpendicularZ) - Math.min(...perpendicularZ), 4);
+
+		const oblique = sceneAt(30);
+		const obliqueFootprint = footprintPoints(oblique);
+		expect(obliqueFootprint.footprint.visible).toBe(true);
+		let source: THREE.Object3D | undefined;
+		oblique.traverse((object) => {
+			if (!source && object.name.startsWith("geometry-source:"))
+				source = object;
+		});
+		expect(source).toBeTruthy();
+		const origin =
+			source?.getWorldPosition(new THREE.Vector3()) ?? new THREE.Vector3();
+		const axis = new THREE.Vector3(0, -1, 0)
+			.applyQuaternion(
+				source?.getWorldQuaternion(new THREE.Quaternion()) ??
+					new THREE.Quaternion(),
+			)
+			.normalize();
+		const expectedSlope =
+			Number(source?.userData.stageBeamRadius) /
+			Number(source?.userData.stageBeamDistance);
+		for (const point of obliqueFootprint.points.slice(0, -1)) {
+			const offset = point.clone().sub(origin);
+			const axial = offset.dot(axis);
+			const radial = offset.clone().addScaledVector(axis, -axial).length();
+			expect(radial / axial).toBeCloseTo(expectedSlope, 4);
+		}
+		const obliqueX = obliqueFootprint.points.map(({ x }) => x);
+		const obliqueZ = obliqueFootprint.points.map(({ z }) => z);
+		expect(Math.max(...obliqueZ) - Math.min(...obliqueZ)).toBeGreaterThan(
+			Math.max(...obliqueX) - Math.min(...obliqueX),
+		);
+
+		expect(footprintPoints(sceneAt(90)).footprint.visible).toBe(false);
+		expect(footprintPoints(sceneAt(180)).footprint.visible).toBe(false);
+		const withoutFloor = sceneAt(0, 255, false);
+		expect(withoutFloor.getObjectByName("stage-floor")).toBeUndefined();
+		expect(footprintPoints(withoutFloor).footprint.visible).toBe(true);
+
+		const lowScene = sceneAt(0, 16);
+		const highScene = sceneAt(0, 255);
+		const lowMaterial = footprintPoints(lowScene).footprint
+			.material as THREE.LineBasicMaterial;
+		const highMaterial = footprintPoints(highScene).footprint
+			.material as THREE.LineBasicMaterial;
+		expect(lowMaterial.opacity).toBeGreaterThanOrEqual(0.18);
+		expect(highMaterial.opacity).toBeGreaterThan(lowMaterial.opacity);
+		expect(highMaterial.opacity).toBeLessThanOrEqual(0.68);
+		const lowCenter = lowScene.getObjectByName("beam-centerline") as THREE.Line;
+		const highCenter = highScene.getObjectByName(
+			"beam-centerline",
+		) as THREE.Line;
+		expect(
+			(highCenter.material as THREE.LineBasicMaterial).opacity,
+		).toBeGreaterThan((lowCenter.material as THREE.LineBasicMaterial).opacity);
+	});
+
+	it("uses the bounded Improved-beam shader for conservative fallback fixtures", () => {
+		const fallback = fixture("moving wash", "Fallback moving wash");
+		const stageFixture = [
+			{
+				fixture: fallback,
+				index: 0,
+				position: {
+					x: 0,
+					y: 0,
+					z: 3,
+					rotationX: 0,
+					rotationY: 0,
+					rotationZ: 0,
+				},
+			},
+		];
+		const snapshot: VisualizationSnapshot = {
+			revision: 1,
+			generated_at: "",
+			grand_master: 1,
+			blackout: false,
+			values: [
+				{
+					fixture_id: fallback.fixture_id,
+					attribute: "intensity",
+					value: { kind: "normalized", value: 1 },
+				},
+			],
+		};
+		const built = buildStageScene(
+			stageFixture,
+			snapshot,
+			new Set(),
+			1,
+			true,
+			true,
+			new Set(),
+			"improved_beams",
+		);
+		const improved = built.scene.getObjectByName(
+			"beam-improved-volume",
+		) as THREE.Mesh;
+		expect(improved.visible).toBe(true);
+		expect(improved.material).toBeInstanceOf(THREE.ShaderMaterial);
+		expect(built.scene.getObjectByName("beam-volume")?.visible).toBe(false);
+		expect(built.scene.getObjectByName("beam-outline")).toBeUndefined();
 	});
 
 	it("uses emitter direction metadata and keeps an inactive geometry source readable", () => {
@@ -752,6 +1098,60 @@ describe("fixture profile model mounting", () => {
 		expect(
 			new THREE.Box3().setFromObject(mounted).getSize(new THREE.Vector3()).x,
 		).toBeCloseTo(2);
+	});
+
+	it("uses conservative fallback beams for lighting profiles without emitters", () => {
+		const profile = blankFixtureProfile();
+		profile.name = "Legacy moving light";
+		profile.revision = 1;
+		const mode = profile.modes[0];
+		mode.geometry.emitters = [];
+		const fixture = {
+			fixture_id: profile.id,
+			universe: 1,
+			address: 1,
+			definition: fixtureDefinitionFromProfileMode(profile, mode),
+			logical_heads: [],
+		} as PatchedFixture;
+		const { scene } = buildStageScene(
+			[
+				{
+					fixture,
+					index: 0,
+					position: {
+						x: 0,
+						y: 0,
+						z: 2,
+						rotationX: 0,
+						rotationY: 0,
+						rotationZ: 0,
+					},
+				},
+			],
+			{
+				revision: 1,
+				generated_at: "2026-07-28T10:00:00Z",
+				grand_master: 1,
+				blackout: false,
+				preload: false,
+				values: [
+					{
+						fixture_id: profile.id,
+						attribute: "intensity",
+						value: { kind: "normalized", value: 0.2 },
+					},
+				],
+				profile_output_values: [],
+			},
+		);
+
+		expect(scene.getObjectByName("fallback-beam")).toBeTruthy();
+		expect(scene.getObjectByName("beam-volume")?.visible).toBe(true);
+		const center = scene.getObjectByName("beam-centerline") as THREE.Line;
+		expect(center.visible).toBe(true);
+		expect((center.material as THREE.LineBasicMaterial).opacity).toBeCloseTo(
+			0.53,
+		);
 	});
 });
 

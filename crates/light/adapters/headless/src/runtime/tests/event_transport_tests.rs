@@ -618,8 +618,8 @@ async fn broad_subscription_delivers_only_authenticated_user_programmer_values()
     let wire::EventPayload::ProgrammingValuesChanged { change } = event.payload else {
         panic!("expected a Programmer values payload")
     };
-    assert_eq!(change.projection.user_id, user_id);
-    assert_eq!(change.projection.revision, 2);
+    assert_eq!(change.user_id, user_id);
+    assert_eq!(change.revision, 2);
 }
 
 #[tokio::test]
@@ -812,6 +812,7 @@ fn programmer_values_draft(user_id: Uuid, revision: u64) -> EventDraft {
             ActionSource::UserInterface,
         ),
         ProgrammingValuesChange {
+            delta: Default::default(),
             projection: ProgrammingValuesProjection {
                 dynamic_values: Vec::new(),
                 user_id: UserId(user_id),

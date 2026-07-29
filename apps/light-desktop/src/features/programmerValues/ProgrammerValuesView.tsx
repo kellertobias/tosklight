@@ -67,9 +67,20 @@ export function ProgrammerValuesViewProvider({
 	onMutationError,
 }: PropsWithChildren<ProgrammerValuesViewProviderProps>) {
 	const captureModeAuthority = useProgrammerCaptureModeAuthority();
+	const loadSnapshotRef = useRef(loadSnapshot);
+	loadSnapshotRef.current = loadSnapshot;
+	const onSessionErrorRef = useRef(onSessionError);
+	onSessionErrorRef.current = onSessionError;
 	const measuredLoadSnapshot = useCallback(
-		() => measureFrontendSnapshot("programmer-values", loadSnapshot),
-		[loadSnapshot],
+		() =>
+			measureFrontendSnapshot("programmer-values", () =>
+				loadSnapshotRef.current(),
+			),
+		[],
+	);
+	const reportSessionError = useCallback(
+		(error: Error | null) => onSessionErrorRef.current?.(error),
+		[],
 	);
 	const session = useMemo(
 		() =>
@@ -81,13 +92,13 @@ export function ProgrammerValuesViewProvider({
 						store,
 						transport,
 						loadSnapshot: measuredLoadSnapshot,
-						onError: onSessionError,
+						onError: reportSessionError,
 					})
 				: null,
 		[
 			authorityKey,
 			measuredLoadSnapshot,
-			onSessionError,
+			reportSessionError,
 			showId,
 			store,
 			transport,

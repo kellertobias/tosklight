@@ -51,7 +51,7 @@ export class HttpSpeedGroupRuntimeTransport
 	async loadSnapshot(scope: SpeedGroupRuntimeScope) {
 		this.validateScope(scope);
 		return measureFrontendSnapshot("speed-group-runtime", async () => {
-			const response = await this.fetchRequest(this.speedGroupPath(scope), {
+			const response = await this.fetchRequest(this.speedGroupPath(), {
 				headers: this.headers(),
 			});
 			return decodeSnapshotResponse(await responseValue(response));
@@ -67,7 +67,7 @@ export class HttpSpeedGroupRuntimeTransport
 			return this.options.applyAction(scope, request);
 		const headers = this.headers();
 		headers.set("content-type", "application/json");
-		const response = await this.fetchRequest(this.speedGroupPath(scope), {
+		const response = await this.fetchRequest(this.speedGroupPath(), {
 			method: "POST",
 			headers,
 			body: JSON.stringify(encodeSpeedGroupActionRequest(request)),
@@ -110,7 +110,7 @@ export class HttpSpeedGroupRuntimeTransport
 			);
 	}
 
-	private speedGroupPath(scope: SpeedGroupRuntimeScope) {
+	private speedGroupPath() {
 		return `${this.baseUrl}/api/v2/speed-groups`;
 	}
 

@@ -18,7 +18,6 @@ import {
 	GroupedSelectionField,
 	ICON_CATALOG_GROUPS,
 	IconPickerField,
-	LargeTextField,
 	MultiValueToggleField,
 	NumberField,
 	SelectField,

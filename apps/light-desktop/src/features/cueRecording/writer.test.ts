@@ -93,7 +93,7 @@ function page(
 		id: String(number),
 		revision,
 		updated_at: "",
-		body: { number, name: `Page ${number}`, slots },
+		body: { number, name: `Page ${number}`, slots, virtual_playbacks: {} },
 	};
 }
 

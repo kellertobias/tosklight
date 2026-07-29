@@ -711,7 +711,23 @@
           "format": "uuid"
         },
         "embedded_fallback": {
-          "$ref": "#/$defs/DynamicDefinitionProjection"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DynamicDefinitionProjection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "embedded_fallback_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "embedded_fallback_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
         },
         "last_known_pool_number": {
           "type": "integer",
@@ -722,7 +738,8 @@
       },
       "required": [
         "last_known_pool_number",
-        "embedded_fallback"
+        "embedded_fallback_id",
+        "embedded_fallback_revision"
       ]
     },
     "DynamicRunModeProjection": {
@@ -1323,6 +1340,13 @@
       "description": "Full retained projection of one user's normal, recordable Programmer values.",
       "type": "object",
       "properties": {
+        "dynamic_definitions": {
+          "description": "Embedded Dynamic fallbacks deduplicated across every Dynamic-controlled address.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DynamicDefinitionProjection"
+          }
+        },
         "dynamic_values": {
           "type": "array",
           "items": {

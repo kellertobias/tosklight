@@ -2,8 +2,28 @@ import type { PresetFamily } from "../presetFamilies";
 import type { ShowEntry } from "./types/desk";
 
 export type {
+	DynamicActivationPolicyProjection,
+	DynamicDefinitionProjection,
+	DynamicDefinitionStatusProjection,
+	DynamicLaneModeProjection,
+	DynamicLaneProjection,
+	DynamicPeriodicFunctionProjection,
+	DynamicPhaseDistributionProjection,
+	DynamicPhaseOrderingProjection,
+	DynamicRandomGroupProjection,
+	DynamicReferenceProjection,
+	DynamicRuntimeControllerProjection,
+	DynamicRuntimeInstanceProjection,
+	DynamicRuntimeSnapshotProjection,
+	DynamicScalarSourceProjection,
+	DynamicSpeedProjection,
+	DynamicTargetBindingProjection,
+	DynamicUpdateIntent,
 	EventPayload as RuntimeCapabilityEvent,
 	OperatorNotification,
+	ProgrammingDynamicSemanticValue,
+	ShowObjectActionOutcome,
+	SpeedGroupId,
 	UpdateWorkflowNotification,
 } from "./generated/light-wire";
 export type * from "./playbackRuntimeTypes";

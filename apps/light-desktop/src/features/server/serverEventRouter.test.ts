@@ -103,13 +103,15 @@ function event(
 		return {
 			type: "programming_values_changed",
 			change: {
-				projection: {
-					user_id: session.user.id,
-					revision,
-					fixture_values: [],
-					group_values: [],
-					dynamic_values: [],
-				},
+				user_id: session.user.id,
+				revision,
+				fixture_values: [],
+				removed_fixture_values: [],
+				group_values: [],
+				removed_group_values: [],
+				dynamic_definitions: [],
+				dynamic_values: [],
+				removed_dynamic_values: [],
 			},
 		};
 	throw new Error(`Unsupported typed test event: ${kind}`);
@@ -163,6 +165,25 @@ function createHarness(showId = "show-a") {
 		shows: vi.fn().mockResolvedValue([]),
 		mediaServers: vi.fn().mockResolvedValue({ fixtures: [] }),
 		programmers: vi.fn().mockResolvedValue([]),
+		programmingInteractionSnapshot: vi.fn().mockResolvedValue({
+			cursor: 1,
+			projection: {
+				deskId: "desk-1",
+				commandLine: {
+					text: "FIXTURE",
+					target: "FIXTURE",
+					pristine: true,
+					revision: 1,
+					pendingChoice: null,
+				},
+				selection: {
+					selected: [],
+					expression: null,
+					revision: 1,
+					gestureOpen: false,
+				},
+			},
+		}),
 		fixtureLibrary: vi.fn().mockResolvedValue([]),
 		fixtureProfiles: vi.fn().mockResolvedValue([]),
 		fixtureProfileWarnings: vi.fn().mockResolvedValue([]),
@@ -182,6 +203,9 @@ function createHarness(showId = "show-a") {
 		desk: {
 			configuration: client.configuration,
 			programmers: client.programmers,
+		},
+		programming: {
+			programmingInteractionSnapshot: client.programmingInteractionSnapshot,
 		},
 		fixtures: {
 			patch: client.patch,
@@ -379,6 +403,10 @@ describe("broad state hydration boundaries", () => {
 		);
 		expect(harness.state.finishDeskLoading).toHaveBeenCalledWith(3);
 		expect(harness.api.playback.screens).toHaveBeenCalledOnce();
+		expect(harness.api.desk.programmers).not.toHaveBeenCalled();
+		expect(
+			harness.api.programming.programmingInteractionSnapshot,
+		).toHaveBeenCalledWith("desk-1");
 		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
 	});
 

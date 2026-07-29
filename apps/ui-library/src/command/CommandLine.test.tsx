@@ -102,6 +102,7 @@ describe("CommandLine", () => {
 		);
 		expect(screen.getByText("BLACKOUT")).toBeVisible();
 		expect(screen.getByRole("alert")).toHaveTextContent("Command rejected");
+		expect(screen.getByRole("alert").parentElement).toBe(document.body);
 		expect(screen.getByRole("alertdialog")).toHaveTextContent(
 			"Output is unavailable",
 		);
@@ -168,6 +169,32 @@ describe("CommandLine", () => {
 		fireEvent.keyDown(window, { key: "Escape" });
 		expect(
 			screen.queryByRole("dialog", { name: "Command line history" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("shows content-window errors in history without offering to execute them", () => {
+		render(
+			<CommandLine
+				{...props({
+					historyOpen: true,
+					history: [
+						{
+							id: "window-error",
+							command: "DYNAMICS ERROR",
+							status: "rejected",
+							feedback: "Dynamic 4 could not be loaded.",
+							source: "window",
+							at: "2026-07-29T12:34:56.000Z",
+						},
+					],
+				})}
+			/>,
+		);
+
+		expect(screen.getByText("Dynamic 4 could not be loaded.")).toBeVisible();
+		expect(screen.getByText(/content window/u)).toBeVisible();
+		expect(
+			screen.queryByRole("button", { name: "Reuse" }),
 		).not.toBeInTheDocument();
 	});
 });

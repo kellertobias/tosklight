@@ -1,4 +1,4 @@
-use light_output::{OutputHealth, run_scheduler};
+use light_output::{OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS, OutputHealth, run_scheduler};
 use std::{
     io,
     sync::{
@@ -35,6 +35,14 @@ async fn scheduler_updates_health_and_stops_on_cancellation() {
     assert_eq!(result.frames_sent, 3);
     assert_eq!(result.packets_sent, 6);
     assert_eq!(result.frame_hz, 44.0);
+    assert_eq!(
+        result.tick_duration_bucket_counts.iter().sum::<u64>(),
+        result.frames_sent
+    );
+    assert_eq!(
+        result.tick_duration_bucket_counts.len(),
+        OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS.len()
+    );
 }
 
 #[tokio::test]
@@ -59,6 +67,12 @@ async fn scheduler_records_a_slow_tick_as_a_missed_deadline() {
     assert_eq!(result.deadline_misses, 1);
     assert!(result.maximum_lateness_micros > 0);
     assert!(result.scheduler_utilization > 1.0);
+    let slow_tick_bucket = result
+        .tick_duration_bucket_counts
+        .iter()
+        .position(|count| *count == 1)
+        .expect("the slow tick is represented in the histogram");
+    assert!(OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS[slow_tick_bucket] >= 35_000);
 }
 
 #[tokio::test]

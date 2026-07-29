@@ -21,6 +21,11 @@ export interface ConsoleScreenWindow {
 	fullscreen: boolean;
 }
 
+export interface PackagedStageBenchmarkConfig {
+	durationSeconds: number;
+	profile: string;
+}
+
 export interface DesktopBridge {
 	readonly available: boolean;
 	frontendReady(): Promise<void>;
@@ -33,6 +38,9 @@ export interface DesktopBridge {
 	hideConsoleScreen(screenId: string): Promise<void>;
 	closeConsoleScreen(screenId: string): Promise<void>;
 	openStageViewWindow(): Promise<void>;
+	packagedStageBenchmarkConfig(): Promise<PackagedStageBenchmarkConfig | null>;
+	packagedStageBenchmarkPrepared(): Promise<boolean>;
+	appendPackagedStageBenchmarkSample(sample: unknown): Promise<void>;
 	currentWindowState(): Promise<DesktopWindowState>;
 	currentWindowFullscreen(): Promise<boolean>;
 	setCurrentWindowFullscreen(fullscreen: boolean): Promise<void>;

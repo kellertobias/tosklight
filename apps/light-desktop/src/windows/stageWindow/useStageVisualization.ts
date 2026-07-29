@@ -12,12 +12,14 @@ function useVisualizationView(
 	followPreload: boolean,
 	active: boolean,
 	reconcileSnapshots: boolean,
+	consumerId?: string,
 ) {
 	return useVisualizationRuntimeView({
 		lane: followPreload ? "preload" : "normal",
 		enabled: active,
 		intervalMillis: 100,
 		reconcileSnapshots,
+		consumerId,
 	});
 }
 
@@ -154,12 +156,14 @@ export function useStageVisualization(
 	selectedFixtureIds: ReadonlySet<string>,
 	patchedFixtures?: readonly PatchedFixture[],
 	reconcileSnapshots = true,
+	consumerId?: string,
 ) {
 	const bootstrapReady = useBootstrapReady();
 	const visualizationView = useVisualizationView(
 		followPreload,
 		active,
 		reconcileSnapshots,
+		consumerId,
 	);
 	const visualization = visualizationView.snapshot;
 	const stageFixtures = usePatchedFixtures(patchedFixtures);

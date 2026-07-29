@@ -54,22 +54,42 @@ fn runtime_numbers(current: &PlaybackEngine, before: &PlaybackEngine) -> BTreeSe
             PlaybackKey::Number(number) => Some(*number),
             PlaybackKey::Virtual(_) | PlaybackKey::CueList(_) => None,
         })
-        .chain(current.temporary.keys().filter_map(|(identity, _)| match identity {
-            PlaybackIdentity::Physical(number) => Some(number.get()),
-            PlaybackIdentity::Virtual(_) => None,
-        }))
-        .chain(before.temporary.keys().filter_map(|(identity, _)| match identity {
-            PlaybackIdentity::Physical(number) => Some(number.get()),
-            PlaybackIdentity::Virtual(_) => None,
-        }))
-        .chain(current.swap_held.iter().filter_map(|identity| match identity {
-            PlaybackIdentity::Physical(number) => Some(number.get()),
-            PlaybackIdentity::Virtual(_) => None,
-        }))
-        .chain(before.swap_held.iter().filter_map(|identity| match identity {
-            PlaybackIdentity::Physical(number) => Some(number.get()),
-            PlaybackIdentity::Virtual(_) => None,
-        }))
+        .chain(
+            current
+                .temporary
+                .keys()
+                .filter_map(|(identity, _)| match identity {
+                    PlaybackIdentity::Physical(number) => Some(number.get()),
+                    PlaybackIdentity::Virtual(_) => None,
+                }),
+        )
+        .chain(
+            before
+                .temporary
+                .keys()
+                .filter_map(|(identity, _)| match identity {
+                    PlaybackIdentity::Physical(number) => Some(number.get()),
+                    PlaybackIdentity::Virtual(_) => None,
+                }),
+        )
+        .chain(
+            current
+                .swap_held
+                .iter()
+                .filter_map(|identity| match identity {
+                    PlaybackIdentity::Physical(number) => Some(number.get()),
+                    PlaybackIdentity::Virtual(_) => None,
+                }),
+        )
+        .chain(
+            before
+                .swap_held
+                .iter()
+                .filter_map(|identity| match identity {
+                    PlaybackIdentity::Physical(number) => Some(number.get()),
+                    PlaybackIdentity::Virtual(_) => None,
+                }),
+        )
         .collect()
 }
 

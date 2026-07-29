@@ -8,7 +8,9 @@ export { buildFixtureProfileGeometryPreview } from "./stage3dScene/profileGeomet
 export {
 	applyStageVisualization,
 	buildStageScene,
+	disposeObjectResources,
 	disposeScene,
+	reconcileStageFixtures,
 } from "./stage3dScene/stageScene";
 export { renderStageThumbnail } from "./stage3dScene/thumbnail";
 export type { Stage3dFixture } from "./stage3dScene/types";

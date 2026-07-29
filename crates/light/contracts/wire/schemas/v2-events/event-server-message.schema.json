@@ -1267,7 +1267,23 @@
           "format": "uuid"
         },
         "embedded_fallback": {
-          "$ref": "#/$defs/DynamicDefinitionProjection"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DynamicDefinitionProjection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "embedded_fallback_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "embedded_fallback_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
         },
         "last_known_pool_number": {
           "type": "integer",
@@ -1278,7 +1294,8 @@
       },
       "required": [
         "last_known_pool_number",
-        "embedded_fallback"
+        "embedded_fallback_id",
+        "embedded_fallback_revision"
       ]
     },
     "DynamicRunModeProjection": {
@@ -3412,6 +3429,33 @@
         {
           "type": "object",
           "properties": {
+            "kind": {
+              "type": "string",
+              "const": "virtual"
+            },
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            },
+            "playback_number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "page",
+            "playback_number"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "cue_list_id": {
               "type": "string",
               "format": "uuid"
@@ -4473,6 +4517,22 @@
         "fade"
       ]
     },
+    "ProgrammingFixtureValueAddress": {
+      "type": "object",
+      "properties": {
+        "attribute": {
+          "type": "string"
+        },
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "fixture_id",
+        "attribute"
+      ]
+    },
     "ProgrammingGroupValue": {
       "type": "object",
       "properties": {
@@ -4516,6 +4576,21 @@
         "value",
         "programmer_order",
         "fade"
+      ]
+    },
+    "ProgrammingGroupValueAddress": {
+      "type": "object",
+      "properties": {
+        "attribute": {
+          "type": "string"
+        },
+        "group_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_id",
+        "attribute"
       ]
     },
     "ProgrammingInteractionChange": {
@@ -5092,18 +5167,12 @@
     "ProgrammingValuesChange": {
       "type": "object",
       "properties": {
-        "projection": {
-          "$ref": "#/$defs/ProgrammingValuesProjection"
-        }
-      },
-      "required": [
-        "projection"
-      ]
-    },
-    "ProgrammingValuesProjection": {
-      "description": "Full retained projection of one user's normal, recordable Programmer values.",
-      "type": "object",
-      "properties": {
+        "dynamic_definitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DynamicDefinitionProjection"
+          }
+        },
         "dynamic_values": {
           "type": "array",
           "items": {
@@ -5122,6 +5191,24 @@
             "$ref": "#/$defs/ProgrammingGroupValue"
           }
         },
+        "removed_dynamic_values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingFixtureValueAddress"
+          }
+        },
+        "removed_fixture_values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingFixtureValueAddress"
+          }
+        },
+        "removed_group_values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingGroupValueAddress"
+          }
+        },
         "revision": {
           "type": "integer",
           "format": "uint64",
@@ -5136,8 +5223,11 @@
         "user_id",
         "revision",
         "fixture_values",
+        "removed_fixture_values",
         "group_values",
-        "dynamic_values"
+        "removed_group_values",
+        "dynamic_values",
+        "removed_dynamic_values"
       ]
     },
     "RuntimeHighlightFixture": {

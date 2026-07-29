@@ -193,14 +193,83 @@ pub(super) fn values_snapshot(
 pub(in crate::runtime) fn values_change(
     change: &application::ProgrammingValuesChange,
 ) -> wire::ProgrammingValuesChange {
+    let mut dynamic_definitions = change
+        .delta
+        .dynamic_values
+        .iter()
+        .filter_map(|value| match &value.value {
+            light_dynamics::DynamicSemanticValue::DynamicOn { dynamic, .. } => {
+                Some(dynamic.embedded_fallback.definition.as_ref())
+            }
+            _ => None,
+        })
+        .map(super::dynamics_wire::definition)
+        .collect::<Vec<_>>();
+    dynamic_definitions.sort_by_key(|definition| (definition.id, definition.revision));
+    dynamic_definitions.dedup_by_key(|definition| (definition.id, definition.revision));
     wire::ProgrammingValuesChange {
-        projection: values_projection(&change.projection),
+        user_id: change.projection.user_id.0,
+        revision: change.projection.revision,
+        fixture_values: change
+            .delta
+            .fixture_values
+            .iter()
+            .map(fixture_value)
+            .collect(),
+        removed_fixture_values: change
+            .delta
+            .removed_fixture_values
+            .iter()
+            .map(|address| wire::ProgrammingFixtureValueAddress {
+                fixture_id: address.fixture_id.0,
+                attribute: address.attribute.0.clone(),
+            })
+            .collect(),
+        group_values: change.delta.group_values.iter().map(group_value).collect(),
+        removed_group_values: change
+            .delta
+            .removed_group_values
+            .iter()
+            .map(|address| wire::ProgrammingGroupValueAddress {
+                group_id: address.group_id.clone(),
+                attribute: address.attribute.0.clone(),
+            })
+            .collect(),
+        dynamic_definitions,
+        dynamic_values: change
+            .delta
+            .dynamic_values
+            .iter()
+            .map(super::dynamics_wire::programming_value)
+            .collect(),
+        removed_dynamic_values: change
+            .delta
+            .removed_dynamic_values
+            .iter()
+            .map(|address| wire::ProgrammingFixtureValueAddress {
+                fixture_id: address.fixture_id.0,
+                attribute: address.attribute.0.clone(),
+            })
+            .collect(),
     }
 }
 
 pub(super) fn values_projection(
     projection: &application::ProgrammingValuesProjection,
 ) -> wire::ProgrammingValuesProjection {
+    let mut dynamic_definitions = projection
+        .dynamic_values
+        .iter()
+        .filter_map(|value| match &value.value {
+            light_dynamics::DynamicSemanticValue::DynamicOn { dynamic, .. } => {
+                Some(dynamic.embedded_fallback.definition.as_ref())
+            }
+            _ => None,
+        })
+        .map(super::dynamics_wire::definition)
+        .collect::<Vec<_>>();
+    dynamic_definitions.sort_by_key(|definition| (definition.id, definition.revision));
+    dynamic_definitions.dedup_by_key(|definition| (definition.id, definition.revision));
     wire::ProgrammingValuesProjection {
         user_id: projection.user_id.0,
         revision: projection.revision,
@@ -210,6 +279,7 @@ pub(super) fn values_projection(
             .map(fixture_value)
             .collect(),
         group_values: projection.group_values.iter().map(group_value).collect(),
+        dynamic_definitions,
         dynamic_values: projection
             .dynamic_values
             .iter()

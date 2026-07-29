@@ -1,4 +1,5 @@
 import type { VisualizationSnapshot } from "../../api/types";
+import { frontendPerformanceDiagnostics } from "../frontendWarmup/diagnostics";
 import type {
 	VisualizationRuntimeLane,
 	VisualizationRuntimeScope,
@@ -11,7 +12,7 @@ import {
 } from "./transport";
 
 interface LaneRuntime {
-	claims: Map<number, number>;
+	claims: Map<number, { intervalMillis: number; consumerId: string }>;
 	generation: number;
 	inFlight: boolean;
 	queued: boolean;
@@ -47,13 +48,18 @@ export class VisualizationRuntimeSession {
 		this.onError = options.onError;
 	}
 
-	activate(lane: VisualizationRuntimeLane, intervalMillis: number) {
+	activate(
+		lane: VisualizationRuntimeLane,
+		intervalMillis: number,
+		consumerId = "anonymous",
+	) {
 		assertInterval(intervalMillis);
 		if (this.stopped || !this.store.matchesScope(this.scope)) return () => {};
 		const runtime = this.lanes[lane];
 		const first = runtime.claims.size === 0;
 		const claimId = ++this.nextClaimId;
-		runtime.claims.set(claimId, intervalMillis);
+		runtime.claims.set(claimId, { intervalMillis, consumerId });
+		this.recordClaims();
 		if (first) {
 			runtime.generation++;
 			this.store.setLoading(lane, this.store.captureScope());
@@ -94,11 +100,13 @@ export class VisualizationRuntimeSession {
 			runtime.generation++;
 			this.clearTimer(runtime);
 		}
+		this.recordClaims();
 	}
 
 	private release(lane: VisualizationRuntimeLane, claimId: number) {
 		const runtime = this.lanes[lane];
 		if (!runtime.claims.delete(claimId)) return;
+		this.recordClaims();
 		if (runtime.claims.size) {
 			if (this.transport.openStream) this.syncStream();
 			else this.restartTimer(lane);
@@ -126,7 +134,10 @@ export class VisualizationRuntimeSession {
 		this.clearTimer(runtime);
 		const interval = minimumInterval(runtime);
 		if (interval === null) return;
-		runtime.timer = globalThis.setInterval(() => void this.refresh(lane), interval);
+		runtime.timer = globalThis.setInterval(
+			() => void this.refresh(lane),
+			interval,
+		);
 	}
 
 	private async refresh(lane: VisualizationRuntimeLane) {
@@ -189,33 +200,45 @@ export class VisualizationRuntimeSession {
 			this.stream = null;
 			return;
 		}
-		this.stream ??= this.transport.openStream?.(this.scope, {
-			snapshot: (lane, snapshot) => {
-				if (
-					this.stopped ||
-					!this.lanes[lane].claims.size ||
-					!this.store.matchesScope(this.scope)
-				)
-					return;
-				this.store.install(lane, snapshot, this.store.captureScope());
-				this.onError?.(null);
-			},
-			error: (error) => {
-				for (const lane of lanes()) {
-					if (this.lanes[lane].claims.size)
-						this.store.setError(lane, error, this.store.captureScope());
-				}
-				this.onError?.(error);
-			},
-		}) ?? null;
+		this.stream ??=
+			this.transport.openStream?.(this.scope, {
+				snapshot: (lane, snapshot) => {
+					if (
+						this.stopped ||
+						!this.lanes[lane].claims.size ||
+						!this.store.matchesScope(this.scope)
+					)
+						return;
+					this.store.install(lane, snapshot, this.store.captureScope());
+					this.onError?.(null);
+				},
+				error: (error) => {
+					for (const lane of lanes()) {
+						if (this.lanes[lane].claims.size)
+							this.store.setError(lane, error, this.store.captureScope());
+					}
+					this.onError?.(error);
+				},
+			}) ?? null;
 		const fastest = Math.min(
 			...claimedLanes.flatMap((lane) => [
-				...this.lanes[lane].claims.values(),
+				...[...this.lanes[lane].claims.values()].map(
+					({ intervalMillis }) => intervalMillis,
+				),
 			]),
 		);
 		this.stream?.updateClaims(
 			claimedLanes,
 			Math.max(1, Math.min(10, Math.ceil(1_000 / fastest))),
+		);
+	}
+
+	private recordClaims() {
+		const owners = (lane: VisualizationRuntimeLane) =>
+			[...this.lanes[lane].claims.values()].map(({ consumerId }) => consumerId);
+		frontendPerformanceDiagnostics.recordStageLaneClaims(
+			owners("normal"),
+			owners("preload"),
 		);
 	}
 }
@@ -231,7 +254,13 @@ function laneRuntime(): LaneRuntime {
 }
 
 function minimumInterval(runtime: LaneRuntime) {
-	return runtime.claims.size ? Math.min(...runtime.claims.values()) : null;
+	return runtime.claims.size
+		? Math.min(
+				...[...runtime.claims.values()].map(
+					({ intervalMillis }) => intervalMillis,
+				),
+			)
+		: null;
 }
 
 function assertInterval(value: number) {

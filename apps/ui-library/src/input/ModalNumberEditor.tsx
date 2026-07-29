@@ -138,15 +138,7 @@ export function ModalNumberEditor({
 	};
 	const discardAndClose = () => {
 		onChange(initialValue);
-		if (fader?.onChange) {
-			const minimum = fader.minimum ?? 0;
-			const maximum = Math.max(minimum, fader.maximum ?? 100);
-			const parsed =
-				fader.valueFromInput?.(initialValue) ?? Number(initialValue);
-			fader.onChange(
-				clamp(Number.isFinite(parsed) ? parsed : minimum, minimum, maximum),
-			);
-		}
+		restoreFaderValue(fader, initialValue);
 		setConfirmClose(false);
 		onClose();
 	};
@@ -248,6 +240,19 @@ export function ModalNumberEditor({
 				/>
 			)}
 		</>
+	);
+}
+
+function restoreFaderValue(
+	fader: ModalNumberFaderConfig | undefined,
+	initialValue: string,
+) {
+	if (!fader?.onChange) return;
+	const minimum = fader.minimum ?? 0;
+	const maximum = Math.max(minimum, fader.maximum ?? 100);
+	const parsed = fader.valueFromInput?.(initialValue) ?? Number(initialValue);
+	fader.onChange(
+		clamp(Number.isFinite(parsed) ? parsed : minimum, minimum, maximum),
 	);
 }
 

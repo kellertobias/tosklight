@@ -19,7 +19,11 @@ impl PlaybackEngine {
             PlaybackIdentity::Physical(number) => PlaybackKey::Number(number.get()),
             PlaybackIdentity::Virtual(address) => PlaybackKey::Virtual(address),
         };
-        let Some(playback) = self.active.get_mut(&key).filter(|playback| playback.enabled) else {
+        let Some(playback) = self
+            .active
+            .get_mut(&key)
+            .filter(|playback| playback.enabled)
+        else {
             return;
         };
         playback.activation = Some(PlaybackActivationProvenance {

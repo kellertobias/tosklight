@@ -328,7 +328,7 @@ describe("PlaybackTopologyWriter", () => {
 			body: {
 				...page(2).body,
 				virtual_playbacks: {
-					"1001": playbackBody("Virtual Front Wash", 1001),
+					"1901": playbackBody("Virtual Front Wash", 1901),
 				},
 			},
 		};
@@ -343,16 +343,16 @@ describe("PlaybackTopologyWriter", () => {
 		await expect(
 			writer.configureVirtual(
 				4,
-				1001,
-				playbackBody("Virtual Front Wash", 1001),
+				1901,
+				playbackBody("Virtual Front Wash", 1901),
 			),
 		).resolves.toMatchObject({
 			status: "changed",
-			resolution: { kind: "virtual", page: 4, playbackNumber: 1001 },
+			resolution: { kind: "virtual", page: 4, playbackNumber: 1901 },
 		});
-		await expect(writer.clearVirtual(4, 1001)).resolves.toMatchObject({
+		await expect(writer.clearVirtual(4, 1901)).resolves.toMatchObject({
 			status: "changed",
-			resolution: { kind: "virtual", page: 4, playbackNumber: 1001 },
+			resolution: { kind: "virtual", page: 4, playbackNumber: 1901 },
 		});
 
 		expect(apply.mock.calls[0]).toMatchObject([
@@ -362,7 +362,7 @@ describe("PlaybackTopologyWriter", () => {
 				action: {
 					type: "configure_virtual",
 					page: 4,
-					playbackNumber: 1001,
+					playbackNumber: 1901,
 					expectedPageRevision: 1,
 					expectedPageObjectId: "legacy-page-four",
 				},
@@ -375,7 +375,7 @@ describe("PlaybackTopologyWriter", () => {
 				action: {
 					type: "clear_virtual",
 					page: 4,
-					playbackNumber: 1001,
+					playbackNumber: 1901,
 					expectedPageRevision: 2,
 					expectedPageObjectId: "legacy-page-four",
 				},

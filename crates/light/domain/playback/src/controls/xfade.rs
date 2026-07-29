@@ -237,7 +237,8 @@ impl PlaybackEngine {
         previous: Option<PlaybackPreloadTimingState>,
     ) -> Result<PlaybackMutation<()>, String> {
         if !matches!(
-            self.definition_at(identity).map(|definition| &definition.target),
+            self.definition_at(identity)
+                .map(|definition| &definition.target),
             Some(PlaybackTarget::CueList { .. })
         ) {
             return Err("preload timing is available only for Cuelist playbacks".into());

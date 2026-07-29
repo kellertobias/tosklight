@@ -141,6 +141,11 @@ fn send_dynamic_feedback(
     programmer: Option<&light_programmer::ProgrammerState>,
 ) {
     let prefix = format!("/light/{}/feedback/dynamic", subscriber.desk_alias);
+    send_runtime_dynamic_feedback(state, subscriber, &prefix);
+    send_programmer_dynamic_feedback(state, subscriber, &prefix, programmer);
+}
+
+fn send_runtime_dynamic_feedback(state: &AppState, subscriber: &OscSubscriber, prefix: &str) {
     let runtime = state.output.dynamic_runtime_snapshot();
     let active_instances = runtime
         .instances
@@ -277,6 +282,14 @@ fn send_dynamic_feedback(
             }
         }
     }
+}
+
+fn send_programmer_dynamic_feedback(
+    state: &AppState,
+    subscriber: &OscSubscriber,
+    prefix: &str,
+    programmer: Option<&light_programmer::ProgrammerState>,
+) {
     let mut instances =
         HashMap::<Uuid, (u16, String, light_dynamics::DynamicInstanceOverrides, usize)>::new();
     let mut fix_at_count = 0_usize;

@@ -147,30 +147,17 @@ const VIRTUAL_GRID_GAP = 2;
 const VIRTUAL_GRID_OVERSCAN = 2;
 const FALLBACK_VISIBLE_TRACKS = 6;
 
-function VirtualizedPlaybackGrid({
-	page,
-	rows,
-	columns,
-	minimumBoxWidth,
-	resolveBox,
-	callbacks,
-	className,
-}: {
-	page: number;
-	rows: number;
-	columns: number;
-	minimumBoxWidth: number;
-	resolveBox(position: number): VirtualPlaybackBoxViewModel;
-	callbacks: VirtualPlaybackGridCallbacks;
-	className: string;
-}) {
-	const host = useRef<HTMLDivElement>(null);
-	const [viewport, setViewport] = useState({
-		scrollTop: 0,
-		scrollLeft: 0,
-		width: 0,
-		height: 0,
-	});
+function virtualWindow(
+	viewport: {
+		scrollTop: number;
+		scrollLeft: number;
+		width: number;
+		height: number;
+	},
+	rows: number,
+	columns: number,
+	minimumBoxWidth: number,
+) {
 	const cellWidth = Math.max(64, minimumBoxWidth);
 	const rowHeight = cellWidth;
 	const columnStride = cellWidth + VIRTUAL_GRID_GAP;
@@ -200,12 +187,57 @@ function VirtualizedPlaybackGrid({
 	for (let row = firstRow; row < lastRow; row++)
 		for (let column = firstColumn; column < lastColumn; column++)
 			positions.push(row * columns + column);
+	return {
+		cellWidth,
+		rowHeight,
+		columnStride,
+		rowStride,
+		firstRow,
+		lastRow,
+		firstColumn,
+		lastColumn,
+		positions,
+	};
+}
+
+function VirtualizedPlaybackGrid({
+	page,
+	rows,
+	columns,
+	minimumBoxWidth,
+	resolveBox,
+	callbacks,
+	className,
+}: {
+	page: number;
+	rows: number;
+	columns: number;
+	minimumBoxWidth: number;
+	resolveBox(position: number): VirtualPlaybackBoxViewModel;
+	callbacks: VirtualPlaybackGridCallbacks;
+	className: string;
+}) {
+	const host = useRef<HTMLDivElement>(null);
+	const [viewport, setViewport] = useState({
+		scrollTop: 0,
+		scrollLeft: 0,
+		width: 0,
+		height: 0,
+	});
+	const {
+		cellWidth,
+		rowHeight,
+		columnStride,
+		rowStride,
+		firstRow,
+		lastRow,
+		firstColumn,
+		lastColumn,
+		positions,
+	} = virtualWindow(viewport, rows, columns, minimumBoxWidth);
 	const rangeKey = positions.join(",");
 	const [settledPositions, setSettledPositions] = useState(positions);
-	const visiblePositions = new Set(positions);
-	const retainedPositions = settledPositions.filter(
-		(position) => !visiblePositions.has(position),
-	);
+	const retainedPositions = retainedVirtualPositions(settledPositions, positions);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: rangeKey owns semantic array equality while scrolling.
 	useEffect(() => {
@@ -341,6 +373,11 @@ function sameViewport(
 	);
 }
 
+function retainedVirtualPositions(settled: number[], visible: number[]) {
+	const visiblePositions = new Set(visible);
+	return settled.filter((position) => !visiblePositions.has(position));
+}
+
 function VirtualPlaybackBox({
 	page,
 	box,
@@ -371,18 +408,9 @@ function VirtualPlaybackBox({
 		[box.position, box.slot],
 	);
 
-	const unavailable = box.availability === "unavailable";
-	const assigned = box.availability === "assigned";
-	const vacant = !assigned;
-	const states: PoolCardState[] = [
-		...(unavailable ? ["disabled" as const] : []),
-		...(box.running || actionHeld ? ["active" as const] : []),
-		...(box.assignmentTarget ? ["record-target" as const] : []),
-		...(box.updateTarget ? ["update-target" as const] : []),
-	];
-	const secondary = assigned
-		? [box.actionLabel, box.currentCue].filter(Boolean).join(" · ")
-		: "Unassigned";
+	const { unavailable, assigned, vacant } = virtualPlaybackAvailability(box);
+	const states = virtualPlaybackStates(box, actionHeld, unavailable);
+	const secondary = virtualPlaybackSecondary(box, assigned);
 
 	const activate = (event: ReactMouseEvent<HTMLButtonElement>) => {
 		if (
@@ -498,6 +526,37 @@ function VirtualPlaybackBox({
 			}}
 		/>
 	);
+}
+
+function virtualPlaybackAvailability(box: VirtualPlaybackBoxViewModel) {
+	const assigned = box.availability === "assigned";
+	return {
+		unavailable: box.availability === "unavailable",
+		assigned,
+		vacant: !assigned,
+	};
+}
+
+function virtualPlaybackSecondary(
+	box: VirtualPlaybackBoxViewModel,
+	assigned: boolean,
+) {
+	return assigned
+		? [box.actionLabel, box.currentCue].filter(Boolean).join(" · ")
+		: "Unassigned";
+}
+
+function virtualPlaybackStates(
+	box: VirtualPlaybackBoxViewModel,
+	actionHeld: boolean,
+	unavailable: boolean,
+): PoolCardState[] {
+	return [
+		...(unavailable ? ["disabled" as const] : []),
+		...(box.running || actionHeld ? ["active" as const] : []),
+		...(box.assignmentTarget ? ["record-target" as const] : []),
+		...(box.updateTarget ? ["update-target" as const] : []),
+	];
 }
 
 function boxLabel(page: number, box: VirtualPlaybackBoxViewModel) {

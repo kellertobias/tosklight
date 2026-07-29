@@ -203,16 +203,25 @@ export class ProgrammerValuesSession {
 			);
 			return;
 		}
-		if (message.projection.userId !== this.eventScope.userId) {
+		const eventUserId =
+			"change" in message ? message.change.userId : message.projection.userId;
+		if (eventUserId !== this.eventScope.userId) {
 			void this.repair(generation, this.scopeError("event user"));
 			return;
 		}
 		try {
-			this.store.applyProjection(
-				message.projection,
-				message.sequence,
-				this.expectedStoreScope(),
-			);
+			if ("change" in message)
+				this.store.applyChange(
+					message.change,
+					message.sequence,
+					this.expectedStoreScope(),
+				);
+			else
+				this.store.applyProjection(
+					message.projection,
+					message.sequence,
+					this.expectedStoreScope(),
+				);
 		} catch (reason) {
 			void this.repair(generation, asError(reason));
 		}

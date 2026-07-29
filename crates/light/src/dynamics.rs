@@ -1,6 +1,9 @@
 //! Server-authoritative Dynamic instance and FAT application operations.
 
+mod conversion;
+
 use crate::{ActionContext, ActionError, ActionErrorKind};
+use conversion::{factor_rational, runtime_error};
 use light_core::{AttributeKey, FixtureId, SessionId, UserId};
 use light_dynamics::{
     DynamicController, DynamicControllerSource, DynamicDefinition, DynamicDefinitionSnapshot,
@@ -23,6 +26,9 @@ pub struct DynamicStartCommand {
     pub targets: Vec<FixtureId>,
     pub overrides: DynamicInstanceOverrides,
     pub timing: DynamicValueTiming,
+    /// Optional identity shared by a deliberate sequence of Dynamic starts. The first start
+    /// creates one Programmer undo checkpoint and later starts with the same identity extend it.
+    pub undo_group: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -449,10 +455,11 @@ impl DynamicsService {
                     })
             })
             .collect::<Vec<_>>();
-        if !self
-            .programmers
-            .apply_dynamic_values(identity.session, &mutations, None)
-        {
+        if !self.programmers.apply_dynamic_values(
+            identity.session,
+            &mutations,
+            command.undo_group.as_deref(),
+        ) {
             if !preload {
                 let _ = ports.off_runtime_controller(controller_id, now_millis, 0, 0);
             }
@@ -1165,44 +1172,4 @@ fn store_off(
         ));
     }
     Ok(())
-}
-
-fn factor_rational(value: f32) -> Result<light_dynamics::Rational, ActionError> {
-    if !value.is_finite() || value <= 0.0 {
-        return Err(ActionError::new(
-            ActionErrorKind::Invalid,
-            "Dynamic speed multiplier must be positive",
-        ));
-    }
-    let denominator = 1_000_u32;
-    let numerator = (value * denominator as f32)
-        .round()
-        .clamp(1.0, u32::MAX as f32) as u32;
-    let divisor = greatest_common_divisor(numerator, denominator);
-    Ok(light_dynamics::Rational {
-        numerator: numerator / divisor,
-        denominator: denominator / divisor,
-    })
-}
-
-const fn greatest_common_divisor(mut left: u32, mut right: u32) -> u32 {
-    while right != 0 {
-        let remainder = left % right;
-        left = right;
-        right = remainder;
-    }
-    if left == 0 { 1 } else { left }
-}
-
-fn runtime_error(error: DynamicRuntimeError) -> ActionError {
-    let kind = match error {
-        DynamicRuntimeError::MissingDefinition
-        | DynamicRuntimeError::MissingInstance
-        | DynamicRuntimeError::MissingController => ActionErrorKind::NotFound,
-        DynamicRuntimeError::EmptyTargets
-        | DynamicRuntimeError::InvalidController
-        | DynamicRuntimeError::InvalidDefinition(_)
-        | DynamicRuntimeError::InvalidSnapshot(_) => ActionErrorKind::Invalid,
-    };
-    ActionError::new(kind, error.to_string())
 }

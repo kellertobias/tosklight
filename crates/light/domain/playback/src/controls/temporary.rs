@@ -195,8 +195,9 @@ impl PlaybackEngine {
         }
         let promoted = self.definition_at(identity).unwrap().flash_release
             == FlashReleaseMode::ReleaseIntensityOnly
-            && released
-                .is_some_and(|released| self.promote_intensity_release_at(identity, released, false));
+            && released.is_some_and(|released| {
+                self.promote_intensity_release_at(identity, released, false)
+            });
         let effect = PlaybackRuntimeEffect::Transient.combine(if promoted {
             PlaybackRuntimeEffect::Durable
         } else {

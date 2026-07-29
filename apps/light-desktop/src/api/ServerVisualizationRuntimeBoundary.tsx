@@ -1,5 +1,6 @@
 import { type PropsWithChildren, useMemo } from "react";
 import type { ServerState } from "../features/server/useServerState";
+import type { SessionRole } from "../features/session/ownership";
 import { VisualizationRuntimeProvider } from "../features/visualizationRuntime/VisualizationRuntimeView";
 import { configuredServerUrl } from "./client/serverLocation";
 import { browserDeskBoundaryToken } from "./PatchTransport";
@@ -9,7 +10,8 @@ import { HttpVisualizationRuntimeTransport } from "./VisualizationRuntimeTranspo
 export function ServerVisualizationRuntimeBoundary({
 	children,
 	state,
-}: PropsWithChildren<{ state: ServerState }>) {
+	sessionRole,
+}: PropsWithChildren<{ state: ServerState; sessionRole: SessionRole }>) {
 	const showId = state.bootstrap?.active_show?.id ?? null;
 	const sessionId = state.session?.session_id ?? null;
 	const sessionToken = state.session?.token ?? null;
@@ -20,6 +22,12 @@ export function ServerVisualizationRuntimeBoundary({
 		state.connectionGeneration,
 		sessionId ?? "",
 		state.session?.client_id ?? "",
+		state.session?.desk.id ?? "",
+		state.session?.user.id ?? "",
+	].join("|");
+	const desktopAuthorityKey = [
+		serverUrl,
+		sessionId ?? "",
 		state.session?.desk.id ?? "",
 		state.session?.user.id ?? "",
 	].join("|");
@@ -50,6 +58,8 @@ export function ServerVisualizationRuntimeBoundary({
 			sessionId={sessionId}
 			authorityKey={authorityKey}
 			transport={transport}
+			desktopRole={sessionRole === "primary" ? "owner" : "mirror"}
+			desktopAuthorityKey={desktopAuthorityKey}
 		>
 			{children}
 		</VisualizationRuntimeProvider>

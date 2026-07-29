@@ -36,6 +36,8 @@ struct DynamicStartHttpActionRequest {
     overrides: DynamicInstanceOverridesProjection,
     #[serde(default)]
     timing: DynamicValueTimingProjection,
+    #[serde(default)]
+    undo_group: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -114,95 +116,113 @@ async fn runtime_snapshot(
         .into_iter()
         .filter(|instance| !instance.completed)
         .map(|instance| {
-            let winning_id = instance
-                .controllers
-                .iter()
-                .max_by_key(|controller| {
-                    (
-                        controller.priority,
-                        controller.activated_at_millis,
-                        controller.id,
-                    )
-                })
-                .map(|controller| controller.id);
-            let winning_speed_multiplier = instance
-                .controllers
-                .iter()
-                .find(|controller| Some(controller.id) == winning_id)
-                .map_or(1.0, |controller| f64::from(controller.speed_multiplier));
-            let combined_speed_multiplier = (winning_speed_multiplier
-                * instance.definition.overall_speed_multiplier.factor())
-            .max(f64::EPSILON);
-            let (
-                speed_source,
-                effective_cycle_millis,
-                effective_bpm,
-                beat_phase,
-                transport_advancing,
-            ) = match instance.definition.speed {
-                DynamicSpeed::Fixed { duration_millis } => (
-                    "Fixed".to_owned(),
-                    ((duration_millis as f64 / combined_speed_multiplier)
+            runtime_instance_projection(
+                instance,
+                &speed_groups,
+                output_interval_millis,
+                now_millis,
+                snapshot.global_paused,
+            )
+        })
+        .collect();
+    Ok(Json(DynamicRuntimeSnapshotProjection {
+        global_paused: snapshot.global_paused,
+        instances,
+        definitions,
+    }))
+}
+
+fn runtime_instance_projection(
+    instance: light_dynamics::DynamicInstanceSnapshot,
+    speed_groups: &[light_control::speed::SpeedSnapshot; 5],
+    output_interval_millis: u64,
+    now_millis: u64,
+    global_paused: bool,
+) -> DynamicRuntimeInstanceProjection {
+    let winning_id = instance
+        .controllers
+        .iter()
+        .max_by_key(|controller| {
+            (
+                controller.priority,
+                controller.activated_at_millis,
+                controller.id,
+            )
+        })
+        .map(|controller| controller.id);
+    let winning_speed_multiplier = instance
+        .controllers
+        .iter()
+        .find(|controller| Some(controller.id) == winning_id)
+        .map_or(1.0, |controller| f64::from(controller.speed_multiplier));
+    let combined_speed_multiplier = (winning_speed_multiplier
+        * instance.definition.overall_speed_multiplier.factor())
+    .max(f64::EPSILON);
+    let (speed_source, effective_cycle_millis, effective_bpm, beat_phase, transport_advancing) =
+        match instance.definition.speed {
+            DynamicSpeed::Fixed { duration_millis } => (
+                "Fixed".to_owned(),
+                ((duration_millis as f64 / combined_speed_multiplier)
+                    .round()
+                    .max(1.0)) as u64,
+                None,
+                None,
+                true,
+            ),
+            DynamicSpeed::SpeedGroup {
+                group,
+                beats_per_cycle,
+            } => {
+                let transport = speed_groups[speed_group_index(group)];
+                let cycle_millis = if transport.effective_bpm > f64::EPSILON {
+                    (beats_per_cycle.factor() * 60_000.0
+                        / transport.effective_bpm
+                        / combined_speed_multiplier)
                         .round()
-                        .max(1.0)) as u64,
-                    None,
-                    None,
-                    true,
-                ),
-                DynamicSpeed::SpeedGroup {
-                    group,
-                    beats_per_cycle,
-                } => {
-                    let transport = speed_groups[speed_group_index(group)];
-                    let cycle_millis = if transport.effective_bpm > f64::EPSILON {
-                        (beats_per_cycle.factor() * 60_000.0
-                            / transport.effective_bpm
-                            / combined_speed_multiplier)
-                            .round()
-                            .max(1.0) as u64
-                    } else {
-                        0
-                    };
-                    (
-                        format!("Speed Group {}", speed_group_label(group)),
-                        cycle_millis,
-                        Some(transport.effective_bpm),
-                        Some(transport.beat_phase),
-                        transport.phase_advancing,
-                    )
-                }
-            };
-            let transitions = instance
-                .controller_transitions
-                .iter()
-                .map(|transition| (transition.controller_id, *transition))
-                .collect::<std::collections::HashMap<_, _>>();
-            let controllers = instance
-                .controllers
-                .into_iter()
-                .map(|controller| {
-                    let transition = transitions.get(&controller.id).copied().unwrap_or(
-                        light_dynamics::DynamicControllerTransitionSnapshot {
-                            controller_id: controller.id,
-                            activation_started_at_millis: controller.activated_at_millis,
-                            ..Default::default()
-                        },
-                    );
-                    DynamicRuntimeControllerProjection {
-                        controller_id: controller.id,
-                        source: dynamic_source_label(&controller.source),
-                        priority: controller.priority,
-                        size: controller.size,
-                        speed_multiplier: controller.speed_multiplier,
-                        phase_offset_degrees: controller.phase_offset_degrees,
-                        paused: controller.paused,
-                        winning: winning_id == Some(controller.id),
-                        releasing: transition.release_started_at_millis.is_some(),
-                        activation_mix: runtime_transition_mix(transition, now_millis),
-                    }
-                })
-                .collect();
-            let aliasing_warning = light_dynamics::aliasing_warning(
+                        .max(1.0) as u64
+                } else {
+                    0
+                };
+                (
+                    format!("Speed Group {}", speed_group_label(group)),
+                    cycle_millis,
+                    Some(transport.effective_bpm),
+                    Some(transport.beat_phase),
+                    transport.phase_advancing,
+                )
+            }
+        };
+    let transitions = instance
+        .controller_transitions
+        .iter()
+        .map(|transition| (transition.controller_id, *transition))
+        .collect::<std::collections::HashMap<_, _>>();
+    let controllers = instance
+        .controllers
+        .into_iter()
+        .map(|controller| {
+            let transition = transitions.get(&controller.id).copied().unwrap_or(
+                light_dynamics::DynamicControllerTransitionSnapshot {
+                    controller_id: controller.id,
+                    activation_started_at_millis: controller.activated_at_millis,
+                    ..Default::default()
+                },
+            );
+            DynamicRuntimeControllerProjection {
+                controller_id: controller.id,
+                source: dynamic_source_label(&controller.source),
+                priority: controller.priority,
+                size: controller.size,
+                speed_multiplier: controller.speed_multiplier,
+                phase_offset_degrees: controller.phase_offset_degrees,
+                paused: controller.paused,
+                winning: winning_id == Some(controller.id),
+                releasing: transition.release_started_at_millis.is_some(),
+                activation_mix: runtime_transition_mix(transition, now_millis),
+            }
+        })
+        .collect();
+    let aliasing_warning = light_dynamics::aliasing_warning(
                 &instance.definition,
                 effective_cycle_millis,
                 output_interval_millis,
@@ -215,46 +235,39 @@ async fn runtime_snapshot(
                     warning.output_interval_millis,
                 )
             });
-            DynamicRuntimeInstanceProjection {
-                instance_id: instance.id,
-                dynamic_id: instance.definition.id,
-                pool_number: instance.definition.pool_number,
-                name: instance.definition.name,
-                targets: instance
-                    .targets
-                    .into_iter()
-                    .map(|target| target.0)
-                    .collect(),
-                pending: instance
-                    .pending_until_millis
-                    .is_some_and(|boundary| now_millis < boundary),
-                pending_until_millis: instance.pending_until_millis,
-                paused: instance.paused_at_millis.is_some(),
-                speed_source,
-                activation_boundary: match instance.definition.activation_boundary {
-                    light_dynamics::ActivationBoundary::Beat => {
-                        light_wire::v2::dynamics::DynamicActivationBoundaryProjection::Beat
-                    }
-                    light_dynamics::ActivationBoundary::Bar => {
-                        light_wire::v2::dynamics::DynamicActivationBoundaryProjection::Bar
-                    }
-                },
-                effective_cycle_millis,
-                effective_bpm,
-                beat_phase,
-                phase_advancing: transport_advancing
-                    && !snapshot.global_paused
-                    && instance.paused_at_millis.is_none(),
-                aliasing_warning,
-                controllers,
+    DynamicRuntimeInstanceProjection {
+        instance_id: instance.id,
+        dynamic_id: instance.definition.id,
+        pool_number: instance.definition.pool_number,
+        name: instance.definition.name,
+        targets: instance
+            .targets
+            .into_iter()
+            .map(|target| target.0)
+            .collect(),
+        pending: instance
+            .pending_until_millis
+            .is_some_and(|boundary| now_millis < boundary),
+        pending_until_millis: instance.pending_until_millis,
+        paused: instance.paused_at_millis.is_some(),
+        speed_source,
+        activation_boundary: match instance.definition.activation_boundary {
+            light_dynamics::ActivationBoundary::Beat => {
+                light_wire::v2::dynamics::DynamicActivationBoundaryProjection::Beat
             }
-        })
-        .collect();
-    Ok(Json(DynamicRuntimeSnapshotProjection {
-        global_paused: snapshot.global_paused,
-        instances,
-        definitions,
-    }))
+            light_dynamics::ActivationBoundary::Bar => {
+                light_wire::v2::dynamics::DynamicActivationBoundaryProjection::Bar
+            }
+        },
+        effective_cycle_millis,
+        effective_bpm,
+        beat_phase,
+        phase_advancing: transport_advancing
+            && !global_paused
+            && instance.paused_at_millis.is_none(),
+        aliasing_warning,
+        controllers,
+    }
 }
 
 fn dynamic_definition_status(
@@ -436,6 +449,7 @@ async fn start_or_toggle(
                 phase_offset_degrees: request.overrides.phase_offset_degrees,
             },
             timing: timing(request.timing),
+            undo_group: request.undo_group,
         };
         let result = if toggle {
             state.dynamics.toggle(&context(session), command, &ports)

@@ -347,6 +347,7 @@ fn set_cuelist_page_assignment_is_one_lossless_active_show_batch() {
                 "number": 1,
                 "name": "Main",
                 "slots": {},
+                "virtual_playbacks": {},
                 "future_layout": {"columns": 10}
             }),
             0,

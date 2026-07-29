@@ -208,7 +208,7 @@ fn page_and_pool_validation_enforce_public_ranges() {
     let list = list(vec![cue]);
     let mut invalid = definition(1001, list.id);
     assert!(invalid.validate().is_ok());
-    invalid.number = 9_999;
+    invalid.number = 39_101;
     assert!(invalid.validate().is_err());
     invalid.number = 1;
     assert!(invalid.validate().is_ok());

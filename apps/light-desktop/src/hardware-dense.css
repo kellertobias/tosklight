@@ -187,19 +187,12 @@
 	padding: 0 3px;
 	overflow: hidden;
 }
-.hardware-cue-row > span {
-	width: fit-content;
-	justify-self: start;
-}
 .hardware-cue-row > i {
 	position: absolute;
 	inset: 0;
 	right: auto;
 	width: calc(var(--cue-fade-progress) * 100%);
 	background: #17677766;
-}
-.hardware-cue-row > b {
-	font-weight: 600;
 }
 .hardware-cue-row > small {
 	text-align: right;

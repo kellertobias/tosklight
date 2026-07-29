@@ -1,5 +1,5 @@
-import type { DeskConfiguration, ShowEntry } from "../../api/types";
-import type { StoredDeskLayout, StoredStageLayout } from "./contracts";
+import type { ShowEntry } from "../../api/types";
+import type { StoredDeskLayout } from "./contracts";
 
 export interface ServerShowContext {
 	createShow: (name: string) => Promise<void>;

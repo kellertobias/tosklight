@@ -13,6 +13,7 @@ export function Stage3dView({
 	camera3d,
 	selection,
 	active,
+	paneId,
 }: {
 	fixtures: Stage3dFixture[];
 	visualization: VisualizationSnapshot | null;
@@ -22,6 +23,7 @@ export function Stage3dView({
 	camera3d: StageWindowProps["camera3d"];
 	selection: StageSelectionModel;
 	active?: boolean;
+	paneId?: string;
 }) {
 	return (
 		<div
@@ -41,6 +43,7 @@ export function Stage3dView({
 				camera3d={camera3d}
 				visualizationLane={options.followPreload ? "preload" : "normal"}
 				visualizationActive={active ?? false}
+				paneId={paneId}
 				onSelect={(fixtureId, additive) => {
 					void selection.applyFixtureGesture(
 						fixtureId,

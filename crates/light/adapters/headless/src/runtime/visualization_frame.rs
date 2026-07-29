@@ -6,8 +6,8 @@ use light_engine::{RenderOptions, RenderResult};
 use light_wire::v2::{
     preload_values::ProgrammingPreloadAttributeValue,
     visualization::{
-        VisualizationLane, VisualizationLaneDelta, VisualizationLaneSnapshot, VisualizationValue,
-        VisualizationValueKey,
+        VisualizationLane, VisualizationLaneDelta, VisualizationLaneSnapshot, VisualizationScope,
+        VisualizationValue, VisualizationValueKey,
     },
 };
 use std::{
@@ -18,7 +18,11 @@ use std::{
     },
     time::{Duration, Instant, SystemTime},
 };
+use tokio::sync::Notify;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
+
+pub(super) const VISUALIZATION_PUBLICATION_INTERVAL: Duration = Duration::from_millis(100);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(super) enum VisualizationProjectionKey {
@@ -29,6 +33,8 @@ pub(super) enum VisualizationProjectionKey {
 pub(super) struct ProjectedVisualizationFrame {
     pub(super) source_sequence: u64,
     pub(super) previous_source_sequence: Option<u64>,
+    pub(super) lane_source_sequence: u64,
+    pub(super) source_generated_at: SystemTime,
     pub(super) snapshot: Arc<VisualizationLaneSnapshot>,
     pub(super) delta: Arc<VisualizationLaneDelta>,
 }
@@ -48,6 +54,14 @@ pub(super) struct VisualizationMetrics {
     pub(super) snapshot_payload_bytes: u64,
     pub(super) snapshot_source_frame: u64,
     pub(super) snapshot_source_age_millis: u64,
+    pub(super) stream_serializations: u64,
+    pub(super) stream_serialization_micros: u64,
+    pub(super) stream_payload_bytes: u64,
+    pub(super) stream_sends: u64,
+    pub(super) stream_send_micros: u64,
+    pub(super) stream_send_failures: u64,
+    pub(super) stream_queue_depth: u64,
+    pub(super) stream_queue_drops: u64,
 }
 
 /// An immutable semantic frame known to have crossed the authoritative output boundary.
@@ -55,6 +69,7 @@ pub(super) struct VisualizationMetrics {
 pub(super) struct PublishedVisualizationFrame {
     pub(super) sequence: u64,
     pub(super) generated_at: SystemTime,
+    pub(super) scope: VisualizationScope,
     pub(super) show_revision: u64,
     pub(super) options: RenderOptions,
     pub(super) values: Arc<HashMap<(FixtureId, AttributeKey), AttributeValue>>,
@@ -65,12 +80,18 @@ pub(super) struct PublishedVisualizationFrame {
 #[derive(Default)]
 pub(super) struct VisualizationFrameHub {
     next_sequence: AtomicU64,
+    next_projection_sequence: AtomicU64,
     latest: ArcSwapOption<PublishedVisualizationFrame>,
+    sampled: ArcSwapOption<PublishedVisualizationFrame>,
     projections:
         parking_lot::Mutex<HashMap<VisualizationProjectionKey, Arc<ProjectedVisualizationFrame>>>,
     projection_claims: parking_lot::Mutex<HashMap<VisualizationProjectionKey, u64>>,
     normal_subscribers: AtomicU64,
     preload_subscribers: AtomicU64,
+    subscriber_notify: Notify,
+    subscriber_generation: AtomicU64,
+    source_notify: Notify,
+    sample_notify: Notify,
     projection_count: AtomicU64,
     projection_micros: AtomicU64,
     payload_bytes: AtomicU64,
@@ -82,23 +103,132 @@ pub(super) struct VisualizationFrameHub {
     snapshot_payload_bytes: AtomicU64,
     snapshot_source_frame: AtomicU64,
     snapshot_source_age_millis: AtomicU64,
+    stream_serializations: AtomicU64,
+    stream_serialization_micros: AtomicU64,
+    stream_payload_bytes: AtomicU64,
+    stream_sends: AtomicU64,
+    stream_send_micros: AtomicU64,
+    stream_send_failures: AtomicU64,
+    stream_queue_depth: AtomicU64,
+    stream_queue_drops: AtomicU64,
 }
 
 impl VisualizationFrameHub {
-    pub(super) fn publish(&self, rendered: &RenderResult, options: RenderOptions) {
+    pub(super) fn publish(
+        &self,
+        rendered: &RenderResult,
+        options: RenderOptions,
+        scope: VisualizationScope,
+    ) {
         let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed) + 1;
         self.latest
             .store(Some(Arc::new(PublishedVisualizationFrame {
                 sequence,
                 generated_at: SystemTime::now(),
+                scope,
                 show_revision: rendered.revision,
                 options,
                 values: Arc::clone(&rendered.resolved_values),
             })));
+        self.source_notify.notify_one();
     }
 
     pub(super) fn latest(&self) -> Option<Arc<PublishedVisualizationFrame>> {
         self.latest.load_full()
+    }
+
+    pub(super) fn sampled(&self) -> Option<Arc<PublishedVisualizationFrame>> {
+        self.sampled.load_full()
+    }
+
+    pub(super) async fn wait_for_sample_after(
+        &self,
+        sequence: u64,
+    ) -> Arc<PublishedVisualizationFrame> {
+        loop {
+            let notified = self.sample_notify.notified();
+            if let Some(source) = self.sampled()
+                && source.sequence > sequence
+            {
+                return source;
+            }
+            notified.await;
+        }
+    }
+
+    fn sample_latest(&self) -> bool {
+        if self.normal_subscribers.load(Ordering::Relaxed) == 0
+            && self.preload_subscribers.load(Ordering::Relaxed) == 0
+        {
+            return false;
+        }
+        if let Some(source) = self.latest() {
+            if self
+                .sampled()
+                .is_some_and(|sampled| sampled.sequence == source.sequence)
+            {
+                return false;
+            }
+            self.sampled.store(Some(source));
+            self.sample_notify.notify_waiters();
+            return true;
+        }
+        false
+    }
+
+    pub(super) async fn run_sampler(
+        self: Arc<Self>,
+        cancellation: CancellationToken,
+    ) -> anyhow::Result<()> {
+        loop {
+            while !self.has_subscribers() {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = self.subscriber_notify.notified() => {},
+                }
+            }
+            self.sample_latest();
+            let generation = self.subscriber_generation.load(Ordering::Relaxed);
+            let mut next_due = tokio::time::Instant::now() + VISUALIZATION_PUBLICATION_INTERVAL;
+            let mut due_for_new_source = false;
+            while self.has_subscribers() {
+                let source_notified = self.source_notify.notified();
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tokio::time::sleep_until(next_due), if !due_for_new_source => {
+                        if self.sample_latest() {
+                            next_due =
+                                tokio::time::Instant::now() + VISUALIZATION_PUBLICATION_INTERVAL;
+                        } else {
+                            // Do not consume a cadence slot without a new
+                            // authoritative source. The next publication can be
+                            // sampled immediately while actual samples remain
+                            // capped at ten hertz.
+                            due_for_new_source = true;
+                        }
+                    },
+                    _ = source_notified => {
+                        if due_for_new_source && self.sample_latest() {
+                            due_for_new_source = false;
+                            next_due =
+                                tokio::time::Instant::now() + VISUALIZATION_PUBLICATION_INTERVAL;
+                        }
+                    },
+                    _ = self.subscriber_notify.notified() => {
+                        if !self.has_subscribers()
+                            || self.subscriber_generation.load(Ordering::Relaxed) != generation
+                        {
+                            break;
+                        }
+                    },
+                }
+            }
+        }
+    }
+
+    fn has_subscribers(&self) -> bool {
+        self.normal_subscribers.load(Ordering::Relaxed) != 0
+            || self.preload_subscribers.load(Ordering::Relaxed) != 0
     }
 
     pub(super) fn projection(
@@ -124,7 +254,22 @@ impl VisualizationFrameHub {
             );
         }
         let started = Instant::now();
-        let snapshot = Arc::new(build()?);
+        let mut snapshot = build()?;
+        let (lane_source_sequence, source_generated_at) = match key {
+            VisualizationProjectionKey::Normal => (source.sequence, source.generated_at),
+            VisualizationProjectionKey::Preload(_) => {
+                let generated_at = SystemTime::now();
+                snapshot.generated_at =
+                    chrono::DateTime::<chrono::Utc>::from(generated_at).to_rfc3339();
+                (
+                    self.next_projection_sequence
+                        .fetch_add(1, Ordering::Relaxed)
+                        + 1,
+                    generated_at,
+                )
+            }
+        };
+        let snapshot = Arc::new(snapshot);
         let previous = projections.get(&key);
         let delta = Arc::new(lane_delta(
             previous.map(|projection| projection.snapshot.as_ref()),
@@ -151,6 +296,8 @@ impl VisualizationFrameHub {
         let projection = Arc::new(ProjectedVisualizationFrame {
             source_sequence: source.sequence,
             previous_source_sequence: previous.map(|projection| projection.source_sequence),
+            lane_source_sequence,
+            source_generated_at,
             snapshot: Arc::clone(&snapshot),
             delta,
         });
@@ -159,17 +306,24 @@ impl VisualizationFrameHub {
     }
 
     pub(super) fn change_subscribers(&self, lane: VisualizationLane, delta: i8) {
+        let was_inactive = !self.has_subscribers();
         let subscribers = match lane {
             VisualizationLane::Normal => &self.normal_subscribers,
             VisualizationLane::Preload => &self.preload_subscribers,
         };
         if delta > 0 {
             subscribers.fetch_add(delta as u64, Ordering::Relaxed);
+            if was_inactive {
+                self.subscriber_generation.fetch_add(1, Ordering::Relaxed);
+                self.sample_latest();
+            }
+            self.subscriber_notify.notify_one();
         } else {
             let decrement = u64::from(delta.unsigned_abs());
             let _ = subscribers.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
                 Some(current.saturating_sub(decrement))
             });
+            self.subscriber_notify.notify_one();
         }
     }
 
@@ -215,6 +369,39 @@ impl VisualizationFrameHub {
         );
     }
 
+    pub(super) fn record_stream_serialization(&self, duration: Duration, payload_bytes: u64) {
+        self.stream_serializations.fetch_add(1, Ordering::Relaxed);
+        self.stream_serialization_micros
+            .store(duration_micros(duration), Ordering::Relaxed);
+        self.stream_payload_bytes
+            .store(payload_bytes, Ordering::Relaxed);
+    }
+
+    pub(super) fn record_stream_queue_push(&self, replaced_pending: bool) {
+        if replaced_pending {
+            self.stream_queue_drops.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.stream_queue_depth.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    pub(super) fn record_stream_queue_take(&self) {
+        let _ =
+            self.stream_queue_depth
+                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |depth| {
+                    Some(depth.saturating_sub(1))
+                });
+    }
+
+    pub(super) fn record_stream_send(&self, duration: Duration, succeeded: bool) {
+        self.stream_sends.fetch_add(1, Ordering::Relaxed);
+        self.stream_send_micros
+            .store(duration_micros(duration), Ordering::Relaxed);
+        if !succeeded {
+            self.stream_send_failures.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
     pub(super) fn metrics(&self) -> VisualizationMetrics {
         VisualizationMetrics {
             normal_subscribers: self.normal_subscribers.load(Ordering::Relaxed),
@@ -232,6 +419,14 @@ impl VisualizationFrameHub {
             snapshot_payload_bytes: self.snapshot_payload_bytes.load(Ordering::Relaxed),
             snapshot_source_frame: self.snapshot_source_frame.load(Ordering::Relaxed),
             snapshot_source_age_millis: self.snapshot_source_age_millis.load(Ordering::Relaxed),
+            stream_serializations: self.stream_serializations.load(Ordering::Relaxed),
+            stream_serialization_micros: self.stream_serialization_micros.load(Ordering::Relaxed),
+            stream_payload_bytes: self.stream_payload_bytes.load(Ordering::Relaxed),
+            stream_sends: self.stream_sends.load(Ordering::Relaxed),
+            stream_send_micros: self.stream_send_micros.load(Ordering::Relaxed),
+            stream_send_failures: self.stream_send_failures.load(Ordering::Relaxed),
+            stream_queue_depth: self.stream_queue_depth.load(Ordering::Relaxed),
+            stream_queue_drops: self.stream_queue_drops.load(Ordering::Relaxed),
         }
     }
 }
@@ -243,6 +438,7 @@ fn lane_delta(
     let previous_values = previous.map(|snapshot| value_index(&snapshot.values));
     let previous_profile = previous.map(|snapshot| value_index(&snapshot.profile_output_values));
     VisualizationLaneDelta {
+        scope: current.scope,
         revision: current.revision,
         generated_at: current.generated_at.clone(),
         grand_master: current.grand_master,
@@ -294,7 +490,7 @@ fn removed_values(
         .iter()
         .map(|value| (value.fixture_id, value.attribute.as_str()))
         .collect::<std::collections::HashSet<_>>();
-    previous
+    let mut removed = previous
         .into_iter()
         .flat_map(HashMap::keys)
         .filter(|(fixture_id, attribute)| !current.contains(&(*fixture_id, attribute.as_str())))
@@ -302,7 +498,13 @@ fn removed_values(
             fixture_id: *fixture_id,
             attribute: attribute.clone(),
         })
-        .collect()
+        .collect::<Vec<_>>();
+    removed.sort_by(|left, right| {
+        left.fixture_id
+            .cmp(&right.fixture_id)
+            .then_with(|| left.attribute.cmp(&right.attribute))
+    });
+    removed
 }
 
 fn duration_micros(duration: Duration) -> u64 {
@@ -331,27 +533,37 @@ mod tests {
         }
     }
 
+    fn scope(show_id: Uuid) -> VisualizationScope {
+        VisualizationScope {
+            show_id: Some(show_id),
+        }
+    }
+
     #[test]
     fn retains_only_the_latest_complete_frame() {
         let hub = VisualizationFrameHub::default();
-        hub.publish(&rendered(10), RenderOptions::default());
-        hub.publish(&rendered(20), RenderOptions::default());
-        hub.publish(&rendered(30), RenderOptions::default());
+        let scope = scope(Uuid::new_v4());
+        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.publish(&rendered(20), RenderOptions::default(), scope);
+        hub.publish(&rendered(30), RenderOptions::default(), scope);
 
         let latest = hub.latest().expect("a frame was published");
         assert_eq!(latest.sequence, 3);
         assert_eq!(latest.show_revision, 30);
+        assert_eq!(latest.scope, scope);
     }
 
     #[test]
     fn shares_one_projection_for_the_same_lane_and_source_frame() {
         let hub = VisualizationFrameHub::default();
-        hub.publish(&rendered(10), RenderOptions::default());
+        let scope = scope(Uuid::new_v4());
+        hub.publish(&rendered(10), RenderOptions::default(), scope);
         let source = hub.latest().unwrap();
         let builds = AtomicUsize::new(0);
         let build = || {
             builds.fetch_add(1, AtomicOrdering::Relaxed);
             Ok(VisualizationLaneSnapshot {
+                scope,
                 revision: 10,
                 generated_at: "2026-07-27T00:00:00Z".into(),
                 grand_master: 1.0,
@@ -377,6 +589,175 @@ mod tests {
     }
 
     #[test]
+    fn sampler_publishes_one_shared_source_only_while_subscribed() {
+        let hub = VisualizationFrameHub::default();
+        let scope = scope(Uuid::new_v4());
+        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.sample_latest();
+        assert!(hub.sampled().is_none());
+
+        hub.change_subscribers(VisualizationLane::Normal, 1);
+        hub.sample_latest();
+        assert_eq!(hub.sampled().unwrap().sequence, 1);
+
+        hub.publish(&rendered(20), RenderOptions::default(), scope);
+        assert_eq!(hub.sampled().unwrap().sequence, 1);
+        hub.sample_latest();
+        assert_eq!(hub.sampled().unwrap().sequence, 2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn sampler_parks_without_subscribers_and_resumes_on_first_claim() {
+        let hub = Arc::new(VisualizationFrameHub::default());
+        let cancellation = CancellationToken::new();
+        let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
+        let scope = scope(Uuid::new_v4());
+        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        tokio::time::advance(Duration::from_secs(1)).await;
+        assert!(hub.sampled().is_none());
+
+        hub.change_subscribers(VisualizationLane::Normal, 1);
+        tokio::task::yield_now().await;
+        assert_eq!(hub.sampled().unwrap().sequence, 1);
+
+        hub.change_subscribers(VisualizationLane::Normal, -1);
+        hub.publish(&rendered(20), RenderOptions::default(), scope);
+        tokio::time::advance(Duration::from_secs(1)).await;
+        assert_eq!(hub.sampled().unwrap().sequence, 1);
+
+        cancellation.cancel();
+        sampler.await.unwrap().unwrap();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn sampler_notifies_waiters_on_each_new_shared_sample() {
+        let hub = Arc::new(VisualizationFrameHub::default());
+        let cancellation = CancellationToken::new();
+        let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
+        let scope = scope(Uuid::new_v4());
+        hub.publish(&rendered(10), RenderOptions::default(), scope);
+
+        let first_waiter = {
+            let hub = Arc::clone(&hub);
+            tokio::spawn(async move { hub.wait_for_sample_after(0).await.sequence })
+        };
+        hub.change_subscribers(VisualizationLane::Normal, 1);
+        assert_eq!(first_waiter.await.unwrap(), 1);
+
+        let second_waiter = {
+            let hub = Arc::clone(&hub);
+            tokio::spawn(async move { hub.wait_for_sample_after(1).await.sequence })
+        };
+        hub.publish(&rendered(20), RenderOptions::default(), scope);
+        tokio::task::yield_now().await;
+        assert!(!second_waiter.is_finished());
+
+        tokio::time::advance(VISUALIZATION_PUBLICATION_INTERVAL).await;
+        assert_eq!(second_waiter.await.unwrap(), 2);
+
+        hub.change_subscribers(VisualizationLane::Normal, -1);
+        cancellation.cancel();
+        sampler.await.unwrap().unwrap();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn sampler_uses_the_next_source_when_a_cadence_deadline_precedes_publication() {
+        let hub = Arc::new(VisualizationFrameHub::default());
+        let cancellation = CancellationToken::new();
+        let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
+        let scope = scope(Uuid::new_v4());
+        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.change_subscribers(VisualizationLane::Normal, 1);
+        assert_eq!(hub.wait_for_sample_after(0).await.sequence, 1);
+        tokio::task::yield_now().await;
+
+        let next_waiter = {
+            let hub = Arc::clone(&hub);
+            tokio::spawn(async move { hub.wait_for_sample_after(1).await.sequence })
+        };
+        tokio::time::advance(VISUALIZATION_PUBLICATION_INTERVAL).await;
+        tokio::task::yield_now().await;
+        assert!(!next_waiter.is_finished());
+
+        hub.publish(&rendered(20), RenderOptions::default(), scope);
+        assert_eq!(next_waiter.await.unwrap(), 2);
+
+        hub.change_subscribers(VisualizationLane::Normal, -1);
+        cancellation.cancel();
+        sampler.await.unwrap().unwrap();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn reactivated_sampler_starts_a_fresh_shared_cadence() {
+        let hub = Arc::new(VisualizationFrameHub::default());
+        let cancellation = CancellationToken::new();
+        let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
+        let scope = scope(Uuid::new_v4());
+        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.change_subscribers(VisualizationLane::Normal, 1);
+        assert_eq!(hub.wait_for_sample_after(0).await.sequence, 1);
+        tokio::task::yield_now().await;
+
+        tokio::time::advance(Duration::from_millis(50)).await;
+        hub.change_subscribers(VisualizationLane::Normal, -1);
+        hub.publish(&rendered(20), RenderOptions::default(), scope);
+        hub.change_subscribers(VisualizationLane::Normal, 1);
+        assert_eq!(hub.wait_for_sample_after(1).await.sequence, 2);
+        tokio::task::yield_now().await;
+
+        hub.publish(&rendered(30), RenderOptions::default(), scope);
+        let next_waiter = {
+            let hub = Arc::clone(&hub);
+            tokio::spawn(async move { hub.wait_for_sample_after(2).await.sequence })
+        };
+        tokio::time::advance(Duration::from_millis(99)).await;
+        tokio::task::yield_now().await;
+        assert!(!next_waiter.is_finished());
+        tokio::time::advance(Duration::from_millis(1)).await;
+        assert_eq!(next_waiter.await.unwrap(), 3);
+
+        hub.change_subscribers(VisualizationLane::Normal, -1);
+        cancellation.cancel();
+        sampler.await.unwrap().unwrap();
+    }
+
+    #[test]
+    fn preload_projection_uses_its_own_authoritative_source_identity_and_timestamp() {
+        let hub = VisualizationFrameHub::default();
+        let scope = scope(Uuid::new_v4());
+        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        let source = hub.latest().unwrap();
+        let stale_timestamp = "2020-01-01T00:00:00Z";
+
+        let projection = hub
+            .projection(
+                VisualizationProjectionKey::Preload(Uuid::new_v4()),
+                &source,
+                || {
+                    Ok(VisualizationLaneSnapshot {
+                        scope,
+                        revision: 10,
+                        generated_at: stale_timestamp.into(),
+                        grand_master: 1.0,
+                        blackout: false,
+                        preload: true,
+                        values: Vec::new(),
+                        dynamic_stack: Vec::new(),
+                        profile_output_values: Vec::new(),
+                    })
+                },
+            )
+            .unwrap();
+
+        assert_eq!(projection.lane_source_sequence, 1);
+        assert_ne!(projection.snapshot.generated_at, stale_timestamp);
+        assert_eq!(
+            projection.snapshot.generated_at,
+            chrono::DateTime::<chrono::Utc>::from(projection.source_generated_at).to_rfc3339()
+        );
+    }
+
+    #[test]
     fn subscriber_metrics_return_to_zero() {
         let hub = VisualizationFrameHub::default();
         hub.change_subscribers(VisualizationLane::Normal, 1);
@@ -393,13 +774,15 @@ mod tests {
     fn final_projection_claim_releases_session_specific_cache() {
         let hub = VisualizationFrameHub::default();
         let key = VisualizationProjectionKey::Preload(Uuid::new_v4());
+        let scope = scope(Uuid::new_v4());
         hub.change_projection_claim(key, 1);
-        hub.publish(&rendered(10), RenderOptions::default());
+        hub.publish(&rendered(10), RenderOptions::default(), scope);
         let source = hub.latest().unwrap();
         let builds = AtomicUsize::new(0);
         let mut build = || {
             builds.fetch_add(1, AtomicOrdering::Relaxed);
             Ok(VisualizationLaneSnapshot {
+                scope,
                 revision: 10,
                 generated_at: "2026-07-27T00:00:00Z".into(),
                 grand_master: 1.0,
@@ -421,9 +804,69 @@ mod tests {
     }
 
     #[test]
+    fn removed_values_have_deterministic_fixture_and_attribute_order() {
+        let scope = scope(Uuid::new_v4());
+        let fixture_a = Uuid::parse_str("11111111-1111-4111-8111-111111111111").unwrap();
+        let fixture_b = Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap();
+        let previous = VisualizationLaneSnapshot {
+            scope,
+            revision: 1,
+            generated_at: "2026-07-27T00:00:00Z".into(),
+            grand_master: 1.0,
+            blackout: false,
+            preload: false,
+            values: vec![
+                VisualizationValue {
+                    fixture_id: fixture_b,
+                    attribute: "tilt".into(),
+                    value: ProgrammingPreloadAttributeValue::Normalized(0.5),
+                },
+                VisualizationValue {
+                    fixture_id: fixture_a,
+                    attribute: "pan".into(),
+                    value: ProgrammingPreloadAttributeValue::Normalized(0.5),
+                },
+                VisualizationValue {
+                    fixture_id: fixture_a,
+                    attribute: "intensity".into(),
+                    value: ProgrammingPreloadAttributeValue::Normalized(0.5),
+                },
+            ],
+            dynamic_stack: Vec::new(),
+            profile_output_values: Vec::new(),
+        };
+        let current = VisualizationLaneSnapshot {
+            values: Vec::new(),
+            revision: 2,
+            ..previous.clone()
+        };
+
+        let delta = lane_delta(Some(&previous), &current);
+
+        assert_eq!(
+            delta.removed_values,
+            vec![
+                VisualizationValueKey {
+                    fixture_id: fixture_a,
+                    attribute: "intensity".into(),
+                },
+                VisualizationValueKey {
+                    fixture_id: fixture_a,
+                    attribute: "pan".into(),
+                },
+                VisualizationValueKey {
+                    fixture_id: fixture_b,
+                    attribute: "tilt".into(),
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn projection_work_cannot_block_latest_frame_publication() {
         let hub = Arc::new(VisualizationFrameHub::default());
-        hub.publish(&rendered(10), RenderOptions::default());
+        let scope = scope(Uuid::new_v4());
+        hub.publish(&rendered(10), RenderOptions::default(), scope);
         let source = hub.latest().unwrap();
         let (projection_started_tx, projection_started_rx) = mpsc::channel();
         let (release_projection_tx, release_projection_rx) = mpsc::channel();
@@ -434,6 +877,7 @@ mod tests {
                     projection_started_tx.send(()).unwrap();
                     release_projection_rx.recv().unwrap();
                     Ok(VisualizationLaneSnapshot {
+                        scope,
                         revision: 10,
                         generated_at: "2026-07-27T00:00:00Z".into(),
                         grand_master: 1.0,
@@ -451,7 +895,7 @@ mod tests {
         let (published_tx, published_rx) = mpsc::channel();
         let publisher_hub = Arc::clone(&hub);
         thread::spawn(move || {
-            publisher_hub.publish(&rendered(20), RenderOptions::default());
+            publisher_hub.publish(&rendered(20), RenderOptions::default(), scope);
             published_tx.send(()).unwrap();
         });
         published_rx

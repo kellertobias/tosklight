@@ -40,7 +40,7 @@ pub use model::{
 };
 pub use playback::{
     CueListPlaybackAction, EnginePlaybackCommand, EnginePlaybackEffect, EnginePlaybackOutcome,
-    PlaybackDynamicsProjection, PoolPlaybackAction,
+    PlaybackDynamicsProjection, PoolPlaybackAction, VirtualPlaybackAction,
 };
 pub use playback_batch::{
     PlaybackBatchAction, PlaybackBatchCommand, PlaybackBatchOutcome, PreparedPlaybackBatch,

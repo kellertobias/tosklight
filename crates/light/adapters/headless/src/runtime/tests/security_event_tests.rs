@@ -16,16 +16,14 @@ async fn bootstrap_does_not_relock_the_desk_store() {
     let body = json(response).await;
     let attributes = body["attribute_registry"].as_array().unwrap();
     assert_eq!(attributes.len(), ATTRIBUTE_REGISTRY.len());
-    assert!(attributes.iter().any(|attribute| {
-        attribute
-            == &serde_json::json!({
-                "id": "zoom",
-                "label": "Zoom",
-                "family": "beam",
-                "value_type": "continuous",
-                "default_unit": "deg"
-            })
-    }));
+    let zoom = attributes
+        .iter()
+        .find(|attribute| attribute["id"] == "zoom")
+        .expect("canonical Zoom attribute");
+    assert_eq!(zoom["label"], "Zoom");
+    assert_eq!(zoom["family"], "beam");
+    assert_eq!(zoom["value_type"], "continuous");
+    assert_eq!(zoom["default_unit"], "deg");
     assert!(
         !attributes
             .iter()

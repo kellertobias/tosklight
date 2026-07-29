@@ -14,6 +14,7 @@ const scope: VisualizationRuntimeScope = {
 	sessionId: SESSION_ID,
 	authorityKey: "server-a",
 };
+const wireScope = { show_id: SHOW_ID };
 
 class FakeWebSocket extends EventTarget {
 	static readonly OPEN = 1;
@@ -175,10 +176,12 @@ describe("HttpVisualizationRuntimeTransport", () => {
 			protocol_version: 1,
 			max_rate_hz: 10,
 			lanes: ["normal", "preload"],
+			scope: wireScope,
 		});
 		socket?.message({
 			type: "snapshot",
 			lane: "normal",
+			scope: wireScope,
 			sequence: 1,
 			source_frame: 7,
 			source_timestamp: "2026-07-21T09:00:00Z",
@@ -194,11 +197,13 @@ describe("HttpVisualizationRuntimeTransport", () => {
 		socket?.message({
 			type: "delta",
 			lane: "normal",
+			scope: wireScope,
 			sequence: 2,
 			source_frame: 8,
 			source_timestamp: "2026-07-21T09:00:00.100Z",
 			published_at: "2026-07-21T09:00:00.101Z",
 			delta: {
+				scope: wireScope,
 				revision: 7,
 				generated_at: "2026-07-21T09:00:00.100Z",
 				grand_master: 0.8,
@@ -231,6 +236,40 @@ describe("HttpVisualizationRuntimeTransport", () => {
 		expect(observer.error).toHaveBeenCalledWith(
 			expect.objectContaining({
 				message: "Visualization stream closed; reconnecting",
+			}),
+		);
+		stream.close();
+	});
+
+	it("rejects stream messages scoped to a replacement Show", () => {
+		FakeWebSocket.instances = [];
+		const observer = { snapshot: vi.fn(), error: vi.fn() };
+		const stream = createTransport(
+			vi.fn<typeof globalThis.fetch>(),
+			FakeWebSocket as unknown as typeof WebSocket,
+		).openStream(scope, observer);
+		stream.updateClaims(["normal"], 10);
+		const socket = FakeWebSocket.instances[0];
+		socket?.open();
+
+		socket?.message({
+			type: "snapshot",
+			lane: "normal",
+			scope: { show_id: "33333333-3333-4333-8333-333333333333" },
+			sequence: 1,
+			source_frame: 7,
+			source_timestamp: "2026-07-21T09:00:00Z",
+			published_at: "2026-07-21T09:00:00Z",
+			snapshot: {
+				...snapshot(false),
+				scope: { show_id: "33333333-3333-4333-8333-333333333333" },
+			},
+		});
+
+		expect(observer.snapshot).not.toHaveBeenCalled();
+		expect(observer.error).toHaveBeenCalledWith(
+			expect.objectContaining({
+				message: expect.stringContaining("configured visualization Show scope"),
 			}),
 		);
 		stream.close();
@@ -352,8 +391,11 @@ describe("decodeVisualizationRuntimeSnapshot", () => {
 					],
 					profile_output_values: [
 						{
-							...(snapshot(false)
-								.profile_output_values as Array<Record<string, unknown>>)[0],
+							...(
+								snapshot(false).profile_output_values as Array<
+									Record<string, unknown>
+								>
+							)[0],
 							future_profile_metadata: true,
 						},
 					],
@@ -401,6 +443,7 @@ function snapshot(preload: boolean) {
 		},
 	];
 	return {
+		scope: wireScope,
 		revision: 7,
 		generated_at: "2026-07-21T09:00:00Z",
 		grand_master: 0.8,

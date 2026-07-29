@@ -17,7 +17,11 @@ async fn map_existing_is_a_page_only_action_with_replay_no_change_and_conflict()
         "playback_page",
         "legacy-page-two",
         &serde_json::json!({
-            "number":2,"name":"Wing","slots":{},"future_page":{"columns":8}
+            "number":2,
+            "name":"Wing",
+            "slots":{},
+            "virtual_playbacks":{},
+            "future_page":{"columns":8}
         }),
     );
     let revision = scenario.show_revision();

@@ -65,7 +65,7 @@ fn one_external_action_publishes_one_full_deterministic_values_projection() {
     let event = &events[0];
     assert_eq!(event.desk_id, None);
     assert_eq!(event.class, EventClass::Projection);
-    assert_eq!(event.delivery, DeliveryPolicy::Replaceable);
+    assert_eq!(event.delivery, DeliveryPolicy::Lossless);
     assert_eq!(
         event.source,
         EventSource::Action(ActionSource::UserInterface)
@@ -78,6 +78,8 @@ fn one_external_action_publishes_one_full_deterministic_values_projection() {
     assert_eq!(projection.user_id, user_id);
     assert_eq!(projection.revision, 1);
     assert_eq!(projection.fixture_values.len(), 2);
+    assert_eq!(change.delta.fixture_values, projection.fixture_values);
+    assert!(change.delta.removed_fixture_values.is_empty());
     assert!(
         projection.fixture_values[0].programmer_order
             < projection.fixture_values[1].programmer_order

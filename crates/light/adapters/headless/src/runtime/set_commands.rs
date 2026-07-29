@@ -240,6 +240,7 @@ pub(super) fn assign_page_slot(
                 number: page,
                 name: format!("Page {page}"),
                 slots: HashMap::new(),
+                virtual_playbacks: HashMap::new(),
             })
     };
     definition.slots.insert(slot, playback);

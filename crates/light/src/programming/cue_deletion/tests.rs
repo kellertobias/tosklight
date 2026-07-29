@@ -309,6 +309,7 @@ fn seed_show(store: &ShowStore, cue_list_id: CueListId, cue_count: usize) {
         number: 1,
         name: "Main".into(),
         slots: [(1, 1)].into_iter().collect(),
+        virtual_playbacks: Default::default(),
     };
     store
         .put_object(

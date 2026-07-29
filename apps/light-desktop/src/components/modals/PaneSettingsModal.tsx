@@ -206,6 +206,252 @@ function CuePaneSettings({
 	);
 }
 
+function PaneLayoutSettings({
+	pane,
+	maximized,
+}: {
+	pane: PaneModel;
+	maximized: boolean;
+}) {
+	const { dispatch } = useApp();
+	return (
+		<>
+			<p>
+				Selected pane: <b>{pane.title}</b>
+			</p>
+			<div className="size-grid">
+				<TouchSelect
+					label="Grid column"
+					value={pane.x}
+					options={Array.from({ length: GRID_COLUMNS }, (_, index) => index + 1)}
+					onChange={(x) =>
+						dispatch({ type: "SET_PANE_RECT", id: pane.id, rect: { x } })
+					}
+				/>
+				<TouchSelect
+					label="Grid row"
+					value={pane.y}
+					options={Array.from({ length: GRID_ROWS }, (_, index) => index + 1)}
+					onChange={(y) =>
+						dispatch({ type: "SET_PANE_RECT", id: pane.id, rect: { y } })
+					}
+				/>
+				<TouchSelect
+					label="Grid width"
+					value={pane.width}
+					options={Array.from({ length: GRID_COLUMNS }, (_, index) => index + 1)}
+					onChange={(width) =>
+						dispatch({
+							type: "SET_PANE_RECT",
+							id: pane.id,
+							rect: { width },
+						})
+					}
+				/>
+				<TouchSelect
+					label="Grid height"
+					value={pane.height}
+					options={Array.from({ length: GRID_ROWS }, (_, index) => index + 1)}
+					onChange={(height) =>
+						dispatch({
+							type: "SET_PANE_RECT",
+							id: pane.id,
+							rect: { height },
+						})
+					}
+				/>
+			</div>
+			<div className="dialog-grid">
+				<Button
+					onClick={() => dispatch({ type: "TOGGLE_MAXIMIZE", id: pane.id })}
+				>
+					{maximized ? "Restore pane" : "Maximize pane"}
+				</Button>
+				<Button
+					className="danger"
+					onClick={() => {
+						if (requestPaneRemoval(pane.id))
+							dispatch({ type: "REMOVE_PANE", id: pane.id });
+					}}
+				>
+					Remove pane
+				</Button>
+			</div>
+		</>
+	);
+}
+
+function StagePaneSettings({ pane }: { pane: PaneModel }) {
+	const { dispatch } = useApp();
+	const setOption = (
+		option: "stageView" | "followPreload" | "showBeamGuides" | "stageRenderQuality",
+		value:
+			| boolean
+			| NonNullable<PaneModel["stageView"]>
+			| NonNullable<PaneModel["stageRenderQuality"]>,
+	) => dispatch({ type: "SET_PANE_STAGE_OPTION", id: pane.id, option, value });
+	return (
+		<FormLayout labelPlacement="side">
+			<MultiValueToggleField
+				label="Stage view"
+				value={pane.stageView ?? "2d"}
+				onChange={(value) => setOption("stageView", value)}
+				options={[
+					{ value: "2d", label: "2D" },
+					{ value: "3d", label: "3D" },
+				]}
+			/>
+			<SwitchField
+				label="Preload source"
+				offLabel="Manual"
+				onLabel="Follow preload"
+				checked={Boolean(pane.followPreload)}
+				onChange={(event) => setOption("followPreload", event.target.checked)}
+			/>
+			<SwitchField
+				label="Beam direction guidelines"
+				offLabel="Hidden"
+				onLabel="Visible"
+				checked={pane.showBeamGuides ?? true}
+				onChange={(event) => setOption("showBeamGuides", event.target.checked)}
+			/>
+			<MultiValueToggleField
+				label="Render quality"
+				value={pane.stageRenderQuality ?? "lines_and_beams"}
+				onChange={(value) => setOption("stageRenderQuality", value)}
+				options={[
+					{ value: "lines_only", label: "Lines only" },
+					{ value: "lines_and_beams", label: "Lines + beams" },
+					{ value: "beams", label: "Beams" },
+					{ value: "improved_beams", label: "Improved beams" },
+				]}
+			/>
+		</FormLayout>
+	);
+}
+
+function VirtualPlaybackGridSettings({ pane }: { pane: PaneModel }) {
+	const { dispatch } = useApp();
+	const rows = pane.virtualPlaybackRows ?? 2;
+	const columns = pane.virtualPlaybackColumns ?? 2;
+	const pageMode = pane.virtualPlaybackPageMode ?? "follow_main";
+	const pinnedPage = pane.virtualPlaybackPinnedPage ?? 1;
+	return (
+		<>
+			<FormLayout labelPlacement="side">
+				<NumberField
+					label="Rows"
+					min="1"
+					max={String(MAX_VIRTUAL_PLAYBACK_CELLS)}
+					value={rows}
+					onChange={(event) =>
+						dispatch({
+							type: "SET_VIRTUAL_PLAYBACK_GRID",
+							id: pane.id,
+							rows: Number(event.target.value),
+							columns,
+							changed: "rows",
+						})
+					}
+				/>
+				<NumberField
+					label="Columns"
+					min="1"
+					max={String(MAX_VIRTUAL_PLAYBACK_CELLS)}
+					value={columns}
+					onChange={(event) =>
+						dispatch({
+							type: "SET_VIRTUAL_PLAYBACK_GRID",
+							id: pane.id,
+							rows,
+							columns: Number(event.target.value),
+							changed: "columns",
+						})
+					}
+				/>
+				<MultiValueToggleField
+					label="Page mode"
+					value={pageMode}
+					onChange={(mode) =>
+						dispatch({
+							type: "SET_VIRTUAL_PLAYBACK_PAGE_MODE",
+							id: pane.id,
+							mode,
+							pinnedPage,
+						})
+					}
+					options={[
+						{ value: "follow_main", label: "Follow Main" },
+						{ value: "pinned", label: "Pinned" },
+					]}
+				/>
+				{pageMode === "pinned" && (
+					<NumberField
+						label="Pinned page"
+						min="1"
+						max={String(MAX_PLAYBACK_PAGE)}
+						value={pinnedPage}
+						onChange={(event) =>
+							dispatch({
+								type: "SET_VIRTUAL_PLAYBACK_PAGE_MODE",
+								id: pane.id,
+								mode: "pinned",
+								pinnedPage: Number(event.target.value),
+							})
+						}
+					/>
+				)}
+			</FormLayout>
+			<p role="status">
+				{(rows * columns).toLocaleString()} of{" "}
+				{MAX_VIRTUAL_PLAYBACK_CELLS.toLocaleString()} available Virtual
+				Playback positions.
+			</p>
+		</>
+	);
+}
+
+function PresetPoolPaneSettings({ pane }: { pane: PaneModel }) {
+	const { state, dispatch } = useApp();
+	const family = pane.presetFamily ?? state.presetFamily;
+	return (
+		<>
+			<h3>Preset family</h3>
+			<div className="button-group">
+				{PRESET_FAMILIES.map((candidate) => (
+					<Button
+						key={candidate}
+						className={family === candidate ? "active" : ""}
+						onClick={() =>
+							dispatch({
+								type: "SET_PANE_PRESET_FAMILY",
+								id: pane.id,
+								family: candidate,
+							})
+						}
+					>
+						{candidate}
+					</Button>
+				))}
+			</div>
+			<PoolColorSettings
+				objectType="preset"
+				paneId={pane.id}
+				presetFamily={family.toLowerCase() as Lowercase<typeof family>}
+				legacyPresetColors={pane.presetPoolColors ?? true}
+			/>
+		</>
+	);
+}
+
+function paneLayoutTab(pane: PaneModel, maximized: boolean): WindowSettingsTab {
+	return {
+		id: "pane",
+		label: "Pane Settings",
+		content: <PaneLayoutSettings pane={pane} maximized={maximized} />,
+	};
+}
+
 export function PaneSettingsModal() {
 	const { state } = useApp();
 	if (!state.paneSettingsId) return null;
@@ -220,89 +466,7 @@ function PaneSettingsDialog({ pane }: { pane: PaneModel }) {
 	const cuePaneCueLists = useCuePaneCuelistPlaybacks(pane.kind === "cues");
 	const close = () => dispatch({ type: "SET_PANE_SETTINGS", id: null });
 	const maximized = state.maximizedPaneId === pane.id;
-	const tabs: WindowSettingsTab[] = [
-		{
-			id: "pane",
-			label: "Pane Settings",
-			content: (
-				<>
-					<p>
-						Selected pane: <b>{pane.title}</b>
-					</p>
-					<div className="size-grid">
-						<TouchSelect
-							label="Grid column"
-							value={pane.x}
-							options={Array.from(
-								{ length: GRID_COLUMNS },
-								(_, index) => index + 1,
-							)}
-							onChange={(x) =>
-								dispatch({ type: "SET_PANE_RECT", id: pane.id, rect: { x } })
-							}
-						/>
-						<TouchSelect
-							label="Grid row"
-							value={pane.y}
-							options={Array.from(
-								{ length: GRID_ROWS },
-								(_, index) => index + 1,
-							)}
-							onChange={(y) =>
-								dispatch({ type: "SET_PANE_RECT", id: pane.id, rect: { y } })
-							}
-						/>
-						<TouchSelect
-							label="Grid width"
-							value={pane.width}
-							options={Array.from(
-								{ length: GRID_COLUMNS },
-								(_, index) => index + 1,
-							)}
-							onChange={(width) =>
-								dispatch({
-									type: "SET_PANE_RECT",
-									id: pane.id,
-									rect: { width },
-								})
-							}
-						/>
-						<TouchSelect
-							label="Grid height"
-							value={pane.height}
-							options={Array.from(
-								{ length: GRID_ROWS },
-								(_, index) => index + 1,
-							)}
-							onChange={(height) =>
-								dispatch({
-									type: "SET_PANE_RECT",
-									id: pane.id,
-									rect: { height },
-								})
-							}
-						/>
-					</div>
-					<div className="dialog-grid">
-						<Button
-							onClick={() => dispatch({ type: "TOGGLE_MAXIMIZE", id: pane.id })}
-						>
-							{maximized ? "Restore pane" : "Maximize pane"}
-						</Button>
-						<Button
-							className="danger"
-							onClick={() => {
-								if (requestPaneRemoval(pane.id))
-									dispatch({ type: "REMOVE_PANE", id: pane.id });
-							}}
-						>
-							Remove pane
-						</Button>
-					</div>
-				</>
-			),
-		},
-	];
+	const tabs: WindowSettingsTab[] = [paneLayoutTab(pane, maximized)];
 	if (pane.kind === "cues") {
 		tabs.push({
 			id: "cues",
@@ -314,42 +478,7 @@ function PaneSettingsDialog({ pane }: { pane: PaneModel }) {
 		tabs.push({
 			id: "pool",
 			label: "Pool",
-			content: (
-				<>
-					<h3>Preset family</h3>
-					<div className="button-group">
-						{PRESET_FAMILIES.map((family) => (
-							<Button
-								key={family}
-								className={
-									(pane.presetFamily ?? state.presetFamily) === family
-										? "active"
-										: ""
-								}
-								onClick={() =>
-									dispatch({
-										type: "SET_PANE_PRESET_FAMILY",
-										id: pane.id,
-										family,
-									})
-								}
-							>
-								{family}
-							</Button>
-						))}
-					</div>
-					<PoolColorSettings
-						objectType="preset"
-						paneId={pane.id}
-						presetFamily={
-							(
-								pane.presetFamily ?? state.presetFamily
-							).toLowerCase() as Lowercase<typeof state.presetFamily>
-						}
-						legacyPresetColors={pane.presetPoolColors ?? true}
-					/>
-				</>
-			),
+			content: <PresetPoolPaneSettings pane={pane} />,
 		});
 	if (pane.kind === "groups")
 		tabs.push({
@@ -373,154 +502,13 @@ function PaneSettingsDialog({ pane }: { pane: PaneModel }) {
 		tabs.push({
 			id: "stage",
 			label: "Stage",
-			content: (
-				<FormLayout labelPlacement="side">
-					<MultiValueToggleField
-						label="Stage view"
-						value={pane.stageView ?? "2d"}
-						onChange={(value) =>
-							dispatch({
-								type: "SET_PANE_STAGE_OPTION",
-								id: pane.id,
-								option: "stageView",
-								value,
-							})
-						}
-						options={[
-							{ value: "2d", label: "2D" },
-							{ value: "3d", label: "3D" },
-						]}
-					/>
-					<SwitchField
-						label="Preload source"
-						offLabel="Manual"
-						onLabel="Follow preload"
-						checked={Boolean(pane.followPreload)}
-						onChange={(event) =>
-							dispatch({
-								type: "SET_PANE_STAGE_OPTION",
-								id: pane.id,
-								option: "followPreload",
-								value: event.target.checked,
-							})
-						}
-					/>
-					<SwitchField
-						label="Beam direction guidelines"
-						offLabel="Hidden"
-						onLabel="Visible"
-						checked={pane.showBeamGuides ?? true}
-						onChange={(event) =>
-							dispatch({
-								type: "SET_PANE_STAGE_OPTION",
-								id: pane.id,
-								option: "showBeamGuides",
-								value: event.target.checked,
-							})
-						}
-					/>
-					<MultiValueToggleField
-						label="Render quality"
-						value={pane.stageRenderQuality ?? "lines_and_beams"}
-						onChange={(value) =>
-							dispatch({
-								type: "SET_PANE_STAGE_OPTION",
-								id: pane.id,
-								option: "stageRenderQuality",
-								value,
-							})
-						}
-						options={[
-							{ value: "lines_only", label: "Lines only" },
-							{ value: "lines_and_beams", label: "Lines + beams" },
-							{ value: "beams", label: "Beams" },
-							{ value: "improved_beams", label: "Improved beams" },
-						]}
-					/>
-				</FormLayout>
-			),
+			content: <StagePaneSettings pane={pane} />,
 		});
 	if (pane.kind === "virtual_playbacks") {
-		const rows = pane.virtualPlaybackRows ?? 2;
-		const columns = pane.virtualPlaybackColumns ?? 2;
-		const pageMode = pane.virtualPlaybackPageMode ?? "follow_main";
-		const pinnedPage = pane.virtualPlaybackPinnedPage ?? 1;
 		tabs.push({
 			id: "virtual",
 			label: "Virtual Playbacks",
-			content: (
-				<>
-					<FormLayout labelPlacement="side">
-						<NumberField
-							label="Rows"
-							min="1"
-							max={String(MAX_VIRTUAL_PLAYBACK_CELLS)}
-							value={rows}
-							onChange={(event) =>
-								dispatch({
-									type: "SET_VIRTUAL_PLAYBACK_GRID",
-									id: pane.id,
-									rows: Number(event.target.value),
-									columns,
-									changed: "rows",
-								})
-							}
-						/>
-						<NumberField
-							label="Columns"
-							min="1"
-							max={String(MAX_VIRTUAL_PLAYBACK_CELLS)}
-							value={columns}
-							onChange={(event) =>
-								dispatch({
-									type: "SET_VIRTUAL_PLAYBACK_GRID",
-									id: pane.id,
-									rows,
-									columns: Number(event.target.value),
-									changed: "columns",
-								})
-							}
-						/>
-						<MultiValueToggleField
-							label="Page mode"
-							value={pageMode}
-							onChange={(mode) =>
-								dispatch({
-									type: "SET_VIRTUAL_PLAYBACK_PAGE_MODE",
-									id: pane.id,
-									mode,
-									pinnedPage,
-								})
-							}
-							options={[
-								{ value: "follow_main", label: "Follow Main" },
-								{ value: "pinned", label: "Pinned" },
-							]}
-						/>
-						{pageMode === "pinned" && (
-							<NumberField
-								label="Pinned page"
-								min="1"
-								max={String(MAX_PLAYBACK_PAGE)}
-								value={pinnedPage}
-								onChange={(event) =>
-									dispatch({
-										type: "SET_VIRTUAL_PLAYBACK_PAGE_MODE",
-										id: pane.id,
-										mode: "pinned",
-										pinnedPage: Number(event.target.value),
-									})
-								}
-							/>
-						)}
-					</FormLayout>
-					<p role="status">
-						{(rows * columns).toLocaleString()} of{" "}
-						{MAX_VIRTUAL_PLAYBACK_CELLS.toLocaleString()} available Virtual
-						Playback positions.
-					</p>
-				</>
-			),
+			content: <VirtualPlaybackGridSettings pane={pane} />,
 		});
 		tabs.push({
 			id: "virtual-exclusion-zones",

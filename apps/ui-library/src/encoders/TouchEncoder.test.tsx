@@ -227,7 +227,7 @@ describe("TouchEncoder", () => {
 		);
 		const dialog = screen.getByRole("dialog", { name: "Enc 1 · Pan value" });
 		fireEvent.click(
-			within(dialog).getByRole("button", { name: "Release", exact: true }),
+			within(dialog).getByRole("button", { name: "Release" }),
 		);
 
 		expect(onRelease).toHaveBeenCalledOnce();

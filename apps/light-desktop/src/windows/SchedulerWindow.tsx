@@ -89,6 +89,126 @@ function EventCard({
 	);
 }
 
+function scheduleMarkers(events: ScheduleEvent[]) {
+	const byDate = new Map<
+		string,
+		{ date: string; explicit?: number; recurring?: number }
+	>();
+	for (const event of events) {
+		const dates =
+			event.timing.type === "fixed"
+				? [event.timing.date]
+				: event.timing.occurrences;
+		for (const date of dates) {
+			const current = byDate.get(date) ?? { date };
+			if (event.timing.type === "fixed")
+				current.explicit = (current.explicit ?? 0) + 1;
+			else current.recurring = (current.recurring ?? 0) + 1;
+			byDate.set(date, current);
+		}
+	}
+	return [...byDate.values()];
+}
+
+function ScheduleList({
+	events,
+	selectedDate,
+	onClearDate,
+	onEdit,
+}: {
+	events: ScheduleEvent[];
+	selectedDate: string | null;
+	onClearDate(): void;
+	onEdit?: (event: ScheduleEvent) => void;
+}) {
+	return (
+		<aside className="scheduler-list">
+			{selectedDate && (
+				<header className="scheduler-list-heading">
+					<span>
+						<strong>{selectedDate}</strong>
+						<small>Fixed and repeating events occurring this day</small>
+					</span>
+					<Button size="compact" onClick={onClearDate}>
+						Show all
+					</Button>
+				</header>
+			)}
+			<WindowScrollArea
+				emptyState={
+					events.length
+						? null
+						: {
+								title: "No events on this day",
+								description: "Choose another day or clear the day filter.",
+							}
+				}
+			>
+				<div className="scheduler-event-list">
+					{events.map((event) => (
+						<EventCard
+							event={event}
+							key={event.id}
+							onSelect={() => onEdit?.(event)}
+						/>
+					))}
+				</div>
+			</WindowScrollArea>
+		</aside>
+	);
+}
+
+function SchedulerSettings({
+	open,
+	showList,
+	showCalendar,
+	onShowList,
+	onShowCalendar,
+	onClose,
+}: {
+	open: boolean;
+	showList: boolean;
+	showCalendar: boolean;
+	onShowList(value: boolean): void;
+	onShowCalendar(value: boolean): void;
+	onClose(): void;
+}) {
+	if (!open) return null;
+	return (
+		<WindowSettings
+			title="Scheduler settings"
+			onClose={onClose}
+			tabs={[
+				{
+					id: "layout",
+					label: "Layout",
+					content: (
+						<div className="scheduler-settings">
+							<p>Choose which sides are visible in this Scheduler window.</p>
+							<SwitchField
+								label="Schedule list"
+								offLabel="Hidden"
+								onLabel="Visible"
+								checked={showList}
+								disabled={showList && !showCalendar}
+								onChange={(event) => onShowList(event.target.checked)}
+							/>
+							<SwitchField
+								label="Calendar"
+								offLabel="Hidden"
+								onLabel="Visible"
+								checked={showCalendar}
+								disabled={showCalendar && !showList}
+								onChange={(event) => onShowCalendar(event.target.checked)}
+							/>
+						</div>
+					),
+				},
+			]}
+		/>
+	);
+}
+
 export function SchedulerWindow({
 	initialEvents,
 	onCreate,
@@ -101,26 +221,7 @@ export function SchedulerWindow({
 	const [showList, setShowList] = useState(true);
 	const [showCalendar, setShowCalendar] = useState(true);
 	const [settingsOpen, setSettingsOpen] = useState(false);
-	const markers = useMemo(() => {
-		const byDate = new Map<
-			string,
-			{ date: string; explicit?: number; recurring?: number }
-		>();
-		for (const event of initialEvents) {
-			const dates =
-				event.timing.type === "fixed"
-					? [event.timing.date]
-					: event.timing.occurrences;
-			for (const date of dates) {
-				const current = byDate.get(date) ?? { date };
-				if (event.timing.type === "fixed")
-					current.explicit = (current.explicit ?? 0) + 1;
-				else current.recurring = (current.recurring ?? 0) + 1;
-				byDate.set(date, current);
-			}
-		}
-		return [...byDate.values()];
-	}, [initialEvents]);
+	const markers = useMemo(() => scheduleMarkers(initialEvents), [initialEvents]);
 	const visibleEvents = selectedDate
 		? initialEvents.filter((event) =>
 				event.timing.type === "fixed"
@@ -217,40 +318,12 @@ export function SchedulerWindow({
 				className={`scheduler-layout ${showList && showCalendar ? "is-split" : ""}`}
 			>
 				{showList && (
-					<aside className="scheduler-list">
-						{selectedDate && (
-							<header className="scheduler-list-heading">
-								<span>
-									<strong>{selectedDate}</strong>
-									<small>Fixed and repeating events occurring this day</small>
-								</span>
-								<Button size="compact" onClick={() => setSelectedDate(null)}>
-									Show all
-								</Button>
-							</header>
-						)}
-						<WindowScrollArea
-							emptyState={
-								visibleEvents.length
-									? null
-									: {
-											title: "No events on this day",
-											description:
-												"Choose another day or clear the day filter.",
-										}
-							}
-						>
-							<div className="scheduler-event-list">
-								{visibleEvents.map((event) => (
-									<EventCard
-										event={event}
-										key={event.id}
-										onSelect={() => onEdit?.(event)}
-									/>
-								))}
-							</div>
-						</WindowScrollArea>
-					</aside>
+					<ScheduleList
+						events={visibleEvents}
+						selectedDate={selectedDate}
+						onClearDate={() => setSelectedDate(null)}
+						onEdit={onEdit}
+					/>
 				)}
 				{showCalendar && (
 					<main className="scheduler-calendar">
@@ -271,37 +344,14 @@ export function SchedulerWindow({
 					</main>
 				)}
 			</div>
-			{settingsOpen && (
-				<WindowSettings
-					title="Scheduler settings"
-					onClose={() => setSettingsOpen(false)}
-					tabs={[
-						{
-							id: "layout",
-							label: "Layout",
-							content: (
-								<div className="scheduler-settings">
-									<p>
-										Choose which sides are visible in this Scheduler window.
-									</p>
-									<SwitchField
-										label="Schedule list"
-										checked={showList}
-										disabled={showList && !showCalendar}
-										onChange={(event) => setShowList(event.target.checked)}
-									/>
-									<SwitchField
-										label="Calendar"
-										checked={showCalendar}
-										disabled={showCalendar && !showList}
-										onChange={(event) => setShowCalendar(event.target.checked)}
-									/>
-								</div>
-							),
-						},
-					]}
-				/>
-			)}
+			<SchedulerSettings
+				open={settingsOpen}
+				showList={showList}
+				showCalendar={showCalendar}
+				onShowList={setShowList}
+				onShowCalendar={setShowCalendar}
+				onClose={() => setSettingsOpen(false)}
+			/>
 		</section>
 	);
 }

@@ -45,6 +45,14 @@ struct DemoTemplates {
     rgb_four: Arc<FixtureTemplate>,
 }
 
+struct DemoLayout {
+    templates: DemoTemplates,
+    universes: Vec<Vec<Arc<FixtureTemplate>>>,
+    manufacturer_fixture_slots: usize,
+    rgb_three_count: usize,
+    rgb_four_count: usize,
+}
+
 impl FixtureTemplate {
     fn load(
         package_dir: &Path,
@@ -158,74 +166,14 @@ pub fn build(
     if config.universes != UNIVERSES as u16 {
         return Err("the sustained demo show requires the 32-universe hard-floor profile".into());
     }
-    let templates = load_templates(package_dir)?;
-    let DemoTemplates {
-        sunstrip,
-        ledwash,
-        dls,
-        ledbeam,
-        rgb_three,
-        rgb_four,
-    } = templates;
-
-    let mut universes = (0..UNIVERSES)
-        .map(|_| Vec::<Arc<FixtureTemplate>>::new())
-        .collect::<Vec<_>>();
-    distribute(&mut universes, Arc::clone(&sunstrip), SUNSTRIP_QUANTITY);
-    distribute(&mut universes, Arc::clone(&ledwash), LEDWASH_QUANTITY);
-    distribute(&mut universes, Arc::clone(&dls), DLS_QUANTITY);
-    distribute(&mut universes, Arc::clone(&ledbeam), LEDBEAM_QUANTITY);
-
-    let manufacturer_fixture_slots = universes
-        .iter()
-        .flatten()
-        .map(|fixture| usize::from(fixture.footprint()))
-        .sum::<usize>();
-    let mut rgb_three_count = 0_usize;
-    let mut rgb_four_count = 0_usize;
-    for universe in &mut universes {
-        let used = used_slots(universe);
-        let remaining = usize::from(SLOTS_PER_UNIVERSE)
-            .checked_sub(used)
-            .ok_or_else(|| format!("demo show overfilled a universe with {used} slots"))?;
-        let (three_count, four_count) = rgb_fill_counts(remaining)?;
-        rgb_three_count += three_count;
-        rgb_four_count += four_count;
-        universe.extend(std::iter::repeat_n(Arc::clone(&rgb_three), three_count));
-        universe.extend(std::iter::repeat_n(Arc::clone(&rgb_four), four_count));
-        if used_slots(universe) != usize::from(SLOTS_PER_UNIVERSE) {
-            return Err("RGB PAR fill did not complete a universe".into());
-        }
-    }
+    let layout = prepare_layout(package_dir)?;
 
     let logical_start = benchmark_start();
     let clock = Arc::new(ManualClock::new(logical_start));
     let programmers = ProgrammerRegistry::with_clock(clock.clone());
     let session = SessionId(fixed_uuid(0x80, 1));
     programmers.start(session, UserId(fixed_uuid(0x81, 1)));
-    let mut fixture_number = 0_u32;
-    let mut fixtures = Vec::new();
-    for (universe_index, templates) in universes.iter().enumerate() {
-        let universe = universe_index as u16 + 1;
-        let mut address = 1_u16;
-        for template in templates {
-            fixture_number += 1;
-            let fixture_id = FixtureId(fixed_uuid(0x82, u64::from(fixture_number)));
-            fixtures.push(patched_fixture(
-                fixture_id,
-                fixture_number,
-                universe,
-                address,
-                template,
-            ));
-            address += template.footprint();
-        }
-        if address != SLOTS_PER_UNIVERSE + 1 {
-            return Err(format!(
-                "demo show universe {universe} ended at address {address}"
-            ));
-        }
-    }
+    let fixtures = patch_layout_fixtures(&layout.universes)?;
     let fixture_ids = fixtures
         .iter()
         .map(|fixture| fixture.fixture_id)
@@ -267,17 +215,6 @@ pub fn build(
             }),
     );
 
-    let rgb_par_fill_slots = rgb_three_count * usize::from(rgb_three.footprint())
-        + rgb_four_count * usize::from(rgb_four.footprint());
-    let total_slots = manufacturer_fixture_slots + rgb_par_fill_slots;
-    let entries = vec![
-        sunstrip.inventory(SUNSTRIP_QUANTITY),
-        ledwash.inventory(LEDWASH_QUANTITY),
-        dls.inventory(DLS_QUANTITY),
-        ledbeam.inventory(LEDBEAM_QUANTITY),
-        rgb_three.inventory(rgb_three_count),
-        rgb_four.inventory(rgb_four_count),
-    ];
     Ok(BenchmarkScenario {
         engine,
         clock,
@@ -286,13 +223,7 @@ pub fn build(
         fixture_count: fixture_ids.len(),
         fixture_footprint: None,
         packet_count,
-        fixture_inventory: ScenarioFixtureInventory {
-            scenario: "mixed_manufacturer_demo_show",
-            entries,
-            manufacturer_fixture_slots,
-            rgb_par_fill_slots,
-            total_slots,
-        },
+        fixture_inventory: layout.fixture_inventory(),
         programmers,
         dynamic_attribute: AttributeKey::intensity(),
         dynamic_overlaps_static_or_programmer: true,
@@ -302,6 +233,113 @@ pub fn build(
             logical_start,
         )),
     })
+}
+
+fn prepare_layout(package_dir: &Path) -> Result<DemoLayout, String> {
+    let templates = load_templates(package_dir)?;
+    let mut universes = (0..UNIVERSES)
+        .map(|_| Vec::<Arc<FixtureTemplate>>::new())
+        .collect::<Vec<_>>();
+    distribute(
+        &mut universes,
+        Arc::clone(&templates.sunstrip),
+        SUNSTRIP_QUANTITY,
+    );
+    distribute(
+        &mut universes,
+        Arc::clone(&templates.ledwash),
+        LEDWASH_QUANTITY,
+    );
+    distribute(&mut universes, Arc::clone(&templates.dls), DLS_QUANTITY);
+    distribute(
+        &mut universes,
+        Arc::clone(&templates.ledbeam),
+        LEDBEAM_QUANTITY,
+    );
+    let manufacturer_fixture_slots = universes
+        .iter()
+        .flatten()
+        .map(|fixture| usize::from(fixture.footprint()))
+        .sum::<usize>();
+    let mut rgb_three_count = 0;
+    let mut rgb_four_count = 0;
+    for universe in &mut universes {
+        let used = used_slots(universe);
+        let remaining = usize::from(SLOTS_PER_UNIVERSE)
+            .checked_sub(used)
+            .ok_or_else(|| format!("demo show overfilled a universe with {used} slots"))?;
+        let (three_count, four_count) = rgb_fill_counts(remaining)?;
+        rgb_three_count += three_count;
+        rgb_four_count += four_count;
+        universe.extend(std::iter::repeat_n(
+            Arc::clone(&templates.rgb_three),
+            three_count,
+        ));
+        universe.extend(std::iter::repeat_n(
+            Arc::clone(&templates.rgb_four),
+            four_count,
+        ));
+        if used_slots(universe) != usize::from(SLOTS_PER_UNIVERSE) {
+            return Err("RGB PAR fill did not complete a universe".into());
+        }
+    }
+    Ok(DemoLayout {
+        templates,
+        universes,
+        manufacturer_fixture_slots,
+        rgb_three_count,
+        rgb_four_count,
+    })
+}
+
+fn patch_layout_fixtures(
+    universes: &[Vec<Arc<FixtureTemplate>>],
+) -> Result<Vec<PatchedFixture>, String> {
+    let mut fixture_number = 0_u32;
+    let mut fixtures = Vec::new();
+    for (universe_index, templates) in universes.iter().enumerate() {
+        let universe = universe_index as u16 + 1;
+        let mut address = 1_u16;
+        for template in templates {
+            fixture_number += 1;
+            fixtures.push(patched_fixture(
+                FixtureId(fixed_uuid(0x82, u64::from(fixture_number))),
+                fixture_number,
+                universe,
+                address,
+                template,
+            ));
+            address += template.footprint();
+        }
+        if address != SLOTS_PER_UNIVERSE + 1 {
+            return Err(format!(
+                "demo show universe {universe} ended at address {address}"
+            ));
+        }
+    }
+    Ok(fixtures)
+}
+
+impl DemoLayout {
+    fn fixture_inventory(&self) -> ScenarioFixtureInventory {
+        let rgb_par_fill_slots = self.rgb_three_count
+            * usize::from(self.templates.rgb_three.footprint())
+            + self.rgb_four_count * usize::from(self.templates.rgb_four.footprint());
+        ScenarioFixtureInventory {
+            scenario: "mixed_manufacturer_demo_show",
+            entries: vec![
+                self.templates.sunstrip.inventory(SUNSTRIP_QUANTITY),
+                self.templates.ledwash.inventory(LEDWASH_QUANTITY),
+                self.templates.dls.inventory(DLS_QUANTITY),
+                self.templates.ledbeam.inventory(LEDBEAM_QUANTITY),
+                self.templates.rgb_three.inventory(self.rgb_three_count),
+                self.templates.rgb_four.inventory(self.rgb_four_count),
+            ],
+            manufacturer_fixture_slots: self.manufacturer_fixture_slots,
+            rgb_par_fill_slots,
+            total_slots: self.manufacturer_fixture_slots + rgb_par_fill_slots,
+        }
+    }
 }
 
 fn benchmark_start() -> chrono::DateTime<Utc> {

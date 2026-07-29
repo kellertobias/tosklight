@@ -287,7 +287,9 @@ fn reference(value: &domain::DynamicReference) -> wire::DynamicReferenceProjecti
     wire::DynamicReferenceProjection {
         dynamic_id: value.dynamic_id,
         last_known_pool_number: value.last_known_pool_number,
-        embedded_fallback: definition(&value.embedded_fallback.definition),
+        embedded_fallback_id: value.embedded_fallback.definition.id,
+        embedded_fallback_revision: value.embedded_fallback.definition.revision,
+        embedded_fallback: None,
     }
 }
 

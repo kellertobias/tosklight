@@ -19,6 +19,7 @@ async fn active_slot_upsert_is_lossless_single_commit_and_stale_failure_safe() {
         "number": 1,
         "name": "Main",
         "slots": {"1": 1},
+        "virtual_playbacks": {},
         "future_layout": {"columns": 10}
     });
     put_raw(&store, "playback_page", "1", page.take());
@@ -28,8 +29,9 @@ async fn active_slot_upsert_is_lossless_single_commit_and_stale_failure_safe() {
     let mut updated = playback(99, cue_list.id);
     updated.name = "Updated slot target".into();
     let response = scenario.put_slot(1, 1, updated, 1, 1).await;
-    assert_eq!(response.status(), StatusCode::OK);
+    let status = response.status();
     let response = json(response).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
     assert_eq!(response["status"], "changed");
     assert_eq!(projection_revision(&response, "playback", "1"), 2);
     assert_eq!(projection_revision(&response, "playback_page", "1"), 1);
@@ -85,6 +87,7 @@ async fn clearing_a_slot_removes_the_pool_playback_from_every_page_atomically() 
                 "number": number,
                 "name": format!("Page {number}"),
                 "slots": {(slot.to_string()): 1},
+                "virtual_playbacks": {},
                 "future_layout": {"page": number}
             }),
         );
@@ -161,7 +164,9 @@ impl PlaybackObjectScenario {
             .oneshot(open_show_request(&self.token, &self.show_id))
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        let status = response.status();
+        let response = json(response).await;
+        assert_eq!(status, StatusCode::OK, "{response}");
     }
 
     async fn put_slot(

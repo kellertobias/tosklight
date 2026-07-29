@@ -81,17 +81,9 @@ impl ProgrammingService {
             environment.programmer_fade_millis,
         )?;
         let active_context = format!("preset:{}", action.command.address.storage_key());
-        let generation_before = self
-            .programmers
-            .normal_values_generation(identity.session_id)
-            .ok_or_else(recall_unavailable)?;
         let transition = self
             .programmers
             .apply_normal_preset_recall(identity.session_id, &mutations, active_context.clone())
-            .ok_or_else(recall_unavailable)?;
-        let generation_after = self
-            .programmers
-            .normal_values_generation(identity.session_id)
             .ok_or_else(recall_unavailable)?;
         let after = Snapshot::read(
             &self.programmers,
@@ -108,9 +100,8 @@ impl ProgrammingService {
         );
         let values_change = self.values_change(
             identity.user_id,
-            identity.session_id,
-            generation_before,
-            generation_after,
+            &before.values_content,
+            &after.values_content,
         )?;
         let changed = transition.changed() || interaction.is_some();
         let warning = changed

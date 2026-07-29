@@ -276,6 +276,7 @@ describe("WebSocketShowObjectsEventTransport", () => {
 						objectRevision: 4,
 						body: { name: "Imported", fixtures: ["fixture-1"] },
 						deleted: false,
+						validationError: null,
 					},
 				],
 			},

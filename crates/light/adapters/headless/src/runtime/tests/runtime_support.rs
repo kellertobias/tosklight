@@ -2,6 +2,32 @@ fn test_state() -> (AppState, PathBuf) {
     test_state_with_programmers(ProgrammerRegistry::default(), None)
 }
 
+fn persist_test_virtual_playback_exclusions(
+    state: &AppState,
+    show_id: light_core::ShowId,
+    store: &VirtualPlaybackExclusionStore,
+) {
+    let entry = state.active_show.current().unwrap();
+    let show_store = match light_show::ShowStore::open(&entry.path) {
+        Ok(show_store) => show_store,
+        Err(_) => {
+            light_show::ShowStore::create(&entry.path, &entry.name)
+                .unwrap()
+                .0
+        }
+    };
+    show_store.set_identity(show_id, &entry.name, None).unwrap();
+    state.active_show.clear_document_cache();
+    update_virtual_playback_exclusions(
+        state,
+        show_id,
+        0,
+        &store.zones,
+        "test-virtual-playback-exclusions",
+    )
+    .unwrap();
+}
+
 fn live_action_frame(
     session: &Session,
     request_id: impl Into<String>,

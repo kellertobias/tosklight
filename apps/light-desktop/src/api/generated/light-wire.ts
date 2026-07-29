@@ -2,308 +2,163 @@
 // Do not edit it by hand.
 
 export type CommandTarget = "FIXTURE" | "GROUP";
-
 export type CommandKey = "SET" | "GRP" | "CUE" | "UND" | "CLR" | "DEL" | "MOV" | "CPY" | "TRU" | "DIV" | "BACKSPACE" | "AT" | "ENT" | "PRE" | "REC" | "ESC" | "SHIFT" | "TIME" | "SELECT" | "+" | "-" | "." | "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
-
 export type CommandKeyPhase = "press" | "release";
-
 export type CommandAcceptedAction = "edited" | "executed" | "cleared_command_line" | "cleared_preload" | "cleared_selection" | "cleared_values" | "undone" | "no_change" | "preload_entered" | "preload_committed" | "shift_pressed" | "shift_released" | "ignored_release";
-
 export type CommandChoiceOptionId = "plain" | "status";
-
 export type CueTransferOperation = "copy" | "move";
-
 export type CueMoveCopyChoiceType = "cue_move_copy";
-
 export type CommandHttpSource = "http" | "http_key";
-
 export type CommandChoiceOption = { id: CommandChoiceOptionId, label: string, command: string, };
-
 export type CueMoveCopyChoice = { type: CueMoveCopyChoiceType, choice_id: string, show_id: string, show_revision: number, operation: CueTransferOperation, command: string, options: Array<CommandChoiceOption>, cancel_label: string, };
-
 export type DynamicInstanceChoiceType = "dynamic_instance";
-
 export type DynamicInstanceChoiceOption = { controller_id: string, label: string, command: string, };
-
 export type DynamicInstanceChoice = { type: DynamicInstanceChoiceType, choice_id: string, show_id: string, show_revision: number, dynamic_id: string, pool_number: number, command: string, options: Array<DynamicInstanceChoiceOption>, cancel_label: string, };
-
 export type PendingCommandChoice = CueMoveCopyChoice | DynamicInstanceChoice;
-
 export type ReplaceCommandLineRequest = { text: string, };
-
 export type CommandKeyRequest = { key: CommandKey, phase: CommandKeyPhase, request_id: string, };
-
 export type ExecuteCommandLineRequest = { command?: string | null, request_id: string, };
-
 export type CommandLineResponse = { text: string, target: CommandTarget, pristine: boolean, revision: number, pending_choice: PendingCommandChoice | null, };
-
 export type CommandOperationOutcome = { "outcome": "accepted", action: CommandAcceptedAction, applied?: number | null, warning?: string | null, } | { "outcome": "choice_required", pending_choice: PendingCommandChoice, } | { "outcome": "rejected", error: string, };
-
 export type CommandOperationResponse = { request_id: string, command_line: CommandLineResponse, } & ({ "outcome": "accepted", action: CommandAcceptedAction, applied?: number | null, warning?: string | null, } | { "outcome": "choice_required", pending_choice: PendingCommandChoice, } | { "outcome": "rejected", error: string, });
-
 export type CommandErrorResponse = { error: string, };
-
 export type CommandLineChangedEvent = { desk_id: string, session_id: string, user_id: string, text: string, target: CommandTarget, pristine: boolean, revision: number, source: CommandHttpSource, request_id?: string | null, redacted?: boolean, };
-
 export type ControlDeskConfigurationActionRequest = { request_id: string, action: ControlDeskConfigurationAction, };
-
 export type ControlDeskConfigurationAction = { "type": "update", patch: ControlDeskConfigurationPatch, } | { "type": "set_page", page: number, existing_only: boolean, } | { "type": "remove_client" };
-
 export type ControlDeskConfigurationPatch = { name: string | null, osc_alias: string | null, columns: number | null, rows: number | null, buttons: number | null, playback_layout: RuntimePlaybackSurfaceLayout | null, };
-
 export type ControlDeskConfigurationActionOutcome = { request_id: string, replayed: boolean, desk: RuntimeControlDesk, removed: boolean, page: number | null, event_sequence: number | null, page_creation_event_sequence: number | null, };
-
 export type ConfigurationUpdateRequest = { request_id: string, patch: ConfigurationPatch, };
-
 export type ConfigurationPatch = { frame_rate_hz?: number | null, output_bind_ip?: string | null, osc_bind?: string | null | null, art_timecode_bind?: string | null | null, midi_inputs?: Array<string> | null, rtp_midi_bind?: string | null | null, timecode_sources?: Array<TimecodeSourceConfiguration> | null, osc_timecode?: OscTimecodeConfiguration | null | null, backup_retention?: number | null, autosave_interval_seconds?: number, programmer_fade_millis?: number, command_line_at_uses_programmer_fade?: boolean | null, sequence_master_fade_millis?: number, preload_programmer_changes?: boolean | null, preload_physical_playback_actions?: boolean | null, preload_virtual_playback_actions?: boolean | null, patch_preview_highlight_dmx?: boolean | null, matter_enabled?: boolean | null, pool_presentation?: PoolPresentationConfiguration | null, file_manager_system_picker_fallback?: boolean | null, file_manager_roots?: Array<FileManagerRoot> | null, };
-
 export type PoolPresentationConfiguration = { palette: PoolColorPalette, modes: { [key in string]: PoolColorMode }, items: { [key in string]: PoolItemPresentation }, };
-
 export type PoolColorPalette = { group: string, macro_color: string, dynamic: string, cuelist: string, sequence: string, preset: PresetPoolColorPalette, };
-
 export type PresetPoolColorPalette = { mixed: string, intensity: string, color: string, position: string, beam: string, };
-
 export type PoolColorMode = "type" | "individual";
-
 export type PoolItemPresentation = { title?: string | null, icon?: string | null, color?: string | null, };
-
 export type TimecodeSourceConfiguration = { source_prefix: string, priority: number, fallback: boolean, loss_timeout_millis: number, };
-
 export type OscTimecodeConfiguration = { address: string, rate: string, };
-
 export type FileManagerRoot = { id: string, label: string, path: string, icon?: string | null, };
-
 export type SpeedGroupSettingsUpdateRequest = { request_id: string, source: SpeedGroupSource, configuration: SoundToLightConfiguration, };
-
 export type SpeedGroupSource = { "type": "manual" } | { "type": "speed_group", group: SpeedGroupId, } | { "type": "sound_to_light" };
-
 export type SoundToLightConfiguration = { analysis_mode: SoundAnalysisMode, frequency: FrequencySelection, input_gain_db: number, confidence_threshold: number, smoothing: number, minimum_bpm: number, maximum_bpm: number, signal_hold_millis: number, multiplier: number, };
-
 export type SoundAnalysisMode = "tempo_bpm";
-
 export type FrequencySelection = { "type": "preset", preset: FrequencyPreset, } | { "type": "custom", low_hz: number, high_hz: number, };
-
 export type FrequencyPreset = "sub" | "low" | "mid" | "high" | "full_range";
-
 export type SpeedGroupLiveActionRequest = { action: SpeedGroupLiveAction, bpm?: number | null, captured_at_millis?: number, };
-
 export type OutputMasterActionRequest = { grand_master?: number | null, blackout?: boolean | null, };
-
 export type SpeedGroupLiveAction = "set_bpm" | "learn" | "double" | "half" | "pause";
-
 export type SoundObservation = { captured_at_millis: number, source_available: boolean, usable_signal: boolean, level: number, selected_band_level: number, detected_bpm?: number | null, confidence: number, };
-
 export type DeskLockConfigurationUpdateRequest = { request_id: string, message: string, wallpaper?: string | null, unlock_mode: DeskUnlockMode, pin?: string | null, };
-
 export type DeskUnlockMode = "button" | "pin";
-
 export type DeskUnlockRequest = { pin?: string | null, };
-
 export type UserCreateRequest = { request_id: string, name: string, enabled: boolean, };
-
 export type DynamicDefinitionProjection = { id: string, pool_number: number, revision: number, name: string, color?: string | null, icon?: string | null, target_binding: DynamicTargetBindingProjection, lanes: Array<DynamicLaneProjection>, random_groups: Array<DynamicRandomGroupProjection>, phase_mode: DynamicPhaseSpreadModeProjection, phase: DynamicPhaseDistributionProjection, speed: DynamicSpeedProjection, overall_speed_multiplier: DynamicRationalProjection, run_mode: DynamicRunModeProjection, default_activation: DynamicActivationPolicyProjection, activation_boundary: DynamicActivationBoundaryProjection, };
-
 export type DynamicTargetBindingProjection = { "type": "live_group", group_id: string, } | { "type": "frozen_targets", targets: Array<string>, } | { "type": "targetless" };
-
 export type DynamicLaneProjection = { id: string, attribute: string, mode: DynamicLaneModeProjection, keyframes: DynamicKeyframeConfigurationProjection, max_min: DynamicMaxMinConfigurationProjection, middle_amplitude: DynamicMiddleAmplitudeConfigurationProjection, speed_multiplier: DynamicRationalProjection, width: number, random_group_id?: string | null, phase?: DynamicPhaseDistributionProjection | null, };
-
 export type DynamicLaneModeProjection = "keyframes" | "max_min" | "middle_amplitude" | "random";
-
 export type DynamicPhaseSpreadModeProjection = "uniform" | "per_lane";
-
 export type DynamicKeyframeConfigurationProjection = { points: Array<DynamicKeyframeProjection>, size: number, };
-
 export type DynamicKeyframeProjection = { position: number, source: DynamicScalarSourceProjection, interpolation: DynamicScalarInterpolationProjection, };
-
 export type DynamicMaxMinConfigurationProjection = { minimum: DynamicScalarSourceProjection, maximum: DynamicScalarSourceProjection, function: DynamicPeriodicFunctionProjection, size: number, pwm: DynamicPwmShapeProjection, };
-
 export type DynamicMiddleAmplitudeConfigurationProjection = { middle: DynamicScalarSourceProjection, amplitude: number, function: DynamicPeriodicFunctionProjection, size: number, pwm: DynamicPwmShapeProjection, };
-
 export type DynamicScalarSourceProjection = { "type": "current" } | { "type": "value", value: number, } | { "type": "preset", preset_id: string, attribute: string, last_valid_by_target: Array<DynamicTargetScalarFallbackProjection>, };
-
 export type DynamicTargetScalarFallbackProjection = { target: string, value: number, };
-
 export type DynamicScalarInterpolationProjection = "linear" | "ease_in" | "ease_out" | "ease_in_out" | "hold" | "drop";
-
 export type DynamicPeriodicFunctionProjection = "sinus" | "cosinus" | "linear_up" | "linear_down" | "pwm";
-
 export type DynamicPwmShapeProjection = { attack: number, on: number, decay: number, off: number, attack_interpolation: DynamicScalarInterpolationProjection, decay_interpolation: DynamicScalarInterpolationProjection, };
-
 export type DynamicRandomGroupProjection = { id: string, seed: number, low: DynamicScalarSourceProjection, high: DynamicScalarSourceProjection, decision_interval_millis: number, start_probability: number, mean_duration_millis: number, duration_spread_millis: number, attack_ratio: number, decay_ratio: number, };
-
 export type DynamicPhaseDistributionProjection = { ordering: DynamicPhaseOrderingProjection, offset_degrees: number, span_degrees: number, block_size: number, repeats: number, wings: boolean, anchors_degrees: Array<number>, };
-
 export type DynamicPhaseOrderingProjection = { "type": "selection" } | { "type": "grid_linear", angle_degrees: number, } | { "type": "radial_out", center_x: number, center_z: number, } | { "type": "radial_in", center_x: number, center_z: number, } | { "type": "axial", center_x: number, center_z: number, } | { "type": "random_each_loop", seed: number, };
-
 export type DynamicSpeedProjection = { "type": "fixed", duration_millis: number, } | { "type": "speed_group", group: DynamicSpeedGroupProjection, beats_per_cycle: DynamicRationalProjection, };
-
 export type DynamicSpeedGroupProjection = "A" | "B" | "C" | "D" | "E";
-
 export type DynamicRationalProjection = { numerator: number, denominator: number, };
-
 export type DynamicRunModeProjection = "loop" | "one_shot";
-
 export type DynamicActivationPolicyProjection = "start_now" | "join_sync_now" | "next_boundary";
-
 export type DynamicActivationBoundaryProjection = "beat" | "bar";
-
 export type DynamicReferenceProjection = { dynamic_id?: string | null, last_known_pool_number: number, embedded_fallback_id: string, embedded_fallback_revision: number, embedded_fallback?: DynamicDefinitionProjection | null, };
-
 export type DynamicValueTimingProjection = { fade_millis?: number | null, delay_millis?: number | null, };
-
 export type DynamicInstanceOverridesProjection = { size: number, speed_multiplier: DynamicRationalProjection, phase_offset_degrees: number, };
-
 export type DynamicStartActionRequest = { request_id: string, targets: Array<string>, overrides: DynamicInstanceOverridesProjection, timing: DynamicValueTimingProjection, undo_group?: string | null, };
-
 export type DynamicOffActionRequest = { request_id: string, timing: DynamicValueTimingProjection, };
-
 export type DynamicControllerValueActionRequest = { request_id: string, value: number, undo_group?: string | null, };
-
 export type DynamicFixAtActionRequest = { request_id: string, targets: Array<string>, attribute: string, value: number, timing: DynamicValueTimingProjection, };
-
 export type DynamicInstanceActionOutcome = { request_id: string, runtime_instance_id: string, controller_id: string, targets: Array<string>, started: boolean, };
-
 export type DynamicControllerActionOutcome = { request_id: string, controller_id: string, changed: boolean, };
-
 export type DynamicRuntimeSnapshotProjection = { global_paused: boolean, instances: Array<DynamicRuntimeInstanceProjection>, definitions: Array<DynamicDefinitionStatusProjection>, };
-
 export type DynamicDefinitionStatusProjection = { dynamic_id: string, target_count: number, compatible_target_count: number, missing_target_count: number, unpatched_target_count: number, lane_count: number, supported_address_count: number, skipped_address_count: number, warning?: string | null, };
-
 export type DynamicRuntimeInstanceProjection = { instance_id: string, dynamic_id: string, pool_number: number, name: string, targets: Array<string>, pending: boolean, pending_until_millis: bigint | null, paused: boolean, speed_source: string, activation_boundary: DynamicActivationBoundaryProjection, effective_cycle_millis: bigint, effective_bpm: number | null, beat_phase: number | null, phase_advancing: boolean, aliasing_warning: string | null, controllers: Array<DynamicRuntimeControllerProjection>, };
-
 export type DynamicRuntimeControllerProjection = { controller_id: string, source: string, priority: number, size: number, speed_multiplier: number, phase_offset_degrees: number, paused: boolean, winning: boolean, releasing: boolean, activation_mix: number, };
-
 export type DynamicStartLiveActionRequest = { dynamic_id: string, request: DynamicStartActionRequest, };
-
 export type DynamicOffLiveActionRequest = { controller_id: string, request: DynamicOffActionRequest, };
-
 export type DynamicControllerLiveActionRequest = { controller_id: string, request: DynamicControllerValueActionRequest, };
-
 export type DynamicCreateActionRequest = { request_id: string,
 /**
  * Complete candidate definition. The server owns UUID, revision, and atomic slot conflict
  * validation; the first lane must already be present and valid.
  */
 definition: unknown, };
-
 export type DynamicPoolActionRequest = { request_id: string, expected_revision: number, pool_number: number, };
-
 export type DynamicDeleteActionRequest = { request_id: string, expected_revision: number, };
-
 export type DynamicUpdateActionRequest = { request_id: string, expected_revision: number, mutation_group?: string | null, intent: DynamicUpdateIntent, };
-
 export type DynamicUpdateIntent = { "type": "set_name", name: string, } | { "type": "set_color", color: string | null, } | { "type": "set_icon", icon: string | null, } | { "type": "set_target_binding", target_binding: unknown, } | { "type": "add_lane", lane: unknown, index: number | null, } | { "type": "replace_lane", lane_id: string, lane: unknown, } | { "type": "delete_lane", lane_id: string, } | { "type": "move_lane", lane_id: string, index: number, } | { "type": "set_phase", phase: unknown, } | { "type": "set_phase_mode", phase_mode: DynamicPhaseSpreadModeProjection, } | { "type": "set_speed", speed: unknown, } | { "type": "set_overall_speed_multiplier", multiplier: DynamicRationalProjection, } | { "type": "set_run_mode", run_mode: DynamicRunModeProjection, } | { "type": "set_activation", activation: unknown, } | { "type": "set_activation_boundary", boundary: DynamicActivationBoundaryProjection, } | { "type": "add_random_group", group: unknown, } | { "type": "replace_random_group", group_id: string, group: unknown, } | { "type": "delete_random_group", group_id: string, };
-
 export type EventCapability = "programmer" | "playback" | "show" | "desk" | "output" | "system";
-
 export type EventClass = "transition" | "projection" | "command_outcome" | "error" | "safety" | "telemetry";
-
 export type EventDeliveryPolicy = "lossless" | "replaceable";
-
 export type EventActionSource = "user_interface" | "keyboard" | "osc" | "http" | "midi" | "matter" | "cue" | "timecode" | "scheduler" | "macro" | "system";
-
 export type EventObject = { capability: EventCapability, id: string, };
-
 export type EventSubscriptionFilter = { capabilities: Array<EventCapability>, classes: Array<EventClass>, objects: Array<EventObject>, };
-
 export type EventRateLimit = { capability: EventCapability, class: EventClass, object: EventObject | null, min_interval_millis: number, };
-
 export type EventSnapshotCursor = { sequence: number, };
-
 export type SequenceGap = { after_sequence: number, oldest_available: number, latest_sequence: number, };
-
 export type EventSource = { "kind": "runtime" } | { "kind": "action", source: EventActionSource, };
-
 export type FileInputAction = "rename" | "copy" | "move" | "delete";
-
 export type FileInputOrigin = "pending" | "toolbar";
-
 export type FileInputClaimRequest = { request_id: string, instance_id: string, action: FileInputAction, origin: FileInputOrigin, };
-
 export type FileInputReleaseRequest = { request_id: string, instance_id: string | null, };
-
 export type NativeNoteUpdateRequest = { request_id: string, path: string, note: string, };
-
 export type TextDocumentUpdateRequest = { request_id: string, path: string, text: string, revision: string | null, };
-
 export type FileOperationKind = "create_file" | "create_folder" | "rename" | "copy" | "move" | "trash" | "delete";
-
 export type FileConflictChoice = "replace" | "keep_both" | "skip";
-
 export type FileOperationRequest = { request_id: string, operation: FileOperationKind, sources: Array<string>, destination: string | null, destination_root_id: string | null, name: string | null, replace: boolean, conflict: FileConflictChoice | null, apply_to_all: boolean, };
-
 export type ProgrammingLifecycleSession = { session_id: string, };
-
 export type ProgrammingLifecycleProgrammer = { programmer_id: string, user_id: string, connected: boolean, selected_fixture_count: number, normal_value_count: number,
 /**
  * Aggregate activity signal only; active Preload values and identities remain private.
  */
 preload_active: boolean, sessions: Array<ProgrammingLifecycleSession>, };
-
 export type ProgrammingLifecycleProjection = { revision: number, programmers: Array<ProgrammingLifecycleProgrammer>, };
-
 export type ProgrammingLifecycleDelta = { "type": "upsert", programmer: ProgrammingLifecycleProgrammer, } | { "type": "remove", programmer_id: string, };
-
 export type ProgrammingLifecycleChange = { revision: number, delta: ProgrammingLifecycleDelta, };
-
 export type ProgrammingLifecycleSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingLifecycleProjection, };
-
 export type ProgrammerPriorityActionRequest = { request_id: string, expected_revision: number, priority: number, };
-
 export type ProgrammerPriorityProjection = { user_id: string, revision: number, priority: number, changed_at: string, };
-
 export type ProgrammerPriorityChange = { "type": "upsert", projection: ProgrammerPriorityProjection, } | { "type": "remove", user_id: string, revision: number, };
-
 export type ProgrammerPrioritySnapshot = { cursor: EventSnapshotCursor, projection: ProgrammerPriorityProjection, };
-
 export type ProgrammerPriorityActionState = { "status": "changed", event_sequence: number, } | { "status": "no_change" };
-
 export type ProgrammerPriorityActionOutcome = { request_id: string, correlation_id: string, projection: ProgrammerPriorityProjection, replayed: boolean, warning?: string | null, } & ({ "status": "changed", event_sequence: number, } | { "status": "no_change" });
-
 export type ProgrammerPriorityErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type ProgrammerPriorityErrorResponse = { kind: ProgrammerPriorityErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
-
 export type ProgrammingColorXyz = { x: number, y: number, z: number, };
-
 export type ProgrammingAttributeValue = { "kind": "normalized", "value": number } | { "kind": "spread", "value": Array<number> } | { "kind": "discrete", "value": string } | { "kind": "color_xyz", "value": ProgrammingColorXyz } | { "kind": "raw_dmx", "value": number } | { "kind": "raw_dmx_exact", "value": number };
-
 export type ProgrammingFixtureValue = { fixture_id: string, attribute: string, value: ProgrammingAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
-
 export type ProgrammingGroupValue = { group_id: string, attribute: string, value: ProgrammingAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
-
 export type ProgrammingDynamicSemanticValue = { "type": "static", value: ProgrammingAttributeValue, timing: DynamicValueTimingProjection, } | { "type": "dynamic_on", instance_link: string, dynamic: DynamicReferenceProjection, lane_id: string, overrides: DynamicInstanceOverridesProjection, timing: DynamicValueTimingProjection, } | { "type": "dynamic_off", instance_link: string, timing: DynamicValueTimingProjection, } | { "type": "fix_at", value: number, timing: DynamicValueTimingProjection, } | { "type": "release" };
-
 export type ProgrammingDynamicValue = { fixture_id: string, attribute: string, value: ProgrammingDynamicSemanticValue, programmer_order: number, changed_at_millis: number, };
-
 export type ProgrammingCaptureModeProjection = { user_id: string, revision: number, blind: boolean, preview: boolean, preload_capture_programmer: boolean, };
-
 export type ProgrammingCaptureModeChange = { projection: ProgrammingCaptureModeProjection, };
-
 export type ProgrammingCaptureModeSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingCaptureModeProjection, };
-
 export type ProgrammingValuesProjection = { user_id: string, revision: number, fixture_values: Array<ProgrammingFixtureValue>, group_values: Array<ProgrammingGroupValue>,
 /**
  * Embedded Dynamic fallbacks deduplicated across every Dynamic-controlled address.
  */
 dynamic_definitions?: Array<DynamicDefinitionProjection>, dynamic_values: Array<ProgrammingDynamicValue>, };
-
 export type ProgrammingFixtureValueAddress = { fixture_id: string, attribute: string, };
-
 export type ProgrammingGroupValueAddress = { group_id: string, attribute: string, };
-
 export type ProgrammingValuesChange = { user_id: string, revision: number, fixture_values: Array<ProgrammingFixtureValue>, removed_fixture_values: Array<ProgrammingFixtureValueAddress>, group_values: Array<ProgrammingGroupValue>, removed_group_values: Array<ProgrammingGroupValueAddress>, dynamic_definitions?: Array<DynamicDefinitionProjection>, dynamic_values: Array<ProgrammingDynamicValue>, removed_dynamic_values: Array<ProgrammingFixtureValueAddress>, };
-
 export type ProgrammingValuesSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingValuesProjection, };
-
 export type ProgrammingPickerColor = { hue: number, saturation: number, };
-
 export type ProgrammingValueTiming = { fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
-
 export type ProgrammingValueOperation = { "type": "absolute_set", value: ProgrammingAttributeValue, } | { "type": "relative_step", delta: number, };
-
 export type ProgrammingValueMutation = { "type": "set_selection", fixture_ids: Array<string>, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "set_selection_color_range", fixture_ids: Array<string>, start: ProgrammingPickerColor, end: ProgrammingPickerColor, hue_travel: number, brightness: number, timing: ProgrammingValueTiming, } | { "type": "set_fixture", fixture_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_fixture", fixture_id: string, attribute: string, } | { "type": "set_group", group_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_group", group_id: string, attribute: string, };
-
 export type ProgrammingValuesAction = { "type": "apply_intent", fixture_ids: Array<string>,
 /**
  * Live Group target. Exactly one of `fixture_ids` or `group_id` must be supplied.
@@ -314,327 +169,173 @@ group_id?: string | null, attribute: string, operation: ProgrammingValueOperatio
  * keeps all samples in one Programmer undo entry; taps and wheel ticks omit it.
  */
 undo_group?: string | null, timing: ProgrammingValueTiming, } | { "type": "set_selection", fixture_ids: Array<string>, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "set_fixture", fixture_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_fixture", fixture_id: string, attribute: string, } | { "type": "set_group", group_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_group", group_id: string, attribute: string, } | { "type": "set_selection_color_range", fixture_ids: Array<string>, start: ProgrammingPickerColor, end: ProgrammingPickerColor, hue_travel: number, brightness: number, timing: ProgrammingValueTiming, } | { "type": "batch", mutations: Array<ProgrammingValueMutation>, } | { "type": "clear" };
-
 export type ProgrammingValuesActionRequest = { request_id: string, expected_revision: number, expected_capture_mode_revision: number, action: ProgrammingValuesAction, };
-
 export type ProgrammingValuesActionState = { "status": "changed", projection: ProgrammingValuesProjection, event_sequence: number, } | { "status": "no_change" };
-
 export type ProgrammingValuesActionOutcome = { request_id: string, correlation_id: string, revision: number, capture_mode_revision: number, replayed: boolean, warning?: string | null, } & ({ "status": "changed", projection: ProgrammingValuesProjection, event_sequence: number, } | { "status": "no_change" });
-
 export type ProgrammingValuesErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type ProgrammingValuesErrorResponse = { kind: ProgrammingValuesErrorKind, error: string, current_revision?: number | null, current_capture_mode_revision?: number | null, retryable: boolean, };
-
 export type ProgrammingPreloadColorXyz = { x: number, y: number, z: number, };
-
 export type ProgrammingPreloadAttributeValue = { "kind": "normalized", "value": number } | { "kind": "spread", "value": Array<number> } | { "kind": "discrete", "value": string } | { "kind": "color_xyz", "value": ProgrammingPreloadColorXyz } | { "kind": "raw_dmx", "value": number } | { "kind": "raw_dmx_exact", "value": number };
-
 export type ProgrammingPreloadFixtureValue = { fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
-
 export type ProgrammingPreloadGroupValue = { group_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
-
 export type ProgrammingPreloadValuesProjection = { user_id: string, revision: number, fixture_values: Array<ProgrammingPreloadFixtureValue>, group_values: Array<ProgrammingPreloadGroupValue>, dynamic_values: Array<ProgrammingDynamicValue>, };
-
 export type ProgrammingPreloadValuesChange = { projection: ProgrammingPreloadValuesProjection, };
-
 export type ProgrammingPreloadValuesSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingPreloadValuesProjection, };
-
 export type ProgrammingPreloadValueTiming = { fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
-
 export type ProgrammingPreloadValueMutation = { "type": "set_fixture", fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, timing: ProgrammingPreloadValueTiming, } | { "type": "release_fixture", fixture_id: string, attribute: string, } | { "type": "set_group", group_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, timing: ProgrammingPreloadValueTiming, } | { "type": "release_group", group_id: string, attribute: string, };
-
 export type ProgrammingPreloadValuesAction = { "type": "set_fixture", fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, timing: ProgrammingPreloadValueTiming, } | { "type": "release_fixture", fixture_id: string, attribute: string, } | { "type": "set_group", group_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, timing: ProgrammingPreloadValueTiming, } | { "type": "release_group", group_id: string, attribute: string, } | { "type": "batch", mutations: Array<ProgrammingPreloadValueMutation>, };
-
 export type ProgrammingPreloadValuesActionRequest = { request_id: string, expected_revision: number, expected_capture_mode_revision: number, action: ProgrammingPreloadValuesAction, };
-
 export type ProgrammingPreloadValuesActionState = { "status": "changed", projection: ProgrammingPreloadValuesProjection, event_sequence: number, } | { "status": "no_change" };
-
 export type ProgrammingPreloadValuesActionOutcome = { request_id: string, correlation_id: string, revision: number, capture_mode_revision: number, replayed: boolean, warning?: string | null, } & ({ "status": "changed", projection: ProgrammingPreloadValuesProjection, event_sequence: number, } | { "status": "no_change" });
-
 export type ProgrammingPreloadValuesErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type ProgrammingPreloadValuesErrorResponse = { kind: ProgrammingPreloadValuesErrorKind, error: string, current_revision?: number | null, current_capture_mode_revision?: number | null, retryable: boolean, };
-
 export type ProgrammingPreloadPlaybackAction = "toggle" | "go" | "back" | "off" | "on" | "temporary_on" | "temporary_off" | "dynamic_pause" | "dynamic_restart" | "dynamic_double_speed" | "dynamic_half_speed" | "dynamic_learn_speed" | { "fader": { value_permyriad: number, } };
-
 export type ProgrammingPreloadPlaybackSurface = "physical" | "virtual" | "osc" | "matter";
-
 export type ProgrammingPreloadPlaybackQueueItem = { playback_number: number, page?: number | null, action: ProgrammingPreloadPlaybackAction, surface: ProgrammingPreloadPlaybackSurface, };
-
 export type ProgrammingPreloadPlaybackQueueProjection = { user_id: string, revision: number, actions: Array<ProgrammingPreloadPlaybackQueueItem>, };
-
 export type ProgrammingPreloadPlaybackQueueChange = { projection: ProgrammingPreloadPlaybackQueueProjection, };
-
 export type ProgrammingPreloadPlaybackQueueSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingPreloadPlaybackQueueProjection, };
-
 export type ProgrammingPreloadLifecycleAction = { "type": "enter", } | { "type": "go", show_id: string, expected_show_revision: number, expected_playback_event_sequence: number, } | { "type": "clear_pending", } | { "type": "release", };
-
 export type ProgrammingPreloadLifecycleRequest = { request_id: string, expected_capture_mode_revision: number, expected_values_revision: number, expected_queue_revision: number, expected_selection_revision: number, action: ProgrammingPreloadLifecycleAction, };
-
 export type ProgrammingPreloadRuntimeOutcome = { projection: PlaybackRuntimeProjection, event_sequence: number, };
-
 export type ProgrammingPreloadCommitOutcome = { show_id: string, show_revision: number, playback_event_sequence_before: number, playback_event_sequence_after: number, committed_at: string, programmer_fade_millis: number, executed_playback_actions: number,
 /**
  * Ordered actions consumed by this one atomic commit. Runtime changes remain separately
  * deduplicated by authoritative Playback identity below.
  */
 executed: Array<ProgrammingPreloadPlaybackQueueItem>, runtime_changes: Array<ProgrammingPreloadRuntimeOutcome>, };
-
 export type ProgrammingPreloadLifecycleState = "changed" | "no_change";
-
 export type ProgrammingPreloadLifecycleOutcome = { request_id: string, correlation_id: string, replayed: boolean, status: ProgrammingPreloadLifecycleState,
 /**
  * True only while retained active Preload fixture or Group values exist. Armed capture is
  * represented independently by `capture_mode.blind`.
  */
 active: boolean, capture_mode: ProgrammingCaptureModeProjection, capture_mode_event_sequence?: number | null, values_revision: number, values_projection?: ProgrammingPreloadValuesProjection | null, values_event_sequence?: number | null, queue_revision: number, queue_projection?: ProgrammingPreloadPlaybackQueueProjection | null, queue_event_sequence?: number | null, interaction_event_sequence?: number | null, selection_revision: number, commit?: ProgrammingPreloadCommitOutcome | null, warning?: string | null, };
-
 export type ProgrammingPreloadLifecycleErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type ProgrammingPreloadLifecycleErrorResponse = { kind: ProgrammingPreloadLifecycleErrorKind, error: string, current_revision?: number | null, current_related_revision?: number | null, retryable: boolean, };
-
 export type PresetRecordingFamily = "mixed" | "intensity" | "color" | "position" | "beam";
-
 export type PresetRecordingAddress = { family: PresetRecordingFamily, number: number, };
-
 export type PresetRecordingMode = "merge" | "overwrite";
-
 export type PresetRecordRequest = { request_id: string, address: PresetRecordingAddress, name: string, mode: PresetRecordingMode, expected_object_revision: number, };
-
 export type RecordedPresetProjection = { id: string, revision: number, body: unknown, };
-
 export type PresetRecordOutcome = { "status": "changed", request_id: string, correlation_id: string, replayed: boolean, show_revision: number, preset: RecordedPresetProjection, event_sequence: number, } | { "status": "no_change", request_id: string, correlation_id: string, replayed: boolean, show_revision: number, preset: RecordedPresetProjection, };
-
 export type PresetRecordErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type PresetRecordErrorResponse = { kind: PresetRecordErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
-
 export type PresetRecallRequest = { address: PresetRecordingAddress, expected_preset_revision: number, expected_show_revision: number, expected_programmer_revision: number, expected_capture_mode_revision: number, expected_selection_revision: number, };
-
 export type RecalledPresetProjection = { id: string, revision: number, body: unknown, };
-
 export type PresetRecallDisposition = "recalled" | "targets_selected";
-
 export type PresetRecallActionState = { "status": "changed", projection?: ProgrammingValuesProjection | null, event_sequence?: number | null, } | { "status": "no_change" };
-
 export type PresetRecallOutcome = { correlation_id: string, disposition: PresetRecallDisposition, show_revision: number, programmer_revision: number, capture_mode_revision: number, selection_revision: number, interaction_event_sequence?: number | null, applied_fixtures: number, selected_targets: number, active_context?: string | null, preset: RecalledPresetProjection, warning?: string | null, } & ({ "status": "changed", projection?: ProgrammingValuesProjection | null, event_sequence?: number | null, } | { "status": "no_change" });
-
 export type PresetRecallErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type PresetRecallErrorResponse = { kind: PresetRecallErrorKind, error: string, current_revision?: number | null, current_related_revision?: number | null, retryable: boolean, };
-
 export type GroupPropertiesUpdate = { name: string, color?: string | null, icon?: string | null, };
-
 export type GroupSourceExpectation = { source_group_id: string, expected_source_revision?: number | null, };
-
 export type GroupManagementOperation = { "type": "update_properties", properties: GroupPropertiesUpdate, } | { "type": "undo", } | { "type": "refresh_frozen", expected_source?: GroupSourceExpectation | null, } | { "type": "detach_derived", expected_source?: GroupSourceExpectation | null, };
-
 export type GroupManagementRequest = { request_id: string, group_id: string, operation: GroupManagementOperation, expected_object_revision: number, };
-
 export type GroupManagementObjectProjection = { object_id: string, object_revision: number, body: unknown, };
-
 export type GroupManagementOutcome = { "status": "changed", request_id: string, correlation_id: string, replayed: boolean, show_id: string, show_revision: number, group: GroupManagementObjectProjection, show_event_sequence: number, persistence_warning?: string | null, } | { "status": "no_change", request_id: string, correlation_id: string, replayed: boolean, show_id: string, show_revision: number, group: GroupManagementObjectProjection, persistence_warning?: string | null, };
-
 export type GroupManagementErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type GroupManagementErrorResponse = { kind: GroupManagementErrorKind, error: string, current_revision?: number | null, current_related_revision?: number | null, retryable: boolean, };
-
 export type GroupRecordOperation = "overwrite" | "merge" | "subtract" | "delete";
-
 export type GroupRecordRequest = { request_id: string, group_id: string, operation: GroupRecordOperation, expected_object_revision: number, };
-
 export type RecordedGroupProjection = { "state": "stored", id: string, revision: number, body: unknown, } | { "state": "deleted", id: string, revision: number, };
-
 export type RecordedStoredGroupProjection = { "state": "stored", id: string, revision: number, body: unknown, };
-
 export type GroupRecordOutcome = { "status": "changed", request_id: string, correlation_id: string, replayed: boolean, show_revision: number, group: RecordedGroupProjection, event_sequence: number, } | { "status": "no_change", request_id: string, correlation_id: string, replayed: boolean, show_revision: number, group: RecordedStoredGroupProjection, };
-
 export type GroupRecordErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type GroupRecordErrorResponse = { kind: GroupRecordErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
-
 export type CueRecordTarget = { "kind": "pool", playback_number: number, } | { "kind": "selected_playback" } | { "kind": "page_slot", page: number, slot: number, } | { "kind": "cue_list", cue_list_id: string, };
-
 export type CueRecordOperation = "overwrite" | "merge" | "subtract";
-
 export type CueRecordTiming = { fade_millis?: number | null, delay_millis?: number | null, };
-
 export type CueRecordCapturePolicy = "current_capture" | "pending_or_active_preload";
-
 export type CueRecordActivationPolicy = "hold" | "go_to_if_normal";
-
 export type CueRecordRequest = { request_id: string, target: CueRecordTarget, operation: CueRecordOperation, cue_number?: number | null, timing: CueRecordTiming, cue_only: boolean, name?: string | null, capture_policy: CueRecordCapturePolicy, activation_policy: CueRecordActivationPolicy, };
-
 export type CueRecordCapturedSource = "normal" | "pending_preload" | "active_preload";
-
 export type RecordedCueObjectProjection = { id: string, revision: number, body: unknown, };
-
 export type CueRecordProjections = { cue_list: RecordedCueObjectProjection, playback: RecordedCueObjectProjection | null, page: RecordedCueObjectProjection | null, };
-
 export type RecordedCueProjection = { id: string, number: number, deleted: boolean, };
-
 export type CueRecordRuntimeOutcome = { projection: PlaybackRuntimeProjection, event_sequence: number, };
-
 export type CueRecordOutcome = { "status": "changed", request_id: string, correlation_id: string, replayed: boolean, captured_source: CueRecordCapturedSource, show_revision: number, recorded_cue: RecordedCueProjection, projections: CueRecordProjections, show_event_sequence: number, runtime: CueRecordRuntimeOutcome | null, } | { "status": "no_change", request_id: string, correlation_id: string, replayed: boolean, captured_source: CueRecordCapturedSource, show_revision: number, recorded_cue: RecordedCueProjection, projections: CueRecordProjections, };
-
 export type CueRecordErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type CueRecordErrorResponse = { kind: CueRecordErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
-
 export type CueDeletionAddress = { "type": "pool", playback_number: number, } | { "type": "current_page", expected_page: number, slot: number, } | { "type": "page_slot", page: number, slot: number, };
-
 export type CueDeletionAuthority = { playback_number: number, cue_list_id: string, object_id: string, object_revision: number, cue_id: string, };
-
 export type CueDeletionRequest = { request_id: string, address: CueDeletionAddress, cue_number: number, authority: CueDeletionAuthority, };
-
 export type CueDeletionObjectProjection = { cue_list_id: string, object_id: string, object_revision: number, body: unknown, };
-
 export type DeletedCueProjection = { id: string, number: number, };
-
 export type CueDeletionOutcome = { "status": "changed", request_id: string, correlation_id: string, replayed: boolean, show_id: string, show_revision: number, cue_list: CueDeletionObjectProjection, deleted_cue: DeletedCueProjection, show_event_sequence: number, persistence_warning?: string | null, } | { "status": "no_change", request_id: string, correlation_id: string, replayed: boolean, show_id: string, show_revision: number, cue_list: CueDeletionObjectProjection, deleted_cue: DeletedCueProjection, persistence_warning?: string | null, };
-
 export type CueDeletionErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type CueDeletionErrorResponse = { kind: CueDeletionErrorKind, error: string, current_revision?: number | null, current_related_revision?: number | null, retryable: boolean, };
-
 export type CueTransferMode = "plain" | "status";
-
 export type CueTransferRequest = { request_id: string, choice_id: string, mode: CueTransferMode, expected_command_line_revision: number, };
-
 export type CueTransferObjectProjection = { cue_list_id: string, object_id: string, object_revision: number, body: unknown, };
-
 export type CueTransferSummary = { operation: CueTransferOperation, mode: CueTransferMode, source_cue_id: string, source_cue_number: number, destination_cue_id: string, destination_cue_number: number, };
-
 export type CueTransferOutcome = { "status": "changed", request_id: string, correlation_id: string, replayed: boolean, show_id: string, choice_id: string, summary: CueTransferSummary, show_revision: number, projections: Array<CueTransferObjectProjection>, show_event_sequence: number, command_line: CommandLineResponse, interaction_event_sequence?: number | null, persistence_warning?: string | null, };
-
 export type CueTransferErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type CueTransferErrorResponse = { kind: CueTransferErrorKind, error: string, current_revision?: number | null, current_related_revision?: number | null, retryable: boolean, };
-
 export type ProgrammingUpdateCueMode = "existing_only" | "existing_in_current_cue" | "add_to_current_cue" | "add_new";
-
 export type ProgrammingUpdateExistingContentMode = "update_existing" | "add_new";
-
 export type ProgrammingUpdateMode = { "target_type": "cue", "mode": ProgrammingUpdateCueMode } | { "target_type": "existing_content", "mode": ProgrammingUpdateExistingContentMode };
-
 export type ProgrammingUpdateTarget = { "type": "cue", cue_list_id: string, playback_number?: number | null, cue_id?: string | null, cue_number?: number | null, validate_active_context: boolean, } | { "type": "preset", object_id: string, } | { "type": "group", object_id: string, };
-
 export type ProgrammingUpdateTargetFamily = { "type": "cue" } | { "type": "preset" } | { "type": "group" };
-
 export type ProgrammingUpdateCueIdentity = { id: string, number: number, };
-
 export type ProgrammingUpdateTargetIdentity = { family: ProgrammingUpdateTargetFamily, object_id: string, name: string, playback_number?: number | null, cue?: ProgrammingUpdateCueIdentity | null, };
-
 export type ProgrammingUpdateObjectKind = "cue_list" | "preset" | "group";
-
 export type ProgrammingUpdateObjectIdentity = { kind: ProgrammingUpdateObjectKind, object_id: string, object_revision: number, };
-
 export type ProgrammingUpdateTargetFilter = "eligible_for_update_existing" | "show_all_active";
-
 export type ProgrammingUpdateAddress = { "type": "fixture_attribute", fixture_id: string, attribute: string, } | { "type": "group_attribute", group_id: string, attribute: string, } | { "type": "dynamic_attribute", fixture_id: string, attribute: string, instance_link?: string | null, } | { "type": "group_membership", fixture_id: string, };
-
 export type ProgrammingUpdateCueSource = { cue_id: string, cue_number: number, cue_index: number, };
-
 export type ProgrammingUpdateIgnoreReason = "new_address" | "not_in_current_cue" | "not_in_active_tracked_state" | "new_group_member";
-
 export type ProgrammingUpdateItemOutcome = { "outcome": "change_at_source", source: ProgrammingUpdateCueSource, } | { "outcome": "change_in_current_cue", cue: ProgrammingUpdateCueSource, } | { "outcome": "add_to_current_cue", cue: ProgrammingUpdateCueSource, } | { "outcome": "add_new_to_current_cue", cue: ProgrammingUpdateCueSource, } | { "outcome": "update_existing" } | { "outcome": "add_new" } | { "outcome": "unchanged", source?: ProgrammingUpdateCueSource | null, } | { "outcome": "ignored", reason: ProgrammingUpdateIgnoreReason, };
-
 export type ProgrammingUpdatePreviewItem = { address: ProgrammingUpdateAddress, outcome: ProgrammingUpdateItemOutcome, };
-
 export type ProgrammingUpdatePreview = { target: ProgrammingUpdateTargetIdentity, mode: ProgrammingUpdateMode, items: Array<ProgrammingUpdatePreviewItem>, };
-
 export type ProgrammingUpdatePreviewRequest = { request_id: string, target: ProgrammingUpdateTarget, mode: ProgrammingUpdateMode, };
-
 export type ProgrammingUpdatePreviewResponse = { request_id: string, correlation_id: string, show_id: string, show_revision: number, object: ProgrammingUpdateObjectIdentity, programmer_revision: string, preview: ProgrammingUpdatePreview, };
-
 export type ProgrammingUpdateTargetsRequest = { request_id: string, filter: ProgrammingUpdateTargetFilter, };
-
 export type ProgrammingUpdateTargetEntry = { request_target: ProgrammingUpdateTarget, object: ProgrammingUpdateObjectIdentity, programmer_revision: string, active_or_referenced: boolean, existing_preview: ProgrammingUpdatePreview, add_new_preview: ProgrammingUpdatePreview, };
-
 export type ProgrammingUpdateTargetsResponse = { request_id: string, correlation_id: string, show_id: string, show_revision: number, targets: Array<ProgrammingUpdateTargetEntry>, };
-
 export type ProgrammingUpdateAction = { "type": "confirm_preview", target: ProgrammingUpdateTarget, mode: ProgrammingUpdateMode, expected_object_revision: number, expected_programmer_revision: string, } | { "type": "apply_direct", target: ProgrammingUpdateTarget, mode: ProgrammingUpdateMode, };
-
 export type ProgrammingUpdateActionRequest = { request_id: string, action: ProgrammingUpdateAction, };
-
 export type ProgrammingUpdateProjection = { kind: ProgrammingUpdateObjectKind, object_id: string, object_revision: number, body: unknown, };
-
 export type ProgrammingUpdateSummary = { target: ProgrammingUpdateTargetIdentity, revision_before: number, revision_after: number, eligible_count: number, changed_count: number, added_count: number, ignored_count: number, changed_cues: Array<ProgrammingUpdateCueSource>, programmer_values_retained: boolean, };
-
 export type ProgrammingUpdateActionOutcome = { "status": "changed", request_id: string, correlation_id: string, replayed: boolean, show_id: string, show_revision: number, projection: ProgrammingUpdateProjection, event_sequence: number, summary: ProgrammingUpdateSummary, };
-
 export type ProgrammingUpdateErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type ProgrammingUpdateErrorResponse = { kind: ProgrammingUpdateErrorKind, error: string, current_object_revision?: number | null, current_show_revision?: number | null, retryable: boolean, };
-
 export type ProgrammingUpdateSettings = { cue_mode: ProgrammingUpdateCueMode, preset_mode: ProgrammingUpdateExistingContentMode, group_mode: ProgrammingUpdateExistingContentMode, show_update_modal_on_touch: boolean, };
-
 export type ProgrammingUpdateSettingsProjection = { desk_id: string, settings: ProgrammingUpdateSettings, };
-
 export type ProgrammingUpdateSettingsUpdateRequest = { request_id: string, settings: ProgrammingUpdateSettings, };
-
 export type ProgrammingUpdateSettingsUpdateOutcome = { request_id: string, replayed: boolean, desk_id: string, settings: ProgrammingUpdateSettings, };
-
 export type PlaybackSurface = "virtual" | "physical";
-
 export type PlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "group", group_id: string, } | { "kind": "playback", playback_number: number, } | { "kind": "virtual", page: number, playback_number: number, } | { "kind": "current_page", slot: number, } | { "kind": "explicit_page", page: number, slot: number, };
-
 export type ResolvedPlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "group", group_id: string, playback_number: number | null, } | { "kind": "playback", playback_number: number, page: number | null, slot: number | null, } | { "kind": "virtual", page: number, playback_number: number, };
-
 export type PlaybackAction = { "type": "go", pressed: boolean, } | { "type": "back", pressed: boolean, } | { "type": "pause", pressed: boolean, } | { "type": "release" } | { "type": "on", pressed: boolean, } | { "type": "off", pressed: boolean, } | { "type": "toggle", pressed: boolean, } | { "type": "fast_forward", pressed: boolean, } | { "type": "fast_rewind", pressed: boolean, } | { "type": "flash", pressed: boolean, } | { "type": "temp", pressed: boolean, } | { "type": "swap", pressed: boolean, } | { "type": "select", pressed: boolean, } | { "type": "select_contents", pressed: boolean, } | { "type": "select_dereferenced", pressed: boolean, } | { "type": "learn", pressed: boolean, } | { "type": "double", pressed: boolean, } | { "type": "half", pressed: boolean, } | { "type": "blackout", pressed: boolean, } | { "type": "pause_dynamics", pressed: boolean, } | { "type": "dynamic_restart", pressed: boolean, } | { "type": "dynamic_double_speed", pressed: boolean, } | { "type": "dynamic_half_speed", pressed: boolean, } | { "type": "dynamic_learn_speed", pressed: boolean, } | { "type": "none", pressed: boolean, } | { "type": "master", value: number, } | { "type": "go_to", cue_number: number, } | { "type": "load", cue_number: number, } | { "type": "crossfade", enabled: boolean, } | { "type": "temporary", enabled: boolean, pressed: boolean, } | { "type": "configured_button", number: number, pressed: boolean, };
-
 export type PendingPlaybackAction = "toggle" | "go" | "back" | "off" | "on" | "temporary_on" | "temporary_off" | "dynamic_pause" | "dynamic_restart" | "dynamic_double_speed" | "dynamic_half_speed" | "dynamic_learn_speed" | { "fader": { value_permyriad: number, } };
-
 export type PlaybackOutcome = { "status": "applied" } | { "status": "no_change" } | { "status": "captured", pending: PendingPlaybackAction, };
-
 export type PlaybackDurability = "durable" | "persistence_pending";
-
 export type PlaybackRuntimeIdentity = { "kind": "playback", playback_number: number, } | { "kind": "virtual", page: number, playback_number: number, } | { "kind": "cue_list", cue_list_id: string, } | { "kind": "group", group_id: string, };
-
 export type PlaybackShowScope = { show_id: string, show_revision: number, };
-
 export type PlaybackCueReference = { id: string, number: number, };
-
 export type ManualXFadeDirection = "towards_high" | "towards_low";
-
 export type SoundLossReason = "source_unavailable" | "no_usable_signal" | "low_confidence" | "tempo_outside_range" | "waiting_for_analysis";
-
 export type SpeedSource = "manual" | "sound" | "held_sound" | "manual_fallback";
-
 export type SoundStatus = { "status": "disabled" } | { "status": "active", detected_bpm: number, confidence: number, } | { "status": "holding", reason: SoundLossReason, remaining_millis: number, } | { "status": "manual_fallback", reason: SoundLossReason, };
-
 export type CueListRuntimeProjection = { cue_index: number, previous_index: number | null, current: PlaybackCueReference | null, loaded: PlaybackCueReference | null, normal_next: PlaybackCueReference | null, effective_next: PlaybackCueReference | null, effective_next_is_loaded: boolean, paused: boolean, activated_at: string, master: number, fader_position: number, fader_pickup_required: boolean, fader_pickup_target: number | null, flash: boolean, temporary: boolean, temporary_active: boolean, temporary_master: number, swap_active: boolean, enabled: boolean, transition_timing_bypassed: boolean, manual_xfade_position: number, manual_xfade_direction: ManualXFadeDirection, manual_xfade_progress: number, };
-
 export type DynamicPlaybackRuntimeState = "off" | "zero" | "pending" | "active" | "paused" | "hidden" | "failed";
-
 export type DynamicPlaybackControllerStatus = "winning" | "losing" | "missing";
-
 export type DynamicPlaybackSpeedSource = "fixed" | "speed_group";
-
 export type DynamicPlaybackRuntimeProjection = { playback_number: number, enabled: boolean, paused: boolean, flash: boolean, activated_at: string, fader_value: number, size: number, master: number, local_speed_numerator: number, local_speed_denominator: number, learned_duration_millis: number | null, state: DynamicPlaybackRuntimeState, instance_id: string | null, controller_id: string, winning_controller_id: string | null, controller_status: DynamicPlaybackControllerStatus, target_count: number, compatible_target_count: number, missing_target_count: number, unpatched_target_count: number, lane_count: number, supported_address_count: number, skipped_address_count: number, speed_source: DynamicPlaybackSpeedSource, effective_speed_multiplier: number, effective_duration_millis: number | null, warning: string | null, };
-
 export type SpeedGroupRuntimeProjection = { manual_bpm: number, sound_bpm: number | null, effective_bpm: number, source: SpeedSource, sound_status: SoundStatus, paused: boolean, phase_advancing: boolean, speed_master_scale: number, sound_multiplier: number, source_available: boolean, usable_signal: boolean, input_level: number, selected_band_level: number, synchronized_with: number | null, phase_origin_millis: number, beat_phase: number, };
-
 export type GrandMasterRuntimeProjection = { level: number, effective_level: number, blackout: boolean, flash_active: boolean, dynamics_paused: boolean, };
-
 export type PlaybackTargetProjection = { "target": "missing" } | { "target": "cue_list", cue_list_id: string, runtime: CueListRuntimeProjection | null, } | { "target": "dynamic", dynamic_id: string | null, last_known_pool_number: number, embedded: boolean, runtime: DynamicPlaybackRuntimeProjection | null, } | { "target": "group", group_id: string, master: number, flash_level: number, } | { "target": "speed_group", group: string, runtime: SpeedGroupRuntimeProjection, } | { "target": "grand_master", runtime: GrandMasterRuntimeProjection, } | { "target": "programmer_fade", millis: number, } | { "target": "cue_fade", millis: number, };
-
 export type PlaybackRuntimeProjection = { scope: PlaybackShowScope, requested: PlaybackRuntimeIdentity, playback_number: number | null, } & ({ "target": "missing" } | { "target": "cue_list", cue_list_id: string, runtime: CueListRuntimeProjection | null, } | { "target": "dynamic", dynamic_id: string | null, last_known_pool_number: number, embedded: boolean, runtime: DynamicPlaybackRuntimeProjection | null, } | { "target": "group", group_id: string, master: number, flash_level: number, } | { "target": "speed_group", group: string, runtime: SpeedGroupRuntimeProjection, } | { "target": "grand_master", runtime: GrandMasterRuntimeProjection, } | { "target": "programmer_fade", millis: number, } | { "target": "cue_fade", millis: number, });
-
 export type PlaybackDeskProjection = { scope: PlaybackShowScope, desk_id: string, active_page: number, selected_playback: number | null, };
-
 export type PlaybackTransitionCause = "go" | "back" | "jump" | "chaser" | "follow" | "wait" | "timecode";
-
 export type PlaybackCueTransition = { playback_number: number | null, cue_list_id: string, previous: PlaybackCueReference | null, current: PlaybackCueReference | null, cause: PlaybackTransitionCause, advanced_steps: number, };
-
 export type PlaybackRuntimeChange = { projection: PlaybackRuntimeProjection, transition: PlaybackCueTransition | null, };
-
 export type PlaybackTelemetrySample = { playback_number: number, enabled: boolean, master: number, current_cue: PlaybackCueReference | null,
 /**
  * 0..=1 progress into the current Cue transition, or null while no Cuelist is active.
  */
 fade_progress: number | null, flash: boolean, temporary_active: boolean, swap_active: boolean, };
-
 export type PlaybackTelemetryTick = { scope: PlaybackShowScope,
 /**
  * Completed render frame this tick was sampled on.
@@ -652,159 +353,82 @@ samples: Array<PlaybackTelemetrySample>,
  * Playback numbers that stopped reporting since the previous tick (released/offline).
  */
 released: Array<number>, };
-
 export type DynamicRuntimeEventKind = "instance_started" | "instance_pending" | "instance_active" | "instance_off" | "instance_release" | "controller_updated" | "controller_winner_changed" | "paused" | "resumed" | "failed_dependency" | "preload_committed" | "transition_completed";
-
 export type DynamicRuntimeChange = { kind: DynamicRuntimeEventKind, dynamic_id: string | null, runtime_instance_id: string | null, controller_id: string | null, winning_controller_id: string | null, occurred_at_millis: number, message: string | null, };
-
 export type OutputRuntimeActionRequest = { request_id: string, expected_show_id: string, expected_revision: number, grand_master?: number | null, blackout?: boolean | null, };
-
 export type OutputRuntimeDurability = "durable" | "persistence_pending";
-
 export type OutputRuntimeActionState = { "status": "changed", event_sequence: number, } | { "status": "no_change", };
-
 export type OutputRuntimeActionOutcome = { request_id: string, correlation_id: string, projection: OutputRuntimeProjection, replayed: boolean, durability: OutputRuntimeDurability, warning?: string | null, } & ({ "status": "changed", event_sequence: number, } | { "status": "no_change", });
-
 export type OutputRuntimeErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type OutputRuntimeErrorResponse = { kind: OutputRuntimeErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
-
 export type DmxOverrideRequest = { request_id: string, universe: number, address: number, value?: number | null, };
-
 export type HighlightAction = "on" | "off" | "toggle" | "next" | "previous" | "all";
-
 export type HighlightActionRequest = { request_id: string, action: HighlightAction, };
-
 export type PatchPreviewHighlightRequest = { request_id: string, active: boolean, fixture_ids: Array<string>, };
-
 export type MediaThumbnailRefreshRequest = { library_type: number, library_level: number, library_1: number, library_2: number, library_3: number, elements: Array<number>, width: number, height: number, };
-
 export type MediaPreviewRefreshRequest = { source: number, width: number, height: number, };
-
 export type SpeedGroupId = "A" | "B" | "C" | "D" | "E";
-
 export type SpeedGroupProjection = { group: SpeedGroupId, manual_bpm: number, paused: boolean, speed_master_scale: number, synchronized_with?: SpeedGroupId | null, phase_origin_millis: number, };
-
 export type SpeedGroupAuthorityProjection = { authority_id: string, revision: number, groups: Array<SpeedGroupProjection>, };
-
 export type SpeedGroupSnapshot = { cursor: EventSnapshotCursor, projection: SpeedGroupAuthorityProjection, };
-
 export type SpeedGroupAction = { "type": "set_bpm", group: SpeedGroupId, bpm: number, } | { "type": "adjust_bpm", group: SpeedGroupId, delta_bpm: number, } | { "type": "synchronize", source: SpeedGroupId, target: SpeedGroupId, };
-
 export type SpeedGroupActionRequest = { request_id: string, expected_authority_id: string, expected_revision: number, action: SpeedGroupAction, };
-
 export type SpeedGroupDurability = "durable" | "persistence_pending";
-
 export type SpeedGroupActionState = { "status": "changed", event_sequence: number, } | { "status": "no_change", };
-
 export type SpeedGroupActionOutcome = { request_id: string, correlation_id: string, authority_id: string, revision: number, applied_at_millis: number, groups: Array<SpeedGroupProjection>, replayed: boolean, durability: SpeedGroupDurability, warning?: string | null, } & ({ "status": "changed", event_sequence: number, } | { "status": "no_change", });
-
 export type SpeedGroupChange = { authority_id: string, revision: number, applied_at_millis: number, groups: Array<SpeedGroupProjection>, };
-
 export type SpeedGroupErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type SpeedGroupErrorResponse = { kind: SpeedGroupErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
-
 export type OutputProtocol = "art_net" | "sacn";
-
 export type OutputDeliveryMode = "broadcast" | "multicast" | "unicast";
-
 export type OutputRoute = { protocol: OutputProtocol, logical_universe: number, destination_universe: number, delivery_mode: OutputDeliveryMode, destination: string | null, enabled: boolean, minimum_slots: number, };
-
 export type OutputRouteChange = { show_id: string, show_revision: number, route_id: string, object_revision: number, route: OutputRoute | null, deleted: boolean, };
-
 export type OutputRuntimeIdentity = "global_master";
-
 export type OutputRuntimeScope = { show_id: string, };
-
 export type OutputRuntimeProjection = { scope: OutputRuntimeScope, identity: OutputRuntimeIdentity, revision: number, grand_master: number, blackout: boolean, };
-
 export type OutputRuntimeChange = { projection: OutputRuntimeProjection, };
-
 export type OutputRuntimeSnapshot = { cursor: EventSnapshotCursor, projection: OutputRuntimeProjection, };
-
 export type ShowObjectKind = "cue_list" | "dynamic" | "group" | "patch_layer" | "playback" | "playback_page" | "preset" | "stage_layout" | "user_layout";
-
 export type ShowObjectChange = { "kind": "dynamic", object_id: string, object_revision: number, body: unknown | null, validation_error?: string | null, deleted: boolean, } | { "kind": "cue_list", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "group", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "patch_layer", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "playback", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "playback_page", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "preset", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "stage_layout", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "user_layout", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, };
-
 export type ShowObjectsChange = { show_id: string, show_revision: number, changes: Array<ShowObjectChange>, };
-
 export type SelectiveImportObjectChange = { kind: string, object_id: string, object_revision: number, body: unknown, };
-
 export type FixtureProfileIdentity = { profile_id: string, revision: number, };
-
 export type ManagedAssetReference = { asset_id: string, revision: number, };
-
 export type SelectiveImportChange = { show_id: string, show_revision: number, objects: Array<SelectiveImportObjectChange>, profile_revisions: Array<FixtureProfileIdentity>, managed_assets: Array<ManagedAssetReference>, };
-
 export type NotificationRevision = { revision: number, };
-
 export type HardwareConnectionNotification = { revision: number, connected: boolean, };
-
 export type HighlightChange = { revision: number, desk_id: string, user_id: string, action: string | null, source: string | null, state: RuntimeHighlightState, };
-
 export type ScreenNotificationKind = "configuration" | "screen_page" | "playback_page";
-
 export type ScreenNotification = { revision: number, kind: ScreenNotificationKind, };
-
 export type ShowLibraryNotificationKind = "show_opened" | "show_renamed" | "show_rolled_back" | "show_uploaded" | "show_deleted";
-
 export type ShowLibraryNotification = { revision: number, kind: ShowLibraryNotificationKind, };
-
 export type FixtureLibraryNotificationKind = "library" | "profile";
-
 export type FixtureLibraryNotification = { revision: number, kind: FixtureLibraryNotificationKind, };
-
 export type MediaNotificationKind = "thumbnails_refreshed" | "preview_refreshed" | "server_offline";
-
 export type MediaNotification = { revision: number, kind: MediaNotificationKind, };
-
 export type DeskActionNotification = { action: string | null, control: string | null, value: string | null, session_id: string | null, desk_id: string | null, desk_alias: string | null, };
-
 export type FileInputNotification = { action: string, instance_id: string, session_id: string, source_session_id: string | null, desk_id: string | null, operation: string | null, source: string | null, };
-
 export type FileOperationItemNotification = { source_root_id: string, source: string, destination_root_id: string | null, destination: string | null, status: string, error: string | null, };
-
 export type FileOperationNotification = { operation: string, items: Array<FileOperationItemNotification>, };
-
 export type GroupConfigurationNotification = { group_id: string, desk_id: string, };
-
 export type UpdateTargetFamilyNotification = "cue" | "preset" | "group";
-
 export type UpdateTargetNotification = { family: UpdateTargetFamilyNotification, object_id: string, playback_number: number | null, cue_id: string | null, cue_number: number | null, validate_active_context: boolean | null, };
-
 export type UpdateWorkflowNotification = { "type": "armed", desk_id: string, armed: boolean, } | { "type": "target_requested", desk_id: string, target: UpdateTargetNotification, } | { "type": "target_rejected", desk_id: string, error: string | null, } | { "type": "targets_requested", desk_id: string, } | { "type": "settings_requested", desk_id: string, };
-
 export type OperatorNotification = { "type": "desk_action", revision: number, notification: DeskActionNotification, } | { "type": "file_input", revision: number, notification: FileInputNotification, } | { "type": "file_operation", revision: number, notification: FileOperationNotification, } | { "type": "group_configuration", revision: number, notification: GroupConfigurationNotification, } | { "type": "update_workflow", revision: number, notification: UpdateWorkflowNotification, } | { "type": "command_history_changed", revision: number, desk_id: string, };
-
 export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programmer_priority_changed", change: ProgrammerPriorityChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "programming_preload_playback_queue_changed", change: ProgrammingPreloadPlaybackQueueChange, } | { "type": "programming_lifecycle_changed", change: ProgrammingLifecycleChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "playback_telemetry_sampled", tick: PlaybackTelemetryTick, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "dynamic_runtime_changed", change: DynamicRuntimeChange, } | { "type": "speed_groups_changed", change: SpeedGroupChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, } | { "type": "virtual_playback_exclusion_zones_changed", change: VirtualPlaybackExclusionZonesChange, } | { "type": "highlight_changed", change: HighlightChange, } | { "type": "server_configuration_changed", change: NotificationRevision, } | { "type": "screens_changed", change: ScreenNotification, } | { "type": "show_library_changed", change: ShowLibraryNotification, } | { "type": "fixture_library_changed", change: FixtureLibraryNotification, } | { "type": "media_changed", change: MediaNotification, } | { "type": "hardware_connection_changed", change: HardwareConnectionNotification, } | { "type": "operator_notification", notification: OperatorNotification, };
-
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, related_objects?: Array<EventObject> | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
-
 export type EventClientMessage = { "type": "subscribe", filter: EventSubscriptionFilter, after_sequence?: number | null, capacity?: number | null, rate_limits: Array<EventRateLimit>, } | { "type": "repair", cursor: EventSnapshotCursor, };
-
 export type EventServerMessage = { "type": "ready", cursor: EventSnapshotCursor, } | { "type": "event", event: EventEnvelope, } | { "type": "gap", gap: SequenceGap, } | { "type": "repaired", cursor: EventSnapshotCursor, } | { "type": "error", error: string, };
-
 export type FixtureDefinitionsSnapshot = { definitions: unknown[], };
-
 export type FixtureProfilesSnapshot = { profiles: unknown[], };
-
 export type FixtureLibraryWarningsSnapshot = { warnings: Array<string>, };
-
 export type FixtureProfileRevisionsSnapshot = { profiles: unknown[], };
-
 export type FixtureLibraryActionRequest = { request_id: string, action: FixtureLibraryAction, };
-
 export type FixtureLibraryAction = { "type": "save_profile", profile: unknown, expected_revision: number, } | { "type": "delete_profile_revision", profile_id: string, revision: number, } | { "type": "import_package", package_base64: string, } | { "type": "attach_gdtf", profile_id: string, revision: number, source_base64: string, } | { "type": "save_definition", definition: unknown, } | { "type": "delete_definition_revision", definition_id: string, revision: number, };
-
 export type FixtureLibraryActionOutcome = { request_id: string, replayed: boolean, result: FixtureLibraryActionResult, };
-
 export type FixtureLibraryActionResult = { "type": "profile", profile_id: string, revision: number, } | { "type": "definition", definition_id: string, revision: number, } | { "type": "deleted", resource: FixtureLibraryResource, id: string, revision: number, } | { "type": "gdtf_attached", profile_id: string, revision: number, };
-
 export type FixtureLibraryResource = "profile" | "definition";
-
 export type PlaybackOverview = { cue_lists: unknown[], pool: unknown[], pages: unknown[], active: unknown[], desk: RuntimeControlDesk, active_page: number, selected_playback: number | null, authoritative_controls: unknown, };
-
 export type PlaybackActionRequest = {
 /**
  * Idempotency is retained for the 4096 most-recent IDs in the live server process. After
@@ -816,9 +440,7 @@ request_id: string, address: PlaybackAddress, action: PlaybackAction,
  * recorded by the server and cannot be supplied by a caller.
  */
 surface: PlaybackSurface, };
-
 export type PlaybackRelatedOutcome = { projection: PlaybackRuntimeProjection, event_sequence: number, };
-
 export type PlaybackActionOutcome = { request_id: string, correlation_id: string, requested: PlaybackAddress, resolved: ResolvedPlaybackAddress, outcome: PlaybackOutcome, durability: PlaybackDurability, projection: PlaybackRuntimeProjection,
 /**
  * Additional runtime identities changed atomically by the same action, in event order.
@@ -832,73 +454,43 @@ event_sequence?: number | null,
  * Sequence of a separate desk-local view event when selection changed.
  */
 desk_event_sequence?: number | null, replayed: boolean, };
-
 export type PlaybackErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type PlaybackErrorResponse = { kind: PlaybackErrorKind, error: string, retryable: boolean, };
-
 export type PlaybackRuntimeSnapshotRequest = { identities: Array<PlaybackRuntimeIdentity>, };
-
 export type PlaybackRuntimeSnapshot = { cursor: EventSnapshotCursor, desk: PlaybackDeskProjection, projections: Array<PlaybackRuntimeProjection>, };
-
 export type PlaybackTopologyTarget = { "type": "cue_list", cue_list_id: string, } | { "type": "dynamic", assignment: PlaybackTopologyDynamicAssignment, } | { "type": "group", group_id: string, } | { "type": "speed_group", group: string, } | { "type": "programmer_fade", } | { "type": "cue_fade", } | { "type": "grand_master", };
-
 export type PlaybackTopologyButtonAction = "on" | "off" | "toggle" | "go" | "go_minus" | "fast_forward" | "fast_rewind" | "flash" | "temp" | "swap" | "select" | "select_contents" | "select_dereferenced" | "learn" | "double" | "half" | "pause" | "blackout" | "pause_dynamics" | "dynamic_restart" | "dynamic_double_speed" | "dynamic_half_speed" | "dynamic_learn_speed" | "none";
-
 export type PlaybackTopologyFaderMode = "master" | "temp" | "speed" | "x_fade" | "direct_bpm" | "centered_relative" | "learned_percentage";
-
 export type PlaybackTopologyFlashReleaseMode = "release_all" | "release_intensity_only";
-
 export type PlaybackTopologyDynamicAssignment = { dynamic_id?: string | null, last_known_pool_number: number, embedded_fallback: DynamicDefinitionProjection, revision: number, target_scope?: PlaybackTopologyDynamicTargetScope | null, fader_mode: PlaybackTopologyDynamicFaderMode, priority: number, activation_override?: DynamicActivationPolicyProjection | null, resume_policy: PlaybackTopologyDynamicResumePolicy, local_speed_multiplier: DynamicRationalProjection, learned_duration_millis?: number | null, crossfade_non_intensity: boolean, auto_off_at_zero: boolean, auto_off_flash_release: boolean, auto_off_full_control: boolean, };
-
 export type PlaybackTopologyDynamicTargetScope = { "type": "live_group", group_id: string, } | { "type": "frozen_targets", targets: Array<string>, };
-
 export type PlaybackTopologyDynamicFaderMode = "none" | "master" | "size" | "size_and_master";
-
 export type PlaybackTopologyDynamicResumePolicy = "follow_dynamic" | "resume_frozen_phase" | "rejoin_synchronized_position" | "resume_on_next_boundary";
-
 export type PlaybackTopologyPlaybackDefinition = { number: number, name: string, target: PlaybackTopologyTarget, buttons: [PlaybackTopologyButtonAction, PlaybackTopologyButtonAction, PlaybackTopologyButtonAction], button_count: number, fader: PlaybackTopologyFaderMode, has_fader: boolean, go_activates: boolean, auto_off: boolean, xfade_millis: number, color: string, flash_release: PlaybackTopologyFlashReleaseMode, protect_from_swap: boolean, presentation_icon?: string | null, presentation_image?: string | null, };
-
 export type PlaybackTopologyAction = { "type": "save_cue_list", cue_list_id: string, expected_revision: number, expected_object_id: string | null,
 /**
  * Extensible portable body; adapters strictly decode its known Cuelist fields.
  */
 body: unknown, } | { "type": "configure_slot", page: number, slot: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, playback: PlaybackTopologyPlaybackDefinition, } | { "type": "configure_virtual", page: number, playback_number: number, expected_page_revision: number, expected_page_object_id: string | null, playback: PlaybackTopologyPlaybackDefinition, } | { "type": "map_existing_playback", page: number, slot: number, playback_number: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, } | { "type": "create_page", page: number, expected_page_revision: number, expected_page_object_id: string | null, } | { "type": "rename_page", page: number, name: string, expected_page_revision: number, expected_page_object_id: string | null, } | { "type": "clear_mapped_playback", page: number, slot: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, } | { "type": "clear_virtual", page: number, playback_number: number, expected_page_revision: number, expected_page_object_id: string | null, };
-
 export type PlaybackTopologyActionRequest = { request_id: string, action: PlaybackTopologyAction, };
-
 export type PlaybackTopologyResolution = { "kind": "cue_list", cue_list_id: string, } | { "kind": "page_slot", page: number, slot: number, playback_number: number | null, } | { "kind": "virtual", page: number, playback_number: number, } | { "kind": "page", page: number, };
-
 export type PlaybackTopologyObjectProjection = { "state": "present", kind: ShowObjectKind, object_id: string, object_revision: number, body: unknown, } | { "state": "deleted", kind: ShowObjectKind, object_id: string, object_revision: number, };
-
 export type PlaybackTopologyActionState = { "status": "changed", objects: Array<PlaybackTopologyObjectProjection>, event_sequence: number, } | { "status": "no_change", objects: Array<PlaybackTopologyObjectProjection>, };
-
 export type PlaybackTopologyActionOutcome = { request_id: string, correlation_id: string, show_revision: number, resolution: PlaybackTopologyResolution, replayed: boolean, } & ({ "status": "changed", objects: Array<PlaybackTopologyObjectProjection>, event_sequence: number, } | { "status": "no_change", objects: Array<PlaybackTopologyObjectProjection>, });
-
 export type PlaybackTopologyErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
-
 export type PlaybackTopologyErrorResponse = { kind: PlaybackTopologyErrorKind, error: string, current_revision?: number | null, current_related_revision?: number | null, retryable: boolean, };
-
 export type PatchDirectControlProtocol = "citp";
-
 export type PatchProfilePolicy = "dmx" | "visual_only";
-
 export type PatchSplitAssignment = { split: number, universe: number | null, address: number | null, };
-
 export type PatchDirectControlEndpoint = { protocol: PatchDirectControlProtocol,
 /**
  * Transport adapters validate this as an IP address before invoking the application service.
  */
 ip_address: string, port: number, };
-
 export type PatchFixtureLocation = { x: number, y: number, z: number, };
-
 export type PatchFixtureRotation = { x: number, y: number, z: number, };
-
 export type PatchMultiPatchInput = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, };
-
 export type PatchHighlightOverrideInput = { channel_id: string, raw_value: number, };
-
 export type PatchFixtureInput = {
 /**
  * Stable identity generated once by the caller and retained across an idempotent retry.
@@ -908,15 +500,10 @@ fixture_id: string, fixture_number: number | null, virtual_fixture_number: numbe
  * Canonical split assignments. An unpatched split has two `null` address fields.
  */
 split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, location: PatchFixtureLocation, rotation: PatchFixtureRotation, multipatch: Array<PatchMultiPatchInput>, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideInput>, };
-
 export type PatchOperatorAddressOverride = { fixture_id: string, universe: number, address: number, };
-
 export type PatchSplitPlacementMode = { "type": "consecutive" } | { "type": "operator_overrides", overrides: Array<PatchOperatorAddressOverride>, };
-
 export type PatchSplitPlacementIntent = { split: number, universe: number | null, address: number | null, mode: PatchSplitPlacementMode, };
-
 export type PatchPlacementIntent = { fixture_ids: Array<string>, splits: Array<PatchSplitPlacementIntent>, };
-
 export type PatchFixturesRequest = {
 /**
  * Client-generated idempotency identity, scoped to the authenticated desk session.
@@ -936,25 +523,17 @@ remove_fixture_ids: Array<string>,
  * where fixture split assignments are already explicit.
  */
 placements: Array<PatchPlacementIntent>, };
-
 export type PatchErrorResponse = { error: string, current_revision?: number | null, retryable: boolean, };
-
 export type PatchLogicalHeadProjection = {
 /**
  * Stable semantic head identity from the selected immutable profile revision.
  */
 profile_head_id: string | null, head_index: number, fixture_id: string, };
-
 export type PatchMultiPatchProjection = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, };
-
 export type PatchHighlightOverrideProjection = { channel_id: string, raw_value: number, };
-
 export type PatchFixtureProjection = { fixture_id: string, fixture_revision: number, fixture_number: number | null, virtual_fixture_number: number | null, name: string, profile_id: string, profile_revision: number, mode_id: string, split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, location: PatchFixtureLocation, rotation: PatchFixtureRotation, logical_heads: Array<PatchLogicalHeadProjection>, multipatch: Array<PatchMultiPatchProjection>, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideProjection>, };
-
 export type PatchModeSplitProjection = { split: number, footprint: number, };
-
 export type PatchModeProjection = { mode_id: string, name: string, splits: Array<PatchModeSplitProjection>, };
-
 export type PatchProfileRevisionProjection = { profile_id: string, profile_revision: number, content_digest: string, manufacturer: string, name: string, fixture_type: string, patch_policy: PatchProfilePolicy,
 /**
  * Only modes referenced by fixtures in the containing snapshot or delta, never the catalog.
@@ -967,7 +546,6 @@ referenced_modes: Array<PatchModeProjection>,
  * excludes fixture definitions. Absent (null) on older payloads, so clients must tolerate it.
  */
 profile_snapshot?: unknown, };
-
 export type PatchDelta = { show_id: string, show_revision: number, patch_revision: number,
 /**
  * Sequence of the semantic patch-change event, absent for a no-op desired-state request.
@@ -977,7 +555,6 @@ event_sequence?: number | null, fixtures: Array<PatchFixtureProjection>, removed
  * Unique metadata needed to interpret the fixture projections in this delta.
  */
 profile_revisions: Array<PatchProfileRevisionProjection>, };
-
 export type PatchFixturesOutcome = { request_id: string,
 /**
  * `true` when idempotency replay returned the already committed authoritative result.
@@ -995,27 +572,22 @@ event_sequence?: number | null, fixtures: Array<PatchFixtureProjection>, removed
  * Unique metadata needed to interpret the fixture projections in this delta.
  */
 profile_revisions: Array<PatchProfileRevisionProjection>, };
-
 export type PatchSnapshot = { show_id: string, show_revision: number, patch_revision: number, cursor: EventSnapshotCursor, fixtures: Array<PatchFixtureProjection>,
 /**
  * Exactly one entry per profile revision referenced by `fixtures`.
  */
 profile_revisions: Array<PatchProfileRevisionProjection>, };
-
 export type StagePositionAxis = "x" | "y" | "z" | "rotation_x" | "rotation_y" | "rotation_z";
-
 export type StageLayoutAction = { "type": "move_selection", fixture_ids: Array<string>, axis: StagePositionAxis,
 /**
  * Meters for translation axes, degrees for rotation axes. Must be finite.
  */
 delta: number, };
-
 export type StageLayoutActionRequest = {
 /**
  * Client-generated idempotency identity, scoped to the authenticated desk session.
  */
 request_id: string, action: StageLayoutAction, };
-
 export type StageLayoutActionOutcome = { request_id: string,
 /**
  * Stage-layout object revision after the action (unchanged for a no-op).
@@ -1033,81 +605,47 @@ replayed: boolean,
  * `false` when no selected fixture had a resolvable position and nothing was written.
  */
 changed: boolean, };
-
 export type StageLayoutErrorResponse = { error: string, retryable: boolean, };
-
 export type RuntimeSessionCreateRequest = { username: string, desk_id: string | null, client_id: string | null, };
-
 export type RuntimeDeskUser = { id: string, name: string, enabled: boolean, };
-
 export type RuntimePlaybackSurfaceRow = { first_playback_slot: number, has_fader: boolean, button_count: number, };
-
 export type RuntimePlaybackSurfaceLayout = { playbacks_per_row: number, rows: Array<RuntimePlaybackSurfaceRow>, };
-
 export type RuntimeControlDesk = { id: string, name: string, osc_alias: string, columns: number, rows: number, buttons: number, playback_layout: RuntimePlaybackSurfaceLayout | null, };
-
 export type RuntimeSessionResponse = { session_id: string, client_id: string, token: string, user: RuntimeDeskUser, desk: RuntimeControlDesk, };
-
 export type RuntimeRevisionCopySource = { show_id: string, show_name: string, revision: number, revision_name: string, copied_at: string, };
-
 export type RuntimeShowEntry = { id: string, name: string, path: string, revision: number, updated_at: string, revision_copy: RuntimeRevisionCopySource | null, };
-
 export type RuntimeOutputHealth = { frames_sent: number, packets_sent: number, send_errors: number, deadline_misses: number, maximum_lateness_micros: number, frame_hz: number, last_tick_micros: number, maximum_tick_micros: number, tick_duration_bucket_bounds_micros: number[], tick_duration_bucket_counts: number[], scheduler_utilization: number, };
-
 export type RuntimeClientSummary = { client_id: string, name: string, connected: boolean, last_connected_at: string | null, desk: RuntimeControlDesk, can_remove: boolean, };
-
 export type RuntimeAttributeDescriptor = { id: string, label: string, family: string, value_type: string, default_unit: string | null, display_unit: string | null, physical_unit: string | null, normalized_min: number | null, normalized_max: number | null, domain_min: number | null, domain_max: number | null, cyclic: boolean, recordable: boolean, };
-
 export type RuntimeHighlightFixture = { fixture_id: string, name: string | null, number: number | null, };
-
 export type RuntimeHighlightState = { active: boolean, mode: string, output_enabled: boolean, capture_only: boolean, remembered: Array<RuntimeHighlightFixture>, active_index: number | null, active_fixture: RuntimeHighlightFixture | null, can_previous: boolean, can_next: boolean, owner_user_id: string | null, owner_user_name: string | null, message: string | null, };
-
 export type RuntimeBootstrapHighlightState = { session_id: string, desk_id: string, user_id: string, state: RuntimeHighlightState, };
-
 export type RuntimeBootstrapSnapshot = { api_version: string, attribute_registry: Array<RuntimeAttributeDescriptor>, users: Array<RuntimeDeskUser>, desks: Array<RuntimeControlDesk>, clients: Array<RuntimeClientSummary>, active_show: RuntimeShowEntry | null,
 /**
  * Retained as an empty compatibility collection until the facade is removed.
  */
 active_programmers: unknown[], highlight_states: Array<RuntimeBootstrapHighlightState>, frame_rate_hz: number, output_health: RuntimeOutputHealth, active_timecode_source: string | null, active_timecode: string | null, active_show_error: string | null, hardware_connected: boolean, };
-
 export type RuntimeReadinessSnapshot = { status: string, active_show: string | null, active_show_error: string | null, recovery_mode: boolean, snapshot_revision: number, };
-
 export type RuntimeVisualizationDiagnostics = { normal_subscribers: number, preload_subscribers: number, projections: number, projection_micros: number, payload_bytes: number, source_age_millis: number, skipped_source_frames: number, snapshot_requests: number, snapshot_projection_micros: number, snapshot_serialization_micros: number, snapshot_payload_bytes: number, snapshot_source_frame: number, snapshot_source_age_millis: number, stream_serializations: number, stream_serialization_micros: number, stream_payload_bytes: number, stream_sends: number, stream_send_micros: number, stream_send_failures: number, stream_queue_depth: number, stream_queue_drops: number, };
-
 export type RuntimeDiagnosticsSnapshot = { output: RuntimeOutputHealth, output_bind_ip: string, output_routes: unknown, route_send_errors: unknown, active_programmers: unknown, active_playbacks: unknown, move_in_black: unknown, timecode_source: string | null, media_servers: unknown, snapshot_revision: number, visualization: RuntimeVisualizationDiagnostics, };
-
 export type ScreenPlaybackSurfaceRow = { first_playback_slot: number, has_fader: boolean, button_count: number, };
-
 export type ScreenPlaybackSurfaceLayout = { playbacks_per_row: number, rows: Array<ScreenPlaybackSurfaceRow>, };
-
 export type ScreenPageMode = "follow_main" | "independent";
-
 export type ScreenConfiguration = { id: string, name: string, layout: unknown, show_dock: boolean, show_playbacks: boolean, playback_count: number, playback_rows: number, first_playback_slot: number, page_mode: ScreenPageMode, show_page_controls: boolean, desired_open: boolean, display_id: string | null, bounds: unknown, fullscreen: boolean, playback_layout: ScreenPlaybackSurfaceLayout | null, };
-
 export type ScreenConfigurationSnapshot = { screens: Array<ScreenConfiguration>, active_pages: Record<string, number>, };
-
 export type ScreenConfigurationActionRequest = { request_id: string, action: ScreenConfigurationAction, };
-
 export type ScreenConfigurationAction = { "type": "create", configuration: ScreenConfiguration, } | { "type": "update", screen_id: string, patch: ScreenConfigurationPatch, } | { "type": "delete", screen_id: string, } | { "type": "set_page", screen_id: string, page: number, };
-
 export type ScreenConfigurationPatch = { name: string | null, layout: unknown, show_dock: boolean | null, show_playbacks: boolean | null, playback_count: number | null, playback_rows: number | null, first_playback_slot: number | null, page_mode: ScreenPageMode | null, show_page_controls: boolean | null, desired_open: boolean | null, display_id: string | null, clear_display_id: boolean, bounds: unknown, clear_bounds: boolean, fullscreen: boolean | null, playback_layout: ScreenPlaybackSurfaceLayout | null, clear_playback_layout: boolean, };
-
 export type ScreenConfigurationActionOutcome = { request_id: string, replayed: boolean, screen: ScreenConfiguration | null, active_page: number | null, };
-
 export type VirtualPlaybackExclusionZone = { id: string, name: string,
 /**
  * Stable show-owned Virtual Playback numbers, independent of panes and desks.
  */
 playback_numbers: Array<number>, };
-
 export type VirtualPlaybackExclusionSnapshot = { show_id: string, revision: number, zones: Array<VirtualPlaybackExclusionZone>, };
-
 export type VirtualPlaybackExclusionUpdateRequest = { request_id: string, expected_revision: number, zones: Array<VirtualPlaybackExclusionZone>, };
-
 export type VirtualPlaybackExclusionUpdateOutcome = { request_id: string, show_id: string, revision: number, zones: Array<VirtualPlaybackExclusionZone>, replayed: boolean, changed: boolean, };
-
 export type VirtualPlaybackExclusionZonesChange = { show_id: string, revision: number, };
-
 export type VisualizationScope = {
 /**
  * The authoritative Show that produced this frame. `None` represents the
@@ -1115,213 +653,108 @@ export type VisualizationScope = {
  * being mistaken for the replacement Show at the same revision.
  */
 show_id: string | null, };
-
 export type VisualizationLane = "normal" | "preload";
-
 export type VisualizationClientMessage = { "type": "subscribe", lanes: Array<VisualizationLane>, max_rate_hz: number, } | { "type": "unsubscribe", lanes: Array<VisualizationLane>, } | { "type": "resynchronize", lane: VisualizationLane, };
-
 export type VisualizationValue = { fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, };
-
 export type VisualizationValueKey = { fixture_id: string, attribute: string, };
-
 export type VisualizationStackEntryType = "ordinary_static" | "dynamic" | "fix_at" | "dynamic_off" | "static";
-
 export type VisualizationDynamicStackEntry = { fixture_id: string, attribute: string, entry_type: VisualizationStackEntryType, priority: number, changed_at_millis: number, source: string, dynamic_id: string | null, pool_number: number | null, name: string, runtime_instance_id: string | null, controller_id: string | null, lane_id: string | null, size: number | null, activation_mix: number | null, paused: boolean, hidden: boolean, pending: boolean, winning: boolean, value: ProgrammingPreloadAttributeValue | null, resolved_value: ProgrammingPreloadAttributeValue | null, };
-
 export type VisualizationLaneSnapshot = { scope: VisualizationScope, revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, dynamic_stack?: Array<VisualizationDynamicStackEntry>, profile_output_values: Array<VisualizationValue>, };
-
 export type VisualizationLaneDelta = { scope: VisualizationScope, revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, removed_values: Array<VisualizationValueKey>, dynamic_stack: Array<VisualizationDynamicStackEntry>, profile_output_values: Array<VisualizationValue>, removed_profile_output_values: Array<VisualizationValueKey>, };
-
 export type VisualizationServerMessage = { "type": "hello", protocol_version: number, max_rate_hz: number, lanes: Array<VisualizationLane>, scope: VisualizationScope, } | { "type": "snapshot", lane: VisualizationLane, scope: VisualizationScope, sequence: number, source_frame: number, source_timestamp: string, published_at: string, snapshot: VisualizationLaneSnapshot, } | { "type": "delta", lane: VisualizationLane, scope: VisualizationScope, sequence: number, source_frame: number, source_timestamp: string, published_at: string, delta: VisualizationLaneDelta, } | { "type": "heartbeat", scope: VisualizationScope, sequence: number, published_at: string, } | { "type": "structural_invalidation", scope: VisualizationScope, revision: number, } | { "type": "error", code: string, message: string, };
-
 export type SelectiveImportObjectKey = { kind: string, id: string, };
-
 export type SelectiveImportConflictResolution = "keep_destination" | "replace_destination" | "duplicate";
-
 export type SelectiveImportConflictChoice = { key: SelectiveImportObjectKey, resolution: SelectiveImportConflictResolution, };
-
 export type SelectiveImportProfileKey = { profile_id: string, revision: number, };
-
 export type SelectiveImportProfileConflictResolution = "keep_destination" | "duplicate";
-
 export type SelectiveImportProfileConflictChoice = { key: SelectiveImportProfileKey, resolution: SelectiveImportProfileConflictResolution, };
-
 export type SelectiveImportSelection = { selected_objects: Array<SelectiveImportObjectKey>, conflict_resolutions: Array<SelectiveImportConflictChoice>, profile_conflict_resolutions: Array<SelectiveImportProfileConflictChoice>, };
-
 export type SelectiveImportApplyRequest = { request_id: string, expected_source_revision: number, expected_target_revision: number, selected_objects: Array<SelectiveImportObjectKey>, conflict_resolutions: Array<SelectiveImportConflictChoice>, profile_conflict_resolutions: Array<SelectiveImportProfileConflictChoice>, };
-
 export type SelectiveImportCatalogObject = { key: SelectiveImportObjectKey, object_revision: number, display_name: string, };
-
 export type SelectiveImportCatalog = { source_show_id: string, source_show_name: string, source_revision: number, objects: Array<SelectiveImportCatalogObject>, };
-
 export type SelectiveImportObjectAction = { "type": "import_preserving_id" } | { "type": "skip_identical" } | { "type": "keep_destination" } | { "type": "replace_destination" } | { "type": "duplicate", destination: SelectiveImportObjectKey, } | { "type": "blocked_conflict" };
-
 export type SelectiveImportObjectPreview = { source: SelectiveImportObjectKey, destination: SelectiveImportObjectKey, action: SelectiveImportObjectAction, };
-
 export type SelectiveImportDependencyDisposition = "selected" | "included" | "bound_to_destination" | "missing";
-
 export type SelectiveImportDependency = { owner: SelectiveImportObjectKey, dependency: SelectiveImportObjectKey, disposition: SelectiveImportDependencyDisposition, };
-
 export type SelectiveImportConflict = { key: SelectiveImportObjectKey, resolution: SelectiveImportConflictResolution | null, };
-
 export type SelectiveImportProfileAction = { "type": "copy" } | { "type": "skip_identical" } | { "type": "keep_destination" } | { "type": "duplicate", destination: SelectiveImportProfileKey, } | { "type": "blocked_conflict" } | { "type": "missing" };
-
 export type SelectiveImportProfilePreview = { source: SelectiveImportProfileKey, destination: SelectiveImportProfileKey, action: SelectiveImportProfileAction, };
-
 export type SelectiveImportManagedAssetAction = "copy" | "skip_identical" | "missing" | "blocked_conflict";
-
 export type SelectiveImportAssetReference = { asset_id: string, revision: number, };
-
 export type SelectiveImportManagedAssetPreview = { asset: SelectiveImportAssetReference, action: SelectiveImportManagedAssetAction, };
-
 export type SelectiveImportBlocker = { "type": "empty_selection" } | { "type": "same_show" } | { "type": "unsupported_object", key: SelectiveImportObjectKey, } | { "type": "missing_object", key: SelectiveImportObjectKey, required_by: SelectiveImportObjectKey | null, } | { "type": "object_conflict", key: SelectiveImportObjectKey, } | { "type": "invalid_resolution", key: SelectiveImportObjectKey, message: string, } | { "type": "invalid_profile_resolution", key: SelectiveImportProfileKey, message: string, } | { "type": "invalid_descriptor", key: SelectiveImportObjectKey, message: string, } | { "type": "missing_profile", key: SelectiveImportProfileKey, required_by: SelectiveImportObjectKey, } | { "type": "profile_conflict", key: SelectiveImportProfileKey, } | { "type": "missing_managed_asset", asset: SelectiveImportAssetReference, } | { "type": "managed_asset_conflict", asset: SelectiveImportAssetReference, } | { "type": "reference_rewrite", owner: SelectiveImportObjectKey, message: string, } | { "type": "candidate_invalid", message: string, };
-
 export type SelectiveImportPreview = { source_show_id: string, target_show_id: string, source_revision: number, target_revision: number, objects: Array<SelectiveImportObjectPreview>, dependencies: Array<SelectiveImportDependency>, conflicts: Array<SelectiveImportConflict>, profiles: Array<SelectiveImportProfilePreview>, managed_assets: Array<SelectiveImportManagedAssetPreview>, blockers: Array<SelectiveImportBlocker>, can_apply: boolean, };
-
 export type SelectiveImportOutcomeObjectChange = { key: SelectiveImportObjectKey, object_revision: number, body: unknown, };
-
 export type SelectiveImportProfileChange = { source: SelectiveImportProfileKey, destination: SelectiveImportProfileKey, digest: string, };
-
 export type SelectiveImportOutcome = { request_id: string, correlation_id: string, changed: boolean, show_id: string, show_revision: number, event_sequence?: number | null, outcomes: Array<SelectiveImportObjectPreview>, objects: Array<SelectiveImportOutcomeObjectChange>, profiles: Array<SelectiveImportProfileChange>, managed_assets: Array<SelectiveImportAssetReference>, };
-
 export type SelectiveImportErrorResponse = { error: string, current_revision?: number | null, retryable: boolean, };
-
 export type ShowLibrarySnapshot = { shows: Array<ShowLibraryEntry>, };
-
 export type ShowLibraryEntry = { revisions: Array<ShowLibraryRevision>, id: string, name: string, path: string, revision: number, updated_at: string, revision_copy: RuntimeRevisionCopySource | null, };
-
 export type ShowLibraryRevision = { show_id: string, revision: number, name: string, created_at: string, };
-
 export type ShowLibraryActionRequest = { request_id: string, action: ShowLibraryAction, };
-
 export type ShowLibraryAction = { "type": "create", name: string, data_base64: string | null, overwrite: boolean, } | { "type": "open", show_id: string, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "open_default", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rollback", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rename", show_id: string, name: string, } | { "type": "overwrite", source_show_id: string, destination_show_id: string, } | { "type": "save_revision", show_id: string, name: string, } | { "type": "open_revision", show_id: string, revision: number, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "apply_mvr", token: string, destination: MvrImportDestination, resolutions: Array<MvrImportResolution>, };
-
 export type ShowOpenTransition = "hold_current" | "timed_fade" | "safe_blackout";
-
 export type MvrImportDestination = { "type": "new_show", name: string, open_after_import: boolean, } | { "type": "existing_show", show_id: string, };
-
 export type MvrImportResolution = { fixture_id: string, action: MvrImportResolutionAction, };
-
 export type MvrImportResolutionAction = { "type": "import" } | { "type": "skip" } | { "type": "import_unpatched" } | { "type": "replace" } | { "type": "address", universe: number, address: number, };
-
 export type ShowLibraryActionOutcome = { request_id: string, replayed: boolean, result: ShowLibraryActionResult, };
-
 export type ShowLibraryActionResult = { "type": "show", show: RuntimeShowEntry, } | { "type": "revision", revision: ShowLibraryRevision, } | { "type": "mvr_apply", result: MvrApplyOutcome, };
-
 export type MvrApplyOutcome = { show: RuntimeShowEntry, imported_fixtures: number, unresolved_fixtures: number, imported_scenery: number, opened: boolean, warnings: Array<string>, };
-
 export type MvrImportPreview = { token: string, fixtures: Array<MvrPreviewFixture>, scenery: number, missing_profiles: Array<string>, warnings: Array<string>, address_conflicts: Array<string>, };
-
 export type MvrPreviewFixture = { uuid: string, name: string, gdtf_spec: string, gdtf_mode: string, universe: number | null, address: number | null, matched: boolean, };
-
 export type MvrExportPreview = { fixtures: number, scenery: number, embedded_profiles: number, missing_profiles: Array<string>, omitted: Array<string>, warnings: Array<string>, };
-
 export type ShowObjectRecord = { kind: string, id: string, revision: number, updated_at: string, body: unknown, validation_error?: string | null, };
-
 export type ShowObjectCollectionSnapshot = { show_id: string, show_revision: number, kind: string, objects: Array<ShowObjectRecord>, };
-
 export type ShowObjectExactSnapshot = { show_id: string, show_revision: number, kind: string, object_id: string, object: ShowObjectRecord | null, };
-
 export type OutputRouteActionRequest = { request_id: string, action: OutputRouteAction, };
-
 export type OutputRouteAction = { "type": "create", route_id: string, route: OutputRoute, } | { "type": "update", route_id: string, expected_revision: number, patch: OutputRoutePatch, } | { "type": "delete", route_id: string, expected_revision: number, };
-
 export type OutputRoutePatch = { protocol?: OutputProtocol | null, logical_universe?: number | null, destination_universe?: number | null, delivery_mode?: OutputDeliveryMode | null, destination?: string | null | null, enabled?: boolean | null, minimum_slots?: number | null, };
-
 export type OutputRouteActionOutcome = { request_id: string, replayed: boolean, change: OutputRouteChange, event_sequence: number, };
-
 export type UserLayoutActionRequest = { request_id: string, action: UserLayoutAction, };
-
 export type UserLayoutAction = { "type": "update", expected_revision: number, patch: UserLayoutPatch, };
-
 export type UserLayoutPatch = { desks?: unknown[] | null, active_desk_id?: string | null, window_settings?: unknown | null, };
-
 export type PatchLayerActionRequest = { request_id: string, action: PatchLayerAction, };
-
 export type PatchLayerAction = { "type": "save", expected_revision: number, layer: PatchLayerInput, };
-
 export type PatchLayerInput = { name: string, order: number, };
-
 export type PreloadRecordActionRequest = { request_id: string, action: PreloadRecordAction, };
-
 export type PreloadRecordAction = { "type": "preset", target_id: string, expected_revision: number, name: string, mode: PreloadPresetMode, family: PreloadPresetFamily, } | { "type": "cue", cue_list_id: string, expected_revision: number, cue_number: number, name: string | null, };
-
 export type PreloadPresetMode = "merge" | "overwrite" | "add_missing_fixtures";
-
 export type PreloadPresetFamily = "mixed" | "intensity" | "color" | "position" | "beam";
-
 export type ShowObjectActionOutcome = { request_id: string, replayed: boolean, show_id: string, show_revision: number, object: ShowObjectRecord, event_sequence?: number | null, };
-
 export type ProgrammerSelectionRule = { "type": "all" } | { "type": "odd" } | { "type": "even" } | { "type": "every_nth", n: number, offset: number, };
-
 export type ProgrammerSelectionReference = { "type": "fixture", fixture_id: string, } | { "type": "live_group", group_id: string, } | { "type": "remove_fixture", fixture_id: string, } | { "type": "remove_live_group", group_id: string, };
-
 export type ProgrammerSelectionExpression = { "type": "static" } | { "type": "live_group", group_id: string, rule: ProgrammerSelectionRule, } | { "type": "playback_contents", items: Array<ProgrammerSelectionReference>, } | { "type": "sources", items: Array<ProgrammerSelectionReference>, };
-
 export type ProgrammerSelectionProjection = { selected: Array<string>, expression: ProgrammerSelectionExpression | null, revision: number, gesture_open: boolean, };
-
 export type ProgrammingInteractionProjection = { desk_id: string, command_line: CommandLineResponse, selection: ProgrammerSelectionProjection, };
-
 export type ProgrammingInteractionChange = { desk_id: string, command_line: CommandLineResponse, selection: ProgrammerSelectionProjection, } | { desk_id: string, command_line: CommandLineResponse, } | { desk_id: string, selection: ProgrammerSelectionProjection, };
-
 export type ProgrammingInteractionSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingInteractionProjection, };
-
 export type ProgrammingSelectionGestureSource = { "type": "fixture", fixture_id: string, } | { "type": "live_group", group_id: string, } | { "type": "dereferenced_group", group_id: string, };
-
 export type ProgrammingSelectionAction = { "action": "replace", fixtures: Array<string>, expected_revision: number, } | { "action": "gesture", source: ProgrammingSelectionGestureSource, remove: boolean, } | { "action": "select_group", group_id: string, frozen: boolean, rule: ProgrammerSelectionRule, expected_revision: number, } | { "action": "apply_rule", rule: ProgrammerSelectionRule, };
-
 export type ProgrammingSelectionActionRequest = { request_id: string, } & ({ "action": "replace", fixtures: Array<string>, expected_revision: number, } | { "action": "gesture", source: ProgrammingSelectionGestureSource, remove: boolean, } | { "action": "select_group", group_id: string, frozen: boolean, rule: ProgrammerSelectionRule, expected_revision: number, } | { "action": "apply_rule", rule: ProgrammerSelectionRule, });
-
 export type ProgrammingSelectionAcceptedAction = "replaced" | "gesture_applied" | "group_selected" | "rule_applied";
-
 export type ProgrammingSelectionActionOutcome = { request_id: string, correlation_id: string, action: ProgrammingSelectionAcceptedAction, applied: number, selection: ProgrammerSelectionProjection, event_sequence: number, replayed: boolean, warning?: string | null, };
-
 export type LiveActionMessageType = "action";
-
 export type PresetRecallLiveActionRequest = { request_id: string, show_id: string, request: PresetRecallRequest, };
-
 export type CommandLineReplaceLiveActionRequest = { expected_revision: number, text: string, };
-
 export type CommandLineSetLiveActionRequest = { value: string, };
-
 export type CommandTargetLiveActionRequest = { value: CommandTarget, };
-
 export type CommandLineExecuteLiveActionRequest = { value: string, };
-
 export type CommandTargetHttpActionRequest = { value: CommandTarget, };
-
 export type CommandTargetHttpActionOutcome = { request_id: string, target: CommandTarget, };
-
 export type ProgrammerUndoHttpActionOutcome = { request_id: string, changed: boolean, };
-
 export type ProgrammerCaptureModeLiveActionRequest = { request_id: string, blind: boolean | null, preview: boolean | null, active_context?: string | null, };
-
 export type ProgrammerCaptureModeHttpActionRequest = { blind: boolean | null, preview: boolean | null, active_context?: string | null, };
-
 export type ProgrammerCaptureModeOutcome = { request_id: string, blind: boolean, preview: boolean, active_context: string | null, };
-
 export type ProgrammingAlignMode = "left" | "right" | "center" | "out";
-
 export type ProgrammingAlignLiveActionRequest = { request_id: string, attribute: string, mode: ProgrammingAlignMode, from: number, to: number, };
-
 export type ProgrammingAlignHttpActionRequest = { attribute: string, mode: ProgrammingAlignMode, from: number, to: number, };
-
 export type ProgrammingAlignOutcome = { request_id: string, unsupported_fixtures: Array<string>, };
-
 export type FixtureControlLiveActionRequest = { request_id: string, fixture_id: string, action_id: string, active: boolean, };
-
 export type FixtureControlHttpActionRequest = { fixture_id: string, action_id: string, active: boolean, };
-
 export type FixtureControlKind = "latched" | "momentary" | "pulse";
-
 export type FixtureControlOutcome = { request_id: string, action_id: string, active: boolean, kind: FixtureControlKind, pulse_duration_millis: number | null, };
-
 export type GenerateFixturePresetsRequest = { request_id: string, expected_show_revision: number, fixture_ids: Array<string>, };
-
 export type GeneratedFixturePreset = { address: PresetRecordingAddress, number: number, name: string, family: string, };
-
 export type GenerateFixturePresetsOutcome = { request_id: string, correlation_id: string, replayed: boolean, show_revision: number, event_sequence: number, created: Array<GeneratedFixturePreset>, };
-
 export type LiveAction = { "type": "programming_selection", "request": ProgrammingSelectionActionRequest } | { "type": "programming_values", "request": ProgrammingValuesActionRequest } | { "type": "programmer_capture_mode", "request": ProgrammerCaptureModeLiveActionRequest } | { "type": "programmer_priority", "request": ProgrammerPriorityActionRequest } | { "type": "programmer_preload_lifecycle", "request": ProgrammingPreloadLifecycleRequest } | { "type": "programmer_preload_values", "request": ProgrammingPreloadValuesActionRequest } | { "type": "preset_recall", "request": PresetRecallLiveActionRequest } | { "type": "playback", "request": PlaybackActionRequest } | { "type": "speed_group", "request": SpeedGroupActionRequest } | { "type": "output_runtime", "request": OutputRuntimeActionRequest } | { "type": "dmx_override", "request": DmxOverrideRequest } | { "type": "highlight", "request": HighlightActionRequest } | { "type": "patch_preview_highlight", "request": PatchPreviewHighlightRequest } | { "type": "command_line_replace", "request": CommandLineReplaceLiveActionRequest } | { "type": "command_line_set", "request": CommandLineSetLiveActionRequest } | { "type": "command_target", "request": CommandTargetLiveActionRequest } | { "type": "command_line_execute", "request": CommandLineExecuteLiveActionRequest } | { "type": "programmer_undo" } | { "type": "programming_align", "request": ProgrammingAlignLiveActionRequest } | { "type": "fixture_control", "request": FixtureControlLiveActionRequest } | { "type": "dynamic_toggle", "request": DynamicStartLiveActionRequest } | { "type": "dynamic_start", "request": DynamicStartLiveActionRequest } | { "type": "dynamic_off", "request": DynamicOffLiveActionRequest } | { "type": "dynamic_size", "request": DynamicControllerLiveActionRequest } | { "type": "dynamic_speed", "request": DynamicControllerLiveActionRequest } | { "type": "dynamic_phase", "request": DynamicControllerLiveActionRequest } | { "type": "dynamic_fix_at", "request": DynamicFixAtActionRequest };
-
 export type LiveActionFrame = { type: LiveActionMessageType, protocol_version: number, request_id: string, session_id: string, action: LiveAction, };

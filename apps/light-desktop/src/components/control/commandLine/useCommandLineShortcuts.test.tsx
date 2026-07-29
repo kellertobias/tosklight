@@ -87,7 +87,7 @@ function playback(
 }
 
 function page(number: number, slots: Record<string, number>): PlaybackPage {
-	return { number, name: `Page ${number}`, slots };
+	return { number, name: `Page ${number}`, slots, virtual_playbacks: {} };
 }
 
 const callbacks = {

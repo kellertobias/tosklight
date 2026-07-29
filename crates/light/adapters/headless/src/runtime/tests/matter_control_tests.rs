@@ -104,9 +104,13 @@ fn matter_activation_checkpoint_keeps_desk_independent_restart_scope() {
     };
     state.active_show.replace_current(Some(show.clone()));
     let cue_list_id = light_core::CueListId::new();
-    state
-        .output.replace_snapshot(restored_exclusion_snapshot(cue_list_id))
-        .unwrap();
+    let mut snapshot = restored_exclusion_snapshot(cue_list_id);
+    std::sync::Arc::make_mut(&mut snapshot.playbacks)
+        .push(restored_exclusion_playback(2, cue_list_id));
+    std::sync::Arc::make_mut(&mut snapshot.playback_pages)[0]
+        .slots
+        .insert(2, 2);
+    state.output.replace_snapshot(snapshot).unwrap();
     state.installation.update_configuration(|configuration| configuration.matter_enabled = true);
     let desk = state
         .installation.add_desk("Matter restart desk", "matter-restart")
@@ -115,18 +119,28 @@ fn matter_activation_checkpoint_keeps_desk_independent_restart_scope() {
         .installation.set_desk_page(desk.id, show.id, 1)
         .unwrap();
     store_restart_zone(&state, &show, desk.id);
-    state
-        .output.execute_pool_playback_with_activation(
-            1,
-            PoolPlaybackAction::On,
-            &[vec![1, 2]],
-            Some(light_playback::PlaybackActivationOrigin {
-                at: state.output.application_time(),
-                desk_id: Some(desk.id),
-                surface: light_playback::PlaybackActivationSurface::Virtual,
-                exclusion_scope: light_playback::PlaybackExclusionScope::OriginatingDesk,
-            }),
+    let prepared = state
+        .output
+        .prepare_playback_batch(
+            &[light_engine::PlaybackBatchCommand {
+                number: 1_001,
+                page: Some(1),
+                action: light_engine::PlaybackBatchAction::On,
+                exclusion_zones: vec![vec![1_001, 1_002]].into(),
+                activation_origin: Some(light_playback::PlaybackActivationOrigin {
+                    at: state.output.application_time(),
+                    desk_id: Some(desk.id),
+                    surface: light_playback::PlaybackActivationSurface::Virtual,
+                    exclusion_scope: light_playback::PlaybackExclusionScope::Show,
+                }),
+            }],
+            chrono::Utc::now(),
+            0,
         )
+        .unwrap();
+    state
+        .output
+        .install_prepared_playback_batch(prepared)
         .unwrap();
 
     apply_matter_playback_write(
@@ -174,7 +188,7 @@ fn matter_activation_checkpoint_keeps_desk_independent_restart_scope() {
         .filter(|playback| playback.enabled)
         .filter_map(|playback| playback.playback_number)
         .collect::<HashSet<_>>();
-    assert_eq!(enabled, HashSet::from([1, 2]));
+    assert_eq!(enabled, HashSet::from([1_001, 2]));
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -364,6 +378,7 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
                 number: 1,
                 name: "Matter".into(),
                 slots: HashMap::from([(1, 1), (2, 2), (3, 3), (4, 4), (5, 5)]),
+                virtual_playbacks: HashMap::new(),
             }].into(),
             ..Default::default()
         })

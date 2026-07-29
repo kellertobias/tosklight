@@ -9,15 +9,20 @@ import type {
 import { VisualizationRuntimeStore } from "./store";
 import type { VisualizationRuntimeTransport } from "./transport";
 import {
-	VisualizationRuntimeProvider,
 	useVisualizationRuntimeSnapshotSubscription,
 	useVisualizationRuntimeView,
+	VisualizationRuntimeProvider,
 } from "./VisualizationRuntimeView";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
 const SESSION_ID = "22222222-2222-4222-8222-222222222222";
 
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	TestBroadcastChannel.reset();
+	vi.unstubAllGlobals();
+	vi.useRealTimers();
+});
 
 describe("VisualizationRuntimeProvider", () => {
 	it("opens no request or subscription for disabled views", async () => {
@@ -25,7 +30,9 @@ describe("VisualizationRuntimeProvider", () => {
 		const store = new VisualizationRuntimeStore();
 		const renders = vi.fn();
 		render(
-			provider(<Probe enabled={false} renders={renders} />, transport, { store }),
+			provider(<Probe enabled={false} renders={renders} />, transport, {
+				store,
+			}),
 		);
 
 		expect(screen.getByText("normal:idle:—")).toBeInTheDocument();
@@ -87,6 +94,35 @@ describe("VisualizationRuntimeProvider", () => {
 		expect(transport.loadSnapshot).toHaveBeenCalledOnce();
 	});
 
+	it("releases the final Live stream claim when only Preload remains mounted", async () => {
+		const updateClaims = vi.fn();
+		const transport = {
+			loadSnapshot: vi.fn(),
+			openStream: vi.fn(() => ({
+				updateClaims,
+				close: vi.fn(),
+			})),
+		} satisfies VisualizationRuntimeTransport;
+		const rendered = render(
+			provider(
+				<>
+					<Probe />
+					<Probe lane="preload" />
+				</>,
+				transport,
+			),
+		);
+		await waitFor(() =>
+			expect(updateClaims).toHaveBeenLastCalledWith(["normal", "preload"], 4),
+		);
+
+		rendered.rerender(provider(<Probe lane="preload" />, transport));
+
+		await waitFor(() =>
+			expect(updateClaims).toHaveBeenLastCalledWith(["preload"], 4),
+		);
+	});
+
 	it("delivers live frames imperatively without reconciling the observing component", async () => {
 		const transport = fakeTransport();
 		const store = new VisualizationRuntimeStore();
@@ -104,9 +140,7 @@ describe("VisualizationRuntimeProvider", () => {
 		);
 		const readyRenders = renders.mock.calls.length;
 
-		act(() =>
-			store.install("normal", { ...snapshot("normal"), revision: 2 }),
-		);
+		act(() => store.install("normal", { ...snapshot("normal"), revision: 2 }));
 
 		expect(snapshots).toHaveBeenLastCalledWith(
 			expect.objectContaining({ revision: 2 }),
@@ -137,6 +171,121 @@ describe("VisualizationRuntimeProvider", () => {
 		await act(async () => first.promise);
 
 		expect(screen.getByText("normal:ready:2")).toBeInTheDocument();
+	});
+
+	it("routes a secondary desktop Stage claim through the owner runtime", async () => {
+		vi.stubGlobal("BroadcastChannel", TestBroadcastChannel);
+		vi.stubGlobal("__TAURI_INTERNALS__", {});
+		const ownerTransport = fakeTransport();
+		const mirrorTransport = {
+			...fakeTransport(),
+			openStream: vi.fn(() => ({
+				updateClaims: vi.fn(),
+				close: vi.fn(),
+			})),
+		} satisfies VisualizationRuntimeTransport;
+		render(
+			<>
+				<VisualizationRuntimeProvider
+					showId={SHOW_ID}
+					sessionId={SESSION_ID}
+					authorityKey="server-a|generation-1"
+					desktopAuthorityKey="server-a|shared-desk"
+					transport={ownerTransport}
+					desktopRole="owner"
+				>
+					<div />
+				</VisualizationRuntimeProvider>
+				<VisualizationRuntimeProvider
+					showId={SHOW_ID}
+					sessionId={SESSION_ID}
+					authorityKey="server-a|generation-2"
+					desktopAuthorityKey="server-a|shared-desk"
+					transport={mirrorTransport}
+					desktopRole="mirror"
+				>
+					<Probe />
+				</VisualizationRuntimeProvider>
+			</>,
+		);
+
+		await waitFor(() =>
+			expect(screen.getByText("normal:ready:1")).toBeInTheDocument(),
+		);
+		expect(ownerTransport.loadSnapshot).toHaveBeenCalledOnce();
+		expect(mirrorTransport.loadSnapshot).not.toHaveBeenCalled();
+		expect(mirrorTransport.openStream).not.toHaveBeenCalled();
+	});
+
+	it("preserves the owner's stale error on a mirrored snapshot", async () => {
+		vi.stubGlobal("BroadcastChannel", TestBroadcastChannel);
+		vi.stubGlobal("__TAURI_INTERNALS__", {});
+		const ownerStore = new VisualizationRuntimeStore();
+		const mirrorStore = new VisualizationRuntimeStore();
+		render(
+			<>
+				<VisualizationRuntimeProvider
+					showId={SHOW_ID}
+					sessionId={SESSION_ID}
+					authorityKey="server-a|generation-1"
+					desktopAuthorityKey="server-a|shared-desk"
+					transport={fakeTransport()}
+					store={ownerStore}
+					desktopRole="owner"
+				>
+					<div />
+				</VisualizationRuntimeProvider>
+				<VisualizationRuntimeProvider
+					showId={SHOW_ID}
+					sessionId={SESSION_ID}
+					authorityKey="server-a|generation-2"
+					desktopAuthorityKey="server-a|shared-desk"
+					transport={fakeTransport()}
+					store={mirrorStore}
+					desktopRole="mirror"
+				>
+					<Probe />
+				</VisualizationRuntimeProvider>
+			</>,
+		);
+		await waitFor(() =>
+			expect(mirrorStore.getSnapshot().normal.snapshot).not.toBeNull(),
+		);
+
+		act(() => ownerStore.setError("normal", new Error("stream interrupted")));
+
+		await waitFor(() =>
+			expect(mirrorStore.getSnapshot().normal.error?.message).toBe(
+				"stream interrupted",
+			),
+		);
+		expect(mirrorStore.getSnapshot().normal.status).toBe("ready");
+	});
+
+	it("falls back to its own runtime when desktop bridge delivery never arrives", async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal("BroadcastChannel", TestBroadcastChannel);
+		vi.stubGlobal("__TAURI_INTERNALS__", {});
+		const transport = fakeTransport();
+		render(
+			<VisualizationRuntimeProvider
+				showId={SHOW_ID}
+				sessionId={SESSION_ID}
+				authorityKey="server-a|generation-2"
+				desktopAuthorityKey="server-a|shared-desk"
+				transport={transport}
+				desktopRole="mirror"
+			>
+				<Probe />
+			</VisualizationRuntimeProvider>,
+		);
+
+		await act(async () => {
+			vi.advanceTimersByTime(6_000);
+			await Promise.resolve();
+		});
+
+		expect(transport.loadSnapshot).toHaveBeenCalledOnce();
 	});
 });
 
@@ -232,4 +381,28 @@ function deferred<T>() {
 		resolve = done;
 	});
 	return { promise, resolve };
+}
+
+class TestBroadcastChannel {
+	static readonly instances = new Set<TestBroadcastChannel>();
+	onmessage: ((event: MessageEvent) => void) | null = null;
+
+	constructor(readonly name: string) {
+		TestBroadcastChannel.instances.add(this);
+	}
+
+	postMessage(data: unknown) {
+		for (const instance of TestBroadcastChannel.instances) {
+			if (instance === this || instance.name !== this.name) continue;
+			queueMicrotask(() => instance.onmessage?.({ data } as MessageEvent));
+		}
+	}
+
+	close() {
+		TestBroadcastChannel.instances.delete(this);
+	}
+
+	static reset() {
+		TestBroadcastChannel.instances.clear();
+	}
 }

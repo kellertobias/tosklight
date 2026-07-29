@@ -30,6 +30,7 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
         number: 3,
         name: "Matter".into(),
         slots: HashMap::from([(1, 27), (2, 28)]),
+        virtual_playbacks: HashMap::new(),
     }]
     .into();
     state.output.replace_snapshot(snapshot).unwrap();

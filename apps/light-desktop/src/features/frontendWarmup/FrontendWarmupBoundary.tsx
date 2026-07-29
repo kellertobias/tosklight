@@ -35,6 +35,7 @@ const SHOW_OBJECT_PRIORITIES: ReadonlyArray<{
 	{ kind: "group", priority: "near-future" },
 	{ kind: "preset", priority: "near-future" },
 	{ kind: "playback_page", priority: "near-future" },
+	{ kind: "dynamic", priority: "near-future" },
 	{ kind: "cue_list", priority: "idle" },
 	{ kind: "playback", priority: "idle" },
 ];
@@ -452,6 +453,7 @@ function showObjectCollection(
 ) {
 	if (kind === "group") return snapshot.groups;
 	if (kind === "preset") return snapshot.presets;
+	if (kind === "dynamic") return snapshot.dynamics;
 	if (kind === "cue_list") return snapshot.cueLists;
 	if (kind === "playback") return snapshot.playbacks;
 	return snapshot.playbackPages;

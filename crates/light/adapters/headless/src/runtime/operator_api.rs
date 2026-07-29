@@ -90,6 +90,14 @@ pub(super) async fn diagnostics(
             snapshot_payload_bytes: visualization.snapshot_payload_bytes,
             snapshot_source_frame: visualization.snapshot_source_frame,
             snapshot_source_age_millis: visualization.snapshot_source_age_millis,
+            stream_serializations: visualization.stream_serializations,
+            stream_serialization_micros: visualization.stream_serialization_micros,
+            stream_payload_bytes: visualization.stream_payload_bytes,
+            stream_sends: visualization.stream_sends,
+            stream_send_micros: visualization.stream_send_micros,
+            stream_send_failures: visualization.stream_send_failures,
+            stream_queue_depth: visualization.stream_queue_depth,
+            stream_queue_drops: visualization.stream_queue_drops,
         },
     }))
 }
@@ -312,7 +320,11 @@ pub(super) fn visualization_snapshot_for_session(
         &dynamic_samples,
         &extra_dynamic_values,
     );
+    let show_id = state.active_show.current().map(|show| show.id.0);
     Ok(serde_json::json!({
+        "scope": {
+            "show_id": show_id,
+        },
         "revision": snapshot.revision,
         "generated_at": chrono::Utc::now(),
         "grand_master": options.grand_master,
@@ -365,6 +377,68 @@ fn dynamic_stack_projection(
     let now_millis =
         u64::try_from(state.output.application_time().timestamp_millis()).unwrap_or_default();
     let mut entries = Vec::new();
+    push_runtime_stack_entries(
+        &mut entries,
+        ordinary,
+        resolved,
+        runtime,
+        samples,
+        now_millis,
+    );
+    for (programmer_id, priority, stored) in state
+        .output
+        .dynamic_programmer_values()
+        .into_iter()
+        .chain(extra.iter().cloned())
+    {
+        push_semantic_stack_entry(
+            &mut entries,
+            stored,
+            priority,
+            format!("Programmer {programmer_id}"),
+            resolved,
+        );
+    }
+    for stored in state.output.active_cue_dynamic_values() {
+        push_semantic_stack_entry(
+            &mut entries,
+            light_dynamics::DynamicAddressValue {
+                fixture_id: stored.fixture_id,
+                attribute: stored.attribute,
+                value: stored.value,
+                changed_at_millis: stored.changed_at_millis,
+                programmer_order: 0,
+            },
+            stored.priority,
+            format!("Cue {}", stored.current_cue_id),
+            resolved,
+        );
+    }
+    entries.sort_by(|left, right| {
+        left.fixture_id
+            .cmp(&right.fixture_id)
+            .then_with(|| left.attribute.cmp(&right.attribute))
+            .then_with(|| left.priority.cmp(&right.priority))
+            .then_with(|| left.changed_at_millis.cmp(&right.changed_at_millis))
+            .then_with(|| left.controller_id.cmp(&right.controller_id))
+    });
+    entries
+}
+
+fn push_runtime_stack_entries(
+    entries: &mut Vec<DynamicStackEntry>,
+    ordinary: &HashMap<
+        (light_core::FixtureId, light_core::AttributeKey),
+        light_core::AttributeValue,
+    >,
+    resolved: &HashMap<
+        (light_core::FixtureId, light_core::AttributeKey),
+        light_core::AttributeValue,
+    >,
+    runtime: &light_dynamics::DynamicRuntimeSnapshot,
+    samples: &[light_dynamics::DynamicRuntimeSample],
+    now_millis: u64,
+) {
     let dynamic_winners = samples
         .iter()
         .fold(
@@ -487,44 +561,6 @@ fn dynamic_stack_projection(
             }
         }
     }
-    for (programmer_id, priority, stored) in state
-        .output
-        .dynamic_programmer_values()
-        .into_iter()
-        .chain(extra.iter().cloned())
-    {
-        push_semantic_stack_entry(
-            &mut entries,
-            stored,
-            priority,
-            format!("Programmer {programmer_id}"),
-            resolved,
-        );
-    }
-    for stored in state.output.active_cue_dynamic_values() {
-        push_semantic_stack_entry(
-            &mut entries,
-            light_dynamics::DynamicAddressValue {
-                fixture_id: stored.fixture_id,
-                attribute: stored.attribute,
-                value: stored.value,
-                changed_at_millis: stored.changed_at_millis,
-                programmer_order: 0,
-            },
-            stored.priority,
-            format!("Cue {}", stored.current_cue_id),
-            resolved,
-        );
-    }
-    entries.sort_by(|left, right| {
-        left.fixture_id
-            .cmp(&right.fixture_id)
-            .then_with(|| left.attribute.cmp(&right.attribute))
-            .then_with(|| left.priority.cmp(&right.priority))
-            .then_with(|| left.changed_at_millis.cmp(&right.changed_at_millis))
-            .then_with(|| left.controller_id.cmp(&right.controller_id))
-    });
-    entries
 }
 
 fn push_semantic_stack_entry(

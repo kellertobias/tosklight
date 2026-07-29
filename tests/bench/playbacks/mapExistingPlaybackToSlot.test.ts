@@ -12,11 +12,10 @@ const CUE_LIST_ID = "66666666-6666-4666-8666-666666666666";
 describe("map existing Playback acceptance intent", () => {
 	it("captures exact active Show, Page, and Playback authority for one action", async () => {
 		const fetchMock = topologyFetch(changedOutcome());
-		const outcome = await mapExistingPlaybackToSlot(
-			api(),
-			intent(),
-			{ fetch: fetchMock as typeof fetch, requestId: () => REQUEST_ID },
-		);
+		const outcome = await mapExistingPlaybackToSlot(api(), intent(), {
+			fetch: fetchMock as typeof fetch,
+			requestId: () => REQUEST_ID,
+		});
 
 		expect(outcome).toMatchObject({
 			requestId: REQUEST_ID,
@@ -107,10 +106,7 @@ describe("map existing Playback acceptance intent", () => {
 		],
 		[
 			"desk",
-			playbackRuntime(
-				SHOW_ID,
-				"88888888-8888-4888-8888-888888888888",
-			),
+			playbackRuntime(SHOW_ID, "88888888-8888-4888-8888-888888888888"),
 			/foreign desk/,
 		],
 	] as const)("rejects a foreign active %s before mutation", async (_, active, error) => {
@@ -202,9 +198,9 @@ function assertNarrowCalls(fetchMock: ReturnType<typeof topologyFetch>) {
 		"http://desk.local/api/v2/objects/playback/1",
 		"http://desk.local/api/v2/playback-topology/actions",
 	]);
-	expect(urls.some((url) => /bootstrap|\/playbacks|programmers/.test(url))).toBe(
-		false,
-	);
+	expect(
+		urls.some((url) => /bootstrap|\/playbacks|programmers/.test(url)),
+	).toBe(false);
 	expect(actionCalls(fetchMock)).toHaveLength(1);
 }
 
@@ -233,7 +229,7 @@ function pageSnapshot(slots: Record<number, number> = {}) {
 		id: "1",
 		revision: 3,
 		updated_at: "2026-07-21T10:00:00Z",
-		body: { number: 1, name: "Main", slots },
+		body: { number: 1, name: "Main", slots, virtual_playbacks: {} },
 	};
 }
 
@@ -286,7 +282,12 @@ function pageOutcome(revision: number) {
 		kind: "playback_page",
 		object_id: "1",
 		object_revision: revision,
-		body: { number: 1, name: "Main", slots: { 1: 1 } },
+		body: {
+			number: 1,
+			name: "Main",
+			slots: { 1: 1 },
+			virtual_playbacks: {},
+		},
 	};
 }
 
@@ -294,10 +295,6 @@ function isNoChange(outcome: unknown) {
 	return (outcome as { status?: unknown })?.status === "no_change";
 }
 
-function json(
-	value: unknown,
-	status = 200,
-	headers?: Record<string, string>,
-) {
+function json(value: unknown, status = 200, headers?: Record<string, string>) {
 	return new Response(JSON.stringify(value), { status, headers });
 }

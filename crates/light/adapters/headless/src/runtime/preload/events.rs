@@ -183,7 +183,9 @@ fn final_released_numbers(
         .filter(|(_, before, after)| playback_was_released(before, after))
         .filter_map(|(identity, _, _)| match identity {
             PlaybackIdentity::Playback(number) => Some(*number),
-            PlaybackIdentity::CueList(_) | PlaybackIdentity::Group(_) => None,
+            PlaybackIdentity::Virtual(_)
+            | PlaybackIdentity::CueList(_)
+            | PlaybackIdentity::Group(_) => None,
         })
 }
 
@@ -209,8 +211,12 @@ fn playback_was_released(before: &PlaybackProjection, after: &PlaybackProjection
 fn identity_sort_key(identity: PlaybackIdentity) -> (u8, u128) {
     match identity {
         PlaybackIdentity::Playback(number) => (0, u128::from(number)),
-        PlaybackIdentity::CueList(id) => (1, id.0.as_u128()),
-        PlaybackIdentity::Group(_) => (2, 0),
+        PlaybackIdentity::Virtual(address) => (
+            1,
+            u128::from(address.page()) * 10_000 + u128::from(address.number().get()),
+        ),
+        PlaybackIdentity::CueList(id) => (2, id.0.as_u128()),
+        PlaybackIdentity::Group(_) => (3, 0),
     }
 }
 

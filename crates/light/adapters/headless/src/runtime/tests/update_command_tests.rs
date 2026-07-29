@@ -56,6 +56,7 @@ fn update_undo_snapshot(
             number: 1,
             name: "Main".into(),
             slots: HashMap::from([(7, 7)]),
+            virtual_playbacks: HashMap::new(),
         }].into(),
         ..EngineSnapshot::default()
     };

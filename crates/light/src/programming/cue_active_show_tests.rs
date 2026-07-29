@@ -27,7 +27,13 @@ fn empty_page_slot_creates_one_lossless_three_object_transaction_and_event() {
     rig.seed(
         "playback_page",
         "1",
-        json!({"number":1,"name":"Main","slots":{},"future":{"columns":10}}),
+        json!({
+            "number":1,
+            "name":"Main",
+            "slots":{},
+            "virtual_playbacks":{},
+            "future":{"columns":10}
+        }),
     );
     let before = rig.document().revision();
     let commit = rig.commit(

@@ -26,7 +26,7 @@ fn create_page_commits_one_default_projection_and_replays_once() {
     assert_eq!(projection.object_id(), "4");
     assert_eq!(
         projection.raw_body().unwrap().as_ref(),
-        &json!({"number":4,"name":"Page 4","slots":{}})
+        &json!({"number":4,"name":"Page 4","slots":{},"virtual_playbacks":{}})
     );
     assert_eq!(rig.steps(), mutation_steps());
     assert_one_event(&rig, 1);
@@ -43,7 +43,7 @@ fn create_page_commits_one_default_projection_and_replays_once() {
 fn create_existing_page_is_no_change_without_normalizing_legacy_json() {
     let rig = TestRig::new();
     let raw = json!({
-        "number":2,"name":"Wing","slots":{"7":19},
+        "number":2,"name":"Wing","slots":{"7":19},"virtual_playbacks":{},
         "future_layout":{"columns":12}
     });
     rig.seed("playback_page", "legacy-page-two", &raw);
@@ -86,7 +86,7 @@ fn rename_page_is_lossless_replayable_and_semantically_idempotent() {
         "playback_page",
         "legacy-page-three",
         &json!({
-            "number":3,"name":"Before","slots":{"2":8},
+            "number":3,"name":"Before","slots":{"2":8},"virtual_playbacks":{},
             "future_layout":{"columns":8}
         }),
     );
@@ -145,12 +145,12 @@ fn page_actions_reject_stale_authority_invalid_names_and_canonical_collisions() 
     rig.seed(
         "playback_page",
         "legacy-page-one",
-        &json!({"number":1,"name":"Main","slots":{}}),
+        &json!({"number":1,"name":"Main","slots":{},"virtual_playbacks":{}}),
     );
     rig.seed(
         "playback_page",
         "2",
-        &json!({"number":9,"name":"Occupied","slots":{}}),
+        &json!({"number":9,"name":"Occupied","slots":{},"virtual_playbacks":{}}),
     );
     let revision = rig.show_revision();
 

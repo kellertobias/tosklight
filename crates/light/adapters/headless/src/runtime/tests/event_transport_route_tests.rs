@@ -127,8 +127,7 @@ async fn v2_subscription_dispatches_an_action_and_keeps_delivering_events() {
         light_application::EventDraft::virtual_playback_exclusion_zones_changed(
             light_application::VirtualPlaybackExclusionZonesChange {
                 show_id: light_core::ShowId(Uuid::from_u128(41)),
-                desk_id: session.desk.id,
-                surface_id: "multiplex-test".into(),
+                revision: 1,
             },
         ),
     );

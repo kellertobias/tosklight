@@ -93,6 +93,66 @@ describe("ProgrammerValuesStore authority", () => {
 		expect(store.getSnapshot().eventSequence).toBe(10);
 	});
 
+	it("merges contiguous address deltas and removes released values", () => {
+		const store = readyStore(
+			valuesProjection({
+				fixtureValues: [
+					fixtureValue(0.2),
+					fixtureValue(0.4, { fixtureId: FIXTURE_2, programmerOrder: 2 }),
+				],
+				groupValues: [groupValue(0.5)],
+			}),
+		);
+
+		expect(
+			store.applyChange(
+				{
+					userId: USER_ID,
+					revision: 2,
+					fixtureValues: [
+						fixtureValue(0.8, { fixtureId: FIXTURE_2, programmerOrder: 3 }),
+					],
+					removedFixtureValues: [
+						{ fixtureId: FIXTURE_1, attribute: "intensity" },
+					],
+					groupValues: [],
+					removedGroupValues: [{ groupId: "front", attribute: "intensity" }],
+					dynamicValues: [],
+					removedDynamicValues: [],
+				},
+				11,
+			),
+		).toBe(true);
+		const projection = store.getSnapshot().projection;
+		expect(projection?.revision).toBe(2);
+		expect(projection?.fixtureValues).toHaveLength(1);
+		expect(projection?.fixtureValues[0]).toMatchObject({
+			fixtureId: FIXTURE_2,
+			value: { kind: "normalized", value: 0.8 },
+		});
+		expect(projection?.groupValues).toEqual([]);
+	});
+
+	it("requires a repair when a delta revision is skipped", () => {
+		const store = readyStore();
+		expect(() =>
+			store.applyChange(
+				{
+					userId: USER_ID,
+					revision: 3,
+					fixtureValues: [],
+					removedFixtureValues: [],
+					groupValues: [],
+					removedGroupValues: [],
+					dynamicValues: [],
+					removedDynamicValues: [],
+				},
+				12,
+			),
+		).toThrow(/not contiguous/);
+		expect(store.getSnapshot().repairRequired).toBe(true);
+	});
+
 	it("canonicalizes order and publishes deeply immutable views", () => {
 		const store = readyStore(
 			valuesProjection({

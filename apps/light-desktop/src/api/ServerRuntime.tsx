@@ -1,19 +1,25 @@
 import { type PropsWithChildren, useMemo } from "react";
+import { CueRecordingProvider } from "../features/cueRecording/CueRecordingProvider";
+import { DeskConnectionProvider } from "../features/deskConnection/DeskConnectionContext";
+import { DeskLoadingStateProvider } from "../features/deskLoading/DeskLoadingState";
+import { DmxDiagnosticsProvider } from "../features/dmxDiagnostics/DmxDiagnosticsContext";
+import { DynamicsActionsProvider } from "../features/dynamics/DynamicsActionsContext";
+import { FilesProvider } from "../features/files/FilesContext";
+import { FixtureLibraryProvider } from "../features/fixtureLibrary/FixtureLibraryContext";
+import { GroupRecordingProvider } from "../features/groupRecording/GroupRecordingProvider";
 import {
 	HighlightActionsProvider,
 	HighlightStateProvider,
 } from "../features/highlight/HighlightState";
-import { ProgrammerActionsProvider } from "../features/programmerActions/ProgrammerActionsContext";
-import { ShellStatusActionsProvider } from "../features/shellStatus/ShellStatusActionsProvider";
-import { DmxDiagnosticsProvider } from "../features/dmxDiagnostics/DmxDiagnosticsContext";
-import { DeskConnectionProvider } from "../features/deskConnection/DeskConnectionContext";
-import { FixtureLibraryProvider } from "../features/fixtureLibrary/FixtureLibraryContext";
-import { ShowLifecycleProvider } from "../features/showLifecycle/ShowLifecycleContext";
 import { MediaServersProvider } from "../features/mediaServers/MediaServersContext";
-import { SoundToLightProvider } from "../features/soundToLight/SoundToLightContext";
-import { FilesProvider } from "../features/files/FilesContext";
+import { PlaybackTopologyProvider } from "../features/playbackTopology/PlaybackTopologyProvider";
+import { PresetRecordingProvider } from "../features/presetRecording/PresetRecordingProvider";
+import { ProgrammerActionsProvider } from "../features/programmerActions/ProgrammerActionsContext";
 import { ScreensProvider } from "../features/screens/ScreensContext";
-import { SelectiveImportProvider } from "../features/selectiveImport/SelectiveImportContext";
+import {
+	SelectiveImportProvider,
+	type SelectiveImportSource,
+} from "../features/selectiveImport/SelectiveImportContext";
 import { createServerCapabilities } from "../features/server/createServerCapabilities";
 import { useCommandLineController } from "../features/server/useCommandLineController";
 import { useFileAccess } from "../features/server/useFileAccess";
@@ -24,20 +30,17 @@ import {
 	useServerRefresh,
 	useShowObjects,
 } from "../features/server/useShowData";
-import { PresetRecordingProvider } from "../features/presetRecording/PresetRecordingProvider";
-import { GroupRecordingProvider } from "../features/groupRecording/GroupRecordingProvider";
-import { CueRecordingProvider } from "../features/cueRecording/CueRecordingProvider";
-import { PlaybackTopologyProvider } from "../features/playbackTopology/PlaybackTopologyProvider";
 import type { SessionRole } from "../features/session/ownership";
 import { useSessionHandoff } from "../features/session/SessionHandoffContext";
+import { ShellStatusActionsProvider } from "../features/shellStatus/ShellStatusActionsProvider";
+import { ShowLifecycleProvider } from "../features/showLifecycle/ShowLifecycleContext";
 import { ShowObjectsViewProvider } from "../features/showObjects/ShowObjectsView";
+import { SoundToLightProvider } from "../features/soundToLight/SoundToLightContext";
 import { VirtualPlaybackZonesProvider } from "../features/virtualPlaybackZones/VirtualPlaybackZonesContext";
 import { ServerDeskBoundaries } from "./ServerDeskBoundaries";
 import { ServerProgrammingProviders } from "./ServerProgrammingProviders";
 import { ServerVisualizationRuntimeBoundary } from "./ServerVisualizationRuntimeBoundary";
 import { useServerFeatureBoundaries } from "./useServerFeatureBoundaries";
-import { DeskLoadingStateProvider } from "../features/deskLoading/DeskLoadingState";
-import { DynamicsActionsProvider } from "../features/dynamics/DynamicsActionsContext";
 
 export type {
 	CommandChoiceOption,
@@ -70,7 +73,6 @@ function ServerConnectionOwner({
 function useProviderDataSources(
 	state: ReturnType<typeof useServerState>,
 	value: ReturnType<typeof createServerCapabilities>,
-	refresh: ReturnType<typeof useServerRefresh>,
 ) {
 	const fileSource = {
 		status: state.status,
@@ -208,13 +210,19 @@ function useProviderDataSources(
 		],
 	);
 	return {
-		fileSource, screenSource, showLifecycle,
-		deskConnection, fixtureLibraryState, mediaServersState,
+		fileSource,
+		screenSource,
+		showLifecycle,
+		deskConnection,
+		fixtureLibraryState,
+		mediaServersState,
 	};
 }
 
 /** Action-shaped provider sources, extracted from ServerRuntime for size. */
-function useProviderActionSources(value: ReturnType<typeof createServerCapabilities>) {
+function useProviderActionSources(
+	value: ReturnType<typeof createServerCapabilities>,
+) {
 	const highlightActions = useMemo(
 		() => ({
 			highlightAction: value.highlightAction,
@@ -283,7 +291,155 @@ function useProviderActionSources(value: ReturnType<typeof createServerCapabilit
 		}),
 		[value.dismissError, value.simulateError, value.readServerLogs],
 	);
-	return { highlightActions, programmerActions, dmxDiagnostics, soundToLightActions, shellStatusActions };
+	return {
+		highlightActions,
+		programmerActions,
+		dmxDiagnostics,
+		soundToLightActions,
+		shellStatusActions,
+	};
+}
+
+function useDynamicsActionSource(state: ReturnType<typeof useServerState>) {
+	return useMemo(
+		() => ({
+			dynamics: state.api.dynamics,
+			showObjects: state.api.showObjects,
+		}),
+		[state.api],
+	);
+}
+
+function ServerActionProviderStack({
+	children,
+	state,
+	data,
+	actions,
+	dynamicsActions,
+}: PropsWithChildren<{
+	state: ReturnType<typeof useServerState>;
+	data: ReturnType<typeof useProviderDataSources>;
+	actions: ReturnType<typeof useProviderActionSources>;
+	dynamicsActions: ReturnType<typeof useDynamicsActionSource>;
+}>) {
+	return (
+		<HighlightStateProvider store={state.highlightStore}>
+			<HighlightActionsProvider actions={actions.highlightActions}>
+				<ProgrammerActionsProvider actions={actions.programmerActions}>
+					<DynamicsActionsProvider actions={dynamicsActions}>
+						<ShellStatusActionsProvider actions={actions.shellStatusActions}>
+							<DmxDiagnosticsProvider diagnostics={actions.dmxDiagnostics}>
+								<ShowLifecycleProvider lifecycle={data.showLifecycle}>
+									<DeskConnectionProvider connection={data.deskConnection}>
+										<FixtureLibraryProvider library={data.fixtureLibraryState}>
+											<MediaServersProvider media={data.mediaServersState}>
+												<SoundToLightProvider
+													actions={actions.soundToLightActions}
+												>
+													{children}
+												</SoundToLightProvider>
+											</MediaServersProvider>
+										</FixtureLibraryProvider>
+									</DeskConnectionProvider>
+								</ShowLifecycleProvider>
+							</DmxDiagnosticsProvider>
+						</ShellStatusActionsProvider>
+					</DynamicsActionsProvider>
+				</ProgrammerActionsProvider>
+			</HighlightActionsProvider>
+		</HighlightStateProvider>
+	);
+}
+
+function ServerShowProviderStack({
+	children,
+	state,
+	boundaries,
+	value,
+	data,
+	selectiveImportSource,
+	sessionRole,
+}: PropsWithChildren<{
+	state: ReturnType<typeof useServerState>;
+	boundaries: ReturnType<typeof useServerFeatureBoundaries>;
+	value: ReturnType<typeof createServerCapabilities>;
+	data: ReturnType<typeof useProviderDataSources>;
+	selectiveImportSource: SelectiveImportSource;
+	sessionRole: SessionRole;
+}>) {
+	const showId = state.bootstrap?.active_show?.id ?? null;
+	return (
+		<ServerDeskBoundaries state={state}>
+			<ServerVisualizationRuntimeBoundary state={state} sessionRole={sessionRole}>
+				<ShowObjectsViewProvider
+					showId={showId}
+					authorityKey={boundaries.showObjectsAuthorityKey}
+					store={state.showObjectsStore}
+					transport={boundaries.showObjectsTransport}
+					loadCollection={boundaries.loadShowObjectCollection}
+					loadObject={boundaries.loadShowObjectSnapshot}
+					onError={boundaries.reportShowObjectError}
+				>
+					<PlaybackTopologyProvider
+						showId={showId}
+						store={state.showObjectsStore}
+						transport={boundaries.playbackTopologyTransport}
+						loadObject={boundaries.loadShowObject}
+						onError={boundaries.reportPlaybackTopologyError}
+					>
+						<VirtualPlaybackZonesProvider
+							authority={boundaries.virtualPlaybackZonesAuthority}
+							transport={boundaries.virtualPlaybackZonesTransport}
+						>
+							<GroupRecordingProvider
+								showId={showId}
+								store={state.showObjectsStore}
+								transport={boundaries.groupRecordingTransport}
+								loadGroup={boundaries.loadGroupForRepair}
+								onError={boundaries.reportGroupRecordingError}
+							>
+								<PresetRecordingProvider
+									showId={showId}
+									store={state.showObjectsStore}
+									transport={boundaries.presetRecordingTransport}
+									loadPreset={boundaries.loadPresetForRepair}
+									onError={boundaries.reportPresetRecordingError}
+								>
+									<CueRecordingProvider
+										showId={showId}
+										store={state.showObjectsStore}
+										playbackRuntimeStore={state.playbackRuntimeStore}
+										transport={boundaries.cueRecordingTransport}
+										selectedPlayback={boundaries.selectedCueRecordingPlayback}
+										loadObject={boundaries.loadShowObject}
+										onError={boundaries.reportCueRecordingError}
+									>
+										<ServerProgrammingProviders
+											state={state}
+											boundaries={boundaries}
+											value={value}
+										>
+											<SelectiveImportProvider source={selectiveImportSource}>
+												<FilesProvider source={data.fileSource}>
+													<ScreensProvider source={data.screenSource}>
+														<DeskLoadingStateProvider
+															loading={state.deskLoading}
+														>
+															{children}
+														</DeskLoadingStateProvider>
+													</ScreensProvider>
+												</FilesProvider>
+											</SelectiveImportProvider>
+										</ServerProgrammingProviders>
+									</CueRecordingProvider>
+								</PresetRecordingProvider>
+							</GroupRecordingProvider>
+						</VirtualPlaybackZonesProvider>
+					</PlaybackTopologyProvider>
+				</ShowObjectsViewProvider>
+			</ServerVisualizationRuntimeBoundary>
+		</ServerDeskBoundaries>
+	);
 }
 
 // @tour frontend-slice:10 Compose focused server capabilities
@@ -310,9 +466,13 @@ export function ServerRuntime({
 	};
 	const value = createServerCapabilities(model);
 	const {
-		fileSource, screenSource, showLifecycle,
-		deskConnection, fixtureLibraryState, mediaServersState,
-	} = useProviderDataSources(state, value, refresh);
+		fileSource,
+		screenSource,
+		showLifecycle,
+		deskConnection,
+		fixtureLibraryState,
+		mediaServersState,
+	} = useProviderDataSources(state, value);
 	const selectiveImportSource = {
 		catalog: state.api.selectiveImport.catalog.bind(state.api.selectiveImport),
 		preview: state.api.selectiveImport.preview.bind(state.api.selectiveImport),
@@ -320,115 +480,57 @@ export function ServerRuntime({
 		refreshCompatibilityState: refresh,
 		reportError: state.setError,
 	};
-	const { highlightActions, programmerActions, dmxDiagnostics, soundToLightActions, shellStatusActions } =
-		useProviderActionSources(value);
-	const dynamicsActions = useMemo(
-		() => ({
-			dynamics: state.api.dynamics,
-			showObjects: state.api.showObjects,
-		}),
-		[state.api],
-	);
+	const {
+		highlightActions,
+		programmerActions,
+		dmxDiagnostics,
+		soundToLightActions,
+		shellStatusActions,
+	} = useProviderActionSources(value);
+	const dynamicsActions = useDynamicsActionSource(state);
 	return (
 		<ServerConnectionOwner
 			state={state}
 			loadShowObjects={loadShowObjects}
 			sessionRole={sessionRole}
 		>
-		<HighlightStateProvider store={state.highlightStore}>
-			<HighlightActionsProvider actions={highlightActions}>
-			<ProgrammerActionsProvider actions={programmerActions}>
-			<DynamicsActionsProvider actions={dynamicsActions}>
-			<ShellStatusActionsProvider actions={shellStatusActions}>
-			<DmxDiagnosticsProvider diagnostics={dmxDiagnostics}>
-			<ShowLifecycleProvider lifecycle={showLifecycle}>
-			<DeskConnectionProvider connection={deskConnection}>
-			<FixtureLibraryProvider library={fixtureLibraryState}>
-			<MediaServersProvider media={mediaServersState}>
-			<SoundToLightProvider actions={soundToLightActions}>
-			<ServerDeskBoundaries state={state}>
-			<ServerVisualizationRuntimeBoundary state={state}>
-				<ShowObjectsViewProvider
-					showId={state.bootstrap?.active_show?.id ?? null}
-					authorityKey={boundaries.showObjectsAuthorityKey}
-					store={state.showObjectsStore}
-					transport={boundaries.showObjectsTransport}
-					loadCollection={boundaries.loadShowObjectCollection}
-					loadObject={boundaries.loadShowObjectSnapshot}
-					onError={boundaries.reportShowObjectError}
+			<ServerActionProviderStack
+				state={state}
+				data={{
+					fileSource,
+					screenSource,
+					showLifecycle,
+					deskConnection,
+					fixtureLibraryState,
+					mediaServersState,
+				}}
+				actions={{
+					highlightActions,
+					programmerActions,
+					dmxDiagnostics,
+					soundToLightActions,
+					shellStatusActions,
+				}}
+				dynamicsActions={dynamicsActions}
+			>
+				<ServerShowProviderStack
+					state={state}
+					boundaries={boundaries}
+					value={value}
+					data={{
+						fileSource,
+						screenSource,
+						showLifecycle,
+						deskConnection,
+						fixtureLibraryState,
+						mediaServersState,
+					}}
+					selectiveImportSource={selectiveImportSource}
+					sessionRole={sessionRole}
 				>
-					<PlaybackTopologyProvider
-						showId={state.bootstrap?.active_show?.id ?? null}
-						store={state.showObjectsStore}
-						transport={boundaries.playbackTopologyTransport}
-						loadObject={boundaries.loadShowObject}
-						onError={boundaries.reportPlaybackTopologyError}
-					>
-						<VirtualPlaybackZonesProvider
-							authority={boundaries.virtualPlaybackZonesAuthority}
-							transport={boundaries.virtualPlaybackZonesTransport}
-						>
-							<GroupRecordingProvider
-								showId={state.bootstrap?.active_show?.id ?? null}
-								store={state.showObjectsStore}
-								transport={boundaries.groupRecordingTransport}
-								loadGroup={boundaries.loadGroupForRepair}
-								onError={boundaries.reportGroupRecordingError}
-							>
-								<PresetRecordingProvider
-									showId={state.bootstrap?.active_show?.id ?? null}
-									store={state.showObjectsStore}
-									transport={boundaries.presetRecordingTransport}
-									loadPreset={boundaries.loadPresetForRepair}
-									onError={boundaries.reportPresetRecordingError}
-								>
-									<CueRecordingProvider
-										showId={state.bootstrap?.active_show?.id ?? null}
-										store={state.showObjectsStore}
-										playbackRuntimeStore={state.playbackRuntimeStore}
-										transport={boundaries.cueRecordingTransport}
-										selectedPlayback={
-											boundaries.selectedCueRecordingPlayback
-										}
-										loadObject={boundaries.loadShowObject}
-										onError={boundaries.reportCueRecordingError}
-									>
-										<ServerProgrammingProviders
-											state={state}
-											boundaries={boundaries}
-											value={value}
-										>
-											<SelectiveImportProvider source={selectiveImportSource}>
-												<FilesProvider source={fileSource}>
-													<ScreensProvider source={screenSource}>
-														<DeskLoadingStateProvider
-															loading={state.deskLoading}
-														>
-															{children}
-														</DeskLoadingStateProvider>
-													</ScreensProvider>
-												</FilesProvider>
-											</SelectiveImportProvider>
-										</ServerProgrammingProviders>
-									</CueRecordingProvider>
-								</PresetRecordingProvider>
-							</GroupRecordingProvider>
-						</VirtualPlaybackZonesProvider>
-					</PlaybackTopologyProvider>
-				</ShowObjectsViewProvider>
-			</ServerVisualizationRuntimeBoundary>
-			</ServerDeskBoundaries>
-			</SoundToLightProvider>
-			</MediaServersProvider>
-			</FixtureLibraryProvider>
-			</DeskConnectionProvider>
-			</ShowLifecycleProvider>
-			</DmxDiagnosticsProvider>
-			</ShellStatusActionsProvider>
-			</DynamicsActionsProvider>
-			</ProgrammerActionsProvider>
-			</HighlightActionsProvider>
-		</HighlightStateProvider>
+					{children}
+				</ServerShowProviderStack>
+			</ServerActionProviderStack>
 		</ServerConnectionOwner>
 	);
 }

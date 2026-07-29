@@ -3,6 +3,7 @@
 mod hardware_controls;
 mod lifecycle;
 mod menu;
+mod packaged_benchmark;
 mod server;
 mod windows;
 
@@ -17,7 +18,10 @@ fn main() {
             windows::open_stage_view_window,
             lifecycle::exit_desktop_app,
             lifecycle::cancel_quit,
-            lifecycle::frontend_ready
+            lifecycle::frontend_ready,
+            packaged_benchmark::packaged_stage_benchmark_config,
+            packaged_benchmark::packaged_stage_benchmark_prepared,
+            packaged_benchmark::append_packaged_stage_benchmark_sample
         ])
         .setup(|app| {
             lifecycle::setup(app);

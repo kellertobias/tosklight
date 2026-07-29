@@ -51,6 +51,7 @@ fn cue_selection_snapshot(list_id: light_core::CueListId) -> EngineSnapshot {
             number: 4,
             name: "Page 4".into(),
             slots: HashMap::from([(7, 2)]),
+            virtual_playbacks: HashMap::new(),
         }].into(),
         ..Default::default()
     }

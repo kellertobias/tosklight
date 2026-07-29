@@ -54,6 +54,13 @@ function isTestSource(file) {
 	);
 }
 
+function withoutInlineTests(source) {
+	const inlineTests = /#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*mod\s+tests\s*\{/u.exec(
+		source,
+	);
+	return inlineTests ? source.slice(0, inlineTests.index) : source;
+}
+
 function isCapabilityResource(file) {
 	return (
 		file === `${RUNTIME_ROOT}/capability_resources.rs` ||
@@ -82,10 +89,12 @@ function isBoundedLocalTaskOwner(file) {
 	// These are deliberately not application-lifecycle tasks:
 	// - the released benchmark owns and joins its receiver thread within one benchmark run;
 	// - the test-bench scheduler runs inline inside one bounded HTTP request and returns only
-	//   after its local cancellation token has stopped the scheduler.
+	//   after its local cancellation token has stopped the scheduler;
+	// - each visualization transport owns and joins its capacity-one socket writer.
 	return (
 		file === "apps/light-headless/src/bin/light_benchmark/loopback.rs" ||
-		file === `${RUNTIME_ROOT}/test_bench.rs`
+		file === `${RUNTIME_ROOT}/test_bench.rs` ||
+		file === `${RUNTIME_ROOT}/visualization_transport.rs`
 	);
 }
 
@@ -261,8 +270,9 @@ function backgroundTaskOwnership(entries) {
 			file === `${RUNTIME_ROOT}/bootstrap.rs`
 		)
 			continue;
+		const source = withoutInlineTests(entry.source);
 		for (const [label, expression] of patterns) {
-			const matches = entry.source.match(expression);
+			const matches = source.match(expression);
 			if (matches?.length) addCount(counts, `${file}|${label}`, matches.length);
 		}
 	}

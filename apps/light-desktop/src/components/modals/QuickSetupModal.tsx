@@ -1,8 +1,4 @@
 import {
-	useConnectionStatus,
-	useServerError,
-} from "../../features/shellStatus/ShellStatusState";
-import {
 	type Dispatch,
 	type SetStateAction,
 	useEffect,

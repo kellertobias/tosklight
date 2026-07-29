@@ -7,7 +7,6 @@ import { ProgrammerPriorityStore } from "./store";
 import {
 	CORRELATION_ID,
 	deferred,
-	noChangeOutcome,
 	priorityProjection,
 	prioritySnapshot,
 	USER_ID,

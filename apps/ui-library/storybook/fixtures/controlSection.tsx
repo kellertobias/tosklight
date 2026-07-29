@@ -2,6 +2,8 @@ import { type ReactNode, useState } from "react";
 import type { ParameterFamily } from "../../../light-desktop/src/components/control/parameterControls/model";
 import { ParameterControlView } from "../../../light-desktop/src/components/control/parameterControls/ParameterControlView";
 import type { ParameterController } from "../../../light-desktop/src/components/control/parameterControls/useParameterController";
+import { ShowObjectsViewProvider } from "../../../light-desktop/src/features/showObjects/ShowObjectsView";
+import { ShowObjectsStore } from "../../../light-desktop/src/features/showObjects/store";
 import { useApp } from "../../../light-desktop/src/state/AppContext";
 import { Button } from "../../src";
 import {
@@ -31,6 +33,24 @@ const speedGroups: readonly SpeedGroupViewModel[] = [120, 96, 72, 48, 24].map(
 		active: true,
 	}),
 );
+const showObjectsStore = new ShowObjectsStore();
+
+function StoryShowObjectsProvider({ children }: { children: ReactNode }) {
+	const unavailable = async () => {
+		throw new Error("The isolated Command Section story has no live show");
+	};
+	return (
+		<ShowObjectsViewProvider
+			showId={null}
+			store={showObjectsStore}
+			transport={null}
+			loadCollection={unavailable}
+			loadObject={unavailable}
+		>
+			{children}
+		</ShowObjectsViewProvider>
+	);
+}
 
 function ProgrammerSurface({ hardware }: { hardware: boolean }) {
 	const { state, dispatch } = useApp();
@@ -450,7 +470,9 @@ export function CommandSectionFixture(props: CommandSectionFixtureProps) {
 	if (props.inheritAppState) return <CommandSectionFixtureContent {...props} />;
 	return (
 		<ApplicationStateHarness>
-			<CommandSectionFixtureContent {...props} />
+			<StoryShowObjectsProvider>
+				<CommandSectionFixtureContent {...props} />
+			</StoryShowObjectsProvider>
 		</ApplicationStateHarness>
 	);
 }

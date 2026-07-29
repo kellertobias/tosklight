@@ -3,10 +3,15 @@ import {
 	type Dispatch,
 	type SetStateAction,
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 } from "react";
 import { useCommandHistory } from "../../features/commandHistory/CommandHistoryState";
+import {
+	mergeCommandHistory,
+	useContentErrorHistory,
+} from "../../features/commandHistory/useContentErrorHistory";
 import {
 	useActiveTimecode,
 	useFrameRateHz,
@@ -89,7 +94,12 @@ function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 function useCommandLineBarModel() {
 	const { state, dispatch } = useApp();
 	const hardwareAttached = useHardwareConnected();
-	const history = useCommandHistory();
+	const authoritativeHistory = useCommandHistory();
+	const contentErrorHistory = useContentErrorHistory();
+	const history = useMemo(
+		() => mergeCommandHistory(authoritativeHistory, contentErrorHistory),
+		[authoritativeHistory, contentErrorHistory],
+	);
 	const connection = useConnectionStatus();
 	const frequency = useFrameRateHz();
 	const timecode = useActiveTimecode();

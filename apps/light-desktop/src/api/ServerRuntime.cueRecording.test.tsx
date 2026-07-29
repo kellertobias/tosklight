@@ -271,7 +271,7 @@ function page(revision: number, name: string): ShowObject<"playback_page"> {
 		id: "4",
 		revision,
 		updated_at: "",
-		body: { number: 4, name, slots: { 2: 7 } },
+		body: { number: 4, name, slots: { 2: 7 }, virtual_playbacks: {} },
 	};
 }
 

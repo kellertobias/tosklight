@@ -68,15 +68,38 @@ function decodeValuesEvent(
 	const sequence = integerAt(event.sequence, "$.event.sequence");
 	validateValuesEnvelope(event, expectedUserId);
 	const change = decodeChange(event.payload);
+	const decoded = decodeProgrammerValuesProjection(
+		{
+			user_id: change.user_id,
+			revision: change.revision,
+			fixture_values: change.fixture_values,
+			group_values: change.group_values,
+			dynamic_definitions: change.dynamic_definitions,
+			dynamic_values: change.dynamic_values,
+		},
+		"$.event.payload.change",
+		expectedUserId,
+	);
 	return {
 		type: "event",
 		sequence,
 		correlationId: optionalUuid(event, "correlation_id", "$.event"),
-		projection: decodeProgrammerValuesProjection(
-			change.projection,
-			"$.event.payload.change.projection",
-			expectedUserId,
-		),
+		change: {
+			...decoded,
+			dynamicValues: decoded.dynamicValues ?? [],
+			removedFixtureValues: decodeFixtureAddresses(
+				change.removed_fixture_values,
+				"$.event.payload.change.removed_fixture_values",
+			),
+			removedGroupValues: decodeGroupAddresses(
+				change.removed_group_values,
+				"$.event.payload.change.removed_group_values",
+			),
+			removedDynamicValues: decodeFixtureAddresses(
+				change.removed_dynamic_values,
+				"$.event.payload.change.removed_dynamic_values",
+			),
+		},
 	};
 }
 
@@ -84,7 +107,15 @@ function decodeChange(value: unknown) {
 	const payload = exactRecordAt(value, "$.event.payload", ["type", "change"]);
 	enumAt(payload.type, "$.event.payload.type", ["programming_values_changed"]);
 	return exactRecordAt(payload.change, "$.event.payload.change", [
-		"projection",
+		"user_id",
+		"revision",
+		"fixture_values",
+		"removed_fixture_values",
+		"group_values",
+		"removed_group_values",
+		"dynamic_definitions",
+		"dynamic_values",
+		"removed_dynamic_values",
 	]);
 }
 
@@ -96,10 +127,41 @@ function validateValuesEnvelope(
 	if (!("desk_id" in event) || event.desk_id !== null)
 		throw new WireValidationError("$.event.desk_id", "null", event.desk_id);
 	enumAt(event.class, "$.event.class", ["projection"]);
-	enumAt(event.delivery, "$.event.delivery", ["replaceable"]);
+	enumAt(event.delivery, "$.event.delivery", ["lossless"]);
 	validateObject(event.object, expectedUserId);
 	assertNoRelatedObjects(event);
 	validateSource(event.source);
+}
+
+function decodeFixtureAddresses(value: unknown, path: string) {
+	return arrayAt(value, path).map((entry, index) => {
+		const addressPath = `${path}[${index}]`;
+		const address = exactRecordAt(entry, addressPath, [
+			"fixture_id",
+			"attribute",
+		]);
+		return {
+			fixtureId: programmerValuesUuidAt(
+				address.fixture_id,
+				`${addressPath}.fixture_id`,
+			),
+			attribute: stringAt(address.attribute, `${addressPath}.attribute`),
+		};
+	});
+}
+
+function decodeGroupAddresses(value: unknown, path: string) {
+	return arrayAt(value, path).map((entry, index) => {
+		const addressPath = `${path}[${index}]`;
+		const address = exactRecordAt(entry, addressPath, [
+			"group_id",
+			"attribute",
+		]);
+		return {
+			groupId: stringAt(address.group_id, `${addressPath}.group_id`),
+			attribute: stringAt(address.attribute, `${addressPath}.attribute`),
+		};
+	});
 }
 
 function validateObject(value: unknown, expectedUserId: string) {

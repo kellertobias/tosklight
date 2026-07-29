@@ -47,6 +47,7 @@ function projection(revision = 7) {
 			},
 		],
 		group_values: [],
+		dynamic_values: [],
 	};
 }
 

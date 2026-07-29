@@ -28,7 +28,10 @@ fn startup_fixture_library_migrates_schema_v1_and_loads_transferable_packages_on
         .iter()
         .find(|profile| profile.id == expected_profile_id)
         .unwrap();
-    assert_eq!(migrated.schema_version, 2);
+    assert_eq!(
+        migrated.schema_version,
+        light_fixture::FIXTURE_PROFILE_SCHEMA_VERSION
+    );
     assert_eq!(migrated.revision, 1);
     assert_eq!(migrated.manufacturer, "Startup Legacy");
     assert_eq!(migrated.name, family);

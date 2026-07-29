@@ -1,16 +1,16 @@
+import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
 import { useMemo, useState } from "react";
 import { useSessionSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
-import { useProgrammerActions } from "../../features/programmerActions/ProgrammerActionsContext";
 import {
 	useOutputRuntimeActions,
 	useOutputRuntimeView,
 } from "../../features/outputRuntime/OutputRuntimeView";
+import { useSelectedPatchedFixtures } from "../../features/patch/PatchState";
+import { useProgrammerActions } from "../../features/programmerActions/ProgrammerActionsContext";
 import { useProgrammerLifecycleView } from "../../features/programmerLifecycle/ProgrammerLifecycleView";
 import { useProgrammerPreloadLifecycleView } from "../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
-import { useSelectedPatchedFixtures } from "../../features/patch/PatchState";
 import { useApp } from "../../state/AppContext";
-import { Button, ModalPortal } from "@tosklight/ui";
 import { compatibleSpecialDialogActions } from "./SpecialDialogsModal";
 import { OutputControls } from "./systemControls/OutputControls";
 import { RunningSections } from "./systemControls/RunningSections";
@@ -93,7 +93,11 @@ function useSystemControlsModel() {
 				),
 				...programmers.flatMap((programmer) =>
 					programmer.sessions[0]
-						? [programmerActions?.clearProgrammer(programmer.sessions[0].sessionId)]
+						? [
+								programmerActions?.clearProgrammer(
+									programmer.sessions[0].sessionId,
+								),
+							]
 						: [],
 				),
 				preload.actions.release(),
@@ -159,36 +163,34 @@ export function SystemControlsModal() {
 					aria-modal="true"
 					aria-label="Running and output"
 				>
-					<header className="system-controls-header">
-						<div>
-							<h2>Running & Output</h2>
-							<small>Shift + Clear / Shift + Delete</small>
-						</div>
-						<Button className="modal-close" onClick={model.close}>
-							×
-						</Button>
-					</header>
-					<div className="running-summary">
-						<span>
-							<b>{activeItems}</b> active items
-						</span>
-						<Button
-							className="danger"
-							disabled={
-								model.stoppingAll ||
-								!model.playbackAuthority.ready ||
-								!model.preload.ready ||
-								(model.playbackAuthority.sources.length > 0 &&
-									!model.playbackAuthority.canRelease) ||
-								(!model.playbackAuthority.sources.length &&
-									!model.programmers.length &&
-									!model.preload.active)
-							}
-							onClick={() => void model.stopEverything()}
-						>
-							{model.stoppingAll ? "Stopping…" : "Stop everything"}
-						</Button>
-					</div>
+					<ModalTitleBar
+						title="Running & Output"
+						details={
+							<span className="system-controls-active-items">
+								<b>{activeItems}</b> active items
+							</span>
+						}
+						actions={
+							<Button
+								className="danger"
+								disabled={
+									model.stoppingAll ||
+									!model.playbackAuthority.ready ||
+									!model.preload.ready ||
+									(model.playbackAuthority.sources.length > 0 &&
+										!model.playbackAuthority.canRelease) ||
+									(!model.playbackAuthority.sources.length &&
+										!model.programmers.length &&
+										!model.preload.active)
+								}
+								onClick={() => void model.stopEverything()}
+							>
+								{model.stoppingAll ? "Stopping…" : "Stop everything"}
+							</Button>
+						}
+						closeLabel="Close Running & Output"
+						onClose={model.close}
+					/>
 					<RunningSections
 						pagePlaybacks={model.playbackAuthority.mappedSources}
 						virtualPlaybacks={model.playbackAuthority.virtualSources}

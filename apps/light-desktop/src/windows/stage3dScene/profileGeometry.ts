@@ -14,6 +14,7 @@ import {
 	resolvedColor,
 } from "./attributeValues";
 import { buildGeometryBeam, updateGeometryBeam } from "./emitterGeometry";
+import type { StageProceduralResourceCache } from "./resources";
 import { addSelectionOutline, millimetres } from "./sceneObjects";
 import type { FixtureAttributeValues, FixtureValuesById } from "./types";
 
@@ -31,6 +32,7 @@ export type ProfileGeometryOptions = {
 	showBeamGuides: boolean;
 	renderQuality: StageRenderQuality;
 	virtualHighlight?: boolean;
+	resources?: StageProceduralResourceCache;
 };
 
 function relatedHeadsByNode(graph: GeometryGraph) {
@@ -111,17 +113,24 @@ function createGeometryMarker(
 	fixture: PatchedFixture,
 	node: GeometryNode,
 	nodeIndex: number,
-	selected: boolean,
+	_selected: boolean,
+	resources?: StageProceduralResourceCache,
 ) {
 	const dimensions = markerDimensions(fixture, nodeIndex);
-	const marker = new THREE.Mesh(
-		new THREE.BoxGeometry(dimensions[0], dimensions[1], dimensions[2]),
+	const createGeometry = () => new THREE.BoxGeometry(1, 1, 1);
+	const createMaterial = () =>
 		new THREE.MeshStandardMaterial({
-			color: selected ? 0x136f80 : 0x252c33,
+			color: 0x252c33,
 			roughness: 0.55,
 			metalness: 0.35,
-		}),
+		});
+	const marker = new THREE.Mesh(
+		resources?.geometry("profile-marker:unit", createGeometry) ??
+			createGeometry(),
+		resources?.material("fixture-marker-material", createMaterial) ??
+			createMaterial(),
 	);
+	marker.scale.set(dimensions[0], dimensions[1], dimensions[2]);
 	marker.name = `geometry-part:${node.id}`;
 	return marker;
 }
@@ -154,7 +163,13 @@ function createGeometryNode(
 	anchor.name = `geometry-node-anchor:${node.id}`;
 	anchor.position.copy(pivot).multiplyScalar(-1);
 	anchor.add(
-		createGeometryMarker(options.fixture, node, nodeIndex, options.selected),
+		createGeometryMarker(
+			options.fixture,
+			node,
+			nodeIndex,
+			options.selected,
+			options.resources,
+		),
 	);
 	group.add(anchor);
 	return { group, anchor };
@@ -225,6 +240,7 @@ function mountEmitter(
 		resolvedColor(attributes.get("color"), attributes),
 		options.showBeamGuides,
 		options.renderQuality,
+		options.resources,
 	);
 	(nodes.get(emitter.node_id)?.anchor ?? root).add(beam);
 }
@@ -291,6 +307,7 @@ export function updateFixtureProfileGeometry(
 			resolvedColor(attributes.get("color"), attributes),
 			options.showBeamGuides,
 			options.renderQuality,
+			options.resources,
 		);
 	}
 }

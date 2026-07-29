@@ -23,18 +23,7 @@ pub(super) fn execute_dynamic_command(
         .find(|definition| definition.pool_number == number)
         .ok_or_else(|| format!("Dynamic {number} does not exist"))?;
     let targets = command_dynamic_targets(state, session, &snapshot, &tokens[..dynamic_index])?;
-    let raw_tail = &tokens[dynamic_index + 2..];
-    let (explicit_controller, tail) = match raw_tail {
-        [instance, controller, rest @ ..] if instance == "INSTANCE" => (
-            Some(
-                controller
-                    .parse::<Uuid>()
-                    .map_err(|_| "Dynamic INSTANCE requires a controller UUID")?,
-            ),
-            rest,
-        ),
-        _ => (None, raw_tail),
-    };
+    let (explicit_controller, tail) = parse_dynamic_command_tail(&tokens[dynamic_index + 2..])?;
     let ports = dynamics_adapter::ServerDynamicsPorts { state, session };
     let command = light_application::DynamicStartCommand {
         dynamic_id: definition.id,
@@ -48,6 +37,7 @@ pub(super) fn execute_dynamic_command(
             fade_millis: timing.fade_millis,
             delay_millis: timing.delay_millis,
         },
+        undo_group: None,
     };
     match tail {
         [] => {
@@ -154,6 +144,20 @@ pub(super) fn execute_dynamic_command(
     }
     persist_output_runtime(state).map_err(|error| error.message)?;
     Ok(super::ProgrammerCommandExecution::Applied(targets.len()))
+}
+
+fn parse_dynamic_command_tail(tokens: &[String]) -> Result<(Option<Uuid>, &[String]), String> {
+    match tokens {
+        [instance, controller, rest @ ..] if instance == "INSTANCE" => Ok((
+            Some(
+                controller
+                    .parse::<Uuid>()
+                    .map_err(|_| "Dynamic INSTANCE requires a controller UUID")?,
+            ),
+            rest,
+        )),
+        _ => Ok((None, tokens)),
+    }
 }
 
 fn command_dynamic_targets(

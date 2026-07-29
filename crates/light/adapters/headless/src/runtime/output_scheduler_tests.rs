@@ -5,6 +5,7 @@ use light_dynamics::{
     DynamicController, DynamicControllerSource, DynamicInstanceSnapshot, DynamicRuntimeSample,
     DynamicRuntimeSnapshot,
 };
+use light_output::{DeliveryMode, OutputRoute};
 use light_programmer::ProgrammerRegistry;
 use uuid::Uuid;
 
@@ -19,6 +20,38 @@ fn frame_selection_applies_overrides_and_reuses_held_frames() {
     control.hold = true;
     let held = output_frames(&mut control, frames_with_value(1, 99));
     assert_eq!(held, live);
+}
+
+#[test]
+fn held_output_reuses_one_coherent_route_frame_and_slot_snapshot() {
+    let mut control = OutputControl::default();
+    let live_route = OutputRoute {
+        protocol: Protocol::ArtNet,
+        logical_universe: 1,
+        destination_universe: 1,
+        delivery_mode: Some(DeliveryMode::Broadcast),
+        destination: None,
+        enabled: true,
+        minimum_slots: 1,
+    };
+    let live = output_payload(
+        &mut control,
+        Arc::from([live_route.clone()]),
+        frames_with_value(1, 10),
+        HashMap::from([(1, 24)]),
+    );
+
+    control.hold = true;
+    let held = output_payload(
+        &mut control,
+        Arc::from([]),
+        frames_with_value(2, 99),
+        HashMap::from([(2, 512)]),
+    );
+
+    assert_eq!(held.0.as_ref(), &[live_route]);
+    assert_eq!(held.1, live.1);
+    assert_eq!(held.2, HashMap::from([(1, 24)]));
 }
 
 #[test]
@@ -112,7 +145,7 @@ fn dynamic_playback_full_control_requires_complete_persistent_coverage_and_honor
             &runtime,
             engine.application_time(),
         ),
-        vec![1],
+        vec![light_playback::PlaybackIdentity::physical(1).unwrap()],
         "the default-on setting turns the source off only after every address is covered",
     );
 
@@ -272,7 +305,7 @@ fn dynamic_playback_control(
     temporary_only: bool,
 ) -> DynamicPlaybackControl {
     DynamicPlaybackControl {
-        playback_number,
+        identity: light_playback::PlaybackIdentity::physical(playback_number).unwrap(),
         master: 1.0,
         crossfade_non_intensity: false,
         auto_off_full_control,

@@ -82,7 +82,12 @@ function wirePage() {
 	return {
 		id: "4",
 		revision: 2,
-		body: { number: 4, name: "Page 4", slots: { 2: 7 } },
+		body: {
+			number: 4,
+			name: "Page 4",
+			slots: { 2: 7 },
+			virtual_playbacks: {},
+		},
 	};
 }
 

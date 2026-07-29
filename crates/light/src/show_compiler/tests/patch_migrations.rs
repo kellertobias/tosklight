@@ -142,7 +142,10 @@ fn schema_one_fixture_is_materialized_and_compiled_in_one_candidate() {
     );
     let compiled = compile_show_candidate(candidate).unwrap();
     assert_eq!(compiled.fixtures.len(), 1);
-    assert_eq!(compiled.fixtures[0].definition.schema_version, 2);
+    assert_eq!(
+        compiled.fixtures[0].definition.schema_version,
+        light_fixture::FIXTURE_PROFILE_SCHEMA_VERSION
+    );
 }
 
 #[test]

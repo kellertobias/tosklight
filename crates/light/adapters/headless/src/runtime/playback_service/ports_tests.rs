@@ -71,7 +71,7 @@ fn dedicated_virtual_runtime_never_collapses_unsupported_buttons_to_pool_actions
         None
     );
 
-    definition.buttons[0] = light_playback::PlaybackButtonAction::Flash;
+    definition.buttons[0] = light_playback::PlaybackButtonAction::Select;
     assert!(
         virtual_runtime_action(
             &definition,

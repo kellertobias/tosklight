@@ -286,9 +286,9 @@ export class BrowserPlaybacks {
 			card.getByRole("button", { name: /Playback representation/ }),
 		).toHaveCount(0);
 		await this.desk.click(card.locator("header b"));
-		await expect(this.page.locator(".ui-window-header")).toContainText(
-			`Cuelist ${number} · ${cueList.body.name}`,
-		);
+		await expect(
+			this.page.getByRole("main", { name: "cuelists built-in" }),
+		).toContainText(`Cuelist ${number} · ${cueList.body.name}`);
 		await this.expect(number).selected();
 	}
 

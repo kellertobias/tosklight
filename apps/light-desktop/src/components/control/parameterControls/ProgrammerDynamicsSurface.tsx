@@ -1,5 +1,3 @@
-import { Button, SelectField } from "@tosklight/ui";
-import { TouchEncoder } from "@tosklight/ui/encoders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	DynamicDefinitionProjection,
@@ -7,7 +5,7 @@ import type {
 	DynamicRuntimeInstanceProjection,
 	DynamicRuntimeSnapshotProjection,
 	DynamicUpdateIntent,
-} from "../../../api/generated/light-wire";
+} from "../../../api/types";
 import { useActiveShowId } from "../../../features/deskSnapshot/DeskSnapshotState";
 import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
 import { DynamicMutationWriter } from "../../../features/dynamics/DynamicMutationWriter";
@@ -24,14 +22,11 @@ import {
 	type DynamicEditorView,
 	DynamicEncoderDeck,
 } from "../../../windows/DynamicsWindow";
-import { HardwareEncoderDisplay } from "../HardwareEncoderDisplay";
+import {
+	type DynamicControllerChoice,
+	ProgrammerDynamicsInstanceContent,
+} from "./ProgrammerDynamicsInstanceContent";
 import type { ParameterController } from "./useParameterController";
-
-interface DynamicControllerChoice {
-	instance: DynamicRuntimeInstanceProjection;
-	controller: DynamicRuntimeControllerProjection;
-	definition: DynamicDefinitionProjection | null;
-}
 
 type ControllerValueField = "size" | "speed" | "phase";
 
@@ -109,66 +104,118 @@ export function ProgrammerDynamicsSurface({
 		[actions, showObjectsStore],
 	);
 	const programmer = useProgrammerValuesView(controller.active);
-	const [runtime, setRuntime] = useState(EMPTY_RUNTIME);
-	const [selectedControllerId, setSelectedControllerId] = useState<
-		string | null
-	>(null);
 	const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
 	const [view, setView] = useState<"instance" | DynamicEditorView>("instance");
 	const [error, setError] = useState<string | null>(null);
-	const [controllerOverrides, setControllerOverrides] = useState<
-		Record<string, ControllerValueOverride>
-	>({});
-	const latestControllerWrites = useRef(new Map<string, string>());
-	const gesture = useRef<{ field: string; id: string; at: number } | null>(
-		null,
+	const { choices, refresh } = useRuntimeChoices(
+		actions,
+		showId,
+		controller,
+		definitions.map((definition) => definition.body),
+		programmer?.dynamicValues ?? [],
+		setError,
 	);
-	const refresh = useCallback(async () => {
-		if (!actions || !showId) {
-			setRuntime(EMPTY_RUNTIME);
-			return EMPTY_RUNTIME;
-		}
-		const next = await actions.dynamics.runtime(showId);
-		setRuntime(next);
-		return next;
-	}, [actions, showId]);
-	useEffect(() => {
-		void refresh().catch((cause) =>
-			setError(cause instanceof Error ? cause.message : String(cause)),
+	const { selected, setSelectedControllerId, update, off, cycleChoice } =
+		useSelectedController(actions, choices, refresh, setError, () =>
+			setSelectedLaneId(null),
 		);
-		if (!controller.active) return;
-		const timer = window.setInterval(
-			() => void refresh().catch(() => undefined),
-			500,
-		);
-		return () => window.clearInterval(timer);
-	}, [controller.active, refresh]);
-	const choices = useMemo(
-		() =>
-			dynamicChoices(
-				runtime,
-				definitions.map((definition) => definition.body),
-				controller.selectedFixtureIds,
-				programmer?.dynamicValues ?? [],
-			),
-		[runtime, definitions, controller.selectedFixtureIds, programmer],
+	const {
+		lanes,
+		selectedObject,
+		selectedLane,
+		cycleLane,
+		mutateDefinition,
+		changeLane,
+	} = useDefinitionEditor(
+		editor,
+		definitions,
+		selected,
+		selectedLaneId,
+		setSelectedLaneId,
+		mutationWriter,
+		showId,
+		setError,
 	);
-	const selectedAuthoritative =
-		choices.find(
-			(choice) => choice.controller.controller_id === selectedControllerId,
-		) ??
-		choices[0] ??
-		null;
-	const selected = selectedAuthoritative
-		? applyControllerOverride(
-				selectedAuthoritative,
-				controllerOverrides[selectedAuthoritative.controller.controller_id],
-			)
-		: null;
-	useEffect(() => {
-		if (selected && selected.controller.controller_id !== selectedControllerId)
-			setSelectedControllerId(selected.controller.controller_id);
-	}, [selected, selectedControllerId]);
+
+	useHardwareControllerActions(
+		controller.hardwareConnected,
+		selected,
+		cycleChoice,
+		cycleLane,
+		update,
+		off,
+	);
+
+	if (editor.session && selectedObject)
+		return (
+			<DynamicDefinitionEncoderSurface
+				dynamic={selectedObject.body}
+				lane={selectedLane}
+				view={editor.session.task}
+				page={editor.session.encoderPage}
+				keyframeIndex={editor.session.primaryKeyframeIndex}
+				onKeyframeIndex={(primaryKeyframeIndex) =>
+					editor.update({ primaryKeyframeIndex })
+				}
+				onLaneChange={changeLane}
+				onMutate={mutateDefinition}
+			/>
+		);
+
+	if (!controller.selectedFixtureIds.length && !controller.selectedGroupId)
+		return (
+			<div className="parameter-empty">
+				<b>No fixtures selected</b>
+				<small>Select fixtures to inspect their Dynamic instances.</small>
+			</div>
+		);
+	if (!selected)
+		return (
+			<div className="parameter-empty">
+				<b>No matching Dynamic instances</b>
+				<small>
+					Start a Dynamic from its pool, Cue, or Playback for this selection.
+				</small>
+			</div>
+		);
+	return (
+		<ProgrammerDynamicsInstanceContent
+			controller={controller}
+			editor={editor}
+			choices={choices}
+			selected={selected}
+			selectedLane={selectedLane}
+			lanes={lanes}
+			selectedObject={selectedObject}
+			presets={presets}
+			view={view}
+			error={error}
+			onView={setView}
+			onController={(controllerId) => {
+				setSelectedControllerId(controllerId);
+				setSelectedLaneId(null);
+			}}
+			onLane={setSelectedLaneId}
+			onCycleChoice={cycleChoice}
+			onCycleLane={cycleLane}
+			onUpdate={update}
+			onOff={off}
+			onLaneChange={changeLane}
+			onMutate={mutateDefinition}
+		/>
+	);
+}
+
+function useDefinitionEditor(
+	editor: ReturnType<typeof useDynamicEditorSession>,
+	definitions: readonly ShowObject<"dynamic">[],
+	selected: DynamicControllerChoice | null,
+	selectedLaneId: string | null,
+	setSelectedLaneId: (id: string | null) => void,
+	mutationWriter: DynamicMutationWriter | null,
+	showId: ReturnType<typeof useActiveShowId>,
+	setError: (error: string | null) => void,
+) {
 	const lanes = selected?.definition?.lanes ?? [];
 	const editorObject = editor.session
 		? definitions.find(
@@ -190,78 +237,7 @@ export function ProgrammerDynamicsSurface({
 	useEffect(() => {
 		if (selectedLane && selectedLane.id !== selectedLaneId)
 			setSelectedLaneId(selectedLane.id);
-	}, [selectedLane, selectedLaneId]);
-	const groupFor = useCallback((field: string) => {
-		const now = performance.now();
-		if (
-			!gesture.current ||
-			gesture.current.field !== field ||
-			now - gesture.current.at > 250
-		)
-			gesture.current = { field, id: crypto.randomUUID(), at: now };
-		else gesture.current.at = now;
-		return gesture.current.id;
-	}, []);
-	const update = useCallback(
-		async (field: ControllerValueField, value: number) => {
-			if (!actions || !selected) return;
-			const controllerId = selected.controller.controller_id;
-			const writeKey = `${controllerId}:${field}`;
-			const writeId = crypto.randomUUID();
-			latestControllerWrites.current.set(writeKey, writeId);
-			setControllerOverrides((current) => ({
-				...current,
-				[controllerId]: {
-					...current[controllerId],
-					[field]: value,
-				},
-			}));
-			setError(null);
-			try {
-				await actions.dynamics.setControllerValueLive(
-					controllerId,
-					field,
-					value,
-					groupFor(field),
-				);
-				await refresh();
-			} catch (cause) {
-				setError(cause instanceof Error ? cause.message : String(cause));
-			} finally {
-				if (latestControllerWrites.current.get(writeKey) === writeId) {
-					latestControllerWrites.current.delete(writeKey);
-					setControllerOverrides((current) =>
-						clearControllerOverride(current, controllerId, field),
-					);
-				}
-			}
-		},
-		[actions, groupFor, refresh, selected],
-	);
-	const off = useCallback(async () => {
-		if (!actions || !selected) return;
-		setError(null);
-		try {
-			await actions.dynamics.offLive(selected.controller.controller_id);
-			await refresh();
-		} catch (cause) {
-			setError(cause instanceof Error ? cause.message : String(cause));
-		}
-	}, [actions, refresh, selected]);
-	const cycleChoice = useCallback(
-		(delta: number) => {
-			if (!selected || choices.length < 2) return;
-			const current = choices.findIndex(
-				(choice) =>
-					choice.controller.controller_id === selected.controller.controller_id,
-			);
-			const next =
-				(current + Math.sign(delta) + choices.length) % choices.length;
-			setSelectedControllerId(choices[next].controller.controller_id);
-			setSelectedLaneId(null);
-		},
-		[choices, selected],
-	);
+	}, [selectedLane, selectedLaneId, setSelectedLaneId]);
 	const cycleLane = useCallback(
 		(delta: number) => {
 			if (!selectedLane || lanes.length < 2) return;
@@ -269,7 +245,7 @@ export function ProgrammerDynamicsSurface({
 			const next = (current + Math.sign(delta) + lanes.length) % lanes.length;
 			setSelectedLaneId(lanes[next].id);
 		},
-		[lanes, selectedLane],
+		[lanes, selectedLane, setSelectedLaneId],
 	);
 	const mutateDefinition = useCallback(
 		async (intent: DynamicUpdateIntent, mutationGroup?: string) => {
@@ -286,7 +262,7 @@ export function ProgrammerDynamicsSurface({
 				setError(cause instanceof Error ? cause.message : String(cause));
 			}
 		},
-		[mutationWriter, selectedObject, showId],
+		[mutationWriter, selectedObject, setError, showId],
 	);
 	const changeLane = useCallback(
 		async (
@@ -304,9 +280,172 @@ export function ProgrammerDynamicsSurface({
 		},
 		[mutateDefinition, selectedLane],
 	);
+	return {
+		lanes,
+		selectedObject,
+		selectedLane,
+		cycleLane,
+		mutateDefinition,
+		changeLane,
+	};
+}
 
+function useRuntimeChoices(
+	actions: ReturnType<typeof useDynamicsActions>,
+	showId: ReturnType<typeof useActiveShowId>,
+	controller: ParameterController,
+	definitions: readonly DynamicDefinitionProjection[],
+	stagedValues: readonly ProgrammerDynamicValue[],
+	setError: (error: string | null) => void,
+) {
+	const [runtime, setRuntime] = useState(EMPTY_RUNTIME);
+	const refresh = useCallback(async () => {
+		if (!actions || !showId) {
+			setRuntime(EMPTY_RUNTIME);
+			return EMPTY_RUNTIME;
+		}
+		const next = await actions.dynamics.runtime(showId);
+		setRuntime(next);
+		return next;
+	}, [actions, showId]);
 	useEffect(() => {
-		if (!controller.hardwareConnected || !selected) return;
+		void refresh().catch((cause) =>
+			setError(cause instanceof Error ? cause.message : String(cause)),
+		);
+		if (!controller.active) return;
+		const timer = window.setInterval(
+			() => void refresh().catch(() => undefined),
+			500,
+		);
+		return () => window.clearInterval(timer);
+	}, [controller.active, refresh, setError]);
+	const choices = useMemo(
+		() =>
+			dynamicChoices(
+				runtime,
+				definitions,
+				controller.selectedFixtureIds,
+				stagedValues,
+			),
+		[runtime, definitions, controller.selectedFixtureIds, stagedValues],
+	);
+	return { choices, refresh };
+}
+
+function useSelectedController(
+	actions: ReturnType<typeof useDynamicsActions>,
+	choices: DynamicControllerChoice[],
+	refresh: () => Promise<DynamicRuntimeSnapshotProjection>,
+	setError: (error: string | null) => void,
+	resetLane: () => void,
+) {
+	const [selectedControllerId, setSelectedControllerId] = useState<
+		string | null
+	>(null);
+	const [overrides, setOverrides] = useState<
+		Record<string, ControllerValueOverride>
+	>({});
+	const latestWrites = useRef(new Map<string, string>());
+	const gesture = useRef<{ field: string; id: string; at: number } | null>(
+		null,
+	);
+	const authoritative =
+		choices.find(
+			(choice) => choice.controller.controller_id === selectedControllerId,
+		) ??
+		choices[0] ??
+		null;
+	const selected = authoritative
+		? applyControllerOverride(
+				authoritative,
+				overrides[authoritative.controller.controller_id],
+			)
+		: null;
+	useEffect(() => {
+		if (selected && selected.controller.controller_id !== selectedControllerId)
+			setSelectedControllerId(selected.controller.controller_id);
+	}, [selected, selectedControllerId]);
+	const groupFor = useCallback((field: string) => {
+		const now = performance.now();
+		if (
+			!gesture.current ||
+			gesture.current.field !== field ||
+			now - gesture.current.at > 250
+		)
+			gesture.current = { field, id: crypto.randomUUID(), at: now };
+		else gesture.current.at = now;
+		return gesture.current.id;
+	}, []);
+	const update = useCallback(
+		async (field: ControllerValueField, value: number) => {
+			if (!actions || !selected) return;
+			const controllerId = selected.controller.controller_id;
+			const writeKey = `${controllerId}:${field}`;
+			const writeId = crypto.randomUUID();
+			latestWrites.current.set(writeKey, writeId);
+			setOverrides((current) => ({
+				...current,
+				[controllerId]: { ...current[controllerId], [field]: value },
+			}));
+			setError(null);
+			try {
+				await actions.dynamics.setControllerValueLive(
+					controllerId,
+					field,
+					value,
+					groupFor(field),
+				);
+				await refresh();
+			} catch (cause) {
+				setError(cause instanceof Error ? cause.message : String(cause));
+			} finally {
+				if (latestWrites.current.get(writeKey) === writeId) {
+					latestWrites.current.delete(writeKey);
+					setOverrides((current) =>
+						clearControllerOverride(current, controllerId, field),
+					);
+				}
+			}
+		},
+		[actions, groupFor, refresh, selected, setError],
+	);
+	const off = useCallback(async () => {
+		if (!actions || !selected) return;
+		setError(null);
+		try {
+			await actions.dynamics.offLive(selected.controller.controller_id);
+			await refresh();
+		} catch (cause) {
+			setError(cause instanceof Error ? cause.message : String(cause));
+		}
+	}, [actions, refresh, selected, setError]);
+	const cycleChoice = useCallback(
+		(delta: number) => {
+			if (!selected || choices.length < 2) return;
+			const current = choices.findIndex(
+				(choice) =>
+					choice.controller.controller_id === selected.controller.controller_id,
+			);
+			const next =
+				(current + Math.sign(delta) + choices.length) % choices.length;
+			setSelectedControllerId(choices[next].controller.controller_id);
+			resetLane();
+		},
+		[choices, resetLane, selected],
+	);
+	return { selected, setSelectedControllerId, update, off, cycleChoice };
+}
+
+function useHardwareControllerActions(
+	hardwareConnected: boolean,
+	selected: DynamicControllerChoice | null,
+	cycleChoice: (delta: number) => void,
+	cycleLane: (delta: number) => void,
+	update: (field: ControllerValueField, value: number) => Promise<void>,
+	off: () => Promise<void>,
+) {
+	useEffect(() => {
+		if (!hardwareConnected || !selected) return;
 		const handle = (event: Event) => {
 			const detail = (event as CustomEvent<{ control: string; value?: string }>)
 				.detail;
@@ -346,257 +485,7 @@ export function ProgrammerDynamicsSurface({
 		};
 		window.addEventListener("light:encoder-action", handle);
 		return () => window.removeEventListener("light:encoder-action", handle);
-	}, [
-		controller.hardwareConnected,
-		cycleChoice,
-		cycleLane,
-		off,
-		selected,
-		update,
-	]);
-
-	if (editor.session && selectedObject)
-		return (
-			<DynamicDefinitionEncoderSurface
-				dynamic={selectedObject.body}
-				lane={selectedLane}
-				view={editor.session.task}
-				page={editor.session.encoderPage}
-				keyframeIndex={editor.session.primaryKeyframeIndex}
-				onKeyframeIndex={(primaryKeyframeIndex) =>
-					editor.update({ primaryKeyframeIndex })
-				}
-				onLaneChange={changeLane}
-				onMutate={mutateDefinition}
-			/>
-		);
-
-	if (!controller.selectedFixtureIds.length && !controller.selectedGroupId)
-		return (
-			<div className="parameter-empty">
-				<b>No fixtures selected</b>
-				<small>Select fixtures to inspect their Dynamic instances.</small>
-			</div>
-		);
-	if (!selected)
-		return (
-			<div className="parameter-empty">
-				<b>No matching Dynamic instances</b>
-				<small>
-					Start a Dynamic from its pool, Cue, or Playback for this selection.
-				</small>
-			</div>
-		);
-	const dynamicLabel = selected.definition
-		? `Dynamic ${selected.definition.pool_number} · ${selected.definition.name}`
-		: `Dynamic ${selected.instance.pool_number} · ${selected.instance.name}`;
-	const status = [
-		selected.controller.source,
-		selected.controller.winning ? "Winning" : "Hidden",
-		selected.controller.paused || selected.instance.paused
-			? "Paused"
-			: "Active",
-		selected.instance.pending ? "Pending" : null,
-	]
-		.filter(Boolean)
-		.join(" · ");
-	const toolbar = (
-		<div className="programmer-dynamics-toolbar">
-			<SelectField
-				ariaLabel="Dynamic instance"
-				value={selected.controller.controller_id}
-				options={choices.map((choice) => ({
-					value: choice.controller.controller_id,
-					label: `Dynamic ${choice.instance.pool_number} · ${choice.instance.name} · ${choice.controller.source}`,
-				}))}
-				onChange={(controllerId) => {
-					setSelectedControllerId(controllerId);
-					setSelectedLaneId(null);
-				}}
-			/>
-			<SelectField
-				ariaLabel="Dynamic lane"
-				value={selectedLane?.id ?? ""}
-				options={lanes.map((lane) => ({
-					value: lane.id,
-					label: lane.attribute,
-				}))}
-				onChange={setSelectedLaneId}
-			/>
-			{(["instance", "curves", "phase", "speed"] as const).map((candidate) => (
-				<Button
-					key={candidate}
-					className={view === candidate ? "active" : ""}
-					onClick={() => setView(candidate)}
-				>
-					{candidate === "instance"
-						? "Instance"
-						: candidate === "phase"
-							? "Phase"
-							: candidate === "curves"
-								? "Lanes"
-								: candidate[0].toUpperCase() + candidate.slice(1)}
-				</Button>
-			))}
-		</div>
-	);
-
-	if (view !== "instance" && selectedObject)
-		return (
-			<>
-				{toolbar}
-				<div className="programmer-dynamics-editor-deck">
-					<DynamicEncoderDeck
-						view={view}
-						page={editor.session?.encoderPage ?? 1}
-						lane={selectedLane ?? undefined}
-						dynamic={selectedObject.body}
-						presets={presets}
-						keyframeIndex={editor.session?.primaryKeyframeIndex ?? 0}
-						onKeyframeIndex={(primaryKeyframeIndex) =>
-							editor.update({ primaryKeyframeIndex })
-						}
-						onLaneChange={changeLane}
-						onMutate={mutateDefinition}
-					/>
-				</div>
-			</>
-		);
-
-	if (controller.hardwareConnected)
-		return (
-			<>
-				{toolbar}
-				<HardwareEncoderDisplay
-					slot={1}
-					target={{ label: dynamicLabel, value: status }}
-				/>
-				<HardwareEncoderDisplay
-					slot={2}
-					target={{
-						label: selectedLane?.attribute ?? "Lane",
-						value: `${lanes.length} lane${lanes.length === 1 ? "" : "s"}`,
-					}}
-				/>
-				<HardwareEncoderDisplay
-					slot={3}
-					target={{
-						label: "Instance Size",
-						value: `${Math.round(selected.controller.size * 100)}%`,
-					}}
-				/>
-				<HardwareEncoderDisplay
-					slot={4}
-					target={{
-						label: "Instance Speed",
-						value: `${selected.controller.speed_multiplier.toFixed(2)}×`,
-					}}
-				/>
-				<HardwareEncoderDisplay
-					slot={5}
-					target={{
-						label: "Instance Phase",
-						value: `${selected.controller.phase_offset_degrees.toFixed(0)}°`,
-					}}
-				/>
-				<HardwareEncoderDisplay
-					slot={6}
-					activateOnHardwarePress
-					target={{ label: "Dynamic Off", value: "Press" }}
-					onHardwarePress={() => {
-						void off();
-						return true;
-					}}
-				/>
-			</>
-		);
-
-	return (
-		<>
-			{toolbar}
-			<TouchEncoder
-				label={`Enc 1 · ${dynamicLabel}`}
-				slot={1}
-				attributeLabel={dynamicLabel}
-				value={Math.max(
-					0,
-					choices.findIndex(
-						(choice) =>
-							choice.controller.controller_id ===
-							selected.controller.controller_id,
-					),
-				)}
-				display={status}
-				indexed
-				onStep={(delta) => cycleChoice(delta)}
-				onSet={(value) => {
-					const choice = choices[Math.round(value)];
-					if (choice) setSelectedControllerId(choice.controller.controller_id);
-				}}
-			/>
-			<TouchEncoder
-				label={`Enc 2 · ${selectedLane?.attribute ?? "Lane"}`}
-				slot={2}
-				attributeLabel={selectedLane?.attribute ?? "Lane"}
-				value={selectedLane ? Math.max(0, lanes.indexOf(selectedLane)) : 0}
-				display={`${lanes.length} lane${lanes.length === 1 ? "" : "s"}`}
-				indexed
-				disabled={!selectedLane}
-				onStep={(delta) => cycleLane(delta)}
-				onSet={(value) => {
-					const lane = lanes[Math.round(value)];
-					if (lane) setSelectedLaneId(lane.id);
-				}}
-			/>
-			<TouchEncoder
-				label="Enc 3 · Instance Size"
-				slot={3}
-				attributeLabel="Instance Size"
-				value={selected.controller.size}
-				display={`${Math.round(selected.controller.size * 100)}%`}
-				mode="Dynamics"
-				onStep={(delta) =>
-					void update("size", clamp(selected.controller.size + delta, 0, 2))
-				}
-				onSet={(value) => void update("size", clamp(value, 0, 2))}
-			/>
-			<TouchEncoder
-				label="Enc 4 · Instance Speed"
-				slot={4}
-				attributeLabel="Instance Speed"
-				value={selected.controller.speed_multiplier}
-				display={`${selected.controller.speed_multiplier.toFixed(2)}×`}
-				mode="Dynamics"
-				onStep={(delta) =>
-					void update(
-						"speed",
-						clamp(selected.controller.speed_multiplier + delta, 0.0625, 16),
-					)
-				}
-				onSet={(value) => void update("speed", clamp(value, 0.0625, 16))}
-			/>
-			<TouchEncoder
-				label="Enc 5 · Instance Phase"
-				slot={5}
-				attributeLabel="Instance Phase"
-				value={selected.controller.phase_offset_degrees}
-				display={`${selected.controller.phase_offset_degrees.toFixed(0)}°`}
-				mode="Dynamics"
-				onStep={(delta) =>
-					void update(
-						"phase",
-						clamp(selected.controller.phase_offset_degrees + delta, -360, 360),
-					)
-				}
-				onSet={(value) => void update("phase", clamp(value, -360, 360))}
-			/>
-			<div className="parameter-placeholder programmer-dynamics-off">
-				<b>Dynamic Off</b>
-				<small>{error ?? "Stops only this exact instance."}</small>
-				<Button onClick={() => void off()}>Off</Button>
-			</div>
-		</>
-	);
+	}, [hardwareConnected, cycleChoice, cycleLane, off, selected, update]);
 }
 
 function dynamicChoices(

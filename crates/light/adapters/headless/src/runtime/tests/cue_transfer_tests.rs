@@ -349,6 +349,7 @@ fn cue_addresses_use_cue_for_pool_and_page_playbacks() {
             number: 4,
             name: "Page 4".into(),
             slots: HashMap::from([(7, 25)]),
+            virtual_playbacks: HashMap::new(),
         }].into(),
         ..Default::default()
     };
@@ -385,11 +386,13 @@ fn update_addresses_keep_current_page_and_explicit_page_distinct() {
                 number: 1,
                 name: "Page 1".into(),
                 slots: HashMap::from([(7, 11)]),
+                virtual_playbacks: HashMap::new(),
             },
             light_playback::PlaybackPage {
                 number: 4,
                 name: "Page 4".into(),
                 slots: HashMap::from([(7, 25)]),
+                virtual_playbacks: HashMap::new(),
             },
         ].into(),
         ..Default::default()

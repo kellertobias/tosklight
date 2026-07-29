@@ -183,6 +183,70 @@ export const InputFields: Story = {
 	render: () => <InputFieldsExample />,
 };
 
+const formSelectionGroups = [
+	{
+		label: "Step Control",
+		options: [
+			{
+				value: "go",
+				label: "GO",
+				icon: "▶",
+				description: "Advance to the next cue.",
+			},
+			{
+				value: "go-minus",
+				label: "GO MINUS",
+				description: "Return to the previous cue.",
+			},
+		],
+	},
+	{
+		label: "Temporary State",
+		options: [
+			{
+				value: "flash",
+				label: "FLASH",
+				icon: "⚡",
+				description: "Output while the button is held.",
+			},
+		],
+	},
+] as const;
+
+function FileDropStates() {
+	return (
+		<section>
+			<h2>File drop states</h2>
+			<FormLayout columns={3}>
+				<FileDropField
+					label="Loading"
+					status="loading"
+					statusMessage="Loading selected file…"
+					constraints={{ extensions: [".gdtf"] }}
+					onFiles={() => undefined}
+					onOpenPicker={() => undefined}
+				/>
+				<FileDropField
+					label="Success"
+					status="success"
+					statusMessage="touring-profile.gdtf"
+					constraints={{ extensions: [".gdtf"] }}
+					onFiles={() => undefined}
+					onOpenPicker={() => undefined}
+				/>
+				<FileDropField
+					label="Actionable error"
+					status="error"
+					statusMessage="The archive could not be read."
+					constraints={{ extensions: [".gdtf"] }}
+					onFiles={() => undefined}
+					onOpenPicker={() => undefined}
+				/>
+			</FormLayout>
+		</section>
+	);
+}
+
 function FormComponentsExample() {
 	const [mode, setMode] = useState("software");
 	const [stageView, setStageView] = useState("2d");
@@ -196,35 +260,6 @@ function FormComponentsExample() {
 	const [faderAction, setFaderAction] = useState("master");
 	const [fileState, setFileState] = useState("No file selected");
 	const [universe, setUniverse] = useState(1);
-	const selectionGroups = [
-		{
-			label: "Step Control",
-			options: [
-				{
-					value: "go",
-					label: "GO",
-					icon: "▶",
-					description: "Advance to the next cue.",
-				},
-				{
-					value: "go-minus",
-					label: "GO MINUS",
-					description: "Return to the previous cue.",
-				},
-			],
-		},
-		{
-			label: "Temporary State",
-			options: [
-				{
-					value: "flash",
-					label: "FLASH",
-					icon: "⚡",
-					description: "Output while the button is held.",
-				},
-			],
-		},
-	] as const;
 	return (
 		<div className="forms-story-canvas">
 			<section>
@@ -326,7 +361,7 @@ function FormComponentsExample() {
 					<GroupedSelectionField
 						label="Top button"
 						value={buttonAction}
-						groups={selectionGroups}
+						groups={formSelectionGroups}
 						onChange={setButtonAction}
 						clearAction={{ label: "Empty Button", value: "none" }}
 					/>
@@ -354,35 +389,7 @@ function FormComponentsExample() {
 					/>
 				</FormLayout>
 			</section>
-			<section>
-				<h2>File drop states</h2>
-				<FormLayout columns={3}>
-					<FileDropField
-						label="Loading"
-						status="loading"
-						statusMessage="Loading selected file…"
-						constraints={{ extensions: [".gdtf"] }}
-						onFiles={() => undefined}
-						onOpenPicker={() => undefined}
-					/>
-					<FileDropField
-						label="Success"
-						status="success"
-						statusMessage="touring-profile.gdtf"
-						constraints={{ extensions: [".gdtf"] }}
-						onFiles={() => undefined}
-						onOpenPicker={() => undefined}
-					/>
-					<FileDropField
-						label="Actionable error"
-						status="error"
-						statusMessage="The archive could not be read."
-						constraints={{ extensions: [".gdtf"] }}
-						onFiles={() => undefined}
-						onOpenPicker={() => undefined}
-					/>
-				</FormLayout>
-			</section>
+			<FileDropStates />
 		</div>
 	);
 }

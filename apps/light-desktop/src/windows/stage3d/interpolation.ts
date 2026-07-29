@@ -1,6 +1,10 @@
 import type { AttributeValue, VisualizationSnapshot } from "../../api/types";
 
-export const STAGE_INTERPOLATION_MILLIS = 100;
+// Leave the final portion of the 100 ms publication cadence for both the
+// interpolation callback and the separate demand-render callback. Settling at
+// the authoritative value early is non-predictive and prevents the next source
+// sample from cancelling the preceding sample before its canvas submission.
+export const STAGE_INTERPOLATION_MILLIS = 60;
 
 export function stageVisualizationChanged(
 	from: VisualizationSnapshot,
@@ -169,20 +173,16 @@ function sameAttribute(left: AttributeValue, right: AttributeValue) {
 		case "spread":
 			return (
 				left.value.length ===
-					(right as Extract<AttributeValue, { kind: "spread" }>).value
-						.length &&
+					(right as Extract<AttributeValue, { kind: "spread" }>).value.length &&
 				left.value.every(
 					(value, index) =>
 						value ===
-						(right as Extract<AttributeValue, { kind: "spread" }>).value[
-							index
-						],
+						(right as Extract<AttributeValue, { kind: "spread" }>).value[index],
 				)
 			);
 		case "color_xyz": {
-			const value = (
-				right as Extract<AttributeValue, { kind: "color_xyz" }>
-			).value;
+			const value = (right as Extract<AttributeValue, { kind: "color_xyz" }>)
+				.value;
 			return (
 				left.value.x === value.x &&
 				left.value.y === value.y &&

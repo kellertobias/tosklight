@@ -5,6 +5,7 @@ import type {
 } from "../../api/types";
 import type { StagePosition3d } from "../../features/server/contracts";
 import type { StageRenderQuality } from "../../types";
+import type { StageProceduralResourceCache } from "./resources";
 
 export interface Stage3dFixture {
 	fixture: PatchedFixture;
@@ -24,4 +25,5 @@ export interface StageSceneContext {
 	showBeamGuides: boolean;
 	renderQuality: StageRenderQuality;
 	virtualHighlight: Set<string>;
+	resources: StageProceduralResourceCache;
 }

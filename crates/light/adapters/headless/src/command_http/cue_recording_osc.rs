@@ -65,6 +65,42 @@ fn target(
                 "Group runtime cannot be a cue record target",
             ));
         }
+        PlaybackAddress::Virtual(address) => virtual_cue_target(state, address)?,
+    })
+}
+
+fn virtual_cue_target(
+    state: &AppState,
+    address: light_playback::VirtualPlaybackAddress,
+) -> Result<ProgrammingCueRecordTarget, ActionError> {
+    let snapshot = state.output.snapshot();
+    let definition = snapshot
+        .playback_pages
+        .iter()
+        .find(|page| page.number == address.page())
+        .and_then(|page| page.virtual_playbacks.get(&address.number().get()))
+        .ok_or_else(|| {
+            ActionError::new(
+                ActionErrorKind::NotFound,
+                format!(
+                    "Virtual {}.{} is not assigned",
+                    address.page(),
+                    address.number().get()
+                ),
+            )
+        })?;
+    let light_playback::PlaybackTarget::CueList { cue_list_id } = &definition.target else {
+        return Err(ActionError::new(
+            ActionErrorKind::Invalid,
+            format!(
+                "Virtual {}.{} is not assigned to a Cuelist",
+                address.page(),
+                address.number().get()
+            ),
+        ));
+    };
+    Ok(ProgrammingCueRecordTarget::CueList {
+        cue_list_id: *cue_list_id,
     })
 }
 

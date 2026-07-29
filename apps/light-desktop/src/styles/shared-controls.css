@@ -1842,8 +1842,8 @@ button:not(:disabled):active {
 	z-index: 20;
 }
 .command-error-message {
-	position: absolute;
-	z-index: 10;
+	position: fixed;
+	z-index: 6000;
 	left: 121px;
 	right: 334px;
 	bottom: 48px;

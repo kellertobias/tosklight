@@ -361,6 +361,8 @@
 
 .ui-data-table-row:not(.header) {
   min-height: 43px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 43px;
 }
 
 .ui-data-table-row > span {

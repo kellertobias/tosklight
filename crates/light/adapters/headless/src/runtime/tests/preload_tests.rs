@@ -318,7 +318,8 @@ fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
     };
     state.programming.start(session.id, user.id);
     state
-        .output.replace_snapshot(preload_atomicity_test_snapshot())
+        .output
+        .replace_snapshot(preload_atomicity_test_snapshot())
         .unwrap();
     assert!(state.programming.arm_preload(session.id, true));
     assert!(state.programming.queue_preload_playback_action(
@@ -371,9 +372,14 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
         desk,
     };
     state.programming.start(session.id, user.id);
-    state
-        .output.replace_snapshot(preload_atomicity_test_snapshot())
-        .unwrap();
+    let mut snapshot = preload_atomicity_test_snapshot();
+    let mut virtual_one = snapshot.playbacks[0].clone();
+    virtual_one.number = 1_001;
+    let mut virtual_two = snapshot.playbacks[1].clone();
+    virtual_two.number = 1_002;
+    std::sync::Arc::make_mut(&mut snapshot.playback_pages)[0].virtual_playbacks =
+        HashMap::from([(1_001, virtual_one), (1_002, virtual_two)]);
+    state.output.replace_snapshot(snapshot).unwrap();
     let show = state
         .installation.upsert_show(
             "Preload exclusions",
@@ -391,26 +397,38 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
         playback_numbers: vec![1_001, 1_002],
     }]);
     persist_test_virtual_playback_exclusions(&state, show.id, &zones);
+    let prepared = state
+        .output
+        .prepare_playback_batch(
+            &[light_engine::PlaybackBatchCommand {
+                number: 1_002,
+                page: Some(1),
+                action: light_engine::PlaybackBatchAction::On,
+                exclusion_zones: std::sync::Arc::default(),
+                activation_origin: None,
+            }],
+            chrono::Utc::now(),
+            0,
+        )
+        .unwrap();
     state
-        .output.execute_playback(EnginePlaybackCommand::Pool {
-            number: 2,
-            action: PoolPlaybackAction::On,
-        })
+        .output
+        .install_prepared_playback_batch(prepared)
         .unwrap();
     assert!(state.programming.arm_preload(session.id, true));
     assert!(state.programming.queue_preload_playback_action(
         session.id,
-        1,
-        None,
+        1_001,
+        Some(1),
         light_programmer::PreloadPlaybackQueueAction::On,
-        light_programmer::PreloadPlaybackQueueSurface::Physical,
+        light_programmer::PreloadPlaybackQueueSurface::Virtual,
     ));
     assert!(state.programming.queue_preload_playback_action(
         session.id,
-        1,
-        None,
+        1_001,
+        Some(1),
         light_programmer::PreloadPlaybackQueueAction::Go,
-        light_programmer::PreloadPlaybackQueueSurface::Physical,
+        light_programmer::PreloadPlaybackQueueSurface::Virtual,
     ));
 
     let response = commit_preload(&state, &session).unwrap();
@@ -445,7 +463,13 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
     else {
         panic!("expected a typed Playback runtime change");
     };
-    assert_eq!(change.projection.playback_number, Some(2));
+    assert_eq!(
+        change.projection.requested,
+        light_application::PlaybackRuntimeIdentity::Virtual(
+            light_playback::VirtualPlaybackAddress::new(1, 1_002).unwrap()
+        )
+    );
+    assert_eq!(change.projection.playback_number, Some(1_002));
     assert!(!change.projection.cue_list_runtime().unwrap().enabled);
     let light_application::ApplicationEvent::Playback(
         light_application::PlaybackEvent::RuntimeChanged(peer),
@@ -453,11 +477,15 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
     else {
         panic!("expected the released peer Playback event");
     };
-    assert_eq!(peer.projection.playback_number, Some(1));
     assert_eq!(
-        peer.transition.as_ref().map(|transition| transition.cause),
-        Some(light_application::PlaybackTransitionCause::Go)
+        peer.projection.requested,
+        light_application::PlaybackRuntimeIdentity::Virtual(
+            light_playback::VirtualPlaybackAddress::new(1, 1_001).unwrap()
+        )
     );
+    assert_eq!(peer.projection.playback_number, Some(1_001));
+    assert!(peer.projection.cue_list_runtime().unwrap().enabled);
+    assert!(peer.transition.is_none());
     assert_eq!(events[0].correlation_id, events[1].correlation_id);
     let _ = std::fs::remove_dir_all(data_dir);
 }

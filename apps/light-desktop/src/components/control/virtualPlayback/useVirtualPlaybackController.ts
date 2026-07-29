@@ -132,6 +132,72 @@ interface InteractionOptions {
 	zones: ReturnType<typeof useVirtualPlaybackSurfaceZones>;
 }
 
+function openVirtualPlaybackConfiguration(
+	options: InteractionOptions,
+	playback: PlaybackDefinition | null,
+	slot: number,
+	setConfiguration: (configuration: ConfigurationState) => void,
+) {
+	if (!validPlaybackSlot(slot) || options.pageNumber == null) return;
+	const playbackNumber = virtualPlaybackNumber(options.pageNumber, slot);
+	const next =
+		playback ??
+		({
+			...emptyConfiguration(
+				options.pageNumber,
+				playbackNumber,
+				1,
+				false,
+				options.topology.cueLists[0]?.body.id ?? "",
+			),
+			buttons: ["go", "none", "none"],
+		} satisfies PlaybackDefinition);
+	setConfiguration({
+		playback: normalizePlaybackTopology(
+			{ ...next, button_count: 1, has_fader: false },
+			1,
+			false,
+		),
+		page: options.pageNumber,
+		slot,
+		empty: !playback,
+		expectedPageRevision:
+			options.topology.pages.find(
+				(candidate) => candidate.body.number === options.pageNumber,
+			)?.revision ?? 0,
+		expectedPageObjectId:
+			options.topology.pages.find(
+				(candidate) => candidate.body.number === options.pageNumber,
+			)?.id ?? null,
+		expectedPlaybackRevision:
+			options.topology.playbacks.find(
+				(candidate) => candidate.body.number === playback?.number,
+			)?.revision ?? 0,
+		expectedPlaybackObjectId:
+			options.topology.playbacks.find(
+				(candidate) => candidate.body.number === playback?.number,
+			)?.id ?? null,
+	});
+	options.dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
+	options.dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
+	options.dispatch({ type: "SET_SHIFT_ARMED", value: false });
+}
+
+function selectedZonePlaybackCount(
+	options: InteractionOptions,
+	zoneEdit: ReturnType<typeof useApp>["state"]["virtualPlaybackZoneEdit"],
+	selectedSlots: number[],
+) {
+	if (!zoneEdit || options.pageNumber == null) return selectedSlots.length;
+	const hiddenCount =
+		options.zones.zones
+			.find((candidate) => candidate.id === zoneEdit.zoneId)
+			?.playbackNumbers.filter(
+				(number) => virtualPlaybackPage(number) !== options.pageNumber,
+			).length ?? 0;
+	return selectedSlots.length + hiddenCount;
+}
+
 function useVirtualPlaybackInteractions(options: InteractionOptions) {
 	const [configuration, setConfiguration] = useState<ConfigurationState | null>(
 		null,
@@ -177,51 +243,13 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 	const openConfiguration = (
 		playback: PlaybackDefinition | null,
 		slot: number,
-	) => {
-		if (!validPlaybackSlot(slot) || options.pageNumber == null) return;
-		const playbackNumber = virtualPlaybackNumber(options.pageNumber, slot);
-		const next =
-			playback ??
-			({
-				...emptyConfiguration(
-					options.pageNumber,
-					playbackNumber,
-					1,
-					false,
-					options.topology.cueLists[0]?.body.id ?? "",
-				),
-				buttons: ["go", "none", "none"],
-			} satisfies PlaybackDefinition);
-		setConfiguration({
-			playback: normalizePlaybackTopology(
-				{ ...next, button_count: 1, has_fader: false },
-				1,
-				false,
-			),
-			page: options.pageNumber,
+	) =>
+		openVirtualPlaybackConfiguration(
+			options,
+			playback,
 			slot,
-			empty: !playback,
-			expectedPageRevision:
-				options.topology.pages.find(
-					(candidate) => candidate.body.number === options.pageNumber,
-				)?.revision ?? 0,
-			expectedPageObjectId:
-				options.topology.pages.find(
-					(candidate) => candidate.body.number === options.pageNumber,
-				)?.id ?? null,
-			expectedPlaybackRevision:
-				options.topology.playbacks.find(
-					(candidate) => candidate.body.number === playback?.number,
-				)?.revision ?? 0,
-			expectedPlaybackObjectId:
-				options.topology.playbacks.find(
-					(candidate) => candidate.body.number === playback?.number,
-				)?.id ?? null,
-		});
-		options.dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
-		options.dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
-		options.dispatch({ type: "SET_SHIFT_ARMED", value: false });
-	};
+			setConfiguration,
+		);
 
 	const toggleZoneSlot = (slot: number) => {
 		if (!options.zones.ready || !validPlaybackSlot(slot)) return;
@@ -293,15 +321,7 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 		if (!(await options.zones.persist(next))) return;
 		cancelZoneSelection();
 	};
-	const selectedPlaybackCount =
-		selectedSlots.length +
-		(zoneEdit && options.pageNumber != null
-			? (options.zones.zones
-					.find((candidate) => candidate.id === zoneEdit.zoneId)
-					?.playbackNumbers.filter(
-						(number) => virtualPlaybackPage(number) !== options.pageNumber,
-					).length ?? 0)
-			: 0);
+	const selectedPlaybackCount = selectedZonePlaybackCount(options, zoneEdit, selectedSlots);
 
 	return {
 		configuration:

@@ -1,60 +1,63 @@
 import * as THREE from "three";
 import type { Vector3Value } from "../../api/types";
+import type { StageProceduralResourceCache } from "./resources";
 
-function fixtureMaterial(selected: boolean) {
-	return new THREE.MeshStandardMaterial({
-		color: selected ? 0x136f80 : 0x252c33,
-		roughness: 0.55,
-		metalness: 0.35,
-	});
+function fixtureMaterial(resources?: StageProceduralResourceCache) {
+	const create = () =>
+		new THREE.MeshStandardMaterial({
+			color: 0x252c33,
+			roughness: 0.55,
+			metalness: 0.35,
+		});
+	return resources?.material("fixture-marker-material", create) ?? create();
 }
 
-function addPlaceholderOutline(
-	group: THREE.Group,
-	mesh: THREE.Mesh,
-	visible: boolean,
+export function fixtureBody(
+	selected: boolean,
+	resources?: StageProceduralResourceCache,
 ) {
-	const outline = new THREE.LineSegments(
-		new THREE.EdgesGeometry(mesh.geometry),
-		new THREE.LineBasicMaterial({ color: 0x378eff }),
-	);
-	outline.position.copy(mesh.position);
-	outline.rotation.copy(mesh.rotation);
-	outline.userData.stageSelectionScale = 1.035;
-	outline.scale.setScalar(visible ? 1.035 : 1);
-	outline.name = "selection-outline";
-	outline.visible = visible;
-	group.add(outline);
-}
-
-export function fixtureBody(selected: boolean) {
 	const group = new THREE.Group();
 	group.name = "fixture-placeholder";
-	const material = fixtureMaterial(selected);
+	const material = fixtureMaterial(resources);
+	const geometry = <T extends THREE.BufferGeometry>(
+		key: string,
+		create: () => T,
+	) => resources?.geometry(key, create) ?? create();
 	const base = new THREE.Mesh(
-		new THREE.CylinderGeometry(0.22, 0.27, 0.18, 16),
+		geometry(
+			"fixture-placeholder-base",
+			() => new THREE.CylinderGeometry(0.22, 0.27, 0.18, 16),
+		),
 		material,
 	);
 	const yoke = new THREE.Mesh(
-		new THREE.BoxGeometry(0.46, 0.42, 0.12),
+		geometry(
+			"fixture-placeholder-yoke",
+			() => new THREE.BoxGeometry(0.46, 0.42, 0.12),
+		),
 		material,
 	);
 	yoke.position.y = -0.25;
 	const head = new THREE.Mesh(
-		new THREE.CylinderGeometry(0.2, 0.24, 0.42, 16),
+		geometry(
+			"fixture-placeholder-head",
+			() => new THREE.CylinderGeometry(0.2, 0.24, 0.42, 16),
+		),
 		material,
 	);
 	head.rotation.z = Math.PI / 2;
 	head.position.y = -0.52;
 	group.add(base, yoke, head);
-	for (const mesh of [base, yoke, head])
-		addPlaceholderOutline(group, mesh, selected);
+	addSelectionOutline(group, selected);
 	return group;
 }
 
 export function addSelectionOutline(object: THREE.Object3D, visible = true) {
+	if (!visible) return;
 	object.traverse((child) => {
 		if (!(child instanceof THREE.Mesh)) return;
+		if (child.children.some((nested) => nested.name === "selection-outline"))
+			return;
 		// Imported and procedural marker meshes may have no vertices.
 		if (!child.geometry.getAttribute("position")?.count) return;
 		const outline = new THREE.LineSegments(
@@ -62,9 +65,8 @@ export function addSelectionOutline(object: THREE.Object3D, visible = true) {
 			new THREE.LineBasicMaterial({ color: 0x378eff }),
 		);
 		outline.name = "selection-outline";
-		outline.visible = visible;
 		outline.userData.stageSelectionScale = 1.025;
-		outline.scale.setScalar(visible ? 1.025 : 1);
+		outline.scale.setScalar(1.025);
 		child.add(outline);
 	});
 }
@@ -74,23 +76,31 @@ export function setSelectionOutlineVisibility(
 	visible: boolean,
 ) {
 	object.userData.stageSelected = visible;
+	if (visible) {
+		addSelectionOutline(object);
+		return;
+	}
+	const outlines: THREE.Object3D[] = [];
 	object.traverse((child) => {
-		if (child.name !== "selection-outline") return;
-		child.visible = visible;
-		child.scale.setScalar(
-			visible ? Number(child.userData.stageSelectionScale) || 1.025 : 1,
-		);
+		if (child.name === "selection-outline") outlines.push(child);
 	});
+	for (const outline of outlines) {
+		outline.removeFromParent();
+		if (outline instanceof THREE.LineSegments) {
+			outline.geometry.dispose();
+			for (const material of Array.isArray(outline.material)
+				? outline.material
+				: [outline.material])
+				material.dispose();
+		}
+	}
 }
 
 export function millimetres(value: Vector3Value) {
 	return new THREE.Vector3(value.x / 1_000, value.y / 1_000, value.z / 1_000);
 }
 
-export function emitterSurfaceMaterial(
-	color: THREE.Color,
-	intensity: number,
-) {
+export function emitterSurfaceMaterial(color: THREE.Color, intensity: number) {
 	if (intensity <= 0.001) {
 		return new THREE.MeshStandardMaterial({
 			color: 0x56616a,

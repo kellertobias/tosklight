@@ -6,8 +6,8 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RunningCueListSource } from "./systemControls/runningPlaybackAuthority";
 import { SystemControlsModal } from "./SystemControlsModal";
+import type { RunningCueListSource } from "./systemControls/runningPlaybackAuthority";
 
 const dispatch = vi.fn();
 const clearProgrammer = vi.fn().mockResolvedValue(undefined);
@@ -257,6 +257,18 @@ describe("SystemControlsModal", () => {
 	it("shows each scoped running source without reading broad Playback state", () => {
 		render(<SystemControlsModal />);
 
+		const titleBar = screen
+			.getByRole("heading", {
+				name: "Running & Output",
+			})
+			.closest(".ui-modal-titlebar");
+		expect(titleBar).toHaveTextContent("4 active items");
+		expect(titleBar).toContainElement(
+			screen.getByRole("button", { name: "Stop everything" }),
+		);
+		expect(
+			screen.queryByText("Shift + Clear / Shift + Delete"),
+		).not.toBeInTheDocument();
 		expect(screen.getByText("Main playback")).toBeInTheDocument();
 		expect(screen.getByText("Virtual Cuelist")).toBeInTheDocument();
 		expect(screen.getByText("Operator · Current user")).toBeInTheDocument();

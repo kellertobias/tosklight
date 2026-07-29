@@ -143,7 +143,11 @@ export function useCueThumbnails(cues: Cue[], active: boolean) {
 						state,
 						cueChanges(cues[index], groups),
 					);
-					next[index] = renderStageThumbnail(stageFixtures, state);
+					next[index] = renderStageThumbnail(
+						stageFixtures,
+						state,
+						"lines_and_beams",
+					);
 				}
 				if (!cancelled)
 					setResult({

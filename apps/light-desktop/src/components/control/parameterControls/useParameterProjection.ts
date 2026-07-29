@@ -28,6 +28,7 @@ function useVisualization(
 	return useVisualizationRuntimeSnapshot({
 		enabled: active && selectedFixtureIds.length > 0,
 		intervalMillis: 400,
+		consumerId: "parameter-controls",
 	});
 }
 

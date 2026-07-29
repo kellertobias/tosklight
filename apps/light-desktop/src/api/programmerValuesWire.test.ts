@@ -48,6 +48,7 @@ function changedOutcome() {
 }
 
 function valuesEvent() {
+	const changed = projection();
 	return {
 		type: "event",
 		event: {
@@ -62,10 +63,15 @@ function valuesEvent() {
 			related_objects: [],
 			source: { kind: "action", source: "http" },
 			correlation_id: CORRELATION_ID,
-			delivery: "replaceable",
+			delivery: "lossless",
 			payload: {
 				type: "programming_values_changed",
-				change: { projection: projection() },
+				change: {
+					...changed,
+					removed_fixture_values: [],
+					removed_group_values: [],
+					removed_dynamic_values: [],
+				},
 			},
 		},
 	};
@@ -377,12 +383,12 @@ describe("Programmer values mutation wire boundary", () => {
 });
 
 describe("Programmer values event wire boundary", () => {
-	it("decodes only the exact replaceable user projection", () => {
+	it("decodes only the exact lossless user delta", () => {
 		expect(decodeProgrammerValuesEventMessage(valuesEvent(), USER_ID)).toEqual({
 			type: "event",
 			sequence: 19,
 			correlationId: CORRELATION_ID,
-			projection: expect.objectContaining({ userId: USER_ID, revision: 7 }),
+			change: expect.objectContaining({ userId: USER_ID, revision: 7 }),
 		});
 	});
 
@@ -396,7 +402,7 @@ describe("Programmer values event wire boundary", () => {
 		[
 			"foreign projection",
 			(event: ReturnType<typeof valuesEvent>) => {
-				event.event.payload.change.projection.user_id = OTHER_USER_ID;
+				event.event.payload.change.user_id = OTHER_USER_ID;
 			},
 		],
 		[
@@ -406,9 +412,9 @@ describe("Programmer values event wire boundary", () => {
 			},
 		],
 		[
-			"lossless delivery",
+			"replaceable delivery",
 			(event: ReturnType<typeof valuesEvent>) => {
-				event.event.delivery = "lossless";
+				event.event.delivery = "replaceable";
 			},
 		],
 	])("rejects a %s", (_label, mutate) => {

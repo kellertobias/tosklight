@@ -179,6 +179,7 @@ fn playback_page_update_forces_storage_number_and_preserves_extensions() {
         "number": 2,
         "name": "Page 2",
         "slots": {"1": 4},
+        "virtual_playbacks": {},
         "future_layout": {"columns": 10}
     });
     let mut request = canonical_playback_page(&existing);
@@ -201,7 +202,7 @@ fn numbered_objects_reject_non_numeric_storage_identity() {
         ),
         (
             ActiveShowObjectKind::PlaybackPage,
-            json!({"number": 1, "name": "Main", "slots": {}}),
+            json!({"number": 1, "name": "Main", "slots": {}, "virtual_playbacks": {}}),
         ),
     ] {
         let mutation = mutation(kind, "not-a-number", body.clone());
@@ -261,7 +262,13 @@ fn every_active_show_family_decodes_to_its_discriminant_and_retains_extensions()
         ),
         (
             ActiveShowObjectKind::PlaybackPage,
-            json!({"number":1,"name":"Main","slots":{},"future_extension":{"kept":true}}),
+            json!({
+                "number":1,
+                "name":"Main",
+                "slots":{},
+                "virtual_playbacks":{},
+                "future_extension":{"kept":true}
+            }),
         ),
         (
             ActiveShowObjectKind::Preset,

@@ -46,7 +46,10 @@ export function reduceVirtualPane(
 										? {
 												...pane,
 												virtualPlaybackExclusionZones: action.zones.map(
-													(zone) => ({ ...zone, slots: [...zone.slots] }),
+													(zone) => ({
+														...zone,
+														playbackNumbers: [...zone.playbackNumbers],
+													}),
 												),
 											}
 										: pane,

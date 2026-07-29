@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiDriver } from "../core/api";
 import {
 	CueDeletionActionError,
-	deleteCue,
 	type DeleteCueIntent,
+	deleteCue,
 } from "./cueDeletion";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
@@ -43,7 +43,9 @@ describe("Cue deletion acceptance intent", () => {
 		assertNarrowCalls(fetchMock, false);
 		const [, init] = actionCalls(fetchMock)[0];
 		expect((init?.headers as Headers).get("if-match")).toBe('"7"');
-		expect((init?.headers as Headers).get("authorization")).toBe("Bearer token");
+		expect((init?.headers as Headers).get("authorization")).toBe(
+			"Bearer token",
+		);
 		expect(JSON.parse(String(init?.body))).toEqual({
 			request_id: REQUEST_ID,
 			address: { type: "pool", playback_number: 1 },
@@ -61,12 +63,20 @@ describe("Cue deletion acceptance intent", () => {
 	it.each([
 		[
 			"current Page",
-			{ surface: "api", address: { type: "current_page", slot: 3 }, cueNumber: 2 },
+			{
+				surface: "api",
+				address: { type: "current_page", slot: 3 },
+				cueNumber: 2,
+			},
 			{ type: "current_page", expected_page: 1, slot: 3 },
 		],
 		[
 			"explicit Page",
-			{ surface: "api", address: { type: "page_slot", page: 1, slot: 3 }, cueNumber: 2 },
+			{
+				surface: "api",
+				address: { type: "page_slot", page: 1, slot: 3 },
+				cueNumber: 2,
+			},
 			{ type: "page_slot", page: 1, slot: 3 },
 		],
 	] as const)("resolves %s slot mapping without bootstrap", async (_, intent, address) => {
@@ -133,9 +143,19 @@ describe("Cue deletion acceptance intent", () => {
 
 	it("rejects foreign, mixed-revision, and ambiguous authority before mutation", async () => {
 		for (const options of [
-			{ active: playbackRuntime(SHOW_ID, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa") },
+			{
+				active: playbackRuntime(
+					SHOW_ID,
+					"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+				),
+			},
 			{ playbackShowRevision: 8 },
-			{ playbackObjects: [playbackObject(), playbackObject("duplicate-playback")] },
+			{
+				playbackObjects: [
+					playbackObject(),
+					playbackObject("duplicate-playback"),
+				],
+			},
 			{ cueListObjects: [cueListObject(), cueListObject("duplicate-cuelist")] },
 		] satisfies FetchOptions[]) {
 			const fetchMock = cueDeletionFetch(options);
@@ -152,7 +172,10 @@ describe("Cue deletion acceptance intent", () => {
 			{ ...changedOutcome(), correlation_id: "not-a-uuid" },
 			{ ...changedOutcome(), show_id: crypto.randomUUID() },
 			{ ...changedOutcome(), show_revision: 9 },
-			{ ...changedOutcome(), cue_list: { ...projection(), cue_list_id: crypto.randomUUID() } },
+			{
+				...changedOutcome(),
+				cue_list: { ...projection(), cue_list_id: crypto.randomUUID() },
+			},
 			{ ...changedOutcome(), deleted_cue: { id: CUE_ONE_ID, number: 2 } },
 			without(changedOutcome(), "show_event_sequence"),
 			{ ...changedOutcome(), persistence_warning: { message: "bad" } },
@@ -213,7 +236,11 @@ function session() {
 }
 
 function replacementSession() {
-	return { ...session(), session_id: "replacement", token: "replacement-token" };
+	return {
+		...session(),
+		session_id: "replacement",
+		token: "replacement-token",
+	};
 }
 
 function poolIntent(): DeleteCueIntent {
@@ -269,9 +296,13 @@ function cueDeletionFetch(options: FetchOptions = {}) {
 			});
 		if (url.endsWith("/cues/delete")) {
 			options.onAction?.();
-			return json(options.outcome ?? changedOutcome(), options.actionStatus ?? 200, {
-				etag: options.actionEtag ?? '"8"',
-			});
+			return json(
+				options.outcome ?? changedOutcome(),
+				options.actionStatus ?? 200,
+				{
+					etag: options.actionEtag ?? '"8"',
+				},
+			);
 		}
 		throw new Error(`Unexpected request ${url}`);
 	});
@@ -292,12 +323,12 @@ function assertNarrowCalls(
 		"http://desk.local/api/v2/playback-runtime/snapshot",
 		"http://desk.local/api/v2/objects/playback",
 		"http://desk.local/api/v2/objects/cue_list",
-		...(withPage
-			? ["http://desk.local/api/v2/objects/playback_page"]
-			: []),
+		...(withPage ? ["http://desk.local/api/v2/objects/playback_page"] : []),
 		"http://desk.local/api/v2/cues/delete",
 	]);
-	expect(urls.some((url) => /bootstrap|\/playbacks|programmers/.test(url))).toBe(false);
+	expect(
+		urls.some((url) => /bootstrap|\/playbacks|programmers/.test(url)),
+	).toBe(false);
 	expect(actionCalls(fetchMock)).toHaveLength(1);
 }
 
@@ -344,7 +375,12 @@ function pageObject() {
 		id: "stored-page",
 		revision: 2,
 		updated_at: "2026-07-21T10:00:00Z",
-		body: { number: 1, name: "Main", slots: { 3: 1 } },
+		body: {
+			number: 1,
+			name: "Main",
+			slots: { 3: 1 },
+			virtual_playbacks: {},
+		},
 	};
 }
 
@@ -420,10 +456,6 @@ function without(value: Record<string, unknown>, key: string) {
 	return copy;
 }
 
-function json(
-	value: unknown,
-	status = 200,
-	headers?: Record<string, string>,
-) {
+function json(value: unknown, status = 200, headers?: Record<string, string>) {
 	return new Response(JSON.stringify(value), { status, headers });
 }

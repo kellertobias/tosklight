@@ -28,7 +28,10 @@ function installHighlight(
 	if (!state.highlightErrorSticky.current) state.setHighlightError(null);
 }
 
-function refreshConfiguration(event: RuntimeCapabilityEvent, state: ServerState) {
+function refreshConfiguration(
+	event: RuntimeCapabilityEvent,
+	state: ServerState,
+) {
 	if (event.type !== "server_configuration_changed") return;
 	void state.api.desk
 		.configuration()
@@ -116,7 +119,10 @@ function refreshBootstrap(
 		.catch(() => undefined);
 }
 
-function refreshFixtureLibrary(event: RuntimeCapabilityEvent, state: ServerState) {
+function refreshFixtureLibrary(
+	event: RuntimeCapabilityEvent,
+	state: ServerState,
+) {
 	if (event.type !== "fixture_library_changed") return;
 	void state.api.fixtures
 		.fixtureLibrary()
@@ -168,13 +174,10 @@ function refreshSelection(
 	state: ServerState,
 ) {
 	if (!isShowLibraryEvent(event, ["show_opened"])) return;
-	void state.api.desk
-		.programmers()
-		.then((programmers) => {
-			const own = programmers.find(
-				(item) => item.session_id === session.session_id,
-			);
-			if (own) state.setSelectedFixtures(own.selected);
+	void state.api.programming
+		.programmingInteractionSnapshot(session.desk.id)
+		.then((snapshot) => {
+			state.setSelectedFixtures([...snapshot.projection.selection.selected]);
 		})
 		.catch(() => undefined);
 }

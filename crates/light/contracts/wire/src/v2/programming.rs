@@ -1,7 +1,8 @@
 //! User-scoped, recordable Programmer value projections and repair snapshots.
 
 use super::dynamics::{
-    DynamicInstanceOverridesProjection, DynamicReferenceProjection, DynamicValueTimingProjection,
+    DynamicDefinitionProjection, DynamicInstanceOverridesProjection, DynamicReferenceProjection,
+    DynamicValueTimingProjection,
 };
 use super::events::EventSnapshotCursor;
 use schemars::JsonSchema;
@@ -103,6 +104,9 @@ pub struct ProgrammingValuesProjection {
     pub revision: u64,
     pub fixture_values: Vec<ProgrammingFixtureValue>,
     pub group_values: Vec<ProgrammingGroupValue>,
+    /// Embedded Dynamic fallbacks deduplicated across every Dynamic-controlled address.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dynamic_definitions: Vec<DynamicDefinitionProjection>,
     pub dynamic_values: Vec<ProgrammingDynamicValue>,
 }
 
@@ -133,7 +137,29 @@ pub struct ProgrammingCaptureModeSnapshot {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingValuesChange {
-    pub projection: ProgrammingValuesProjection,
+    pub user_id: Uuid,
+    #[ts(type = "number")]
+    pub revision: u64,
+    pub fixture_values: Vec<ProgrammingFixtureValue>,
+    pub removed_fixture_values: Vec<ProgrammingFixtureValueAddress>,
+    pub group_values: Vec<ProgrammingGroupValue>,
+    pub removed_group_values: Vec<ProgrammingGroupValueAddress>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dynamic_definitions: Vec<DynamicDefinitionProjection>,
+    pub dynamic_values: Vec<ProgrammingDynamicValue>,
+    pub removed_dynamic_values: Vec<ProgrammingFixtureValueAddress>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ProgrammingFixtureValueAddress {
+    pub fixture_id: Uuid,
+    pub attribute: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ProgrammingGroupValueAddress {
+    pub group_id: String,
+    pub attribute: String,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

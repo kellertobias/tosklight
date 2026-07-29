@@ -270,6 +270,11 @@ test("tests do not create production ownership debt", () => {
 			source:
 				"fn harness(state: &AppState) { state.desk.lock(); tokio::spawn(async {}); }",
 		},
+		{
+			path: "crates/light/adapters/headless/src/runtime/worker.rs",
+			source:
+				"fn production() {} #[cfg(test)] mod tests { fn harness() { let cancel = CancellationToken::new(); tokio::spawn(async {}); } }",
+		},
 	];
 	assert.deepEqual(
 		capabilityStateBoundaryFailures(entries, { debt: emptyDebt() }),
@@ -292,6 +297,11 @@ test("bounded request and benchmark-local task owners are not application lifecy
 			path: "apps/light-headless/src/bin/light_benchmark/loopback.rs",
 			source:
 				"struct LocalReceiver { receiver: Option<JoinHandle<()>> } impl Drop for LocalReceiver { fn drop(&mut self) { self.receiver.take().unwrap().join().unwrap(); } }",
+		},
+		{
+			path: "crates/light/adapters/headless/src/runtime/visualization_transport.rs",
+			source:
+				"async fn socket() { let writer = tokio::spawn(async {}); writer.await.unwrap(); }",
 		},
 	];
 	assert.deepEqual(

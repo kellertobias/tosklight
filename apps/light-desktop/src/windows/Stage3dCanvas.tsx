@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import type { VisualizationSnapshot } from "../api/types";
-import { useVisualizationRuntimeSnapshotSubscription } from "../features/visualizationRuntime/VisualizationRuntimeView";
 import type { VisualizationRuntimeLane } from "../features/visualizationRuntime/contracts";
+import { useVisualizationRuntimeSnapshotSubscription } from "../features/visualizationRuntime/VisualizationRuntimeView";
 import { useApp } from "../state/AppContext";
 import type { StageRenderQuality } from "../types";
 import {
@@ -30,6 +30,7 @@ interface Props {
 	camera3d?: StageCamera;
 	visualizationLane?: VisualizationRuntimeLane;
 	visualizationActive?: boolean;
+	paneId?: string;
 	onSelect: (fixtureId: string, additive: boolean) => void;
 }
 
@@ -46,10 +47,19 @@ export function Stage3dCanvas({
 	camera3d,
 	visualizationLane = "normal",
 	visualizationActive = false,
+	paneId,
 	onSelect,
 }: Props) {
 	const { state, dispatch } = useApp();
 	const hostRef = useRef<HTMLDivElement>(null);
+	const diagnosticsRef = useRef({
+		lane: visualizationLane,
+		paneId: paneId ?? null,
+	});
+	diagnosticsRef.current = {
+		lane: visualizationLane,
+		paneId: paneId ?? null,
+	};
 	const defaultCamera =
 		state.stageZoom === 1 && state.stageOrbitX === 0 && state.stageOrbitY === 0
 			? DEFAULT_STAGE_CAMERA_3D
@@ -76,6 +86,7 @@ export function Stage3dCanvas({
 		hostRef,
 		controller,
 		dispatch,
+		diagnosticsRef,
 	});
 	useStageCamera({
 		camera: cameraRef,

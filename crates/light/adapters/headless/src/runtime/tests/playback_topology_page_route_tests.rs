@@ -22,7 +22,7 @@ async fn create_page_returns_one_authority_and_is_replayable_and_idempotent() {
     assert_eq!(changed["objects"][0]["object_id"], "4");
     assert_eq!(
         changed["objects"][0]["body"],
-        serde_json::json!({"number":4,"name":"Page 4","slots":{}})
+        serde_json::json!({"number":4,"name":"Page 4","slots":{},"virtual_playbacks":{}})
     );
     assert_one_topology_event(&scenario.state, cursor, 1);
 
@@ -73,7 +73,7 @@ async fn rename_page_is_lossless_no_change_replayable_and_revision_checked() {
         "playback_page",
         "legacy-page-three",
         &serde_json::json!({
-            "number":3,"name":"Before","slots":{"2":8},
+            "number":3,"name":"Before","slots":{"2":8},"virtual_playbacks":{},
             "future_layout":{"columns":8}
         }),
     );
@@ -303,7 +303,7 @@ async fn page_route_rejects_unauthenticated_unsafe_and_canonical_collision_reque
     scenario.seed(
         "playback_page",
         "6",
-        &serde_json::json!({"number":9,"name":"Occupied","slots":{}}),
+        &serde_json::json!({"number":9,"name":"Occupied","slots":{},"virtual_playbacks":{}}),
     );
     let revision = scenario.show_revision();
     let cursor = scenario.state.events.latest_sequence();

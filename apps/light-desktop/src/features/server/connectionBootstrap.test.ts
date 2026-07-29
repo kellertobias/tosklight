@@ -36,6 +36,25 @@ function createHarness() {
 		deskLock: vi.fn().mockResolvedValue({ locked: false }),
 		patch: vi.fn().mockResolvedValue({ revision: 1, fixtures: [], routes: [] }),
 		programmers: vi.fn().mockResolvedValue([]),
+		programmingInteractionSnapshot: vi.fn().mockResolvedValue({
+			cursor: 1,
+			projection: {
+				deskId: "desk-1",
+				commandLine: {
+					text: "FIXTURE",
+					target: "FIXTURE",
+					pristine: true,
+					revision: 1,
+					pendingChoice: null,
+				},
+				selection: {
+					selected: [],
+					expression: null,
+					revision: 1,
+					gestureOpen: false,
+				},
+			},
+		}),
 		shows: vi.fn().mockResolvedValue([]),
 		configuration: vi.fn().mockResolvedValue({ configuration: {}, matter: {} }),
 		mediaServers: vi.fn().mockResolvedValue({ fixtures: [] }),
@@ -65,6 +84,9 @@ function createHarness() {
 				configuration: client.configuration,
 				deskLock: client.deskLock,
 				programmers: client.programmers,
+			},
+			programming: {
+				programmingInteractionSnapshot: client.programmingInteractionSnapshot,
 			},
 			fixtures: {
 				fixtureLibrary: client.fixtureLibrary,
@@ -124,7 +146,10 @@ describe("connection bootstrap resources", () => {
 
 		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
 		expect(harness.clientMethods.patch).not.toHaveBeenCalled();
-		expect(harness.clientMethods.programmers).toHaveBeenCalledOnce();
+		expect(harness.clientMethods.programmers).not.toHaveBeenCalled();
+		expect(
+			harness.clientMethods.programmingInteractionSnapshot,
+		).toHaveBeenCalledWith("desk-1");
 		expect(harness.clientMethods.commandHistory).toHaveBeenCalledOnce();
 		expect(harness.clientMethods.fixtureLibrary).toHaveBeenCalledOnce();
 		expect(harness.clientMethods.screens).not.toHaveBeenCalled();

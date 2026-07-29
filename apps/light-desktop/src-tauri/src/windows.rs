@@ -1,5 +1,6 @@
 use serde::Serialize;
 use tauri::Manager;
+use tauri::utils::config::BackgroundThrottlingPolicy;
 
 #[derive(Serialize)]
 pub(crate) struct ConsoleDisplay {
@@ -85,6 +86,7 @@ pub(crate) fn open_stage_view_window(app: tauri::AppHandle) -> Result<(), String
     .title("Stage View")
     .inner_size(1000.0, 720.0)
     .resizable(true)
+    .background_throttling(BackgroundThrottlingPolicy::Disabled)
     .build()
     .map_err(|error| error.to_string())?;
     Ok(())
@@ -123,6 +125,7 @@ pub(crate) fn open_console_screen(
     .title(title)
     .inner_size(1200.0, 800.0)
     .resizable(true)
+    .background_throttling(BackgroundThrottlingPolicy::Disabled)
     .decorations(false);
     if let Some(value) = bounds {
         if let Some(bounds) = window_bounds(&value) {

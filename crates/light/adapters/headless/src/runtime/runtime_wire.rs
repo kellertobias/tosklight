@@ -65,6 +65,9 @@ pub(super) fn output_health(health: OutputHealth) -> wire::RuntimeOutputHealth {
         frame_hz: health.frame_hz,
         last_tick_micros: health.last_tick_micros,
         maximum_tick_micros: health.maximum_tick_micros,
+        tick_duration_bucket_bounds_micros: light_output::OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS
+            .to_vec(),
+        tick_duration_bucket_counts: health.tick_duration_bucket_counts.to_vec(),
         scheduler_utilization: health.scheduler_utilization,
     }
 }

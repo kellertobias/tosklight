@@ -48,19 +48,25 @@ pub(super) async fn advance_test_clock(
     let clock = state.output.acquire_test_clock().await?;
     let now = clock.advance_millis(input.millis);
     refresh_speed_group_engine(&state);
-    let rendered = {
+    let (rendered, visualization_scope) = {
         let _activation = state.active_show.acquire().await;
+        let visualization_scope = light_wire::v2::visualization::VisualizationScope {
+            show_id: state.active_show.current().map(|show| show.id.0),
+        };
         let playback = state.playback.render_capability();
-        state
+        let rendered = state
             .output
             .render_with_playback_events(
                 &state.active_show.output_projection(),
                 &playback,
                 state.output.render_options(),
             )
-            .map_err(|error| ApiError::internal(error.to_string()))?
+            .map_err(|error| ApiError::internal(error.to_string()))?;
+        (rendered, visualization_scope)
     };
-    let frames = state.output.render_frames_and_publish(&rendered);
+    let frames = state
+        .output
+        .render_frames_and_publish(&rendered, visualization_scope);
     let snapshot = state.output.snapshot();
     let packets = state
         .output
@@ -99,22 +105,24 @@ pub(super) async fn free_run_test_clock(
     let cancellation = tokio_util::sync::CancellationToken::new();
     let cancellation_after_tick = cancellation.clone();
     let mut advanced = 0_u64;
-    state
-        .output
-        .run_output_scheduler(cancellation, || {
+    let output = state.output.clone();
+    let scheduler_state = state.clone();
+    let scheduler_clock = clock.clone();
+    output
+        .run_output_scheduler(cancellation, move || {
             let elapsed = u64::try_from(started.elapsed().as_millis())
                 .unwrap_or(u64::MAX)
                 .min(input.millis);
             let delta = elapsed.saturating_sub(advanced);
             advanced = elapsed;
             if delta > 0 {
-                clock.advance_millis(i64::try_from(delta).unwrap_or(i64::MAX));
+                scheduler_clock.advance_millis(i64::try_from(delta).unwrap_or(i64::MAX));
             }
-            refresh_speed_group_engine(&state);
+            refresh_speed_group_engine(&scheduler_state);
             if elapsed == input.millis {
                 cancellation_after_tick.cancel();
             }
-            let tick_state = state.clone();
+            let tick_state = scheduler_state.clone();
             async move {
                 let result = output_scheduler::render_test_tick(tick_state.clone()).await;
                 send_osc_feedback(&tick_state, true);

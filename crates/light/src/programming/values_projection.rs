@@ -1,5 +1,6 @@
 use super::{ProgrammingPorts, ProgrammingService};
 use crate::{ActionContext, ActionError, ActionErrorKind};
+use light_core::{AttributeKey, FixtureId};
 use light_core::{SessionId, UserId};
 use light_dynamics::DynamicAddressValue;
 use light_programmer::{
@@ -28,11 +29,34 @@ pub struct ProgrammingValuesProjection {
     pub dynamic_values: Vec<DynamicAddressValue>,
 }
 
-/// One semantic normal-value transition. Events carry the full retained projection so a
-/// replaceable delivery can supersede an older queued value update safely.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProgrammingFixtureValueAddress {
+    pub fixture_id: FixtureId,
+    pub attribute: AttributeKey,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProgrammingGroupValueAddress {
+    pub group_id: String,
+    pub attribute: AttributeKey,
+}
+
+/// One ordered normal-value transition. The retained projection remains available to command
+/// outcomes, while event transport publishes only these address-level changes.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ProgrammingValuesDelta {
+    pub fixture_values: Vec<ProgrammerFixtureUpdate>,
+    pub removed_fixture_values: Vec<ProgrammingFixtureValueAddress>,
+    pub group_values: Vec<ProgrammerGroupUpdate>,
+    pub removed_group_values: Vec<ProgrammingGroupValueAddress>,
+    pub dynamic_values: Vec<DynamicAddressValue>,
+    pub removed_dynamic_values: Vec<ProgrammingFixtureValueAddress>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProgrammingValuesChange {
     pub projection: Arc<ProgrammingValuesProjection>,
+    pub delta: ProgrammingValuesDelta,
 }
 
 /// Authoritative gap-repair snapshot for one authenticated user's normal Programmer values.
@@ -57,6 +81,14 @@ impl ProgrammingValuesContent {
     ) -> Result<Self, ActionError> {
         #[cfg(test)]
         PROJECTION_READS.set(PROJECTION_READS.get() + 1);
+        Self::read_for_diff(programmers, session, user_id)
+    }
+
+    pub(super) fn read_for_diff(
+        programmers: &ProgrammerRegistry,
+        session: SessionId,
+        user_id: UserId,
+    ) -> Result<Self, ActionError> {
         let state = programmers
             .get(session)
             .ok_or_else(programmer_values_unavailable)?;
@@ -87,6 +119,110 @@ impl ProgrammingValuesContent {
             group_values: self.group_values,
             dynamic_values: self.dynamic_values,
         }
+    }
+
+    pub(super) fn change(
+        self,
+        before: &Self,
+        user_id: UserId,
+        revision: u64,
+    ) -> ProgrammingValuesChange {
+        #[cfg(test)]
+        PROJECTION_READS.set(PROJECTION_READS.get() + 1);
+        use std::collections::HashMap;
+
+        let before_fixture = before
+            .fixture_values
+            .iter()
+            .map(|value| ((value.fixture_id, value.attribute.clone()), value))
+            .collect::<HashMap<_, _>>();
+        let after_fixture = self
+            .fixture_values
+            .iter()
+            .map(|value| ((value.fixture_id, value.attribute.clone()), value))
+            .collect::<HashMap<_, _>>();
+        let before_group = before
+            .group_values
+            .iter()
+            .map(|value| ((value.group_id.clone(), value.attribute.clone()), value))
+            .collect::<HashMap<_, _>>();
+        let after_group = self
+            .group_values
+            .iter()
+            .map(|value| ((value.group_id.clone(), value.attribute.clone()), value))
+            .collect::<HashMap<_, _>>();
+        let before_dynamic = before
+            .dynamic_values
+            .iter()
+            .map(|value| ((value.fixture_id, value.attribute.clone()), value))
+            .collect::<HashMap<_, _>>();
+        let after_dynamic = self
+            .dynamic_values
+            .iter()
+            .map(|value| ((value.fixture_id, value.attribute.clone()), value))
+            .collect::<HashMap<_, _>>();
+
+        let delta = ProgrammingValuesDelta {
+            fixture_values: self
+                .fixture_values
+                .iter()
+                .filter(|value| {
+                    before_fixture
+                        .get(&(value.fixture_id, value.attribute.clone()))
+                        .copied()
+                        != Some(*value)
+                })
+                .cloned()
+                .collect(),
+            removed_fixture_values: before_fixture
+                .keys()
+                .filter(|key| !after_fixture.contains_key(*key))
+                .map(|(fixture_id, attribute)| ProgrammingFixtureValueAddress {
+                    fixture_id: *fixture_id,
+                    attribute: attribute.clone(),
+                })
+                .collect(),
+            group_values: self
+                .group_values
+                .iter()
+                .filter(|value| {
+                    before_group
+                        .get(&(value.group_id.clone(), value.attribute.clone()))
+                        .copied()
+                        != Some(*value)
+                })
+                .cloned()
+                .collect(),
+            removed_group_values: before_group
+                .keys()
+                .filter(|key| !after_group.contains_key(*key))
+                .map(|(group_id, attribute)| ProgrammingGroupValueAddress {
+                    group_id: group_id.clone(),
+                    attribute: attribute.clone(),
+                })
+                .collect(),
+            dynamic_values: self
+                .dynamic_values
+                .iter()
+                .filter(|value| {
+                    before_dynamic
+                        .get(&(value.fixture_id, value.attribute.clone()))
+                        .copied()
+                        != Some(*value)
+                })
+                .cloned()
+                .collect(),
+            removed_dynamic_values: before_dynamic
+                .keys()
+                .filter(|key| !after_dynamic.contains_key(*key))
+                .map(|(fixture_id, attribute)| ProgrammingFixtureValueAddress {
+                    fixture_id: *fixture_id,
+                    attribute: attribute.clone(),
+                })
+                .collect(),
+        };
+        let projection = Arc::new(self.projection(user_id, revision));
+        ProgrammingValuesChange { projection, delta }
     }
 }
 

@@ -104,12 +104,24 @@ impl CapabilitySupervisors {
             state.clone(),
             runtime_tasks.cancellation(),
         ));
+        runtime_tasks.spawn(
+            state
+                .output
+                .visualization_frame_hub()
+                .run_sampler(runtime_tasks.cancellation()),
+        );
 
         Self {
             root_cancellation,
             output: OutputTaskGroup {
                 cancellation: output_cancellation,
-                task: tokio::spawn(scheduler.into_task()),
+                task: tokio::task::spawn_blocking(move || {
+                    tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .context("failed to create isolated output runtime")?
+                        .block_on(scheduler.into_task())
+                }),
             },
             control_inputs,
             matter,
@@ -164,15 +176,22 @@ async fn persist_dynamic_auto_offs(
     }
 }
 
-fn publish_dynamic_auto_offs(state: &AppState, numbers: &[u16]) {
+fn publish_dynamic_auto_offs(state: &AppState, identities: &[light_playback::PlaybackIdentity]) {
     let context = light_application::ActionContext::system(
         uuid::Uuid::nil(),
         light_application::ActionSource::Scheduler,
     );
-    let identities = numbers
+    let identities = identities
         .iter()
         .copied()
-        .map(light_application::PlaybackRuntimeIdentity::Playback)
+        .map(|identity| match identity {
+            light_playback::PlaybackIdentity::Physical(number) => {
+                light_application::PlaybackRuntimeIdentity::Playback(number.get())
+            }
+            light_playback::PlaybackIdentity::Virtual(address) => {
+                light_application::PlaybackRuntimeIdentity::Virtual(address)
+            }
+        })
         .collect::<Vec<_>>();
     let Ok(projections) = playback_service::read_runtime_projections(state, &context, &identities)
     else {

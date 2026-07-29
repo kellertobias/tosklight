@@ -565,7 +565,7 @@ describe("appReducer legacy pane layout hydration", () => {
 		expect(notes.textEditorMode ?? "plain").toBe("plain");
 	});
 
-	it("accepts a 20 by 20 Virtual Playback grid and bounds larger products", () => {
+	it("accepts a full 20 by 15 Virtual Playback page and bounds larger products", () => {
 		const desks = [
 			{
 				id: "virtual-workspace",
@@ -592,12 +592,12 @@ describe("appReducer legacy pane layout hydration", () => {
 			type: "SET_VIRTUAL_PLAYBACK_GRID",
 			id: "virtual",
 			rows: 20,
-			columns: 20,
+			columns: 15,
 			changed: "columns",
 		});
 		expect(ordinary.desks[0].panes[0]).toMatchObject({
 			virtualPlaybackRows: 20,
-			virtualPlaybackColumns: 20,
+			virtualPlaybackColumns: 15,
 		});
 
 		const bounded = appReducer(ordinary, {
@@ -609,7 +609,7 @@ describe("appReducer legacy pane layout hydration", () => {
 		});
 		expect(bounded.desks[0].panes[0]).toMatchObject({
 			virtualPlaybackRows: 20,
-			virtualPlaybackColumns: 449,
+			virtualPlaybackColumns: 15,
 		});
 	});
 

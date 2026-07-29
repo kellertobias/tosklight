@@ -116,19 +116,29 @@ export const tauriDesktopBridge: DesktopBridge = {
 	exitApplication: () => invoke("exit_desktop_app"),
 	cancelQuit: () => invoke("cancel_quit"),
 	onQuitRequested: (handler) => listen("quit-requested", handler),
-	onApplicationShuttingDown: (handler) =>
-		listen("app-shutting-down", handler),
+	onApplicationShuttingDown: (handler) => listen("app-shutting-down", handler),
 	listDisplays: async () => {
 		const api = await coreApi();
 		return api.invoke<DesktopDisplay[]>("list_console_displays");
 	},
 	openConsoleScreen: (screen) =>
 		invoke("open_console_screen", screenArguments(screen)),
-	hideConsoleScreen: (screenId) =>
-		invoke("hide_console_screen", { screenId }),
+	hideConsoleScreen: (screenId) => invoke("hide_console_screen", { screenId }),
 	closeConsoleScreen: (screenId) =>
 		invoke("close_console_screen", { screenId }),
 	openStageViewWindow: () => invoke("open_stage_view_window"),
+	packagedStageBenchmarkConfig: async () => {
+		const api = await coreApi();
+		return api.invoke("packaged_stage_benchmark_config");
+	},
+	packagedStageBenchmarkPrepared: async () => {
+		const api = await coreApi();
+		return api.invoke("packaged_stage_benchmark_prepared");
+	},
+	appendPackagedStageBenchmarkSample: async (sample) => {
+		const api = await coreApi();
+		await api.invoke("append_packaged_stage_benchmark_sample", { sample });
+	},
 	currentWindowState,
 	currentWindowFullscreen,
 	setCurrentWindowFullscreen,

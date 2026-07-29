@@ -16,7 +16,13 @@ fn map_existing_is_page_only_lossless_replayable_and_semantically_idempotent() {
     rig.seed(
         "playback_page",
         "legacy-page-two",
-        &json!({"number":2,"name":"Wing","slots":{},"future_page":{"columns":8}}),
+        &json!({
+            "number":2,
+            "name":"Wing",
+            "slots":{},
+            "virtual_playbacks":{},
+            "future_page":{"columns":8}
+        }),
     );
     let action = map_existing_action(2, 4, 12, 1, "legacy-page-two");
     let before = rig.show_revision();
@@ -132,7 +138,7 @@ fn map_existing_rejects_an_occupied_default_page_storage_identity() {
     rig.seed(
         "playback_page",
         "3",
-        &json!({"number":9,"name":"Legacy Page","slots":{}}),
+        &json!({"number":9,"name":"Legacy Page","slots":{},"virtual_playbacks":{}}),
     );
     let revision = rig.show_revision();
 

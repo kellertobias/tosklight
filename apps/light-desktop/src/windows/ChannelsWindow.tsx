@@ -185,6 +185,7 @@ function useChannelVisualization(active: boolean) {
 	return useVisualizationRuntimeSnapshot({
 		enabled: active,
 		intervalMillis: 250,
+		consumerId: "channels",
 	});
 }
 

@@ -264,18 +264,13 @@ impl Engine {
             if !playback
                 .dynamic_assignment_at(identity)
                 .is_some_and(|assignment| assignment.auto_off_full_control)
-                || !playback
-                    .active_dynamic_playbacks()
-                    .iter()
-                    .any(|active| {
-                        active
-                            .playback_identity
-                            .or_else(|| {
-                                PlaybackIdentity::physical(active.playback_number).ok()
-                            })
-                            == Some(identity)
-                            && active.enabled
-                    })
+                || !playback.active_dynamic_playbacks().iter().any(|active| {
+                    active
+                        .playback_identity
+                        .or_else(|| PlaybackIdentity::physical(active.playback_number).ok())
+                        == Some(identity)
+                        && active.enabled
+                })
             {
                 continue;
             }
@@ -476,7 +471,9 @@ pub(crate) fn execute_virtual(
         }
         VirtualPlaybackAction::XFade(on) => playback.xfade_at_mutation(identity, on)?.effect,
         VirtualPlaybackAction::SetTempButton(active) => {
-            playback.set_temp_button_at_mutation(identity, active)?.effect
+            playback
+                .set_temp_button_at_mutation(identity, active)?
+                .effect
         }
         VirtualPlaybackAction::ToggleTemp => playback.toggle_temp_at_mutation(identity)?.effect,
         VirtualPlaybackAction::SetFlash(pressed) => {
@@ -517,8 +514,8 @@ pub(crate) fn execute_virtual(
         for peer in virtual_exclusion_peers(exclusion_zones, address) {
             peer_effect = peer_effect.combine(
                 playback
-                .release_at_mutation(PlaybackIdentity::Virtual(peer))?
-                .effect,
+                    .release_at_mutation(PlaybackIdentity::Virtual(peer))?
+                    .effect,
             );
         }
     }

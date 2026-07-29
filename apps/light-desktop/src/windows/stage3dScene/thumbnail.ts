@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { VisualizationSnapshot } from "../../api/types";
+import type { StageRenderQuality } from "../../types";
 import { buildStageScene, disposeScene } from "./stageScene";
 import type { Stage3dFixture } from "./types";
 
@@ -24,10 +25,20 @@ function thumbnailRenderer(width: number, height: number) {
 export function renderStageThumbnail(
 	fixtures: Stage3dFixture[],
 	snapshot: VisualizationSnapshot,
+	renderQuality: StageRenderQuality,
 	width = 240,
 	height = 135,
 ) {
-	const { scene } = buildStageScene(fixtures, snapshot);
+	const { scene } = buildStageScene(
+		fixtures,
+		snapshot,
+		new Set(),
+		1,
+		true,
+		true,
+		new Set(),
+		renderQuality,
+	);
 	const renderer = thumbnailRenderer(width, height);
 	renderer.render(scene, thumbnailCamera(width, height));
 	const result = renderer.domElement.toDataURL("image/webp", 0.8);

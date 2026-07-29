@@ -156,17 +156,21 @@ function StoryGrid({
 					_action: string,
 					input?: { pressed?: boolean },
 				) => {
+					const playback = page.virtual_playbacks[String(number)];
+					const heldAction =
+						playback?.buttons[0] === "flash" ||
+						playback?.buttons[0] === "swap";
 					setEvent(
 						input?.pressed === false
 							? `Released ${number}`
-							: input?.pressed === true
+							: input?.pressed === true && heldAction
 								? `Pressed ${number}`
 								: `Action ${number}`,
 					);
 					return null;
 				},
 			}) as PlaybackRuntimeActions,
-		[],
+		[page],
 	);
 	return (
 		<div

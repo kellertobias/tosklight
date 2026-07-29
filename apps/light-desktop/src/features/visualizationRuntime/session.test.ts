@@ -66,10 +66,9 @@ describe("VisualizationRuntimeSession", () => {
 		harness.session.activate("preload", 250);
 		await flush();
 
-		expect(harness.loadSnapshot.mock.calls.map((call) => call[1]).sort()).toEqual([
-			"normal",
-			"preload",
-		]);
+		expect(
+			harness.loadSnapshot.mock.calls.map((call) => call[1]).sort(),
+		).toEqual(["normal", "preload"]);
 		expect(harness.store.getSnapshot().normal.snapshot?.preload).toBe(false);
 		expect(harness.store.getSnapshot().preload.snapshot?.preload).toBe(true);
 	});
@@ -89,7 +88,11 @@ describe("VisualizationRuntimeSession", () => {
 				return { updateClaims, close };
 			}),
 		};
-		const session = new VisualizationRuntimeSession({ scope, store, transport });
+		const session = new VisualizationRuntimeSession({
+			scope,
+			store,
+			transport,
+		});
 
 		const releaseNormal = session.activate("normal", 100);
 		const releasePreload = session.activate("preload", 100);
@@ -97,10 +100,7 @@ describe("VisualizationRuntimeSession", () => {
 
 		expect(transport.openStream).toHaveBeenCalledOnce();
 		expect(transport.loadSnapshot).not.toHaveBeenCalled();
-		expect(updateClaims).toHaveBeenLastCalledWith(
-			["normal", "preload"],
-			10,
-		);
+		expect(updateClaims).toHaveBeenLastCalledWith(["normal", "preload"], 10);
 		observer?.snapshot("normal", snapshot("normal"));
 		expect(store.getSnapshot().normal.status).toBe("ready");
 
@@ -108,6 +108,29 @@ describe("VisualizationRuntimeSession", () => {
 		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 10);
 		releaseNormal();
 		expect(close).toHaveBeenCalledOnce();
+	});
+
+	it("unsubscribes the normal lane after its last duplicate claim is released", () => {
+		const store = new VisualizationRuntimeStore();
+		store.reset(scope);
+		const updateClaims = vi.fn();
+		const transport: VisualizationRuntimeTransport = {
+			loadSnapshot: vi.fn(),
+			openStream: vi.fn(() => ({ updateClaims, close: vi.fn() })),
+		};
+		const session = new VisualizationRuntimeSession({
+			scope,
+			store,
+			transport,
+		});
+		const releaseFirstNormal = session.activate("normal", 100);
+		const releaseSecondNormal = session.activate("normal", 100);
+		session.activate("preload", 100);
+
+		releaseFirstNormal();
+		expect(updateClaims).toHaveBeenLastCalledWith(["normal", "preload"], 10);
+		releaseSecondNormal();
+		expect(updateClaims).toHaveBeenLastCalledWith(["preload"], 10);
 	});
 
 	it("drops an old response after immediate scope replacement", async () => {

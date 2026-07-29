@@ -111,18 +111,14 @@ impl ProgrammingService {
     pub(super) fn values_change(
         &self,
         user_id: UserId,
-        session: SessionId,
-        before_generation: u64,
-        after_generation: u64,
+        before: &ProgrammingValuesContent,
+        after: &ProgrammingValuesContent,
     ) -> Result<Option<ProgrammingValuesChange>, ActionError> {
-        if before_generation == after_generation {
+        if before == after {
             return Ok(None);
         }
-        let content = ProgrammingValuesContent::read(&self.programmers, session, user_id)?;
         let revision = self.programmers.advance_normal_values_revision(user_id);
-        Ok(Some(ProgrammingValuesChange {
-            projection: Arc::new(content.projection(user_id, revision)),
-        }))
+        Ok(Some(after.clone().change(before, user_id, revision)))
     }
 
     pub(super) fn preload_values_change(

@@ -107,18 +107,23 @@ describe("frontend performance diagnostics", () => {
 		finish({ generated_at: generatedAt });
 		diagnostics.recordStageFrameReceived({
 			lane: "normal",
+			showId: "11111111-1111-4111-8111-111111111111",
+			scopeActivation: 1,
 			sourceFrame: 42,
 			sourceGeneratedAt: generatedAt,
 			publishedAt: generatedAt,
 		});
 		diagnostics.recordStageFrameReceived({
 			lane: "preload",
+			showId: "11111111-1111-4111-8111-111111111111",
+			scopeActivation: 1,
 			sourceFrame: 42,
 			sourceGeneratedAt: generatedAt,
 			publishedAt: generatedAt,
 		});
-		diagnostics.recordStageFrameApplied(generatedAt, true, "normal");
+		diagnostics.recordStageFrameApplied(generatedAt, true, "normal", true);
 		diagnostics.recordStageFrameCanvasSubmitted(generatedAt, true, "normal");
+		diagnostics.recordStageLaneClaims(["stage-live"], ["stage-preload"]);
 		diagnostics.recordStageSceneBuild({
 			startedAt: 1,
 			finishedAt: 3,
@@ -135,20 +140,78 @@ describe("frontend performance diagnostics", () => {
 		diagnostics.recordStageModelClone();
 		diagnostics.recordStageModelCacheDisposal();
 		diagnostics.recordStageRendererCreated();
+		diagnostics.recordStageRendererCapabilities({
+			isWebGL2: true,
+			precision: "highp",
+			maxTextures: 16,
+			maxTextureSize: 16_384,
+			maxRenderbufferSize: 16_384,
+			renderer: "Test GPU",
+			vendor: "Test Vendor",
+		});
 		diagnostics.recordStageRafCallback();
 		diagnostics.recordStageRender({
+			lane: "normal",
+			renderQuality: "lines_and_beams",
+			paneId: "stage-live",
 			submittedAt: 4,
 			durationMs: 1,
 			calls: 8,
+			transparentDrawCalls: 4,
 			triangles: 100,
 			lines: 4,
 			points: 0,
 			geometries: 20,
 			textures: 0,
+			visibleObjects: {
+				beamVolumes: 2,
+				improvedBeamVolumes: 0,
+				improvedBeamLights: 0,
+				centerLines: 2,
+				groundFootprints: 2,
+				directionGuides: 0,
+				selectionOutlines: 1,
+			},
 		});
 		diagnostics.recordStageSceneDisposal();
 		diagnostics.recordStageRendererDisposed();
 
+		expect(diagnostics.stageBenchmarkSample(0).newRenders).toHaveLength(1);
+		expect(diagnostics.stageBenchmarkSample(1).newRenders).toHaveLength(0);
+		expect(diagnostics.stageBenchmarkSample()).toMatchObject({
+			recordedAt: expect.any(Number),
+			latestFrames: {
+				normal: expect.objectContaining({
+					lane: "normal",
+					sourceFrame: 42,
+					settledCanvasSubmittedAt: expect.any(Number),
+				}),
+				preload: expect.objectContaining({
+					lane: "preload",
+					sourceFrame: 42,
+				}),
+			},
+			latestRender: expect.objectContaining({
+				lane: "normal",
+				renderQuality: "lines_and_beams",
+				paneId: "stage-live",
+				calls: 8,
+				transparentDrawCalls: 4,
+				visibleObjects: expect.objectContaining({
+					beamVolumes: 2,
+					centerLines: 2,
+					groundFootprints: 2,
+				}),
+			}),
+			sceneBuilds: 1,
+			rendererContextsCreated: 1,
+			rendererContextsDisposed: 1,
+			rafCallbacks: 1,
+			rendererCapabilities: {
+				renderer: "Test GPU",
+				maxTextureSize: 16_384,
+			},
+		});
 		expect(diagnostics.snapshot().stage).toMatchObject({
 			visualizationRequests: [
 				expect.objectContaining({ lane: "normal", status: "ready" }),
@@ -160,12 +223,20 @@ describe("frontend performance diagnostics", () => {
 					firstAppliedAt: expect.any(Number),
 					settledCanvasSubmittedAt: expect.any(Number),
 					sourceToSettledCanvasMs: expect.any(Number),
+					visibleChanged: true,
 				}),
 				expect.objectContaining({
 					lane: "preload",
 					firstAppliedAt: null,
 					settledCanvasSubmittedAt: null,
 				}),
+			],
+			claims: [
+				{
+					recordedAt: expect.any(Number),
+					normal: ["stage-live"],
+					preload: ["stage-preload"],
+				},
 			],
 			sceneBuilds: [expect.objectContaining({ fixtureCount: 49 })],
 			modelLoads: [expect.objectContaining({ status: "ready" })],
@@ -178,6 +249,10 @@ describe("frontend performance diagnostics", () => {
 			rendererContextsCreated: 1,
 			rendererContextsDisposed: 1,
 			rafCallbacks: 1,
+			rendererCapabilities: {
+				renderer: "Test GPU",
+				maxTextureSize: 16_384,
+			},
 		});
 	});
 });

@@ -2402,7 +2402,7 @@ test("the Cuelist pool uses its target minimum and fills the available width", a
 	);
 	const grid = page.locator(".cuelist-pool-grid");
 	const firstCard = page.locator(".cuelist-card").first();
-	await expect(grid).toHaveCSS("--grid-cell-min", "150px");
+	await expect(grid).toHaveCSS("--grid-cell-min", "100px");
 	await expect(firstCard).toBeVisible();
 	const geometry = await grid.evaluate((node) => {
 		const style = getComputedStyle(node);

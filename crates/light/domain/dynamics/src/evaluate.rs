@@ -41,7 +41,11 @@ impl<'a> DynamicEvaluator<'a> {
         let interval_position = ((context.elapsed_millis as f64 / duration)
             + f64::from(context.phase_degrees) / 360.0)
             .rem_euclid(1.0) as f32;
-        let width = lane.width.clamp(f32::EPSILON, 1.0);
+        let width = if lane_is_pwm(lane) {
+            1.0
+        } else {
+            lane.width.clamp(f32::EPSILON, 1.0)
+        };
         let position = ((interval_position - (1.0 - width) * 0.5) / width).clamp(0.0, 1.0);
         let value = match lane.mode {
             DynamicLaneMode::Keyframes => self.keyframes(lane, position, context)?,
@@ -172,6 +176,17 @@ fn resolve_source(
                     .map(|fallback| fallback.value)
             }),
     }
+}
+
+fn lane_is_pwm(lane: &DynamicLane) -> bool {
+    matches!(
+        lane.mode,
+        DynamicLaneMode::MaxMin if lane.max_min.function == PeriodicFunction::Pwm
+    ) || matches!(
+        lane.mode,
+        DynamicLaneMode::MiddleAmplitude
+            if lane.middle_amplitude.function == PeriodicFunction::Pwm
+    )
 }
 
 fn periodic(function: PeriodicFunction, position: f32, pwm: PwmShape) -> f32 {

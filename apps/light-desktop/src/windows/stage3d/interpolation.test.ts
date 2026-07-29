@@ -55,7 +55,7 @@ describe("interpolateVisualizationSnapshot", () => {
 		const now = Date.parse("2026-07-27T00:00:00.100Z");
 		expect(
 			remainingStageInterpolationMillis("2026-07-27T00:00:00.040Z", now),
-		).toBe(40);
+		).toBe(0);
 		expect(
 			remainingStageInterpolationMillis("2026-07-27T00:00:00.000Z", now),
 		).toBe(0);

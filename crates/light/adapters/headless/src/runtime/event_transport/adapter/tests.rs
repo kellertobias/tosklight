@@ -465,6 +465,18 @@ fn programming_values_keep_user_scope_full_projection_and_action_identity() {
     let event = bus.publish(EventDraft::programming_values_changed(
         &context,
         ProgrammingValuesChange {
+            delta: light_application::ProgrammingValuesDelta {
+                group_values: vec![light_programmer::ProgrammerGroupUpdate {
+                    group_id: "2.1".into(),
+                    attribute: AttributeKey::intensity(),
+                    value: AttributeValue::Normalized(0.75),
+                    programmer_order: 9,
+                    fade: true,
+                    fade_millis: Some(1_000),
+                    delay_millis: Some(250),
+                }],
+                ..Default::default()
+            },
             projection: ProgrammingValuesProjection {
                 dynamic_values: Vec::new(),
                 user_id,
@@ -491,7 +503,7 @@ fn programming_values_keep_user_scope_full_projection_and_action_identity() {
     };
     assert_eq!(event.desk_id, None);
     assert_eq!(event.class, wire::EventClass::Projection);
-    assert_eq!(event.delivery, wire::EventDeliveryPolicy::Replaceable);
+    assert_eq!(event.delivery, wire::EventDeliveryPolicy::Lossless);
     assert_eq!(event.correlation_id, Some(context.correlation_id));
     assert_eq!(
         event.object,
@@ -503,9 +515,9 @@ fn programming_values_keep_user_scope_full_projection_and_action_identity() {
     let wire::EventPayload::ProgrammingValuesChanged { change } = event.payload else {
         panic!("expected a Programmer values payload")
     };
-    assert_eq!(change.projection.user_id, user_id.0);
-    assert_eq!(change.projection.revision, 7);
-    let value = &change.projection.group_values[0];
+    assert_eq!(change.user_id, user_id.0);
+    assert_eq!(change.revision, 7);
+    let value = &change.group_values[0];
     assert_eq!(value.group_id, "2.1");
     assert_eq!(value.programmer_order, 9);
     assert!(value.fade);

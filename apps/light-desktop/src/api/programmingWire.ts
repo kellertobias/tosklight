@@ -17,7 +17,6 @@ import {
 } from "./playbackWirePrimitives";
 import {
 	decodeProgrammingChange,
-	decodeProgrammingCommandLine,
 	decodeProgrammingProjection,
 	plainProgrammingStringAt,
 	programmingComponentPresence,

@@ -275,13 +275,26 @@ Run both focused server targets with `cargo test -p light-headless --no-default-
 ## Stage visualization runtime coverage
 
 `STAGE-001` uses the Default Stage Show and two real Stage panes to prove the
-authoritative visualization path. The Live pane begins in 2D so Fixture 201 is
-selected through the visible Stage interaction, then switches to 3D beside a
-Follow Preload pane. A one-second Programmer Fade and moving-head Pan change
-produce deterministic output-boundary frames. The scenario verifies the
-midpoint and final DMX bytes, independent Live and Preload lane claims, all four
-Render quality choices, the strict engine-frame-to-settled-canvas timing report,
-and WebGL context recovery.
+authoritative visualization path. The Live pane begins in 2D so Fixture 101 is
+selected through the visible Stage interaction. Preload capture then gives the
+same fixture a distinguishable pending intensity and proves the Live and
+Follow Preload 2D presentations remain independent before both panes switch to
+the fixed default 3D camera. A one-second Programmer Fade and moving-head Pan
+change advance in ten 100 ms source frames. The scenario verifies the midpoint
+and final DMX bytes, independent Live and Preload lane claims, one shared
+desktop visualization socket with one server subscriber per lane, 10 Hz source
+cadence, the 120 ms p95 and 200 ms hard canvas budgets, and no presentation gap
+longer than 200 ms.
+
+All four Render quality choices are switched rapidly on the retained scene.
+Renderer diagnostics prove the line modes submit additional line geometry,
+**Lines + beams** adds beam work without replacing the fixture hierarchy, and
+**Improved beams** uses the bounded non-line representation. The scenario also
+proves settled rendering stops, captures the live 3D canvas through
+Playwright's compositor screenshot path without a preserved drawing buffer,
+proves WebGL context recovery redraws the surface, verifies 2D/3D switching
+releases and recreates its renderer, and confirms a per-pane quality choice
+survives a page reload with the fixed camera restored.
 
 The scenario then closes only the visualization WebSocket while leaving the
 desk and output paths running. Both Stage surfaces retain their last coherent
@@ -291,6 +304,30 @@ attached `stage-visualization-timing.json` separates source-to-receive,
 projection-to-receive, scene-build, draw-call, resource, and
 source-to-settled-canvas evidence. Run it with
 `npm run test:e2e -- tests/66-semantic-stage-visualizer.spec.ts`.
+
+`STAGE-PERF-001` and `STAGE-PERF-002` add bounded Chromium engineering
+profiles for the Default Stage and 500 Stage instances. Each compares the same
+ten-frame transition without Stage against one Live pane, a duplicate Live
+pane, and a Follow Preload pane; switches every quality; changes Live and
+Preload together; stalls browser delivery while output continues; recovers the
+sequence; exercises WebGL recovery and 2D/3D teardown; and removes duplicate
+consumers while checking server subscriber counts. The large profile also
+completes an authenticated visualization WebSocket handshake, pauses the
+underlying TCP reader, and requires capacity-one queue replacement or send
+timeout while the isolated output scheduler records zero missed deadlines.
+Both profiles compute bounded-window output p99 from cumulative fixed-bucket
+scheduler histograms and enforce the 1 ms-or-5-percent comparison rule. These
+profiles remain Chromium engineering evidence. They are not the packaged
+WebView, cross-platform GPU, canonical five-minute output comparison, or
+30-minute resource release gates.
+
+The separate packaged collector runs the built Tauri WebView with either the
+unchanged `default-stage` profile or a runner-prepared `large-stage` profile.
+For the latter, the production session and Patch routes must finish and verify
+470 fixture records and 500 Stage instances before the measured Live and
+Follow Preload surfaces mount. A macOS run with no animation-frame submissions
+is retained as failed diagnostic evidence and does not satisfy any packaged
+latency, quality, or resource gate.
 
 ## Matter playback bridge boundary coverage
 

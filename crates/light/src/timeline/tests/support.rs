@@ -195,6 +195,7 @@ impl PlaybackPorts for FakeBackend {
             requested: identity.clone(),
             playback_number: match identity {
                 PlaybackRuntimeIdentity::Playback(number) => Some(number),
+                PlaybackRuntimeIdentity::Virtual(address) => Some(address.number().get()),
                 PlaybackRuntimeIdentity::CueList(_) | PlaybackRuntimeIdentity::Group(_) => None,
             },
             target: PlaybackTargetProjection::Missing,

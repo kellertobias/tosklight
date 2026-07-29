@@ -8,7 +8,17 @@ import { HttpProgrammerPreloadPlaybackQueueTransport } from "./ProgrammerPreload
 import { HttpProgrammerPreloadValuesTransport } from "./ProgrammerPreloadValuesTransport";
 import { HttpProgrammerValuesTransport } from "./ProgrammerValuesTransport";
 
+function useProgrammerScope(state: ServerState) {
+	return useMemo(() => {
+		const showId = state.bootstrap?.active_show?.id;
+		const userId = state.session?.user.id;
+		return showId && userId ? { showId, userId } : null;
+	}, [state.bootstrap?.active_show?.id, state.session?.user.id]);
+}
+
 export function useProgrammerValuesBoundaries(state: ServerState) {
+	const sessionToken = state.session?.token ?? null;
+	const sessionUserId = state.session?.user.id ?? null;
 	const valuesErrors = useMemo(
 		() => createFeatureErrorGroup(state.setError),
 		[state.setError],
@@ -27,55 +37,51 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 	);
 	const programmerValuesTransport = useMemo(
 		() =>
-			state.session
+			sessionToken
 				? new HttpProgrammerValuesTransport({
 						baseUrl: configuredServerUrl(),
-						sessionToken: state.session.token,
+						sessionToken,
 						deskBoundaryToken: browserDeskBoundaryToken(),
 					})
 				: null,
-		[state.session],
+		[sessionToken],
 	);
 	const programmerCaptureModeTransport = useMemo(
 		() =>
-			state.session
+			sessionToken
 				? new HttpProgrammerCaptureModeTransport({
 						baseUrl: configuredServerUrl(),
-						sessionToken: state.session.token,
+						sessionToken,
 						deskBoundaryToken: browserDeskBoundaryToken(),
 					})
 				: null,
-		[state.session],
+		[sessionToken],
 	);
 	const programmerPreloadValuesTransport = useMemo(
 		() =>
-			state.session
+			sessionToken && sessionUserId
 				? new HttpProgrammerPreloadValuesTransport({
 						baseUrl: configuredServerUrl(),
-						sessionToken: state.session.token,
+						sessionToken,
 						deskBoundaryToken: browserDeskBoundaryToken(),
-						authenticatedUserId: state.session.user.id,
+						authenticatedUserId: sessionUserId,
 					})
 				: null,
-		[state.session],
+		[sessionToken, sessionUserId],
 	);
 	const programmerPreloadPlaybackQueueTransport = useMemo(
 		() =>
-			state.session
+			sessionToken && sessionUserId
 				? new HttpProgrammerPreloadPlaybackQueueTransport({
 						baseUrl: configuredServerUrl(),
-						sessionToken: state.session.token,
+						sessionToken,
 						deskBoundaryToken: browserDeskBoundaryToken(),
-						authenticatedUserId: state.session.user.id,
+						authenticatedUserId: sessionUserId,
 					})
 				: null,
-		[state.session],
+		[sessionToken, sessionUserId],
 	);
-	const programmerScope = useMemo(() => {
-		const showId = state.bootstrap?.active_show?.id;
-		const userId = state.session?.user.id;
-		return showId && userId ? { showId, userId } : null;
-	}, [state.bootstrap?.active_show?.id, state.session?.user.id]);
+	const programmerScope = useProgrammerScope(state);
 	const authorityKey = programmerScope
 		? `${configuredServerUrl()}|${programmerScope.showId}|${programmerScope.userId}`
 		: "";
@@ -106,14 +112,14 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 			scope: NonNullable<typeof programmerScope>,
 			request: Parameters<HttpProgrammerValuesTransport["applyAction"]>[1],
 		) => {
-			if (!state.session)
+			if (!sessionToken)
 				throw new Error("Programmer values session is unavailable");
 			return state.api.programming.programmerValuesLiveAction(
 				scope.userId,
 				request,
 			);
 		},
-		[state.api, state.session],
+		[sessionToken, state.api],
 	);
 	const applyProgrammerPreloadValuesAction = useCallback(
 		(
@@ -122,14 +128,14 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 				HttpProgrammerPreloadValuesTransport["applyAction"]
 			>[1],
 		) => {
-			if (!state.session)
+			if (!sessionToken)
 				throw new Error("Programmer Preload values session is unavailable");
 			return state.api.programming.programmerPreloadValuesLiveAction(
 				scope.userId,
 				request,
 			);
 		},
-		[state.api, state.session],
+		[sessionToken, state.api],
 	);
 	return {
 		programmerValuesTransport,

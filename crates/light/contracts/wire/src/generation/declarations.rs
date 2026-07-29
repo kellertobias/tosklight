@@ -69,6 +69,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
 
 fn visualization(config: &Config) -> Vec<String> {
     vec![
+        VisualizationScope::decl(config),
         VisualizationLane::decl(config),
         VisualizationClientMessage::decl(config),
         VisualizationValue::decl(config),
@@ -455,6 +456,8 @@ fn programming(config: &Config) -> Vec<String> {
         ProgrammingCaptureModeChange::decl(config),
         ProgrammingCaptureModeSnapshot::decl(config),
         ProgrammingValuesProjection::decl(config),
+        ProgrammingFixtureValueAddress::decl(config),
+        ProgrammingGroupValueAddress::decl(config),
         ProgrammingValuesChange::decl(config),
         ProgrammingValuesSnapshot::decl(config),
         ProgrammingPickerColor::decl(config),

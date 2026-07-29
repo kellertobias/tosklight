@@ -69,7 +69,7 @@ describe("show-object wire decoders", () => {
 		expect(decoded.body.id).toBe(CUE_LIST_ID);
 	});
 
-	it("decodes current Playback and page topology with legacy defaults", () => {
+	it("decodes current Playback defaults and dedicated Virtual page topology", () => {
 		const playback = decodeShowObject(
 			versioned("playback", "7", {
 				number: 7,
@@ -84,6 +84,7 @@ describe("show-object wire decoders", () => {
 				number: 4,
 				name: "Page 4",
 				slots: { 1: 7 },
+				virtual_playbacks: {},
 			}),
 			"playback_page",
 		);
@@ -97,6 +98,7 @@ describe("show-object wire decoders", () => {
 			auto_off: true,
 		});
 		expect(page.body.slots).toEqual({ 1: 7 });
+		expect(page.body.virtual_playbacks).toEqual({});
 	});
 
 	it("uses target-aware defaults and migrates a legacy Speed Group fader", () => {
@@ -203,5 +205,33 @@ describe("show-object wire decoders", () => {
 				value.kind === "playback" ? "playback" : "cue_list",
 			),
 		).toThrow(WireValidationError);
+	});
+
+	it("rejects a legacy Virtual Playbacks pane without the dedicated address schema", () => {
+		const body = {
+			desks: [
+				{
+					id: "desk-1",
+					name: "Main",
+					panes: [
+						{
+							id: "virtual-1",
+							kind: "virtual_playbacks",
+							title: "Virtual Playbacks",
+							x: 1,
+							y: 1,
+							width: 12,
+							height: 9,
+							virtualPlaybackRows: 2,
+							virtualPlaybackColumns: 2,
+						},
+					],
+				},
+			],
+			activeDeskId: "desk-1",
+		};
+		expect(() =>
+			decodeShowObject(versioned("user_layout", "user", body), "user_layout"),
+		).toThrow(/virtualPlaybackPageMode/u);
 	});
 });

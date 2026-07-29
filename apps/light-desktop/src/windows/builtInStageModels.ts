@@ -273,6 +273,64 @@ function mirrorScanner(
 	return { object, beamMount };
 }
 
+function addFresnelBody(
+	body: THREE.Group,
+	color: THREE.Color,
+	intensity: number,
+) {
+	const housing = mesh(new THREE.BoxGeometry(0.48, 0.42, 0.54));
+	housing.name = "fresnel-housing";
+	body.add(housing);
+	const barrel = mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.18, 24));
+	barrel.rotation.z = Math.PI / 2;
+	barrel.position.x = 0.34;
+	body.add(barrel);
+	const aperture = lightSource(
+		new THREE.CircleGeometry(0.21, 32),
+		color,
+		intensity,
+	);
+	aperture.rotation.y = Math.PI / 2;
+	aperture.position.x = 0.445;
+	const barnDoors = [
+		{
+			name: "top",
+			size: [0.025, 0.28, 0.48],
+			position: [0.48, 0.34, 0],
+			rotation: [0, 0, -0.34],
+		},
+		{
+			name: "bottom",
+			size: [0.025, 0.28, 0.48],
+			position: [0.48, -0.34, 0],
+			rotation: [0, 0, 0.34],
+		},
+		{
+			name: "left",
+			size: [0.025, 0.42, 0.28],
+			position: [0.48, 0, 0.35],
+			rotation: [0, 0.34, 0],
+		},
+		{
+			name: "right",
+			size: [0.025, 0.42, 0.28],
+			position: [0.48, 0, -0.35],
+			rotation: [0, -0.34, 0],
+		},
+	] as const;
+	for (const door of barnDoors) {
+		const flap = mesh(
+			new THREE.BoxGeometry(door.size[0], door.size[1], door.size[2]),
+			black(),
+		);
+		flap.name = `fresnel-barn-door-${door.name}`;
+		flap.position.set(door.position[0], door.position[1], door.position[2]);
+		flap.rotation.set(door.rotation[0], door.rotation[1], door.rotation[2]);
+		body.add(flap);
+	}
+	return aperture;
+}
+
 function staticFixture(
 	kind: "par" | "profile-static" | "fresnel" | "strobe" | "sunstrip",
 	color: THREE.Color,
@@ -344,56 +402,7 @@ function staticFixture(
 		aperture.rotation.y = Math.PI / 2;
 		aperture.position.x = 0.745;
 	} else if (kind === "fresnel") {
-		const housing = mesh(new THREE.BoxGeometry(0.48, 0.42, 0.54));
-		housing.name = "fresnel-housing";
-		body.add(housing);
-		const barrel = mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.18, 24));
-		barrel.rotation.z = Math.PI / 2;
-		barrel.position.x = 0.34;
-		body.add(barrel);
-		aperture = lightSource(
-			new THREE.CircleGeometry(0.21, 32),
-			color,
-			intensity,
-		);
-		aperture.rotation.y = Math.PI / 2;
-		aperture.position.x = 0.445;
-		const barnDoors = [
-			{
-				name: "top",
-				size: [0.025, 0.28, 0.48],
-				position: [0.48, 0.34, 0],
-				rotation: [0, 0, -0.34],
-			},
-			{
-				name: "bottom",
-				size: [0.025, 0.28, 0.48],
-				position: [0.48, -0.34, 0],
-				rotation: [0, 0, 0.34],
-			},
-			{
-				name: "left",
-				size: [0.025, 0.42, 0.28],
-				position: [0.48, 0, 0.35],
-				rotation: [0, 0.34, 0],
-			},
-			{
-				name: "right",
-				size: [0.025, 0.42, 0.28],
-				position: [0.48, 0, -0.35],
-				rotation: [0, -0.34, 0],
-			},
-		] as const;
-		for (const door of barnDoors) {
-			const flap = mesh(
-				new THREE.BoxGeometry(door.size[0], door.size[1], door.size[2]),
-				black(),
-			);
-			flap.name = `fresnel-barn-door-${door.name}`;
-			flap.position.set(door.position[0], door.position[1], door.position[2]);
-			flap.rotation.set(door.rotation[0], door.rotation[1], door.rotation[2]);
-			body.add(flap);
-		}
+		aperture = addFresnelBody(body, color, intensity);
 	} else if (kind === "strobe") {
 		body.add(mesh(new THREE.BoxGeometry(0.95, 0.48, 0.16)));
 		aperture = lightSource(

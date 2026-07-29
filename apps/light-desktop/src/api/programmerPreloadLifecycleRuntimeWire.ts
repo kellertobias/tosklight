@@ -121,6 +121,7 @@ function assertIdentity(value: unknown, path: string) {
 	const identity = recordAt(value, path);
 	const kind = enumAt(identity.kind, `${path}.kind`, [
 		"playback",
+		"virtual",
 		"cue_list",
 		"group",
 	]);
@@ -128,9 +129,12 @@ function assertIdentity(value: unknown, path: string) {
 		"kind",
 		kind === "playback"
 			? "playback_number"
+			: kind === "virtual"
+				? "page"
 			: kind === "cue_list"
 				? "cue_list_id"
 				: "group_id",
+		...(kind === "virtual" ? ["playback_number"] : []),
 	]);
 }
 
@@ -148,6 +152,7 @@ function assertCueRuntime(value: unknown, path: string) {
 		"master",
 		"fader_position",
 		"fader_pickup_required",
+		"fader_pickup_target",
 		"flash",
 		"temporary",
 		"temporary_active",

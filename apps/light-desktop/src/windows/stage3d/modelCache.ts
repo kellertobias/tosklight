@@ -54,20 +54,28 @@ function disposeTemplate(root: THREE.Object3D) {
 
 /** Renderer-surface-owned decoded GLB templates shared by every fixture instance. */
 export class StageModelCache {
-	private readonly templates = new Map<string, Promise<THREE.Group>>();
+	private readonly templates = new Map<
+		string,
+		{
+			template: Promise<THREE.Group>;
+			retainers: number;
+			retired: boolean;
+		}
+	>();
 	private disposed = false;
 
 	constructor(
 		private readonly load: (source: string) => Promise<THREE.Group> = loadModel,
 	) {}
 
-	async clone(source: string) {
+	retain(source: string, revision: string | number) {
 		if (this.disposed) throw new Error("The Stage model cache is closed");
-		let template = this.templates.get(source);
-		frontendPerformanceDiagnostics.recordStageModelCacheLookup(Boolean(template));
-		if (!template) {
+		const key = `${source}\u0000${revision}`;
+		let entry = this.templates.get(key);
+		frontendPerformanceDiagnostics.recordStageModelCacheLookup(Boolean(entry));
+		if (!entry) {
 			const finishLoad = frontendPerformanceDiagnostics.beginStageModelLoad();
-			template = this.load(source).then(
+			const template = this.load(source).then(
 				(model) => {
 					markSharedResources(model);
 					finishLoad();
@@ -78,19 +86,45 @@ export class StageModelCache {
 					throw error;
 				},
 			);
-			this.templates.set(source, template);
+			entry = { template, retainers: 0, retired: false };
+			this.templates.set(key, entry);
 		}
-		const clone = (await template).clone(true);
-		frontendPerformanceDiagnostics.recordStageModelClone();
-		return clone;
+		entry.retainers += 1;
+		const retainedEntry = entry;
+		let released = false;
+		return {
+			model: retainedEntry.template.then((template) => {
+				const clone = template.clone(true);
+				frontendPerformanceDiagnostics.recordStageModelClone();
+				return clone;
+			}),
+			release: () => {
+				if (released) return;
+				released = true;
+				retainedEntry.retainers -= 1;
+				if (retainedEntry.retainers === 0) this.retire(key, retainedEntry);
+			},
+		};
+	}
+
+	private retire(
+		key: string,
+		entry: {
+			template: Promise<THREE.Group>;
+			retainers: number;
+			retired: boolean;
+		},
+	) {
+		if (entry.retired) return;
+		entry.retired = true;
+		if (this.templates.get(key) === entry) this.templates.delete(key);
+		void entry.template.then(disposeTemplate).catch(() => undefined);
 	}
 
 	dispose() {
 		if (this.disposed) return;
 		this.disposed = true;
-		for (const template of this.templates.values())
-			void template.then(disposeTemplate).catch(() => undefined);
-		this.templates.clear();
+		for (const [key, entry] of this.templates) this.retire(key, entry);
 		frontendPerformanceDiagnostics.recordStageModelCacheDisposal();
 	}
 }

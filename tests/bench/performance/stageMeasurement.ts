@@ -1,15 +1,17 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Page, TestInfo } from "@playwright/test";
-import type {
-	RuntimeDiagnosticsSnapshot,
-	RuntimeOutputHealth,
-} from "../../../apps/light-desktop/src/api/generated/light-wire";
+import type { RuntimeDiagnosticsSnapshot } from "../../../apps/light-desktop/src/api/generated/light-wire";
 import type {
 	FrontendPerformanceSnapshot,
 	FrontendStageDiagnostics,
 } from "../../../apps/light-desktop/src/features/frontendWarmup/diagnostics";
 import artifactResolver from "../../../tools/artifact-paths.cjs";
+import {
+	histogramPercentileMicros,
+	type OutputWindow,
+	outputWindow,
+} from "../../../tools/output-histogram.mjs";
 import type { ApiDriver } from "../core/api";
 
 const { artifactPaths } = artifactResolver;
@@ -17,7 +19,7 @@ const { artifactPaths } = artifactResolver;
 export type StageMeasurementProfile = "default-stage" | "large-stage";
 
 export interface StagePerformanceEvidence {
-	schemaVersion: 1;
+	schemaVersion: 2;
 	profile: StageMeasurementProfile;
 	measurementSurface: "browser-playwright";
 	packagedWebView: {
@@ -61,17 +63,31 @@ export interface StagePerformanceEvidence {
 	};
 	server: {
 		before: RuntimeDiagnosticsSnapshot;
+		afterNoStage: RuntimeDiagnosticsSnapshot;
 		after: RuntimeDiagnosticsSnapshot;
-		outputDelta: Pick<
-			RuntimeOutputHealth,
-			"frames_sent" | "packets_sent" | "send_errors" | "deadline_misses"
-		>;
+		noStageOutputDelta: OutputWindow;
+		outputDelta: OutputWindow;
+		outputComparison: {
+			latestTickDifferenceMicros: number;
+			latestTickDifferencePercent: number | null;
+			cumulativeMaximumTickIncreaseMicros: number;
+			noStageP99TickMicros: number | null;
+			stageP99TickMicros: number | null;
+			allowedP99RegressionMicros: number | null;
+			p99RegressionMicros: number | null;
+			boundedWindowGatePassed: boolean;
+			stageWindowDeadlineMisses: number;
+			releaseGateEnforced: false;
+		};
 		visualizationWindow: {
 			projections: number;
 			skippedSourceFrames: number;
 			latestProjectionMicros: number;
 			latestPayloadBytes: number;
 			latestSourceAgeMillis: number;
+			streamSendFailures: number;
+			streamQueueDrops: number;
+			finalStreamQueueDepth: number;
 		};
 	};
 	limitations: string[];
@@ -91,17 +107,20 @@ interface StageMeasurementOptions {
 	profile: StageMeasurementProfile;
 	fixtureRecords: number;
 	fixtureInstances: number;
+	noStageExercise: () => Promise<void>;
 	exercise: () => Promise<void>;
 }
 
 export async function measureStagePerformance(
 	options: StageMeasurementOptions,
 ): Promise<StagePerformanceEvidence> {
-	const frontendBefore = await frontendDiagnostics(options.page);
 	const serverBefore = await runtimeDiagnostics(options.api);
 	const startedAt = new Date();
 	const monotonicStartedAt = performance.now();
 
+	await options.noStageExercise();
+	const serverAfterNoStage = await runtimeDiagnostics(options.api);
+	const frontendBefore = await frontendDiagnostics(options.page);
 	await options.exercise();
 	await options.page.evaluate(
 		() =>
@@ -119,12 +138,33 @@ export async function measureStagePerformance(
 	const serverAfter = await runtimeDiagnostics(options.api);
 	const finishedAt = new Date();
 	const stage = stageDelta(frontendBefore.stage, frontendAfter.stage);
+	const noStageOutputDelta = outputWindow(
+		serverBefore.output,
+		serverAfterNoStage.output,
+	);
+	const outputDelta = outputWindow(
+		serverAfterNoStage.output,
+		serverAfter.output,
+	);
+	const noStageP99TickMicros = histogramPercentileMicros(
+		noStageOutputDelta,
+		99,
+	);
+	const stageP99TickMicros = histogramPercentileMicros(outputDelta, 99);
+	const allowedP99RegressionMicros =
+		noStageP99TickMicros === null
+			? null
+			: Math.max(1_000, noStageP99TickMicros * 0.05);
+	const p99RegressionMicros =
+		noStageP99TickMicros === null || stageP99TickMicros === null
+			? null
+			: stageP99TickMicros - noStageP99TickMicros;
 	const canvasTimestamps = stage.frames
 		.map(({ settledCanvasSubmittedAt }) => settledCanvasSubmittedAt)
 		.filter((value): value is number => value !== null)
 		.sort((left, right) => left - right);
 	const evidence: StagePerformanceEvidence = {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		profile: options.profile,
 		measurementSurface: "browser-playwright",
 		packagedWebView: {
@@ -184,35 +224,57 @@ export async function measureStagePerformance(
 		},
 		server: {
 			before: serverBefore,
+			afterNoStage: serverAfterNoStage,
 			after: serverAfter,
-			outputDelta: {
-				frames_sent:
-					serverAfter.output.frames_sent - serverBefore.output.frames_sent,
-				packets_sent:
-					serverAfter.output.packets_sent - serverBefore.output.packets_sent,
-				send_errors:
-					serverAfter.output.send_errors - serverBefore.output.send_errors,
-				deadline_misses:
+			noStageOutputDelta,
+			outputDelta,
+			outputComparison: {
+				latestTickDifferenceMicros:
+					serverAfter.output.last_tick_micros -
+					serverAfterNoStage.output.last_tick_micros,
+				latestTickDifferencePercent: percentageDifference(
+					serverAfterNoStage.output.last_tick_micros,
+					serverAfter.output.last_tick_micros,
+				),
+				cumulativeMaximumTickIncreaseMicros:
+					serverAfter.output.maximum_tick_micros -
+					serverAfterNoStage.output.maximum_tick_micros,
+				noStageP99TickMicros,
+				stageP99TickMicros,
+				allowedP99RegressionMicros,
+				p99RegressionMicros,
+				boundedWindowGatePassed:
+					p99RegressionMicros !== null &&
+					allowedP99RegressionMicros !== null &&
+					p99RegressionMicros <= allowedP99RegressionMicros,
+				stageWindowDeadlineMisses:
 					serverAfter.output.deadline_misses -
-					serverBefore.output.deadline_misses,
+					serverAfterNoStage.output.deadline_misses,
+				releaseGateEnforced: false,
 			},
 			visualizationWindow: {
 				projections:
 					serverAfter.visualization.projections -
-					serverBefore.visualization.projections,
+					serverAfterNoStage.visualization.projections,
 				skippedSourceFrames:
 					serverAfter.visualization.skipped_source_frames -
-					serverBefore.visualization.skipped_source_frames,
-				latestProjectionMicros:
-					serverAfter.visualization.projection_micros,
+					serverAfterNoStage.visualization.skipped_source_frames,
+				latestProjectionMicros: serverAfter.visualization.projection_micros,
 				latestPayloadBytes: serverAfter.visualization.payload_bytes,
-				latestSourceAgeMillis:
-					serverAfter.visualization.source_age_millis,
+				latestSourceAgeMillis: serverAfter.visualization.source_age_millis,
+				streamSendFailures:
+					serverAfter.visualization.stream_send_failures -
+					serverAfterNoStage.visualization.stream_send_failures,
+				streamQueueDrops:
+					serverAfter.visualization.stream_queue_drops -
+					serverAfterNoStage.visualization.stream_queue_drops,
+				finalStreamQueueDepth: serverAfter.visualization.stream_queue_depth,
 			},
 		},
 		limitations: [
 			"This evidence is a Chromium/Playwright engineering baseline, not packaged macOS WebView evidence.",
-			"The runtime exposes cumulative and maximum output health counters, not a per-frame output p99 distribution.",
+			"The server output p99 uses paired bounded transition windows derived from cumulative fixed-bucket scheduler histograms; it is not the five-minute packaged release gate.",
+			"The large profile adds a separate authenticated WebSocket whose underlying TCP reader is paused; queue replacement or send timeout is recorded independently from the browser message-delivery recovery case.",
 			"Thresholds remain informational until the packaged WebView can be controlled and sampled.",
 		],
 	};
@@ -280,6 +342,13 @@ function percentile(values: readonly number[], value: number): number | null {
 
 function maximum(values: readonly number[]): number {
 	return values.length === 0 ? 0 : Math.max(...values);
+}
+
+function percentageDifference(
+	baseline: number,
+	candidate: number,
+): number | null {
+	return baseline <= 0 ? null : ((candidate - baseline) / baseline) * 100;
 }
 
 async function writeEvidence(

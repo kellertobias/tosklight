@@ -82,7 +82,7 @@ export const IndividualTouch: Story = {
 					slowStep={slowStep}
 					fastStep={fastStep}
 					repeatSeconds={repeatSeconds}
-					canRelease={state.owned}
+					canRelease={!indexed && state.owned}
 					onStep={(delta) =>
 						setState((current) => ({
 							value: Math.max(0, Math.min(1, current.value + delta)),
@@ -90,8 +90,11 @@ export const IndividualTouch: Story = {
 						}))
 					}
 					onSet={(value) => setState({ value, owned: true })}
-					onRelease={() =>
-						setState((current) => ({ ...current, owned: false }))
+					onRelease={
+						indexed
+							? undefined
+							: () =>
+									setState((current) => ({ ...current, owned: false }))
 					}
 				/>
 			</div>
@@ -321,6 +324,7 @@ function FamilyExample(props: EncoderStoryProps) {
 			disabled: props.disabled,
 			indexed: props.indexed,
 			canRelease: owned.has(id),
+			range: true,
 			presets: {
 				...valuePresets,
 				selectedValue: String(Math.round(values[id] * 100)),

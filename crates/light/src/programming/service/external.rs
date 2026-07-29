@@ -53,12 +53,7 @@ impl ProgrammingService {
             ),
             values_event_sequence: self.publish_values(
                 context,
-                self.values_change(
-                    user_id,
-                    session,
-                    before.values_generation,
-                    after.values_generation,
-                )?,
+                self.values_change(user_id, &before.values_content, &after.values_content)?,
             ),
             preload_values_event_sequence: self.publish_preload_values(
                 context,

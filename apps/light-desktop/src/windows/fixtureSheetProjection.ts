@@ -2,7 +2,11 @@ import {
 	useActiveShowId,
 	useBootstrapReady,
 } from "../features/deskSnapshot/DeskSnapshotState";
-import type { CueList, PatchedFixture, VisualizationSnapshot } from "../api/types";
+import type {
+	CueList,
+	PatchedFixture,
+	VisualizationSnapshot,
+} from "../api/types";
 import { fixtures } from "../data/mockData";
 import {
 	type RuntimeGroup,
@@ -307,11 +311,13 @@ export function useFixtureSheetVisualizations(
 	const visualization = useVisualizationRuntimeSnapshot({
 		enabled: active,
 		intervalMillis: 250,
+		consumerId: "fixture-sheet-live",
 	});
 	const preloadVisualization = useVisualizationRuntimeSnapshot({
 		lane: "preload",
 		enabled: active && preloadActive,
 		intervalMillis: 250,
+		consumerId: "fixture-sheet-preload",
 	});
 
 	return { visualization, preloadVisualization };

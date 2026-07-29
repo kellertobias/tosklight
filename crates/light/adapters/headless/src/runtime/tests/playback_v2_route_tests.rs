@@ -283,24 +283,32 @@ async fn v2_virtual_activation_returns_and_emits_one_transition_per_changed_play
     let (token, _) = login(&app, "Operator").await;
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
-    install_virtual_playback_test_state(&state, desk_id);
+    install_virtual_playback_test_state(&state);
 
     let first = post_action(
         &app,
         Some(&token),
         desk_id,
-        action_request(
+        virtual_action_request(
             "activate-zone-peer",
             1,
+            1_001,
             serde_json::json!({"type":"on","pressed":true}),
         ),
     )
     .await;
-    assert_eq!(first.status(), StatusCode::OK);
+    let first_status = first.status();
+    let first_body = json(first).await;
+    assert_eq!(
+        first_status,
+        StatusCode::OK,
+        "virtual activation failed: {first_body}"
+    );
     let cursor = state.events.latest_sequence();
-    let request = action_request(
+    let request = virtual_action_request(
         "activate-zone-winner",
-        3,
+        1,
+        1_002,
         serde_json::json!({"type":"on","pressed":true}),
     );
     let outcome = json(post_action(&app, Some(&token), desk_id, request.clone()).await).await;
@@ -310,14 +318,24 @@ async fn v2_virtual_activation_returns_and_emits_one_transition_per_changed_play
     assert_eq!(outcome["related"].as_array().unwrap().len(), 1);
     assert_eq!(
         outcome["related"][0]["projection"]["requested"],
-        serde_json::json!({"kind":"playback","playback_number":1})
+        serde_json::json!({"kind":"virtual","page":1,"playback_number":1001})
     );
     assert_eq!(outcome["related"][0]["event_sequence"], cursor + 1);
     assert_eq!(
         outcome["related"][0]["projection"]["runtime"]["enabled"],
         false
     );
-    assert_eq!(playback_event_objects(&state, cursor), vec![1, 3]);
+    assert_eq!(
+        playback_event_identities(&state, cursor),
+        vec![
+            light_application::PlaybackRuntimeIdentity::Virtual(
+                light_playback::VirtualPlaybackAddress::new(1, 1_001).unwrap()
+            ),
+            light_application::PlaybackRuntimeIdentity::Virtual(
+                light_playback::VirtualPlaybackAddress::new(1, 1_002).unwrap()
+            ),
+        ]
+    );
     let after_mutation = state.events.latest_sequence();
 
     let replay = json(post_action(&app, Some(&token), desk_id, request).await).await;
@@ -330,9 +348,10 @@ async fn v2_virtual_activation_returns_and_emits_one_transition_per_changed_play
             &app,
             Some(&token),
             desk_id,
-            action_request(
+            virtual_action_request(
                 "toggle-zone-winner-off",
-                3,
+                1,
+                1_002,
                 serde_json::json!({"type":"toggle","pressed":true}),
             ),
         )
@@ -353,24 +372,30 @@ async fn v2_virtual_exclusion_publishes_changed_peer_before_target_and_replays_n
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
     install_virtual_exclusion_test_state(&state);
-    set_pool_enabled(&state, 2, true);
-    set_pool_enabled(&state, 4, true);
-    put_virtual_exclusion_zone(&state, &app, &token, &[1, 2, 3]).await;
+    set_virtual_enabled(&state, 1, 1_002, true);
+    set_virtual_enabled(&state, 1, 1_004, true);
+    put_virtual_exclusion_zone(&state, &app, &token, &[1_001, 1_002, 1_003]).await;
     let cursor = state.events.latest_sequence();
-    let request = action_request(
+    let request = virtual_action_request(
         "activate-zoned-playback",
         1,
+        1_001,
         serde_json::json!({"type":"on","pressed":true}),
     );
 
     let response = post_action(&app, Some(&token), desk_id, request.clone()).await;
 
-    assert_eq!(response.status(), StatusCode::OK);
+    let response_status = response.status();
     let response = json(response).await;
+    assert_eq!(
+        response_status,
+        StatusCode::OK,
+        "virtual exclusion activation failed: {response}"
+    );
     let events = playback_runtime_events(&state, cursor);
     assert_eq!(events.len(), 2);
-    assert_eq!(playback_event_state(&events[0]), (2, false));
-    assert_eq!(playback_event_state(&events[1]), (1, true));
+    assert_eq!(playback_event_state(&events[0]), (1_002, false));
+    assert_eq!(playback_event_state(&events[1]), (1_001, true));
     let correlation = Uuid::parse_str(response["correlation_id"].as_str().unwrap()).unwrap();
     assert!(
         events
@@ -380,7 +405,7 @@ async fn v2_virtual_exclusion_publishes_changed_peer_before_target_and_replays_n
     assert_eq!(response["related"].as_array().unwrap().len(), 1);
     assert_eq!(
         response["related"][0]["projection"]["requested"]["playback_number"],
-        2
+        1_002
     );
     assert_eq!(
         response["related"][0]["projection"]["runtime"]["enabled"],
@@ -392,8 +417,8 @@ async fn v2_virtual_exclusion_publishes_changed_peer_before_target_and_replays_n
         response["event_sequence"].as_u64(),
         Some(state.events.latest_sequence())
     );
-    assert!(!pool_is_enabled(&state, 3));
-    assert!(pool_is_enabled(&state, 4));
+    assert!(!virtual_is_enabled(&state, 1, 1_003));
+    assert!(virtual_is_enabled(&state, 1, 1_004));
 
     let after_first = state.events.latest_sequence();
     let replay = json(post_action(&app, Some(&token), desk_id, request).await).await;
@@ -461,11 +486,11 @@ async fn v2_peer_only_auto_off_change_does_not_emit_an_equal_primary_event() {
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
     install_auto_off_test_state(&state);
-    update_virtual_definition(&state, 1, |definition| definition.auto_off = false);
+    update_pool_definition(&state, 1, |definition| definition.auto_off = false);
     set_pool_enabled(&state, 1, true);
     std::thread::sleep(std::time::Duration::from_millis(2));
     set_pool_enabled(&state, 2, true);
-    update_virtual_definition(&state, 1, |definition| definition.auto_off = true);
+    update_pool_definition(&state, 1, |definition| definition.auto_off = true);
     let cursor = state.events.latest_sequence();
     let request = action_request(
         "repeat-covering-playback",
@@ -495,8 +520,8 @@ async fn v2_timed_crossfade_retrigger_emits_one_equal_projection_event() {
     let (token, _) = login(&app, "Operator").await;
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
-    install_virtual_exclusion_test_state(&state);
-    update_virtual_definition(&state, 1, |definition| definition.xfade_millis = 1_000);
+    install_pool_cuelist_test_state(&state);
+    update_pool_definition(&state, 1, |definition| definition.xfade_millis = 1_000);
     let first = json(
         post_action(
             &app,
@@ -540,17 +565,18 @@ async fn v2_crossfade_activation_uses_the_same_atomic_exclusion_transition_set()
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
     install_virtual_exclusion_test_state(&state);
-    set_pool_enabled(&state, 2, true);
-    put_virtual_exclusion_zone(&state, &app, &token, &[1, 2]).await;
+    set_virtual_enabled(&state, 1, 1_002, true);
+    put_virtual_exclusion_zone(&state, &app, &token, &[1_001, 1_002]).await;
     let cursor = state.events.latest_sequence();
 
     let response = post_action(
         &app,
         Some(&token),
         desk_id,
-        action_request(
+        virtual_action_request(
             "crossfade-zoned-playback",
             1,
+            1_001,
             serde_json::json!({"type":"crossfade","enabled":true}),
         ),
     )
@@ -560,8 +586,8 @@ async fn v2_crossfade_activation_uses_the_same_atomic_exclusion_transition_set()
     let response = json(response).await;
     let events = playback_runtime_events(&state, cursor);
     assert_eq!(events.len(), 2);
-    assert_eq!(playback_event_state(&events[0]), (2, false));
-    assert_eq!(playback_event_state(&events[1]), (1, true));
+    assert_eq!(playback_event_state(&events[0]), (1_002, false));
+    assert_eq!(playback_event_state(&events[1]), (1_001, true));
     assert_eq!(response["related"][0]["event_sequence"], events[0].sequence);
     assert_eq!(response["event_sequence"], events[1].sequence);
     let _ = std::fs::remove_dir_all(data_dir);
@@ -575,38 +601,40 @@ async fn v2_flash_release_promotion_publishes_its_exclusion_peer() {
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
     install_virtual_exclusion_test_state(&state);
-    update_virtual_definition(&state, 2, |definition| {
+    update_dedicated_virtual_definition(&state, 1, 1_002, |definition| {
         definition.flash_release = light_playback::FlashReleaseMode::ReleaseIntensityOnly;
     });
-    set_pool_enabled(&state, 1, true);
-    put_virtual_exclusion_zone(&state, &app, &token, &[1, 2]).await;
+    set_virtual_enabled(&state, 1, 1_001, true);
+    put_virtual_exclusion_zone(&state, &app, &token, &[1_001, 1_002]).await;
+    let cursor = state.events.latest_sequence();
 
     let press = json(
         post_action(
             &app,
             Some(&token),
             desk_id,
-            action_request(
+            virtual_action_request(
                 "hold-zoned-flash",
-                2,
+                1,
+                1_002,
                 serde_json::json!({"type":"flash","pressed":true}),
             ),
         )
         .await,
     )
     .await;
-    assert_eq!(press["related"], serde_json::json!([]));
-    assert!(pool_is_enabled(&state, 1));
-    let cursor = state.events.latest_sequence();
+    assert_eq!(press["related"].as_array().unwrap().len(), 1);
+    assert!(!virtual_is_enabled(&state, 1, 1_001));
 
     let release = json(
         post_action(
             &app,
             Some(&token),
             desk_id,
-            action_request(
+            virtual_action_request(
                 "release-zoned-flash",
-                2,
+                1,
+                1_002,
                 serde_json::json!({"type":"flash","pressed":false}),
             ),
         )
@@ -614,50 +642,66 @@ async fn v2_flash_release_promotion_publishes_its_exclusion_peer() {
     )
     .await;
 
-    assert_eq!(release["related"].as_array().unwrap().len(), 1);
-    assert_eq!(playback_event_objects(&state, cursor), vec![1, 2]);
-    assert_eq!(enabled_playback_numbers(&state), vec![2]);
+    assert_eq!(release["related"], serde_json::json!([]));
+    assert_eq!(
+        playback_event_identities(&state, cursor),
+        vec![
+            light_application::PlaybackRuntimeIdentity::Virtual(
+                light_playback::VirtualPlaybackAddress::new(1, 1_001).unwrap()
+            ),
+            light_application::PlaybackRuntimeIdentity::Virtual(
+                light_playback::VirtualPlaybackAddress::new(1, 1_002).unwrap()
+            ),
+            light_application::PlaybackRuntimeIdentity::Virtual(
+                light_playback::VirtualPlaybackAddress::new(1, 1_002).unwrap()
+            ),
+        ]
+    );
+    assert_eq!(enabled_playback_numbers(&state), vec![1_002]);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
 #[tokio::test]
-async fn v2_zero_manual_xfade_activation_publishes_its_exclusion_peer() {
+async fn v2_virtual_master_rejects_xfade_without_releasing_its_exclusion_peer() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
     install_virtual_exclusion_test_state(&state);
-    update_virtual_definition(&state, 2, |definition| {
+    update_dedicated_virtual_definition(&state, 1, 1_002, |definition| {
         definition.fader = light_playback::PlaybackFaderMode::XFade;
     });
-    set_pool_enabled(&state, 1, true);
-    put_virtual_exclusion_zone(&state, &app, &token, &[1, 2]).await;
+    set_virtual_enabled(&state, 1, 1_001, true);
+    put_virtual_exclusion_zone(&state, &app, &token, &[1_001, 1_002]).await;
     let cursor = state.events.latest_sequence();
 
-    let response = json(
-        post_action(
-            &app,
-            Some(&token),
-            desk_id,
-            action_request(
-                "zero-xfade-zoned-playback",
-                2,
-                serde_json::json!({"type":"master","value":0.0}),
-            ),
-        )
-        .await,
+    let response = post_action(
+        &app,
+        Some(&token),
+        desk_id,
+        virtual_action_request(
+            "zero-xfade-zoned-playback",
+            1,
+            1_002,
+            serde_json::json!({"type":"master","value":0.0}),
+        ),
     )
     .await;
-
-    assert_eq!(response["related"].as_array().unwrap().len(), 1);
-    assert_eq!(playback_event_objects(&state, cursor), vec![1, 2]);
-    assert_eq!(enabled_playback_numbers(&state), vec![2]);
+    let response_status = response.status();
+    let response = json(response).await;
+    assert_eq!(response_status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response["error"],
+        "virtual master requires the Master fader mode"
+    );
+    assert!(playback_event_identities(&state, cursor).is_empty());
+    assert_eq!(enabled_playback_numbers(&state), vec![1_001]);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
 #[tokio::test]
-async fn v2_explicit_non_current_page_does_not_borrow_virtual_exclusions() {
+async fn v2_page_two_virtual_does_not_match_page_one_numbered_zone() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -665,32 +709,37 @@ async fn v2_explicit_non_current_page_does_not_borrow_virtual_exclusions() {
     open_playback_test_show(&app, &token).await;
     install_virtual_exclusion_test_state(&state);
     add_explicit_virtual_page(&state);
-    set_pool_enabled(&state, 2, true);
-    put_virtual_exclusion_zone(&state, &app, &token, &[1, 2]).await;
+    set_virtual_enabled(&state, 1, 1_002, true);
+    put_virtual_exclusion_zone(&state, &app, &token, &[1_001, 1_002]).await;
     let cursor = state.events.latest_sequence();
 
     let request = serde_json::json!({
         "request_id":"explicit-non-current-zone-member",
-        "address":{"kind":"explicit_page","page":2,"slot":1},
+        "address":{"kind":"virtual","page":2,"playback_number":1301},
         "action":{"type":"on","pressed":true},
         "surface":"virtual"
     });
     let response = post_action(&app, Some(&token), desk_id, request).await;
 
-    assert_eq!(response.status(), StatusCode::OK);
+    let response_status = response.status();
     let response = json(response).await;
+    assert_eq!(
+        response_status,
+        StatusCode::OK,
+        "page-two virtual activation failed: {response}"
+    );
     assert_eq!(response["related"], serde_json::json!([]));
-    assert_eq!(enabled_playback_numbers(&state), vec![1, 2]);
+    assert_eq!(enabled_playback_numbers(&state), vec![1_002, 1_301]);
     let events = playback_runtime_events(&state, cursor);
     assert_eq!(events.len(), 1);
-    assert_eq!(playback_event_state(&events[0]), (1, true));
+    assert_eq!(playback_event_state(&events[0]), (1_301, true));
     assert_eq!(response["event_sequence"], events[0].sequence);
     assert_eq!(
         state
             .output
             .playback_runtime()
             .into_iter()
-            .find(|playback| playback.playback_number == Some(1))
+            .find(|playback| playback.playback_number == Some(1_301))
             .unwrap()
             .activation
             .unwrap()
@@ -699,7 +748,7 @@ async fn v2_explicit_non_current_page_does_not_borrow_virtual_exclusions() {
     );
     let normalized = normalize_restored_virtual_playback_exclusions(&state).unwrap();
     assert!(normalized.released_playbacks.is_empty());
-    assert_eq!(enabled_playback_numbers(&state), vec![1, 2]);
+    assert_eq!(enabled_playback_numbers(&state), vec![1_002, 1_301]);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -773,7 +822,7 @@ async fn v2_current_page_and_explicit_page_addresses_resolve_independently() {
 }
 
 #[tokio::test]
-async fn v2_virtual_exclusion_configuration_is_desk_scoped() {
+async fn v2_shared_virtual_exclusion_configuration_applies_across_desks() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (first_token, _) = login(&app, "Operator").await;
@@ -784,17 +833,18 @@ async fn v2_virtual_exclusion_configuration_is_desk_scoped() {
     let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
     open_playback_test_show(&app, &first_token).await;
     install_virtual_exclusion_test_state(&state);
-    set_pool_enabled(&state, 2, true);
-    put_virtual_exclusion_zone(&state, &app, &first_token, &[1, 2]).await;
+    set_virtual_enabled(&state, 1, 1_002, true);
+    put_virtual_exclusion_zone(&state, &app, &first_token, &[1_001, 1_002]).await;
     let cursor = state.events.latest_sequence();
 
     let response = post_action(
         &app,
         Some(&second_token),
         second_desk.id,
-        action_request(
-            "activate-from-unconfigured-desk",
+        virtual_action_request(
+            "activate-from-second-desk",
             1,
+            1_001,
             serde_json::json!({"type":"on","pressed":true}),
         ),
     )
@@ -802,16 +852,17 @@ async fn v2_virtual_exclusion_configuration_is_desk_scoped() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let response = json(response).await;
-    assert_eq!(response["related"], serde_json::json!([]));
-    assert!(pool_is_enabled(&state, 2));
+    assert_eq!(response["related"].as_array().unwrap().len(), 1);
+    assert!(!virtual_is_enabled(&state, 1, 1_002));
     let events = playback_runtime_events(&state, cursor);
-    assert_eq!(events.len(), 1);
-    assert_eq!(playback_event_state(&events[0]), (1, true));
+    assert_eq!(events.len(), 2);
+    assert_eq!(playback_event_state(&events[0]), (1_002, false));
+    assert_eq!(playback_event_state(&events[1]), (1_001, true));
     let activation = state
         .output
         .playback_runtime()
         .into_iter()
-        .find(|playback| playback.playback_number == Some(1))
+        .find(|playback| playback.playback_number == Some(1_001))
         .unwrap()
         .activation
         .unwrap();
@@ -819,6 +870,10 @@ async fn v2_virtual_exclusion_configuration_is_desk_scoped() {
     assert_eq!(
         activation.surface,
         light_playback::PlaybackActivationSurface::Virtual
+    );
+    assert_eq!(
+        activation.exclusion_scope,
+        light_playback::PlaybackExclusionScope::Show
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -1902,7 +1957,7 @@ async fn transient_preload_cancellation_drains_without_runtime_event_or_persiste
 }
 
 #[tokio::test]
-async fn same_user_preload_commit_keeps_each_captured_actions_originating_desk() {
+async fn same_user_preload_commit_keeps_captured_originating_desk_with_show_scope() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (first_token, _) = login(&app, "Operator").await;
@@ -1914,8 +1969,11 @@ async fn same_user_preload_commit_keeps_each_captured_actions_originating_desk()
     let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
     open_playback_test_show(&app, &first_token).await;
     install_virtual_exclusion_test_state(&state);
-    set_pool_enabled(&state, 2, true);
-    put_virtual_exclusion_zone(&state, &app, &first_token, &[1, 2]).await;
+    set_virtual_enabled(&state, 1, 1_002, true);
+    put_virtual_exclusion_zone(&state, &app, &first_token, &[1_001, 1_002]).await;
+    state.installation.update_configuration(|configuration| {
+        configuration.preload_virtual_playback_actions = true;
+    });
     assert_preload_key(
         &app,
         &second_token,
@@ -1924,12 +1982,12 @@ async fn same_user_preload_commit_keeps_each_captured_actions_originating_desk()
         "preload_entered",
     )
     .await;
-    let mut capture = action_request(
-        "capture-from-unconfigured-desk",
+    let capture = virtual_action_request(
+        "capture-from-second-desk",
         1,
+        1_001,
         serde_json::json!({"type":"on","pressed":true}),
     );
-    capture["surface"] = "physical".into();
     let captured = post_action(&app, Some(&second_token), second_desk.id, capture).await;
     assert_eq!(captured.status(), StatusCode::OK);
     assert_eq!(json(captured).await["outcome"]["status"], "captured");
@@ -1943,23 +2001,23 @@ async fn same_user_preload_commit_keeps_each_captured_actions_originating_desk()
     )
     .await;
 
-    assert_eq!(enabled_playback_numbers(&state), vec![1, 2]);
+    assert_eq!(enabled_playback_numbers(&state), vec![1_001]);
     let activation = state
         .output
         .playback_runtime()
         .into_iter()
-        .find(|playback| playback.playback_number == Some(1))
+        .find(|playback| playback.playback_number == Some(1_001))
         .unwrap()
         .activation
         .unwrap();
     assert_eq!(activation.desk_id, Some(second_desk.id));
     assert_eq!(
         activation.surface,
-        light_playback::PlaybackActivationSurface::Physical
+        light_playback::PlaybackActivationSurface::Virtual
     );
     assert_eq!(
         activation.exclusion_scope,
-        light_playback::PlaybackExclusionScope::OriginatingDesk
+        light_playback::PlaybackExclusionScope::Show
     );
     let show_id = state.active_show.current().as_ref().unwrap().id;
     let persisted = state
@@ -1979,7 +2037,7 @@ async fn preload_hidden_addressed_change_emits_one_equal_projection_event() {
     let session = session_for_token(&state, &token);
     open_playback_test_show(&app, &token).await;
     install_playback_test_state(&state);
-    update_virtual_definition(&state, 1, |definition| definition.xfade_millis = 1_000);
+    update_pool_definition(&state, 1, |definition| definition.xfade_millis = 1_000);
     set_pool_enabled(&state, 1, true);
     let crossfade = post_action(
         &app,
@@ -2076,6 +2134,24 @@ fn action_request(
     serde_json::json!({
         "request_id": request_id,
         "address": {"kind":"playback","playback_number":playback_number},
+        "action": action,
+        "surface": "virtual"
+    })
+}
+
+fn virtual_action_request(
+    request_id: &str,
+    page: u16,
+    playback_number: u16,
+    action: serde_json::Value,
+) -> serde_json::Value {
+    serde_json::json!({
+        "request_id": request_id,
+        "address": {
+            "kind": "virtual",
+            "page": page,
+            "playback_number": playback_number
+        },
         "action": action,
         "surface": "virtual"
     })
@@ -2235,19 +2311,30 @@ fn active_show_id(state: &AppState) -> Uuid {
     state.active_show.current().as_ref().unwrap().id.0
 }
 
-fn install_virtual_playback_test_state(state: &AppState, _desk_id: Uuid) {
+fn install_virtual_playback_test_state(state: &AppState) {
     install_playback_test_state(state);
     let cue_list_id = state.output.snapshot().cue_lists[0].id;
     let mut snapshot = (*state.output.snapshot()).clone();
-    std::sync::Arc::make_mut(&mut snapshot.playbacks).push(playback_test_definition(
-        3,
-        light_playback::PlaybackTarget::CueList { cue_list_id },
-    ));
     snapshot.playback_pages = vec![light_playback::PlaybackPage {
         number: 1,
         name: "Virtual".into(),
-        slots: HashMap::from([(1, 1), (2, 3)]),
-        virtual_playbacks: HashMap::new(),
+        slots: HashMap::new(),
+        virtual_playbacks: HashMap::from([
+            (
+                1_001,
+                playback_test_definition(
+                    1_001,
+                    light_playback::PlaybackTarget::CueList { cue_list_id },
+                ),
+            ),
+            (
+                1_002,
+                playback_test_definition(
+                    1_002,
+                    light_playback::PlaybackTarget::CueList { cue_list_id },
+                ),
+            ),
+        ]),
     }]
     .into();
     state.output.replace_snapshot(snapshot).unwrap();
@@ -2258,6 +2345,24 @@ fn install_virtual_playback_test_state(state: &AppState, _desk_id: Uuid) {
     }]);
     let show_id = state.active_show.current().as_ref().unwrap().id;
     persist_test_virtual_playback_exclusions(state, show_id, &store);
+}
+
+fn playback_event_identities(
+    state: &AppState,
+    after: u64,
+) -> Vec<light_application::PlaybackRuntimeIdentity> {
+    playback_runtime_events(state, after)
+        .into_iter()
+        .filter_map(|event| {
+            let light_application::ApplicationEvent::Playback(
+                light_application::PlaybackEvent::RuntimeChanged(change),
+            ) = &event.payload
+            else {
+                return None;
+            };
+            Some(change.projection.requested.clone())
+        })
+        .collect()
 }
 
 fn playback_event_objects(state: &AppState, after: u64) -> Vec<u16> {
@@ -2361,7 +2466,7 @@ fn set_group_playback_assignment(state: &AppState, group_id: &str, playback: Opt
     state.output.replace_snapshot(snapshot).unwrap();
 }
 
-fn install_virtual_exclusion_test_state(state: &AppState) {
+fn install_pool_cuelist_test_state(state: &AppState) {
     let cue_list = playback_test_cue_list();
     let cue_list_id = cue_list.id;
     let playbacks = (1..=4)
@@ -2384,6 +2489,35 @@ fn install_virtual_exclusion_test_state(state: &AppState) {
                 name: "Main".into(),
                 slots: std::collections::HashMap::from([(1, 1), (2, 2), (3, 3), (4, 4)]),
                 virtual_playbacks: std::collections::HashMap::new(),
+            }]
+            .into(),
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+}
+
+fn install_virtual_exclusion_test_state(state: &AppState) {
+    let cue_list = playback_test_cue_list();
+    let cue_list_id = cue_list.id;
+    let virtual_playbacks = (1_001..=1_004)
+        .map(|number| {
+            let mut definition = playback_test_definition(
+                number,
+                light_playback::PlaybackTarget::CueList { cue_list_id },
+            );
+            definition.auto_off = false;
+            (number, definition)
+        })
+        .collect::<HashMap<_, _>>();
+    state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            cue_lists: vec![cue_list].into(),
+            playback_pages: vec![light_playback::PlaybackPage {
+                number: 1,
+                name: "Main".into(),
+                slots: HashMap::new(),
+                virtual_playbacks,
             }]
             .into(),
             ..EngineSnapshot::default()
@@ -2432,7 +2566,7 @@ fn install_auto_off_test_state(state: &AppState) {
         .unwrap();
 }
 
-fn update_virtual_definition(
+fn update_pool_definition(
     state: &AppState,
     number: u16,
     update: impl FnOnce(&mut light_playback::PlaybackDefinition),
@@ -2446,13 +2580,36 @@ fn update_virtual_definition(
     state.output.replace_snapshot(snapshot).unwrap();
 }
 
+fn update_dedicated_virtual_definition(
+    state: &AppState,
+    page: u8,
+    number: u16,
+    update: impl FnOnce(&mut light_playback::PlaybackDefinition),
+) {
+    let mut snapshot = (*state.output.snapshot()).clone();
+    let definition = std::sync::Arc::make_mut(&mut snapshot.playback_pages)
+        .iter_mut()
+        .find(|candidate| candidate.number == page)
+        .and_then(|candidate| candidate.virtual_playbacks.get_mut(&number))
+        .unwrap();
+    update(definition);
+    state.output.replace_snapshot(snapshot).unwrap();
+}
+
 fn add_explicit_virtual_page(state: &AppState) {
     let mut snapshot = (*state.output.snapshot()).clone();
+    let cue_list_id = snapshot.cue_lists[0].id;
     std::sync::Arc::make_mut(&mut snapshot.playback_pages).push(light_playback::PlaybackPage {
         number: 2,
         name: "Explicit".into(),
-        slots: std::collections::HashMap::from([(1, 1)]),
-        virtual_playbacks: std::collections::HashMap::new(),
+        slots: HashMap::new(),
+        virtual_playbacks: HashMap::from([(
+            1_301,
+            playback_test_definition(
+                1_301,
+                light_playback::PlaybackTarget::CueList { cue_list_id },
+            ),
+        )]),
     });
     state.output.replace_snapshot(snapshot).unwrap();
 }
@@ -2471,27 +2628,55 @@ fn set_pool_enabled(state: &AppState, number: u16, enabled: bool) {
         .unwrap();
 }
 
-fn pool_is_enabled(state: &AppState, number: u16) -> bool {
+fn set_virtual_enabled(state: &AppState, page: u8, number: u16, enabled: bool) {
     state
         .output
-        .playback_runtime()
-        .iter()
-        .any(|playback| playback.playback_number == Some(number) && playback.enabled)
+        .execute_playback(light_engine::EnginePlaybackCommand::Virtual {
+            address: light_playback::VirtualPlaybackAddress::new(page, number).unwrap(),
+            action: if enabled {
+                light_engine::VirtualPlaybackAction::On
+            } else {
+                light_engine::VirtualPlaybackAction::Off
+            },
+            exclusion_zones: Vec::new(),
+            activation_origin: None,
+        })
+        .unwrap();
 }
 
-async fn put_virtual_exclusion_zone(state: &AppState, app: &Router, token: &str, slots: &[u8]) {
+fn virtual_is_enabled(state: &AppState, page: u8, number: u16) -> bool {
+    state.output.playback_runtime().iter().any(|playback| {
+        playback.enabled
+            && playback.playback_identity
+                == Some(light_playback::PlaybackIdentity::Virtual(
+                    light_playback::VirtualPlaybackAddress::new(page, number).unwrap(),
+                ))
+    })
+}
+
+async fn put_virtual_exclusion_zone(
+    state: &AppState,
+    app: &Router,
+    token: &str,
+    playback_numbers: &[u16],
+) {
     let show_id = state.active_show.current().as_ref().unwrap().id.0;
     let response = app
         .clone()
         .oneshot(
-            Request::post("/api/v2/virtual-playback-exclusion-zones/v2-route-test/update")
+            Request::post("/api/v2/virtual-playback-exclusion-zones/update")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header("x-tosk-show", show_id.to_string())
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({
                         "request_id": Uuid::new_v4().to_string(),
-                        "zones":[{"id":"v2-route-zone","name":"v2 route zone","slots":slots}]
+                        "expected_revision": 0,
+                        "zones":[{
+                            "id":"v2-route-zone",
+                            "name":"v2 route zone",
+                            "playback_numbers":playback_numbers
+                        }]
                     })
                     .to_string(),
                 ))

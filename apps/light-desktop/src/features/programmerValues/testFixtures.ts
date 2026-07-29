@@ -3,6 +3,7 @@ import type {
 	ProgrammerFixtureValue,
 	ProgrammerGroupValue,
 	ProgrammerValuesEventMessage,
+	ProgrammerValuesChange,
 	ProgrammerValuesProjection,
 	ProgrammerValuesScope,
 	ProgrammerValuesSnapshot,
@@ -73,6 +74,21 @@ export function valuesSnapshot(
 	return {
 		cursor: options.cursor ?? 10,
 		projection: valuesProjection(options),
+	};
+}
+
+export function valuesChange(
+	projection: ProgrammerValuesProjection,
+): ProgrammerValuesChange {
+	return {
+		userId: projection.userId,
+		revision: projection.revision,
+		fixtureValues: projection.fixtureValues,
+		removedFixtureValues: [],
+		groupValues: projection.groupValues,
+		removedGroupValues: [],
+		dynamicValues: projection.dynamicValues ?? [],
+		removedDynamicValues: [],
 	};
 }
 

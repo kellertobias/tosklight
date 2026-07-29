@@ -5,6 +5,7 @@ import type {
 	GridRect,
 	TextEditorMode,
 	VirtualPlaybackExclusionZone,
+	VirtualPlaybackPageMode,
 	WindowSettings,
 } from "../types";
 
@@ -15,6 +16,10 @@ export type Action =
 	| { type: "CLOSE_FILE_MANAGER" }
 	| { type: "TOGGLE_CONTROL_MODE" }
 	| { type: "SET_PANE_SETTINGS"; id: string | null }
+	| {
+			type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT";
+			edit: AppState["virtualPlaybackZoneEdit"];
+	  }
 	| { type: "SET_PANE_RECT"; id: string; rect: Partial<GridRect> }
 	| { type: "SET_PANE_GROUP_SHORTCUTS"; id: string; value: boolean }
 	| { type: "SET_PANE_CUE_SIDEBAR"; id: string; value: boolean }
@@ -45,6 +50,13 @@ export type Action =
 			id: string;
 			rows: number;
 			columns: number;
+			changed?: "rows" | "columns";
+	  }
+	| {
+			type: "SET_VIRTUAL_PLAYBACK_PAGE_MODE";
+			id: string;
+			mode: VirtualPlaybackPageMode;
+			pinnedPage?: number;
 	  }
 	| {
 			type: "SET_VIRTUAL_PLAYBACK_CELL";

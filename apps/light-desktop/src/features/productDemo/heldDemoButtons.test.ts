@@ -15,6 +15,7 @@ function deferredActions() {
 		releaseCueListSource: vi.fn(async () => null),
 		setGroupMaster: vi.fn(async () => null),
 		setGroupFlash: vi.fn(async () => null),
+		virtualPlaybackAction: vi.fn(async () => null),
 		poolPlaybackAction: vi.fn(async (playbackNumber, action, input) => {
 			calls.push({ playbackNumber, action, input });
 			await new Promise<void>((resolve) => settle.push(resolve));

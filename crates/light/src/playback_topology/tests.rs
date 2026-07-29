@@ -121,7 +121,7 @@ fn storage_identity_conflicts_stop_before_topology_mutation() {
     slot_rig.seed(
         "playback_page",
         "legacy-page-one",
-        &json!({"number":1,"name":"Main","slots":{"1":7}}),
+        &json!({"number":1,"name":"Main","slots":{"1":7},"virtual_playbacks":{}}),
     );
     let slot_error = slot_rig
         .handle(
@@ -196,7 +196,7 @@ fn canonical_storage_key_collisions_stop_before_topology_mutation() {
     playback_rig.seed(
         "playback_page",
         "legacy-page-one",
-        &json!({"number":1,"name":"Main","slots":{}}),
+        &json!({"number":1,"name":"Main","slots":{},"virtual_playbacks":{}}),
     );
     let playback_revision = playback_rig.show_revision();
 
@@ -243,7 +243,13 @@ fn configure_empty_slot_allocates_once_and_commits_playback_and_page_together() 
     rig.seed(
         "playback_page",
         "legacy-page-one",
-        &json!({"number":1,"name":"Main","slots":{},"future":{"columns":12}}),
+        &json!({
+            "number":1,
+            "name":"Main",
+            "slots":{},
+            "virtual_playbacks":{},
+            "future":{"columns":12}
+        }),
     );
 
     let result = rig
@@ -298,7 +304,7 @@ fn legacy_semantic_configure_is_no_change_without_normalizing_raw_json() {
     rig.seed(
         "playback_page",
         "1",
-        &json!({"number":1,"name":"Main","slots":{"2":7}}),
+        &json!({"number":1,"name":"Main","slots":{"2":7},"virtual_playbacks":{}}),
     );
     let decoded: PlaybackDefinition = serde_json::from_value(legacy.clone()).unwrap();
 
@@ -346,7 +352,13 @@ fn changed_playback_preserves_nested_extensions_and_returns_unchanged_page_autho
     rig.seed(
         "playback_page",
         "page-one",
-        &json!({"number":1,"name":"Main","slots":{"2":7},"future_page":true}),
+        &json!({
+            "number":1,
+            "name":"Main",
+            "slots":{"2":7},
+            "virtual_playbacks":{},
+            "future_page":true
+        }),
     );
     let mut changed: PlaybackDefinition = serde_json::from_value(raw).unwrap();
     changed.name = "After".into();
@@ -406,12 +418,24 @@ fn clear_removes_one_playback_from_every_page_in_one_event() {
     rig.seed(
         "playback_page",
         "page-a",
-        &json!({"number":1,"name":"One","slots":{"1":9,"2":3},"future":"a"}),
+        &json!({
+            "number":1,
+            "name":"One",
+            "slots":{"1":9,"2":3},
+            "virtual_playbacks":{},
+            "future":"a"
+        }),
     );
     rig.seed(
         "playback_page",
         "page-b",
-        &json!({"number":2,"name":"Two","slots":{"7":9},"future":"b"}),
+        &json!({
+            "number":2,
+            "name":"Two",
+            "slots":{"7":9},
+            "virtual_playbacks":{},
+            "future":"b"
+        }),
     );
     let before = rig.show_revision();
 
@@ -463,7 +487,7 @@ fn empty_clear_is_no_change_and_does_not_prepare_or_emit() {
     rig.seed(
         "playback_page",
         "1",
-        &json!({"number":1,"name":"Main","slots":{}}),
+        &json!({"number":1,"name":"Main","slots":{},"virtual_playbacks":{}}),
     );
 
     let result = rig
@@ -496,7 +520,7 @@ fn exact_replay_returns_original_authority_without_a_second_transaction_or_event
     rig.seed(
         "playback_page",
         "1",
-        &json!({"number":1,"name":"Main","slots":{}}),
+        &json!({"number":1,"name":"Main","slots":{},"virtual_playbacks":{}}),
     );
     let action = PlaybackTopologyAction::ConfigureSlot {
         page: 1,
@@ -526,7 +550,7 @@ fn show_object_and_request_conflicts_stop_before_side_effects() {
     rig.seed(
         "playback_page",
         "1",
-        &json!({"number":1,"name":"Main","slots":{}}),
+        &json!({"number":1,"name":"Main","slots":{},"virtual_playbacks":{}}),
     );
     let action = PlaybackTopologyAction::ConfigureSlot {
         page: 1,
@@ -600,7 +624,7 @@ fn replay_identity_isolated_by_user_desk_and_session() {
     rig.seed(
         "playback_page",
         "1",
-        &json!({"number":1,"name":"Main","slots":{}}),
+        &json!({"number":1,"name":"Main","slots":{},"virtual_playbacks":{}}),
     );
     let action = PlaybackTopologyAction::ClearMappedPlayback {
         page: 1,

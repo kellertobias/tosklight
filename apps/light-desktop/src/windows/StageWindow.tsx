@@ -22,6 +22,10 @@ export function StageWindow(props: StageWindowProps) {
 		selection.fixtureIdSet,
 		props.patchedFixtures,
 		false,
+		props.paneId ??
+			(props.compact
+				? `compact-stage-${options.followPreload ? "preload" : "live"}`
+				: `stage-window-${options.followPreload ? "preload" : "live"}`),
 	);
 	return (
 		<div
@@ -52,6 +56,7 @@ export function StageWindow(props: StageWindowProps) {
 					camera3d={props.camera3d}
 					selection={selection}
 					active={active}
+					paneId={props.paneId}
 				/>
 			) : (
 				<Stage2dView
@@ -63,9 +68,7 @@ export function StageWindow(props: StageWindowProps) {
 					patchedFixtures={stage.stageFixtures}
 					patchSelectionPreview={patchSelectionPreview}
 					patchPreviewFixtures={stage.patchPreviewFixtures}
-					visualizationLane={
-						options.followPreload ? "preload" : "normal"
-					}
+					visualizationLane={options.followPreload ? "preload" : "normal"}
 					visualizationActive={active}
 				/>
 			)}

@@ -7,24 +7,21 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { artifactPaths } from "./artifact-paths.mjs";
 
-if (process.env.GITHUB_ACTIONS !== "true") {
-	throw new Error("The packaged desktop launch probe is CI-only.");
-}
-
 const target = process.env.LIGHT_DESKTOP_SMOKE_TARGET;
-if (!target) throw new Error("LIGHT_DESKTOP_SMOKE_TARGET is required.");
+if (process.env.GITHUB_ACTIONS === "true" && !target)
+	throw new Error("LIGHT_DESKTOP_SMOKE_TARGET is required in CI.");
+const buildDirectory = target
+	? path.join(artifactPaths.cargo, target, "release")
+	: path.join(artifactPaths.cargo, "debug");
 
 const executable =
 	process.platform === "darwin"
 		? path.join(
-				artifactPaths.cargo,
-				target,
-				"release/bundle/macos/ToskLight.app/Contents/MacOS/light-desktop",
+				buildDirectory,
+				"bundle/macos/ToskLight.app/Contents/MacOS/light-desktop",
 			)
 		: path.join(
-				artifactPaths.cargo,
-				target,
-				"release",
+				buildDirectory,
 				process.platform === "win32" ? "light-desktop.exe" : "light-desktop",
 			);
 

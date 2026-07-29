@@ -124,7 +124,13 @@ function pageObject(slots: Record<string, number> = { 2: 7 }) {
 		kind: "playback_page",
 		object_id: "legacy-page-four",
 		object_revision: 8,
-		body: { number: 4, name: "Page 4", slots, future_page: true },
+		body: {
+			number: 4,
+			name: "Page 4",
+			slots,
+			virtual_playbacks: {},
+			future_page: true,
+		},
 	};
 }
 
@@ -377,7 +383,13 @@ describe("Playback topology v2 wire", () => {
 			kind: "playback_page",
 			object_id: "5",
 			object_revision: 1,
-			body: { number: 5, name: "Page 5", slots: {}, future_page: true },
+			body: {
+				number: 5,
+				name: "Page 5",
+				slots: {},
+				virtual_playbacks: {},
+				future_page: true,
+			},
 		};
 		const create = decodePlaybackTopologyOutcome(
 			{
@@ -608,7 +620,12 @@ describe("Playback topology v2 wire", () => {
 					{
 						...pageObject({}),
 						object_id: "page-two",
-						body: { number: 2, name: "Page 2", slots: {} },
+						body: {
+							number: 2,
+							name: "Page 2",
+							slots: {},
+							virtual_playbacks: {},
+						},
 					},
 					{
 						state: "deleted",

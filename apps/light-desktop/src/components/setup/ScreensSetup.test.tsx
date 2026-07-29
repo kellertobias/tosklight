@@ -163,8 +163,8 @@ describe("default screen picker", () => {
 		render(<DefaultScreenPicker clients={[client("old", "Old wing", false, "2026-07-01T10:00:00Z")]} currentClientId="current" currentDeskId="desk-current" onSelect={vi.fn()} onRemove={remove} onClose={vi.fn()}/>);
 		fireEvent.click(screen.getByRole("button", { name: "Remove client" }));
 		const confirmation = screen.getByRole("alertdialog", { name: "Remove client Old wing?" });
-		expect(confirmation).toHaveTextContent("per-show page and playback selection, desk lock, Update defaults, and virtual-playback exclusion settings");
-		expect(confirmation).toHaveTextContent("Portable shows, users, optional screens, other clients, and installation-wide configuration will not change");
+		expect(confirmation).toHaveTextContent("per-show page and playback selection, desk lock, Update defaults");
+		expect(confirmation).toHaveTextContent("Portable shows, Virtual Playback assignments and exclusion zones, users, optional screens, other clients, and installation-wide configuration will not change");
 		fireEvent.click(screen.getAllByRole("button", { name: "Remove client" }).at(-1)!);
 		await waitFor(() => expect(remove).toHaveBeenCalledWith("desk-old"));
 		expect(await screen.findByRole("alert")).toHaveTextContent("may have reconnected");

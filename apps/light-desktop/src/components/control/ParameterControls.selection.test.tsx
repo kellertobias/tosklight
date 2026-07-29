@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DynamicEditorSessionProvider } from "../../features/dynamics/DynamicEditorSessionContext";
 import { ProgrammingInteractionViewProvider } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { ProgrammingInteractionStore } from "../../features/programmingInteraction/store";
 import {
@@ -192,7 +193,9 @@ function selectionView(
 				transport={transport}
 				loadSnapshot={loadSnapshot}
 			>
-				{children}
+				<DynamicEditorSessionProvider>
+					{children}
+				</DynamicEditorSessionProvider>
 			</ProgrammingInteractionViewProvider>
 		),
 		store,

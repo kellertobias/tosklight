@@ -202,13 +202,13 @@ fn project_virtual(
     let target = match &definition.target {
         PlaybackTarget::CueList { cue_list_id } => {
             return Ok(cue_list_projection(
-            scope,
-            requested,
-            Some(address.number().get()),
-            *cue_list_id,
-            runtime.iter().find(|status| {
-                status.playback.playback_identity == Some(PlaybackIdentity::Virtual(address))
-            }),
+                scope,
+                requested,
+                Some(address.number().get()),
+                *cue_list_id,
+                runtime.iter().find(|status| {
+                    status.playback.playback_identity == Some(PlaybackIdentity::Virtual(address))
+                }),
             ));
         }
         PlaybackTarget::Dynamic { assignment } => PlaybackTargetProjection::Dynamic {
@@ -220,9 +220,7 @@ fn project_virtual(
                 .output
                 .active_dynamic_playbacks()
                 .into_iter()
-                .find(|active| {
-                    active.playback_identity == Some(PlaybackIdentity::Virtual(address))
-                })
+                .find(|active| active.playback_identity == Some(PlaybackIdentity::Virtual(address)))
                 .map(|active| dynamic_runtime_projection(ports, snapshot, assignment, active)),
         },
         PlaybackTarget::Group { group_id } => group_projection(ports, snapshot, group_id)?,
@@ -600,6 +598,7 @@ pub(in crate::runtime) fn dynamic_target_lane_coverage(
     coverage
 }
 
+#[cfg(test)]
 const fn dynamic_playback_controller_id(playback_number: u16) -> uuid::Uuid {
     uuid::Uuid::from_u128(0x4459_4e41_4d49_432d_504c_4159_4241_434b ^ playback_number as u128)
 }

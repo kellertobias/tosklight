@@ -3,7 +3,7 @@ import type {
 	DynamicDefinitionProjection,
 	DynamicUpdateIntent,
 	ShowObjectActionOutcome,
-} from "../../api/generated/light-wire";
+} from "../../api/types";
 import { createDefaultDynamicDefinition } from "../../windows/DynamicsWindow";
 import type { ShowObject } from "../showObjects/contracts";
 import { ShowObjectsStore } from "../showObjects/store";

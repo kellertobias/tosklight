@@ -225,7 +225,9 @@ impl EventDraft {
             related_objects: Vec::new(),
             source: EventSource::Action(context.source),
             correlation_id: Some(context.correlation_id),
-            delivery: DeliveryPolicy::Replaceable,
+            // Address-level deltas are ordered and cannot supersede one another. A bounded
+            // subscriber repairs any detected gap from the authoritative full snapshot.
+            delivery: DeliveryPolicy::Lossless,
             payload: ApplicationEvent::Programming(ProgrammingEvent::ValuesChanged(change)),
         }
     }

@@ -204,6 +204,7 @@ pub(super) fn supply_playback_defaults(
             number: 1,
             name: "Main".into(),
             slots: HashMap::new(),
+            virtual_playbacks: HashMap::new(),
         });
     }
 }

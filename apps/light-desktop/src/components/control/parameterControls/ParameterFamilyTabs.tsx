@@ -1,6 +1,6 @@
 import { Button } from "@tosklight/ui";
 import { EncoderGroupTabs } from "@tosklight/ui/encoders";
-import type { DynamicDefinitionProjection } from "../../../api/generated/light-wire";
+import type { DynamicDefinitionProjection } from "../../../api/types";
 import type { DynamicEditorTask } from "../../../features/dynamics/DynamicEditorSessionContext";
 import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
 import { useDynamics } from "../../../features/showObjects/ShowObjectsState";

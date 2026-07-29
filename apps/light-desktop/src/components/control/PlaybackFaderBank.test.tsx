@@ -264,6 +264,7 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => {
 	};
 });
 vi.mock("../../features/showObjects/ShowObjectsState", () => ({
+	useDynamics: () => [],
 	usePortableGroups: (enabled: boolean) => {
 		mocks.portableGroups(enabled);
 		return [];

@@ -59,6 +59,7 @@ function projection(userId = USER_ID) {
 			},
 		],
 		group_values: [],
+		dynamic_values: [],
 	};
 }
 

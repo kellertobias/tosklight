@@ -341,4 +341,32 @@ describe("ProgrammerValuesViewProvider", () => {
 		expect(transport.subscriptions[0].close).toHaveBeenCalledOnce();
 		expect(transport.subscriptions[1].after).toBe(1);
 	});
+
+	it("does not reload authority when a parent recreates callback props", async () => {
+		const store = new ProgrammerValuesStore();
+		const transport = new FakeProgrammerValuesTransport();
+		const loadSnapshot = vi.fn(async () => valuesSnapshot());
+		const view = () => (
+			<ProgrammerValuesViewProvider
+				showId={SHOW_ID}
+				userId={USER_ID}
+				authorityKey="stable-session"
+				store={store}
+				transport={transport}
+				loadSnapshot={() => loadSnapshot()}
+				onSessionError={() => undefined}
+			>
+				<ProjectionProbe enabled onRender={vi.fn()} />
+			</ProgrammerValuesViewProvider>
+		);
+		const rendered = render(view());
+		await waitFor(() => expect(loadSnapshot).toHaveBeenCalledOnce());
+		await waitFor(() => expect(transport.subscriptions).toHaveLength(1));
+
+		rendered.rerender(view());
+
+		expect(loadSnapshot).toHaveBeenCalledOnce();
+		expect(transport.subscriptions).toHaveLength(1);
+		expect(transport.subscriptions[0].close).not.toHaveBeenCalled();
+	});
 });

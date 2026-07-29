@@ -67,7 +67,7 @@ struct RuntimeResources {
     pub(super) active_show: Arc<RwLock<Option<ShowEntry>>>,
     pub(super) activation: ActiveShowCoordinator,
     pub(super) dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
-    pub(super) dynamic_auto_offs: Arc<Mutex<Vec<u16>>>,
+    pub(super) dynamic_auto_offs: Arc<Mutex<Vec<light_playback::PlaybackIdentity>>>,
     pub(super) visualization_frames: Arc<super::visualization_frame::VisualizationFrameHub>,
 }
 

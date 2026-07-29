@@ -7,7 +7,7 @@ import type {
 	DynamicSpeedProjection,
 	DynamicTargetBindingProjection,
 	DynamicUpdateIntent,
-} from "../../api/generated/light-wire";
+} from "../../api/types";
 
 /**
  * Projects a Dynamic update exactly as the server will apply it so encoder

@@ -3,6 +3,7 @@ import {
 	chooseProgrammerValuesRevision,
 } from "./authority";
 import type {
+	ProgrammerValuesChange,
 	ProgrammerValuesProjection,
 	ProgrammerValuesSnapshot,
 } from "./contracts";
@@ -111,6 +112,62 @@ export class ProgrammerValuesStore {
 		expectedScope = this.scope,
 	) {
 		return this.install(projection, sequence, expectedScope, true);
+	}
+
+	applyChange(
+		change: ProgrammerValuesChange,
+		sequence: number,
+		expectedScope = this.scope,
+	) {
+		if (!this.canAccept(change.userId, expectedScope)) return false;
+		if (!this.authoritative)
+			return this.rejectProtocol(
+				new ProgrammerValuesProtocolError(
+					"Programmer values delta arrived before its snapshot",
+					sequence,
+				),
+				sequence,
+			);
+		try {
+			assertCursor(sequence);
+			if (change.revision !== this.authoritative.revision + 1)
+				throw new ProgrammerValuesProtocolError(
+					"Programmer values delta revision is not contiguous",
+					sequence,
+				);
+			const fixtureValues = mergeAddressValues(
+				this.authoritative.fixtureValues,
+				change.fixtureValues,
+				change.removedFixtureValues,
+				(entry) => `${entry.fixtureId}\u0000${entry.attribute}`,
+			);
+			const groupValues = mergeAddressValues(
+				this.authoritative.groupValues,
+				change.groupValues,
+				change.removedGroupValues,
+				(entry) => `${entry.groupId}\u0000${entry.attribute}`,
+			);
+			const dynamicValues = mergeAddressValues(
+				this.authoritative.dynamicValues ?? [],
+				change.dynamicValues,
+				change.removedDynamicValues,
+				(entry) => `${entry.fixtureId}\u0000${entry.attribute}`,
+			);
+			return this.install(
+				{
+					userId: change.userId,
+					revision: change.revision,
+					fixtureValues,
+					groupValues,
+					...(dynamicValues.length > 0 ? { dynamicValues } : {}),
+				},
+				sequence,
+				expectedScope,
+				true,
+			);
+		} catch (reason) {
+			return this.rejectProtocol(reason, sequence);
+		}
 	}
 
 	beginOptimistic(
@@ -402,4 +459,19 @@ export class ProgrammerValuesStore {
 	private emit() {
 		for (const listener of this.listeners) listener();
 	}
+}
+
+function mergeAddressValues<
+	T,
+	A,
+>(
+	current: readonly T[],
+	upserts: readonly T[],
+	removals: readonly A[],
+	key: (value: T | A) => string,
+) {
+	const merged = new Map(current.map((entry) => [key(entry), entry]));
+	for (const removal of removals) merged.delete(key(removal));
+	for (const upsert of upserts) merged.set(key(upsert), upsert);
+	return [...merged.values()];
 }

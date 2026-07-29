@@ -185,7 +185,7 @@ fn validate_family_shape(
         ActiveShowObjectKind::Group => &["name", "fixtures"],
         ActiveShowObjectKind::PatchLayer => &["id", "name", "order"],
         ActiveShowObjectKind::Playback => &["number", "name", "target"],
-        ActiveShowObjectKind::PlaybackPage => &["number", "name", "slots"],
+        ActiveShowObjectKind::PlaybackPage => &["number", "name", "slots", "virtual_playbacks"],
         // `values` was absent from early empty Presets and is defaulted by the typed model.
         ActiveShowObjectKind::Preset => &["name", "family", "number"],
         ActiveShowObjectKind::StageLayout => &["positions"],
@@ -207,7 +207,7 @@ fn looks_like_other_family(object: &serde_json::Map<String, serde_json::Value>) 
         &["name", "fixtures"],
         &["name", "order"],
         &["number", "name", "target"],
-        &["number", "name", "slots"],
+        &["number", "name", "slots", "virtual_playbacks"],
         &["name", "family", "number"],
         &["positions"],
     ]

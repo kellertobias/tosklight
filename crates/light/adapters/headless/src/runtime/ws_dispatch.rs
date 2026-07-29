@@ -244,80 +244,50 @@ fn dispatch_action(
         LiveAction::FixtureControl(request) => {
             dispatch_fixture_control(state, session, request, context)
         }
-        LiveAction::DynamicToggle(request) => run_interaction_with_activation(
+        dynamic_action => dispatch_dynamic_action(
             state,
             session,
             context,
             dynamic_activation_held,
-            || ActionOutput::plain(dispatch_dynamic_toggle(state, session, context, request)),
-        ),
-        LiveAction::DynamicStart(request) => run_interaction_with_activation(
-            state,
-            session,
-            context,
-            dynamic_activation_held,
-            || ActionOutput::plain(dispatch_dynamic_start(state, session, context, request)),
-        ),
-        LiveAction::DynamicOff(request) => run_interaction_with_activation(
-            state,
-            session,
-            context,
-            dynamic_activation_held,
-            || ActionOutput::plain(dispatch_dynamic_off(state, session, context, request)),
-        ),
-        LiveAction::DynamicSize(request) => run_interaction_with_activation(
-            state,
-            session,
-            context,
-            dynamic_activation_held,
-            || {
-                ActionOutput::plain(dispatch_dynamic_update(
-                    state,
-                    session,
-                    context,
-                    request,
-                    DynamicUpdateField::Size,
-                ))
-            },
-        ),
-        LiveAction::DynamicSpeed(request) => run_interaction_with_activation(
-            state,
-            session,
-            context,
-            dynamic_activation_held,
-            || {
-                ActionOutput::plain(dispatch_dynamic_update(
-                    state,
-                    session,
-                    context,
-                    request,
-                    DynamicUpdateField::Speed,
-                ))
-            },
-        ),
-        LiveAction::DynamicPhase(request) => run_interaction_with_activation(
-            state,
-            session,
-            context,
-            dynamic_activation_held,
-            || {
-                ActionOutput::plain(dispatch_dynamic_update(
-                    state,
-                    session,
-                    context,
-                    request,
-                    DynamicUpdateField::Phase,
-                ))
-            },
-        ),
-        LiveAction::DynamicFixAt(request) => run_interaction_with_activation(
-            state,
-            session,
-            context,
-            dynamic_activation_held,
-            || ActionOutput::plain(dispatch_dynamic_fix_at(state, session, context, request)),
+            dynamic_action,
         ),
     }
+}
+
+fn dispatch_dynamic_action(
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+    dynamic_activation_held: bool,
+    action: LiveAction,
+) -> ActionOutput {
+    run_interaction_with_activation(state, session, context, dynamic_activation_held, || {
+        let result = match action {
+            LiveAction::DynamicToggle(request) => {
+                dispatch_dynamic_toggle(state, session, context, request)
+            }
+            LiveAction::DynamicStart(request) => {
+                dispatch_dynamic_start(state, session, context, request)
+            }
+            LiveAction::DynamicOff(request) => {
+                dispatch_dynamic_off(state, session, context, request)
+            }
+            LiveAction::DynamicSize(request) => {
+                dispatch_dynamic_update(state, session, context, request, DynamicUpdateField::Size)
+            }
+            LiveAction::DynamicSpeed(request) => {
+                dispatch_dynamic_update(state, session, context, request, DynamicUpdateField::Speed)
+            }
+            LiveAction::DynamicPhase(request) => {
+                dispatch_dynamic_update(state, session, context, request, DynamicUpdateField::Phase)
+            }
+            LiveAction::DynamicFixAt(request) => {
+                dispatch_dynamic_fix_at(state, session, context, request)
+            }
+            _ => Err("expected Dynamic live action".into()),
+        };
+        ActionOutput::plain(result)
+    })
 }
 
 fn is_dynamic_action(action: &LiveAction) -> bool {
@@ -369,6 +339,7 @@ fn dispatch_dynamic_start_with(
             .collect(),
         overrides: dynamic_overrides(request.request.overrides),
         timing: dynamic_timing(request.request.timing),
+        undo_group: request.request.undo_group,
     };
     let result = if toggle {
         state.dynamics.toggle(context, command, &ports)

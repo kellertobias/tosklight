@@ -131,6 +131,7 @@ fn preload_dynamic_start_stays_projected_until_go_then_installs_and_persists_run
                     phase_offset_degrees: 0.0,
                 },
                 timing: light_dynamics::DynamicValueTiming::default(),
+                undo_group: None,
             },
             &super::dynamics_adapter::ServerDynamicsPorts {
                 state: &state,
@@ -164,6 +165,55 @@ fn preload_dynamic_start_stays_projected_until_go_then_installs_and_persists_run
         .unwrap()
         .expect("Preload GO persists the reconciled Dynamic runtime");
     assert!(persisted.contains(&result.controller_id.to_string()));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn grouped_dynamic_starts_share_one_programmer_undo_checkpoint() {
+    let (state, data_dir) = test_state();
+    let user = state.installation.users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "grouped-dynamic-starts".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programming.start(session.id, user.id);
+    let fixtures = [light_core::FixtureId::new(), light_core::FixtureId::new()];
+    let dynamic_id = uuid::Uuid::new_v4();
+    let mut snapshot = light_engine::EngineSnapshot::default();
+    snapshot.dynamics = vec![command_test_dynamic(dynamic_id, 1)].into();
+    state.output.replace_snapshot(snapshot).unwrap();
+    let context = operator_action_context(&session, light_application::ActionSource::Http);
+    let ports = super::dynamics_adapter::ServerDynamicsPorts {
+        state: &state,
+        session: &session,
+    };
+
+    for fixture in fixtures {
+        state
+            .dynamics
+            .start(
+                &context,
+                light_application::DynamicStartCommand {
+                    dynamic_id,
+                    targets: vec![fixture],
+                    overrides: light_dynamics::DynamicInstanceOverrides {
+                        size: 1.0,
+                        speed_multiplier: light_dynamics::Rational::ONE,
+                        phase_offset_degrees: 0.0,
+                    },
+                    timing: light_dynamics::DynamicValueTiming::default(),
+                    undo_group: Some("stage-capacity-dynamics".into()),
+                },
+                &ports,
+            )
+            .unwrap();
+    }
+
+    assert_eq!(state.programming.programmers().undo_depth(session.id), Some(1));
+    assert_eq!(state.output.dynamic_runtime_snapshot().instances.len(), 2);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -232,6 +282,7 @@ fn startup_load_restores_persisted_dynamic_runtime_and_programmer_identity() {
                     fade_millis: Some(400),
                     delay_millis: Some(100),
                 },
+                undo_group: None,
             },
             &super::dynamics_adapter::ServerDynamicsPorts {
                 state: &state,
@@ -481,6 +532,7 @@ fn websocket_dynamic_toggle_matches_the_authoritative_target_scope() {
                             },
                             timing:
                                 light_wire::v2::dynamics::DynamicValueTimingProjection::default(),
+                            undo_group: None,
                         },
                     },
                 ),
@@ -555,6 +607,7 @@ async fn production_dynamic_action_waits_for_active_show_contention() {
                         phase_offset_degrees: 0.0,
                     },
                     timing: light_wire::v2::dynamics::DynamicValueTimingProjection::default(),
+                    undo_group: None,
                 },
             },
         ),
@@ -597,6 +650,7 @@ async fn production_dynamic_action_waits_for_active_show_contention() {
                         phase_offset_degrees: 0.0,
                     },
                     timing: light_wire::v2::dynamics::DynamicValueTimingProjection::default(),
+                    undo_group: None,
                 },
             },
         ),
@@ -673,6 +727,7 @@ fn live_and_preload_visualization_resolve_different_dynamic_layers_authoritative
                     phase_offset_degrees: 0.0,
                 },
                 timing: light_dynamics::DynamicValueTiming::default(),
+                undo_group: None,
             },
             &ports,
         )
@@ -691,6 +746,7 @@ fn live_and_preload_visualization_resolve_different_dynamic_layers_authoritative
                     phase_offset_degrees: 0.0,
                 },
                 timing: light_dynamics::DynamicValueTiming::default(),
+                undo_group: None,
             },
             &ports,
         )
@@ -1002,6 +1058,7 @@ fn preload_controller_edit_updates_projection_without_touching_live_runtime() {
                     phase_offset_degrees: 0.0,
                 },
                 timing: light_dynamics::DynamicValueTiming::default(),
+                undo_group: None,
             },
             &ports,
         )

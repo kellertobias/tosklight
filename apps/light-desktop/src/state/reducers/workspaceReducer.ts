@@ -8,6 +8,60 @@ import {
 	overlaps,
 } from "../reducerHelpers";
 
+function addWindow(
+	state: AppState,
+	action: Extract<Action, { type: "ADD_WINDOW" }>,
+) {
+	if (!state.windowPicker) return state;
+	const kind = cueListWindowKind(action.kind);
+	const pane = {
+		id: `${kind}-${Date.now()}`,
+		kind,
+		title:
+			kind === "help"
+				? "Help"
+				: kind === "virtual_playbacks"
+					? "Virtual Playbacks"
+					: kind === "file_manager"
+						? "File Manager"
+						: kind === "text_editor"
+							? "Text Editor"
+							: cueListWindowTitle(
+									kind[0].toUpperCase() + kind.slice(1),
+									kind,
+								),
+		...(kind === "virtual_playbacks"
+			? {
+					virtualPlaybackRows: 2,
+					virtualPlaybackColumns: 2,
+					virtualPlaybackPageMode: "follow_main" as const,
+					virtualPlaybackPinnedPage: 1,
+					virtualPlaybackCells: [],
+					virtualPlaybackExclusionZones: [],
+				}
+			: {}),
+		...(kind === "file_manager" ? { fileManagerShowHidden: false } : {}),
+		...(kind === "text_editor"
+			? { textEditorReadOnly: false, textEditorMode: "plain" as const }
+			: {}),
+		...state.windowPicker,
+	};
+	const activeDesk = state.desks.find(
+		(desk) => desk.id === state.activeDeskId,
+	);
+	if (activeDesk?.panes.some((item) => overlaps(pane, item)))
+		return { ...state, windowPicker: null };
+	return {
+		...state,
+		windowPicker: null,
+		desks: state.desks.map((desk) =>
+			desk.id !== state.activeDeskId
+				? desk
+				: { ...desk, panes: [...desk.panes, pane] },
+		),
+	};
+}
+
 export function reduceWorkspace(
 	state: AppState,
 	action: Action,
@@ -105,56 +159,8 @@ export function reduceWorkspace(
 				deskSettingsId: null,
 			};
 		}
-		case "ADD_WINDOW": {
-			if (!state.windowPicker) return state;
-			const kind = cueListWindowKind(action.kind);
-			const pane = {
-				id: `${kind}-${Date.now()}`,
-				kind,
-				title:
-					kind === "help"
-						? "Help"
-						: kind === "virtual_playbacks"
-							? "Virtual Playbacks"
-							: kind === "file_manager"
-								? "File Manager"
-								: kind === "text_editor"
-									? "Text Editor"
-									: cueListWindowTitle(
-											kind[0].toUpperCase() + kind.slice(1),
-											kind,
-										),
-				...(kind === "virtual_playbacks"
-					? {
-							virtualPlaybackRows: 2,
-							virtualPlaybackColumns: 2,
-							virtualPlaybackPageMode: "follow_main" as const,
-							virtualPlaybackPinnedPage: 1,
-							virtualPlaybackCells: [],
-							virtualPlaybackExclusionZones: [],
-						}
-					: {}),
-				...(kind === "file_manager" ? { fileManagerShowHidden: false } : {}),
-				...(kind === "text_editor"
-					? { textEditorReadOnly: false, textEditorMode: "plain" as const }
-					: {}),
-				...state.windowPicker,
-			};
-			const activeDesk = state.desks.find(
-				(desk) => desk.id === state.activeDeskId,
-			);
-			if (activeDesk?.panes.some((item) => overlaps(pane, item)))
-				return { ...state, windowPicker: null };
-			return {
-				...state,
-				windowPicker: null,
-				desks: state.desks.map((desk) =>
-					desk.id !== state.activeDeskId
-						? desk
-						: { ...desk, panes: [...desk.panes, pane] },
-				),
-			};
-		}
+		case "ADD_WINDOW":
+			return addWindow(state, action);
 		default:
 			return undefined;
 	}

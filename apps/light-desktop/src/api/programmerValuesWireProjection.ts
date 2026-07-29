@@ -5,6 +5,7 @@ import type {
 	ProgrammerValuesProjection,
 } from "../features/programmerValues/contracts";
 import type {
+	DynamicDefinitionProjection,
 	DynamicInstanceOverridesProjection,
 	DynamicReferenceProjection,
 	DynamicValueTimingProjection,
@@ -36,6 +37,7 @@ export function decodeProgrammerValuesProjection(
 		"revision",
 		"fixture_values",
 		"group_values",
+		"dynamic_definitions",
 		"dynamic_values",
 	]);
 	const userId = programmerValuesUuidAt(projection.user_id, `${path}.user_id`);
@@ -52,11 +54,34 @@ export function decodeProgrammerValuesProjection(
 	).map((item, index) =>
 		decodeGroupValue(item, `${path}.group_values[${index}]`),
 	);
+	const dynamicDefinitions = (
+		projection.dynamic_definitions == null
+			? []
+			: arrayAt(
+					projection.dynamic_definitions,
+					`${path}.dynamic_definitions`,
+				)
+	).map((definition, index) =>
+		decodeEmbeddedDefinition(
+			definition,
+			`${path}.dynamic_definitions[${index}]`,
+		),
+	);
+	const definitionsByFallback = new Map(
+		dynamicDefinitions.map((definition) => [
+			fallbackKey(definition.id, definition.revision),
+			definition,
+		]),
+	);
 	const dynamicValues = arrayAt(
 		projection.dynamic_values,
 		`${path}.dynamic_values`,
 	).map((item, index) =>
-		decodeDynamicValue(item, `${path}.dynamic_values[${index}]`),
+		decodeDynamicValue(
+			item,
+			`${path}.dynamic_values[${index}]`,
+			definitionsByFallback,
+		),
 	);
 	assertUniqueAddresses(fixtureValues, groupValues, path);
 	return {
@@ -71,6 +96,7 @@ export function decodeProgrammerValuesProjection(
 function decodeDynamicValue(
 	value: unknown,
 	path: string,
+	definitionsByFallback: ReadonlyMap<string, DynamicDefinitionProjection>,
 ): ProgrammerDynamicValue {
 	const item = exactRecordAt(value, path, [
 		"fixture_id",
@@ -82,7 +108,11 @@ function decodeDynamicValue(
 	return {
 		fixtureId: programmerValuesUuidAt(item.fixture_id, `${path}.fixture_id`),
 		attribute: stringAt(item.attribute, `${path}.attribute`),
-		value: decodeDynamicSemanticValue(item.value, `${path}.value`),
+		value: decodeDynamicSemanticValue(
+			item.value,
+			`${path}.value`,
+			definitionsByFallback,
+		),
 		programmerOrder: integerAt(
 			item.programmer_order,
 			`${path}.programmer_order`,
@@ -97,6 +127,7 @@ function decodeDynamicValue(
 function decodeDynamicSemanticValue(
 	value: unknown,
 	path: string,
+	definitionsByFallback: ReadonlyMap<string, DynamicDefinitionProjection>,
 ): ProgrammerDynamicValue["value"] {
 	const tagged = recordAt(value, path);
 	const type = enumAt(tagged.type, `${path}.type`, [
@@ -153,7 +184,11 @@ function decodeDynamicSemanticValue(
 			semantic.instance_link,
 			`${path}.instance_link`,
 		),
-		dynamic: decodeDynamicReference(semantic.dynamic, `${path}.dynamic`),
+		dynamic: decodeDynamicReference(
+			semantic.dynamic,
+			`${path}.dynamic`,
+			definitionsByFallback,
+		),
 		lane_id: programmerValuesUuidAt(semantic.lane_id, `${path}.lane_id`),
 		overrides: decodeDynamicOverrides(semantic.overrides, `${path}.overrides`),
 		timing: decodeDynamicTiming(semantic.timing, `${path}.timing`),
@@ -174,36 +209,53 @@ function decodeDynamicTiming(
 function decodeDynamicReference(
 	value: unknown,
 	path: string,
-): DynamicReferenceProjection {
+	definitionsByFallback: ReadonlyMap<string, DynamicDefinitionProjection>,
+): DynamicReferenceProjection & {
+	embedded_fallback: DynamicDefinitionProjection;
+} {
 	const reference = exactRecordAt(value, path, [
 		"dynamic_id",
 		"last_known_pool_number",
+		"embedded_fallback_id",
+		"embedded_fallback_revision",
 		"embedded_fallback",
 	]);
-	const definition = exactRecordAt(
-		reference.embedded_fallback,
-		`${path}.embedded_fallback`,
-		[
-			"id",
-			"pool_number",
-			"revision",
-			"name",
-			"color",
-			"icon",
-			"target_binding",
-			"lanes",
-			"random_groups",
-			"phase",
-			"speed",
-			"overall_speed_multiplier",
-			"run_mode",
-			"default_activation",
-			"activation_boundary",
-		],
-	);
-	programmerValuesUuidAt(definition.id, `${path}.embedded_fallback.id`);
-	arrayAt(definition.lanes, `${path}.embedded_fallback.lanes`);
-	arrayAt(definition.random_groups, `${path}.embedded_fallback.random_groups`);
+	const inlineDefinition =
+		reference.embedded_fallback == null
+			? null
+			: decodeEmbeddedDefinition(
+					reference.embedded_fallback,
+					`${path}.embedded_fallback`,
+				);
+	const fallbackId =
+		reference.embedded_fallback_id == null
+			? inlineDefinition?.id
+			: programmerValuesUuidAt(
+					reference.embedded_fallback_id,
+					`${path}.embedded_fallback_id`,
+				);
+	const fallbackRevision =
+		reference.embedded_fallback_revision == null
+			? inlineDefinition?.revision
+			: integerAt(
+					reference.embedded_fallback_revision,
+					`${path}.embedded_fallback_revision`,
+				);
+	if (fallbackId == null || fallbackRevision == null)
+		throw new WireValidationError(
+			path,
+			"Dynamic fallback identity or inline definition",
+			value,
+		);
+	const definition =
+		inlineDefinition ??
+		definitionsByFallback.get(fallbackKey(fallbackId, fallbackRevision));
+	if (!definition)
+		throw new WireValidationError(
+			`${path}.embedded_fallback`,
+			`fallback ${fallbackId} revision ${fallbackRevision}`,
+			reference.embedded_fallback,
+		);
 	return {
 		dynamic_id:
 			reference.dynamic_id == null
@@ -213,8 +265,42 @@ function decodeDynamicReference(
 			reference.last_known_pool_number,
 			`${path}.last_known_pool_number`,
 		),
+		embedded_fallback_id: fallbackId,
+		embedded_fallback_revision: fallbackRevision,
 		embedded_fallback: definition,
-	} as unknown as DynamicReferenceProjection;
+	};
+}
+
+function decodeEmbeddedDefinition(
+	value: unknown,
+	path: string,
+): DynamicDefinitionProjection {
+	const definition = exactRecordAt(value, path, [
+		"id",
+		"pool_number",
+		"revision",
+		"name",
+		"color",
+		"icon",
+		"target_binding",
+		"lanes",
+		"random_groups",
+		"phase_mode",
+		"phase",
+		"speed",
+		"overall_speed_multiplier",
+		"run_mode",
+		"default_activation",
+		"activation_boundary",
+	]);
+	programmerValuesUuidAt(definition.id, `${path}.id`);
+	arrayAt(definition.lanes, `${path}.lanes`);
+	arrayAt(definition.random_groups, `${path}.random_groups`);
+	return definition as unknown as DynamicDefinitionProjection;
+}
+
+function fallbackKey(id: string, revision: number) {
+	return `${id}:${revision}`;
 }
 
 function decodeDynamicOverrides(

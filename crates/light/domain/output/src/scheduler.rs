@@ -1,6 +1,6 @@
 //! Monotonic output scheduler and deadline accounting.
 
-use crate::OutputHealth;
+use crate::{OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS, OutputHealth};
 use std::{
     future::Future,
     io,
@@ -67,6 +67,10 @@ fn record_tick_duration(health: &Mutex<OutputHealth>, tick_started: Instant, int
     let mut current = health.lock().expect("output health mutex poisoned");
     current.last_tick_micros = tick_micros;
     current.maximum_tick_micros = current.maximum_tick_micros.max(tick_micros);
+    let bucket = OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS
+        .partition_point(|upper_bound| *upper_bound < tick_micros);
+    let bucket = bucket.min(current.tick_duration_bucket_counts.len() - 1);
+    current.tick_duration_bucket_counts[bucket] += 1;
     current.scheduler_utilization =
         (tick_started.elapsed().as_secs_f64() / interval.as_secs_f64()) as f32;
 }

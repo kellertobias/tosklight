@@ -180,3 +180,39 @@ Do not claim that all dead code is removed solely from compiler success or a sca
 report. Completion means every repository area was inventoried, backend candidates
 were traced deeply, removals were verified through their real boundaries, and retained
 candidates have an explicit reason.
+
+## Result
+
+Completed: 2026-07-29.
+
+- Removed the unused Speed Group error adapter, restricted characterization-only
+  helpers to test builds, removed superseded generated wire declarations and their
+  consumers, and deleted obsolete forwarding/test support found by the reviewed Rust
+  and TypeScript reference scans.
+- Split the eight production files and forty production functions that exceeded the
+  repository hard limits. The empty source-size baseline is valid again: no production
+  file exceeds 1,200 logical lines and no production function exceeds 150 logical
+  lines.
+- Preserved generated wire entry points, Scheduler documentation stories, seeded and
+  legacy show migrations, unknown-object retention, Storybook/manual capture paths,
+  release/packaging commands, benchmark entry points, OSC/platform registrations, and
+  test-only characterization helpers after tracing their non-obvious owners.
+- Rust formatting, the complete serial Rust workspace test run, explicit unused-code
+  compilation, every TypeScript workspace type-check, desktop/hardware/UI-library
+  Vitest suites, desktop and hardware production builds, Storybook production and
+  258-story browser checks, benchmark type/unit checks, API E2E, architecture,
+  artifact-path, semantic-catalog, source-size, and diff checks pass. The Rust run
+  passed 555 headless tests with one privileged Matter-port case ignored on this host.
+- The broad UI run reached 146 passed and 1 skipped. Its semantic failures were fixed
+  and pass focused reruns. The remaining large-scene `STAGE-PERF-002` evidence is
+  intentionally owned by plan 21: its trace proves that a 1,000-instance workload
+  delays `command_line_replace` acknowledgements by about 7.1 seconds. Plan 21 now
+  requires every Programmer action to complete within two output ticks at rates up to
+  60 Hz and within four ticks above 60 Hz; increasing the five-second client timeout
+  is not an accepted repair.
+- The authoritative serialized `npm run open` workflow built and launched both macOS
+  applications. `/api/v2/readiness` returned `ready` with no active-show error and
+  recovery mode disabled, and the current runtime log contains no new startup error.
+- The complete three-show benchmark sweep and combined large E2E suite remain deferred
+  to plan 21 as required by the queue and the operator request. Existing plan 20/21
+  worktree changes were preserved while the Plan 19-owned completion was reviewed.

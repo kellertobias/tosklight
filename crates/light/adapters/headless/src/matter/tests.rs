@@ -40,6 +40,7 @@ fn disabled_bridge_exposes_nothing_and_does_not_churn_revision() {
         number: 1,
         name: "Main".into(),
         slots: HashMap::from([(1, 7)]),
+        virtual_playbacks: HashMap::new(),
     };
     let first = adapter.reconcile(
         false,
@@ -75,11 +76,13 @@ fn every_assigned_playback_is_exposed_in_global_address_order() {
             number: 2,
             name: "Second".into(),
             slots: HashMap::from([(1, 20), (3, 30)]),
+            virtual_playbacks: HashMap::new(),
         },
         PlaybackPage {
             number: 1,
             name: "First".into(),
             slots: HashMap::from([(2, 10)]),
+            virtual_playbacks: HashMap::new(),
         },
     ];
     let values = HashMap::from([
@@ -131,6 +134,7 @@ fn runtime_reconciliation_publishes_remote_and_tracking_changes_bidirectionally(
         number: 4,
         name: "Looks".into(),
         slots: HashMap::from([(7, 25)]),
+        virtual_playbacks: HashMap::new(),
     }];
     let definitions = [definition(25, "Tracked", true)];
     let active = adapter.reconcile(
@@ -162,6 +166,7 @@ fn transport_status_is_commissionable_only_after_network_start_and_open_window()
             number: 1,
             name: "Main".into(),
             slots: HashMap::from([(1, 7)]),
+            virtual_playbacks: HashMap::new(),
         }],
         &[definition(7, "Look", true)],
         &HashMap::new(),
@@ -232,6 +237,7 @@ fn matter_writes_resolve_the_explicit_address_without_a_desk_page() {
         number: 4,
         name: "Looks".into(),
         slots: HashMap::from([(7, 25)]),
+        virtual_playbacks: HashMap::new(),
     }];
     adapter.reconcile(
         true,

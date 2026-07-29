@@ -164,6 +164,7 @@ fn page_body(target: &mut ResolvedCueTarget) -> Result<Option<PendingBody>, Acti
                 number: slot.page,
                 name: format!("Page {}", slot.page),
                 slots: HashMap::from([(slot.slot, playback)]),
+                virtual_playbacks: HashMap::new(),
             };
             Ok(Some(PendingBody {
                 object_id: slot.page.to_string(),
