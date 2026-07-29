@@ -1,6 +1,7 @@
 import { expect, test } from "./bench/core/fixtures";
 import { activeShowId, loadCanonicalCopy } from "./support/catalog";
 import { installPlannedDemoGroups } from "./support/plannedDemoGroups";
+import { installPlannedDemoDynamics } from "./support/plannedDemoDynamics";
 import { installPlannedDemoPatch } from "./support/plannedDemoPatch";
 import { installPlannedDemoPlaybacks } from "./support/plannedDemoPlaybacks";
 import { installPlannedDemoPresets } from "./support/plannedDemoPresets";
@@ -65,4 +66,13 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
   expect(cuelists.find((cuelist) => cuelist.body.name === "ACL Chase")?.body)
     .toMatchObject({ mode: "chaser", speed_group: "D", looped: true });
   expect(cuelists.find((cuelist) => cuelist.body.name === "ACL Chase")?.body.cues).toHaveLength(4);
+
+  const dynamics = await installPlannedDemoDynamics(api, showId);
+  expect(dynamics).toHaveLength(30);
+  const storedDynamics = await api.showObjects<any>(showId, "dynamic");
+  expect(storedDynamics).toHaveLength(30);
+  expect(storedDynamics.find((dynamic) => dynamic.body.name === "Wash Row Waterfall")
+    ?.body.phase.ordering).toEqual({ type: "grid_linear", angle_degrees: 90 });
+  const [page] = await api.showObjects<any>(showId, "playback_page");
+  expect(Object.keys(page.body.virtual_playbacks)).toHaveLength(30);
 });
