@@ -1,5 +1,6 @@
 import { expect, test } from "./bench/core/fixtures";
 import { activeShowId, loadCanonicalCopy } from "./support/catalog";
+import { installPlannedDemoGroups } from "./support/plannedDemoGroups";
 import { installPlannedDemoPatch } from "./support/plannedDemoPatch";
 
 test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from one manifest", async ({
@@ -37,4 +38,11 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
   const frontInstances = [acls[3], ...acls[3].multipatch];
   expect(frontInstances.filter((fixture) => fixture.location.x < 0)).toHaveLength(4);
   expect(frontInstances.filter((fixture) => fixture.location.x > 0)).toHaveLength(4);
+
+  const groupSpecs = await installPlannedDemoGroups(api, showId, generated.fixtures);
+  expect(groupSpecs).toHaveLength(38);
+  const groups = await api.showObjects<any>(showId, "group");
+  expect(groups).toHaveLength(38);
+  expect(groups.find((group) => group.body.name === "Show")?.body.fixtures).toHaveLength(208);
+  expect(groups.find((group) => group.body.name === "Aux Show")?.body.fixtures).toHaveLength(24);
 });
