@@ -813,6 +813,15 @@ function evaluate(
 		);
 	if (!timeline.some((sample) => sample.additionalStageWindow === "opened"))
 		failures.push("the representative additional Stage window did not open");
+	if (
+		profile === "large-stage" &&
+		!["stage-3d", "fixture-sheet"].every((surface) =>
+			complete.activeUiSurfaces?.includes(surface),
+		)
+	)
+		failures.push(
+			"the interactive large tier did not expose both Stage 3D and Fixture Sheet surfaces",
+		);
 	assertPackagedQualityObjects(qualityObjects, failures);
 	const outstandingContexts =
 		(stage?.rendererContextsCreated ?? 0) -
@@ -847,6 +856,7 @@ function evaluate(
 			"the packaged Stage run did not complete its application suspend/resume cycle",
 		);
 	const output = summarizeOutputComparison(runtime);
+	const achievedOutputHz = output.stage.frames_sent / duration;
 	if (!output.boundedWindowGatePassed)
 		failures.push(
 			"packaged Stage output p99 regressed by more than 1 ms or 5 percent",
@@ -911,12 +921,20 @@ function evaluate(
 	);
 	for (const failure of longRun.failures) failures.push(failure);
 	return {
-		schemaVersion: 1,
+		schemaVersion: 2,
+		tier: profile === "large-stage" ? "interactive-large" : "realistic-stage",
 		measurementSurface: "packaged-tauri-webview",
 		profile,
 		scene,
 		host: hostHardware(),
 		durationSeconds: duration,
+		activeUiSurfaces: complete.activeUiSurfaces ?? [],
+		visualizationEnabled: true,
+		rate: {
+			targetHz: profile === "large-stage" ? 100 : null,
+			achievedOutputHz,
+			blocking: profile !== "large-stage",
+		},
 		samplesFile,
 		acceptanceGateEnforced: failures.length === 0,
 		failures,
