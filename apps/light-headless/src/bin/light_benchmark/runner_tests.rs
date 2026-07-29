@@ -28,6 +28,10 @@ fn required_floor_status_distinguishes_failure_from_not_run() {
         required_floor_result_for([(Expectation::RequiredFloor, true)]),
         Some(true)
     );
+    assert_eq!(
+        required_floor_result_for([(Expectation::InformationalCapacity, false)]),
+        None
+    );
 }
 
 #[test]

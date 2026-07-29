@@ -1,6 +1,6 @@
 use crate::light_benchmark::{
     report::SampledContributionReport,
-    scenario::{BenchmarkScenario, SAMPLED_ASSIGNMENT_DIVISOR, SLOTS_PER_UNIVERSE},
+    scenario::{BenchmarkScenario, SAMPLED_ASSIGNMENT_DIVISOR},
     statistics::distribution,
 };
 use chrono::Duration as ChronoDuration;
@@ -34,12 +34,9 @@ pub fn measure(
             .map_err(|error| format!("render sampled benchmark frame: {error}"))?;
         render_durations.push(render_started.elapsed());
         black_box((&rendered.universes, &rendered.patched_slots));
-        let complete_patch = rendered.patched_slots.len() == usize::from(scenario.universes)
-            && rendered
-                .patched_slots
-                .values()
-                .all(|slots| *slots == SLOTS_PER_UNIVERSE);
-        if rendered.universes.len() != usize::from(scenario.universes) || !complete_patch {
+        if rendered.universes.len() != usize::from(scenario.universes)
+            || !scenario.has_expected_patch(&rendered.patched_slots)
+        {
             return Err("sampled render did not produce every configured universe".into());
         }
     }

@@ -23,8 +23,13 @@ const SOURCE_NAME: &str = "ToskLight output benchmark";
 const SAMPLED_DIAGNOSTIC_SECONDS: u64 = 1;
 
 pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
-    let mut scenarios = Vec::with_capacity(arguments.profiles.len());
-    for profile in &arguments.profiles {
+    let profiles = if arguments.headless_stress_fixtures.is_some() {
+        vec![crate::light_benchmark::arguments::BenchmarkProfile::HeadlessStress]
+    } else {
+        arguments.profiles.clone()
+    };
+    let mut scenarios = Vec::with_capacity(profiles.len());
+    for profile in profiles {
         let mut config = profile.config();
         let required_minimum_hz = config.rate_hz;
         if let Some(rate_hz) = arguments.rate_hz {
@@ -39,7 +44,12 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
         if let Some(fixtures_per_universe) = arguments.fixtures_per_universe {
             config.fixtures_per_universe = fixtures_per_universe;
         }
-        if arguments.sustained_show {
+        if let Some(fixture_count) = arguments.headless_stress_fixtures {
+            eprintln!(
+                "benchmarking headless stress: {fixture_count} mixed shipped-mode fixtures at {} Hz",
+                config.rate_hz
+            );
+        } else if arguments.sustained_show {
             eprintln!(
                 "benchmarking {:?}: mixed-fixture sustained show across {} fully packed universes at {} Hz",
                 profile, config.universes, config.rate_hz
@@ -62,7 +72,7 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
         .then(crate::light_benchmark::patch_mutation::run)
         .transpose()?;
     Ok(BenchmarkReport {
-        schema_version: 5,
+        schema_version: 6,
         benchmark: "tosklight_render_to_protocol_encoding_pipeline",
         reference: metadata::capture(arguments.hardware_label.as_deref()),
         configuration: RunConfiguration {
@@ -75,6 +85,7 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
         },
         scenarios,
         measurement_coverage: coverage(arguments.transport),
+        process_resources: crate::light_benchmark::process_resources::capture(),
         required_floor_met,
         show_mutation,
         patch_mutation,
@@ -183,12 +194,22 @@ fn run_scenario(
     Ok(ScenarioReport {
         profile: config.profile,
         expectation: config.expectation,
-        universes: config.universes,
+        workload_tier: scenario.workload_tier,
+        release_blocking: scenario.release_blocking,
+        active_ui_surfaces: scenario.active_ui_surfaces,
+        visualization_enabled: scenario.visualization_enabled,
+        universes: scenario.universes,
         slots_per_universe: SLOTS_PER_UNIVERSE,
         fixture_count: scenario.fixture_count,
-        fixtures_per_universe: (!arguments.sustained_show).then_some(config.fixtures_per_universe),
+        physical_instance_count: scenario.physical_instance_count,
+        fixtures_per_universe: (!arguments.sustained_show
+            && arguments.headless_stress_fixtures.is_none())
+        .then_some(config.fixtures_per_universe),
         fixture_footprint: scenario.fixture_footprint,
         fixture_inventory: scenario.fixture_inventory.clone(),
+        dynamic_definition_count: scenario.dynamic_definition_count,
+        dynamic_lane_attributes: scenario.dynamic_lane_attributes,
+        dynamic_excluded_fixture_count: scenario.dynamic_excluded_fixture_count,
         configured_rate_hz: config.rate_hz,
         warmup_ticks,
         warmup_elapsed_seconds: warmup_elapsed.as_secs_f64(),
@@ -251,7 +272,18 @@ fn prepare_scenario(
         ),
     };
     let destination = loopback.as_ref().map(LoopbackDelivery::destination);
-    let scenario = if arguments.sustained_show {
+    let scenario = if let Some(fixture_count) = arguments.headless_stress_fixtures {
+        let package_dir = arguments.fixture_package_dir.as_deref().ok_or_else(|| {
+            "--headless-stress-fixtures requires --fixture-package-dir".to_owned()
+        })?;
+        crate::light_benchmark::headless_stress_show::build(
+            fixture_count,
+            config,
+            arguments.protocol,
+            destination,
+            std::path::Path::new(package_dir),
+        )?
+    } else if arguments.sustained_show {
         let package_dir = arguments
             .fixture_package_dir
             .as_deref()
@@ -401,9 +433,12 @@ fn validate_full_output(
         return Err("pipeline did not produce every configured universe and route".into());
     }
     for universe in 1..=scenario.universes {
-        if !frames.contains_key(&universe) || patched_slots.get(&universe) != Some(&512) {
+        let expected = scenario.expected_patched_slots.get(&universe);
+        if !frames.contains_key(&universe) || patched_slots.get(&universe) != expected {
             return Err(format!(
-                "logical universe {universe} is not fully patched to slot 512"
+                "logical universe {universe} ended at {:?} instead of expected {:?}",
+                patched_slots.get(&universe),
+                expected,
             ));
         }
     }

@@ -29,20 +29,20 @@ const LEDWASH_QUANTITY: usize = 40;
 const DLS_QUANTITY: usize = 32;
 const LEDBEAM_QUANTITY: usize = 32;
 
-struct FixtureTemplate {
-    manufacturer: &'static str,
-    name: &'static str,
-    mode: &'static str,
-    definition: Arc<FixtureDefinition>,
+pub(super) struct FixtureTemplate {
+    pub(super) manufacturer: &'static str,
+    pub(super) name: &'static str,
+    pub(super) mode: &'static str,
+    pub(super) definition: Arc<FixtureDefinition>,
 }
 
-struct DemoTemplates {
-    sunstrip: Arc<FixtureTemplate>,
-    ledwash: Arc<FixtureTemplate>,
-    dls: Arc<FixtureTemplate>,
-    ledbeam: Arc<FixtureTemplate>,
-    rgb_three: Arc<FixtureTemplate>,
-    rgb_four: Arc<FixtureTemplate>,
+pub(super) struct DemoTemplates {
+    pub(super) sunstrip: Arc<FixtureTemplate>,
+    pub(super) ledwash: Arc<FixtureTemplate>,
+    pub(super) dls: Arc<FixtureTemplate>,
+    pub(super) ledbeam: Arc<FixtureTemplate>,
+    pub(super) rgb_three: Arc<FixtureTemplate>,
+    pub(super) rgb_four: Arc<FixtureTemplate>,
 }
 
 struct DemoLayout {
@@ -54,7 +54,7 @@ struct DemoLayout {
 }
 
 impl FixtureTemplate {
-    fn load(
+    pub(super) fn load(
         package_dir: &Path,
         manufacturer: &'static str,
         name: &'static str,
@@ -94,11 +94,11 @@ impl FixtureTemplate {
         })
     }
 
-    fn footprint(&self) -> u16 {
+    pub(super) fn footprint(&self) -> u16 {
         self.definition.footprint
     }
 
-    fn inventory(&self, quantity: usize) -> FixtureInventoryEntry {
+    pub(super) fn inventory(&self, quantity: usize) -> FixtureInventoryEntry {
         FixtureInventoryEntry {
             manufacturer: self.manufacturer.into(),
             name: self.name.into(),
@@ -110,7 +110,7 @@ impl FixtureTemplate {
     }
 }
 
-fn load_templates(package_dir: &Path) -> Result<DemoTemplates, String> {
+pub(super) fn load_templates(package_dir: &Path) -> Result<DemoTemplates, String> {
     Ok(DemoTemplates {
         sunstrip: Arc::new(FixtureTemplate::load(
             package_dir,
@@ -226,6 +226,17 @@ pub fn build(
         fixture_footprint: None,
         packet_count,
         fixture_inventory: layout.fixture_inventory(),
+        expected_patched_slots: (1..=config.universes)
+            .map(|universe| (universe, SLOTS_PER_UNIVERSE))
+            .collect(),
+        workload_tier: "sustained_release_floor",
+        physical_instance_count: fixture_ids.len(),
+        dynamic_definition_count: 4,
+        dynamic_lane_attributes: &["intensity"],
+        dynamic_excluded_fixture_count: 0,
+        active_ui_surfaces: &[],
+        visualization_enabled: false,
+        release_blocking: true,
         programmers,
         dynamic_attribute: AttributeKey::intensity(),
         dynamic_overlaps_static_or_programmer: true,
@@ -344,7 +355,7 @@ impl DemoLayout {
     }
 }
 
-fn benchmark_start() -> chrono::DateTime<Utc> {
+pub(super) fn benchmark_start() -> chrono::DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0)
         .single()
         .expect("benchmark timestamp is valid")
@@ -379,7 +390,7 @@ fn rgb_fill_counts(remaining: usize) -> Result<(usize, usize), String> {
     ))
 }
 
-fn patched_fixture(
+pub(super) fn patched_fixture(
     fixture_id: FixtureId,
     fixture_number: u32,
     universe: u16,
@@ -425,7 +436,7 @@ fn patched_fixture(
     }
 }
 
-fn demo_group(fixtures: &[FixtureId]) -> GroupDefinition {
+pub(super) fn demo_group(fixtures: &[FixtureId]) -> GroupDefinition {
     GroupDefinition {
         id: GROUP_ID.into(),
         name: "Sustained benchmark-show fixtures".into(),
@@ -436,7 +447,7 @@ fn demo_group(fixtures: &[FixtureId]) -> GroupDefinition {
     }
 }
 
-fn demo_playback() -> (CueList, PlaybackDefinition) {
+pub(super) fn demo_playback() -> (CueList, PlaybackDefinition) {
     let cue_list_id = CueListId(fixed_uuid(0x83, 1));
     let cue = Cue {
         id: fixed_uuid(0x84, 1),
@@ -499,7 +510,7 @@ fn demo_playback() -> (CueList, PlaybackDefinition) {
     (cue_list, playback)
 }
 
-fn routes(
+pub(super) fn routes(
     universes: u16,
     selection: ProtocolSelection,
     loopback_destination: Option<SocketAddr>,
@@ -522,7 +533,7 @@ fn routes(
         .collect()
 }
 
-fn fixed_uuid(namespace: u64, value: u64) -> Uuid {
+pub(super) fn fixed_uuid(namespace: u64, value: u64) -> Uuid {
     Uuid::from_u128((u128::from(namespace) << 64) | u128::from(value))
 }
 

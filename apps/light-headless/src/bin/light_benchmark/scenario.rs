@@ -26,7 +26,7 @@ use light_playback::{
 };
 use light_programmer::{GroupDefinition, ProgrammerRegistry};
 use serde::Serialize;
-use std::{net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use uuid::Uuid;
 
 pub const SLOTS_PER_UNIVERSE: u16 = 512;
@@ -63,6 +63,15 @@ pub struct BenchmarkScenario {
     pub fixture_footprint: Option<u16>,
     pub packet_count: usize,
     pub fixture_inventory: ScenarioFixtureInventory,
+    pub expected_patched_slots: HashMap<u16, u16>,
+    pub workload_tier: &'static str,
+    pub physical_instance_count: usize,
+    pub dynamic_definition_count: usize,
+    pub dynamic_lane_attributes: &'static [&'static str],
+    pub dynamic_excluded_fixture_count: usize,
+    pub active_ui_surfaces: &'static [&'static str],
+    pub visualization_enabled: bool,
+    pub release_blocking: bool,
     pub(super) programmers: ProgrammerRegistry,
     pub(super) dynamic_attribute: AttributeKey,
     pub(super) dynamic_overlaps_static_or_programmer: bool,
@@ -159,6 +168,18 @@ impl BenchmarkScenario {
                 rgb_par_fill_slots: 0,
                 total_slots: fixture_count * usize::from(fixture_footprint),
             },
+            expected_patched_slots: (1..=config.universes)
+                .map(|universe| (universe, SLOTS_PER_UNIVERSE))
+                .collect(),
+            workload_tier: "synthetic_release_floor",
+            physical_instance_count: fixture_count,
+            dynamic_definition_count: 4,
+            dynamic_lane_attributes: &["intensity"],
+            dynamic_excluded_fixture_count: 0,
+            active_ui_surfaces: &[],
+            visualization_enabled: false,
+            release_blocking: config.expectation
+                == crate::light_benchmark::arguments::Expectation::RequiredFloor,
             programmers,
             dynamic_attribute,
             dynamic_overlaps_static_or_programmer: false,
@@ -173,6 +194,10 @@ impl BenchmarkScenario {
 
     pub fn sampled_batches(&self, at: chrono::DateTime<Utc>) -> Vec<ContributionBatch> {
         sampled_batches(&self.engine, &self.programmers, at, &self.dynamic_attribute)
+    }
+
+    pub fn has_expected_patch(&self, patched_slots: &HashMap<u16, u16>) -> bool {
+        patched_slots == &self.expected_patched_slots
     }
 }
 
@@ -390,6 +415,7 @@ pub(super) struct BenchmarkDynamic {
     phase_degrees: Arc<[f32]>,
     instance_id: Uuid,
     started_at: chrono::DateTime<Utc>,
+    partitioned: bool,
 }
 
 impl BenchmarkDynamic {
@@ -414,7 +440,83 @@ impl BenchmarkDynamic {
             phase_degrees: Arc::from(phase_degrees),
             instance_id: fixed_uuid(0x5a, 3),
             started_at,
+            partitioned: false,
         }
+    }
+
+    pub(super) fn production(
+        targets: &[FixtureId],
+        started_at: chrono::DateTime<Utc>,
+        instance_count: usize,
+    ) -> Result<Self, String> {
+        if instance_count == 0 || targets.len() < instance_count {
+            return Err(
+                "production Dynamics require one nonempty target partition per instance".into(),
+            );
+        }
+        let base = benchmark_dynamic_definition(targets, AttributeKey::intensity());
+        let variants = {
+            let [pwm, middle, random] = benchmark_dynamic_variants(&base);
+            [base, pwm, middle, random]
+        };
+        let attributes = [
+            AttributeKey::intensity(),
+            AttributeKey("color.red".into()),
+            AttributeKey("color.green".into()),
+            AttributeKey("color.blue".into()),
+            AttributeKey("pan".into()),
+            AttributeKey("tilt".into()),
+        ];
+        let definitions = (0..instance_count)
+            .map(|index| {
+                let mut definition = variants[index % variants.len()].clone();
+                definition.id = fixed_uuid(0x5b, index as u64 + 1);
+                definition.pool_number = index as u16 + 1;
+                definition.name = format!("Headless production Dynamic {}", index + 1);
+                let partition = targets
+                    .iter()
+                    .enumerate()
+                    .filter(|(target_index, _)| target_index % instance_count == index)
+                    .map(|(_, target)| *target)
+                    .collect::<Vec<_>>();
+                definition.target_binding =
+                    DynamicTargetBinding::FrozenTargets { targets: partition };
+                let seed = definition.lanes[0].clone();
+                definition.lanes = attributes
+                    .iter()
+                    .enumerate()
+                    .map(|(lane_index, attribute)| {
+                        let mut lane = seed.clone();
+                        lane.id = fixed_uuid(0x5c + index as u64, lane_index as u64 + 1);
+                        lane.attribute = attribute.clone();
+                        for point in &mut lane.keyframes.points {
+                            if let ScalarSource::Preset {
+                                attribute: source_attribute,
+                                ..
+                            } = &mut point.source
+                            {
+                                *source_attribute = attribute.clone();
+                            }
+                        }
+                        lane
+                    })
+                    .collect();
+                definition
+            })
+            .collect();
+        let count = targets.len() as f32;
+        Ok(Self {
+            definitions,
+            targets: Arc::from(targets),
+            phase_degrees: Arc::from(
+                (0..targets.len())
+                    .map(|index| index as f32 / count * 360.0)
+                    .collect::<Vec<_>>(),
+            ),
+            instance_id: fixed_uuid(0x5d, 1),
+            started_at,
+            partitioned: true,
+        })
     }
 
     fn sample(&self, at: chrono::DateTime<Utc>) -> ContributionBatch {
@@ -422,10 +524,9 @@ impl BenchmarkDynamic {
             .signed_duration_since(self.started_at)
             .num_milliseconds()
             .max(0) as u64;
-        let mut samples = Vec::with_capacity(self.targets.len() * 2);
+        let mut samples = Vec::with_capacity(self.targets.len() * 6);
         for (definition_index, definition) in self.definitions.iter().enumerate() {
             let evaluator = DynamicEvaluator::new(definition);
-            let lane = &definition.lanes[0];
             let cycle_duration_millis = match definition.speed {
                 DynamicSpeed::Fixed { duration_millis } => duration_millis,
                 DynamicSpeed::SpeedGroup {
@@ -437,61 +538,69 @@ impl BenchmarkDynamic {
                 .iter()
                 .zip(self.phase_degrees.iter())
                 .enumerate()
-                .filter(|(target_index, _)| {
-                    definition_index == 0 || target_index % 4 == definition_index.saturating_sub(1)
-                })
             {
-                let Some(mut value) = evaluator.sample_lane(
-                    lane,
-                    DynamicEvaluationContext {
-                        instance_id: Uuid::from_u128(
-                            self.instance_id.as_u128() + definition_index as u128,
-                        ),
-                        target: *target,
-                        elapsed_millis,
-                        cycle_duration_millis,
-                        phase_degrees: (*phase_degrees + definition_index as f32 * 45.0) % 360.0,
-                        output_interval_millis: 8,
-                        random_envelope: None,
-                        sources: &BenchmarkSources,
-                    },
-                ) else {
-                    continue;
-                };
-                if definition_index == 2 {
-                    let wet = ((elapsed_millis % 1_000) as f32 / 500.0 - 1.0).abs();
-                    value = 0.5 + (value - 0.5) * wet;
-                }
-                let controller_switch = if definition_index == 1 {
-                    ((elapsed_millis / 1_000) % 2) as i16
+                let selected = if self.partitioned {
+                    target_index % self.definitions.len() == definition_index
                 } else {
-                    0
+                    definition_index == 0 || target_index % 4 == definition_index.saturating_sub(1)
                 };
-                samples.push(ContributionSample::independent(TimedValue {
-                    fixture_id: *target,
-                    attribute: lane.attribute.clone(),
-                    value: AttributeValue::Normalized(value),
-                    priority: 10 + definition_index as i16 + controller_switch,
-                    changed_at: at,
-                    programmer_order: definition_index as u64,
-                    merge_mode: MergeMode::Ltp,
-                    fade: false,
-                    fade_millis: None,
-                    delay_millis: None,
-                }));
-                if target_index % 16 == 0 {
+                if !selected {
+                    continue;
+                }
+                for lane in &definition.lanes {
+                    let Some(mut value) = evaluator.sample_lane(
+                        lane,
+                        DynamicEvaluationContext {
+                            instance_id: Uuid::from_u128(
+                                self.instance_id.as_u128() + definition_index as u128,
+                            ),
+                            target: *target,
+                            elapsed_millis,
+                            cycle_duration_millis,
+                            phase_degrees: (*phase_degrees + definition_index as f32 * 45.0)
+                                % 360.0,
+                            output_interval_millis: 8,
+                            random_envelope: None,
+                            sources: &BenchmarkSources,
+                        },
+                    ) else {
+                        continue;
+                    };
+                    if definition_index % 4 == 2 {
+                        let wet = ((elapsed_millis % 1_000) as f32 / 500.0 - 1.0).abs();
+                        value = 0.5 + (value - 0.5) * wet;
+                    }
+                    let controller_switch = if definition_index % 4 == 1 {
+                        ((elapsed_millis / 1_000) % 2) as i16
+                    } else {
+                        0
+                    };
                     samples.push(ContributionSample::independent(TimedValue {
                         fixture_id: *target,
                         attribute: lane.attribute.clone(),
-                        value: AttributeValue::Normalized(0.65),
-                        priority: 20,
+                        value: AttributeValue::Normalized(value),
+                        priority: 10 + definition_index as i16 + controller_switch,
                         changed_at: at,
-                        programmer_order: 20,
+                        programmer_order: definition_index as u64,
                         merge_mode: MergeMode::Ltp,
                         fade: false,
                         fade_millis: None,
                         delay_millis: None,
                     }));
+                    if target_index % 16 == 0 {
+                        samples.push(ContributionSample::independent(TimedValue {
+                            fixture_id: *target,
+                            attribute: lane.attribute.clone(),
+                            value: AttributeValue::Normalized(0.65),
+                            priority: 40,
+                            changed_at: at,
+                            programmer_order: 40,
+                            merge_mode: MergeMode::Ltp,
+                            fade: false,
+                            fade_millis: None,
+                            delay_millis: None,
+                        }));
+                    }
                 }
             }
         }

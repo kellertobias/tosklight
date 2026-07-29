@@ -13,6 +13,7 @@ pub enum BenchmarkProfile {
     LowPower4,
     #[serde(rename = "low_power_8")]
     LowPower8,
+    HeadlessStress,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -21,6 +22,7 @@ pub enum Expectation {
     RequiredFloor,
     TargetGoal,
     LowPowerGoal,
+    InformationalCapacity,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,6 +63,7 @@ pub struct Arguments {
     pub fixtures_per_universe: Option<u16>,
     pub rate_hz: Option<u16>,
     pub sustained_show: bool,
+    pub headless_stress_fixtures: Option<usize>,
     pub fixture_package_dir: Option<String>,
 }
 
@@ -107,6 +110,13 @@ impl BenchmarkProfile {
                 rate_hz: 40,
                 fixtures_per_universe: 1,
             },
+            Self::HeadlessStress => ProfileConfig {
+                profile: self,
+                expectation: Expectation::InformationalCapacity,
+                universes: 1,
+                rate_hz: 60,
+                fixtures_per_universe: 1,
+            },
         }
     }
 }
@@ -135,6 +145,7 @@ impl Default for Arguments {
             fixtures_per_universe: None,
             rate_hz: None,
             sustained_show: false,
+            headless_stress_fixtures: None,
             fixture_package_dir: None,
         }
     }
@@ -203,6 +214,18 @@ impl Arguments {
                     )? as u16);
                 }
                 "--sustained-show" | "--demo-show" => parsed.sustained_show = true,
+                "--headless-stress-fixtures" => {
+                    let value = parse_bounded_u64(
+                        &required_value(&mut arguments, &argument)?,
+                        2_000,
+                        4_000,
+                        "headless stress fixtures",
+                    )? as usize;
+                    if value != 2_000 && value != 4_000 {
+                        return Err("headless stress fixtures must be exactly 2000 or 4000".into());
+                    }
+                    parsed.headless_stress_fixtures = Some(value);
+                }
                 "--fixture-package-dir" => {
                     let path = required_value(&mut arguments, &argument)?;
                     if path.trim().is_empty() {
@@ -213,6 +236,17 @@ impl Arguments {
                 "--help" | "-h" => return Ok(ParseOutcome::Help),
                 _ => return Err(format!("unknown argument: {argument}")),
             }
+        }
+        if parsed.sustained_show && parsed.headless_stress_fixtures.is_some() {
+            return Err(
+                "--sustained-show and --headless-stress-fixtures are mutually exclusive".into(),
+            );
+        }
+        if parsed.headless_stress_fixtures.is_some() && parsed.fixtures_per_universe.is_some() {
+            return Err(
+                "--headless-stress-fixtures and --fixtures-per-universe are mutually exclusive"
+                    .into(),
+            );
         }
         Ok(ParseOutcome::Run(parsed))
     }
@@ -232,7 +266,8 @@ impl Arguments {
           --fixtures-per-universe N    Equal-size fixtures filling every universe (1-128)\n\
           --rate-hz N                  Scheduled output rate, 1-240 (profile floor still applies)\n\
           --sustained-show             Use the mixed-fixture sustained benchmark show\n\
-          --fixture-package-dir PATH   Fixture packages used by --sustained-show\n\
+          --headless-stress-fixtures N Run the informational mixed-mode headless tier (2000 or 4000)\n\
+          --fixture-package-dir PATH   Fixture packages used by shipped-mode workloads\n\
           --mutation-gate              Run the large-show incremental mutation gate\n\
           --patch-gate                 Run the real persisted Patch transaction gate\n\
           -h, --help\n"
@@ -331,6 +366,7 @@ mod tests {
         assert_eq!(arguments.fixtures_per_universe, Some(32));
         assert_eq!(arguments.rate_hz, Some(110));
         assert!(arguments.sustained_show);
+        assert_eq!(arguments.headless_stress_fixtures, None);
         assert_eq!(
             arguments.fixture_package_dir.as_deref(),
             Some("assets/fixture-library")
@@ -355,6 +391,21 @@ mod tests {
         let arguments = parsed(&["--demo-show"]);
         assert!(arguments.sustained_show);
         assert!(!Arguments::help().contains("--demo-show"));
+    }
+
+    #[test]
+    fn accepts_only_the_exact_headless_capacity_tiers() {
+        let arguments = parsed(&["--headless-stress-fixtures", "2000"]);
+        assert_eq!(arguments.headless_stress_fixtures, Some(2_000));
+        assert!(Arguments::parse(["--headless-stress-fixtures".into(), "3000".into(),]).is_err());
+        assert!(
+            Arguments::parse([
+                "--sustained-show".into(),
+                "--headless-stress-fixtures".into(),
+                "4000".into(),
+            ])
+            .is_err()
+        );
     }
 
     #[test]

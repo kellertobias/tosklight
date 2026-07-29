@@ -14,12 +14,21 @@ pub struct BenchmarkReport {
     pub configuration: RunConfiguration,
     pub scenarios: Vec<ScenarioReport>,
     pub measurement_coverage: MeasurementCoverage,
+    pub process_resources: ProcessResourceReport,
     /// `None` means the hard-floor profile was not selected for this run.
     pub required_floor_met: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show_mutation: Option<crate::light_benchmark::mutation::ShowMutationReport>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub patch_mutation: Option<crate::light_benchmark::patch_mutation::PatchMutationReport>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProcessResourceReport {
+    pub resident_bytes: Option<u64>,
+    pub peak_resident_bytes: Option<u64>,
+    pub measurement: &'static str,
+    pub unavailable_reason: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -36,12 +45,20 @@ pub struct RunConfiguration {
 pub struct ScenarioReport {
     pub profile: crate::light_benchmark::arguments::BenchmarkProfile,
     pub expectation: Expectation,
+    pub workload_tier: &'static str,
+    pub release_blocking: bool,
+    pub active_ui_surfaces: &'static [&'static str],
+    pub visualization_enabled: bool,
     pub universes: u16,
     pub slots_per_universe: u16,
     pub fixture_count: usize,
+    pub physical_instance_count: usize,
     pub fixtures_per_universe: Option<u16>,
     pub fixture_footprint: Option<u16>,
     pub fixture_inventory: crate::light_benchmark::scenario::ScenarioFixtureInventory,
+    pub dynamic_definition_count: usize,
+    pub dynamic_lane_attributes: &'static [&'static str],
+    pub dynamic_excluded_fixture_count: usize,
     pub configured_rate_hz: u16,
     pub warmup_ticks: u64,
     pub warmup_elapsed_seconds: f64,

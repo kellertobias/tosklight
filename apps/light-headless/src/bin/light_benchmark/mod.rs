@@ -1,8 +1,10 @@
 mod arguments;
+mod headless_stress_show;
 mod loopback;
 mod metadata;
 mod mutation;
 mod patch_mutation;
+mod process_resources;
 mod report;
 mod runner;
 mod sampled;
