@@ -9,6 +9,10 @@ import {
 	histogramPercentileMicros,
 	outputWindow,
 } from "./output-histogram.mjs";
+import {
+	packagedStageProfile,
+	packagedStageSceneFailures,
+} from "./packaged-stage-profile.mjs";
 import { startSlowVisualizationClient } from "./slow-visualization-client.mjs";
 import { createLargeStageDynamicsPlan } from "./stage-dynamics-scene.mjs";
 import {
@@ -32,10 +36,7 @@ const durationSeconds = positiveInteger(
 	"duration seconds",
 );
 const profile = process.argv[3] ?? "default-stage";
-if (!["default-stage", "large-stage", "improved-beam-spike"].includes(profile))
-	throw new Error(
-		"packaged Stage profile must be `default-stage`, `large-stage`, or `improved-beam-spike`",
-	);
+const profileDefinition = packagedStageProfile(profile);
 const application = packagedApplication();
 const executable = application.executable;
 await stat(executable).catch(() => {
@@ -210,18 +211,74 @@ async function prepareScene(profile) {
 		desk_id: null,
 	});
 	const bootstrap = await requestJson("GET", "/api/v2/bootstrap");
-	const showId = bootstrap.active_show?.id;
+	let showId = bootstrap.active_show?.id;
 	if (!showId) throw new Error("Packaged Stage benchmark has no active Show");
+	if (profile === "canonical-demo")
+		showId = await openCanonicalDemoShow(session);
 	const before = await requestJson("GET", "/api/v2/patch", undefined, {
 		session,
 		showId,
 	});
-	if (profile === "default-stage") {
+	if (profile === "default-stage" || profile === "canonical-demo") {
+		const scene = summarizeScene(profile, before.fixtures);
+		const inventoryFailures = packagedStageSceneFailures(profile, scene);
+		if (inventoryFailures.length > 0)
+			throw new Error(inventoryFailures.join("; "));
+		const benchmarkLook =
+			profile === "canonical-demo"
+				? await startCanonicalDemoBenchmarkLook(session, showId)
+				: null;
 		const showSwitch = await createShowSwitchTarget(session, showId, profile);
+		if (profile === "canonical-demo") {
+			await requestJson(
+				"POST",
+				"/api/v2/shows",
+				{
+					request_id: crypto.randomUUID(),
+					action: {
+						type: "open",
+						show_id: showSwitch.alternateShowId,
+						transition: "safe_blackout",
+						transition_millis: null,
+					},
+				},
+				{ session },
+			);
+			await startCanonicalDemoBenchmarkLook(
+				session,
+				showSwitch.alternateShowId,
+			);
+			await requestJson(
+				"POST",
+				"/api/v2/shows",
+				{
+					request_id: crypto.randomUUID(),
+					action: {
+						type: "open",
+						show_id: showId,
+						transition: "safe_blackout",
+						transition_millis: null,
+					},
+				},
+				{ session },
+			);
+			await startCanonicalDemoBenchmarkLook(session, showId);
+		}
 		return {
-			scene: summarizeScene(profile, before.fixtures),
+			scene: {
+				...scene,
+				profileLabel: packagedStageProfile(profile).label,
+				benchmarkLook,
+				source:
+					profile === "canonical-demo"
+						? "assets/demo.show"
+						: "development default show",
+			},
 			session,
-			showSwitch,
+			showSwitch: {
+				...showSwitch,
+				canonicalDemo: profile === "canonical-demo",
+			},
 		};
 	}
 	const fixtureLibrary = await requestJson(
@@ -331,6 +388,125 @@ async function prepareScene(profile) {
 		},
 		session,
 		showSwitch: { ...showSwitch, dynamics },
+	};
+}
+
+const CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS = Object.freeze([
+	{ name: "ACL Chase", kind: "physical", playbackNumber: 17 },
+	{ name: "Show Wash Waterfall", kind: "virtual", playbackNumber: 1024 },
+	{ name: "Show Profile Circle", kind: "virtual", playbackNumber: 1019 },
+	{ name: "Show Profile PWM", kind: "virtual", playbackNumber: 1001 },
+	{ name: "Show LED Random", kind: "virtual", playbackNumber: 1014 },
+	{ name: "Show LED Random Strobe", kind: "virtual", playbackNumber: 1030 },
+	{ name: "Sunstrip Rain", kind: "virtual", playbackNumber: 1029 },
+	{ name: "Aux Show Profile Circle", kind: "virtual", playbackNumber: 1021 },
+	{ name: "Aux Show Profile PWM", kind: "virtual", playbackNumber: 1004 },
+	{ name: "Aux Show Wash Waterfall", kind: "virtual", playbackNumber: 1026 },
+	{ name: "Aux Show Wash Random", kind: "virtual", playbackNumber: 1011 },
+	{ name: "Aux Show LED Sinus", kind: "virtual", playbackNumber: 1018 },
+]);
+
+async function openCanonicalDemoShow(session) {
+	const source = path.join(repositoryRoot, "assets", "demo.show");
+	const dataBase64 = (await readFile(source)).toString("base64");
+	const outcome = await requestJson(
+		"POST",
+		"/api/v2/shows",
+		{
+			request_id: crypto.randomUUID(),
+			action: {
+				type: "create",
+				name: `Packaged canonical demo ${crypto.randomUUID()}`,
+				data_base64: dataBase64,
+				overwrite: false,
+			},
+		},
+		{ session },
+	);
+	const showId = outcome?.result?.show?.id;
+	if (!showId)
+		throw new Error("Packaged canonical demo import returned no show identity");
+	await requestJson(
+		"POST",
+		"/api/v2/shows",
+		{
+			request_id: crypto.randomUUID(),
+			action: {
+				type: "open",
+				show_id: showId,
+				transition: "safe_blackout",
+				transition_millis: null,
+			},
+		},
+		{ session },
+	);
+	return showId;
+}
+
+async function startCanonicalDemoBenchmarkLook(session, showId) {
+	for (const assignment of CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS)
+		await requestJson(
+			"POST",
+			"/api/v2/playback-actions",
+			{
+				request_id: crypto.randomUUID(),
+				address:
+					assignment.kind === "physical"
+						? {
+								kind: "playback",
+								playback_number: assignment.playbackNumber,
+							}
+						: {
+								kind: "virtual",
+								page: 1,
+								playback_number: assignment.playbackNumber,
+							},
+				action:
+					assignment.kind === "physical"
+						? { type: "go", pressed: true }
+						: { type: "on", pressed: true },
+				surface: assignment.kind === "physical" ? "physical" : "virtual",
+			},
+			{ session, showId, deskId: session.desk.id },
+		);
+	const snapshot = await requestJson(
+		"POST",
+		"/api/v2/playback-runtime/snapshot",
+		{
+			identities: CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.map((assignment) =>
+				assignment.kind === "physical"
+					? {
+							kind: "playback",
+							playback_number: assignment.playbackNumber,
+						}
+					: {
+							kind: "virtual",
+							page: 1,
+							playback_number: assignment.playbackNumber,
+						},
+			),
+		},
+		{ session, showId, deskId: session.desk.id },
+	);
+	const active = snapshot.projections.filter((projection) =>
+		projection.target === "cue_list"
+			? projection.runtime?.enabled === true
+			: projection.target === "dynamic" &&
+				projection.runtime?.state === "active",
+	);
+	if (
+		snapshot.projections.length !==
+			CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.length ||
+		active.length !== CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.length
+	)
+		throw new Error(
+			`Canonical demo activated ${active.length} of ${CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.length} benchmark assignments`,
+		);
+	return {
+		assignments: CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.map(
+			(assignment) => assignment.name,
+		),
+		activeAssignments: active.length,
 	};
 }
 
@@ -514,6 +690,8 @@ async function exerciseShowSwitches(session, shows, duration) {
 			);
 			if (shows.dynamics)
 				await requireLargeStageDynamicsRuntime(session, showId, shows.dynamics);
+			if (shows.canonicalDemo)
+				await startCanonicalDemoBenchmarkLook(session, showId);
 			result.completed++;
 			await new Promise((resolve) => setTimeout(resolve, 500));
 		}
@@ -578,6 +756,7 @@ async function requestJson(method, route, body, context = {}) {
 	if (context.showId) headers["x-tosk-show"] = context.showId;
 	if (context.revision !== undefined)
 		headers["if-match"] = String(context.revision);
+	if (context.deskId) headers["x-tosk-desk"] = context.deskId;
 	const response = await fetch(`http://127.0.0.1:5000${route}`, {
 		method,
 		headers,
@@ -917,6 +1096,16 @@ function evaluate(
 				"packaged large Stage did not retain 440 fixed-dimmer control instances",
 			);
 	}
+	for (const failure of packagedStageSceneFailures(profile, scene))
+		failures.push(failure);
+	if (
+		profile === "canonical-demo" &&
+		scene.benchmarkLook?.activeAssignments !==
+			CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.length
+	)
+		failures.push(
+			"packaged canonical demo did not activate all 12 benchmark assignments",
+		);
 	const longRun = summarizeStageLongRunResources(
 		timeline,
 		processMemory,
@@ -925,18 +1114,19 @@ function evaluate(
 	for (const failure of longRun.failures) failures.push(failure);
 	return {
 		schemaVersion: 2,
-		tier: profile === "large-stage" ? "interactive-large" : "realistic-stage",
+		tier: profileDefinition.tier,
 		measurementSurface: "packaged-tauri-webview",
 		profile,
+		profileLabel: profileDefinition.label,
 		scene,
 		host: hostHardware(),
 		durationSeconds: duration,
 		activeUiSurfaces: complete.activeUiSurfaces ?? [],
 		visualizationEnabled: true,
 		rate: {
-			targetHz: profile === "large-stage" ? 100 : null,
+			targetHz: profileDefinition.targetHz,
 			achievedOutputHz,
-			blocking: profile !== "large-stage",
+			blocking: profileDefinition.blocking,
 		},
 		samplesFile,
 		acceptanceGateEnforced: failures.length === 0,
