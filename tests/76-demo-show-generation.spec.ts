@@ -2,6 +2,7 @@ import { expect, test } from "./bench/core/fixtures";
 import { activeShowId, loadCanonicalCopy } from "./support/catalog";
 import { installPlannedDemoGroups } from "./support/plannedDemoGroups";
 import { installPlannedDemoDynamics } from "./support/plannedDemoDynamics";
+import { installPlannedDemoLayout } from "./support/plannedDemoLayouts";
 import { installPlannedDemoPatch } from "./support/plannedDemoPatch";
 import { installPlannedDemoPlaybacks } from "./support/plannedDemoPlaybacks";
 import { installPlannedDemoPresets } from "./support/plannedDemoPresets";
@@ -75,4 +76,10 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
     ?.body.phase.ordering).toEqual({ type: "grid_linear", angle_degrees: 90 });
   const [page] = await api.showObjects<any>(showId, "playback_page");
   expect(Object.keys(page.body.virtual_playbacks)).toHaveLength(30);
+
+  const layout = await installPlannedDemoLayout(api, showId);
+  expect(layout.desks.map((desk) => desk.name)).toEqual(["Busking", "Programming", "Theater"]);
+  const [storedLayout] = await api.showObjects<any>(showId, "user_layout");
+  expect(storedLayout.body.desks.find((desk: any) => desk.name === "Programming")
+    ?.panes.map((pane: any) => pane.kind)).toEqual(["fixtures", "stage", "dmx"]);
 });
