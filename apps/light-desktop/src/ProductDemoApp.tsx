@@ -30,7 +30,7 @@ const DEMO_CHAPTERS = [
 	["CUE PROGRAMMING", "Cues"],
 	["BUSKING", "Busking"],
 	["PRELOADING", "Preload"],
-	["ACL CHASER · SPEED A", "Chaser"],
+	["ACL CHASER · SPEED D", "Chaser"],
 ] as const;
 
 function DemoDmxGrid({ universeNumber }: { universeNumber: number }) {

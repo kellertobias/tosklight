@@ -2,9 +2,9 @@ import type { PlaybackProjection } from "../playbackRuntime/contracts";
 import type { ShowObject } from "../showObjects/contracts";
 
 /** Fader strips the demo desk renders, in visible order. */
-export const DEMO_PLAYBACK_STRIP_SLOTS = [1, 2, 3, 4] as const;
+export const DEMO_PLAYBACK_STRIP_SLOTS = [11, 16, 17, 4] as const;
 /** Momentary-only slots rendered above the strips, in visible order. */
-export const DEMO_PLAYBACK_TOP_SLOTS = [21, 22, 23, 24] as const;
+export const DEMO_PLAYBACK_TOP_SLOTS = [12, 13, 14, 15] as const;
 /** Buttons every strip renders, in visible order. */
 export const DEMO_PLAYBACK_STRIP_BUTTONS = [1, 2, 3] as const;
 

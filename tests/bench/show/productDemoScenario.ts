@@ -13,6 +13,10 @@ import {
   programmer,
 } from "../../support/catalog";
 import {
+  PLANNED_DEMO_BENCHMARK_ASSIGNMENTS,
+  startPlannedDemoBenchmarkLook,
+} from "../../support/plannedDemoBenchmark";
+import {
   aimFixtureAt,
   demoObjects,
   ensurePlannedDemoFixtureLibrary,
@@ -41,6 +45,255 @@ export class BrowserProductDemo {
   ) {}
 
   async run(): Promise<void> {
+    return this.runCanonical();
+  }
+
+  private async runCanonical(): Promise<void> {
+    const { api, bench, desk, page, testInfo } = this;
+    testInfo.setTimeout(RECORDING ? 900_000 : 300_000);
+    page.setDefaultTimeout(15_000);
+    await loadCanonicalCopy(api, bench, "planned-product-demo", "default-stage");
+    const video = page.video();
+    let completedShow: Buffer | null = null;
+    try {
+      await desk.open(`${bench.baseUrl}/?demo=product`);
+      const demo = page.getByTestId("product-demo");
+      const app = demo.locator(".product-demo-application");
+      const screenFrame = demo.locator(".product-demo-screen-frame");
+      const keypad = demo.locator(".demo-number-block");
+      const stage = demo.locator(".stage-3d-canvas");
+      await expect(demo).toBeVisible();
+      await expect(screenFrame).toHaveCSS("border-left-width", "10px");
+      const appBox = await app.boundingBox();
+      expect(appBox).not.toBeNull();
+      expect(appBox!.width / appBox!.height).toBeCloseTo(16 / 9, 2);
+      await expect(demo.locator("[data-demo-chapter]")).toHaveCount(8);
+      await expect(app.locator(".control-section.hardware-connected")).toBeVisible();
+      await expect(stage.locator("canvas")).toBeVisible();
+      await stage.locator("canvas").evaluate((canvas) => {
+        canvas.dataset.recordingCanvas = "stable";
+      });
+      await expect(stage).toHaveAttribute("data-camera-position", "0,1.625,8");
+      await expect(stage).toHaveAttribute("data-camera-target", "0,2.6,-4");
+      await expect(stage).toHaveAttribute("data-environment-brightness", "1");
+      await expect(stage).toHaveAttribute("data-floor-grid", "off");
+      await expect(stage).toHaveAttribute("data-beam-guides", "off");
+      for (const universe of [1, 2, 3, 4]) {
+        await expect(
+          demo.getByLabel(`Live DMX universe ${universe}`)
+            .locator(".product-demo-dmx-cell"),
+        ).toHaveCount(512);
+      }
+
+      await desk.titleCard(
+        "SHOW SETUP",
+        "Create one empty show, then generate the canonical 262-control, 301-instance lighting venue.",
+      );
+      const originalShowId = await activeShowId(api);
+      await desk.click(app.getByRole("button", { name: /Open show menu/ }));
+      await desk.click(
+        page.locator(".show-modal").getByRole("button", {
+          name: "New Show",
+          exact: true,
+        }),
+      );
+      await desk.click(
+        page.getByRole("dialog", { name: "New show" }).getByRole("button", {
+          name: "Create Empty Show",
+          exact: true,
+        }),
+      );
+      await expect.poll(() => activeShowId(api)).not.toBe(originalShowId);
+      const showId = await activeShowId(api);
+      expect(await demoObjects(api, showId, "group")).toHaveLength(0);
+      expect(await demoObjects(api, showId, "preset")).toHaveLength(0);
+      await desk.click(
+        page.locator(".show-modal").getByRole("button", {
+          name: "Show Patch",
+          exact: true,
+        }),
+      );
+      const patchWindow = app.locator(".show-patch-layout");
+      await expect(patchWindow).toBeVisible();
+      const canonical = await desk.fastForward(
+        "Building the canonical trusses, floor clusters, audience grid, auxiliary rig, ACL fans, groups, presets, playbacks and Dynamics.",
+        () => generatePlannedDemo(api, showId),
+      );
+      expect(canonical.patch.fixtureRecords).toBe(262);
+      expect(canonical.patch.physicalInstances).toBe(301);
+      expect(canonical.patch.occupiedSlots).toBe(3_783);
+      await expect.poll(async () => (await api.patch()).fixtures.length).toBe(262);
+      await expect(patchWindow.locator(".ui-window-info")).toContainText("262 fixtures");
+      await expect(fixtureRow(patchWindow, 101)).toBeVisible();
+
+      await desk.titleCard(
+        "OUTPUT CONFIGURATION",
+        "Configure live Art-Net and sACN routes after the canonical lighting venue exists.",
+      );
+      await desk.click(app.getByRole("button", { name: /Open show menu/ }));
+      await desk.click(
+        page.locator(".show-modal").getByRole("button", {
+          name: "Enter Setup",
+          exact: true,
+        }),
+      );
+      await desk.click(
+        app.locator(".setup-window nav").getByRole("button", {
+          name: "Outputs",
+          exact: true,
+        }),
+      );
+      const routes = app.getByRole("region", { name: "Output routes" });
+      await createOutputRoute(desk, page, routes, "Art-Net", 1, 1, bench.artnet.port);
+      await createOutputRoute(desk, page, routes, "sACN", 2, 2, bench.sacn.port);
+      await createOutputRoute(desk, page, routes, "Art-Net", 3, 3, bench.artnet.port);
+      await expect(routes.locator("article")).toHaveCount(3);
+
+      await desk.titleCard(
+        "GROUP PREPARATION",
+        "Use the final Profile Stage Group through the normal keypad and Fixture Sheet.",
+      );
+      await openBuiltIn(desk, app, "Fixtures");
+      const fixtureWindow = app.locator(".fixture-window");
+      await expect(fixtureWindow).toBeVisible();
+      await clearSelection(desk, keypad, api);
+      await keypadCommand(desk, keypad, ["GRP", "2", "ENT"]);
+      await expect.poll(async () => (await programmer(api)).selected.length).toBe(28);
+      await expect(fixtureWindow.locator(".group-strip")).toContainText("Profile Stage");
+
+      await desk.titleCard(
+        "BUILT-IN FIXTURE CONTROL ACTIONS",
+        "The selected Profile exposes Lamp On, Fan Auto, Reset and Lamp Off through one centered control surface.",
+      );
+      await clearSelection(desk, keypad, api);
+      await keypadCommand(desk, keypad, ["1", "0", "1", "ENT"]);
+      await desk.click(app.getByRole("button", { name: "Control", exact: true }));
+      await desk.click(app.getByRole("button", { name: "Special Dialog", exact: true }));
+      const specialDialog = page.locator(".special-dialog-card");
+      await expect(specialDialog).toContainText(/1 fixtures? selected/);
+      for (const name of ["Lamps On", "Fan Auto", "Reset", "Lamp Off"]) {
+        const action = specialDialog.getByRole("button", { name, exact: true });
+        await expect(action).toBeVisible();
+        await desk.click(action);
+      }
+      await desk.click(specialDialog.getByRole("button", { name: "×", exact: true }));
+
+      await desk.titleCard(
+        "PRESET PROGRAMMING",
+        "Recall the canonical Red preset on Show Profile; the recording performs no redundant Green or Blue zero edits.",
+      );
+      await clearProgrammer(desk, keypad, api);
+      await keypadCommand(desk, keypad, ["GRP", "1", "3", "ENT"]);
+      await openBuiltIn(desk, app, "Presets");
+      const presetWindow = app.locator(".preset-pool-window");
+      await desk.click(presetWindow.getByRole("button", { name: "Color", exact: true }));
+      await desk.click(presetWindow.getByRole("button", { name: /Red Color ·/ }));
+      await expect.poll(() => programmerValueCount(api)).toBeGreaterThan(0);
+      await expect(presetWindow.getByRole("button", { name: /Tungsten White Color ·/ }))
+        .toBeVisible();
+
+      await desk.titleCard(
+        "CUE PROGRAMMING",
+        "Fixture Sheet, Color and Position presets, and the final seven-Cuelist topology remain visible together.",
+      );
+      await openBuiltIn(desk, app, "Cuelists");
+      await expect(app.locator(".cuelist-window")).toContainText("Start");
+      expect(await demoObjects(api, showId, "cue_list")).toHaveLength(7);
+      expect(await demoObjects(api, showId, "playback")).toHaveLength(13);
+
+      await desk.titleCard(
+        "BUSKING",
+        "Start the composed white look, ACL chase and all canonical benchmark Dynamics through their final assignments.",
+      );
+      await desk.click(demo.getByRole("button", {
+        name: "Playback 11 button 1",
+        exact: true,
+      }));
+      await desk.click(demo.getByRole("button", {
+        name: "Playback 17 button 1",
+        exact: true,
+      }));
+      await bench.tick(1_200);
+      const runtime = await startPlannedDemoBenchmarkLook(api, showId);
+      expect(runtime.projections).toHaveLength(PLANNED_DEMO_BENCHMARK_ASSIGNMENTS.length);
+      expect(runtime.projections.every((projection: any) =>
+        projection.target === "cue_list"
+          ? projection.runtime?.enabled === true
+          : projection.target === "dynamic" && projection.runtime?.state === "active"))
+        .toBe(true);
+      await expect.poll(async () =>
+        (await api.request<any>("GET", "/api/v2/output/dmx", undefined, false))
+          .universes.some((frame: any) =>
+            frame.slots.some((value: number) => value > 0))).toBe(true);
+
+      await desk.titleCard(
+        "PRELOADING",
+        "Prepare two canonical ACL playbacks blind and commit them together through the physical Preload Go path.",
+      );
+      await clearProgrammer(desk, keypad, api);
+      await desk.click(keypad.getByRole("button", { name: "PRELOAD GO", exact: true }));
+      await desk.click(demo.getByRole("button", {
+        name: "Playback 12 button 1",
+        exact: true,
+      }));
+      await desk.click(demo.getByRole("button", {
+        name: "Playback 15 button 1",
+        exact: true,
+      }));
+      expect((await preloadState(api)).playbackCount).toBeGreaterThanOrEqual(2);
+      await desk.click(keypad.getByRole("button", { name: "PRELOAD GO", exact: true }));
+      await expect.poll(async () => (await preloadState(api)).toEqual({
+        capturesValues: false,
+        valueCount: 0,
+        playbackCount: 0,
+      }));
+
+      await desk.titleCard(
+        "ACL CHASER · SPEED D",
+        "The four-step ACL chase remains active on Speed Group D while a final keypad action proves normal post-generation control.",
+      );
+      await expect.poll(async () => activeNumbers(api)).toContain(17);
+      await clearSelection(desk, keypad, api);
+      await keypadCommand(desk, keypad, ["1", "0", "1", "ENT"]);
+      await keypadCommand(desk, keypad, ["AT", "8", "0", "ENT"]);
+      await expect.poll(async () =>
+        (await api.request<any>("GET", "/api/v2/output/dmx", undefined, false))
+          .universes.some((frame: any) =>
+            frame.slots.some((value: number) => value > 0))).toBe(true);
+      if (UPDATE_DEMO_SHOW) {
+        completedShow = await downloadCompletedDemoShow(api, showId);
+      }
+      if (RECORDING) {
+        await fs.mkdir(path.dirname(SCREENSHOT), { recursive: true });
+        await page.screenshot({ path: SCREENSHOT });
+        await testInfo.attach("planned-demo-full-hd-screenshot", {
+          path: SCREENSHOT,
+          contentType: "image/png",
+        });
+      }
+    } finally {
+      if (video) {
+        await fs.mkdir(path.dirname(VIDEO), { recursive: true });
+        const saveVideo = video.saveAs(VIDEO);
+        await page.close();
+        await saveVideo;
+        await testInfo.attach("planned-demo-video", {
+          path: VIDEO,
+          contentType: "video/webm",
+        });
+      }
+    }
+    if (UPDATE_DEMO_SHOW) {
+      expect(completedShow).not.toBeNull();
+      await publishDemoShowAsset(completedShow!);
+      await testInfo.attach("completed-demo-show", {
+        path: DEMO_SHOW,
+        contentType: "application/vnd.light.show",
+      });
+    }
+  }
+
+  private async runLegacy(): Promise<void> {
     const { api, bench, desk, page, testInfo } = this;
     testInfo.setTimeout(RECORDING ? 900_000 : 300_000);
     page.setDefaultTimeout(15_000);

@@ -97,15 +97,15 @@ function page(
 }
 
 const DEMO_PAGE = page(1, {
-	"1": 11,
-	"2": 12,
-	"3": 13,
+	"11": 11,
+	"16": 12,
+	"17": 13,
 	"4": 14,
 	"9": 99,
-	"21": 21,
-	"22": 22,
-	"23": 23,
-	"24": 24,
+	"12": 21,
+	"13": 22,
+	"14": 23,
+	"15": 24,
 });
 
 type ApplyActionMock = Mock<PlaybackRuntimeActionApply>;
@@ -223,8 +223,8 @@ describe("DemoPlaybackControls", () => {
 		const { applyAction, transport, view } = harness();
 		render(view());
 		await settled();
-		fireEvent.pointerDown(button(1), { pointerId: 1 });
-		fireEvent.input(screen.getByLabelText("Playback 1 fader"), {
+		fireEvent.pointerDown(button(11), { pointerId: 1 });
+		fireEvent.input(screen.getByLabelText("Playback 11 fader"), {
 			target: { value: "0.5" },
 		});
 		await settled();
@@ -236,8 +236,8 @@ describe("DemoPlaybackControls", () => {
 		const { applyAction, view } = harness();
 		// The desk snapshot has not resolved yet, so no Page is authoritative.
 		render(view());
-		fireEvent.pointerDown(button(21), { pointerId: 1 });
-		fireEvent.input(screen.getByLabelText("Playback 2 fader"), {
+		fireEvent.pointerDown(button(12), { pointerId: 1 });
+		fireEvent.input(screen.getByLabelText("Playback 16 fader"), {
 			target: { value: "0.5" },
 		});
 		expect(applyAction).not.toHaveBeenCalled();
@@ -254,7 +254,7 @@ describe("DemoPlaybackControls", () => {
 		projection.runtime.fader_position = 0.4;
 		act(() => void store.applyProjection(projection, 20));
 		await waitFor(() =>
-			expect(screen.getByLabelText("Playback 2 fader")).toHaveValue("0.4"),
+			expect(screen.getByLabelText("Playback 16 fader")).toHaveValue("0.4"),
 		);
 		expect(screen.getByText("40%")).toBeInTheDocument();
 	});
@@ -263,7 +263,7 @@ describe("DemoPlaybackControls", () => {
 		const { applyAction, view } = harness();
 		render(view());
 		await settled();
-		fireEvent.input(screen.getByLabelText("Playback 3 fader"), {
+		fireEvent.input(screen.getByLabelText("Playback 17 fader"), {
 			target: { value: "0.75" },
 		});
 		await settled();
@@ -278,9 +278,9 @@ describe("DemoPlaybackControls", () => {
 		const { applyAction, view } = harness();
 		render(view());
 		await settled();
-		fireEvent.pointerDown(button(1, 2), { pointerId: 1 });
+		fireEvent.pointerDown(button(11, 2), { pointerId: 1 });
 		await settled();
-		fireEvent.pointerUp(button(1, 2), { pointerId: 1 });
+		fireEvent.pointerUp(button(11, 2), { pointerId: 1 });
 		await settled();
 		expect(buttonSends(applyAction)).toEqual([
 			{ playbackNumber: 11, button: 2, pressed: true, surface: "physical" },
@@ -292,17 +292,17 @@ describe("DemoPlaybackControls", () => {
 		const { applyAction, view } = harness();
 		const rendered = render(view());
 		await settled();
-		fireEvent.pointerDown(button(1), { pointerId: 1 });
+		fireEvent.pointerDown(button(11), { pointerId: 1 });
 		await settled();
 
 		mocks.pagesView = {
 			ready: true,
 			error: null,
-			pages: [page(1, { ...DEMO_PAGE.body.slots, "1": 77 })],
+			pages: [page(1, { ...DEMO_PAGE.body.slots, "11": 77 })],
 		};
 		rendered.rerender(view());
 		await settled();
-		fireEvent.pointerUp(button(1), { pointerId: 1 });
+		fireEvent.pointerUp(button(11), { pointerId: 1 });
 		await settled();
 
 		expect(buttonSends(applyAction)).toEqual([
@@ -325,11 +325,11 @@ describe("DemoPlaybackControls", () => {
 		const deskLoads = settle.length;
 		settle.splice(0, deskLoads).forEach((resolve) => resolve());
 
-		fireEvent.pointerDown(button(1), { pointerId: 1 });
+		fireEvent.pointerDown(button(11), { pointerId: 1 });
 		await settled();
 		expect(applyAction).toHaveBeenCalledOnce();
 
-		fireEvent.pointerUp(button(1), { pointerId: 1 });
+		fireEvent.pointerUp(button(11), { pointerId: 1 });
 		await settled();
 		expect(applyAction).toHaveBeenCalledOnce();
 
@@ -351,9 +351,9 @@ describe("DemoPlaybackControls", () => {
 		const { applyAction, view } = harness();
 		render(view());
 		await settled();
-		fireEvent.pointerDown(button(22), { pointerId: 1 });
+		fireEvent.pointerDown(button(13), { pointerId: 1 });
 		await settled();
-		release(button(22));
+		release(button(13));
 		await settled();
 		expect(buttonSends(applyAction)).toEqual([
 			{ playbackNumber: 22, button: 1, pressed: true, surface: "physical" },
@@ -365,7 +365,7 @@ describe("DemoPlaybackControls", () => {
 		const { applyAction, view } = harness();
 		const rendered = render(view());
 		await settled();
-		fireEvent.pointerDown(button(23), { pointerId: 1 });
+		fireEvent.pointerDown(button(14), { pointerId: 1 });
 		await settled();
 		rendered.unmount();
 		await settled();
@@ -379,7 +379,7 @@ describe("DemoPlaybackControls", () => {
 		const { applyAction, view } = harness();
 		const rendered = render(view("authority-a"));
 		await settled();
-		fireEvent.pointerDown(button(24), { pointerId: 1 });
+		fireEvent.pointerDown(button(15), { pointerId: 1 });
 		await settled();
 		rendered.rerender(view("authority-b"));
 		await settled();
@@ -393,20 +393,20 @@ describe("DemoPlaybackControls", () => {
 		const { applyAction, view } = harness();
 		const rendered = render(view());
 		await settled();
-		fireEvent.pointerDown(button(1), { pointerId: 1 });
+		fireEvent.pointerDown(button(11), { pointerId: 1 });
 		await settled();
 
 		mocks.pagesView = { ready: false, error: null, pages: [DEMO_PAGE] };
 		rendered.rerender(view());
 		await settled();
-		fireEvent.lostPointerCapture(button(1), { pointerId: 1 });
+		fireEvent.lostPointerCapture(button(11), { pointerId: 1 });
 		await settled();
 
 		expect(buttonSends(applyAction)).toEqual([
 			{ playbackNumber: 11, button: 1, pressed: true, surface: "physical" },
 			{ playbackNumber: 11, button: 1, pressed: false, surface: "physical" },
 		]);
-		expect(button(1)).toBeDisabled();
+		expect(button(11)).toBeDisabled();
 	});
 
 	it("does not rerender for Playback numbers the demo desk never mapped", async () => {

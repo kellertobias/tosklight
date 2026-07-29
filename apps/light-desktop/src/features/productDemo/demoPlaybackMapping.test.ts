@@ -24,12 +24,12 @@ function page(
 describe("demoSlotPlaybackNumbers", () => {
 	it("maps only the demo slots of the exact active desk Page", () => {
 		const pages = [
-			page(1, { "1": 11, "2": 12, "5": 15, "21": 121 }),
-			page(2, { "1": 21, "21": 221 }),
+			page(1, { "11": 11, "16": 12, "5": 15, "12": 121 }),
+			page(2, { "11": 21, "12": 221 }),
 		];
 		expect([...demoSlotPlaybackNumbers(pages, 2)]).toEqual([
-			[1, 21],
-			[21, 221],
+			[11, 21],
+			[12, 221],
 		]);
 	});
 
@@ -43,16 +43,16 @@ describe("demoSlotPlaybackNumbers", () => {
 	});
 
 	it("skips unassigned demo slots instead of inventing them", () => {
-		const mapped = demoSlotPlaybackNumbers([page(1, { "3": 33 })], 1);
-		expect(mapped.get(3)).toBe(33);
-		expect(mapped.has(1)).toBe(false);
+		const mapped = demoSlotPlaybackNumbers([page(1, { "17": 33 })], 1);
+		expect(mapped.get(17)).toBe(33);
+		expect(mapped.has(11)).toBe(false);
 	});
 });
 
 describe("demoMappedPlaybackNumbers", () => {
 	it("returns each mapped Playback number once, in ascending order", () => {
 		const mapped = demoSlotPlaybackNumbers(
-			[page(1, { "1": 9, "2": 4, "3": 9, "21": 1 })],
+			[page(1, { "11": 9, "16": 4, "17": 9, "12": 1 })],
 			1,
 		);
 		expect(demoMappedPlaybackNumbers(mapped)).toEqual([1, 4, 9]);
