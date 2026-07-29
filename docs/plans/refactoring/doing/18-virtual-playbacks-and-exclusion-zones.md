@@ -5,7 +5,6 @@
 **Doing, claimed after the completed focused Dynamics lane-layout regression and before
 repository-wide dead-code removal.**
 
-**Completion usage gate: above 75% large-window remaining usage.**
 
 Execute this plan after the focused
 [Dynamics lane-layout regression](../finished/14a-dynamics-lane-layout-and-interaction-regression.md).
@@ -51,22 +50,30 @@ repository-owned example shows named above.
 
 ## Address space and identity
 
-- A concrete Playback address remains **page plus playback number**.
-- Physical playbacks retain numbers **1 through 1000**.
-- Virtual Playbacks use numbers **1001 through 9998 inclusive** on each page.
-- Number 9999 is not a valid Playback number. Keeping every Playback address below
-  9999 preserves an obvious four-digit boundary.
-- Each page can therefore contain up to 8,998 independently assignable Virtual
-  Playback positions. The implementation must not allocate all positions eagerly.
-- Page 2 Virtual Playback 1001 is a different assignment and runtime identity from
-  page 1 Virtual Playback 1001 and from physical page 2 playback 1.
+- A concrete Playback address remains **page plus playback number**, but every Virtual
+  Playback number belongs to exactly one page and therefore remains globally
+  unambiguous across desks.
+- Physical playbacks retain numbers **1 through 1000** on each page.
+- Every Virtual Playback page owns one bank of 300 numbers. Page 1 owns **1001 through
+  1300**, page 2 owns **1301 through 1600**, page 3 owns **1601 through 1900**, and page
+  `p` starts at `1001 + 300 × (p - 1)`.
+- The existing 127-page boundary therefore makes **39100** the highest Virtual
+  Playback number. A `{page, number}` pair is valid only when the number belongs to
+  that page's bank.
+- A page contains at most 300 independently assignable Virtual Playbacks. Definitions
+  remain sparse; the implementation must not allocate all 38,100 possible Virtual
+  Playback definitions eagerly.
+- Page 2 Virtual Playback 1301 is independent from page 1 Virtual Playback 1001 and
+  from physical page 2 playback 1. Every desk that addresses page 2 Virtual Playback
+  1301 reaches the same show-owned assignment and runtime.
 - Assigning, configuring, clearing, operating, recording to, or deleting a Virtual
   Playback never creates, moves, retargets, or clears a physical playback.
 - A Virtual Playback references the normal Cuelist, Group, Dynamic, master, or other
   supported Playback target. It does not copy the source object or create a separate
   runtime engine.
 - Operator labels, selection, audit, running-source feedback, and error messages use
-  an unambiguous page/address form such as **Virtual 4.1001**.
+  the stable number, optionally accompanied by its derived page, such as **Virtual
+  Playback 1901** or **Virtual page 4 · Playback 1901**.
 
 Update all numeric types, validators, generated wire schemas, persistence indexes, and
 test helpers that currently assume a maximum playback number of 127 or an eight-bit
@@ -75,16 +82,15 @@ slot. Range errors must name the accepted physical or virtual range.
 ## Pane grid and page modes
 
 - A Virtual Playbacks pane has explicit **Rows** and **Columns**. Both are positive
-  integers and their product may not exceed 8,998.
-- A 20×20 grid is a required ordinary acceptance case. Large sparse grids with empty
-  cells are supported.
-- Cell position `n` maps in row-major order to Virtual Playback number `1000 + n`.
-  Empty positions remain visible and assignable.
+  integers and their product may not exceed 300.
+- A 20×15 grid is the ordinary full-page acceptance case. Smaller sparse grids with
+  empty cells are supported.
+- Cell position `n` on page `p` maps in row-major order to Virtual Playback number
+  `1000 + 300 × (p - 1) + n`. Empty positions remain visible and assignable.
 - Resizing the pane never changes its logical rows, columns, addresses, or assignments.
   The pane fits, scales, scrolls, and virtualizes rendering as needed.
-- Large grids must not mount thousands of expensive playback controllers or
-  subscriptions at once. Subscribe to the visible range plus a small bounded
-  overscan, while the server remains authoritative for the complete page.
+- A pane mounts only its configured cells and subscribes narrowly to their 300-number
+  bank. The server remains authoritative for every page and definition.
 - Each pane has one page mode:
   - **Follow Main** resolves against the main page of its control desk.
   - **Pinned** resolves against one explicit fixed page stored with the pane.
@@ -92,8 +98,9 @@ slot. Range errors must name the accepted physical or virtual range.
   main page changes. A Pinned pane does not.
 - Page changes alter only the displayed address range. They never start, stop,
   normalize, or otherwise operate a Playback.
-- Multiple panes may display the same page and Virtual Playback numbers. They are
-  projections of the same authoritative definitions and runtime, not copies.
+- Multiple panes and different desks may display the same page and Virtual Playback
+  numbers. They are projections of the same show-owned definitions, runtime, and
+  exclusion zones, not copies.
 
 ## Assignment, configuration, and runtime
 
@@ -111,8 +118,8 @@ slot. Range errors must name the accepted physical or virtual range.
   Swap, and target-specific actions use the same authoritative Playback service and
   ownership semantics as the equivalent physical Playback.
 - Preload retains a separate Virtual Playback capture domain. A captured action stores
-  its complete virtual page/address identity, commits in preserved order at Preload GO,
-  and always retains a deliberate Off/release path.
+  the stable Virtual Playback number and its validated page qualifier, commits in
+  preserved order at Preload GO, and always retains a deliberate Off/release path.
 - Active Virtual Playbacks appear in running-source feedback and remain operable when
   their pane is closed, another page is visible, or their cell is outside the rendered
   viewport.
@@ -122,27 +129,24 @@ slot. Range errors must name the accepted physical or virtual range.
 
 ## Exclusion-zone data model
 
-An exclusion zone is a named, ordered set of cells on one Virtual Playbacks surface.
-When a member receives an authoritative activation that leaves it On, that member wins
-and the other applicable members are released through the normal Playback service.
+An exclusion zone is a show-owned named, ordered set of Virtual Playback numbers. When
+a member receives an authoritative activation that leaves it On, that member wins and
+the other applicable members are released through the normal Playback service.
 
 - Each zone stores a stable ID, a trimmed non-empty name of at most 80 characters, and
-  at least two unique one-based cell positions.
-- A zone stores **surface cell positions**, not copied target-object IDs. On the
-  surface's effective page, cell `n` resolves to Virtual Playback
-  `{page, 1000 + n}`.
-- Empty cells may be members. Assigning them later activates the existing zone intent.
-- Shrinking a grid does not delete out-of-range memberships. The Exclusion Zones tab
-  continues to list those stored positions; expanding the grid restores them.
-- A cell may belong to multiple zones. Activating it releases the deduplicated union of
-  all other members in every applicable zone.
-- All matching zones on all surfaces of the originating control desk participate when
-  they resolve to the activated page/address. Surface list order never changes runtime
-  arbitration.
-- Follow Main zones apply only to that desk's current main page. Pinned zones apply
-  only to their pinned page. An explicit action on another page borrows neither.
-- Different control desks retain independent surface layouts and zones. The
-  originating desk recorded on the action selects the applicable zone partitions.
+  at least two unique Virtual Playback numbers.
+- A zone stores **Virtual Playback numbers**, never copied target-object IDs, pane-cell
+  positions, desk IDs, surface IDs, or page modes. UI selection resolves each displayed
+  cell to its stable number before saving the zone.
+- An unassigned Virtual Playback number may be a member. Assigning it later activates
+  the existing zone intent.
+- Changing, shrinking, moving, duplicating, or deleting a pane never retargets, copies,
+  or deletes zone membership.
+- A Virtual Playback number may belong to multiple zones. Activating it releases the
+  deduplicated union of all other members in every applicable zone.
+- Every desk, pane, OSC controller, REST caller, WebSocket caller, attached-hardware
+  input, and Preload action uses the same show-owned zones. Desk layout and selected
+  page do not partition or alter arbitration.
 - Creating, renaming, editing, reordering, or deleting a zone is configuration-only
   and never operates a Playback. If several members are already On, they remain On
   until the next qualifying activation.
@@ -150,8 +154,8 @@ and the other applicable members are released through the normal Playback servic
   The last accepted activation wins, including concurrent UI, command, REST, WebSocket,
   OSC, attached-hardware, and Preload inputs.
 - Restart restores activation provenance before output resumes and deterministically
-  normalizes zones using the last accepted activation. Exact legacy-zone migration is
-  not required; only state written by the new schema participates.
+  normalizes the show-owned zones using the last accepted activation. Exact legacy-zone
+  migration is not required; only state written by the new schema participates.
 - Automatic full-override release and the separate fader-zero/Flash-release auto-off
   options remain independent from mutual exclusion.
 
@@ -168,15 +172,16 @@ and the other applicable members are released through the normal Playback servic
   Zones** tab and does not expose pane-level Cuelist color-mode controls.
 - **Edit Zone** closes Pane Settings and selects the zone's stored cells on the live
   grid. The title actions become **Update Exclusion Zone** and **Cancel Edit**.
-  Updating replaces that zone's membership in place while preserving its ID, name,
-  order, and hidden members; canceling persists nothing.
+  The pane derives visible cells from the zone's stored playback numbers. Updating
+  replaces that zone's membership in place while preserving its ID, name, order, and
+  members on other pages; canceling persists nothing.
 - Temporary selection and saved zone membership are unmistakably different visual
   states. Saved membership is not communicated by color alone.
 - Orthogonally neighboring members of one zone share a single outer fence with no
   internal fence edge. Disconnected components render as separately fenced islands.
   Diagonal contact alone does not join two components.
-- Overlapping cells expose every applicable zone name through reachable detail and
-  Settings, not only an opaque color.
+- Overlapping Virtual Playback numbers expose every applicable zone name through
+  reachable detail and Settings, not only an opaque color.
 - Zone styling coexists with configured light/dark Playback colors, active/running
   state, Record, Update, focus, disabled/error state, empty cells, and held actions.
   It cannot obscure the address, label, action, current Cue, or On/Off distinction.
@@ -192,16 +197,15 @@ hardware-connected layouts before screenshots are refreshed.
 
 ## Persistence, API, and events
 
-- Virtual Playback assignments are portable show data under the normal active-show
-  persistence owner.
+- Virtual Playback assignments and exclusion zones are portable show data under the
+  normal active-show persistence owner and are shared by every desk operating that
+  show.
 - Pane rows, columns, page mode, pinned page, and stable surface ID remain
   Desktop/control-desk layout data.
-- Exclusion zones remain show-keyed control-desk data partitioned by desk and stable
-  surface ID. Sessions on the same desk share them; another desk has independent
-  partitions.
-- Moving a pane retains its surface ID and zones. Duplicating it creates a new surface
-  ID and copies its zone configuration once. Removing a pane removes only that
-  surface's zones. Removing a historical desk removes its partitions.
+- Exclusion zones have one show-owned revisioned snapshot. They contain playback
+  numbers and have no desk or surface partition.
+- Moving, duplicating, or removing a pane and removing a historical desk do not mutate
+  zones. Only the explicit zone-delete intent removes a zone.
 - Follow `docs/engineering/api-rules.md`: show and desk are authenticated context, not
   duplicated mutable operands.
 - Reads use typed snapshots; configuration writes use typed, retry-safe intent actions
@@ -210,9 +214,9 @@ hardware-connected layouts before screenshots are refreshed.
 - Accepted configuration and runtime changes publish typed capability events.
   High-frequency telemetry remains bounded and is not persisted as one durable event
   per frame.
-- Audit entries distinguish configuration changes, winner activation, peer releases,
-  source surface, page/address, and rejected conflicts without copying sensitive
-  request bodies.
+- Audit entries distinguish zone configuration changes, winner activation, peer
+  releases, source desk/surface provenance, stable playback number, and rejected
+  conflicts without copying sensitive request bodies.
 
 ## Implementation boundaries
 
@@ -258,26 +262,25 @@ characterization of the current page-slot implementation only after the dedicate
 identity, page modes, and sparse-grid runtime are authoritative.
 
 - Update `docs/help/05-Pane-Reference/02-cues-and-playbacks.md` and
-  `docs/help/40-Running-a-Show/05-virtual-playbacks.md` with the 1001–9998 range,
-  rejected 9999 boundary, row-major cell mapping, 8,998-cell product limit, Follow
-  Main and Pinned behavior, unambiguous `Virtual P.NNNN` labels, and server-owned
-  exclusion arbitration across applicable surfaces.
+  `docs/help/40-Running-a-Show/05-virtual-playbacks.md` with the 300-number page banks,
+  1001/1301/1601 starts, 20×15 and 300-cell limit, Follow Main and Pinned behavior,
+  stable-number labels, and server-owned cross-desk exclusion arbitration.
 - Update `docs/help/50-Protocols/01-osc-rest-and-websocket.md` so protocol examples
   distinguish dedicated Virtual Playback addresses from physical current-page and
   explicit-page Playback controls; remove any compatibility wording that would imply
   an old page-slot alias remains.
-- Update `.tour/glossary/domain.md` with dedicated Virtual Playback identity, surface
-  cell position, effective page, and exclusion-zone partition definitions. Update
+- Update `.tour/glossary/domain.md` with dedicated Virtual Playback numbers, page-bank
+  mapping, displayed cells, and show-owned exclusion-zone definitions. Update
   `.tour/tours/26-playback-runtime.md` with the shared Playback runtime path,
-  physical-versus-virtual address domains, Preload capture identity, and serialized
-  peer release.
+  physical-versus-virtual address domains, cross-desk identity, Preload capture, and
+  serialized peer release.
 - Replace the 1–12 Storybook row/column controls, page-slot fixture data, and
   `cell 128 unavailable` characterization in
   `apps/light-desktop/src/components/control/virtualPlayback/VirtualPlaybackGrid.stories.tsx`
-  and `apps/ui-library/storybook/tests/ui-stories.spec.ts`. Add representative 20×20,
-  sparse large-grid, Follow Main, Pinned, overlapping-zone, hidden-membership,
-  configured-color, active, error, and accessibility states without mounting all
-  8,998 expensive controllers.
+  and `apps/ui-library/storybook/tests/ui-stories.spec.ts`. Add representative 20×15,
+  sparse, Follow Main, Pinned, overlapping-zone, cross-page membership,
+  configured-color, active, error, and accessibility states using stable playback
+  numbers.
 - Refresh `panes/virtual-playbacks.png` from the production-backed documentation
   story and `panes/virtual-playbacks-settings.png` through the live desktop path in
   `docs/help/screenshot-manifest.json`. Review both visually in software-only and
@@ -292,20 +295,20 @@ identity, page modes, and sparse-grid runtime are authoritative.
 Start with focused domain, wire, adapter, UI, and semantic checks, then run every
 affected broader gate. Completion requires at least:
 
-1. Rust domain tests for the 1/1000 physical boundary, 1001/9998 virtual boundary,
-   rejected 9999, page identity, action semantics, exclusion union, serialization,
-   restart, and no eager 8,998-position allocation.
+1. Rust domain tests for the 1/1000 physical boundary, page-bank starts
+   1001/1301/1601, final 39100 boundary, page/number validation, action semantics,
+   show-wide exclusion union, serialization, restart, and sparse allocation.
 2. Persistence/startup tests proving old schema rejection and successful real-path
    opening of all three regenerated canonical shows.
 3. Generated wire/client checks for full-width playback numbers and explicit physical
    versus virtual address types.
-4. UI tests for 20×20 sparse grids, large-grid virtualization, fixed logical geometry,
-   Follow Main, Pinned, multiple panes, assignment/configuration, hidden active sources,
-   exclusion editing, overlap, accessibility, and errors.
+4. UI tests for 20×15 and smaller sparse grids, fixed logical geometry, Follow Main,
+   Pinned, bank changes, multiple panes and desks, assignment/configuration, hidden
+   active sources, exclusion editing/deletion, overlap, accessibility, and errors.
 5. Cross-surface tests for software, software/hardware Shift zone selection, REST,
-   WebSocket, OSC, attached-hardware, Preload, runtime/output feedback, and
-   different-desk isolation. Virtual Playbacks do not consume the physical F1–F8
-   Playback shortcuts.
+   WebSocket, OSC, attached-hardware, Preload, runtime/output feedback, and two desks
+   sharing assignments, runtime, and zones despite different layouts. Virtual
+   Playbacks do not consume the physical F1–F8 Playback shortcuts.
 6. Updated semantic `VPB-007` coverage for the new identity and exclusion contract.
    Delete obsolete old-model assertions instead of retaining a compatibility suite.
 7. Focused Preload and auto-off scenarios proving normal release/ownership behavior on
@@ -325,7 +328,7 @@ stories, or mocked runtime evidence alone.
 This plan remains **doing**. The latest large-window usage checkpoint was 77%, and the
 strict completion threshold is above 75%, so no later queue phase has been claimed.
 
-Implemented and focused-verified so far:
+Implemented and focused-verified before the corrected global-number contract:
 
 - dedicated physical and page-qualified Virtual Playback identities, topology, wire
   projections, regenerated canonical shows, sparse grids, Follow Main/Pinned modes,
@@ -339,6 +342,12 @@ Implemented and focused-verified so far:
   focused/shared Playback-page test fixtures reached by the full UI gate; and
 - current production Storybook states for 20×20, sparse-large, Pinned, overlapping,
   hidden-member, and error cases.
+
+The 2026-07-29 correction supersedes the page-reused 1001–9998 identity,
+8,998-cell panes, cell-position zone storage, and desk/surface partitions listed
+above. Those implementation and verification claims must be replaced with 300-number
+page banks, show-owned playback-number zones, cross-desk proof, and explicit deletion
+coverage before completion.
 
 Current verification evidence:
 

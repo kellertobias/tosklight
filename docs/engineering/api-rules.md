@@ -99,9 +99,11 @@ per-fixture values.
   are several, or otherwise the first desk in deterministic case-insensitive name/UUID
   order. On the desk's own WebSocket, the session already carries the desk — frames need
   no header. This is deliberately symmetric with the show guard header above.
-- Virtual-playback exclusion zones are **show-level** (the storage already keys by
-  show); the desk segment in the current route is an authentication artifact and is
-  dropped whenever that route is next touched.
+- Virtual-playback exclusion zones are **show-level** and contain stable Virtual
+  Playback numbers. They are never partitioned by desk, surface, layout, or selected
+  page. The route has no desk or surface operand; an authenticated write carries the
+  expected show-level revision and returns the complete authoritative zone snapshot.
+  Desk and surface remain action provenance only.
 
 ## 7 — Undo and concurrency (maintainer, 2026-07-23)
 

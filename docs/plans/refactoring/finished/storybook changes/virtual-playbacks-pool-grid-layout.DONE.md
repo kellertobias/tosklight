@@ -1,5 +1,10 @@
 # Virtual Playbacks Pool-Grid Layout
 
+> **Superseded identity note (2026-07-29):** The pool-grid visual contract remains
+> valid, but current-page stable-cell identity and pane-owned exclusion persistence
+> below describe the former model. Plan 18 now owns 300-number page banks and
+> show-owned, cross-desk exclusion zones keyed by Virtual Playback number.
+
 ## Status
 
 Complete.

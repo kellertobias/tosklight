@@ -37,7 +37,9 @@ Assigning a Virtual Playback follows the standard playback workflow:
 
 Pressing `[SET]` and then an existing or empty Virtual Playback opens the same Playback Configuration modal used by every other playback. A Virtual Playback is a one-button, faderless playback target. Its configuration additionally supports an icon or image background without creating a separate assignment model.
 
-Named mutual-exclusion behavior is specified separately in the completed [Virtual Playback Exclusion Zones](17-virtual-playback-exclusion-zones.DONE.md) contract.
+Named mutual-exclusion behavior is specified by the current
+[Dedicated Virtual Playbacks and Exclusion Zones](../refactoring/doing/18-virtual-playbacks-and-exclusion-zones.md)
+contract; the older completed page-slot document is historical evidence only.
 
 ## File Manager
 

@@ -22,10 +22,11 @@ Software, OSC, attached hardware, and HTTP adapters resolve either current-page 
 explicit Page P / Playback N. `crates/light/src/playback/command.rs` preserves that distinction
 through the service boundary. A page change retargets only current-page addressing.
 
-Physical Playbacks use numbers 1–1000. Dedicated Virtual Playbacks use the composite identity
-`{page, number}` with numbers 1001–9998, so Virtual 1.1001, Virtual 2.1001, and physical Playback 1
-remain independent definitions and runtimes. Follow Main and Pinned panes only project those
-identities; they do not own or copy runtime.
+Physical Playbacks use page-relative numbers 1–1000. Dedicated Virtual Playbacks use
+stable show-wide numbers in 300-control banks: page 1 is 1001–1300, page 2 is
+1301–1600, and page `p` starts at `1001 + 300 × (p - 1)`. The explicit page qualifier
+is validated against the number's bank. Follow Main and Pinned panes only project
+those identities; desks do not own or copy their assignment or runtime.
 
 ## Controls and runtime
 
@@ -36,11 +37,12 @@ Chaser phase, and replaceable telemetry.
 Manual controls and `crates/light/domain/playback/src/automatic.rs` produce the same semantic transition.
 `crates/light/src/playback/event.rs` publishes after the domain lock is released.
 
-Preload captures the full Virtual identity and commits its ordered actions through one atomic batch.
-Exclusion surfaces resolve their cell positions against their effective page and release the
-deduplicated union of page-qualified peers inside the same serialized action. Activation provenance
-retains the originating desk so restart normalization applies the same Follow Main or Pinned
-partitions before output resumes.
+Preload captures the stable Virtual Playback number and validated page qualifier, then
+commits its ordered actions through one atomic batch. Exclusion zones store playback
+numbers directly and release the deduplicated union of numbered peers inside the same
+serialized action. Activation provenance retains the source desk for audit, while
+restart normalization applies the same show-owned zones regardless of which desk
+accepted the winning action.
 
 ## Contributions and arbitration
 

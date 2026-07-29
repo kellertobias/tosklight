@@ -1,5 +1,12 @@
 # Virtual Playback Exclusion Zones
 
+> **Superseded current contract (2026-07-29):** This file records the former
+> page-slot implementation. The authoritative replacement is
+> [Dedicated Virtual Playbacks and Exclusion Zones](../refactoring/doing/18-virtual-playbacks-and-exclusion-zones.md):
+> zones are show-owned, store stable Virtual Playback numbers, and apply across desks
+> and pane layouts. Pane or desk removal does not remove them; only explicit zone
+> deletion does.
+
 Named exclusion zones let an operator define a set of virtual playback cells in which at most one playback may be On at a time.
 
 **Implementation status:** Complete for the current page-slot-mirroring Virtual
@@ -12,7 +19,7 @@ compatibility coverage.
 
 The future dedicated Virtual Playback range and Follow Main/Pinned page modes are
 specified in the final refactoring queue item,
-[Dedicated Virtual Playbacks and Exclusion Zones](../refactoring/pending/15-virtual-playbacks-and-exclusion-zones.md).
+[Dedicated Virtual Playbacks and Exclusion Zones](../refactoring/doing/18-virtual-playbacks-and-exclusion-zones.md).
 That pre-alpha schema break deliberately does not migrate this old model; it
 regenerates the repository-owned example shows instead.
 This completed document records shipped behavior and must not be used to claim that

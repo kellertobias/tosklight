@@ -18,7 +18,7 @@ The configured **TEMP** button remains a press-to-toggle control, matching its n
 
 Flash actions, ordinary fader changes, and an On state caused only by moving a fader are never captured. Pending entries store action verbs rather than predicted end states. Multiple actions for one playback preserve operator order and execute against the playback's actual state at Preload GO.
 
-Virtual Playbacks are a pane kind in the normal configurable window system, never a built-in fixed surface. A Virtual Playbacks pane contains a configurable grid of single-button cells. Each cell can be assigned a Cuelist, defaults to GO, and can instead be configured as TOGGLE. Pane placement, grid dimensions, assignments, and actions persist. When virtual capture is enabled, virtual GO and TOGGLE actions remain pending until Preload GO and then execute against their real underlying playbacks.
+Virtual Playbacks are a pane kind in the normal configurable window system, never a built-in fixed surface. A Virtual Playbacks pane contains a configurable grid of single-button cells. Pane placement, grid dimensions, and selected page remain desk-layout data; assignments and actions belong to the stable show-wide Virtual Playback numbers displayed by those cells. Each Playback can be assigned a Cuelist, defaults to GO, and can instead be configured as TOGGLE. When virtual capture is enabled, virtual GO and TOGGLE actions remain pending until Preload GO and then execute against their real underlying playbacks.
 
 Preload Release removes only the active temporary programmer contribution created by Preload GO. Physical and virtual actions have already changed their actual playbacks and are never undone by Preload Release.
 

@@ -196,36 +196,36 @@ Tracking affects what Record and [Update](glossary:update) write.
 
 A fader or button strip that owns a [cuelist](glossary:cuelist) and runs it.
 
-A Playback is a **control-surface slot**, not "media playback". A **physical** playback maps to hardware; a **virtual** one exists only in software.
-Playbacks live on [pages](glossary:page).
+A Playback is a show-owned control target, not "media playback". A **physical**
+playback is projected through a page-relative hardware slot; a **virtual** one is
+projected through a stable show-wide number in a software page bank.
 
 **Exclusion zones** mean activating one playback can automatically release peers — one atomic engine
 transition, with released peers reported as related projections alongside the primary change.
 
 ## Dedicated Virtual Playback
 
-A one-button, faderless Playback with a page-qualified address from 1001 through 9998. The page is
-part of the identity: Virtual 1.1001, Virtual 2.1001, and physical Playback 1 do not share
-assignment or runtime state.
+A one-button, faderless Playback with one stable number shared by every desk. Page 1
+owns numbers 1001–1300, page 2 owns 1301–1600, and each following page advances by
+300. The explicit page qualifier must agree with the bank encoded by the number.
 
-## Virtual Playback surface cell
+## Virtual Playback displayed cell
 
-A one-based position in a Virtual Playbacks pane. Cell `n` resolves to Virtual Playback
-`1000 + n` on the surface's [effective page](glossary:effective-page). Cell positions are layout
-coordinates, not Playback-pool aliases or copied target-object IDs.
+A one-based UI position in a Virtual Playbacks pane. On page `p`, cell `n` displays
+Virtual Playback `1000 + 300 × (p - 1) + n`. Cell positions belong only to a desk
+layout; assignments and exclusion zones store the stable playback number.
 
 ## Effective page
 
 The page against which one Virtual Playback surface resolves its cells. **Follow Main** uses the
 originating control desk's current main page; **Pinned** uses the page stored with the surface.
-Changing the effective page changes only which addresses are displayed.
+Changing the effective page changes only which 300-number bank is displayed.
 
-## Virtual Playback exclusion-zone partition
+## Virtual Playback exclusion zone
 
-The ordered named zones stored for one show, control desk, and stable Virtual Playback surface ID.
-Each zone contains surface cell positions. On an authoritative activation, all applicable Follow
-Main and Pinned surface partitions for the originating desk resolve those positions to
-page-qualified Virtual Playback addresses; the winner remains On and active peers are released.
+A show-owned named set of stable Virtual Playback numbers. It has no desk, surface,
+layout, or selected-page partition. Every desk and transport applies the same
+serialized winner-and-peer-release rule. Only explicit zone deletion removes it.
 
 ## Page
 

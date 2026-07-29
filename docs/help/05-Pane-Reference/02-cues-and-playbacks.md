@@ -36,13 +36,18 @@ Use **Cuelist Pool** for a permanent pool surface and **Cues - Cuelist** for a p
 
 ## Virtual Playbacks
 
-Virtual Playbacks create a touch-button surface without consuming a physical playback fader position. Cell position `n` addresses dedicated Virtual Playback number `1000 + n` on the pane's effective page. Virtual 1.1001 is independent from Virtual 2.1001 and from every physical Playback.
+Virtual Playbacks create a touch-button surface without consuming a physical playback
+fader position. Every page owns a stable bank of 300 show-wide Virtual Playback
+numbers: page 1 starts at 1001, page 2 at 1301, and page 3 at 1601. Cell position `n`
+on page `p` addresses `1000 + 300 × (p - 1) + n`. Every desk that displays the same
+number operates the same Playback.
 
 A cell displays its cell number, assigned playback name, and action. When that playback is active it also shows the current Cue and receives active styling. An unassigned cell is inert during normal operation but remains available for Playback Configuration.
 
 **Pane configuration:**
 
-- **Rows** and **Columns** are positive integers whose product may not exceed 8,998. A 20×20 surface is an ordinary supported layout; large grids render only the visible range plus bounded overscan.
+- **Rows** and **Columns** are positive integers whose product may not exceed 300. A
+  20×15 surface displays one complete Virtual Playback page.
 - **Page mode** is **Follow Main** or **Pinned**. Follow Main uses the control desk's current main page. Pinned stores one fixed page from 1 through 127.
 - Resizing the pane does not change its logical row/column count.
 
@@ -50,7 +55,10 @@ Configure a cell exactly like a regular Playback: right-click the Virtual Playba
 
 Pane Settings keeps grid and page configuration in **Virtual Playbacks** and zone management in **Exclusion Zones**. Playback colors remain part of the assigned Playback rather than a separate pane-level color mode.
 
-Virtual actions carry their complete page/address identity and identify themselves as coming from the virtual surface. During Preload, **Preload virtual playback actions** in Desk Setup decides whether they execute immediately or are captured for Preload GO. This is independent from the switches for physical playback controls and programmer changes.
+Virtual actions carry their stable playback number and validated page qualifier. During
+Preload, **Preload virtual playback actions** in Desk Setup decides whether they
+execute immediately or are captured for Preload GO. This is independent from the
+switches for physical playback controls and programmer changes.
 
 ![Virtual Playbacks pane](../assets/screenshots/panes/virtual-playbacks.png)
 
