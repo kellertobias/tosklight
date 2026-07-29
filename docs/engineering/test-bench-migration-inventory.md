@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **152 root cases across 57 files**.
+Default catalog: **154 root cases across 59 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -166,6 +166,8 @@ Default catalog: **152 root cases across 57 files**.
 | 66-semantic-stage-visualizer.spec.ts | STAGE-001 @bench @ui › authoritative Live and Preload Stage surfaces stay current, recover independently, and preserve output | repository contract | @bench @ui | semantic-stage-visualizer | standard failure evidence | parallel | migrated-semantic-world |
 | 67-stage-performance-baseline.spec.ts | STAGE-PERF-001 @ui › collect informational default-stage frontend and output evidence | repository contract | @ui | stage-performance-baseline | standard failure evidence | parallel | pending-semantic-migration |
 | 67-stage-performance-baseline.spec.ts | STAGE-PERF-002 @ui › collect informational large-stage frontend and output evidence | repository contract | @ui | stage-performance-baseline | standard failure evidence | parallel | pending-semantic-migration |
+| 76-demo-show-generation.spec.ts | DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from one manifest | repository contract | @api | demo-show-generation | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 76-interactive-large-tier.spec.ts | PLAN76-LARGE-001 @ui @benchmark › opens the exact 1,000-instance interactive tier with Stage and Fixture Sheet | repository contract | @ui @benchmark | interactive-large-tier | standard failure evidence | parallel | pending-semantic-migration |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints
