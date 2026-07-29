@@ -145,6 +145,8 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
         source,
     } = &event
     {
+        let action_timing =
+            begin_authenticated_osc_programmer_timing(state, address, arguments, source.as_deref());
         if !handle_subscription_osc(state, address, arguments, source.as_deref()) && !input_locked {
             handle_playback_osc(state, address, arguments, source.as_deref());
             handle_highlight_osc(state, address, arguments, source.as_deref());
@@ -154,6 +156,9 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
             handle_encoder_osc(state, address, arguments);
         }
         send_osc_feedback(state, false);
+        if let Some(action_timing) = action_timing {
+            action_timing.acknowledge(state);
+        }
     }
     if input_locked {
         return;
@@ -181,4 +186,79 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
         serde_json::to_value(event)
             .unwrap_or_else(|_| serde_json::json!({"error":"serialization failed"})),
     );
+}
+
+struct AuthenticatedOscActionTiming {
+    receipt: ActionTimingReceipt,
+    desk_alias: String,
+    feedback_target: SocketAddr,
+}
+
+impl AuthenticatedOscActionTiming {
+    fn acknowledge(self, state: &AppState) {
+        let timing = self.receipt.acknowledge(true);
+        send_osc(
+            state,
+            self.feedback_target,
+            format!("/light/{}/feedback/action", self.desk_alias),
+            vec![
+                OscArgument::String(timing.request_id),
+                OscArgument::Bool(timing.succeeded),
+                OscArgument::Int(i32::try_from(timing.received_output_tick).unwrap_or(i32::MAX)),
+                OscArgument::Int(
+                    i32::try_from(timing.acknowledged_output_tick).unwrap_or(i32::MAX),
+                ),
+                OscArgument::Int(i32::from(timing.output_frame_hz)),
+                OscArgument::Int(i32::try_from(timing.budget_ticks).unwrap_or(i32::MAX)),
+                OscArgument::Bool(timing.acknowledgement_within_budget),
+            ],
+        );
+    }
+}
+
+fn begin_authenticated_osc_programmer_timing(
+    state: &AppState,
+    address: &str,
+    arguments: &[OscArgument],
+    source: Option<&str>,
+) -> Option<AuthenticatedOscActionTiming> {
+    let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
+    let [light, desk_alias, capability, rest @ ..] = parts.as_slice() else {
+        return None;
+    };
+    if *light != "light" {
+        return None;
+    }
+    let (action, may_change_output) = match *capability {
+        "programmer" if !rest.is_empty() => ("programmer_key", true),
+        "dynamic" if !rest.is_empty() => ("dynamic", true),
+        "encode" if !rest.is_empty() => ("encoder", false),
+        "nav" => ("encoder", false),
+        _ => return None,
+    };
+    let source = source?.parse::<SocketAddr>().ok()?;
+    let subscriber = state.integrations.osc_subscriber_for_source(source)?;
+    if !subscriber.desk_alias.eq_ignore_ascii_case(desk_alias)
+        || state.sessions.session(subscriber.session_id).is_none()
+    {
+        return None;
+    }
+    let request_id = arguments
+        .get(1)
+        .and_then(|argument| match argument {
+            OscArgument::String(value) if !value.trim().is_empty() => Some(value.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| format!("osc-{}", Uuid::new_v4()));
+    Some(AuthenticatedOscActionTiming {
+        receipt: state.action_timing.begin(
+            "osc",
+            action,
+            request_id,
+            state.output.frame_rate_hz(),
+            may_change_output,
+        ),
+        desk_alias: (*desk_alias).to_owned(),
+        feedback_target: subscriber.target,
+    })
 }

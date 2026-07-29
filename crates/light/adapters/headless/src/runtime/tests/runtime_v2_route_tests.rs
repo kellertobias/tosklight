@@ -137,6 +137,65 @@ async fn runtime_v2_preserves_diagnostics_auth_and_recovery_reporting() {
 }
 
 #[tokio::test]
+async fn authenticated_programmer_http_actions_expose_shared_tick_budget_timing() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/programmer-capture-mode/actions")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"blind":false}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    for header in [
+        "x-tosk-action-id",
+        "x-tosk-received-output-tick",
+        "x-tosk-ack-output-tick",
+        "x-tosk-action-wall-micros",
+        "x-tosk-output-frame-hz",
+        "x-tosk-action-budget-ticks",
+        "x-tosk-action-within-budget",
+    ] {
+        assert!(
+            response.headers().get(header).is_some(),
+            "Programmer response is missing {header}"
+        );
+    }
+    assert_eq!(
+        response.headers()["x-tosk-action-budget-ticks"],
+        "2",
+        "the <=60 Hz contract allows two configured output ticks"
+    );
+    assert_eq!(response.headers()["x-tosk-action-within-budget"], "true");
+
+    let diagnostics = app
+        .oneshot(
+            Request::get("/api/v2/diagnostics")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let diagnostics = json(diagnostics).await;
+    let measurements = diagnostics["programmer_action_timing"]
+        .as_array()
+        .expect("Programmer timing diagnostics");
+    assert_eq!(measurements.len(), 1);
+    assert_eq!(measurements[0]["source"], "http");
+    assert_eq!(measurements[0]["action"], "capture_mode");
+    assert_eq!(measurements[0]["acknowledgement_within_budget"], true);
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn visualization_snapshot_reports_authoritative_source_and_route_costs() {
     let (state, data_dir) = test_state();
     let rendered = {

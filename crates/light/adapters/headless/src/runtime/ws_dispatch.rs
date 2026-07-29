@@ -17,7 +17,9 @@ pub(super) fn dispatch_live_action(
     session: &Session,
     frame: LiveActionFrame,
 ) -> WsResponse {
-    dispatch_live_action_inner(state, session, frame, false)
+    let timing = begin_live_action_timing(state, &frame);
+    let response = dispatch_live_action_inner(state, session, frame, false);
+    acknowledge_live_action(timing, response)
 }
 
 /// Production Dynamic actions wait for the current active-show operation
@@ -27,28 +29,89 @@ pub(super) async fn dispatch_live_action_live(
     session: &Session,
     frame: LiveActionFrame,
 ) -> WsResponse {
+    let timing = begin_live_action_timing(state, &frame);
     if !is_dynamic_action(&frame.action) {
-        return dispatch_live_action(state, session, frame);
+        let response = dispatch_live_action_inner(state, session, frame, false);
+        return acknowledge_live_action(timing, response);
     }
     let revision = state.output.snapshot().revision;
     if let Err(error) = validate_frame(state, session, &frame) {
-        return failed_response(frame.request_id, revision, error);
+        return acknowledge_live_action(timing, failed_response(frame.request_id, revision, error));
     }
     let show_before = state.active_show.current().as_ref().map(|show| show.id);
     let activation = state.active_show.acquire().await;
     let show_after = state.active_show.current().as_ref().map(|show| show.id);
     if show_before != show_after {
         drop(activation);
-        return failed_response(
-            frame.request_id,
-            revision,
-            "The active show changed before the Dynamic action could run. Tap the Dynamic again."
-                .into(),
+        return acknowledge_live_action(
+            timing,
+            failed_response(
+                frame.request_id,
+                revision,
+                "The active show changed before the Dynamic action could run. Tap the Dynamic again."
+                    .into(),
+            ),
         );
     }
     let response = dispatch_live_action_inner(state, session, frame, true);
     drop(activation);
+    acknowledge_live_action(timing, response)
+}
+
+fn begin_live_action_timing(
+    state: &AppState,
+    frame: &LiveActionFrame,
+) -> Option<ActionTimingReceipt> {
+    let (action, may_change_output) = programmer_action_timing(&frame.action)?;
+    Some(state.action_timing.begin(
+        "websocket",
+        action,
+        frame.request_id.clone(),
+        state.output.frame_rate_hz(),
+        may_change_output,
+    ))
+}
+
+fn acknowledge_live_action(
+    timing: Option<ActionTimingReceipt>,
+    mut response: WsResponse,
+) -> WsResponse {
+    if let Some(timing) = timing {
+        response.action_timing = Some(timing.acknowledge(response.ok));
+    }
     response
+}
+
+fn programmer_action_timing(action: &LiveAction) -> Option<(&'static str, bool)> {
+    match action {
+        LiveAction::ProgrammingSelection(_) => Some(("selection", true)),
+        LiveAction::ProgrammingValues(_) => Some(("values", true)),
+        LiveAction::ProgrammerCaptureMode(_) => Some(("capture_mode", true)),
+        LiveAction::ProgrammerPriority(_) => Some(("priority", true)),
+        LiveAction::ProgrammerPreloadLifecycle(_) => Some(("preload_lifecycle", true)),
+        LiveAction::ProgrammerPreloadValues(_) => Some(("preload_values", false)),
+        LiveAction::PresetRecall(_) => Some(("preset_recall", true)),
+        LiveAction::CommandLineReplace(_) => Some(("command_line_edit", false)),
+        LiveAction::CommandLineSet(_) => Some(("command_line_edit", false)),
+        LiveAction::CommandTarget(_) => Some(("command_target", false)),
+        LiveAction::CommandLineExecute(_) => Some(("command_execute", true)),
+        LiveAction::ProgrammerUndo => Some(("undo", true)),
+        LiveAction::ProgrammingAlign(_) => Some(("align", true)),
+        LiveAction::FixtureControl(_) => Some(("fixture_control", true)),
+        LiveAction::DynamicToggle(_)
+        | LiveAction::DynamicStart(_)
+        | LiveAction::DynamicOff(_)
+        | LiveAction::DynamicSize(_)
+        | LiveAction::DynamicSpeed(_)
+        | LiveAction::DynamicPhase(_)
+        | LiveAction::DynamicFixAt(_) => Some(("dynamic", true)),
+        LiveAction::Playback(_)
+        | LiveAction::SpeedGroup(_)
+        | LiveAction::OutputRuntime(_)
+        | LiveAction::DmxOverride(_)
+        | LiveAction::Highlight(_)
+        | LiveAction::PatchPreviewHighlight(_) => None,
+    }
 }
 
 fn dispatch_live_action_inner(
@@ -80,6 +143,7 @@ fn dispatch_live_action_inner(
             revision: state.output.snapshot().revision,
             payload: Some(payload),
             error: None,
+            action_timing: None,
         },
         Err(error) => failed_response(request_id, revision, error),
     }
@@ -626,6 +690,7 @@ fn failed_response(request_id: String, revision: u64, error: String) -> WsRespon
         revision,
         payload: None,
         error: Some(error),
+        action_timing: None,
     }
 }
 

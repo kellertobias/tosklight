@@ -234,6 +234,7 @@ fn command_error(state: &AppState, request_id: String, error: String) -> WsRespo
         revision: state.output.snapshot().revision,
         payload: None,
         error: Some(error),
+        action_timing: None,
     }
 }
 

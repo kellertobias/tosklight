@@ -76,6 +76,8 @@ pub(super) async fn diagnostics(
         media_servers: serde_json::to_value(state.media.statuses())
             .map_err(|error| ApiError::internal(error.to_string()))?,
         snapshot_revision: state.output.snapshot().revision,
+        programmer_action_timing: serde_json::to_value(state.action_timing.snapshot())
+            .map_err(|error| ApiError::internal(error.to_string()))?,
         visualization: wire::RuntimeVisualizationDiagnostics {
             normal_subscribers: visualization.normal_subscribers,
             preload_subscribers: visualization.preload_subscribers,

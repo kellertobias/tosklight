@@ -38,6 +38,19 @@ async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
         ),
     );
     assert!(response.ok, "{:?}", response.error);
+    let timing = response
+        .action_timing
+        .expect("Programmer WebSocket acknowledgement carries timing");
+    assert_eq!(timing.action, "values");
+    assert_eq!(timing.request_id, "home");
+    assert_eq!(timing.budget_ticks, 2);
+    assert!(timing.acknowledgement_within_budget);
+    assert_eq!(timing.first_output_tick, None);
+    let output_tick = state.action_timing.begin_output_render();
+    state.action_timing.complete_output_render(output_tick);
+    let completed = state.action_timing.snapshot();
+    assert_eq!(completed[0].first_output_tick, Some(1));
+    assert_eq!(completed[0].output_within_budget, Some(true));
     let values = state.programming.get(session.id).unwrap().values;
     assert_eq!(values.len(), 2);
     assert!(values.iter().all(|value| value.fade));

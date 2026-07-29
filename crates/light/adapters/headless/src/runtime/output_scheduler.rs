@@ -4,7 +4,9 @@ use super::capability_resources::{
     ActiveShowCoordinator, ActiveShowProjection, OutputControlCapability, PlaybackRenderCapability,
 };
 use super::visualization_frame::VisualizationFrameHub;
-use super::{AppState, OutputControl, PersistedOutputRuntime, playback_service};
+use super::{
+    ActionTimingResource, AppState, OutputControl, PersistedOutputRuntime, playback_service,
+};
 use light_application::{
     PlaybackOperation, PlaybackShowScope, PlaybackUnitOfWork, automatic_playback_events,
 };
@@ -62,6 +64,7 @@ pub(super) struct Config {
     pub speed_groups: Arc<Mutex<[light_control::speed::SpeedGroupController; 5]>>,
     pub dynamic_auto_offs: Arc<Mutex<Vec<PlaybackIdentity>>>,
     pub visualization_frames: Arc<VisualizationFrameHub>,
+    pub action_timing: ActionTimingResource,
 }
 
 pub(super) struct OutputScheduler {
@@ -94,6 +97,7 @@ struct Runtime {
     pub(super) rate: Arc<AtomicU16>,
     pub(super) dynamic_auto_offs: Arc<Mutex<Vec<PlaybackIdentity>>>,
     pub(super) visualization_frames: Arc<VisualizationFrameHub>,
+    pub(super) action_timing: ActionTimingResource,
 }
 
 pub(super) async fn start(config: Config) -> anyhow::Result<OutputScheduler> {
@@ -172,6 +176,7 @@ async fn run(
 // A scheduler tick advances timecode, renders authoritative engine state, maps universes into
 // frames, and sends configured routes. Network I/O starts only after rendering completes.
 async fn render_tick(runtime: Runtime) -> io::Result<u64> {
+    let action_timing = runtime.action_timing.begin_output_render();
     update_timecode(&runtime);
     let options = runtime.control.lock().render_options();
     let (rendered, visualization_scope) = {
@@ -219,7 +224,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
             rendered.patched_slots,
         )
     };
-    runtime
+    let result = runtime
         .output
         .send_routes(
             &routes,
@@ -227,7 +232,11 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
             &patched_slots,
             &mut *runtime.sequences.lock().await,
         )
-        .await
+        .await;
+    if result.is_ok() {
+        runtime.action_timing.complete_output_render(action_timing);
+    }
+    result
 }
 
 async fn send_retained_output(runtime: &Runtime) -> io::Result<u64> {
@@ -253,6 +262,7 @@ async fn send_retained_output(runtime: &Runtime) -> io::Result<u64> {
 /// Runs one test-bench frame through the same render, routing, sequence, health-facing output
 /// boundary as the production scheduler.
 pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
+    let action_timing = state.action_timing.begin_output_render();
     let (rendered, visualization_scope) = {
         let _activation = state.active_show.acquire().await;
         let visualization_scope = VisualizationScope {
@@ -272,10 +282,14 @@ pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
     let frames = state
         .output
         .render_frames_and_publish(&rendered, visualization_scope);
-    state
+    let result = state
         .output
         .send_network_routes(&rendered.routes, &frames, &rendered.patched_slots)
-        .await
+        .await;
+    if result.is_ok() {
+        state.action_timing.complete_output_render(action_timing);
+    }
+    result
 }
 
 pub(super) fn render_with_playback_events(
@@ -488,6 +502,7 @@ impl SharedResources {
             rate: Arc::clone(&config.rate),
             dynamic_auto_offs: Arc::clone(&config.dynamic_auto_offs),
             visualization_frames: Arc::clone(&config.visualization_frames),
+            action_timing: config.action_timing.clone(),
         }
     }
 

@@ -65,6 +65,7 @@ fn test_state_with_programmers(
     let active_show_service_for_patch = active_show_service.clone();
     (
         AppState {
+            action_timing: ActionTimingResource::default(),
             installation: InstallationResource::open_test_installation(data_dir.clone()).unwrap(),
             sessions: SessionResource::new(),
             dynamics: light_application::DynamicsService::new(programmers.clone()),

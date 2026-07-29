@@ -18,6 +18,7 @@ import {
   type Lamp,
   type SendControl,
 } from "../controller/types";
+import { actionRequestId } from "../controller/actionRequestId";
 import { TimeFader } from "./programmer/TimeFader";
 
 interface ProgrammerSurfaceProps {
@@ -34,7 +35,7 @@ export function ProgrammerSurface({
   send,
 }: ProgrammerSurfaceProps) {
   const action = (name: ProgrammerControlAction, down: boolean) => {
-    send(controlSurfaceOscPaths.programmer(name), [down]);
+    send(controlSurfaceOscPaths.programmer(name), [down, actionRequestId()]);
   };
 
   const renderKeypadSection = (section: NumericPadSection) =>

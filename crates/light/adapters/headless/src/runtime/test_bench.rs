@@ -48,6 +48,7 @@ pub(super) async fn advance_test_clock(
     let clock = state.output.acquire_test_clock().await?;
     let now = clock.advance_millis(input.millis);
     refresh_speed_group_engine(&state);
+    let action_timing = state.action_timing.begin_output_render();
     let (rendered, visualization_scope) = {
         let _activation = state.active_show.acquire().await;
         let visualization_scope = light_wire::v2::visualization::VisualizationScope {
@@ -75,6 +76,7 @@ pub(super) async fn advance_test_clock(
         .map_err(ApiError::io)?;
     let send_errors = state.output.take_send_errors();
     state.output.record_output_health(packets, send_errors);
+    state.action_timing.complete_output_render(action_timing);
     send_osc_feedback(&state, true);
     Ok(Json(serde_json::json!({
         "now": now,

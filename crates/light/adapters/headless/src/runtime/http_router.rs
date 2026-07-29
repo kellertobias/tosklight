@@ -107,6 +107,10 @@ fn with_transport_layers(router: Router<AppState>, state: AppState) -> Router {
     router
         .layer(middleware::from_fn_with_state(
             state.clone(),
+            action_timing_boundary,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
             desk_lock_boundary,
         ))
         .layer(middleware::from_fn_with_state(state.clone(), desk_boundary))
@@ -134,5 +138,99 @@ fn cors_layer() -> CorsLayer {
             header::ACCEPT_RANGES,
             header::CONTENT_RANGE,
             header::CONTENT_LENGTH,
+            header::HeaderName::from_static("x-tosk-action-id"),
+            header::HeaderName::from_static("x-tosk-received-output-tick"),
+            header::HeaderName::from_static("x-tosk-ack-output-tick"),
+            header::HeaderName::from_static("x-tosk-action-wall-micros"),
+            header::HeaderName::from_static("x-tosk-output-frame-hz"),
+            header::HeaderName::from_static("x-tosk-action-budget-ticks"),
+            header::HeaderName::from_static("x-tosk-action-within-budget"),
         ])
+}
+
+async fn action_timing_boundary(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let Some((action, may_change_output)) =
+        programmer_http_action(request.method(), request.uri().path())
+    else {
+        return next.run(request).await;
+    };
+    let Some(session) = request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .and_then(|token| authenticate_token(&state, token).ok())
+    else {
+        return next.run(request).await;
+    };
+    let request_id = format!("http-{}-{}", session.id.0, Uuid::new_v4());
+    let timing = state.action_timing.begin(
+        "http",
+        action,
+        request_id,
+        state.output.frame_rate_hz(),
+        may_change_output,
+    );
+    let mut response = next.run(request).await;
+    let timing = timing.acknowledge(response.status().is_success());
+    for (name, value) in [
+        ("x-tosk-action-id", timing.action_id.to_string()),
+        (
+            "x-tosk-received-output-tick",
+            timing.received_output_tick.to_string(),
+        ),
+        (
+            "x-tosk-ack-output-tick",
+            timing.acknowledged_output_tick.to_string(),
+        ),
+        (
+            "x-tosk-action-wall-micros",
+            timing.acknowledgement_wall_micros.to_string(),
+        ),
+        ("x-tosk-output-frame-hz", timing.output_frame_hz.to_string()),
+        (
+            "x-tosk-action-budget-ticks",
+            timing.budget_ticks.to_string(),
+        ),
+        (
+            "x-tosk-action-within-budget",
+            timing.acknowledgement_within_budget.to_string(),
+        ),
+    ] {
+        if let Ok(value) = value.parse::<header::HeaderValue>() {
+            response
+                .headers_mut()
+                .insert(header::HeaderName::from_static(name), value);
+        }
+    }
+    response
+}
+
+fn programmer_http_action(method: &Method, path: &str) -> Option<(&'static str, bool)> {
+    let mutation = matches!(*method, Method::POST | Method::PUT | Method::DELETE)
+        || (*method == Method::GET && path == "/api/v2/programmer-undo/actions");
+    if !mutation {
+        return None;
+    }
+    match path {
+        "/api/v2/command-line" => Some(("command_line_edit", false)),
+        "/api/v2/command-line/keys" => Some(("command_key", true)),
+        "/api/v2/command-line/execute" => Some(("command_execute", true)),
+        "/api/v2/programmer-undo/actions" => Some(("undo", true)),
+        "/api/v2/programmer-capture-mode/actions" => Some(("capture_mode", true)),
+        "/api/v2/programming-align/actions" => Some(("align", true)),
+        "/api/v2/fixture-controls/actions" => Some(("fixture_control", true)),
+        "/api/v2/presets/recall" => Some(("preset_recall", true)),
+        _ if path.contains("programming-selection") => Some(("selection", true)),
+        _ if path.contains("programming-preload-values") => Some(("preload_values", false)),
+        _ if path.contains("programming-values") => Some(("values", true)),
+        _ if path.contains("programmer-preload") => Some(("preload_lifecycle", true)),
+        _ if path.contains("programmer-priority") => Some(("priority", true)),
+        _ if path.contains("/dynamics/") => Some(("dynamic", true)),
+        _ => None,
+    }
 }

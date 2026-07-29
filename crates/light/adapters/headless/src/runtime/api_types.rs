@@ -156,4 +156,6 @@ pub(super) struct WsResponse {
     pub(super) payload: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) action_timing: Option<ActionTimingProjection>,
 }

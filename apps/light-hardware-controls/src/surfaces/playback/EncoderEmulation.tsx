@@ -3,6 +3,7 @@ import {
   type EncoderControlAction,
 } from "@tosklight/ui/control-surface-contracts";
 import { useState } from "react";
+import { actionRequestId } from "../../controller/actionRequestId";
 import type { SendControl } from "../../controller/types";
 
 interface EncoderEmulationProps {
@@ -28,7 +29,10 @@ export function EncoderEmulation({
         type="button"
         aria-label={`${name} ${held ? "left" : "up"}`}
         onClick={() =>
-          send(path, [(held ? "left" : "up") satisfies EncoderControlAction])
+          send(path, [
+            (held ? "left" : "up") satisfies EncoderControlAction,
+            actionRequestId(),
+          ])
         }
       >
         {held ? "‹" : "⌃"}
@@ -37,7 +41,12 @@ export function EncoderEmulation({
         <button
           type="button"
           aria-label={`${name} click`}
-          onClick={() => send(path, ["press" satisfies EncoderControlAction])}
+          onClick={() =>
+            send(path, [
+              "press" satisfies EncoderControlAction,
+              actionRequestId(),
+            ])
+          }
         >
           CLK
         </button>
@@ -54,7 +63,10 @@ export function EncoderEmulation({
         type="button"
         aria-label={`${name} ${held ? "right" : "down"}`}
         onClick={() =>
-          send(path, [(held ? "right" : "down") satisfies EncoderControlAction])
+          send(path, [
+            (held ? "right" : "down") satisfies EncoderControlAction,
+            actionRequestId(),
+          ])
         }
       >
         {held ? "›" : "⌄"}

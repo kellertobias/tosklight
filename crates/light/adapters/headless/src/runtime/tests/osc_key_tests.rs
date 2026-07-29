@@ -28,12 +28,29 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         },
     );
     let pressed = [OscArgument::Bool(true)];
-    handle_programmer_osc(
+    handle_control_event(
         &state,
-        "/light/main/programmer/set",
-        &pressed,
-        Some("127.0.0.1:9010"),
+        ControlEvent::Osc {
+            address: "/light/main/programmer/set".into(),
+            arguments: vec![
+                OscArgument::Bool(true),
+                OscArgument::String("hardware-set-1".into()),
+            ],
+            source: Some("127.0.0.1:9010".into()),
+        },
     );
+    let timing = state.action_timing.snapshot();
+    assert_eq!(timing.len(), 1);
+    assert_eq!(timing[0].source, "osc");
+    assert_eq!(timing[0].request_id, "hardware-set-1");
+    assert!(timing[0].acknowledgement_within_budget);
+    assert!(state.integrations.captured_osc_feedback().iter().any(
+        |(_, address, arguments)| {
+            address == "/light/main/feedback/action"
+                && arguments.first()
+                    == Some(&OscArgument::String("hardware-set-1".into()))
+        }
+    ));
     assert_eq!(state.programming.get(session.id).unwrap().command_line, "");
     assert!(state.events.audit_events().iter().any(|event| {
         event.kind == "desk_action"

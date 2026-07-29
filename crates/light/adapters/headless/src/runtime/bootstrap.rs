@@ -3,9 +3,10 @@
 use super::capabilities::runtime::supervisor::CapabilitySupervisors;
 use super::capability_resources::*;
 use super::{
-    AppState, HighlightRegistry, matter, normalize_restored_virtual_playback_exclusions,
-    output_scheduler, playback_telemetry, refresh_matter_bridge, refresh_speed_group_engine,
-    router, startup_options, startup_state::StartupState,
+    ActionTimingResource, AppState, HighlightRegistry, matter,
+    normalize_restored_virtual_playback_exclusions, output_scheduler, playback_telemetry,
+    refresh_matter_bridge, refresh_speed_group_engine, router, startup_options,
+    startup_state::StartupState,
 };
 use axum::Router;
 use light_application::{
@@ -54,6 +55,7 @@ fn process_options() -> anyhow::Result<Option<startup_options::StartupOptions>> 
 }
 
 struct RuntimeResources {
+    pub(super) action_timing: ActionTimingResource,
     pub(super) output_health: Arc<std::sync::Mutex<OutputHealth>>,
     pub(super) output_rate: Arc<AtomicU16>,
     pub(super) playback_telemetry: Arc<playback_telemetry::PlaybackTelemetrySampler>,
@@ -75,6 +77,7 @@ impl RuntimeResources {
     async fn start(startup: &mut StartupState) -> anyhow::Result<Self> {
         let persisted_runtime = std::mem::take(&mut startup.output_runtime);
         let configuration = &startup.persistent.configuration;
+        let action_timing = ActionTimingResource::default();
         let output_health = Arc::new(std::sync::Mutex::new(OutputHealth::default()));
         let timecode_router = Arc::new(Mutex::new(TimecodeRouter::default()));
         timecode_router
@@ -137,10 +140,12 @@ impl RuntimeResources {
             speed_groups: Arc::clone(&startup.speed_groups),
             dynamic_auto_offs: Arc::clone(&dynamic_auto_offs),
             visualization_frames: Arc::clone(&visualization_frames),
+            action_timing: action_timing.clone(),
             test_bench: startup.persistent.test_bench,
         })
         .await?;
         Ok(Self {
+            action_timing,
             output_health,
             output_rate,
             playback_telemetry,
@@ -326,6 +331,7 @@ fn build_app_state(
     let playback_topology = PlaybackTopologyService::new(active_show_service.clone());
     let selective_import = SelectiveShowImportService::new(active_show_service.clone());
     Ok(AppState {
+        action_timing: resources.action_timing.clone(),
         installation: InstallationResource::new(
             startup.persistent.desk,
             startup.persistent.fixture_library,

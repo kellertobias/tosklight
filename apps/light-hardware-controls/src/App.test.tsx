@@ -58,12 +58,12 @@ describe("hardware controls Programmer layout", () => {
     fireEvent.click(screen.getByRole("button", { name: "Navigation click" }));
 
     expect(send.mock.calls).toEqual([
-      ["encode/2", ["up"]],
-      ["encode/2", ["right"]],
-      ["encode/2", ["press"]],
-      ["nav", ["down"]],
-      ["nav", ["left"]],
-      ["nav", ["press"]],
+      ["encode/2", ["up", expect.any(String)]],
+      ["encode/2", ["right", expect.any(String)]],
+      ["encode/2", ["press", expect.any(String)]],
+      ["nav", ["down", expect.any(String)]],
+      ["nav", ["left", expect.any(String)]],
+      ["nav", ["press", expect.any(String)]],
     ]);
   });
 

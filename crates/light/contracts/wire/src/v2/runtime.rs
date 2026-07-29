@@ -254,6 +254,8 @@ pub struct RuntimeDiagnosticsSnapshot {
     pub media_servers: serde_json::Value,
     #[ts(type = "number")]
     pub snapshot_revision: u64,
+    #[ts(type = "unknown")]
+    pub programmer_action_timing: serde_json::Value,
     pub visualization: RuntimeVisualizationDiagnostics,
 }
 
