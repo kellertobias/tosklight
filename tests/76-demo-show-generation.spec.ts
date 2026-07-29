@@ -2,6 +2,7 @@ import { expect, test } from "./bench/core/fixtures";
 import { activeShowId, loadCanonicalCopy } from "./support/catalog";
 import { installPlannedDemoGroups } from "./support/plannedDemoGroups";
 import { installPlannedDemoPatch } from "./support/plannedDemoPatch";
+import { installPlannedDemoPlaybacks } from "./support/plannedDemoPlaybacks";
 import { installPlannedDemoPresets } from "./support/plannedDemoPresets";
 
 test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from one manifest", async ({
@@ -56,4 +57,12 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
   expect(presets).toHaveLength(30);
   expect(presets.filter((preset) => preset.body.family === "Color")).toHaveLength(13);
   expect(presets.find((preset) => preset.body.name === "Tungsten White")).toBeDefined();
+
+  const topology = await installPlannedDemoPlaybacks(api, showId, generated.fixtures);
+  expect(topology.cuelists).toHaveLength(7);
+  expect(topology.playbacks).toHaveLength(13);
+  const cuelists = await api.showObjects<any>(showId, "cue_list");
+  expect(cuelists.find((cuelist) => cuelist.body.name === "ACL Chase")?.body)
+    .toMatchObject({ mode: "chaser", speed_group: "D", looped: true });
+  expect(cuelists.find((cuelist) => cuelist.body.name === "ACL Chase")?.body.cues).toHaveLength(4);
 });

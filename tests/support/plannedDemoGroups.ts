@@ -11,6 +11,15 @@ interface PatchedTargetFixture {
   logical_heads?: Array<{ fixture_id: string }>;
 }
 
+const GROUP_MASTER_PLAYBACKS: Readonly<Record<string, number>> = {
+  "Show Profile Odd": 1,
+  "Show Profile Even": 2,
+  "Show LED": 3,
+  "Show Wash": 4,
+  "All ACLs": 5,
+  "Blinders": 6,
+};
+
 export interface PlannedDemoGroupSpec {
   id: string;
   name: string;
@@ -89,7 +98,7 @@ export async function installPlannedDemoGroups(
       frozen_from: null,
       programming: {},
       master: 1,
-      playback_fader: null,
+      playback_fader: GROUP_MASTER_PLAYBACKS[spec.name] ?? null,
     });
   }
   return specs;
