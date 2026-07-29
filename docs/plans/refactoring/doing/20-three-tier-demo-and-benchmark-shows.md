@@ -6,9 +6,11 @@ If the usage drops below 60%, wrap up and give me a summary.
 
 ## Queue position and status
 
-**Pending after repository-wide dead-code removal and before final Stage optimization.**
+**Doing after repository-wide dead-code removal and before final Stage optimization.**
 
 **Completion usage gate: above 50% large-window remaining usage.**
+
+**Claim checkpoint — 2026-07-29: 94% large-window remaining usage.**
 
 Claim this plan only after Dynamics, Dedicated Virtual Playbacks and exclusion zones, and
 repository-wide dead-code removal are finished. This phase builds and validates the three
@@ -50,8 +52,8 @@ not satisfy this plan:
 - The sustained headless benchmark still exposes `--demo-show` terminology and must
   be renamed without changing its independent stress behavior.
 
-Do not mutate this compact implementation piecemeal before the fourth ACL placement
-is approved. Once this plan is claimed, establish the deterministic generator and
+The fourth ACL placement is approved as Front Split: four lamps left and four lamps
+right on the Front Truss, fanning inward. Establish the deterministic generator and
 manifest first, then migrate the maintained video and benchmark consumers onto their
 separate authoritative tiers.
 

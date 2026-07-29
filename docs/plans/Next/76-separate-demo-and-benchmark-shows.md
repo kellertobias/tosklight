@@ -189,9 +189,8 @@ eight separately controlled fixture objects per set.
    aimed inward as a fan in.
 3. **Mid Split ACL** — mounted on the Mid Truss as four lamps centred within the left section and
    four centred within the right section, aimed as a fan out.
-4. **Fourth ACL** — add a fourth eight-lamp multi-patch set. Confirm its truss placement and fan
-   direction before implementation so it complements rather than duplicates the other three
-   Stage compositions.
+4. **Front Split ACL** — mounted as four lamps on the left and four on the right of the Front
+   Truss, aimed inward as a fan in.
 
 Give every physical instance an individual Stage position and aim while preserving one shared
 control fixture per set.
@@ -579,7 +578,7 @@ or claim the Theater Cues are complete before that source is provided.
    canonical consumers of each generated show.
 2. Establish the benchmark-only name and preserve the existing sustained workload and performance
    acceptance behavior.
-3. Resolve the fourth ACL placement.
+3. Implement the approved Front Split ACL as a four-left/four-right Front Truss fan in.
 4. Select real shipped fixture packages and modes for every role. Add or correct a fixture profile
    only through the fixture-package contract if a required representative fixture is missing.
 5. Build the deterministic demo patch with stable fixture numbers, layers, mounts, non-overlapping
@@ -624,9 +623,9 @@ Implementation is complete only when:
    rear follow spots, and no Beam fixtures.
 9. The auxiliary area contains exactly 4 Profiles, 4 Washes, and 16 LED PARs in an intentional
    grid, with no Beam fixtures.
-10. The four ACL control fixtures each expose seven multi-patches. The first three render as the
-    requested Back Centre fan out, Back Split fan in, and Mid Split fan out; the approved fourth
-    layout is documented and asserted.
+10. The four ACL control fixtures each expose seven multi-patches. They render as the requested
+    Back Centre fan out, Back Split fan in, Mid Split fan out, and Front Split fan in, with the
+    Front Split lamps arranged four left and four right on the Front Truss.
 11. All 12 named first-level Groups exist, preserve their intended order, and reconcile with the
     canonical family totals.
 12. `Show` is composed from the three family Show Groups, `Aux Show` is composed from the three
@@ -679,12 +678,10 @@ Implementation is complete only when:
 
 ## Open decisions
 
-The remaining inputs are:
+The remaining input is which royalty-free Theater script should be stored, and which scenes or
+beats should become the first programmed Theater Cues.
 
-1. Where is the fourth ACL set mounted and which fan direction/composition does it use?
-2. Which royalty-free Theater script should be stored, and which scenes or beats should become the
-   first programmed Theater Cues?
-
-Record the first answer before patch implementation. The patch, Groups, presets, Playbacks,
-and desktops may be completed before the script arrives, but Theater Cue programming remains
-incomplete until the second input is provided.
+The fourth ACL decision is approved: **Front Split ACL**, with four lamps on the left and four on
+the right of the Front Truss, fanning inward. The patch, Groups, presets, Playbacks, and desktops
+may be completed before the script arrives, but Theater Cue programming remains incomplete until
+the remaining input is provided.

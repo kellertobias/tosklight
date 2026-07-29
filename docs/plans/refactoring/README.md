@@ -44,7 +44,7 @@ files, contracts, runtime state, and verification surfaces do not overlap.
 | 17 | [Dynamics lane layout and interaction regression](finished/14a-dynamics-lane-layout-and-interaction-regression.md) | Completed full-width lane geometry, valid sibling interactions, and production Storybook regression coverage. |
 | 18 | [Dedicated Virtual Playbacks and exclusion zones](finished/18-virtual-playbacks-and-exclusion-zones.md) | Completed: stable 300-control Virtual Playback banks and portable show-wide number-based exclusion zones. |
 | 19 | [Repository-wide dead-code removal](finished/19-repository-wide-dead-code-removal.md) | Completed repository-wide audit, safe removal, retained-path classification, and source-size hard-limit cleanup. |
-| 20 | [Three-tier demo and benchmark shows](pending/20-three-tier-demo-and-benchmark-shows.md) | Build the realistic demo, 1,000-fixture interactive benchmark, and 2,000–4,000-fixture headless stress workloads before the final Stage optimization phase. |
+| 20 | [Three-tier demo and benchmark shows](doing/20-three-tier-demo-and-benchmark-shows.md) | In progress: build the realistic demo, 1,000-fixture interactive benchmark, and 2,000–4,000-fixture headless stress workloads before the final Stage optimization phase. |
 | 21 | [Efficient built-in Stage visualizer](pending/21-efficient-built-in-stage-visualizer.md) | Optimize isolated visualization telemetry, retained rendering, and the four Stage render qualities against the completed benchmark workloads, then run the final performance sweep. |
 
 Product-roadmap work under `docs/plans/Next` and `docs/plans/Later` remains separate unless a queue
