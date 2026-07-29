@@ -3,6 +3,7 @@ import {
 	type PoolPlaybackAction,
 	type PoolPlaybackInput,
 	poolPlaybackRequest,
+	virtualPlaybackRequest,
 } from "../server/playbackActionMapping";
 import {
 	assertGroupMaster,
@@ -14,7 +15,12 @@ import {
 	playbackActionError,
 } from "./actionWriterSupport";
 import type { PlaybackIdentity, PlaybackOutcome } from "./contracts";
-import { groupIdentity, identityKey, playbackIdentity } from "./contracts";
+import {
+	groupIdentity,
+	identityKey,
+	playbackIdentity,
+	virtualPlaybackIdentity,
+} from "./contracts";
 import type { PlaybackRuntimeStore } from "./store";
 
 export type PlaybackRuntimeActionApply = (
@@ -52,6 +58,12 @@ export interface PlaybackRuntimeActions {
 		action: PoolPlaybackAction,
 		input?: PoolPlaybackInput,
 	): Promise<PlaybackOutcome | null>;
+	virtualPlaybackAction(
+		page: number,
+		playbackNumber: number,
+		action: PoolPlaybackAction,
+		input?: PoolPlaybackInput,
+	): Promise<PlaybackOutcome | null>;
 	releaseCueListSource(
 		source: CueListRuntimeSource,
 	): Promise<PlaybackOutcome | null>;
@@ -85,6 +97,7 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		// the page change threw before issuing its request, silently failing on-screen.
 		this.setActivePage = this.setActivePage.bind(this);
 		this.poolPlaybackAction = this.poolPlaybackAction.bind(this);
+		this.virtualPlaybackAction = this.virtualPlaybackAction.bind(this);
 		this.releaseCueListSource = this.releaseCueListSource.bind(this);
 		this.setGroupMaster = this.setGroupMaster.bind(this);
 		this.setGroupFlash = this.setGroupFlash.bind(this);
@@ -117,6 +130,31 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 			)
 				return this.sendSafetyRelease(request);
 			return await this.execute(playbackNumber, action, input, request);
+		} catch (reason) {
+			return this.rejectSetup(reason);
+		}
+	}
+
+	async virtualPlaybackAction(
+		page: number,
+		playbackNumber: number,
+		action: PoolPlaybackAction,
+		input: PoolPlaybackInput = {},
+	) {
+		try {
+			const identity = virtualPlaybackIdentity(page, playbackNumber);
+			const request = virtualPlaybackRequest(
+				page,
+				playbackNumber,
+				action,
+				input,
+			);
+			if (
+				isPlaybackSafetyRelease(action, input.pressed) &&
+				!this.matchesScope()
+			)
+				return this.sendSafetyRelease(request);
+			return await this.executeIdentity(identity, action, input, request);
 		} catch (reason) {
 			return this.rejectSetup(reason);
 		}
@@ -199,12 +237,26 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		input: PoolPlaybackInput,
 		request: PlaybackActionRequest,
 	) {
+		return this.executeIdentity(
+			playbackIdentity(playbackNumber),
+			action,
+			input,
+			request,
+		);
+	}
+
+	private async executeIdentity(
+		identity: PlaybackIdentity,
+		action: PoolPlaybackAction,
+		input: PoolPlaybackInput,
+		request: PlaybackActionRequest,
+	) {
 		const scope = this.options.store.captureScope();
 		if (!this.isCurrent(scope)) return null;
-		const optimistic = this.optimisticToken(playbackNumber, action, input);
+		const optimistic = this.optimisticToken(identity, action, input);
 		const token =
 			optimistic ??
-			this.options.store.beginRequest(playbackIdentity(playbackNumber));
+			this.options.store.beginRequest(identity);
 		try {
 			const outcome = await this.options.applyAction(
 				this.options.showId,
@@ -298,12 +350,12 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 	}
 
 	private optimisticToken(
-		playbackNumber: number,
+		identity: PlaybackIdentity,
 		action: PoolPlaybackAction,
 		input: PoolPlaybackInput,
 	) {
 		return action === "master" && input.value != null
-			? this.options.store.beginOptimisticMaster(playbackNumber, input.value)
+			? this.options.store.beginOptimisticMaster(identity, input.value)
 			: null;
 	}
 

@@ -7,7 +7,7 @@ import { PaneType } from "./bench/window-system/paneTypes";
 
 scenario(
 	"PRELOAD-003",
-	"Virtual Playbacks use a persisted pane-native 2×2 grid and real GO/TOGGLE playbacks",
+	"Virtual Playbacks persist dedicated page-qualified identities in virtualized Follow Main and Pinned grids",
 	async (t) => {
 		await t.show.use(Show.TwelveDimmers);
 		await t.app.open();
@@ -42,57 +42,104 @@ scenario(
 			return playback;
 		};
 
-		await recordSource(5, 3, "Virtual Source A");
-		await recordSource(6, 4, "Virtual Source B");
+		const firstSource = await recordSource(5, 3, "Virtual Source A");
+		const secondSource = await recordSource(6, 4, "Virtual Source B");
 
 		const desktop = t.desktop.configure("Virtual Playback Desktop");
-		const pane = desktop.addPane(
+		const followPane = desktop.addPane(
 			PaneType.VirtualPlaybacks,
 			{
-				slug: "virtual-playbacks",
+				slug: "virtual-playbacks-follow",
 				column: 1,
 				row: 1,
 				width: 12,
-				height: 10,
+				height: 5,
 			},
-			{ rows: 2, columns: 2 },
+			{ rows: 20, columns: 20, pageMode: "follow_main" },
+		);
+		const pinnedPane = desktop.addPane(
+			PaneType.VirtualPlaybacks,
+			{
+				slug: "virtual-playbacks-pinned",
+				column: 1,
+				row: 6,
+				width: 12,
+				height: 5,
+			},
+			{ rows: 12, columns: 449, pageMode: "pinned", pinnedPage: 2 },
 		);
 		await desktop.apply();
-		await t.virtualPlayback.expect.cells(pane, 4);
+		await t.virtualPlayback.expect.logicalCells(followPane, 400);
+		await t.virtualPlayback.expect.mountedCellsBelow(followPane, 200);
+		await t.virtualPlayback.expect.effectivePage(followPane, 1);
+		await t.virtualPlayback.expect.logicalCells(pinnedPane, 5_388);
+		await t.virtualPlayback.expect.mountedCellsBelow(pinnedPane, 200);
+		await t.virtualPlayback.expect.effectivePage(pinnedPane, 2);
 
 		const firstPlayback = await t.virtualPlayback.assignSource(
-			pane,
+			followPane,
 			"Virtual Source A",
+			1,
 			1,
 		);
 		const secondPlayback = await t.virtualPlayback.assignSource(
-			pane,
+			pinnedPane,
 			"Virtual Source B",
+			1,
 			2,
 		);
-		await t.virtualPlayback.configureTopButton(pane, 2, PlaybackButton.Toggle);
+		await t.virtualPlayback.configureTopButton(
+			pinnedPane,
+			1,
+			PlaybackButton.Toggle,
+			2,
+		);
 
-		await t.virtualPlayback.activate(pane, 1);
-		await t.virtualPlayback.activate(pane, 2);
-		await t.playback.expect(firstPlayback).runtime({
-			enabled: true,
-			current_cue_number: 1,
+		await t.virtualPlayback.activate(followPane, 1, 1);
+		await t.virtualPlayback.activate(pinnedPane, 1, 2);
+		await t.virtualPlayback.expect.runtime(firstPlayback, {
+			requested: {
+				kind: "virtual",
+				page: 1,
+				playback_number: 1001,
+			},
+			target: "cue_list",
+			runtime: { enabled: true, current: { number: 1 } },
 		});
-		await t.playback.expect(secondPlayback).runtime({
-			enabled: true,
-			current_cue_number: 1,
+		await t.virtualPlayback.expect.runtime(secondPlayback, {
+			requested: {
+				kind: "virtual",
+				page: 2,
+				playback_number: 1001,
+			},
+			target: "cue_list",
+			runtime: { enabled: true, current: { number: 1 } },
 		});
+		await t.virtualPlayback.expect.physicalRuntimeAbsent(firstSource);
+		await t.virtualPlayback.expect.physicalRuntimeAbsent(secondSource);
+		await t.playback.expect(firstSource).present();
+		await t.playback.expect(secondSource).present();
 
-		await t.virtualPlayback.reload(pane);
-		await t.virtualPlayback.expect.cells(pane, 4);
-		await t.virtualPlayback.expect.button(pane, 1, "GO");
-		await t.virtualPlayback.expect.button(pane, 2, "TOGGLE");
-		await t.playback.expect(firstPlayback).configuration({
+		await t.virtualPlayback.setMainPage(2);
+		await t.virtualPlayback.expect.effectivePage(followPane, 2);
+		await t.virtualPlayback.expect.effectivePage(pinnedPane, 2);
+		await t.virtualPlayback.setMainPage(1);
+		await t.virtualPlayback.expect.effectivePage(followPane, 1);
+		await t.virtualPlayback.expect.effectivePage(pinnedPane, 2);
+
+		await t.virtualPlayback.reload(followPane);
+		await t.virtualPlayback.expect.logicalCells(followPane, 400);
+		await t.virtualPlayback.expect.logicalCells(pinnedPane, 5_388);
+		await t.virtualPlayback.expect.button(followPane, 1, "GO", 1);
+		await t.virtualPlayback.expect.button(pinnedPane, 1, "TOGGLE", 2);
+		await t.virtualPlayback.expect.assignment(firstPlayback, {
+			number: 1001,
 			button_count: 1,
 			has_fader: false,
 			buttons: ["go", "none", "none"],
 		});
-		await t.playback.expect(secondPlayback).configuration({
+		await t.virtualPlayback.expect.assignment(secondPlayback, {
+			number: 1001,
 			button_count: 1,
 			has_fader: false,
 			buttons: ["toggle", "none", "none"],

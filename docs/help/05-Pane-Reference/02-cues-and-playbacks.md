@@ -36,19 +36,21 @@ Use **Cuelist Pool** for a permanent pool surface and **Cues - Cuelist** for a p
 
 ## Virtual Playbacks
 
-Virtual Playbacks create a touch-button surface without consuming a physical playback fader position. Every cell uses the playback assignment at the same position on the control desk's current page; that playback-pool definition in turn targets a Cuelist or another supported playback function. Changing page keeps the cell positions and displays the new page's assignments.
+Virtual Playbacks create a touch-button surface without consuming a physical playback fader position. Cell position `n` addresses dedicated Virtual Playback number `1000 + n` on the pane's effective page. Virtual 1.1001 is independent from Virtual 2.1001 and from every physical Playback.
 
-A cell displays its cell number, assigned playback name, and action. When that playback is active it also shows the current Cue and receives active styling. An unassigned cell is inert during normal operation but remains available as a Set/assignment target.
+A cell displays its cell number, assigned playback name, and action. When that playback is active it also shows the current Cue and receives active styling. An unassigned cell is inert during normal operation but remains available for Playback Configuration.
 
 **Pane configuration:**
 
-- **Rows** and **Columns** independently accept 1-12, allowing 1 to 144 cells.
-- **Type colors / Individual colors** controls the object-color treatment used when a cell represents a Cuelist or Group.
+- **Rows** and **Columns** are positive integers whose product may not exceed 8,998. A 20×20 surface is an ordinary supported layout; large grids render only the visible range plus bounded overscan.
+- **Page mode** is **Follow Main** or **Pinned**. Follow Main uses the control desk's current main page. Pinned stores one fixed page from 1 through 127.
 - Resizing the pane does not change its logical row/column count.
 
-Assignment uses the same Set workflow as any other playback. Use **Set Source**, **Add Target**, or press `[SET]`, select the source, and select the Virtual Playback. Pressing `[SET]` and then a Virtual Playback opens the standard Playback Configuration modal for that one-button, faderless target. Virtual Playbacks additionally support an icon or image background.
+Configure a cell exactly like a regular Playback: right-click the Virtual Playback, or press `[SET]` and then press the cell. Both paths open the standard Playback Configuration modal for that one-button, faderless target. Virtual Playbacks additionally support an icon or image background.
 
-Virtual actions identify themselves as coming from the virtual surface. During Preload, **Preload virtual playback actions** in Desk Setup decides whether they execute immediately or are captured for Preload GO. This is independent from the switches for physical playback controls and programmer changes.
+Pane Settings keeps grid and page configuration in **Virtual Playbacks** and zone management in **Exclusion Zones**. Playback colors remain part of the assigned Playback rather than a separate pane-level color mode.
+
+Virtual actions carry their complete page/address identity and identify themselves as coming from the virtual surface. During Preload, **Preload virtual playback actions** in Desk Setup decides whether they execute immediately or are captured for Preload GO. This is independent from the switches for physical playback controls and programmer changes.
 
 ![Virtual Playbacks pane](../assets/screenshots/panes/virtual-playbacks.png)
 

@@ -107,14 +107,18 @@ scenario(
 			enabled: true,
 			current_cue_number: 1,
 		});
-		await t.playback.expect(virtualPlayback).runtime({
-			enabled: true,
-			current_cue_number: 1,
+		await t.virtualPlayback.expect.runtime(virtualPlayback, {
+			runtime: {
+				enabled: true,
+				current: { number: 1 },
+			},
 		});
 
 		await t.preload.via.ui.release();
 		await t.expectFixtureValue(fixture(1), { intensity: 0.25 });
 		await t.playback.expect(physicalPlayback).runtime({ enabled: true });
-		await t.playback.expect(virtualPlayback).runtime({ enabled: true });
+		await t.virtualPlayback.expect.runtime(virtualPlayback, {
+			runtime: { enabled: true },
+		});
 	},
 );

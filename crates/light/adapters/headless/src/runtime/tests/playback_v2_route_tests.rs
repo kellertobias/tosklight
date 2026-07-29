@@ -51,6 +51,7 @@ async fn plain_playback_urls_are_fire_and_forget_and_keep_page_addressing_distin
         number: 1,
         name: "Main".into(),
         slots: std::collections::HashMap::from([(1, 1)]),
+        virtual_playbacks: std::collections::HashMap::new(),
     }]
     .into();
     state.output.replace_snapshot(snapshot).unwrap();
@@ -716,11 +717,13 @@ async fn v2_current_page_and_explicit_page_addresses_resolve_independently() {
             number: 1,
             name: "Current".into(),
             slots: HashMap::from([(1, 1)]),
+            virtual_playbacks: HashMap::new(),
         },
         light_playback::PlaybackPage {
             number: 2,
             name: "Explicit".into(),
             slots: HashMap::from([(1, 2)]),
+            virtual_playbacks: HashMap::new(),
         },
     ]
     .into();
@@ -2244,6 +2247,7 @@ fn install_virtual_playback_test_state(state: &AppState, desk_id: Uuid) {
         number: 1,
         name: "Virtual".into(),
         slots: HashMap::from([(1, 1), (2, 3)]),
+        virtual_playbacks: HashMap::new(),
     }]
     .into();
     state.output.replace_snapshot(snapshot).unwrap();
@@ -2251,11 +2255,11 @@ fn install_virtual_playback_test_state(state: &AppState, desk_id: Uuid) {
         desk_id.to_string(),
         VirtualPlaybackExclusionSurfaces::from([(
             "test-surface".into(),
-            vec![VirtualPlaybackExclusionZone {
+            test_virtual_playback_exclusion_surface(vec![VirtualPlaybackExclusionZone {
                 id: "zone-a".into(),
                 name: "Zone A".into(),
                 slots: vec![1, 2],
-            }],
+            }]),
         )]),
     )]);
     let show_id = state.active_show.current().as_ref().unwrap().id;
@@ -2391,6 +2395,7 @@ fn install_virtual_exclusion_test_state(state: &AppState) {
                 number: 1,
                 name: "Main".into(),
                 slots: std::collections::HashMap::from([(1, 1), (2, 2), (3, 3), (4, 4)]),
+                virtual_playbacks: std::collections::HashMap::new(),
             }]
             .into(),
             ..EngineSnapshot::default()
@@ -2459,6 +2464,7 @@ fn add_explicit_virtual_page(state: &AppState) {
         number: 2,
         name: "Explicit".into(),
         slots: std::collections::HashMap::from([(1, 1)]),
+        virtual_playbacks: std::collections::HashMap::new(),
     });
     state.output.replace_snapshot(snapshot).unwrap();
 }

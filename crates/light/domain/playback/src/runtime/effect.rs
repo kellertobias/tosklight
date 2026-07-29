@@ -31,7 +31,12 @@ impl PlaybackEngine {
         if active_playback(self, number) != active_playback(before, number) {
             PlaybackRuntimeEffect::Durable
         } else if temporary_playbacks(self, number) != temporary_playbacks(before, number)
-            || self.swap_held.contains(&number) != before.swap_held.contains(&number)
+            || self
+                .swap_held
+                .contains(&PlaybackIdentity::physical(number).expect("valid physical number"))
+                != before
+                    .swap_held
+                    .contains(&PlaybackIdentity::physical(number).expect("valid physical number"))
         {
             PlaybackRuntimeEffect::Transient
         } else {
@@ -47,12 +52,24 @@ fn runtime_numbers(current: &PlaybackEngine, before: &PlaybackEngine) -> BTreeSe
         .chain(before.active.keys())
         .filter_map(|key| match key {
             PlaybackKey::Number(number) => Some(*number),
-            PlaybackKey::CueList(_) => None,
+            PlaybackKey::Virtual(_) | PlaybackKey::CueList(_) => None,
         })
-        .chain(current.temporary.keys().map(|(number, _)| *number))
-        .chain(before.temporary.keys().map(|(number, _)| *number))
-        .chain(current.swap_held.iter().copied())
-        .chain(before.swap_held.iter().copied())
+        .chain(current.temporary.keys().filter_map(|(identity, _)| match identity {
+            PlaybackIdentity::Physical(number) => Some(number.get()),
+            PlaybackIdentity::Virtual(_) => None,
+        }))
+        .chain(before.temporary.keys().filter_map(|(identity, _)| match identity {
+            PlaybackIdentity::Physical(number) => Some(number.get()),
+            PlaybackIdentity::Virtual(_) => None,
+        }))
+        .chain(current.swap_held.iter().filter_map(|identity| match identity {
+            PlaybackIdentity::Physical(number) => Some(number.get()),
+            PlaybackIdentity::Virtual(_) => None,
+        }))
+        .chain(before.swap_held.iter().filter_map(|identity| match identity {
+            PlaybackIdentity::Physical(number) => Some(number.get()),
+            PlaybackIdentity::Virtual(_) => None,
+        }))
         .collect()
 }
 
@@ -67,7 +84,9 @@ fn temporary_playbacks(
     let mut playbacks = engine
         .temporary
         .iter()
-        .filter(|((candidate, _), _)| *candidate == number)
+        .filter(|((candidate, _), _)| {
+            *candidate == PlaybackIdentity::physical(number).expect("valid physical number")
+        })
         .map(|((_, kind), playback)| (*kind, playback))
         .collect::<Vec<_>>();
     playbacks.sort_by_key(|(kind, _)| temporary_kind_order(*kind));

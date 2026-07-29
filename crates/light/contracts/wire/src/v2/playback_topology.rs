@@ -66,6 +66,18 @@ pub enum PlaybackTopologyAction {
         expected_playback_object_id: PlaybackTopologyObjectIdentity,
         playback: PlaybackTopologyPlaybackDefinition,
     },
+    ConfigureVirtual {
+        #[schemars(range(min = 1, max = 127))]
+        page: u8,
+        #[schemars(range(min = 1001, max = 9998))]
+        playback_number: u16,
+        #[schemars(range(max = 9007199254740991_u64))]
+        #[ts(type = "number")]
+        expected_page_revision: u64,
+        #[ts(type = "string | null")]
+        expected_page_object_id: PlaybackTopologyObjectIdentity,
+        playback: PlaybackTopologyPlaybackDefinition,
+    },
     MapExistingPlayback {
         #[schemars(range(min = 1, max = 127))]
         page: u8,
@@ -120,11 +132,22 @@ pub enum PlaybackTopologyAction {
         #[ts(type = "string | null")]
         expected_playback_object_id: PlaybackTopologyObjectIdentity,
     },
+    ClearVirtual {
+        #[schemars(range(min = 1, max = 127))]
+        page: u8,
+        #[schemars(range(min = 1001, max = 9998))]
+        playback_number: u16,
+        #[schemars(range(max = 9007199254740991_u64))]
+        #[ts(type = "number")]
+        expected_page_revision: u64,
+        #[ts(type = "string | null")]
+        expected_page_object_id: PlaybackTopologyObjectIdentity,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PlaybackTopologyPlaybackDefinition {
-    #[schemars(range(max = 1000))]
+    #[schemars(range(max = 9998))]
     pub number: u16,
     #[schemars(length(min = 1, max = 80))]
     pub name: String,
@@ -310,6 +333,12 @@ pub enum PlaybackTopologyResolution {
         slot: u8,
         #[schemars(range(min = 1, max = 1000))]
         playback_number: Option<u16>,
+    },
+    Virtual {
+        #[schemars(range(min = 1, max = 127))]
+        page: u8,
+        #[schemars(range(min = 1001, max = 9998))]
+        playback_number: u16,
     },
     Page {
         #[schemars(range(min = 1, max = 127))]

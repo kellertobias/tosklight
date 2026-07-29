@@ -79,7 +79,9 @@ function assertRuntimeRoute(
 					? `cuelist:${projection.requested.cue_list_id}`
 					: projection.requested.kind === "playback"
 						? `playback:${projection.requested.playback_number}`
-						: `group:${projection.requested.group_id}`
+						: projection.requested.kind === "virtual"
+							? `virtual:${projection.requested.page}.${projection.requested.playback_number}`
+							: `group:${projection.requested.group_id}`
 			: `playback:${projection.playback_number}`;
 	assertPlaybackRoute(routes, expected);
 }
@@ -342,6 +344,7 @@ function decodeRequestedAddress(value: unknown, path: string): PlaybackAddress {
 		"cue_list",
 		"group",
 		"playback",
+		"virtual",
 		"current_page",
 		"explicit_page",
 	]);
@@ -358,6 +361,15 @@ function decodeRequestedAddress(value: unknown, path: string): PlaybackAddress {
 	if (kind === "playback")
 		return {
 			kind,
+			playback_number: positiveIntegerAt(
+				address.playback_number,
+				`${path}.playback_number`,
+			),
+		};
+	if (kind === "virtual")
+		return {
+			kind,
+			page: positiveIntegerAt(address.page, `${path}.page`),
 			playback_number: positiveIntegerAt(
 				address.playback_number,
 				`${path}.playback_number`,
@@ -384,6 +396,7 @@ function decodeResolvedAddress(
 		"cue_list",
 		"group",
 		"playback",
+		"virtual",
 	]);
 	if (kind === "cue_list")
 		return {
@@ -398,6 +411,15 @@ function decodeResolvedAddress(
 				address.playback_number,
 				`${path}.playback_number`,
 				positiveIntegerAt,
+			),
+		};
+	if (kind === "virtual")
+		return {
+			kind,
+			page: positiveIntegerAt(address.page, `${path}.page`),
+			playback_number: positiveIntegerAt(
+				address.playback_number,
+				`${path}.playback_number`,
 			),
 		};
 	return {

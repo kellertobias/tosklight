@@ -9,6 +9,8 @@ import {
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
+	VirtualPlaybackExclusionSurface,
+	VirtualPlaybackSurfacePageMode,
 	VirtualPlaybackZone,
 	VirtualPlaybackZonesAuthority,
 	VirtualPlaybackZonesEventObserver,
@@ -27,6 +29,7 @@ const INITIAL_ZONES = [
 const UPDATED_ZONES = [
 	{ id: "paired", name: "Updated", slots: [1, 2, 3, 144] },
 ] as const;
+const PAGE_MODE = { type: "pinned", page: 7 } as const;
 
 function authority(showId = SHOW_ID): VirtualPlaybackZonesAuthority {
 	return {
@@ -41,8 +44,20 @@ function snapshot(
 ): VirtualPlaybackZonesSnapshot {
 	return {
 		showId,
-		desks: { [DESK_ID]: { "surface-a": zones } },
+		desks: {
+			[DESK_ID]: {
+				"surface-a": surface(zones, 4, PAGE_MODE),
+			},
+		},
 	};
+}
+
+function surface(
+	zones: readonly VirtualPlaybackZone[],
+	revision: number,
+	pageMode: VirtualPlaybackSurfacePageMode,
+): VirtualPlaybackExclusionSurface {
+	return { revision, pageMode, zones };
 }
 
 function saveOutcome(zones: readonly VirtualPlaybackZone[]) {
@@ -51,7 +66,7 @@ function saveOutcome(zones: readonly VirtualPlaybackZone[]) {
 		showId: SHOW_ID,
 		deskId: DESK_ID,
 		surfaceId: "surface-a",
-		zones,
+		surface: surface(zones, 5, PAGE_MODE),
 		replayed: false,
 		changed: true,
 	};
@@ -78,6 +93,7 @@ function SurfaceProbe({
 		surfaceId: "surface-a",
 		active,
 		authorityReady: true,
+		pageMode: PAGE_MODE,
 	});
 	return (
 		<section aria-label={label}>
@@ -148,6 +164,14 @@ describe("useVirtualPlaybackSurfaceZones", () => {
 			);
 		});
 		expect(saveSurface).toHaveBeenCalledOnce();
+		expect(saveSurface).toHaveBeenCalledWith(
+			{ showId: SHOW_ID, deskId: DESK_ID },
+			"surface-a",
+			4,
+			PAGE_MODE,
+			UPDATED_ZONES,
+			expect.any(String),
+		);
 		expect(loadSnapshot).toHaveBeenCalledOnce();
 	});
 

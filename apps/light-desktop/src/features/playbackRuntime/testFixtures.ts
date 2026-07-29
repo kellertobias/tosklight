@@ -82,13 +82,18 @@ export function playbackSnapshot(
 	projections = identities.map((identity) =>
 		identity.kind === "playback"
 			? cueProjection(identity.playback_number)
-			: identity.kind === "cue_list"
+			: identity.kind === "virtual"
 				? {
-					...cueProjection(1),
-					requested: identity,
-					playback_number: null,
-				}
-				: groupProjection(identity.group_id),
+						...cueProjection(identity.playback_number),
+						requested: identity,
+					}
+				: identity.kind === "cue_list"
+					? {
+							...cueProjection(1),
+							requested: identity,
+							playback_number: null,
+						}
+					: groupProjection(identity.group_id),
 	),
 ): PlaybackSnapshot {
 	return {

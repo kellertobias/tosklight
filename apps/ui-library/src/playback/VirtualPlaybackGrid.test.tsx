@@ -51,9 +51,9 @@ describe("VirtualPlaybackGridView", () => {
 		const grid = document.querySelector(".virtual-playback-grid");
 		expect(grid).toHaveClass("compact-grid");
 		expect(grid).toHaveStyle({
-			gridTemplateColumns:
-				"repeat(2, minmax(var(--grid-cell-min), 1fr))",
-			gridTemplateRows: "repeat(2, minmax(0, 1fr))",
+			gridTemplateColumns: "repeat(2, minmax(var(--grid-cell-min), 1fr))",
+			gridTemplateRows: "repeat(2, minmax(36px, 1fr))",
+			overflow: "auto",
 		});
 		expect(document.querySelectorAll(".virtual-playback-box")).toHaveLength(4);
 		expect(document.querySelector('[data-grid-position="0"]')).toHaveClass(
@@ -74,9 +74,7 @@ describe("VirtualPlaybackGridView", () => {
 			"data-availability",
 			"unavailable",
 		);
-		expect(
-			screen.getByRole("button", { name: /cell 2 empty/u }),
-		).toBeEnabled();
+		expect(screen.getByRole("button", { name: /cell 2 empty/u })).toBeEnabled();
 		expect(
 			screen.getByRole("button", { name: /cell 3 empty/u }),
 		).toBeDisabled();
@@ -187,6 +185,12 @@ describe("VirtualPlaybackGridView", () => {
 					availability: "assigned",
 					label: "Zone",
 					exclusionMember: true,
+					exclusionFence: {
+						top: true,
+						right: false,
+						bottom: true,
+						left: true,
+					},
 					exclusionSelected: true,
 					selectingExclusionZone: true,
 				},
@@ -205,7 +209,17 @@ describe("VirtualPlaybackGridView", () => {
 		expect(callbacks.onZoneSelection).toHaveBeenCalledWith(4, 3);
 		expect(document.querySelector('[data-grid-position="3"]')).toHaveClass(
 			"exclusion-member",
+			"exclusion-fence-top",
+			"exclusion-fence-bottom",
+			"exclusion-fence-left",
 			"exclusion-selected",
+		);
+		expect(document.querySelector('[data-grid-position="3"]')).not.toHaveClass(
+			"exclusion-fence-right",
+		);
+		expect(document.querySelector('[data-grid-position="3"]')).toHaveAttribute(
+			"data-exclusion-fence",
+			"top bottom left",
 		);
 		expect(
 			document.querySelector('[data-grid-position="0"] .pool-card-workflow'),
@@ -216,6 +230,15 @@ describe("VirtualPlaybackGridView", () => {
 		expect(
 			document.querySelector('[data-grid-position="2"] .pool-card-workflow'),
 		).toHaveTextContent("Update");
+	});
+
+	it("opens playback configuration from the context menu", () => {
+		const onConfigure = vi.fn();
+		renderGrid({ callbacks: { onConfigure } });
+
+		fireEvent.contextMenu(screen.getByRole("button", { name: /cell 1 Main/ }));
+
+		expect(onConfigure).toHaveBeenCalledWith(1, 0);
 	});
 
 	it("uses bottom-right icon or image artwork and keeps color contrast metadata", () => {
@@ -257,5 +280,51 @@ describe("VirtualPlaybackGridView", () => {
 		expect(document.querySelector('[data-grid-position="1"]')).toHaveStyle({
 			"--playback-contrast": "#071014",
 		});
+	});
+
+	it("virtualizes a 20 by 20 grid and resolves only a bounded visible window", () => {
+		const boxAt = vi.fn((position: number) => ({
+			slot: position + 1,
+			position,
+			availability: "empty" as const,
+		}));
+		render(
+			<div style={{ width: 600, height: 500 }}>
+				<VirtualPlaybackGridView
+					page={1}
+					rows={20}
+					columns={20}
+					boxAt={boxAt}
+				/>
+			</div>,
+		);
+
+		const grid = document.querySelector(".virtual-playback-grid");
+		expect(grid).toHaveClass("virtual-playback-grid-virtualized");
+		expect(grid).toHaveAttribute("data-logical-cells", "400");
+		expect(boxAt.mock.calls.length).toBeGreaterThan(0);
+		expect(boxAt.mock.calls.length).toBeLessThan(400);
+		expect(document.querySelectorAll(".virtual-playback-box").length).toBe(
+			boxAt.mock.calls.length,
+		);
+	});
+
+	it("keeps small grids fully mounted without invoking the virtualizer", () => {
+		const boxAt = vi.fn((position: number) => ({
+			slot: position + 1,
+			position,
+			availability: "empty" as const,
+		}));
+		render(
+			<VirtualPlaybackGridView page={1} rows={10} columns={20} boxAt={boxAt} />,
+		);
+
+		expect(document.querySelector(".virtual-playback-grid")).not.toHaveClass(
+			"virtual-playback-grid-virtualized",
+		);
+		expect(boxAt).toHaveBeenCalledTimes(200);
+		expect(document.querySelectorAll(".virtual-playback-box")).toHaveLength(
+			200,
+		);
 	});
 });

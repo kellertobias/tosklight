@@ -42,6 +42,7 @@ export type AttributeValue =
 	| { kind: "raw_dmx_exact"; value: number };
 
 export interface VisualizationSnapshot {
+	scope?: { show_id: string | null };
 	revision: number;
 	generated_at: string;
 	grand_master: number;
@@ -220,4 +221,5 @@ export interface PlaybackPage {
 	number: number;
 	name: string;
 	slots: Record<string, number>;
+	virtual_playbacks: Record<string, PlaybackDefinition>;
 }

@@ -1,5 +1,6 @@
 import type {
 	VirtualPlaybackZone,
+	VirtualPlaybackSurfacePageMode,
 	VirtualPlaybackZonesEventObserver,
 	VirtualPlaybackZonesEventStream,
 	VirtualPlaybackZonesScope,
@@ -51,7 +52,7 @@ export class HttpVirtualPlaybackZonesTransport
 		validateVirtualPlaybackZonesScope(scope);
 		const response = await this.fetchImplementation(
 			`${this.baseUrl}/api/v2/virtual-playback-exclusion-zones`,
-			{ headers: this.headers(scope.showId), signal },
+			{ headers: this.headers(scope), signal },
 		);
 		return decodeVirtualPlaybackZonesSnapshot(
 			await responseValue(response),
@@ -62,13 +63,15 @@ export class HttpVirtualPlaybackZonesTransport
 	async saveSurface(
 		scope: VirtualPlaybackZonesScope,
 		surfaceId: string,
+		expectedRevision: number,
+		pageMode: VirtualPlaybackSurfacePageMode,
 		zones: readonly VirtualPlaybackZone[],
 		requestId: string,
 		signal?: AbortSignal,
 	) {
 		validateVirtualPlaybackZonesScope(scope);
 		validateVirtualPlaybackZoneSurfaceId(surfaceId);
-		const headers = this.headers(scope.showId);
+		const headers = this.headers(scope);
 		headers.set("content-type", "application/json");
 		const response = await this.fetchImplementation(
 			`${this.baseUrl}/api/v2/virtual-playback-exclusion-zones/${encodeURIComponent(surfaceId)}/update`,
@@ -76,7 +79,12 @@ export class HttpVirtualPlaybackZonesTransport
 				method: "POST",
 				headers,
 				body: JSON.stringify(
-					encodeVirtualPlaybackZonesSaveRequest(requestId, zones),
+					encodeVirtualPlaybackZonesSaveRequest(
+						requestId,
+						expectedRevision,
+						pageMode,
+						zones,
+					),
 				),
 				signal,
 			},
@@ -152,10 +160,11 @@ export class HttpVirtualPlaybackZonesTransport
 		};
 	}
 
-	private headers(showId: string) {
+	private headers(scope: VirtualPlaybackZonesScope) {
 		const headers = new Headers({
 			authorization: `Bearer ${this.options.sessionToken}`,
-			"x-tosk-show": showId,
+			"x-tosk-show": scope.showId,
+			"x-tosk-desk": scope.deskId,
 		});
 		if (this.options.deskBoundaryToken)
 			headers.set("x-light-desk-token", this.options.deskBoundaryToken);

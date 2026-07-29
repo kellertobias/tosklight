@@ -38,6 +38,10 @@ pub enum PlaybackAddress {
     Playback {
         playback_number: u16,
     },
+    Virtual {
+        page: u8,
+        playback_number: u16,
+    },
     CurrentPage {
         slot: u8,
     },
@@ -62,6 +66,10 @@ pub enum ResolvedPlaybackAddress {
         playback_number: u16,
         page: Option<u8>,
         slot: Option<u8>,
+    },
+    Virtual {
+        page: u8,
+        playback_number: u16,
     },
 }
 
@@ -257,6 +265,24 @@ mod tests {
             PlaybackAddress::ExplicitPage { page: 2, slot: 4 }
         );
         assert_eq!(request.surface, PlaybackSurface::Physical);
+    }
+
+    #[test]
+    fn dedicated_virtual_address_retains_page_and_full_number() {
+        let request: PlaybackActionRequest = serde_json::from_value(serde_json::json!({
+            "request_id": "virtual-4-1001",
+            "address": {"kind": "virtual", "page": 4, "playback_number": 1001},
+            "action": {"type": "toggle", "pressed": true},
+            "surface": "virtual",
+        }))
+        .expect("decode dedicated Virtual Playback action");
+        assert_eq!(
+            request.address,
+            PlaybackAddress::Virtual {
+                page: 4,
+                playback_number: 1_001
+            }
+        );
     }
 
     #[test]

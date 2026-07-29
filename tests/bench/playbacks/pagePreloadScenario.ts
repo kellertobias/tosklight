@@ -13,6 +13,7 @@ import {
 } from "../programmer/programmerPreloadLifecycle";
 import { mapExistingPlaybackToSlot } from "./mapExistingPlaybackToSlot";
 import type { BrowserPlaybacks } from "./playbackScenario";
+import type { VirtualPlaybackIdentity } from "./virtualPlaybackScenario";
 
 type PageRoute = "ui" | "api";
 type PreloadRoute = "ui" | "api";
@@ -32,7 +33,9 @@ export type PreloadCaptureMask = Pick<
 
 export interface PendingPreloadExpectation {
 	groupIds: string[];
-	playbackActions: Array<[number, string, string]>;
+	playbackActions: Array<
+		[number | VirtualPlaybackIdentity, string, string]
+	>;
 }
 
 interface ProgrammerPreloadProjection {
@@ -41,6 +44,7 @@ interface ProgrammerPreloadProjection {
 	preload_group_active: Record<string, Record<string, { changed_at?: string }>>;
 	preload_playback_pending: Array<{
 		playback_number: number;
+		page?: number;
 		action: string;
 		surface: string;
 	}>;
@@ -352,7 +356,10 @@ export class BrowserPreload {
 			expect(await this.pendingPlaybackActions()).toEqual(actions),
 		pending: async (expected: PendingPreloadExpectation) =>
 			expect.poll(() => this.pending()).toEqual(expected),
-		atomicCommit: async (groupId: string, playbacks: number[]) => {
+		atomicCommit: async (
+			groupId: string,
+			playbacks: Array<number | VirtualPlaybackIdentity>,
+		) => {
 			if (playbacks.length < 1)
 				throw new Error("Atomic Preload commit requires a Playback");
 			await expect
@@ -361,12 +368,17 @@ export class BrowserPreload {
 					const groupTimestamp =
 						programmer.preload_group_active[groupId]?.intensity?.changed_at;
 					const playbackTimestamps = await Promise.all(
-						playbacks.map(
-							async (number) =>
-								(await this.playbacks.runtime(number))?.activated_at,
-						),
+						playbacks.map(async (identity) => {
+							const runtime =
+								typeof identity === "number"
+									? await this.playbacks.runtime(identity)
+									: await this.virtualRuntime(identity);
+							return runtime?.activated_at ?? runtime?.runtime?.activated_at;
+						}),
 					);
-					const timestamps = [groupTimestamp, ...playbackTimestamps];
+					const timestamps = [groupTimestamp, ...playbackTimestamps].map(
+						normalizeCommitTimestamp,
+					);
 					return timestamps.every(Boolean) ? new Set(timestamps).size : 0;
 				})
 				.toBe(1);
@@ -529,11 +541,37 @@ export class BrowserPreload {
 		return {
 			groupIds: Object.keys(programmer.preload_group_pending).sort(),
 			playbackActions: programmer.preload_playback_pending.map((entry) => [
-				entry.playback_number,
+				entry.surface === "virtual" && entry.page != null
+					? {
+							page: entry.page,
+							playbackNumber: entry.playback_number,
+						}
+					: entry.playback_number,
 				entry.action,
 				entry.surface,
 			]),
 		};
+	}
+
+	private async virtualRuntime(identity: VirtualPlaybackIdentity): Promise<any> {
+		const session = this.session();
+		const snapshot = await this.api.request<any>(
+			"POST",
+			"/api/v2/playback-runtime/snapshot",
+			{
+				identities: [
+					{
+						kind: "virtual",
+						page: identity.page,
+						playback_number: identity.playbackNumber,
+					},
+				],
+			},
+			true,
+			undefined,
+			{ showId: this.showId(), deskId: session.desk.id },
+		);
+		return snapshot.projections?.[0];
 	}
 
 	private async programmer(): Promise<ProgrammerPreloadProjection> {
@@ -570,4 +608,10 @@ function valid(value: number, label: string) {
 	if (!Number.isSafeInteger(value) || value < 1)
 		throw new Error(`${label} numbers start at 1`);
 	return value;
+}
+
+function normalizeCommitTimestamp(value: unknown): number | null {
+	if (typeof value !== "string" && typeof value !== "number") return null;
+	const millis = typeof value === "number" ? value : Date.parse(value);
+	return Number.isFinite(millis) ? millis : null;
 }

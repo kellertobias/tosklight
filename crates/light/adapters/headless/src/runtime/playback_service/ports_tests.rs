@@ -38,6 +38,52 @@ fn exclusion_candidates_match_only_interactions_that_can_activate() {
     ));
 }
 
+#[test]
+fn dedicated_virtual_runtime_never_collapses_unsupported_buttons_to_pool_actions() {
+    let mut definition = test_definition();
+    definition.number = 1_001;
+    definition.button_count = 1;
+    definition.buttons = [
+        light_playback::PlaybackButtonAction::Toggle,
+        light_playback::PlaybackButtonAction::None,
+        light_playback::PlaybackButtonAction::None,
+    ];
+    assert_eq!(
+        virtual_runtime_action(
+            &definition,
+            PlaybackAction::ConfiguredButton {
+                number: 1,
+                pressed: true,
+            }
+        )
+        .unwrap(),
+        Some(VirtualPlaybackAction::Toggle)
+    );
+    assert_eq!(
+        virtual_runtime_action(
+            &definition,
+            PlaybackAction::ConfiguredButton {
+                number: 1,
+                pressed: false,
+            }
+        )
+        .unwrap(),
+        None
+    );
+
+    definition.buttons[0] = light_playback::PlaybackButtonAction::Flash;
+    assert!(
+        virtual_runtime_action(
+            &definition,
+            PlaybackAction::ConfiguredButton {
+                number: 1,
+                pressed: true,
+            }
+        )
+        .is_err()
+    );
+}
+
 fn test_definition() -> light_playback::PlaybackDefinition {
     light_playback::PlaybackDefinition {
         number: 1,

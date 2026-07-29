@@ -48,6 +48,22 @@ pub(super) fn application_command(
             expected_playback_object_id: expected_playback_object_id.into_option(),
             playback: application_playback(playback)?,
         },
+        wire::PlaybackTopologyAction::ConfigureVirtual {
+            page,
+            playback_number,
+            expected_page_revision,
+            expected_page_object_id,
+            playback,
+        } => application::PlaybackTopologyAction::ConfigureVirtual {
+            page,
+            number: playback_number,
+            expected_page_revision: input_revision(
+                expected_page_revision,
+                "expected_page_revision",
+            )?,
+            expected_page_object_id: expected_page_object_id.into_option(),
+            playback: application_playback(playback)?,
+        },
         wire::PlaybackTopologyAction::MapExistingPlayback {
             page,
             slot,
@@ -117,6 +133,20 @@ pub(super) fn application_command(
                 "expected_playback_revision",
             )?,
             expected_playback_object_id: expected_playback_object_id.into_option(),
+        },
+        wire::PlaybackTopologyAction::ClearVirtual {
+            page,
+            playback_number,
+            expected_page_revision,
+            expected_page_object_id,
+        } => application::PlaybackTopologyAction::ClearVirtual {
+            page,
+            number: playback_number,
+            expected_page_revision: input_revision(
+                expected_page_revision,
+                "expected_page_revision",
+            )?,
+            expected_page_object_id: expected_page_object_id.into_option(),
         },
     };
     Ok((
@@ -372,6 +402,13 @@ fn wire_resolution(
         application::PlaybackTopologyResolution::Page { page } => {
             wire::PlaybackTopologyResolution::Page { page }
         }
+        application::PlaybackTopologyResolution::Virtual {
+            page,
+            playback_number,
+        } => wire::PlaybackTopologyResolution::Virtual {
+            page,
+            playback_number,
+        },
     }
 }
 

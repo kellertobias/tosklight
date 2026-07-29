@@ -15,10 +15,19 @@ function zone() {
 	return { id: "stage-left", name: "Stage Left", slots: [1, 2] };
 }
 
+function surface(overrides: Record<string, unknown> = {}) {
+	return {
+		revision: 4,
+		page_mode: { type: "follow_main" },
+		zones: [zone()],
+		...overrides,
+	};
+}
+
 function snapshot(overrides: Record<string, unknown> = {}) {
 	return {
 		show_id: SHOW_ID,
-		desks: { [DESK_ID]: { "surface-a": [zone()] } },
+		desks: { [DESK_ID]: { "surface-a": surface() } },
 		...overrides,
 	};
 }
@@ -29,7 +38,7 @@ function saveOutcome(overrides: Record<string, unknown> = {}) {
 		show_id: SHOW_ID,
 		desk_id: DESK_ID,
 		surface_id: "surface-a",
-		zones: [zone()],
+		surface: surface(),
 		replayed: false,
 		changed: true,
 		...overrides,
@@ -38,9 +47,19 @@ function saveOutcome(overrides: Record<string, unknown> = {}) {
 
 describe("Virtual Playback exclusion-zone wire", () => {
 	it("decodes an exact authority-scoped snapshot", () => {
-		expect(decodeVirtualPlaybackZonesSnapshot(snapshot(), SCOPE)).toEqual({
+		expect(
+			decodeVirtualPlaybackZonesSnapshot(snapshot({ future_field: true }), SCOPE),
+		).toEqual({
 			showId: SHOW_ID,
-			desks: { [DESK_ID]: { "surface-a": [zone()] } },
+			desks: {
+				[DESK_ID]: {
+					"surface-a": {
+						revision: 4,
+						pageMode: { type: "follow_main" },
+						zones: [zone()],
+					},
+				},
+			},
 		});
 	});
 
@@ -54,15 +73,18 @@ describe("Virtual Playback exclusion-zone wire", () => {
 	});
 
 	it.each([
-		["unexpected field", snapshot({ extra: true })],
 		[
 			"untrimmed surface",
-			snapshot({ desks: { [DESK_ID]: { " surface-a": [zone()] } } }),
+			snapshot({ desks: { [DESK_ID]: { " surface-a": surface() } } }),
 		],
 		[
 			"duplicate zone ids",
 			snapshot({
-				desks: { [DESK_ID]: { "surface-a": [zone(), zone()] } },
+				desks: {
+					[DESK_ID]: {
+						"surface-a": surface({ zones: [zone(), zone()] }),
+					},
+				},
 			}),
 		],
 		[
@@ -70,7 +92,9 @@ describe("Virtual Playback exclusion-zone wire", () => {
 			snapshot({
 				desks: {
 					[DESK_ID]: {
-						"surface-a": [{ ...zone(), slots: [1, 1] }],
+						"surface-a": surface({
+							zones: [{ ...zone(), slots: [1, 1] }],
+						}),
 					},
 				},
 			}),
@@ -80,17 +104,9 @@ describe("Virtual Playback exclusion-zone wire", () => {
 			snapshot({
 				desks: {
 					[DESK_ID]: {
-						"surface-a": [{ ...zone(), slots: [1, 145] }],
-					},
-				},
-			}),
-		],
-		[
-			"unknown zone field",
-			snapshot({
-				desks: {
-					[DESK_ID]: {
-						"surface-a": [{ ...zone(), color: "red" }],
+						"surface-a": surface({
+							zones: [{ ...zone(), slots: [1, 8_999] }],
+						}),
 					},
 				},
 			}),
@@ -112,7 +128,11 @@ describe("Virtual Playback exclusion-zone wire", () => {
 		).toMatchObject({
 			requestId: "request-a",
 			surfaceId: "surface-a",
-			zones: [zone()],
+			surface: {
+				revision: 4,
+				pageMode: { type: "follow_main" },
+				zones: [zone()],
+			},
 		});
 		expect(() =>
 			decodeVirtualPlaybackZonesSaveOutcome(
@@ -139,28 +159,78 @@ describe("Virtual Playback exclusion-zone wire", () => {
 	});
 
 	it("validates an outgoing save before serialization", () => {
-		expect(encodeVirtualPlaybackZonesSaveRequest("request-a", [zone()])).toEqual({
+		expect(
+			encodeVirtualPlaybackZonesSaveRequest(
+				"request-a",
+				4,
+				{ type: "pinned", page: 7 },
+				[zone()],
+			),
+		).toEqual({
 			request_id: "request-a",
+			expected_revision: 4,
+			page_mode: { type: "pinned", page: 7 },
 			zones: [zone()],
 		});
 		expect(() =>
-			encodeVirtualPlaybackZonesSaveRequest("request-a", [
-				{ ...zone(), name: "", slots: [1, 2] },
-			]),
+			encodeVirtualPlaybackZonesSaveRequest(
+				"request-a",
+				4,
+				{ type: "follow_main" },
+				[{ ...zone(), name: "", slots: [1, 2] }],
+			),
 		).toThrow(VirtualPlaybackZonesProtocolError);
 	});
 
-	it("round-trips retained legacy cells above the assignable slot limit", () => {
-		const legacy = { ...zone(), slots: [128, 144] };
+	it("round-trips cells through the dedicated Virtual Playback domain", () => {
+		const largest = { ...zone(), slots: [128, 8_998], future_field: true };
 		expect(
 			decodeVirtualPlaybackZonesSnapshot(
-				snapshot({ desks: { [DESK_ID]: { "surface-a": [legacy] } } }),
+				snapshot({
+					desks: {
+						[DESK_ID]: {
+							"surface-a": surface({ zones: [largest], future_field: true }),
+						},
+					},
+				}),
 				SCOPE,
-			).desks[DESK_ID]["surface-a"],
-		).toEqual([legacy]);
-		expect(encodeVirtualPlaybackZonesSaveRequest("request-a", [legacy])).toEqual({
+			).desks[DESK_ID]["surface-a"].zones,
+		).toEqual([{ ...zone(), slots: [128, 8_998] }]);
+		expect(
+			encodeVirtualPlaybackZonesSaveRequest(
+				"request-a",
+				4,
+				{ type: "follow_main" },
+				[{ ...zone(), slots: [128, 8_998] }],
+			),
+		).toEqual({
 			request_id: "request-a",
-			zones: [legacy],
+			expected_revision: 4,
+			page_mode: { type: "follow_main" },
+			zones: [{ ...zone(), slots: [128, 8_998] }],
 		});
+	});
+
+	it("rejects malformed surface revision and pinned page authority", () => {
+		expect(() =>
+			decodeVirtualPlaybackZonesSnapshot(
+				snapshot({
+					desks: {
+						[DESK_ID]: {
+							"surface-a": surface({ revision: -1 }),
+						},
+					},
+				}),
+				SCOPE,
+			),
+		).toThrow(VirtualPlaybackZonesProtocolError);
+		expect(() =>
+			encodeVirtualPlaybackZonesSaveRequest(
+				"request-a",
+				4,
+				{ type: "pinned", page: 128 },
+				[zone()],
+			),
+		).toThrow(VirtualPlaybackZonesProtocolError);
 	});
 });

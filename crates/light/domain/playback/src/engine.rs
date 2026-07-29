@@ -5,14 +5,15 @@ pub struct PlaybackEngine {
     pub(crate) cue_lists: HashMap<CueListId, CueList>,
     pub(crate) compiled_cue_lists: HashMap<CueListId, Arc<CompiledCueList>>,
     pub(crate) active: HashMap<PlaybackKey, ActivePlayback>,
-    pub(crate) active_dynamics: HashMap<u16, ActiveDynamicPlayback>,
-    pub(crate) temporary: HashMap<(u16, TemporaryPlaybackKind), ActivePlayback>,
-    pub(crate) swap_held: HashSet<u16>,
+    pub(crate) active_dynamics: HashMap<PlaybackIdentity, ActiveDynamicPlayback>,
+    pub(crate) temporary: HashMap<(PlaybackIdentity, TemporaryPlaybackKind), ActivePlayback>,
+    pub(crate) swap_held: HashSet<PlaybackIdentity>,
     pub(crate) dynamics_paused_at: Option<DateTime<Utc>>,
     pub(crate) speed_groups_bpm: [f64; 5],
     pub(crate) speed_groups_paused: [bool; 5],
     pub(crate) sequence_master_fade_millis: u64,
     pub(crate) definitions: HashMap<u16, PlaybackDefinition>,
+    pub(crate) virtual_definitions: HashMap<VirtualPlaybackAddress, PlaybackDefinition>,
     pub(crate) clock: SharedClock,
     pub(crate) next_activation_ordinal: u64,
 }
@@ -37,6 +38,7 @@ impl PlaybackEngine {
             speed_groups_paused: [false; 5],
             sequence_master_fade_millis: 0,
             definitions: HashMap::new(),
+            virtual_definitions: HashMap::new(),
             clock,
             next_activation_ordinal: 1,
         }
@@ -119,6 +121,7 @@ impl PlaybackEngine {
         Ok(())
     }
     pub fn register_definition(&mut self, definition: PlaybackDefinition) -> Result<(), String> {
+        PhysicalPlaybackNumber::new(definition.number)?;
         definition.validate()?;
         if self.definitions.contains_key(&definition.number) {
             return Err("duplicate playback number".into());
@@ -146,5 +149,33 @@ impl PlaybackEngine {
 
     pub fn definition(&self, number: u16) -> Option<&PlaybackDefinition> {
         self.definitions.get(&number)
+    }
+
+    pub fn register_virtual_definition(
+        &mut self,
+        address: VirtualPlaybackAddress,
+        definition: PlaybackDefinition,
+    ) -> Result<(), String> {
+        definition.validate()?;
+        if definition.number != address.number().get() {
+            return Err("virtual playback address and definition number must match".into());
+        }
+        if self.virtual_definitions.contains_key(&address) {
+            return Err("duplicate virtual playback address".into());
+        }
+        if let PlaybackTarget::CueList { cue_list_id } = definition.target
+            && !self.cue_lists.contains_key(&cue_list_id)
+        {
+            return Err("playback cue list does not exist".into());
+        }
+        self.virtual_definitions.insert(address, definition);
+        Ok(())
+    }
+
+    pub fn definition_at(&self, identity: PlaybackIdentity) -> Option<&PlaybackDefinition> {
+        match identity {
+            PlaybackIdentity::Physical(number) => self.definitions.get(&number.get()),
+            PlaybackIdentity::Virtual(address) => self.virtual_definitions.get(&address),
+        }
     }
 }

@@ -1,5 +1,7 @@
 import {
 	MAX_PERSISTED_VIRTUAL_PLAYBACK_ZONE_SLOT,
+	type VirtualPlaybackExclusionSurface,
+	type VirtualPlaybackSurfacePageMode,
 	type VirtualPlaybackZone,
 	type VirtualPlaybackZonesChange,
 	type VirtualPlaybackZonesSaveOutcome,
@@ -50,7 +52,7 @@ export function decodeVirtualPlaybackZonesSaveOutcome(
 		"show_id",
 		"desk_id",
 		"surface_id",
-		"zones",
+		"surface",
 		"request_id",
 		"replayed",
 		"changed",
@@ -68,7 +70,7 @@ export function decodeVirtualPlaybackZonesSaveOutcome(
 		showId,
 		deskId,
 		surfaceId,
-		zones: decodeZones(outcome.zones, "$.zones"),
+		surface: decodeSurface(outcome.surface, "$.surface"),
 		replayed: boolean(outcome.replayed, "$.replayed"),
 		changed: boolean(outcome.changed, "$.changed"),
 	};
@@ -76,10 +78,14 @@ export function decodeVirtualPlaybackZonesSaveOutcome(
 
 export function encodeVirtualPlaybackZonesSaveRequest(
 	requestId: string,
+	expectedRevision: number,
+	pageMode: VirtualPlaybackSurfacePageMode,
 	zones: readonly VirtualPlaybackZone[],
 ) {
 	return {
 		request_id: nonEmptyString(requestId, "$.request_id"),
+		expected_revision: revision(expectedRevision, "$.expected_revision"),
+		page_mode: decodePageMode(pageMode, "$.page_mode"),
 		zones: decodeZones(zones, "$.zones").map((zone) => ({
 			id: zone.id,
 			name: zone.name,
@@ -134,11 +140,37 @@ export function validateVirtualPlaybackZoneSurfaceId(surfaceId: unknown) {
 function decodeSurfaces(value: unknown, path: string) {
 	const surfaces = object(value, path);
 	return Object.fromEntries(
-		Object.entries(surfaces).map(([surfaceId, zones]) => {
+		Object.entries(surfaces).map(([surfaceId, surface]) => {
 			validateSurfaceId(surfaceId, `${path}.${surfaceId}`);
-			return [surfaceId, decodeZones(zones, `${path}.${surfaceId}`)];
+			return [surfaceId, decodeSurface(surface, `${path}.${surfaceId}`)];
 		}),
 	);
+}
+
+function decodeSurface(
+	value: unknown,
+	path: string,
+): VirtualPlaybackExclusionSurface {
+	const surface = exactObject(value, path, ["revision", "page_mode", "zones"]);
+	return {
+		revision: revision(surface.revision, `${path}.revision`),
+		pageMode: decodePageMode(surface.page_mode, `${path}.page_mode`),
+		zones: decodeZones(surface.zones, `${path}.zones`),
+	};
+}
+
+function decodePageMode(
+	value: unknown,
+	path: string,
+): VirtualPlaybackSurfacePageMode {
+	const mode = object(value, path);
+	const type = nonEmptyString(mode.type, `${path}.type`);
+	if (type === "follow_main") return { type };
+	if (type !== "pinned") invalid(`${path}.type`, "follow_main or pinned", type);
+	const page = mode.page;
+	if (!Number.isSafeInteger(page) || (page as number) < 1 || (page as number) > 127)
+		invalid(`${path}.page`, "integer between 1 and 127", page);
+	return { type, page: page as number };
 }
 
 function decodeDesks(value: unknown, path: string) {
@@ -205,6 +237,12 @@ function boundedSlot(value: unknown, path: string) {
 	return value as number;
 }
 
+function revision(value: unknown, path: string) {
+	if (!Number.isSafeInteger(value) || (value as number) < 0)
+		invalid(path, "non-negative safe integer", value);
+	return value as number;
+}
+
 function boundedTrimmedString(value: unknown, path: string, maximum: number) {
 	const decoded = nonEmptyString(value, path);
 	if (decoded !== decoded.trim() || decoded.length > maximum)
@@ -231,9 +269,6 @@ function uuid(value: unknown, path: string) {
 
 function exactObject(value: unknown, path: string, keys: readonly string[]) {
 	const decoded = object(value, path);
-	const unexpected = Object.keys(decoded).find((key) => !keys.includes(key));
-	if (unexpected)
-		invalid(`${path}.${unexpected}`, "a declared wire field", decoded[unexpected]);
 	for (const key of keys) {
 		if (!(key in decoded)) invalid(`${path}.${key}`, "declared wire field", undefined);
 	}

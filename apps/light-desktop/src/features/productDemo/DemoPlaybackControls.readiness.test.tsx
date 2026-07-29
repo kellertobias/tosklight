@@ -54,6 +54,7 @@ const DEMO_PAGE: ShowObject<"playback_page"> = {
 			"23": 23,
 			"24": 24,
 		},
+		virtual_playbacks: {},
 	},
 };
 

@@ -100,6 +100,10 @@ slot. Range errors must name the accepted physical or virtual range.
 - Reuse the standard Playback Configuration and Set/Record/Update workflows. A Virtual
   Playback remains a one-button, faderless target unless a later explicit plan adds
   another topology.
+- Right-clicking a Virtual Playback and pressing `[SET]` followed by that Virtual
+  Playback open the same standard Playback Configuration modal used by physical
+  Playbacks. The pane does not expose separate **Set Source** or **Add Target**
+  shortcuts and does not maintain a second source-copy assignment workflow.
 - Preserve the configured action, icon, image background, color, name, current Cue,
   loaded/paused/running state, Update/Record target state, and error feedback already
   shown by the pool-grid card.
@@ -128,8 +132,8 @@ and the other applicable members are released through the normal Playback servic
   surface's effective page, cell `n` resolves to Virtual Playback
   `{page, 1000 + n}`.
 - Empty cells may be members. Assigning them later activates the existing zone intent.
-- Shrinking a grid does not delete out-of-range memberships. Settings displays them as
-  retained hidden members; expanding the grid restores them.
+- Shrinking a grid does not delete out-of-range memberships. The Exclusion Zones tab
+  continues to list those stored positions; expanding the grid restores them.
 - A cell may belong to multiple zones. Activating it releases the deduplicated union of
   all other members in every applicable zone.
 - All matching zones on all surfaces of the originating control desk participate when
@@ -156,12 +160,21 @@ and the other applicable members are released through the normal Playback servic
 - Shift plus pointer/touch toggles temporary cell selection without operating the
   Playback. Software keyboard Shift and attached-hardware Shift produce the same
   gesture while the pane owns interaction.
-- Selecting at least two cells enables **Create Exclusion Zone**. Creation asks for the
-  name and remains inert.
-- Pane Settings lists zones in persisted order and supports rename, membership editing,
-  reordering, and deletion without deleting Playback assignments or source objects.
+- Selecting at least two cells exposes **Create Exclusion Zone** and **Cancel Zone
+  Selection** in the pane's authoritative window title. Creation asks for the name and
+  remains inert.
+- Pane Settings keeps Rows, Columns, Page mode, Follow Main/Pinned, and the position
+  count in **Virtual Playbacks**. It keeps zone management in a separate **Exclusion
+  Zones** tab and does not expose pane-level Cuelist color-mode controls.
+- **Edit Zone** closes Pane Settings and selects the zone's stored cells on the live
+  grid. The title actions become **Update Exclusion Zone** and **Cancel Edit**.
+  Updating replaces that zone's membership in place while preserving its ID, name,
+  order, and hidden members; canceling persists nothing.
 - Temporary selection and saved zone membership are unmistakably different visual
   states. Saved membership is not communicated by color alone.
+- Orthogonally neighboring members of one zone share a single outer fence with no
+  internal fence edge. Disconnected components render as separately fenced islands.
+  Diagonal contact alone does not join two components.
 - Overlapping cells expose every applicable zone name through reachable detail and
   Settings, not only an opaque color.
 - Zone styling coexists with configured light/dark Playback colors, active/running

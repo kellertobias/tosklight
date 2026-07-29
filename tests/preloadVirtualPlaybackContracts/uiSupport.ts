@@ -1,8 +1,5 @@
+import type { Locator, Page } from "@playwright/test";
 import { expect } from "../bench/core/fixtures";
-import type {
-	Locator,
-	Page,
-} from "@playwright/test";
 
 export async function openPlaybackMode(page: Page) {
 	if (await page.locator(".playback-fader-bank").isVisible()) return;
@@ -17,7 +14,7 @@ export function playbackCard(page: Page, slotNumber: number): Locator {
 }
 
 export async function addVirtualPlaybackPane(page: Page): Promise<Locator> {
-	await page.getByRole("button", { name: "DESKTOPS", exact: true }).click();
+	await showDockMode(page, "desks");
 	await page.getByRole("button", { name: /New desktop/ }).click();
 	const grid = page.locator(".desk-grid");
 	const box = await grid.boundingBox();
@@ -36,7 +33,7 @@ export async function addVirtualPlaybackPane(page: Page): Promise<Locator> {
 }
 
 export async function activeVirtualPane(page: Page): Promise<Locator> {
-	await page.getByRole("button", { name: "DESKTOPS", exact: true }).click();
+	await showDockMode(page, "desks");
 	const activeDesk = page.locator(".dock-list .dock-entry.active");
 	if (!(await activeDesk.isVisible().catch(() => false)))
 		await page
@@ -56,24 +53,40 @@ export async function assignVirtualSource(
 	pane: Locator,
 	sourceName: string,
 	cell: number,
+	sourceOption: string,
 ) {
-	await pane.getByRole("button", { name: "Set Source", exact: true }).click();
-	await page.getByRole("button", { name: "BUILT-INS", exact: true }).click();
-	await page.locator(".dock-entry").filter({ hasText: "Cuelists" }).click();
-	await page.locator(".cuelist-card").filter({ hasText: sourceName }).click();
-	const restored = await activeVirtualPane(page);
-	await restored
+	await pane
 		.getByRole("button", {
 			name: new RegExp(`Virtual playback page 1 cell ${cell} empty`),
 		})
+		.click({ button: "right" });
+	const modal = page.getByRole("dialog", { name: "Playback Configuration" });
+	await expect(modal).toBeVisible();
+	await modal.getByLabel("Playback name").fill(sourceName);
+	await modal
+		.getByRole("radio", { name: sourceOption, exact: true })
 		.click();
+	await modal.getByRole("button", { name: "Apply", exact: true }).click();
+	await expect(modal).toBeHidden();
 	await expect(
-		restored.getByRole("button", {
+		pane.getByRole("button", {
 			name: new RegExp(
 				`Virtual playback page 1 cell ${cell} ${escapeRegExp(sourceName)}`,
 			),
 		}),
 	).toBeVisible();
+}
+
+async function showDockMode(
+	page: Page,
+	mode: "desks" | "builtins",
+): Promise<void> {
+	const toggle = page.getByRole("button", {
+		name: "Desktops / Built-ins",
+		exact: true,
+	});
+	if ((await toggle.getAttribute("data-dock-mode")) !== mode)
+		await toggle.click();
 }
 
 export function selectTrigger(container: Locator, label: string): Locator {

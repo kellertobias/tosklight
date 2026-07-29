@@ -28,7 +28,12 @@ export async function repairPlaybackTopologyConflict(
 		);
 	if (action.type === "save_cue_list")
 		return repairCueList(options, action, generation);
-	if (action.type === "create_page" || action.type === "rename_page")
+	if (
+		action.type === "create_page" ||
+		action.type === "rename_page" ||
+		action.type === "configure_virtual" ||
+		action.type === "clear_virtual"
+	)
 		return repairPage(options, action, generation);
 	if (action.type === "map_existing_playback")
 		return repairExistingPlaybackMap(options, action, generation);
@@ -39,7 +44,13 @@ async function repairPage(
 	options: PlaybackTopologyRepairOptions,
 	action: Extract<
 		PlaybackTopologyAction,
-		{ type: "create_page" | "rename_page" }
+		{
+			type:
+				| "create_page"
+				| "rename_page"
+				| "configure_virtual"
+				| "clear_virtual";
+		}
 	>,
 	generation: number,
 ) {

@@ -18,7 +18,14 @@ export async function emptyPlaybackPage(api: ApiDriver) {
 		api,
 		"playback_page",
 		"1",
-		{ ...(page?.body ?? { number: 1, name: "Main" }), slots: {} },
+		{
+			...(page?.body ?? {
+				number: 1,
+				name: "Main",
+				virtual_playbacks: {},
+			}),
+			slots: {},
+		},
 		page?.revision ?? 0,
 	);
 }
@@ -259,7 +266,11 @@ export async function installPlaybackSequence(
 		"playback_page",
 		page?.id ?? "1",
 		{
-			...(page?.body ?? { number: 1, name: "Main" }),
+			...(page?.body ?? {
+				number: 1,
+				name: "Main",
+				virtual_playbacks: {},
+			}),
 			slots: { ...(page?.body.slots ?? {}), [playbackNumber]: playbackNumber },
 		},
 		page?.revision ?? 0,

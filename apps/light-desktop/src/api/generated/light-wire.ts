@@ -147,13 +147,13 @@ export type DynamicActivationPolicyProjection = "start_now" | "join_sync_now" | 
 
 export type DynamicActivationBoundaryProjection = "beat" | "bar";
 
-export type DynamicReferenceProjection = { dynamic_id?: string | null, last_known_pool_number: number, embedded_fallback: DynamicDefinitionProjection, };
+export type DynamicReferenceProjection = { dynamic_id?: string | null, last_known_pool_number: number, embedded_fallback_id: string, embedded_fallback_revision: number, embedded_fallback?: DynamicDefinitionProjection | null, };
 
 export type DynamicValueTimingProjection = { fade_millis?: number | null, delay_millis?: number | null, };
 
 export type DynamicInstanceOverridesProjection = { size: number, speed_multiplier: DynamicRationalProjection, phase_offset_degrees: number, };
 
-export type DynamicStartActionRequest = { request_id: string, targets: Array<string>, overrides: DynamicInstanceOverridesProjection, timing: DynamicValueTimingProjection, };
+export type DynamicStartActionRequest = { request_id: string, targets: Array<string>, overrides: DynamicInstanceOverridesProjection, timing: DynamicValueTimingProjection, undo_group?: string | null, };
 
 export type DynamicOffActionRequest = { request_id: string, timing: DynamicValueTimingProjection, };
 
@@ -282,9 +282,17 @@ export type ProgrammingCaptureModeChange = { projection: ProgrammingCaptureModeP
 
 export type ProgrammingCaptureModeSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingCaptureModeProjection, };
 
-export type ProgrammingValuesProjection = { user_id: string, revision: number, fixture_values: Array<ProgrammingFixtureValue>, group_values: Array<ProgrammingGroupValue>, dynamic_values: Array<ProgrammingDynamicValue>, };
+export type ProgrammingValuesProjection = { user_id: string, revision: number, fixture_values: Array<ProgrammingFixtureValue>, group_values: Array<ProgrammingGroupValue>,
+/**
+ * Embedded Dynamic fallbacks deduplicated across every Dynamic-controlled address.
+ */
+dynamic_definitions?: Array<DynamicDefinitionProjection>, dynamic_values: Array<ProgrammingDynamicValue>, };
 
-export type ProgrammingValuesChange = { projection: ProgrammingValuesProjection, };
+export type ProgrammingFixtureValueAddress = { fixture_id: string, attribute: string, };
+
+export type ProgrammingGroupValueAddress = { group_id: string, attribute: string, };
+
+export type ProgrammingValuesChange = { user_id: string, revision: number, fixture_values: Array<ProgrammingFixtureValue>, removed_fixture_values: Array<ProgrammingFixtureValueAddress>, group_values: Array<ProgrammingGroupValue>, removed_group_values: Array<ProgrammingGroupValueAddress>, dynamic_definitions?: Array<DynamicDefinitionProjection>, dynamic_values: Array<ProgrammingDynamicValue>, removed_dynamic_values: Array<ProgrammingFixtureValueAddress>, };
 
 export type ProgrammingValuesSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingValuesProjection, };
 
@@ -569,9 +577,9 @@ export type ProgrammingUpdateSettingsUpdateOutcome = { request_id: string, repla
 
 export type PlaybackSurface = "virtual" | "physical";
 
-export type PlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "group", group_id: string, } | { "kind": "playback", playback_number: number, } | { "kind": "current_page", slot: number, } | { "kind": "explicit_page", page: number, slot: number, };
+export type PlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "group", group_id: string, } | { "kind": "playback", playback_number: number, } | { "kind": "virtual", page: number, playback_number: number, } | { "kind": "current_page", slot: number, } | { "kind": "explicit_page", page: number, slot: number, };
 
-export type ResolvedPlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "group", group_id: string, playback_number: number | null, } | { "kind": "playback", playback_number: number, page: number | null, slot: number | null, };
+export type ResolvedPlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "group", group_id: string, playback_number: number | null, } | { "kind": "playback", playback_number: number, page: number | null, slot: number | null, } | { "kind": "virtual", page: number, playback_number: number, };
 
 export type PlaybackAction = { "type": "go", pressed: boolean, } | { "type": "back", pressed: boolean, } | { "type": "pause", pressed: boolean, } | { "type": "release" } | { "type": "on", pressed: boolean, } | { "type": "off", pressed: boolean, } | { "type": "toggle", pressed: boolean, } | { "type": "fast_forward", pressed: boolean, } | { "type": "fast_rewind", pressed: boolean, } | { "type": "flash", pressed: boolean, } | { "type": "temp", pressed: boolean, } | { "type": "swap", pressed: boolean, } | { "type": "select", pressed: boolean, } | { "type": "select_contents", pressed: boolean, } | { "type": "select_dereferenced", pressed: boolean, } | { "type": "learn", pressed: boolean, } | { "type": "double", pressed: boolean, } | { "type": "half", pressed: boolean, } | { "type": "blackout", pressed: boolean, } | { "type": "pause_dynamics", pressed: boolean, } | { "type": "dynamic_restart", pressed: boolean, } | { "type": "dynamic_double_speed", pressed: boolean, } | { "type": "dynamic_half_speed", pressed: boolean, } | { "type": "dynamic_learn_speed", pressed: boolean, } | { "type": "none", pressed: boolean, } | { "type": "master", value: number, } | { "type": "go_to", cue_number: number, } | { "type": "load", cue_number: number, } | { "type": "crossfade", enabled: boolean, } | { "type": "temporary", enabled: boolean, pressed: boolean, } | { "type": "configured_button", number: number, pressed: boolean, };
 
@@ -581,7 +589,7 @@ export type PlaybackOutcome = { "status": "applied" } | { "status": "no_change" 
 
 export type PlaybackDurability = "durable" | "persistence_pending";
 
-export type PlaybackRuntimeIdentity = { "kind": "playback", playback_number: number, } | { "kind": "cue_list", cue_list_id: string, } | { "kind": "group", group_id: string, };
+export type PlaybackRuntimeIdentity = { "kind": "playback", playback_number: number, } | { "kind": "virtual", page: number, playback_number: number, } | { "kind": "cue_list", cue_list_id: string, } | { "kind": "group", group_id: string, };
 
 export type PlaybackShowScope = { show_id: string, show_revision: number, };
 
@@ -855,11 +863,11 @@ export type PlaybackTopologyAction = { "type": "save_cue_list", cue_list_id: str
 /**
  * Extensible portable body; adapters strictly decode its known Cuelist fields.
  */
-body: unknown, } | { "type": "configure_slot", page: number, slot: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, playback: PlaybackTopologyPlaybackDefinition, } | { "type": "map_existing_playback", page: number, slot: number, playback_number: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, } | { "type": "create_page", page: number, expected_page_revision: number, expected_page_object_id: string | null, } | { "type": "rename_page", page: number, name: string, expected_page_revision: number, expected_page_object_id: string | null, } | { "type": "clear_mapped_playback", page: number, slot: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, };
+body: unknown, } | { "type": "configure_slot", page: number, slot: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, playback: PlaybackTopologyPlaybackDefinition, } | { "type": "configure_virtual", page: number, playback_number: number, expected_page_revision: number, expected_page_object_id: string | null, playback: PlaybackTopologyPlaybackDefinition, } | { "type": "map_existing_playback", page: number, slot: number, playback_number: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, } | { "type": "create_page", page: number, expected_page_revision: number, expected_page_object_id: string | null, } | { "type": "rename_page", page: number, name: string, expected_page_revision: number, expected_page_object_id: string | null, } | { "type": "clear_mapped_playback", page: number, slot: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, } | { "type": "clear_virtual", page: number, playback_number: number, expected_page_revision: number, expected_page_object_id: string | null, };
 
 export type PlaybackTopologyActionRequest = { request_id: string, action: PlaybackTopologyAction, };
 
-export type PlaybackTopologyResolution = { "kind": "cue_list", cue_list_id: string, } | { "kind": "page_slot", page: number, slot: number, playback_number: number | null, } | { "kind": "page", page: number, };
+export type PlaybackTopologyResolution = { "kind": "cue_list", cue_list_id: string, } | { "kind": "page_slot", page: number, slot: number, playback_number: number | null, } | { "kind": "virtual", page: number, playback_number: number, } | { "kind": "page", page: number, };
 
 export type PlaybackTopologyObjectProjection = { "state": "present", kind: ShowObjectKind, object_id: string, object_revision: number, body: unknown, } | { "state": "deleted", kind: ShowObjectKind, object_id: string, object_revision: number, };
 
@@ -1044,7 +1052,7 @@ export type RuntimeRevisionCopySource = { show_id: string, show_name: string, re
 
 export type RuntimeShowEntry = { id: string, name: string, path: string, revision: number, updated_at: string, revision_copy: RuntimeRevisionCopySource | null, };
 
-export type RuntimeOutputHealth = { frames_sent: number, packets_sent: number, send_errors: number, deadline_misses: number, maximum_lateness_micros: number, frame_hz: number, last_tick_micros: number, maximum_tick_micros: number, scheduler_utilization: number, };
+export type RuntimeOutputHealth = { frames_sent: number, packets_sent: number, send_errors: number, deadline_misses: number, maximum_lateness_micros: number, frame_hz: number, last_tick_micros: number, maximum_tick_micros: number, tick_duration_bucket_bounds_micros: number[], tick_duration_bucket_counts: number[], scheduler_utilization: number, };
 
 export type RuntimeClientSummary = { client_id: string, name: string, connected: boolean, last_connected_at: string | null, desk: RuntimeControlDesk, can_remove: boolean, };
 
@@ -1064,7 +1072,7 @@ active_programmers: unknown[], highlight_states: Array<RuntimeBootstrapHighlight
 
 export type RuntimeReadinessSnapshot = { status: string, active_show: string | null, active_show_error: string | null, recovery_mode: boolean, snapshot_revision: number, };
 
-export type RuntimeVisualizationDiagnostics = { normal_subscribers: number, preload_subscribers: number, projections: number, projection_micros: number, payload_bytes: number, source_age_millis: number, skipped_source_frames: number, snapshot_requests: number, snapshot_projection_micros: number, snapshot_serialization_micros: number, snapshot_payload_bytes: number, snapshot_source_frame: number, snapshot_source_age_millis: number, };
+export type RuntimeVisualizationDiagnostics = { normal_subscribers: number, preload_subscribers: number, projections: number, projection_micros: number, payload_bytes: number, source_age_millis: number, skipped_source_frames: number, snapshot_requests: number, snapshot_projection_micros: number, snapshot_serialization_micros: number, snapshot_payload_bytes: number, snapshot_source_frame: number, snapshot_source_age_millis: number, stream_serializations: number, stream_serialization_micros: number, stream_payload_bytes: number, stream_sends: number, stream_send_micros: number, stream_send_failures: number, stream_queue_depth: number, stream_queue_drops: number, };
 
 export type RuntimeDiagnosticsSnapshot = { output: RuntimeOutputHealth, output_bind_ip: string, output_routes: unknown, route_send_errors: unknown, active_programmers: unknown, active_playbacks: unknown, move_in_black: unknown, timecode_source: string | null, media_servers: unknown, snapshot_revision: number, visualization: RuntimeVisualizationDiagnostics, };
 
@@ -1086,15 +1094,31 @@ export type ScreenConfigurationPatch = { name: string | null, layout: unknown, s
 
 export type ScreenConfigurationActionOutcome = { request_id: string, replayed: boolean, screen: ScreenConfiguration | null, active_page: number | null, };
 
-export type VirtualPlaybackExclusionZone = { id: string, name: string, slots: Array<number>, };
+export type VirtualPlaybackExclusionZone = { id: string, name: string,
+/**
+ * One-based logical cell positions on the owning Virtual Playback surface.
+ */
+slots: Array<number>, };
 
-export type VirtualPlaybackExclusionSnapshot = { show_id: string, desks: { [key in string]: { [key in string]: Array<VirtualPlaybackExclusionZone> } }, };
+export type VirtualPlaybackSurfacePageMode = { "type": "follow_main" } | { "type": "pinned", page: number, };
 
-export type VirtualPlaybackExclusionUpdateRequest = { request_id: string, zones: Array<VirtualPlaybackExclusionZone>, };
+export type VirtualPlaybackExclusionSurface = { revision: number, page_mode: VirtualPlaybackSurfacePageMode, zones: Array<VirtualPlaybackExclusionZone>, };
 
-export type VirtualPlaybackExclusionUpdateOutcome = { request_id: string, show_id: string, desk_id: string, surface_id: string, zones: Array<VirtualPlaybackExclusionZone>, replayed: boolean, changed: boolean, };
+export type VirtualPlaybackExclusionSnapshot = { show_id: string, desks: { [key in string]: { [key in string]: VirtualPlaybackExclusionSurface } }, };
+
+export type VirtualPlaybackExclusionUpdateRequest = { request_id: string, expected_revision: number, page_mode: VirtualPlaybackSurfacePageMode, zones: Array<VirtualPlaybackExclusionZone>, };
+
+export type VirtualPlaybackExclusionUpdateOutcome = { request_id: string, show_id: string, desk_id: string, surface_id: string, surface: VirtualPlaybackExclusionSurface, replayed: boolean, changed: boolean, };
 
 export type VirtualPlaybackExclusionZonesChange = { show_id: string, desk_id: string, surface_id: string, };
+
+export type VisualizationScope = {
+/**
+ * The authoritative Show that produced this frame. `None` represents the
+ * no-active-Show runtime state and prevents a previous Show frame from
+ * being mistaken for the replacement Show at the same revision.
+ */
+show_id: string | null, };
 
 export type VisualizationLane = "normal" | "preload";
 
@@ -1108,11 +1132,11 @@ export type VisualizationStackEntryType = "ordinary_static" | "dynamic" | "fix_a
 
 export type VisualizationDynamicStackEntry = { fixture_id: string, attribute: string, entry_type: VisualizationStackEntryType, priority: number, changed_at_millis: number, source: string, dynamic_id: string | null, pool_number: number | null, name: string, runtime_instance_id: string | null, controller_id: string | null, lane_id: string | null, size: number | null, activation_mix: number | null, paused: boolean, hidden: boolean, pending: boolean, winning: boolean, value: ProgrammingPreloadAttributeValue | null, resolved_value: ProgrammingPreloadAttributeValue | null, };
 
-export type VisualizationLaneSnapshot = { revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, dynamic_stack?: Array<VisualizationDynamicStackEntry>, profile_output_values: Array<VisualizationValue>, };
+export type VisualizationLaneSnapshot = { scope: VisualizationScope, revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, dynamic_stack?: Array<VisualizationDynamicStackEntry>, profile_output_values: Array<VisualizationValue>, };
 
-export type VisualizationLaneDelta = { revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, removed_values: Array<VisualizationValueKey>, dynamic_stack: Array<VisualizationDynamicStackEntry>, profile_output_values: Array<VisualizationValue>, removed_profile_output_values: Array<VisualizationValueKey>, };
+export type VisualizationLaneDelta = { scope: VisualizationScope, revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, removed_values: Array<VisualizationValueKey>, dynamic_stack: Array<VisualizationDynamicStackEntry>, profile_output_values: Array<VisualizationValue>, removed_profile_output_values: Array<VisualizationValueKey>, };
 
-export type VisualizationServerMessage = { "type": "hello", protocol_version: number, max_rate_hz: number, lanes: Array<VisualizationLane>, } | { "type": "snapshot", lane: VisualizationLane, sequence: number, source_frame: number, source_timestamp: string, published_at: string, snapshot: VisualizationLaneSnapshot, } | { "type": "delta", lane: VisualizationLane, sequence: number, source_frame: number, source_timestamp: string, published_at: string, delta: VisualizationLaneDelta, } | { "type": "heartbeat", sequence: number, published_at: string, } | { "type": "structural_invalidation", revision: number, } | { "type": "error", code: string, message: string, };
+export type VisualizationServerMessage = { "type": "hello", protocol_version: number, max_rate_hz: number, lanes: Array<VisualizationLane>, scope: VisualizationScope, } | { "type": "snapshot", lane: VisualizationLane, scope: VisualizationScope, sequence: number, source_frame: number, source_timestamp: string, published_at: string, snapshot: VisualizationLaneSnapshot, } | { "type": "delta", lane: VisualizationLane, scope: VisualizationScope, sequence: number, source_frame: number, source_timestamp: string, published_at: string, delta: VisualizationLaneDelta, } | { "type": "heartbeat", scope: VisualizationScope, sequence: number, published_at: string, } | { "type": "structural_invalidation", scope: VisualizationScope, revision: number, } | { "type": "error", code: string, message: string, };
 
 export type SelectiveImportObjectKey = { kind: string, id: string, };
 

@@ -1,10 +1,20 @@
-/** Legacy grid cells remain portable even though Playback assignments stop at 127. */
-export const MAX_PERSISTED_VIRTUAL_PLAYBACK_ZONE_SLOT = 144;
+/** One-based surface cells map to Virtual Playback numbers 1001 through 9998. */
+export const MAX_PERSISTED_VIRTUAL_PLAYBACK_ZONE_SLOT = 8_998;
 
 export interface VirtualPlaybackZone {
 	readonly id: string;
 	readonly name: string;
 	readonly slots: readonly number[];
+}
+
+export type VirtualPlaybackSurfacePageMode =
+	| { readonly type: "follow_main" }
+	| { readonly type: "pinned"; readonly page: number };
+
+export interface VirtualPlaybackExclusionSurface {
+	readonly revision: number;
+	readonly pageMode: VirtualPlaybackSurfacePageMode;
+	readonly zones: readonly VirtualPlaybackZone[];
 }
 
 export interface VirtualPlaybackZonesScope {
@@ -23,7 +33,7 @@ export interface VirtualPlaybackZonesSnapshot {
 	readonly desks: Readonly<
 		Record<
 			string,
-			Readonly<Record<string, readonly VirtualPlaybackZone[]>>
+			Readonly<Record<string, VirtualPlaybackExclusionSurface>>
 		>
 	>;
 }
@@ -33,7 +43,7 @@ export interface VirtualPlaybackZonesSaveOutcome {
 	readonly showId: string;
 	readonly deskId: string;
 	readonly surfaceId: string;
-	readonly zones: readonly VirtualPlaybackZone[];
+	readonly surface: VirtualPlaybackExclusionSurface;
 	readonly replayed: boolean;
 	readonly changed: boolean;
 }
@@ -63,6 +73,8 @@ export interface VirtualPlaybackZonesTransport {
 	saveSurface(
 		scope: VirtualPlaybackZonesScope,
 		surfaceId: string,
+		expectedRevision: number,
+		pageMode: VirtualPlaybackSurfacePageMode,
 		zones: readonly VirtualPlaybackZone[],
 		requestId: string,
 		signal?: AbortSignal,
@@ -87,6 +99,7 @@ export interface VirtualPlaybackZonesCapability {
 	loadSurface(surfaceId: string): Promise<readonly VirtualPlaybackZone[] | null>;
 	saveSurface(
 		surfaceId: string,
+		pageMode: VirtualPlaybackSurfacePageMode,
 		zones: readonly VirtualPlaybackZone[],
 	): Promise<readonly VirtualPlaybackZone[] | null>;
 	clearError(): void;

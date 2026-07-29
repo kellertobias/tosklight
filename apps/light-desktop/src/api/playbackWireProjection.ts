@@ -28,6 +28,7 @@ export function decodePlaybackIdentity(
 	const identity = recordAt(value, path);
 	const kind = enumAt(identity.kind, `${path}.kind`, [
 		"playback",
+		"virtual",
 		"cue_list",
 		"group",
 	]);
@@ -39,6 +40,15 @@ export function decodePlaybackIdentity(
 					`${path}.playback_number`,
 				),
 			};
+	if (kind === "virtual")
+		return {
+			kind,
+			page: positiveIntegerAt(identity.page, `${path}.page`),
+			playback_number: positiveIntegerAt(
+				identity.playback_number,
+				`${path}.playback_number`,
+			),
+		};
 	if (kind === "cue_list")
 		return {
 				kind,

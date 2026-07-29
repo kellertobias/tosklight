@@ -167,11 +167,13 @@ async function prepare(
 		number: 1,
 		name: "Main",
 		slots: { "1": 41, "2": 43 },
+		virtual_playbacks: {},
 	});
 	await putObject(api, "playback_page", "2", {
 		number: 2,
 		name: "Page 2",
 		slots: { "1": 42 },
+		virtual_playbacks: {},
 	});
 	return { firstCuelist, secondCuelist, showId: show.id };
 }

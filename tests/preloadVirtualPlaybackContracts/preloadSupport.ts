@@ -42,6 +42,17 @@ export function playbackPendingObservation(
 	]);
 }
 
+export function virtualPlaybackPendingObservation(
+	state: any,
+): Array<[number, number, string, string]> {
+	return state.preload_playback_pending.map((entry: any) => [
+		entry.page,
+		entry.playback_number,
+		entry.action,
+		entry.surface,
+	]);
+}
+
 export function captureMask(
 	config: Configuration,
 ): [boolean, boolean, boolean] {
@@ -114,7 +125,17 @@ export interface VirtualZoneFixture {
 
 export interface VirtualZoneSnapshot {
 	show_id: string;
-	desks: Record<string, Record<string, VirtualZoneFixture[]>>;
+	desks: Record<string, Record<string, VirtualZoneSurface>>;
+}
+
+export type VirtualZonePageMode =
+	| { type: "follow_main" }
+	| { type: "pinned"; page: number };
+
+export interface VirtualZoneSurface {
+	revision: number;
+	page_mode: VirtualZonePageMode;
+	zones: VirtualZoneFixture[];
 }
 
 export interface VirtualZoneSaveOutcome {
@@ -122,7 +143,7 @@ export interface VirtualZoneSaveOutcome {
 	show_id: string;
 	desk_id: string;
 	surface_id: string;
-	zones: VirtualZoneFixture[];
+	surface: VirtualZoneSurface;
 	replayed: boolean;
 	changed: boolean;
 }
@@ -145,13 +166,23 @@ export async function saveVirtualZoneSurface(
 	api: ApiDriver,
 	surfaceId: string,
 	zones: readonly VirtualZoneFixture[],
+	options: {
+		expectedRevision?: number;
+		pageMode?: VirtualZonePageMode;
+		requestId?: string;
+	} = {},
 ) {
 	const showId = await activeShowId(api);
-	const requestId = crypto.randomUUID();
+	const requestId = options.requestId ?? crypto.randomUUID();
 	return api.request<VirtualZoneSaveOutcome>(
 		"POST",
 		`/api/v2/virtual-playback-exclusion-zones/${encodeURIComponent(surfaceId)}/update`,
-		{ request_id: requestId, zones },
+		{
+			request_id: requestId,
+			expected_revision: options.expectedRevision ?? 0,
+			page_mode: options.pageMode ?? { type: "follow_main" },
+			zones,
+		},
 		true,
 		undefined,
 		{ showId },
@@ -166,7 +197,7 @@ export async function normalizedVirtualZones(
 	return Object.values(
 		surfaces,
 	)
-		.flat()
+		.flatMap((surface) => surface.zones)
 		.map((zone) => ({ name: zone.name, slots: [...zone.slots] }))
 		.sort((left, right) => left.name.localeCompare(right.name));
 }

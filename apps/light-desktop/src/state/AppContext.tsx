@@ -121,9 +121,11 @@ export function AppProvider({ children }: PropsWithChildren) {
 }
 
 function activeSetTarget(state: AppState) {
-	if (state.builtIn === "patch") return "patch" as const;
+	if (state.dockMode === "builtins" && state.builtIn === "patch")
+		return "patch" as const;
+	if (state.controlMode === "playbacks") return "playback" as const;
 	const kinds =
-		state.builtIn == null
+		state.dockMode === "desks"
 			? (state.desks
 					.find((desk) => desk.id === state.activeDeskId)
 					?.panes.filter(
@@ -132,7 +134,9 @@ function activeSetTarget(state: AppState) {
 							pane.id === state.maximizedPaneId,
 					)
 					.map((pane) => pane.kind) ?? [])
-			: [state.builtIn];
+			: state.builtIn
+				? [state.builtIn]
+				: [];
 	if (
 		kinds.some((kind) =>
 			[

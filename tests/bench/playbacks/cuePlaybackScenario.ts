@@ -430,10 +430,10 @@ export class BrowserRecording {
 		await this.page.mouse.up();
 		const dialog = this.page.locator(".store-settings-modal");
 		await expect(dialog).toBeVisible();
-		const cueOnly = dialog.getByLabel("Cue only");
+		const cueOnly = dialog.getByLabel("Cue only", { exact: true });
 		if ((await cueOnly.isChecked()) !== checked)
 			await this.desk.click(
-				dialog.locator("label").filter({ hasText: "Cue only" }),
+				cueOnly.locator("..").locator(".ui-switch-track"),
 			);
 		if (checked) await expect(cueOnly).toBeChecked();
 		else await expect(cueOnly).not.toBeChecked();

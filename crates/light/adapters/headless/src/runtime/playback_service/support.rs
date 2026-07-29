@@ -18,6 +18,21 @@ pub(super) fn playback_definition(
         .ok_or_else(|| ActionError::new(ActionErrorKind::NotFound, "playback"))
 }
 
+pub(super) fn virtual_playback_definition(
+    state: &AppState,
+    address: light_playback::VirtualPlaybackAddress,
+) -> Result<light_playback::PlaybackDefinition, ActionError> {
+    state
+        .output
+        .snapshot()
+        .playback_pages
+        .iter()
+        .find(|page| page.number == address.page())
+        .and_then(|page| page.virtual_playbacks.get(&address.number().get()))
+        .cloned()
+        .ok_or_else(|| ActionError::new(ActionErrorKind::NotFound, "virtual playback"))
+}
+
 pub(super) fn resolve_group_playback(
     snapshot: &light_engine::EngineSnapshot,
     group_id: &str,

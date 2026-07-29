@@ -8,7 +8,7 @@ use light_application::{
 };
 use light_core::CueListId;
 use light_engine::EngineSnapshot;
-use light_playback::{PlaybackRuntimeStatus, PlaybackTarget};
+use light_playback::{PlaybackIdentity, PlaybackRuntimeStatus, PlaybackTarget};
 
 use super::{ServerPlaybackPorts, invalid, resolve_group_playback};
 
@@ -66,6 +66,9 @@ pub(super) fn projection(
     match identity {
         PlaybackRuntimeIdentity::Playback(number) => {
             project_playback(ports, &snapshot, &runtime, scope, identity, number)
+        }
+        PlaybackRuntimeIdentity::Virtual(address) => {
+            project_virtual(ports, &snapshot, &runtime, scope, identity, address)
         }
         PlaybackRuntimeIdentity::CueList(cue_list_id) => Ok(cue_list_projection(
             scope,
@@ -159,6 +162,11 @@ fn project_identity(
                 ports, snapshot, runtime, scope, identity, number,
             )?);
         }
+        PlaybackRuntimeIdentity::Virtual(address) => {
+            result.push(project_virtual(
+                ports, snapshot, runtime, scope, identity, address,
+            )?);
+        }
         PlaybackRuntimeIdentity::CueList(cue_list_id) => {
             project_cue_list(scope, snapshot, runtime, identity, cue_list_id, result);
         }
@@ -168,6 +176,79 @@ fn project_identity(
         }
     }
     Ok(())
+}
+
+fn project_virtual(
+    ports: &ServerPlaybackPorts<'_>,
+    snapshot: &EngineSnapshot,
+    runtime: &[PlaybackRuntimeStatus],
+    scope: PlaybackShowScope,
+    requested: PlaybackRuntimeIdentity,
+    address: light_playback::VirtualPlaybackAddress,
+) -> Result<PlaybackRuntimeProjection, ActionError> {
+    let definition = snapshot
+        .playback_pages
+        .iter()
+        .find(|page| page.number == address.page())
+        .and_then(|page| page.virtual_playbacks.get(&address.number().get()));
+    let Some(definition) = definition else {
+        return Ok(PlaybackRuntimeProjection {
+            scope,
+            requested,
+            playback_number: Some(address.number().get()),
+            target: PlaybackTargetProjection::Missing,
+        });
+    };
+    let target = match &definition.target {
+        PlaybackTarget::CueList { cue_list_id } => {
+            return Ok(cue_list_projection(
+            scope,
+            requested,
+            Some(address.number().get()),
+            *cue_list_id,
+            runtime.iter().find(|status| {
+                status.playback.playback_identity == Some(PlaybackIdentity::Virtual(address))
+            }),
+            ));
+        }
+        PlaybackTarget::Dynamic { assignment } => PlaybackTargetProjection::Dynamic {
+            dynamic_id: assignment.dynamic.dynamic_id,
+            last_known_pool_number: assignment.dynamic.last_known_pool_number,
+            embedded: assignment.dynamic.dynamic_id.is_none(),
+            runtime: ports
+                .state
+                .output
+                .active_dynamic_playbacks()
+                .into_iter()
+                .find(|active| {
+                    active.playback_identity == Some(PlaybackIdentity::Virtual(address))
+                })
+                .map(|active| dynamic_runtime_projection(ports, snapshot, assignment, active)),
+        },
+        PlaybackTarget::Group { group_id } => group_projection(ports, snapshot, group_id)?,
+        PlaybackTarget::SpeedGroup { group } => speed_projection(ports, group)?,
+        PlaybackTarget::GrandMaster => grand_master_projection(ports),
+        PlaybackTarget::ProgrammerFade => PlaybackTargetProjection::ProgrammerFade {
+            millis: ports
+                .state
+                .installation
+                .configuration()
+                .programmer_fade_millis,
+        },
+        PlaybackTarget::CueFade => PlaybackTargetProjection::CueFade {
+            millis: ports
+                .state
+                .installation
+                .configuration()
+                .sequence_master_fade_millis,
+        },
+    };
+    Ok(PlaybackRuntimeProjection {
+        scope,
+        requested,
+        playback_number: Some(address.number().get()),
+        target,
+    })
 }
 
 fn project_group(
@@ -336,7 +417,7 @@ fn dynamic_runtime_projection_from_snapshot(
         .dynamic_id
         .and_then(|id| snapshot.dynamics.iter().find(|dynamic| dynamic.id == id))
         .unwrap_or(&assignment.dynamic.embedded_fallback.definition);
-    let controller_id = dynamic_playback_controller_id(active.playback_number);
+    let controller_id = dynamic_playback_controller_id_for_active(&active);
     let stored_instance = runtime.instances.iter().find(|instance| {
         instance
             .controllers
@@ -521,6 +602,18 @@ pub(in crate::runtime) fn dynamic_target_lane_coverage(
 
 const fn dynamic_playback_controller_id(playback_number: u16) -> uuid::Uuid {
     uuid::Uuid::from_u128(0x4459_4e41_4d49_432d_504c_4159_4241_434b ^ playback_number as u128)
+}
+
+fn dynamic_playback_controller_id_for_active(
+    active: &light_playback::ActiveDynamicPlayback,
+) -> uuid::Uuid {
+    let address = match active.playback_identity {
+        Some(PlaybackIdentity::Virtual(address)) => {
+            (u128::from(address.page()) << 16) | u128::from(address.number().get())
+        }
+        _ => u128::from(active.playback_number),
+    };
+    uuid::Uuid::from_u128(0x4459_4e41_4d49_432d_504c_4159_4241_434b ^ address)
 }
 
 fn show_scope(ports: &ServerPlaybackPorts<'_>, snapshot: &EngineSnapshot) -> PlaybackShowScope {

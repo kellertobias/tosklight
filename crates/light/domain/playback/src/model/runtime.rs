@@ -7,7 +7,17 @@ fn default_true() -> bool {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum PlaybackKey {
     Number(u16),
+    Virtual(VirtualPlaybackAddress),
     CueList(CueListId),
+}
+
+impl PlaybackKey {
+    pub(crate) const fn from_identity(identity: PlaybackIdentity) -> Self {
+        match identity {
+            PlaybackIdentity::Physical(number) => Self::Number(number.get()),
+            PlaybackIdentity::Virtual(address) => Self::Virtual(address),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -67,6 +77,10 @@ pub struct PlaybackPreloadTimingState {
 pub struct ActivePlayback {
     #[serde(default)]
     pub playback_number: Option<u16>,
+    /// Stable address authority for runtimes which cannot be identified by the legacy scalar
+    /// Playback number alone. Older persisted physical and direct-Cuelist rows omit this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub playback_identity: Option<PlaybackIdentity>,
     /// Internal restart authority. Public runtime payloads deliberately omit this field.
     #[serde(default, skip_serializing)]
     pub activation: Option<PlaybackActivationProvenance>,
@@ -176,6 +190,8 @@ pub struct ActiveCueDynamicValue {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ActiveDynamicPlayback {
     pub playback_number: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub playback_identity: Option<PlaybackIdentity>,
     pub enabled: bool,
     pub paused: bool,
     #[serde(default)]
@@ -233,6 +249,7 @@ pub struct MoveInBlackCandidate {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct SequenceMasterSource {
     pub playback_number: Option<u16>,
+    pub playback_identity: Option<PlaybackIdentity>,
     pub cue_list_id: CueListId,
     pub temporary: bool,
 }
@@ -323,6 +340,7 @@ pub(crate) fn new_active_playback(
 ) -> ActivePlayback {
     ActivePlayback {
         playback_number,
+        playback_identity: None,
         activation: None,
         cue_list_id: cue_list.id,
         cue_index: 0,

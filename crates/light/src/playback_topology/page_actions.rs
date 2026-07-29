@@ -38,6 +38,7 @@ pub(super) fn create_page(
         number,
         name: format!("Page {number}"),
         slots: HashMap::new(),
+        virtual_playbacks: HashMap::new(),
     };
     desired.validate().map_err(invalid)?;
     let object_id = page_object_id(document, None, number)?;

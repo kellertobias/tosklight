@@ -17,12 +17,13 @@ import {
 	usePlaybackDeskView,
 	usePlaybackRuntimeStatus,
 } from "../../features/playbackRuntime/PlaybackRuntimeView";
-import {
-	MAX_PERSISTED_VIRTUAL_PLAYBACK_ZONE_SLOT,
-	type VirtualPlaybackZone,
-} from "../../features/virtualPlaybackZones/contracts";
+import type { VirtualPlaybackZone } from "../../features/virtualPlaybackZones/contracts";
 import { PRESET_FAMILIES } from "../../presetFamilies";
 import { useApp } from "../../state/AppContext";
+import {
+	MAX_PLAYBACK_PAGE,
+	MAX_VIRTUAL_PLAYBACK_CELLS,
+} from "../../state/reducers/paneOptionsReducer";
 import { GRID_COLUMNS, GRID_ROWS, type PaneModel } from "../../types";
 import { useVirtualPlaybackSurfaceZones } from "../control/virtualPlayback/useVirtualPlaybackSurfaceZones";
 import { PoolColorSettings } from "../shared/PoolColorSettings";
@@ -35,15 +36,15 @@ import {
 function VirtualPlaybackZoneEditor({
 	zone,
 	zones,
-	visibleCells,
 	saving,
 	persist,
+	onEdit,
 }: {
 	zone: VirtualPlaybackZone;
 	zones: readonly VirtualPlaybackZone[];
-	visibleCells: number;
 	saving: boolean;
 	persist: (zones: readonly VirtualPlaybackZone[]) => void;
+	onEdit: (zone: VirtualPlaybackZone) => void;
 }) {
 	const [name, setName] = useState(zone.name);
 	const saveName = () => {
@@ -56,19 +57,6 @@ function VirtualPlaybackZoneEditor({
 			),
 		);
 	};
-	const toggleSlot = (slot: number) => {
-		if (slot < 1 || slot > MAX_PERSISTED_VIRTUAL_PLAYBACK_ZONE_SLOT) return;
-		const slots = zone.slots.includes(slot)
-			? zone.slots.filter((candidate) => candidate !== slot)
-			: [...zone.slots, slot].sort((left, right) => left - right);
-		if (slots.length < 2) return;
-		persist(
-			zones.map((candidate) =>
-				candidate.id === zone.id ? { ...candidate, slots } : candidate,
-			),
-		);
-	};
-	const hiddenSlots = zone.slots.filter((slot) => slot > visibleCells);
 	return (
 		<article className="virtual-playback-zone-editor">
 			<header>
@@ -85,6 +73,9 @@ function VirtualPlaybackZoneEditor({
 				>
 					Save name
 				</Button>
+				<Button disabled={saving} onClick={() => onEdit(zone)}>
+					Edit Zone
+				</Button>
 				<Button
 					className="danger"
 					disabled={saving}
@@ -95,46 +86,8 @@ function VirtualPlaybackZoneEditor({
 					Delete zone
 				</Button>
 			</header>
-			<div
-				className="virtual-playback-zone-members"
-				role="group"
-				aria-label={`${zone.name} cells`}
-			>
-				{Array.from({ length: visibleCells }, (_, index) => index + 1).map(
-					(slot) => (
-						<Button
-							key={slot}
-							active={zone.slots.includes(slot)}
-							disabled={saving}
-							aria-label={`${zone.name} cell ${slot}`}
-							onClick={() => toggleSlot(slot)}
-						>
-							{slot}
-						</Button>
-					),
-				)}
-			</div>
-			{hiddenSlots.length > 0 && (
-				<div className="virtual-playback-zone-hidden">
-					<small>
-						{hiddenSlots.length} hidden grid{" "}
-						{hiddenSlots.length === 1 ? "cell is" : "cells are"} retained:
-					</small>
-					{hiddenSlots.map((slot) => (
-						<Button
-							key={slot}
-							active
-							disabled={saving}
-							aria-label={`${zone.name} hidden cell ${slot}`}
-							onClick={() => toggleSlot(slot)}
-						>
-							{slot}
-						</Button>
-					))}
-				</div>
-			)}
 			<small>
-				{zone.slots.length} cells · zone order{" "}
+				Cells {zone.slots.join(", ")} · zone order{" "}
 				{zones.findIndex((candidate) => candidate.id === zone.id) + 1}
 			</small>
 		</article>
@@ -143,12 +96,10 @@ function VirtualPlaybackZoneEditor({
 
 function VirtualPlaybackZoneSettings({
 	pane,
-	rows,
-	columns,
+	onEditZone,
 }: {
 	pane: PaneModel;
-	rows: number;
-	columns: number;
+	onEditZone: (zone: VirtualPlaybackZone) => void;
 }) {
 	const desk = usePlaybackDeskView(true);
 	const runtimeStatus = usePlaybackRuntimeStatus();
@@ -157,14 +108,19 @@ function VirtualPlaybackZoneSettings({
 		surfaceId: pane.id,
 		active: true,
 		authorityReady,
+		pageMode:
+			(pane.virtualPlaybackPageMode ?? "follow_main") === "pinned"
+				? {
+						type: "pinned",
+						page: pane.virtualPlaybackPinnedPage ?? 1,
+					}
+				: { type: "follow_main" },
 	});
-	const visibleCells = Math.min(rows * columns, 127);
 	return (
 		<section
 			className="virtual-playback-zone-settings"
 			aria-label="Playback Exclusion Zones"
 		>
-			<h3>Playback Exclusion Zones</h3>
 			<p>
 				Shift-select at least two cells in the pane to create a zone. A newly
 				activated member releases the other active members; creating or editing
@@ -183,9 +139,9 @@ function VirtualPlaybackZoneSettings({
 						key={zone.id}
 						zone={zone}
 						zones={surface.zones}
-						visibleCells={visibleCells}
 						saving={surface.saving}
 						persist={(next) => void surface.persist(next)}
+						onEdit={onEditZone}
 					/>
 				))
 			)}
@@ -450,7 +406,7 @@ function PaneSettingsDialog({ pane }: { pane: PaneModel }) {
 						}
 					/>
 					<SwitchField
-						label="Beam direction guides"
+						label="Beam direction guidelines"
 						offLabel="Hidden"
 						onLabel="Visible"
 						checked={pane.showBeamGuides ?? true}
@@ -487,6 +443,8 @@ function PaneSettingsDialog({ pane }: { pane: PaneModel }) {
 	if (pane.kind === "virtual_playbacks") {
 		const rows = pane.virtualPlaybackRows ?? 2;
 		const columns = pane.virtualPlaybackColumns ?? 2;
+		const pageMode = pane.virtualPlaybackPageMode ?? "follow_main";
+		const pinnedPage = pane.virtualPlaybackPinnedPage ?? 1;
 		tabs.push({
 			id: "virtual",
 			label: "Virtual Playbacks",
@@ -496,7 +454,7 @@ function PaneSettingsDialog({ pane }: { pane: PaneModel }) {
 						<NumberField
 							label="Rows"
 							min="1"
-							max="12"
+							max={String(MAX_VIRTUAL_PLAYBACK_CELLS)}
 							value={rows}
 							onChange={(event) =>
 								dispatch({
@@ -504,13 +462,14 @@ function PaneSettingsDialog({ pane }: { pane: PaneModel }) {
 									id: pane.id,
 									rows: Number(event.target.value),
 									columns,
+									changed: "rows",
 								})
 							}
 						/>
 						<NumberField
 							label="Columns"
 							min="1"
-							max="12"
+							max={String(MAX_VIRTUAL_PLAYBACK_CELLS)}
 							value={columns}
 							onChange={(event) =>
 								dispatch({
@@ -518,21 +477,70 @@ function PaneSettingsDialog({ pane }: { pane: PaneModel }) {
 									id: pane.id,
 									rows,
 									columns: Number(event.target.value),
+									changed: "columns",
 								})
 							}
 						/>
+						<MultiValueToggleField
+							label="Page mode"
+							value={pageMode}
+							onChange={(mode) =>
+								dispatch({
+									type: "SET_VIRTUAL_PLAYBACK_PAGE_MODE",
+									id: pane.id,
+									mode,
+									pinnedPage,
+								})
+							}
+							options={[
+								{ value: "follow_main", label: "Follow Main" },
+								{ value: "pinned", label: "Pinned" },
+							]}
+						/>
+						{pageMode === "pinned" && (
+							<NumberField
+								label="Pinned page"
+								min="1"
+								max={String(MAX_PLAYBACK_PAGE)}
+								value={pinnedPage}
+								onChange={(event) =>
+									dispatch({
+										type: "SET_VIRTUAL_PLAYBACK_PAGE_MODE",
+										id: pane.id,
+										mode: "pinned",
+										pinnedPage: Number(event.target.value),
+									})
+								}
+							/>
+						)}
 					</FormLayout>
-					<p>
-						Assign cells with <b>Set Source</b>, <b>Add Target</b>, or the
-						normal [SET], source, target sequence.
+					<p role="status">
+						{(rows * columns).toLocaleString()} of{" "}
+						{MAX_VIRTUAL_PLAYBACK_CELLS.toLocaleString()} available Virtual
+						Playback positions.
 					</p>
-					<PoolColorSettings objectType="cuelist" paneId={pane.id} />
-					<VirtualPlaybackZoneSettings
-						pane={pane}
-						rows={rows}
-						columns={columns}
-					/>
 				</>
+			),
+		});
+		tabs.push({
+			id: "virtual-exclusion-zones",
+			label: "Exclusion Zones",
+			content: (
+				<VirtualPlaybackZoneSettings
+					pane={pane}
+					onEditZone={(zone) => {
+						dispatch({
+							type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT",
+							edit: {
+								surfaceId: pane.id,
+								zoneId: zone.id,
+								name: zone.name,
+								slots: [...zone.slots],
+							},
+						});
+						close();
+					}}
+				/>
 			),
 		});
 	}

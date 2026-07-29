@@ -14,6 +14,7 @@ pub(super) fn configured_page(
             number: page,
             name: format!("Page {page}"),
             slots: HashMap::new(),
+            virtual_playbacks: HashMap::new(),
         },
         |stored| stored.typed.clone(),
     );

@@ -88,6 +88,23 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		);
 	}
 
+	configureVirtual(
+		page: number,
+		playbackNumber: number,
+		playback: PlaybackDefinition,
+		revisionBasis?: PlaybackPageRevisionBasis,
+	) {
+		return this.lifecycle.enqueue((generation) =>
+			this.configureVirtualNow(
+				generation,
+				page,
+				playbackNumber,
+				playback,
+				revisionBasis,
+			),
+		);
+	}
+
 	mapExistingPlayback(
 		page: number,
 		slot: number,
@@ -112,6 +129,16 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 	) {
 		return this.lifecycle.enqueue((generation) =>
 			this.clearMappedPlaybackNow(generation, page, slot, revisionBasis),
+		);
+	}
+
+	clearVirtual(
+		page: number,
+		playbackNumber: number,
+		revisionBasis?: PlaybackPageRevisionBasis,
+	) {
+		return this.lifecycle.enqueue((generation) =>
+			this.clearVirtualNow(generation, page, playbackNumber, revisionBasis),
 		);
 	}
 
@@ -190,9 +217,37 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 	) {
 		const revisions = this.readySlotRevisions(page, slot, revisionBasis);
 		if (!revisions)
-			return this.fail("Authoritative Playback topology is loading", generation);
+			return this.fail(
+				"Authoritative Playback topology is loading",
+				generation,
+			);
 		return this.apply(
 			{ type: "configure_slot", page, slot, ...revisions, playback },
+			generation,
+		);
+	}
+
+	private configureVirtualNow(
+		generation: number,
+		page: number,
+		playbackNumber: number,
+		playback: PlaybackDefinition,
+		revisionBasis?: PlaybackPageRevisionBasis,
+	) {
+		const revisions = this.readyPageRevisions(page, revisionBasis);
+		if (!revisions)
+			return this.fail(
+				"Authoritative Playback topology is loading",
+				generation,
+			);
+		return this.apply(
+			{
+				type: "configure_virtual",
+				page,
+				playbackNumber,
+				...revisions,
+				playback,
+			},
 			generation,
 		);
 	}
@@ -205,9 +260,30 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 	) {
 		const revisions = this.readySlotRevisions(page, slot, revisionBasis);
 		if (!revisions)
-			return this.fail("Authoritative Playback topology is loading", generation);
+			return this.fail(
+				"Authoritative Playback topology is loading",
+				generation,
+			);
 		return this.apply(
 			{ type: "clear_mapped_playback", page, slot, ...revisions },
+			generation,
+		);
+	}
+
+	private clearVirtualNow(
+		generation: number,
+		page: number,
+		playbackNumber: number,
+		revisionBasis?: PlaybackPageRevisionBasis,
+	) {
+		const revisions = this.readyPageRevisions(page, revisionBasis);
+		if (!revisions)
+			return this.fail(
+				"Authoritative Playback topology is loading",
+				generation,
+			);
+		return this.apply(
+			{ type: "clear_virtual", page, playbackNumber, ...revisions },
 			generation,
 		);
 	}
@@ -270,6 +346,22 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 	) {
 		const current = this.slotRevisions(page, slot);
 		return current ? (revisionBasis ?? current) : null;
+	}
+
+	private readyPageRevisions(
+		page: number,
+		revisionBasis?: PlaybackPageRevisionBasis,
+	): PlaybackPageRevisionBasis | null {
+		const snapshot = this.options.store.getSnapshot();
+		if (!snapshot.readyCollections.has("playback_page")) return null;
+		if (revisionBasis) return revisionBasis;
+		const pageObject = snapshot.playbackPages.find(
+			(object) => object.body.number === page,
+		);
+		return {
+			expectedPageRevision: pageObject?.revision ?? 0,
+			expectedPageObjectId: pageObject?.id ?? null,
+		};
 	}
 
 	private existingPlaybackRevisions(
@@ -365,6 +457,8 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 			(page?.revision ?? 0) === action.expectedPageRevision;
 		if (action.type === "create_page" || action.type === "rename_page")
 			return pageCurrent;
+		if (action.type === "configure_virtual" || action.type === "clear_virtual")
+			return pageCurrent;
 		const playback = snapshot.playbacks.find(
 			(object) => object.id === action.expectedPlaybackObjectId,
 		);
@@ -425,6 +519,17 @@ function assertOutcome(
 	if (action.type === "create_page" || action.type === "rename_page") {
 		if (resolution.kind !== "page" || resolution.page !== action.page)
 			throw new Error("Playback topology response Page does not match");
+		return;
+	}
+	if (action.type === "configure_virtual" || action.type === "clear_virtual") {
+		if (
+			resolution.kind !== "virtual" ||
+			resolution.page !== action.page ||
+			resolution.playbackNumber !== action.playbackNumber
+		)
+			throw new Error(
+				"Playback topology response Virtual Playback does not match",
+			);
 		return;
 	}
 	if (

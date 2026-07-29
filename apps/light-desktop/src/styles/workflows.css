@@ -359,24 +359,21 @@
 	height: 100%;
 	min-height: 0;
 	display: grid;
-	grid-template-rows: auto minmax(0, 1fr);
+	grid-template-rows: minmax(0, 1fr);
+	position: relative;
 }
-.virtual-playback-toolbar {
+.virtual-playback-title-actions {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	padding: 6px;
-	border-bottom: 1px solid var(--line);
 }
-.virtual-playback-toolbar .ui-button {
-	min-height: 36px;
-	padding: 0 12px;
-	border: 1px solid var(--line2);
-	background: var(--panel2);
-}
-.virtual-playback-toolbar span {
-	margin-left: auto;
-	color: var(--muted);
+.virtual-playback-pane-error {
+	position: absolute;
+	z-index: 4;
+	right: 8px;
+	bottom: 8px;
+	max-width: calc(100% - 16px);
+	margin: 0;
 }
 .virtual-playback-grid {
 	min-height: 0;
@@ -432,24 +429,9 @@
 }
 .virtual-playback-zone-editor > header {
 	display: grid;
-	grid-template-columns: minmax(180px, 1fr) auto auto;
+	grid-template-columns: minmax(180px, 1fr) repeat(3, auto);
 	align-items: end;
 	gap: 8px;
-}
-.virtual-playback-zone-members,
-.virtual-playback-zone-hidden {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 6px;
-}
-.virtual-playback-zone-members .ui-button,
-.virtual-playback-zone-hidden .ui-button {
-	min-width: 42px;
-}
-.virtual-playback-zone-hidden small {
-	margin-right: 4px;
-	color: var(--muted);
 }
 .virtual-playback-cell > .pool-card-status,
 .virtual-playback-cell > .pool-card-workflow {

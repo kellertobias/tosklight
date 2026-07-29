@@ -71,12 +71,14 @@ impl ContributionContext<'_> {
         let Some(number) = playback.playback_number else {
             return false;
         };
+        let identity = playback.playback_identity.unwrap_or_else(|| {
+            PlaybackIdentity::physical(number).expect("active physical playback number is valid")
+        });
         self.engine.swap_held.iter().any(|source| {
-            *source != number
+            *source != identity
                 && !self
                     .engine
-                    .definitions
-                    .get(&number)
+                    .definition_at(identity)
                     .is_some_and(|definition| definition.protect_from_swap)
         })
     }
@@ -102,6 +104,7 @@ impl ContributionContext<'_> {
 fn source(playback: &ActivePlayback) -> SequenceMasterSource {
     SequenceMasterSource {
         playback_number: playback.playback_number,
+        playback_identity: playback.playback_identity,
         cue_list_id: playback.cue_list_id,
         temporary: playback.temporary,
     }

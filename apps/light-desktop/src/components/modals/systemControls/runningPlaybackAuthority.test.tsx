@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CueList, PlaybackActionRequest, PlaybackDefinition } from "../../../api/types";
+import type { CueList, PlaybackDefinition } from "../../../api/types";
 import type { PlaybackRuntimeActionApply } from "../../../features/playbackRuntime/actionWriter";
 import type {
 	PlaybackIdentity,
@@ -220,17 +220,21 @@ function projection(
 	showId: string,
 	requested: PlaybackIdentity,
 ): PlaybackProjection {
-	const cueListId =
-		requested.kind === "playback"
-			? requested.playback_number === 12
-				? "main"
-				: "replacement"
-			: requested.kind === "cue_list"
-				? requested.cue_list_id
-				: unexpectedGroupIdentity(requested.group_id);
-	const playbackNumber =
-		requested.kind === "playback"
+	const requestedPlaybackNumber =
+		requested.kind === "playback" || requested.kind === "virtual"
 			? requested.playback_number
+			: null;
+	const cueListId =
+		requested.kind === "cue_list"
+			? requested.cue_list_id
+			: requested.kind === "group"
+				? unexpectedGroupIdentity(requested.group_id)
+				: requested.playback_number === 12
+					? "main"
+					: "replacement";
+	const playbackNumber =
+		requestedPlaybackNumber != null
+			? requestedPlaybackNumber
 			: cueListId === "main"
 				? 12
 				: cueListId === "replacement"

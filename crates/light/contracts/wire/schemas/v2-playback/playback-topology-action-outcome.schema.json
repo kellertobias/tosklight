@@ -202,6 +202,33 @@
           "properties": {
             "kind": {
               "type": "string",
+              "const": "virtual"
+            },
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 127,
+              "minimum": 1
+            },
+            "playback_number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 9998,
+              "minimum": 1001
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "page",
+            "playback_number"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
               "const": "page"
             },
             "page": {

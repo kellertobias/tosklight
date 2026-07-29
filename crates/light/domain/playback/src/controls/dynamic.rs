@@ -2,7 +2,14 @@ use crate::*;
 
 impl PlaybackEngine {
     pub fn dynamic_assignment(&self, number: u16) -> Option<&DynamicPlaybackAssignment> {
-        match &self.definitions.get(&number)?.target {
+        self.dynamic_assignment_at(PlaybackIdentity::physical(number).ok()?)
+    }
+
+    pub fn dynamic_assignment_at(
+        &self,
+        identity: PlaybackIdentity,
+    ) -> Option<&DynamicPlaybackAssignment> {
+        match &self.definition_at(identity)?.target {
             PlaybackTarget::Dynamic { assignment } => Some(assignment),
             _ => None,
         }
@@ -18,15 +25,22 @@ impl PlaybackEngine {
         &mut self,
         number: u16,
     ) -> Result<PlaybackMutation<()>, String> {
+        self.on_dynamic_at_mutation(PlaybackIdentity::physical(number)?)
+    }
+
+    pub fn on_dynamic_at_mutation(
+        &mut self,
+        identity: PlaybackIdentity,
+    ) -> Result<PlaybackMutation<()>, String> {
         let assignment = self
-            .dynamic_assignment(number)
+            .dynamic_assignment_at(identity)
             .ok_or("Playback is not assigned to a Dynamic")?
             .clone();
         let now = self.clock.now();
         let active = self
             .active_dynamics
-            .entry(number)
-            .or_insert_with(|| active_dynamic_playback(number, &assignment, now));
+            .entry(identity)
+            .or_insert_with(|| active_dynamic_playback(identity, &assignment, now));
         let changed = !active.enabled;
         active.enabled = true;
         active.paused = false;
@@ -40,9 +54,16 @@ impl PlaybackEngine {
         &mut self,
         number: u16,
     ) -> Result<PlaybackMutation<bool>, String> {
-        self.dynamic_assignment(number)
+        self.off_dynamic_at_mutation(PlaybackIdentity::physical(number)?)
+    }
+
+    pub fn off_dynamic_at_mutation(
+        &mut self,
+        identity: PlaybackIdentity,
+    ) -> Result<PlaybackMutation<bool>, String> {
+        self.dynamic_assignment_at(identity)
             .ok_or("Playback is not assigned to a Dynamic")?;
-        let Some(active) = self.active_dynamics.get_mut(&number) else {
+        let Some(active) = self.active_dynamics.get_mut(&identity) else {
             return Ok(PlaybackMutation::new(false, PlaybackRuntimeEffect::None));
         };
         let changed = active.enabled;
@@ -55,16 +76,23 @@ impl PlaybackEngine {
         &mut self,
         number: u16,
     ) -> Result<PlaybackMutation<bool>, String> {
+        self.toggle_dynamic_at_mutation(PlaybackIdentity::physical(number)?)
+    }
+
+    pub fn toggle_dynamic_at_mutation(
+        &mut self,
+        identity: PlaybackIdentity,
+    ) -> Result<PlaybackMutation<bool>, String> {
         if self
             .active_dynamics
-            .get(&number)
+            .get(&identity)
             .is_some_and(|active| active.enabled)
         {
             return self
-                .off_dynamic_mutation(number)
+                .off_dynamic_at_mutation(identity)
                 .map(|mutation| mutation.map(|_| false));
         }
-        self.on_dynamic_mutation(number)
+        self.on_dynamic_at_mutation(identity)
             .map(|mutation| mutation.map(|_| true))
     }
 
@@ -73,11 +101,19 @@ impl PlaybackEngine {
         number: u16,
         value: f32,
     ) -> Result<PlaybackMutation<()>, String> {
+        self.set_dynamic_fader_at_mutation(PlaybackIdentity::physical(number)?, value)
+    }
+
+    pub fn set_dynamic_fader_at_mutation(
+        &mut self,
+        identity: PlaybackIdentity,
+        value: f32,
+    ) -> Result<PlaybackMutation<()>, String> {
         if !value.is_finite() || !(0.0..=1.0).contains(&value) {
             return Err("Dynamic Playback fader must be within 0-1".into());
         }
         let assignment = self
-            .dynamic_assignment(number)
+            .dynamic_assignment_at(identity)
             .ok_or("Playback is not assigned to a Dynamic")?
             .clone();
         if assignment.fader_mode == DynamicPlaybackFaderMode::None {
@@ -86,16 +122,16 @@ impl PlaybackEngine {
         if value > 0.0
             && !self
                 .active_dynamics
-                .get(&number)
+                .get(&identity)
                 .is_some_and(|active| active.enabled)
         {
-            self.on_dynamic_mutation(number)?;
+            self.on_dynamic_at_mutation(identity)?;
         }
         let now = self.clock.now();
         let active = self
             .active_dynamics
-            .entry(number)
-            .or_insert_with(|| active_dynamic_playback(number, &assignment, now));
+            .entry(identity)
+            .or_insert_with(|| active_dynamic_playback(identity, &assignment, now));
         let before = active.clone();
         active.fader_value = value;
         match assignment.fader_mode {
@@ -118,11 +154,18 @@ impl PlaybackEngine {
         &mut self,
         number: u16,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.dynamic_assignment(number)
+        self.toggle_dynamic_pause_at_mutation(PlaybackIdentity::physical(number)?)
+    }
+
+    pub fn toggle_dynamic_pause_at_mutation(
+        &mut self,
+        identity: PlaybackIdentity,
+    ) -> Result<PlaybackMutation<()>, String> {
+        self.dynamic_assignment_at(identity)
             .ok_or("Playback is not assigned to a Dynamic")?;
         let active = self
             .active_dynamics
-            .get_mut(&number)
+            .get_mut(&identity)
             .filter(|active| active.enabled)
             .ok_or("Dynamic Playback is Off")?;
         active.paused = !active.paused;
@@ -133,11 +176,18 @@ impl PlaybackEngine {
         &mut self,
         number: u16,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.on_dynamic_mutation(number)?;
+        self.restart_dynamic_at_mutation(PlaybackIdentity::physical(number)?)
+    }
+
+    pub fn restart_dynamic_at_mutation(
+        &mut self,
+        identity: PlaybackIdentity,
+    ) -> Result<PlaybackMutation<()>, String> {
+        self.on_dynamic_at_mutation(identity)?;
         let now = self.clock.now();
         let active = self
             .active_dynamics
-            .get_mut(&number)
+            .get_mut(&identity)
             .expect("Dynamic On creates runtime state");
         active.activated_at = now;
         active.paused = false;
@@ -149,15 +199,23 @@ impl PlaybackEngine {
         number: u16,
         double: bool,
     ) -> Result<PlaybackMutation<()>, String> {
+        self.scale_dynamic_speed_at_mutation(PlaybackIdentity::physical(number)?, double)
+    }
+
+    pub fn scale_dynamic_speed_at_mutation(
+        &mut self,
+        identity: PlaybackIdentity,
+        double: bool,
+    ) -> Result<PlaybackMutation<()>, String> {
         let assignment = self
-            .dynamic_assignment(number)
+            .dynamic_assignment_at(identity)
             .ok_or("Playback is not assigned to a Dynamic")?
             .clone();
         let now = self.clock.now();
         let active = self
             .active_dynamics
-            .entry(number)
-            .or_insert_with(|| active_dynamic_playback(number, &assignment, now));
+            .entry(identity)
+            .or_insert_with(|| active_dynamic_playback(identity, &assignment, now));
         if let Some(duration) = active.learned_duration_millis {
             active.learned_duration_millis = Some(if double {
                 (duration / 2).max(1)
@@ -186,8 +244,15 @@ impl PlaybackEngine {
         &mut self,
         number: u16,
     ) -> Result<PlaybackMutation<Option<u64>>, String> {
+        self.tap_dynamic_speed_at_mutation(PlaybackIdentity::physical(number)?)
+    }
+
+    pub fn tap_dynamic_speed_at_mutation(
+        &mut self,
+        identity: PlaybackIdentity,
+    ) -> Result<PlaybackMutation<Option<u64>>, String> {
         let assignment = self
-            .dynamic_assignment(number)
+            .dynamic_assignment_at(identity)
             .ok_or("Playback is not assigned to a Dynamic")?
             .clone();
         if !matches!(
@@ -200,8 +265,8 @@ impl PlaybackEngine {
         let now_millis = u64::try_from(now.timestamp_millis()).unwrap_or_default();
         let active = self
             .active_dynamics
-            .entry(number)
-            .or_insert_with(|| active_dynamic_playback(number, &assignment, now));
+            .entry(identity)
+            .or_insert_with(|| active_dynamic_playback(identity, &assignment, now));
         let Some(previous) = active.last_learn_tap_millis.replace(now_millis) else {
             active.learn_intervals_millis.clear();
             return Ok(PlaybackMutation::new(None, PlaybackRuntimeEffect::Durable));
@@ -228,9 +293,10 @@ impl PlaybackEngine {
         &mut self,
         number: u16,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.dynamic_assignment(number)
+        let identity = PlaybackIdentity::physical(number)?;
+        self.dynamic_assignment_at(identity)
             .ok_or("Playback is not assigned to a Dynamic")?;
-        let Some(active) = self.active_dynamics.get_mut(&number) else {
+        let Some(active) = self.active_dynamics.get_mut(&identity) else {
             return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
         };
         let changed = active.learned_duration_millis.take().is_some()
@@ -245,18 +311,26 @@ impl PlaybackEngine {
         number: u16,
         pressed: bool,
     ) -> Result<PlaybackMutation<()>, String> {
+        self.set_dynamic_flash_at_mutation(PlaybackIdentity::physical(number)?, pressed)
+    }
+
+    pub fn set_dynamic_flash_at_mutation(
+        &mut self,
+        identity: PlaybackIdentity,
+        pressed: bool,
+    ) -> Result<PlaybackMutation<()>, String> {
         let assignment = self
-            .dynamic_assignment(number)
+            .dynamic_assignment_at(identity)
             .ok_or("Playback is not assigned to a Dynamic")?
             .clone();
         let was_enabled = self
             .active_dynamics
-            .get(&number)
+            .get(&identity)
             .is_some_and(|active| active.enabled);
         if pressed && !was_enabled {
-            self.on_dynamic_mutation(number)?;
+            self.on_dynamic_at_mutation(identity)?;
         }
-        let Some(active) = self.active_dynamics.get_mut(&number) else {
+        let Some(active) = self.active_dynamics.get_mut(&identity) else {
             return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
         };
         let before = active.clone();
@@ -276,12 +350,13 @@ impl PlaybackEngine {
 }
 
 fn active_dynamic_playback(
-    number: u16,
+    identity: PlaybackIdentity,
     assignment: &DynamicPlaybackAssignment,
     now: DateTime<Utc>,
 ) -> ActiveDynamicPlayback {
     ActiveDynamicPlayback {
-        playback_number: number,
+        playback_number: identity.number(),
+        playback_identity: identity.virtual_address().map(PlaybackIdentity::Virtual),
         enabled: true,
         paused: false,
         flash: false,

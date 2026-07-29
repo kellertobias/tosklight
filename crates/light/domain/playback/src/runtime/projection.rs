@@ -1,5 +1,13 @@
 use crate::*;
 
+fn playback_runtime_identity(playback: &ActivePlayback) -> Option<PlaybackIdentity> {
+    playback.playback_identity.or_else(|| {
+        playback
+            .playback_number
+            .and_then(|number| PlaybackIdentity::physical(number).ok())
+    })
+}
+
 impl PlaybackEngine {
     /// Folds the first-class Dynamic layer through each active Cuelist's current Cue.
     ///
@@ -70,10 +78,10 @@ impl PlaybackEngine {
 
     pub fn runtime_status(&self) -> Vec<PlaybackRuntimeStatus> {
         let mut runtime = self.runtime();
-        for ((number, _), temporary) in &self.temporary {
+        for ((identity, _), temporary) in &self.temporary {
             if runtime
                 .iter()
-                .any(|playback| playback.playback_number == Some(*number))
+                .any(|playback| playback_runtime_identity(playback) == Some(*identity))
             {
                 continue;
             }
@@ -88,26 +96,27 @@ impl PlaybackEngine {
         runtime
             .into_iter()
             .map(|mut playback| {
-                let number = playback.playback_number;
-                let temporary_master = number
-                    .map(|number| {
+                let identity = playback_runtime_identity(&playback);
+                let temporary_master = identity
+                    .map(|identity| {
                         self.temporary
                             .iter()
-                            .filter(|((candidate, _), _)| *candidate == number)
+                            .filter(|((candidate, _), _)| *candidate == identity)
                             .map(|(_, playback)| playback.master)
                             .fold(0.0_f32, f32::max)
                     })
                     .unwrap_or(0.0);
                 let temporary_active = temporary_master > 0.0
-                    || number.is_some_and(|number| {
+                    || identity.is_some_and(|identity| {
                         self.temporary
                             .keys()
-                            .any(|(candidate, _)| *candidate == number)
+                            .any(|(candidate, _)| *candidate == identity)
                     });
-                let swap_active = number.is_some_and(|number| self.swap_held.contains(&number));
-                playback.flash = number.is_some_and(|number| {
+                let swap_active =
+                    identity.is_some_and(|identity| self.swap_held.contains(&identity));
+                playback.flash = identity.is_some_and(|identity| {
                     self.temporary
-                        .contains_key(&(number, TemporaryPlaybackKind::Flash))
+                        .contains_key(&(identity, TemporaryPlaybackKind::Flash))
                 });
                 let cue_list = self.cue_lists.get(&playback.cue_list_id);
                 let normal = cue_list.and_then(|list| {

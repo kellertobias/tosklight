@@ -71,8 +71,10 @@ export function PlaybackTopologyProvider({
 				renamePage: writer.renamePage.bind(writer),
 				saveCueList: writer.saveCueList.bind(writer),
 				configureSlot: writer.configureSlot.bind(writer),
+				configureVirtual: writer.configureVirtual.bind(writer),
 				mapExistingPlayback: writer.mapExistingPlayback.bind(writer),
 				clearMappedPlayback: writer.clearMappedPlayback.bind(writer),
+				clearVirtual: writer.clearVirtual.bind(writer),
 			},
 		[writer],
 	);

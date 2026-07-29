@@ -135,6 +135,24 @@ function encodeAction(action: PlaybackTopologyAction) {
 		};
 	if (action.type === "create_page" || action.type === "rename_page")
 		return encodePlaybackPageAction(action);
+	if (action.type === "configure_virtual" || action.type === "clear_virtual") {
+		const shared = {
+			type: action.type,
+			page: boundedPositiveIntegerAt(action.page, "$.action.page", 127),
+			playback_number: boundedVirtualPlaybackNumber(
+				action.playbackNumber,
+				"$.action.playbackNumber",
+			),
+			expected_page_revision: revisionAt(
+				action.expectedPageRevision,
+				"$.action.expectedPageRevision",
+			),
+			expected_page_object_id: action.expectedPageObjectId,
+		};
+		return action.type === "configure_virtual"
+			? { ...shared, playback: encodePlayback(action.playback, 9_998) }
+			: shared;
+	}
 	const shared = {
 		type: action.type,
 		page: boundedPositiveIntegerAt(action.page, "$.action.page", 127),
@@ -195,10 +213,14 @@ function validateExistingPlaybackAuthority(
 	);
 }
 
-function encodePlayback(playback: PlaybackDefinition) {
+function encodePlayback(playback: PlaybackDefinition, maximum = 1_000) {
 	const number = revisionAt(playback.number, "$.action.playback.number");
-	if (number > 1000)
-		invalid("$.action.playback.number", "integer between 0 and 1000", number);
+	if (number > maximum)
+		invalid(
+			"$.action.playback.number",
+			`integer between 0 and ${maximum}`,
+			number,
+		);
 	return {
 		number,
 		name: plainStringAt(playback.name, "$.action.playback.name"),
@@ -266,6 +288,7 @@ function decodeResolution(
 		"cue_list",
 		"page",
 		"page_slot",
+		"virtual",
 	]);
 	if (kind === "cue_list") {
 		exactRecordAt(resolution, "$.resolution", ["kind", "cue_list_id"]);
@@ -281,6 +304,30 @@ function decodeResolution(
 		if (action.type !== "create_page" && action.type !== "rename_page")
 			invalid("$.resolution", "the requested Playback Page", resolution);
 		return decodePlaybackPageResolution(resolution, action);
+	}
+	if (kind === "virtual") {
+		exactRecordAt(resolution, "$.resolution", [
+			"kind",
+			"page",
+			"playback_number",
+		]);
+		const page = boundedPositiveIntegerAt(
+			resolution.page,
+			"$.resolution.page",
+			127,
+		);
+		const playbackNumber = boundedVirtualPlaybackNumber(
+			resolution.playback_number,
+			"$.resolution.playback_number",
+		);
+		if (
+			(action.type !== "configure_virtual" &&
+				action.type !== "clear_virtual") ||
+			action.page !== page ||
+			action.playbackNumber !== playbackNumber
+		)
+			invalid("$.resolution", "the requested Virtual Playback", resolution);
+		return { kind, page, playbackNumber };
 	}
 	exactRecordAt(resolution, "$.resolution", [
 		"kind",
@@ -310,6 +357,8 @@ function decodeResolution(
 		action.type === "save_cue_list" ||
 		action.type === "create_page" ||
 		action.type === "rename_page" ||
+		action.type === "configure_virtual" ||
+		action.type === "clear_virtual" ||
 		action.page !== page ||
 		action.slot !== slot
 	)
@@ -324,6 +373,12 @@ function decodeResolution(
 			playbackNumber,
 		);
 	return { kind, page, slot, playbackNumber };
+}
+
+function boundedVirtualPlaybackNumber(value: unknown, path: string) {
+	const number = boundedPositiveIntegerAt(value, path, 9_998);
+	if (number < 1_001) invalid(path, "integer between 1001 and 9998", number);
+	return number;
 }
 
 function decodeObjects(value: unknown): PlaybackTopologyObject[] {

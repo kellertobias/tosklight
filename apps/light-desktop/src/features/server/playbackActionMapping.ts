@@ -54,6 +54,19 @@ export function poolPlaybackRequest(
 	);
 }
 
+export function virtualPlaybackRequest(
+	page: number,
+	playbackNumber: number,
+	action: PoolPlaybackAction,
+	input: PoolPlaybackInput,
+): PlaybackActionRequest {
+	return actionRequest(
+		{ kind: "virtual", page, playback_number: playbackNumber },
+		structuredAction(action, input),
+		"virtual",
+	);
+}
+
 function actionRequest(
 	address: PlaybackAddress,
 	action: PlaybackAction,

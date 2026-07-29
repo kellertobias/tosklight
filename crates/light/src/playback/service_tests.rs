@@ -127,6 +127,53 @@ fn current_page_is_resolved_inside_the_ordered_operation() {
     );
 }
 
+#[test]
+fn page_qualified_virtual_addresses_keep_distinct_runtime_identities() {
+    let service = PlaybackService::default();
+    let ports = FakePorts::default();
+    let first = light_playback::VirtualPlaybackAddress::new(1, 1_001).unwrap();
+    let second = light_playback::VirtualPlaybackAddress::new(2, 1_001).unwrap();
+
+    let first_result = service
+        .handle(
+            envelope(
+                ActionSource::Http,
+                PlaybackAddress::Virtual(first),
+                Some("virtual-page-one"),
+            ),
+            &ports,
+        )
+        .unwrap();
+    let second_result = service
+        .handle(
+            envelope(
+                ActionSource::Http,
+                PlaybackAddress::Virtual(second),
+                Some("virtual-page-two"),
+            ),
+            &ports,
+        )
+        .unwrap();
+
+    assert_eq!(
+        first_result.resolved,
+        ResolvedPlaybackAddress::Virtual(first)
+    );
+    assert_eq!(
+        second_result.resolved,
+        ResolvedPlaybackAddress::Virtual(second)
+    );
+    assert_eq!(
+        ports.projection_reads(),
+        vec![
+            PlaybackRuntimeIdentity::Virtual(first),
+            PlaybackRuntimeIdentity::Virtual(first),
+            PlaybackRuntimeIdentity::Virtual(second),
+            PlaybackRuntimeIdentity::Virtual(second),
+        ]
+    );
+}
+
 struct BlockingOperation {
     entered: mpsc::Sender<()>,
     release: mpsc::Receiver<()>,
@@ -772,6 +819,7 @@ fn envelope_with_action(
 fn missing_projection(identity: PlaybackRuntimeIdentity) -> PlaybackRuntimeProjection {
     let playback_number = match &identity {
         PlaybackRuntimeIdentity::Playback(number) => Some(*number),
+        PlaybackRuntimeIdentity::Virtual(address) => Some(address.number().get()),
         PlaybackRuntimeIdentity::CueList(_) | PlaybackRuntimeIdentity::Group(_) => None,
     };
     PlaybackRuntimeProjection {

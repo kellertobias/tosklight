@@ -11,7 +11,9 @@ use light_application::{
     PlaybackExecution, PlaybackGroupId, PlaybackPorts, PlaybackResult, PlaybackRuntimeIdentity,
     PlaybackSurface, ResolvedPlaybackAddress,
 };
-use light_engine::{CueListPlaybackAction, EnginePlaybackCommand, EnginePlaybackOutcome};
+use light_engine::{
+    CueListPlaybackAction, EnginePlaybackCommand, EnginePlaybackOutcome, VirtualPlaybackAction,
+};
 
 #[path = "playback_service/capture.rs"]
 mod capture;
@@ -40,7 +42,7 @@ use conversion::{
 };
 use support::{
     action_error, api_action_error, capture_enabled, captures_preload, invalid, operator_context,
-    playback_definition, resolve_group_playback,
+    playback_definition, resolve_group_playback, virtual_playback_definition,
 };
 
 pub(super) fn osc_action(

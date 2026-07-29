@@ -39,6 +39,13 @@ export function playbackIdentity(playbackNumber: number): PlaybackIdentity {
 	return { kind: "playback", playback_number: playbackNumber };
 }
 
+export function virtualPlaybackIdentity(
+	page: number,
+	playbackNumber: number,
+): PlaybackIdentity {
+	return { kind: "virtual", page, playback_number: playbackNumber };
+}
+
 export function cueListIdentity(cueListId: string): PlaybackIdentity {
 	return { kind: "cue_list", cue_list_id: cueListId };
 }
@@ -50,6 +57,8 @@ export function groupIdentity(groupId: string): PlaybackIdentity {
 export function identityKey(identity: PlaybackIdentity) {
 	if (identity.kind === "playback")
 		return `playback:${identity.playback_number}`;
+	if (identity.kind === "virtual")
+		return `virtual:${identity.page}.${identity.playback_number}`;
 	if (identity.kind === "cue_list") return `cuelist:${identity.cue_list_id}`;
 	return `group:${identity.group_id}`;
 }

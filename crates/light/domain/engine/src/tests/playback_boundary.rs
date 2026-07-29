@@ -1,8 +1,8 @@
 use super::*;
 use crate::playback::combine_release_effect;
 use light_playback::{
-    PlaybackActivationOrigin, PlaybackActivationSurface, PlaybackExclusionScope,
-    PlaybackRuntimeEffect,
+    PlaybackActivationOrigin, PlaybackActivationSurface, PlaybackExclusionScope, PlaybackIdentity,
+    PlaybackPage, PlaybackRuntimeEffect, VirtualPlaybackAddress,
 };
 use uuid::Uuid;
 
@@ -14,6 +14,7 @@ fn prepared_batch_is_isolated_until_one_typed_install() {
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
                 number: 1,
+                page: None,
                 action: PlaybackBatchAction::On,
                 exclusion_zones: Arc::default(),
                 activation_origin: None,
@@ -41,6 +42,7 @@ fn prepared_batch_cannot_overwrite_a_new_compiled_generation() {
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
                 number: 1,
+                page: None,
                 action: PlaybackBatchAction::Go,
                 exclusion_zones: Arc::default(),
                 activation_origin: None,
@@ -188,12 +190,14 @@ fn prepared_batch_assigns_distinct_activation_ordinals_in_queue_order() {
             &[
                 PlaybackBatchCommand {
                     number: 2,
+                    page: None,
                     action: PlaybackBatchAction::On,
                     exclusion_zones: Arc::default(),
                     activation_origin: Some(origin),
                 },
                 PlaybackBatchCommand {
                     number: 1,
+                    page: None,
                     action: PlaybackBatchAction::On,
                     exclusion_zones: Arc::default(),
                     activation_origin: Some(origin),
@@ -221,6 +225,7 @@ fn timed_preload_release_retains_activation_provenance_while_fade_is_active() {
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
                 number: 1,
+                page: None,
                 action: PlaybackBatchAction::Off,
                 exclusion_zones: Arc::default(),
                 activation_origin: Some(origin),
@@ -294,6 +299,7 @@ fn prepared_batch_reports_only_peers_it_actually_releases() {
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
                 number: 1,
+                page: None,
                 action: PlaybackBatchAction::On,
                 exclusion_zones: vec![vec![3, 2, 1, 2]].into(),
                 activation_origin: None,
@@ -428,6 +434,7 @@ fn peer_only_auto_off_batch_does_not_retime_the_addressed_playback() {
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
                 number: 2,
+                page: None,
                 action: PlaybackBatchAction::On,
                 exclusion_zones: Arc::default(),
                 activation_origin: None,
@@ -509,12 +516,14 @@ fn prepared_batch_classifies_the_exact_final_state_after_transient_cancellation(
             &[
                 PlaybackBatchCommand {
                     number: 1,
+                    page: None,
                     action: PlaybackBatchAction::SetTempButton(true),
                     exclusion_zones: Arc::default(),
                     activation_origin: None,
                 },
                 PlaybackBatchCommand {
                     number: 1,
+                    page: None,
                     action: PlaybackBatchAction::SetTempButton(false),
                     exclusion_zones: Arc::default(),
                     activation_origin: None,
@@ -549,6 +558,7 @@ fn repeated_on_batch_does_not_retrigger_timing_or_signal_persistence() {
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
                 number: 1,
+                page: None,
                 action: PlaybackBatchAction::On,
                 exclusion_zones: Arc::default(),
                 activation_origin: None,
@@ -565,6 +575,125 @@ fn repeated_on_batch_does_not_retrigger_timing_or_signal_persistence() {
     assert_eq!(after.activated_at, before.activated_at);
     assert_eq!(after.transition_fade_fallback_millis, None);
     assert!(after.master_transition.is_none());
+}
+
+#[test]
+fn virtual_exclusions_release_only_exact_page_qualified_peers() {
+    let engine = virtual_playback_engine();
+    let activated = VirtualPlaybackAddress::new(1, 1_001).unwrap();
+    let same_page_peer = VirtualPlaybackAddress::new(1, 1_002).unwrap();
+    let other_page_same_number = VirtualPlaybackAddress::new(2, 1_001).unwrap();
+    let other_page_peer_number = VirtualPlaybackAddress::new(2, 1_002).unwrap();
+    let origin = activation_origin(Uuid::new_v4(), PlaybackActivationSurface::Osc);
+
+    for address in [
+        same_page_peer,
+        other_page_same_number,
+        other_page_peer_number,
+    ] {
+        engine
+            .execute_playback(EnginePlaybackCommand::Virtual {
+                address,
+                action: VirtualPlaybackAction::On,
+                exclusion_zones: Vec::new(),
+                activation_origin: None,
+            })
+            .unwrap();
+    }
+    execute_pool(&engine, 1, PoolPlaybackAction::On);
+
+    engine
+        .execute_playback(EnginePlaybackCommand::Virtual {
+            address: activated,
+            action: VirtualPlaybackAction::On,
+            exclusion_zones: vec![vec![activated, same_page_peer]],
+            activation_origin: Some(origin.clone()),
+        })
+        .unwrap();
+
+    let runtime = engine.playback_runtime();
+    let by_identity = |identity| {
+        runtime
+            .iter()
+            .find(|playback| playback.playback_identity == Some(identity))
+            .unwrap()
+    };
+    assert!(by_identity(PlaybackIdentity::Virtual(activated)).enabled);
+    assert!(!by_identity(PlaybackIdentity::Virtual(same_page_peer)).enabled);
+    assert!(by_identity(PlaybackIdentity::Virtual(other_page_same_number)).enabled);
+    assert!(by_identity(PlaybackIdentity::Virtual(other_page_peer_number)).enabled);
+    assert!(
+        runtime
+            .iter()
+            .any(|playback| playback.playback_number == Some(1)
+                && playback.playback_identity.is_none()
+                && playback.enabled)
+    );
+    let recorded = by_identity(PlaybackIdentity::Virtual(activated))
+        .activation
+        .as_ref()
+        .unwrap();
+    assert_eq!(recorded.at, origin.at);
+    assert_eq!(recorded.desk_id, origin.desk_id);
+    assert_eq!(recorded.surface, origin.surface);
+    assert_eq!(recorded.exclusion_scope, origin.exclusion_scope);
+}
+
+#[test]
+fn prepared_virtual_batch_keeps_page_identity_and_exclusions_atomic() {
+    let engine = virtual_playback_engine();
+    let page_one_peer = VirtualPlaybackAddress::new(1, 1_002).unwrap();
+    let page_two_same_number = VirtualPlaybackAddress::new(2, 1_002).unwrap();
+    for address in [page_one_peer, page_two_same_number] {
+        engine
+            .execute_playback(EnginePlaybackCommand::Virtual {
+                address,
+                action: VirtualPlaybackAction::On,
+                exclusion_zones: Vec::new(),
+                activation_origin: None,
+            })
+            .unwrap();
+    }
+    let prepared = engine
+        .prepare_playback_batch(
+            &[PlaybackBatchCommand {
+                number: 1_001,
+                page: Some(1),
+                action: PlaybackBatchAction::On,
+                exclusion_zones: vec![vec![1_001, 1_002]].into(),
+                activation_origin: None,
+            }],
+            chrono::Utc::now(),
+            0,
+        )
+        .unwrap();
+
+    assert_eq!(prepared.outcomes()[0].page, Some(1));
+    assert_eq!(prepared.outcomes()[0].released_playbacks, vec![1_002]);
+    assert!(
+        engine
+            .playback_runtime()
+            .iter()
+            .any(|playback| playback.playback_identity
+                == Some(PlaybackIdentity::Virtual(page_one_peer))
+                && playback.enabled)
+    );
+    engine.install_prepared_playback_batch(prepared).unwrap();
+    let runtime = engine.playback_runtime();
+    assert!(
+        runtime
+            .iter()
+            .any(|playback| playback.playback_identity
+                == Some(PlaybackIdentity::Virtual(page_one_peer))
+                && !playback.enabled)
+    );
+    assert!(
+        runtime
+            .iter()
+            .any(|playback| playback.playback_identity
+                == Some(PlaybackIdentity::Virtual(page_two_same_number))
+                && playback.enabled)
+    );
 }
 
 fn assert_pool_effect(
@@ -627,6 +756,7 @@ fn prepare_batch(engine: &Engine, action: PlaybackBatchAction) -> PreparedPlayba
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
                 number: 1,
+                page: None,
                 action,
                 exclusion_zones: Arc::default(),
                 activation_origin: None,
@@ -695,6 +825,35 @@ fn playback_engine_with_numbers(numbers: &[u16]) -> Engine {
         .replace_snapshot(EngineSnapshot {
             cue_lists: vec![cue_list].into(),
             playbacks: playbacks.into(),
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    engine
+}
+
+fn virtual_playback_engine() -> Engine {
+    let cue_list = test_cue_list("Virtual typed boundary", Vec::new());
+    let page = |number| PlaybackPage {
+        number,
+        name: format!("Page {number}"),
+        slots: HashMap::new(),
+        virtual_playbacks: [1_001, 1_002]
+            .into_iter()
+            .map(|playback_number| {
+                (
+                    playback_number,
+                    test_playback(playback_number, cue_list.id),
+                )
+            })
+            .collect(),
+    };
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            cue_lists: vec![cue_list.clone()].into(),
+            playbacks: vec![test_playback(1, cue_list.id)].into(),
+            playback_pages: vec![page(1), page(2)].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })

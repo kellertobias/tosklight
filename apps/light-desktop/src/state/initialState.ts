@@ -10,6 +10,7 @@ export const initialState: AppState = {
 	fileManagerReturn: null,
 	controlMode: "programmer",
 	paneSettingsId: null,
+	virtualPlaybackZoneEdit: null,
 	maximizedPaneId: null,
 	windowPicker: null,
 	savingDesk: false,

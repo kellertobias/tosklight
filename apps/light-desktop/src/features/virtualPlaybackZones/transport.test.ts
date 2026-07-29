@@ -10,6 +10,7 @@ const DESK_ID = "22222222-2222-4222-8222-222222222222";
 const OTHER_ID = "33333333-3333-4333-8333-333333333333";
 const SCOPE = { showId: SHOW_ID, deskId: DESK_ID };
 const ZONES = [{ id: "paired", name: "Paired", slots: [1, 2] }] as const;
+const PAGE_MODE = { type: "pinned", page: 7 } as const;
 
 function json(value: unknown, status = 200) {
 	return new Response(JSON.stringify(value), {
@@ -76,6 +77,7 @@ describe("HttpVirtualPlaybackZonesTransport", () => {
 		expect(headers.get("authorization")).toBe("Bearer session-token");
 		expect(headers.get("x-light-desk-token")).toBe("desk-boundary");
 		expect(headers.get("x-tosk-show")).toBe(SHOW_ID);
+		expect(headers.get("x-tosk-desk")).toBe(DESK_ID);
 	});
 
 	it("saves one exact surface through an authenticated PUT", async () => {
@@ -86,7 +88,11 @@ describe("HttpVirtualPlaybackZonesTransport", () => {
 				show_id: SHOW_ID,
 				desk_id: DESK_ID,
 				surface_id: "surface/one",
-				zones: ZONES,
+				surface: {
+					revision: 5,
+					page_mode: PAGE_MODE,
+					zones: ZONES,
+				},
 				replayed: false,
 				changed: true,
 			}),
@@ -94,8 +100,18 @@ describe("HttpVirtualPlaybackZonesTransport", () => {
 		const transport = createTransport(fetchImplementation);
 
 		await expect(
-			transport.saveSurface(SCOPE, "surface/one", ZONES, "request-a"),
-		).resolves.toMatchObject({ surfaceId: "surface/one", zones: ZONES });
+			transport.saveSurface(
+				SCOPE,
+				"surface/one",
+				4,
+				PAGE_MODE,
+				ZONES,
+				"request-a",
+			),
+		).resolves.toMatchObject({
+			surfaceId: "surface/one",
+			surface: { revision: 5, pageMode: PAGE_MODE, zones: ZONES },
+		});
 		const [url, init] = fetchImplementation.mock.calls[0];
 		expect(url).toBe(
 			"http://127.0.0.1:5000/api/v2/virtual-playback-exclusion-zones/surface%2Fone/update",
@@ -103,12 +119,15 @@ describe("HttpVirtualPlaybackZonesTransport", () => {
 		expect(init?.method).toBe("POST");
 		expect(JSON.parse(String(init?.body))).toEqual({
 			request_id: "request-a",
+			expected_revision: 4,
+			page_mode: PAGE_MODE,
 			zones: ZONES,
 		});
 		expect(new Headers(init?.headers).get("authorization")).toBe(
 			"Bearer session-token",
 		);
 		expect(new Headers(init?.headers).get("x-tosk-show")).toBe(SHOW_ID);
+		expect(new Headers(init?.headers).get("x-tosk-desk")).toBe(DESK_ID);
 	});
 
 	it("rejects foreign or malformed successful responses", async () => {
@@ -123,7 +142,11 @@ describe("HttpVirtualPlaybackZonesTransport", () => {
 						show_id: SHOW_ID,
 					desk_id: DESK_ID,
 					surface_id: "foreign",
+					surface: {
+						revision: 5,
+						page_mode: PAGE_MODE,
 						zones: ZONES,
+					},
 						replayed: false,
 						changed: true,
 				}),
@@ -134,7 +157,11 @@ describe("HttpVirtualPlaybackZonesTransport", () => {
 						show_id: SHOW_ID,
 					desk_id: DESK_ID,
 					surface_id: "surface-a",
-						zones: [{ ...ZONES[0], slots: [1, 145] }],
+					surface: {
+						revision: 5,
+						page_mode: PAGE_MODE,
+						zones: [{ ...ZONES[0], slots: [1, 8_999] }],
+					},
 						replayed: false,
 						changed: true,
 				}),
@@ -145,10 +172,10 @@ describe("HttpVirtualPlaybackZonesTransport", () => {
 			VirtualPlaybackZonesProtocolError,
 		);
 		await expect(
-			transport.saveSurface(SCOPE, "surface-a", ZONES, "request-a"),
+			transport.saveSurface(SCOPE, "surface-a", 4, PAGE_MODE, ZONES, "request-a"),
 		).rejects.toBeInstanceOf(VirtualPlaybackZonesProtocolError);
 		await expect(
-			transport.saveSurface(SCOPE, "surface-a", ZONES, "request-a"),
+			transport.saveSurface(SCOPE, "surface-a", 4, PAGE_MODE, ZONES, "request-a"),
 		).rejects.toBeInstanceOf(VirtualPlaybackZonesProtocolError);
 	});
 
@@ -160,7 +187,11 @@ describe("HttpVirtualPlaybackZonesTransport", () => {
 				show_id: OTHER_ID,
 				desk_id: DESK_ID,
 				surface_id: "surface-a",
-				zones: ZONES,
+				surface: {
+					revision: 5,
+					page_mode: PAGE_MODE,
+					zones: ZONES,
+				},
 				replayed: false,
 				changed: true,
 			}),
@@ -168,7 +199,7 @@ describe("HttpVirtualPlaybackZonesTransport", () => {
 		const transport = createTransport(fetchImplementation);
 
 		await expect(
-			transport.saveSurface(SCOPE, "surface-a", ZONES, "request-a"),
+			transport.saveSurface(SCOPE, "surface-a", 4, PAGE_MODE, ZONES, "request-a"),
 		).rejects.toBeInstanceOf(VirtualPlaybackZonesProtocolError);
 		const [url, init] = fetchImplementation.mock.calls[0];
 		expect(url).not.toContain(`/shows/`);

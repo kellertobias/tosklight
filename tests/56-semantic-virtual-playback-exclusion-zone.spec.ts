@@ -38,11 +38,12 @@ scenario(
 				],
 			});
 			await t.playback.via.api.off(playback);
+			return playback;
 		};
 
-		await recordSource(5, 3, 25, "Touring A");
-		await recordSource(6, 4, 50, "Touring B");
-		await recordSource(7, 5, 75, "Touring C");
+		const firstSource = await recordSource(5, 3, 25, "Touring A");
+		const secondSource = await recordSource(6, 4, 50, "Touring B");
+		const thirdSource = await recordSource(7, 5, 75, "Touring C");
 
 		const desktop = t.desktop.configure("Touring Virtual Playbacks");
 		const pane = desktop.addPane(
@@ -68,23 +69,61 @@ scenario(
 			"Touring B",
 			2,
 		);
-		await t.virtualPlayback.assignSource(pane, "Touring C", 3);
-		await t.playback.via.api.on(firstPlayback);
-		await t.playback.via.api.on(secondPlayback);
+		const thirdPlayback = await t.virtualPlayback.assignSource(
+			pane,
+			"Touring C",
+			3,
+		);
+		await t.virtualPlayback.activate(pane, 1);
+		await t.virtualPlayback.activate(pane, 2);
 
-		await t.virtualPlayback.createExclusionZone(pane, "Touring pair", [1, 2]);
+		await t.virtualPlayback.createExclusionZoneWithAttachedShift(
+			pane,
+			"Touring pair",
+			[1, 2],
+		);
 		await t.virtualPlayback.expect.zones([
 			{ name: "Touring pair", slots: [1, 2] },
 		]);
-		await t.playback.expect(firstPlayback).runtime({ enabled: true });
-		await t.playback.expect(secondPlayback).runtime({ enabled: true });
+		await t.virtualPlayback.expect.fence(pane, 1, "top bottom left");
+		await t.virtualPlayback.expect.fence(pane, 2, "top right bottom");
+		await t.virtualPlayback.expect.runtime(firstPlayback, {
+			requested: {
+				kind: "virtual",
+				page: 1,
+				playback_number: 1001,
+			},
+			target: "cue_list",
+			runtime: { enabled: true },
+		});
+		await t.virtualPlayback.expect.runtime(secondPlayback, {
+			requested: {
+				kind: "virtual",
+				page: 1,
+				playback_number: 1002,
+			},
+			target: "cue_list",
+			runtime: { enabled: true },
+		});
 
 		await t.virtualPlayback.activate(pane, 1);
 		await t.virtualPlayback.activate(pane, 2);
 		await t.virtualPlayback.activate(pane, 1);
 		await t.virtualPlayback.activate(pane, 2);
-		await t.playback.expect(firstPlayback).runtime({ enabled: false });
-		await t.playback.expect(secondPlayback).runtime({ enabled: true });
+		await t.virtualPlayback.expect.runtime(firstPlayback, {
+			target: "cue_list",
+			runtime: { enabled: false },
+		});
+		await t.virtualPlayback.expect.runtime(secondPlayback, {
+			target: "cue_list",
+			runtime: { enabled: true },
+		});
+		await t.virtualPlayback.expect.runtime(thirdPlayback, {
+			target: "cue_list",
+			runtime: null,
+		});
+		for (const source of [firstSource, secondSource, thirdSource])
+			await t.virtualPlayback.expect.physicalRuntimeAbsent(source);
 		await t.clock.advanceStep();
 		await t.expectFixtureValue(fixture(3), { intensity: 0 });
 		await t.expectFixtureValue(fixture(4), { intensity: 0.5 });

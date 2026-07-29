@@ -1,6 +1,51 @@
 use crate::*;
 
 impl PlaybackEngine {
+    pub fn on_at(&mut self, identity: PlaybackIdentity) -> Result<(), String> {
+        match identity {
+            PlaybackIdentity::Physical(number) => self.on(number.get()),
+            PlaybackIdentity::Virtual(address) => {
+                let definition = self
+                    .virtual_definitions
+                    .get(&address)
+                    .ok_or("virtual playback does not exist")?;
+                let PlaybackTarget::CueList { cue_list_id } = definition.target else {
+                    return Err(
+                        "operation is not available for this virtual playback function".into(),
+                    );
+                };
+                let key = PlaybackKey::Virtual(address);
+                if !self.active.contains_key(&key) {
+                    self.go_at_key(key, cue_list_id, self.clock.now())?;
+                }
+                activate_normal(
+                    self.active
+                        .get_mut(&key)
+                        .expect("virtual playback activation inserted runtime"),
+                    address.number().get(),
+                );
+                Ok(())
+            }
+        }
+    }
+
+    pub fn off_at(&mut self, identity: PlaybackIdentity) -> Result<bool, String> {
+        match identity {
+            PlaybackIdentity::Physical(number) => self.off(number.get()),
+            PlaybackIdentity::Virtual(address) => {
+                if !self.virtual_definitions.contains_key(&address) {
+                    return Err("virtual playback does not exist".into());
+                }
+                let Some(playback) = self.active.get_mut(&PlaybackKey::Virtual(address)) else {
+                    return Ok(false);
+                };
+                let was_enabled = playback.enabled;
+                deactivate(playback);
+                Ok(was_enabled)
+            }
+        }
+    }
+
     pub fn on(&mut self, number: u16) -> Result<(), String> {
         self.on_mutation(number).map(|_| ())
     }
@@ -131,6 +176,51 @@ impl PlaybackEngine {
         self.set_master_inner_mutation(number, value, true)
     }
 
+    pub fn set_virtual_master_at_mutation(
+        &mut self,
+        identity: PlaybackIdentity,
+        value: f32,
+    ) -> Result<PlaybackMutation<()>, String> {
+        if let PlaybackIdentity::Physical(number) = identity {
+            return self.set_virtual_master_mutation(number.get(), value);
+        }
+        if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+            return Err("playback master must be within 0-1".into());
+        }
+        let address = identity
+            .virtual_address()
+            .expect("physical identity returned above");
+        let definition = self
+            .definition_at(identity)
+            .ok_or("virtual playback does not exist")?;
+        if definition.fader != PlaybackFaderMode::Master {
+            return Err("virtual master requires the Master fader mode".into());
+        }
+        let PlaybackTarget::CueList { cue_list_id } = definition.target else {
+            return Err("virtual playback master is unavailable for this target".into());
+        };
+        let key = PlaybackKey::Virtual(address);
+        let mut changed = self
+            .active
+            .get(&key)
+            .is_some_and(|active| active.fader_position != value);
+        if value > 0.0 && !self.active.contains_key(&key) {
+            self.go_at_key(key, cue_list_id, self.clock.now())?;
+            changed = true;
+        }
+        if let Some(active) = self.active.get_mut(&key) {
+            active.playback_identity = Some(identity);
+            changed |= set_master_state(active, address.number().get(), value);
+        }
+        let addressed_effect = durable_effect(changed);
+        let related_effect = durable_effect(self.auto_off_overwritten());
+        Ok(PlaybackMutation::with_related_effect(
+            (),
+            addressed_effect,
+            related_effect,
+        ))
+    }
+
     fn set_master_inner_mutation(
         &mut self,
         number: u16,
@@ -232,22 +322,31 @@ impl PlaybackEngine {
         number: u16,
         pressed: bool,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.cue_list_for(number)?;
-        let key = (number, TemporaryPlaybackKind::Flash);
+        self.set_flash_at_mutation(PlaybackIdentity::physical(number)?, pressed)
+    }
+
+    pub fn set_flash_at_mutation(
+        &mut self,
+        identity: PlaybackIdentity,
+        pressed: bool,
+    ) -> Result<PlaybackMutation<()>, String> {
+        self.definition_at(identity)
+            .ok_or("playback does not exist")?;
+        let key = (identity, TemporaryPlaybackKind::Flash);
         if pressed {
             if self.temporary.contains_key(&key) {
                 return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
             }
-            let playback = self.temporary_playback(number, 1.0, true)?;
+            let playback = self.temporary_playback_at(identity, 1.0, true)?;
             self.temporary.insert(key, playback);
             return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::Transient));
         }
         let Some(released) = self.temporary.remove(&key) else {
             return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
         };
-        let promoted = self.definitions[&number].flash_release
+        let promoted = self.definition_at(identity).unwrap().flash_release
             == FlashReleaseMode::ReleaseIntensityOnly
-            && self.promote_intensity_release(number, released, true);
+            && self.promote_intensity_release_at(identity, released, true);
         let effect = PlaybackRuntimeEffect::Transient.combine(durable_effect(promoted));
         Ok(PlaybackMutation::new((), effect))
     }

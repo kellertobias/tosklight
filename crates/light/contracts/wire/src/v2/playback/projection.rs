@@ -11,6 +11,10 @@ pub enum PlaybackRuntimeIdentity {
     Playback {
         playback_number: u16,
     },
+    Virtual {
+        page: u8,
+        playback_number: u16,
+    },
     CueList {
         cue_list_id: Uuid,
     },

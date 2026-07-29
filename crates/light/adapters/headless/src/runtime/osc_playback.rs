@@ -173,7 +173,18 @@ fn handle_osc_page(state: &AppState, parts: &[&str], arguments: &[OscArgument]) 
 }
 
 fn osc_playback_address(parts: &[&str]) -> Option<(PlaybackAddress, usize)> {
-    if parts.len() >= 5 && parts.first() == Some(&"light") && parts.get(1) == Some(&"playback") {
+    if parts.len() >= 6
+        && parts.first() == Some(&"light")
+        && parts.get(2) == Some(&"virtual-playback")
+    {
+        let page = parts[3].parse::<u8>().ok()?;
+        let number = parts[4].parse::<u16>().ok()?;
+        let address = light_playback::VirtualPlaybackAddress::new(page, number).ok()?;
+        Some((PlaybackAddress::Virtual(address), 5))
+    } else if parts.len() >= 5
+        && parts.first() == Some(&"light")
+        && parts.get(1) == Some(&"playback")
+    {
         let page = parts[2].parse::<u8>().ok()?;
         let slot = parts[3].parse::<u8>().ok()?;
         Some((PlaybackAddress::ExplicitPage { page, slot }, 4))
@@ -245,6 +256,8 @@ pub(super) fn handle_playback_osc(
     // Preserve the three established OSC address families as distinct typed intents:
     //
     // - `/light/playback/{page}/{slot}` always targets that explicit page.
+    // - `/light/{desk}/virtual-playback/{page}/{number}` targets one dedicated Virtual
+    //   Playback identity without aliasing a physical page slot.
     // - `/light/{desk}/page-playback/{slot}` resolves the desk's current page under the
     //   PlaybackService operation gate.
     // - `/light/playback/{number}` and its Cuelist aliases address the global pool directly.
@@ -274,10 +287,9 @@ pub(super) fn handle_playback_osc(
         button,
         ..PoolPlaybackInput::default()
     };
-    let path_alias = if parts
-        .get(2)
-        .is_some_and(|part| *part == "page-playback" || *part == "paged-playback")
-    {
+    let path_alias = if parts.get(2).is_some_and(|part| {
+        *part == "page-playback" || *part == "paged-playback" || *part == "virtual-playback"
+    }) {
         Some(parts[1])
     } else {
         None
@@ -362,6 +374,31 @@ pub(super) fn handle_playback_osc(
             "playback_changed",
             serde_json::json!({"playback_number":number,"action":action,"source":"osc","session_id":session.map(|session|session.id)}),
         );
+    }
+}
+
+#[cfg(test)]
+mod playback_address_tests {
+    use super::*;
+
+    #[test]
+    fn dedicated_virtual_osc_address_is_page_qualified_and_range_checked() {
+        let parts = ["light", "main", "virtual-playback", "4", "1001", "go"];
+        let (address, action_index) = osc_playback_address(&parts).unwrap();
+        assert_eq!(
+            address,
+            PlaybackAddress::Virtual(
+                light_playback::VirtualPlaybackAddress::new(4, 1_001).unwrap()
+            )
+        );
+        assert_eq!(action_index, 5);
+
+        for invalid in [
+            ["light", "main", "virtual-playback", "4", "1000", "go"],
+            ["light", "main", "virtual-playback", "4", "9999", "go"],
+        ] {
+            assert!(osc_playback_address(&invalid).is_none());
+        }
     }
 }
 

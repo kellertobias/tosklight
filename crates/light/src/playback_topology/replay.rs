@@ -160,6 +160,19 @@ pub(super) fn fingerprint(
             hash_json(&mut hasher, expected_playback_object_id)?;
             hash_json(&mut hasher, playback)?;
         }
+        PlaybackTopologyAction::ConfigureVirtual {
+            page,
+            number,
+            expected_page_revision,
+            expected_page_object_id,
+            playback,
+        } => {
+            hasher.update([6, *page]);
+            hasher.update(number.to_le_bytes());
+            hasher.update(expected_page_revision.to_le_bytes());
+            hash_json(&mut hasher, expected_page_object_id)?;
+            hash_json(&mut hasher, playback)?;
+        }
         PlaybackTopologyAction::ClearMappedPlayback {
             page,
             slot,
@@ -207,6 +220,17 @@ pub(super) fn fingerprint(
         } => {
             hasher.update([5, *page]);
             hash_json(&mut hasher, name)?;
+            hasher.update(expected_page_revision.to_le_bytes());
+            hash_json(&mut hasher, expected_page_object_id)?;
+        }
+        PlaybackTopologyAction::ClearVirtual {
+            page,
+            number,
+            expected_page_revision,
+            expected_page_object_id,
+        } => {
+            hasher.update([7, *page]);
+            hasher.update(number.to_le_bytes());
             hasher.update(expected_page_revision.to_le_bytes());
             hash_json(&mut hasher, expected_page_object_id)?;
         }

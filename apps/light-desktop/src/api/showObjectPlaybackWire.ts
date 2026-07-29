@@ -45,10 +45,15 @@ export function decodePlaybackBody(
 	value: unknown,
 	path: string,
 	_objectId?: string,
+	maximumNumber = 1_000,
 ): PlaybackDefinition {
 	const playback = recordAt(value, path);
 	// Legacy portable objects may retain a non-numeric storage ID; `number` is the desk identity.
-	const number = positiveIntegerAt(playback.number, `${path}.number`, 1000);
+	const number = positiveIntegerAt(
+		playback.number,
+		`${path}.number`,
+		maximumNumber,
+	);
 	const target = decodeTarget(playback.target, `${path}.target`);
 	const buttons = arrayAt(
 		playback.buttons ?? defaultButtons(target),
@@ -129,11 +134,44 @@ export function decodePlaybackPageBody(
 			positiveIntegerAt(number, `${path}.slots.${slot}`, 1000),
 		]),
 	);
+	const virtualPlaybacks = recordAt(
+		page.virtual_playbacks,
+		`${path}.virtual_playbacks`,
+	);
+	const decodedVirtualPlaybacks = Object.fromEntries(
+		Object.entries(virtualPlaybacks).map(([number, playback]) => {
+			const decodedNumber = positiveIntegerAt(
+				Number(number),
+				`${path}.virtual_playbacks.${number}`,
+				9_998,
+			);
+			if (decodedNumber < 1_001)
+				throw new WireValidationError(
+					`${path}.virtual_playbacks.${number}`,
+					"integer between 1001 and 9998",
+					number,
+				);
+			const decoded = decodePlaybackBody(
+				playback,
+				`${path}.virtual_playbacks.${number}`,
+				undefined,
+				9_998,
+			);
+			if (decoded.number !== decodedNumber)
+				throw new WireValidationError(
+					`${path}.virtual_playbacks.${number}.number`,
+					String(decodedNumber),
+					decoded.number,
+				);
+			return [String(decodedNumber), decoded];
+		}),
+	);
 	return {
 		...page,
 		number,
 		name: plainStringAt(page.name, `${path}.name`),
 		slots: decodedSlots,
+		virtual_playbacks: decodedVirtualPlaybacks,
 	} as PlaybackPage;
 }
 

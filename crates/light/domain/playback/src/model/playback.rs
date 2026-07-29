@@ -3,6 +3,102 @@ use crate::*;
 pub const MAX_PLAYBACKS: u16 = 1_000;
 pub const MAX_PLAYBACK_PAGES: u8 = 127;
 pub const MAX_PAGE_SLOTS: u8 = 127;
+pub const MIN_VIRTUAL_PLAYBACK: u16 = 1_001;
+pub const MAX_VIRTUAL_PLAYBACK: u16 = 9_998;
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PhysicalPlaybackNumber(u16);
+
+impl PhysicalPlaybackNumber {
+    pub fn new(number: u16) -> Result<Self, String> {
+        if (1..=MAX_PLAYBACKS).contains(&number) {
+            Ok(Self(number))
+        } else {
+            Err("physical playback number must be within 1-1000".into())
+        }
+    }
+
+    pub const fn get(self) -> u16 {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct VirtualPlaybackNumber(u16);
+
+impl VirtualPlaybackNumber {
+    pub fn new(number: u16) -> Result<Self, String> {
+        if (MIN_VIRTUAL_PLAYBACK..=MAX_VIRTUAL_PLAYBACK).contains(&number) {
+            Ok(Self(number))
+        } else {
+            Err("virtual playback number must be within 1001-9998".into())
+        }
+    }
+
+    pub const fn get(self) -> u16 {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+pub struct VirtualPlaybackAddress {
+    page: u8,
+    number: VirtualPlaybackNumber,
+}
+
+impl VirtualPlaybackAddress {
+    pub fn new(page: u8, number: u16) -> Result<Self, String> {
+        if !(1..=MAX_PLAYBACK_PAGES).contains(&page) {
+            return Err("virtual playback page must be within 1-127".into());
+        }
+        Ok(Self {
+            page,
+            number: VirtualPlaybackNumber::new(number)?,
+        })
+    }
+
+    pub const fn page(self) -> u8 {
+        self.page
+    }
+
+    pub const fn number(self) -> VirtualPlaybackNumber {
+        self.number
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PlaybackIdentity {
+    Physical(PhysicalPlaybackNumber),
+    Virtual(VirtualPlaybackAddress),
+}
+
+impl PlaybackIdentity {
+    pub fn physical(number: u16) -> Result<Self, String> {
+        Ok(Self::Physical(PhysicalPlaybackNumber::new(number)?))
+    }
+
+    pub fn virtual_playback(page: u8, number: u16) -> Result<Self, String> {
+        let address = VirtualPlaybackAddress::new(page, number)?;
+        Ok(Self::Virtual(address))
+    }
+
+    pub const fn number(self) -> u16 {
+        match self {
+            Self::Physical(number) => number.get(),
+            Self::Virtual(address) => address.number.get(),
+        }
+    }
+
+    pub const fn virtual_address(self) -> Option<VirtualPlaybackAddress> {
+        match self {
+            Self::Physical(_) => None,
+            Self::Virtual(address) => Some(address),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -319,8 +415,8 @@ impl PlaybackDefinition {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if !(1..=MAX_PLAYBACKS).contains(&self.number) {
-            return Err("playback number must be within 1-1000".into());
+        if !(1..=MAX_VIRTUAL_PLAYBACK).contains(&self.number) {
+            return Err("playback number must be physical 1-1000 or virtual 1001-9998".into());
         }
         if self.name.trim().is_empty() || self.name.len() > 80 {
             return Err("playback name must contain 1-80 characters".into());
@@ -462,6 +558,12 @@ pub struct PlaybackPage {
     pub name: String,
     #[serde(default)]
     pub slots: HashMap<u8, u16>,
+    /// Sparse dedicated Virtual Playback assignments for this page.
+    ///
+    /// Keys are the operator-visible numbers 1001-9998. They are intentionally separate from
+    /// physical page slots so the same number on two pages remains a different definition and
+    /// runtime identity.
+    pub virtual_playbacks: HashMap<u16, PlaybackDefinition>,
 }
 
 impl PlaybackPage {
@@ -473,6 +575,15 @@ impl PlaybackPage {
             !(1..=MAX_PAGE_SLOTS).contains(slot) || !(1..=MAX_PLAYBACKS).contains(playback)
         }) {
             return Err("page slots must be within 1-127 and reference playbacks 1-1000".into());
+        }
+        for (number, playback) in &self.virtual_playbacks {
+            VirtualPlaybackAddress::new(self.number, *number)?;
+            if playback.number != *number {
+                return Err(
+                    "virtual playback assignment key must match its playback number".into(),
+                );
+            }
+            playback.validate()?;
         }
         Ok(())
     }

@@ -41,6 +41,11 @@ pub(in crate::runtime) fn application_identities(
             wire::PlaybackRuntimeIdentity::Playback { .. } => {
                 Err("playback_number must be within 1-1000".into())
             }
+            wire::PlaybackRuntimeIdentity::Virtual {
+                page,
+                playback_number,
+            } => light_playback::VirtualPlaybackAddress::new(page, playback_number)
+                .map(application::PlaybackRuntimeIdentity::Virtual),
             wire::PlaybackRuntimeIdentity::CueList { cue_list_id } if !cue_list_id.is_nil() => Ok(
                 application::PlaybackRuntimeIdentity::CueList(light_core::CueListId(cue_list_id)),
             ),
@@ -75,6 +80,11 @@ fn application_address(
         wire::PlaybackAddress::Playback { .. } => {
             Err("playback_number must be within 1-1000".into())
         }
+        wire::PlaybackAddress::Virtual {
+            page,
+            playback_number,
+        } => light_playback::VirtualPlaybackAddress::new(page, playback_number)
+            .map(application::PlaybackAddress::Virtual),
         wire::PlaybackAddress::CurrentPage { slot }
             if (1..=light_playback::MAX_PAGE_SLOTS).contains(&slot) =>
         {
@@ -296,6 +306,12 @@ fn wire_identity(identity: application::PlaybackRuntimeIdentity) -> wire::Playba
         application::PlaybackRuntimeIdentity::Playback(playback_number) => {
             wire::PlaybackRuntimeIdentity::Playback { playback_number }
         }
+        application::PlaybackRuntimeIdentity::Virtual(address) => {
+            wire::PlaybackRuntimeIdentity::Virtual {
+                page: address.page(),
+                playback_number: address.number().get(),
+            }
+        }
         application::PlaybackRuntimeIdentity::CueList(cue_list_id) => {
             wire::PlaybackRuntimeIdentity::CueList {
                 cue_list_id: cue_list_id.0,
@@ -320,6 +336,10 @@ fn requested_address(address: application::PlaybackAddress) -> wire::PlaybackAdd
         application::PlaybackAddress::Pool(playback_number) => {
             wire::PlaybackAddress::Playback { playback_number }
         }
+        application::PlaybackAddress::Virtual(address) => wire::PlaybackAddress::Virtual {
+            page: address.page(),
+            playback_number: address.number().get(),
+        },
         application::PlaybackAddress::CurrentPage { slot } => {
             wire::PlaybackAddress::CurrentPage { slot }
         }
@@ -350,6 +370,12 @@ fn resolved_address(
                 playback_number: number,
                 page,
                 slot,
+            }
+        }
+        application::ResolvedPlaybackAddress::Virtual(address) => {
+            wire::ResolvedPlaybackAddress::Virtual {
+                page: address.page(),
+                playback_number: address.number().get(),
             }
         }
     }

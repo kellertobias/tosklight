@@ -58,6 +58,21 @@ pub(super) fn prepare(
             ),
             playback,
         ),
+        PlaybackTopologyAction::ConfigureVirtual {
+            page,
+            number,
+            expected_page_revision,
+            expected_page_object_id,
+            playback,
+        } => configure_virtual(
+            document,
+            command,
+            *page,
+            *number,
+            *expected_page_revision,
+            expected_page_object_id.as_deref(),
+            playback,
+        ),
         PlaybackTopologyAction::MapExistingPlayback {
             page,
             slot,
@@ -118,7 +133,146 @@ pub(super) fn prepare(
                 expected_playback_object_id.as_deref(),
             ),
         ),
+        PlaybackTopologyAction::ClearVirtual {
+            page,
+            number,
+            expected_page_revision,
+            expected_page_object_id,
+        } => clear_virtual(
+            document,
+            command,
+            *page,
+            *number,
+            *expected_page_revision,
+            expected_page_object_id.as_deref(),
+        ),
     }
+}
+
+fn configure_virtual(
+    document: &PortableShowDocument,
+    command: &PlaybackTopologyCommand,
+    page_number: u8,
+    number: u16,
+    expected_page_revision: u64,
+    expected_page_object_id: Option<&str>,
+    requested: &PlaybackDefinition,
+) -> Result<PreparedActiveShowTransaction<PreparedTopology>, ActionError> {
+    light_playback::VirtualPlaybackAddress::new(page_number, number).map_err(invalid)?;
+    let stored = find_page(document, page_number)?;
+    validate_identity(
+        stored.as_ref(),
+        expected_page_object_id,
+        "Playback Page",
+        document.revision().value(),
+    )?;
+    validate_revision(
+        stored.as_ref(),
+        expected_page_revision,
+        "Playback Page",
+        document.revision().value(),
+    )?;
+    let mut playback = requested.clone();
+    playback.number = number;
+    playback.has_fader = false;
+    playback.button_count = 1;
+    playback.buttons[1] = light_playback::PlaybackButtonAction::None;
+    playback.buttons[2] = light_playback::PlaybackButtonAction::None;
+    playback.validate().map_err(invalid)?;
+    let mut page = stored.as_ref().map_or_else(
+        || light_playback::PlaybackPage {
+            number: page_number,
+            name: format!("Page {page_number}"),
+            slots: std::collections::HashMap::new(),
+            virtual_playbacks: std::collections::HashMap::new(),
+        },
+        |stored| stored.typed.clone(),
+    );
+    page.virtual_playbacks.insert(number, playback);
+    page.validate().map_err(invalid)?;
+    let resolution = PlaybackTopologyResolution::Virtual {
+        page: page_number,
+        playback_number: number,
+    };
+    if let Some(stored) = stored.as_ref()
+        && same_typed(&stored.typed, &page)?
+    {
+        return Ok(no_change(
+            document,
+            command,
+            resolution,
+            vec![stored_projection(
+                ActiveShowObjectKind::PlaybackPage,
+                stored,
+            )],
+        ));
+    }
+    let object_id = page_object_id(document, stored.as_ref(), page_number)?;
+    let body = stored.as_ref().map_or_else(
+        || serde_json::to_value(&page).map_err(invalid),
+        |stored| {
+            lossless_json::merge_typed(&stored.raw_body, &stored.typed, &page).map_err(invalid)
+        },
+    )?;
+    changed_present(
+        document,
+        command,
+        resolution,
+        vec![(ActiveShowObjectKind::PlaybackPage, object_id, body)],
+        Vec::new(),
+    )
+}
+
+fn clear_virtual(
+    document: &PortableShowDocument,
+    command: &PlaybackTopologyCommand,
+    page_number: u8,
+    number: u16,
+    expected_page_revision: u64,
+    expected_page_object_id: Option<&str>,
+) -> Result<PreparedActiveShowTransaction<PreparedTopology>, ActionError> {
+    light_playback::VirtualPlaybackAddress::new(page_number, number).map_err(invalid)?;
+    let stored = find_page(document, page_number)?;
+    validate_identity(
+        stored.as_ref(),
+        expected_page_object_id,
+        "Playback Page",
+        document.revision().value(),
+    )?;
+    validate_revision(
+        stored.as_ref(),
+        expected_page_revision,
+        "Playback Page",
+        document.revision().value(),
+    )?;
+    let resolution = PlaybackTopologyResolution::Virtual {
+        page: page_number,
+        playback_number: number,
+    };
+    let Some(stored) = stored else {
+        return Ok(no_change(document, command, resolution, Vec::new()));
+    };
+    let mut page = stored.typed.clone();
+    if page.virtual_playbacks.remove(&number).is_none() {
+        return Ok(no_change(
+            document,
+            command,
+            resolution,
+            vec![stored_projection(
+                ActiveShowObjectKind::PlaybackPage,
+                &stored,
+            )],
+        ));
+    }
+    let body =
+        lossless_json::merge_typed(&stored.raw_body, &stored.typed, &page).map_err(invalid)?;
+    changed_present(
+        document,
+        command,
+        resolution,
+        vec![(ActiveShowObjectKind::PlaybackPage, stored.object_id, body)],
+        Vec::new(),
+    )
 }
 
 fn save_cue_list(

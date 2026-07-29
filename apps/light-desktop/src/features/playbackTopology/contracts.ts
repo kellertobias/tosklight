@@ -24,6 +24,14 @@ export type PlaybackTopologyAction =
 			playback: PlaybackDefinition;
 	  }
 	| {
+			type: "configure_virtual";
+			page: number;
+			playbackNumber: number;
+			expectedPageRevision: number;
+			expectedPageObjectId: string | null;
+			playback: PlaybackDefinition;
+	  }
+	| {
 			type: "map_existing_playback";
 			page: number;
 			slot: number;
@@ -41,6 +49,13 @@ export type PlaybackTopologyAction =
 			expectedPageObjectId: string | null;
 			expectedPlaybackRevision: number;
 			expectedPlaybackObjectId: string | null;
+	  }
+	| {
+			type: "clear_virtual";
+			page: number;
+			playbackNumber: number;
+			expectedPageRevision: number;
+			expectedPageObjectId: string | null;
 	  }
 	| {
 			type: "create_page";
@@ -69,7 +84,8 @@ export type PlaybackTopologyResolution =
 			page: number;
 			slot: number;
 			playbackNumber: number | null;
-	  };
+	  }
+	| { kind: "virtual"; page: number; playbackNumber: number };
 
 export type PlaybackTopologyObject<K extends ShowObjectKind = ShowObjectKind> =
 	| {
@@ -131,6 +147,12 @@ export interface PlaybackTopologyActions {
 		playback: PlaybackDefinition,
 		revisionBasis?: PlaybackTopologyRevisionBasis,
 	): Promise<PlaybackTopologyOutcome | null>;
+	configureVirtual(
+		page: number,
+		playbackNumber: number,
+		playback: PlaybackDefinition,
+		revisionBasis?: PlaybackPageRevisionBasis,
+	): Promise<PlaybackTopologyOutcome | null>;
 	mapExistingPlayback(
 		page: number,
 		slot: number,
@@ -141,6 +163,11 @@ export interface PlaybackTopologyActions {
 		page: number,
 		slot: number,
 		revisionBasis?: PlaybackTopologyRevisionBasis,
+	): Promise<PlaybackTopologyOutcome | null>;
+	clearVirtual(
+		page: number,
+		playbackNumber: number,
+		revisionBasis?: PlaybackPageRevisionBasis,
 	): Promise<PlaybackTopologyOutcome | null>;
 }
 

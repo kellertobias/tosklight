@@ -88,13 +88,13 @@ The full Stage settings also control the 2D/3D view, Group shortcuts, selection 
 - **Lines only** draws each active directional source as a center line and a ground-footprint outline without a beam volume.
 - **Lines + beams** adds the normal beam volume to those aiming lines and is the default for new and older layouts.
 - **Beams** shows the normal beam volume without the active center line or footprint.
-- **Improved beams** uses a feathered beam edge while keeping the embedded Stage within its bounded live-desk rendering budget.
+- **Improved beams** uses a feathered beam edge. Up to eight highest-contributing directional sources also illuminate opaque Stage surfaces, stop at their first opaque intersection, and cast bounded soft shadows; stable ownership prevents the light budget from rapidly changing. Other active sources keep their feathered volume without allocating another Stage light or shadow map.
 
 The footprint shows where the authored field angle intersects the ground reference. It becomes elliptical when a beam strikes at an angle and stays visible when **Floor grid** is off. A beam aimed parallel to or away from the ground has a center line but no invented footprint.
 
 **Beam direction guides** is separate from Render quality. It shows a dotted off-state aim line for every emitter configured as directional, including fixed conventional fixtures; broad strobes and Sunstrip-style emitters have no guide. Turn **Floor grid** off when the neutral base plane and its reference lines should not be rendered.
 
-Stage receives authoritative Live and Preload output from the engine. The desk sends current values at a bounded cadence and the view moves smoothly between samples without predicting past the newest value. A disconnected view freezes its last coherent state and reconnects without blocking Programmer, Playback, command handling, or physical output. The built-in view is intended for selection, aiming, and show preparation; realistic materials, haze, photometric rendering, and richer shadow or occlusion work belong to the separate Viz application.
+Stage receives authoritative Live and Preload output from the engine. The desk sends current values at a bounded cadence and the view moves smoothly between samples without predicting past the newest value. A disconnected view freezes its last coherent state and reconnects without blocking Programmer, Playback, command handling, or physical output. The built-in view is intended for selection, aiming, and show preparation; realistic materials, haze, photometric rendering, volumetric occlusion, and richer optical or shadow work belong to the separate Viz application.
 
 ![Stage pane](../assets/screenshots/panes/stage.png)
 
@@ -125,12 +125,12 @@ Empty positions remain available for future Dynamics without renumbering existin
 populated tile reports its name and number; its running state comes from the authoritative runtime
 rather than a browser-side animation. Press **Delete**, then a populated tile, to delete it.
 
-The editor separates **Curves**, **Phase Spread**, and **Speed**. Curves contain scalar lanes for
+The editor separates **Lanes**, **Phase**, and **Speed**. Lanes contain scalar curves for
 fixture attributes. Click one lane to edit it, or Shift-click additional lanes for a shared edit.
-The lane menu changes the attribute or deletes that lane. The bottom composer switches between
+The lane cog opens actions over that lane to change its attribute or delete it. The bottom composer switches between
 Keyframes, Max/Min, and Middle/Amplitude while the normal Programmer encoder surface becomes the
 Dynamics encoder surface; pressing an encoder-group tab advances its additional pages when present.
-Phase Spread controls ordered target projection, Offset/Span, Blocks, Repeats, Wings, and spatial
+Phase controls ordered target projection, Offset/Span, Blocks, Repeats, Wings, and spatial
 ordering. Choose **Uniform** to use one spread for every lane, or **Per lane** to select a lane and
 give it its own spread. Switching to Per lane starts each lane with the current Uniform settings;
 switching back to Uniform keeps the lane settings available for a later return. Speed uses either
@@ -143,7 +143,7 @@ choose Live or **Follow Preload** for authoritative visualization.
 binding; any other selection becomes an exact frozen ordered target list. **Clear Selection**
 returns the Dynamic to targetless operation. Both actions are disabled while any instance of that
 Dynamic is running, so an active definition cannot silently retarget. These controls are available
-in Dynamic Settings and in the Phase Spread workspace.
+in Dynamic Settings and in the Phase workspace.
 
 **Pane configuration:** only the common size and removal controls.
 

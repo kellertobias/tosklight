@@ -23,6 +23,8 @@ use uuid::Uuid;
 mod map_existing;
 #[path = "tests/page_actions.rs"]
 mod page_actions;
+#[path = "tests/virtual_playbacks.rs"]
+mod virtual_playbacks;
 
 #[test]
 fn save_cue_list_is_lossless_and_semantic_repetition_is_no_change() {

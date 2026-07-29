@@ -1,7 +1,7 @@
 //! Show-level snapshot and replay-safe exclusion-zone updates.
 
 use super::{
-    ApiError, AppState, ShowContext, authenticate, emit,
+    ApiError, AppState, ShowContext, TolerantJson, authenticate, emit,
     playback_api::{VirtualPlaybackExclusionZone, validate_virtual_playback_exclusion_zones},
 };
 use axum::{
@@ -37,7 +37,7 @@ async fn snapshot(
     authenticate(&state, &headers)?;
     let _activation = state.active_show.acquire().await;
     let show_id = show.resolve(&state)?;
-    let desks = state.installation.virtual_playback_exclusions(show_id);
+    let desks = state.installation.virtual_playback_exclusions(show_id)?;
     Ok(Json(VirtualPlaybackExclusionSnapshot {
         show_id: show_id.0,
         desks,
@@ -49,11 +49,12 @@ async fn update_surface(
     show: ShowContext,
     Path(surface_id): Path<String>,
     headers: HeaderMap,
-    request: Result<Json<VirtualPlaybackExclusionUpdateRequest>, JsonRejection>,
+    request: Result<TolerantJson<VirtualPlaybackExclusionUpdateRequest>, JsonRejection>,
 ) -> Result<Json<VirtualPlaybackExclusionUpdateOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_surface_id(&surface_id)?;
-    let Json(request) = request.map_err(|error| ApiError::bad_request(error.body_text()))?;
+    let TolerantJson(request) =
+        request.map_err(|error| ApiError::bad_request(error.body_text()))?;
     validate_request_id(&request.request_id)?;
     let zones = validate_virtual_playback_exclusion_zones(request.zones)?;
     let key = ReplayKey {
@@ -66,6 +67,8 @@ async fn update_surface(
     let action = ReplayAction {
         show_id: show_id.0,
         surface_id: surface_id.clone(),
+        expected_revision: request.expected_revision,
+        page_mode: request.page_mode,
         zones: zones.clone(),
     };
     if let Some(outcome) = state
@@ -76,15 +79,22 @@ async fn update_surface(
         return Ok(Json(outcome));
     }
     let desk_id = session.desk.id;
-    let changed = state
+    let (changed, surface) = state
         .installation
-        .update_virtual_playback_exclusion_surface(show_id, desk_id, &surface_id, &zones)?;
+        .update_virtual_playback_exclusion_surface(
+            show_id,
+            desk_id,
+            &surface_id,
+            request.expected_revision,
+            request.page_mode,
+            &zones,
+        )?;
     let outcome = VirtualPlaybackExclusionUpdateOutcome {
         request_id: request.request_id,
         show_id: show_id.0,
         desk_id,
         surface_id: surface_id.clone(),
-        zones: zones.clone(),
+        surface,
         replayed: false,
         changed,
     };
@@ -153,6 +163,8 @@ pub(super) struct ReplayKey {
 pub(super) struct ReplayAction {
     show_id: Uuid,
     surface_id: String,
+    expected_revision: u64,
+    page_mode: light_wire::v2::virtual_playback_zones::VirtualPlaybackSurfacePageMode,
     zones: Vec<VirtualPlaybackExclusionZone>,
 }
 

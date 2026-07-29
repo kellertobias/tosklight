@@ -205,7 +205,12 @@ export async function writePage(
 		api,
 		"playback_page",
 		String(number),
-		{ number, name: number === 1 ? "Main" : `Page ${number}`, slots },
+		{
+			number,
+			name: number === 1 ? "Main" : `Page ${number}`,
+			slots,
+			virtual_playbacks: current?.body.virtual_playbacks ?? {},
+		},
 		current?.revision ?? 0,
 	);
 }

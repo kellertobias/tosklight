@@ -873,6 +873,47 @@
               "maximum": 9007199254740991,
               "minimum": 0
             },
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 127,
+              "minimum": 1
+            },
+            "playback": {
+              "$ref": "#/$defs/PlaybackTopologyPlaybackDefinition"
+            },
+            "playback_number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 9998,
+              "minimum": 1001
+            },
+            "type": {
+              "type": "string",
+              "const": "configure_virtual"
+            }
+          },
+          "required": [
+            "type",
+            "page",
+            "playback_number",
+            "expected_page_revision",
+            "expected_page_object_id",
+            "playback"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expected_page_object_id": {
+              "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
+            },
+            "expected_page_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "maximum": 9007199254740991,
+              "minimum": 0
+            },
             "expected_playback_object_id": {
               "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
             },
@@ -1028,6 +1069,43 @@
             "expected_page_object_id",
             "expected_playback_revision",
             "expected_playback_object_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expected_page_object_id": {
+              "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
+            },
+            "expected_page_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "maximum": 9007199254740991,
+              "minimum": 0
+            },
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 127,
+              "minimum": 1
+            },
+            "playback_number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 9998,
+              "minimum": 1001
+            },
+            "type": {
+              "type": "string",
+              "const": "clear_virtual"
+            }
+          },
+          "required": [
+            "type",
+            "page",
+            "playback_number",
+            "expected_page_revision",
+            "expected_page_object_id"
           ]
         }
       ]
@@ -1285,7 +1363,7 @@
         "number": {
           "type": "integer",
           "format": "uint16",
-          "maximum": 1000,
+          "maximum": 9998,
           "minimum": 0
         },
         "presentation_icon": {

@@ -4,7 +4,9 @@ use crate::{
     playback_exclusion::apply_with_exclusions,
 };
 use chrono::{DateTime, Utc};
-use light_playback::{PlaybackEngine, PlaybackRuntimeEffect};
+use light_playback::{
+    PlaybackEngine, PlaybackIdentity, PlaybackRuntimeEffect, VirtualPlaybackAddress,
+};
 use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -26,6 +28,7 @@ pub enum PlaybackBatchAction {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlaybackBatchCommand {
     pub number: u16,
+    pub page: Option<u8>,
     pub action: PlaybackBatchAction,
     pub exclusion_zones: Arc<[Vec<u16>]>,
     pub activation_origin: Option<light_playback::PlaybackActivationOrigin>,
@@ -34,6 +37,7 @@ pub struct PlaybackBatchCommand {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlaybackBatchOutcome {
     pub number: u16,
+    pub page: Option<u8>,
     pub released_playbacks: Vec<u16>,
     pub addressed_effect: PlaybackRuntimeEffect,
     pub effect: PlaybackRuntimeEffect,
@@ -120,6 +124,9 @@ fn apply_command(
     started_at: DateTime<Utc>,
     fallback_millis: u64,
 ) -> Result<PlaybackBatchOutcome, String> {
+    if command.number >= light_playback::MIN_VIRTUAL_PLAYBACK {
+        return apply_virtual_command(playback, command, started_at, fallback_millis);
+    }
     let previous = playback.preload_timing_state(command.number);
     let (effects, released_playbacks) = apply_with_exclusions(
         playback,
@@ -148,9 +155,101 @@ fn apply_command(
         .combine(timing_effect);
     Ok(PlaybackBatchOutcome {
         number: command.number,
+        page: command.page,
         released_playbacks,
         addressed_effect,
         effect,
+    })
+}
+
+fn apply_virtual_command(
+    playback: &mut PlaybackEngine,
+    command: &PlaybackBatchCommand,
+    started_at: DateTime<Utc>,
+    fallback_millis: u64,
+) -> Result<PlaybackBatchOutcome, String> {
+    let page = command
+        .page
+        .ok_or("virtual Preload Playback action requires a page")?;
+    let address = VirtualPlaybackAddress::new(page, command.number)?;
+    let identity = PlaybackIdentity::Virtual(address);
+    let previous = playback.preload_timing_state_at(identity);
+    let zones = command
+        .exclusion_zones
+        .iter()
+        .map(|zone| {
+            zone.iter()
+                .copied()
+                .map(|number| VirtualPlaybackAddress::new(page, number))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let peers = zones
+        .iter()
+        .filter(|zone| zone.contains(&address))
+        .flatten()
+        .copied()
+        .filter(|peer| *peer != address)
+        .filter(|peer| playback.is_active_at(PlaybackIdentity::Virtual(*peer)))
+        .collect::<std::collections::BTreeSet<_>>();
+    let outcome = crate::playback::execute_virtual(
+        playback,
+        address,
+        virtual_action(command.action)?,
+        &zones,
+        command.activation_origin,
+    )?;
+    let effects = match outcome {
+        crate::EnginePlaybackOutcome::Changed(effect) => effect,
+        _ => EnginePlaybackEffect::default(),
+    };
+    let timing_effect = if effects.addressed.changed() {
+        playback
+            .apply_preload_timing_at_mutation(
+                identity,
+                action_name(command.action),
+                started_at,
+                fallback_millis,
+                previous,
+            )?
+            .effect
+    } else {
+        PlaybackRuntimeEffect::None
+    };
+    let released_playbacks = peers
+        .into_iter()
+        .filter(|peer| !playback.is_active_at(PlaybackIdentity::Virtual(*peer)))
+        .map(|peer| peer.number().get())
+        .collect::<Vec<_>>();
+    Ok(PlaybackBatchOutcome {
+        number: command.number,
+        page: command.page,
+        released_playbacks,
+        addressed_effect: effects.addressed.combine(timing_effect),
+        effect: effects.aggregate.combine(timing_effect),
+    })
+}
+
+fn virtual_action(action: PlaybackBatchAction) -> Result<crate::VirtualPlaybackAction, String> {
+    use crate::VirtualPlaybackAction as Virtual;
+    Ok(match action {
+        PlaybackBatchAction::Toggle => Virtual::Toggle,
+        PlaybackBatchAction::Go => Virtual::Go,
+        PlaybackBatchAction::Back => Virtual::Back,
+        PlaybackBatchAction::Off => Virtual::Off,
+        PlaybackBatchAction::On => Virtual::On,
+        PlaybackBatchAction::SetTempButton(active) => Virtual::SetTempButton(active),
+        PlaybackBatchAction::TogglePause => Virtual::Pause,
+        PlaybackBatchAction::DynamicRestart => Virtual::DynamicRestart,
+        PlaybackBatchAction::DynamicDoubleSpeed => Virtual::DynamicDoubleSpeed,
+        PlaybackBatchAction::DynamicHalfSpeed => Virtual::DynamicHalfSpeed,
+        PlaybackBatchAction::DynamicLearnSpeed => Virtual::DynamicLearnSpeed,
+        PlaybackBatchAction::SetFader { value_permyriad } if value_permyriad <= 10_000 => {
+            Virtual::SetMaster(f32::from(value_permyriad) / 10_000.0)
+        }
+        PlaybackBatchAction::SetFader { .. } => {
+            return Err("Preload Playback fader value must be within 0-10000".into());
+        }
     })
 }
 

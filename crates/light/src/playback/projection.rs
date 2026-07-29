@@ -11,6 +11,7 @@ pub const MAX_PLAYBACK_SNAPSHOT_IDENTITIES: usize = 256;
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum PlaybackRuntimeIdentity {
     Playback(u16),
+    Virtual(light_playback::VirtualPlaybackAddress),
     CueList(CueListId),
     Group(PlaybackGroupId),
 }

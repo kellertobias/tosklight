@@ -34,6 +34,17 @@ test("TELEMETRY-001 @ui › playback fades stream ~10 Hz delta samples without p
 
   await desk.open(bench.baseUrl);
   await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            window.__TOSKLIGHT_FRONTEND_PERFORMANCE__?.snapshot().warmup?.status ??
+            null,
+        ),
+      { timeout: 30_000 },
+    )
+    .toBe("ready");
   const hydrationSnapshots = snapshotRequests.length;
 
   await api.playbackNumberAction(1, "go", {});

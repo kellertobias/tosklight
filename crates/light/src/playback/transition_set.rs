@@ -109,10 +109,23 @@ fn compare_identity(left: &PlaybackRuntimeIdentity, right: &PlaybackRuntimeIdent
         (PlaybackRuntimeIdentity::Playback(left), PlaybackRuntimeIdentity::Playback(right)) => {
             left.cmp(right)
         }
+        (PlaybackRuntimeIdentity::Virtual(left), PlaybackRuntimeIdentity::Virtual(right)) => {
+            left.cmp(right)
+        }
+        (PlaybackRuntimeIdentity::Playback(_), PlaybackRuntimeIdentity::Virtual(_)) => {
+            Ordering::Less
+        }
+        (PlaybackRuntimeIdentity::Virtual(_), PlaybackRuntimeIdentity::Playback(_)) => {
+            Ordering::Greater
+        }
         (PlaybackRuntimeIdentity::Playback(_), PlaybackRuntimeIdentity::CueList(_)) => {
             Ordering::Less
         }
-        (PlaybackRuntimeIdentity::CueList(_), PlaybackRuntimeIdentity::Playback(_)) => {
+        (PlaybackRuntimeIdentity::Virtual(_), PlaybackRuntimeIdentity::CueList(_)) => {
+            Ordering::Less
+        }
+        (PlaybackRuntimeIdentity::CueList(_), PlaybackRuntimeIdentity::Playback(_))
+        | (PlaybackRuntimeIdentity::CueList(_), PlaybackRuntimeIdentity::Virtual(_)) => {
             Ordering::Greater
         }
         (PlaybackRuntimeIdentity::CueList(left), PlaybackRuntimeIdentity::CueList(right)) => {

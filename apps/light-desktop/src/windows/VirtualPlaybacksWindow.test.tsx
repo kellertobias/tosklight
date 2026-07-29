@@ -8,13 +8,72 @@ import {
 import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaybackDefinition } from "../api/types";
+import { exclusionFenceForSlot } from "../components/control/virtualPlayback/VirtualPlaybackGrid";
 import { PaneSettingsModal } from "../components/modals/PaneSettingsModal";
+import { PaneChromeProvider } from "../components/shell/PaneChromeContext";
 import { registerControlSurfaceTarget } from "../features/controlSurfaceInteraction/registry";
 import { cueProjection } from "../features/playbackRuntime/testFixtures";
 import { VirtualPlaybacksWindow } from "./VirtualPlaybacksWindow";
 
-const render = (ui: Parameters<typeof rtlRender>[0]) =>
-	rtlRender(ui, { wrapper: ModalProvider });
+describe("Virtual Playback exclusion-zone fences", () => {
+	it("joins orthogonal neighbors and outlines disconnected islands", () => {
+		const zones = [{ slots: [1, 2, 4, 5, 9] }];
+
+		expect(exclusionFenceForSlot(zones, 1, 3, 9)).toEqual({
+			top: true,
+			right: false,
+			bottom: false,
+			left: true,
+		});
+		expect(exclusionFenceForSlot(zones, 5, 3, 9)).toEqual({
+			top: false,
+			right: true,
+			bottom: true,
+			left: false,
+		});
+		expect(exclusionFenceForSlot(zones, 9, 3, 9)).toEqual({
+			top: true,
+			right: true,
+			bottom: true,
+			left: true,
+		});
+	});
+
+	it("treats overlapping zones as one connected visual boundary", () => {
+		const zones = [{ slots: [1, 2] }, { slots: [2, 3] }];
+
+		expect(exclusionFenceForSlot(zones, 2, 3, 3)).toEqual({
+			top: true,
+			right: false,
+			bottom: true,
+			left: false,
+		});
+	});
+});
+
+const portalTargets: HTMLElement[] = [];
+const render = (ui: Parameters<typeof rtlRender>[0]) => {
+	const toolbar = document.createElement("span");
+	toolbar.className = "pane-chrome-toolbar-target";
+	document.body.append(toolbar);
+	portalTargets.push(toolbar);
+	const rendered = rtlRender(
+		<PaneChromeProvider value={{ info: null, toolbar }}>
+			{ui}
+		</PaneChromeProvider>,
+		{ wrapper: ModalProvider },
+	);
+	return {
+		...rendered,
+		rerender(next: Parameters<typeof rendered.rerender>[0]) {
+			rendered.rerender(
+				<PaneChromeProvider value={{ info: null, toolbar }}>
+					{next}
+				</PaneChromeProvider>,
+			);
+		},
+	};
+};
 
 const mocks = vi.hoisted(() => {
 	const loadSurface = vi.fn();
@@ -44,10 +103,14 @@ const mocks = vi.hoisted(() => {
 		flash_release: "release_all" as const,
 		protect_from_swap: false,
 	};
+	const virtualPlayback: PlaybackDefinition = { ...playback, number: 1001 };
 	const page = {
 		number: 1,
 		name: "Main",
 		slots: { "1": 7 } as Record<string, number>,
+		virtual_playbacks: {
+			"1001": virtualPlayback,
+		} as Record<string, PlaybackDefinition>,
 	};
 	const cueList = {
 		id: "cue-1",
@@ -61,7 +124,9 @@ const mocks = vi.hoisted(() => {
 		dispatch: vi.fn(),
 		useServer: vi.fn(() => ({ playbacks: { pool: [] } })),
 		configureSlot: vi.fn(),
+		configureVirtual: vi.fn(),
 		clearMappedPlayback: vi.fn(),
+		clearVirtual: vi.fn(),
 		topologyActionError: null as Error | null,
 		poolPlaybackAction: vi.fn(),
 		loadSurface,
@@ -71,7 +136,9 @@ const mocks = vi.hoisted(() => {
 		zoneListeners,
 		topologyEnabled: [] as boolean[],
 		deskEnabled: [] as boolean[],
-		runtimeSelections: [] as number[][],
+		runtimeSelections: [] as Array<
+			Array<{ page: number; playbackNumber: number }>
+		>,
 		topology: {
 			ready: true,
 			error: null as Error | null,
@@ -80,6 +147,7 @@ const mocks = vi.hoisted(() => {
 			cueLists: [{ id: "cue-1", revision: 4, updated_at: "", body: cueList }],
 		},
 		playback,
+		virtualPlayback,
 		page,
 		cueList,
 		desk: {
@@ -92,7 +160,7 @@ const mocks = vi.hoisted(() => {
 			status: "ready" as "idle" | "loading" | "ready" | "error",
 			error: null as Error | null,
 		},
-		runtimes: new Map<number, ReturnType<typeof cueProjection>>(),
+		runtimes: new Map<string, ReturnType<typeof cueProjection>>(),
 		zoneCapability: {
 			authorityId: "session-a" as string | null,
 			authorityGeneration: 1,
@@ -115,7 +183,11 @@ const mocks = vi.hoisted(() => {
 				return zones;
 			}),
 			saveSurface: vi.fn(
-				async (surfaceId: string, zones: readonly unknown[]) => {
+				async (
+					surfaceId: string,
+					_pageMode: unknown,
+					zones: readonly unknown[],
+				) => {
 					zoneSaving.add(surfaceId);
 					notifyZone(surfaceId);
 					try {
@@ -133,6 +205,12 @@ const mocks = vi.hoisted(() => {
 		state: {
 			activeDeskId: "desk-1",
 			paneSettingsId: null as string | null,
+			virtualPlaybackZoneEdit: null as {
+				surfaceId: string;
+				zoneId: string;
+				name: string;
+				slots: number[];
+			} | null,
 			playbackPage: 98,
 			playbackSetArmed: false,
 			cueListSetArmed: false,
@@ -155,6 +233,10 @@ const mocks = vi.hoisted(() => {
 							height: 6,
 							virtualPlaybackRows: 1,
 							virtualPlaybackColumns: 2,
+							virtualPlaybackPageMode: "follow_main" as
+								| "follow_main"
+								| "pinned",
+							virtualPlaybackPinnedPage: 1,
 							virtualPlaybackCells: [{ playbackNumber: 999, action: "toggle" }],
 							virtualPlaybackExclusionZones: [],
 						},
@@ -181,7 +263,9 @@ vi.mock("../features/playbackTopology/PlaybackTopologyProvider", () => ({
 	usePlaybackTopologyActions: () => ({
 		error: mocks.topologyActionError,
 		configureSlot: mocks.configureSlot,
+		configureVirtual: mocks.configureVirtual,
 		clearMappedPlayback: mocks.clearMappedPlayback,
+		clearVirtual: mocks.clearVirtual,
 		saveCueList: vi.fn(),
 	}),
 }));
@@ -190,12 +274,20 @@ vi.mock("../features/playbackRuntime/PlaybackRuntimeView", () => ({
 		mocks.deskEnabled.push(enabled);
 		return enabled ? mocks.desk : null;
 	},
-	usePlaybackProjectionMap: (numbers: number[]) => {
-		mocks.runtimeSelections.push(numbers);
+	useVirtualPlaybackProjectionMap: (
+		addresses: Array<{ page: number; playbackNumber: number }>,
+	) => {
+		mocks.runtimeSelections.push(addresses);
 		return mocks.runtimes;
 	},
 	usePlaybackRuntimeActions: () => ({
 		poolPlaybackAction: mocks.poolPlaybackAction,
+		virtualPlaybackAction: (
+			_page: number,
+			_playbackNumber: number,
+			action: string,
+			input: unknown,
+		) => mocks.poolPlaybackAction(7, action, input),
 	}),
 	usePlaybackRuntimeStatus: () => mocks.runtimeStatus,
 }));
@@ -207,11 +299,15 @@ vi.mock("../features/showObjects/ShowObjectsView", () => ({
 }));
 vi.mock("../features/showObjects/ShowObjectsState", () => ({
 	useCueLists: () => mocks.topology.cueLists,
+	useDynamics: () => [],
 	usePlaybackDefinitions: () => mocks.topology.playbacks,
 	usePortableGroups: () => [],
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	for (const target of portalTargets.splice(0)) target.remove();
+});
 
 function deferred<T>() {
 	let resolve!: (value: T) => void;
@@ -225,9 +321,11 @@ beforeEach(() => {
 	mocks.dispatch.mockReset();
 	mocks.useServer.mockClear();
 	mocks.configureSlot.mockReset().mockResolvedValue({ status: "changed" });
+	mocks.configureVirtual.mockReset().mockResolvedValue({ status: "changed" });
 	mocks.clearMappedPlayback
 		.mockReset()
 		.mockResolvedValue({ status: "changed" });
+	mocks.clearVirtual.mockReset().mockResolvedValue({ status: "changed" });
 	mocks.topologyActionError = null;
 	mocks.poolPlaybackAction.mockReset().mockResolvedValue(null);
 	mocks.zoneSurfaces.clear();
@@ -254,6 +352,7 @@ beforeEach(() => {
 	mocks.topology.error = null;
 	mocks.topology.playbacks[0].revision = 2;
 	mocks.topology.pages[0].revision = 3;
+	mocks.topology.pages.splice(1);
 	mocks.desk = {
 		scope: { show_id: "show-1", show_revision: 4 },
 		desk_id: "desk-1",
@@ -263,10 +362,16 @@ beforeEach(() => {
 	mocks.runtimeStatus.status = "ready";
 	mocks.runtimeStatus.error = null;
 	mocks.page.slots = { "1": 7 };
-	mocks.playback.buttons = ["toggle", "none", "none"];
+	mocks.virtualPlayback.buttons = ["toggle", "none", "none"];
+	mocks.page.virtual_playbacks = { "1001": mocks.virtualPlayback };
 	mocks.runtimes.clear();
+	mocks.runtimes.set("virtual:1.1001", {
+		...cueProjection(1001),
+		requested: { kind: "virtual", page: 1, playback_number: 1001 },
+	});
 	Object.assign(mocks.state, {
 		paneSettingsId: null,
+		virtualPlaybackZoneEdit: null,
 		playbackSetArmed: false,
 		cueListSetArmed: false,
 		cueListSetTarget: null,
@@ -276,6 +381,8 @@ beforeEach(() => {
 	const pane = mocks.state.desks[0].panes[0];
 	pane.virtualPlaybackRows = 1;
 	pane.virtualPlaybackColumns = 2;
+	pane.virtualPlaybackPageMode = "follow_main";
+	pane.virtualPlaybackPinnedPage = 1;
 	pane.virtualPlaybackExclusionZones = [];
 });
 
@@ -293,11 +400,43 @@ describe("VirtualPlaybacksWindow", () => {
 			surface: "virtual",
 		});
 		expect(mocks.useServer).not.toHaveBeenCalled();
-		expect(mocks.runtimeSelections.at(-1)).toEqual([7]);
+		expect(mocks.runtimeSelections.at(-1)).toEqual([
+			{ page: 1, playbackNumber: 1001 },
+		]);
+	});
+
+	it("keeps a Pinned surface on its configured page", () => {
+		const pane = mocks.state.desks[0].panes[0];
+		pane.virtualPlaybackPageMode = "pinned";
+		pane.virtualPlaybackPinnedPage = 2;
+		mocks.topology.pages.push({
+			id: "2",
+			revision: 1,
+			updated_at: "",
+			body: {
+				number: 2,
+				name: "Pinned",
+				slots: { "1": 7 },
+				virtual_playbacks: { "1001": mocks.virtualPlayback },
+			},
+		});
+		mocks.runtimes.set("virtual:2.1001", {
+			...cueProjection(1001),
+			requested: { kind: "virtual", page: 2, playback_number: 1001 },
+		});
+
+		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
+
+		expect(
+			screen.getByRole("button", {
+				name: "Virtual playback page 2 cell 1 Front Wash",
+			}),
+		).toBeInTheDocument();
+		expect(mocks.desk?.active_page).toBe(1);
 	});
 
 	it("renders authoritative runtime without a legacy active-playback fallback", () => {
-		mocks.runtimes.set(7, cueProjection(7));
+		mocks.runtimes.set("playback:7", cueProjection(7));
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		const assigned = screen.getByRole("button", {
 			name: "Virtual playback page 1 cell 1 Front Wash",
@@ -342,7 +481,9 @@ describe("VirtualPlaybacksWindow", () => {
 		// The runtime subscription for the mapped playbacks stays active while loading:
 		// it is the activation mechanism itself (gating it on authorityReady deadlocked
 		// the pane, see useVirtualPlaybackController). Only rendering waits for authority.
-		expect(mocks.runtimeSelections.at(-1)).toEqual([7]);
+		expect(mocks.runtimeSelections.at(-1)).toEqual([
+			{ page: 1, playbackNumber: 1001 },
+		]);
 		expect(mocks.zoneCapability.loadSurface).not.toHaveBeenCalled();
 	});
 
@@ -413,43 +554,36 @@ describe("VirtualPlaybacksWindow", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
 		await waitFor(() =>
-			expect(mocks.configureSlot).toHaveBeenCalledWith(
+			expect(mocks.configureVirtual).toHaveBeenCalledWith(
 				1,
-				1,
-				expect.objectContaining({ name: "Edited against revision two" }),
+				1001,
+				expect.objectContaining({
+					number: 1001,
+					name: "Edited against revision two",
+				}),
 				{
 					expectedPageRevision: 3,
 					expectedPageObjectId: "1",
-					expectedPlaybackRevision: 2,
-					expectedPlaybackObjectId: "7",
 				},
 			),
 		);
 	});
 
-	it("assigns a scoped Cuelist source as one button and faderless", async () => {
+	it("opens normal Playback Configuration instead of copying a selected Cuelist", () => {
 		mocks.state.cueListSetArmed = true;
 		mocks.state.cueListSetTarget = 7;
-		mocks.page.slots = {};
+		mocks.page.virtual_playbacks = {};
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		fireEvent.click(
 			screen.getByRole("button", {
 				name: "Virtual playback page 1 cell 1 empty",
 			}),
 		);
-		await waitFor(() =>
-			expect(mocks.configureSlot).toHaveBeenCalledWith(
-				1,
-				1,
-				expect.objectContaining({
-					number: 0,
-					target: { type: "cue_list", cue_list_id: "cue-1" },
-					buttons: ["toggle", "none", "none"],
-					button_count: 1,
-					has_fader: false,
-				}),
-			),
-		);
+
+		expect(
+			screen.getByRole("dialog", { name: "Playback Configuration" }),
+		).toBeInTheDocument();
+		expect(mocks.configureVirtual).not.toHaveBeenCalled();
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_CUELIST_SET_ARMED",
 			value: false,
@@ -465,23 +599,19 @@ describe("VirtualPlaybacksWindow", () => {
 		);
 	});
 
-	it("preserves Set Source and Add Target entry points", () => {
+	it("opens normal Playback Configuration on right-click", () => {
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
-		fireEvent.click(screen.getByRole("button", { name: "Set Source" }));
-		expect(mocks.dispatch).toHaveBeenCalledWith({
-			type: "SET_CUELIST_SET_TARGET",
-			value: null,
-		});
-		expect(mocks.dispatch).toHaveBeenCalledWith({
-			type: "SET_CUELIST_SET_ARMED",
-			value: true,
-		});
-		mocks.dispatch.mockClear();
-		fireEvent.click(screen.getByRole("button", { name: "Add Target" }));
-		expect(mocks.dispatch).toHaveBeenCalledWith({
-			type: "SET_CUELIST_SET_ARMED",
-			value: true,
-		});
+		fireEvent.contextMenu(
+			screen.getByRole("button", {
+				name: "Virtual playback page 1 cell 1 Front Wash",
+			}),
+		);
+
+		expect(
+			screen.getByRole("dialog", { name: "Playback Configuration" }),
+		).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Set Source" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Add Target" })).toBeNull();
 	});
 
 	it("preserves configured rows and columns through the shared grid view", () => {
@@ -520,7 +650,7 @@ describe("VirtualPlaybacksWindow", () => {
 				target: {
 					family: { type: "cue" },
 					object_id: "cue-1",
-					playback_number: 7,
+					playback_number: 1001,
 					validate_active_context: true,
 				},
 			});
@@ -549,12 +679,17 @@ describe("VirtualPlaybacksWindow", () => {
 
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 		expect(
-			screen.getByText(/1 cells selected · Page 1 · 1×2/u),
+			screen.getByRole("button", { name: "Cancel Zone Selection" }),
 		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", {
+				name: "Virtual playback page 1 cell 1 Front Wash",
+			}),
+		).toHaveAttribute("aria-pressed", "true");
 	});
 
 	it("orders a held Flash release after its scoped press retry settles", async () => {
-		mocks.playback.buttons = ["flash", "none", "none"];
+		mocks.virtualPlayback.buttons = ["flash", "none", "none"];
 		const press = deferred<null>();
 		mocks.poolPlaybackAction
 			.mockImplementationOnce(() => press.promise)
@@ -595,7 +730,7 @@ describe("VirtualPlaybacksWindow", () => {
 	});
 
 	it("releases a held action when the scoped grid unmounts", async () => {
-		mocks.playback.buttons = ["flash", "none", "none"];
+		mocks.virtualPlayback.buttons = ["flash", "none", "none"];
 		const rendered = render(
 			<VirtualPlaybacksWindow paneId="virtual-1" active />,
 		);
@@ -619,7 +754,7 @@ describe("VirtualPlaybacksWindow", () => {
 	});
 
 	it("keeps Swap as a matched virtual press and release", async () => {
-		mocks.playback.buttons = ["swap", "none", "none"];
+		mocks.virtualPlayback.buttons = ["swap", "none", "none"];
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		const cell = screen.getByRole("button", {
 			name: "Virtual playback page 1 cell 1 Front Wash",
@@ -651,17 +786,35 @@ describe("VirtualPlaybacksWindow", () => {
 				"virtual-1",
 			),
 		);
+		expect(document.querySelector(".virtual-playback-toolbar")).toBeNull();
+		expect(
+			screen.queryByRole("button", { name: "Create Exclusion Zone" }),
+		).toBeNull();
+		expect(
+			screen.queryByRole("button", { name: "Cancel Zone Selection" }),
+		).toBeNull();
 		fireEvent.click(
 			screen.getByRole("button", {
 				name: "Virtual playback page 1 cell 1 Front Wash",
 			}),
 		);
+		expect(
+			screen.queryByRole("button", { name: "Create Exclusion Zone" }),
+		).toBeNull();
+		expect(
+			screen.getByRole("button", { name: "Cancel Zone Selection" }),
+		).toBeInTheDocument();
 		fireEvent.click(
 			screen.getByRole("button", {
 				name: "Virtual playback page 1 cell 2 empty",
 			}),
 		);
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+		expect(
+			screen
+				.getByRole("button", { name: "Create Exclusion Zone" })
+				.closest(".pane-chrome-toolbar-target"),
+		).not.toBeNull();
 		fireEvent.click(
 			await screen.findByRole("button", { name: "Create Exclusion Zone" }),
 		);
@@ -672,6 +825,7 @@ describe("VirtualPlaybacksWindow", () => {
 		await waitFor(() =>
 			expect(mocks.zoneCapability.saveSurface).toHaveBeenCalledWith(
 				"virtual-1",
+				{ type: "follow_main" },
 				[
 					expect.objectContaining({
 						name: "Front alternates",
@@ -683,6 +837,78 @@ describe("VirtualPlaybacksWindow", () => {
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_SHIFT_ARMED",
 			value: false,
+		});
+	});
+
+	it("updates an existing zone from the title bar and preserves hidden members", async () => {
+		const zone = {
+			id: "zone-1",
+			name: "Front alternates",
+			slots: [1, 2, 144],
+		};
+		mocks.loadSurface.mockResolvedValue([zone]);
+		mocks.state.virtualPlaybackZoneEdit = {
+			surfaceId: "virtual-1",
+			zoneId: zone.id,
+			name: zone.name,
+			slots: [...zone.slots],
+		};
+		mocks.state.desks[0].panes[0].virtualPlaybackColumns = 3;
+		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
+
+		const update = await screen.findByRole("button", {
+			name: "Update Exclusion Zone",
+		});
+		expect(
+			screen.getByRole("button", { name: "Cancel Edit" }),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Create Exclusion Zone" }),
+		).toBeNull();
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Virtual playback page 1 cell 3 empty",
+			}),
+			{ shiftKey: true },
+		);
+		fireEvent.click(update);
+
+		await waitFor(() =>
+			expect(mocks.zoneCapability.saveSurface).toHaveBeenCalledWith(
+				"virtual-1",
+				{ type: "follow_main" },
+				[
+					{
+						id: "zone-1",
+						name: "Front alternates",
+						slots: [1, 2, 3, 144],
+					},
+				],
+			),
+		);
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT",
+			edit: null,
+		});
+	});
+
+	it("cancels zone editing without persisting", async () => {
+		const zone = { id: "zone-1", name: "Front alternates", slots: [1, 2] };
+		mocks.loadSurface.mockResolvedValue([zone]);
+		mocks.state.virtualPlaybackZoneEdit = {
+			surfaceId: "virtual-1",
+			zoneId: zone.id,
+			name: zone.name,
+			slots: [...zone.slots],
+		};
+		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
+
+		fireEvent.click(await screen.findByRole("button", { name: "Cancel Edit" }));
+
+		expect(mocks.zoneCapability.saveSurface).not.toHaveBeenCalled();
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT",
+			edit: null,
 		});
 	});
 
@@ -733,21 +959,19 @@ describe("VirtualPlaybacksWindow", () => {
 		);
 	});
 
-	it("disables grid cells above the 127-slot desk domain", () => {
+	it("keeps Virtual Playback cells above the physical slot domain assignable", () => {
 		const pane = mocks.state.desks[0].panes[0];
 		pane.virtualPlaybackRows = 12;
 		pane.virtualPlaybackColumns = 12;
-		mocks.page.slots = { "1": 7, "128": 7 };
 		mocks.state.playbackSetArmed = true;
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		const cell = screen.getByRole("button", {
 			name: "Virtual playback page 1 cell 128 empty",
 		});
-		expect(cell).toBeDisabled();
-		expect(cell).toHaveAttribute("data-availability", "unavailable");
+		expect(cell).toBeEnabled();
+		expect(cell).toHaveAttribute("data-availability", "empty");
 		expect(cell).toHaveTextContent("Empty");
-		fireEvent.click(cell);
-		expect(mocks.configureSlot).not.toHaveBeenCalled();
+		expect(mocks.configureVirtual).not.toHaveBeenCalled();
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 	});
 });
@@ -760,34 +984,38 @@ describe("Virtual Playback Pane Settings", () => {
 		mocks.loadSurface.mockResolvedValue(zones);
 	});
 
-	it("loads named zones only when its tab is active", async () => {
+	it("keeps layout concise and loads zones only in their own tab", async () => {
 		render(<PaneSettingsModal />);
 		expect(mocks.zoneCapability.loadSurface).not.toHaveBeenCalled();
 		fireEvent.click(screen.getByRole("tab", { name: "Virtual Playbacks" }));
 		expect(screen.getByLabelText("Rows")).toBeInTheDocument();
 		expect(screen.getByLabelText("Columns")).toBeInTheDocument();
-		expect(screen.queryByText(/Cell 1 Cuelist/)).not.toBeInTheDocument();
-		expect(screen.getByText(/Set Source/)).toBeInTheDocument();
-		expect(screen.getByText(/Add Target/)).toBeInTheDocument();
+		expect(
+			screen.getByText("2 of 8,998 available Virtual Playback positions."),
+		).toBeInTheDocument();
+		expect(screen.queryByText(/Set Source/)).toBeNull();
+		expect(screen.queryByText(/Add Target/)).toBeNull();
+		expect(screen.queryByText("Cue List Colors")).toBeNull();
+		expect(screen.queryByText("Type Colors")).toBeNull();
+		expect(screen.queryByText("Individual Colors")).toBeNull();
+		expect(mocks.zoneCapability.loadSurface).not.toHaveBeenCalled();
+
+		fireEvent.click(screen.getByRole("tab", { name: "Exclusion Zones" }));
 		await waitFor(() =>
 			expect(mocks.zoneCapability.loadSurface).toHaveBeenCalledWith(
 				"virtual-1",
 			),
 		);
+		expect(await screen.findByText(/Cells 1, 2, 4/)).toBeInTheDocument();
 		expect(
-			await screen.findByText("1 hidden grid cell is retained:"),
-		).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", {
-				name: "Front alternates hidden cell 4",
-			}),
+			screen.getByRole("button", { name: "Edit Zone" }),
 		).toBeInTheDocument();
 		expect(mocks.useServer).not.toHaveBeenCalled();
 	});
 
-	it("renames, edits, and deletes zones through the scoped capability", async () => {
+	it("renames and deletes zones through the scoped capability", async () => {
 		render(<PaneSettingsModal />);
-		fireEvent.click(screen.getByRole("tab", { name: "Virtual Playbacks" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Exclusion Zones" }));
 		await screen.findByLabelText("Name for Front alternates");
 		fireEvent.change(screen.getByLabelText("Name for Front alternates"), {
 			target: { value: "Front choice" },
@@ -796,18 +1024,8 @@ describe("Virtual Playback Pane Settings", () => {
 		await waitFor(() =>
 			expect(mocks.zoneCapability.saveSurface).toHaveBeenCalledWith(
 				"virtual-1",
+				{ type: "follow_main" },
 				[{ id: "zone-1", name: "Front choice", slots: [1, 2, 4] }],
-			),
-		);
-
-		mocks.zoneCapability.saveSurface.mockClear();
-		fireEvent.click(
-			screen.getByRole("button", { name: "Front choice hidden cell 4" }),
-		);
-		await waitFor(() =>
-			expect(mocks.zoneCapability.saveSurface).toHaveBeenCalledWith(
-				"virtual-1",
-				[{ id: "zone-1", name: "Front choice", slots: [1, 2] }],
 			),
 		);
 
@@ -816,28 +1034,29 @@ describe("Virtual Playback Pane Settings", () => {
 		await waitFor(() =>
 			expect(mocks.zoneCapability.saveSurface).toHaveBeenCalledWith(
 				"virtual-1",
+				{ type: "follow_main" },
 				[],
 			),
 		);
 	});
 
-	it("retains and removes a legacy cell above the assignable slot limit", async () => {
-		mocks.loadSurface.mockResolvedValue([
-			{ id: "legacy-zone", name: "Legacy zone", slots: [1, 2, 144] },
-		]);
+	it("closes settings and hands the selected zone to live-grid editing", async () => {
 		render(<PaneSettingsModal />);
-		fireEvent.click(screen.getByRole("tab", { name: "Virtual Playbacks" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Exclusion Zones" }));
+		fireEvent.click(await screen.findByRole("button", { name: "Edit Zone" }));
 
-		const retained = await screen.findByRole("button", {
-			name: "Legacy zone hidden cell 144",
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT",
+			edit: {
+				surfaceId: "virtual-1",
+				zoneId: "zone-1",
+				name: "Front alternates",
+				slots: [1, 2, 4],
+			},
 		});
-		fireEvent.click(retained);
-
-		await waitFor(() =>
-			expect(mocks.zoneCapability.saveSurface).toHaveBeenCalledWith(
-				"virtual-1",
-				[{ id: "legacy-zone", name: "Legacy zone", slots: [1, 2] }],
-			),
-		);
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_PANE_SETTINGS",
+			id: null,
+		});
 	});
 });

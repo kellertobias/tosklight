@@ -38,6 +38,13 @@ pub enum PlaybackTopologyAction {
         expected_playback_object_id: Option<String>,
         playback: PlaybackDefinition,
     },
+    ConfigureVirtual {
+        page: u8,
+        number: u16,
+        expected_page_revision: Revision,
+        expected_page_object_id: Option<String>,
+        playback: PlaybackDefinition,
+    },
     MapExistingPlayback {
         page: u8,
         slot: u8,
@@ -66,6 +73,12 @@ pub enum PlaybackTopologyAction {
         expected_playback_revision: Revision,
         expected_playback_object_id: Option<String>,
     },
+    ClearVirtual {
+        page: u8,
+        number: u16,
+        expected_page_revision: Revision,
+        expected_page_object_id: Option<String>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -77,6 +90,10 @@ pub enum PlaybackTopologyResolution {
         page: u8,
         slot: u8,
         playback_number: Option<u16>,
+    },
+    Virtual {
+        page: u8,
+        playback_number: u16,
     },
     Page {
         page: u8,

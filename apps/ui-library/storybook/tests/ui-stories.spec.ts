@@ -69,16 +69,17 @@ const publicComponentStoryCoverage: Record<string, string> = {
 	ModalCaretValue: "controls-keyboard-and-numpad--keyboard",
 	ModalPortal: "window-system-modals--portal-primitive",
 	ModalTitleBar: "window-system-modals--title-bar-configuration",
-	TitleBarSearchDivider:
-		"window-system-modals--title-bar-configuration",
+	TitleBarSearchDivider: "window-system-modals--title-bar-configuration",
 	ModalProvider: "window-system-modals--three-deep",
 	ModalLayer: "window-system-modals--close-policies",
 	ModalFrame: "window-system-modals--close-policies",
 	ModalRegistration: "window-system-modals--application-registration",
 	WindowHeader: "window-system-production-window-kit--header-configurations",
-	WindowSettings: "window-system-production-window-kit--settings-configurations",
+	WindowSettings:
+		"window-system-production-window-kit--settings-configurations",
 	WindowFrame: "window-system-production-window-kit--configuration",
-	WindowScrollArea: "window-system-production-window-kit--scroll-and-empty-states",
+	WindowScrollArea:
+		"window-system-production-window-kit--scroll-and-empty-states",
 	DataTable: "tables-and-grids-generic-table--interactive",
 	ButtonGrid: "window-system-production-window-kit--pool-grid",
 	GridButton: "window-system-production-window-kit--pool-grid",
@@ -89,20 +90,19 @@ const publicComponentStoryCoverage: Record<string, string> = {
 	TouchValueButton: "controls-faders-vertical-touch-fader--direct-value-button",
 	FaderView: "controls-faders-vertical-touch-fader--fader-view-composition",
 	TouchEncoder: "controls-encoders--individual-touch",
-	HardwareEncoderDisplayView:
-		"controls-encoders--individual-hardware",
+	HardwareEncoderDisplayView: "controls-encoders--individual-hardware",
 	EncoderSection: "controls-encoders--configurable-family",
 	GridDesktop: "window-system-desktop-grid-manager--constrained-placement",
 	PaneView: "window-system-desktop-grid-manager--drag-and-resize",
 	TouchPlaybackCardView: "controls-playbacks--configurable-playback",
-	HardwarePlaybackCardView:
-		"controls-playbacks--eight-by-two-hardware-bank",
+	HardwarePlaybackCardView: "controls-playbacks--eight-by-two-hardware-bank",
 	HardwareCueRowsView: "controls-playbacks--eight-by-two-hardware-bank",
-	HardwarePlaybackFaderView:
-		"controls-playbacks--eight-by-two-hardware-bank",
+	HardwarePlaybackFaderView: "controls-playbacks--eight-by-two-hardware-bank",
 	PlaybackBankView: "controls-playbacks--eight-by-two-touch-bank",
-	VirtualPlaybackGridView: "tables-and-grids-virtual-playback-grid--sparse-grid",
-	PoolCard: "tables-and-grids-pools-production-pool-cards--scaling-and-every-state",
+	VirtualPlaybackGridView:
+		"tables-and-grids-virtual-playback-grid--sparse-grid",
+	PoolCard:
+		"tables-and-grids-pools-production-pool-cards--scaling-and-every-state",
 	PoolGrid: "tables-and-grids-pools-generic-pool-window--sparse",
 	PoolWindow: "tables-and-grids-pools-generic-pool-window--sparse",
 };
@@ -187,6 +187,7 @@ for (const story of stories) {
 test("Dynamics lane layout preserves full-width geometry and isolated interactions", async ({
 	page,
 }, testInfo) => {
+	test.setTimeout(60_000);
 	const artifactDirectory = `${artifactPaths.visual}/dynamics-lane-regression`;
 	mkdirSync(artifactDirectory, { recursive: true });
 	const measurements: Array<Record<string, unknown>> = [];
@@ -248,18 +249,21 @@ test("Dynamics lane layout preserves full-width geometry and isolated interactio
 			.locator(".dynamic-lane-overview-list")
 			.boundingBox();
 		expect(list).not.toBeNull();
+		const listOverflow = await page
+			.locator(".dynamic-lane-overview-list")
+			.evaluate((element) => ({
+				clientHeight: element.clientHeight,
+				scrollHeight: element.scrollHeight,
+			}));
 		measurements.push({ viewport, list, lanes: geometry });
 		for (const lane of geometry) {
+			expect(lane.row.height).toBeGreaterThanOrEqual(120);
 			expect(lane.row.width).toBeGreaterThan((list?.width ?? 0) - 20);
 			expect(
-				Math.abs(
-					lane.content.width + lane.action.width - lane.row.width,
-				),
+				Math.abs(lane.content.width + lane.action.width - lane.row.width),
 			).toBeLessThanOrEqual(3);
 			expect(
-				Math.abs(
-					lane.identity.width + lane.curve.width - lane.content.width,
-				),
+				Math.abs(lane.identity.width + lane.curve.width - lane.content.width),
 			).toBeLessThanOrEqual(1);
 			expect(lane.curve.width).toBeGreaterThan(190);
 			expect(lane.curve.width).toBeGreaterThan(lane.identity.width * 2);
@@ -267,6 +271,12 @@ test("Dynamics lane layout preserves full-width geometry and isolated interactio
 			expect(lane.curveSelect.height).toBeCloseTo(lane.curve.height, 0);
 			expect(lane.action.right).toBeLessThanOrEqual(viewport.width);
 		}
+		expect(geometry[1].row.height).toBeCloseTo(geometry[0].row.height, 0);
+		expect(geometry[2].row.height).toBeCloseTo(geometry[0].row.height, 0);
+		if (listOverflow.scrollHeight === listOverflow.clientHeight)
+			expect(
+				geometry.reduce((sum, lane) => sum + lane.row.height, 0),
+			).toBeGreaterThan((list?.height ?? 0) - 24);
 		for (const key of ["identity", "curve", "action"] as const) {
 			expect(geometry[1][key].x).toBeCloseTo(geometry[0][key].x, 0);
 			expect(geometry[2][key].x).toBeCloseTo(geometry[0][key].x, 0);
@@ -319,13 +329,14 @@ test("Dynamics lane layout preserves full-width geometry and isolated interactio
 	const beforeLeft = await keyframe.evaluate(
 		(element) => (element as HTMLElement).style.left,
 	);
+	const targetCenterX = (before?.x ?? 0) + (before?.width ?? 0) / 2 + 48;
 	await page.mouse.move(
 		(before?.x ?? 0) + (before?.width ?? 0) / 2,
 		(before?.y ?? 0) + (before?.height ?? 0) / 2,
 	);
 	await page.mouse.down();
 	await page.mouse.move(
-		(before?.x ?? 0) + (before?.width ?? 0) / 2 + 48,
+		targetCenterX,
 		(before?.y ?? 0) + (before?.height ?? 0) / 2,
 		{ steps: 8 },
 	);
@@ -335,9 +346,375 @@ test("Dynamics lane layout preserves full-width geometry and isolated interactio
 			keyframe.evaluate((element) => (element as HTMLElement).style.left),
 		)
 		.not.toBe(beforeLeft);
+	await expect
+		.poll(async () => {
+			const after = await keyframe.boundingBox();
+			return (after?.x ?? 0) + (after?.width ?? 0) / 2;
+		})
+		.toBeCloseTo(targetCenterX, 0);
 	await expect(intensityIdentity).toHaveAttribute("aria-pressed", "true");
 	await expect(blueIdentity).toHaveAttribute("aria-pressed", "false");
 	await expect(panCurve).toHaveAttribute("aria-pressed", "false");
+
+	const loopClose = page.locator(".dynamic-keyframe-marks i.loop-close");
+	await expect(loopClose).toHaveCSS("border-top-style", "solid");
+	await expect(loopClose).toHaveCSS("border-top-color", "rgb(122, 135, 145)");
+
+	const laneRow = page.locator(".dynamic-lane-overview").first();
+	const laneSettings = page.getByRole("button", {
+		name: "Intensity lane settings",
+	});
+	const [closedSettingsBox, closedActionBox] = await Promise.all([
+		laneSettings.boundingBox(),
+		laneSettings.locator("..").boundingBox(),
+	]);
+	await expect(laneSettings).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+	await laneSettings.click();
+	const laneMenu = page.getByRole("menu", { name: "Intensity lane menu" });
+	const closeLaneSettings = page.getByRole("button", {
+		name: "Close lane settings",
+	});
+	const [rowBox, menuBox, closeSettingsBox] = await Promise.all([
+		laneRow.boundingBox(),
+		laneMenu.boundingBox(),
+		closeLaneSettings.boundingBox(),
+	]);
+	expect(Math.abs((menuBox?.x ?? 0) - (rowBox?.x ?? 0))).toBeLessThanOrEqual(2);
+	expect(
+		Math.abs((menuBox?.width ?? 0) - (rowBox?.width ?? 0)),
+	).toBeLessThanOrEqual(2);
+	expect(
+		Math.abs((menuBox?.height ?? 0) - (rowBox?.height ?? 0)),
+	).toBeLessThanOrEqual(2);
+	expect(closeSettingsBox?.width).toBeGreaterThan(
+		closedSettingsBox?.width ?? 0,
+	);
+	expect(closeSettingsBox?.x).toBeLessThan(closedSettingsBox?.x ?? 0);
+	expect(closeSettingsBox?.x).toBeLessThan(closedActionBox?.x ?? 0);
+	expect(
+		Math.abs(
+			(closeSettingsBox?.x ?? 0) -
+				((rowBox?.x ?? 0) +
+					(rowBox?.width ?? 0) -
+					(closeSettingsBox?.width ?? 0)),
+		),
+	).toBeLessThanOrEqual(2);
+	expect(
+		Math.abs(
+			(closeSettingsBox?.x ?? 0) +
+				(closeSettingsBox?.width ?? 0) -
+				((rowBox?.x ?? 0) + (rowBox?.width ?? 0)),
+		),
+	).toBeLessThanOrEqual(2);
+	await expect(closeLaneSettings).toHaveText("×");
+	await expect(closeLaneSettings).toHaveCSS(
+		"background-color",
+		"rgba(0, 0, 0, 0)",
+	);
+
+	await page.setViewportSize({ width: 900, height: 560 });
+	await page.goto(`${storyUrl}&globals=mode:software`);
+	await page.evaluate(() => document.fonts.ready);
+	const compactOverflow = await page
+		.locator(".dynamic-lane-overview-list")
+		.evaluate((element) => ({
+			clientHeight: element.clientHeight,
+			scrollHeight: element.scrollHeight,
+			rowHeights: Array.from(
+				element.querySelectorAll(".dynamic-lane-overview"),
+				(row) => row.getBoundingClientRect().height,
+			),
+		}));
+	expect(compactOverflow.rowHeights.every((height) => height >= 120)).toBe(
+		true,
+	);
+	expect(compactOverflow.scrollHeight).toBeGreaterThan(
+		compactOverflow.clientHeight,
+	);
+});
+
+test("Dynamics full application discussion keeps the selection preview across tabs and exposes shared Phase controls", async ({
+	page,
+}) => {
+	const storyUrl =
+		"/iframe.html?id=tosklight-windows-dynamics--full-application-discussion&viewMode=story";
+	const screenshotPath = `${artifactPaths.visual}/dynamics-phase/full-application-phase-1440x900.png`;
+	mkdirSync(`${artifactPaths.visual}/dynamics-phase`, { recursive: true });
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto(`${storyUrl}&globals=mode:software`);
+	await page.evaluate(() => document.fonts.ready);
+
+	const editor = page.locator(".dynamic-full-discussion-editor");
+	const preview = page.getByRole("complementary", {
+		name: "Selection preview",
+	});
+	const fixtureField = page.getByRole("img", {
+		name: "Top-down preview of 12 selected fixtures",
+	});
+	await expect(preview).toBeVisible();
+	await expect(fixtureField).toBeVisible();
+	await editor.getByRole("button", { name: "+ Add Lane" }).click();
+	const laneAttributeDialog = page.getByRole("dialog", {
+		name: "Select lane attribute",
+	});
+	await expect(laneAttributeDialog).toBeVisible();
+	await expect(
+		laneAttributeDialog.getByText(
+			"Choose the attribute controlled by the new lane",
+		),
+	).toBeVisible();
+	await expect(
+		laneAttributeDialog.getByRole("button", { name: "Intensity" }),
+	).toBeVisible();
+	await laneAttributeDialog
+		.getByRole("button", { name: "Close modal" })
+		.click();
+	const [windowBox, headerBox, composerBox, composerControlBox, previewBox] =
+		await Promise.all([
+			editor.locator(".dynamics-window").boundingBox(),
+			editor.locator(".ui-window-header").boundingBox(),
+			editor.locator(".dynamic-lane-bottom-editor").boundingBox(),
+			editor.locator(".dynamic-curve-method-cycle").boundingBox(),
+			preview.boundingBox(),
+		]);
+	for (const fullWidthBox of [headerBox, composerBox]) {
+		expect(
+			Math.abs((fullWidthBox?.x ?? 0) - (windowBox?.x ?? 0)),
+		).toBeLessThanOrEqual(1);
+		expect(
+			Math.abs((fullWidthBox?.width ?? 0) - (windowBox?.width ?? 0)),
+		).toBeLessThanOrEqual(1);
+	}
+	expect(previewBox?.y).toBeGreaterThanOrEqual(
+		(headerBox?.y ?? 0) + (headerBox?.height ?? 0) - 1,
+	);
+	expect((previewBox?.y ?? 0) + (previewBox?.height ?? 0)).toBeLessThanOrEqual(
+		(composerBox?.y ?? 0) + 1,
+	);
+	expect(await fixtureField.locator(".dynamic-face-fixture").count()).toBe(12);
+	const fieldBox = await fixtureField.boundingBox();
+	expect(fieldBox?.width).toBeCloseTo(fieldBox?.height ?? 0, 0);
+	await expect(fixtureField).not.toHaveCSS("border-radius", "50%");
+	const fixtureStyles = await fixtureField
+		.locator(".dynamic-face-fixture")
+		.evaluateAll((fixtures) =>
+			fixtures.slice(0, 6).map((fixture) => {
+				const style = getComputedStyle(fixture);
+				return {
+					background: style.backgroundColor,
+					border: style.borderColor,
+					opacity: style.opacity,
+					shadow: style.boxShadow,
+				};
+			}),
+		);
+	expect(
+		new Set(fixtureStyles.map(({ background }) => background)).size,
+	).toBeGreaterThan(1);
+	expect(
+		new Set(fixtureStyles.map(({ opacity }) => opacity)).size,
+	).toBeGreaterThan(1);
+	expect(fixtureStyles.every(({ shadow }) => shadow === "none")).toBe(true);
+
+	await editor.getByRole("button", { name: "Speed", exact: true }).click();
+	await expect(preview).toBeVisible();
+	const speedSourceFields = editor.locator(".dynamic-speed-source-fields");
+	const [speedSourceBox, speedGroupBox, beatsPerCycleBox] = await Promise.all([
+		speedSourceFields.boundingBox(),
+		speedSourceFields.locator(".ui-form-field").nth(0).boundingBox(),
+		speedSourceFields.locator(".ui-form-field").nth(1).boundingBox(),
+	]);
+	expect(speedGroupBox?.width).toBeCloseTo(beatsPerCycleBox?.width ?? 0, 0);
+	expect(
+		(speedGroupBox?.width ?? 0) + (beatsPerCycleBox?.width ?? 0),
+	).toBeGreaterThan((speedSourceBox?.width ?? 0) - 12);
+	const beatGrid = editor.getByRole("img", {
+		name: "Speed transport beat grid",
+	});
+	const groupTap = editor.getByRole("button", {
+		name: "Tap Speed Group A tempo, 120 BPM",
+	});
+	await expect(beatGrid).toContainText("Phase 38%");
+	await expect(groupTap).toBeVisible();
+	await expect(groupTap).toContainText("120 BPM");
+	await expect(groupTap).toContainText("TAP GROUP A");
+	const [beatGridBox, groupTapBox] = await Promise.all([
+		beatGrid.boundingBox(),
+		groupTap.boundingBox(),
+	]);
+	const speedSourceToggle = editor.getByRole("radiogroup", {
+		name: "Speed source",
+	});
+	const speedSourceToggleBox = await speedSourceToggle.boundingBox();
+	expect(groupTapBox?.width).toBeCloseTo(beatGridBox?.width ?? 0, 0);
+	expect(groupTapBox?.height).toBeCloseTo(beatGridBox?.height ?? 0, 0);
+	expect(beatGridBox?.y).toBeLessThan(speedSourceToggleBox?.y ?? 0);
+	expect(groupTapBox?.y).toBeGreaterThan(
+		(beatGridBox?.y ?? 0) + (beatGridBox?.height ?? 0) - 1,
+	);
+	const firstFixture = fixtureField.locator(".dynamic-face-fixture").first();
+	const stoppedOpacity = await firstFixture.evaluate(
+		(element) => getComputedStyle(element).opacity,
+	);
+	await editor.getByRole("button", { name: "▶ Preview", exact: true }).click();
+	await expect
+		.poll(() =>
+			firstFixture.evaluate((element) => getComputedStyle(element).opacity),
+		)
+		.not.toBe(stoppedOpacity);
+	await editor.getByRole("radio", { name: "Fixed BPM", exact: true }).click();
+	const fixedTap = editor.getByRole("button", {
+		name: "Tap fixed tempo, 120 BPM",
+	});
+	await expect(fixedTap).toBeVisible();
+	await expect(fixedTap).toContainText("120 BPM");
+	await expect(fixedTap).toContainText("TAP");
+	expect((await fixedTap.boundingBox())?.width).toBeCloseTo(
+		(await beatGrid.boundingBox())?.width ?? 0,
+		0,
+	);
+	for (const field of await editor
+		.locator(".dynamic-speed-controls .ui-form-field")
+		.all()) {
+		const [fieldWidth, controlWidth] = await Promise.all([
+			field.evaluate((element) => element.getBoundingClientRect().width),
+			field
+				.locator(".ui-form-control")
+				.evaluate((element) => element.getBoundingClientRect().width),
+		]);
+		expect(controlWidth).toBeCloseTo(fieldWidth, 0);
+	}
+
+	await editor.getByRole("button", { name: "Phase", exact: true }).click();
+	await expect(preview).toBeVisible();
+	await expect(editor.getByText("2D phase distribution")).toHaveCount(0);
+	await expect(
+		editor.getByText("Fill shows color · outline glow shows intensity"),
+	).toHaveCount(0);
+	await expect(editor.locator(".dynamic-phase-position-map")).toHaveCount(0);
+	await expect(
+		editor.getByRole("radiogroup", { name: "Phase mode" }),
+	).toHaveCount(0);
+	await expect(
+		editor
+			.locator(".dynamic-phase-controls")
+			.getByRole("radiogroup", { name: "Ordering mode" }),
+	).toBeHidden();
+	await expect(
+		editor.getByText(
+			"Ordering stays centered · hold or right-click to choose any method",
+		),
+	).toHaveCount(0);
+
+	const phaseControls = page.getByRole("group", {
+		name: "Phase quick controls",
+	});
+	await expect(phaseControls).toBeVisible();
+	await expect(
+		phaseControls.getByRole("radiogroup", { name: "Ordering mode" }),
+	).toBeVisible();
+	await expect(
+		phaseControls.getByRole("radio", { name: "Linear", exact: true }),
+	).toBeVisible();
+	await expect(
+		phaseControls.getByRole("radio", { name: "Selection", exact: true }),
+	).toHaveCount(0);
+	await expect(
+		phaseControls.getByText("Ordering mode", { exact: true }),
+	).toHaveCount(0);
+	await expect(
+		phaseControls.getByRole("button", { name: "Take Selection" }),
+	).toBeVisible();
+	await expect(
+		phaseControls.getByRole("button", { name: "Clear Selection" }),
+	).toBeVisible();
+	const [phaseControlsBox, orderingBox, takeSelectionBox, clearSelectionBox] =
+		await Promise.all([
+			phaseControls.boundingBox(),
+			phaseControls
+				.getByRole("radiogroup", { name: "Ordering mode" })
+				.boundingBox(),
+			phaseControls
+				.getByRole("button", { name: "Take Selection" })
+				.boundingBox(),
+			phaseControls
+				.getByRole("button", { name: "Clear Selection" })
+				.boundingBox(),
+		]);
+	expect(phaseControlsBox?.height).toBeCloseTo(composerBox?.height ?? 0, 0);
+	expect(orderingBox?.height).toBeCloseTo(composerControlBox?.height ?? 0, 0);
+	const orderingCenter = (orderingBox?.y ?? 0) + (orderingBox?.height ?? 0) / 2;
+	expect(
+		(takeSelectionBox?.x ?? 0) -
+			((orderingBox?.x ?? 0) + (orderingBox?.width ?? 0)),
+	).toBeGreaterThanOrEqual(8);
+	for (const actionBox of [takeSelectionBox, clearSelectionBox]) {
+		const actionCenter = (actionBox?.y ?? 0) + (actionBox?.height ?? 0) / 2;
+		expect(actionCenter).toBeCloseTo(orderingCenter, 0);
+		expect(actionBox?.height).toBeCloseTo(orderingBox?.height ?? 0, 0);
+	}
+	expect(
+		await editor.getByRole("button", { name: "Take Selection" }).count(),
+	).toBe(1);
+	expect(
+		await editor.getByRole("button", { name: "Clear Selection" }).count(),
+	).toBe(1);
+	for (const label of ["Offset", "Span", "Blocks", "Repeats"]) {
+		await expect(
+			editor
+				.locator(".dynamic-phase-shared-fields")
+				.getByLabel(label, { exact: true }),
+		).toBeVisible();
+		await expect(phaseControls.getByLabel(label, { exact: true })).toHaveCount(
+			0,
+		);
+	}
+	await expect(
+		editor
+			.locator(".dynamic-phase-controls")
+			.getByRole("switch", { name: "Wings" }),
+	).toBeVisible();
+	await expect(
+		editor.getByLabel("Explicit anchors", { exact: true }),
+	).toBeHidden();
+	const [blocksBox, repeatsBox, wingsBox, offsetBox, spanBox] =
+		await Promise.all([
+			editor.locator(".dynamic-phase-blocks-field").boundingBox(),
+			editor.locator(".dynamic-phase-repeats-field").boundingBox(),
+			editor.locator(".dynamic-phase-wings-field").boundingBox(),
+			editor.locator(".dynamic-phase-offset-field").boundingBox(),
+			editor.locator(".dynamic-phase-span-field").boundingBox(),
+		]);
+	expect(blocksBox?.y).toBeCloseTo(repeatsBox?.y ?? 0, 0);
+	expect(blocksBox?.y).toBeCloseTo(wingsBox?.y ?? 0, 0);
+	expect(offsetBox?.y).toBeCloseTo(spanBox?.y ?? 0, 0);
+	expect(offsetBox?.y ?? 0).toBeGreaterThan(blocksBox?.y ?? 0);
+	await expect(
+		page.getByRole("combobox", { name: "Dynamic lane" }),
+	).toHaveCount(0);
+	const radialOrdering = phaseControls.getByRole("radio", {
+		name: "Radial",
+		exact: true,
+	});
+	await radialOrdering.click();
+	await expect(radialOrdering).toHaveAttribute("aria-checked", "true");
+	await expect(radialOrdering).toHaveClass(/is-active/);
+	const gridOrdering = phaseControls.getByRole("radio", {
+		name: "Grid",
+		exact: true,
+	});
+	await expect(gridOrdering).toHaveAttribute("aria-checked", "false");
+	await expect(gridOrdering).not.toHaveClass(/is-active/);
+	await expect(editor.getByLabel("Direction", { exact: true })).toHaveCount(0);
+	await expect(editor.getByLabel("Center X", { exact: true })).toBeVisible();
+	await expect(editor.getByLabel("Center Z", { exact: true })).toBeVisible();
+	await expect(
+		phaseControls.getByRole("radio", { name: "Radial in", exact: true }),
+	).toHaveCount(0);
+	await page.screenshot({ path: screenshotPath });
+
+	await page.setViewportSize({ width: 1199, height: 800 });
+	await expect(preview).toBeHidden();
 });
 
 test("every story family has autodocs source preview", () => {
@@ -370,9 +747,7 @@ test("Storybook uses the exact application background token", () => {
 test("configured search keeps the standard magnifier size and adds width only for its caret", async ({
 	page,
 }) => {
-	await page.goto(
-		"/iframe.html?id=controls-forms--search&viewMode=story",
-	);
+	await page.goto("/iframe.html?id=controls-forms--search&viewMode=story");
 	const plainIcon = page.locator(
 		".console-search:not(.has-options) .console-search-icon > svg",
 	);
@@ -1345,8 +1720,7 @@ test("the consolidated playback stories cover controls, touch, hardware, loaded,
 			}
 		).entries,
 	).filter(
-		(entry) =>
-			entry.type === "story" && entry.title === "Controls/Playbacks",
+		(entry) => entry.type === "story" && entry.title === "Controls/Playbacks",
 	);
 	expect(entries).toHaveLength(3);
 
@@ -1970,14 +2344,19 @@ test("pool cards stay square across width, height, resize, overflow, and applica
 	}
 	expect(
 		Math.abs(
-			(widths.get("tables-and-grids-pools-generic-pool-window--narrow-tall") ?? 0) -
-				(widths.get("tables-and-grids-pools-generic-pool-window--narrow-short") ?? 0),
+			(widths.get("tables-and-grids-pools-generic-pool-window--narrow-tall") ??
+				0) -
+				(widths.get(
+					"tables-and-grids-pools-generic-pool-window--narrow-short",
+				) ?? 0),
 		),
 	).toBeLessThanOrEqual(1);
 	expect(
 		Math.abs(
-			(widths.get("tables-and-grids-pools-generic-pool-window--wide-tall") ?? 0) -
-				(widths.get("tables-and-grids-pools-generic-pool-window--wide-short") ?? 0),
+			(widths.get("tables-and-grids-pools-generic-pool-window--wide-tall") ??
+				0) -
+				(widths.get("tables-and-grids-pools-generic-pool-window--wide-short") ??
+					0),
 		),
 	).toBeLessThanOrEqual(1);
 
@@ -2006,10 +2385,7 @@ test("pool cards stay square across width, height, resize, overflow, and applica
 		["tosklight-windows-pools--groups-wide-tall", ".group-card"],
 		["tosklight-windows-pools--presets-narrow-short", ".preset-card"],
 		["tosklight-windows-pools--presets-wide-tall", ".preset-card"],
-		[
-			"tosklight-windows-cuelists-and-cues--pool-narrow-short",
-			".cuelist-card",
-		],
+		["tosklight-windows-cuelists-and-cues--pool-narrow-short", ".cuelist-card"],
 		["tosklight-windows-cuelists-and-cues--pool-wide-tall", ".cuelist-card"],
 	] as const) {
 		await page.goto(`/iframe.html?id=${storyId}&viewMode=story`);
@@ -2278,11 +2654,42 @@ test("the application Virtual Playbacks stories cover adapter-owned targeting an
 		"Front alternates",
 	);
 	await page.goto(
-		"/iframe.html?id=tosklight-virtual-playbacks--unavailable-slots&viewMode=story",
+		"/iframe.html?id=tosklight-virtual-playbacks--sparse-large-grid&viewMode=story",
+	);
+	const largeGrid = page.locator(".virtual-playback-grid");
+	await expect(largeGrid).toHaveAttribute("data-logical-cells", "8980");
+	expect(await largeGrid.locator(".virtual-playback-box").count()).toBeLessThan(
+		200,
 	);
 	await expect(
-		page.getByRole("button", { name: /cell 128 empty/u }),
-	).toBeDisabled();
+		page.getByRole("button", { name: /cell 1 Main/u }),
+	).toBeEnabled();
+
+	await page.goto(
+		"/iframe.html?id=tosklight-virtual-playbacks--pinned-page&viewMode=story",
+	);
+	await expect(
+		page.getByRole("button", { name: /page 2 cell 1 House/u }),
+	).toBeVisible();
+	await page.goto(
+		"/iframe.html?id=tosklight-virtual-playbacks--overlapping-zones&viewMode=story",
+	);
+	await expect(page.locator('[data-grid-position="3"]')).toHaveAttribute(
+		"data-exclusion-zones",
+		"Front alternates, Bump alternates",
+	);
+	await page.goto(
+		"/iframe.html?id=tosklight-virtual-playbacks--hidden-membership&viewMode=story",
+	);
+	await expect(
+		page.getByText("Cell 3 remains a saved hidden member.", { exact: true }),
+	).toHaveText("Cell 3 remains a saved hidden member.");
+	await page.goto(
+		"/iframe.html?id=tosklight-virtual-playbacks--zone-error-state&viewMode=story",
+	);
+	await expect(page.getByRole("alert")).toHaveText(
+		"Zone revision changed on another screen",
+	);
 
 	await page.goto(
 		"/iframe.html?id=tables-and-grids-virtual-playback-grid--every-state&viewMode=story",
@@ -2886,9 +3293,7 @@ test("desktop panes drag, resize, maximize, and request an empty-grid placement"
 test("button variants expose animated loading, larger icon-only controls, icons, and left alignment", async ({
 	page,
 }) => {
-	await page.goto(
-		"/iframe.html?id=controls-buttons--buttons&viewMode=story",
-	);
+	await page.goto("/iframe.html?id=controls-buttons--buttons&viewMode=story");
 	const loading = page.getByRole("button", { name: "Loading" });
 	await expect(loading).toHaveAttribute("aria-busy", "true");
 	await expect(loading.locator(".ui-spinner")).toHaveCSS(

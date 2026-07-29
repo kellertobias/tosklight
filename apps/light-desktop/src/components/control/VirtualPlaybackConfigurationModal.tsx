@@ -21,17 +21,20 @@ export function VirtualPlaybackConfigurationModal(
 	const revisionBasis = {
 		expectedPageRevision: props.expectedPageRevision,
 		expectedPageObjectId: props.expectedPageObjectId,
-		expectedPlaybackRevision: props.expectedPlaybackRevision,
-		expectedPlaybackObjectId: props.expectedPlaybackObjectId,
 	};
 	const save = async (
 		page: number,
 		slot: number,
 		playback: PlaybackDefinition,
 	) =>
-		(await topology?.configureSlot(page, slot, playback, revisionBasis)) != null;
+		(await topology?.configureVirtual(
+			page,
+			1_000 + slot,
+			{ ...playback, number: 1_000 + slot },
+			revisionBasis,
+		)) != null;
 	const clear = async (page: number, slot: number) =>
-		(await topology?.clearMappedPlayback(page, slot, revisionBasis)) != null;
+		(await topology?.clearVirtual(page, 1_000 + slot, revisionBasis)) != null;
 	return (
 		<PlaybackConfigurationDialog
 			{...props}

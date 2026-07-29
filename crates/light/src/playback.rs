@@ -2,6 +2,9 @@ use light_playback::{
     AutomaticPlaybackTransition, AutomaticPlaybackTransitionCause,
     PlaybackCueReference as DomainPlaybackCueReference,
 };
+pub use light_playback::{
+    PhysicalPlaybackNumber, PlaybackIdentity, VirtualPlaybackAddress, VirtualPlaybackNumber,
+};
 use std::sync::Arc;
 
 mod command;

@@ -8,6 +8,7 @@ pub enum PlaybackAddress {
     CueList(CueListId),
     Group(PlaybackGroupId),
     Pool(u16),
+    Virtual(light_playback::VirtualPlaybackAddress),
     CurrentPage { slot: u8 },
     ExplicitPage { page: u8, slot: u8 },
 }
@@ -24,6 +25,7 @@ pub enum ResolvedPlaybackAddress {
         page: Option<u8>,
         slot: Option<u8>,
     },
+    Virtual(light_playback::VirtualPlaybackAddress),
 }
 
 impl ResolvedPlaybackAddress {
@@ -34,6 +36,7 @@ impl ResolvedPlaybackAddress {
                 playback_number, ..
             } => *playback_number,
             Self::Pool { number, .. } => Some(*number),
+            Self::Virtual(address) => Some(address.number().get()),
         }
     }
 }

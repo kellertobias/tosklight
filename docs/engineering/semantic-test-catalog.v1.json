@@ -32390,7 +32390,7 @@
     },
     {
       "id": "PRELOAD-003",
-      "title": "Virtual Playbacks use a persisted pane-native 2×2 grid and real GO/TOGGLE playbacks",
+      "title": "Virtual Playbacks persist dedicated page-qualified identities in virtualized Follow Main and Pinned grids",
       "source": {
         "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
         "line": 8,
@@ -32938,18 +32938,18 @@
         },
         {
           "kind": "step",
-          "description": "Add the PaneType.VirtualPlaybacks pane with layout { slug: \"virtual-playbacks\", column: 1, row: 1, width: 12, height: 10 }.",
+          "description": "Add the PaneType.VirtualPlaybacks pane with layout { slug: \"virtual-playbacks-follow\", column: 1, row: 1, width: 12, height: 5 }.",
           "call": "desktopBuilder.addPane",
           "arguments": [
             "PaneType.VirtualPlaybacks",
-            "{ slug: \"virtual-playbacks\", column: 1, row: 1, width: 12, height: 10 }",
-            "{ rows: 2, columns: 2 }"
+            "{ slug: \"virtual-playbacks-follow\", column: 1, row: 1, width: 12, height: 5 }",
+            "{ rows: 20, columns: 20, pageMode: \"follow_main\" }"
           ],
           "presentation": {
             "omitStructuredArguments": true
           },
-          "expression": "desktop.addPane( PaneType.VirtualPlaybacks, { slug: \"virtual-playbacks\", column: 1, row: 1, width: 12, height: 10, }, { rows: 2, columns: 2 }, )",
-          "sourceCode": "desktop.addPane(\n\t\t\tPaneType.VirtualPlaybacks,\n\t\t\t{\n\t\t\t\tslug: \"virtual-playbacks\",\n\t\t\t\tcolumn: 1,\n\t\t\t\trow: 1,\n\t\t\t\twidth: 12,\n\t\t\t\theight: 10,\n\t\t\t},\n\t\t\t{ rows: 2, columns: 2 },\n\t\t)",
+          "expression": "desktop.addPane( PaneType.VirtualPlaybacks, { slug: \"virtual-playbacks-follow\", column: 1, row: 1, width: 12, height: 5, }, { rows: 20, columns: 20, pageMode: \"follow_main\" }, )",
+          "sourceCode": "desktop.addPane(\n\t\t\tPaneType.VirtualPlaybacks,\n\t\t\t{\n\t\t\t\tslug: \"virtual-playbacks-follow\",\n\t\t\t\tcolumn: 1,\n\t\t\t\trow: 1,\n\t\t\t\twidth: 12,\n\t\t\t\theight: 5,\n\t\t\t},\n\t\t\t{ rows: 20, columns: 20, pageMode: \"follow_main\" },\n\t\t)",
           "surfaces": [
             "Browser UI",
             "Desktop layout"
@@ -32959,7 +32959,33 @@
           "source": {
             "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
             "line": 49,
-            "column": 16
+            "column": 22
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Add the PaneType.VirtualPlaybacks pane with layout { slug: \"virtual-playbacks-pinned\", column: 1, row: 6, width: 12, height: 5 }.",
+          "call": "desktopBuilder.addPane",
+          "arguments": [
+            "PaneType.VirtualPlaybacks",
+            "{ slug: \"virtual-playbacks-pinned\", column: 1, row: 6, width: 12, height: 5 }",
+            "{ rows: 12, columns: 449, pageMode: \"pinned\", pinnedPage: 2 }"
+          ],
+          "presentation": {
+            "omitStructuredArguments": true
+          },
+          "expression": "desktop.addPane( PaneType.VirtualPlaybacks, { slug: \"virtual-playbacks-pinned\", column: 1, row: 6, width: 12, height: 5, }, { rows: 12, columns: 449, pageMode: \"pinned\", pinnedP…",
+          "sourceCode": "desktop.addPane(\n\t\t\tPaneType.VirtualPlaybacks,\n\t\t\t{\n\t\t\t\tslug: \"virtual-playbacks-pinned\",\n\t\t\t\tcolumn: 1,\n\t\t\t\trow: 6,\n\t\t\t\twidth: 12,\n\t\t\t\theight: 5,\n\t\t\t},\n\t\t\t{ rows: 12, columns: 449, pageMode: \"pinned\", pinnedPage: 2 },\n\t\t)",
+          "surfaces": [
+            "Browser UI",
+            "Desktop layout"
+          ],
+          "phase": "scenario",
+          "order": 27,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 60,
+            "column": 22
           }
         },
         {
@@ -32974,24 +33000,206 @@
             "Desktop layout"
           ],
           "phase": "scenario",
-          "order": 27,
+          "order": 28,
           "source": {
             "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
-            "line": 60,
+            "line": 71,
             "column": 9
           }
         },
         {
           "kind": "step",
-          "description": "Virtual playback → assign source with $pane (result of desktopBuilder.addPane), \"Virtual Source A\", 1.",
+          "description": "Virtual playback → assign source with $followPane (result of desktopBuilder.addPane), \"Virtual Source A\", 1, 1.",
           "call": "virtualPlayback.assignSource",
           "arguments": [
-            "$pane (result of desktopBuilder.addPane)",
+            "$followPane (result of desktopBuilder.addPane)",
             "\"Virtual Source A\"",
+            "1",
             "1"
           ],
-          "expression": "t.virtualPlayback.assignSource( pane, \"Virtual Source A\", 1, )",
-          "sourceCode": "t.virtualPlayback.assignSource(\n\t\t\tpane,\n\t\t\t\"Virtual Source A\",\n\t\t\t1,\n\t\t)",
+          "expression": "t.virtualPlayback.assignSource( followPane, \"Virtual Source A\", 1, 1, )",
+          "sourceCode": "t.virtualPlayback.assignSource(\n\t\t\tfollowPane,\n\t\t\t\"Virtual Source A\",\n\t\t\t1,\n\t\t\t1,\n\t\t)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 35,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 79,
+            "column": 31
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Virtual playback → assign source with $pinnedPane (result of desktopBuilder.addPane), \"Virtual Source B\", 1, 2.",
+          "call": "virtualPlayback.assignSource",
+          "arguments": [
+            "$pinnedPane (result of desktopBuilder.addPane)",
+            "\"Virtual Source B\"",
+            "1",
+            "2"
+          ],
+          "expression": "t.virtualPlayback.assignSource( pinnedPane, \"Virtual Source B\", 1, 2, )",
+          "sourceCode": "t.virtualPlayback.assignSource(\n\t\t\tpinnedPane,\n\t\t\t\"Virtual Source B\",\n\t\t\t1,\n\t\t\t2,\n\t\t)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 36,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 85,
+            "column": 32
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Virtual playback → configure top button with $pinnedPane (result of desktopBuilder.addPane), 1, PlaybackButton.Toggle, 2.",
+          "call": "virtualPlayback.configureTopButton",
+          "arguments": [
+            "$pinnedPane (result of desktopBuilder.addPane)",
+            "1",
+            "PlaybackButton.Toggle",
+            "2"
+          ],
+          "expression": "t.virtualPlayback.configureTopButton( pinnedPane, 1, PlaybackButton.Toggle, 2, )",
+          "sourceCode": "t.virtualPlayback.configureTopButton(\n\t\t\tpinnedPane,\n\t\t\t1,\n\t\t\tPlaybackButton.Toggle,\n\t\t\t2,\n\t\t)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 37,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 91,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Virtual playback → activate with $followPane (result of desktopBuilder.addPane), 1, 1.",
+          "call": "virtualPlayback.activate",
+          "arguments": [
+            "$followPane (result of desktopBuilder.addPane)",
+            "1",
+            "1"
+          ],
+          "expression": "t.virtualPlayback.activate(followPane, 1, 1)",
+          "sourceCode": "t.virtualPlayback.activate(followPane, 1, 1)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 38,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 98,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Virtual playback → activate with $pinnedPane (result of desktopBuilder.addPane), 1, 2.",
+          "call": "virtualPlayback.activate",
+          "arguments": [
+            "$pinnedPane (result of desktopBuilder.addPane)",
+            "1",
+            "2"
+          ],
+          "expression": "t.virtualPlayback.activate(pinnedPane, 1, 2)",
+          "sourceCode": "t.virtualPlayback.activate(pinnedPane, 1, 2)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 39,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 99,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Virtual playback → set main page with 2.",
+          "call": "virtualPlayback.setMainPage",
+          "arguments": [
+            "2"
+          ],
+          "expression": "t.virtualPlayback.setMainPage(2)",
+          "sourceCode": "t.virtualPlayback.setMainPage(2)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 46,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 123,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Virtual playback → set main page with 1.",
+          "call": "virtualPlayback.setMainPage",
+          "arguments": [
+            "1"
+          ],
+          "expression": "t.virtualPlayback.setMainPage(1)",
+          "sourceCode": "t.virtualPlayback.setMainPage(1)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 49,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 126,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Virtual playback → reload with $followPane (result of desktopBuilder.addPane).",
+          "call": "virtualPlayback.reload",
+          "arguments": [
+            "$followPane (result of desktopBuilder.addPane)"
+          ],
+          "expression": "t.virtualPlayback.reload(followPane)",
+          "sourceCode": "t.virtualPlayback.reload(followPane)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 52,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 130,
+            "column": 9
+          }
+        }
+      ],
+      "expectedOutcomes": [
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → logical cells: $followPane (result of desktopBuilder.addPane), 400.",
+          "call": "virtualPlayback.expect.logicalCells",
+          "arguments": [
+            "$followPane (result of desktopBuilder.addPane)",
+            "400"
+          ],
+          "expression": "t.virtualPlayback.expect.logicalCells(followPane, 400)",
+          "sourceCode": "t.virtualPlayback.expect.logicalCells(followPane, 400)",
           "surfaces": [
             "Browser UI",
             "Virtual Playbacks"
@@ -33000,21 +33208,20 @@
           "order": 29,
           "source": {
             "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
-            "line": 63,
-            "column": 31
+            "line": 72,
+            "column": 9
           }
         },
         {
-          "kind": "step",
-          "description": "Virtual playback → assign source with $pane (result of desktopBuilder.addPane), \"Virtual Source B\", 2.",
-          "call": "virtualPlayback.assignSource",
+          "kind": "expected-outcome",
+          "description": "Virtual playback → mounted cells below: $followPane (result of desktopBuilder.addPane), 200.",
+          "call": "virtualPlayback.expect.mountedCellsBelow",
           "arguments": [
-            "$pane (result of desktopBuilder.addPane)",
-            "\"Virtual Source B\"",
-            "2"
+            "$followPane (result of desktopBuilder.addPane)",
+            "200"
           ],
-          "expression": "t.virtualPlayback.assignSource( pane, \"Virtual Source B\", 2, )",
-          "sourceCode": "t.virtualPlayback.assignSource(\n\t\t\tpane,\n\t\t\t\"Virtual Source B\",\n\t\t\t2,\n\t\t)",
+          "expression": "t.virtualPlayback.expect.mountedCellsBelow(followPane, 200)",
+          "sourceCode": "t.virtualPlayback.expect.mountedCellsBelow(followPane, 200)",
           "surfaces": [
             "Browser UI",
             "Virtual Playbacks"
@@ -33023,21 +33230,20 @@
           "order": 30,
           "source": {
             "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
-            "line": 68,
-            "column": 32
+            "line": 73,
+            "column": 9
           }
         },
         {
-          "kind": "step",
-          "description": "Virtual playback → configure top button with $pane (result of desktopBuilder.addPane), 2, PlaybackButton.Toggle.",
-          "call": "virtualPlayback.configureTopButton",
+          "kind": "expected-outcome",
+          "description": "Virtual playback → effective page: $followPane (result of desktopBuilder.addPane), 1.",
+          "call": "virtualPlayback.expect.effectivePage",
           "arguments": [
-            "$pane (result of desktopBuilder.addPane)",
-            "2",
-            "PlaybackButton.Toggle"
+            "$followPane (result of desktopBuilder.addPane)",
+            "1"
           ],
-          "expression": "t.virtualPlayback.configureTopButton(pane, 2, PlaybackButton.Toggle)",
-          "sourceCode": "t.virtualPlayback.configureTopButton(pane, 2, PlaybackButton.Toggle)",
+          "expression": "t.virtualPlayback.expect.effectivePage(followPane, 1)",
+          "sourceCode": "t.virtualPlayback.expect.effectivePage(followPane, 1)",
           "surfaces": [
             "Browser UI",
             "Virtual Playbacks"
@@ -33046,20 +33252,20 @@
           "order": 31,
           "source": {
             "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
-            "line": 73,
+            "line": 74,
             "column": 9
           }
         },
         {
-          "kind": "step",
-          "description": "Virtual playback → activate with $pane (result of desktopBuilder.addPane), 1.",
-          "call": "virtualPlayback.activate",
+          "kind": "expected-outcome",
+          "description": "Virtual playback → logical cells: $pinnedPane (result of desktopBuilder.addPane), 5388.",
+          "call": "virtualPlayback.expect.logicalCells",
           "arguments": [
-            "$pane (result of desktopBuilder.addPane)",
-            "1"
+            "$pinnedPane (result of desktopBuilder.addPane)",
+            "5388"
           ],
-          "expression": "t.virtualPlayback.activate(pane, 1)",
-          "sourceCode": "t.virtualPlayback.activate(pane, 1)",
+          "expression": "t.virtualPlayback.expect.logicalCells(pinnedPane, 5_388)",
+          "sourceCode": "t.virtualPlayback.expect.logicalCells(pinnedPane, 5_388)",
           "surfaces": [
             "Browser UI",
             "Virtual Playbacks"
@@ -33073,15 +33279,15 @@
           }
         },
         {
-          "kind": "step",
-          "description": "Virtual playback → activate with $pane (result of desktopBuilder.addPane), 2.",
-          "call": "virtualPlayback.activate",
+          "kind": "expected-outcome",
+          "description": "Virtual playback → mounted cells below: $pinnedPane (result of desktopBuilder.addPane), 200.",
+          "call": "virtualPlayback.expect.mountedCellsBelow",
           "arguments": [
-            "$pane (result of desktopBuilder.addPane)",
-            "2"
+            "$pinnedPane (result of desktopBuilder.addPane)",
+            "200"
           ],
-          "expression": "t.virtualPlayback.activate(pane, 2)",
-          "sourceCode": "t.virtualPlayback.activate(pane, 2)",
+          "expression": "t.virtualPlayback.expect.mountedCellsBelow(pinnedPane, 200)",
+          "sourceCode": "t.virtualPlayback.expect.mountedCellsBelow(pinnedPane, 200)",
           "surfaces": [
             "Browser UI",
             "Virtual Playbacks"
@@ -33095,62 +33301,18 @@
           }
         },
         {
-          "kind": "step",
-          "description": "Virtual playback → reload with $pane (result of desktopBuilder.addPane).",
-          "call": "virtualPlayback.reload",
+          "kind": "expected-outcome",
+          "description": "Virtual playback → effective page: $pinnedPane (result of desktopBuilder.addPane), 2.",
+          "call": "virtualPlayback.expect.effectivePage",
           "arguments": [
-            "$pane (result of desktopBuilder.addPane)"
+            "$pinnedPane (result of desktopBuilder.addPane)",
+            "2"
           ],
-          "expression": "t.virtualPlayback.reload(pane)",
-          "sourceCode": "t.virtualPlayback.reload(pane)",
+          "expression": "t.virtualPlayback.expect.effectivePage(pinnedPane, 2)",
+          "sourceCode": "t.virtualPlayback.expect.effectivePage(pinnedPane, 2)",
           "surfaces": [
             "Browser UI",
             "Virtual Playbacks"
-          ],
-          "phase": "scenario",
-          "order": 36,
-          "source": {
-            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
-            "line": 86,
-            "column": 9
-          }
-        }
-      ],
-      "expectedOutcomes": [
-        {
-          "kind": "expected-outcome",
-          "description": "Virtual playback → cells: $pane (result of desktopBuilder.addPane), 4.",
-          "call": "virtualPlayback.expect.cells",
-          "arguments": [
-            "$pane (result of desktopBuilder.addPane)",
-            "4"
-          ],
-          "expression": "t.virtualPlayback.expect.cells(pane, 4)",
-          "sourceCode": "t.virtualPlayback.expect.cells(pane, 4)",
-          "surfaces": [
-            "Browser UI",
-            "Virtual Playbacks"
-          ],
-          "phase": "scenario",
-          "order": 28,
-          "source": {
-            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
-            "line": 61,
-            "column": 9
-          }
-        },
-        {
-          "kind": "expected-outcome",
-          "description": "Playback → runtime: $firstPlayback (result of virtualPlayback.assignSource), { enabled: true, current_cue_number: 1 }.",
-          "call": "playback.expect.runtime",
-          "arguments": [
-            "$firstPlayback (result of virtualPlayback.assignSource)",
-            "{ enabled: true, current_cue_number: 1 }"
-          ],
-          "expression": "t.playback.expect(firstPlayback).runtime({ enabled: true, current_cue_number: 1, })",
-          "sourceCode": "t.playback.expect(firstPlayback).runtime({\n\t\t\tenabled: true,\n\t\t\tcurrent_cue_number: 1,\n\t\t})",
-          "surfaces": [
-            "Playbacks"
           ],
           "phase": "scenario",
           "order": 34,
@@ -33162,132 +33324,351 @@
         },
         {
           "kind": "expected-outcome",
-          "description": "Playback → runtime: $secondPlayback (result of virtualPlayback.assignSource), { enabled: true, current_cue_number: 1 }.",
-          "call": "playback.expect.runtime",
-          "arguments": [
-            "$secondPlayback (result of virtualPlayback.assignSource)",
-            "{ enabled: true, current_cue_number: 1 }"
-          ],
-          "expression": "t.playback.expect(secondPlayback).runtime({ enabled: true, current_cue_number: 1, })",
-          "sourceCode": "t.playback.expect(secondPlayback).runtime({\n\t\t\tenabled: true,\n\t\t\tcurrent_cue_number: 1,\n\t\t})",
-          "surfaces": [
-            "Playbacks"
-          ],
-          "phase": "scenario",
-          "order": 35,
-          "source": {
-            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
-            "line": 81,
-            "column": 9
-          }
-        },
-        {
-          "kind": "expected-outcome",
-          "description": "Virtual playback → cells: $pane (result of desktopBuilder.addPane), 4.",
-          "call": "virtualPlayback.expect.cells",
-          "arguments": [
-            "$pane (result of desktopBuilder.addPane)",
-            "4"
-          ],
-          "expression": "t.virtualPlayback.expect.cells(pane, 4)",
-          "sourceCode": "t.virtualPlayback.expect.cells(pane, 4)",
-          "surfaces": [
-            "Browser UI",
-            "Virtual Playbacks"
-          ],
-          "phase": "scenario",
-          "order": 37,
-          "source": {
-            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
-            "line": 87,
-            "column": 9
-          }
-        },
-        {
-          "kind": "expected-outcome",
-          "description": "Virtual playback → button: $pane (result of desktopBuilder.addPane), 1, \"GO\".",
-          "call": "virtualPlayback.expect.button",
-          "arguments": [
-            "$pane (result of desktopBuilder.addPane)",
-            "1",
-            "\"GO\""
-          ],
-          "expression": "t.virtualPlayback.expect.button(pane, 1, \"GO\")",
-          "sourceCode": "t.virtualPlayback.expect.button(pane, 1, \"GO\")",
-          "surfaces": [
-            "Browser UI",
-            "Virtual Playbacks"
-          ],
-          "phase": "scenario",
-          "order": 38,
-          "source": {
-            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
-            "line": 88,
-            "column": 9
-          }
-        },
-        {
-          "kind": "expected-outcome",
-          "description": "Virtual playback → button: $pane (result of desktopBuilder.addPane), 2, \"TOGGLE\".",
-          "call": "virtualPlayback.expect.button",
-          "arguments": [
-            "$pane (result of desktopBuilder.addPane)",
-            "2",
-            "\"TOGGLE\""
-          ],
-          "expression": "t.virtualPlayback.expect.button(pane, 2, \"TOGGLE\")",
-          "sourceCode": "t.virtualPlayback.expect.button(pane, 2, \"TOGGLE\")",
-          "surfaces": [
-            "Browser UI",
-            "Virtual Playbacks"
-          ],
-          "phase": "scenario",
-          "order": 39,
-          "source": {
-            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
-            "line": 89,
-            "column": 9
-          }
-        },
-        {
-          "kind": "expected-outcome",
-          "description": "Playback → configuration: $firstPlayback (result of virtualPlayback.assignSource), { button_count: 1, has_fader: false, buttons: [\"go\", \"none\", \"none\"] }.",
-          "call": "playback.expect.configuration",
+          "description": "Virtual playback → runtime: $firstPlayback (result of virtualPlayback.assignSource), { requested: { kind: \"virtual\", page: 1, playback_number: 1001 }, target: \"cue_list\", runtime: { enabled: true, current: { number: 1 } } }.",
+          "call": "virtualPlayback.expect.runtime",
           "arguments": [
             "$firstPlayback (result of virtualPlayback.assignSource)",
-            "{ button_count: 1, has_fader: false, buttons: [\"go\", \"none\", \"none\"] }"
+            "{ requested: { kind: \"virtual\", page: 1, playback_number: 1001 }, target: \"cue_list\", runtime: { enabled: true, current: { number: 1 } } }"
           ],
-          "expression": "t.playback.expect(firstPlayback).configuration({ button_count: 1, has_fader: false, buttons: [\"go\", \"none\", \"none\"], })",
-          "sourceCode": "t.playback.expect(firstPlayback).configuration({\n\t\t\tbutton_count: 1,\n\t\t\thas_fader: false,\n\t\t\tbuttons: [\"go\", \"none\", \"none\"],\n\t\t})",
+          "expression": "t.virtualPlayback.expect.runtime(firstPlayback, { requested: { kind: \"virtual\", page: 1, playback_number: 1001, }, target: \"cue_list\", runtime: { enabled: true, current: { numbe…",
+          "sourceCode": "t.virtualPlayback.expect.runtime(firstPlayback, {\n\t\t\trequested: {\n\t\t\t\tkind: \"virtual\",\n\t\t\t\tpage: 1,\n\t\t\t\tplayback_number: 1001,\n\t\t\t},\n\t\t\ttarget: \"cue_list\",\n\t\t\truntime: { enabled: true, current: { number: 1 } },\n\t\t})",
           "surfaces": [
-            "Playbacks"
+            "Browser UI",
+            "Virtual Playbacks"
           ],
           "phase": "scenario",
           "order": 40,
           "source": {
             "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
-            "line": 90,
+            "line": 100,
             "column": 9
           }
         },
         {
           "kind": "expected-outcome",
-          "description": "Playback → configuration: $secondPlayback (result of virtualPlayback.assignSource), { button_count: 1, has_fader: false, buttons: [\"toggle\", \"none\", \"none\"] }.",
-          "call": "playback.expect.configuration",
+          "description": "Virtual playback → runtime: $secondPlayback (result of virtualPlayback.assignSource), { requested: { kind: \"virtual\", page: 2, playback_number: 1001 }, target: \"cue_list\", runtime: { enabled: true, current: { number: 1 } } }.",
+          "call": "virtualPlayback.expect.runtime",
           "arguments": [
             "$secondPlayback (result of virtualPlayback.assignSource)",
-            "{ button_count: 1, has_fader: false, buttons: [\"toggle\", \"none\", \"none\"] }"
+            "{ requested: { kind: \"virtual\", page: 2, playback_number: 1001 }, target: \"cue_list\", runtime: { enabled: true, current: { number: 1 } } }"
           ],
-          "expression": "t.playback.expect(secondPlayback).configuration({ button_count: 1, has_fader: false, buttons: [\"toggle\", \"none\", \"none\"], })",
-          "sourceCode": "t.playback.expect(secondPlayback).configuration({\n\t\t\tbutton_count: 1,\n\t\t\thas_fader: false,\n\t\t\tbuttons: [\"toggle\", \"none\", \"none\"],\n\t\t})",
+          "expression": "t.virtualPlayback.expect.runtime(secondPlayback, { requested: { kind: \"virtual\", page: 2, playback_number: 1001, }, target: \"cue_list\", runtime: { enabled: true, current: { numb…",
+          "sourceCode": "t.virtualPlayback.expect.runtime(secondPlayback, {\n\t\t\trequested: {\n\t\t\t\tkind: \"virtual\",\n\t\t\t\tpage: 2,\n\t\t\t\tplayback_number: 1001,\n\t\t\t},\n\t\t\ttarget: \"cue_list\",\n\t\t\truntime: { enabled: true, current: { number: 1 } },\n\t\t})",
           "surfaces": [
-            "Playbacks"
+            "Browser UI",
+            "Virtual Playbacks"
           ],
           "phase": "scenario",
           "order": 41,
           "source": {
             "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
-            "line": 95,
+            "line": 109,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → physical runtime absent: $firstSource (result of recordSource).",
+          "call": "virtualPlayback.expect.physicalRuntimeAbsent",
+          "arguments": [
+            "$firstSource (result of recordSource)"
+          ],
+          "expression": "t.virtualPlayback.expect.physicalRuntimeAbsent(firstSource)",
+          "sourceCode": "t.virtualPlayback.expect.physicalRuntimeAbsent(firstSource)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 42,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 118,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → physical runtime absent: $secondSource (result of recordSource).",
+          "call": "virtualPlayback.expect.physicalRuntimeAbsent",
+          "arguments": [
+            "$secondSource (result of recordSource)"
+          ],
+          "expression": "t.virtualPlayback.expect.physicalRuntimeAbsent(secondSource)",
+          "sourceCode": "t.virtualPlayback.expect.physicalRuntimeAbsent(secondSource)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 43,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 119,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Playback → present: $firstSource (result of recordSource).",
+          "call": "playback.expect.present",
+          "arguments": [
+            "$firstSource (result of recordSource)"
+          ],
+          "expression": "t.playback.expect(firstSource).present()",
+          "sourceCode": "t.playback.expect(firstSource).present()",
+          "surfaces": [
+            "Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 44,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 120,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Playback → present: $secondSource (result of recordSource).",
+          "call": "playback.expect.present",
+          "arguments": [
+            "$secondSource (result of recordSource)"
+          ],
+          "expression": "t.playback.expect(secondSource).present()",
+          "sourceCode": "t.playback.expect(secondSource).present()",
+          "surfaces": [
+            "Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 45,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 121,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → effective page: $followPane (result of desktopBuilder.addPane), 2.",
+          "call": "virtualPlayback.expect.effectivePage",
+          "arguments": [
+            "$followPane (result of desktopBuilder.addPane)",
+            "2"
+          ],
+          "expression": "t.virtualPlayback.expect.effectivePage(followPane, 2)",
+          "sourceCode": "t.virtualPlayback.expect.effectivePage(followPane, 2)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 47,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 124,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → effective page: $pinnedPane (result of desktopBuilder.addPane), 2.",
+          "call": "virtualPlayback.expect.effectivePage",
+          "arguments": [
+            "$pinnedPane (result of desktopBuilder.addPane)",
+            "2"
+          ],
+          "expression": "t.virtualPlayback.expect.effectivePage(pinnedPane, 2)",
+          "sourceCode": "t.virtualPlayback.expect.effectivePage(pinnedPane, 2)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 48,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 125,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → effective page: $followPane (result of desktopBuilder.addPane), 1.",
+          "call": "virtualPlayback.expect.effectivePage",
+          "arguments": [
+            "$followPane (result of desktopBuilder.addPane)",
+            "1"
+          ],
+          "expression": "t.virtualPlayback.expect.effectivePage(followPane, 1)",
+          "sourceCode": "t.virtualPlayback.expect.effectivePage(followPane, 1)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 50,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 127,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → effective page: $pinnedPane (result of desktopBuilder.addPane), 2.",
+          "call": "virtualPlayback.expect.effectivePage",
+          "arguments": [
+            "$pinnedPane (result of desktopBuilder.addPane)",
+            "2"
+          ],
+          "expression": "t.virtualPlayback.expect.effectivePage(pinnedPane, 2)",
+          "sourceCode": "t.virtualPlayback.expect.effectivePage(pinnedPane, 2)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 51,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 128,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → logical cells: $followPane (result of desktopBuilder.addPane), 400.",
+          "call": "virtualPlayback.expect.logicalCells",
+          "arguments": [
+            "$followPane (result of desktopBuilder.addPane)",
+            "400"
+          ],
+          "expression": "t.virtualPlayback.expect.logicalCells(followPane, 400)",
+          "sourceCode": "t.virtualPlayback.expect.logicalCells(followPane, 400)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 53,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 131,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → logical cells: $pinnedPane (result of desktopBuilder.addPane), 5388.",
+          "call": "virtualPlayback.expect.logicalCells",
+          "arguments": [
+            "$pinnedPane (result of desktopBuilder.addPane)",
+            "5388"
+          ],
+          "expression": "t.virtualPlayback.expect.logicalCells(pinnedPane, 5_388)",
+          "sourceCode": "t.virtualPlayback.expect.logicalCells(pinnedPane, 5_388)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 54,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 132,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → button: $followPane (result of desktopBuilder.addPane), 1, \"GO\", 1.",
+          "call": "virtualPlayback.expect.button",
+          "arguments": [
+            "$followPane (result of desktopBuilder.addPane)",
+            "1",
+            "\"GO\"",
+            "1"
+          ],
+          "expression": "t.virtualPlayback.expect.button(followPane, 1, \"GO\", 1)",
+          "sourceCode": "t.virtualPlayback.expect.button(followPane, 1, \"GO\", 1)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 55,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 133,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → button: $pinnedPane (result of desktopBuilder.addPane), 1, \"TOGGLE\", 2.",
+          "call": "virtualPlayback.expect.button",
+          "arguments": [
+            "$pinnedPane (result of desktopBuilder.addPane)",
+            "1",
+            "\"TOGGLE\"",
+            "2"
+          ],
+          "expression": "t.virtualPlayback.expect.button(pinnedPane, 1, \"TOGGLE\", 2)",
+          "sourceCode": "t.virtualPlayback.expect.button(pinnedPane, 1, \"TOGGLE\", 2)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 56,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 134,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → assignment: $firstPlayback (result of virtualPlayback.assignSource), { number: 1001, button_count: 1, has_fader: false, buttons: [\"go\", \"none\", \"none\"] }.",
+          "call": "virtualPlayback.expect.assignment",
+          "arguments": [
+            "$firstPlayback (result of virtualPlayback.assignSource)",
+            "{ number: 1001, button_count: 1, has_fader: false, buttons: [\"go\", \"none\", \"none\"] }"
+          ],
+          "expression": "t.virtualPlayback.expect.assignment(firstPlayback, { number: 1001, button_count: 1, has_fader: false, buttons: [\"go\", \"none\", \"none\"], })",
+          "sourceCode": "t.virtualPlayback.expect.assignment(firstPlayback, {\n\t\t\tnumber: 1001,\n\t\t\tbutton_count: 1,\n\t\t\thas_fader: false,\n\t\t\tbuttons: [\"go\", \"none\", \"none\"],\n\t\t})",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 57,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 135,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → assignment: $secondPlayback (result of virtualPlayback.assignSource), { number: 1001, button_count: 1, has_fader: false, buttons: [\"toggle\", \"none\", \"none\"] }.",
+          "call": "virtualPlayback.expect.assignment",
+          "arguments": [
+            "$secondPlayback (result of virtualPlayback.assignSource)",
+            "{ number: 1001, button_count: 1, has_fader: false, buttons: [\"toggle\", \"none\", \"none\"] }"
+          ],
+          "expression": "t.virtualPlayback.expect.assignment(secondPlayback, { number: 1001, button_count: 1, has_fader: false, buttons: [\"toggle\", \"none\", \"none\"], })",
+          "sourceCode": "t.virtualPlayback.expect.assignment(secondPlayback, {\n\t\t\tnumber: 1001,\n\t\t\tbutton_count: 1,\n\t\t\thas_fader: false,\n\t\t\tbuttons: [\"toggle\", \"none\", \"none\"],\n\t\t})",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 58,
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 141,
             "column": 9
           }
         }
@@ -33313,14 +33694,24 @@
         "Virtual Playbacks"
       ],
       "migration": {
-        "status": "migrated-semantic-world",
-        "contract": "repository contract",
-        "helperFamily": "semantic-virtual-playback-layout",
-        "artifacts": "standard failure evidence",
-        "constraint": "parallel"
+        "status": "unresolved",
+        "contract": "unresolved",
+        "helperFamily": "unresolved",
+        "artifacts": "unresolved",
+        "constraint": "unresolved"
       },
       "lastRun": null,
-      "diagnostics": []
+      "diagnostics": [
+        {
+          "code": "missing-migration-status",
+          "message": "No exact source, ID, and title match exists in the generated migration inventory.",
+          "source": {
+            "file": "tests/55-semantic-virtual-playback-layout.spec.ts",
+            "line": 8,
+            "column": 1
+          }
+        }
+      ]
     },
     {
       "id": "LOCK-001",
@@ -34037,7 +34428,7 @@
           "order": 26,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 47,
+            "line": 48,
             "column": 19
           }
         },
@@ -34063,7 +34454,7 @@
           "order": 27,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 48,
+            "line": 49,
             "column": 16
           }
         },
@@ -34082,7 +34473,7 @@
           "order": 28,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 59,
+            "line": 60,
             "column": 9
           }
         },
@@ -34105,7 +34496,7 @@
           "order": 29,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 61,
+            "line": 62,
             "column": 31
           }
         },
@@ -34128,7 +34519,7 @@
           "order": 30,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 66,
+            "line": 67,
             "column": 32
           }
         },
@@ -34141,8 +34532,8 @@
             "\"Touring C\"",
             "3"
           ],
-          "expression": "t.virtualPlayback.assignSource(pane, \"Touring C\", 3)",
-          "sourceCode": "t.virtualPlayback.assignSource(pane, \"Touring C\", 3)",
+          "expression": "t.virtualPlayback.assignSource( pane, \"Touring C\", 3, )",
+          "sourceCode": "t.virtualPlayback.assignSource(\n\t\t\tpane,\n\t\t\t\"Touring C\",\n\t\t\t3,\n\t\t)",
           "surfaces": [
             "Browser UI",
             "Virtual Playbacks"
@@ -34151,49 +34542,51 @@
           "order": 31,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 71,
-            "column": 9
+            "line": 72,
+            "column": 31
           }
         },
         {
           "kind": "step",
-          "description": "Playback → api → on with $firstPlayback (result of virtualPlayback.assignSource).",
-          "call": "playback.via.api.on",
+          "description": "Virtual playback → activate with $pane (result of desktopBuilder.addPane), 1.",
+          "call": "virtualPlayback.activate",
           "arguments": [
-            "$firstPlayback (result of virtualPlayback.assignSource)"
+            "$pane (result of desktopBuilder.addPane)",
+            "1"
           ],
-          "expression": "t.playback.via.api.on(firstPlayback)",
-          "sourceCode": "t.playback.via.api.on(firstPlayback)",
+          "expression": "t.virtualPlayback.activate(pane, 1)",
+          "sourceCode": "t.virtualPlayback.activate(pane, 1)",
           "surfaces": [
-            "Playbacks",
-            "Typed API"
+            "Browser UI",
+            "Virtual Playbacks"
           ],
           "phase": "scenario",
           "order": 32,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 72,
+            "line": 77,
             "column": 9
           }
         },
         {
           "kind": "step",
-          "description": "Playback → api → on with $secondPlayback (result of virtualPlayback.assignSource).",
-          "call": "playback.via.api.on",
+          "description": "Virtual playback → activate with $pane (result of desktopBuilder.addPane), 2.",
+          "call": "virtualPlayback.activate",
           "arguments": [
-            "$secondPlayback (result of virtualPlayback.assignSource)"
+            "$pane (result of desktopBuilder.addPane)",
+            "2"
           ],
-          "expression": "t.playback.via.api.on(secondPlayback)",
-          "sourceCode": "t.playback.via.api.on(secondPlayback)",
+          "expression": "t.virtualPlayback.activate(pane, 2)",
+          "sourceCode": "t.virtualPlayback.activate(pane, 2)",
           "surfaces": [
-            "Playbacks",
-            "Typed API"
+            "Browser UI",
+            "Virtual Playbacks"
           ],
           "phase": "scenario",
           "order": 33,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 73,
+            "line": 78,
             "column": 9
           }
         },
@@ -34216,7 +34609,7 @@
           "order": 34,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 75,
+            "line": 80,
             "column": 9
           }
         },
@@ -34238,7 +34631,7 @@
           "order": 38,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 82,
+            "line": 103,
             "column": 9
           }
         },
@@ -34260,7 +34653,7 @@
           "order": 39,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 83,
+            "line": 104,
             "column": 9
           }
         },
@@ -34282,7 +34675,7 @@
           "order": 40,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 84,
+            "line": 105,
             "column": 9
           }
         },
@@ -34304,7 +34697,7 @@
           "order": 41,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 85,
+            "line": 106,
             "column": 9
           }
         },
@@ -34319,10 +34712,10 @@
             "Test clock"
           ],
           "phase": "scenario",
-          "order": 44,
+          "order": 48,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 88,
+            "line": 121,
             "column": 9
           }
         }
@@ -34345,92 +34738,181 @@
           "order": 35,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 76,
+            "line": 81,
             "column": 9
           }
         },
         {
           "kind": "expected-outcome",
-          "description": "Playback → runtime: $firstPlayback (result of virtualPlayback.assignSource), { enabled: true }.",
-          "call": "playback.expect.runtime",
+          "description": "Virtual playback → runtime: $firstPlayback (result of virtualPlayback.assignSource), { requested: { kind: \"virtual\", page: 1, playback_number: 1001 }, target: \"cue_list\", runtime: { enabled: true } }.",
+          "call": "virtualPlayback.expect.runtime",
           "arguments": [
             "$firstPlayback (result of virtualPlayback.assignSource)",
-            "{ enabled: true }"
+            "{ requested: { kind: \"virtual\", page: 1, playback_number: 1001 }, target: \"cue_list\", runtime: { enabled: true } }"
           ],
-          "expression": "t.playback.expect(firstPlayback).runtime({ enabled: true })",
-          "sourceCode": "t.playback.expect(firstPlayback).runtime({ enabled: true })",
+          "expression": "t.virtualPlayback.expect.runtime(firstPlayback, { requested: { kind: \"virtual\", page: 1, playback_number: 1001, }, target: \"cue_list\", runtime: { enabled: true }, })",
+          "sourceCode": "t.virtualPlayback.expect.runtime(firstPlayback, {\n\t\t\trequested: {\n\t\t\t\tkind: \"virtual\",\n\t\t\t\tpage: 1,\n\t\t\t\tplayback_number: 1001,\n\t\t\t},\n\t\t\ttarget: \"cue_list\",\n\t\t\truntime: { enabled: true },\n\t\t})",
           "surfaces": [
-            "Playbacks"
+            "Browser UI",
+            "Virtual Playbacks"
           ],
           "phase": "scenario",
           "order": 36,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 79,
+            "line": 84,
             "column": 9
           }
         },
         {
           "kind": "expected-outcome",
-          "description": "Playback → runtime: $secondPlayback (result of virtualPlayback.assignSource), { enabled: true }.",
-          "call": "playback.expect.runtime",
+          "description": "Virtual playback → runtime: $secondPlayback (result of virtualPlayback.assignSource), { requested: { kind: \"virtual\", page: 1, playback_number: 1002 }, target: \"cue_list\", runtime: { enabled: true } }.",
+          "call": "virtualPlayback.expect.runtime",
           "arguments": [
             "$secondPlayback (result of virtualPlayback.assignSource)",
-            "{ enabled: true }"
+            "{ requested: { kind: \"virtual\", page: 1, playback_number: 1002 }, target: \"cue_list\", runtime: { enabled: true } }"
           ],
-          "expression": "t.playback.expect(secondPlayback).runtime({ enabled: true })",
-          "sourceCode": "t.playback.expect(secondPlayback).runtime({ enabled: true })",
+          "expression": "t.virtualPlayback.expect.runtime(secondPlayback, { requested: { kind: \"virtual\", page: 1, playback_number: 1002, }, target: \"cue_list\", runtime: { enabled: true }, })",
+          "sourceCode": "t.virtualPlayback.expect.runtime(secondPlayback, {\n\t\t\trequested: {\n\t\t\t\tkind: \"virtual\",\n\t\t\t\tpage: 1,\n\t\t\t\tplayback_number: 1002,\n\t\t\t},\n\t\t\ttarget: \"cue_list\",\n\t\t\truntime: { enabled: true },\n\t\t})",
           "surfaces": [
-            "Playbacks"
+            "Browser UI",
+            "Virtual Playbacks"
           ],
           "phase": "scenario",
           "order": 37,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 80,
+            "line": 93,
             "column": 9
           }
         },
         {
           "kind": "expected-outcome",
-          "description": "Playback → runtime: $firstPlayback (result of virtualPlayback.assignSource), { enabled: false }.",
-          "call": "playback.expect.runtime",
+          "description": "Virtual playback → runtime: $firstPlayback (result of virtualPlayback.assignSource), { target: \"cue_list\", runtime: { enabled: false } }.",
+          "call": "virtualPlayback.expect.runtime",
           "arguments": [
             "$firstPlayback (result of virtualPlayback.assignSource)",
-            "{ enabled: false }"
+            "{ target: \"cue_list\", runtime: { enabled: false } }"
           ],
-          "expression": "t.playback.expect(firstPlayback).runtime({ enabled: false })",
-          "sourceCode": "t.playback.expect(firstPlayback).runtime({ enabled: false })",
+          "expression": "t.virtualPlayback.expect.runtime(firstPlayback, { target: \"cue_list\", runtime: { enabled: false }, })",
+          "sourceCode": "t.virtualPlayback.expect.runtime(firstPlayback, {\n\t\t\ttarget: \"cue_list\",\n\t\t\truntime: { enabled: false },\n\t\t})",
           "surfaces": [
-            "Playbacks"
+            "Browser UI",
+            "Virtual Playbacks"
           ],
           "phase": "scenario",
           "order": 42,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 86,
+            "line": 107,
             "column": 9
           }
         },
         {
           "kind": "expected-outcome",
-          "description": "Playback → runtime: $secondPlayback (result of virtualPlayback.assignSource), { enabled: true }.",
-          "call": "playback.expect.runtime",
+          "description": "Virtual playback → runtime: $secondPlayback (result of virtualPlayback.assignSource), { target: \"cue_list\", runtime: { enabled: true } }.",
+          "call": "virtualPlayback.expect.runtime",
           "arguments": [
             "$secondPlayback (result of virtualPlayback.assignSource)",
-            "{ enabled: true }"
+            "{ target: \"cue_list\", runtime: { enabled: true } }"
           ],
-          "expression": "t.playback.expect(secondPlayback).runtime({ enabled: true })",
-          "sourceCode": "t.playback.expect(secondPlayback).runtime({ enabled: true })",
+          "expression": "t.virtualPlayback.expect.runtime(secondPlayback, { target: \"cue_list\", runtime: { enabled: true }, })",
+          "sourceCode": "t.virtualPlayback.expect.runtime(secondPlayback, {\n\t\t\ttarget: \"cue_list\",\n\t\t\truntime: { enabled: true },\n\t\t})",
           "surfaces": [
-            "Playbacks"
+            "Browser UI",
+            "Virtual Playbacks"
           ],
           "phase": "scenario",
           "order": 43,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 87,
+            "line": 111,
             "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → runtime: $thirdPlayback (result of virtualPlayback.assignSource), { target: \"cue_list\", runtime: null }.",
+          "call": "virtualPlayback.expect.runtime",
+          "arguments": [
+            "$thirdPlayback (result of virtualPlayback.assignSource)",
+            "{ target: \"cue_list\", runtime: null }"
+          ],
+          "expression": "t.virtualPlayback.expect.runtime(thirdPlayback, { target: \"cue_list\", runtime: null, })",
+          "sourceCode": "t.virtualPlayback.expect.runtime(thirdPlayback, {\n\t\t\ttarget: \"cue_list\",\n\t\t\truntime: null,\n\t\t})",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 44,
+          "source": {
+            "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
+            "line": 115,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → physical runtime absent: source = $firstSource (result of recordSource).",
+          "call": "virtualPlayback.expect.physicalRuntimeAbsent",
+          "arguments": [
+            "source = $firstSource (result of recordSource)"
+          ],
+          "expression": "t.virtualPlayback.expect.physicalRuntimeAbsent(source)",
+          "sourceCode": "t.virtualPlayback.expect.physicalRuntimeAbsent(source)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario:iteration-1",
+          "order": 45,
+          "source": {
+            "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
+            "line": 120,
+            "column": 10
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → physical runtime absent: source = $secondSource (result of recordSource).",
+          "call": "virtualPlayback.expect.physicalRuntimeAbsent",
+          "arguments": [
+            "source = $secondSource (result of recordSource)"
+          ],
+          "expression": "t.virtualPlayback.expect.physicalRuntimeAbsent(source)",
+          "sourceCode": "t.virtualPlayback.expect.physicalRuntimeAbsent(source)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario:iteration-2",
+          "order": 46,
+          "source": {
+            "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
+            "line": 120,
+            "column": 10
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → physical runtime absent: source = $thirdSource (result of recordSource).",
+          "call": "virtualPlayback.expect.physicalRuntimeAbsent",
+          "arguments": [
+            "source = $thirdSource (result of recordSource)"
+          ],
+          "expression": "t.virtualPlayback.expect.physicalRuntimeAbsent(source)",
+          "sourceCode": "t.virtualPlayback.expect.physicalRuntimeAbsent(source)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario:iteration-3",
+          "order": 47,
+          "source": {
+            "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
+            "line": 120,
+            "column": 10
           }
         },
         {
@@ -34447,10 +34929,10 @@
             "Resolved output"
           ],
           "phase": "scenario",
-          "order": 45,
+          "order": 49,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 89,
+            "line": 122,
             "column": 9
           }
         },
@@ -34468,10 +34950,10 @@
             "Resolved output"
           ],
           "phase": "scenario",
-          "order": 46,
+          "order": 50,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 90,
+            "line": 123,
             "column": 9
           }
         },
@@ -34489,10 +34971,10 @@
             "Resolved output"
           ],
           "phase": "scenario",
-          "order": 47,
+          "order": 51,
           "source": {
             "file": "tests/56-semantic-virtual-playback-exclusion-zone.spec.ts",
-            "line": 91,
+            "line": 124,
             "column": 9
           }
         }
@@ -36758,10 +37240,10 @@
             "Test clock"
           ],
           "phase": "scenario",
-          "order": 42,
+          "order": 44,
           "source": {
             "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
-            "line": 107,
+            "line": 109,
             "column": 9
           }
         },
@@ -36776,10 +37258,10 @@
             "Preload"
           ],
           "phase": "scenario",
-          "order": 45,
+          "order": 47,
           "source": {
             "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
-            "line": 111,
+            "line": 113,
             "column": 9
           }
         },
@@ -36796,10 +37278,10 @@
             "Test clock"
           ],
           "phase": "scenario",
-          "order": 49,
+          "order": 50,
           "source": {
             "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
-            "line": 121,
+            "line": 132,
             "column": 9
           }
         },
@@ -36815,10 +37297,10 @@
             "Preload"
           ],
           "phase": "scenario",
-          "order": 52,
+          "order": 53,
           "source": {
             "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
-            "line": 125,
+            "line": 136,
             "column": 9
           }
         }
@@ -36886,6 +37368,48 @@
         },
         {
           "kind": "expected-outcome",
+          "description": "Virtual playback → physical runtime absent: $goSource (result of recordSource).",
+          "call": "virtualPlayback.expect.physicalRuntimeAbsent",
+          "arguments": [
+            "$goSource (result of recordSource)"
+          ],
+          "expression": "t.virtualPlayback.expect.physicalRuntimeAbsent(goSource)",
+          "sourceCode": "t.virtualPlayback.expect.physicalRuntimeAbsent(goSource)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 41,
+          "source": {
+            "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
+            "line": 103,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → physical runtime absent: $toggleSource (result of recordSource).",
+          "call": "virtualPlayback.expect.physicalRuntimeAbsent",
+          "arguments": [
+            "$toggleSource (result of recordSource)"
+          ],
+          "expression": "t.virtualPlayback.expect.physicalRuntimeAbsent(toggleSource)",
+          "sourceCode": "t.virtualPlayback.expect.physicalRuntimeAbsent(toggleSource)",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 42,
+          "source": {
+            "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
+            "line": 104,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
           "description": "Playback → runtime: $physicalPlayback (result of recordSource), { enabled: true, current_cue_number: 1 }.",
           "call": "playback.expect.runtime",
           "arguments": [
@@ -36898,10 +37422,10 @@
             "Playbacks"
           ],
           "phase": "scenario",
-          "order": 41,
+          "order": 43,
           "source": {
             "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
-            "line": 103,
+            "line": 105,
             "column": 9
           }
         },
@@ -36919,10 +37443,10 @@
             "Resolved output"
           ],
           "phase": "scenario",
-          "order": 43,
+          "order": 45,
           "source": {
             "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
-            "line": 108,
+            "line": 110,
             "column": 9
           }
         },
@@ -36940,73 +37464,54 @@
             "Resolved output"
           ],
           "phase": "scenario",
-          "order": 44,
-          "source": {
-            "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
-            "line": 109,
-            "column": 9
-          }
-        },
-        {
-          "kind": "expected-outcome",
-          "description": "Playback → runtime: $virtualGo (result of virtualPlayback.assignSource), { enabled: true, current_cue_number: 1 }.",
-          "call": "playback.expect.runtime",
-          "arguments": [
-            "$virtualGo (result of virtualPlayback.assignSource)",
-            "{ enabled: true, current_cue_number: 1 }"
-          ],
-          "expression": "t.playback.expect(virtualGo).runtime({ enabled: true, current_cue_number: 1, })",
-          "sourceCode": "t.playback.expect(virtualGo).runtime({\n\t\t\tenabled: true,\n\t\t\tcurrent_cue_number: 1,\n\t\t})",
-          "surfaces": [
-            "Playbacks"
-          ],
-          "phase": "scenario",
           "order": 46,
           "source": {
             "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
-            "line": 112,
+            "line": 111,
             "column": 9
           }
         },
         {
           "kind": "expected-outcome",
-          "description": "Playback → runtime: $virtualToggle (result of virtualPlayback.assignSource), { enabled: true, current_cue_number: 1 }.",
-          "call": "playback.expect.runtime",
-          "arguments": [
-            "$virtualToggle (result of virtualPlayback.assignSource)",
-            "{ enabled: true, current_cue_number: 1 }"
-          ],
-          "expression": "t.playback.expect(virtualToggle).runtime({ enabled: true, current_cue_number: 1, })",
-          "sourceCode": "t.playback.expect(virtualToggle).runtime({\n\t\t\tenabled: true,\n\t\t\tcurrent_cue_number: 1,\n\t\t})",
-          "surfaces": [
-            "Playbacks"
-          ],
-          "phase": "scenario",
-          "order": 47,
-          "source": {
-            "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
-            "line": 116,
-            "column": 9
-          }
-        },
-        {
-          "kind": "expected-outcome",
-          "description": "Playback → expect activated together: $virtualGo (result of virtualPlayback.assignSource), $virtualToggle (result of virtualPlayback.assignSource).",
-          "call": "playback.expectActivatedTogether",
+          "description": "Virtual playback → runtime: $virtualGo (result of virtualPlayback.assignSource), { requested: { kind: \"virtual\", page: 1, playback_number: 1001 }, target: \"cue_list\", runtime: { enabled: true, current: { number: 1 } } }.",
+          "call": "virtualPlayback.expect.runtime",
           "arguments": [
             "$virtualGo (result of virtualPlayback.assignSource)",
-            "$virtualToggle (result of virtualPlayback.assignSource)"
+            "{ requested: { kind: \"virtual\", page: 1, playback_number: 1001 }, target: \"cue_list\", runtime: { enabled: true, current: { number: 1 } } }"
           ],
-          "expression": "t.playback.expectActivatedTogether(virtualGo, virtualToggle)",
-          "sourceCode": "t.playback.expectActivatedTogether(virtualGo, virtualToggle)",
+          "expression": "t.virtualPlayback.expect.runtime(virtualGo, { requested: { kind: \"virtual\", page: 1, playback_number: 1001, }, target: \"cue_list\", runtime: { enabled: true, current: { number: 1…",
+          "sourceCode": "t.virtualPlayback.expect.runtime(virtualGo, {\n\t\t\trequested: {\n\t\t\t\tkind: \"virtual\",\n\t\t\t\tpage: 1,\n\t\t\t\tplayback_number: 1001,\n\t\t\t},\n\t\t\ttarget: \"cue_list\",\n\t\t\truntime: { enabled: true, current: { number: 1 } },\n\t\t})",
           "surfaces": [
-            "Playbacks"
+            "Browser UI",
+            "Virtual Playbacks"
           ],
           "phase": "scenario",
           "order": 48,
           "source": {
             "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
-            "line": 120,
+            "line": 114,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → runtime: $virtualToggle (result of virtualPlayback.assignSource), { requested: { kind: \"virtual\", page: 1, playback_number: 1002 }, target: \"cue_list\", runtime: { enabled: true, current: { number: 1 } } }.",
+          "call": "virtualPlayback.expect.runtime",
+          "arguments": [
+            "$virtualToggle (result of virtualPlayback.assignSource)",
+            "{ requested: { kind: \"virtual\", page: 1, playback_number: 1002 }, target: \"cue_list\", runtime: { enabled: true, current: { number: 1 } } }"
+          ],
+          "expression": "t.virtualPlayback.expect.runtime(virtualToggle, { requested: { kind: \"virtual\", page: 1, playback_number: 1002, }, target: \"cue_list\", runtime: { enabled: true, current: { numbe…",
+          "sourceCode": "t.virtualPlayback.expect.runtime(virtualToggle, {\n\t\t\trequested: {\n\t\t\t\tkind: \"virtual\",\n\t\t\t\tpage: 1,\n\t\t\t\tplayback_number: 1002,\n\t\t\t},\n\t\t\ttarget: \"cue_list\",\n\t\t\truntime: { enabled: true, current: { number: 1 } },\n\t\t})",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 49,
+          "source": {
+            "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
+            "line": 123,
             "column": 9
           }
         },
@@ -37024,10 +37529,10 @@
             "Resolved output"
           ],
           "phase": "scenario",
-          "order": 50,
+          "order": 51,
           "source": {
             "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
-            "line": 122,
+            "line": 133,
             "column": 9
           }
         },
@@ -37045,52 +37550,54 @@
             "Resolved output"
           ],
           "phase": "scenario",
-          "order": 51,
+          "order": 52,
           "source": {
             "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
-            "line": 123,
+            "line": 134,
             "column": 9
           }
         },
         {
           "kind": "expected-outcome",
-          "description": "Playback → runtime: $virtualGo (result of virtualPlayback.assignSource), { enabled: true }.",
-          "call": "playback.expect.runtime",
+          "description": "Virtual playback → runtime: $virtualGo (result of virtualPlayback.assignSource), { target: \"cue_list\", runtime: { enabled: true } }.",
+          "call": "virtualPlayback.expect.runtime",
           "arguments": [
             "$virtualGo (result of virtualPlayback.assignSource)",
-            "{ enabled: true }"
+            "{ target: \"cue_list\", runtime: { enabled: true } }"
           ],
-          "expression": "t.playback.expect(virtualGo).runtime({ enabled: true })",
-          "sourceCode": "t.playback.expect(virtualGo).runtime({ enabled: true })",
+          "expression": "t.virtualPlayback.expect.runtime(virtualGo, { target: \"cue_list\", runtime: { enabled: true }, })",
+          "sourceCode": "t.virtualPlayback.expect.runtime(virtualGo, {\n\t\t\ttarget: \"cue_list\",\n\t\t\truntime: { enabled: true },\n\t\t})",
           "surfaces": [
-            "Playbacks"
-          ],
-          "phase": "scenario",
-          "order": 53,
-          "source": {
-            "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
-            "line": 126,
-            "column": 9
-          }
-        },
-        {
-          "kind": "expected-outcome",
-          "description": "Playback → runtime: $virtualToggle (result of virtualPlayback.assignSource), { enabled: true }.",
-          "call": "playback.expect.runtime",
-          "arguments": [
-            "$virtualToggle (result of virtualPlayback.assignSource)",
-            "{ enabled: true }"
-          ],
-          "expression": "t.playback.expect(virtualToggle).runtime({ enabled: true })",
-          "sourceCode": "t.playback.expect(virtualToggle).runtime({ enabled: true })",
-          "surfaces": [
-            "Playbacks"
+            "Browser UI",
+            "Virtual Playbacks"
           ],
           "phase": "scenario",
           "order": 54,
           "source": {
             "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
-            "line": 127,
+            "line": 137,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Virtual playback → runtime: $virtualToggle (result of virtualPlayback.assignSource), { target: \"cue_list\", runtime: { enabled: true } }.",
+          "call": "virtualPlayback.expect.runtime",
+          "arguments": [
+            "$virtualToggle (result of virtualPlayback.assignSource)",
+            "{ target: \"cue_list\", runtime: { enabled: true } }"
+          ],
+          "expression": "t.virtualPlayback.expect.runtime(virtualToggle, { target: \"cue_list\", runtime: { enabled: true }, })",
+          "sourceCode": "t.virtualPlayback.expect.runtime(virtualToggle, {\n\t\t\ttarget: \"cue_list\",\n\t\t\truntime: { enabled: true },\n\t\t})",
+          "surfaces": [
+            "Browser UI",
+            "Virtual Playbacks"
+          ],
+          "phase": "scenario",
+          "order": 55,
+          "source": {
+            "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
+            "line": 141,
             "column": 9
           }
         },
@@ -37108,10 +37615,10 @@
             "Resolved output"
           ],
           "phase": "scenario",
-          "order": 55,
+          "order": 56,
           "source": {
             "file": "tests/57-semantic-virtual-playback-preload.spec.ts",
-            "line": 128,
+            "line": 145,
             "column": 9
           }
         }
@@ -47591,29 +48098,147 @@
           "order": 11,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 51,
+            "line": 56,
             "column": 9
           }
         },
         {
           "kind": "step",
-          "description": "Selection → fixtures → click → item with 201.",
-          "call": "selection.fixtures.via.click.item",
+          "description": "Stage → select fixture with $live (result of desktopBuilder.addPane), 101.",
+          "call": "stage.selectFixture",
           "arguments": [
-            "201"
+            "$live (result of desktopBuilder.addPane)",
+            "101"
           ],
-          "expression": "t.selection.fixtures.via.click.item(201)",
-          "sourceCode": "t.selection.fixtures.via.click.item(201)",
+          "expression": "t.stage.selectFixture(live, 101)",
+          "sourceCode": "t.stage.selectFixture(live, 101)",
           "surfaces": [
             "Browser UI",
-            "Selection"
+            "Stage",
+            "Visualization runtime"
           ],
           "phase": "scenario",
           "order": 12,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 52,
+            "line": 57,
             "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Start blind Preload programming.",
+          "call": "preload.start",
+          "arguments": [],
+          "expression": "t.preload.start()",
+          "sourceCode": "t.preload.start()",
+          "surfaces": [
+            "Preload"
+          ],
+          "phase": "scenario",
+          "order": 13,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 63,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Preload → set fixture value with { fixture: 101, attribute: \"intensity\", value: { kind: \"normalized\", value: 0.35 } }.",
+          "call": "preload.setFixtureValue",
+          "arguments": [
+            "{ fixture: 101, attribute: \"intensity\", value: { kind: \"normalized\", value: 0.35 } }"
+          ],
+          "expression": "t.preload.setFixtureValue({ fixture: 101, attribute: \"intensity\", value: { kind: \"normalized\", value: 0.35 }, })",
+          "sourceCode": "t.preload.setFixtureValue({\n\t\t\tfixture: 101,\n\t\t\tattribute: \"intensity\",\n\t\t\tvalue: { kind: \"normalized\", value: 0.35 },\n\t\t})",
+          "surfaces": [
+            "Preload"
+          ],
+          "phase": "scenario",
+          "order": 14,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 64,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Advance the test clock by \"100ms\".",
+          "call": "clock.advanceBy",
+          "arguments": [
+            "\"100ms\""
+          ],
+          "expression": "t.clock.advanceBy(\"100ms\")",
+          "sourceCode": "t.clock.advanceBy(\"100ms\")",
+          "surfaces": [
+            "Test clock"
+          ],
+          "phase": "scenario",
+          "order": 15,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 69,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Stage → wait for changing frame.",
+          "call": "stage.waitForChangingFrame",
+          "arguments": [],
+          "expression": "t.stage.waitForChangingFrame()",
+          "sourceCode": "t.stage.waitForChangingFrame()",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 16,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 70,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Release blind Preload programming.",
+          "call": "preload.release",
+          "arguments": [],
+          "expression": "t.preload.release()",
+          "sourceCode": "t.preload.release()",
+          "surfaces": [
+            "Preload"
+          ],
+          "phase": "scenario",
+          "order": 19,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 79,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Stage → capture retained scene state.",
+          "call": "stage.captureRetainedSceneState",
+          "arguments": [],
+          "expression": "t.stage.captureRetainedSceneState()",
+          "sourceCode": "t.stage.captureRetainedSceneState()",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 22,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 93,
+            "column": 31
           }
         },
         {
@@ -47629,10 +48254,10 @@
             "Visualization runtime"
           ],
           "phase": "scenario",
-          "order": 13,
+          "order": 23,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 58,
+            "line": 94,
             "column": 32
           }
         },
@@ -47651,10 +48276,10 @@
             "Typed API"
           ],
           "phase": "scenario",
-          "order": 14,
+          "order": 24,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 59,
+            "line": 95,
             "column": 9
           }
         },
@@ -47673,10 +48298,10 @@
             "Typed API"
           ],
           "phase": "scenario",
-          "order": 15,
+          "order": 25,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 60,
+            "line": 96,
             "column": 9
           }
         },
@@ -47693,31 +48318,31 @@
             "Command line"
           ],
           "phase": "scenario",
-          "order": 16,
+          "order": 26,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 61,
+            "line": 97,
             "column": 9
           }
         },
         {
           "kind": "step",
-          "description": "Advance the test clock by \"500ms\".",
+          "description": "Advance the test clock by \"100ms\".",
           "call": "clock.advanceBy",
           "arguments": [
-            "\"500ms\""
+            "\"100ms\""
           ],
-          "expression": "t.clock.advanceBy(\"500ms\")",
-          "sourceCode": "t.clock.advanceBy(\"500ms\")",
+          "expression": "t.clock.advanceBy(\"100ms\")",
+          "sourceCode": "t.clock.advanceBy(\"100ms\")",
           "surfaces": [
             "Test clock"
           ],
           "phase": "scenario",
-          "order": 17,
+          "order": 27,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 62,
-            "column": 9
+            "line": 99,
+            "column": 10
           }
         },
         {
@@ -47733,51 +48358,11 @@
             "Visualization runtime"
           ],
           "phase": "scenario",
-          "order": 18,
+          "order": 28,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 63,
-            "column": 9
-          }
-        },
-        {
-          "kind": "step",
-          "description": "Advance the test clock by \"500ms\".",
-          "call": "clock.advanceBy",
-          "arguments": [
-            "\"500ms\""
-          ],
-          "expression": "t.clock.advanceBy(\"500ms\")",
-          "sourceCode": "t.clock.advanceBy(\"500ms\")",
-          "surfaces": [
-            "Test clock"
-          ],
-          "phase": "scenario",
-          "order": 20,
-          "source": {
-            "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 65,
-            "column": 9
-          }
-        },
-        {
-          "kind": "step",
-          "description": "Stage → wait for changing frame.",
-          "call": "stage.waitForChangingFrame",
-          "arguments": [],
-          "expression": "t.stage.waitForChangingFrame()",
-          "sourceCode": "t.stage.waitForChangingFrame()",
-          "surfaces": [
-            "Browser UI",
-            "Stage",
-            "Visualization runtime"
-          ],
-          "phase": "scenario",
-          "order": 21,
-          "source": {
-            "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 66,
-            "column": 9
+            "line": 100,
+            "column": 10
           }
         },
         {
@@ -47795,11 +48380,73 @@
             "Visualization runtime"
           ],
           "phase": "scenario",
-          "order": 23,
+          "order": 31,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 68,
+            "line": 105,
             "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Encoder → position → pan → api → set with <unresolved: 76 + qualityIndex>.",
+          "call": "encoder.position.pan.via.api.set",
+          "arguments": [
+            "<unresolved: 76 + qualityIndex>"
+          ],
+          "expression": "t.encoder.position.pan.via.api.set(76 + qualityIndex)",
+          "sourceCode": "t.encoder.position.pan.via.api.set(76 + qualityIndex)",
+          "surfaces": [
+            "Encoder controls",
+            "Programmer",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 32,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 115,
+            "column": 10
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Advance the test clock by \"100ms\".",
+          "call": "clock.advanceBy",
+          "arguments": [
+            "\"100ms\""
+          ],
+          "expression": "t.clock.advanceBy(\"100ms\")",
+          "sourceCode": "t.clock.advanceBy(\"100ms\")",
+          "surfaces": [
+            "Test clock"
+          ],
+          "phase": "scenario",
+          "order": 33,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 116,
+            "column": 10
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Stage → wait for changing frame.",
+          "call": "stage.waitForChangingFrame",
+          "arguments": [],
+          "expression": "t.stage.waitForChangingFrame()",
+          "sourceCode": "t.stage.waitForChangingFrame()",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 34,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 117,
+            "column": 10
           }
         },
         {
@@ -47815,10 +48462,10 @@
             "Visualization runtime"
           ],
           "phase": "scenario",
-          "order": 28,
+          "order": 39,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 79,
+            "line": 124,
             "column": 9
           }
         },
@@ -47837,10 +48484,10 @@
             "Typed API"
           ],
           "phase": "scenario",
-          "order": 30,
+          "order": 41,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 81,
+            "line": 126,
             "column": 9
           }
         },
@@ -47857,10 +48504,10 @@
             "Test clock"
           ],
           "phase": "scenario",
-          "order": 31,
+          "order": 42,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 82,
+            "line": 127,
             "column": 9
           }
         },
@@ -47877,10 +48524,112 @@
             "Visualization runtime"
           ],
           "phase": "scenario",
-          "order": 33,
+          "order": 44,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 84,
+            "line": 129,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Stage → capture retained scene state.",
+          "call": "stage.captureRetainedSceneState",
+          "arguments": [],
+          "expression": "t.stage.captureRetainedSceneState()",
+          "sourceCode": "t.stage.captureRetainedSceneState()",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 49,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 140,
+            "column": 34
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Stage → capture retained scene state.",
+          "call": "stage.captureRetainedSceneState",
+          "arguments": [],
+          "expression": "t.stage.captureRetainedSceneState()",
+          "sourceCode": "t.stage.captureRetainedSceneState()",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 51,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 147,
+            "column": 31
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Advance the test clock by \"100ms\".",
+          "call": "clock.advanceBy",
+          "arguments": [
+            "\"100ms\""
+          ],
+          "expression": "t.clock.advanceBy(\"100ms\")",
+          "sourceCode": "t.clock.advanceBy(\"100ms\")",
+          "surfaces": [
+            "Test clock"
+          ],
+          "phase": "scenario",
+          "order": 54,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 161,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Stage → wait for changing frame.",
+          "call": "stage.waitForChangingFrame",
+          "arguments": [],
+          "expression": "t.stage.waitForChangingFrame()",
+          "sourceCode": "t.stage.waitForChangingFrame()",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 55,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 162,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Stage → resume visualization with { reload: true, waitBeforeReloadMillis: 700 }.",
+          "call": "stage.resumeVisualization",
+          "arguments": [
+            "{ reload: true, waitBeforeReloadMillis: 700 }"
+          ],
+          "expression": "t.stage.resumeVisualization({ reload: true, waitBeforeReloadMillis: 700, })",
+          "sourceCode": "t.stage.resumeVisualization({\n\t\t\treload: true,\n\t\t\twaitBeforeReloadMillis: 700,\n\t\t})",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 57,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 164,
             "column": 9
           }
         }
@@ -47888,14 +48637,15 @@
       "expectedOutcomes": [
         {
           "kind": "expected-outcome",
-          "description": "Stage → expect lane: $live (result of desktopBuilder.addPane), \"live\".",
+          "description": "Stage → expect lane: $live (result of desktopBuilder.addPane), \"live\", { sharedFeed: { normalSubscribers: 1, preloadSubscribers: 1 } }.",
           "call": "stage.expectLane",
           "arguments": [
             "$live (result of desktopBuilder.addPane)",
-            "\"live\""
+            "\"live\"",
+            "{ sharedFeed: { normalSubscribers: 1, preloadSubscribers: 1 } }"
           ],
-          "expression": "t.stage.expectLane(live, \"live\")",
-          "sourceCode": "t.stage.expectLane(live, \"live\")",
+          "expression": "t.stage.expectLane(live, \"live\", { sharedFeed: { normalSubscribers: 1, preloadSubscribers: 1, }, })",
+          "sourceCode": "t.stage.expectLane(live, \"live\", {\n\t\t\tsharedFeed: {\n\t\t\t\tnormalSubscribers: 1,\n\t\t\t\tpreloadSubscribers: 1,\n\t\t\t},\n\t\t})",
           "surfaces": [
             "Browser UI",
             "Stage",
@@ -47928,73 +48678,56 @@
           "order": 10,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 49,
+            "line": 54,
             "column": 9
           }
         },
         {
           "kind": "expected-outcome",
-          "description": "fixture(201) DMX equals { Intensity: 102 }.",
-          "call": "expectFixtureDMX",
-          "arguments": [
-            "fixture(201)",
-            "{ Intensity: 102 }"
-          ],
-          "expression": "t.expectFixtureDMX(fixture(201), { Intensity: 102 })",
-          "sourceCode": "t.expectFixtureDMX(fixture(201), { Intensity: 102 })",
-          "surfaces": [
-            "DMX output"
-          ],
-          "phase": "scenario",
-          "order": 19,
-          "source": {
-            "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 64,
-            "column": 9
-          }
-        },
-        {
-          "kind": "expected-outcome",
-          "description": "fixture(201) DMX equals { Intensity: 204 }.",
-          "call": "expectFixtureDMX",
-          "arguments": [
-            "fixture(201)",
-            "{ Intensity: 204 }"
-          ],
-          "expression": "t.expectFixtureDMX(fixture(201), { Intensity: 204 })",
-          "sourceCode": "t.expectFixtureDMX(fixture(201), { Intensity: 204 })",
-          "surfaces": [
-            "DMX output"
-          ],
-          "phase": "scenario",
-          "order": 22,
-          "source": {
-            "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 67,
-            "column": 9
-          }
-        },
-        {
-          "kind": "expected-outcome",
-          "description": "Stage → expect quality: $live (result of desktopBuilder.addPane), StageRenderQuality.LinesOnly.",
-          "call": "stage.expectQuality",
+          "description": "Stage → expect lane: $live (result of desktopBuilder.addPane), \"live\", { fixtureNumber: 101, percent: 0 }.",
+          "call": "stage.expectLane",
           "arguments": [
             "$live (result of desktopBuilder.addPane)",
-            "StageRenderQuality.LinesOnly"
+            "\"live\"",
+            "{ fixtureNumber: 101, percent: 0 }"
           ],
-          "expression": "t.stage.expectQuality(live, quality)",
-          "sourceCode": "t.stage.expectQuality(live, quality)",
+          "expression": "t.stage.expectLane(live, \"live\", { fixtureNumber: 101, percent: 0, })",
+          "sourceCode": "t.stage.expectLane(live, \"live\", {\n\t\t\tfixtureNumber: 101,\n\t\t\tpercent: 0,\n\t\t})",
           "surfaces": [
             "Browser UI",
             "Stage",
             "Visualization runtime"
           ],
-          "phase": "scenario:iteration-1",
-          "order": 24,
+          "phase": "scenario",
+          "order": 17,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 76,
-            "column": 10
+            "line": 71,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect lane: $preload (result of desktopBuilder.addPane), \"preload\", { fixtureNumber: 101, percent: 35 }.",
+          "call": "stage.expectLane",
+          "arguments": [
+            "$preload (result of desktopBuilder.addPane)",
+            "\"preload\"",
+            "{ fixtureNumber: 101, percent: 35 }"
+          ],
+          "expression": "t.stage.expectLane(preload, \"preload\", { fixtureNumber: 101, percent: 35, })",
+          "sourceCode": "t.stage.expectLane(preload, \"preload\", {\n\t\t\tfixtureNumber: 101,\n\t\t\tpercent: 35,\n\t\t})",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 18,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 75,
+            "column": 9
           }
         },
         {
@@ -48005,6 +48738,95 @@
             "$live (result of desktopBuilder.addPane)",
             "StageRenderQuality.LinesAndBeams"
           ],
+          "expression": "t.stage.expectQuality(live, StageRenderQuality.LinesAndBeams)",
+          "sourceCode": "t.stage.expectQuality(live, StageRenderQuality.LinesAndBeams)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 20,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 91,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect lane: $preload (result of desktopBuilder.addPane), \"preload\", { fixedCamera: true }.",
+          "call": "stage.expectLane",
+          "arguments": [
+            "$preload (result of desktopBuilder.addPane)",
+            "\"preload\"",
+            "{ fixedCamera: true }"
+          ],
+          "expression": "t.stage.expectLane(preload, \"preload\", { fixedCamera: true })",
+          "sourceCode": "t.stage.expectLane(preload, \"preload\", { fixedCamera: true })",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 21,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 92,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "fixture(101) DMX equals { Intensity: 102 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "fixture(101)",
+            "{ Intensity: 102 }"
+          ],
+          "expression": "t.expectFixtureDMX(fixture(101), { Intensity: 102 })",
+          "sourceCode": "t.expectFixtureDMX(fixture(101), { Intensity: 102 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario:if-true",
+          "order": 29,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 102,
+            "column": 11
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "fixture(101) DMX equals { Intensity: 204 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "fixture(101)",
+            "{ Intensity: 204 }"
+          ],
+          "expression": "t.expectFixtureDMX(fixture(101), { Intensity: 204 })",
+          "sourceCode": "t.expectFixtureDMX(fixture(101), { Intensity: 204 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario",
+          "order": 30,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 104,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect quality: $live (result of desktopBuilder.addPane), <unresolved: quality>.",
+          "call": "stage.expectQuality",
+          "arguments": [
+            "$live (result of desktopBuilder.addPane)",
+            "<unresolved: quality>"
+          ],
           "expression": "t.stage.expectQuality(live, quality)",
           "sourceCode": "t.stage.expectQuality(live, quality)",
           "surfaces": [
@@ -48012,58 +48834,76 @@
             "Stage",
             "Visualization runtime"
           ],
-          "phase": "scenario:iteration-2",
-          "order": 25,
+          "phase": "scenario",
+          "order": 35,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 76,
+            "line": 118,
             "column": 10
           }
         },
         {
           "kind": "expected-outcome",
-          "description": "Stage → expect quality: $live (result of desktopBuilder.addPane), StageRenderQuality.Beams.",
-          "call": "stage.expectQuality",
+          "description": "Stage → expect no structural rebuild since: $retainedScene (result of stage.captureRetainedSceneState).",
+          "call": "stage.expectNoStructuralRebuildSince",
           "arguments": [
-            "$live (result of desktopBuilder.addPane)",
-            "StageRenderQuality.Beams"
+            "$retainedScene (result of stage.captureRetainedSceneState)"
           ],
-          "expression": "t.stage.expectQuality(live, quality)",
-          "sourceCode": "t.stage.expectQuality(live, quality)",
+          "expression": "t.stage.expectNoStructuralRebuildSince(retainedScene)",
+          "sourceCode": "t.stage.expectNoStructuralRebuildSince(retainedScene)",
           "surfaces": [
             "Browser UI",
             "Stage",
             "Visualization runtime"
           ],
-          "phase": "scenario:iteration-3",
-          "order": 26,
+          "phase": "scenario",
+          "order": 36,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 76,
-            "column": 10
+            "line": 120,
+            "column": 9
           }
         },
         {
           "kind": "expected-outcome",
-          "description": "Stage → expect quality: $live (result of desktopBuilder.addPane), StageRenderQuality.ImprovedBeams.",
-          "call": "stage.expectQuality",
-          "arguments": [
-            "$live (result of desktopBuilder.addPane)",
-            "StageRenderQuality.ImprovedBeams"
-          ],
-          "expression": "t.stage.expectQuality(live, quality)",
-          "sourceCode": "t.stage.expectQuality(live, quality)",
+          "description": "Stage → expect settled renderer idle.",
+          "call": "stage.expectSettledRendererIdle",
+          "arguments": [],
+          "expression": "t.stage.expectSettledRendererIdle()",
+          "sourceCode": "t.stage.expectSettledRendererIdle()",
           "surfaces": [
             "Browser UI",
             "Stage",
             "Visualization runtime"
           ],
-          "phase": "scenario:iteration-4",
-          "order": 27,
+          "phase": "scenario",
+          "order": 37,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 76,
-            "column": 10
+            "line": 121,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect canvas capture: $live (result of desktopBuilder.addPane).",
+          "call": "stage.expectCanvasCapture",
+          "arguments": [
+            "$live (result of desktopBuilder.addPane)"
+          ],
+          "expression": "t.stage.expectCanvasCapture(live)",
+          "sourceCode": "t.stage.expectCanvasCapture(live)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 38,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 122,
+            "column": 9
           }
         },
         {
@@ -48081,31 +48921,31 @@
             "Visualization runtime"
           ],
           "phase": "scenario",
-          "order": 29,
+          "order": 40,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 80,
+            "line": 125,
             "column": 9
           }
         },
         {
           "kind": "expected-outcome",
-          "description": "fixture(201) DMX equals { Intensity: 102 }.",
+          "description": "fixture(101) DMX equals { Intensity: 102 }.",
           "call": "expectFixtureDMX",
           "arguments": [
-            "fixture(201)",
+            "fixture(101)",
             "{ Intensity: 102 }"
           ],
-          "expression": "t.expectFixtureDMX(fixture(201), { Intensity: 102 })",
-          "sourceCode": "t.expectFixtureDMX(fixture(201), { Intensity: 102 })",
+          "expression": "t.expectFixtureDMX(fixture(101), { Intensity: 102 })",
+          "sourceCode": "t.expectFixtureDMX(fixture(101), { Intensity: 102 })",
           "surfaces": [
             "DMX output"
           ],
           "phase": "scenario",
-          "order": 32,
+          "order": 43,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 83,
+            "line": 128,
             "column": 9
           }
         },
@@ -48124,10 +48964,10 @@
             "Visualization runtime"
           ],
           "phase": "scenario",
-          "order": 34,
+          "order": 45,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 85,
+            "line": 130,
             "column": 9
           }
         },
@@ -48146,10 +48986,34 @@
             "Visualization runtime"
           ],
           "phase": "scenario",
-          "order": 35,
+          "order": 46,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 86,
+            "line": 131,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect lane: $live (result of desktopBuilder.addPane), \"live\", { sharedFeed: { normalSubscribers: 1, preloadSubscribers: 1 } }.",
+          "call": "stage.expectLane",
+          "arguments": [
+            "$live (result of desktopBuilder.addPane)",
+            "\"live\"",
+            "{ sharedFeed: { normalSubscribers: 1, preloadSubscribers: 1 } }"
+          ],
+          "expression": "t.stage.expectLane(live, \"live\", { sharedFeed: { normalSubscribers: 1, preloadSubscribers: 1, }, })",
+          "sourceCode": "t.stage.expectLane(live, \"live\", {\n\t\t\tsharedFeed: {\n\t\t\t\tnormalSubscribers: 1,\n\t\t\t\tpreloadSubscribers: 1,\n\t\t\t},\n\t\t})",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 47,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 132,
             "column": 9
           }
         },
@@ -48168,10 +49032,169 @@
             "Visualization runtime"
           ],
           "phase": "scenario",
-          "order": 36,
+          "order": 48,
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 88,
+            "line": 139,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect renderer released since: $beforeViewSwitch (result of stage.captureRetainedSceneState).",
+          "call": "stage.expectRendererReleasedSince",
+          "arguments": [
+            "$beforeViewSwitch (result of stage.captureRetainedSceneState)"
+          ],
+          "expression": "t.stage.expectRendererReleasedSince(beforeViewSwitch)",
+          "sourceCode": "t.stage.expectRendererReleasedSince(beforeViewSwitch)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 50,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 146,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect renderer created since: $beforeRestore (result of stage.captureRetainedSceneState).",
+          "call": "stage.expectRendererCreatedSince",
+          "arguments": [
+            "$beforeRestore (result of stage.captureRetainedSceneState)"
+          ],
+          "expression": "t.stage.expectRendererCreatedSince(beforeRestore)",
+          "sourceCode": "t.stage.expectRendererCreatedSince(beforeRestore)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 52,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 153,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect quality: $live (result of desktopBuilder.addPane), StageRenderQuality.ImprovedBeams.",
+          "call": "stage.expectQuality",
+          "arguments": [
+            "$live (result of desktopBuilder.addPane)",
+            "StageRenderQuality.ImprovedBeams"
+          ],
+          "expression": "t.stage.expectQuality(live, StageRenderQuality.ImprovedBeams)",
+          "sourceCode": "t.stage.expectQuality(live, StageRenderQuality.ImprovedBeams)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 53,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 154,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect quality: $live (result of desktopBuilder.addPane), StageRenderQuality.LinesOnly.",
+          "call": "stage.expectQuality",
+          "arguments": [
+            "$live (result of desktopBuilder.addPane)",
+            "StageRenderQuality.LinesOnly"
+          ],
+          "expression": "t.stage.expectQuality(live, StageRenderQuality.LinesOnly)",
+          "sourceCode": "t.stage.expectQuality(live, StageRenderQuality.LinesOnly)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 56,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 163,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect lane: $live (result of desktopBuilder.addPane), \"live\".",
+          "call": "stage.expectLane",
+          "arguments": [
+            "$live (result of desktopBuilder.addPane)",
+            "\"live\""
+          ],
+          "expression": "t.stage.expectLane(live, \"live\")",
+          "sourceCode": "t.stage.expectLane(live, \"live\")",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 58,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 168,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect lane: $preload (result of desktopBuilder.addPane), \"preload\".",
+          "call": "stage.expectLane",
+          "arguments": [
+            "$preload (result of desktopBuilder.addPane)",
+            "\"preload\""
+          ],
+          "expression": "t.stage.expectLane(preload, \"preload\")",
+          "sourceCode": "t.stage.expectLane(preload, \"preload\")",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 59,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 169,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect quality: $live (result of desktopBuilder.addPane), StageRenderQuality.LinesOnly.",
+          "call": "stage.expectQuality",
+          "arguments": [
+            "$live (result of desktopBuilder.addPane)",
+            "StageRenderQuality.LinesOnly"
+          ],
+          "expression": "t.stage.expectQuality(live, StageRenderQuality.LinesOnly)",
+          "sourceCode": "t.stage.expectQuality(live, StageRenderQuality.LinesOnly)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 60,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 170,
             "column": 9
           }
         }
@@ -48189,6 +49212,7 @@
         "DMX output",
         "Desktop layout",
         "Encoder controls",
+        "Preload",
         "Programmer",
         "Programmer timing",
         "Selection",
@@ -48199,21 +49223,73 @@
         "Visualization runtime"
       ],
       "migration": {
-        "status": "unresolved",
-        "contract": "unresolved",
-        "helperFamily": "unresolved",
-        "artifacts": "unresolved",
-        "constraint": "unresolved"
+        "status": "migrated-semantic-world",
+        "contract": "repository contract",
+        "helperFamily": "semantic-stage-visualizer",
+        "artifacts": "standard failure evidence",
+        "constraint": "parallel"
       },
       "lastRun": null,
       "diagnostics": [
         {
-          "code": "missing-migration-status",
-          "message": "No exact source, ID, and title match exists in the generated migration inventory.",
+          "code": "static-control-flow",
+          "message": "Control flow for (let frame = 1; frame <= 10; frame++) { await t.clock.advanceBy(\"100ms\"); await t.stage.waitForChangingFrame(); if (frame === 5) await t.expectFixtureDMX(fixture(101), { Int… is narrated once; iteration values are not guessed.",
           "source": {
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
-            "line": 12,
-            "column": 1
+            "line": 98,
+            "column": 3
+          }
+        },
+        {
+          "code": "static-control-flow",
+          "message": "The if/else frame === 5 has conditional execution; branches are documented separately and no branch is assumed.",
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 101,
+            "column": 8
+          }
+        },
+        {
+          "code": "static-control-flow",
+          "message": "Control flow for (const [qualityIndex, quality] of Object.values( StageRenderQuality, ).entries()) { await live.configure({ view: StageView.ThreeDimensional, followPreload: false, renderQual… is narrated once; iteration values are not guessed.",
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 107,
+            "column": 3
+          }
+        },
+        {
+          "code": "unresolved-expression",
+          "message": "Expression 76 + qualityIndex is not statically resolved.",
+          "expression": "76 + qualityIndex",
+          "relatedCall": "encoder.position.pan.via.api.set",
+          "relatedSource": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 115,
+            "column": 10
+          },
+          "sourceCode": "76 + qualityIndex",
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 115,
+            "column": 45
+          }
+        },
+        {
+          "code": "unresolved-expression",
+          "message": "Expression quality is not statically resolved.",
+          "expression": "quality",
+          "relatedCall": "stage.expectQuality",
+          "relatedSource": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 118,
+            "column": 10
+          },
+          "sourceCode": "quality",
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 118,
+            "column": 38
           }
         }
       ]

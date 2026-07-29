@@ -24,6 +24,15 @@ export function validatePlaybackTopologyObjects(
 			return invalid("Playback Page resolution", resolution);
 		return validatePageAction(action, objects, status);
 	}
+	if (action.type === "configure_virtual" || action.type === "clear_virtual") {
+		if (
+			resolution.kind !== "virtual" ||
+			resolution.page !== action.page ||
+			resolution.playbackNumber !== action.playbackNumber
+		)
+			return invalid("Virtual Playback resolution", resolution);
+		return validateVirtualPlaybackAction(action, objects, status);
+	}
 	if (resolution.kind !== "page_slot")
 		return invalid("page-slot resolution", resolution);
 	if (action.type === "configure_slot")
@@ -41,6 +50,53 @@ export function validatePlaybackTopologyObjects(
 			status,
 		);
 	validateClearedSlot(action, resolution.playbackNumber, objects, status);
+}
+
+function validateVirtualPlaybackAction(
+	action: Extract<
+		PlaybackTopologyAction,
+		{ type: "configure_virtual" | "clear_virtual" }
+	>,
+	objects: PlaybackTopologyObject[],
+	status: "changed" | "no_change",
+) {
+	if (objects.length > 1)
+		return invalid("only the authoritative requested Playback Page", objects);
+	const page = matchingPage(objects, action.page);
+	if (!page) {
+		if (
+			action.type === "clear_virtual" &&
+			status === "no_change" &&
+			objects.length === 0
+		)
+			return;
+		return invalid("the authoritative requested Playback Page", objects);
+	}
+	validateStorageId(
+		page.objectId,
+		action.expectedPageObjectId,
+		String(action.page),
+		"Playback Page",
+	);
+	validateExactRevision(
+		page.objectRevision,
+		action.expectedPageRevision,
+		status,
+		"Playback Page",
+	);
+	const stored =
+		(page.body as PlaybackPage).virtual_playbacks?.[
+			String(action.playbackNumber)
+		] ?? null;
+	if (action.type === "clear_virtual") {
+		if (stored) return invalid("cleared Virtual Playback assignment", stored);
+		return;
+	}
+	if (
+		!stored ||
+		!sameKnownPlayback(stored, action.playback, action.playbackNumber)
+	)
+		return invalid("configured Virtual Playback assignment", stored);
 }
 
 function validatePageAction(

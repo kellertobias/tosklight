@@ -1,6 +1,55 @@
 use crate::*;
 
 impl PlaybackEngine {
+    pub fn go_playback_at(
+        &mut self,
+        identity: PlaybackIdentity,
+    ) -> Result<&ActivePlayback, String> {
+        match identity {
+            PlaybackIdentity::Physical(number) => self.go_playback(number.get()),
+            PlaybackIdentity::Virtual(address) => {
+                let definition = self
+                    .definition_at(identity)
+                    .ok_or("virtual playback does not exist")?
+                    .clone();
+                let PlaybackTarget::CueList { cue_list_id } = definition.target else {
+                    return Err("virtual playback does not have cues".into());
+                };
+                let key = PlaybackKey::Virtual(address);
+                let was_active = self
+                    .active
+                    .get(&key)
+                    .is_some_and(|playback| playback.enabled);
+                let has_loaded_cue = self
+                    .active
+                    .get(&key)
+                    .is_some_and(|playback| playback.loaded_cue_id.is_some());
+                if definition.go_activates && !was_active && !has_loaded_cue {
+                    self.on_at(identity)?;
+                    return self
+                        .active
+                        .get(&key)
+                        .ok_or_else(|| "virtual playback was automatically switched off".into());
+                }
+                self.go_at_key(key, cue_list_id, self.clock.now())?;
+                let result = self
+                    .active
+                    .get_mut(&key)
+                    .expect("Virtual GO inserted active playback");
+                result.playback_number = Some(address.number().get());
+                result.playback_identity = Some(identity);
+                if definition.go_activates && !was_active {
+                    result.master = 1.0;
+                    result.enabled = true;
+                }
+                self.auto_off_overwritten();
+                self.active
+                    .get(&key)
+                    .ok_or_else(|| "virtual playback was automatically switched off".into())
+            }
+        }
+    }
+
     // @tour playback-runtime:20 Advance a Playback
     // GO resolves the assigned Cuelist, honors activation policy and loaded Cues, advances runtime,
     // restores the Playback master when required, and applies automatic exclusion behavior.
@@ -50,6 +99,24 @@ impl PlaybackEngine {
         self.back_at_key(PlaybackKey::Number(number), id, self.clock.now())
     }
 
+    pub fn back_playback_at(
+        &mut self,
+        identity: PlaybackIdentity,
+    ) -> Result<&ActivePlayback, String> {
+        match identity {
+            PlaybackIdentity::Physical(number) => self.back_playback(number.get()),
+            PlaybackIdentity::Virtual(address) => {
+                let definition = self
+                    .definition_at(identity)
+                    .ok_or("virtual playback does not exist")?;
+                let PlaybackTarget::CueList { cue_list_id } = definition.target else {
+                    return Err("virtual playback does not have cues".into());
+                };
+                self.back_at_key(PlaybackKey::Virtual(address), cue_list_id, self.clock.now())
+            }
+        }
+    }
+
     pub fn fast_forward_playback(&mut self, number: u16) -> Result<&ActivePlayback, String> {
         self.go_playback(number)?;
         let playback = self
@@ -66,6 +133,46 @@ impl PlaybackEngine {
             .active
             .get_mut(&PlaybackKey::Number(number))
             .ok_or("playback is not active")?;
+        playback.transition_timing_bypassed = true;
+        Ok(playback)
+    }
+
+    pub fn fast_forward_playback_at(
+        &mut self,
+        identity: PlaybackIdentity,
+    ) -> Result<&ActivePlayback, String> {
+        if let PlaybackIdentity::Physical(number) = identity {
+            return self.fast_forward_playback(number.get());
+        }
+        self.go_playback_at(identity)?;
+        let playback = self
+            .active
+            .get_mut(&PlaybackKey::Virtual(
+                identity
+                    .virtual_address()
+                    .expect("physical identity returned above"),
+            ))
+            .ok_or("virtual playback is not active")?;
+        playback.transition_timing_bypassed = true;
+        Ok(playback)
+    }
+
+    pub fn fast_rewind_playback_at(
+        &mut self,
+        identity: PlaybackIdentity,
+    ) -> Result<&ActivePlayback, String> {
+        if let PlaybackIdentity::Physical(number) = identity {
+            return self.fast_rewind_playback(number.get());
+        }
+        self.back_playback_at(identity)?;
+        let playback = self
+            .active
+            .get_mut(&PlaybackKey::Virtual(
+                identity
+                    .virtual_address()
+                    .expect("physical identity returned above"),
+            ))
+            .ok_or("virtual playback is not active")?;
         playback.transition_timing_bypassed = true;
         Ok(playback)
     }
@@ -120,6 +227,56 @@ impl PlaybackEngine {
         ))
     }
 
+    pub fn goto_playback_at_mutation(
+        &mut self,
+        identity: PlaybackIdentity,
+        cue_number: f64,
+    ) -> Result<PlaybackMutation<&ActivePlayback>, String> {
+        if let PlaybackIdentity::Physical(number) = identity {
+            return self.goto_playback_mutation(number.get(), cue_number);
+        }
+        let address = identity
+            .virtual_address()
+            .expect("physical identity returned above");
+        let definition = self
+            .definition_at(identity)
+            .ok_or("virtual playback does not exist")?;
+        let PlaybackTarget::CueList { cue_list_id } = definition.target else {
+            return Err("virtual playback does not have cues".into());
+        };
+        let cue = self.cue_lists[&cue_list_id]
+            .cues
+            .iter()
+            .find(|cue| cue.number == cue_number)
+            .ok_or("cue does not exist")?;
+        let (cue_id, cue_number) = (cue.id, cue.number);
+        let key = PlaybackKey::Virtual(address);
+        let now = self.clock.now();
+        let changed = self.active.get(&key).is_none_or(|playback| {
+            playback.playback_identity != Some(identity)
+                || goto_changes_runtime(playback, address.number().get(), cue_id, cue_number, now)
+        });
+        self.jump_at_key(key, cue_list_id, cue_number, now)?;
+        let playback = self.active.get_mut(&key).unwrap();
+        playback.playback_number = Some(address.number().get());
+        playback.playback_identity = Some(identity);
+        playback.master = 1.0;
+        playback.enabled = true;
+        playback.loaded_cue_id = None;
+        playback.loaded_cue_number = None;
+        let addressed_effect = runtime_effect(changed);
+        let related_effect = runtime_effect(self.auto_off_overwritten());
+        let playback = self
+            .active
+            .get(&key)
+            .ok_or_else(|| "virtual playback was automatically switched off".to_owned())?;
+        Ok(PlaybackMutation::with_related_effect(
+            playback,
+            addressed_effect,
+            related_effect,
+        ))
+    }
+
     pub fn load_playback(
         &mut self,
         number: u16,
@@ -162,6 +319,48 @@ impl PlaybackEngine {
         };
         Ok(PlaybackMutation::new(playback, effect))
     }
+
+    pub fn load_playback_at_mutation(
+        &mut self,
+        identity: PlaybackIdentity,
+        cue_number: f64,
+    ) -> Result<PlaybackMutation<&ActivePlayback>, String> {
+        if let PlaybackIdentity::Physical(number) = identity {
+            return self.load_playback_mutation(number.get(), cue_number);
+        }
+        let address = identity
+            .virtual_address()
+            .expect("physical identity returned above");
+        let definition = self
+            .definition_at(identity)
+            .ok_or("virtual playback does not exist")?;
+        let PlaybackTarget::CueList { cue_list_id } = definition.target else {
+            return Err("virtual playback does not have cues".into());
+        };
+        let cue = self.cue_lists[&cue_list_id]
+            .cues
+            .iter()
+            .find(|cue| cue.number == cue_number)
+            .ok_or("cue does not exist")?;
+        let (cue_id, cue_number) = (cue.id, cue.number);
+        let key = PlaybackKey::Virtual(address);
+        let inserted = !self.active.contains_key(&key);
+        let now = self.clock.now();
+        let playback = self.active.entry(key).or_insert_with(|| {
+            let mut playback = inactive_playback(address.number().get(), cue_list_id, now);
+            playback.playback_identity = Some(identity);
+            playback
+        });
+        let changed = inserted
+            || playback.playback_identity != Some(identity)
+            || playback.loaded_cue_id != Some(cue_id)
+            || playback.loaded_cue_number != Some(cue_number);
+        playback.playback_number = Some(address.number().get());
+        playback.playback_identity = Some(identity);
+        playback.loaded_cue_id = Some(cue_id);
+        playback.loaded_cue_number = Some(cue_number);
+        Ok(PlaybackMutation::new(playback, runtime_effect(changed)))
+    }
 }
 
 fn goto_changes_runtime(
@@ -202,6 +401,7 @@ const fn runtime_effect(changed: bool) -> PlaybackRuntimeEffect {
 fn inactive_playback(number: u16, cue_list_id: CueListId, now: DateTime<Utc>) -> ActivePlayback {
     ActivePlayback {
         playback_number: Some(number),
+        playback_identity: None,
         activation: None,
         cue_list_id,
         cue_index: 0,

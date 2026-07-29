@@ -128,6 +128,8 @@ export function reduceWorkspace(
 					? {
 							virtualPlaybackRows: 2,
 							virtualPlaybackColumns: 2,
+							virtualPlaybackPageMode: "follow_main" as const,
+							virtualPlaybackPinnedPage: 1,
 							virtualPlaybackCells: [],
 							virtualPlaybackExclusionZones: [],
 						}

@@ -36,6 +36,19 @@ function PatchState() {
 	);
 }
 
+function ControlModeState() {
+	const { state, dispatch } = useApp();
+	return (
+		<>
+			<Button onClick={() => dispatch({ type: "TOGGLE_CONTROL_MODE" })}>
+				Toggle control mode
+			</Button>
+			<span>{state.playbackSetArmed ? "playback-set-armed" : "playback-set-idle"}</span>
+			<span>{state.presetSetArmed ? "preset-set-armed" : "preset-set-idle"}</span>
+		</>
+	);
+}
+
 function CompactSetTarget() {
 	useControlSurfaceTarget({
 		id: "compact-cue-properties",
@@ -142,6 +155,20 @@ describe("desk shortcuts", () => {
 		act(() => routeControlSurfaceIntent({ type: "set", source: "hardware" }));
 
 		expect(screen.getByText("patch-set-armed")).toBeInTheDocument();
+	});
+
+	it("routes SET to Playbacks while the control surface is in Playbacks mode", () => {
+		render(
+			<AppProvider>
+				<ControlModeState />
+			</AppProvider>,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Toggle control mode" }));
+
+		act(() => routeControlSurfaceIntent({ type: "set", source: "touch" }));
+
+		expect(screen.getByText("playback-set-armed")).toBeInTheDocument();
+		expect(screen.getByText("preset-set-idle")).toBeInTheDocument();
 	});
 
 	it("reserves attached-hardware SET for the constrained Cue settings editor", () => {

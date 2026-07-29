@@ -1,14 +1,11 @@
+import { type BenchUiContext, expect, test } from "../bench/core/fixtures";
 import {
-	type BenchUiContext,
-	expect,
-	test,
-} from "../bench/core/fixtures";
-import {
-	activePlayback,
 	activeVirtualPane,
+	activeVirtualPlayback,
 	addVirtualPlaybackPane,
-	poolAction,
 	prepare,
+	virtualZoneSnapshot,
+	writeVirtualPage,
 } from "./support";
 
 const virtualZoneUiSupplement = async ({
@@ -26,8 +23,9 @@ const virtualZoneUiSupplement = async ({
 			{ number: 75, fixture: 4, levels: [0.5], name: "Touring B" },
 			{ number: 76, fixture: 5, levels: [0.75], name: "Touring C" },
 		],
-		{ 1: 74, 2: 75, 3: 76 },
+		{},
 	);
+	await writeVirtualPage(api, 1, { 1001: 74, 1002: 75, 1003: 76 });
 	await desk.open(bench.baseUrl);
 	let pane = await addVirtualPlaybackPane(page);
 	await desk.recordStep(
@@ -42,13 +40,26 @@ const virtualZoneUiSupplement = async ({
 		.getByRole("button", { name: /Virtual playback page 1 cell 2 Touring B/ })
 		.click();
 	await page.keyboard.up("Shift");
-	expect(await activePlayback(api, 74)).toBeUndefined();
-	expect(await activePlayback(api, 75)).toBeUndefined();
+	expect(await activeVirtualPlayback(api, 1, 1001)).toBeUndefined();
+	expect(await activeVirtualPlayback(api, 1, 1002)).toBeUndefined();
 	await pane.getByRole("button", { name: "Create Exclusion Zone" }).click();
 	const create = page.getByRole("dialog", { name: "Create Exclusion Zone" });
 	await create.getByLabel("Zone name").fill("Touring pair");
 	await create.getByRole("button", { name: "Create zone" }).click();
 	await expect(create).toBeHidden();
+	await expect
+		.poll(async () => {
+			const surfaces = Object.values(
+				(await virtualZoneSnapshot(api)).desks[api.session!.desk.id] ?? {},
+			);
+			return surfaces.find((surface) =>
+				surface.zones.some((zone) => zone.name === "Touring pair"),
+			);
+		})
+		.toMatchObject({
+			revision: 1,
+			page_mode: { type: "follow_main" },
+		});
 
 	await desk.recordStep(
 		"NEW ACTIVATION WINS",
@@ -61,25 +72,10 @@ const virtualZoneUiSupplement = async ({
 		.getByRole("button", { name: /Virtual playback page 1 cell 2 Touring B/ })
 		.click();
 	await expect
-		.poll(async () => (await activePlayback(api, 74))?.enabled)
+		.poll(async () => (await activeVirtualPlayback(api, 1, 1001))?.enabled)
 		.toBe(false);
 	await expect
-		.poll(async () => (await activePlayback(api, 75))?.enabled)
-		.toBe(true);
-
-	await poolAction(api, 74, "off");
-	await poolAction(api, 75, "off");
-	await desk.recordStep(
-		"KEYBOARD USES THE SAME ZONE",
-		"F1 followed by F2 operates the current-page cells through the shared server path; F2 wins.",
-	);
-	await page.keyboard.press("F1");
-	await page.keyboard.press("F2");
-	await expect
-		.poll(async () => (await activePlayback(api, 74))?.enabled)
-		.toBe(false);
-	await expect
-		.poll(async () => (await activePlayback(api, 75))?.enabled)
+		.poll(async () => (await activeVirtualPlayback(api, 1, 1002))?.enabled)
 		.toBe(true);
 
 	await pane.getByRole("button", { name: "Settings", exact: true }).click();
@@ -87,20 +83,46 @@ const virtualZoneUiSupplement = async ({
 	await settings
 		.getByRole("tab", { name: "Virtual Playbacks", exact: true })
 		.click();
+	await settings.getByRole("radio", { name: "Pinned", exact: true }).click();
+	await settings.getByLabel("Pinned page").fill("2");
+	await settings
+		.getByRole("tab", { name: "Exclusion Zones", exact: true })
+		.click();
 	await settings.getByLabel("Name for Touring pair").fill("Touring alternates");
 	await settings.getByRole("button", { name: "Save name" }).click();
+	await settings.getByRole("button", { name: "Edit Zone" }).click();
+	await expect(settings).toBeHidden();
+	await pane
+		.getByRole("button", { name: /Virtual playback page 2 cell 3 empty/ })
+		.click();
+	await pane
+		.getByRole("button", { name: "Update Exclusion Zone", exact: true })
+		.click();
+	await pane.getByRole("button", { name: "Settings", exact: true }).click();
+	settings = page.getByRole("dialog", { name: "Pane Settings" });
 	await settings
-		.getByRole("button", { name: "Touring alternates cell 3" })
+		.getByRole("tab", { name: "Virtual Playbacks", exact: true })
 		.click();
 	await settings.getByLabel("Rows").fill("1");
 	await settings.getByLabel("Columns").fill("2");
-	await expect(
-		settings.getByText("1 hidden grid cell is retained:"),
-	).toBeVisible();
-	await expect(
-		settings.getByRole("button", { name: "Touring alternates hidden cell 3" }),
-	).toBeVisible();
+	await settings
+		.getByRole("tab", { name: "Exclusion Zones", exact: true })
+		.click();
+	await expect(settings.getByText(/Cells 1, 2, 3/)).toBeVisible();
 	await settings.getByRole("button", { name: "Close settings" }).click();
+	await expect
+		.poll(async () => {
+			const surfaces = Object.values(
+				(await virtualZoneSnapshot(api)).desks[api.session!.desk.id] ?? {},
+			);
+			return surfaces.find((surface) =>
+				surface.zones.some((zone) => zone.name === "Touring alternates"),
+			);
+		})
+		.toMatchObject({
+			revision: expect.any(Number),
+			page_mode: { type: "pinned", page: 2 },
+		});
 
 	await page.waitForTimeout(1_000);
 	await page.reload();
@@ -108,23 +130,28 @@ const virtualZoneUiSupplement = async ({
 		timeout: 10_000,
 	});
 	pane = await activeVirtualPane(page);
-	await expect(pane.locator(".virtual-playback-cell")).toHaveCount(2);
+	await expect(pane.locator(".virtual-playback-box")).toHaveCount(2);
 	await pane.getByRole("button", { name: "Settings", exact: true }).click();
 	settings = page.getByRole("dialog", { name: "Pane Settings" });
 	await settings
 		.getByRole("tab", { name: "Virtual Playbacks", exact: true })
 		.click();
+	await expect(
+		settings.getByRole("radio", { name: "Pinned", exact: true }),
+	).toBeChecked();
+	await expect(settings.getByLabel("Pinned page")).toHaveValue("2");
+	await settings
+		.getByRole("tab", { name: "Exclusion Zones", exact: true })
+		.click();
 	await expect(settings.getByLabel("Name for Touring alternates")).toHaveValue(
 		"Touring alternates",
 	);
-	await expect(
-		settings.getByRole("button", { name: "Touring alternates hidden cell 3" }),
-	).toBeVisible();
+	await expect(settings.getByText(/Cells 1, 2, 3/)).toBeVisible();
 };
 
 export function registerVirtualZoneUiScenario(): void {
 	test(
-		"VPB-007 @supplemental-ui › Settings edits hidden membership and reload restores it",
+		"VPB-007 @ui › Settings persist Pinned page mode, hidden membership, and revisioned zone authority",
 		virtualZoneUiSupplement,
 	);
 }

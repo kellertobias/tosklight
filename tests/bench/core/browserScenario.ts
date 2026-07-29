@@ -286,6 +286,7 @@ export class BrowserScenarioWorld {
 			page,
 			desk,
 			this.desktop,
+			this.hardware,
 			() => this.show.contractIdentity().workingId,
 		);
 		this.page = new BrowserPages(
@@ -417,12 +418,12 @@ export class BrowserScenarioWorld {
 			evidence.selection = { unavailable: String(reason) };
 		}
 		try {
-			evidence.programmers = await this.evidenceApi.request(
+			evidence.programmingInteraction = await this.evidenceApi.request(
 				"GET",
-				"/api/v2/programmers",
+				"/api/v2/programming-interaction/snapshot",
 			);
 		} catch (reason) {
-			evidence.programmers = { unavailable: String(reason) };
+			evidence.programmingInteraction = { unavailable: String(reason) };
 		}
 		try {
 			await this.testInfo.attach("bench-application-failure.png", {
@@ -615,9 +616,9 @@ export class BrowserScreens {
 		await card.getByLabel("Screen name").fill(configuration.name);
 		if (configuration.desktop)
 			await chooseOption(this.page, card, "Desktop", configuration.desktop);
-		await setSwitch(card, "Show Dock", configuration.showDock);
-		await setSwitch(card, "Show Playbacks", configuration.showPlaybacks);
-		await setSwitch(card, "Show Page Controls", configuration.showPageControls);
+		await setSwitch(card, "Dock", configuration.showDock);
+		await setSwitch(card, "Playbacks", configuration.showPlaybacks);
+		await setSwitch(card, "Page controls", configuration.showPageControls);
 		if (configuration.display)
 			await chooseOption(
 				this.page,
@@ -625,7 +626,7 @@ export class BrowserScreens {
 				"Physical Display",
 				configuration.display.name,
 			);
-		await setSwitch(card, "Fullscreen", configuration.fullscreen);
+		await setSwitch(card, "Window mode", configuration.fullscreen);
 		if (configuration.bounds) {
 			for (const [label, value] of [
 				["Window X", configuration.bounds.x],

@@ -4,15 +4,16 @@ import {
 	pairedScenario,
 } from "../bench/core/pairedScenario";
 import {
-	activePlayback,
+	activeVirtualPlayback,
 	addVirtualPlaybackPane,
 	configuration,
 	normalizedVirtualZones,
-	poolAction,
 	prepare,
 	saveVirtualZoneSurface,
 	type VirtualZonePairState,
+	virtualAction,
 	visualizationLevel,
+	writeVirtualPage,
 } from "./support";
 
 const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
@@ -54,14 +55,19 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 					hasFader: false,
 				},
 			],
-			{ 1: 74, 2: 75, 3: 76 },
+			{},
 		);
+		await writeVirtualPage(api, 1, {
+			1001: 74,
+			1002: 75,
+			1003: 76,
+		});
 		await api.request("PUT", "/api/v2/configuration", {
 			...(await configuration(api)),
 			sequence_master_fade_millis: 0,
 		});
-		await poolAction(api, 74, "on", { surface: "virtual" });
-		await poolAction(api, 75, "on", { surface: "virtual" });
+		await virtualAction(api, 1, 1001, "on");
+		await virtualAction(api, 1, 1002, "on");
 		return prepared;
 	},
 	api: async ({ api }, state) => {
@@ -70,11 +76,11 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 		]);
 		state.savedZones = await normalizedVirtualZones(api);
 		state.creationState = [
-			Boolean((await activePlayback(api, 74))?.enabled),
-			Boolean((await activePlayback(api, 75))?.enabled),
+			Boolean((await activeVirtualPlayback(api, 1, 1001))?.enabled),
+			Boolean((await activeVirtualPlayback(api, 1, 1002))?.enabled),
 		];
-		for (const number of [74, 75, 74, 75])
-			await poolAction(api, number, "toggle", { surface: "virtual" });
+		for (const number of [1001, 1002, 1001, 1002])
+			await virtualAction(api, 1, number, "toggle");
 	},
 	ui: async ({ api, bench, desk, page }, state) => {
 		await desk.open(bench.baseUrl);
@@ -94,8 +100,8 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 		await expect(create).toBeHidden();
 		state.savedZones = await normalizedVirtualZones(api);
 		state.creationState = [
-			Boolean((await activePlayback(api, 74))?.enabled),
-			Boolean((await activePlayback(api, 75))?.enabled),
+			Boolean((await activeVirtualPlayback(api, 1, 1001))?.enabled),
+			Boolean((await activeVirtualPlayback(api, 1, 1002))?.enabled),
 		];
 		for (const cell of [1, 2, 1, 2])
 			await pane
@@ -107,9 +113,15 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 	assert: async ({ api, bench }, state) => {
 		expect(state.savedZones).toEqual([{ name: "Touring pair", slots: [1, 2] }]);
 		expect(state.creationState).toEqual([true, true]);
-		expect(await activePlayback(api, 74)).toMatchObject({ enabled: false });
-		expect(await activePlayback(api, 75)).toMatchObject({ enabled: true });
-		expect((await activePlayback(api, 76))?.enabled ?? false).toBe(false);
+		expect(await activeVirtualPlayback(api, 1, 1001)).toMatchObject({
+			enabled: false,
+		});
+		expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
+			enabled: true,
+		});
+		expect(
+			(await activeVirtualPlayback(api, 1, 1003))?.enabled ?? false,
+		).toBe(false);
 		await bench.tick(0);
 		expect(await visualizationLevel(api, state.fixtures[3])).toBeCloseTo(0, 5);
 		expect(await visualizationLevel(api, state.fixtures[4])).toBeCloseTo(

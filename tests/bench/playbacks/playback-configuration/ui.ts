@@ -77,7 +77,7 @@ export async function choosePlaybackColor(
 		.locator(".ui-color-input-trigger")
 		.click();
 	await expect(
-		page.locator("body > .ui-color-dropdown-backdrop .ui-color-dropdown-panel"),
+		page.locator(".ui-color-dropdown-backdrop .ui-color-dropdown-panel"),
 	).toBeVisible();
 	const after = await container.boundingBox();
 	expect(after?.width).toBeCloseTo(before?.width ?? 0, 0);
@@ -88,7 +88,9 @@ export async function choosePlaybackColor(
 }
 
 export async function addVirtualPlaybackPane(page: Page): Promise<Locator> {
-	await page.getByRole("button", { name: "DESKTOPS", exact: true }).click();
+	await page
+		.getByRole("button", { name: "Desktops / Built-ins", exact: true })
+		.click();
 	await page.getByRole("button", { name: /New desktop/ }).click();
 	const grid = page.locator(".desk-grid");
 	const box = await grid.boundingBox();

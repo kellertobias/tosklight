@@ -62,17 +62,59 @@ impl PlaybackEngine {
     }
     pub fn restore_active(&mut self, playbacks: impl IntoIterator<Item = ActivePlayback>) {
         for mut playback in playbacks {
-            if let Some(number) = playback.playback_number
-                && !self.definitions.get(&number).is_some_and(|definition| {
-                    matches!(
-                        definition.target,
-                        PlaybackTarget::CueList { cue_list_id }
-                            if cue_list_id == playback.cue_list_id
-                    )
-                })
-            {
-                continue;
-            }
+            let key = match playback.playback_identity {
+                Some(PlaybackIdentity::Virtual(address)) => {
+                    if !self
+                        .virtual_definitions
+                        .get(&address)
+                        .is_some_and(|definition| {
+                            matches!(
+                                definition.target,
+                                PlaybackTarget::CueList { cue_list_id }
+                                    if cue_list_id == playback.cue_list_id
+                            )
+                        })
+                    {
+                        continue;
+                    }
+                    playback.playback_number = Some(address.number().get());
+                    PlaybackKey::Virtual(address)
+                }
+                Some(PlaybackIdentity::Physical(number)) => {
+                    if !self
+                        .definitions
+                        .get(&number.get())
+                        .is_some_and(|definition| {
+                            matches!(
+                                definition.target,
+                                PlaybackTarget::CueList { cue_list_id }
+                                    if cue_list_id == playback.cue_list_id
+                            )
+                        })
+                    {
+                        continue;
+                    }
+                    playback.playback_number = Some(number.get());
+                    PlaybackKey::Number(number.get())
+                }
+                None => {
+                    if let Some(number) = playback.playback_number
+                        && !self.definitions.get(&number).is_some_and(|definition| {
+                            matches!(
+                                definition.target,
+                                PlaybackTarget::CueList { cue_list_id }
+                                    if cue_list_id == playback.cue_list_id
+                            )
+                        })
+                    {
+                        continue;
+                    }
+                    playback
+                        .playback_number
+                        .map(PlaybackKey::Number)
+                        .unwrap_or(PlaybackKey::CueList(playback.cue_list_id))
+                }
+            };
             let Some(cue_list) = self.cue_lists.get(&playback.cue_list_id) else {
                 continue;
             };
@@ -111,10 +153,6 @@ impl PlaybackEngine {
                 playback.loaded_cue_id = None;
                 playback.loaded_cue_number = None;
             }
-            let key = playback
-                .playback_number
-                .map(PlaybackKey::Number)
-                .unwrap_or(PlaybackKey::CueList(playback.cue_list_id));
             self.observe_restored_activation(playback.activation.as_ref());
             self.active.insert(key, playback);
         }
@@ -126,9 +164,12 @@ impl PlaybackEngine {
     ) {
         self.active_dynamics.clear();
         for mut playback in playbacks {
+            let identity = playback.playback_identity.unwrap_or_else(|| {
+                PlaybackIdentity::physical(playback.playback_number)
+                    .expect("persisted physical Dynamic Playback number")
+            });
             if !self
-                .definitions
-                .get(&playback.playback_number)
+                .definition_at(identity)
                 .is_some_and(|definition| {
                     matches!(definition.target, PlaybackTarget::Dynamic { .. })
                 })
@@ -146,8 +187,8 @@ impl PlaybackEngine {
                 playback.flash = false;
                 playback.flash_restore_off = false;
             }
-            self.active_dynamics
-                .insert(playback.playback_number, playback);
+            playback.playback_number = identity.number();
+            self.active_dynamics.insert(identity, playback);
         }
     }
 
@@ -158,10 +199,15 @@ impl PlaybackEngine {
         self.active_dynamics
             .values()
             .filter(|active| {
-                next_definitions.iter().any(|definition| {
-                    definition.number == active.playback_number
-                        && matches!(definition.target, PlaybackTarget::Dynamic { .. })
-                })
+                active.playback_identity.is_some_and(|identity| {
+                    matches!(identity, PlaybackIdentity::Virtual(_))
+                        && self.definition_at(identity).is_some_and(|definition| {
+                            matches!(definition.target, PlaybackTarget::Dynamic { .. })
+                        })
+                }) || next_definitions.iter().any(|definition| {
+                        definition.number == active.playback_number
+                            && matches!(definition.target, PlaybackTarget::Dynamic { .. })
+                    })
             })
             .cloned()
             .collect()
@@ -241,6 +287,7 @@ impl PlaybackEngine {
                     speed_groups_paused: self.speed_groups_paused,
                     sequence_master_fade_millis: self.sequence_master_fade_millis,
                     definitions: self.definitions.clone(),
+                    virtual_definitions: self.virtual_definitions.clone(),
                     clock: Arc::clone(&self.clock),
                     next_activation_ordinal: self.next_activation_ordinal,
                 };

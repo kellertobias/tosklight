@@ -21,7 +21,7 @@ scenario(
 			fixtureNumber: number,
 			intensity: number,
 			name: string,
-			button: PlaybackButton,
+			button: Exclude<PlaybackButton, PlaybackButton.Release>,
 		) => {
 			await t.selection.clear();
 			await t.selection.fixtures.via.api.item(fixtureNumber);
@@ -100,6 +100,8 @@ scenario(
 		await t.virtualPlayback.activate(pane, 1);
 		await t.virtualPlayback.activate(pane, 2);
 		await t.preload.expect.pendingPlaybackActions(["go", "toggle"]);
+		await t.virtualPlayback.expect.physicalRuntimeAbsent(goSource);
+		await t.virtualPlayback.expect.physicalRuntimeAbsent(toggleSource);
 		await t.playback.expect(physicalPlayback).runtime({
 			enabled: true,
 			current_cue_number: 1,
@@ -109,22 +111,37 @@ scenario(
 		await t.expectFixtureValue(fixture(4), { intensity: 0 });
 
 		await t.preload.commit();
-		await t.playback.expect(virtualGo).runtime({
-			enabled: true,
-			current_cue_number: 1,
+		await t.virtualPlayback.expect.runtime(virtualGo, {
+			requested: {
+				kind: "virtual",
+				page: 1,
+				playback_number: 1001,
+			},
+			target: "cue_list",
+			runtime: { enabled: true, current: { number: 1 } },
 		});
-		await t.playback.expect(virtualToggle).runtime({
-			enabled: true,
-			current_cue_number: 1,
+		await t.virtualPlayback.expect.runtime(virtualToggle, {
+			requested: {
+				kind: "virtual",
+				page: 1,
+				playback_number: 1002,
+			},
+			target: "cue_list",
+			runtime: { enabled: true, current: { number: 1 } },
 		});
-		await t.playback.expectActivatedTogether(virtualGo, virtualToggle);
 		await t.clock.advanceBy("2500ms");
 		await t.expectFixtureValue(fixture(3), { intensity: 1 });
 		await t.expectFixtureValue(fixture(4), { intensity: 0.8 });
 
 		await t.preload.via.ui.release();
-		await t.playback.expect(virtualGo).runtime({ enabled: true });
-		await t.playback.expect(virtualToggle).runtime({ enabled: true });
+		await t.virtualPlayback.expect.runtime(virtualGo, {
+			target: "cue_list",
+			runtime: { enabled: true },
+		});
+		await t.virtualPlayback.expect.runtime(virtualToggle, {
+			target: "cue_list",
+			runtime: { enabled: true },
+		});
 		await t.expectFixtureValue(fixture(1), { intensity: 0.35 });
 	},
 );

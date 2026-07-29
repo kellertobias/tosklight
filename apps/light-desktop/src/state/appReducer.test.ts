@@ -556,11 +556,107 @@ describe("appReducer legacy pane layout hydration", () => {
 
 		expect(virtual.virtualPlaybackRows ?? 2).toBe(2);
 		expect(virtual.virtualPlaybackColumns ?? 2).toBe(2);
+		expect(virtual.virtualPlaybackPageMode ?? "follow_main").toBe("follow_main");
+		expect(virtual.virtualPlaybackPinnedPage ?? 1).toBe(1);
 		expect(virtual.virtualPlaybackCells ?? []).toEqual([]);
 		expect(virtual.virtualPlaybackExclusionZones ?? []).toEqual([]);
 		expect(files.fileManagerShowHidden ?? false).toBe(false);
 		expect(notes.textEditorReadOnly ?? false).toBe(false);
 		expect(notes.textEditorMode ?? "plain").toBe("plain");
+	});
+
+	it("accepts a 20 by 20 Virtual Playback grid and bounds larger products", () => {
+		const desks = [
+			{
+				id: "virtual-workspace",
+				name: "Virtual workspace",
+				panes: [
+					{
+						id: "virtual",
+						kind: "virtual_playbacks" as const,
+						title: "Virtual Playbacks",
+						x: 1,
+						y: 1,
+						width: 8,
+						height: 8,
+					},
+				],
+			},
+		];
+		const hydrated = appReducer(initialState, {
+			type: "HYDRATE_LAYOUT",
+			desks,
+			activeDeskId: "virtual-workspace",
+		});
+		const ordinary = appReducer(hydrated, {
+			type: "SET_VIRTUAL_PLAYBACK_GRID",
+			id: "virtual",
+			rows: 20,
+			columns: 20,
+			changed: "columns",
+		});
+		expect(ordinary.desks[0].panes[0]).toMatchObject({
+			virtualPlaybackRows: 20,
+			virtualPlaybackColumns: 20,
+		});
+
+		const bounded = appReducer(ordinary, {
+			type: "SET_VIRTUAL_PLAYBACK_GRID",
+			id: "virtual",
+			rows: 20,
+			columns: 500,
+			changed: "columns",
+		});
+		expect(bounded.desks[0].panes[0]).toMatchObject({
+			virtualPlaybackRows: 20,
+			virtualPlaybackColumns: 449,
+		});
+	});
+
+	it("persists Follow Main and bounded Pinned page settings", () => {
+		const desks = [
+			{
+				id: "virtual-workspace",
+				name: "Virtual workspace",
+				panes: [
+					{
+						id: "virtual-surface",
+						kind: "virtual_playbacks" as const,
+						title: "Virtual Playbacks",
+						x: 1,
+						y: 1,
+						width: 8,
+						height: 8,
+					},
+				],
+			},
+		];
+		const hydrated = appReducer(initialState, {
+			type: "HYDRATE_LAYOUT",
+			desks,
+			activeDeskId: "virtual-workspace",
+		});
+		const pinned = appReducer(hydrated, {
+			type: "SET_VIRTUAL_PLAYBACK_PAGE_MODE",
+			id: "virtual-surface",
+			mode: "pinned",
+			pinnedPage: 999,
+		});
+		expect(pinned.desks[0].panes[0]).toMatchObject({
+			id: "virtual-surface",
+			virtualPlaybackPageMode: "pinned",
+			virtualPlaybackPinnedPage: 127,
+		});
+		const followed = appReducer(pinned, {
+			type: "SET_VIRTUAL_PLAYBACK_PAGE_MODE",
+			id: "virtual-surface",
+			mode: "follow_main",
+		});
+		expect(followed.desks[0].panes[0]).toMatchObject({
+			id: "virtual-surface",
+			virtualPlaybackPageMode: "follow_main",
+			virtualPlaybackPinnedPage: 127,
+		});
 	});
 });
 

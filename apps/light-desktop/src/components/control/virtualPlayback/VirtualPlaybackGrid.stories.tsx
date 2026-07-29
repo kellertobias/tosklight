@@ -8,11 +8,14 @@ import type {
 } from "../../../api/types";
 import type { PlaybackRuntimeActions } from "../../../features/playbackRuntime/actionWriter";
 import {
+	identityKey,
+	virtualPlaybackIdentity,
+} from "../../../features/playbackRuntime/contracts";
+import {
 	CUE_LIST_ID,
 	cueProjection,
 } from "../../../features/playbackRuntime/testFixtures";
 import type { VirtualPlaybackZone } from "../../../features/virtualPlaybackZones/contracts";
-import { VirtualPlaybackToolbar } from "../../../windows/VirtualPlaybacksWindow";
 import { VirtualPlaybackGrid } from "./VirtualPlaybackGrid";
 
 interface VirtualPlaybackStoryArgs {
@@ -27,8 +30,8 @@ const meta = {
 	parameters: { layout: "fullscreen" },
 	args: { rows: 3, columns: 4, width: 920 },
 	argTypes: {
-		rows: { control: { type: "range", min: 1, max: 12, step: 1 } },
-		columns: { control: { type: "range", min: 1, max: 12, step: 1 } },
+		rows: { control: { type: "number", min: 1, max: 8998, step: 1 } },
+		columns: { control: { type: "number", min: 1, max: 8998, step: 1 } },
 		width: { control: { type: "range", min: 320, max: 1400, step: 20 } },
 	},
 } satisfies Meta<VirtualPlaybackStoryArgs>;
@@ -78,11 +81,19 @@ const pageOne: PlaybackPage = {
 	number: 1,
 	name: "Main",
 	slots: { "1": 7, "4": 8 },
+	virtual_playbacks: {
+		"1001": virtualPlayback(1, 7),
+		"1004": virtualPlayback(4, 8),
+	},
 };
 const pageTwo: PlaybackPage = {
 	number: 2,
 	name: "House",
 	slots: { "1": 9, "3": 8 },
+	virtual_playbacks: {
+		"1001": virtualPlayback(1, 9),
+		"1003": virtualPlayback(3, 8),
+	},
 };
 
 function playback(
@@ -108,22 +119,26 @@ function playback(
 	};
 }
 
+function virtualPlayback(cell: number, sourceNumber: number) {
+	const source = playbacks.get(sourceNumber);
+	if (!source) throw new Error(`Missing Storybook Playback ${sourceNumber}`);
+	return { ...source, number: 1_000 + cell };
+}
+
 function StoryGrid({
 	page = pageOne,
 	rows,
 	columns,
 	width,
 	configurationArmed = false,
-	assignmentPending = false,
 	updateArmed = false,
 	shiftArmed = false,
 	selectedSlots = [],
 	zones = [],
-	runningNumbers = [7],
+	runningNumbers = [1001],
 }: VirtualPlaybackStoryArgs & {
 	page?: PlaybackPage;
 	configurationArmed?: boolean;
-	assignmentPending?: boolean;
 	updateArmed?: boolean;
 	shiftArmed?: boolean;
 	selectedSlots?: readonly number[];
@@ -173,19 +188,22 @@ function StoryGrid({
 				cueLists={cueLists}
 				runtimes={
 					new Map(
-						runningNumbers.map((number) => [number, cueProjection(number, 3)]),
+						runningNumbers.map((number) => [
+							identityKey(virtualPlaybackIdentity(page.number, number)),
+							{
+								...cueProjection(number, 3),
+								requested: virtualPlaybackIdentity(page.number, number),
+							},
+						]),
 					)
 				}
 				runtimeActions={runtimeActions}
 				zones={zones}
 				selectedSlots={selectedSlots}
 				configurationArmed={configurationArmed}
-				assignmentPending={assignmentPending}
-				assignmentTarget={7}
 				updateArmed={updateArmed}
 				shiftArmed={shiftArmed}
 				onConfigure={(_playback, slot) => setEvent(`Configure ${slot}`)}
-				onAssign={(slot) => setEvent(`Assign ${slot}`)}
 				onToggleZone={(slot) => setEvent(`Zone ${slot}`)}
 			/>
 		</div>
@@ -193,6 +211,11 @@ function StoryGrid({
 }
 
 export const SparseGrid: Story = {
+	render: (args) => <StoryGrid {...args} />,
+};
+
+export const OrdinaryTwentyByTwenty: Story = {
+	args: { rows: 20, columns: 20, width: 920 },
 	render: (args) => <StoryGrid {...args} />,
 };
 
@@ -204,42 +227,41 @@ export const DocumentationPane: Story = {
 			aria-label="Virtual Playbacks page 1"
 			style={{ width: args.width, height: 713 }}
 		>
-			<VirtualPlaybackToolbar
-				pageNumber={1}
-				rows={args.rows}
-				columns={args.columns}
-				zonesReady
-				zoneError={null}
-				actionError={null}
-				zoneCount={0}
-				selectedSlots={[]}
-				onSetSource={() => undefined}
-				onAddTarget={() => undefined}
-				onCreateZone={() => undefined}
-				onCancelZone={() => undefined}
-			/>
 			<VirtualPlaybackGrid
 				pageNumber={1}
 				page={{
 					number: 1,
 					name: "Main",
 					slots: { "1": 7, "2": 8, "3": 9, "4": 10 },
+					virtual_playbacks: {
+						"1001": virtualPlayback(1, 7),
+						"1002": virtualPlayback(2, 8),
+						"1003": virtualPlayback(3, 9),
+						"1004": virtualPlayback(4, 10),
+					},
 				}}
 				rows={args.rows}
 				columns={args.columns}
 				playbacks={playbacks}
 				cueLists={cueLists}
-				runtimes={new Map([[7, cueProjection(7, 3)]])}
+				runtimes={
+					new Map([
+						[
+							identityKey(virtualPlaybackIdentity(1, 7)),
+							{
+								...cueProjection(7, 3),
+								requested: virtualPlaybackIdentity(1, 7),
+							},
+						],
+					])
+				}
 				runtimeActions={{} as PlaybackRuntimeActions}
 				zones={[]}
 				selectedSlots={[]}
 				configurationArmed={false}
-				assignmentPending={false}
-				assignmentTarget={null}
 				updateArmed={false}
 				shiftArmed={false}
 				onConfigure={() => undefined}
-				onAssign={() => undefined}
 				onToggleZone={() => undefined}
 			/>
 		</section>
@@ -252,7 +274,6 @@ export const EveryState: Story = {
 		<StoryGrid
 			{...args}
 			configurationArmed
-			assignmentPending
 			updateArmed
 			shiftArmed
 			selectedSlots={[4]}
@@ -270,7 +291,11 @@ export const InactiveColored: Story = {
 	render: (args) => (
 		<StoryGrid
 			{...args}
-			page={{ ...pageOne, slots: { "1": 9 } }}
+			page={{
+				...pageOne,
+				slots: { "1": 9 },
+				virtual_playbacks: { "1001": virtualPlayback(1, 9) },
+			}}
 			runningNumbers={[]}
 		/>
 	),
@@ -281,8 +306,12 @@ export const RunningLightColor: Story = {
 	render: (args) => (
 		<StoryGrid
 			{...args}
-			page={{ ...pageOne, slots: { "1": 10 } }}
-			runningNumbers={[10]}
+			page={{
+				...pageOne,
+				slots: { "1": 10 },
+				virtual_playbacks: { "1001": virtualPlayback(1, 10) },
+			}}
+			runningNumbers={[1001]}
 		/>
 	),
 };
@@ -298,8 +327,12 @@ export const RunningTransition: Story = {
 				</Button>
 				<StoryGrid
 					{...args}
-					page={{ ...pageOne, slots: { "1": 7 } }}
-					runningNumbers={running ? [7] : []}
+					page={{
+						...pageOne,
+						slots: { "1": 7 },
+						virtual_playbacks: { "1001": virtualPlayback(1, 7) },
+					}}
+					runningNumbers={running ? [1001] : []}
 				/>
 			</div>
 		);
@@ -328,10 +361,6 @@ export const LongLabelsAndColorless: Story = {
 	),
 };
 
-export const AssignmentState: Story = {
-	render: (args) => <StoryGrid {...args} assignmentPending />,
-};
-
 export const UpdateState: Story = {
 	render: (args) => <StoryGrid {...args} updateArmed />,
 };
@@ -347,9 +376,60 @@ export const ExclusionZoneState: Story = {
 	),
 };
 
-export const UnavailableSlots: Story = {
-	args: { rows: 12, columns: 12, width: 1320 },
+export const SparseLargeGrid: Story = {
+	args: { rows: 20, columns: 449, width: 1320 },
 	render: (args) => <StoryGrid {...args} />,
+};
+
+export const PinnedPage: Story = {
+	args: { rows: 2, columns: 2 },
+	render: (args) => <StoryGrid {...args} page={pageTwo} />,
+};
+
+export const OverlappingZones: Story = {
+	args: { rows: 2, columns: 2 },
+	render: (args) => (
+		<StoryGrid
+			{...args}
+			shiftArmed
+			selectedSlots={[4]}
+			zones={[
+				{ id: "zone-front", name: "Front alternates", slots: [1, 4] },
+				{ id: "zone-bump", name: "Bump alternates", slots: [3, 4] },
+			]}
+		/>
+	),
+};
+
+export const HiddenMembership: Story = {
+	args: { rows: 1, columns: 2 },
+	render: (args) => (
+		<div>
+			<p role="status">Cell 3 remains a saved hidden member.</p>
+			<StoryGrid
+				{...args}
+				zones={[
+					{ id: "zone-hidden", name: "Touring alternates", slots: [1, 3] },
+				]}
+			/>
+		</div>
+	),
+};
+
+export const ZoneErrorState: Story = {
+	args: { rows: 2, columns: 2 },
+	render: (args) => (
+		<section
+			className="virtual-playback-pane"
+			aria-label="Virtual Playbacks page 1"
+			style={{ width: args.width, height: 713 }}
+		>
+			<StoryGrid {...args} />
+			<p className="virtual-playback-pane-error" role="alert">
+				Zone revision changed on another screen
+			</p>
+		</section>
+	),
 };
 
 export const HeldFlashAndSwap: Story = {

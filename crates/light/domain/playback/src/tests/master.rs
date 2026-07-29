@@ -207,6 +207,8 @@ fn page_and_pool_validation_enforce_public_ranges() {
     cue.changes.push(value(fixture, "pan", 0.1));
     let list = list(vec![cue]);
     let mut invalid = definition(1001, list.id);
+    assert!(invalid.validate().is_ok());
+    invalid.number = 9_999;
     assert!(invalid.validate().is_err());
     invalid.number = 1;
     assert!(invalid.validate().is_ok());
@@ -214,7 +216,8 @@ fn page_and_pool_validation_enforce_public_ranges() {
         PlaybackPage {
             number: 0,
             name: "Bad".into(),
-            slots: HashMap::new()
+            slots: HashMap::new(),
+            virtual_playbacks: HashMap::new(),
         }
         .validate()
         .is_err()
@@ -223,7 +226,8 @@ fn page_and_pool_validation_enforce_public_ranges() {
         PlaybackPage {
             number: 127,
             name: "Last".into(),
-            slots: HashMap::from([(127, 1000)])
+            slots: HashMap::from([(127, 1000)]),
+            virtual_playbacks: HashMap::new(),
         }
         .validate()
         .is_ok()

@@ -23,6 +23,7 @@ import {
 	groupIdentity,
 	identityKey,
 	playbackIdentity,
+	virtualPlaybackIdentity,
 } from "./contracts";
 import {
 	equalGroupProjectionSelection,
@@ -333,6 +334,66 @@ export function usePlaybackProjectionMap(playbackNumbers: readonly number[]) {
 	);
 }
 
+export function useVirtualPlaybackProjectionMap(
+	addresses: readonly { page: number; playbackNumber: number }[],
+) {
+	const canonical = [
+		...new Map(
+			addresses.map((address) => [
+				`${address.page}.${address.playbackNumber}`,
+				address,
+			]),
+		).values(),
+	].sort(
+		(left, right) =>
+			left.page - right.page ||
+			left.playbackNumber - right.playbackNumber,
+	);
+	const key = canonical
+		.map((address) => `${address.page}.${address.playbackNumber}`)
+		.join(",");
+	const identities = useMemo(
+		() =>
+			canonical.map((address) =>
+				virtualPlaybackIdentity(address.page, address.playbackNumber),
+			),
+		// The canonical address key owns array equality.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[key],
+	);
+	usePlaybackRuntimeView(identities);
+	return usePlaybackSelector(
+		useCallback(
+			(state: PlaybackRuntimeState) =>
+				new Map(
+					canonical.map((address) => {
+						const identity = virtualPlaybackIdentity(
+							address.page,
+							address.playbackNumber,
+						);
+						return [
+							identityKey(identity),
+							state.projections
+								.get(identityKey(identity))
+								?.find(
+									(item) =>
+										item.requested.kind === "virtual" &&
+										item.requested.page === address.page &&
+										item.requested.playback_number ===
+											address.playbackNumber,
+								),
+						] as const;
+					}),
+				),
+			// The same canonical key denotes the selected address set.
+			// eslint-disable-next-line react-hooks/exhaustive-deps
+			[key],
+		),
+		equalProjectionMap,
+		addresses.length > 0,
+	);
+}
+
 export interface DirectCueListProjectionSelection {
 	ready: boolean;
 	projections: ReadonlyMap<string, PlaybackProjection | undefined>;
@@ -429,8 +490,8 @@ function usePlaybackSelector<T>(
 const NO_SUBSCRIPTION = () => () => undefined;
 
 function equalProjectionMap(
-	left: ReadonlyMap<number, PlaybackProjection | undefined>,
-	right: ReadonlyMap<number, PlaybackProjection | undefined>,
+	left: ReadonlyMap<string | number, PlaybackProjection | undefined>,
+	right: ReadonlyMap<string | number, PlaybackProjection | undefined>,
 ) {
 	return (
 		left.size === right.size &&

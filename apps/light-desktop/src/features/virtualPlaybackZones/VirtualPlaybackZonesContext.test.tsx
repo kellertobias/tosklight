@@ -2,6 +2,8 @@ import { act, render } from "@testing-library/react";
 import { type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type {
+	VirtualPlaybackExclusionSurface,
+	VirtualPlaybackSurfacePageMode,
 	VirtualPlaybackZone,
 	VirtualPlaybackZonesAuthority,
 	VirtualPlaybackZonesCapability,
@@ -19,6 +21,7 @@ const ZONES = [{ id: "paired", name: "Paired", slots: [1, 2] }] as const;
 const UPDATED_ZONES = [
 	{ id: "paired", name: "Updated", slots: [1, 2, 3] },
 ] as const;
+const FOLLOW_MAIN = { type: "follow_main" } as const;
 
 function authority(authorityId: string): VirtualPlaybackZonesAuthority {
 	return { authorityId, scope: { showId: SHOW_ID, deskId: DESK_ID } };
@@ -26,17 +29,39 @@ function authority(authorityId: string): VirtualPlaybackZonesAuthority {
 
 function snapshot(
 	surfaces: Record<string, readonly VirtualPlaybackZone[]> = {},
+	revision = 4,
 ): VirtualPlaybackZonesSnapshot {
-	return { showId: SHOW_ID, desks: { [DESK_ID]: surfaces } };
+	return {
+		showId: SHOW_ID,
+		desks: {
+			[DESK_ID]: Object.fromEntries(
+				Object.entries(surfaces).map(([surfaceId, zones]) => [
+					surfaceId,
+					surface(zones, revision),
+				]),
+			),
+		},
+	};
 }
 
-function saveOutcome(zones: readonly VirtualPlaybackZone[] = ZONES) {
+function surface(
+	zones: readonly VirtualPlaybackZone[] = ZONES,
+	revision = 1,
+	pageMode: VirtualPlaybackSurfacePageMode = FOLLOW_MAIN,
+): VirtualPlaybackExclusionSurface {
+	return { revision, pageMode, zones };
+}
+
+function saveOutcome(
+	zones: readonly VirtualPlaybackZone[] = ZONES,
+	revision = 1,
+) {
 	return {
 		requestId: "request-a",
 		showId: SHOW_ID,
 		deskId: DESK_ID,
 		surfaceId: "surface-a",
-		zones,
+		surface: surface(zones, revision),
 		replayed: false,
 		changed: true,
 	};
@@ -113,24 +138,68 @@ describe("VirtualPlaybackZonesProvider", () => {
 
 		await act(async () => {
 			await expect(
-				current.capability?.saveSurface("surface-a", ZONES),
+				current.capability?.saveSurface("surface-a", FOLLOW_MAIN, ZONES),
 			).resolves.toEqual(ZONES);
 		});
 		expect(saveSurface).toHaveBeenCalledWith(
 			{ showId: SHOW_ID, deskId: DESK_ID },
 			"surface-a",
+			0,
+			FOLLOW_MAIN,
 			ZONES,
 			expect.any(String),
 		);
 		await act(async () => {
 			await expect(
-				current.capability?.saveSurface("surface-a", ZONES),
+				current.capability?.saveSurface("surface-a", FOLLOW_MAIN, ZONES),
 			).resolves.toBeNull();
 		});
 		expect(current.capability?.error).toBe("save failed");
 
 		act(() => current.capability?.clearError());
 		expect(current.capability?.error).toBeNull();
+	});
+
+	it("reloads authoritative surface revision after a save conflict", async () => {
+		const conflict = Object.assign(new Error("stale surface revision"), {
+			status: 409,
+		});
+		const loadSnapshot = vi
+			.fn<VirtualPlaybackZonesTransport["loadSnapshot"]>()
+			.mockResolvedValueOnce(snapshot({ "surface-a": ZONES }, 4))
+			.mockResolvedValueOnce(snapshot({ "surface-a": UPDATED_ZONES }, 5));
+		const saveSurface = vi
+			.fn<VirtualPlaybackZonesTransport["saveSurface"]>()
+			.mockRejectedValueOnce(conflict);
+		const current = { capability: null as VirtualPlaybackZonesCapability | null };
+		render(
+			harness(
+				current,
+				authority("session-a"),
+				fakeTransport(loadSnapshot, saveSurface),
+			),
+		);
+
+		await act(async () => {
+			await expect(
+				current.capability?.loadSurface("surface-a"),
+			).resolves.toEqual(ZONES);
+			await expect(
+				current.capability?.saveSurface("surface-a", FOLLOW_MAIN, UPDATED_ZONES),
+			).resolves.toBeNull();
+		});
+
+		expect(saveSurface).toHaveBeenCalledWith(
+			{ showId: SHOW_ID, deskId: DESK_ID },
+			"surface-a",
+			4,
+			FOLLOW_MAIN,
+			UPDATED_ZONES,
+			expect.any(String),
+		);
+		expect(loadSnapshot).toHaveBeenCalledTimes(2);
+		expect(current.capability?.getSurface("surface-a")).toEqual(UPDATED_ZONES);
+		expect(current.capability?.error).toBe("stale surface revision");
 	});
 
 	it("serializes saves so an older response cannot overwrite a newer intent", async () => {
@@ -141,7 +210,7 @@ describe("VirtualPlaybackZonesProvider", () => {
 		const saveSurface = vi
 			.fn<VirtualPlaybackZonesTransport["saveSurface"]>()
 			.mockReturnValueOnce(first.promise)
-			.mockResolvedValueOnce(saveOutcome(newest));
+			.mockResolvedValueOnce(saveOutcome(newest, 2));
 		const current = { capability: null as VirtualPlaybackZonesCapability | null };
 		render(
 			harness(
@@ -151,8 +220,16 @@ describe("VirtualPlaybackZonesProvider", () => {
 			),
 		);
 
-		const older = current.capability?.saveSurface("surface-a", ZONES);
-		const newer = current.capability?.saveSurface("surface-a", newest);
+		const older = current.capability?.saveSurface(
+			"surface-a",
+			FOLLOW_MAIN,
+			ZONES,
+		);
+		const newer = current.capability?.saveSurface(
+			"surface-a",
+			FOLLOW_MAIN,
+			newest,
+		);
 		await Promise.resolve();
 		expect(saveSurface).toHaveBeenCalledOnce();
 
@@ -162,6 +239,7 @@ describe("VirtualPlaybackZonesProvider", () => {
 			await expect(newer).resolves.toEqual(newest);
 		});
 		expect(saveSurface).toHaveBeenCalledTimes(2);
+		expect(saveSurface.mock.calls[1][2]).toBe(1);
 		expect(current.capability?.getSurface("surface-a")).toEqual(newest);
 	});
 
@@ -182,7 +260,11 @@ describe("VirtualPlaybackZonesProvider", () => {
 
 		await act(async () => {
 			await expect(
-				current.capability?.saveSurface("surface-a", UPDATED_ZONES),
+				current.capability?.saveSurface(
+					"surface-a",
+					FOLLOW_MAIN,
+					UPDATED_ZONES,
+				),
 			).resolves.toEqual(UPDATED_ZONES);
 		});
 		expect(current.capability?.getSurface("surface-a")).toEqual(UPDATED_ZONES);
@@ -272,7 +354,11 @@ describe("VirtualPlaybackZonesProvider", () => {
 		const rendered = render(
 			harness(current, authority("session-a"), transport),
 		);
-		const stale = current.capability?.saveSurface("surface-a", ZONES);
+		const stale = current.capability?.saveSurface(
+			"surface-a",
+			FOLLOW_MAIN,
+			ZONES,
+		);
 
 		rendered.rerender(harness(current, authority("session-b"), transport));
 		oldSave.resolve(saveOutcome());

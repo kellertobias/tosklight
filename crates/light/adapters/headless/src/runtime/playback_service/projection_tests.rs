@@ -149,6 +149,7 @@ fn dynamic_projection_reports_hidden_controller_identity_speed_and_coverage() {
     };
     let active = ActiveDynamicPlayback {
         playback_number: 7,
+        playback_identity: None,
         enabled: true,
         paused: false,
         flash: false,

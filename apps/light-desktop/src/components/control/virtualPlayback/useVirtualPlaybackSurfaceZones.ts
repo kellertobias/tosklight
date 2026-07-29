@@ -4,13 +4,17 @@ import {
 	useRef,
 	useSyncExternalStore,
 } from "react";
-import type { VirtualPlaybackZone } from "../../../features/virtualPlaybackZones/contracts";
+import type {
+	VirtualPlaybackSurfacePageMode,
+	VirtualPlaybackZone,
+} from "../../../features/virtualPlaybackZones/contracts";
 import { useVirtualPlaybackZones } from "../../../features/virtualPlaybackZones/VirtualPlaybackZonesContext";
 
 interface SurfaceZoneOptions {
 	surfaceId: string;
 	active: boolean;
 	authorityReady: boolean;
+	pageMode: VirtualPlaybackSurfacePageMode;
 }
 
 /** Loads one surface only for a ready desk authority; local errors never retrigger reads. */
@@ -18,6 +22,7 @@ export function useVirtualPlaybackSurfaceZones({
 	surfaceId,
 	active,
 	authorityReady,
+	pageMode,
 }: SurfaceZoneOptions) {
 	const capability = useVirtualPlaybackZones();
 	const capabilityRef = useRef(capability);
@@ -79,7 +84,7 @@ export function useVirtualPlaybackSurfaceZones({
 			const authorityId = source.authorityId;
 			const authorityGeneration = source.authorityGeneration;
 			if (!authorityId || source.isSavingSurface(surfaceId)) return false;
-			const saved = await source.saveSurface(surfaceId, zones);
+			const saved = await source.saveSurface(surfaceId, pageMode, zones);
 			if (!saved) return false;
 			const current = capabilityRef.current;
 			return (
@@ -87,7 +92,7 @@ export function useVirtualPlaybackSurfaceZones({
 				current.authorityGeneration === authorityGeneration
 			);
 		},
-		[active, authorityReady, surfaceId],
+		[active, authorityReady, pageMode, surfaceId],
 	);
 
 	return {

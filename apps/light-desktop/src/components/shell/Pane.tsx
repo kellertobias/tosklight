@@ -120,7 +120,9 @@ export function Pane({
 								: undefined
 			}
 			toolbar={
-				pane.kind === "file_manager" || pane.kind === "text_editor" ? (
+				pane.kind === "file_manager" ||
+				pane.kind === "text_editor" ||
+				pane.kind === "virtual_playbacks" ? (
 					<span className="pane-chrome-toolbar-target" ref={setChromeToolbar} />
 				) : undefined
 			}

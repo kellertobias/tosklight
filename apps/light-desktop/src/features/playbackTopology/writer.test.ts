@@ -61,7 +61,7 @@ function page(
 		id,
 		revision,
 		updated_at: "",
-		body: { number: 4, name: "Page 4", slots },
+		body: { number: 4, name: "Page 4", slots, virtual_playbacks: {} },
 	};
 }
 
@@ -76,7 +76,7 @@ function numberedPage(
 		id,
 		revision,
 		updated_at: "",
-		body: { number, name, slots: {} },
+		body: { number, name, slots: {}, virtual_playbacks: {} },
 	};
 }
 
@@ -141,6 +141,21 @@ function changed(
 			correlationId: CORRELATION_ID,
 			showRevision,
 			resolution: { kind: "page", page: action.page },
+			objects,
+			eventSequence,
+			replayed: false,
+		};
+	if (action.type === "configure_virtual" || action.type === "clear_virtual")
+		return {
+			status: "changed",
+			requestId: request.requestId,
+			correlationId: CORRELATION_ID,
+			showRevision,
+			resolution: {
+				kind: "virtual",
+				page: action.page,
+				playbackNumber: action.playbackNumber,
+			},
 			objects,
 			eventSequence,
 			replayed: false,
@@ -307,6 +322,68 @@ describe("PlaybackTopologyWriter", () => {
 		expect(observed[0].playbackPages[0].revision).toBe(2);
 	});
 
+	it("configures and clears a Virtual Playback through serialized Page authority", async () => {
+		const configured = {
+			...page(2),
+			body: {
+				...page(2).body,
+				virtual_playbacks: {
+					"1001": playbackBody("Virtual Front Wash", 1001),
+				},
+			},
+		};
+		const cleared = page(3);
+		const apply = vi.fn(async (_show, _revision, request) =>
+			request.action.type === "configure_virtual"
+				? changed(request, [present(configured)], 12, 41)
+				: changed(request, [present(cleared)], 13, 42),
+		);
+		const { store, writer } = setup(apply);
+
+		await expect(
+			writer.configureVirtual(
+				4,
+				1001,
+				playbackBody("Virtual Front Wash", 1001),
+			),
+		).resolves.toMatchObject({
+			status: "changed",
+			resolution: { kind: "virtual", page: 4, playbackNumber: 1001 },
+		});
+		await expect(writer.clearVirtual(4, 1001)).resolves.toMatchObject({
+			status: "changed",
+			resolution: { kind: "virtual", page: 4, playbackNumber: 1001 },
+		});
+
+		expect(apply.mock.calls[0]).toMatchObject([
+			SHOW_ID,
+			11,
+			{
+				action: {
+					type: "configure_virtual",
+					page: 4,
+					playbackNumber: 1001,
+					expectedPageRevision: 1,
+					expectedPageObjectId: "legacy-page-four",
+				},
+			},
+		]);
+		expect(apply.mock.calls[1]).toMatchObject([
+			SHOW_ID,
+			12,
+			{
+				action: {
+					type: "clear_virtual",
+					page: 4,
+					playbackNumber: 1001,
+					expectedPageRevision: 2,
+					expectedPageObjectId: "legacy-page-four",
+				},
+			},
+		]);
+		expect(store.getSnapshot().playbackPages[0]).toEqual(cleared);
+	});
+
 	it("maps an existing Playback by exact source identity and publishes only its Page", async () => {
 		const mappedPage = page(2, { 2: 7, 3: 7 });
 		const apply = vi.fn(async (_show, _revision, request) =>
@@ -354,7 +431,12 @@ describe("PlaybackTopologyWriter", () => {
 	it("carries an exact absent Page identity when creating a new mapping", async () => {
 		const createdPage = {
 			...page(1, { 1: 7 }, "5"),
-			body: { number: 5, name: "Page 5", slots: { 1: 7 } },
+			body: {
+				number: 5,
+				name: "Page 5",
+				slots: { 1: 7 },
+				virtual_playbacks: {},
+			},
 		};
 		const apply = vi.fn(async (_show, _revision, request) =>
 			changed(request, [present(createdPage)]),
@@ -739,7 +821,12 @@ describe("PlaybackTopologyWriter", () => {
 	it("clears one Playback and every returned Page in one publication", async () => {
 		const second = {
 			...page(2, { 7: 7 }, "legacy-page-two"),
-			body: { number: 2, name: "Page 2", slots: { 7: 7 } },
+			body: {
+				number: 2,
+				name: "Page 2",
+				slots: { 7: 7 },
+				virtual_playbacks: {},
+			},
 		};
 		const apply = vi.fn(async (_show, _revision, request) =>
 			changed(request, [

@@ -65,6 +65,7 @@ mod contribution;
 mod controls;
 mod cue_recording;
 mod cue_tracking;
+mod identity;
 mod master;
 mod mutation;
 mod runtime;

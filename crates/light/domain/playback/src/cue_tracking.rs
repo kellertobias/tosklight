@@ -55,6 +55,7 @@ impl PlaybackEngine {
         let playback = match self.active.entry(key) {
             std::collections::hash_map::Entry::Vacant(entry) => entry.insert(ActivePlayback {
                 playback_number: None,
+                playback_identity: None,
                 activation: None,
                 cue_list_id: id,
                 cue_index: 0,
@@ -151,6 +152,10 @@ impl PlaybackEngine {
                 playback
             }
         };
+        if let PlaybackKey::Virtual(address) = key {
+            playback.playback_number = Some(address.number().get());
+            playback.playback_identity = Some(PlaybackIdentity::Virtual(address));
+        }
         reset_manual_transition(playback);
         Ok(playback)
     }
@@ -184,6 +189,7 @@ impl PlaybackEngine {
             .ok_or("cue does not exist")?;
         let playback = self.active.entry(key).or_insert(ActivePlayback {
             playback_number: None,
+            playback_identity: None,
             activation: None,
             cue_list_id: id,
             cue_index: index,
@@ -215,6 +221,10 @@ impl PlaybackEngine {
             loaded_cue_id: None,
             loaded_cue_number: None,
         });
+        if let PlaybackKey::Virtual(address) = key {
+            playback.playback_number = Some(address.number().get());
+            playback.playback_identity = Some(PlaybackIdentity::Virtual(address));
+        }
         if playback.cue_index != index {
             playback.previous_index = Some(playback.cue_index);
         }
@@ -298,6 +308,19 @@ impl PlaybackEngine {
         let key = PlaybackKey::Number(number);
         self.pause_key_at_mutation(key, now, "playback is not active")
     }
+    pub fn pause_playback_at_mutation(
+        &mut self,
+        identity: PlaybackIdentity,
+    ) -> Result<PlaybackMutation<()>, String> {
+        match identity {
+            PlaybackIdentity::Physical(number) => self.pause_playback_mutation(number.get()),
+            PlaybackIdentity::Virtual(address) => self.pause_key_at_mutation(
+                PlaybackKey::Virtual(address),
+                self.clock.now(),
+                "virtual playback is not active",
+            ),
+        }
+    }
     pub fn pause_at(&mut self, id: CueListId, now: DateTime<Utc>) -> Result<(), String> {
         self.pause_at_mutation(id, now).map(|_| ())
     }
@@ -343,5 +366,55 @@ impl PlaybackEngine {
     }
     pub fn playback_runtime(&self, number: u16) -> Option<&ActivePlayback> {
         self.active.get(&PlaybackKey::Number(number))
+    }
+
+    pub fn playback_runtime_at(&self, identity: PlaybackIdentity) -> Option<&ActivePlayback> {
+        match identity {
+            PlaybackIdentity::Physical(number) => self.playback_runtime(number.get()),
+            PlaybackIdentity::Virtual(address) => self.active.get(&PlaybackKey::Virtual(address)),
+        }
+    }
+
+    pub fn is_active_at(&self, identity: PlaybackIdentity) -> bool {
+        self.playback_runtime_at(identity)
+            .is_some_and(|runtime| runtime.enabled)
+            || self
+                .active_dynamics
+                .get(&identity)
+                .is_some_and(|runtime| runtime.enabled)
+            || self
+                .temporary
+                .keys()
+                .any(|(candidate, _)| *candidate == identity)
+    }
+
+    pub fn release_at_mutation(
+        &mut self,
+        identity: PlaybackIdentity,
+    ) -> Result<PlaybackMutation<()>, String> {
+        self.definition_at(identity)
+            .ok_or("playback does not exist")?;
+        let durable = if self.dynamic_assignment_at(identity).is_some() {
+            self.off_dynamic_at_mutation(identity)?.value
+        } else {
+            self.off_at(identity)?
+        };
+        let before = self.temporary.len();
+        self.temporary
+            .retain(|(candidate, _), _| *candidate != identity);
+        let transient = before != self.temporary.len() || self.swap_held.remove(&identity);
+        Ok(PlaybackMutation::new(
+            (),
+            (if durable {
+                PlaybackRuntimeEffect::Durable
+            } else {
+                PlaybackRuntimeEffect::None
+            })
+            .combine(if transient {
+                PlaybackRuntimeEffect::Transient
+            } else {
+                PlaybackRuntimeEffect::None
+            }),
+        ))
     }
 }

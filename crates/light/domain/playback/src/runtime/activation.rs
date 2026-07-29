@@ -2,13 +2,24 @@ use crate::*;
 
 impl PlaybackEngine {
     pub fn record_activation(&mut self, number: u16, origin: PlaybackActivationOrigin) {
+        let Ok(identity) = PlaybackIdentity::physical(number) else {
+            return;
+        };
+        self.record_activation_at(identity, origin);
+    }
+
+    pub fn record_activation_at(
+        &mut self,
+        identity: PlaybackIdentity,
+        origin: PlaybackActivationOrigin,
+    ) {
         let ordinal = self.next_activation_ordinal;
         self.next_activation_ordinal = ordinal.saturating_add(1);
-        let Some(playback) = self
-            .active
-            .get_mut(&PlaybackKey::Number(number))
-            .filter(|playback| playback.enabled)
-        else {
+        let key = match identity {
+            PlaybackIdentity::Physical(number) => PlaybackKey::Number(number.get()),
+            PlaybackIdentity::Virtual(address) => PlaybackKey::Virtual(address),
+        };
+        let Some(playback) = self.active.get_mut(&key).filter(|playback| playback.enabled) else {
             return;
         };
         playback.activation = Some(PlaybackActivationProvenance {

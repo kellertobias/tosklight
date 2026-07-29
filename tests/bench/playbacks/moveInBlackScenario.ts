@@ -388,6 +388,9 @@ export class BrowserMoveInBlack {
 					...(isRecord(body.slots) ? body.slots : {}),
 					[String(number)]: number,
 				},
+				virtual_playbacks: isRecord(body.virtual_playbacks)
+					? body.virtual_playbacks
+					: {},
 			},
 			page?.revision ?? 0,
 		);

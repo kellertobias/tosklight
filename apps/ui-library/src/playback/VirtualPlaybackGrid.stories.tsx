@@ -18,8 +18,8 @@ const meta: Meta<VirtualGridArgs> = {
 	parameters: { layout: "fullscreen" },
 	args: { rows: 3, columns: 4, width: 920 },
 	argTypes: {
-		rows: { control: { type: "range", min: 1, max: 12, step: 1 } },
-		columns: { control: { type: "range", min: 1, max: 12, step: 1 } },
+		rows: { control: { type: "number", min: 1, max: 8998, step: 1 } },
+		columns: { control: { type: "number", min: 1, max: 8998, step: 1 } },
 		width: { control: { type: "range", min: 320, max: 1400, step: 20 } },
 	},
 };
@@ -74,6 +74,11 @@ function GridHost({
 }
 
 export const SparseGrid: Story = {
+	render: (args) => <GridHost {...args} boxes={pageOne} />,
+};
+
+export const OrdinaryTwentyByTwenty: Story = {
+	args: { rows: 20, columns: 20, width: 920 },
 	render: (args) => <GridHost {...args} boxes={pageOne} />,
 };
 

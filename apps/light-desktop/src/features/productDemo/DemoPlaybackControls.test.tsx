@@ -92,7 +92,7 @@ function page(
 		id: `page-${number}`,
 		revision: 1,
 		updated_at: "2026-07-19T10:00:00Z",
-		body: { number, name: `Page ${number}`, slots },
+		body: { number, name: `Page ${number}`, slots, virtual_playbacks: {} },
 	};
 }
 

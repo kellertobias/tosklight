@@ -22,6 +22,11 @@ Software, OSC, attached hardware, and HTTP adapters resolve either current-page 
 explicit Page P / Playback N. `crates/light/src/playback/command.rs` preserves that distinction
 through the service boundary. A page change retargets only current-page addressing.
 
+Physical Playbacks use numbers 1–1000. Dedicated Virtual Playbacks use the composite identity
+`{page, number}` with numbers 1001–9998, so Virtual 1.1001, Virtual 2.1001, and physical Playback 1
+remain independent definitions and runtimes. Follow Main and Pinned panes only project those
+identities; they do not own or copy runtime.
+
 ## Controls and runtime
 
 `crates/light/domain/playback/src/controls/` owns GO, pause, resume, back, GOTO, Load, On, Off, Flash, Temp, Swap,
@@ -30,6 +35,12 @@ Chaser phase, and replaceable telemetry.
 
 Manual controls and `crates/light/domain/playback/src/automatic.rs` produce the same semantic transition.
 `crates/light/src/playback/event.rs` publishes after the domain lock is released.
+
+Preload captures the full Virtual identity and commits its ordered actions through one atomic batch.
+Exclusion surfaces resolve their cell positions against their effective page and release the
+deduplicated union of page-qualified peers inside the same serialized action. Activation provenance
+retains the originating desk so restart normalization applies the same Follow Main or Pinned
+partitions before output resumes.
 
 ## Contributions and arbitration
 

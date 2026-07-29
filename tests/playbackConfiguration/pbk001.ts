@@ -1,6 +1,10 @@
+import type { Locator } from "@playwright/test";
 import { expect, test } from "../bench/core/fixtures";
 import { pairedScenario } from "../bench/core/pairedScenario";
-import type { Locator } from "@playwright/test";
+import type {
+	PlaybackConfigurationObservation,
+	PreparedShow,
+} from "../bench/playbacks/playback-configuration/models";
 import {
 	addVirtualPlaybackPane,
 	armSet,
@@ -18,10 +22,6 @@ import {
 	prepareShow,
 	selectTrigger,
 } from "./helpers";
-import type {
-	PlaybackConfigurationObservation,
-	PreparedShow,
-} from "../bench/playbacks/playback-configuration/models";
 
 type Pbk001State = PreparedShow & {
 	before: Awaited<ReturnType<typeof inertSnapshot>>;
@@ -293,10 +293,10 @@ export function registerPbk001VirtualCellsScenario(): void {
 		const pane = await addVirtualPlaybackPane(page);
 		await expect(
 			pane.getByRole("button", { name: "Set Source", exact: true }),
-		).toBeVisible();
+		).toHaveCount(0);
 		await expect(
 			pane.getByRole("button", { name: "Add Target", exact: true }),
-		).toBeVisible();
+		).toHaveCount(0);
 
 		await pane.getByRole("button", { name: "Settings", exact: true }).click();
 		const settings = page.getByRole("dialog", { name: "Pane Settings" });
@@ -311,13 +311,27 @@ export function registerPbk001VirtualCellsScenario(): void {
 		await settings.getByRole("button", { name: "Close settings" }).click();
 
 		const before = await inertSnapshot(api, 42);
+		await pane
+			.getByRole("button", {
+				name: /Virtual playback page 1 cell 1 Virtual Sequence/,
+			})
+			.click({ button: "right" });
+		let modal = await expectConfigurationModal(page, 1, 1);
+		await modal
+			.getByRole("button", {
+				name: "Close playback configuration",
+				exact: true,
+			})
+			.click();
+		expect(await inertSnapshot(api, 42)).toEqual(before);
+
 		await armSet(page);
 		await pane
 			.getByRole("button", {
 				name: /Virtual playback page 1 cell 1 Virtual Sequence/,
 			})
 			.click();
-		let modal = await expectConfigurationModal(page, 1, 1);
+		modal = await expectConfigurationModal(page, 1, 1);
 		await expect(modal).toHaveAttribute(
 			"data-topology",
 			"1 button · faderless",

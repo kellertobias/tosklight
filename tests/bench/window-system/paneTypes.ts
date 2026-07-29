@@ -108,6 +108,8 @@ export interface CuesPaneConfiguration {
 export interface VirtualPlaybackPaneConfiguration {
 	rows?: number;
 	columns?: number;
+	pageMode?: "follow_main" | "pinned";
+	pinnedPage?: number;
 }
 
 export interface TextEditorPaneConfiguration {

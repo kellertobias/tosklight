@@ -108,7 +108,56 @@ export async function writePage(
 		api,
 		"playback_page",
 		String(number),
-		{ number, name: number === 1 ? "Main" : `Page ${number}`, slots },
+		{
+			number,
+			name: number === 1 ? "Main" : `Page ${number}`,
+			slots,
+			virtual_playbacks: current?.body.virtual_playbacks ?? {},
+		},
+		current?.revision ?? 0,
+	);
+}
+
+export async function writeVirtualPage(
+	api: ApiDriver,
+	page: number,
+	assignments: Record<number, number>,
+) {
+	const current = (await objects<any>(api, "playback_page")).find(
+		(entry) => entry.id === String(page),
+	);
+	const virtualPlaybacks = Object.fromEntries(
+		await Promise.all(
+			Object.entries(assignments).map(async ([number, sourceNumber]) => {
+				const source = await object<any>(
+					api,
+					"playback",
+					String(sourceNumber),
+				);
+				return [
+					number,
+					{
+						...source.body,
+						number: Number(number),
+						buttons: [source.body.buttons?.[0] ?? "go", "none", "none"],
+						button_count: 1,
+						has_fader: false,
+					},
+				];
+			}),
+		),
+	);
+	await putObject(
+		api,
+		"playback_page",
+		String(page),
+		{
+			...(current?.body ?? {}),
+			number: page,
+			name: page === 1 ? "Main" : `Page ${page}`,
+			slots: current?.body.slots ?? {},
+			virtual_playbacks: virtualPlaybacks,
+		},
 		current?.revision ?? 0,
 	);
 }
@@ -159,6 +208,57 @@ export async function activePlayback(
 ): Promise<any | undefined> {
 	return (await playbacks(api)).active.find(
 		(entry: any) => entry.playback_number === number,
+	);
+}
+
+export async function activeVirtualPlayback(
+	api: ApiDriver,
+	page: number,
+	playbackNumber: number,
+): Promise<any | undefined> {
+	return (await playbacks(api)).active.find(
+		(entry: any) =>
+			entry.playback_identity?.kind === "virtual" &&
+			entry.playback_identity.page === page &&
+			entry.playback_identity.number === playbackNumber,
+	);
+}
+
+export async function virtualAction<T = any>(
+	api: ApiDriver,
+	page: number,
+	playbackNumber: number,
+	action: "go" | "toggle" | "on" | "off",
+	body: Record<string, unknown> = {},
+): Promise<T> {
+	const bootstrap = await api.request<any>(
+		"GET",
+		"/api/v2/bootstrap",
+		undefined,
+		false,
+	);
+	return api.request<T>(
+		"POST",
+		"/api/v2/playback-actions",
+		{
+			request_id: crypto.randomUUID(),
+			address: {
+				kind: "virtual",
+				page,
+				playback_number: playbackNumber,
+			},
+			action: {
+				type: action,
+				pressed: body.pressed ?? true,
+			},
+			surface: "virtual",
+		},
+		true,
+		undefined,
+		{
+			showId: bootstrap.active_show.id,
+			deskId: api.session!.desk.id,
+		},
 	);
 }
 

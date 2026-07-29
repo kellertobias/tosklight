@@ -17,17 +17,20 @@ import { clearProgrammerValues } from "../bench/programmer/programmerValues";
 import { programmer } from "../support/catalog";
 import {
 	activePlayback,
+	activeVirtualPlayback,
 	addVirtualPlaybackPane,
 	longPressPreload,
 	openPlaybackMode,
 	type PreloadVirtualPairState,
 	playbackCard,
-	playbackPendingObservation,
 	poolAction,
 	prepare,
 	setCaptureMask,
 	timestampMillis,
+	virtualAction,
+	virtualPlaybackPendingObservation,
 	visualizationLevel,
+	writeVirtualPage,
 } from "./support";
 
 const preload004Scenario: PairedScenario<PreloadVirtualPairState> = {
@@ -68,8 +71,9 @@ const preload004Scenario: PairedScenario<PreloadVirtualPairState> = {
 					hasFader: false,
 				},
 			],
-			{ 1: 44, 2: 45, 3: 46 },
+			{ 3: 46 },
 		);
+		await writeVirtualPage(api, 1, { 1001: 44, 1002: 45 });
 		await setCaptureMask(api, false, false, true, 2_500, 8_000);
 		return prepared;
 	},
@@ -86,17 +90,11 @@ const preload004Scenario: PairedScenario<PreloadVirtualPairState> = {
 			pressed: true,
 			surface: "physical",
 		});
-		await poolAction(api, 44, "button", {
-			button: 1,
-			pressed: true,
-			surface: "virtual",
-		});
-		await poolAction(api, 45, "button", {
-			button: 1,
-			pressed: true,
-			surface: "virtual",
-		});
-		state.pendingActions = playbackPendingObservation(await programmer(api));
+		await virtualAction(api, 1, 1001, "go");
+		await virtualAction(api, 1, 1002, "toggle");
+		state.pendingActions = virtualPlaybackPendingObservation(
+			await programmer(api),
+		);
 		state.applicationTimestamp = (
 			await goProgrammerPreload(api, {
 				surface: "api",
@@ -128,12 +126,14 @@ const preload004Scenario: PairedScenario<PreloadVirtualPairState> = {
 				name: /Virtual playback page 1 cell 2 Virtual TOGGLE/,
 			})
 			.click();
-		state.pendingActions = playbackPendingObservation(await programmer(api));
+		state.pendingActions = virtualPlaybackPendingObservation(
+			await programmer(api),
+		);
 		await page.getByRole("button", { name: /^PRELOAD GO\b/ }).click();
 		await expect
 			.poll(async () => {
 				state.applicationTimestamp =
-					(await activePlayback(api, 44))?.activated_at;
+					(await activeVirtualPlayback(api, 1, 1001))?.activated_at;
 				return state.applicationTimestamp ?? "";
 			})
 			.not.toBe("");
@@ -142,24 +142,28 @@ const preload004Scenario: PairedScenario<PreloadVirtualPairState> = {
 	},
 	assert: async ({ api }, state) => {
 		expect(state.pendingActions).toEqual([
-			[44, "go", "virtual"],
-			[45, "toggle", "virtual"],
+			[1, 1001, "go", "virtual"],
+			[1, 1002, "toggle", "virtual"],
 		]);
 		expect(state.applicationTimestamp).toEqual(expect.any(String));
-		expect(await activePlayback(api, 44)).toMatchObject({
+		expect(await activeVirtualPlayback(api, 1, 1001)).toMatchObject({
 			enabled: true,
 			current_cue_number: 1,
 		});
-		expect(await activePlayback(api, 45)).toMatchObject({
+		expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
 			enabled: true,
 			current_cue_number: 1,
 		});
-		expect(timestampMillis((await activePlayback(api, 44))?.activated_at)).toBe(
-			timestampMillis(state.applicationTimestamp),
-		);
-		expect(timestampMillis((await activePlayback(api, 45))?.activated_at)).toBe(
-			timestampMillis(state.applicationTimestamp),
-		);
+		expect(
+			timestampMillis(
+				(await activeVirtualPlayback(api, 1, 1001))?.activated_at,
+			),
+		).toBe(timestampMillis(state.applicationTimestamp));
+		expect(
+			timestampMillis(
+				(await activeVirtualPlayback(api, 1, 1002))?.activated_at,
+			),
+		).toBe(timestampMillis(state.applicationTimestamp));
 		expect(await activePlayback(api, 46)).toMatchObject({
 			enabled: true,
 			current_cue_number: 1,
@@ -221,8 +225,9 @@ const preload004ApiSupplement = async ({
 				hasFader: false,
 			},
 		],
-		{ 1: 41, 2: 42, 3: 43 },
+		{ 3: 43 },
 	);
+	await writeVirtualPage(api, 1, { 1001: 41, 1002: 42 });
 	await setCaptureMask(api, false, false, true, 2_500, 8_000);
 	await enterProgrammerPreload(api, {
 		surface: "api",
@@ -234,27 +239,18 @@ const preload004ApiSupplement = async ({
 		pressed: true,
 		surface: "physical",
 	});
-	await poolAction(api, 41, "button", {
-		button: 1,
-		pressed: true,
-		surface: "virtual",
-	});
-	await poolAction(api, 42, "button", {
-		button: 1,
-		pressed: true,
-		surface: "virtual",
-	});
+	await virtualAction(api, 1, 1001, "go");
+	await virtualAction(api, 1, 1002, "toggle");
 	const pending = await programmer(api);
 	expect(pending.preload_group_pending).toEqual({});
 	expect(
-		pending.preload_playback_pending.map((entry: any) => [
-			entry.action,
-			entry.surface,
-		]),
+		virtualPlaybackPendingObservation(pending),
 	).toEqual([
-		["go", "virtual"],
-		["toggle", "virtual"],
+		[1, 1001, "go", "virtual"],
+		[1, 1002, "toggle", "virtual"],
 	]);
+	expect(await activeVirtualPlayback(api, 1, 1001)).toBeUndefined();
+	expect(await activeVirtualPlayback(api, 1, 1002)).toBeUndefined();
 	expect(await activePlayback(api, 41)).toBeUndefined();
 	expect(await activePlayback(api, 42)).toBeUndefined();
 	expect(await activePlayback(api, 43)).toMatchObject({ enabled: true });
@@ -276,12 +272,16 @@ const preload004ApiSupplement = async ({
 		"go",
 		"toggle",
 	]);
-	expect(timestampMillis((await activePlayback(api, 41))?.activated_at)).toBe(
-		timestampMillis(committed.committedAt),
-	);
-	expect(timestampMillis((await activePlayback(api, 42))?.activated_at)).toBe(
-		timestampMillis(committed.committedAt),
-	);
+	expect(
+		timestampMillis(
+			(await activeVirtualPlayback(api, 1, 1001))?.activated_at,
+		),
+	).toBe(timestampMillis(committed.committedAt));
+	expect(
+		timestampMillis(
+			(await activeVirtualPlayback(api, 1, 1002))?.activated_at,
+		),
+	).toBe(timestampMillis(committed.committedAt));
 	await bench.tick(2_500);
 	expect(await visualizationLevel(api, prepared.fixtures[3])).toBeCloseTo(1, 2);
 	expect(await visualizationLevel(api, prepared.fixtures[4])).toBeCloseTo(
@@ -292,8 +292,12 @@ const preload004ApiSupplement = async ({
 		surface: "api",
 		showId: prepared.showId,
 	});
-	expect(await activePlayback(api, 41)).toMatchObject({ enabled: true });
-	expect(await activePlayback(api, 42)).toMatchObject({ enabled: true });
+	expect(await activeVirtualPlayback(api, 1, 1001)).toMatchObject({
+		enabled: true,
+	});
+	expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
+		enabled: true,
+	});
 };
 
 const preload004UiSupplement = async ({
@@ -335,8 +339,9 @@ const preload004UiSupplement = async ({
 				hasFader: false,
 			},
 		],
-		{ 1: 44, 2: 45, 3: 46 },
+		{ 3: 46 },
 	);
+	await writeVirtualPage(api, 1, { 1001: 44, 1002: 45 });
 	await setCaptureMask(api, false, false, true, 2_500, 8_000);
 	await desk.open(bench.baseUrl);
 	const pane = await addVirtualPlaybackPane(page);
@@ -360,8 +365,12 @@ const preload004UiSupplement = async ({
 		})
 		.click();
 	await expect(
-		page.getByTitle(/Pending Preload: .*GO 44.*TOGGLE 45/),
+		page.getByTitle(
+			/Pending Preload: .*GO Virtual 1\.1001.*TOGGLE Virtual 1\.1002/,
+		),
 	).toBeVisible();
+	expect(await activeVirtualPlayback(api, 1, 1001)).toBeUndefined();
+	expect(await activeVirtualPlayback(api, 1, 1002)).toBeUndefined();
 	expect(await activePlayback(api, 44)).toBeUndefined();
 	expect(await activePlayback(api, 45)).toBeUndefined();
 	expect(await activePlayback(api, 46)).toMatchObject({ enabled: true });
@@ -372,17 +381,25 @@ const preload004UiSupplement = async ({
 		)
 		.toBe(0);
 	await bench.tick(2_500);
-	expect(await activePlayback(api, 44)).toMatchObject({ enabled: true });
-	expect(await activePlayback(api, 45)).toMatchObject({ enabled: true });
+	expect(await activeVirtualPlayback(api, 1, 1001)).toMatchObject({
+		enabled: true,
+	});
+	expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
+		enabled: true,
+	});
 	await longPressPreload(page);
-	expect(await activePlayback(api, 44)).toMatchObject({ enabled: true });
-	expect(await activePlayback(api, 45)).toMatchObject({ enabled: true });
+	expect(await activeVirtualPlayback(api, 1, 1001)).toMatchObject({
+		enabled: true,
+	});
+	expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
+		enabled: true,
+	});
 };
 
 export function registerVirtualPlaybackPreloadScenarios(): void {
 	pairedScenario(preload004Scenario);
 	test(
-		"PRELOAD-004 @supplemental › API disabled-domain behavior and exact virtual transition timing",
+		"PRELOAD-004 @api › page-qualified Virtual preload capture preserves identity and exact transition timing",
 		preload004ApiSupplement,
 	);
 	// UI-only gap (the @supplemental API contract passes, so the engine's pending feedback and
@@ -390,7 +407,7 @@ export function registerVirtualPlaybackPreloadScenarios(): void {
 	// so the detailed pending feedback cannot be exercised on screen (same missing control as
 	// PRELOAD-002/004 @ui). Unskip once the virtual-playback PRELOAD control is rendered.
 	test.skip(
-		"PRELOAD-004 @supplemental-ui › virtual cells expose detailed pending feedback and release behavior",
+		"PRELOAD-004 @ui › virtual cells expose detailed pending feedback and release behavior",
 		preload004UiSupplement,
 	);
 }

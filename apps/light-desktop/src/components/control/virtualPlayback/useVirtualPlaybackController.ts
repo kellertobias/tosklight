@@ -2,21 +2,21 @@ import { useEffect, useMemo, useState } from "react";
 import type { PlaybackDefinition } from "../../../api/types";
 import {
 	usePlaybackDeskView,
-	usePlaybackProjectionMap,
 	usePlaybackRuntimeActions,
 	usePlaybackRuntimeStatus,
+	useVirtualPlaybackProjectionMap,
 } from "../../../features/playbackRuntime/PlaybackRuntimeView";
 import { usePlaybackTopologyActions } from "../../../features/playbackTopology/PlaybackTopologyProvider";
 import { usePlaybackTopologyView } from "../../../features/playbackTopology/PlaybackTopologyView";
 import type { VirtualPlaybackZone } from "../../../features/virtualPlaybackZones/contracts";
 import { useApp } from "../../../state/AppContext";
-import { emptyConfiguration } from "../PlaybackFaderBank";
 import { normalizePlaybackTopology } from "../PlaybackConfigurationModal";
+import { emptyConfiguration } from "../PlaybackFaderBank";
+import { useVirtualPlaybackSurfaceZones } from "./useVirtualPlaybackSurfaceZones";
 import {
-	MAX_PLAYBACK_SLOT,
+	MAX_VIRTUAL_PLAYBACK_CELLS,
 	validPlaybackSlot,
 } from "./VirtualPlaybackGrid";
-import { useVirtualPlaybackSurfaceZones } from "./useVirtualPlaybackSurfaceZones";
 
 interface ConfigurationState {
 	playback: PlaybackDefinition;
@@ -45,7 +45,10 @@ export function useVirtualPlaybackController(
 		.find((candidate) => candidate.id === paneId);
 	const rows = pane?.virtualPlaybackRows ?? 2;
 	const columns = pane?.virtualPlaybackColumns ?? 2;
-	const pageNumber = playbackDesk?.active_page ?? null;
+	const pageMode = pane?.virtualPlaybackPageMode ?? "follow_main";
+	const pinnedPage = pane?.virtualPlaybackPinnedPage ?? 1;
+	const pageNumber =
+		pageMode === "pinned" ? pinnedPage : (playbackDesk?.active_page ?? null);
 	const authorityReady =
 		active &&
 		topology.ready &&
@@ -63,8 +66,8 @@ export function useVirtualPlaybackController(
 		() => new Map(topology.cueLists.map(({ body }) => [body.id, body])),
 		[topology.cueLists],
 	);
-	const playbackNumbers = useMemo(
-		() => mappedPlaybackNumbers(page?.slots, rows * columns),
+	const virtualAddresses = useMemo(
+		() => mappedVirtualPlaybackAddresses(page, rows * columns),
 		[columns, page, rows],
 	);
 	// Activate the runtime for the current page's playbacks as soon as the topology and page are
@@ -72,18 +75,21 @@ export function useVirtualPlaybackController(
 	// pane: authorityReady needs the runtime "ready", but the runtime only becomes ready once it is
 	// activated for these identities, so a Virtual Playbacks pane opened on its own stayed stuck at
 	// "Loading Virtual Playbacks…".
-	const runtimes = usePlaybackProjectionMap(playbackNumbers);
+	const runtimes = useVirtualPlaybackProjectionMap(virtualAddresses);
 	const zones = useVirtualPlaybackSurfaceZones({
 		surfaceId,
 		active,
 		authorityReady,
+		pageMode:
+			pageMode === "pinned"
+				? { type: "pinned", page: pinnedPage }
+				: { type: "follow_main" },
 	});
 	const interactions = useVirtualPlaybackInteractions({
+		surfaceId,
 		state,
 		dispatch,
 		topology,
-		topologyActions,
-		playbacks,
 		pageNumber,
 		rows,
 		columns,
@@ -110,11 +116,10 @@ export function useVirtualPlaybackController(
 }
 
 interface InteractionOptions {
+	surfaceId: string;
 	state: ReturnType<typeof useApp>["state"];
 	dispatch: ReturnType<typeof useApp>["dispatch"];
 	topology: ReturnType<typeof usePlaybackTopologyView>;
-	topologyActions: ReturnType<typeof usePlaybackTopologyActions>;
-	playbacks: ReadonlyMap<number, PlaybackDefinition>;
 	pageNumber: number | null;
 	rows: number;
 	columns: number;
@@ -122,32 +127,43 @@ interface InteractionOptions {
 }
 
 function useVirtualPlaybackInteractions(options: InteractionOptions) {
-	const [configuration, setConfiguration] =
-		useState<ConfigurationState | null>(null);
+	const [configuration, setConfiguration] = useState<ConfigurationState | null>(
+		null,
+	);
 	const [selectedSlots, setSelectedSlots] = useState<number[]>([]);
 	const [creatingZone, setCreatingZone] = useState(false);
 	const [zoneName, setZoneName] = useState("");
+	const zoneEdit =
+		options.state.virtualPlaybackZoneEdit?.surfaceId === options.surfaceId
+			? options.state.virtualPlaybackZoneEdit
+			: null;
 	const configurationArmed =
-		options.state.playbackSetArmed ||
-		(options.state.cueListSetArmed &&
-			options.state.cueListSetTarget == null);
-	const assignmentPending = options.state.cueListSetTarget != null;
+		options.state.playbackSetArmed || options.state.cueListSetArmed;
 	useEffect(() => {
 		setConfiguration(null);
+		if (zoneEdit) return;
 		setSelectedSlots([]);
 		setCreatingZone(false);
 		setZoneName("");
-	}, [options.pageNumber, options.topology.ready]);
+	}, [options.pageNumber, zoneEdit]);
+	useEffect(() => {
+		if (options.topology.ready) return;
+		setConfiguration(null);
+	}, [options.topology.ready]);
+	useEffect(() => {
+		if (!zoneEdit) return;
+		setSelectedSlots([...zoneEdit.slots]);
+		options.dispatch({ type: "SET_SHIFT_ARMED", value: true });
+	}, [options.dispatch, zoneEdit]);
 
 	useEffect(() => {
+		if (zoneEdit) return;
 		const lastSlot = Math.min(
 			options.rows * options.columns,
-			MAX_PLAYBACK_SLOT,
+			MAX_VIRTUAL_PLAYBACK_CELLS,
 		);
-		setSelectedSlots((current) =>
-			current.filter((slot) => slot <= lastSlot),
-		);
-	}, [options.rows, options.columns]);
+		setSelectedSlots((current) => current.filter((slot) => slot <= lastSlot));
+	}, [options.rows, options.columns, zoneEdit]);
 
 	const openConfiguration = (
 		playback: PlaybackDefinition | null,
@@ -156,13 +172,16 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 		if (!validPlaybackSlot(slot) || options.pageNumber == null) return;
 		const next =
 			playback ??
-			emptyConfiguration(
-				options.pageNumber,
-				slot,
-				1,
-				false,
-				options.topology.cueLists[0]?.body.id ?? "",
-			);
+			({
+				...emptyConfiguration(
+					options.pageNumber,
+					slot,
+					1,
+					false,
+					options.topology.cueLists[0]?.body.id ?? "",
+				),
+				buttons: ["go", "none", "none"],
+			} satisfies PlaybackDefinition);
 		setConfiguration({
 			playback: normalizePlaybackTopology(
 				{ ...next, button_count: 1, has_fader: false },
@@ -194,23 +213,6 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 		options.dispatch({ type: "SET_SHIFT_ARMED", value: false });
 	};
 
-	const assignSource = async (slot: number) => {
-		const target = options.state.cueListSetTarget;
-		if (!validPlaybackSlot(slot) || target == null || options.pageNumber == null)
-			return;
-		const source = options.playbacks.get(target);
-		if (!source || source.target.type !== "cue_list") return;
-		const playback = assignmentPlayback(options.pageNumber, slot, source);
-		if (
-			await options.topologyActions?.configureSlot(
-				options.pageNumber,
-				slot,
-				playback,
-			)
-		)
-			options.dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
-	};
-
 	const toggleZoneSlot = (slot: number) => {
 		if (!options.zones.ready || !validPlaybackSlot(slot)) return;
 		setSelectedSlots((current) =>
@@ -220,9 +222,10 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 		);
 	};
 
-	const createZone = async () => {
-		const name = zoneName.trim();
-		if (!options.zones.ready || !name || selectedSlots.length < 2) return;
+	const createZone = async (inputName = zoneName) => {
+		const name = inputName.trim();
+		if (zoneEdit || !options.zones.ready || !name || selectedSlots.length < 2)
+			return;
 		const zone: VirtualPlaybackZone = {
 			id: crypto.randomUUID(),
 			name,
@@ -233,6 +236,30 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 		setSelectedSlots([]);
 		setZoneName("");
 		setCreatingZone(false);
+	};
+
+	const cancelZoneSelection = () => {
+		setSelectedSlots([]);
+		setCreatingZone(false);
+		setZoneName("");
+		options.dispatch({ type: "SET_SHIFT_ARMED", value: false });
+		if (zoneEdit)
+			options.dispatch({ type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT", edit: null });
+	};
+
+	const updateZone = async () => {
+		if (!zoneEdit || !options.zones.ready || selectedSlots.length < 2) return;
+		const current = options.zones.zones.find(
+			(candidate) => candidate.id === zoneEdit.zoneId,
+		);
+		if (!current) return;
+		const next = options.zones.zones.map((candidate) =>
+			candidate.id === zoneEdit.zoneId
+				? { ...candidate, slots: [...selectedSlots] }
+				: candidate,
+		);
+		if (!(await options.zones.persist(next))) return;
+		cancelZoneSelection();
 	};
 
 	return {
@@ -247,48 +274,30 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 		setCreatingZone,
 		zoneName,
 		setZoneName,
+		zoneEdit,
 		configurationArmed,
-		assignmentPending,
 		openConfiguration,
-		assignSource,
 		toggleZoneSlot,
 		createZone,
+		cancelZoneSelection,
+		updateZone,
 	};
 }
 
-function mappedPlaybackNumbers(
-	slots: Readonly<Record<string, number>> | undefined,
+function mappedVirtualPlaybackAddresses(
+	page:
+		| { number: number; virtual_playbacks?: Record<string, PlaybackDefinition> }
+		| undefined,
 	cellCount: number,
 ) {
-	if (!slots) return [];
-	return Array.from(
-		{ length: Math.min(cellCount, MAX_PLAYBACK_SLOT) },
-		(_, index) => slots[String(index + 1)],
-	).filter((number): number is number => number != null);
-}
-
-function assignmentPlayback(
-	page: number,
-	slot: number,
-	source: PlaybackDefinition,
-) {
-	const draft = emptyConfiguration(
-		page,
-		slot,
-		1,
-		false,
-		source.target.type === "cue_list" ? source.target.cue_list_id : "",
-	);
-	return {
-		...draft,
-		name: source.name,
-		color: source.color,
-		buttons: [
-			source.buttons[0] === "none" ? "go" : source.buttons[0],
-			"none",
-			"none",
-		] as PlaybackDefinition["buttons"],
-		presentation_icon: source.presentation_icon,
-		presentation_image: source.presentation_image,
-	};
+	if (!page?.virtual_playbacks) return [];
+	return Object.keys(page.virtual_playbacks)
+		.map(Number)
+		.filter(
+			(number) =>
+				Number.isSafeInteger(number) &&
+				number >= 1_001 &&
+				number <= 1_000 + Math.min(cellCount, MAX_VIRTUAL_PLAYBACK_CELLS),
+		)
+		.map((playbackNumber) => ({ page: page.number, playbackNumber }));
 }

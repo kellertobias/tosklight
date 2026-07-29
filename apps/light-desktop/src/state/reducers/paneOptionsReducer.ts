@@ -2,6 +2,9 @@ import type { AppState } from "../../types";
 import type { Action } from "../appActions";
 import { clamp } from "../reducerHelpers";
 
+export const MAX_VIRTUAL_PLAYBACK_CELLS = 8_998;
+export const MAX_PLAYBACK_PAGE = 127;
+
 export function reducePaneOptions(
 	state: AppState,
 	action: Action,
@@ -59,7 +62,12 @@ export function reducePaneOptions(
 							},
 				),
 			};
-		case "SET_VIRTUAL_PLAYBACK_GRID":
+		case "SET_VIRTUAL_PLAYBACK_GRID": {
+			const grid = normalizeVirtualPlaybackGrid(
+				action.rows,
+				action.columns,
+				action.changed,
+			);
 			return {
 				...state,
 				desks: state.desks.map((desk) =>
@@ -71,8 +79,33 @@ export function reducePaneOptions(
 									pane.id === action.id
 										? {
 												...pane,
-												virtualPlaybackRows: clamp(action.rows, 1, 12),
-												virtualPlaybackColumns: clamp(action.columns, 1, 12),
+												virtualPlaybackRows: grid.rows,
+												virtualPlaybackColumns: grid.columns,
+											}
+										: pane,
+								),
+							},
+				),
+			};
+		}
+		case "SET_VIRTUAL_PLAYBACK_PAGE_MODE":
+			return {
+				...state,
+				desks: state.desks.map((desk) =>
+					desk.id !== state.activeDeskId
+						? desk
+						: {
+								...desk,
+								panes: desk.panes.map((pane) =>
+									pane.id === action.id
+										? {
+												...pane,
+												virtualPlaybackPageMode: action.mode,
+												virtualPlaybackPinnedPage: normalizePlaybackPage(
+													action.pinnedPage ??
+														pane.virtualPlaybackPinnedPage ??
+														1,
+												),
 											}
 										: pane,
 								),
@@ -82,4 +115,40 @@ export function reducePaneOptions(
 		default:
 			return undefined;
 	}
+}
+
+export function normalizeVirtualPlaybackGrid(
+	rows: number,
+	columns: number,
+	changed: "rows" | "columns" = "columns",
+) {
+	const normalizedRows = normalizedGridDimension(rows);
+	const normalizedColumns = normalizedGridDimension(columns);
+	if (normalizedRows * normalizedColumns <= MAX_VIRTUAL_PLAYBACK_CELLS)
+		return { rows: normalizedRows, columns: normalizedColumns };
+	if (changed === "rows")
+		return {
+			rows: Math.max(
+				1,
+				Math.floor(MAX_VIRTUAL_PLAYBACK_CELLS / normalizedColumns),
+			),
+			columns: normalizedColumns,
+		};
+	return {
+		rows: normalizedRows,
+		columns: Math.max(
+			1,
+			Math.floor(MAX_VIRTUAL_PLAYBACK_CELLS / normalizedRows),
+		),
+	};
+}
+
+function normalizedGridDimension(value: number) {
+	if (!Number.isFinite(value)) return 1;
+	return clamp(Math.trunc(value), 1, MAX_VIRTUAL_PLAYBACK_CELLS);
+}
+
+function normalizePlaybackPage(value: number) {
+	if (!Number.isFinite(value)) return 1;
+	return clamp(Math.trunc(value), 1, MAX_PLAYBACK_PAGE);
 }

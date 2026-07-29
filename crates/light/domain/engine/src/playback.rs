@@ -5,8 +5,8 @@ use crate::{
 use chrono::{DateTime, Utc};
 use light_core::CueListId;
 use light_playback::{
-    ActiveDynamicPlayback, ActivePlayback, PlaybackContribution, PlaybackEngine, PlaybackMutation,
-    PlaybackRuntimeEffect, PlaybackRuntimeStatus,
+    ActiveDynamicPlayback, ActivePlayback, PlaybackContribution, PlaybackEngine, PlaybackIdentity,
+    PlaybackMutation, PlaybackRuntimeEffect, PlaybackRuntimeStatus, VirtualPlaybackAddress,
 };
 use std::collections::HashSet;
 
@@ -23,7 +23,14 @@ pub enum EnginePlaybackCommand {
         number: u16,
         action: PoolPlaybackAction,
     },
+    Virtual {
+        address: VirtualPlaybackAddress,
+        action: VirtualPlaybackAction,
+        exclusion_zones: Vec<Vec<VirtualPlaybackAddress>>,
+        activation_origin: Option<light_playback::PlaybackActivationOrigin>,
+    },
     ReleasePoolBatch(Vec<u16>),
+    ReleaseIdentityBatch(Vec<PlaybackIdentity>),
     RestoreActive(Vec<ActivePlayback>),
     RestoreActiveDynamics(Vec<ActiveDynamicPlayback>),
     RestoreDynamicsPausedSince(Option<DateTime<Utc>>),
@@ -57,6 +64,35 @@ pub enum PoolPlaybackAction {
     SetMaster(f32),
     SetVirtualMaster(f32),
     SetManualXFade(f32),
+    XFade(bool),
+    SetTempButton(bool),
+    ToggleTemp,
+    SetFlash(bool),
+    SetSwap(bool),
+    DynamicRestart,
+    DynamicDoubleSpeed,
+    DynamicHalfSpeed,
+    DynamicLearnSpeed,
+}
+
+/// Actions supported by the dedicated page-qualified Virtual Playback runtime boundary.
+///
+/// This intentionally stays narrower than `PoolPlaybackAction`: unsupported physical fader and
+/// temporary-control semantics must not silently collapse a Virtual address to a pool number.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum VirtualPlaybackAction {
+    Go,
+    Back,
+    Pause,
+    FastForward,
+    FastRewind,
+    On,
+    Off,
+    Release,
+    Toggle,
+    GoTo(f64),
+    Load(f64),
+    SetMaster(f32),
     XFade(bool),
     SetTempButton(bool),
     ToggleTemp,
@@ -204,25 +240,54 @@ impl Engine {
         &self,
         numbers: impl IntoIterator<Item = u16>,
     ) -> Vec<u16> {
+        self.auto_off_fully_controlled_dynamic_playbacks_at(
+            numbers
+                .into_iter()
+                .filter_map(|number| PlaybackIdentity::physical(number).ok()),
+        )
+        .into_iter()
+        .filter_map(|identity| match identity {
+            PlaybackIdentity::Physical(number) => Some(number.get()),
+            PlaybackIdentity::Virtual(_) => None,
+        })
+        .collect()
+    }
+
+    pub fn auto_off_fully_controlled_dynamic_playbacks_at(
+        &self,
+        identities: impl IntoIterator<Item = PlaybackIdentity>,
+    ) -> Vec<PlaybackIdentity> {
         let generation = self.generation.load();
         let mut playback = generation.playback().write();
         let mut changed = Vec::new();
-        for number in numbers {
+        for identity in identities {
             if !playback
-                .dynamic_assignment(number)
+                .dynamic_assignment_at(identity)
                 .is_some_and(|assignment| assignment.auto_off_full_control)
                 || !playback
                     .active_dynamic_playbacks()
                     .iter()
-                    .any(|active| active.playback_number == number && active.enabled)
+                    .any(|active| {
+                        active
+                            .playback_identity
+                            .or_else(|| {
+                                PlaybackIdentity::physical(active.playback_number).ok()
+                            })
+                            == Some(identity)
+                            && active.enabled
+                    })
             {
                 continue;
             }
-            if playback
-                .off_mutation(number)
-                .is_ok_and(|mutation| mutation.value)
-            {
-                changed.push(number);
+            let turned_off = if playback.dynamic_assignment_at(identity).is_some() {
+                playback
+                    .off_dynamic_at_mutation(identity)
+                    .is_ok_and(|mutation| mutation.value)
+            } else {
+                playback.off_at(identity).unwrap_or(false)
+            };
+            if turned_off {
+                changed.push(identity);
             }
         }
         changed
@@ -273,9 +338,35 @@ fn execute(
     match command {
         EnginePlaybackCommand::CueList { id, action } => execute_cue_list(playback, id, action),
         EnginePlaybackCommand::Pool { number, action } => execute_pool(playback, number, action),
+        EnginePlaybackCommand::Virtual {
+            address,
+            action,
+            exclusion_zones,
+            activation_origin,
+        } => execute_virtual(
+            playback,
+            address,
+            action,
+            &exclusion_zones,
+            activation_origin,
+        ),
         EnginePlaybackCommand::ReleasePoolBatch(numbers) => Ok(
             EnginePlaybackOutcome::ChangedPlaybacks(release_pool_batch(playback, numbers)),
         ),
+        EnginePlaybackCommand::ReleaseIdentityBatch(identities) => {
+            let mut released = Vec::new();
+            for identity in identities {
+                if playback
+                    .release_at_mutation(identity)
+                    .is_ok_and(|mutation| mutation.effect.changed())
+                {
+                    released.push(identity.number());
+                }
+            }
+            released.sort_unstable();
+            released.dedup();
+            Ok(EnginePlaybackOutcome::ChangedPlaybacks(released))
+        }
         EnginePlaybackCommand::RestoreActive(active) => {
             playback.restore_active(active);
             Ok(EnginePlaybackOutcome::Applied)
@@ -296,6 +387,156 @@ fn execute(
             playback.toggle_dynamics_paused(),
         )),
     }
+}
+
+pub(crate) fn execute_virtual(
+    playback: &mut PlaybackEngine,
+    address: VirtualPlaybackAddress,
+    action: VirtualPlaybackAction,
+    exclusion_zones: &[Vec<VirtualPlaybackAddress>],
+    activation_origin: Option<light_playback::PlaybackActivationOrigin>,
+) -> Result<EnginePlaybackOutcome, String> {
+    let identity = PlaybackIdentity::Virtual(address);
+    let was_enabled = playback.is_active_at(identity);
+    let addressed_effect = match action {
+        VirtualPlaybackAction::Go => {
+            playback.go_playback_at(identity)?;
+            PlaybackRuntimeEffect::Durable
+        }
+        VirtualPlaybackAction::Back => {
+            playback.back_playback_at(identity)?;
+            PlaybackRuntimeEffect::Durable
+        }
+        VirtualPlaybackAction::Pause => {
+            if playback.dynamic_assignment_at(identity).is_some() {
+                playback.toggle_dynamic_pause_at_mutation(identity)?.effect
+            } else {
+                playback.pause_playback_at_mutation(identity)?.effect
+            }
+        }
+        VirtualPlaybackAction::FastForward => {
+            playback.fast_forward_playback_at(identity)?;
+            PlaybackRuntimeEffect::Durable
+        }
+        VirtualPlaybackAction::FastRewind => {
+            playback.fast_rewind_playback_at(identity)?;
+            PlaybackRuntimeEffect::Durable
+        }
+        VirtualPlaybackAction::On => {
+            if playback.dynamic_assignment_at(identity).is_some() {
+                playback.on_dynamic_at_mutation(identity)?;
+            } else {
+                playback.on_at(identity)?;
+            }
+            if was_enabled {
+                PlaybackRuntimeEffect::None
+            } else {
+                PlaybackRuntimeEffect::Durable
+            }
+        }
+        VirtualPlaybackAction::Off => {
+            let changed = if playback.dynamic_assignment_at(identity).is_some() {
+                playback.off_dynamic_at_mutation(identity)?.value
+            } else {
+                playback.off_at(identity)?
+            };
+            if changed {
+                PlaybackRuntimeEffect::Durable
+            } else {
+                PlaybackRuntimeEffect::None
+            }
+        }
+        VirtualPlaybackAction::Release => playback.release_at_mutation(identity)?.effect,
+        VirtualPlaybackAction::Toggle => {
+            if playback.dynamic_assignment_at(identity).is_some() {
+                playback.toggle_dynamic_at_mutation(identity)?;
+            } else if was_enabled {
+                playback.off_at(identity)?;
+            } else {
+                playback.on_at(identity)?;
+            }
+            PlaybackRuntimeEffect::Durable
+        }
+        VirtualPlaybackAction::GoTo(cue) => {
+            playback.goto_playback_at_mutation(identity, cue)?.effect
+        }
+        VirtualPlaybackAction::Load(cue) => {
+            playback.load_playback_at_mutation(identity, cue)?.effect
+        }
+        VirtualPlaybackAction::SetMaster(value) => {
+            if playback.dynamic_assignment_at(identity).is_some() {
+                playback
+                    .set_dynamic_fader_at_mutation(identity, value)?
+                    .effect
+            } else {
+                playback
+                    .set_virtual_master_at_mutation(identity, value)?
+                    .effect
+            }
+        }
+        VirtualPlaybackAction::XFade(on) => playback.xfade_at_mutation(identity, on)?.effect,
+        VirtualPlaybackAction::SetTempButton(active) => {
+            playback.set_temp_button_at_mutation(identity, active)?.effect
+        }
+        VirtualPlaybackAction::ToggleTemp => playback.toggle_temp_at_mutation(identity)?.effect,
+        VirtualPlaybackAction::SetFlash(pressed) => {
+            if playback.dynamic_assignment_at(identity).is_some() {
+                playback
+                    .set_dynamic_flash_at_mutation(identity, pressed)?
+                    .effect
+            } else {
+                playback.set_flash_at_mutation(identity, pressed)?.effect
+            }
+        }
+        VirtualPlaybackAction::SetSwap(pressed) => {
+            playback.set_swap_at_mutation(identity, pressed)?.effect
+        }
+        VirtualPlaybackAction::DynamicRestart => {
+            playback.restart_dynamic_at_mutation(identity)?.effect
+        }
+        VirtualPlaybackAction::DynamicDoubleSpeed => {
+            playback
+                .scale_dynamic_speed_at_mutation(identity, true)?
+                .effect
+        }
+        VirtualPlaybackAction::DynamicHalfSpeed => {
+            playback
+                .scale_dynamic_speed_at_mutation(identity, false)?
+                .effect
+        }
+        VirtualPlaybackAction::DynamicLearnSpeed => {
+            playback.tap_dynamic_speed_at_mutation(identity)?.effect
+        }
+    };
+    let is_enabled = playback.is_active_at(identity);
+    let mut peer_effect = PlaybackRuntimeEffect::None;
+    if !was_enabled && is_enabled {
+        if let Some(origin) = activation_origin {
+            playback.record_activation_at(identity, origin);
+        }
+        for peer in virtual_exclusion_peers(exclusion_zones, address) {
+            peer_effect = peer_effect.combine(
+                playback
+                .release_at_mutation(PlaybackIdentity::Virtual(peer))?
+                .effect,
+            );
+        }
+    }
+    Ok(EnginePlaybackOutcome::Changed(
+        EnginePlaybackEffect::from_addressed(addressed_effect).with_related(peer_effect),
+    ))
+}
+
+fn virtual_exclusion_peers(
+    zones: &[Vec<VirtualPlaybackAddress>],
+    activated: VirtualPlaybackAddress,
+) -> std::collections::BTreeSet<VirtualPlaybackAddress> {
+    zones
+        .iter()
+        .filter(|zone| zone.contains(&activated))
+        .flat_map(|zone| zone.iter().copied())
+        .filter(|address| *address != activated)
+        .collect()
 }
 
 fn release_pool_batch(playback: &mut PlaybackEngine, numbers: Vec<u16>) -> Vec<u16> {

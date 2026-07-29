@@ -53,7 +53,7 @@ export type PreloadPlaybackPairState = Prepared & {
 };
 
 export type PreloadVirtualPairState = Prepared & {
-	pendingActions?: Array<[number, string, string]>;
+	pendingActions?: Array<[number, number, string, string]>;
 	applicationTimestamp?: string;
 };
 

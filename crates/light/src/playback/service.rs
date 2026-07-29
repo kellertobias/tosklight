@@ -218,6 +218,7 @@ fn runtime_identity(address: &ResolvedPlaybackAddress) -> PlaybackRuntimeIdentit
             PlaybackRuntimeIdentity::Group(group_id.clone())
         }
         ResolvedPlaybackAddress::Pool { number, .. } => PlaybackRuntimeIdentity::Playback(*number),
+        ResolvedPlaybackAddress::Virtual(address) => PlaybackRuntimeIdentity::Virtual(*address),
     }
 }
 
@@ -270,6 +271,7 @@ fn resolve(
             playback_number: ports.group_playback(context, group_id.clone())?,
         }),
         PlaybackAddress::Pool(number) => Ok(pool(*number, None, None)),
+        PlaybackAddress::Virtual(address) => Ok(ResolvedPlaybackAddress::Virtual(*address)),
         PlaybackAddress::CurrentPage { slot } => {
             let page = ports.current_page(context)?;
             resolve_page(page, *slot, ports)

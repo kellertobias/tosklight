@@ -8,6 +8,8 @@ import {
 	useState,
 } from "react";
 import type {
+	VirtualPlaybackExclusionSurface,
+	VirtualPlaybackSurfacePageMode,
 	VirtualPlaybackZone,
 	VirtualPlaybackZonesAuthority,
 	VirtualPlaybackZonesCapability,
@@ -84,8 +86,9 @@ export function VirtualPlaybackZonesProvider({
 				controller?.activateSurface(surfaceId) ?? noOp,
 			loadSurface: (surfaceId) =>
 				controller?.loadSurface(surfaceId) ?? Promise.resolve(null),
-			saveSurface: (surfaceId, zones) =>
-				controller?.saveSurface(surfaceId, zones) ?? Promise.resolve(null),
+			saveSurface: (surfaceId, pageMode, zones) =>
+				controller?.saveSurface(surfaceId, pageMode, zones) ??
+				Promise.resolve(null),
 			clearError: () => setReportedError(null),
 		}),
 		[authority?.authorityId, controller, epoch.generation, error],
@@ -110,7 +113,7 @@ export class VirtualPlaybackZonesController {
 	private saveTail: Promise<void> = Promise.resolve();
 	private readonly surfaceCache = new Map<
 		string,
-		readonly VirtualPlaybackZone[]
+		VirtualPlaybackExclusionSurface
 	>();
 	private readonly surfaceVersions = new Map<string, number>();
 	private readonly surfaceSaveCounts = new Map<string, number>();
@@ -143,7 +146,7 @@ export class VirtualPlaybackZonesController {
 	getSurface(surfaceId: string) {
 		if (!this.isCurrent()) return null;
 		const cached = this.surfaceCache.get(surfaceId);
-		if (cached) return cached;
+		if (cached) return cached.zones;
 		return this.snapshotLoaded ? EMPTY_ZONES : null;
 	}
 
@@ -228,14 +231,15 @@ export class VirtualPlaybackZonesController {
 
 	saveSurface(
 		surfaceId: string,
+		pageMode: VirtualPlaybackSurfacePageMode,
 		zones: readonly VirtualPlaybackZone[],
 	) {
 		try {
 			validateVirtualPlaybackZoneSurfaceId(surfaceId);
 			this.changeSaveCount(surfaceId, 1);
-			return this.enqueueSave(() => this.performSave(surfaceId, zones)).finally(
-				() => this.changeSaveCount(surfaceId, -1),
-			);
+			return this.enqueueSave(() =>
+				this.performSave(surfaceId, pageMode, zones),
+			).finally(() => this.changeSaveCount(surfaceId, -1));
 		} catch (reason) {
 			return Promise.resolve(this.failure(reason));
 		}
@@ -250,12 +254,16 @@ export class VirtualPlaybackZonesController {
 
 	private async performSave(
 		surfaceId: string,
+		pageMode: VirtualPlaybackSurfacePageMode,
 		zones: readonly VirtualPlaybackZone[],
 	) {
 		try {
+			const expectedRevision = this.surfaceCache.get(surfaceId)?.revision ?? 0;
 			const outcome = await this.transport.saveSurface(
 				this.scope,
 				surfaceId,
+				expectedRevision,
+				pageMode,
 				zones,
 				crypto.randomUUID(),
 			);
@@ -263,10 +271,11 @@ export class VirtualPlaybackZonesController {
 			if (outcome.surfaceId !== surfaceId)
 				throw new Error("Virtual Playback zone response changed surface identity");
 			this.mutationVersion += 1;
-			this.storeSurface(surfaceId, outcome.zones, this.mutationVersion);
+			this.storeSurface(surfaceId, outcome.surface, this.mutationVersion);
 			this.reportError(null);
-			return outcome.zones;
+			return outcome.surface.zones;
 		} catch (reason) {
+			if (conflictStatus(reason) === 409) await this.reloadSnapshot();
 			return this.failure(reason);
 		}
 	}
@@ -320,7 +329,7 @@ export class VirtualPlaybackZonesController {
 			if ((this.surfaceVersions.get(surfaceId) ?? 0) > loadVersion) continue;
 			this.storeSurface(
 				surfaceId,
-				snapshot.desks[this.scope.deskId]?.[surfaceId] ?? EMPTY_ZONES,
+				snapshot.desks[this.scope.deskId]?.[surfaceId] ?? EMPTY_SURFACE,
 				loadVersion,
 			);
 		}
@@ -329,13 +338,13 @@ export class VirtualPlaybackZonesController {
 
 	private storeSurface(
 		surfaceId: string,
-		zones: readonly VirtualPlaybackZone[],
+		surface: VirtualPlaybackExclusionSurface,
 		version: number,
 	) {
 		const previous = this.surfaceCache.get(surfaceId);
 		this.surfaceVersions.set(surfaceId, version);
-		if (previous && sameZones(previous, zones)) return;
-		this.surfaceCache.set(surfaceId, zones);
+		if (previous && sameSurface(previous, surface)) return;
+		this.surfaceCache.set(surfaceId, surface);
 		this.notifySurface(surfaceId);
 	}
 
@@ -388,16 +397,23 @@ function asError(reason: unknown) {
 }
 
 const EMPTY_ZONES: readonly VirtualPlaybackZone[] = [];
+const EMPTY_SURFACE: VirtualPlaybackExclusionSurface = {
+	revision: 0,
+	pageMode: { type: "follow_main" },
+	zones: EMPTY_ZONES,
+};
 const noOp = () => {};
 
-function sameZones(
-	left: readonly VirtualPlaybackZone[],
-	right: readonly VirtualPlaybackZone[],
+function sameSurface(
+	left: VirtualPlaybackExclusionSurface,
+	right: VirtualPlaybackExclusionSurface,
 ) {
 	return (
-		left.length === right.length &&
-		left.every((zone, index) => {
-			const other = right[index];
+		left.revision === right.revision &&
+		samePageMode(left.pageMode, right.pageMode) &&
+		left.zones.length === right.zones.length &&
+		left.zones.every((zone, index) => {
+			const other = right.zones[index];
 			return (
 				other !== undefined &&
 				zone.id === other.id &&
@@ -407,4 +423,21 @@ function sameZones(
 			);
 		})
 	);
+}
+
+function samePageMode(
+	left: VirtualPlaybackSurfacePageMode,
+	right: VirtualPlaybackSurfacePageMode,
+) {
+	return (
+		left.type === right.type &&
+		(left.type !== "pinned" ||
+			(right.type === "pinned" && left.page === right.page))
+	);
+}
+
+function conflictStatus(reason: unknown) {
+	if (!reason || typeof reason !== "object") return null;
+	const status = (reason as { status?: unknown }).status;
+	return typeof status === "number" ? status : null;
 }
