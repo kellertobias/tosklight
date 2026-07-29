@@ -19,6 +19,33 @@ describe("Plan 76 initial Playback topology", () => {
     expect(result.cuelists).toHaveLength(7);
     expect(result.playbacks).toHaveLength(13);
     expect(result.playbacks.filter((item) => item.target.type === "group")).toHaveLength(6);
+    const start = result.cuelists.find((item) => item.name === "Start")!;
+    const startChanges = start.cues[0].changes as Array<{
+      attribute: string;
+      value: { value: number };
+    }>;
+    expect(startChanges.filter((change) => change.attribute === "intensity").length)
+      .toBeGreaterThan(0);
+    expect(startChanges.filter((change) => change.attribute === "intensity")
+      .every((change) => change.value.value === 1)).toBe(true);
+    for (const attribute of ["color.red", "color.green", "color.blue", "pan", "tilt"]) {
+      const values = startChanges
+        .filter((change) => change.attribute === attribute)
+        .map((change) => change.value.value);
+      expect(values.length).toBeGreaterThan(0);
+      expect(new Set(values)).toEqual(
+        new Set([attribute.startsWith("color.") ? 1 : 0.5]),
+      );
+    }
+    const hazer = result.cuelists.find((item) => item.name === "Hazer")!;
+    expect(hazer.cues[0].changes).toHaveLength(2);
+    expect(hazer.cues[0].changes.every((change: any) =>
+      change.attribute === "intensity" && change.value.value === 0.2)).toBe(true);
+    expect(result.playbacks.find((item) => item.name === "Hazer")).toMatchObject({
+      fader: "master",
+      has_fader: true,
+      go_activates: true,
+    });
     const chase = result.cuelists.find((item) => item.name === "ACL Chase")!;
     expect(chase).toMatchObject({
       mode: "chaser",

@@ -91,6 +91,7 @@ export async function installPlannedDemoGroups(
       return found;
     });
     await putPlannedDemoObject(api, showId, "group", spec.id, {
+      id: spec.id,
       name: spec.name,
       fixtures: targets,
       color: null,

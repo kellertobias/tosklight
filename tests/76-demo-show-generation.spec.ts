@@ -1,5 +1,10 @@
 import { expect, test } from "./bench/core/fixtures";
 import { activeShowId, loadCanonicalCopy } from "./support/catalog";
+import {
+  PLANNED_DEMO_BENCHMARK_ASSIGNMENTS,
+  PLANNED_DEMO_BENCHMARK_SPEED_GROUPS,
+  startPlannedDemoBenchmarkLook,
+} from "./support/plannedDemoBenchmark";
 import { generatePlannedDemo } from "./support/plannedDemoGenerator";
 
 test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from one manifest", async ({
@@ -78,4 +83,41 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
   const [storedLayout] = await api.showObjects<any>(showId, "user_layout");
   expect(storedLayout.body.desks.find((desk: any) => desk.name === "Programming")
     ?.panes.map((pane: any) => pane.kind)).toEqual(["fixtures", "stage", "dmx"]);
+
+  await api.openDefaultShow({ transition: "hold_current" });
+  await api.openShow(showId, { transition: "hold_current" });
+  expect(PLANNED_DEMO_BENCHMARK_ASSIGNMENTS.map((assignment) => assignment.name)).toEqual([
+    "ACL Chase",
+    "Show Wash Waterfall",
+    "Show Profile Circle",
+    "Show Profile PWM",
+    "Show LED Random",
+    "Show LED Random Strobe",
+    "Sunstrip Rain",
+    "Aux Show Profile Circle",
+    "Aux Show Profile PWM",
+    "Aux Show Wash Waterfall",
+    "Aux Show Wash Random",
+    "Aux Show LED Sinus",
+  ]);
+  expect(PLANNED_DEMO_BENCHMARK_SPEED_GROUPS).toEqual({
+    A: { bpm: 120, multiplier: 1, phaseOriginDegrees: 0 },
+    B: { bpm: 120, multiplier: 1, phaseOriginDegrees: 0 },
+    C: { bpm: 120, multiplier: 1, phaseOriginDegrees: 0 },
+    D: { bpm: 120, multiplier: 1, phaseOriginDegrees: 0 },
+    E: { bpm: 120, multiplier: 1, phaseOriginDegrees: 0 },
+  });
+  const runtime = await startPlannedDemoBenchmarkLook(api, showId);
+  const runtimeSummary = runtime.projections.map((projection: any) => ({
+    requested: projection.requested,
+    target: projection.target,
+    runtime: projection.runtime,
+  }));
+  expect(runtime.projections).toHaveLength(PLANNED_DEMO_BENCHMARK_ASSIGNMENTS.length);
+  expect(runtime.projections.every((projection: any) =>
+    projection.target === "cue_list"
+      ? projection.runtime?.enabled === true
+      : projection.target === "dynamic" && projection.runtime?.state === "active"),
+  JSON.stringify(runtimeSummary, null, 2))
+    .toBe(true);
 });

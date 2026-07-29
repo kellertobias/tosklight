@@ -560,11 +560,16 @@ pub(in crate::runtime) fn dynamic_target_lane_coverage(
         ..DynamicTargetLaneCoverage::default()
     };
     for target in targets {
-        let Some(fixture) = snapshot
-            .fixtures
-            .iter()
-            .find(|fixture| fixture.fixture_id == *target)
-        else {
+        let Some((fixture, head_index)) = snapshot.fixtures.iter().find_map(|fixture| {
+            if fixture.fixture_id == *target {
+                return Some((fixture, None));
+            }
+            fixture
+                .logical_heads
+                .iter()
+                .find(|head| head.fixture_id == *target)
+                .map(|head| (fixture, Some(head.head_index)))
+        }) else {
             coverage.missing_target_count += 1;
             coverage.skipped_address_count += definition.lanes.len();
             continue;
@@ -585,6 +590,7 @@ pub(in crate::runtime) fn dynamic_target_lane_coverage(
                     .definition
                     .heads
                     .iter()
+                    .filter(|head| head_index.is_none_or(|index| head.index == index))
                     .flat_map(|head| &head.parameters)
                     .any(|parameter| parameter.attribute == lane.attribute)
             })

@@ -60,9 +60,10 @@ export function plannedDemoDynamicDefinitions() {
 }
 
 export async function installPlannedDemoDynamics(api: ApiDriver, showId: string) {
-  const definitions = plannedDemoDynamicDefinitions();
-  for (const dynamicDefinition of definitions)
-    await api.request(
+  const requestedDefinitions = plannedDemoDynamicDefinitions();
+  const definitions = [];
+  for (const dynamicDefinition of requestedDefinitions) {
+    const created = await api.request<{ object: { body: any } }>(
       "POST",
       "/api/v2/dynamics/create",
       { request_id: crypto.randomUUID(), definition: dynamicDefinition },
@@ -70,6 +71,8 @@ export async function installPlannedDemoDynamics(api: ApiDriver, showId: string)
       undefined,
       { showId },
     );
+    definitions.push(created.object.body);
+  }
   const [page] = await api.showObjects<any>(showId, "playback_page");
   if (!page) throw new Error("Plan 76 Busking Playback page is missing");
   const virtual_playbacks = Object.fromEntries(definitions.map((dynamicDefinition, index) => {
@@ -232,7 +235,7 @@ function dynamicPlayback(number: number, dynamicDefinition: any) {
         crossfade_non_intensity: false,
         auto_off_at_zero: false,
         auto_off_flash_release: false,
-        auto_off_full_control: true,
+        auto_off_full_control: false,
       },
     },
     buttons: ["off", "pause", "flash"],

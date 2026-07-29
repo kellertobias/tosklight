@@ -233,6 +233,38 @@ fn dynamic_coverage_reports_supported_skipped_missing_and_unpatched_addresses() 
     );
 }
 
+#[test]
+fn dynamic_coverage_resolves_persisted_logical_head_targets() {
+    let fixture_id = light_core::FixtureId::new();
+    let head_id = light_core::FixtureId::new();
+    let mut fixture = projection_fixture(fixture_id, true, &["intensity"]);
+    fixture.definition.heads[0].index = 7;
+    fixture.logical_heads.push(light_fixture::PatchedHead {
+        profile_head_id: None,
+        head_index: 7,
+        fixture_id: head_id,
+    });
+    let definition = dynamic_definition(head_id);
+    let snapshot = EngineSnapshot {
+        fixtures: vec![fixture].into(),
+        ..EngineSnapshot::default()
+    };
+
+    let coverage = dynamic_target_lane_coverage(&snapshot, &definition, &[head_id]);
+
+    assert_eq!(
+        coverage,
+        DynamicTargetLaneCoverage {
+            compatible_target_count: 1,
+            missing_target_count: 0,
+            unpatched_target_count: 0,
+            supported_address_count: 1,
+            skipped_address_count: 0,
+            total_address_count: 1,
+        }
+    );
+}
+
 fn test_scope() -> PlaybackShowScope {
     PlaybackShowScope {
         show_id: uuid::Uuid::from_u128(1),
