@@ -9,7 +9,8 @@ If the usage drops below 50%, wrap up and give me a summary.
 
 ## Status
 
-**PENDING AFTER THE THREE-TIER DEMO AND BENCHMARK SHOWS.** This plan retains the refactor, settings,
+**DOING AFTER THE THREE-TIER DEMO AND BENCHMARK SHOWS.** Claimed on 2026-07-29
+with 91% large-window usage remaining. This plan retains the refactor, settings,
 implementation evidence, and acceptance contract for the Stage visualizer embedded in
 ToskLight. Work completed while this plan was previously claimed remains valid; the plan was
 returned to `pending/` when the queue was reordered so Dynamics, Dedicated Virtual Playbacks and
