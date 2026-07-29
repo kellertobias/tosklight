@@ -2,7 +2,9 @@ import {
   controlSurfaceOscPaths,
   type ProgrammerControlAction,
 } from "@tosklight/ui/control-surface-contracts";
+import { useRef } from "react";
 import { ControlButton } from "../../components/ControlButton";
+import { actionRequestId } from "../../controller/actionRequestId";
 import type { SendControl } from "../../controller/types";
 
 interface NavigationRailProps {
@@ -11,14 +13,28 @@ interface NavigationRailProps {
 }
 
 export function NavigationRail({ page, send }: NavigationRailProps) {
+  const programmerActionIds = useRef(
+    new Map<ProgrammerControlAction, string>(),
+  );
+  const sendProgrammerAction = (
+    action: ProgrammerControlAction,
+    down: boolean,
+  ) => {
+    const requestId = down
+      ? actionRequestId()
+      : programmerActionIds.current.get(action) ?? actionRequestId();
+    if (down) programmerActionIds.current.set(action, requestId);
+    else programmerActionIds.current.delete(action);
+    send(controlSurfaceOscPaths.programmer(action), [down, requestId]);
+  };
   const programmerKey = (label: "ESCAPE" | "MENU" | "PROG-PLAYBACK") => {
     const action = label.toLowerCase() as ProgrammerControlAction;
     return (
       <ControlButton
         className={`key-${action}`}
         label={label}
-        onDown={() => send(controlSurfaceOscPaths.programmer(action), [true])}
-        onUp={() => send(controlSurfaceOscPaths.programmer(action), [false])}
+        onDown={() => sendProgrammerAction(action, true)}
+        onUp={() => sendProgrammerAction(action, false)}
       />
     );
   };

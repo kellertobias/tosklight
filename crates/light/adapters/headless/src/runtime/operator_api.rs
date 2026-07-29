@@ -58,7 +58,7 @@ pub(super) async fn diagnostics(
     let route_send_errors = state.output.route_send_errors();
     let output_routes = NetworkOutput::route_diagnostics(&state.output.snapshot().routes);
     let output_bind_ip = state.installation.configuration().output_bind_ip;
-    let visualization = state.output.visualization_metrics();
+    let visualization = runtime_visualization_diagnostics(&state);
     Ok(Json(wire::RuntimeDiagnosticsSnapshot {
         output: runtime_wire::output_health(state.output.health_snapshot()),
         output_bind_ip: output_bind_ip.to_string(),
@@ -78,30 +78,49 @@ pub(super) async fn diagnostics(
         snapshot_revision: state.output.snapshot().revision,
         programmer_action_timing: serde_json::to_value(state.action_timing.snapshot())
             .map_err(|error| ApiError::internal(error.to_string()))?,
-        visualization: wire::RuntimeVisualizationDiagnostics {
-            normal_subscribers: visualization.normal_subscribers,
-            preload_subscribers: visualization.preload_subscribers,
-            projections: visualization.projections,
-            projection_micros: visualization.projection_micros,
-            payload_bytes: visualization.payload_bytes,
-            source_age_millis: visualization.source_age_millis,
-            skipped_source_frames: visualization.skipped_source_frames,
-            snapshot_requests: visualization.snapshot_requests,
-            snapshot_projection_micros: visualization.snapshot_projection_micros,
-            snapshot_serialization_micros: visualization.snapshot_serialization_micros,
-            snapshot_payload_bytes: visualization.snapshot_payload_bytes,
-            snapshot_source_frame: visualization.snapshot_source_frame,
-            snapshot_source_age_millis: visualization.snapshot_source_age_millis,
-            stream_serializations: visualization.stream_serializations,
-            stream_serialization_micros: visualization.stream_serialization_micros,
-            stream_payload_bytes: visualization.stream_payload_bytes,
-            stream_sends: visualization.stream_sends,
-            stream_send_micros: visualization.stream_send_micros,
-            stream_send_failures: visualization.stream_send_failures,
-            stream_queue_depth: visualization.stream_queue_depth,
-            stream_queue_drops: visualization.stream_queue_drops,
-        },
+        visualization,
     }))
+}
+
+pub(super) async fn performance_diagnostics(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<wire::RuntimePerformanceDiagnosticsSnapshot>, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    let _ = state.output.resolved_values();
+    Ok(Json(wire::RuntimePerformanceDiagnosticsSnapshot {
+        output: runtime_wire::output_health(state.output.health_snapshot()),
+        programmer_action_timing: serde_json::to_value(state.action_timing.snapshot())
+            .map_err(|error| ApiError::internal(error.to_string()))?,
+        visualization: runtime_visualization_diagnostics(&state),
+    }))
+}
+
+fn runtime_visualization_diagnostics(state: &AppState) -> wire::RuntimeVisualizationDiagnostics {
+    let visualization = state.output.visualization_metrics();
+    wire::RuntimeVisualizationDiagnostics {
+        normal_subscribers: visualization.normal_subscribers,
+        preload_subscribers: visualization.preload_subscribers,
+        projections: visualization.projections,
+        projection_micros: visualization.projection_micros,
+        payload_bytes: visualization.payload_bytes,
+        source_age_millis: visualization.source_age_millis,
+        skipped_source_frames: visualization.skipped_source_frames,
+        snapshot_requests: visualization.snapshot_requests,
+        snapshot_projection_micros: visualization.snapshot_projection_micros,
+        snapshot_serialization_micros: visualization.snapshot_serialization_micros,
+        snapshot_payload_bytes: visualization.snapshot_payload_bytes,
+        snapshot_source_frame: visualization.snapshot_source_frame,
+        snapshot_source_age_millis: visualization.snapshot_source_age_millis,
+        stream_serializations: visualization.stream_serializations,
+        stream_serialization_micros: visualization.stream_serialization_micros,
+        stream_payload_bytes: visualization.stream_payload_bytes,
+        stream_sends: visualization.stream_sends,
+        stream_send_micros: visualization.stream_send_micros,
+        stream_send_failures: visualization.stream_send_failures,
+        stream_queue_depth: visualization.stream_queue_depth,
+        stream_queue_drops: visualization.stream_queue_drops,
+    }
 }
 pub(super) async fn bootstrap_v2(
     State(state): State<AppState>,

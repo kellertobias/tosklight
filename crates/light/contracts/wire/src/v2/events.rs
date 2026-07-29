@@ -360,6 +360,9 @@ pub struct DeskActionNotification {
     pub action: Option<String>,
     pub control: Option<String>,
     pub value: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub request_id: Option<String>,
     pub session_id: Option<String>,
     pub desk_id: Option<String>,
     pub desk_alias: Option<String>,

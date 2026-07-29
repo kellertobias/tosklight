@@ -259,6 +259,14 @@ pub struct RuntimeDiagnosticsSnapshot {
     pub visualization: RuntimeVisualizationDiagnostics,
 }
 
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
+pub struct RuntimePerformanceDiagnosticsSnapshot {
+    pub output: RuntimeOutputHealth,
+    #[ts(type = "unknown")]
+    pub programmer_action_timing: serde_json::Value,
+    pub visualization: RuntimeVisualizationDiagnostics,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

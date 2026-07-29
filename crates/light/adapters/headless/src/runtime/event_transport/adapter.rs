@@ -447,6 +447,7 @@ fn wire_operator_notification(
                 action: notification.action.clone(),
                 control: notification.control.clone(),
                 value: notification.value.clone(),
+                request_id: notification.request_id.clone(),
                 session_id: notification.session_id.clone(),
                 desk_id: notification.desk_id.clone(),
                 desk_alias: notification.desk_alias.clone(),

@@ -31,6 +31,8 @@ function event(
 					action: (payload.action as string | undefined) ?? null,
 					control: (payload.control as string | undefined) ?? null,
 					value: (payload.value as string | undefined) ?? null,
+					request_id:
+						(payload.request_id as string | undefined) ?? null,
 					session_id: (payload.session_id as string | undefined) ?? null,
 					desk_id: (payload.desk_id as string | undefined) ?? null,
 					desk_alias: (payload.desk_alias as string | undefined) ?? null,
@@ -334,8 +336,20 @@ describe("server event routing", () => {
 		try {
 			for (const payload of [
 				{ control: "nav", value: "down", desk_alias: "other" },
+				{
+					control: "nav",
+					value: "down",
+					desk_alias: "main",
+					session_id: "another-session",
+					desk_id: "another-desk",
+				},
 				{ control: "nav", value: "down", desk_alias: "main" },
-				{ control: "encode/2", value: "press", desk_alias: "main" },
+				{
+					control: "encode/2",
+					value: "press",
+					request_id: "hardware-encoder-2",
+					desk_alias: "main",
+				},
 			])
 				routeOperatorEvent(
 					event("desk_action", payload),
@@ -344,7 +358,12 @@ describe("server event routing", () => {
 				);
 			expect(received).toEqual([
 				{ control: "nav", value: "down", desk_alias: "main" },
-				{ control: "encode/2", value: "press", desk_alias: "main" },
+				{
+					control: "encode/2",
+					value: "press",
+					request_id: "hardware-encoder-2",
+					desk_alias: "main",
+				},
 			]);
 		} finally {
 			window.removeEventListener("light:encoder-action", listener);

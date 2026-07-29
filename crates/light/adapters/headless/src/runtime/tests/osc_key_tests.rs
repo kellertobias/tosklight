@@ -43,6 +43,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     assert_eq!(timing.len(), 1);
     assert_eq!(timing[0].source, "osc");
     assert_eq!(timing[0].request_id, "hardware-set-1");
+    assert!(!timing[0].requires_output_frame);
     assert!(timing[0].acknowledgement_within_budget);
     assert!(state.integrations.captured_osc_feedback().iter().any(
         |(_, address, arguments)| {
@@ -56,7 +57,47 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         event.kind == "desk_action"
             && event.payload["action"] == "set"
             && event.payload["session_id"] == serde_json::json!(session.id)
+            && event.payload["request_id"] == "hardware-set-1"
     }));
+    handle_control_event(
+        &state,
+        ControlEvent::Osc {
+            address: "/light/main/encode/2".into(),
+            arguments: vec![
+                OscArgument::String("up".into()),
+                OscArgument::String("hardware-encoder-1".into()),
+            ],
+            source: Some("127.0.0.1:9010".into()),
+        },
+    );
+    assert_eq!(
+        state.action_timing.snapshot().len(),
+        1,
+        "encoder timing remains pending until its correlated WebSocket action"
+    );
+    assert!(state.events.audit_events().iter().any(|event| {
+        event.kind == "desk_action"
+            && event.payload["control"] == "encode/2"
+            && event.payload["request_id"] == "hardware-encoder-1"
+            && event.payload["session_id"] == serde_json::json!(session.id)
+            && event.payload["desk_id"] == serde_json::json!(session.desk.id)
+    }));
+    handle_control_event(
+        &state,
+        ControlEvent::Osc {
+            address: "/light/main/programmer/set".into(),
+            arguments: vec![
+                OscArgument::Bool(false),
+                OscArgument::String("hardware-set-1".into()),
+            ],
+            source: Some("127.0.0.1:9010".into()),
+        },
+    );
+    assert_eq!(
+        state.action_timing.snapshot().len(),
+        1,
+        "Programmer key release is not measured as another action"
+    );
     state
         .programming
         .set_command_line(session.id, "COPY".into());

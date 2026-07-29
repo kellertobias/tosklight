@@ -90,8 +90,9 @@ export class DynamicsApiClient {
 	offLive(
 		controllerId: string,
 		timing: DynamicValueTimingProjection = NO_TIMING,
+		suppliedRequestId?: string,
 	): Promise<DynamicInstanceActionOutcome> {
-		const requestId = crypto.randomUUID();
+		const requestId = suppliedRequestId ?? crypto.randomUUID();
 		const request: DynamicOffActionRequest = {
 			request_id: requestId,
 			timing,
@@ -128,8 +129,9 @@ export class DynamicsApiClient {
 		field: "size" | "speed" | "phase",
 		value: number,
 		undoGroup?: string,
+		suppliedRequestId?: string,
 	): Promise<DynamicControllerActionOutcome> {
-		const requestId = crypto.randomUUID();
+		const requestId = suppliedRequestId ?? crypto.randomUUID();
 		const request: DynamicControllerValueActionRequest = {
 			request_id: requestId,
 			value,

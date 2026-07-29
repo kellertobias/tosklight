@@ -406,7 +406,7 @@ export type FixtureLibraryNotificationKind = "library" | "profile";
 export type FixtureLibraryNotification = { revision: number, kind: FixtureLibraryNotificationKind, };
 export type MediaNotificationKind = "thumbnails_refreshed" | "preview_refreshed" | "server_offline";
 export type MediaNotification = { revision: number, kind: MediaNotificationKind, };
-export type DeskActionNotification = { action: string | null, control: string | null, value: string | null, session_id: string | null, desk_id: string | null, desk_alias: string | null, };
+export type DeskActionNotification = { action: string | null, control: string | null, value: string | null, request_id?: string | null, session_id: string | null, desk_id: string | null, desk_alias: string | null, };
 export type FileInputNotification = { action: string, instance_id: string, session_id: string, source_session_id: string | null, desk_id: string | null, operation: string | null, source: string | null, };
 export type FileOperationItemNotification = { source_root_id: string, source: string, destination_root_id: string | null, destination: string | null, status: string, error: string | null, };
 export type FileOperationNotification = { operation: string, items: Array<FileOperationItemNotification>, };
@@ -628,6 +628,7 @@ active_programmers: unknown[], highlight_states: Array<RuntimeBootstrapHighlight
 export type RuntimeReadinessSnapshot = { status: string, active_show: string | null, active_show_error: string | null, recovery_mode: boolean, snapshot_revision: number, };
 export type RuntimeVisualizationDiagnostics = { normal_subscribers: number, preload_subscribers: number, projections: number, projection_micros: number, payload_bytes: number, source_age_millis: number, skipped_source_frames: number, snapshot_requests: number, snapshot_projection_micros: number, snapshot_serialization_micros: number, snapshot_payload_bytes: number, snapshot_source_frame: number, snapshot_source_age_millis: number, stream_serializations: number, stream_serialization_micros: number, stream_payload_bytes: number, stream_sends: number, stream_send_micros: number, stream_send_failures: number, stream_queue_depth: number, stream_queue_drops: number, };
 export type RuntimeDiagnosticsSnapshot = { output: RuntimeOutputHealth, output_bind_ip: string, output_routes: unknown, route_send_errors: unknown, active_programmers: unknown, active_playbacks: unknown, move_in_black: unknown, timecode_source: string | null, media_servers: unknown, snapshot_revision: number, programmer_action_timing: unknown, visualization: RuntimeVisualizationDiagnostics, };
+export type RuntimePerformanceDiagnosticsSnapshot = { output: RuntimeOutputHealth, programmer_action_timing: unknown, visualization: RuntimeVisualizationDiagnostics, };
 export type ScreenPlaybackSurfaceRow = { first_playback_slot: number, has_fader: boolean, button_count: number, };
 export type ScreenPlaybackSurfaceLayout = { playbacks_per_row: number, rows: Array<ScreenPlaybackSurfaceRow>, };
 export type ScreenPageMode = "follow_main" | "independent";

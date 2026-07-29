@@ -12,14 +12,15 @@ use light_wire::v2::{
     preload_lifecycle::ProgrammingPreloadLifecycleAction,
 };
 
+#[cfg(test)]
 pub(super) fn dispatch_live_action(
     state: &AppState,
     session: &Session,
     frame: LiveActionFrame,
 ) -> WsResponse {
-    let timing = begin_live_action_timing(state, &frame);
+    let timing = begin_live_action_timing(state, session, &frame);
     let response = dispatch_live_action_inner(state, session, frame, false);
-    acknowledge_live_action(timing, response)
+    acknowledge_live_action(state, timing, response)
 }
 
 /// Production Dynamic actions wait for the current active-show operation
@@ -29,14 +30,18 @@ pub(super) async fn dispatch_live_action_live(
     session: &Session,
     frame: LiveActionFrame,
 ) -> WsResponse {
-    let timing = begin_live_action_timing(state, &frame);
+    let timing = begin_live_action_timing(state, session, &frame);
     if !is_dynamic_action(&frame.action) {
         let response = dispatch_live_action_inner(state, session, frame, false);
-        return acknowledge_live_action(timing, response);
+        return acknowledge_live_action(state, timing, response);
     }
     let revision = state.output.snapshot().revision;
     if let Err(error) = validate_frame(state, session, &frame) {
-        return acknowledge_live_action(timing, failed_response(frame.request_id, revision, error));
+        return acknowledge_live_action(
+            state,
+            timing,
+            failed_response(frame.request_id, revision, error),
+        );
     }
     let show_before = state.active_show.current().as_ref().map(|show| show.id);
     let activation = state.active_show.acquire().await;
@@ -44,6 +49,7 @@ pub(super) async fn dispatch_live_action_live(
     if show_before != show_after {
         drop(activation);
         return acknowledge_live_action(
+            state,
             timing,
             failed_response(
                 frame.request_id,
@@ -55,15 +61,17 @@ pub(super) async fn dispatch_live_action_live(
     }
     let response = dispatch_live_action_inner(state, session, frame, true);
     drop(activation);
-    acknowledge_live_action(timing, response)
+    acknowledge_live_action(state, timing, response)
 }
 
 fn begin_live_action_timing(
     state: &AppState,
+    session: &Session,
     frame: &LiveActionFrame,
 ) -> Option<ActionTimingReceipt> {
     let (action, may_change_output) = programmer_action_timing(&frame.action)?;
-    Some(state.action_timing.begin(
+    Some(state.action_timing.begin_or_resume(
+        session.id.0.to_string(),
         "websocket",
         action,
         frame.request_id.clone(),
@@ -73,11 +81,21 @@ fn begin_live_action_timing(
 }
 
 fn acknowledge_live_action(
+    state: &AppState,
     timing: Option<ActionTimingReceipt>,
     mut response: WsResponse,
 ) -> WsResponse {
     if let Some(timing) = timing {
-        response.action_timing = Some(timing.acknowledge(response.ok));
+        let (projection, osc_feedback) = timing.acknowledge_with_osc_feedback(response.ok);
+        if let Some(osc_feedback) = osc_feedback {
+            send_action_timing_feedback(
+                state,
+                &osc_feedback.desk_alias,
+                osc_feedback.target,
+                &projection,
+            );
+        }
+        response.action_timing = Some(projection);
     }
     response
 }

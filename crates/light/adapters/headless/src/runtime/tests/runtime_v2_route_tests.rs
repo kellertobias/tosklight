@@ -126,6 +126,25 @@ async fn runtime_v2_preserves_diagnostics_auth_and_recovery_reporting() {
         .unwrap();
     assert_eq!(diagnostics.status(), StatusCode::OK);
     assert!(json(diagnostics).await["snapshot_revision"].is_number());
+    let performance = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v2/diagnostics/performance")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(performance.status(), StatusCode::OK);
+    let performance = json(performance).await;
+    assert!(performance["output"].is_object());
+    assert!(performance["programmer_action_timing"].is_array());
+    assert!(performance["visualization"].is_object());
+    assert!(
+        performance.get("active_programmers").is_none(),
+        "the bounded performance route must not serialize active Programmer state"
+    );
 
     let (_, readiness) = get_json(&app, "/api/v2/readiness").await;
     assert_eq!(readiness["recovery_mode"], true);

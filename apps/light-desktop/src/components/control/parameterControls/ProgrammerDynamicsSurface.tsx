@@ -377,7 +377,7 @@ function useSelectedController(
 		return gesture.current.id;
 	}, []);
 	const update = useCallback(
-		async (field: ControllerValueField, value: number) => {
+		async (field: ControllerValueField, value: number, requestId?: string) => {
 			if (!actions || !selected) return;
 			const controllerId = selected.controller.controller_id;
 			const writeKey = `${controllerId}:${field}`;
@@ -394,6 +394,7 @@ function useSelectedController(
 					field,
 					value,
 					groupFor(field),
+					requestId,
 				);
 				await refresh();
 			} catch (cause) {
@@ -409,11 +410,15 @@ function useSelectedController(
 		},
 		[actions, groupFor, refresh, selected, setError],
 	);
-	const off = useCallback(async () => {
+	const off = useCallback(async (requestId?: string) => {
 		if (!actions || !selected) return;
 		setError(null);
 		try {
-			await actions.dynamics.offLive(selected.controller.controller_id);
+			await actions.dynamics.offLive(
+				selected.controller.controller_id,
+				undefined,
+				requestId,
+			);
 			await refresh();
 		} catch (cause) {
 			setError(cause instanceof Error ? cause.message : String(cause));
@@ -441,14 +446,23 @@ function useHardwareControllerActions(
 	selected: DynamicControllerChoice | null,
 	cycleChoice: (delta: number) => void,
 	cycleLane: (delta: number) => void,
-	update: (field: ControllerValueField, value: number) => Promise<void>,
-	off: () => Promise<void>,
+	update: (
+		field: ControllerValueField,
+		value: number,
+		requestId?: string,
+	) => Promise<void>,
+	off: (requestId?: string) => Promise<void>,
 ) {
 	useEffect(() => {
 		if (!hardwareConnected || !selected) return;
 		const handle = (event: Event) => {
-			const detail = (event as CustomEvent<{ control: string; value?: string }>)
-				.detail;
+			const detail = (
+				event as CustomEvent<{
+					control: string;
+					value?: string;
+					request_id?: string;
+				}>
+			).detail;
 			const slot = Number(detail.control.split("/")[1]);
 			const direction =
 				detail.value === "up" || detail.value === "right"
@@ -462,6 +476,7 @@ function useHardwareControllerActions(
 				void update(
 					"size",
 					clamp(selected.controller.size + direction * 0.01, 0, 2),
+					detail.request_id,
 				);
 			else if (slot === 4 && direction)
 				void update(
@@ -471,6 +486,7 @@ function useHardwareControllerActions(
 						0.0625,
 						16,
 					),
+					detail.request_id,
 				);
 			else if (slot === 5 && direction)
 				void update(
@@ -480,8 +496,10 @@ function useHardwareControllerActions(
 						-360,
 						360,
 					),
+					detail.request_id,
 				);
-			else if (slot === 6 && detail.value === "press") void off();
+			else if (slot === 6 && detail.value === "press")
+				void off(detail.request_id);
 		};
 		window.addEventListener("light:encoder-action", handle);
 		return () => window.removeEventListener("light:encoder-action", handle);

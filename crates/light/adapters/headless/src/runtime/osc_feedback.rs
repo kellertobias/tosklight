@@ -1,5 +1,27 @@
 use super::*;
 
+pub(super) fn send_action_timing_feedback(
+    state: &AppState,
+    desk_alias: &str,
+    target: SocketAddr,
+    timing: &ActionTimingProjection,
+) {
+    send_osc(
+        state,
+        target,
+        format!("/light/{desk_alias}/feedback/action"),
+        vec![
+            OscArgument::String(timing.request_id.clone()),
+            OscArgument::Bool(timing.succeeded),
+            OscArgument::Int(i32::try_from(timing.received_output_tick).unwrap_or(i32::MAX)),
+            OscArgument::Int(i32::try_from(timing.acknowledged_output_tick).unwrap_or(i32::MAX)),
+            OscArgument::Int(i32::from(timing.output_frame_hz)),
+            OscArgument::Int(i32::try_from(timing.budget_ticks).unwrap_or(i32::MAX)),
+            OscArgument::Bool(timing.acknowledgement_within_budget),
+        ],
+    );
+}
+
 pub(super) fn handle_timing_osc(state: &AppState, address: &str, arguments: &[OscArgument]) {
     let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
     let numeric = arguments.first().and_then(|v| match v {
@@ -74,7 +96,12 @@ pub(super) fn handle_timing_osc(state: &AppState, address: &str, arguments: &[Os
     }
 }
 
-pub(super) fn handle_encoder_osc(state: &AppState, address: &str, arguments: &[OscArgument]) {
+pub(super) fn handle_encoder_osc(
+    state: &AppState,
+    address: &str,
+    arguments: &[OscArgument],
+    source: Option<&str>,
+) {
     let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
     let value = arguments.first().and_then(|argument| match argument {
         OscArgument::String(value) => Some(value.as_str()),
@@ -97,10 +124,29 @@ pub(super) fn handle_encoder_osc(state: &AppState, address: &str, arguments: &[O
     } else {
         return;
     };
+    let request_id = arguments.get(1).and_then(|argument| match argument {
+        OscArgument::String(value) if !value.trim().is_empty() => Some(value),
+        _ => None,
+    });
+    let source = source.and_then(|value| value.parse::<SocketAddr>().ok());
+    let Some((subscriber, session)) = programmer_osc_session(state, source) else {
+        return;
+    };
+    if !subscriber.desk_alias.eq_ignore_ascii_case(parts[1]) {
+        return;
+    }
     emit(
         state,
         "desk_action",
-        serde_json::json!({"desk_alias":parts[1],"control":control,"value":value,"source":"osc"}),
+        serde_json::json!({
+            "desk_alias":parts[1],
+            "desk_id":session.desk.id,
+            "session_id":session.id,
+            "request_id":request_id,
+            "control":control,
+            "value":value,
+            "source":"osc"
+        }),
     );
 }
 

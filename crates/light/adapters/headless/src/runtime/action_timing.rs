@@ -2,6 +2,7 @@ use super::*;
 
 const MEASUREMENT_CAPACITY: usize = 2_048;
 const OUTPUT_EPOCH_CAPACITY: usize = 2_048;
+const CAUSAL_ORIGIN_TTL: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Debug, Serialize)]
 pub(super) struct ActionTimingProjection {
@@ -16,6 +17,7 @@ pub(super) struct ActionTimingProjection {
     pub(super) first_output_wall_micros: Option<u64>,
     pub(super) output_frame_hz: u16,
     pub(super) budget_ticks: u64,
+    pub(super) requires_output_frame: bool,
     pub(super) acknowledgement_within_budget: bool,
     pub(super) output_within_budget: Option<bool>,
     pub(super) succeeded: bool,
@@ -32,6 +34,22 @@ struct ActionTimingInner {
     visibility_epoch: AtomicU64,
     measurements: Mutex<VecDeque<ActionMeasurement>>,
     output_epochs: Mutex<VecDeque<OutputEpoch>>,
+    causal_origins: Mutex<HashMap<(String, String), CausalOrigin>>,
+}
+
+struct CausalOrigin {
+    action_id: u64,
+    source: String,
+    received_output_tick: u64,
+    received_at: Instant,
+    output_frame_hz: u16,
+    osc_feedback: OscActionFeedback,
+}
+
+#[derive(Clone)]
+pub(super) struct OscActionFeedback {
+    pub(super) desk_alias: String,
+    pub(super) target: SocketAddr,
 }
 
 struct ActionMeasurement {
@@ -45,6 +63,7 @@ struct ActionMeasurement {
     acknowledged_at: Instant,
     output_frame_hz: u16,
     visibility_epoch: Option<u64>,
+    requires_output_frame: bool,
     succeeded: bool,
 }
 
@@ -65,6 +84,7 @@ pub(super) struct ActionTimingReceipt {
     received_at: Instant,
     output_frame_hz: u16,
     may_change_output: bool,
+    osc_feedback: Option<OscActionFeedback>,
 }
 
 #[derive(Clone, Copy)]
@@ -82,6 +102,7 @@ impl Default for ActionTimingResource {
                 visibility_epoch: AtomicU64::new(0),
                 measurements: Mutex::new(VecDeque::with_capacity(MEASUREMENT_CAPACITY)),
                 output_epochs: Mutex::new(VecDeque::with_capacity(OUTPUT_EPOCH_CAPACITY)),
+                causal_origins: Mutex::new(HashMap::new()),
             }),
         }
     }
@@ -106,6 +127,70 @@ impl ActionTimingResource {
             received_at: Instant::now(),
             output_frame_hz: output_frame_hz.max(1),
             may_change_output,
+            osc_feedback: None,
+        }
+    }
+
+    pub(super) fn begin_causal_origin(
+        &self,
+        session_id: impl Into<String>,
+        source: impl Into<String>,
+        request_id: impl Into<String>,
+        output_frame_hz: u16,
+        osc_feedback: OscActionFeedback,
+    ) {
+        let now = Instant::now();
+        let key = (session_id.into(), request_id.into());
+        let mut origins = self.inner.causal_origins.lock();
+        origins.retain(|_, origin| now.duration_since(origin.received_at) <= CAUSAL_ORIGIN_TTL);
+        origins.entry(key).or_insert_with(|| CausalOrigin {
+            action_id: self.inner.next_action_id.fetch_add(1, Ordering::Relaxed) + 1,
+            source: source.into(),
+            received_output_tick: self.inner.output_tick.load(Ordering::Acquire),
+            received_at: now,
+            output_frame_hz: output_frame_hz.max(1),
+            osc_feedback,
+        });
+    }
+
+    pub(super) fn begin_or_resume(
+        &self,
+        session_id: impl Into<String>,
+        fallback_source: impl Into<String>,
+        action: impl Into<String>,
+        request_id: impl Into<String>,
+        output_frame_hz: u16,
+        may_change_output: bool,
+    ) -> ActionTimingReceipt {
+        let session_id = session_id.into();
+        let request_id = request_id.into();
+        let action = action.into();
+        let now = Instant::now();
+        let origin = {
+            let mut origins = self.inner.causal_origins.lock();
+            origins.retain(|_, origin| now.duration_since(origin.received_at) <= CAUSAL_ORIGIN_TTL);
+            origins.remove(&(session_id, request_id.clone()))
+        };
+        match origin {
+            Some(origin) => ActionTimingReceipt {
+                resource: self.clone(),
+                action_id: origin.action_id,
+                source: origin.source,
+                action,
+                request_id,
+                received_output_tick: origin.received_output_tick,
+                received_at: origin.received_at,
+                output_frame_hz: origin.output_frame_hz,
+                may_change_output,
+                osc_feedback: Some(origin.osc_feedback),
+            },
+            None => self.begin(
+                fallback_source,
+                action,
+                request_id,
+                output_frame_hz,
+                may_change_output,
+            ),
         }
     }
 
@@ -154,6 +239,13 @@ impl ActionTimingResource {
 
 impl ActionTimingReceipt {
     pub(super) fn acknowledge(self, succeeded: bool) -> ActionTimingProjection {
+        self.acknowledge_with_osc_feedback(succeeded).0
+    }
+
+    pub(super) fn acknowledge_with_osc_feedback(
+        self,
+        succeeded: bool,
+    ) -> (ActionTimingProjection, Option<OscActionFeedback>) {
         let acknowledged_at = Instant::now();
         let acknowledged_output_tick = self.resource.inner.output_tick.load(Ordering::Acquire);
         let visibility_epoch = (succeeded && self.may_change_output).then(|| {
@@ -174,6 +266,7 @@ impl ActionTimingReceipt {
             acknowledged_at,
             output_frame_hz: self.output_frame_hz,
             visibility_epoch,
+            requires_output_frame: self.may_change_output,
             succeeded,
         };
         let projection = measurement.projection(&[]);
@@ -182,7 +275,7 @@ impl ActionTimingReceipt {
             measurement,
             MEASUREMENT_CAPACITY,
         );
-        projection
+        (projection, self.osc_feedback)
     }
 }
 
@@ -216,6 +309,7 @@ impl ActionMeasurement {
             first_output_wall_micros,
             output_frame_hz: self.output_frame_hz,
             budget_ticks,
+            requires_output_frame: self.requires_output_frame,
             acknowledgement_within_budget,
             output_within_budget: self.visibility_epoch.and_then(|_| {
                 output.map(|epoch| {
@@ -280,6 +374,7 @@ mod tests {
         let completed = &timing.snapshot()[0];
         assert_eq!(completed.first_output_tick, Some(2));
         assert_eq!(completed.output_within_budget, Some(true));
+        assert!(completed.requires_output_frame);
     }
 
     #[test]
@@ -291,6 +386,37 @@ mod tests {
         let completed = &timing.snapshot()[0];
         assert_eq!(completed.first_output_tick, None);
         assert_eq!(completed.output_within_budget, None);
+        assert!(!completed.requires_output_frame);
         assert!(completed.acknowledgement_within_budget);
+    }
+
+    #[test]
+    fn websocket_action_resumes_only_the_matching_authenticated_origin() {
+        let timing = ActionTimingResource::default();
+        timing.begin_causal_origin(
+            "session-a",
+            "osc",
+            "encoder-1",
+            60,
+            OscActionFeedback {
+                desk_alias: "main".into(),
+                target: "127.0.0.1:9000".parse().unwrap(),
+            },
+        );
+        let other_session =
+            timing.begin_or_resume("session-b", "websocket", "values", "encoder-1", 60, true);
+        assert_eq!(other_session.source, "websocket");
+        other_session.acknowledge(true);
+
+        let resumed =
+            timing.begin_or_resume("session-a", "websocket", "values", "encoder-1", 60, true);
+        assert_eq!(resumed.source, "osc");
+        resumed.acknowledge(true);
+
+        let measurements = timing.snapshot();
+        assert_eq!(measurements.len(), 2);
+        assert_eq!(measurements[0].source, "websocket");
+        assert_eq!(measurements[1].source, "osc");
+        assert_eq!(measurements[1].request_id, "encoder-1");
     }
 }

@@ -39,6 +39,10 @@ fn operator_routes() -> Router<AppState> {
         .route("/assets/{*path}", get(operator_asset))
         .route("/api/v2/readiness", get(readiness))
         .route("/api/v2/diagnostics", get(diagnostics))
+        .route(
+            "/api/v2/diagnostics/performance",
+            get(performance_diagnostics),
+        )
         .route("/api/v2/bootstrap", get(bootstrap_v2))
 }
 

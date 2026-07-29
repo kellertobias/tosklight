@@ -153,7 +153,7 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
             handle_dynamics_osc(state, address, arguments, source.as_deref());
             handle_programmer_osc(state, address, arguments, source.as_deref());
             handle_timing_osc(state, address, arguments);
-            handle_encoder_osc(state, address, arguments);
+            handle_encoder_osc(state, address, arguments, source.as_deref());
         }
         send_osc_feedback(state, false);
         if let Some(action_timing) = action_timing {
@@ -197,22 +197,7 @@ struct AuthenticatedOscActionTiming {
 impl AuthenticatedOscActionTiming {
     fn acknowledge(self, state: &AppState) {
         let timing = self.receipt.acknowledge(true);
-        send_osc(
-            state,
-            self.feedback_target,
-            format!("/light/{}/feedback/action", self.desk_alias),
-            vec![
-                OscArgument::String(timing.request_id),
-                OscArgument::Bool(timing.succeeded),
-                OscArgument::Int(i32::try_from(timing.received_output_tick).unwrap_or(i32::MAX)),
-                OscArgument::Int(
-                    i32::try_from(timing.acknowledged_output_tick).unwrap_or(i32::MAX),
-                ),
-                OscArgument::Int(i32::from(timing.output_frame_hz)),
-                OscArgument::Int(i32::try_from(timing.budget_ticks).unwrap_or(i32::MAX)),
-                OscArgument::Bool(timing.acknowledgement_within_budget),
-            ],
-        );
+        send_action_timing_feedback(state, &self.desk_alias, self.feedback_target, &timing);
     }
 }
 
@@ -230,7 +215,12 @@ fn begin_authenticated_osc_programmer_timing(
         return None;
     }
     let (action, may_change_output) = match *capability {
-        "programmer" if !rest.is_empty() => ("programmer_key", true),
+        "programmer" if !rest.is_empty() && osc_pressed(arguments) => (
+            "programmer_key",
+            rest.first().is_some_and(|action| {
+                matches!(*action, "at" | "clear" | "enter" | "preload" | "undo")
+            }),
+        ),
         "dynamic" if !rest.is_empty() => ("dynamic", true),
         "encode" if !rest.is_empty() => ("encoder", false),
         "nav" => ("encoder", false),
@@ -250,6 +240,19 @@ fn begin_authenticated_osc_programmer_timing(
             _ => None,
         })
         .unwrap_or_else(|| format!("osc-{}", Uuid::new_v4()));
+    if action == "encoder" {
+        state.action_timing.begin_causal_origin(
+            subscriber.session_id.0.to_string(),
+            "osc",
+            request_id,
+            state.output.frame_rate_hz(),
+            OscActionFeedback {
+                desk_alias: (*desk_alias).to_owned(),
+                target: subscriber.target,
+            },
+        );
+        return None;
+    }
     Some(AuthenticatedOscActionTiming {
         receipt: state.action_timing.begin(
             "osc",

@@ -67,6 +67,33 @@ describe("hardware controls Programmer layout", () => {
     ]);
   });
 
+  it("reuses one request id across a Programmer key press and release", () => {
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    const send = vi.fn().mockResolvedValue(undefined);
+    const bridge: OscBridge = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      send,
+      listenFeedback: vi.fn().mockResolvedValue(() => undefined),
+    };
+    const { container } = render(<HardwareControlsApp bridge={bridge} />);
+    const key = container.querySelector(
+      '[data-keypad-key="1"]',
+    ) as HTMLButtonElement;
+
+    fireEvent.pointerDown(key, { pointerId: 1 });
+    fireEvent.pointerUp(key, { pointerId: 1 });
+
+    const programmerCalls = send.mock.calls.filter(
+      ([path]) => path === "programmer/digit-1",
+    );
+    expect(programmerCalls).toHaveLength(2);
+    expect(programmerCalls[0]?.[1]).toEqual([true, expect.any(String)]);
+    expect(programmerCalls[1]?.[1]).toEqual([
+      false,
+      programmerCalls[0]?.[1][1],
+    ]);
+  });
+
   it("uses the 2x2 command area for RECORD and PRELOAD GO and keeps equal adjacent fade faders", () => {
     const { container } = render(<HardwareControlsApp />);
     const commandGrid = container.querySelector(

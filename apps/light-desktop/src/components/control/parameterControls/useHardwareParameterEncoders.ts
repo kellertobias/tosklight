@@ -10,11 +10,13 @@ interface HardwareParameterActions {
 		attribute: string,
 		level: number,
 		undoGroup?: string | null,
+		requestId?: string,
 	): Promise<unknown>;
 	stepParameter(
 		attribute: string,
 		delta: number,
 		undoGroup?: string | null,
+		requestId?: string,
 	): Promise<unknown>;
 }
 
@@ -79,8 +81,12 @@ export function useHardwareParameterEncoders(
 		const handleEncoder = (event: Event) => {
 			const { projection, actions } = latest.current;
 			if (!actions.canWriteValues) return;
-			const { control, value } = (
-				event as CustomEvent<{ control: string; value?: string }>
+			const { control, value, request_id: requestId } = (
+				event as CustomEvent<{
+					control: string;
+					value?: string;
+					request_id?: string;
+				}>
 			).detail;
 			const attribute =
 				projection.encoderSlots[Number(control.split("/")[1]) - 1];
@@ -106,7 +112,12 @@ export function useHardwareParameterEncoders(
 				};
 			else undoGroup.current.lastSampleAt = now;
 			if (actions.relativeSteps) {
-				void actions.stepParameter(attribute, delta, undoGroup.current.id);
+				void actions.stepParameter(
+					attribute,
+					delta,
+					undoGroup.current.id,
+					requestId,
+				);
 				return;
 			}
 			const base =
@@ -123,6 +134,7 @@ export function useHardwareParameterEncoders(
 				attribute,
 				accumulated.current.value,
 				undoGroup.current.id,
+				requestId,
 			);
 		};
 		window.addEventListener("light:encoder-action", handleEncoder);

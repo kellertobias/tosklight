@@ -17,6 +17,7 @@ function routeDeskAction(
 		...(payload.action == null ? {} : { action: payload.action }),
 		...(payload.control == null ? {} : { control: payload.control }),
 		...(payload.value == null ? {} : { value: payload.value }),
+		...(payload.request_id == null ? {} : { request_id: payload.request_id }),
 		...(payload.session_id == null ? {} : { session_id: payload.session_id }),
 		...(payload.desk_id == null ? {} : { desk_id: payload.desk_id }),
 		...(payload.desk_alias == null ? {} : { desk_alias: payload.desk_alias }),
@@ -51,6 +52,9 @@ function routeDeskAction(
 	if (
 		payload.control &&
 		payload.desk_alias === session.desk.osc_alias &&
+		((!payload.session_id && !payload.desk_id) ||
+			payload.session_id === session.session_id ||
+			payload.desk_id === session.desk.id) &&
 		(payload.control.startsWith("encode/") || payload.control === "nav")
 	) {
 		window.dispatchEvent(new CustomEvent("light:encoder-action", { detail }));

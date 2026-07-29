@@ -468,11 +468,15 @@ describe("ParameterControls hardware encoders", () => {
 
 		window.dispatchEvent(
 			new CustomEvent("light:encoder-action", {
-				detail: { control: "encode/1", value: "up" },
+				detail: {
+					control: "encode/1",
+					value: "up",
+					request_id: "hardware-fine",
+				},
 			}),
 		);
 		expect(normalValuesActions.applyIntent).toHaveBeenLastCalledWith({
-			requestId: expect.any(String),
+			requestId: "hardware-fine",
 			fixtureIds: ["fixture-1"],
 			attribute: "intensity",
 			operation: { type: "relative_step", delta: 0.01 },
@@ -481,12 +485,16 @@ describe("ParameterControls hardware encoders", () => {
 		});
 		window.dispatchEvent(
 			new CustomEvent("light:encoder-action", {
-				detail: { control: "encode/1", value: "right" },
+				detail: {
+					control: "encode/1",
+					value: "right",
+					request_id: "hardware-coarse",
+				},
 			}),
 		);
 		await vi.waitFor(() =>
 			expect(normalValuesActions.applyIntent).toHaveBeenLastCalledWith({
-				requestId: expect.any(String),
+				requestId: "hardware-coarse",
 				fixtureIds: ["fixture-1"],
 				attribute: "intensity",
 				operation: { type: "relative_step", delta: 0.1 },
@@ -499,11 +507,15 @@ describe("ParameterControls hardware encoders", () => {
 		rendered.rerender(<ParameterControls />);
 		window.dispatchEvent(
 			new CustomEvent("light:encoder-action", {
-				detail: { control: "encode/1", value: "up" },
+				detail: {
+					control: "encode/1",
+					value: "up",
+					request_id: "hardware-preload",
+				},
 			}),
 		);
 		expect(preloadValuesActions.batch).toHaveBeenLastCalledWith({
-			requestId: expect.any(String),
+			requestId: "hardware-preload",
 			mutations: [
 				{
 					action: "set_fixture",

@@ -310,6 +310,7 @@ fn runtime(config: &Config) -> Vec<String> {
         RuntimeReadinessSnapshot::decl(config),
         RuntimeVisualizationDiagnostics::decl(config),
         RuntimeDiagnosticsSnapshot::decl(config),
+        RuntimePerformanceDiagnosticsSnapshot::decl(config),
     ]
 }
 

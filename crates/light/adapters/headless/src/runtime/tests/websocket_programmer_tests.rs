@@ -13,6 +13,27 @@ async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let session = authenticate_token(&state, &token).unwrap();
+    state.action_timing.begin_causal_origin(
+        session.id.0.to_string(),
+        "osc",
+        "home",
+        state.output.frame_rate_hz(),
+        OscActionFeedback {
+            desk_alias: "main".into(),
+            target: "127.0.0.1:9010".parse().unwrap(),
+        },
+    );
+    assert!(
+        !state
+            .integrations
+            .captured_osc_feedback()
+            .iter()
+            .any(|(_, address, arguments)| {
+                address == "/light/main/feedback/action"
+                    && arguments.first() == Some(&OscArgument::String("home".into()))
+            }),
+        "causal encoder feedback waits for the authoritative WebSocket action"
+    );
 
     let response = dispatch_live_action(
         &state,
@@ -42,10 +63,22 @@ async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
         .action_timing
         .expect("Programmer WebSocket acknowledgement carries timing");
     assert_eq!(timing.action, "values");
+    assert_eq!(timing.source, "osc");
     assert_eq!(timing.request_id, "home");
     assert_eq!(timing.budget_ticks, 2);
     assert!(timing.acknowledgement_within_budget);
     assert_eq!(timing.first_output_tick, None);
+    let feedback = state
+        .integrations
+        .captured_osc_feedback()
+        .into_iter()
+        .filter(|(_, address, arguments)| {
+            address == "/light/main/feedback/action"
+                && arguments.first() == Some(&OscArgument::String("home".into()))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(feedback.len(), 1);
+    assert_eq!(feedback[0].0, "127.0.0.1:9010".parse().unwrap());
     let output_tick = state.action_timing.begin_output_render();
     state.action_timing.complete_output_render(output_tick);
     let completed = state.action_timing.snapshot();

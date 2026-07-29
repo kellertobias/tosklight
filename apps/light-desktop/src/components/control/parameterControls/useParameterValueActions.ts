@@ -29,12 +29,20 @@ export function useParameterValueActions(projection: ParameterProjection) {
 	);
 	useStrictModeSafeStop(queue);
 	const canWriteValues = projection.programmerValuesReady && actions !== null;
-	const submit = (mutations: ReturnType<typeof setParameterMutations>) =>
-		submitParameterMutations(canWriteValues ? actions : null, mutations);
+	const submit = (
+		mutations: ReturnType<typeof setParameterMutations>,
+		requestId?: string,
+	) =>
+		submitParameterMutations(
+			canWriteValues ? actions : null,
+			mutations,
+			requestId ? () => requestId : undefined,
+		);
 	const applyParameter = (
 		attribute: string,
 		level: number,
 		undoGroup?: string | null,
+		requestId?: string,
 	) => {
 		if (
 			projection.programmerValuesRoute === "normal" &&
@@ -50,7 +58,7 @@ export function useParameterValueActions(projection: ParameterProjection) {
 						projection,
 						attribute,
 						{ kind: "normalized", value: level },
-						() => crypto.randomUUID(),
+						requestId ? () => requestId : undefined,
 						undoGroup,
 					) ?? Promise.resolve(null),
 			);
@@ -65,13 +73,14 @@ export function useParameterValueActions(projection: ParameterProjection) {
 		return queue.submitLatest(
 			parameterMutationKey(mutations),
 			JSON.stringify(mutations),
-			() => submit(mutations),
+			() => submit(mutations, requestId),
 		);
 	};
 	const stepParameter = (
 		attribute: string,
 		delta: number,
 		undoGroup?: string | null,
+		requestId?: string,
 	) =>
 		queue.submitBarrier(() =>
 			submitParameterStep(
@@ -79,7 +88,7 @@ export function useParameterValueActions(projection: ParameterProjection) {
 				projection,
 				attribute,
 				delta,
-				() => crypto.randomUUID(),
+				requestId ? () => requestId : undefined,
 				undoGroup,
 			),
 		);

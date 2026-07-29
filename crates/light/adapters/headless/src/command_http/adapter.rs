@@ -294,6 +294,7 @@ pub(crate) fn route_osc_command_key(
     session: &Session,
     desk_alias: &str,
     action: &str,
+    request_id: Option<&str>,
 ) -> bool {
     let Some(key) = osc_command_key(action) else {
         return false;
@@ -312,6 +313,7 @@ pub(crate) fn route_osc_command_key(
         session.id.0,
         ActionSource::Osc,
     );
+    let context = request_id.map_or(context.clone(), |id| context.with_request_id(id));
     let command = ProgrammingCommand::ApplyKey {
         key,
         phase: CommandKeyPhase::Press,

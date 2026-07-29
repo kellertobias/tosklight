@@ -291,6 +291,7 @@ pub struct DeskActionNotification {
     pub action: Option<String>,
     pub control: Option<String>,
     pub value: Option<String>,
+    pub request_id: Option<String>,
     pub session_id: Option<String>,
     pub desk_id: Option<String>,
     pub desk_alias: Option<String>,

@@ -11,6 +11,7 @@ import {
   oscProgrammerActionForKey,
   softwareKeyLabel,
 } from "@tosklight/ui/programmer-keypad";
+import { useRef } from "react";
 import { ControlButton } from "../components/ControlButton";
 import {
   darkLamp,
@@ -34,8 +35,14 @@ export function ProgrammerSurface({
   highlight,
   send,
 }: ProgrammerSurfaceProps) {
+  const actionIds = useRef(new Map<ProgrammerControlAction, string>());
   const action = (name: ProgrammerControlAction, down: boolean) => {
-    send(controlSurfaceOscPaths.programmer(name), [down, actionRequestId()]);
+    const requestId = down
+      ? actionRequestId()
+      : actionIds.current.get(name) ?? actionRequestId();
+    if (down) actionIds.current.set(name, requestId);
+    else actionIds.current.delete(name);
+    send(controlSurfaceOscPaths.programmer(name), [down, requestId]);
   };
 
   const renderKeypadSection = (section: NumericPadSection) =>
