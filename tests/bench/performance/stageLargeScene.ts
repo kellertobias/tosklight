@@ -68,11 +68,11 @@ export async function installDeterministicLargeStage(
 			`Large Stage has ${fixtureInstances} instances; expected ${LARGE_STAGE_FIXTURE_INSTANCES}`,
 		);
 	const plan = createLargeStageDynamicsPlan(after, largeScene);
-	for (const definition of plan.definitions) {
+	for (const activation of plan.activations) {
 		const created = await api.request<{ object: { id: string } }>(
 			"POST",
 			"/api/v2/dynamics/create",
-			{ request_id: crypto.randomUUID(), definition },
+			{ request_id: crypto.randomUUID(), definition: activation.definition },
 			true,
 			undefined,
 			{ showId: before.show_id },
@@ -81,7 +81,7 @@ export async function installDeterministicLargeStage(
 			"POST",
 			`/api/v2/dynamics/${encodeURIComponent(created.object.id)}/start`,
 			{
-				targets: [],
+				targets: activation.targets,
 				overrides: {
 					size: 1,
 					speed_multiplier: { numerator: 1, denominator: 1 },

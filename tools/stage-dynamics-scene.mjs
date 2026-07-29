@@ -35,30 +35,33 @@ export function createLargeStageDynamicsPlan(patch, largeScene) {
 		throw new Error(
 			`Large Stage has only ${descriptors.length} Dynamic targets for ${LARGE_STAGE_DYNAMIC_INSTANCES} instances`,
 		);
-	const buckets = partitionDescriptors(
-		descriptors,
-		LARGE_STAGE_DYNAMIC_INSTANCES,
+	const addresses = descriptors.flatMap((descriptor) =>
+		descriptor.attributes.map((attribute) => ({
+			target: descriptor.target,
+			attribute,
+		})),
 	);
-	const definitions = buckets.map((bucket, index) =>
-		dynamicDefinition(bucket, index),
+	const buckets = partitionAddresses(addresses, LARGE_STAGE_DYNAMIC_INSTANCES);
+	const activations = buckets.map((bucket, index) => ({
+		definition: dynamicDefinition(bucket[0].attribute, index),
+		targets: bucket.map((address) => address.target),
+	}));
+	const identities = buckets.flatMap((bucket) =>
+		bucket.map((address) => `${address.target}:${address.attribute}`),
 	);
-	const allTargets = definitions.flatMap(
-		(definition) => definition.target_binding.targets,
-	);
-	if (new Set(allTargets).size !== allTargets.length)
-		throw new Error("Large Stage Dynamic target partitions overlap");
+	if (new Set(identities).size !== identities.length)
+		throw new Error("Large Stage Dynamic address partitions overlap");
 	return {
-		definitions,
+		definitions: activations.map((activation) => activation.definition),
+		activations,
 		targetDescriptors: descriptors,
-		dynamicTargetCount: descriptors.length,
+		dynamicTargetCount: addresses.length,
 		staticControlFixtureIds: [...largeScene.staticControlFixtureIds],
 		laneCoverage: Object.fromEntries(
 			[...DYNAMIC_ATTRIBUTES]
 				.map((attribute) => [
 					attribute,
-					descriptors.filter((descriptor) =>
-						descriptor.attributes.includes(attribute),
-					).length,
+					addresses.filter((address) => address.attribute === attribute).length,
 				])
 				.filter(([, count]) => count > 0),
 		),
@@ -117,16 +120,16 @@ function fixtureTargetDescriptors(fixture, profiles) {
 	return descriptors;
 }
 
-function partitionDescriptors(descriptors, count) {
+function partitionAddresses(addresses, count) {
 	const groups = new Map();
-	for (const descriptor of descriptors) {
-		const group = groups.get(descriptor.signature) ?? [];
-		group.push(descriptor);
-		groups.set(descriptor.signature, group);
+	for (const address of addresses) {
+		const group = groups.get(address.attribute) ?? [];
+		group.push(address);
+		groups.set(address.attribute, group);
 	}
 	if (groups.size > count)
 		throw new Error(
-			`Large Stage has ${groups.size} Dynamic lane signatures but only ${count} instances`,
+			`Large Stage has ${groups.size} attributes but only ${count} instances`,
 		);
 	const allocations = new Map(
 		[...groups.keys()].map((signature) => [signature, 1]),
@@ -142,11 +145,11 @@ function partitionDescriptors(descriptors, count) {
 		allocations.set(signature, allocations.get(signature) + 1);
 	}
 	const buckets = [];
-	for (const [signature, group] of [...groups.entries()].sort(
+	for (const [attribute, group] of [...groups.entries()].sort(
 		([left], [right]) => left.localeCompare(right),
 	)) {
 		const allocated = Array.from(
-			{ length: allocations.get(signature) },
+			{ length: allocations.get(attribute) },
 			() => [],
 		);
 		group.forEach((descriptor, index) => {
@@ -159,8 +162,7 @@ function partitionDescriptors(descriptors, count) {
 	return buckets;
 }
 
-function dynamicDefinition(bucket, index) {
-	const attributes = bucket[0].attributes;
+function dynamicDefinition(attribute, index) {
 	const number = index + 1;
 	return {
 		id: deterministicUuid("3", number),
@@ -169,13 +171,8 @@ function dynamicDefinition(bucket, index) {
 		name: `Stage capacity Dynamic ${String(number).padStart(2, "0")}`,
 		color: null,
 		icon: null,
-		target_binding: {
-			type: "frozen_targets",
-			targets: bucket.map((descriptor) => descriptor.target),
-		},
-		lanes: attributes.map((attribute, laneIndex) =>
-			dynamicLane(attribute, number, laneIndex),
-		),
+		target_binding: { type: "targetless" },
+		lanes: [dynamicLane(attribute, number, 0)],
 		random_groups: [],
 		phase_mode: "uniform",
 		phase: {

@@ -335,21 +335,24 @@ async function prepareScene(profile) {
 }
 
 async function installLargeStageDynamics(session, showId, plan) {
-	const definitionIds = [];
-	for (const definition of plan.definitions) {
+	const activations = [];
+	for (const activation of plan.activations) {
 		const outcome = await requestJson(
 			"POST",
 			"/api/v2/dynamics/create",
-			{ request_id: crypto.randomUUID(), definition },
+			{ request_id: crypto.randomUUID(), definition: activation.definition },
 			{ session, showId },
 		);
 		if (!outcome?.object?.id)
 			throw new Error("Large Stage Dynamic create returned no object identity");
-		definitionIds.push(outcome.object.id);
+		activations.push({
+			definitionId: outcome.object.id,
+			targets: activation.targets,
+		});
 	}
-	await startLargeStageDynamics(session, showId, definitionIds);
+	await startLargeStageDynamics(session, showId, activations);
 	const expected = {
-		definitionIds,
+		definitionIds: activations.map((activation) => activation.definitionId),
 		instanceCount: LARGE_STAGE_DYNAMIC_INSTANCES,
 		targetCount: plan.dynamicTargetCount,
 		laneCoverage: plan.laneCoverage,
@@ -359,13 +362,13 @@ async function installLargeStageDynamics(session, showId, plan) {
 	return expected;
 }
 
-async function startLargeStageDynamics(session, showId, definitionIds) {
-	for (const dynamicId of definitionIds)
+async function startLargeStageDynamics(session, showId, activations) {
+	for (const activation of activations)
 		await requestJson(
 			"POST",
-			`/api/v2/dynamics/${encodeURIComponent(dynamicId)}/start`,
+			`/api/v2/dynamics/${encodeURIComponent(activation.definitionId)}/start`,
 			{
-				targets: [],
+				targets: activation.targets,
 				overrides: {
 					size: 1,
 					speed_multiplier: { numerator: 1, denominator: 1 },
