@@ -14,9 +14,12 @@ Playback addresses deliberately distinguish current-page and explicit-page opera
 | --- | --- |
 | `/light/{desk}/page-playback/{playback}/{control}` | Resolve the playback number against the page currently selected on that desk or screen. |
 | `/light/playback/{page}/{playback}/{control}` | Address a specific global page and playback, independent of every desk's current page. |
+| `/light/{desk}/virtual-playback/{page}/{number}/{control}` | Address dedicated Virtual Playback `1001` through `9998` on one explicit page and apply that desk's exclusion surfaces. |
 | `/light/cuelist/{number}/{action}` | Operate a Cuelist directly when a page playback is not the intended target. |
 
-Changing a page in the application changes where the same `page-playback` packet is routed. It does not change the meaning of an explicit `/light/playback/{page}/...` address. Compatibility aliases may remain available, but new integrations should use the canonical forms above.
+Changing a page in the application changes where the same `page-playback` packet is routed. It
+does not change an explicit physical or Virtual address. A Virtual address is never an alias for
+physical Playback 1–1000 or an old page slot; number 9999 is invalid.
 
 ### Dynamics
 

@@ -202,6 +202,31 @@ Playbacks live on [pages](glossary:page).
 **Exclusion zones** mean activating one playback can automatically release peers — one atomic engine
 transition, with released peers reported as related projections alongside the primary change.
 
+## Dedicated Virtual Playback
+
+A one-button, faderless Playback with a page-qualified address from 1001 through 9998. The page is
+part of the identity: Virtual 1.1001, Virtual 2.1001, and physical Playback 1 do not share
+assignment or runtime state.
+
+## Virtual Playback surface cell
+
+A one-based position in a Virtual Playbacks pane. Cell `n` resolves to Virtual Playback
+`1000 + n` on the surface's [effective page](glossary:effective-page). Cell positions are layout
+coordinates, not Playback-pool aliases or copied target-object IDs.
+
+## Effective page
+
+The page against which one Virtual Playback surface resolves its cells. **Follow Main** uses the
+originating control desk's current main page; **Pinned** uses the page stored with the surface.
+Changing the effective page changes only which addresses are displayed.
+
+## Virtual Playback exclusion-zone partition
+
+The ordered named zones stored for one show, control desk, and stable Virtual Playback surface ID.
+Each zone contains surface cell positions. On an authoritative activation, all applicable Follow
+Main and Pinned surface partitions for the originating desk resolve those positions to
+page-qualified Virtual Playback addresses; the winner remains On and active peers are released.
+
 ## Page
 
 The current bank of [playback](glossary:playback) assignments, so one physical strip drives
