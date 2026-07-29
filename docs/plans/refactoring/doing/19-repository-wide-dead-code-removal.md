@@ -1,14 +1,8 @@
 # Repository-wide Dead-code Removal
 
-## Usage Limits:
-This plan should not get started if remaining usage is below 74%
-If the usage drops below 65%, wrap up and give me a summary.
-
 ## Queue position and status
 
-**Pending and ordered after Dedicated Virtual Playbacks and before benchmark-show construction.**
-
-**Completion usage gate: above 65% large-window remaining usage.**
+**Doing after Dedicated Virtual Playbacks and before benchmark-show construction.**
 
 Claim this plan only after
 [`18-virtual-playbacks-and-exclusion-zones.md`](../finished/18-virtual-playbacks-and-exclusion-zones.md)
@@ -19,9 +13,9 @@ twice. Finish this audit before building
 [`20-three-tier-demo-and-benchmark-shows.md`](20-three-tier-demo-and-benchmark-shows.md)
 so the workloads and subsequent renderer profiling start from the smaller, current codebase.
 
-Move this file to `doing/` before changing implementation code, query Tosken Raider as
-required by the queue README, and follow the normal verification, Result, finished-plan,
-and semantic-commit workflow.
+This plan was claimed on 2026-07-29 after plan 18 finished. Tosken Raider reported
+68% remaining in the current large window. Follow the normal verification, Result,
+finished-plan, and semantic-commit workflow.
 
 ## Goal
 

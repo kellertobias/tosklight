@@ -43,7 +43,7 @@ files, contracts, runtime state, and verification surfaces do not overlap.
 | 16 | [Dynamics](finished/16-dynamics/README.md) | Completed scalar Dynamics runtime, persistence, Programmer/Cue/Preload, Playback, transport, reviewed UI, compatibility removal, and acceptance evidence. |
 | 17 | [Dynamics lane layout and interaction regression](finished/14a-dynamics-lane-layout-and-interaction-regression.md) | Completed full-width lane geometry, valid sibling interactions, and production Storybook regression coverage. |
 | 18 | [Dedicated Virtual Playbacks and exclusion zones](finished/18-virtual-playbacks-and-exclusion-zones.md) | Completed: stable 300-control Virtual Playback banks and portable show-wide number-based exclusion zones. |
-| 19 | [Repository-wide dead-code removal](pending/19-repository-wide-dead-code-removal.md) | After feature migration stabilizes, audit and safely remove dead backend, UI, test, tooling, dependency, and compatibility code, prioritizing the Rust backend. |
+| 19 | [Repository-wide dead-code removal](doing/19-repository-wide-dead-code-removal.md) | Doing: audit and safely remove dead backend, UI, test, tooling, dependency, and compatibility code, prioritizing the Rust backend. |
 | 20 | [Three-tier demo and benchmark shows](pending/20-three-tier-demo-and-benchmark-shows.md) | Build the realistic demo, 1,000-fixture interactive benchmark, and 2,000–4,000-fixture headless stress workloads before the final Stage optimization phase. |
 | 21 | [Efficient built-in Stage visualizer](pending/21-efficient-built-in-stage-visualizer.md) | Optimize isolated visualization telemetry, retained rendering, and the four Stage render qualities against the completed benchmark workloads, then run the final performance sweep. |
 
