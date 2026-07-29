@@ -1,5 +1,6 @@
 import type { ApiDriver } from "../bench/core/api";
 import { plannedDemoGroupSpecs } from "./plannedDemoGroups";
+import { putPlannedDemoObject } from "./plannedDemoObjects";
 
 interface PatchedTargetFixture {
   fixture_id: string;
@@ -37,6 +38,15 @@ export async function installPlannedDemoPlaybacks(
       ...intensity(groups, "Wash All", 1),
       ...intensity(groups, "LED All", 1),
       ...intensity(groups, "Blinders", 1),
+      ...attributes(groups, ["Profile All", "Wash All", "LED All"], {
+        "color.red": 1,
+        "color.green": 1,
+        "color.blue": 1,
+      }),
+      ...attributes(groups, ["Profile All", "Wash All"], {
+        pan: 0.5,
+        tilt: 0.5,
+      }),
     ])]),
     ...[1, 2, 3, 4].map((number) =>
       cueList(ACL_CUE_LIST_IDS[number - 1], `ACL ${number}`, [
@@ -57,7 +67,7 @@ export async function installPlannedDemoPlaybacks(
     },
   ];
   for (const cuelist of cuelists)
-    await api.seedShowObject(showId, "cue_list", cuelist.id, cuelist, 0);
+    await putPlannedDemoObject(api, showId, "cue_list", cuelist.id, cuelist);
 
   const playbacks = [
     playback(1, "Show Profile Odd", { type: "group", group_id: "21" }),
@@ -76,13 +86,13 @@ export async function installPlannedDemoPlaybacks(
     playback(17, "ACL Chase", { type: "cue_list", cue_list_id: CUE_LIST_IDS.chase }),
   ];
   for (const item of playbacks)
-    await api.seedShowObject(showId, "playback", String(item.number), item, 0);
-  await api.seedShowObject(showId, "playback_page", "1", {
+    await putPlannedDemoObject(api, showId, "playback", String(item.number), item);
+  await putPlannedDemoObject(api, showId, "playback_page", "1", {
     number: 1,
     name: "Busking",
     slots: Object.fromEntries(playbacks.map((item) => [String(item.number), item.number])),
     virtual_playbacks: {},
-  }, 0);
+  });
   return { cuelists, playbacks };
 }
 
@@ -90,6 +100,20 @@ function intensity(groups: Map<string, string[]>, name: string, value: number) {
   const fixtures = groups.get(name);
   if (!fixtures) throw new Error(`Missing generated Group ${name}`);
   return fixtures.map((fixtureId) => [fixtureId, "intensity", value] as const);
+}
+
+function attributes(
+  groups: Map<string, string[]>,
+  names: readonly string[],
+  values: Readonly<Record<string, number>>,
+) {
+  return names.flatMap((name) => {
+    const fixtures = groups.get(name);
+    if (!fixtures) throw new Error(`Missing generated Group ${name}`);
+    return fixtures.flatMap((fixtureId) =>
+      Object.entries(values).map(([attribute, value]) =>
+        [fixtureId, attribute, value] as const));
+  });
 }
 
 function stateCue(number: number, name: string, changes: ReadonlyArray<readonly [string, string, number]>) {

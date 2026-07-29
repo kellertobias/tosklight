@@ -4,6 +4,7 @@ import {
   plannedDemoRoleNumbers,
   type DemoFamily,
 } from "./plannedDemoManifest";
+import { putPlannedDemoObject } from "./plannedDemoObjects";
 
 interface PatchedTargetFixture {
   fixture_id: string;
@@ -89,7 +90,7 @@ export async function installPlannedDemoGroups(
       if (!found) throw new Error(`Group ${spec.name} references missing fixture ${fixtureNumber}`);
       return found;
     });
-    await put(api, showId, "group", spec.id, {
+    await putPlannedDemoObject(api, showId, "group", spec.id, {
       name: spec.name,
       fixtures: targets,
       color: null,
@@ -119,21 +120,4 @@ function targetIds(fixture: PatchedTargetFixture) {
   return fixture.logical_heads?.length
     ? fixture.logical_heads.map((head) => head.fixture_id)
     : [fixture.fixture_id];
-}
-
-async function put(api: ApiDriver, showId: string, kind: string, id: string, body: unknown) {
-  let revision = 0;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    try {
-      await api.seedShowObject(showId, kind, id, body, revision);
-      return;
-    } catch (error) {
-      const current = error instanceof Error
-        ? /revision conflict: expected \d+, current (\d+)/.exec(error.message)?.[1]
-        : undefined;
-      if (!current) throw error;
-      revision = Number(current);
-    }
-  }
-  throw new Error(`Could not write demo ${kind} ${id} after repeated revision conflicts`);
 }

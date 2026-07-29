@@ -20,6 +20,7 @@ import {
   seedPlannedDemoPatch,
   seedPlannedDemoProgramming,
 } from "../../support/plannedDemoState";
+import { generatePlannedDemo } from "../../support/plannedDemoGenerator";
 import artifactResolver from "../../../tools/artifact-paths.cjs";
 
 const { artifactPaths } = artifactResolver;
@@ -370,7 +371,15 @@ export class BrowserProductDemo {
     await expect.poll(async () => activeNumbers(api)).toContain(3);
     await desk.click(presetWindow.locator(".group-strip .group-card").nth(1));
     await expect.poll(async () => (await programmer(api)).selected.length).toBe(rig.washTargets.length);
-    await desk.click(presetWindow.getByRole("button", { name: /Blue Color ·/ }));
+    const bluePreset = presetWindow.getByRole("button", { name: /Blue Color ·/ });
+    await desk.click(bluePreset);
+    try {
+      await expect.poll(() => programmerValueCount(api), { timeout: 1_000 }).toBeGreaterThan(0);
+    } catch {
+      await desk.click(bluePreset);
+      await expect.poll(() => programmerValueCount(api)).toBeGreaterThan(0);
+    }
+    if (!RECORDING) await bench.tick(3_000);
     await expect.poll(async () => blueStageColors(api, rig)).toBeGreaterThanOrEqual(7);
 
     await desk.titleCard("PRELOADING", "Physical playback changes and new moving-light positions are prepared blind, then committed together with a four-second programmer fade.");
@@ -410,6 +419,25 @@ export class BrowserProductDemo {
     if (RECORDING) await clock.freeRunFor("2s");
     else await clock.advanceBy("2s");
     await expect.poll(async () => (await api.request<any>("GET", "/api/v2/output/dmx", undefined, false)).universes.some((frame: any) => frame.slots.some((value: number) => value > 0))).toBe(true);
+    await clearProgrammerValues(desk, keypad, api);
+    await replaceSelectionWithEmpty(api);
+    const canonical = await desk.fastForward(
+      "Reconciling the maintained recording and portable artifact to the exact Plan 76 demo generator.",
+      () => generatePlannedDemo(api, showId, layerIds),
+    );
+    expect(canonical.patch.fixtureRecords).toBe(262);
+    expect(canonical.patch.physicalInstances).toBe(301);
+    await desk.titleCard(
+      "CANONICAL DEMO",
+      "The exact 262-control, 301-instance rig is live; one final keypad action proves normal operator control after generation.",
+    );
+    await clearSelection(desk, keypad, api);
+    await keypadCommand(desk, keypad, ["1", "0", "1", "ENT"]);
+    await expect.poll(async () => (await programmer(api)).selected.length).toBeGreaterThan(0);
+    await keypadCommand(desk, keypad, ["AT", "8", "0", "ENT"]);
+    await expect.poll(async () =>
+      (await api.request<any>("GET", "/api/v2/output/dmx", undefined, false))
+        .universes.some((frame: any) => frame.slots.some((value: number) => value > 0))).toBe(true);
     if (UPDATE_DEMO_SHOW) completedShow = await downloadCompletedDemoShow(api, showId);
 
     if (RECORDING) {
@@ -598,13 +626,12 @@ async function activatePatchLayer(desk: DeskDriver, patchWindow: Locator, layer:
 }
 
 async function openBuiltIn(desk: DeskDriver, app: Locator, name: string): Promise<void> {
-    await desk.click(
-      app.getByRole("button", {
-        name: "Desktops / Built-ins",
-        exact: true,
-      }),
-    );
-  await desk.click(app.locator(".dock-entry").filter({ hasText: name }).first());
+  const toggle = app.getByRole("button", {
+    name: "Desktops / Built-ins",
+    exact: true,
+  });
+  if (await toggle.getAttribute("data-dock-mode") === "desks") await desk.click(toggle);
+  await desk.click(app.getByRole("button", { name, exact: true }));
 }
 
 async function createOutputRoute(
@@ -714,7 +741,7 @@ async function clearSelection(desk: DeskDriver, keypad: Locator, api: ApiDriver)
 }
 
 async function clearProgrammer(desk: DeskDriver, keypad: Locator, api: ApiDriver): Promise<void> {
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 16; attempt++) {
     const state = await programmer(api);
     if (!state.selected.length && !state.values.length && !Object.keys(state.group_values).length) return;
     await desk.click(keypad.getByRole("button", { name: "CLR", exact: true }));
@@ -723,6 +750,42 @@ async function clearProgrammer(desk: DeskDriver, keypad: Locator, api: ApiDriver
     const state = await programmer(api);
     return state.selected.length + state.values.length + Object.keys(state.group_values).length;
   }).toBe(0);
+}
+
+async function clearProgrammerValues(desk: DeskDriver, keypad: Locator, api: ApiDriver): Promise<void> {
+  for (let attempt = 0; attempt < 16; attempt++) {
+    const state = await programmer(api);
+    if (!state.values.length && !Object.keys(state.group_values).length) return;
+    await desk.click(keypad.getByRole("button", { name: "CLR", exact: true }));
+  }
+  await expect.poll(async () => {
+    const state = await programmer(api);
+    return state.values.length + Object.keys(state.group_values).length;
+  }).toBe(0);
+}
+
+async function replaceSelectionWithEmpty(api: ApiDriver): Promise<void> {
+  const deskId = api.session?.desk.id;
+  if (!deskId) throw new Error("The product demo requires an authenticated desk");
+  const snapshot = await api.request<any>(
+    "GET",
+    "/api/v2/programming-interaction/snapshot",
+    undefined,
+    true,
+    undefined,
+    { deskId },
+  );
+  const requestId = crypto.randomUUID();
+  await api.liveAction({
+    type: "programming_selection",
+    request: {
+      request_id: requestId,
+      action: "replace",
+      fixtures: [],
+      expected_revision: snapshot.projection.selection.revision,
+    },
+  }, requestId);
+  await expect.poll(async () => (await programmer(api)).selected).toEqual([]);
 }
 
 async function preloadState(api: ApiDriver): Promise<{
@@ -755,6 +818,11 @@ async function blueStageColors(api: ApiDriver, rig: Awaited<ReturnType<typeof se
     const { x, y, z } = entry.value.value;
     return z > x * 1.5 && z > y * 1.5;
   }).length;
+}
+
+async function programmerValueCount(api: ApiDriver): Promise<number> {
+  const state = await programmer(api);
+  return state.values.length + Object.keys(state.group_values).length;
 }
 
 async function activeNumbers(api: ApiDriver): Promise<number[]> {

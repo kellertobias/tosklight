@@ -1,5 +1,6 @@
 import type { ApiDriver } from "../bench/core/api";
 import { plannedDemoFamilyNumbers, plannedDemoRoleNumbers } from "./plannedDemoManifest";
+import { putPlannedDemoObject } from "./plannedDemoObjects";
 
 interface PatchedTargetFixture {
   fixture_id: string;
@@ -53,16 +54,16 @@ export async function installPlannedDemoPresets(
   ]);
   const profileTargets = targets(byNumber, plannedDemoFamilyNumbers("profile"));
   for (const [index, [name, red, green, blue]] of COLORS.entries())
-    await put(api, showId, "preset", `2.${index + 1}`, preset(
+    await putPlannedDemoObject(api, showId, "preset", `2.${index + 1}`, preset(
       index + 1, name, "Color", colorTargets,
       { "color.red": red, "color.green": green, "color.blue": blue },
     ));
   for (const [index, [name, pan, tilt]] of POSITIONS.entries())
-    await put(api, showId, "preset", `3.${index + 1}`, preset(
+    await putPlannedDemoObject(api, showId, "preset", `3.${index + 1}`, preset(
       index + 1, name, "Position", movingTargets, { pan, tilt },
     ));
   for (const [index, [name, attribute, value]] of BEAM.entries())
-    await put(api, showId, "preset", `4.${index + 1}`, preset(
+    await putPlannedDemoObject(api, showId, "preset", `4.${index + 1}`, preset(
       index + 1, name, "Beam", profileTargets, { [attribute]: value },
     ));
   return { colors: COLORS.length, positions: POSITIONS.length, beam: BEAM.length };
@@ -101,8 +102,4 @@ function targetIds(fixture: PatchedTargetFixture) {
   return fixture.logical_heads?.length
     ? fixture.logical_heads.map((head) => head.fixture_id)
     : [fixture.fixture_id];
-}
-
-async function put(api: ApiDriver, showId: string, kind: string, id: string, body: unknown) {
-  await api.seedShowObject(showId, kind, id, body, 0);
 }

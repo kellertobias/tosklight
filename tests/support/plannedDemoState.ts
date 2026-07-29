@@ -250,7 +250,9 @@ export async function seedPlannedDemoProgramming(api: ApiDriver, showId: string,
   ] as const;
   for (const [number, name, red, green, blue] of colors) {
     await put(api, showId, "preset", `2.${number}`, {
-      name, family: "Color", values: Object.fromEntries(colorTargets.map((id) => [id, colorValues(red, green, blue)])), group_values: {},
+      name, family: "Color", number,
+      values: Object.fromEntries(colorTargets.map((id) => [id, colorValues(red, green, blue)])),
+      group_values: {},
     });
   }
   const positions = [
@@ -258,14 +260,22 @@ export async function seedPlannedDemoProgramming(api: ApiDriver, showId: string,
   ] as const;
   for (const [index, [name, pan, tilt]] of positions.entries()) {
     await put(api, showId, "preset", `3.${index + 1}`, {
-      name, family: "Position", values: Object.fromEntries([...profiles, ...washes].map((id) => [id, { pan: normalized(pan), tilt: normalized(tilt) }])), group_values: {},
+      name, family: "Position", number: index + 1,
+      values: Object.fromEntries([...profiles, ...washes].map((id) => [
+        id, { pan: normalized(pan), tilt: normalized(tilt) },
+      ])),
+      group_values: {},
     });
   }
   const profileDefinition = rig.fixtures[101].definition;
   const goboAttribute = profileDefinition.heads.flatMap((head) => head.parameters).find((parameter) => parameter.attribute.startsWith("gobo"))?.attribute;
   if (goboAttribute) {
     for (const [index, value] of [.2, .5, .8].entries()) await put(api, showId, "preset", `4.${index + 1}`, {
-      name: `Gobo ${index + 1}`, family: "Beam", values: Object.fromEntries(profiles.map((id) => [id, { [goboAttribute]: normalized(value) }])), group_values: {},
+      name: `Gobo ${index + 1}`, family: "Beam", number: index + 1,
+      values: Object.fromEntries(profiles.map((id) => [
+        id, { [goboAttribute]: normalized(value) },
+      ])),
+      group_values: {},
     });
   }
 
@@ -309,7 +319,12 @@ export async function seedPlannedDemoProgramming(api: ApiDriver, showId: string,
     playback(24, "Profile Blue", { type: "cue_list", cue_list_id: profileBlue }),
   ];
   for (const item of playbacks) await put(api, showId, "playback", String(item.number), item);
-  await put(api, showId, "playback_page", "1", { number: 1, name: "Demo", slots: { "1": 1, "2": 2, "3": 3, "4": 4, "21": 21, "22": 22, "23": 23, "24": 24 } });
+  await put(api, showId, "playback_page", "1", {
+    number: 1,
+    name: "Demo",
+    slots: { "1": 1, "2": 2, "3": 3, "4": 4, "21": 21, "22": 22, "23": 23, "24": 24 },
+    virtual_playbacks: {},
+  });
 }
 
 export async function seedPlannedDemoRoutes(api: ApiDriver, showId: string, artnetPort: number, sacnPort: number): Promise<void> {

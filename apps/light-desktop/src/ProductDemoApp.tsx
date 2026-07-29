@@ -76,7 +76,10 @@ export function DemoDmxGridView({
 	slots: readonly number[];
 }) {
 	return (
-		<div className="product-demo-dmx-universe">
+		<div
+			aria-label={`Live DMX universe ${universeNumber}`}
+			className="product-demo-dmx-universe"
+		>
 			<div className="product-demo-dmx-universe-label">
 				UNIVERSE {universeNumber}
 			</div>
