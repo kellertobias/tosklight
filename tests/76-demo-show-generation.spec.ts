@@ -1,11 +1,6 @@
 import { expect, test } from "./bench/core/fixtures";
 import { activeShowId, loadCanonicalCopy } from "./support/catalog";
-import { installPlannedDemoGroups } from "./support/plannedDemoGroups";
-import { installPlannedDemoDynamics } from "./support/plannedDemoDynamics";
-import { installPlannedDemoLayout } from "./support/plannedDemoLayouts";
-import { installPlannedDemoPatch } from "./support/plannedDemoPatch";
-import { installPlannedDemoPlaybacks } from "./support/plannedDemoPlaybacks";
-import { installPlannedDemoPresets } from "./support/plannedDemoPresets";
+import { generatePlannedDemo } from "./support/plannedDemoGenerator";
 
 test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from one manifest", async ({
   api,
@@ -24,7 +19,8 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
   for (const [index, [name, id]] of Object.entries(layers).entries())
     await api.seedShowObject(showId, "patch_layer", id, { id, name, order: index }, 0);
 
-  const generated = await installPlannedDemoPatch(api, showId, layers);
+  const generatedShow = await generatePlannedDemo(api, showId, layers);
+  const generated = generatedShow.patch;
   expect(generated).toMatchObject({
     fixtureRecords: 262,
     physicalInstances: 301,
@@ -43,14 +39,14 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
   expect(frontInstances.filter((fixture) => fixture.location.x < 0)).toHaveLength(4);
   expect(frontInstances.filter((fixture) => fixture.location.x > 0)).toHaveLength(4);
 
-  const groupSpecs = await installPlannedDemoGroups(api, showId, generated.fixtures);
+  const groupSpecs = generatedShow.groups;
   expect(groupSpecs).toHaveLength(38);
   const groups = await api.showObjects<any>(showId, "group");
   expect(groups).toHaveLength(38);
   expect(groups.find((group) => group.body.name === "Show")?.body.fixtures).toHaveLength(208);
   expect(groups.find((group) => group.body.name === "Aux Show")?.body.fixtures).toHaveLength(24);
 
-  expect(await installPlannedDemoPresets(api, showId, generated.fixtures)).toEqual({
+  expect(generatedShow.presets).toEqual({
     colors: 13,
     positions: 7,
     beam: 10,
@@ -60,7 +56,7 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
   expect(presets.filter((preset) => preset.body.family === "Color")).toHaveLength(13);
   expect(presets.find((preset) => preset.body.name === "Tungsten White")).toBeDefined();
 
-  const topology = await installPlannedDemoPlaybacks(api, showId, generated.fixtures);
+  const topology = generatedShow.topology;
   expect(topology.cuelists).toHaveLength(7);
   expect(topology.playbacks).toHaveLength(13);
   const cuelists = await api.showObjects<any>(showId, "cue_list");
@@ -68,7 +64,7 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
     .toMatchObject({ mode: "chaser", speed_group: "D", looped: true });
   expect(cuelists.find((cuelist) => cuelist.body.name === "ACL Chase")?.body.cues).toHaveLength(4);
 
-  const dynamics = await installPlannedDemoDynamics(api, showId);
+  const dynamics = generatedShow.dynamics;
   expect(dynamics).toHaveLength(30);
   const storedDynamics = await api.showObjects<any>(showId, "dynamic");
   expect(storedDynamics).toHaveLength(30);
@@ -77,7 +73,7 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
   const [page] = await api.showObjects<any>(showId, "playback_page");
   expect(Object.keys(page.body.virtual_playbacks)).toHaveLength(30);
 
-  const layout = await installPlannedDemoLayout(api, showId);
+  const layout = generatedShow.layout;
   expect(layout.desks.map((desk) => desk.name)).toEqual(["Busking", "Programming", "Theater"]);
   const [storedLayout] = await api.showObjects<any>(showId, "user_layout");
   expect(storedLayout.body.desks.find((desk: any) => desk.name === "Programming")
