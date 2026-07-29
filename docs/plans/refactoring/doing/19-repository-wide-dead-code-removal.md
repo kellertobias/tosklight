@@ -135,6 +135,21 @@ Store reports under the canonical `.artifacts/` paths. Add a maintained check on
 its false-positive model is understood and it can run deterministically in the normal
 repository workflow. Do not add a noisy CI gate merely to claim tool coverage.
 
+## Progress checkpoint — 2026-07-29
+
+The backend-first audit has started.
+
+- `cargo check -p light-headless-runtime` initially reported 12 dead-code warning
+  groups.
+- The first clean-file slice removed the unused Speed Group error adapter and moved
+  two helpers that exist only for characterization tests behind `cfg(test)`.
+- Production warning groups fell from 12 to 9. The test target compiles successfully;
+  it additionally identified one unnecessary `mut` and one test-only coordinator
+  accessor for the next slice.
+- The remaining warnings are concentrated in the already-dirty capability facade and
+  one Playback projection helper. They require caller and test tracing before deletion
+  so concurrent Stage/programmer work is not staged accidentally.
+
 ## Verification and completion
 
 Work in coherent, reviewable removal slices, starting with the backend. After each

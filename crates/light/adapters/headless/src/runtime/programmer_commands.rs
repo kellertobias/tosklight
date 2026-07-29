@@ -22,6 +22,7 @@ pub(super) enum ProgrammerCommandExecution {
     ChoiceRequired(light_application::DynamicInstanceChoice),
 }
 
+#[cfg(test)]
 pub(super) fn execute_programmer_command_from(
     state: &AppState,
     session: &Session,

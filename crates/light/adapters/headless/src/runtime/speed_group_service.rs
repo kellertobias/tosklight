@@ -200,10 +200,6 @@ fn persist_configuration(state: &AppState) -> Result<(), ApiError> {
     persist_server_configuration(state)
 }
 
-fn speed_error(error: light_control::speed::SpeedError) -> ActionError {
-    ActionError::new(ActionErrorKind::Invalid, error.to_string())
-}
-
 pub(super) fn action_error(error: ActionError) -> ApiError {
     match error.kind {
         ActionErrorKind::Invalid => ApiError::bad_request(error.message),

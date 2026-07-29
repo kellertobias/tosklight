@@ -66,6 +66,7 @@ impl ActiveShowRepository {
         self.store.prepare_object_undo(kind, object_id, expected)
     }
 
+    #[cfg(test)]
     pub(crate) fn undo_object(
         &self,
         kind: &str,
