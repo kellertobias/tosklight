@@ -76,7 +76,7 @@ export function DemoDmxGridView({
 	slots: readonly number[];
 }) {
 	return (
-		<div
+		<section
 			aria-label={`Live DMX universe ${universeNumber}`}
 			className="product-demo-dmx-universe"
 		>
@@ -100,7 +100,7 @@ export function DemoDmxGridView({
 					/>
 				))}
 			</div>
-		</div>
+		</section>
 	);
 }
 

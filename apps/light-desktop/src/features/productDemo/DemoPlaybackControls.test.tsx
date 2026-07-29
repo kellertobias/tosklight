@@ -12,8 +12,8 @@ import {
 	describe,
 	expect,
 	it,
-	vi,
 	type Mock,
+	vi,
 } from "vitest";
 import type { PlaybackActionRequest } from "../../api/types";
 import type { PlaybackRuntimeActionApply } from "../playbackRuntime/actionWriter";
@@ -323,7 +323,9 @@ describe("DemoPlaybackControls", () => {
 		render(view());
 		await settled();
 		const deskLoads = settle.length;
-		settle.splice(0, deskLoads).forEach((resolve) => resolve());
+		settle.splice(0, deskLoads).forEach((resolve) => {
+			resolve();
+		});
 
 		fireEvent.pointerDown(button(11), { pointerId: 1 });
 		await settled();
@@ -340,13 +342,23 @@ describe("DemoPlaybackControls", () => {
 			true,
 			false,
 		]);
-		settle.forEach((resolve) => resolve());
+		settle.forEach((resolve) => {
+			resolve();
+		});
 		await settled();
 	});
 
 	it.each([
-		["pointer cancel", (target: HTMLElement) => fireEvent.pointerCancel(target, { pointerId: 1 })],
-		["lost pointer capture", (target: HTMLElement) => fireEvent.lostPointerCapture(target, { pointerId: 1 })],
+		[
+			"pointer cancel",
+			(target: HTMLElement) =>
+				fireEvent.pointerCancel(target, { pointerId: 1 }),
+		],
+		[
+			"lost pointer capture",
+			(target: HTMLElement) =>
+				fireEvent.lostPointerCapture(target, { pointerId: 1 }),
+		],
 	])("releases a held button on %s", async (_name, release) => {
 		const { applyAction, view } = harness();
 		render(view());
