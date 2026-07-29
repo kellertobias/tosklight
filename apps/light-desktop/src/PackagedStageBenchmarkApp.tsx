@@ -17,6 +17,7 @@ import {
 import { useDesktopBridge } from "./platform/desktop";
 import { AppProvider } from "./state/AppContext";
 import type { StageRenderQuality } from "./types";
+import { FixtureSheetWindow } from "./windows/FixtureSheetWindow";
 import { StageWindow } from "./windows/StageWindow";
 
 const qualities: readonly StageRenderQuality[] = [
@@ -39,6 +40,7 @@ interface PackagedBenchmarkState {
 	liveVisible: boolean;
 	additionalStageWindow: AdditionalStageWindowState;
 	contextRecoveryMethod: ContextRecoveryMethod;
+	activeUiSurfaces: readonly ["stage-3d", "fixture-sheet"];
 }
 
 function useAdditionalStageWindow(
@@ -341,6 +343,7 @@ function PreparedPackagedStageBenchmark({
 		liveVisible,
 		additionalStageWindow,
 		contextRecoveryMethod: "not_attempted" as ContextRecoveryMethod,
+		activeUiSurfaces: ["stage-3d", "fixture-sheet"],
 	});
 	benchmarkState.current = {
 		quality: qualities[qualityIndex] ?? "lines_and_beams",
@@ -348,6 +351,7 @@ function PreparedPackagedStageBenchmark({
 		liveVisible,
 		additionalStageWindow,
 		contextRecoveryMethod: benchmarkState.current.contextRecoveryMethod,
+		activeUiSurfaces: ["stage-3d", "fixture-sheet"],
 	};
 	useAdditionalStageWindow(desktop, stageEnabled, setAdditionalStageWindow);
 	usePackagedStagePhases(
@@ -425,16 +429,9 @@ function PreparedPackagedStageBenchmark({
 							</div>
 						)}
 						{stageEnabled ? (
-							<StageWindow
-								compact
-								stageView="3d"
-								showGroupShortcuts={false}
-								followPreload
-								stageRenderQuality={quality}
-								showSelection
-								showFloorGrid
-								showBeamGuides
-							/>
+							<div data-testid="packaged-stage-fixture-sheet">
+								<FixtureSheetWindow compact />
+							</div>
 						) : (
 							<div
 								data-testid="packaged-stage-output-baseline-secondary"
