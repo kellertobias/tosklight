@@ -655,6 +655,18 @@ prove current authoritative values.
 Run the same engine/output stress sequence with no Stage, one Live Stage, Live
 plus Preload, the large scene, and a deliberately stalled client.
 
+- Every Programmer action on every supported software, keyboard, OSC, and
+  attached-hardware route must reach its authoritative Programmer outcome and
+  correlated acknowledgement within **two configured output ticks at output
+  rates up to and including 60 Hz**, and within **four configured output ticks
+  above 60 Hz**. If the action changes resolved output, the first output frame
+  containing that change must remain inside the same tick budget.
+- Measure that budget from receipt at the authenticated server action boundary,
+  record both elapsed wall time and output-tick sequence, and cover editing,
+  selection, values, encoders, command execution, Preload, undo, preset recall,
+  and Dynamic Programmer actions. A longer client timeout, an eventually
+  converged projection, or a fast path on only one control surface does not
+  satisfy this gate.
 - The engine/output path performs zero awaited visualization operations and
   zero client-specific work.
 - No visualization condition causes a missed DMX/network-output deadline.

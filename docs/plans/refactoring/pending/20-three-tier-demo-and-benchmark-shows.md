@@ -22,6 +22,39 @@ The complete behavior and inventory contract is
 This queue file makes that roadmap plan executable in the refactoring order; it does not itself
 implement, generate, or benchmark a show.
 
+This plan also owns completion of
+[`49-product-demo-video-revision.md`](../../Next/49-product-demo-video-revision.md).
+The generated Plan 76 demo and the maintained `DEMO-001` video must share one
+authoritative show contract; do not build a second demo-only patch to satisfy the
+recording.
+
+## Pre-claim audit — 2026-07-29
+
+The current maintained product-demo implementation is useful migration input but does
+not satisfy this plan:
+
+- `tests/support/plannedDemoState.ts` and
+  `tests/bench/show/productDemoScenario.ts` currently assert 66 controllable fixtures
+  and 114 physical instances, rather than 262 and 301.
+- The current patch has two eight-lamp ACL controls (`ACL In` and `ACL Out`), while
+  Plan 76 requires four named eight-lamp controls with distinct reviewed
+  compositions.
+- The current programming seed creates seven Color presets, five Position presets,
+  no 30-Dynamic library, and a two-Cue `ACL Chase` assigned to Speed Group A. The
+  replacement requires 13 Color presets, the complete Beam and seven-Position
+  libraries, 30 Dynamics, and the four-Cue chase on Speed Group D.
+- The current visible workflow saves a provisional `Demo Show`, uses repeated setup
+  title cards, and shows a compact cue-programming result. Plan 49 requires one
+  maintained polished recording with the revised setup, ACL spreading, output,
+  fixture-control, preset, cue-programming, and centered-modal evidence.
+- The sustained headless benchmark still exposes `--demo-show` terminology and must
+  be renamed without changing its independent stress behavior.
+
+Do not mutate this compact implementation piecemeal before the fourth ACL placement
+is approved. Once this plan is claimed, establish the deterministic generator and
+manifest first, then migrate the maintained video and benchmark consumers onto their
+separate authoritative tiers.
+
 ## Goal
 
 Replace the ambiguous single demo/benchmark workload with three deterministic, independently
