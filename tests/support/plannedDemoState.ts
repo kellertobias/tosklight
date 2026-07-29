@@ -25,6 +25,7 @@ const PLANNED_DEMO_PACKAGES = [
   ["Venue", "One-Point Truss / Pipe", "venue--one-point-truss-pipe.toskfixture"],
   ["Venue", "Curtain 2 m", "venue--curtain-2-m.toskfixture"],
   ["Generic", "Dimmer Fresnel", "generic--dimmer-fresnel.toskfixture"],
+  ["Generic", "Dimmer Profile", "generic--dimmer-profile.toskfixture"],
   ["Generic", "Dimmer", "generic--dimmer.toskfixture"],
   ["Generic", "ACL", "generic--acl.toskfixture"],
   ["ROBE", "Robin DLS Profile", "robe--robin-dls-profile.toskfixture"],
