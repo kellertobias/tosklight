@@ -1,17 +1,15 @@
 import type {
 	VirtualPlaybackZone,
-	VirtualPlaybackSurfacePageMode,
 	VirtualPlaybackZonesEventObserver,
 	VirtualPlaybackZonesEventStream,
 	VirtualPlaybackZonesScope,
 	VirtualPlaybackZonesTransport,
 } from "./contracts";
 import {
+	decodeVirtualPlaybackZonesEvent,
 	decodeVirtualPlaybackZonesSaveOutcome,
 	decodeVirtualPlaybackZonesSnapshot,
-	decodeVirtualPlaybackZonesEvent,
 	encodeVirtualPlaybackZonesSaveRequest,
-	validateVirtualPlaybackZoneSurfaceId,
 	validateVirtualPlaybackZonesScope,
 } from "./wire";
 
@@ -41,7 +39,9 @@ export class HttpVirtualPlaybackZonesTransport
 	private readonly fetchImplementation: typeof globalThis.fetch;
 	private readonly WebSocketImplementation: typeof globalThis.WebSocket;
 
-	constructor(private readonly options: HttpVirtualPlaybackZonesTransportOptions) {
+	constructor(
+		private readonly options: HttpVirtualPlaybackZonesTransportOptions,
+	) {
 		this.baseUrl = options.baseUrl.replace(/\/$/, "");
 		this.fetchImplementation =
 			options.fetch ?? globalThis.fetch.bind(globalThis);
@@ -60,21 +60,18 @@ export class HttpVirtualPlaybackZonesTransport
 		);
 	}
 
-	async saveSurface(
+	async save(
 		scope: VirtualPlaybackZonesScope,
-		surfaceId: string,
 		expectedRevision: number,
-		pageMode: VirtualPlaybackSurfacePageMode,
 		zones: readonly VirtualPlaybackZone[],
 		requestId: string,
 		signal?: AbortSignal,
 	) {
 		validateVirtualPlaybackZonesScope(scope);
-		validateVirtualPlaybackZoneSurfaceId(surfaceId);
 		const headers = this.headers(scope);
 		headers.set("content-type", "application/json");
 		const response = await this.fetchImplementation(
-			`${this.baseUrl}/api/v2/virtual-playback-exclusion-zones/${encodeURIComponent(surfaceId)}/update`,
+			`${this.baseUrl}/api/v2/virtual-playback-exclusion-zones/update`,
 			{
 				method: "POST",
 				headers,
@@ -82,7 +79,6 @@ export class HttpVirtualPlaybackZonesTransport
 					encodeVirtualPlaybackZonesSaveRequest(
 						requestId,
 						expectedRevision,
-						pageMode,
 						zones,
 					),
 				),
@@ -92,7 +88,6 @@ export class HttpVirtualPlaybackZonesTransport
 		return decodeVirtualPlaybackZonesSaveOutcome(
 			await responseValue(response),
 			scope,
-			surfaceId,
 			requestId,
 		);
 	}
@@ -147,7 +142,9 @@ export class HttpVirtualPlaybackZonesTransport
 			}
 		});
 		socket.addEventListener("error", () => {
-			observer.error(new Error("Virtual Playback zone event connection failed"));
+			observer.error(
+				new Error("Virtual Playback zone event connection failed"),
+			);
 		});
 		socket.addEventListener("close", () => {
 			if (!explicitlyClosed) observer.closed();
@@ -164,7 +161,6 @@ export class HttpVirtualPlaybackZonesTransport
 		const headers = new Headers({
 			authorization: `Bearer ${this.options.sessionToken}`,
 			"x-tosk-show": scope.showId,
-			"x-tosk-desk": scope.deskId,
 		});
 		if (this.options.deskBoundaryToken)
 			headers.set("x-light-desk-token", this.options.deskBoundaryToken);

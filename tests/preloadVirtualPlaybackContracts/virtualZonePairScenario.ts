@@ -9,7 +9,7 @@ import {
 	configuration,
 	normalizedVirtualZones,
 	prepare,
-	saveVirtualZoneSurface,
+	saveVirtualZones,
 	type VirtualZonePairState,
 	virtualAction,
 	visualizationLevel,
@@ -19,7 +19,7 @@ import {
 const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 	id: "VPB-007",
 	title:
-		"named Virtual Playback exclusion zones are inert on creation and authoritative on activation",
+		"show-owned Virtual Playback-number exclusion zones are inert on creation and authoritative on activation",
 	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const prepared = await prepare(
@@ -71,8 +71,12 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 		return prepared;
 	},
 	api: async ({ api }, state) => {
-		await saveVirtualZoneSurface(api, "vpb-paired-surface", [
-			{ id: "touring-pair", name: "Touring pair", slots: [1, 2] },
+		await saveVirtualZones(api, [
+			{
+				id: "touring-pair",
+				name: "Touring pair",
+				playback_numbers: [1001, 1002],
+			},
 		]);
 		state.savedZones = await normalizedVirtualZones(api);
 		state.creationState = [
@@ -87,10 +91,10 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 		const pane = await addVirtualPlaybackPane(page);
 		await page.keyboard.down("Shift");
 		await pane
-			.getByRole("button", { name: /Virtual playback page 1 cell 1 Touring A/ })
+			.getByRole("button", { name: /Virtual playback 1001 page 1 cell 1 Touring A/ })
 			.click();
 		await pane
-			.getByRole("button", { name: /Virtual playback page 1 cell 2 Touring B/ })
+			.getByRole("button", { name: /Virtual playback 1002 page 1 cell 2 Touring B/ })
 			.click();
 		await page.keyboard.up("Shift");
 		await pane.getByRole("button", { name: "Create Exclusion Zone" }).click();
@@ -106,12 +110,14 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 		for (const cell of [1, 2, 1, 2])
 			await pane
 				.getByRole("button", {
-					name: new RegExp(`Virtual playback page 1 cell ${cell}`),
+					name: new RegExp(`Virtual playback ${1000 + cell} page 1 cell ${cell}`),
 				})
 				.click();
 	},
 	assert: async ({ api, bench }, state) => {
-		expect(state.savedZones).toEqual([{ name: "Touring pair", slots: [1, 2] }]);
+		expect(state.savedZones).toEqual([
+			{ name: "Touring pair", playback_numbers: [1001, 1002] },
+		]);
 		expect(state.creationState).toEqual([true, true]);
 		expect(await activeVirtualPlayback(api, 1, 1001)).toMatchObject({
 			enabled: false,
@@ -119,9 +125,9 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 		expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
 			enabled: true,
 		});
-		expect(
-			(await activeVirtualPlayback(api, 1, 1003))?.enabled ?? false,
-		).toBe(false);
+		expect((await activeVirtualPlayback(api, 1, 1003))?.enabled ?? false).toBe(
+			false,
+		);
 		await bench.tick(0);
 		expect(await visualizationLevel(api, state.fixtures[3])).toBeCloseTo(0, 5);
 		expect(await visualizationLevel(api, state.fixtures[4])).toBeCloseTo(

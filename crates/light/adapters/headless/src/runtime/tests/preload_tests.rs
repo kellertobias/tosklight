@@ -106,6 +106,7 @@ fn preload_atomicity_test_snapshot() -> EngineSnapshot {
             number: 1,
             name: "Preload".into(),
             slots: HashMap::from([(1, 1), (2, 2)]),
+            virtual_playbacks: HashMap::new(),
         }].into(),
         ..Default::default()
     }
@@ -178,11 +179,13 @@ fn matter_test_snapshot() -> EngineSnapshot {
                 number: 1,
                 name: "Main".into(),
                 slots: HashMap::from([(7, 26)]),
+                virtual_playbacks: HashMap::new(),
             },
             light_playback::PlaybackPage {
                 number: 4,
                 name: "Matter".into(),
                 slots: HashMap::from([(7, 25)]),
+                virtual_playbacks: HashMap::new(),
             },
         ].into(),
         ..Default::default()
@@ -283,6 +286,7 @@ fn preload_batch_keeps_dynamic_controls_and_quantized_fader_in_operator_order() 
 
     let commands = preload_batch_commands(&pending).unwrap();
 
+    assert!(commands.iter().all(|command| command.page == Some(2)));
     assert_eq!(
         commands
             .iter()
@@ -381,23 +385,12 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
     state
         .installation.set_desk_page(session.desk.id, show.id, 1)
         .unwrap();
-    let zones = VirtualPlaybackExclusionStore::from([(
-        session.desk.id.to_string(),
-        HashMap::from([(
-            "preload-test".into(),
-            vec![VirtualPlaybackExclusionZone {
-                id: "preload-zone".into(),
-                name: "Preload zone".into(),
-                slots: vec![1, 2],
-            }],
-        )]),
-    )]);
-    state
-        .installation.set_setting(
-            &virtual_playback_exclusion_setting(show.id),
-            &serde_json::to_string(&zones).unwrap(),
-        )
-        .unwrap();
+    let zones = test_virtual_playback_exclusion_store(vec![VirtualPlaybackExclusionZone {
+        id: "preload-zone".into(),
+        name: "Preload zone".into(),
+        playback_numbers: vec![1_001, 1_002],
+    }]);
+    persist_test_virtual_playback_exclusions(&state, show.id, &zones);
     state
         .output.execute_playback(EnginePlaybackCommand::Pool {
             number: 2,
@@ -624,6 +617,7 @@ fn explicit_page_preload_does_not_borrow_current_page_exclusions() {
         number: 2,
         name: "Explicit".into(),
         slots: HashMap::from([(1, 1)]),
+        virtual_playbacks: HashMap::new(),
     });
     state.output.replace_snapshot(snapshot).unwrap();
     let show = state
@@ -640,23 +634,12 @@ fn explicit_page_preload_does_not_borrow_current_page_exclusions() {
     state
         .installation.set_desk_page(session.desk.id, show.id, 1)
         .unwrap();
-    let zones = VirtualPlaybackExclusionStore::from([(
-        session.desk.id.to_string(),
-        HashMap::from([(
-            "explicit-preload".into(),
-            vec![VirtualPlaybackExclusionZone {
-                id: "current-page-zone".into(),
-                name: "Current page".into(),
-                slots: vec![1, 2],
-            }],
-        )]),
-    )]);
-    state
-        .installation.set_setting(
-            &virtual_playback_exclusion_setting(show.id),
-            &serde_json::to_string(&zones).unwrap(),
-        )
-        .unwrap();
+    let zones = test_virtual_playback_exclusion_store(vec![VirtualPlaybackExclusionZone {
+        id: "current-page-zone".into(),
+        name: "Current page".into(),
+        playback_numbers: vec![1_001, 1_002],
+    }]);
+    persist_test_virtual_playback_exclusions(&state, show.id, &zones);
     state
         .output.execute_playback(EnginePlaybackCommand::Pool {
             number: 2,

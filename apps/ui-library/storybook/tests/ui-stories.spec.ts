@@ -2614,7 +2614,7 @@ test("Virtual Playback GO and held actions retain click versus press-release sem
 		"/iframe.html?id=tosklight-virtual-playbacks--sparse-grid&viewMode=story",
 	);
 	await page.getByRole("button", { name: /cell 1 Main/u }).click();
-	await expect(page.getByRole("status")).toHaveText("Action 7");
+	await expect(page.getByRole("status")).toHaveText("Action 1001");
 
 	await page.goto(
 		"/iframe.html?id=tosklight-virtual-playbacks--held-flash-and-swap&viewMode=story",
@@ -2627,9 +2627,9 @@ test("Virtual Playback GO and held actions retain click versus press-release sem
 		bounds!.y + bounds!.height / 2,
 	);
 	await page.mouse.down();
-	await expect(page.getByRole("status")).toHaveText("Pressed 8");
+	await expect(page.getByRole("status")).toHaveText("Pressed 1001");
 	await page.mouse.up();
-	await expect(page.getByRole("status")).toHaveText("Released 8");
+	await expect(page.getByRole("status")).toHaveText("Released 1001");
 });
 
 test("the application Virtual Playbacks stories cover adapter-owned targeting and availability states", async ({
@@ -2637,7 +2637,6 @@ test("the application Virtual Playbacks stories cover adapter-owned targeting an
 }) => {
 	for (const [story, selector, className] of [
 		["configuration-state", '[data-grid-position="0"]', "configuration-armed"],
-		["assignment-state", '[data-grid-position="1"]', "assignment-pending"],
 		["update-state", '[data-grid-position="0"]', "update-target"],
 		["exclusion-zone-state", '[data-grid-position="3"]', "exclusion-selected"],
 	] as const) {
@@ -2657,7 +2656,7 @@ test("the application Virtual Playbacks stories cover adapter-owned targeting an
 		"/iframe.html?id=tosklight-virtual-playbacks--sparse-large-grid&viewMode=story",
 	);
 	const largeGrid = page.locator(".virtual-playback-grid");
-	await expect(largeGrid).toHaveAttribute("data-logical-cells", "8980");
+	await expect(largeGrid).toHaveAttribute("data-logical-cells", "300");
 	expect(await largeGrid.locator(".virtual-playback-box").count()).toBeLessThan(
 		200,
 	);
@@ -2669,7 +2668,7 @@ test("the application Virtual Playbacks stories cover adapter-owned targeting an
 		"/iframe.html?id=tosklight-virtual-playbacks--pinned-page&viewMode=story",
 	);
 	await expect(
-		page.getByRole("button", { name: /page 2 cell 1 House/u }),
+		page.getByRole("button", { name: /playback 1301 page 2 cell 1 House/u }),
 	).toBeVisible();
 	await page.goto(
 		"/iframe.html?id=tosklight-virtual-playbacks--overlapping-zones&viewMode=story",
@@ -2682,8 +2681,10 @@ test("the application Virtual Playbacks stories cover adapter-owned targeting an
 		"/iframe.html?id=tosklight-virtual-playbacks--hidden-membership&viewMode=story",
 	);
 	await expect(
-		page.getByText("Cell 3 remains a saved hidden member.", { exact: true }),
-	).toHaveText("Cell 3 remains a saved hidden member.");
+		page.getByText("Virtual Playback 1301 remains a saved member on page 2.", {
+			exact: true,
+		}),
+	).toHaveText("Virtual Playback 1301 remains a saved member on page 2.");
 	await page.goto(
 		"/iframe.html?id=tosklight-virtual-playbacks--zone-error-state&viewMode=story",
 	);
@@ -2779,7 +2780,6 @@ test("Virtual Playback cards use outline, full-fill, edge-status, and artwork hi
 
 	for (const [story, label] of [
 		["configuration-state", "Configure Playback"],
-		["assignment-state", "Record"],
 		["update-state", "Update"],
 	] as const) {
 		await page.goto(

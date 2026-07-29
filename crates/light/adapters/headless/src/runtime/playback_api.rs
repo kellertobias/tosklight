@@ -34,28 +34,127 @@ pub(super) fn authoritative_playback_controls(state: &AppState) -> serde_json::V
 
 pub(super) type VirtualPlaybackExclusionZone =
     light_wire::v2::virtual_playback_zones::VirtualPlaybackExclusionZone;
-pub(super) type VirtualPlaybackExclusionSurface =
-    light_wire::v2::virtual_playback_zones::VirtualPlaybackExclusionSurface;
-pub(super) type VirtualPlaybackSurfacePageMode =
-    light_wire::v2::virtual_playback_zones::VirtualPlaybackSurfacePageMode;
 
-pub(super) type VirtualPlaybackExclusionSurfaces =
-    HashMap<String, VirtualPlaybackExclusionSurface>;
-pub(super) type VirtualPlaybackExclusionStore = HashMap<String, VirtualPlaybackExclusionSurfaces>;
-
-#[cfg(test)]
-pub(super) fn test_virtual_playback_exclusion_surface(
-    zones: Vec<VirtualPlaybackExclusionZone>,
-) -> VirtualPlaybackExclusionSurface {
-    VirtualPlaybackExclusionSurface {
-        revision: 1,
-        page_mode: VirtualPlaybackSurfacePageMode::FollowMain,
-        zones,
-    }
+#[derive(Clone, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct VirtualPlaybackExclusionStore {
+    pub(super) revision: u64,
+    pub(super) zones: Vec<VirtualPlaybackExclusionZone>,
 }
 
-pub(super) fn virtual_playback_exclusion_setting(show_id: light_core::ShowId) -> String {
-    format!("virtual_playback_exclusion_zones:{}", show_id.0)
+#[cfg(test)]
+pub(super) fn test_virtual_playback_exclusion_store(
+    zones: Vec<VirtualPlaybackExclusionZone>,
+) -> VirtualPlaybackExclusionStore {
+    VirtualPlaybackExclusionStore { revision: 1, zones }
+}
+
+pub(super) const VIRTUAL_PLAYBACK_EXCLUSION_OBJECT_KIND: &str = "virtual_playback_exclusion_zones";
+pub(super) const VIRTUAL_PLAYBACK_EXCLUSION_OBJECT_ID: &str = "global";
+
+pub(super) fn read_virtual_playback_exclusions(
+    state: &AppState,
+    show_id: light_core::ShowId,
+) -> Result<VirtualPlaybackExclusionStore, ApiError> {
+    use light_application::ActiveShowUnitOfWork;
+    let unit = ServerActiveShowUnitOfWork::begin(state, show_id, ActiveShowBackupKind::ShowObjects)
+        .map_err(|error| ApiError::internal(error.message))?;
+    decode_virtual_playback_exclusions(unit.document())
+}
+
+pub(super) fn update_virtual_playback_exclusions(
+    state: &AppState,
+    show_id: light_core::ShowId,
+    expected_revision: u64,
+    zones: &[VirtualPlaybackExclusionZone],
+    request_id: &str,
+) -> Result<(bool, VirtualPlaybackExclusionStore), ApiError> {
+    use light_application::{ActiveShowUnitOfWork, BackupIdentity};
+    let mut unit =
+        ServerActiveShowUnitOfWork::begin(state, show_id, ActiveShowBackupKind::ShowObjects)
+            .map_err(|error| ApiError::internal(error.message))?;
+    let stored = decode_virtual_playback_exclusions(unit.document())?;
+    if stored.revision != expected_revision {
+        return Err(ApiError::conflict(format!(
+            "Virtual Playback exclusion-zone revision conflict: expected {expected_revision}, actual {}",
+            stored.revision
+        )));
+    }
+    if stored.zones.as_slice() == zones {
+        return Ok((false, stored));
+    }
+    unit.backup(&BackupIdentity {
+        show_id,
+        correlation_id: Uuid::new_v4(),
+        request_id: request_id.to_owned(),
+    })
+    .map_err(|error| ApiError::internal(error.message))?;
+    let next = VirtualPlaybackExclusionStore {
+        revision: stored.revision.saturating_add(1),
+        zones: zones.to_vec(),
+    };
+    let mut transaction = light_show::PortableShowTransaction::new(unit.document().revision());
+    transaction.put(
+        VIRTUAL_PLAYBACK_EXCLUSION_OBJECT_KIND,
+        VIRTUAL_PLAYBACK_EXCLUSION_OBJECT_ID,
+        serde_json::to_value(&next).map_err(|error| ApiError::internal(error.to_string()))?,
+    );
+    let commit = unit
+        .commit(transaction)
+        .map_err(|error| ApiError::internal(error.message))?;
+    state.active_show.update_current(|entry| {
+        if entry.id == show_id {
+            entry.revision = commit.revision().value();
+        }
+    });
+    Ok((true, next))
+}
+
+fn decode_virtual_playback_exclusions(
+    document: &light_show::PortableShowDocument,
+) -> Result<VirtualPlaybackExclusionStore, ApiError> {
+    document
+        .object(
+            VIRTUAL_PLAYBACK_EXCLUSION_OBJECT_KIND,
+            VIRTUAL_PLAYBACK_EXCLUSION_OBJECT_ID,
+        )
+        .map_or_else(
+            || Ok(VirtualPlaybackExclusionStore::default()),
+            |object| {
+                serde_json::from_value(object.body().clone()).map_err(|error| {
+                    ApiError::bad_request(format!(
+                        "incompatible Virtual Playback exclusion-zone schema: {error}"
+                    ))
+                })
+            },
+        )
+}
+
+#[cfg(test)]
+pub(super) fn persist_test_virtual_playback_exclusions(
+    state: &AppState,
+    show_id: light_core::ShowId,
+    store: &VirtualPlaybackExclusionStore,
+) {
+    let entry = state.active_show.current().unwrap();
+    let show_store = match light_show::ShowStore::open(&entry.path) {
+        Ok(show_store) => show_store,
+        Err(_) => {
+            light_show::ShowStore::create(&entry.path, &entry.name)
+                .unwrap()
+                .0
+        }
+    };
+    show_store.set_identity(show_id, &entry.name, None).unwrap();
+    state.active_show.clear_document_cache();
+    update_virtual_playback_exclusions(
+        state,
+        show_id,
+        0,
+        &store.zones,
+        "test-virtual-playback-exclusions",
+    )
+    .unwrap();
 }
 
 pub(super) fn validate_virtual_playback_exclusion_zones(
@@ -87,125 +186,63 @@ fn validate_virtual_playback_exclusion_zone(
         ));
     }
     let mut seen = HashSet::new();
-    if let Some(slot) = zone
-        .slots
-        .iter()
-        .find(|slot| !(1..=8_998).contains(*slot))
-    {
+    if let Some(number) = zone.playback_numbers.iter().find(|number| {
+        !(light_playback::MIN_VIRTUAL_PLAYBACK..=light_playback::MAX_VIRTUAL_PLAYBACK)
+            .contains(*number)
+    }) {
         return Err(ApiError::bad_request(format!(
-            "zones[].slots contains {slot}; cells must be between 1 and 8998"
+            "zones[].playback_numbers contains {number}; Virtual Playback numbers must be between 1001 and 39100"
         )));
     }
-    if zone.slots.iter().any(|slot| !seen.insert(*slot)) {
+    if zone
+        .playback_numbers
+        .iter()
+        .any(|number| !seen.insert(*number))
+    {
         return Err(ApiError::bad_request(
-            "zones[].slots must contain unique cells",
+            "zones[].playback_numbers must contain unique Virtual Playback numbers",
         ));
     }
-    if zone.slots.len() < 2 {
+    if zone.playback_numbers.len() < 2 {
         return Err(ApiError::bad_request(
-            "zones[].slots must contain at least two cells",
+            "zones[].playback_numbers must contain at least two Virtual Playback numbers",
         ));
     }
     Ok(())
 }
 
 pub(super) struct VirtualPlaybackExclusionResolver {
-    current_page: u8,
-    surfaces: VirtualPlaybackExclusionSurfaces,
+    zones: Vec<VirtualPlaybackExclusionZone>,
 }
 
 impl VirtualPlaybackExclusionResolver {
-    pub(super) fn read(state: &AppState, desk_id: Uuid) -> Self {
+    pub(super) fn read(state: &AppState) -> Result<Self, ApiError> {
         let Some(show) = state.active_show.current().clone() else {
-            return Self {
-                current_page: 1,
-                surfaces: HashMap::new(),
-            };
+            return Ok(Self { zones: Vec::new() });
         };
-        let current_page = state.installation.desk_page(desk_id, show.id).unwrap_or(1);
-        let surfaces = state
-            .installation
-            .virtual_playback_exclusions(show.id)
-            .unwrap_or_default()
-            .remove(&desk_id.to_string())
-            .unwrap_or_default();
-        Self {
-            current_page,
-            surfaces,
-        }
+        let zones = read_virtual_playback_exclusions(state, show.id)?.zones;
+        Ok(Self { zones })
     }
 
-    pub(super) fn zone_numbers(&self, addressed_page: Option<u8>) -> Vec<Vec<u16>> {
-        self.surfaces
-            .values()
-            .filter(|surface| {
-                addressed_page.is_none_or(|page| self.surface_page(surface) == page)
-            })
-            .flat_map(|surface| &surface.zones)
-            .map(zone_numbers)
-            .filter(|numbers| numbers.len() >= 2)
+    pub(super) fn zone_numbers(&self) -> Vec<Vec<u16>> {
+        self.zones
+            .iter()
+            .map(|zone| zone.playback_numbers.clone())
             .collect()
     }
 
-    pub(super) fn zone_addresses(
-        &self,
-        addressed_page: u8,
-    ) -> Vec<Vec<light_playback::VirtualPlaybackAddress>> {
-        self.surfaces
-            .values()
-            .filter(|surface| self.surface_page(surface) == addressed_page)
-            .flat_map(|surface| &surface.zones)
+    pub(super) fn zone_addresses(&self) -> Vec<Vec<light_playback::VirtualPlaybackAddress>> {
+        self.zones
+            .iter()
             .map(|zone| {
-                zone.slots
+                zone.playback_numbers
                     .iter()
-                    .filter_map(|cell| {
-                        light_playback::VirtualPlaybackAddress::new(
-                            addressed_page,
-                            1_000 + cell,
-                        )
-                        .ok()
+                    .filter_map(|number| {
+                        light_playback::VirtualPlaybackAddress::from_number(*number).ok()
                     })
                     .collect::<Vec<_>>()
             })
             .filter(|addresses| addresses.len() >= 2)
             .collect()
     }
-
-    pub(super) fn applies_to_page(&self, addressed_page: Option<u8>) -> bool {
-        addressed_page.is_none_or(|page| {
-            self.surfaces
-                .values()
-                .any(|surface| self.surface_page(surface) == page)
-        })
-    }
-
-    fn surface_page(&self, surface: &VirtualPlaybackExclusionSurface) -> u8 {
-        match surface.page_mode {
-            VirtualPlaybackSurfacePageMode::FollowMain => self.current_page,
-            VirtualPlaybackSurfacePageMode::Pinned { page } => page,
-        }
-    }
-}
-
-fn zone_numbers(zone: &VirtualPlaybackExclusionZone) -> Vec<u16> {
-    zone.slots
-        .iter()
-        .map(|slot| 1_000 + slot)
-        .collect()
-}
-
-pub(super) fn virtual_playback_zone_numbers(state: &AppState, desk_id: Uuid) -> Vec<Vec<u16>> {
-    VirtualPlaybackExclusionResolver::read(state, desk_id).zone_numbers(None)
-}
-
-pub(super) fn virtual_playback_peer_numbers(zones: &[Vec<u16>], activated_number: u16) -> Vec<u16> {
-    let mut peers = zones
-        .iter()
-        .filter(|zone| zone.contains(&activated_number))
-        .flat_map(|zone| zone.iter().copied())
-        .filter(|number| *number != activated_number)
-        .collect::<Vec<_>>();
-    peers.sort_unstable();
-    peers.dedup();
-    peers
 }

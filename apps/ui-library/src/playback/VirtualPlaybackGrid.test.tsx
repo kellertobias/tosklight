@@ -10,6 +10,7 @@ afterEach(cleanup);
 
 const boxes: VirtualPlaybackBoxViewModel[] = [
 	{
+		number: 1001,
 		slot: 1,
 		position: 0,
 		availability: "assigned",
@@ -19,6 +20,7 @@ const boxes: VirtualPlaybackBoxViewModel[] = [
 		running: true,
 	},
 	{
+		number: 1003,
 		slot: 3,
 		position: 2,
 		availability: "unavailable",
@@ -90,6 +92,7 @@ describe("VirtualPlaybackGridView", () => {
 		const position = () =>
 			document.querySelector('[data-grid-position="0"]') as HTMLElement;
 		expect(position()).toHaveAttribute("data-virtual-playback-slot", "1");
+		expect(position()).toHaveAttribute("data-virtual-playback-number", "1001");
 		expect(position()).toHaveTextContent("Main");
 
 		rendered.rerender(
@@ -100,6 +103,7 @@ describe("VirtualPlaybackGridView", () => {
 					columns={2}
 					boxes={[
 						{
+							number: 1301,
 							slot: 1,
 							position: 0,
 							availability: "assigned",
@@ -112,6 +116,7 @@ describe("VirtualPlaybackGridView", () => {
 		);
 		expect(position()).toHaveAttribute("data-grid-position", "0");
 		expect(position()).toHaveAttribute("data-page", "2");
+		expect(position()).toHaveAttribute("data-virtual-playback-number", "1301");
 		expect(position()).toHaveTextContent("House");
 	});
 
@@ -282,7 +287,7 @@ describe("VirtualPlaybackGridView", () => {
 		});
 	});
 
-	it("virtualizes a 20 by 20 grid and resolves only a bounded visible window", () => {
+	it("virtualizes a full 20 by 15 page and resolves only a bounded visible window", () => {
 		const boxAt = vi.fn((position: number) => ({
 			slot: position + 1,
 			position,
@@ -293,7 +298,7 @@ describe("VirtualPlaybackGridView", () => {
 				<VirtualPlaybackGridView
 					page={1}
 					rows={20}
-					columns={20}
+					columns={15}
 					boxAt={boxAt}
 				/>
 			</div>,
@@ -301,9 +306,9 @@ describe("VirtualPlaybackGridView", () => {
 
 		const grid = document.querySelector(".virtual-playback-grid");
 		expect(grid).toHaveClass("virtual-playback-grid-virtualized");
-		expect(grid).toHaveAttribute("data-logical-cells", "400");
+		expect(grid).toHaveAttribute("data-logical-cells", "300");
 		expect(boxAt.mock.calls.length).toBeGreaterThan(0);
-		expect(boxAt.mock.calls.length).toBeLessThan(400);
+		expect(boxAt.mock.calls.length).toBeLessThan(300);
 		expect(document.querySelectorAll(".virtual-playback-box").length).toBe(
 			boxAt.mock.calls.length,
 		);

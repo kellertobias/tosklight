@@ -6,7 +6,7 @@ use super::{
 };
 use axum::{
     Json, Router,
-    extract::{Path, State, rejection::JsonRejection},
+    extract::{State, rejection::JsonRejection},
     http::HeaderMap,
     routing::{get, post},
 };
@@ -24,8 +24,8 @@ pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v2/virtual-playback-exclusion-zones", get(snapshot))
         .route(
-            "/api/v2/virtual-playback-exclusion-zones/{surface_id}/update",
-            post(update_surface),
+            "/api/v2/virtual-playback-exclusion-zones/update",
+            post(update_zones),
         )
 }
 
@@ -37,22 +37,21 @@ async fn snapshot(
     authenticate(&state, &headers)?;
     let _activation = state.active_show.acquire().await;
     let show_id = show.resolve(&state)?;
-    let desks = state.installation.virtual_playback_exclusions(show_id)?;
+    let stored = super::playback_api::read_virtual_playback_exclusions(&state, show_id)?;
     Ok(Json(VirtualPlaybackExclusionSnapshot {
         show_id: show_id.0,
-        desks,
+        revision: stored.revision,
+        zones: stored.zones,
     }))
 }
 
-async fn update_surface(
+async fn update_zones(
     State(state): State<AppState>,
     show: ShowContext,
-    Path(surface_id): Path<String>,
     headers: HeaderMap,
     request: Result<TolerantJson<VirtualPlaybackExclusionUpdateRequest>, JsonRejection>,
 ) -> Result<Json<VirtualPlaybackExclusionUpdateOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    validate_surface_id(&surface_id)?;
     let TolerantJson(request) =
         request.map_err(|error| ApiError::bad_request(error.body_text()))?;
     validate_request_id(&request.request_id)?;
@@ -66,9 +65,7 @@ async fn update_surface(
     let show_id = show.resolve(&state)?;
     let action = ReplayAction {
         show_id: show_id.0,
-        surface_id: surface_id.clone(),
         expected_revision: request.expected_revision,
-        page_mode: request.page_mode,
         zones: zones.clone(),
     };
     if let Some(outcome) = state
@@ -78,23 +75,18 @@ async fn update_surface(
     {
         return Ok(Json(outcome));
     }
-    let desk_id = session.desk.id;
-    let (changed, surface) = state
-        .installation
-        .update_virtual_playback_exclusion_surface(
-            show_id,
-            desk_id,
-            &surface_id,
-            request.expected_revision,
-            request.page_mode,
-            &zones,
-        )?;
+    let (changed, stored) = super::playback_api::update_virtual_playback_exclusions(
+        &state,
+        show_id,
+        request.expected_revision,
+        &zones,
+        &request.request_id,
+    )?;
     let outcome = VirtualPlaybackExclusionUpdateOutcome {
         request_id: request.request_id,
         show_id: show_id.0,
-        desk_id,
-        surface_id: surface_id.clone(),
-        surface,
+        revision: stored.revision,
+        zones: stored.zones,
         replayed: false,
         changed,
     };
@@ -109,8 +101,7 @@ async fn update_surface(
             .publish(EventDraft::virtual_playback_exclusion_zones_changed(
                 VirtualPlaybackExclusionZonesChange {
                     show_id,
-                    desk_id,
-                    surface_id: surface_id.clone(),
+                    revision: outcome.revision,
                 },
             ));
         // Retained for the compatibility event stream until its dedicated retirement chunk.
@@ -118,9 +109,8 @@ async fn update_surface(
             &state,
             "virtual_playback_exclusion_zones_changed",
             serde_json::json!({
-                "desk_id": desk_id,
                 "show_id": show_id,
-                "surface_id": surface_id,
+                "revision": outcome.revision,
                 "zones": zones,
             }),
         );
@@ -140,19 +130,6 @@ fn validate_request_id(request_id: &str) -> Result<(), ApiError> {
     Ok(())
 }
 
-fn validate_surface_id(surface_id: &str) -> Result<(), ApiError> {
-    if surface_id.is_empty()
-        || surface_id.len() > 128
-        || surface_id != surface_id.trim()
-        || surface_id.chars().any(char::is_control)
-    {
-        return Err(ApiError::bad_request(
-            "surface_id must be a trimmed string containing 1-128 printable characters",
-        ));
-    }
-    Ok(())
-}
-
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(super) struct ReplayKey {
     session_id: Uuid,
@@ -162,9 +139,7 @@ pub(super) struct ReplayKey {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct ReplayAction {
     show_id: Uuid,
-    surface_id: String,
     expected_revision: u64,
-    page_mode: light_wire::v2::virtual_playback_zones::VirtualPlaybackSurfacePageMode,
     zones: Vec<VirtualPlaybackExclusionZone>,
 }
 

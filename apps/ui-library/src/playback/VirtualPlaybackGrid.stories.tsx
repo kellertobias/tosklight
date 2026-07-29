@@ -18,8 +18,8 @@ const meta: Meta<VirtualGridArgs> = {
 	parameters: { layout: "fullscreen" },
 	args: { rows: 3, columns: 4, width: 920 },
 	argTypes: {
-		rows: { control: { type: "number", min: 1, max: 8998, step: 1 } },
-		columns: { control: { type: "number", min: 1, max: 8998, step: 1 } },
+		rows: { control: { type: "number", min: 1, max: 300, step: 1 } },
+		columns: { control: { type: "number", min: 1, max: 300, step: 1 } },
 		width: { control: { type: "range", min: 320, max: 1400, step: 20 } },
 	},
 };
@@ -28,16 +28,16 @@ export default meta;
 type Story = StoryObj<VirtualGridArgs>;
 
 const pageOne: VirtualPlaybackBoxViewModel[] = [
-	{ slot: 1, position: 0, availability: "assigned", label: "Main", actionLabel: "GO", currentCue: "Cue 4 · Solo", color: "#176777", running: true },
-	{ slot: 2, position: 1, availability: "assigned", label: "Front Wash", actionLabel: "TOGGLE", color: "#925ad1", icon: "☀" },
-	{ slot: 4, position: 3, availability: "assigned", label: "Bump", actionLabel: "FLASH", color: "#d98236", heldAction: true },
-	{ slot: 9, position: 8, availability: "unavailable" },
+	{ number: 1001, slot: 1, position: 0, availability: "assigned", label: "Main", actionLabel: "GO", currentCue: "Cue 4 · Solo", color: "#176777", running: true },
+	{ number: 1002, slot: 2, position: 1, availability: "assigned", label: "Front Wash", actionLabel: "TOGGLE", color: "#925ad1", icon: "☀" },
+	{ number: 1004, slot: 4, position: 3, availability: "assigned", label: "Bump", actionLabel: "FLASH", color: "#d98236", heldAction: true },
+	{ number: 1009, slot: 9, position: 8, availability: "unavailable" },
 ];
 
 const pageTwo: VirtualPlaybackBoxViewModel[] = [
-	{ slot: 1, position: 0, availability: "assigned", label: "House", actionLabel: "GO", currentCue: "Cue 1", color: "#2874bd" },
-	{ slot: 3, position: 2, availability: "assigned", label: "Encore", actionLabel: "SWAP", heldAction: true, color: "#b33f75" },
-	{ slot: 9, position: 8, availability: "unavailable" },
+	{ number: 1301, slot: 1, position: 0, availability: "assigned", label: "House", actionLabel: "GO", currentCue: "Cue 1", color: "#2874bd" },
+	{ number: 1303, slot: 3, position: 2, availability: "assigned", label: "Encore", actionLabel: "SWAP", heldAction: true, color: "#b33f75" },
+	{ number: 1309, slot: 9, position: 8, availability: "unavailable" },
 ];
 
 function GridHost({
@@ -58,7 +58,10 @@ function GridHost({
 				page={page}
 				rows={rows}
 				columns={columns}
-				boxes={boxes}
+				boxes={boxes.map((box) => ({
+					...box,
+					number: box.number ?? 1_001 + (page - 1) * 300 + box.slot - 1,
+				}))}
 				callbacks={{
 					onAction: (slot) => setEvent(`Action ${slot}`),
 					onActionPress: (slot) => setEvent(`Pressed ${slot}`),
@@ -77,8 +80,8 @@ export const SparseGrid: Story = {
 	render: (args) => <GridHost {...args} boxes={pageOne} />,
 };
 
-export const OrdinaryTwentyByTwenty: Story = {
-	args: { rows: 20, columns: 20, width: 920 },
+export const FullTwentyByFifteenPage: Story = {
+	args: { rows: 20, columns: 15, width: 920 },
 	render: (args) => <GridHost {...args} boxes={pageOne} />,
 };
 

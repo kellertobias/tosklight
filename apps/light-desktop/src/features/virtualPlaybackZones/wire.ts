@@ -1,7 +1,6 @@
 import {
-	MAX_PERSISTED_VIRTUAL_PLAYBACK_ZONE_SLOT,
-	type VirtualPlaybackExclusionSurface,
-	type VirtualPlaybackSurfacePageMode,
+	MAX_VIRTUAL_PLAYBACK_ZONE_NUMBER,
+	MIN_VIRTUAL_PLAYBACK_ZONE_NUMBER,
 	type VirtualPlaybackZone,
 	type VirtualPlaybackZonesChange,
 	type VirtualPlaybackZonesSaveOutcome,
@@ -9,7 +8,6 @@ import {
 	type VirtualPlaybackZonesSnapshot,
 } from "./contracts";
 
-const MAX_SURFACE_ID_LENGTH = 128;
 const MAX_ZONE_ID_LENGTH = 128;
 const MAX_ZONE_NAME_LENGTH = 80;
 const UUID_PATTERN =
@@ -31,46 +29,39 @@ export function decodeVirtualPlaybackZonesSnapshot(
 	expected: VirtualPlaybackZonesScope,
 ): VirtualPlaybackZonesSnapshot {
 	validateScope(expected);
-	const snapshot = exactObject(value, "$", ["show_id", "desks"]);
+	const snapshot = exactObject(value, "$", ["show_id", "revision", "zones"]);
 	const showId = uuid(snapshot.show_id, "$.show_id");
 	requireIdentity(showId, expected.showId, "$.show_id");
 	return {
 		showId,
-		desks: decodeDesks(snapshot.desks, "$.desks"),
+		revision: revision(snapshot.revision, "$.revision"),
+		zones: decodeZones(snapshot.zones, "$.zones"),
 	};
 }
 
 export function decodeVirtualPlaybackZonesSaveOutcome(
 	value: unknown,
 	expected: VirtualPlaybackZonesScope,
-	expectedSurfaceId: string,
 	expectedRequestId: string,
 ): VirtualPlaybackZonesSaveOutcome {
 	validateScope(expected);
-	validateSurfaceId(expectedSurfaceId, "$.requested_surface_id");
 	const outcome = exactObject(value, "$", [
 		"show_id",
-		"desk_id",
-		"surface_id",
-		"surface",
+		"revision",
+		"zones",
 		"request_id",
 		"replayed",
 		"changed",
 	]);
 	const showId = uuid(outcome.show_id, "$.show_id");
-	const deskId = uuid(outcome.desk_id, "$.desk_id");
-	const surfaceId = validateSurfaceId(outcome.surface_id, "$.surface_id");
 	const requestId = nonEmptyString(outcome.request_id, "$.request_id");
 	requireIdentity(showId, expected.showId, "$.show_id");
-	requireIdentity(deskId, expected.deskId, "$.desk_id");
-	requireIdentity(surfaceId, expectedSurfaceId, "$.surface_id");
 	requireIdentity(requestId, expectedRequestId, "$.request_id");
 	return {
 		requestId,
 		showId,
-		deskId,
-		surfaceId,
-		surface: decodeSurface(outcome.surface, "$.surface"),
+		revision: revision(outcome.revision, "$.revision"),
+		zones: decodeZones(outcome.zones, "$.zones"),
 		replayed: boolean(outcome.replayed, "$.replayed"),
 		changed: boolean(outcome.changed, "$.changed"),
 	};
@@ -79,17 +70,22 @@ export function decodeVirtualPlaybackZonesSaveOutcome(
 export function encodeVirtualPlaybackZonesSaveRequest(
 	requestId: string,
 	expectedRevision: number,
-	pageMode: VirtualPlaybackSurfacePageMode,
 	zones: readonly VirtualPlaybackZone[],
 ) {
 	return {
 		request_id: nonEmptyString(requestId, "$.request_id"),
 		expected_revision: revision(expectedRevision, "$.expected_revision"),
-		page_mode: decodePageMode(pageMode, "$.page_mode"),
-		zones: decodeZones(zones, "$.zones").map((zone) => ({
+		zones: decodeZones(
+			zones.map((zone) => ({
+				id: zone.id,
+				name: zone.name,
+				playback_numbers: zone.playbackNumbers,
+			})),
+			"$.zones",
+		).map((zone) => ({
 			id: zone.id,
 			name: zone.name,
-			slots: [...zone.slots],
+			playback_numbers: [...zone.playbackNumbers],
 		})),
 	};
 }
@@ -114,16 +110,11 @@ export function decodeVirtualPlaybackZonesEvent(
 		);
 	const change = exactObject(payload.change, "$.event.payload.change", [
 		"show_id",
-		"desk_id",
-		"surface_id",
+		"revision",
 	]);
 	return {
 		showId: uuid(change.show_id, "$.event.payload.change.show_id"),
-		deskId: uuid(change.desk_id, "$.event.payload.change.desk_id"),
-		surfaceId: validateSurfaceId(
-			change.surface_id,
-			"$.event.payload.change.surface_id",
-		),
+		revision: revision(change.revision, "$.event.payload.change.revision"),
 	};
 }
 
@@ -133,105 +124,58 @@ export function validateVirtualPlaybackZonesScope(
 	validateScope(scope);
 }
 
-export function validateVirtualPlaybackZoneSurfaceId(surfaceId: unknown) {
-	return validateSurfaceId(surfaceId, "$.surface_id");
-}
-
-function decodeSurfaces(value: unknown, path: string) {
-	const surfaces = object(value, path);
-	return Object.fromEntries(
-		Object.entries(surfaces).map(([surfaceId, surface]) => {
-			validateSurfaceId(surfaceId, `${path}.${surfaceId}`);
-			return [surfaceId, decodeSurface(surface, `${path}.${surfaceId}`)];
-		}),
-	);
-}
-
-function decodeSurface(
-	value: unknown,
-	path: string,
-): VirtualPlaybackExclusionSurface {
-	const surface = exactObject(value, path, ["revision", "page_mode", "zones"]);
-	return {
-		revision: revision(surface.revision, `${path}.revision`),
-		pageMode: decodePageMode(surface.page_mode, `${path}.page_mode`),
-		zones: decodeZones(surface.zones, `${path}.zones`),
-	};
-}
-
-function decodePageMode(
-	value: unknown,
-	path: string,
-): VirtualPlaybackSurfacePageMode {
-	const mode = object(value, path);
-	const type = nonEmptyString(mode.type, `${path}.type`);
-	if (type === "follow_main") return { type };
-	if (type !== "pinned") invalid(`${path}.type`, "follow_main or pinned", type);
-	const page = mode.page;
-	if (!Number.isSafeInteger(page) || (page as number) < 1 || (page as number) > 127)
-		invalid(`${path}.page`, "integer between 1 and 127", page);
-	return { type, page: page as number };
-}
-
-function decodeDesks(value: unknown, path: string) {
-	const desks = object(value, path);
-	return Object.fromEntries(
-		Object.entries(desks).map(([deskId, surfaces]) => {
-			uuid(deskId, `${path}.${deskId}`);
-			return [deskId, decodeSurfaces(surfaces, `${path}.${deskId}`)];
-		}),
-	);
-}
-
 function decodeZones(value: unknown, path: string): VirtualPlaybackZone[] {
 	if (!Array.isArray(value)) invalid(path, "array", value);
 	const ids = new Set<string>();
 	return value.map((entry, index) => {
 		const zone = decodeZone(entry, `${path}[${index}]`);
-		if (ids.has(zone.id)) invalid(`${path}[${index}].id`, "unique zone id", zone.id);
+		if (ids.has(zone.id))
+			invalid(`${path}[${index}].id`, "unique zone id", zone.id);
 		ids.add(zone.id);
 		return zone;
 	});
 }
 
 function decodeZone(value: unknown, path: string): VirtualPlaybackZone {
-	const zone = exactObject(value, path, ["id", "name", "slots"]);
+	const zone = exactObject(value, path, ["id", "name", "playback_numbers"]);
 	const id = boundedTrimmedString(zone.id, `${path}.id`, MAX_ZONE_ID_LENGTH);
 	const name = boundedTrimmedString(
 		zone.name,
 		`${path}.name`,
 		MAX_ZONE_NAME_LENGTH,
 	);
-	const slots = decodeSlots(zone.slots, `${path}.slots`);
-	return { id, name, slots };
+	const playbackNumbers = decodePlaybackNumbers(
+		zone.playback_numbers,
+		`${path}.playback_numbers`,
+	);
+	return { id, name, playbackNumbers };
 }
 
-function decodeSlots(value: unknown, path: string) {
+function decodePlaybackNumbers(value: unknown, path: string) {
 	if (!Array.isArray(value)) invalid(path, "array", value);
-	if (value.length < 2) invalid(path, "at least two unique cells", value);
-	const slots = value.map((slot, index) => boundedSlot(slot, `${path}[${index}]`));
-	if (new Set(slots).size !== slots.length) invalid(path, "unique cells", value);
-	return slots;
+	if (value.length < 2)
+		invalid(path, "at least two unique Virtual Playback numbers", value);
+	const numbers = value.map((number, index) =>
+		boundedPlaybackNumber(number, `${path}[${index}]`),
+	);
+	if (new Set(numbers).size !== numbers.length)
+		invalid(path, "unique Virtual Playback numbers", value);
+	return numbers;
 }
 
 function validateScope(scope: VirtualPlaybackZonesScope) {
 	uuid(scope.showId, "$.scope.showId");
-	uuid(scope.deskId, "$.scope.deskId");
 }
 
-function validateSurfaceId(value: unknown, path: string) {
-	return boundedTrimmedString(value, path, MAX_SURFACE_ID_LENGTH);
-}
-
-function boundedSlot(value: unknown, path: string) {
+function boundedPlaybackNumber(value: unknown, path: string) {
 	if (
 		!Number.isSafeInteger(value) ||
-		(value as number) < 1 ||
-		(value as number) > MAX_PERSISTED_VIRTUAL_PLAYBACK_ZONE_SLOT
+		(value as number) < MIN_VIRTUAL_PLAYBACK_ZONE_NUMBER ||
+		(value as number) > MAX_VIRTUAL_PLAYBACK_ZONE_NUMBER
 	)
 		invalid(
 			path,
-			`integer between 1 and ${MAX_PERSISTED_VIRTUAL_PLAYBACK_ZONE_SLOT}`,
+			`integer between ${MIN_VIRTUAL_PLAYBACK_ZONE_NUMBER} and ${MAX_VIRTUAL_PLAYBACK_ZONE_NUMBER}`,
 			value,
 		);
 	return value as number;
@@ -270,7 +214,8 @@ function uuid(value: unknown, path: string) {
 function exactObject(value: unknown, path: string, keys: readonly string[]) {
 	const decoded = object(value, path);
 	for (const key of keys) {
-		if (!(key in decoded)) invalid(`${path}.${key}`, "declared wire field", undefined);
+		if (!(key in decoded))
+			invalid(`${path}.${key}`, "declared wire field", undefined);
 	}
 	return decoded;
 }

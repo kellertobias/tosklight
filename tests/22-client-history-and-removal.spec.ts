@@ -61,7 +61,7 @@ test.describe("docs/plans/Done/22-client-history-and-removal.DONE.md", () => {
     await expect(historicalRow).toContainText("Last connected");
     await historicalRow.getByRole("button", { name: "Remove client" }).click();
     const confirmation = page.getByRole("alertdialog", { name: new RegExp(`Remove client ${escapeRegex(historical.name)}`) });
-    await expect(confirmation).toContainText("Portable shows, users, optional screens, other clients, and installation-wide configuration will not change");
+    await expect(confirmation).toContainText("Portable shows, Virtual Playback assignments and exclusion zones, users, optional screens, other clients, and installation-wide configuration will not change");
     await confirmation.getByRole("button", { name: "Cancel" }).click();
     await chooser.getByRole("button", { name: "Close default screen chooser" }).click();
 

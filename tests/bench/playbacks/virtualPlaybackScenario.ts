@@ -24,21 +24,13 @@ export interface VirtualPlaybackIdentity {
 interface VirtualPlaybackZone {
 	id?: string;
 	name: string;
-	slots: number[];
-}
-
-type VirtualPlaybackPageMode =
-	| { type: "follow_main" }
-	| { type: "pinned"; page: number };
-
-interface VirtualPlaybackZoneSurface {
-	revision: number;
-	page_mode: VirtualPlaybackPageMode;
-	zones: VirtualPlaybackZone[];
+	playback_numbers: number[];
 }
 
 interface VirtualPlaybackZoneSnapshot {
-	desks: Record<string, Record<string, VirtualPlaybackZoneSurface>>;
+	show_id: string;
+	revision: number;
+	zones: VirtualPlaybackZone[];
 }
 
 export class BrowserVirtualPlaybacks {
@@ -64,7 +56,9 @@ export class BrowserVirtualPlaybacks {
 			expect(
 				this.pane(pane).locator(".virtual-playback-box").first(),
 			).toHaveAccessibleName(
-				new RegExp(`^Virtual playback page ${validPage(page)} cell `),
+				new RegExp(
+					`^Virtual playback ${virtualPlaybackNumber(1, page)} page ${validPage(page)} cell `,
+				),
 			),
 		fence: async (
 			pane: VirtualPlaybackPane,
@@ -196,7 +190,7 @@ export class BrowserVirtualPlaybacks {
 			"playback_page",
 			String(validPage(page)),
 		);
-		const playbackNumber = virtualPlaybackNumber(cell);
+		const playbackNumber = virtualPlaybackNumber(cell, page);
 		const playback =
 			playbackPage?.body.virtual_playbacks?.[String(playbackNumber)];
 		if (!playback)
@@ -280,7 +274,8 @@ export class BrowserVirtualPlaybacks {
 		if (cells.length < 2)
 			throw new Error("A Virtual Playback exclusion zone needs two cells");
 		const alias = this.api.session?.desk.osc_alias;
-		if (!alias) throw new Error("Attached Shift proof requires a desk OSC alias");
+		if (!alias)
+			throw new Error("Attached Shift proof requires a desk OSC alias");
 		await this.hardware.connect();
 		try {
 			await this.hardware.send(`/light/${alias}/programmer/shift`, [true]);
@@ -315,6 +310,29 @@ export class BrowserVirtualPlaybacks {
 			dialog.getByRole("button", { name: "Create zone", exact: true }),
 		);
 		await expect(dialog).toBeHidden();
+	}
+
+	async deleteExclusionZone(
+		pane: VirtualPlaybackPane,
+		name: string,
+	): Promise<void> {
+		await this.desk.click(
+			this.pane(pane).getByRole("button", { name: "Settings", exact: true }),
+		);
+		const settings = this.page.getByRole("dialog", { name: "Pane Settings" });
+		await this.desk.click(
+			settings.getByRole("tab", { name: "Exclusion Zones", exact: true }),
+		);
+		await expect(settings.getByLabel(`Name for ${name}`)).toBeVisible();
+		await this.desk.click(
+			settings.getByRole("button", { name: "Delete zone", exact: true }),
+		);
+		await expect
+			.poll(async () => (await this.zones()).some((zone) => zone.name === name))
+			.toBe(false);
+		await this.desk.click(
+			settings.getByRole("button", { name: "Close settings", exact: true }),
+		);
 	}
 
 	async activate(
@@ -364,7 +382,7 @@ export class BrowserVirtualPlaybacks {
 		const suffix = sourceName ? ` ${escapeRegExp(sourceName)}` : "";
 		return this.pane(pane).getByRole("button", {
 			name: new RegExp(
-				`^Virtual playback page ${validPage(page)} cell ${validCell(cell)}${suffix}(?: |$)`,
+				`^Virtual playback ${virtualPlaybackNumber(cell, page)} page ${validPage(page)} cell ${validCell(cell)}${suffix}(?: |$)`,
 			),
 		});
 	}
@@ -376,7 +394,7 @@ export class BrowserVirtualPlaybacks {
 	): Locator {
 		return this.pane(pane).getByRole("button", {
 			name: new RegExp(
-				`^Virtual playback page ${validPage(page)} cell ${validCell(cell)} empty$`,
+				`^Virtual playback ${virtualPlaybackNumber(cell, page)} page ${validPage(page)} cell ${validCell(cell)} empty$`,
 			),
 		});
 	}
@@ -414,16 +432,18 @@ export class BrowserVirtualPlaybacks {
 			undefined,
 			{ showId: this.showId() },
 		);
-		return Object.values(response.desks[this.api.session.desk.id] ?? {})
-			.flatMap((surface) => surface.zones)
-			.map((zone) => ({ name: zone.name, slots: [...zone.slots] }))
+		return response.zones
+			.map((zone) => ({
+				name: zone.name,
+				playback_numbers: [...zone.playback_numbers],
+			}))
 			.sort((left, right) => left.name.localeCompare(right.name));
 	}
 }
 
 function validCell(cell: number): number {
-	if (!Number.isSafeInteger(cell) || cell < 1)
-		throw new Error("Virtual Playback cell must be a positive integer");
+	if (!Number.isSafeInteger(cell) || cell < 1 || cell > 300)
+		throw new Error("Virtual Playback cell must be within 1-300");
 	return cell;
 }
 
@@ -437,14 +457,14 @@ function validVirtualNumber(playbackNumber: number): number {
 	if (
 		!Number.isSafeInteger(playbackNumber) ||
 		playbackNumber < 1001 ||
-		playbackNumber > 9998
+		playbackNumber > 39_100
 	)
-		throw new Error("Virtual Playback number must be within 1001-9998");
+		throw new Error("Virtual Playback number must be within 1001-39100");
 	return playbackNumber;
 }
 
-export function virtualPlaybackNumber(cell: number): number {
-	const playbackNumber = 1000 + validCell(cell);
+export function virtualPlaybackNumber(cell: number, page = 1): number {
+	const playbackNumber = 1000 + 300 * (validPage(page) - 1) + validCell(cell);
 	return validVirtualNumber(playbackNumber);
 }
 

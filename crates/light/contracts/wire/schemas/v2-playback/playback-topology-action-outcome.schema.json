@@ -213,7 +213,7 @@
             "playback_number": {
               "type": "integer",
               "format": "uint16",
-              "maximum": 9998,
+              "maximum": 39100,
               "minimum": 1001
             }
           },

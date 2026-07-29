@@ -23,6 +23,11 @@ import {
 	stringAt,
 } from "./playbackWirePrimitives";
 import { decodeShowObjectBody } from "./showObjectBodyWire";
+import {
+	MAX_VIRTUAL_PLAYBACK_NUMBER,
+	isVirtualPlaybackNumberForPage,
+	virtualPlaybackBankStart,
+} from "./virtualPlaybackAddress";
 import type { PlaybackDefinition } from "./types";
 import { WireValidationError } from "./wireValidation";
 
@@ -136,13 +141,16 @@ function encodeAction(action: PlaybackTopologyAction) {
 	if (action.type === "create_page" || action.type === "rename_page")
 		return encodePlaybackPageAction(action);
 	if (action.type === "configure_virtual" || action.type === "clear_virtual") {
+		const page = boundedPositiveIntegerAt(action.page, "$.action.page", 127);
+		const playbackNumber = boundedVirtualPlaybackNumber(
+			action.playbackNumber,
+			"$.action.playbackNumber",
+		);
+		validateVirtualPlaybackBank(page, playbackNumber, "$.action.playbackNumber");
 		const shared = {
 			type: action.type,
-			page: boundedPositiveIntegerAt(action.page, "$.action.page", 127),
-			playback_number: boundedVirtualPlaybackNumber(
-				action.playbackNumber,
-				"$.action.playbackNumber",
-			),
+			page,
+			playback_number: playbackNumber,
 			expected_page_revision: revisionAt(
 				action.expectedPageRevision,
 				"$.action.expectedPageRevision",
@@ -150,7 +158,13 @@ function encodeAction(action: PlaybackTopologyAction) {
 			expected_page_object_id: action.expectedPageObjectId,
 		};
 		return action.type === "configure_virtual"
-			? { ...shared, playback: encodePlayback(action.playback, 9_998) }
+			? {
+					...shared,
+					playback: encodePlayback(
+						action.playback,
+						MAX_VIRTUAL_PLAYBACK_NUMBER,
+					),
+				}
 			: shared;
 	}
 	const shared = {
@@ -320,6 +334,11 @@ function decodeResolution(
 			resolution.playback_number,
 			"$.resolution.playback_number",
 		);
+		validateVirtualPlaybackBank(
+			page,
+			playbackNumber,
+			"$.resolution.playback_number",
+		);
 		if (
 			(action.type !== "configure_virtual" &&
 				action.type !== "clear_virtual") ||
@@ -376,9 +395,24 @@ function decodeResolution(
 }
 
 function boundedVirtualPlaybackNumber(value: unknown, path: string) {
-	const number = boundedPositiveIntegerAt(value, path, 9_998);
-	if (number < 1_001) invalid(path, "integer between 1001 and 9998", number);
+	const number = boundedPositiveIntegerAt(
+		value,
+		path,
+		MAX_VIRTUAL_PLAYBACK_NUMBER,
+	);
+	if (number < 1_001)
+		invalid(path, "integer between 1001 and 39100", number);
 	return number;
+}
+
+function validateVirtualPlaybackBank(
+	page: number,
+	number: number,
+	path: string,
+) {
+	if (isVirtualPlaybackNumberForPage(page, number)) return;
+	const start = virtualPlaybackBankStart(page);
+	invalid(path, `integer between ${start} and ${start + 299}`, number);
 }
 
 function decodeObjects(value: unknown): PlaybackTopologyObject[] {

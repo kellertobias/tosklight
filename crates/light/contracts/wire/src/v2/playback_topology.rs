@@ -69,7 +69,7 @@ pub enum PlaybackTopologyAction {
     ConfigureVirtual {
         #[schemars(range(min = 1, max = 127))]
         page: u8,
-        #[schemars(range(min = 1001, max = 9998))]
+        #[schemars(range(min = 1001, max = 39100))]
         playback_number: u16,
         #[schemars(range(max = 9007199254740991_u64))]
         #[ts(type = "number")]
@@ -135,7 +135,7 @@ pub enum PlaybackTopologyAction {
     ClearVirtual {
         #[schemars(range(min = 1, max = 127))]
         page: u8,
-        #[schemars(range(min = 1001, max = 9998))]
+        #[schemars(range(min = 1001, max = 39100))]
         playback_number: u16,
         #[schemars(range(max = 9007199254740991_u64))]
         #[ts(type = "number")]
@@ -147,7 +147,7 @@ pub enum PlaybackTopologyAction {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PlaybackTopologyPlaybackDefinition {
-    #[schemars(range(max = 9998))]
+    #[schemars(range(max = 39100))]
     pub number: u16,
     #[schemars(length(min = 1, max = 80))]
     pub name: String,
@@ -337,7 +337,7 @@ pub enum PlaybackTopologyResolution {
     Virtual {
         #[schemars(range(min = 1, max = 127))]
         page: u8,
-        #[schemars(range(min = 1001, max = 9998))]
+        #[schemars(range(min = 1001, max = 39100))]
         playback_number: u16,
     },
     Page {

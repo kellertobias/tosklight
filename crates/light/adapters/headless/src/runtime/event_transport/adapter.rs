@@ -302,8 +302,7 @@ fn wire_payload(
         ) => wire::EventPayload::VirtualPlaybackExclusionZonesChanged {
             change: light_wire::v2::virtual_playback_zones::VirtualPlaybackExclusionZonesChange {
                 show_id: change.show_id.0,
-                desk_id: change.desk_id,
-                surface_id: change.surface_id.clone(),
+                revision: change.revision,
             },
         },
         application::ApplicationEvent::Show(application::ShowEvent::ShowLibraryChanged(change)) => {

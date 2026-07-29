@@ -86,6 +86,17 @@ impl EventObject {
         Self::new(EventCapability::Playback, format!("playback:{number}"))
     }
 
+    pub fn virtual_playback(address: light_playback::VirtualPlaybackAddress) -> Self {
+        Self::new(
+            EventCapability::Playback,
+            format!(
+                "virtual-playback:{}.{}",
+                address.page(),
+                address.number().get()
+            ),
+        )
+    }
+
     /// The one shared route for sampled playback telemetry ticks.
     pub fn playback_telemetry() -> Self {
         Self::new(EventCapability::Playback, "telemetry")
@@ -389,8 +400,7 @@ pub enum OperatorNotification {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VirtualPlaybackExclusionZonesChange {
     pub show_id: ShowId,
-    pub desk_id: Uuid,
-    pub surface_id: String,
+    pub revision: u64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -701,7 +711,9 @@ impl EventDraft {
 
 fn playback_routes(change: &PlaybackRuntimeChange) -> (Option<EventObject>, Vec<EventObject>) {
     let mut routes = Vec::with_capacity(3);
-    if let Some(number) = change.projection.playback_number {
+    if let PlaybackRuntimeIdentity::Virtual(address) = change.projection.requested {
+        routes.push(EventObject::virtual_playback(address));
+    } else if let Some(number) = change.projection.playback_number {
         routes.push(EventObject::playback(number));
     }
     if let Some(cue_list_id) = change.projection.cue_list_id() {
@@ -713,6 +725,7 @@ fn playback_routes(change: &PlaybackRuntimeChange) -> (Option<EventObject>, Vec<
     if routes.is_empty() {
         routes.push(match &change.projection.requested {
             PlaybackRuntimeIdentity::Playback(number) => EventObject::playback(*number),
+            PlaybackRuntimeIdentity::Virtual(address) => EventObject::virtual_playback(*address),
             PlaybackRuntimeIdentity::CueList(id) => EventObject::cue_list(id.0),
             PlaybackRuntimeIdentity::Group(id) => EventObject::group(id.as_str()),
         });

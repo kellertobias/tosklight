@@ -1,25 +1,17 @@
-/** One-based surface cells map to Virtual Playback numbers 1001 through 9998. */
-export const MAX_PERSISTED_VIRTUAL_PLAYBACK_ZONE_SLOT = 8_998;
+import { MAX_VIRTUAL_PLAYBACK_NUMBER } from "../../api/virtualPlaybackAddress";
+
+/** Stable show-owned Virtual Playback numbers. Physical Playbacks stop at 1000. */
+export const MIN_VIRTUAL_PLAYBACK_ZONE_NUMBER = 1_001;
+export const MAX_VIRTUAL_PLAYBACK_ZONE_NUMBER = MAX_VIRTUAL_PLAYBACK_NUMBER;
 
 export interface VirtualPlaybackZone {
 	readonly id: string;
 	readonly name: string;
-	readonly slots: readonly number[];
-}
-
-export type VirtualPlaybackSurfacePageMode =
-	| { readonly type: "follow_main" }
-	| { readonly type: "pinned"; readonly page: number };
-
-export interface VirtualPlaybackExclusionSurface {
-	readonly revision: number;
-	readonly pageMode: VirtualPlaybackSurfacePageMode;
-	readonly zones: readonly VirtualPlaybackZone[];
+	readonly playbackNumbers: readonly number[];
 }
 
 export interface VirtualPlaybackZonesScope {
 	readonly showId: string;
-	readonly deskId: string;
 }
 
 export interface VirtualPlaybackZonesAuthority {
@@ -30,28 +22,20 @@ export interface VirtualPlaybackZonesAuthority {
 
 export interface VirtualPlaybackZonesSnapshot {
 	readonly showId: string;
-	readonly desks: Readonly<
-		Record<
-			string,
-			Readonly<Record<string, VirtualPlaybackExclusionSurface>>
-		>
-	>;
+	readonly revision: number;
+	readonly zones: readonly VirtualPlaybackZone[];
 }
 
-export interface VirtualPlaybackZonesSaveOutcome {
+export interface VirtualPlaybackZonesSaveOutcome
+	extends VirtualPlaybackZonesSnapshot {
 	readonly requestId: string;
-	readonly showId: string;
-	readonly deskId: string;
-	readonly surfaceId: string;
-	readonly surface: VirtualPlaybackExclusionSurface;
 	readonly replayed: boolean;
 	readonly changed: boolean;
 }
 
 export interface VirtualPlaybackZonesChange {
 	readonly showId: string;
-	readonly deskId: string;
-	readonly surfaceId: string;
+	readonly revision: number;
 }
 
 export interface VirtualPlaybackZonesEventObserver {
@@ -70,11 +54,9 @@ export interface VirtualPlaybackZonesTransport {
 		scope: VirtualPlaybackZonesScope,
 		signal?: AbortSignal,
 	): Promise<VirtualPlaybackZonesSnapshot>;
-	saveSurface(
+	save(
 		scope: VirtualPlaybackZonesScope,
-		surfaceId: string,
 		expectedRevision: number,
-		pageMode: VirtualPlaybackSurfacePageMode,
 		zones: readonly VirtualPlaybackZone[],
 		requestId: string,
 		signal?: AbortSignal,
@@ -88,18 +70,16 @@ export interface VirtualPlaybackZonesTransport {
 export interface VirtualPlaybackZonesCapability {
 	/** Stable for one authenticated server/session authority, even as local errors change. */
 	readonly authorityId: string | null;
-	/** Changes for session, show, desk, server transport, or authority replacement. */
+	/** Changes for session, show, server transport, or authority replacement. */
 	readonly authorityGeneration: number;
 	readonly available: boolean;
 	readonly error: string | null;
-	getSurface(surfaceId: string): readonly VirtualPlaybackZone[] | null;
-	isSavingSurface(surfaceId: string): boolean;
-	subscribeSurface(surfaceId: string, listener: () => void): () => void;
-	activateSurface(surfaceId: string): () => void;
-	loadSurface(surfaceId: string): Promise<readonly VirtualPlaybackZone[] | null>;
-	saveSurface(
-		surfaceId: string,
-		pageMode: VirtualPlaybackSurfacePageMode,
+	getZones(): readonly VirtualPlaybackZone[] | null;
+	isSaving(): boolean;
+	subscribe(listener: () => void): () => void;
+	activate(): () => void;
+	load(): Promise<readonly VirtualPlaybackZone[] | null>;
+	save(
 		zones: readonly VirtualPlaybackZone[],
 	): Promise<readonly VirtualPlaybackZone[] | null>;
 	clearError(): void;

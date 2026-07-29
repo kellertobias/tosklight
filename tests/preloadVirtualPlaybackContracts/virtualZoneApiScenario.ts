@@ -6,13 +6,12 @@ import {
 } from "../bench/core/fixtures";
 import { object, putObject } from "../support/catalog";
 import {
-	activePlayback,
 	activeVirtualPlayback,
 	audit,
 	configuration,
 	playbacks,
 	prepare,
-	saveVirtualZoneSurface,
+	saveVirtualZones,
 	virtualAction,
 	virtualZoneSnapshot,
 	visualizationLevel,
@@ -37,7 +36,7 @@ async function prepareAuthoritativeVirtualZone({
 		{},
 	);
 	await writeVirtualPage(api, 1, { 1001: 71, 1002: 72, 1003: 73 });
-	await writeVirtualPage(api, 2, { 1001: 73, 1002: 71, 1003: 72 });
+	await writeVirtualPage(api, 2, { 1301: 73, 1302: 71, 1303: 72 });
 	await api.request("PUT", "/api/v2/configuration", {
 		...(await configuration(api)),
 		sequence_master_fade_millis: 0,
@@ -52,8 +51,16 @@ async function prepareAuthoritativeVirtualZone({
 	);
 	const firstDesk = api.session!.desk;
 	const zones = [
-		{ id: "front-pair", name: "Front pair", slots: [1, 2] },
-		{ id: "overlap", name: "Overlap pair", slots: [2, 3] },
+		{
+			id: "front-pair",
+			name: "Front pair",
+			playback_numbers: [1001, 1002],
+		},
+		{
+			id: "overlap",
+			name: "Overlap pair",
+			playback_numbers: [1002, 1003],
+		},
 	];
 
 	await virtualAction(api, 1, 1001, "go");
@@ -69,41 +76,38 @@ async function prepareAuthoritativeVirtualZone({
 		enabled: true,
 	});
 	const zoneRequestId = crypto.randomUUID();
-	const saved = await saveVirtualZoneSurface(api, "vpb-api-surface", zones, {
+	const saved = await saveVirtualZones(api, zones, {
 		requestId: zoneRequestId,
-		pageMode: { type: "follow_main" },
 	});
 	expect(saved).toMatchObject({
 		show_id: prepared.showId,
-		desk_id: firstDesk.id,
-		surface_id: "vpb-api-surface",
-		surface: {
-			revision: 1,
-			page_mode: { type: "follow_main" },
-			zones,
-		},
+		revision: 1,
+		zones,
 		replayed: false,
 		changed: true,
 	});
 	expect(saved.request_id).toEqual(expect.any(String));
-	const replay = await saveVirtualZoneSurface(api, "vpb-api-surface", zones, {
+	const replay = await saveVirtualZones(api, zones, {
 		requestId: zoneRequestId,
-		pageMode: { type: "follow_main" },
 	});
 	expect(replay).toMatchObject({
 		request_id: zoneRequestId,
 		replayed: true,
 		changed: true,
-		surface: { revision: 1 },
+		revision: 1,
 	});
 	await expect(
-		saveVirtualZoneSurface(
+		saveVirtualZones(
 			api,
-			"vpb-api-surface",
-			[{ id: "stale", name: "Stale", slots: [1, 3] }],
+			[
+				{
+					id: "stale",
+					name: "Stale",
+					playback_numbers: [1001, 1003],
+				},
+			],
 			{
 				expectedRevision: 0,
-				pageMode: { type: "follow_main" },
 			},
 		),
 	).rejects.toThrow(/returned 409:.*expected 0, actual 1/);
@@ -118,15 +122,8 @@ async function prepareAuthoritativeVirtualZone({
 	});
 	expect(await virtualZoneSnapshot(api)).toMatchObject({
 		show_id: prepared.showId,
-		desks: {
-			[firstDesk.id]: {
-				"vpb-api-surface": {
-					revision: 1,
-					page_mode: { type: "follow_main" },
-					zones,
-				},
-			},
-		},
+		revision: 1,
+		zones,
 	});
 	return { prepared, firstDesk, zones };
 }
@@ -157,11 +154,7 @@ async function verifyRestartedVirtualZone(
 	expect(await activeVirtualPlayback(api, 1, 1003)).toMatchObject({
 		enabled: true,
 	});
-	expect(
-		(await virtualZoneSnapshot(api)).desks[firstDesk.id][
-			"vpb-api-surface"
-		].zones,
-	).toEqual(zones);
+	expect((await virtualZoneSnapshot(api)).zones).toEqual(zones);
 
 	for (const number of [1001, 1002, 1003])
 		await virtualAction(api, 1, number, "off");
@@ -209,36 +202,29 @@ async function verifyFirstDeskPageAndOsc({
 	bench,
 }: VirtualZoneApiContext) {
 	const desk = api.session!.desk;
-	await api.request(
-		"POST",
-		`/api/v2/control-desks/${desk.id}/actions`,
-		{
-			request_id: crypto.randomUUID(),
-			action: { type: "set_page", page: 2, existing_only: false },
-		},
-	);
-	for (const page of [1, 2])
-		for (const number of [1001, 1002, 1003])
-			await virtualAction(api, page, number, "off");
-	await virtualAction(api, 2, 1001, "go");
-	await virtualAction(api, 2, 1002, "go");
-	expect(await activeVirtualPlayback(api, 2, 1001)).toMatchObject({
-		enabled: false,
+	await api.request("POST", `/api/v2/control-desks/${desk.id}/actions`, {
+		request_id: crypto.randomUUID(),
+		action: { type: "set_page", page: 2, existing_only: false },
 	});
-	expect(await activeVirtualPlayback(api, 2, 1002)).toMatchObject({
+	for (const number of [1001, 1002, 1003])
+		await virtualAction(api, 1, number, "off");
+	for (const number of [1301, 1302, 1303])
+		await virtualAction(api, 2, number, "off");
+	await virtualAction(api, 2, 1301, "go");
+	await virtualAction(api, 2, 1302, "go");
+	expect(await activeVirtualPlayback(api, 2, 1301)).toMatchObject({
+		enabled: true,
+	});
+	expect(await activeVirtualPlayback(api, 2, 1302)).toMatchObject({
 		enabled: true,
 	});
 	expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
 		enabled: false,
 	});
-	await api.request(
-		"POST",
-		`/api/v2/control-desks/${desk.id}/actions`,
-		{
-			request_id: crypto.randomUUID(),
-			action: { type: "set_page", page: 1, existing_only: false },
-		},
-	);
+	await api.request("POST", `/api/v2/control-desks/${desk.id}/actions`, {
+		request_id: crypto.randomUUID(),
+		action: { type: "set_page", page: 1, existing_only: false },
+	});
 	for (const number of [1001, 1002, 1003])
 		await virtualAction(api, 1, number, "off");
 
@@ -254,16 +240,10 @@ async function verifyFirstDeskPageAndOsc({
 			[true],
 		);
 		await expect
-			.poll(
-				async () =>
-					(await activeVirtualPlayback(api, 1, 1001))?.enabled,
-			)
+			.poll(async () => (await activeVirtualPlayback(api, 1, 1001))?.enabled)
 			.toBe(false);
 		await expect
-			.poll(
-				async () =>
-					(await activeVirtualPlayback(api, 1, 1002))?.enabled,
-			)
+			.poll(async () => (await activeVirtualPlayback(api, 1, 1002))?.enabled)
 			.toBe(true);
 		expect(
 			(await audit(api)).some(
@@ -279,9 +259,9 @@ async function verifyFirstDeskPageAndOsc({
 	}
 }
 
-async function verifySecondDeskPartitionIsolation(
+async function verifySecondDeskSharesShowZones(
 	{ api, bench }: VirtualZoneApiContext,
-	{ prepared, firstDesk, zones }: AuthoritativeVirtualZoneSetup,
+	{ prepared, zones }: AuthoritativeVirtualZoneSetup,
 ) {
 	const second = await api.request<Session>(
 		"POST",
@@ -290,49 +270,19 @@ async function verifySecondDeskPartitionIsolation(
 		false,
 	);
 	api.session = second;
-	const secondZones = [
-		{ id: "wing-spares", name: "Wing spares", slots: [1, 2] },
-	];
-	const secondSaved = await saveVirtualZoneSurface(
-		api,
-		"vpb-second-surface",
-		secondZones,
-		{ pageMode: { type: "pinned", page: 2 } },
-	);
-	expect(secondSaved).toMatchObject({
-		show_id: prepared.showId,
-		desk_id: second.desk.id,
-		surface_id: "vpb-second-surface",
-		surface: {
-			revision: 1,
-			page_mode: { type: "pinned", page: 2 },
-			zones: secondZones,
-		},
-		replayed: false,
-		changed: true,
+	await api.request("POST", `/api/v2/control-desks/${second.desk.id}/actions`, {
+		request_id: crypto.randomUUID(),
+		action: { type: "set_page", page: 2, existing_only: false },
 	});
 	expect(await virtualZoneSnapshot(api)).toMatchObject({
 		show_id: prepared.showId,
-		desks: {
-			[firstDesk.id]: {
-				"vpb-api-surface": {
-					revision: 1,
-					page_mode: { type: "follow_main" },
-					zones,
-				},
-			},
-			[second.desk.id]: {
-				"vpb-second-surface": {
-					revision: 1,
-					page_mode: { type: "pinned", page: 2 },
-					zones: secondZones,
-				},
-			},
-		},
+		revision: 1,
+		zones,
 	});
-	for (const page of [1, 2])
-		for (const number of [1001, 1002, 1003])
-			await virtualAction(api, page, number, "off");
+	for (const number of [1001, 1002, 1003])
+		await virtualAction(api, 1, number, "off");
+	for (const number of [1301, 1302, 1303])
+		await virtualAction(api, 2, number, "off");
 	const secondHardware = await bench.osc();
 	try {
 		await secondHardware.subscribe("vpb-007-second", second.desk.osc_alias);
@@ -345,27 +295,19 @@ async function verifySecondDeskPartitionIsolation(
 			[true],
 		);
 		await expect
-			.poll(
-				async () =>
-					(await activeVirtualPlayback(api, 1, 1001))?.enabled,
-			)
-			.toBe(true);
+			.poll(async () => (await activeVirtualPlayback(api, 1, 1001))?.enabled)
+			.toBe(false);
 		await expect
-			.poll(
-				async () =>
-					(await activeVirtualPlayback(api, 1, 1002))?.enabled,
-			)
+			.poll(async () => (await activeVirtualPlayback(api, 1, 1002))?.enabled)
 			.toBe(true);
-		await virtualAction(api, 2, 1001, "go");
-		await virtualAction(api, 2, 1002, "go");
-		expect(await activeVirtualPlayback(api, 2, 1001)).toMatchObject({
-			enabled: false,
-		});
-		expect(await activeVirtualPlayback(api, 2, 1002)).toMatchObject({
+		await virtualAction(api, 2, 1301, "go");
+		await virtualAction(api, 2, 1302, "go");
+		expect(await activeVirtualPlayback(api, 2, 1301)).toMatchObject({
 			enabled: true,
 		});
-		expect(await activePlayback(api, 71)).toBeUndefined();
-		expect(await activePlayback(api, 72)).toBeUndefined();
+		expect(await activeVirtualPlayback(api, 2, 1302)).toMatchObject({
+			enabled: true,
+		});
 		await bench.tick(0);
 		expect(await visualizationLevel(api, prepared.fixtures[3])).toBeCloseTo(
 			0.2,
@@ -373,6 +315,10 @@ async function verifySecondDeskPartitionIsolation(
 		);
 		expect(await visualizationLevel(api, prepared.fixtures[4])).toBeCloseTo(
 			0.4,
+			5,
+		);
+		expect(await visualizationLevel(api, prepared.fixtures[5])).toBeCloseTo(
+			0.6,
 			5,
 		);
 	} finally {
@@ -388,12 +334,12 @@ const virtualZoneApiSupplement = async ({
 	const setup = await prepareAuthoritativeVirtualZone(context);
 	await verifyRestartedVirtualZone(context, setup);
 	await verifyFirstDeskPageAndOsc(context);
-	await verifySecondDeskPartitionIsolation(context, setup);
+	await verifySecondDeskSharesShowZones(context, setup);
 };
 
 export function registerVirtualZoneApiScenario(): void {
 	test(
-		"VPB-007 @api › revisioned Follow Main and Pinned zone surfaces retain page-qualified desk isolation across restart and OSC",
+		"VPB-007 @api › revisioned show-owned playback-number zones arbitrate across desks, pages, restart, and OSC",
 		virtualZoneApiSupplement,
 	);
 }

@@ -132,7 +132,7 @@ fn page_qualified_virtual_addresses_keep_distinct_runtime_identities() {
     let service = PlaybackService::default();
     let ports = FakePorts::default();
     let first = light_playback::VirtualPlaybackAddress::new(1, 1_001).unwrap();
-    let second = light_playback::VirtualPlaybackAddress::new(2, 1_001).unwrap();
+    let second = light_playback::VirtualPlaybackAddress::new(2, 1_301).unwrap();
 
     let first_result = service
         .handle(

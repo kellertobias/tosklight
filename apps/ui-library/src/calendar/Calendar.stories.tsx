@@ -18,6 +18,7 @@ const markers = [
 const meta = {
 	title: "Controls/Calendar",
 	component: Calendar,
+	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof Calendar>;
 

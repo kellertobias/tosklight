@@ -40,6 +40,7 @@ export type StageRenderQuality =
 	| "improved_beams";
 export type DmxDotSize = "small" | "large";
 export type TextEditorMode = "plain" | "markdown" | "split";
+export type VirtualPlaybackPageMode = "follow_main" | "pinned";
 
 export interface GridRect {
 	x: number;
@@ -51,8 +52,14 @@ export interface GridRect {
 export interface VirtualPlaybackExclusionZone {
 	id: string;
 	name: string;
-	/** One-based cells on the surface's current playback page. */
-	slots: number[];
+	/** Stable show-owned Virtual Playback numbers. */
+	playbackNumbers: number[];
+}
+
+export interface VirtualPlaybackZoneEdit {
+	zoneId: string;
+	name: string;
+	playbackNumbers: number[];
 }
 
 export interface PaneModel extends GridRect {
@@ -71,6 +78,8 @@ export interface PaneModel extends GridRect {
 	presetPoolColors?: boolean;
 	virtualPlaybackRows?: number;
 	virtualPlaybackColumns?: number;
+	virtualPlaybackPageMode?: VirtualPlaybackPageMode;
+	virtualPlaybackPinnedPage?: number;
 	virtualPlaybackCells?: Array<{
 		playbackNumber: number | null;
 		action: "go" | "toggle";
@@ -143,6 +152,7 @@ export interface AppState {
 	} | null;
 	controlMode: ControlMode;
 	paneSettingsId: string | null;
+	virtualPlaybackZoneEdit: VirtualPlaybackZoneEdit | null;
 	maximizedPaneId: string | null;
 	windowPicker: GridRect | null;
 	savingDesk: boolean;

@@ -6100,22 +6100,20 @@
     "VirtualPlaybackExclusionZonesChange": {
       "type": "object",
       "properties": {
-        "desk_id": {
-          "type": "string",
-          "format": "uuid"
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0
         },
         "show_id": {
           "type": "string",
           "format": "uuid"
-        },
-        "surface_id": {
-          "type": "string"
         }
       },
       "required": [
         "show_id",
-        "desk_id",
-        "surface_id"
+        "revision"
       ]
     }
   }

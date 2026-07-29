@@ -12,6 +12,11 @@ import {
 	recordAt,
 	stringAt,
 } from "./playbackWirePrimitives";
+import {
+	MAX_VIRTUAL_PLAYBACK_NUMBER,
+	isVirtualPlaybackNumberForPage,
+	virtualPlaybackBankStart,
+} from "./virtualPlaybackAddress";
 import { WireValidationError } from "./wireValidation";
 
 const BUTTON_ACTIONS = [
@@ -126,7 +131,7 @@ export function decodePlaybackPageBody(
 ): PlaybackPage {
 	const page = recordAt(value, path);
 	// Page object keys are lossless storage identities and need not equal the page number.
-	const number = positiveIntegerAt(page.number, `${path}.number`, 127);
+	const pageNumber = positiveIntegerAt(page.number, `${path}.number`, 127);
 	const slots = recordAt(page.slots ?? {}, `${path}.slots`);
 	const decodedSlots = Object.fromEntries(
 		Object.entries(slots).map(([slot, number]) => [
@@ -143,19 +148,19 @@ export function decodePlaybackPageBody(
 			const decodedNumber = positiveIntegerAt(
 				Number(number),
 				`${path}.virtual_playbacks.${number}`,
-				9_998,
+				MAX_VIRTUAL_PLAYBACK_NUMBER,
 			);
-			if (decodedNumber < 1_001)
+			if (!isVirtualPlaybackNumberForPage(pageNumber, decodedNumber))
 				throw new WireValidationError(
 					`${path}.virtual_playbacks.${number}`,
-					"integer between 1001 and 9998",
+					`integer in page ${pageNumber}'s bank ${virtualPlaybackBankStart(pageNumber)}-${virtualPlaybackBankStart(pageNumber) + 299}`,
 					number,
 				);
 			const decoded = decodePlaybackBody(
 				playback,
 				`${path}.virtual_playbacks.${number}`,
 				undefined,
-				9_998,
+				MAX_VIRTUAL_PLAYBACK_NUMBER,
 			);
 			if (decoded.number !== decodedNumber)
 				throw new WireValidationError(
@@ -168,7 +173,7 @@ export function decodePlaybackPageBody(
 	);
 	return {
 		...page,
-		number,
+		number: pageNumber,
 		name: plainStringAt(page.name, `${path}.name`),
 		slots: decodedSlots,
 		virtual_playbacks: decodedVirtualPlaybacks,

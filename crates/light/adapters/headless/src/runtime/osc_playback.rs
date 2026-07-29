@@ -383,18 +383,19 @@ mod playback_address_tests {
 
     #[test]
     fn dedicated_virtual_osc_address_is_page_qualified_and_range_checked() {
-        let parts = ["light", "main", "virtual-playback", "4", "1001", "go"];
+        let parts = ["light", "main", "virtual-playback", "4", "1901", "go"];
         let (address, action_index) = osc_playback_address(&parts).unwrap();
         assert_eq!(
             address,
             PlaybackAddress::Virtual(
-                light_playback::VirtualPlaybackAddress::new(4, 1_001).unwrap()
+                light_playback::VirtualPlaybackAddress::new(4, 1_901).unwrap()
             )
         );
         assert_eq!(action_index, 5);
 
         for invalid in [
             ["light", "main", "virtual-playback", "4", "1000", "go"],
+            ["light", "main", "virtual-playback", "4", "1001", "go"],
             ["light", "main", "virtual-playback", "4", "9999", "go"],
         ] {
             assert!(osc_playback_address(&invalid).is_none());

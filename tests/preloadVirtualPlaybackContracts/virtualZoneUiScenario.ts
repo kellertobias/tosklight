@@ -4,6 +4,7 @@ import {
 	activeVirtualPlayback,
 	addVirtualPlaybackPane,
 	prepare,
+	virtualAction,
 	virtualZoneSnapshot,
 	writeVirtualPage,
 } from "./support";
@@ -34,10 +35,14 @@ const virtualZoneUiSupplement = async ({
 	);
 	await page.keyboard.down("Shift");
 	await pane
-		.getByRole("button", { name: /Virtual playback page 1 cell 1 Touring A/ })
+		.getByRole("button", {
+			name: /Virtual playback 1001 page 1 cell 1 Touring A/,
+		})
 		.click();
 	await pane
-		.getByRole("button", { name: /Virtual playback page 1 cell 2 Touring B/ })
+		.getByRole("button", {
+			name: /Virtual playback 1002 page 1 cell 2 Touring B/,
+		})
 		.click();
 	await page.keyboard.up("Shift");
 	expect(await activeVirtualPlayback(api, 1, 1001)).toBeUndefined();
@@ -49,16 +54,11 @@ const virtualZoneUiSupplement = async ({
 	await expect(create).toBeHidden();
 	await expect
 		.poll(async () => {
-			const surfaces = Object.values(
-				(await virtualZoneSnapshot(api)).desks[api.session!.desk.id] ?? {},
-			);
-			return surfaces.find((surface) =>
-				surface.zones.some((zone) => zone.name === "Touring pair"),
-			);
+			const snapshot = await virtualZoneSnapshot(api);
+			return snapshot.zones.find((zone) => zone.name === "Touring pair");
 		})
 		.toMatchObject({
-			revision: 1,
-			page_mode: { type: "follow_main" },
+			playback_numbers: [1001, 1002],
 		});
 
 	await desk.recordStep(
@@ -66,10 +66,14 @@ const virtualZoneUiSupplement = async ({
 		"Turn on cell 1, then cell 2. Cell 2 remains On and cell 1 is released by the server.",
 	);
 	await pane
-		.getByRole("button", { name: /Virtual playback page 1 cell 1 Touring A/ })
+		.getByRole("button", {
+			name: /Virtual playback 1001 page 1 cell 1 Touring A/,
+		})
 		.click();
 	await pane
-		.getByRole("button", { name: /Virtual playback page 1 cell 2 Touring B/ })
+		.getByRole("button", {
+			name: /Virtual playback 1002 page 1 cell 2 Touring B/,
+		})
 		.click();
 	await expect
 		.poll(async () => (await activeVirtualPlayback(api, 1, 1001))?.enabled)
@@ -93,7 +97,7 @@ const virtualZoneUiSupplement = async ({
 	await settings.getByRole("button", { name: "Edit Zone" }).click();
 	await expect(settings).toBeHidden();
 	await pane
-		.getByRole("button", { name: /Virtual playback page 2 cell 3 empty/ })
+		.getByRole("button", { name: /Virtual playback 1303 page 2 cell 3 empty/ })
 		.click();
 	await pane
 		.getByRole("button", { name: "Update Exclusion Zone", exact: true })
@@ -108,20 +112,17 @@ const virtualZoneUiSupplement = async ({
 	await settings
 		.getByRole("tab", { name: "Exclusion Zones", exact: true })
 		.click();
-	await expect(settings.getByText(/Cells 1, 2, 3/)).toBeVisible();
+	await expect(
+		settings.getByText(/Virtual Playbacks 1001, 1002, 1303/),
+	).toBeVisible();
 	await settings.getByRole("button", { name: "Close settings" }).click();
 	await expect
 		.poll(async () => {
-			const surfaces = Object.values(
-				(await virtualZoneSnapshot(api)).desks[api.session!.desk.id] ?? {},
-			);
-			return surfaces.find((surface) =>
-				surface.zones.some((zone) => zone.name === "Touring alternates"),
-			);
+			const snapshot = await virtualZoneSnapshot(api);
+			return snapshot.zones.find((zone) => zone.name === "Touring alternates");
 		})
 		.toMatchObject({
-			revision: expect.any(Number),
-			page_mode: { type: "pinned", page: 2 },
+			playback_numbers: [1001, 1002, 1303],
 		});
 
 	await page.waitForTimeout(1_000);
@@ -146,12 +147,43 @@ const virtualZoneUiSupplement = async ({
 	await expect(settings.getByLabel("Name for Touring alternates")).toHaveValue(
 		"Touring alternates",
 	);
-	await expect(settings.getByText(/Cells 1, 2, 3/)).toBeVisible();
+	await expect(
+		settings.getByText(/Virtual Playbacks 1001, 1002, 1303/),
+	).toBeVisible();
+	await settings.getByRole("button", { name: "Delete zone" }).click();
+	await expect
+		.poll(async () => (await virtualZoneSnapshot(api)).zones)
+		.toEqual([]);
+	await settings.getByRole("button", { name: "Close settings" }).click();
+
+	for (const number of [1001, 1002]) await virtualAction(api, 1, number, "off");
+	await virtualAction(api, 1, 1001, "on");
+	await virtualAction(api, 1, 1002, "on");
+	expect(await activeVirtualPlayback(api, 1, 1001)).toMatchObject({
+		enabled: true,
+	});
+	expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
+		enabled: true,
+	});
+
+	await page.reload();
+	await expect(page.locator(".connection-cover")).toBeHidden({
+		timeout: 10_000,
+	});
+	pane = await activeVirtualPane(page);
+	await pane.getByRole("button", { name: "Settings", exact: true }).click();
+	settings = page.getByRole("dialog", { name: "Pane Settings" });
+	await settings
+		.getByRole("tab", { name: "Exclusion Zones", exact: true })
+		.click();
+	await expect(
+		settings.getByText("No exclusion zones are configured for this show."),
+	).toBeVisible();
 };
 
 export function registerVirtualZoneUiScenario(): void {
 	test(
-		"VPB-007 @ui › Settings persist Pinned page mode, hidden membership, and revisioned zone authority",
+		"VPB-007 @ui › Settings preserve numbered cross-page members and explicitly delete zone authority",
 		virtualZoneUiSupplement,
 	);
 }

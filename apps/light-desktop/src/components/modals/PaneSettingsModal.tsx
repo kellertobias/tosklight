@@ -87,7 +87,7 @@ function VirtualPlaybackZoneEditor({
 				</Button>
 			</header>
 			<small>
-				Cells {zone.slots.join(", ")} · zone order{" "}
+				Virtual Playbacks {zone.playbackNumbers.join(", ")} · zone order{" "}
 				{zones.findIndex((candidate) => candidate.id === zone.id) + 1}
 			</small>
 		</article>
@@ -132,7 +132,7 @@ function VirtualPlaybackZoneSettings({
 					{surface.error ?? "Loading Playback Exclusion Zones…"}
 				</p>
 			) : surface.zones.length === 0 ? (
-				<p>No exclusion zones are configured for this pane.</p>
+				<p>No exclusion zones are configured for this show.</p>
 			) : (
 				surface.zones.map((zone) => (
 					<VirtualPlaybackZoneEditor
@@ -532,10 +532,9 @@ function PaneSettingsDialog({ pane }: { pane: PaneModel }) {
 						dispatch({
 							type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT",
 							edit: {
-								surfaceId: pane.id,
 								zoneId: zone.id,
 								name: zone.name,
-								slots: [...zone.slots],
+								playbackNumbers: [...zone.playbackNumbers],
 							},
 						});
 						close();

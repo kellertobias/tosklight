@@ -10,10 +10,12 @@ import type { BuiltInWindow, DeskModel, PaneModel } from "../types";
 import { decodeRecordedGroupBody } from "./groupRecordingBodyWire";
 import {
 	arrayAt,
+	boundedPositiveIntegerAt,
 	integerAt,
 	recordAt,
 	stringAt,
 } from "./playbackWirePrimitives";
+import { VIRTUAL_PLAYBACKS_PER_PAGE } from "./virtualPlaybackAddress";
 import { decodeCueListBody } from "./showObjectCueWire";
 import {
 	decodePlaybackBody,
@@ -233,10 +235,16 @@ function decodeUserLayout(value: unknown, path: string): StoredDeskLayout {
 				(rawPane, paneIndex) => {
 					const panePath = `${deskPath}.panes[${paneIndex}]`;
 					const pane = recordAt(rawPane, panePath);
+					const kind = builtInWindowAt(pane.kind, `${panePath}.kind`);
+					const virtualFields =
+						kind === "virtual_playbacks"
+							? decodeVirtualPlaybackPane(pane, panePath)
+							: {};
 					return {
 						...pane,
+						...virtualFields,
 						id: stringAt(pane.id, `${panePath}.id`),
-						kind: builtInWindowAt(pane.kind, `${panePath}.kind`),
+						kind,
 						title: stringAt(pane.title, `${panePath}.title`),
 						x: finiteNumberAt(pane.x, `${panePath}.x`),
 						y: finiteNumberAt(pane.y, `${panePath}.y`),
@@ -259,6 +267,52 @@ function decodeUserLayout(value: unknown, path: string): StoredDeskLayout {
 		...body,
 		desks,
 		activeDeskId: stringAt(body.activeDeskId, `${path}.activeDeskId`),
+	};
+}
+
+function decodeVirtualPlaybackPane(
+	pane: Record<string, unknown>,
+	path: string,
+): Pick<
+	PaneModel,
+	| "virtualPlaybackRows"
+	| "virtualPlaybackColumns"
+	| "virtualPlaybackPageMode"
+	| "virtualPlaybackPinnedPage"
+> {
+	const rows = boundedPositiveIntegerAt(
+		pane.virtualPlaybackRows,
+		`${path}.virtualPlaybackRows`,
+		VIRTUAL_PLAYBACKS_PER_PAGE,
+	);
+	const columns = boundedPositiveIntegerAt(
+		pane.virtualPlaybackColumns,
+		`${path}.virtualPlaybackColumns`,
+		VIRTUAL_PLAYBACKS_PER_PAGE,
+	);
+	if (rows * columns > VIRTUAL_PLAYBACKS_PER_PAGE)
+		throw new WireValidationError(
+			path,
+			"a Virtual Playback grid with at most 300 cells",
+			pane,
+		);
+	const mode = pane.virtualPlaybackPageMode;
+	if (mode !== "follow_main" && mode !== "pinned")
+		throw new WireValidationError(
+			`${path}.virtualPlaybackPageMode`,
+			"follow_main or pinned",
+			mode,
+		);
+	const pinnedPage = boundedPositiveIntegerAt(
+		pane.virtualPlaybackPinnedPage,
+		`${path}.virtualPlaybackPinnedPage`,
+		127,
+	);
+	return {
+		virtualPlaybackRows: rows,
+		virtualPlaybackColumns: columns,
+		virtualPlaybackPageMode: mode,
+		virtualPlaybackPinnedPage: pinnedPage,
 	};
 }
 

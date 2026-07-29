@@ -1,4 +1,5 @@
 import type { PlaybackDefinition } from "../../api/types";
+import { virtualPlaybackNumber } from "../../api/virtualPlaybackAddress";
 import { usePlaybackTopologyActions } from "../../features/playbackTopology/PlaybackTopologyProvider";
 import {
 	PlaybackConfigurationDialog,
@@ -26,15 +27,21 @@ export function VirtualPlaybackConfigurationModal(
 		page: number,
 		slot: number,
 		playback: PlaybackDefinition,
-	) =>
+	) => {
+		const number = virtualPlaybackNumber(page, slot);
+		return (
 		(await topology?.configureVirtual(
 			page,
-			1_000 + slot,
-			{ ...playback, number: 1_000 + slot },
+			number,
+			{ ...playback, number },
 			revisionBasis,
-		)) != null;
-	const clear = async (page: number, slot: number) =>
-		(await topology?.clearVirtual(page, 1_000 + slot, revisionBasis)) != null;
+		)) != null
+		);
+	};
+	const clear = async (page: number, slot: number) => {
+		const number = virtualPlaybackNumber(page, slot);
+		return (await topology?.clearVirtual(page, number, revisionBasis)) != null;
+	};
 	return (
 		<PlaybackConfigurationDialog
 			{...props}

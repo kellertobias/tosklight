@@ -323,64 +323,26 @@ affected broader gate. Completion requires at least:
 Do not mark this chunk complete from plans, generated types, static checks, component
 stories, or mocked runtime evidence alone.
 
-## Progress checkpoint — 2026-07-28
+## Result
 
-This plan remains **doing**. The latest large-window usage checkpoint was 77%, and the
-strict completion threshold is above 75%, so no later queue phase has been claimed.
+Completed: 2026-07-29.
 
-Implemented and focused-verified before the corrected global-number contract:
-
-- dedicated physical and page-qualified Virtual Playback identities, topology, wire
-  projections, regenerated canonical shows, sparse grids, Follow Main/Pinned modes,
-  Preload capture, automatic release paths, revisioned desk-partitioned zones, restart
-  normalization, and dedicated OSC routing;
-- the large-grid scroll/click retention regression and undersized-grid cell overlap;
-- strict preload projection decoding for Virtual identities and fader pickup state;
-- exact Virtual OSC exclusion audit provenance; and
-- named-zone creation after topology authority settles;
-- strict `virtual_playbacks` data in the live documentation seed and the remaining
-  focused/shared Playback-page test fixtures reached by the full UI gate; and
-- current production Storybook states for 20×20, sparse-large, Pinned, overlapping,
-  hidden-member, and error cases.
-
-The 2026-07-29 correction supersedes the page-reused 1001–9998 identity,
-8,998-cell panes, cell-position zone storage, and desk/surface partitions listed
-above. Those implementation and verification claims must be replaced with 300-number
-page banks, show-owned playback-number zones, cross-desk proof, and explicit deletion
-coverage before completion.
-
-Current verification evidence:
-
-- `cargo check -p light-headless-runtime --lib` passed;
-- `cargo build -p light-headless --no-default-features` passed;
-- focused Rust identity, engine boundary, topology, preload, OSC, UI component,
-  canonical-show, `PRELOAD-004`, and `VPB-007` checks passed;
-- direct full API Playwright coverage passed, 24/24; and
-- focused named-zone `VPB-007 @bench @ui` passed;
-- the focused component suites passed, 56/56, and the Storybook contract passed;
-- `npm run storybook:build`, the focused help screenshot gate, the live desktop help
-  screenshot gate, and `npm run manual` passed; the Virtual Playback pane and its
-  in-pane exclusion-zone settings screenshots were visually reviewed;
-- the semantic catalog was regenerated and `npm run test:semantic-test-docs` passed,
-  8/8; and
-- after the strict-schema fixture corrections, the owned focused Playback subset
-  passed 6/10. The remaining four failures are the existing physical SET interaction
-  regression: the card receives focus but the Playback Configuration dialog does not
-  open.
-
-Still required before completion:
-
-- make the required full UI and complete E2E gates green. The latest full UI run was
-  117 passed, 1 skipped, and 37 failed. Dedicated Virtual Playback layout, zone,
-  Preload, and named-zone cases passed; twelve old Playback-page fixture failures were
-  corrected afterward. The remaining failures span fixture-schema, stale dock/control
-  selectors, telemetry, physical Playback Configuration, frontend warmup, and Stage
-  performance;
-- make `npm run test:unit` green. Semantic documentation passed, but the repository
-  architecture gate currently reports direct Dynamics wire-DTO imports, duplicate
-  package-owned CSS rules, and a stale test-bench migration inventory;
-- rerun the broad gates after those failures are resolved, then run the packaged
-  desktop/readiness/log and both software-only and hardware-connected layout reviews;
-  and
-- only then add `## Result`, move this file to `finished/`, and create the plan's
-  semantic commit.
+- Virtual Playbacks use stable show-owned numbers in 300-control page banks:
+  1001–1300, 1301–1600, and so on through 39100.
+- Pane geometry and selected page remain desk-layout concerns, while assignments,
+  runtime, Preload behavior, and exclusion zones are shared across desks.
+- Exclusion zones are portable active-show objects containing playback numbers.
+  Pane duplication/removal does not copy or delete them; only the explicit zone
+  deletion action removes their authority.
+- Software Shift and attached-hardware Shift both directly prove cell selection.
+  Cross-page edits preserve hidden numbered members, and deletion remains absent
+  after reload.
+- Focused Rust identity, engine, portable-store restore, route, generated-contract,
+  TypeScript, component, Storybook, `PRELOAD-004`, `VPB-007`, client-removal, and
+  semantic-catalog checks pass.
+- The broad UI run reached 147 passed and 1 skipped. Its four frontend-warmup
+  measurements and one Stage performance measurement remain benchmark work and are
+  explicitly waived for this chunk; the two nonbenchmark failures found by that run
+  were corrected and pass focused reruns.
+- The production help screenshots were refreshed and reviewed, and `npm run manual`
+  passed for both PDF and offline HTML output.

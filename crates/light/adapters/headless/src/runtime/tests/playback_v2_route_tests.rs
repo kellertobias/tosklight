@@ -2235,7 +2235,7 @@ fn active_show_id(state: &AppState) -> Uuid {
     state.active_show.current().as_ref().unwrap().id.0
 }
 
-fn install_virtual_playback_test_state(state: &AppState, desk_id: Uuid) {
+fn install_virtual_playback_test_state(state: &AppState, _desk_id: Uuid) {
     install_playback_test_state(state);
     let cue_list_id = state.output.snapshot().cue_lists[0].id;
     let mut snapshot = (*state.output.snapshot()).clone();
@@ -2251,25 +2251,13 @@ fn install_virtual_playback_test_state(state: &AppState, desk_id: Uuid) {
     }]
     .into();
     state.output.replace_snapshot(snapshot).unwrap();
-    let store = VirtualPlaybackExclusionStore::from([(
-        desk_id.to_string(),
-        VirtualPlaybackExclusionSurfaces::from([(
-            "test-surface".into(),
-            test_virtual_playback_exclusion_surface(vec![VirtualPlaybackExclusionZone {
-                id: "zone-a".into(),
-                name: "Zone A".into(),
-                slots: vec![1, 2],
-            }]),
-        )]),
-    )]);
+    let store = test_virtual_playback_exclusion_store(vec![VirtualPlaybackExclusionZone {
+        id: "zone-a".into(),
+        name: "Zone A".into(),
+        playback_numbers: vec![1_001, 1_002],
+    }]);
     let show_id = state.active_show.current().as_ref().unwrap().id;
-    state
-        .installation
-        .set_setting(
-            &virtual_playback_exclusion_setting(show_id),
-            &serde_json::to_string(&store).unwrap(),
-        )
-        .unwrap();
+    persist_test_virtual_playback_exclusions(state, show_id, &store);
 }
 
 fn playback_event_objects(state: &AppState, after: u64) -> Vec<u16> {

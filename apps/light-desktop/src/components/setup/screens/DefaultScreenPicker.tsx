@@ -114,11 +114,12 @@ function RemoveClientConfirmation({
 				<p>
 					Remove {client.name} and its client registration, default-screen
 					configuration, per-show page and playback selection, desk lock, Update
-					defaults, and virtual-playback exclusion settings.
+					defaults.
 				</p>
 				<p>
-					Portable shows, users, optional screens, other clients, and
-					installation-wide configuration will not change.
+					Portable shows, Virtual Playback assignments and exclusion zones,
+					users, optional screens, other clients, and installation-wide
+					configuration will not change.
 				</p>
 				<div className="modal-actions">
 					<Button disabled={removing} onClick={onCancel}>

@@ -71,6 +71,6 @@ export type PreloadCombinedPairState = Prepared & {
 };
 
 export type VirtualZonePairState = Prepared & {
-	savedZones?: Array<{ name: string; slots: number[] }>;
+	savedZones?: Array<{ name: string; playback_numbers: number[] }>;
 	creationState?: [boolean, boolean];
 };

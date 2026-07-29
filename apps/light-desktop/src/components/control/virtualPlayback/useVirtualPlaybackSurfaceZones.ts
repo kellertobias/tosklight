@@ -1,45 +1,35 @@
-import {
-	useCallback,
-	useEffect,
-	useRef,
-	useSyncExternalStore,
-} from "react";
-import type {
-	VirtualPlaybackSurfacePageMode,
-	VirtualPlaybackZone,
-} from "../../../features/virtualPlaybackZones/contracts";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import type { VirtualPlaybackZone } from "../../../features/virtualPlaybackZones/contracts";
 import { useVirtualPlaybackZones } from "../../../features/virtualPlaybackZones/VirtualPlaybackZonesContext";
 
 interface SurfaceZoneOptions {
 	surfaceId: string;
 	active: boolean;
 	authorityReady: boolean;
-	pageMode: VirtualPlaybackSurfacePageMode;
+	/** Layout identity is intentionally ignored; zones are show-global. */
+	pageMode?: unknown;
 }
 
-/** Loads one surface only for a ready desk authority; local errors never retrigger reads. */
+/** Projects the show-global zone set into a pane; local errors never retrigger reads. */
 export function useVirtualPlaybackSurfaceZones({
-	surfaceId,
 	active,
 	authorityReady,
-	pageMode,
 }: SurfaceZoneOptions) {
 	const capability = useVirtualPlaybackZones();
 	const capabilityRef = useRef(capability);
 	capabilityRef.current = capability;
 	const subscribe = useCallback(
-		(listener: () => void) =>
-			capabilityRef.current.subscribeSurface(surfaceId, listener),
-		[capability.authorityGeneration, surfaceId],
+		(listener: () => void) => capabilityRef.current.subscribe(listener),
+		[capability.authorityGeneration],
 	);
 	const getSnapshot = useCallback(
-		() => capabilityRef.current.getSurface(surfaceId),
-		[capability.authorityGeneration, surfaceId],
+		() => capabilityRef.current.getZones(),
+		[capability.authorityGeneration],
 	);
 	const zones = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 	const getSaving = useCallback(
-		() => capabilityRef.current.isSavingSurface(surfaceId),
-		[capability.authorityGeneration, surfaceId],
+		() => capabilityRef.current.isSaving(),
+		[capability.authorityGeneration],
 	);
 	const saving = useSyncExternalStore(subscribe, getSaving, getSaving);
 	const ready =
@@ -53,29 +43,27 @@ export function useVirtualPlaybackSurfaceZones({
 		const source = capabilityRef.current;
 		if (!active || !authorityReady || !source.available || !source.authorityId)
 			return;
-		return source.activateSurface(surfaceId);
+		return source.activate();
 	}, [
 		active,
 		authorityReady,
 		capability.authorityId,
 		capability.authorityGeneration,
 		capability.available,
-		surfaceId,
 	]);
 
 	useEffect(() => {
 		const source = capabilityRef.current;
 		if (!active || !authorityReady || !source.available || !source.authorityId)
 			return;
-		if (source.getSurface(surfaceId) !== null) return;
-		void source.loadSurface(surfaceId);
+		if (source.getZones() !== null) return;
+		void source.load();
 	}, [
 		active,
 		authorityReady,
 		capability.authorityId,
 		capability.authorityGeneration,
 		capability.available,
-		surfaceId,
 	]);
 	const persist = useCallback(
 		async (zones: readonly VirtualPlaybackZone[]) => {
@@ -83,8 +71,8 @@ export function useVirtualPlaybackSurfaceZones({
 			const source = capabilityRef.current;
 			const authorityId = source.authorityId;
 			const authorityGeneration = source.authorityGeneration;
-			if (!authorityId || source.isSavingSurface(surfaceId)) return false;
-			const saved = await source.saveSurface(surfaceId, pageMode, zones);
+			if (!authorityId || source.isSaving()) return false;
+			const saved = await source.save(zones);
 			if (!saved) return false;
 			const current = capabilityRef.current;
 			return (
@@ -92,7 +80,7 @@ export function useVirtualPlaybackSurfaceZones({
 				current.authorityGeneration === authorityGeneration
 			);
 		},
-		[active, authorityReady, pageMode, surfaceId],
+		[active, authorityReady],
 	);
 
 	return {

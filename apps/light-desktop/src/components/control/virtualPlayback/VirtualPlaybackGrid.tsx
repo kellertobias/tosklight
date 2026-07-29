@@ -9,6 +9,10 @@ import type {
 	PlaybackDefinition,
 	PlaybackPage,
 } from "../../../api/types";
+import {
+	VIRTUAL_PLAYBACKS_PER_PAGE,
+	virtualPlaybackNumber,
+} from "../../../api/virtualPlaybackAddress";
 import { useActiveShowId } from "../../../features/deskSnapshot/DeskSnapshotState";
 import type { PlaybackRuntimeActions } from "../../../features/playbackRuntime/actionWriter";
 import type { PlaybackProjection } from "../../../features/playbackRuntime/contracts";
@@ -24,7 +28,7 @@ import {
 import type { VirtualPlaybackZone } from "../../../features/virtualPlaybackZones/contracts";
 import { cueUpdateTarget, requestUpdateTarget } from "../updateWorkflow";
 
-export const MAX_VIRTUAL_PLAYBACK_CELLS = 8_998;
+export const MAX_VIRTUAL_PLAYBACK_CELLS = VIRTUAL_PLAYBACKS_PER_PAGE;
 
 interface VirtualPlaybackGridProps {
 	pageNumber: number;
@@ -51,7 +55,7 @@ export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 	const showId = useActiveShowId() ?? "unresolved";
 	const surfaceKey = poolSurfaceKey(showId, "cuelist", props.paneId);
 	const playbackAt = (slot: number) => {
-		const number = virtualPlaybackNumber(slot);
+		const number = virtualPlaybackNumber(props.pageNumber, slot);
 		return props.page?.virtual_playbacks?.[String(number)] ?? null;
 	};
 	return (
@@ -108,7 +112,7 @@ function boxViewModel(
 	surfaceKey: string,
 ): VirtualPlaybackBoxViewModel {
 	const available = validPlaybackSlot(slot);
-	const number = virtualPlaybackNumber(slot);
+	const number = virtualPlaybackNumber(props.pageNumber, slot);
 	const playback = available
 		? (props.page?.virtual_playbacks?.[String(number)] ?? null)
 		: null;
@@ -125,10 +129,11 @@ function boxViewModel(
 	const currentCue = currentCueFrom(cueList, runtime?.current ?? null);
 	const action = playback?.buttons[0] ?? "none";
 	const containingZones = props.zones.filter((zone) =>
-		zone.slots.includes(slot),
+		zone.playbackNumbers.includes(number),
 	);
 	const exclusionFence = exclusionFenceForSlot(
 		props.zones,
+		props.pageNumber,
 		slot,
 		props.columns,
 		props.rows * props.columns,
@@ -161,6 +166,7 @@ function boxViewModel(
 			})
 		: undefined;
 	return {
+		number,
 		slot,
 		position,
 		availability: !available ? "unavailable" : playback ? "assigned" : "empty",
@@ -190,19 +196,25 @@ function boxViewModel(
 }
 
 export function exclusionFenceForSlot(
-	zones: readonly Pick<VirtualPlaybackZone, "slots">[],
+	zones: readonly Pick<VirtualPlaybackZone, "playbackNumbers">[],
+	page: number,
 	slot: number,
 	columns: number,
 	cellCount: number,
 ): VirtualPlaybackExclusionFence | undefined {
-	const containingZones = zones.filter((zone) => zone.slots.includes(slot));
+	const number = virtualPlaybackNumber(page, slot);
+	const containingZones = zones.filter((zone) =>
+		zone.playbackNumbers.includes(number),
+	);
 	if (containingZones.length === 0 || columns < 1 || cellCount < 1)
 		return undefined;
 	const column = (slot - 1) % columns;
 	const sharesZoneWith = (neighbor: number) =>
 		neighbor >= 1 &&
 		neighbor <= cellCount &&
-		containingZones.some((zone) => zone.slots.includes(neighbor));
+		containingZones.some((zone) =>
+			zone.playbackNumbers.includes(virtualPlaybackNumber(page, neighbor)),
+		);
 	return {
 		top: slot <= columns || !sharesZoneWith(slot - columns),
 		right: column === columns - 1 || !sharesZoneWith(slot + 1),
@@ -212,7 +224,7 @@ export function exclusionFenceForSlot(
 }
 
 function requestPlaybackUpdate(props: VirtualPlaybackGridProps, slot: number) {
-	const number = virtualPlaybackNumber(slot);
+	const number = virtualPlaybackNumber(props.pageNumber, slot);
 	const playback = props.page?.virtual_playbacks?.[String(number)] ?? null;
 	if (!playback || playback.target.type !== "cue_list") return;
 	const projection = props.runtimes.get(
@@ -294,10 +306,6 @@ export function validPlaybackSlot(slot: number) {
 		slot >= 1 &&
 		slot <= MAX_VIRTUAL_PLAYBACK_CELLS
 	);
-}
-
-export function virtualPlaybackNumber(slot: number) {
-	return 1_000 + slot;
 }
 
 function currentCueFrom(

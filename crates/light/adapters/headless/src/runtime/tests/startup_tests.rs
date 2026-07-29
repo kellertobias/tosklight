@@ -163,6 +163,7 @@ fn advancing_from_an_occupied_last_playback_page_creates_one_empty_page() {
         number: 1,
         name: "Main".into(),
         slots: HashMap::from([(1, 1)]),
+        virtual_playbacks: HashMap::new(),
     };
     let playback = light_playback::PlaybackDefinition {
         number: 1,
@@ -288,34 +289,23 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
         .unwrap();
     let desk = state.installation.add_desk("Restored", "restored").unwrap();
     state.installation.set_desk_page(desk.id, show.id, 1).unwrap();
-    let stored = VirtualPlaybackExclusionStore::from([(
-        desk.id.to_string(),
-        HashMap::from([(
-            "surface".into(),
-            vec![
-                VirtualPlaybackExclusionZone {
-                    id: "left".into(),
-                    name: "Left".into(),
-                    slots: vec![1, 2],
-                },
-                VirtualPlaybackExclusionZone {
-                    id: "right".into(),
-                    name: "Right".into(),
-                    slots: vec![2, 3],
-                },
-            ],
-        )]),
-    )]);
-    state
-        .installation.set_setting(
-            &virtual_playback_exclusion_setting(show.id),
-            &serde_json::to_string(&stored).unwrap(),
-        )
-        .unwrap();
+    let stored = test_virtual_playback_exclusion_store(vec![
+        VirtualPlaybackExclusionZone {
+            id: "left".into(),
+            name: "Left".into(),
+            playback_numbers: vec![1_001, 1_002],
+        },
+        VirtualPlaybackExclusionZone {
+            id: "right".into(),
+            name: "Right".into(),
+            playback_numbers: vec![1_002, 1_003],
+        },
+    ]);
+    persist_test_virtual_playback_exclusions(&state, show.id, &stored);
 
     let first = normalize_restored_virtual_playback_exclusions(&state).unwrap();
 
-    assert_eq!(first.released_playbacks, vec![1, 2]);
+    assert_eq!(first.released_playbacks, vec![1_001, 1_002]);
     assert!(first.provenance_migrated);
     assert!(!first.persistence_pending);
     let light_application::EventReplay::Events(events) = state
@@ -337,7 +327,7 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
             other => panic!("expected Playback runtime event, got {other:?}"),
         })
         .collect::<Vec<_>>();
-    assert_eq!(numbers, vec![1, 2]);
+    assert_eq!(numbers, vec![1_001, 1_002]);
     assert_eq!(events[0].sequence, 1);
     assert_eq!(events[1].sequence, 2);
     assert_eq!(events[0].correlation_id, events[1].correlation_id);
@@ -359,7 +349,7 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
         .filter(|playback| playback.enabled)
         .filter_map(|playback| playback.playback_number)
         .collect::<HashSet<_>>();
-    assert_eq!(enabled, HashSet::from([3, 4]));
+    assert_eq!(enabled, HashSet::from([1_003, 1_004]));
     let persisted = state
         .installation.setting(&active_playbacks_setting(show.id))
         .unwrap()
@@ -377,13 +367,13 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
             .filter(|playback| playback.enabled)
             .filter_map(|playback| playback.playback_number)
             .collect::<HashSet<_>>(),
-        HashSet::from([3, 4])
+        HashSet::from([1_003, 1_004])
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
 #[test]
-fn restored_exclusions_replay_each_activation_with_its_own_desk_zones() {
+fn restored_exclusions_replay_each_activation_against_show_owned_zones() {
     for configured_desk_activates_last in [false, true] {
         let (state, data_dir) = test_state();
         let show = ShowEntry {
@@ -434,9 +424,9 @@ fn restored_exclusions_replay_each_activation_with_its_own_desk_zones() {
         let outcome = normalize_restored_virtual_playback_exclusions(&state).unwrap();
 
         let expected_released = if configured_desk_activates_last {
-            vec![2]
+            vec![1_002]
         } else {
-            Vec::new()
+            vec![1_001]
         };
         assert_eq!(outcome.released_playbacks, expected_released);
         assert!(!outcome.provenance_migrated);
@@ -447,9 +437,9 @@ fn restored_exclusions_replay_each_activation_with_its_own_desk_zones() {
             .filter_map(|playback| playback.playback_number)
             .collect::<HashSet<_>>();
         let expected_enabled = if configured_desk_activates_last {
-            HashSet::from([1])
+            HashSet::from([1_001])
         } else {
-            HashSet::from([1, 2])
+            HashSet::from([1_002])
         };
         assert_eq!(enabled, expected_enabled);
         let persisted = state
@@ -511,7 +501,8 @@ fn timed_preload_release_restart_keeps_the_original_activation_order() {
     let prepared = state
         .output.prepare_playback_batch(
             &[light_engine::PlaybackBatchCommand {
-                number: 1,
+                number: 1_001,
+                page: Some(1),
                 action: light_engine::PlaybackBatchAction::Off,
                 exclusion_zones: std::sync::Arc::default(),
                 activation_origin: None,
@@ -526,7 +517,7 @@ fn timed_preload_release_restart_keeps_the_original_activation_order() {
     let active_release = state
         .output.playback_runtime()
         .into_iter()
-        .find(|playback| playback.playback_number == Some(1))
+        .find(|playback| playback.playback_number == Some(1_001))
         .unwrap();
     assert!(active_release.enabled);
     assert_eq!(active_release.activation.unwrap().ordinal, 1);
@@ -542,35 +533,24 @@ fn timed_preload_release_restart_keeps_the_original_activation_order() {
 
     let normalized = normalize_restored_virtual_playback_exclusions(&state).unwrap();
     assert!(!normalized.provenance_migrated);
-    assert!(normalized.released_playbacks.is_empty());
+    assert_eq!(normalized.released_playbacks, vec![1_001]);
     let enabled = state
         .output.playback_runtime()
         .into_iter()
         .filter(|playback| playback.enabled)
         .filter_map(|playback| playback.playback_number)
         .collect::<HashSet<_>>();
-    assert_eq!(enabled, HashSet::from([1, 2]));
+    assert_eq!(enabled, HashSet::from([1_002]));
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
-fn store_restart_zone(state: &AppState, show: &ShowEntry, desk_id: Uuid) {
-    let stored = VirtualPlaybackExclusionStore::from([(
-        desk_id.to_string(),
-        HashMap::from([(
-            "restart-surface".into(),
-            vec![VirtualPlaybackExclusionZone {
-                id: "restart-zone".into(),
-                name: "Restart zone".into(),
-                slots: vec![1, 2],
-            }],
-        )]),
-    )]);
-    state
-        .installation.set_setting(
-            &virtual_playback_exclusion_setting(show.id),
-            &serde_json::to_string(&stored).unwrap(),
-        )
-        .unwrap();
+fn store_restart_zone(state: &AppState, show: &ShowEntry, _desk_id: Uuid) {
+    let stored = test_virtual_playback_exclusion_store(vec![VirtualPlaybackExclusionZone {
+        id: "restart-zone".into(),
+        name: "Restart zone".into(),
+        playback_numbers: vec![1_001, 1_002],
+    }]);
+    persist_test_virtual_playback_exclusions(state, show.id, &stored);
 }
 
 fn restored_exclusion_active_with_origin(
@@ -586,7 +566,7 @@ fn restored_exclusion_active_with_origin(
         at: playback.activated_at,
         desk_id: Some(desk_id),
         surface: light_playback::PlaybackActivationSurface::Virtual,
-        exclusion_scope: light_playback::PlaybackExclusionScope::OriginatingDesk,
+        exclusion_scope: light_playback::PlaybackExclusionScope::Show,
     });
     playback
 }
@@ -613,14 +593,17 @@ fn restored_exclusion_snapshot(cue_list_id: light_core::CueListId) -> EngineSnap
     EngineSnapshot {
         revision: 7,
         cue_lists: vec![cue_list].into(),
-        playbacks: (1..=4)
-            .map(|number| restored_exclusion_playback(number, cue_list_id))
-            .collect::<Vec<_>>()
-            .into(),
+        playbacks: Vec::new().into(),
         playback_pages: vec![light_playback::PlaybackPage {
             number: 1,
             name: "Page 1".into(),
-            slots: HashMap::from([(1, 1), (2, 2), (3, 3), (4, 4)]),
+            slots: HashMap::new(),
+            virtual_playbacks: (1..=4)
+                .map(|cell| {
+                    let number = 1_000 + cell;
+                    (number, restored_exclusion_playback(number, cue_list_id))
+                })
+                .collect(),
         }].into(),
         ..EngineSnapshot::default()
     }
@@ -655,8 +638,10 @@ fn restored_exclusion_active(
     cue_list_id: light_core::CueListId,
     activated_at: &str,
 ) -> light_playback::ActivePlayback {
+    let number = 1_000 + number;
     serde_json::from_value(serde_json::json!({
         "playback_number": number,
+        "playback_identity": {"kind":"virtual","page":1,"number":number},
         "cue_list_id": cue_list_id,
         "cue_index": 0,
         "previous_index": null,

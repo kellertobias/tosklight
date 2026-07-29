@@ -4,7 +4,23 @@ pub const MAX_PLAYBACKS: u16 = 1_000;
 pub const MAX_PLAYBACK_PAGES: u8 = 127;
 pub const MAX_PAGE_SLOTS: u8 = 127;
 pub const MIN_VIRTUAL_PLAYBACK: u16 = 1_001;
-pub const MAX_VIRTUAL_PLAYBACK: u16 = 9_998;
+pub const VIRTUAL_PLAYBACKS_PER_PAGE: u16 = 300;
+pub const MAX_VIRTUAL_PLAYBACK: u16 =
+    MIN_VIRTUAL_PLAYBACK + (MAX_PLAYBACK_PAGES as u16 * VIRTUAL_PLAYBACKS_PER_PAGE) - 1;
+
+pub const fn virtual_playback_page_start(page: u8) -> Option<u16> {
+    if page == 0 || page > MAX_PLAYBACK_PAGES {
+        return None;
+    }
+    Some(MIN_VIRTUAL_PLAYBACK + ((page as u16 - 1) * VIRTUAL_PLAYBACKS_PER_PAGE))
+}
+
+pub const fn virtual_playback_page_for_number(number: u16) -> Option<u8> {
+    if number < MIN_VIRTUAL_PLAYBACK || number > MAX_VIRTUAL_PLAYBACK {
+        return None;
+    }
+    Some(((number - MIN_VIRTUAL_PLAYBACK) / VIRTUAL_PLAYBACKS_PER_PAGE) as u8 + 1)
+}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -33,7 +49,7 @@ impl VirtualPlaybackNumber {
         if (MIN_VIRTUAL_PLAYBACK..=MAX_VIRTUAL_PLAYBACK).contains(&number) {
             Ok(Self(number))
         } else {
-            Err("virtual playback number must be within 1001-9998".into())
+            Err("virtual playback number must be within 1001-39100".into())
         }
     }
 
@@ -50,13 +66,24 @@ pub struct VirtualPlaybackAddress {
 
 impl VirtualPlaybackAddress {
     pub fn new(page: u8, number: u16) -> Result<Self, String> {
-        if !(1..=MAX_PLAYBACK_PAGES).contains(&page) {
-            return Err("virtual playback page must be within 1-127".into());
+        let page_start = virtual_playback_page_start(page)
+            .ok_or_else(|| "virtual playback page must be within 1-127".to_owned())?;
+        let page_end = page_start + VIRTUAL_PLAYBACKS_PER_PAGE - 1;
+        if !(page_start..=page_end).contains(&number) {
+            return Err(format!(
+                "virtual playback page {page} requires a playback number within {page_start}-{page_end}"
+            ));
         }
         Ok(Self {
             page,
             number: VirtualPlaybackNumber::new(number)?,
         })
+    }
+
+    pub fn from_number(number: u16) -> Result<Self, String> {
+        let page = virtual_playback_page_for_number(number)
+            .ok_or_else(|| "virtual playback number must be within 1001-39100".to_owned())?;
+        Self::new(page, number)
     }
 
     pub const fn page(self) -> u8 {
@@ -416,7 +443,7 @@ impl PlaybackDefinition {
 
     pub fn validate(&self) -> Result<(), String> {
         if !(1..=MAX_VIRTUAL_PLAYBACK).contains(&self.number) {
-            return Err("playback number must be physical 1-1000 or virtual 1001-9998".into());
+            return Err("playback number must be physical 1-1000 or virtual 1001-39100".into());
         }
         if self.name.trim().is_empty() || self.name.len() > 80 {
             return Err("playback name must contain 1-80 characters".into());
@@ -560,9 +587,8 @@ pub struct PlaybackPage {
     pub slots: HashMap<u8, u16>,
     /// Sparse dedicated Virtual Playback assignments for this page.
     ///
-    /// Keys are the operator-visible numbers 1001-9998. They are intentionally separate from
-    /// physical page slots so the same number on two pages remains a different definition and
-    /// runtime identity.
+    /// Keys are the operator-visible numbers in this page's 300-number Virtual Playback bank.
+    /// They are intentionally separate from physical page slots.
     pub virtual_playbacks: HashMap<u16, PlaybackDefinition>,
 }
 

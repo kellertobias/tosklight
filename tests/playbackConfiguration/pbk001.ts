@@ -313,7 +313,7 @@ export function registerPbk001VirtualCellsScenario(): void {
 		const before = await inertSnapshot(api, 42);
 		await pane
 			.getByRole("button", {
-				name: /Virtual playback page 1 cell 1 Virtual Sequence/,
+				name: /Virtual playback 1001 page 1 cell 1 Virtual Sequence/,
 			})
 			.click({ button: "right" });
 		let modal = await expectConfigurationModal(page, 1, 1);
@@ -328,7 +328,7 @@ export function registerPbk001VirtualCellsScenario(): void {
 		await armSet(page);
 		await pane
 			.getByRole("button", {
-				name: /Virtual playback page 1 cell 1 Virtual Sequence/,
+				name: /Virtual playback 1001 page 1 cell 1 Virtual Sequence/,
 			})
 			.click();
 		modal = await expectConfigurationModal(page, 1, 1);
@@ -355,7 +355,7 @@ export function registerPbk001VirtualCellsScenario(): void {
 
 		await armSet(page);
 		await pane
-			.getByRole("button", { name: /Virtual playback page 1 cell 2 empty/ })
+			.getByRole("button", { name: /Virtual playback 1002 page 1 cell 2 empty/ })
 			.click();
 		modal = await expectConfigurationModal(page, 1, 2);
 		await expect(modal).toHaveAttribute(

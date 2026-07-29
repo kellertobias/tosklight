@@ -1,6 +1,6 @@
+import type { Page } from "@playwright/test";
 import type { ApiDriver } from "../bench/core/api";
 import { expect } from "../bench/core/fixtures";
-import type { Page } from "@playwright/test";
 import { activeShowId, programmer } from "../support/catalog";
 import { configuration, visualizationLevel } from "./showFixtures";
 import type {
@@ -120,30 +120,20 @@ export function timestampMillis(value: unknown): number {
 export interface VirtualZoneFixture {
 	id: string;
 	name: string;
-	slots: number[];
+	playback_numbers: number[];
 }
 
 export interface VirtualZoneSnapshot {
 	show_id: string;
-	desks: Record<string, Record<string, VirtualZoneSurface>>;
-}
-
-export type VirtualZonePageMode =
-	| { type: "follow_main" }
-	| { type: "pinned"; page: number };
-
-export interface VirtualZoneSurface {
 	revision: number;
-	page_mode: VirtualZonePageMode;
 	zones: VirtualZoneFixture[];
 }
 
 export interface VirtualZoneSaveOutcome {
 	request_id: string;
 	show_id: string;
-	desk_id: string;
-	surface_id: string;
-	surface: VirtualZoneSurface;
+	revision: number;
+	zones: VirtualZoneFixture[];
 	replayed: boolean;
 	changed: boolean;
 }
@@ -162,13 +152,11 @@ export async function virtualZoneSnapshot(
 	);
 }
 
-export async function saveVirtualZoneSurface(
+export async function saveVirtualZones(
 	api: ApiDriver,
-	surfaceId: string,
 	zones: readonly VirtualZoneFixture[],
 	options: {
 		expectedRevision?: number;
-		pageMode?: VirtualZonePageMode;
 		requestId?: string;
 	} = {},
 ) {
@@ -176,11 +164,10 @@ export async function saveVirtualZoneSurface(
 	const requestId = options.requestId ?? crypto.randomUUID();
 	return api.request<VirtualZoneSaveOutcome>(
 		"POST",
-		`/api/v2/virtual-playback-exclusion-zones/${encodeURIComponent(surfaceId)}/update`,
+		"/api/v2/virtual-playback-exclusion-zones/update",
 		{
 			request_id: requestId,
 			expected_revision: options.expectedRevision ?? 0,
-			page_mode: options.pageMode ?? { type: "follow_main" },
 			zones,
 		},
 		true,
@@ -191,13 +178,12 @@ export async function saveVirtualZoneSurface(
 
 export async function normalizedVirtualZones(
 	api: ApiDriver,
-): Promise<Array<{ name: string; slots: number[] }>> {
+): Promise<Array<{ name: string; playback_numbers: number[] }>> {
 	const response = await virtualZoneSnapshot(api);
-	const surfaces = response.desks[api.session!.desk.id] ?? {};
-	return Object.values(
-		surfaces,
-	)
-		.flatMap((surface) => surface.zones)
-		.map((zone) => ({ name: zone.name, slots: [...zone.slots] }))
+	return response.zones
+		.map((zone) => ({
+			name: zone.name,
+			playback_numbers: [...zone.playback_numbers],
+		}))
 		.sort((left, right) => left.name.localeCompare(right.name));
 }

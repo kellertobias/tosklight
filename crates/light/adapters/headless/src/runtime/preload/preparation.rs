@@ -1,5 +1,5 @@
 use super::*;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 pub(super) type PlaybackIdentity = light_application::PlaybackRuntimeIdentity;
 pub(super) type PlaybackProjection = light_application::PlaybackRuntimeProjection;
@@ -74,11 +74,23 @@ fn validate_playback_definitions(
     snapshot: &EngineSnapshot,
 ) -> Result<(), String> {
     for action in pending {
-        if !snapshot
-            .playbacks
-            .iter()
-            .any(|definition| definition.number == action.playback_number)
-        {
+        let exists = if action.playback_number >= light_playback::MIN_VIRTUAL_PLAYBACK {
+            action.page.is_some_and(|page_number| {
+                snapshot
+                    .playback_pages
+                    .iter()
+                    .find(|page| page.number == page_number)
+                    .is_some_and(|page| {
+                        page.virtual_playbacks.contains_key(&action.playback_number)
+                    })
+            })
+        } else {
+            snapshot
+                .playbacks
+                .iter()
+                .any(|definition| definition.number == action.playback_number)
+        };
+        if !exists {
             return Err(format!(
                 "playback {} no longer exists",
                 action.playback_number
@@ -95,58 +107,26 @@ fn attach_shared_exclusions(
     pending: &[light_programmer::PreloadPlaybackAction],
     commands: &mut [light_engine::PlaybackBatchCommand],
 ) {
-    let mut resolvers = HashMap::<uuid::Uuid, VirtualPlaybackExclusionResolver>::new();
-    let mut cached = HashMap::<(uuid::Uuid, Option<u8>), ResolvedExclusions>::new();
+    let zones: Arc<[Vec<u16>]> = VirtualPlaybackExclusionResolver::read(state)
+        .map(|resolver| resolver.zone_numbers())
+        .unwrap_or_default()
+        .into();
     for (pending, command) in pending.iter().zip(commands) {
         let desk_id = pending.origin_desk_id.unwrap_or(session.desk.id);
-        let key = (desk_id, pending.page);
-        let exclusions = cached
-            .entry(key)
-            .or_insert_with(|| resolve_exclusions(state, desk_id, pending.page, &mut resolvers));
-        command.exclusion_zones = Arc::clone(&exclusions.zones);
+        let applies = zones
+            .iter()
+            .any(|zone| zone.contains(&pending.playback_number));
+        command.exclusion_zones = Arc::clone(&zones);
         command.activation_origin = Some(light_playback::PlaybackActivationOrigin {
             at: committed_at,
             desk_id: Some(desk_id),
             surface: activation_surface(pending.surface),
-            exclusion_scope: exclusions.scope,
+            exclusion_scope: if applies {
+                light_playback::PlaybackExclusionScope::Show
+            } else {
+                light_playback::PlaybackExclusionScope::None
+            },
         });
-    }
-}
-
-struct ResolvedExclusions {
-    zones: Arc<[Vec<u16>]>,
-    scope: light_playback::PlaybackExclusionScope,
-}
-
-fn resolve_exclusions(
-    state: &AppState,
-    desk_id: uuid::Uuid,
-    page: Option<u8>,
-    resolvers: &mut HashMap<uuid::Uuid, VirtualPlaybackExclusionResolver>,
-) -> ResolvedExclusions {
-    let desk_exists = state
-        .installation
-        .control_desk(desk_id)
-        .ok()
-        .flatten()
-        .is_some();
-    if !desk_exists {
-        return ResolvedExclusions {
-            zones: Arc::default(),
-            scope: light_playback::PlaybackExclusionScope::None,
-        };
-    }
-    let resolver = resolvers
-        .entry(desk_id)
-        .or_insert_with(|| VirtualPlaybackExclusionResolver::read(state, desk_id));
-    let scope = if resolver.applies_to_page(page) {
-        light_playback::PlaybackExclusionScope::OriginatingDesk
-    } else {
-        light_playback::PlaybackExclusionScope::None
-    };
-    ResolvedExclusions {
-        zones: resolver.zone_numbers(page).into(),
-        scope,
     }
 }
 
@@ -170,10 +150,32 @@ const fn activation_surface(
 }
 
 fn changed_identities(prepared: &light_engine::PreparedPlaybackBatch) -> Vec<PlaybackIdentity> {
-    prepared
+    let mut identities = prepared
         .changed_playback_numbers()
         .map(PlaybackIdentity::Playback)
-        .collect()
+        .collect::<Vec<_>>();
+    for outcome in prepared.outcomes() {
+        if outcome.addressed_effect.changed()
+            && let Some(page) = outcome.page
+            && let Ok(address) = light_playback::VirtualPlaybackAddress::new(page, outcome.number)
+        {
+            identities.push(PlaybackIdentity::Virtual(address));
+        }
+        if let Some(page) = outcome.page {
+            identities.extend(outcome.released_playbacks.iter().filter_map(|number| {
+                light_playback::VirtualPlaybackAddress::new(page, *number)
+                    .ok()
+                    .map(PlaybackIdentity::Virtual)
+            }));
+        }
+    }
+    identities.sort_by_key(|identity| match identity {
+        PlaybackIdentity::Playback(number) => (0_u8, 0_u8, *number),
+        PlaybackIdentity::Virtual(address) => (1, address.page(), address.number().get()),
+        PlaybackIdentity::CueList(_) | PlaybackIdentity::Group(_) => (2, 0, 0),
+    });
+    identities.dedup();
+    identities
 }
 
 fn validate_projections(

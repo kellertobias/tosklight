@@ -8,25 +8,30 @@ fn physical_and_virtual_playback_ranges_are_explicit_and_disjoint() {
     assert!(PhysicalPlaybackNumber::new(1_001).is_err());
 
     assert_eq!(VirtualPlaybackNumber::new(1_001).unwrap().get(), 1_001);
-    assert_eq!(VirtualPlaybackNumber::new(9_998).unwrap().get(), 9_998);
+    assert_eq!(VirtualPlaybackNumber::new(39_100).unwrap().get(), 39_100);
     assert!(VirtualPlaybackNumber::new(1_000).is_err());
-    assert!(VirtualPlaybackNumber::new(9_999).is_err());
+    assert!(VirtualPlaybackNumber::new(39_101).is_err());
 
     assert!(VirtualPlaybackAddress::new(0, 1_001).is_err());
     assert!(VirtualPlaybackAddress::new(128, 1_001).is_err());
+    assert!(VirtualPlaybackAddress::new(2, 1_001).is_err());
+    assert_eq!(
+        VirtualPlaybackAddress::from_number(1_301).unwrap().page(),
+        2
+    );
 }
 
 #[test]
-fn equal_virtual_numbers_on_different_pages_have_independent_runtime() {
+fn banked_virtual_numbers_on_different_pages_have_independent_runtime() {
     let cue_list = list(vec![Cue::new(1.0)]);
     let cue_list_id = cue_list.id;
     let page_one = VirtualPlaybackAddress::new(1, 1_001).unwrap();
-    let page_two = VirtualPlaybackAddress::new(2, 1_001).unwrap();
+    let page_two = VirtualPlaybackAddress::new(2, 1_301).unwrap();
     let page_one_identity = PlaybackIdentity::virtual_playback(1, 1_001).unwrap();
-    let page_two_identity = PlaybackIdentity::virtual_playback(2, 1_001).unwrap();
+    let page_two_identity = PlaybackIdentity::virtual_playback(2, 1_301).unwrap();
     let mut first_definition = definition(1_001, cue_list_id);
     first_definition.auto_off = false;
-    let second_definition = first_definition.clone();
+    let second_definition = definition(1_301, cue_list_id);
 
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
@@ -80,14 +85,14 @@ fn page_qualified_virtual_runtime_survives_persistence_restore() {
     let cue_list = list(vec![Cue::new(1.0)]);
     let cue_list_id = cue_list.id;
     let page_one = VirtualPlaybackAddress::new(1, 1_001).unwrap();
-    let page_two = VirtualPlaybackAddress::new(2, 1_001).unwrap();
+    let page_two = VirtualPlaybackAddress::new(2, 1_301).unwrap();
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list.clone()).unwrap();
     engine
         .register_virtual_definition(page_one, definition(1_001, cue_list_id))
         .unwrap();
     engine
-        .register_virtual_definition(page_two, definition(1_001, cue_list_id))
+        .register_virtual_definition(page_two, definition(1_301, cue_list_id))
         .unwrap();
     engine.on_at(PlaybackIdentity::Virtual(page_one)).unwrap();
     engine.on_at(PlaybackIdentity::Virtual(page_two)).unwrap();
@@ -99,7 +104,7 @@ fn page_qualified_virtual_runtime_survives_persistence_restore() {
         .register_virtual_definition(page_one, definition(1_001, cue_list_id))
         .unwrap();
     restored
-        .register_virtual_definition(page_two, definition(1_001, cue_list_id))
+        .register_virtual_definition(page_two, definition(1_301, cue_list_id))
         .unwrap();
     restored.restore_active(persisted);
 
@@ -120,14 +125,14 @@ fn page_qualified_virtual_go_advances_only_the_addressed_runtime() {
     let cue_list = list(vec![Cue::new(1.0), Cue::new(2.0)]);
     let cue_list_id = cue_list.id;
     let page_one = VirtualPlaybackAddress::new(1, 1_001).unwrap();
-    let page_two = VirtualPlaybackAddress::new(2, 1_001).unwrap();
+    let page_two = VirtualPlaybackAddress::new(2, 1_301).unwrap();
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
     engine
         .register_virtual_definition(page_one, definition(1_001, cue_list_id))
         .unwrap();
     engine
-        .register_virtual_definition(page_two, definition(1_001, cue_list_id))
+        .register_virtual_definition(page_two, definition(1_301, cue_list_id))
         .unwrap();
     engine.on_at(PlaybackIdentity::Virtual(page_one)).unwrap();
     engine.on_at(PlaybackIdentity::Virtual(page_two)).unwrap();
@@ -155,7 +160,7 @@ fn virtual_temp_flash_and_swap_hold_full_page_qualified_identity() {
     let cue_list = list(vec![Cue::new(1.0)]);
     let cue_list_id = cue_list.id;
     let page_one = VirtualPlaybackAddress::new(1, 1_001).unwrap();
-    let page_two = VirtualPlaybackAddress::new(2, 1_001).unwrap();
+    let page_two = VirtualPlaybackAddress::new(2, 1_301).unwrap();
     let page_one_identity = PlaybackIdentity::Virtual(page_one);
     let page_two_identity = PlaybackIdentity::Virtual(page_two);
     let mut engine = PlaybackEngine::default();
@@ -164,7 +169,7 @@ fn virtual_temp_flash_and_swap_hold_full_page_qualified_identity() {
         .register_virtual_definition(page_one, definition(1_001, cue_list_id))
         .unwrap();
     engine
-        .register_virtual_definition(page_two, definition(1_001, cue_list_id))
+        .register_virtual_definition(page_two, definition(1_301, cue_list_id))
         .unwrap();
 
     engine
@@ -213,8 +218,12 @@ fn virtual_temp_flash_and_swap_hold_full_page_qualified_identity() {
                 && *kind == TemporaryPlaybackKind::Flash)
     );
 
-    engine.set_swap_at_mutation(page_one_identity, true).unwrap();
-    engine.set_swap_at_mutation(page_two_identity, true).unwrap();
+    engine
+        .set_swap_at_mutation(page_one_identity, true)
+        .unwrap();
+    engine
+        .set_swap_at_mutation(page_two_identity, true)
+        .unwrap();
     engine
         .set_swap_at_mutation(page_one_identity, false)
         .unwrap();

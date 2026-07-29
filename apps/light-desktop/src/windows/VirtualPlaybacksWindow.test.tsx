@@ -17,21 +17,21 @@ import { VirtualPlaybacksWindow } from "./VirtualPlaybacksWindow";
 
 describe("Virtual Playback exclusion-zone fences", () => {
 	it("joins orthogonal neighbors and outlines disconnected islands", () => {
-		const zones = [{ slots: [1, 2, 4, 5, 9] }];
+		const zones = [{ playbackNumbers: [1001, 1002, 1004, 1005, 1009] }];
 
-		expect(exclusionFenceForSlot(zones, 1, 3, 9)).toEqual({
+		expect(exclusionFenceForSlot(zones, 1, 1, 3, 9)).toEqual({
 			top: true,
 			right: false,
 			bottom: false,
 			left: true,
 		});
-		expect(exclusionFenceForSlot(zones, 5, 3, 9)).toEqual({
+		expect(exclusionFenceForSlot(zones, 1, 5, 3, 9)).toEqual({
 			top: false,
 			right: true,
 			bottom: true,
 			left: false,
 		});
-		expect(exclusionFenceForSlot(zones, 9, 3, 9)).toEqual({
+		expect(exclusionFenceForSlot(zones, 1, 9, 3, 9)).toEqual({
 			top: true,
 			right: true,
 			bottom: true,
@@ -40,9 +40,12 @@ describe("Virtual Playback exclusion-zone fences", () => {
 	});
 
 	it("treats overlapping zones as one connected visual boundary", () => {
-		const zones = [{ slots: [1, 2] }, { slots: [2, 3] }];
+		const zones = [
+			{ playbackNumbers: [1001, 1002] },
+			{ playbackNumbers: [1002, 1003] },
+		];
 
-		expect(exclusionFenceForSlot(zones, 2, 3, 3)).toEqual({
+		expect(exclusionFenceForSlot(zones, 1, 2, 3, 3)).toEqual({
 			top: true,
 			right: false,
 			bottom: true,
@@ -81,12 +84,12 @@ const mocks = vi.hoisted(() => {
 	const zoneSurfaces = new Map<string, readonly unknown[]>();
 	const zoneSaving = new Set<string>();
 	const zoneListeners = new Map<string, Set<() => void>>();
-	const notifyZone = (surfaceId: string) => {
-		for (const listener of zoneListeners.get(surfaceId) ?? []) listener();
+	const notifyZone = () => {
+		for (const listener of zoneListeners.get("global") ?? []) listener();
 	};
-	const publishZones = (surfaceId: string, zones: readonly unknown[]) => {
-		zoneSurfaces.set(surfaceId, zones);
-		notifyZone(surfaceId);
+	const publishZones = (zones: readonly unknown[]) => {
+		zoneSurfaces.set("global", zones);
+		notifyZone();
 	};
 	const playback: PlaybackDefinition = {
 		number: 7,
@@ -166,50 +169,41 @@ const mocks = vi.hoisted(() => {
 			authorityGeneration: 1,
 			available: true,
 			error: null as string | null,
-			getSurface: vi.fn(
-				(surfaceId: string) => zoneSurfaces.get(surfaceId) ?? null,
-			),
-			isSavingSurface: vi.fn((surfaceId: string) => zoneSaving.has(surfaceId)),
-			subscribeSurface: vi.fn((surfaceId: string, listener: () => void) => {
-				const listeners = zoneListeners.get(surfaceId) ?? new Set();
+			getZones: vi.fn(() => zoneSurfaces.get("global") ?? null),
+			isSaving: vi.fn(() => zoneSaving.has("global")),
+			subscribe: vi.fn((listener: () => void) => {
+				const listeners = zoneListeners.get("global") ?? new Set();
 				listeners.add(listener);
-				zoneListeners.set(surfaceId, listeners);
+				zoneListeners.set("global", listeners);
 				return () => listeners.delete(listener);
 			}),
-			activateSurface: vi.fn(() => () => undefined),
-			loadSurface: vi.fn(async (surfaceId: string) => {
-				const zones = await loadSurface(surfaceId);
-				if (zones) publishZones(surfaceId, zones);
+			activate: vi.fn(() => () => undefined),
+			load: vi.fn(async () => {
+				const zones = await loadSurface();
+				if (zones) publishZones(zones);
 				return zones;
 			}),
-			saveSurface: vi.fn(
-				async (
-					surfaceId: string,
-					_pageMode: unknown,
-					zones: readonly unknown[],
-				) => {
-					zoneSaving.add(surfaceId);
-					notifyZone(surfaceId);
-					try {
-						const saved = await saveSurface(surfaceId, zones);
-						if (saved) publishZones(surfaceId, saved);
-						return saved;
-					} finally {
-						zoneSaving.delete(surfaceId);
-						notifyZone(surfaceId);
-					}
-				},
-			),
+			save: vi.fn(async (zones: readonly unknown[]) => {
+				zoneSaving.add("global");
+				notifyZone();
+				try {
+					const saved = await saveSurface(zones);
+					if (saved) publishZones(saved);
+					return saved;
+				} finally {
+					zoneSaving.delete("global");
+					notifyZone();
+				}
+			}),
 			clearError: vi.fn(),
 		},
 		state: {
 			activeDeskId: "desk-1",
 			paneSettingsId: null as string | null,
 			virtualPlaybackZoneEdit: null as {
-				surfaceId: string;
 				zoneId: string;
 				name: string;
-				slots: number[];
+				playbackNumbers: number[];
 			} | null,
 			playbackPage: 98,
 			playbackSetArmed: false,
@@ -332,15 +326,13 @@ beforeEach(() => {
 	mocks.zoneSaving.clear();
 	mocks.zoneListeners.clear();
 	mocks.loadSurface.mockReset().mockResolvedValue([]);
-	mocks.saveSurface
-		.mockReset()
-		.mockImplementation(async (_surfaceId, zones) => zones);
-	mocks.zoneCapability.getSurface.mockClear();
-	mocks.zoneCapability.isSavingSurface.mockClear();
-	mocks.zoneCapability.subscribeSurface.mockClear();
-	mocks.zoneCapability.activateSurface.mockClear();
-	mocks.zoneCapability.loadSurface.mockClear();
-	mocks.zoneCapability.saveSurface.mockClear();
+	mocks.saveSurface.mockReset().mockImplementation(async (zones) => zones);
+	mocks.zoneCapability.getZones.mockClear();
+	mocks.zoneCapability.isSaving.mockClear();
+	mocks.zoneCapability.subscribe.mockClear();
+	mocks.zoneCapability.activate.mockClear();
+	mocks.zoneCapability.load.mockClear();
+	mocks.zoneCapability.save.mockClear();
 	mocks.zoneCapability.available = true;
 	mocks.zoneCapability.authorityId = "session-a";
 	mocks.zoneCapability.authorityGeneration = 1;
@@ -390,7 +382,7 @@ describe("VirtualPlaybacksWindow", () => {
 	it("uses only scoped page topology and emits virtual runtime metadata", () => {
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		const cell = screen.getByRole("button", {
-			name: "Virtual playback page 1 cell 1 Front Wash",
+			name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 		});
 		expect(cell).toHaveTextContent("TOGGLE");
 		fireEvent.click(cell);
@@ -417,19 +409,21 @@ describe("VirtualPlaybacksWindow", () => {
 				number: 2,
 				name: "Pinned",
 				slots: { "1": 7 },
-				virtual_playbacks: { "1001": mocks.virtualPlayback },
+				virtual_playbacks: {
+					"1301": { ...mocks.virtualPlayback, number: 1301 },
+				},
 			},
 		});
-		mocks.runtimes.set("virtual:2.1001", {
-			...cueProjection(1001),
-			requested: { kind: "virtual", page: 2, playback_number: 1001 },
+		mocks.runtimes.set("virtual:2.1301", {
+			...cueProjection(1301),
+			requested: { kind: "virtual", page: 2, playback_number: 1301 },
 		});
 
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 
 		expect(
 			screen.getByRole("button", {
-				name: "Virtual playback page 2 cell 1 Front Wash",
+				name: "Virtual playback 1301 page 2 cell 1 Front Wash",
 			}),
 		).toBeInTheDocument();
 		expect(mocks.desk?.active_page).toBe(1);
@@ -439,13 +433,13 @@ describe("VirtualPlaybacksWindow", () => {
 		mocks.runtimes.set("playback:7", cueProjection(7));
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		const assigned = screen.getByRole("button", {
-			name: "Virtual playback page 1 cell 1 Front Wash",
+			name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 		});
 		expect(assigned).toHaveClass("playback-colored", "running");
 		expect(assigned).toHaveTextContent("Cue 1");
 		expect(
 			screen.getByRole("button", {
-				name: "Virtual playback page 1 cell 2 empty",
+				name: "Virtual playback 1002 page 1 cell 2 empty",
 			}),
 		).not.toHaveClass("playback-colored", "running");
 	});
@@ -458,7 +452,7 @@ describe("VirtualPlaybacksWindow", () => {
 			"Loading Virtual Playbacks…",
 		);
 		expect(screen.queryByText("Front Wash")).not.toBeInTheDocument();
-		expect(mocks.zoneCapability.loadSurface).not.toHaveBeenCalled();
+		expect(mocks.zoneCapability.load).not.toHaveBeenCalled();
 		expect(mocks.topologyEnabled.at(-1)).toBe(false);
 		expect(mocks.deskEnabled.at(-1)).toBe(false);
 		expect(mocks.runtimeSelections.at(-1)).toEqual([]);
@@ -484,7 +478,7 @@ describe("VirtualPlaybacksWindow", () => {
 		expect(mocks.runtimeSelections.at(-1)).toEqual([
 			{ page: 1, playbackNumber: 1001 },
 		]);
-		expect(mocks.zoneCapability.loadSurface).not.toHaveBeenCalled();
+		expect(mocks.zoneCapability.load).not.toHaveBeenCalled();
 	});
 
 	it("opens the scoped one-button faderless configuration without mutation", () => {
@@ -492,7 +486,7 @@ describe("VirtualPlaybacksWindow", () => {
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		fireEvent.click(
 			screen.getByRole("button", {
-				name: "Virtual playback page 1 cell 2 empty",
+				name: "Virtual playback 1002 page 1 cell 2 empty",
 			}),
 		);
 		const modal = screen.getByRole("dialog", {
@@ -521,7 +515,7 @@ describe("VirtualPlaybacksWindow", () => {
 		const rendered = render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		fireEvent.click(
 			screen.getByRole("button", {
-				name: "Virtual playback page 1 cell 1 Front Wash",
+				name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 			}),
 		);
 		expect(
@@ -541,7 +535,7 @@ describe("VirtualPlaybacksWindow", () => {
 		const rendered = render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		fireEvent.click(
 			screen.getByRole("button", {
-				name: "Virtual playback page 1 cell 1 Front Wash",
+				name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 			}),
 		);
 
@@ -576,7 +570,7 @@ describe("VirtualPlaybacksWindow", () => {
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		fireEvent.click(
 			screen.getByRole("button", {
-				name: "Virtual playback page 1 cell 1 empty",
+				name: "Virtual playback 1001 page 1 cell 1 empty",
 			}),
 		);
 
@@ -603,7 +597,7 @@ describe("VirtualPlaybacksWindow", () => {
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		fireEvent.contextMenu(
 			screen.getByRole("button", {
-				name: "Virtual playback page 1 cell 1 Front Wash",
+				name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 			}),
 		);
 
@@ -640,7 +634,7 @@ describe("VirtualPlaybacksWindow", () => {
 			render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 			fireEvent.click(
 				screen.getByRole("button", {
-					name: "Virtual playback page 1 cell 1 Front Wash",
+					name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 				}),
 			);
 			expect(update).toHaveBeenCalledOnce();
@@ -662,17 +656,13 @@ describe("VirtualPlaybacksWindow", () => {
 
 	it("keeps momentary Shift-click zone selection inert", async () => {
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
-		await waitFor(() =>
-			expect(mocks.zoneCapability.loadSurface).toHaveBeenCalledWith(
-				"virtual-1",
-			),
-		);
+		await waitFor(() => expect(mocks.zoneCapability.load).toHaveBeenCalled());
 		await waitFor(() =>
 			expect(screen.queryByText(/Loading zones/u)).not.toBeInTheDocument(),
 		);
 		fireEvent.click(
 			screen.getByRole("button", {
-				name: "Virtual playback page 1 cell 1 Front Wash",
+				name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 			}),
 			{ shiftKey: true },
 		);
@@ -683,7 +673,7 @@ describe("VirtualPlaybacksWindow", () => {
 		).toBeInTheDocument();
 		expect(
 			screen.getByRole("button", {
-				name: "Virtual playback page 1 cell 1 Front Wash",
+				name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 			}),
 		).toHaveAttribute("aria-pressed", "true");
 	});
@@ -696,7 +686,7 @@ describe("VirtualPlaybacksWindow", () => {
 			.mockResolvedValue(null);
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		const cell = screen.getByRole("button", {
-			name: "Virtual playback page 1 cell 1 Front Wash",
+			name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 		});
 		fireEvent.pointerDown(cell, { pointerId: 4 });
 		fireEvent.pointerUp(cell, { pointerId: 4 });
@@ -735,7 +725,7 @@ describe("VirtualPlaybacksWindow", () => {
 			<VirtualPlaybacksWindow paneId="virtual-1" active />,
 		);
 		const cell = screen.getByRole("button", {
-			name: "Virtual playback page 1 cell 1 Front Wash",
+			name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 		});
 		fireEvent.pointerDown(cell, { pointerId: 6 });
 
@@ -757,7 +747,7 @@ describe("VirtualPlaybacksWindow", () => {
 		mocks.virtualPlayback.buttons = ["swap", "none", "none"];
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		const cell = screen.getByRole("button", {
-			name: "Virtual playback page 1 cell 1 Front Wash",
+			name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 		});
 
 		fireEvent.pointerDown(cell, { pointerId: 7 });
@@ -781,11 +771,7 @@ describe("VirtualPlaybacksWindow", () => {
 	it("loads zones only while active and persists inert Shift selection", async () => {
 		mocks.state.shiftArmed = true;
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
-		await waitFor(() =>
-			expect(mocks.zoneCapability.loadSurface).toHaveBeenCalledWith(
-				"virtual-1",
-			),
-		);
+		await waitFor(() => expect(mocks.zoneCapability.load).toHaveBeenCalled());
 		expect(document.querySelector(".virtual-playback-toolbar")).toBeNull();
 		expect(
 			screen.queryByRole("button", { name: "Create Exclusion Zone" }),
@@ -795,7 +781,7 @@ describe("VirtualPlaybacksWindow", () => {
 		).toBeNull();
 		fireEvent.click(
 			screen.getByRole("button", {
-				name: "Virtual playback page 1 cell 1 Front Wash",
+				name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 			}),
 		);
 		expect(
@@ -806,7 +792,7 @@ describe("VirtualPlaybacksWindow", () => {
 		).toBeInTheDocument();
 		fireEvent.click(
 			screen.getByRole("button", {
-				name: "Virtual playback page 1 cell 2 empty",
+				name: "Virtual playback 1002 page 1 cell 2 empty",
 			}),
 		);
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
@@ -823,16 +809,12 @@ describe("VirtualPlaybacksWindow", () => {
 		});
 		fireEvent.click(screen.getByRole("button", { name: "Create zone" }));
 		await waitFor(() =>
-			expect(mocks.zoneCapability.saveSurface).toHaveBeenCalledWith(
-				"virtual-1",
-				{ type: "follow_main" },
-				[
-					expect.objectContaining({
-						name: "Front alternates",
-						slots: [1, 2],
-					}),
-				],
-			),
+			expect(mocks.zoneCapability.save).toHaveBeenCalledWith([
+				expect.objectContaining({
+					name: "Front alternates",
+					playbackNumbers: [1001, 1002],
+				}),
+			]),
 		);
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_SHIFT_ARMED",
@@ -844,14 +826,13 @@ describe("VirtualPlaybacksWindow", () => {
 		const zone = {
 			id: "zone-1",
 			name: "Front alternates",
-			slots: [1, 2, 144],
+			playbackNumbers: [1001, 1002, 1144],
 		};
 		mocks.loadSurface.mockResolvedValue([zone]);
 		mocks.state.virtualPlaybackZoneEdit = {
-			surfaceId: "virtual-1",
 			zoneId: zone.id,
 			name: zone.name,
-			slots: [...zone.slots],
+			playbackNumbers: [...zone.playbackNumbers],
 		};
 		mocks.state.desks[0].panes[0].virtualPlaybackColumns = 3;
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
@@ -867,24 +848,20 @@ describe("VirtualPlaybacksWindow", () => {
 		).toBeNull();
 		fireEvent.click(
 			screen.getByRole("button", {
-				name: "Virtual playback page 1 cell 3 empty",
+				name: "Virtual playback 1003 page 1 cell 3 empty",
 			}),
 			{ shiftKey: true },
 		);
 		fireEvent.click(update);
 
 		await waitFor(() =>
-			expect(mocks.zoneCapability.saveSurface).toHaveBeenCalledWith(
-				"virtual-1",
-				{ type: "follow_main" },
-				[
-					{
-						id: "zone-1",
-						name: "Front alternates",
-						slots: [1, 2, 3, 144],
-					},
-				],
-			),
+			expect(mocks.zoneCapability.save).toHaveBeenCalledWith([
+				{
+					id: "zone-1",
+					name: "Front alternates",
+					playbackNumbers: [1001, 1002, 1003, 1144],
+				},
+			]),
 		);
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT",
@@ -893,19 +870,22 @@ describe("VirtualPlaybacksWindow", () => {
 	});
 
 	it("cancels zone editing without persisting", async () => {
-		const zone = { id: "zone-1", name: "Front alternates", slots: [1, 2] };
+		const zone = {
+			id: "zone-1",
+			name: "Front alternates",
+			playbackNumbers: [1001, 1002],
+		};
 		mocks.loadSurface.mockResolvedValue([zone]);
 		mocks.state.virtualPlaybackZoneEdit = {
-			surfaceId: "virtual-1",
 			zoneId: zone.id,
 			name: zone.name,
-			slots: [...zone.slots],
+			playbackNumbers: [...zone.playbackNumbers],
 		};
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 
 		fireEvent.click(await screen.findByRole("button", { name: "Cancel Edit" }));
 
-		expect(mocks.zoneCapability.saveSurface).not.toHaveBeenCalled();
+		expect(mocks.zoneCapability.save).not.toHaveBeenCalled();
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT",
 			edit: null,
@@ -915,19 +895,19 @@ describe("VirtualPlaybacksWindow", () => {
 	it("reloads zones for authority replacement but not error-only rerenders", async () => {
 		mocks.loadSurface
 			.mockResolvedValueOnce([
-				{ id: "zone-a", name: "Authority A", slots: [1, 2] },
+				{ id: "zone-a", name: "Authority A", playbackNumbers: [1001, 1002] },
 			])
 			.mockResolvedValueOnce([
-				{ id: "zone-b", name: "Authority B", slots: [1, 2] },
+				{ id: "zone-b", name: "Authority B", playbackNumbers: [1001, 1002] },
 			]);
 		const rendered = render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		await waitFor(() =>
-			expect(mocks.zoneCapability.loadSurface).toHaveBeenCalledTimes(1),
+			expect(mocks.zoneCapability.load).toHaveBeenCalledTimes(1),
 		);
 		await waitFor(() =>
 			expect(
 				screen.getByRole("button", {
-					name: "Virtual playback page 1 cell 1 Front Wash",
+					name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 				}),
 			).toHaveAttribute("data-exclusion-zones", "Authority A"),
 		);
@@ -935,10 +915,10 @@ describe("VirtualPlaybacksWindow", () => {
 		mocks.zoneCapability.error = "save failed";
 		rendered.rerender(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		expect(screen.getByRole("alert")).toHaveTextContent("save failed");
-		expect(mocks.zoneCapability.loadSurface).toHaveBeenCalledTimes(1);
+		expect(mocks.zoneCapability.load).toHaveBeenCalledTimes(1);
 		expect(
 			screen.getByRole("button", {
-				name: "Virtual playback page 1 cell 1 Front Wash",
+				name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 			}),
 		).toHaveAttribute("data-exclusion-zones", "Authority A");
 
@@ -948,12 +928,12 @@ describe("VirtualPlaybacksWindow", () => {
 		mocks.zoneSurfaces.clear();
 		rendered.rerender(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		await waitFor(() =>
-			expect(mocks.zoneCapability.loadSurface).toHaveBeenCalledTimes(2),
+			expect(mocks.zoneCapability.load).toHaveBeenCalledTimes(2),
 		);
 		await waitFor(() =>
 			expect(
 				screen.getByRole("button", {
-					name: "Virtual playback page 1 cell 1 Front Wash",
+					name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 				}),
 			).toHaveAttribute("data-exclusion-zones", "Authority B"),
 		);
@@ -966,7 +946,7 @@ describe("VirtualPlaybacksWindow", () => {
 		mocks.state.playbackSetArmed = true;
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		const cell = screen.getByRole("button", {
-			name: "Virtual playback page 1 cell 128 empty",
+			name: "Virtual playback 1128 page 1 cell 128 empty",
 		});
 		expect(cell).toBeEnabled();
 		expect(cell).toHaveAttribute("data-availability", "empty");
@@ -977,7 +957,13 @@ describe("VirtualPlaybacksWindow", () => {
 });
 
 describe("Virtual Playback Pane Settings", () => {
-	const zones = [{ id: "zone-1", name: "Front alternates", slots: [1, 2, 4] }];
+	const zones = [
+		{
+			id: "zone-1",
+			name: "Front alternates",
+			playbackNumbers: [1001, 1002, 1004],
+		},
+	];
 
 	beforeEach(() => {
 		mocks.state.paneSettingsId = "virtual-1";
@@ -986,27 +972,25 @@ describe("Virtual Playback Pane Settings", () => {
 
 	it("keeps layout concise and loads zones only in their own tab", async () => {
 		render(<PaneSettingsModal />);
-		expect(mocks.zoneCapability.loadSurface).not.toHaveBeenCalled();
+		expect(mocks.zoneCapability.load).not.toHaveBeenCalled();
 		fireEvent.click(screen.getByRole("tab", { name: "Virtual Playbacks" }));
 		expect(screen.getByLabelText("Rows")).toBeInTheDocument();
 		expect(screen.getByLabelText("Columns")).toBeInTheDocument();
 		expect(
-			screen.getByText("2 of 8,998 available Virtual Playback positions."),
+			screen.getByText("2 of 300 available Virtual Playback positions."),
 		).toBeInTheDocument();
 		expect(screen.queryByText(/Set Source/)).toBeNull();
 		expect(screen.queryByText(/Add Target/)).toBeNull();
 		expect(screen.queryByText("Cue List Colors")).toBeNull();
 		expect(screen.queryByText("Type Colors")).toBeNull();
 		expect(screen.queryByText("Individual Colors")).toBeNull();
-		expect(mocks.zoneCapability.loadSurface).not.toHaveBeenCalled();
+		expect(mocks.zoneCapability.load).not.toHaveBeenCalled();
 
 		fireEvent.click(screen.getByRole("tab", { name: "Exclusion Zones" }));
-		await waitFor(() =>
-			expect(mocks.zoneCapability.loadSurface).toHaveBeenCalledWith(
-				"virtual-1",
-			),
-		);
-		expect(await screen.findByText(/Cells 1, 2, 4/)).toBeInTheDocument();
+		await waitFor(() => expect(mocks.zoneCapability.load).toHaveBeenCalled());
+		expect(
+			await screen.findByText(/Virtual Playbacks 1001, 1002, 1004/),
+		).toBeInTheDocument();
 		expect(
 			screen.getByRole("button", { name: "Edit Zone" }),
 		).toBeInTheDocument();
@@ -1022,21 +1006,19 @@ describe("Virtual Playback Pane Settings", () => {
 		});
 		fireEvent.click(screen.getByRole("button", { name: "Save name" }));
 		await waitFor(() =>
-			expect(mocks.zoneCapability.saveSurface).toHaveBeenCalledWith(
-				"virtual-1",
-				{ type: "follow_main" },
-				[{ id: "zone-1", name: "Front choice", slots: [1, 2, 4] }],
-			),
+			expect(mocks.zoneCapability.save).toHaveBeenCalledWith([
+				{
+					id: "zone-1",
+					name: "Front choice",
+					playbackNumbers: [1001, 1002, 1004],
+				},
+			]),
 		);
 
-		mocks.zoneCapability.saveSurface.mockClear();
+		mocks.zoneCapability.save.mockClear();
 		fireEvent.click(screen.getByRole("button", { name: "Delete zone" }));
 		await waitFor(() =>
-			expect(mocks.zoneCapability.saveSurface).toHaveBeenCalledWith(
-				"virtual-1",
-				{ type: "follow_main" },
-				[],
-			),
+			expect(mocks.zoneCapability.save).toHaveBeenCalledWith([]),
 		);
 	});
 
@@ -1048,10 +1030,9 @@ describe("Virtual Playback Pane Settings", () => {
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT",
 			edit: {
-				surfaceId: "virtual-1",
 				zoneId: "zone-1",
 				name: "Front alternates",
-				slots: [1, 2, 4],
+				playbackNumbers: [1001, 1002, 1004],
 			},
 		});
 		expect(mocks.dispatch).toHaveBeenCalledWith({

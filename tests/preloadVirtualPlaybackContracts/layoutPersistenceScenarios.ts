@@ -5,8 +5,8 @@ import {
 } from "../bench/core/pairedScenario";
 import { object, objects, putObject } from "../support/catalog";
 import {
-	activeVirtualPlayback,
 	activeVirtualPane,
+	activeVirtualPlayback,
 	addVirtualPlaybackPane,
 	assignVirtualSource,
 	chooseSelect,
@@ -21,7 +21,7 @@ import {
 const preload003Scenario: PairedScenario<Preload003State> = {
 	id: "PRELOAD-003",
 	title:
-		"Virtual Playbacks persist a virtualized 20×20 Follow Main grid with dedicated GO/TOGGLE identities",
+		"Virtual Playbacks persist a full 20×15 Follow Main grid with dedicated GO/TOGGLE identities",
 	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const specs: PlaybackSpec[] = [
@@ -82,7 +82,7 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 								width: 12,
 								height: 10,
 								virtualPlaybackRows: 20,
-								virtualPlaybackColumns: 20,
+								virtualPlaybackColumns: 15,
 								virtualPlaybackPageMode: "follow_main",
 								virtualPlaybackPinnedPage: 1,
 							},
@@ -122,7 +122,7 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 		await desk.open(bench.baseUrl);
 		await desk.recordStep(
 			"CREATE VIRTUAL PLAYBACK PANE",
-			"Add a normal configurable pane and set its grid to two rows by two columns.",
+			"Add a normal configurable pane and set its full-page grid to 20 rows by 15 columns.",
 		);
 		let pane = await addVirtualPlaybackPane(page);
 		await pane.getByRole("button", { name: "Settings", exact: true }).click();
@@ -131,14 +131,14 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 			.getByRole("tab", { name: "Virtual Playbacks", exact: true })
 			.click();
 		await settings.getByLabel("Rows").fill("20");
-		await settings.getByLabel("Columns").fill("20");
+		await settings.getByLabel("Columns").fill("15");
 		await settings
 			.getByRole("radio", { name: "Follow Main", exact: true })
 			.click();
 		await settings.getByRole("button", { name: "Close settings" }).click();
 		await expect(pane.locator(".virtual-playback-grid")).toHaveAttribute(
 			"data-logical-cells",
-			"400",
+			"300",
 		);
 		expect(await pane.locator(".virtual-playback-box").count()).toBeLessThan(
 			200,
@@ -154,7 +154,7 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 
 		await page.getByRole("button", { name: "SET", exact: true }).click();
 		await pane
-			.getByRole("button", { name: /Virtual playback page 1 cell 2/ })
+			.getByRole("button", { name: /Virtual playback 1002 page 1 cell 2/ })
 			.click();
 		const modal = page.getByRole("dialog", { name: "Playback Configuration" });
 		await expect(modal).toHaveAttribute(
@@ -166,10 +166,10 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 		await modal.getByRole("button", { name: "Apply", exact: true }).click();
 		await expect(modal).toBeHidden();
 		await pane
-			.getByRole("button", { name: /Virtual playback page 1 cell 1/ })
+			.getByRole("button", { name: /Virtual playback 1001 page 1 cell 1/ })
 			.click();
 		await pane
-			.getByRole("button", { name: /Virtual playback page 1 cell 2/ })
+			.getByRole("button", { name: /Virtual playback 1002 page 1 cell 2/ })
 			.click();
 		await expect
 			.poll(
@@ -192,13 +192,13 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 		pane = await activeVirtualPane(page);
 		await expect(pane.locator(".virtual-playback-grid")).toHaveAttribute(
 			"data-logical-cells",
-			"400",
+			"300",
 		);
 		await expect(
-			pane.getByRole("button", { name: /Virtual playback page 1 cell 1/ }),
+			pane.getByRole("button", { name: /Virtual playback 1001 page 1 cell 1/ }),
 		).toContainText("GO");
 		await expect(
-			pane.getByRole("button", { name: /Virtual playback page 1 cell 2/ }),
+			pane.getByRole("button", { name: /Virtual playback 1002 page 1 cell 2/ }),
 		).toContainText("TOGGLE");
 	},
 	assert: async ({ api }, state) => {
@@ -227,7 +227,7 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 		expect(pane).toEqual(
 			expect.objectContaining({
 				virtualPlaybackRows: 20,
-				virtualPlaybackColumns: 20,
+				virtualPlaybackColumns: 15,
 				virtualPlaybackPageMode: "follow_main",
 			}),
 		);

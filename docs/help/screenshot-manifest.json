@@ -223,7 +223,7 @@
 			"file": "panes/virtual-playbacks-settings.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 650, "height": 446 },
+			"viewport": { "width": 650, "height": 334 },
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],

@@ -134,8 +134,6 @@ fn activation_time(playback: &light_playback::ActivePlayback) -> chrono::DateTim
 fn restored_exclusion_losers(
     state: &AppState,
 ) -> Result<Vec<light_playback::PlaybackIdentity>, ApiError> {
-    let mut desk_zones =
-        HashMap::<(Uuid, Option<u8>), Arc<[Vec<light_playback::PlaybackIdentity>]>>::new();
     let mut active = state
         .output
         .playback_runtime()
@@ -151,100 +149,27 @@ fn restored_exclusion_losers(
             playback.playback_number,
         )
     });
-    losing_playbacks(&active, |playback| {
-        activation_zones(state, playback, &mut desk_zones)
-    })
+    losing_playbacks(&active, |playback| activation_zones(state, playback))
 }
 
 fn activation_zones(
     state: &AppState,
     playback: &light_playback::ActivePlayback,
-    desk_zones: &mut HashMap<
-        (Uuid, Option<u8>),
-        Arc<[Vec<light_playback::PlaybackIdentity>]>,
-    >,
 ) -> Result<Arc<[Vec<light_playback::PlaybackIdentity>]>, ApiError> {
     let identity = runtime_identity(playback).ok_or_else(|| {
         ApiError::internal("restored assigned Playback has no stable runtime identity")
     })?;
-    let page = match identity {
-        light_playback::PlaybackIdentity::Virtual(address) => Some(address.page()),
-        light_playback::PlaybackIdentity::Physical(_) => None,
-    };
-    let Some(activation) = &playback.activation else {
-        return all_restored_zones(state, identity);
-    };
-    match activation.exclusion_scope {
-        // Zone edits are configuration-only while the desk is running, but restart must
-        // normalize the restored winners against the current configuration using the
-        // last accepted activation. An activation recorded before its desk gained a
-        // qualifying surface therefore still carries the desk partition we need here.
-        light_playback::PlaybackExclusionScope::None => {
-            originating_desk_zones(state, activation.desk_id, identity, page, desk_zones)
-        }
-        light_playback::PlaybackExclusionScope::LegacyAllDesks => {
-            all_restored_zones(state, identity)
-        }
-        light_playback::PlaybackExclusionScope::OriginatingDesk => originating_desk_zones(
-            state,
-            activation.desk_id,
-            identity,
-            page,
-            desk_zones,
-        ),
+    match identity {
+        light_playback::PlaybackIdentity::Virtual(_) => all_restored_zones(state, identity),
+        light_playback::PlaybackIdentity::Physical(_) => Ok(Arc::default()),
     }
-}
-
-fn originating_desk_zones(
-    state: &AppState,
-    desk_id: Option<Uuid>,
-    identity: light_playback::PlaybackIdentity,
-    page: Option<u8>,
-    desk_zones: &mut HashMap<
-        (Uuid, Option<u8>),
-        Arc<[Vec<light_playback::PlaybackIdentity>]>,
-    >,
-) -> Result<Arc<[Vec<light_playback::PlaybackIdentity>]>, ApiError> {
-    let Some(desk_id) = desk_id else {
-        return Ok(Arc::default());
-    };
-    let key = (desk_id, page);
-    if let Some(zones) = desk_zones.get(&key) {
-        return Ok(Arc::clone(zones));
-    }
-    let exists = state
-        .installation
-        .control_desk(desk_id)
-        .map_err(ApiError::store)?
-        .is_some();
-    let zones: Arc<[Vec<light_playback::PlaybackIdentity>]> = if exists {
-        qualified_zone_identities(state, desk_id, identity).into()
-    } else {
-        Arc::default()
-    };
-    desk_zones.insert(key, Arc::clone(&zones));
-    Ok(zones)
 }
 
 fn all_restored_zones(
     state: &AppState,
     identity: light_playback::PlaybackIdentity,
 ) -> Result<Arc<[Vec<light_playback::PlaybackIdentity>]>, ApiError> {
-    let Some(show) = state.active_show.current().clone() else {
-        return Ok(Arc::default());
-    };
-    let desks = state
-        .installation
-        .virtual_playback_exclusions(show.id)
-        ?
-        .keys()
-        .filter_map(|id| Uuid::parse_str(id).ok())
-        .collect::<Vec<_>>();
-    Ok(desks
-        .into_iter()
-        .flat_map(|desk_id| qualified_zone_identities(state, desk_id, identity))
-        .collect::<Vec<_>>()
-        .into())
+    Ok(qualified_zone_identities(state, identity)?.into())
 }
 
 fn losing_playbacks(
@@ -355,21 +280,17 @@ fn runtime_identity(
 
 fn qualified_zone_identities(
     state: &AppState,
-    desk_id: Uuid,
     identity: light_playback::PlaybackIdentity,
-) -> Vec<Vec<light_playback::PlaybackIdentity>> {
-    let page = match identity {
-        light_playback::PlaybackIdentity::Virtual(address) => Some(address.page()),
-        light_playback::PlaybackIdentity::Physical(_) => None,
-    };
-    VirtualPlaybackExclusionResolver::read(state, desk_id)
-        .zone_numbers(page)
+) -> Result<Vec<Vec<light_playback::PlaybackIdentity>>, ApiError> {
+    Ok(VirtualPlaybackExclusionResolver::read(state)?
+        .zone_numbers()
         .into_iter()
         .filter_map(|zone| {
             zone.into_iter()
                 .map(|number| match identity {
-                    light_playback::PlaybackIdentity::Virtual(address) => {
-                        light_playback::PlaybackIdentity::virtual_playback(address.page(), number)
+                    light_playback::PlaybackIdentity::Virtual(_) => {
+                        light_playback::VirtualPlaybackAddress::from_number(number)
+                            .map(light_playback::PlaybackIdentity::Virtual)
                     }
                     light_playback::PlaybackIdentity::Physical(_) => {
                         light_playback::PlaybackIdentity::physical(number)
@@ -378,7 +299,7 @@ fn qualified_zone_identities(
                 .collect::<Result<Vec<_>, _>>()
                 .ok()
         })
-        .collect()
+        .collect())
 }
 
 const fn application_identity(

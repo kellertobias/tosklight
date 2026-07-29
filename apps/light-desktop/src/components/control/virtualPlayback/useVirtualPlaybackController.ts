@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PlaybackDefinition } from "../../../api/types";
 import {
+	isVirtualPlaybackNumberForPage,
+	virtualPlaybackBankStart,
+	virtualPlaybackNumber,
+	virtualPlaybackPage,
+} from "../../../api/virtualPlaybackAddress";
+import {
 	usePlaybackDeskView,
 	usePlaybackRuntimeActions,
 	usePlaybackRuntimeStatus,
@@ -133,10 +139,7 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 	const [selectedSlots, setSelectedSlots] = useState<number[]>([]);
 	const [creatingZone, setCreatingZone] = useState(false);
 	const [zoneName, setZoneName] = useState("");
-	const zoneEdit =
-		options.state.virtualPlaybackZoneEdit?.surfaceId === options.surfaceId
-			? options.state.virtualPlaybackZoneEdit
-			: null;
+	const zoneEdit = options.state.virtualPlaybackZoneEdit;
 	const configurationArmed =
 		options.state.playbackSetArmed || options.state.cueListSetArmed;
 	useEffect(() => {
@@ -151,10 +154,16 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 		setConfiguration(null);
 	}, [options.topology.ready]);
 	useEffect(() => {
-		if (!zoneEdit) return;
-		setSelectedSlots([...zoneEdit.slots]);
+		if (!zoneEdit || options.pageNumber == null) return;
+		const pageNumber = options.pageNumber;
+		const start = virtualPlaybackBankStart(pageNumber);
+		setSelectedSlots(
+			zoneEdit.playbackNumbers
+				.filter((number) => isVirtualPlaybackNumberForPage(pageNumber, number))
+				.map((number) => number - start + 1),
+		);
 		options.dispatch({ type: "SET_SHIFT_ARMED", value: true });
-	}, [options.dispatch, zoneEdit]);
+	}, [options.dispatch, options.pageNumber, zoneEdit]);
 
 	useEffect(() => {
 		if (zoneEdit) return;
@@ -170,12 +179,13 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 		slot: number,
 	) => {
 		if (!validPlaybackSlot(slot) || options.pageNumber == null) return;
+		const playbackNumber = virtualPlaybackNumber(options.pageNumber, slot);
 		const next =
 			playback ??
 			({
 				...emptyConfiguration(
 					options.pageNumber,
-					slot,
+					playbackNumber,
 					1,
 					false,
 					options.topology.cueLists[0]?.body.id ?? "",
@@ -224,12 +234,21 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 
 	const createZone = async (inputName = zoneName) => {
 		const name = inputName.trim();
-		if (zoneEdit || !options.zones.ready || !name || selectedSlots.length < 2)
+		if (
+			zoneEdit ||
+			!options.zones.ready ||
+			options.pageNumber == null ||
+			!name ||
+			selectedSlots.length < 2
+		)
 			return;
+		const pageNumber = options.pageNumber;
 		const zone: VirtualPlaybackZone = {
 			id: crypto.randomUUID(),
 			name,
-			slots: [...selectedSlots],
+			playbackNumbers: selectedSlots.map((slot) =>
+				virtualPlaybackNumber(pageNumber, slot),
+			),
 		};
 		if (!(await options.zones.persist([...options.zones.zones, zone]))) return;
 		options.dispatch({ type: "SET_SHIFT_ARMED", value: false });
@@ -248,19 +267,41 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 	};
 
 	const updateZone = async () => {
-		if (!zoneEdit || !options.zones.ready || selectedSlots.length < 2) return;
+		if (!zoneEdit || !options.zones.ready || options.pageNumber == null) return;
+		const pageNumber = options.pageNumber;
 		const current = options.zones.zones.find(
 			(candidate) => candidate.id === zoneEdit.zoneId,
 		);
 		if (!current) return;
+		const hiddenNumbers = current.playbackNumbers.filter(
+			(number) => virtualPlaybackPage(number) !== pageNumber,
+		);
+		if (hiddenNumbers.length + selectedSlots.length < 2) return;
+		const visibleNumbers = selectedSlots.map((slot) =>
+			virtualPlaybackNumber(pageNumber, slot),
+		);
 		const next = options.zones.zones.map((candidate) =>
 			candidate.id === zoneEdit.zoneId
-				? { ...candidate, slots: [...selectedSlots] }
+				? {
+						...candidate,
+						playbackNumbers: [...hiddenNumbers, ...visibleNumbers].sort(
+							(left, right) => left - right,
+						),
+					}
 				: candidate,
 		);
 		if (!(await options.zones.persist(next))) return;
 		cancelZoneSelection();
 	};
+	const selectedPlaybackCount =
+		selectedSlots.length +
+		(zoneEdit && options.pageNumber != null
+			? (options.zones.zones
+					.find((candidate) => candidate.id === zoneEdit.zoneId)
+					?.playbackNumbers.filter(
+						(number) => virtualPlaybackPage(number) !== options.pageNumber,
+					).length ?? 0)
+			: 0);
 
 	return {
 		configuration:
@@ -269,6 +310,7 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 				: null,
 		setConfiguration,
 		selectedSlots,
+		selectedPlaybackCount,
 		setSelectedSlots,
 		creatingZone,
 		setCreatingZone,
@@ -296,8 +338,13 @@ function mappedVirtualPlaybackAddresses(
 		.filter(
 			(number) =>
 				Number.isSafeInteger(number) &&
-				number >= 1_001 &&
-				number <= 1_000 + Math.min(cellCount, MAX_VIRTUAL_PLAYBACK_CELLS),
+				isVirtualPlaybackNumberForPage(page.number, number) &&
+				number <
+					virtualPlaybackNumber(
+						page.number,
+						Math.min(cellCount, MAX_VIRTUAL_PLAYBACK_CELLS),
+					) +
+						1,
 		)
 		.map((playbackNumber) => ({ page: page.number, playbackNumber }));
 }

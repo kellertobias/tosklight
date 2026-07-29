@@ -1,41 +1,58 @@
 use super::{playback_topology_route_support::open_topology_show, *};
 
-const SURFACE_ID: &str = "surface-a";
-
 #[tokio::test]
-async fn show_level_route_returns_all_desks_and_publishes_one_replay_safe_event() {
+async fn show_level_route_is_cross_desk_and_publishes_one_replay_safe_event() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let show = create_show(&app, &token, "Scoped zones").await;
     let show_id = show["id"].as_str().unwrap();
     open_topology_show(&app, &token, show_id, None).await;
-    let desk_id = authenticated_desk_id(&state, &token);
-
     let empty = get_zones(&app, &token).await;
     assert_eq!(empty.status(), StatusCode::OK);
     assert_eq!(
         json(empty).await,
-        serde_json::json!({"show_id":show_id,"desks":{}})
+        serde_json::json!({"show_id":show_id,"revision":0,"zones":[]})
     );
 
     let cursor = state.events.latest_sequence();
-    let saved = put_zones(&app, &token, show_id, SURFACE_ID, "save-zones", 0).await;
+    let saved = put_zones(&app, &token, show_id, "save-zones", 0).await;
     assert_eq!(saved.status(), StatusCode::OK);
     assert_eq!(
         json(saved).await,
         serde_json::json!({
             "show_id": show_id,
-            "desk_id": desk_id,
-            "surface_id": SURFACE_ID,
-            "surface": surface(1),
+            "revision": 1,
+            "zones": zones(),
             "request_id": "save-zones",
             "replayed": false,
             "changed": true,
         })
     );
+    let active = state.active_show.current().unwrap();
+    let portable = ShowStore::open(&active.path)
+        .unwrap()
+        .portable_document()
+        .unwrap();
+    assert_eq!(
+        portable
+            .object(
+                VIRTUAL_PLAYBACK_EXCLUSION_OBJECT_KIND,
+                VIRTUAL_PLAYBACK_EXCLUSION_OBJECT_ID,
+            )
+            .unwrap()
+            .body(),
+        &serde_json::json!({"revision":1,"zones":zones()})
+    );
+    assert!(
+        state
+            .installation
+            .setting(&format!("virtual_playback_exclusion_zones:{show_id}"))
+            .unwrap()
+            .is_none()
+    );
 
-    let replay = put_zones(&app, &token, show_id, SURFACE_ID, "save-zones", 0).await;
+    let replay = put_zones(&app, &token, show_id, "save-zones", 0).await;
     assert_eq!(replay.status(), StatusCode::OK);
     let replay = json(replay).await;
     assert_eq!(replay["replayed"], true);
@@ -56,37 +73,18 @@ async fn show_level_route_returns_all_desks_and_publishes_one_replay_safe_event(
         panic!("expected typed exclusion-zone invalidation event")
     };
     assert_eq!(change.show_id.0.to_string(), show_id);
-    assert_eq!(change.desk_id, desk_id);
-    assert_eq!(change.surface_id, SURFACE_ID);
+    assert_eq!(change.revision, 1);
 
-    let no_change =
-        json(put_zones(
-            &app,
-            &token,
-            show_id,
-            SURFACE_ID,
-            "same-zones-new-request",
-            1,
-        )
-        .await)
-        .await;
+    let no_change = json(put_zones(&app, &token, show_id, "same-zones-new-request", 1).await).await;
     assert_eq!(no_change["replayed"], false);
     assert_eq!(no_change["changed"], false);
     assert_eq!(state.events.latest_sequence(), cursor + 1);
 
-    let stale_revision = put_zones(
-        &app,
-        &token,
-        show_id,
-        SURFACE_ID,
-        "stale-revision",
-        0,
-    )
-    .await;
+    let stale_revision = put_zones(&app, &token, show_id, "stale-revision", 0).await;
     assert_eq!(stale_revision.status(), StatusCode::CONFLICT);
     assert_eq!(
         json(stale_revision).await["error"],
-        "Virtual Playback exclusion surface revision conflict: expected 0, actual 1"
+        "Virtual Playback exclusion-zone revision conflict: expected 0, actual 1"
     );
 
     let second_desk = state
@@ -94,35 +92,17 @@ async fn show_level_route_returns_all_desks_and_publishes_one_replay_safe_event(
         .add_desk("Zone wing", "zone-wing")
         .unwrap();
     let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
-    let second = put_zones(
-        &app,
-        &second_token,
-        show_id,
-        "surface-b",
-        "save-second-zones",
-        0,
-    )
-    .await;
+    let second = put_zones(&app, &second_token, show_id, "save-second-zones", 1).await;
     assert_eq!(second.status(), StatusCode::OK);
+    let second = json(second).await;
+    assert_eq!(second["changed"], false);
+    assert_eq!(second["revision"], 1);
     let snapshot = json(get_zones(&app, &token).await).await;
-    assert_eq!(
-        snapshot["desks"][desk_id.to_string()][SURFACE_ID],
-        surface(1)
-    );
-    assert_eq!(
-        snapshot["desks"][second_desk.id.to_string()]["surface-b"],
-        surface(1)
-    );
+    assert_eq!(snapshot["revision"], 1);
+    assert_eq!(snapshot["zones"], zones());
 
-    let foreign_show = put_zones(
-        &app,
-        &token,
-        &Uuid::new_v4().to_string(),
-        SURFACE_ID,
-        "foreign-show",
-        1,
-    )
-    .await;
+    let foreign_show =
+        put_zones(&app, &token, &Uuid::new_v4().to_string(), "foreign-show", 1).await;
     assert_eq!(foreign_show.status(), StatusCode::CONFLICT);
     assert_eq!(
         json(foreign_show).await["error"],
@@ -139,19 +119,18 @@ async fn incompatible_legacy_zone_shape_is_rejected_instead_of_silently_dropped(
     let show = create_show(&app, &token, "Legacy zone schema").await;
     let show_id = show["id"].as_str().unwrap();
     open_topology_show(&app, &token, show_id, None).await;
-    let desk_key = authenticated_desk_id(&state, &token).to_string();
-    state
-        .installation
-        .set_setting(
-            &virtual_playback_exclusion_setting(light_core::ShowId(
-                Uuid::parse_str(show_id).unwrap(),
-            )),
+    state.active_show.clear_document_cache();
+    let active = state.active_show.current().unwrap();
+    ShowStore::open(&active.path)
+        .unwrap()
+        .put_object(
+            VIRTUAL_PLAYBACK_EXCLUSION_OBJECT_KIND,
+            VIRTUAL_PLAYBACK_EXCLUSION_OBJECT_ID,
             &serde_json::json!({
-                (desk_key): {
-                    SURFACE_ID: zones()
-                }
-            })
-            .to_string(),
+                "revision": 1,
+                "zones": [{"id":"legacy","name":"Legacy","slots":[1,2]}]
+            }),
+            0,
         )
         .unwrap();
 
@@ -178,56 +157,20 @@ async fn captured_show_scope_is_rejected_after_active_show_replacement() {
     let second_id = second["id"].as_str().unwrap().to_owned();
     open_topology_show(&app, &token, &second_id, None).await;
 
-    let stale = put_zones(&app, &token, &first_id, SURFACE_ID, "stale-show", 0).await;
+    let stale = put_zones(&app, &token, &first_id, "stale-show", 0).await;
     assert_eq!(stale.status(), StatusCode::CONFLICT);
     assert_eq!(
         json(stale).await["error"],
         "X-Tosk-Show does not match the active show"
     );
-    let first_store = state
-        .installation
-        .virtual_playback_exclusions(light_core::ShowId(Uuid::parse_str(&first_id).unwrap()));
-    let second_store = state
-        .installation
-        .virtual_playback_exclusions(light_core::ShowId(Uuid::parse_str(&second_id).unwrap()));
-    assert!(first_store.unwrap().is_empty());
-    assert!(second_store.unwrap().is_empty());
-
-    let current = put_zones(
-        &app,
-        &token,
-        &second_id,
-        SURFACE_ID,
-        "current-show",
-        0,
-    )
-    .await;
+    let current = put_zones(&app, &token, &second_id, "current-show", 0).await;
     assert_eq!(current.status(), StatusCode::OK);
     assert_eq!(json(current).await["show_id"], second_id);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
-fn authenticated_desk_id(state: &AppState, token: &str) -> Uuid {
-    state
-        .sessions
-        .sessions()
-        .into_iter()
-        .find(|session| session.token == token)
-        .unwrap()
-        .desk
-        .id
-}
-
 fn zones() -> serde_json::Value {
-    serde_json::json!([{"id":"paired","name":"Paired","slots":[1,2]}])
-}
-
-fn surface(revision: u64) -> serde_json::Value {
-    serde_json::json!({
-        "revision": revision,
-        "page_mode": {"type": "follow_main"},
-        "zones": zones(),
-    })
+    serde_json::json!([{"id":"paired","name":"Paired","playback_numbers":[1001,1002]}])
 }
 
 async fn get_zones(app: &Router, token: &str) -> Response {
@@ -246,28 +189,24 @@ async fn put_zones(
     app: &Router,
     token: &str,
     show_id: &str,
-    surface_id: &str,
     request_id: &str,
     expected_revision: u64,
 ) -> Response {
     app.clone()
         .oneshot(
-            Request::post(format!(
-                "/api/v2/virtual-playback-exclusion-zones/{surface_id}/update"
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .header("x-tosk-show", show_id)
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(
-                serde_json::json!({
-                    "request_id": request_id,
-                    "expected_revision": expected_revision,
-                    "page_mode": {"type": "follow_main"},
-                    "zones": zones(),
-                })
-                .to_string(),
-            ))
-            .unwrap(),
+            Request::post("/api/v2/virtual-playback-exclusion-zones/update")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-show", show_id)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": request_id,
+                        "expected_revision": expected_revision,
+                        "zones": zones(),
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
         )
         .await
         .unwrap()

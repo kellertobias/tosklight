@@ -6,6 +6,7 @@ import {
 } from "@tosklight/ui";
 import { useState } from "react";
 import { createPortal } from "react-dom";
+import { virtualPlaybackNumber } from "../api/virtualPlaybackAddress";
 import { VirtualPlaybackConfigurationModal } from "../components/control/VirtualPlaybackConfigurationModal";
 import { useVirtualPlaybackController } from "../components/control/virtualPlayback/useVirtualPlaybackController";
 import { VirtualPlaybackGrid } from "../components/control/virtualPlayback/VirtualPlaybackGrid";
@@ -43,6 +44,7 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 						saving={controller.zones.saving}
 						zoneCount={controller.zones.zones.length}
 						selectedSlots={controller.selectedSlots}
+						selectedPlaybackCount={controller.selectedPlaybackCount}
 						editing={controller.zoneEdit !== null}
 						onCreateZone={(name) => {
 							controller.setZoneName(name);
@@ -100,7 +102,9 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 			)}
 			{controller.creatingZone && (
 				<CreateZoneModal
-					selectedSlots={controller.selectedSlots}
+					playbackNumbers={controller.selectedSlots.map((slot) =>
+						virtualPlaybackNumber(controller.pageNumber ?? 1, slot),
+					)}
 					name={controller.zoneName}
 					error={controller.zones.error}
 					saving={controller.zones.saving}
@@ -117,6 +121,7 @@ export function VirtualPlaybackTitleActions(props: {
 	saving: boolean;
 	zoneCount: number;
 	selectedSlots: readonly number[];
+	selectedPlaybackCount?: number;
 	editing: boolean;
 	onCreateZone(name: string): void;
 	onUpdateZone(): void;
@@ -131,7 +136,7 @@ export function VirtualPlaybackTitleActions(props: {
 						disabled={
 							props.saving ||
 							!props.zonesReady ||
-							props.selectedSlots.length < 2
+							(props.selectedPlaybackCount ?? props.selectedSlots.length) < 2
 						}
 						onClick={props.onUpdateZone}
 					>
@@ -160,7 +165,7 @@ export function VirtualPlaybackTitleActions(props: {
 }
 
 function CreateZoneModal(props: {
-	selectedSlots: readonly number[];
+	playbackNumbers: readonly number[];
 	name: string;
 	error: string | null;
 	saving: boolean;
@@ -187,7 +192,7 @@ function CreateZoneModal(props: {
 					</Button>
 					<h3>Create Exclusion Zone</h3>
 					<p>
-						Cells {props.selectedSlots.join(", ")} on the current page will be
+						Virtual Playbacks {props.playbackNumbers.join(", ")} will be
 						mutually exclusive. Creating the zone does not operate any playback.
 					</p>
 					<FormLayout labelPlacement="side">
@@ -206,7 +211,7 @@ function CreateZoneModal(props: {
 							disabled={
 								props.saving ||
 								!draftName.trim() ||
-								props.selectedSlots.length < 2
+								props.playbackNumbers.length < 2
 							}
 							onClick={() => props.onCreate(draftName)}
 						>

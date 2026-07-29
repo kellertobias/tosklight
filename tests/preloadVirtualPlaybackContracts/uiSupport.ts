@@ -57,7 +57,7 @@ export async function assignVirtualSource(
 ) {
 	await pane
 		.getByRole("button", {
-			name: new RegExp(`Virtual playback page 1 cell ${cell} empty`),
+			name: new RegExp(`Virtual playback ${1000 + cell} page 1 cell ${cell} empty`),
 		})
 		.click({ button: "right" });
 	const modal = page.getByRole("dialog", { name: "Playback Configuration" });
@@ -71,7 +71,7 @@ export async function assignVirtualSource(
 	await expect(
 		pane.getByRole("button", {
 			name: new RegExp(
-				`Virtual playback page 1 cell ${cell} ${escapeRegExp(sourceName)}`,
+				`Virtual playback ${1000 + cell} page 1 cell ${cell} ${escapeRegExp(sourceName)}`,
 			),
 		}),
 	).toBeVisible();

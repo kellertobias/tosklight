@@ -1,12 +1,9 @@
-import { act, render } from "@testing-library/react";
-import { type ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
-	VirtualPlaybackExclusionSurface,
-	VirtualPlaybackSurfacePageMode,
 	VirtualPlaybackZone,
-	VirtualPlaybackZonesAuthority,
 	VirtualPlaybackZonesCapability,
+	VirtualPlaybackZonesEventObserver,
 	VirtualPlaybackZonesSnapshot,
 	VirtualPlaybackZonesTransport,
 } from "./contracts";
@@ -16,355 +13,163 @@ import {
 } from "./VirtualPlaybackZonesContext";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
-const DESK_ID = "22222222-2222-4222-8222-222222222222";
-const ZONES = [{ id: "paired", name: "Paired", slots: [1, 2] }] as const;
-const UPDATED_ZONES = [
-	{ id: "paired", name: "Updated", slots: [1, 2, 3] },
+const AUTHORITY = {
+	authorityId: "authority-a",
+	scope: { showId: SHOW_ID },
+};
+const ZONES = [
+	{ id: "paired", name: "Paired", playbackNumbers: [1001, 1301] },
 ] as const;
-const FOLLOW_MAIN = { type: "follow_main" } as const;
-
-function authority(authorityId: string): VirtualPlaybackZonesAuthority {
-	return { authorityId, scope: { showId: SHOW_ID, deskId: DESK_ID } };
-}
+const UPDATED = [
+	{ id: "paired", name: "Updated", playbackNumbers: [1001, 1301, 1601] },
+] as const;
 
 function snapshot(
-	surfaces: Record<string, readonly VirtualPlaybackZone[]> = {},
+	zones: readonly VirtualPlaybackZone[] = ZONES,
 	revision = 4,
 ): VirtualPlaybackZonesSnapshot {
-	return {
-		showId: SHOW_ID,
-		desks: {
-			[DESK_ID]: Object.fromEntries(
-				Object.entries(surfaces).map(([surfaceId, zones]) => [
-					surfaceId,
-					surface(zones, revision),
-				]),
-			),
-		},
-	};
+	return { showId: SHOW_ID, revision, zones };
 }
 
-function surface(
-	zones: readonly VirtualPlaybackZone[] = ZONES,
-	revision = 1,
-	pageMode: VirtualPlaybackSurfacePageMode = FOLLOW_MAIN,
-): VirtualPlaybackExclusionSurface {
-	return { revision, pageMode, zones };
-}
-
-function saveOutcome(
-	zones: readonly VirtualPlaybackZone[] = ZONES,
-	revision = 1,
-) {
-	return {
-		requestId: "request-a",
-		showId: SHOW_ID,
-		deskId: DESK_ID,
-		surfaceId: "surface-a",
-		surface: surface(zones, revision),
-		replayed: false,
-		changed: true,
-	};
-}
-
-function deferred<T>() {
-	let resolve!: (value: T) => void;
-	let reject!: (reason: unknown) => void;
-	const promise = new Promise<T>((accept, decline) => {
-		resolve = accept;
-		reject = decline;
-	});
-	return { promise, resolve, reject };
-}
-
-function fakeTransport(
-	loadSnapshot: VirtualPlaybackZonesTransport["loadSnapshot"],
-	saveSurface: VirtualPlaybackZonesTransport["saveSurface"] = vi.fn(),
-): VirtualPlaybackZonesTransport {
-	return { loadSnapshot, saveSurface };
-}
-
-function harness(
-	current: { capability: VirtualPlaybackZonesCapability | null },
-	selectedAuthority: VirtualPlaybackZonesAuthority | null,
-	transport: VirtualPlaybackZonesTransport | null,
-	child: ReactNode = null,
-) {
+function harness(transport: VirtualPlaybackZonesTransport) {
+	const current = { capability: null as VirtualPlaybackZonesCapability | null };
 	function Probe() {
 		current.capability = useVirtualPlaybackZones();
-		return <>{child}</>;
+		return null;
 	}
-	return (
-		<VirtualPlaybackZonesProvider
-			authority={selectedAuthority}
-			transport={transport}
-		>
+	render(
+		<VirtualPlaybackZonesProvider authority={AUTHORITY} transport={transport}>
 			<Probe />
-		</VirtualPlaybackZonesProvider>
+		</VirtualPlaybackZonesProvider>,
 	);
+	return current;
 }
 
+afterEach(cleanup);
+
 describe("VirtualPlaybackZonesProvider", () => {
-	it("performs no read on mount and coalesces caller-triggered reads", async () => {
-		const pending = deferred<VirtualPlaybackZonesSnapshot>();
-		const loadSnapshot = vi.fn(() => pending.promise);
-		const transport = fakeTransport(loadSnapshot);
-		const current = { capability: null as VirtualPlaybackZonesCapability | null };
-		render(harness(current, authority("session-a"), transport));
-
-		expect(current.capability?.available).toBe(true);
+	it("is dormant until explicitly loaded and coalesces reads", async () => {
+		const loadSnapshot = vi.fn(async () => snapshot());
+		const current = harness({ loadSnapshot, save: vi.fn() });
 		expect(loadSnapshot).not.toHaveBeenCalled();
-		const first = current.capability?.loadSurface("surface-a");
-		const second = current.capability?.loadSurface("surface-b");
+		await act(async () => {
+			await Promise.all([
+				current.capability?.load(),
+				current.capability?.load(),
+			]);
+		});
 		expect(loadSnapshot).toHaveBeenCalledOnce();
-		expect(loadSnapshot).toHaveBeenCalledWith(
-			{ showId: SHOW_ID, deskId: DESK_ID },
-		);
-		pending.resolve(snapshot({ "surface-a": ZONES }));
-		await act(async () => {
-			await expect(first).resolves.toEqual(ZONES);
-			await expect(second).resolves.toEqual([]);
-		});
+		expect(current.capability?.getZones()).toEqual(ZONES);
 	});
 
-	it("saves a surface and exposes local failures", async () => {
-		const saveSurface = vi
-			.fn<VirtualPlaybackZonesTransport["saveSurface"]>()
-			.mockResolvedValueOnce(saveOutcome())
-			.mockRejectedValueOnce(new Error("save failed"));
-		const transport = fakeTransport(vi.fn(), saveSurface);
-		const current = { capability: null as VirtualPlaybackZonesCapability | null };
-		render(harness(current, authority("session-a"), transport));
-
+	it("saves against the one show-level revision and installs the result", async () => {
+		const save = vi.fn(async () => ({
+			...snapshot(UPDATED, 5),
+			requestId: "request-a",
+			replayed: false,
+			changed: true,
+		}));
+		const current = harness({
+			loadSnapshot: vi.fn(async () => snapshot()),
+			save,
+		});
 		await act(async () => {
-			await expect(
-				current.capability?.saveSurface("surface-a", FOLLOW_MAIN, ZONES),
-			).resolves.toEqual(ZONES);
+			await current.capability?.load();
+			await current.capability?.save(UPDATED);
 		});
-		expect(saveSurface).toHaveBeenCalledWith(
-			{ showId: SHOW_ID, deskId: DESK_ID },
-			"surface-a",
-			0,
-			FOLLOW_MAIN,
-			ZONES,
-			expect.any(String),
-		);
-		await act(async () => {
-			await expect(
-				current.capability?.saveSurface("surface-a", FOLLOW_MAIN, ZONES),
-			).resolves.toBeNull();
-		});
-		expect(current.capability?.error).toBe("save failed");
-
-		act(() => current.capability?.clearError());
-		expect(current.capability?.error).toBeNull();
-	});
-
-	it("reloads authoritative surface revision after a save conflict", async () => {
-		const conflict = Object.assign(new Error("stale surface revision"), {
-			status: 409,
-		});
-		const loadSnapshot = vi
-			.fn<VirtualPlaybackZonesTransport["loadSnapshot"]>()
-			.mockResolvedValueOnce(snapshot({ "surface-a": ZONES }, 4))
-			.mockResolvedValueOnce(snapshot({ "surface-a": UPDATED_ZONES }, 5));
-		const saveSurface = vi
-			.fn<VirtualPlaybackZonesTransport["saveSurface"]>()
-			.mockRejectedValueOnce(conflict);
-		const current = { capability: null as VirtualPlaybackZonesCapability | null };
-		render(
-			harness(
-				current,
-				authority("session-a"),
-				fakeTransport(loadSnapshot, saveSurface),
-			),
-		);
-
-		await act(async () => {
-			await expect(
-				current.capability?.loadSurface("surface-a"),
-			).resolves.toEqual(ZONES);
-			await expect(
-				current.capability?.saveSurface("surface-a", FOLLOW_MAIN, UPDATED_ZONES),
-			).resolves.toBeNull();
-		});
-
-		expect(saveSurface).toHaveBeenCalledWith(
-			{ showId: SHOW_ID, deskId: DESK_ID },
-			"surface-a",
+		expect(save).toHaveBeenCalledWith(
+			{ showId: SHOW_ID },
 			4,
-			FOLLOW_MAIN,
-			UPDATED_ZONES,
+			UPDATED,
 			expect.any(String),
+		);
+		expect(current.capability?.getZones()).toEqual(UPDATED);
+	});
+
+	it("serializes edits so the second uses the first result revision", async () => {
+		const save = vi
+			.fn<VirtualPlaybackZonesTransport["save"]>()
+			.mockResolvedValueOnce({
+				...snapshot(UPDATED, 5),
+				requestId: "one",
+				replayed: false,
+				changed: true,
+			})
+			.mockResolvedValueOnce({
+				...snapshot(ZONES, 6),
+				requestId: "two",
+				replayed: false,
+				changed: true,
+			});
+		const current = harness({
+			loadSnapshot: vi.fn(async () => snapshot()),
+			save,
+		});
+		await act(async () => {
+			await Promise.all([
+				current.capability?.save(UPDATED),
+				current.capability?.save(ZONES),
+			]);
+		});
+		expect(save).toHaveBeenCalledTimes(2);
+		expect(save.mock.calls[0][1]).toBe(4);
+		expect(save.mock.calls[1][1]).toBe(5);
+	});
+
+	it("reloads the shared snapshot when another desk publishes a revision", async () => {
+		let observer: VirtualPlaybackZonesEventObserver | null = null;
+		const loadSnapshot = vi
+			.fn<() => Promise<VirtualPlaybackZonesSnapshot>>()
+			.mockResolvedValueOnce(snapshot())
+			.mockResolvedValueOnce(snapshot(UPDATED, 5));
+		const current = harness({
+			loadSnapshot,
+			save: vi.fn(),
+			subscribe: (_scope, next) => {
+				observer = next;
+				return { close: vi.fn() };
+			},
+		});
+		await act(async () => {
+			current.capability?.activate();
+			await current.capability?.load();
+		});
+		act(() => observer?.changed({ showId: SHOW_ID, revision: 5 }));
+		await waitFor(() =>
+			expect(current.capability?.getZones()).toEqual(UPDATED),
 		);
 		expect(loadSnapshot).toHaveBeenCalledTimes(2);
-		expect(current.capability?.getSurface("surface-a")).toEqual(UPDATED_ZONES);
-		expect(current.capability?.error).toBe("stale surface revision");
 	});
 
-	it("serializes saves so an older response cannot overwrite a newer intent", async () => {
-		const first = deferred<ReturnType<typeof saveOutcome>>();
-		const newest = [
-			{ id: "paired", name: "Newest", slots: [1, 2, 4] },
-		] as const;
-		const saveSurface = vi
-			.fn<VirtualPlaybackZonesTransport["saveSurface"]>()
-			.mockReturnValueOnce(first.promise)
-			.mockResolvedValueOnce(saveOutcome(newest, 2));
-		const current = { capability: null as VirtualPlaybackZonesCapability | null };
-		render(
-			harness(
-				current,
-				authority("session-a"),
-				fakeTransport(vi.fn(), saveSurface),
-			),
+	it("clears cached zones when the authority changes", async () => {
+		const transport = {
+			loadSnapshot: vi.fn(async () => snapshot()),
+			save: vi.fn(),
+		};
+		const current = {
+			capability: null as VirtualPlaybackZonesCapability | null,
+		};
+		function Probe() {
+			current.capability = useVirtualPlaybackZones();
+			return null;
+		}
+		const view = render(
+			<VirtualPlaybackZonesProvider authority={AUTHORITY} transport={transport}>
+				<Probe />
+			</VirtualPlaybackZonesProvider>,
 		);
-
-		const older = current.capability?.saveSurface(
-			"surface-a",
-			FOLLOW_MAIN,
-			ZONES,
+		await act(async () => void (await current.capability?.load()));
+		view.rerender(
+			<VirtualPlaybackZonesProvider
+				authority={{
+					authorityId: "authority-b",
+					scope: { showId: "33333333-3333-4333-8333-333333333333" },
+				}}
+				transport={transport}
+			>
+				<Probe />
+			</VirtualPlaybackZonesProvider>,
 		);
-		const newer = current.capability?.saveSurface(
-			"surface-a",
-			FOLLOW_MAIN,
-			newest,
-		);
-		await Promise.resolve();
-		expect(saveSurface).toHaveBeenCalledOnce();
-
-		first.resolve(saveOutcome());
-		await act(async () => {
-			await expect(older).resolves.toEqual(ZONES);
-			await expect(newer).resolves.toEqual(newest);
-		});
-		expect(saveSurface).toHaveBeenCalledTimes(2);
-		expect(saveSurface.mock.calls[1][2]).toBe(1);
-		expect(current.capability?.getSurface("surface-a")).toEqual(newest);
-	});
-
-	it("keeps a completed save when an older coalesced snapshot arrives later", async () => {
-		const pending = deferred<VirtualPlaybackZonesSnapshot>();
-		const listener = vi.fn();
-		const transport = fakeTransport(
-			vi.fn(() => pending.promise),
-			vi.fn(async () => saveOutcome(UPDATED_ZONES)),
-		);
-		const current = { capability: null as VirtualPlaybackZonesCapability | null };
-		render(harness(current, authority("session-a"), transport));
-		const unsubscribe = current.capability?.subscribeSurface(
-			"surface-a",
-			listener,
-		);
-		const loading = current.capability?.loadSurface("surface-a");
-
-		await act(async () => {
-			await expect(
-				current.capability?.saveSurface(
-					"surface-a",
-					FOLLOW_MAIN,
-					UPDATED_ZONES,
-				),
-			).resolves.toEqual(UPDATED_ZONES);
-		});
-		expect(current.capability?.getSurface("surface-a")).toEqual(UPDATED_ZONES);
-		pending.resolve(snapshot({ "surface-a": ZONES }));
-		await act(async () => {
-			await expect(loading).resolves.toEqual(UPDATED_ZONES);
-		});
-		expect(current.capability?.getSurface("surface-a")).toEqual(UPDATED_ZONES);
-		expect(listener).toHaveBeenCalledTimes(3);
-		unsubscribe?.();
-	});
-
-	it("rejects a foreign typed transport result as a local error", async () => {
-		const transport = fakeTransport(
-			vi.fn(async () => ({ ...snapshot(), showId: DESK_ID })),
-		);
-		const current = { capability: null as VirtualPlaybackZonesCapability | null };
-		render(harness(current, authority("session-a"), transport));
-
-		await act(async () => {
-			await expect(
-				current.capability?.loadSurface("surface-a"),
-			).resolves.toBeNull();
-		});
-		expect(current.capability?.error).toContain("changed authority scope");
-	});
-
-	it("ignores a late response after same-show session replacement", async () => {
-		const oldRequest = deferred<VirtualPlaybackZonesSnapshot>();
-		const transport = fakeTransport(
-			vi
-				.fn<VirtualPlaybackZonesTransport["loadSnapshot"]>()
-				.mockReturnValueOnce(oldRequest.promise)
-				.mockResolvedValueOnce(snapshot({ "surface-a": ZONES })),
-		);
-		const current = { capability: null as VirtualPlaybackZonesCapability | null };
-		const rendered = render(
-			harness(current, authority("session-a"), transport),
-		);
-		const stale = current.capability?.loadSurface("surface-a");
-
-		rendered.rerender(harness(current, authority("session-b"), transport));
-		oldRequest.resolve(snapshot({ "surface-a": ZONES }));
-		await act(async () => {
-			await expect(stale).resolves.toBeNull();
-		});
-		expect(current.capability?.error).toBeNull();
-		await act(async () => {
-			await expect(
-				current.capability?.loadSurface("surface-a"),
-			).resolves.toEqual(ZONES);
-		});
-	});
-
-	it("ignores late errors and replaces the server transport in the same scope", async () => {
-		const oldRequest = deferred<VirtualPlaybackZonesSnapshot>();
-		const oldTransport = fakeTransport(vi.fn(() => oldRequest.promise));
-		const newTransport = fakeTransport(
-			vi.fn(async () => snapshot({ "surface-a": ZONES })),
-		);
-		const current = { capability: null as VirtualPlaybackZonesCapability | null };
-		const rendered = render(
-			harness(current, authority("session-a"), oldTransport),
-		);
-		const stale = current.capability?.loadSurface("surface-a");
-
-		rendered.rerender(
-			harness(current, authority("session-a"), newTransport),
-		);
-		oldRequest.reject(new Error("old server failed"));
-		await act(async () => {
-			await expect(stale).resolves.toBeNull();
-			await expect(
-				current.capability?.loadSurface("surface-a"),
-			).resolves.toEqual(ZONES);
-		});
-		expect(current.capability?.error).toBeNull();
-	});
-
-	it("ignores a late save outcome after authority replacement", async () => {
-		const oldSave = deferred<ReturnType<typeof saveOutcome>>();
-		const saveSurface = vi
-			.fn<VirtualPlaybackZonesTransport["saveSurface"]>()
-			.mockReturnValueOnce(oldSave.promise);
-		const transport = fakeTransport(vi.fn(), saveSurface);
-		const current = { capability: null as VirtualPlaybackZonesCapability | null };
-		const rendered = render(
-			harness(current, authority("session-a"), transport),
-		);
-		const stale = current.capability?.saveSurface(
-			"surface-a",
-			FOLLOW_MAIN,
-			ZONES,
-		);
-
-		rendered.rerender(harness(current, authority("session-b"), transport));
-		oldSave.resolve(saveOutcome());
-		await act(async () => {
-			await expect(stale).resolves.toBeNull();
-		});
-		expect(current.capability?.error).toBeNull();
+		expect(current.capability?.getZones()).toBeNull();
 	});
 });

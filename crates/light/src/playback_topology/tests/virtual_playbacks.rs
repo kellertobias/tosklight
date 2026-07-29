@@ -7,6 +7,7 @@ fn configure_virtual_persists_one_sparse_page_qualified_assignment_and_normalize
         "number": 1,
         "name": "Main",
         "slots": {},
+        "virtual_playbacks": {},
         "future_layout": {"columns": 12}
     });
     rig.seed("playback_page", "legacy-page-one", &raw_page);
@@ -74,7 +75,7 @@ fn configure_virtual_persists_one_sparse_page_qualified_assignment_and_normalize
 }
 
 #[test]
-fn identical_virtual_numbers_on_different_pages_remain_independent() {
+fn banked_virtual_numbers_on_different_pages_remain_independent() {
     let rig = TestRig::new();
 
     let first = rig
@@ -105,10 +106,10 @@ fn identical_virtual_numbers_on_different_pages_remain_independent() {
             rig.show_revision(),
             PlaybackTopologyAction::ConfigureVirtual {
                 page: 2,
-                number: 1001,
+                number: 1301,
                 expected_page_revision: 0,
                 expected_page_object_id: None,
-                playback: playback(1001, "Page two"),
+                playback: playback(1301, "Page two"),
             },
         )
         .unwrap();
@@ -116,7 +117,7 @@ fn identical_virtual_numbers_on_different_pages_remain_independent() {
         second.outcome.resolution(),
         PlaybackTopologyResolution::Virtual {
             page: 2,
-            playback_number: 1001,
+            playback_number: 1301,
         }
     );
 
@@ -138,7 +139,7 @@ fn identical_virtual_numbers_on_different_pages_remain_independent() {
     )
     .unwrap();
     assert_eq!(page_one.virtual_playbacks[&1001].name, "Page one");
-    assert_eq!(page_two.virtual_playbacks[&1001].name, "Page two");
+    assert_eq!(page_two.virtual_playbacks[&1301].name, "Page two");
     assert_eq!(page_one.virtual_playbacks.len(), 1);
     assert_eq!(page_two.virtual_playbacks.len(), 1);
     assert_eq!(rig.steps(), mutation_steps());
@@ -148,16 +149,16 @@ fn identical_virtual_numbers_on_different_pages_remain_independent() {
 #[test]
 fn clear_virtual_removes_only_the_addressed_page_assignment_and_replays_once() {
     let rig = TestRig::new();
-    for (page, name) in [(1, "Page one"), (2, "Page two")] {
+    for (page, number, name) in [(1, 1001, "Page one"), (2, 1301, "Page two")] {
         rig.handle(
             &format!("seed-page-{page}"),
             rig.show_revision(),
             PlaybackTopologyAction::ConfigureVirtual {
                 page,
-                number: 1001,
+                number,
                 expected_page_revision: 0,
                 expected_page_object_id: None,
-                playback: playback(1001, name),
+                playback: playback(number, name),
             },
         )
         .unwrap();
@@ -200,7 +201,7 @@ fn clear_virtual_removes_only_the_addressed_page_assignment_and_replays_once() {
     )
     .unwrap();
     assert!(page_one.virtual_playbacks.is_empty());
-    assert_eq!(page_two.virtual_playbacks[&1001].name, "Page two");
+    assert_eq!(page_two.virtual_playbacks[&1301].name, "Page two");
     assert_eq!(rig.steps(), mutation_steps());
     assert_event_object_counts(&rig, &[1, 1, 1]);
 
@@ -218,11 +219,11 @@ fn virtual_configuration_enforces_bounds_and_page_optimistic_authority() {
     rig.seed(
         "playback_page",
         "legacy-page-one",
-        &json!({"number":1,"name":"Main","slots":{}}),
+        &json!({"number":1,"name":"Main","slots":{},"virtual_playbacks":{}}),
     );
     let revision = rig.show_revision();
 
-    for (request_id, number) in [("below-range", 1000), ("above-range", 9999)] {
+    for (request_id, number) in [("below-range", 1000), ("wrong-page-bank", 1301)] {
         rig.clear_steps();
         let error = rig
             .handle(

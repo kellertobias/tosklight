@@ -393,61 +393,6 @@ impl InstallationResource {
         startup_state::ensure_default_show_available(&self.desk.lock(), &self.data_dir)
     }
 
-    pub(super) fn virtual_playback_exclusions(
-        &self,
-        show_id: light_core::ShowId,
-    ) -> playback_api::VirtualPlaybackExclusionStore {
-        self.desk
-            .lock()
-            .setting(&playback_api::virtual_playback_exclusion_setting(show_id))
-            .ok()
-            .flatten()
-            .and_then(|value| serde_json::from_str(&value).ok())
-            .unwrap_or_default()
-    }
-
-    pub(super) fn update_virtual_playback_exclusion_surface(
-        &self,
-        show_id: light_core::ShowId,
-        desk_id: Uuid,
-        surface_id: &str,
-        zones: &[playback_api::VirtualPlaybackExclusionZone],
-    ) -> Result<bool, ApiError> {
-        let desk = self.desk.lock();
-        let mut stored = desk
-            .setting(&playback_api::virtual_playback_exclusion_setting(show_id))
-            .ok()
-            .flatten()
-            .and_then(|value| {
-                serde_json::from_str::<playback_api::VirtualPlaybackExclusionStore>(&value).ok()
-            })
-            .unwrap_or_default();
-        let previous = stored
-            .get(&desk_id.to_string())
-            .and_then(|surfaces| surfaces.get(surface_id));
-        if previous.is_some_and(|previous| previous.as_slice() == zones)
-            || (previous.is_none() && zones.is_empty())
-        {
-            return Ok(false);
-        }
-        let surfaces = stored.entry(desk_id.to_string()).or_default();
-        if zones.is_empty() {
-            surfaces.remove(surface_id);
-        } else {
-            surfaces.insert(surface_id.to_owned(), zones.to_vec());
-        }
-        if surfaces.is_empty() {
-            stored.remove(&desk_id.to_string());
-        }
-        desk.set_setting(
-            &playback_api::virtual_playback_exclusion_setting(show_id),
-            &serde_json::to_string(&stored)
-                .map_err(|error| ApiError::internal(error.to_string()))?,
-        )
-        .map_err(ApiError::store)?;
-        Ok(true)
-    }
-
     #[cfg(test)]
     pub(super) fn replace_desk_store(&self, desk: DeskStore) {
         *self.desk.lock() = desk;

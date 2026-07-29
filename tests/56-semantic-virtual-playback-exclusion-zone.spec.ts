@@ -8,7 +8,7 @@ import { PaneType } from "./bench/window-system/paneTypes";
 
 scenario(
 	"VPB-007",
-	"named Virtual Playback exclusion zones are inert on creation and authoritative on activation",
+	"show-owned Virtual Playback exclusion zones are inert, authoritative, and explicitly removable",
 	async (t) => {
 		await t.show.use(Show.TwelveDimmers);
 		await t.app.open();
@@ -83,7 +83,7 @@ scenario(
 			[1, 2],
 		);
 		await t.virtualPlayback.expect.zones([
-			{ name: "Touring pair", slots: [1, 2] },
+			{ name: "Touring pair", playback_numbers: [1001, 1002] },
 		]);
 		await t.virtualPlayback.expect.fence(pane, 1, "top bottom left");
 		await t.virtualPlayback.expect.fence(pane, 2, "top right bottom");
@@ -128,5 +128,17 @@ scenario(
 		await t.expectFixtureValue(fixture(3), { intensity: 0 });
 		await t.expectFixtureValue(fixture(4), { intensity: 0.5 });
 		await t.expectFixtureValue(fixture(5), { intensity: 0 });
+
+		await t.virtualPlayback.deleteExclusionZone(pane, "Touring pair");
+		await t.virtualPlayback.expect.zones([]);
+		await t.virtualPlayback.activate(pane, 2);
+		await t.virtualPlayback.activate(pane, 1);
+		await t.virtualPlayback.activate(pane, 2);
+		await t.virtualPlayback.expect.runtime(firstPlayback, {
+			runtime: { enabled: true },
+		});
+		await t.virtualPlayback.expect.runtime(secondPlayback, {
+			runtime: { enabled: true },
+		});
 	},
 );

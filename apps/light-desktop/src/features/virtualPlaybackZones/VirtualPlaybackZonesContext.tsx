@@ -8,8 +8,6 @@ import {
 	useState,
 } from "react";
 import type {
-	VirtualPlaybackExclusionSurface,
-	VirtualPlaybackSurfacePageMode,
 	VirtualPlaybackZone,
 	VirtualPlaybackZonesAuthority,
 	VirtualPlaybackZonesCapability,
@@ -18,7 +16,6 @@ import type {
 	VirtualPlaybackZonesSnapshot,
 	VirtualPlaybackZonesTransport,
 } from "./contracts";
-import { validateVirtualPlaybackZoneSurfaceId } from "./wire";
 
 interface VirtualPlaybackZonesProviderProps {
 	readonly authority: VirtualPlaybackZonesAuthority | null;
@@ -28,7 +25,6 @@ interface VirtualPlaybackZonesProviderProps {
 interface AuthorityEpoch {
 	readonly authorityId: string | null;
 	readonly showId: string | null;
-	readonly deskId: string | null;
 	readonly transport: VirtualPlaybackZonesTransport | null;
 	readonly generation: number;
 }
@@ -48,7 +44,9 @@ export function VirtualPlaybackZonesProvider({
 	children,
 }: PropsWithChildren<VirtualPlaybackZonesProviderProps>) {
 	const epochRef = useRef<AuthorityEpoch>(initialEpoch());
-	const [reportedError, setReportedError] = useState<ReportedError | null>(null);
+	const [reportedError, setReportedError] = useState<ReportedError | null>(
+		null,
+	);
 	const epoch = updateEpoch(epochRef, authority, transport);
 	const controller = useMemo(
 		() =>
@@ -77,18 +75,12 @@ export function VirtualPlaybackZonesProvider({
 			authorityGeneration: epoch.generation,
 			available: controller !== null,
 			error,
-			getSurface: (surfaceId) => controller?.getSurface(surfaceId) ?? null,
-			isSavingSurface: (surfaceId) =>
-				controller?.isSavingSurface(surfaceId) ?? false,
-			subscribeSurface: (surfaceId, listener) =>
-				controller?.subscribeSurface(surfaceId, listener) ?? noOp,
-			activateSurface: (surfaceId) =>
-				controller?.activateSurface(surfaceId) ?? noOp,
-			loadSurface: (surfaceId) =>
-				controller?.loadSurface(surfaceId) ?? Promise.resolve(null),
-			saveSurface: (surfaceId, pageMode, zones) =>
-				controller?.saveSurface(surfaceId, pageMode, zones) ??
-				Promise.resolve(null),
+			getZones: () => controller?.getZones() ?? null,
+			isSaving: () => controller?.isSaving() ?? false,
+			subscribe: (listener) => controller?.subscribe(listener) ?? noOp,
+			activate: () => controller?.activate() ?? noOp,
+			load: () => controller?.load() ?? Promise.resolve(null),
+			save: (zones) => controller?.save(zones) ?? Promise.resolve(null),
 			clearError: () => setReportedError(null),
 		}),
 		[authority?.authorityId, controller, epoch.generation, error],
@@ -111,16 +103,11 @@ export class VirtualPlaybackZonesController {
 	private pendingSnapshot: Promise<VirtualPlaybackZonesSnapshot | null> | null =
 		null;
 	private saveTail: Promise<void> = Promise.resolve();
-	private readonly surfaceCache = new Map<
-		string,
-		VirtualPlaybackExclusionSurface
-	>();
-	private readonly surfaceVersions = new Map<string, number>();
-	private readonly surfaceSaveCounts = new Map<string, number>();
-	private readonly surfaceListeners = new Map<string, Set<() => void>>();
-	private readonly activeSurfaceCounts = new Map<string, number>();
+	private snapshot: VirtualPlaybackZonesSnapshot | null = null;
+	private readonly listeners = new Set<() => void>();
 	private eventStream: VirtualPlaybackZonesEventStream | null = null;
-	private snapshotLoaded = false;
+	private activeCount = 0;
+	private saveCount = 0;
 	private mutationVersion = 0;
 
 	constructor(
@@ -130,150 +117,93 @@ export class VirtualPlaybackZonesController {
 		private readonly reportError: (error: Error | null) => void,
 	) {}
 
-	loadSurface(surfaceId: string) {
-		try {
-			validateVirtualPlaybackZoneSurfaceId(surfaceId);
-		} catch (reason) {
-			return Promise.resolve(this.failure(reason));
-		}
-		const cached = this.getSurface(surfaceId);
-		if (cached) return Promise.resolve(cached);
-		return this.loadSnapshot().then((snapshot) =>
-			snapshot ? this.getSurface(surfaceId) : null,
-		);
+	load() {
+		const cached = this.getZones();
+		return cached
+			? Promise.resolve(cached)
+			: this.loadSnapshot().then((snapshot) => snapshot?.zones ?? null);
 	}
 
-	getSurface(surfaceId: string) {
+	getZones() {
 		if (!this.isCurrent()) return null;
-		const cached = this.surfaceCache.get(surfaceId);
-		if (cached) return cached.zones;
-		return this.snapshotLoaded ? EMPTY_ZONES : null;
+		return this.snapshot?.zones ?? null;
 	}
 
-	isSavingSurface(surfaceId: string) {
-		return this.isCurrent() && (this.surfaceSaveCounts.get(surfaceId) ?? 0) > 0;
+	isSaving() {
+		return this.isCurrent() && this.saveCount > 0;
 	}
 
-	subscribeSurface(surfaceId: string, listener: () => void) {
-		const listeners = this.surfaceListeners.get(surfaceId) ?? new Set();
-		listeners.add(listener);
-		this.surfaceListeners.set(surfaceId, listeners);
-		return () => {
-			listeners.delete(listener);
-			if (listeners.size === 0) this.surfaceListeners.delete(surfaceId);
-		};
+	subscribe(listener: () => void) {
+		this.listeners.add(listener);
+		return () => this.listeners.delete(listener);
 	}
 
-	activateSurface(surfaceId: string) {
-		try {
-			validateVirtualPlaybackZoneSurfaceId(surfaceId);
-		} catch (reason) {
-			this.failure(reason);
-			return noOp;
-		}
-		const count = this.activeSurfaceCounts.get(surfaceId) ?? 0;
-		this.activeSurfaceCounts.set(surfaceId, count + 1);
-		if (this.activeSurfaceCount() === 1) this.openWindow();
+	activate() {
+		this.activeCount += 1;
+		if (this.activeCount === 1) this.openWindow();
 		let active = true;
 		return () => {
 			if (!active) return;
 			active = false;
-			const current = this.activeSurfaceCounts.get(surfaceId) ?? 0;
-			if (current <= 1) this.activeSurfaceCounts.delete(surfaceId);
-			else this.activeSurfaceCounts.set(surfaceId, current - 1);
-			if (this.activeSurfaceCount() === 0) {
+			this.activeCount = Math.max(0, this.activeCount - 1);
+			if (this.activeCount === 0) {
 				this.eventStream?.close();
 				this.eventStream = null;
 			}
 		};
 	}
 
-	private activeSurfaceCount() {
-		let count = 0;
-		for (const active of this.activeSurfaceCounts.values()) count += active;
-		return count;
-	}
-
 	private openWindow() {
-		this.snapshotLoaded = false;
-		this.surfaceCache.clear();
-		this.surfaceVersions.clear();
-		for (const surfaceId of this.surfaceListeners.keys())
-			this.notifySurface(surfaceId);
-		this.eventStream = this.transport.subscribe?.(this.scope, {
-			changed: (change) => {
-				if (
-					this.isCurrent() &&
-					change.showId === this.scope.showId &&
-					change.deskId === this.scope.deskId &&
-					this.activeSurfaceCounts.has(change.surfaceId)
-				)
-					void this.reloadSnapshot();
-			},
-			gap: () => {
-				if (this.isCurrent()) void this.reloadSnapshot();
-			},
-			error: (error) => {
-				if (this.isCurrent()) this.reportError(error);
-			},
-			closed: () => {
-				if (this.isCurrent() && this.activeSurfaceCount() > 0)
-					this.reportError(
-						new Error("Virtual Playback zone event connection closed"),
-					);
-			},
-		}) ?? null;
+		this.snapshot = null;
+		this.notify();
+		this.eventStream =
+			this.transport.subscribe?.(this.scope, {
+				changed: (change) => {
+					if (
+						this.isCurrent() &&
+						change.showId === this.scope.showId &&
+						change.revision !== this.snapshot?.revision
+					)
+						void this.reloadSnapshot();
+				},
+				gap: () => {
+					if (this.isCurrent()) void this.reloadSnapshot();
+				},
+				error: (error) => {
+					if (this.isCurrent()) this.reportError(error);
+				},
+				closed: () => {
+					if (this.isCurrent() && this.activeCount > 0)
+						this.reportError(
+							new Error("Virtual Playback zone event connection closed"),
+						);
+				},
+			}) ?? null;
 	}
 
-	private reloadSnapshot() {
-		return this.loadSnapshot();
+	save(zones: readonly VirtualPlaybackZone[]) {
+		this.saveCount += 1;
+		this.notify();
+		return this.enqueueSave(() => this.performSave(zones)).finally(() => {
+			this.saveCount = Math.max(0, this.saveCount - 1);
+			if (this.isCurrent()) this.notify();
+		});
 	}
 
-	saveSurface(
-		surfaceId: string,
-		pageMode: VirtualPlaybackSurfacePageMode,
-		zones: readonly VirtualPlaybackZone[],
-	) {
+	private async performSave(zones: readonly VirtualPlaybackZone[]) {
 		try {
-			validateVirtualPlaybackZoneSurfaceId(surfaceId);
-			this.changeSaveCount(surfaceId, 1);
-			return this.enqueueSave(() =>
-				this.performSave(surfaceId, pageMode, zones),
-			).finally(() => this.changeSaveCount(surfaceId, -1));
-		} catch (reason) {
-			return Promise.resolve(this.failure(reason));
-		}
-	}
-
-	private changeSaveCount(surfaceId: string, delta: 1 | -1) {
-		const count = Math.max(0, (this.surfaceSaveCounts.get(surfaceId) ?? 0) + delta);
-		if (count === 0) this.surfaceSaveCounts.delete(surfaceId);
-		else this.surfaceSaveCounts.set(surfaceId, count);
-		if (this.isCurrent()) this.notifySurface(surfaceId);
-	}
-
-	private async performSave(
-		surfaceId: string,
-		pageMode: VirtualPlaybackSurfacePageMode,
-		zones: readonly VirtualPlaybackZone[],
-	) {
-		try {
-			const expectedRevision = this.surfaceCache.get(surfaceId)?.revision ?? 0;
-			const outcome = await this.transport.saveSurface(
+			if (!this.snapshot && !(await this.loadSnapshot())) return null;
+			const outcome = await this.transport.save(
 				this.scope,
-				surfaceId,
-				expectedRevision,
-				pageMode,
+				this.snapshot?.revision ?? 0,
 				zones,
 				crypto.randomUUID(),
 			);
 			if (!this.isCurrent()) return null;
-			if (outcome.surfaceId !== surfaceId)
-				throw new Error("Virtual Playback zone response changed surface identity");
 			this.mutationVersion += 1;
-			this.storeSurface(surfaceId, outcome.surface, this.mutationVersion);
+			this.storeSnapshot(outcome);
 			this.reportError(null);
-			return outcome.surface.zones;
+			return outcome.zones;
 		} catch (reason) {
 			if (conflictStatus(reason) === 409) await this.reloadSnapshot();
 			return this.failure(reason);
@@ -289,6 +219,11 @@ export class VirtualPlaybackZonesController {
 			() => undefined,
 		);
 		return result;
+	}
+
+	private reloadSnapshot() {
+		this.pendingSnapshot = null;
+		return this.loadSnapshot();
 	}
 
 	private loadSnapshot() {
@@ -307,8 +242,10 @@ export class VirtualPlaybackZonesController {
 			const snapshot = await this.transport.loadSnapshot(this.scope);
 			if (!this.isCurrent()) return null;
 			if (snapshot.showId !== this.scope.showId)
-				throw new Error("Virtual Playback zone response changed authority scope");
-			this.installSnapshot(snapshot, loadVersion);
+				throw new Error(
+					"Virtual Playback zone response changed authority scope",
+				);
+			if (loadVersion === this.mutationVersion) this.storeSnapshot(snapshot);
 			this.reportError(null);
 			return snapshot;
 		} catch (reason) {
@@ -316,40 +253,14 @@ export class VirtualPlaybackZonesController {
 		}
 	}
 
-	private installSnapshot(
-		snapshot: VirtualPlaybackZonesSnapshot,
-		loadVersion: number,
-	) {
-		const surfaceIds = new Set([
-			...this.surfaceCache.keys(),
-			...this.surfaceListeners.keys(),
-			...Object.keys(snapshot.desks[this.scope.deskId] ?? {}),
-		]);
-		for (const surfaceId of surfaceIds) {
-			if ((this.surfaceVersions.get(surfaceId) ?? 0) > loadVersion) continue;
-			this.storeSurface(
-				surfaceId,
-				snapshot.desks[this.scope.deskId]?.[surfaceId] ?? EMPTY_SURFACE,
-				loadVersion,
-			);
-		}
-		this.snapshotLoaded = true;
+	private storeSnapshot(snapshot: VirtualPlaybackZonesSnapshot) {
+		if (this.snapshot && sameSnapshot(this.snapshot, snapshot)) return;
+		this.snapshot = snapshot;
+		this.notify();
 	}
 
-	private storeSurface(
-		surfaceId: string,
-		surface: VirtualPlaybackExclusionSurface,
-		version: number,
-	) {
-		const previous = this.surfaceCache.get(surfaceId);
-		this.surfaceVersions.set(surfaceId, version);
-		if (previous && sameSurface(previous, surface)) return;
-		this.surfaceCache.set(surfaceId, surface);
-		this.notifySurface(surfaceId);
-	}
-
-	private notifySurface(surfaceId: string) {
-		for (const listener of this.surfaceListeners.get(surfaceId) ?? []) listener();
+	private notify() {
+		for (const listener of this.listeners) listener();
 	}
 
 	private failure(reason: unknown) {
@@ -368,14 +279,12 @@ function updateEpoch(
 	if (
 		current.authorityId === (authority?.authorityId ?? null) &&
 		current.showId === (authority?.scope.showId ?? null) &&
-		current.deskId === (authority?.scope.deskId ?? null) &&
 		current.transport === transport
 	)
 		return current;
 	ref.current = {
 		authorityId: authority?.authorityId ?? null,
 		showId: authority?.scope.showId ?? null,
-		deskId: authority?.scope.deskId ?? null,
 		transport,
 		generation: current.generation + 1,
 	};
@@ -386,31 +295,17 @@ function initialEpoch(): AuthorityEpoch {
 	return {
 		authorityId: null,
 		showId: null,
-		deskId: null,
 		transport: null,
 		generation: 0,
 	};
 }
 
-function asError(reason: unknown) {
-	return reason instanceof Error ? reason : new Error(String(reason));
-}
-
-const EMPTY_ZONES: readonly VirtualPlaybackZone[] = [];
-const EMPTY_SURFACE: VirtualPlaybackExclusionSurface = {
-	revision: 0,
-	pageMode: { type: "follow_main" },
-	zones: EMPTY_ZONES,
-};
-const noOp = () => {};
-
-function sameSurface(
-	left: VirtualPlaybackExclusionSurface,
-	right: VirtualPlaybackExclusionSurface,
+function sameSnapshot(
+	left: VirtualPlaybackZonesSnapshot,
+	right: VirtualPlaybackZonesSnapshot,
 ) {
 	return (
 		left.revision === right.revision &&
-		samePageMode(left.pageMode, right.pageMode) &&
 		left.zones.length === right.zones.length &&
 		left.zones.every((zone, index) => {
 			const other = right.zones[index];
@@ -418,22 +313,18 @@ function sameSurface(
 				other !== undefined &&
 				zone.id === other.id &&
 				zone.name === other.name &&
-				zone.slots.length === other.slots.length &&
-				zone.slots.every((slot, slotIndex) => slot === other.slots[slotIndex])
+				zone.playbackNumbers.length === other.playbackNumbers.length &&
+				zone.playbackNumbers.every(
+					(number, numberIndex) =>
+						number === other.playbackNumbers[numberIndex],
+				)
 			);
 		})
 	);
 }
 
-function samePageMode(
-	left: VirtualPlaybackSurfacePageMode,
-	right: VirtualPlaybackSurfacePageMode,
-) {
-	return (
-		left.type === right.type &&
-		(left.type !== "pinned" ||
-			(right.type === "pinned" && left.page === right.page))
-	);
+function asError(reason: unknown) {
+	return reason instanceof Error ? reason : new Error(String(reason));
 }
 
 function conflictStatus(reason: unknown) {
@@ -441,3 +332,5 @@ function conflictStatus(reason: unknown) {
 	const status = (reason as { status?: unknown }).status;
 	return typeof status === "number" ? status : null;
 }
+
+const noOp = () => {};

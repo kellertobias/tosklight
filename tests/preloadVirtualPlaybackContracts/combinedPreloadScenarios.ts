@@ -131,7 +131,7 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 			.click();
 		await pane
 			.getByRole("button", {
-				name: /Virtual playback page 1 cell 2 Virtual combined/,
+				name: /Virtual playback 1002 page 1 cell 2 Virtual combined/,
 			})
 			.click();
 		state.pending = preloadCombinedObservation(await programmer(api));
@@ -343,7 +343,7 @@ const preload006UiSupplement = async ({
 		.click();
 	await pane
 		.getByRole("button", {
-			name: /Virtual playback page 1 cell 2 Virtual combined/,
+			name: /Virtual playback 1002 page 1 cell 2 Virtual combined/,
 		})
 		.click();
 	await expect(

@@ -578,19 +578,15 @@ fn repeated_on_batch_does_not_retrigger_timing_or_signal_persistence() {
 }
 
 #[test]
-fn virtual_exclusions_release_only_exact_page_qualified_peers() {
+fn virtual_exclusions_release_only_their_global_playback_number_peers() {
     let engine = virtual_playback_engine();
     let activated = VirtualPlaybackAddress::new(1, 1_001).unwrap();
     let same_page_peer = VirtualPlaybackAddress::new(1, 1_002).unwrap();
-    let other_page_same_number = VirtualPlaybackAddress::new(2, 1_001).unwrap();
-    let other_page_peer_number = VirtualPlaybackAddress::new(2, 1_002).unwrap();
+    let other_page_first = VirtualPlaybackAddress::new(2, 1_301).unwrap();
+    let other_page_peer = VirtualPlaybackAddress::new(2, 1_302).unwrap();
     let origin = activation_origin(Uuid::new_v4(), PlaybackActivationSurface::Osc);
 
-    for address in [
-        same_page_peer,
-        other_page_same_number,
-        other_page_peer_number,
-    ] {
+    for address in [same_page_peer, other_page_first, other_page_peer] {
         engine
             .execute_playback(EnginePlaybackCommand::Virtual {
                 address,
@@ -620,8 +616,8 @@ fn virtual_exclusions_release_only_exact_page_qualified_peers() {
     };
     assert!(by_identity(PlaybackIdentity::Virtual(activated)).enabled);
     assert!(!by_identity(PlaybackIdentity::Virtual(same_page_peer)).enabled);
-    assert!(by_identity(PlaybackIdentity::Virtual(other_page_same_number)).enabled);
-    assert!(by_identity(PlaybackIdentity::Virtual(other_page_peer_number)).enabled);
+    assert!(by_identity(PlaybackIdentity::Virtual(other_page_first)).enabled);
+    assert!(by_identity(PlaybackIdentity::Virtual(other_page_peer)).enabled);
     assert!(
         runtime
             .iter()
@@ -643,8 +639,8 @@ fn virtual_exclusions_release_only_exact_page_qualified_peers() {
 fn prepared_virtual_batch_keeps_page_identity_and_exclusions_atomic() {
     let engine = virtual_playback_engine();
     let page_one_peer = VirtualPlaybackAddress::new(1, 1_002).unwrap();
-    let page_two_same_number = VirtualPlaybackAddress::new(2, 1_002).unwrap();
-    for address in [page_one_peer, page_two_same_number] {
+    let page_two_peer = VirtualPlaybackAddress::new(2, 1_302).unwrap();
+    for address in [page_one_peer, page_two_peer] {
         engine
             .execute_playback(EnginePlaybackCommand::Virtual {
                 address,
@@ -680,20 +676,12 @@ fn prepared_virtual_batch_keeps_page_identity_and_exclusions_atomic() {
     );
     engine.install_prepared_playback_batch(prepared).unwrap();
     let runtime = engine.playback_runtime();
-    assert!(
-        runtime
-            .iter()
-            .any(|playback| playback.playback_identity
-                == Some(PlaybackIdentity::Virtual(page_one_peer))
-                && !playback.enabled)
-    );
-    assert!(
-        runtime
-            .iter()
-            .any(|playback| playback.playback_identity
-                == Some(PlaybackIdentity::Virtual(page_two_same_number))
-                && playback.enabled)
-    );
+    assert!(runtime.iter().any(|playback| playback.playback_identity
+        == Some(PlaybackIdentity::Virtual(page_one_peer))
+        && !playback.enabled));
+    assert!(runtime.iter().any(|playback| playback.playback_identity
+        == Some(PlaybackIdentity::Virtual(page_two_peer))
+        && playback.enabled));
 }
 
 fn assert_pool_effect(
@@ -838,15 +826,13 @@ fn virtual_playback_engine() -> Engine {
         number,
         name: format!("Page {number}"),
         slots: HashMap::new(),
-        virtual_playbacks: [1_001, 1_002]
-            .into_iter()
-            .map(|playback_number| {
-                (
-                    playback_number,
-                    test_playback(playback_number, cue_list.id),
-                )
-            })
-            .collect(),
+        virtual_playbacks: {
+            let start = light_playback::virtual_playback_page_start(number).unwrap();
+            [start, start + 1]
+        }
+        .into_iter()
+        .map(|playback_number| (playback_number, test_playback(playback_number, cue_list.id)))
+        .collect(),
     };
     let engine = Engine::new(ProgrammerRegistry::default());
     engine

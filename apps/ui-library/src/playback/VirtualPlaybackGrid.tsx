@@ -27,6 +27,8 @@ export interface VirtualPlaybackExclusionFence {
 }
 
 export interface VirtualPlaybackBoxViewModel {
+	/** Stable show-owned Virtual Playback number. `slot` remains the displayed cell. */
+	number?: number;
 	slot: number;
 	position: number;
 	availability: VirtualPlaybackBoxAvailability;
@@ -413,6 +415,7 @@ function VirtualPlaybackBox({
 			aria-pressed={box.exclusionSelected || undefined}
 			data-page={page}
 			data-virtual-playback-slot={box.slot}
+			data-virtual-playback-number={box.number ?? box.slot}
 			data-grid-position={box.position}
 			data-availability={box.availability}
 			data-exclusion-zones={box.exclusionZones?.join(", ") ?? ""}
@@ -444,7 +447,7 @@ function VirtualPlaybackBox({
 				.filter(Boolean)
 				.join(" ")}
 			model={{
-				number: box.slot,
+				number: box.number ?? box.slot,
 				primary: box.label ?? (vacant ? "Empty" : ""),
 				secondary,
 				color: box.color,
@@ -498,7 +501,7 @@ function VirtualPlaybackBox({
 }
 
 function boxLabel(page: number, box: VirtualPlaybackBoxViewModel) {
-	return `Virtual playback page ${page} cell ${box.slot}${
+	return `Virtual playback ${box.number ?? box.slot} page ${page} cell ${box.slot}${
 		box.availability === "assigned" ? ` ${box.label ?? ""}` : " empty"
 	}`.trim();
 }

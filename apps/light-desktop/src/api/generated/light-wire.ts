@@ -1096,21 +1096,17 @@ export type ScreenConfigurationActionOutcome = { request_id: string, replayed: b
 
 export type VirtualPlaybackExclusionZone = { id: string, name: string,
 /**
- * One-based logical cell positions on the owning Virtual Playback surface.
+ * Stable show-owned Virtual Playback numbers, independent of panes and desks.
  */
-slots: Array<number>, };
+playback_numbers: Array<number>, };
 
-export type VirtualPlaybackSurfacePageMode = { "type": "follow_main" } | { "type": "pinned", page: number, };
+export type VirtualPlaybackExclusionSnapshot = { show_id: string, revision: number, zones: Array<VirtualPlaybackExclusionZone>, };
 
-export type VirtualPlaybackExclusionSurface = { revision: number, page_mode: VirtualPlaybackSurfacePageMode, zones: Array<VirtualPlaybackExclusionZone>, };
+export type VirtualPlaybackExclusionUpdateRequest = { request_id: string, expected_revision: number, zones: Array<VirtualPlaybackExclusionZone>, };
 
-export type VirtualPlaybackExclusionSnapshot = { show_id: string, desks: { [key in string]: { [key in string]: VirtualPlaybackExclusionSurface } }, };
+export type VirtualPlaybackExclusionUpdateOutcome = { request_id: string, show_id: string, revision: number, zones: Array<VirtualPlaybackExclusionZone>, replayed: boolean, changed: boolean, };
 
-export type VirtualPlaybackExclusionUpdateRequest = { request_id: string, expected_revision: number, page_mode: VirtualPlaybackSurfacePageMode, zones: Array<VirtualPlaybackExclusionZone>, };
-
-export type VirtualPlaybackExclusionUpdateOutcome = { request_id: string, show_id: string, desk_id: string, surface_id: string, surface: VirtualPlaybackExclusionSurface, replayed: boolean, changed: boolean, };
-
-export type VirtualPlaybackExclusionZonesChange = { show_id: string, desk_id: string, surface_id: string, };
+export type VirtualPlaybackExclusionZonesChange = { show_id: string, revision: number, };
 
 export type VisualizationScope = {
 /**

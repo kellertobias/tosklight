@@ -118,12 +118,12 @@ const preload004Scenario: PairedScenario<PreloadVirtualPairState> = {
 			.click();
 		await pane
 			.getByRole("button", {
-				name: /Virtual playback page 1 cell 1 Virtual GO/,
+				name: /Virtual playback 1001 page 1 cell 1 Virtual GO/,
 			})
 			.click();
 		await pane
 			.getByRole("button", {
-				name: /Virtual playback page 1 cell 2 Virtual TOGGLE/,
+				name: /Virtual playback 1002 page 1 cell 2 Virtual TOGGLE/,
 			})
 			.click();
 		state.pendingActions = virtualPlaybackPendingObservation(
@@ -357,11 +357,11 @@ const preload004UiSupplement = async ({
 		"Click the real GO and TOGGLE cells; their underlying playbacks must remain unchanged.",
 	);
 	await pane
-		.getByRole("button", { name: /Virtual playback page 1 cell 1 Virtual GO/ })
+		.getByRole("button", { name: /Virtual playback 1001 page 1 cell 1 Virtual GO/ })
 		.click();
 	await pane
 		.getByRole("button", {
-			name: /Virtual playback page 1 cell 2 Virtual TOGGLE/,
+			name: /Virtual playback 1002 page 1 cell 2 Virtual TOGGLE/,
 		})
 		.click();
 	await expect(

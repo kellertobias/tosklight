@@ -44,22 +44,18 @@ impl<'a> ServerPlaybackPorts<'a> {
         };
         let page = address.page();
         let cached = self.exclusion_zones.get_or_init(|| {
-            let resolver = self.desk.map(|desk| {
-                super::super::VirtualPlaybackExclusionResolver::read(self.state, desk.id)
-            });
+            let zones = super::super::VirtualPlaybackExclusionResolver::read(self.state)
+                .map(|resolver| resolver.zone_addresses())
+                .unwrap_or_default();
+            let applies = zones.iter().any(|zone| zone.contains(&address));
             CachedExclusionZones {
                 addressed_page: page,
-                zones: resolver
-                    .as_ref()
-                    .map(|resolver| resolver.zone_addresses(page))
-                    .unwrap_or_default(),
-                scope: resolver.map_or(light_playback::PlaybackExclusionScope::None, |resolver| {
-                    if resolver.applies_to_page(Some(page)) {
-                        light_playback::PlaybackExclusionScope::OriginatingDesk
-                    } else {
-                        light_playback::PlaybackExclusionScope::None
-                    }
-                }),
+                zones,
+                scope: if applies {
+                    light_playback::PlaybackExclusionScope::Show
+                } else {
+                    light_playback::PlaybackExclusionScope::None
+                },
             }
         });
         debug_assert_eq!(cached.addressed_page, page);
