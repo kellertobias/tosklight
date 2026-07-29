@@ -2,6 +2,7 @@ import { expect, test } from "./bench/core/fixtures";
 import { activeShowId, loadCanonicalCopy } from "./support/catalog";
 import { installPlannedDemoGroups } from "./support/plannedDemoGroups";
 import { installPlannedDemoPatch } from "./support/plannedDemoPatch";
+import { installPlannedDemoPresets } from "./support/plannedDemoPresets";
 
 test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from one manifest", async ({
   api,
@@ -45,4 +46,14 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
   expect(groups).toHaveLength(38);
   expect(groups.find((group) => group.body.name === "Show")?.body.fixtures).toHaveLength(208);
   expect(groups.find((group) => group.body.name === "Aux Show")?.body.fixtures).toHaveLength(24);
+
+  expect(await installPlannedDemoPresets(api, showId, generated.fixtures)).toEqual({
+    colors: 13,
+    positions: 7,
+    beam: 10,
+  });
+  const presets = await api.showObjects<any>(showId, "preset");
+  expect(presets).toHaveLength(30);
+  expect(presets.filter((preset) => preset.body.family === "Color")).toHaveLength(13);
+  expect(presets.find((preset) => preset.body.name === "Tungsten White")).toBeDefined();
 });
