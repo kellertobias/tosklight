@@ -253,9 +253,60 @@ impl AttributeConfiguration {
                     "color.amber",
                     "color.white",
                     "color.uv",
+                    "color.cold_white",
+                    "color.warm_white",
+                    "color.lime",
+                    "color.indigo",
+                    "color.mint",
+                    "color.temperature",
+                    "color.tint",
                 ],
             ),
-            recommended_activation_group("position", "Position", &["pan", "tilt"]),
+            recommended_activation_group(
+                "color_wheel_1",
+                "Color Wheel 1",
+                &["color.wheel.1", "color.wheel.1.rotation"],
+            ),
+            recommended_activation_group(
+                "color_wheel_2",
+                "Color Wheel 2",
+                &["color.wheel.2", "color.wheel.2.rotation"],
+            ),
+            recommended_activation_group(
+                "position",
+                "Position",
+                &["pan", "tilt", "position.rotation"],
+            ),
+            recommended_activation_group("gobo_1", "Gobo 1", &["gobo.1", "gobo.1.rotation"]),
+            recommended_activation_group("gobo_2", "Gobo 2", &["gobo.2", "gobo.2.rotation"]),
+            recommended_activation_group(
+                "media_source",
+                "Media Source",
+                &["media.folder", "media.file"],
+            ),
+            recommended_activation_group(
+                "media_mask_source",
+                "Media Mask Source",
+                &["media.mask.folder", "media.mask.file"],
+            ),
+            recommended_activation_group(
+                "shapers",
+                "Shapers",
+                &[
+                    "iris",
+                    "shaper.blade.1.position",
+                    "shaper.blade.1.angle",
+                    "shaper.blade.2.position",
+                    "shaper.blade.2.angle",
+                    "shaper.rotation",
+                    "shaper.blade.3.position",
+                    "shaper.blade.3.angle",
+                    "shaper.blade.4.position",
+                    "shaper.blade.4.angle",
+                    "shaper.keystone.x",
+                    "shaper.keystone.y",
+                ],
+            ),
         ];
         let linked_members = linked_groups
             .iter()
@@ -520,35 +571,100 @@ fn recommended_activation_group(
 }
 
 fn recommended_builtin_placements() -> Vec<AttributePlacement> {
-    use EncoderGroup::{Beam, Color, Control, Focus, Intensity, Position, Shapers};
+    use EncoderGroup::{Beam, Color, Control, Focus, Intensity, Media, Position, Shapers};
 
     [
         ("intensity", Intensity, 1, 1),
         ("shutter", Intensity, 1, 2),
         ("strobe", Intensity, 1, 3),
+        ("volume", Intensity, 1, 4),
         ("color.red", Color, 1, 1),
         ("color.green", Color, 1, 2),
         ("color.blue", Color, 1, 3),
         ("color.white", Color, 1, 4),
         ("color.amber", Color, 1, 5),
         ("color.uv", Color, 1, 6),
+        ("color.cold_white", Color, 2, 1),
+        ("color.warm_white", Color, 2, 2),
+        ("color.lime", Color, 2, 3),
+        ("color.indigo", Color, 2, 4),
+        ("color.mint", Color, 2, 5),
+        ("color.temperature", Color, 2, 6),
+        ("color.tint", Color, 3, 1),
+        ("color", Color, 3, 2),
+        ("color.wheel.1", Color, 3, 3),
+        ("color.wheel.1.rotation", Color, 3, 4),
+        ("color.wheel.2", Color, 3, 5),
+        ("color.wheel.2.rotation", Color, 3, 6),
         // Legacy canonical CMY IDs remain distinct and lossless until the explicit compatible
         // CMY-to-RGB show migration. They are not linked into the recommended Color Mix group.
         ("color.cyan", Color, 4, 1),
         ("color.magenta", Color, 4, 2),
         ("color.yellow", Color, 4, 3),
-        ("color", Color, 3, 2),
-        ("color.wheel.1", Color, 3, 3),
-        ("color.wheel.2", Color, 3, 5),
         ("pan", Position, 1, 1),
         ("tilt", Position, 1, 2),
+        ("pan.continuous", Position, 1, 3),
+        ("tilt.continuous", Position, 1, 4),
+        ("pan.time", Position, 1, 5),
+        ("tilt.time", Position, 1, 6),
+        ("position.speed", Position, 2, 1),
+        ("position.mode", Position, 2, 2),
+        ("position.rotation", Position, 2, 3),
         ("gobo.1", Beam, 1, 1),
+        ("gobo.1.rotation", Beam, 1, 2),
         ("gobo.2", Beam, 1, 3),
+        ("gobo.2.rotation", Beam, 1, 4),
+        ("prism.1", Beam, 1, 5),
+        ("prism.1.rotation", Beam, 1, 6),
+        ("prism.2", Beam, 2, 1),
+        ("prism.2.rotation", Beam, 2, 2),
+        ("animation.1", Beam, 2, 3),
+        ("animation.1.rotation", Beam, 2, 4),
+        ("beam.effect.1", Beam, 2, 5),
+        ("beam.effect.2", Beam, 2, 6),
         ("beam", Beam, 3, 1),
         ("iris", Shapers, 1, 1),
+        ("shaper.blade.1.position", Shapers, 1, 2),
+        ("shaper.blade.1.angle", Shapers, 1, 3),
+        ("shaper.blade.2.position", Shapers, 1, 4),
+        ("shaper.blade.2.angle", Shapers, 1, 5),
+        ("shaper.rotation", Shapers, 1, 6),
+        ("shaper.blade.3.position", Shapers, 2, 1),
+        ("shaper.blade.3.angle", Shapers, 2, 2),
+        ("shaper.blade.4.position", Shapers, 2, 3),
+        ("shaper.blade.4.angle", Shapers, 2, 4),
+        ("shaper.keystone.x", Shapers, 2, 5),
+        ("shaper.keystone.y", Shapers, 2, 6),
         ("focus", Focus, 1, 1),
         ("zoom", Focus, 1, 2),
-        ("control", Control, 1, 1),
+        ("frost.1", Focus, 1, 3),
+        ("frost.2", Focus, 1, 4),
+        ("beam.edge", Focus, 1, 5),
+        ("control.mode", Control, 1, 1),
+        ("control.speed", Control, 1, 2),
+        ("control", Control, 2, 1),
+        ("media.folder", Media, 1, 1),
+        ("media.file", Media, 1, 2),
+        ("media.mask.folder", Media, 1, 3),
+        ("media.mask.file", Media, 1, 4),
+        ("media.opacity", Media, 1, 5),
+        ("media.tint", Media, 1, 6),
+        ("media.play_mode", Media, 2, 1),
+        ("media.playback_speed", Media, 2, 2),
+        ("media.playback_bpm", Media, 2, 3),
+        ("media.grayscale", Media, 2, 4),
+        ("media.scaling_mode", Media, 2, 5),
+        ("media.rotation", Media, 2, 6),
+        ("media.position.x", Media, 3, 1),
+        ("media.position.y", Media, 3, 2),
+        ("media.scale.x", Media, 3, 3),
+        ("media.scale.y", Media, 3, 4),
+        ("media.mask.opacity", Media, 3, 5),
+        ("media.mask.invert", Media, 3, 6),
+        ("media.effect.1", Media, 4, 1),
+        ("media.effect.2", Media, 4, 2),
+        ("media.effect.3", Media, 4, 3),
+        ("media.effect.4", Media, 4, 4),
     ]
     .into_iter()
     .map(|(id, group, page, slot)| AttributePlacement {
@@ -561,175 +677,321 @@ fn recommended_builtin_placements() -> Vec<AttributePlacement> {
 /// Built-in attribute registry. Custom attributes remain valid and use their persisted identifier
 /// as the operator label until a desk extension supplies richer metadata.
 pub const ATTRIBUTE_REGISTRY: &[AttributeDescriptor] = &[
-    descriptor(
+    continuous(
         "intensity",
         "Intensity",
         AttributeClass::Intensity,
-        AttributeValueType::Continuous,
-        Some("percent"),
+        "percent",
     ),
-    descriptor(
-        "color",
-        "Color",
+    indexed("shutter", "Shutter", AttributeClass::Intensity),
+    continuous("strobe", "Strobe", AttributeClass::Intensity, "hz"),
+    continuous("volume", "Volume", AttributeClass::Intensity, "percent"),
+    color("color", "Color", AttributeClass::Color),
+    continuous("color.red", "Red", AttributeClass::Color, "percent"),
+    continuous("color.green", "Green", AttributeClass::Color, "percent"),
+    continuous("color.blue", "Blue", AttributeClass::Color, "percent"),
+    continuous("color.cyan", "Cyan", AttributeClass::Color, "percent"),
+    continuous("color.magenta", "Magenta", AttributeClass::Color, "percent"),
+    continuous("color.yellow", "Yellow", AttributeClass::Color, "percent"),
+    continuous("color.amber", "Amber", AttributeClass::Color, "percent"),
+    continuous("color.white", "White", AttributeClass::Color, "percent"),
+    continuous("color.uv", "UV", AttributeClass::Color, "percent"),
+    continuous(
+        "color.cold_white",
+        "Cold White",
         AttributeClass::Color,
-        AttributeValueType::Color,
-        None,
+        "percent",
     ),
-    descriptor(
-        "color.red",
-        "Red",
+    continuous(
+        "color.warm_white",
+        "Warm White",
         AttributeClass::Color,
-        AttributeValueType::Continuous,
-        Some("percent"),
+        "percent",
     ),
-    descriptor(
-        "color.green",
-        "Green",
+    continuous("color.lime", "Lime", AttributeClass::Color, "percent"),
+    continuous("color.indigo", "Indigo", AttributeClass::Color, "percent"),
+    continuous("color.mint", "Mint", AttributeClass::Color, "percent"),
+    continuous(
+        "color.temperature",
+        "Color Temperature",
         AttributeClass::Color,
-        AttributeValueType::Continuous,
-        Some("percent"),
+        "K",
     ),
-    descriptor(
-        "color.blue",
-        "Blue",
+    continuous("color.tint", "Tint", AttributeClass::Color, "percent"),
+    indexed("color.wheel.1", "Color Wheel 1", AttributeClass::Color),
+    continuous(
+        "color.wheel.1.rotation",
+        "Color Wheel 1 Rotation",
         AttributeClass::Color,
-        AttributeValueType::Continuous,
-        Some("percent"),
+        "percent",
     ),
-    descriptor(
-        "color.cyan",
-        "Cyan",
+    indexed("color.wheel.2", "Color Wheel 2", AttributeClass::Color),
+    continuous(
+        "color.wheel.2.rotation",
+        "Color Wheel 2 Rotation",
         AttributeClass::Color,
-        AttributeValueType::Continuous,
-        Some("percent"),
+        "percent",
     ),
-    descriptor(
-        "color.magenta",
-        "Magenta",
-        AttributeClass::Color,
-        AttributeValueType::Continuous,
-        Some("percent"),
-    ),
-    descriptor(
-        "color.yellow",
-        "Yellow",
-        AttributeClass::Color,
-        AttributeValueType::Continuous,
-        Some("percent"),
-    ),
-    descriptor(
-        "color.amber",
-        "Amber",
-        AttributeClass::Color,
-        AttributeValueType::Continuous,
-        Some("percent"),
-    ),
-    descriptor(
-        "color.white",
-        "White",
-        AttributeClass::Color,
-        AttributeValueType::Continuous,
-        Some("percent"),
-    ),
-    descriptor(
-        "color.uv",
-        "UV",
-        AttributeClass::Color,
-        AttributeValueType::Continuous,
-        Some("percent"),
-    ),
-    descriptor(
-        "color.wheel.1",
-        "Color Wheel 1",
-        AttributeClass::Color,
-        AttributeValueType::Indexed,
-        None,
-    ),
-    descriptor(
-        "color.wheel.2",
-        "Color Wheel 2",
-        AttributeClass::Color,
-        AttributeValueType::Indexed,
-        None,
-    ),
-    descriptor(
-        "pan",
-        "Pan",
+    continuous("pan", "Pan", AttributeClass::Position, "deg"),
+    continuous("tilt", "Tilt", AttributeClass::Position, "deg"),
+    continuous(
+        "pan.continuous",
+        "Continuous Pan",
         AttributeClass::Position,
-        AttributeValueType::Continuous,
-        Some("deg"),
+        "percent",
     ),
-    descriptor(
-        "tilt",
-        "Tilt",
+    continuous(
+        "tilt.continuous",
+        "Continuous Tilt",
         AttributeClass::Position,
-        AttributeValueType::Continuous,
-        Some("deg"),
+        "percent",
     ),
-    descriptor(
-        "beam",
-        "Beam",
+    continuous("pan.time", "Pan Time", AttributeClass::Position, "s"),
+    continuous("tilt.time", "Tilt Time", AttributeClass::Position, "s"),
+    continuous(
+        "position.speed",
+        "Position Speed",
+        AttributeClass::Position,
+        "percent",
+    ),
+    indexed("position.mode", "Position Mode", AttributeClass::Position),
+    cyclic_continuous(
+        "position.rotation",
+        "Head Rotation",
+        AttributeClass::Position,
+        "deg",
+    ),
+    indexed("gobo.1", "Gobo 1", AttributeClass::Beam),
+    continuous(
+        "gobo.1.rotation",
+        "Gobo 1 Rotation",
         AttributeClass::Beam,
-        AttributeValueType::Continuous,
-        Some("percent"),
+        "percent",
     ),
-    descriptor(
-        "focus",
-        "Focus",
-        AttributeClass::Focus,
-        AttributeValueType::Continuous,
-        Some("percent"),
-    ),
-    descriptor(
-        "zoom",
-        "Zoom",
+    indexed("gobo.2", "Gobo 2", AttributeClass::Beam),
+    continuous(
+        "gobo.2.rotation",
+        "Gobo 2 Rotation",
         AttributeClass::Beam,
-        AttributeValueType::Continuous,
-        Some("deg"),
+        "percent",
     ),
-    descriptor(
-        "iris",
-        "Iris",
+    indexed("prism.1", "Prism 1", AttributeClass::Beam),
+    continuous(
+        "prism.1.rotation",
+        "Prism 1 Rotation",
         AttributeClass::Beam,
-        AttributeValueType::Continuous,
-        Some("percent"),
+        "percent",
     ),
-    descriptor(
-        "gobo.1",
-        "Gobo 1",
+    indexed("prism.2", "Prism 2", AttributeClass::Beam),
+    continuous(
+        "prism.2.rotation",
+        "Prism 2 Rotation",
         AttributeClass::Beam,
-        AttributeValueType::Indexed,
-        None,
+        "percent",
     ),
-    descriptor(
-        "gobo.2",
-        "Gobo 2",
+    indexed("animation.1", "Animation Wheel 1", AttributeClass::Beam),
+    continuous(
+        "animation.1.rotation",
+        "Animation Rotation 1",
         AttributeClass::Beam,
-        AttributeValueType::Indexed,
-        None,
+        "percent",
     ),
-    descriptor(
-        "shutter",
-        "Shutter",
-        AttributeClass::Beam,
-        AttributeValueType::Indexed,
-        None,
+    indexed("beam.effect.1", "Beam Effect 1", AttributeClass::Beam),
+    indexed("beam.effect.2", "Beam Effect 2", AttributeClass::Beam),
+    continuous("beam", "Beam", AttributeClass::Beam, "percent"),
+    continuous("iris", "Iris", AttributeClass::Shapers, "percent"),
+    continuous(
+        "shaper.blade.1.position",
+        "Blade 1 Position",
+        AttributeClass::Shapers,
+        "percent",
     ),
-    descriptor(
-        "strobe",
-        "Strobe",
-        AttributeClass::Beam,
-        AttributeValueType::Continuous,
-        Some("hz"),
+    continuous(
+        "shaper.blade.1.angle",
+        "Blade 1 Angle",
+        AttributeClass::Shapers,
+        "deg",
     ),
-    descriptor(
-        "control",
-        "Control",
+    continuous(
+        "shaper.blade.2.position",
+        "Blade 2 Position",
+        AttributeClass::Shapers,
+        "percent",
+    ),
+    continuous(
+        "shaper.blade.2.angle",
+        "Blade 2 Angle",
+        AttributeClass::Shapers,
+        "deg",
+    ),
+    cyclic_continuous(
+        "shaper.rotation",
+        "Shaper Rotation",
+        AttributeClass::Shapers,
+        "deg",
+    ),
+    continuous(
+        "shaper.blade.3.position",
+        "Blade 3 Position",
+        AttributeClass::Shapers,
+        "percent",
+    ),
+    continuous(
+        "shaper.blade.3.angle",
+        "Blade 3 Angle",
+        AttributeClass::Shapers,
+        "deg",
+    ),
+    continuous(
+        "shaper.blade.4.position",
+        "Blade 4 Position",
+        AttributeClass::Shapers,
+        "percent",
+    ),
+    continuous(
+        "shaper.blade.4.angle",
+        "Blade 4 Angle",
+        AttributeClass::Shapers,
+        "deg",
+    ),
+    continuous(
+        "shaper.keystone.x",
+        "Keystone X",
+        AttributeClass::Shapers,
+        "percent",
+    ),
+    continuous(
+        "shaper.keystone.y",
+        "Keystone Y",
+        AttributeClass::Shapers,
+        "percent",
+    ),
+    continuous("focus", "Focus", AttributeClass::Focus, "percent"),
+    continuous("zoom", "Zoom", AttributeClass::Focus, "deg"),
+    continuous("frost.1", "Frost 1", AttributeClass::Focus, "percent"),
+    continuous("frost.2", "Frost 2", AttributeClass::Focus, "percent"),
+    continuous("beam.edge", "Beam Edge", AttributeClass::Focus, "percent"),
+    indexed("control.mode", "Fixture Mode", AttributeClass::Control),
+    continuous(
+        "control.speed",
+        "Fixture Control Speed",
         AttributeClass::Control,
-        AttributeValueType::Control,
-        None,
+        "percent",
     ),
+    control("control", "Control", AttributeClass::Control),
+    indexed("media.folder", "Media Folder", AttributeClass::Media),
+    indexed("media.file", "Media File", AttributeClass::Media),
+    indexed("media.mask.folder", "Mask Folder", AttributeClass::Media),
+    indexed("media.mask.file", "Mask File", AttributeClass::Media),
+    continuous(
+        "media.opacity",
+        "Layer Opacity",
+        AttributeClass::Media,
+        "percent",
+    ),
+    color("media.tint", "Layer Tint", AttributeClass::Media),
+    indexed("media.play_mode", "Play Mode", AttributeClass::Media),
+    continuous(
+        "media.playback_speed",
+        "Playback Speed",
+        AttributeClass::Media,
+        "percent",
+    ),
+    continuous(
+        "media.playback_bpm",
+        "Playback BPM",
+        AttributeClass::Media,
+        "bpm",
+    ),
+    continuous(
+        "media.grayscale",
+        "Grayscale",
+        AttributeClass::Media,
+        "percent",
+    ),
+    indexed("media.scaling_mode", "Scaling Mode", AttributeClass::Media),
+    cyclic_continuous(
+        "media.rotation",
+        "Layer Rotation",
+        AttributeClass::Media,
+        "deg",
+    ),
+    continuous(
+        "media.position.x",
+        "Position X",
+        AttributeClass::Media,
+        "percent",
+    ),
+    continuous(
+        "media.position.y",
+        "Position Y",
+        AttributeClass::Media,
+        "percent",
+    ),
+    continuous("media.scale.x", "Scale X", AttributeClass::Media, "percent"),
+    continuous("media.scale.y", "Scale Y", AttributeClass::Media, "percent"),
+    continuous(
+        "media.mask.opacity",
+        "Mask Opacity",
+        AttributeClass::Media,
+        "percent",
+    ),
+    indexed("media.mask.invert", "Invert Mask", AttributeClass::Media),
+    indexed("media.effect.1", "Media Effect 1", AttributeClass::Media),
+    indexed("media.effect.2", "Media Effect 2", AttributeClass::Media),
+    indexed("media.effect.3", "Media Effect 3", AttributeClass::Media),
+    indexed("media.effect.4", "Media Effect 4", AttributeClass::Media),
 ];
+
+const fn continuous(
+    id: &'static str,
+    label: &'static str,
+    family: AttributeClass,
+    unit: &'static str,
+) -> AttributeDescriptor {
+    descriptor(
+        id,
+        label,
+        family,
+        AttributeValueType::Continuous,
+        Some(unit),
+    )
+}
+
+const fn cyclic_continuous(
+    id: &'static str,
+    label: &'static str,
+    family: AttributeClass,
+    unit: &'static str,
+) -> AttributeDescriptor {
+    let mut result = continuous(id, label, family, unit);
+    result.cyclic = true;
+    result
+}
+
+const fn indexed(
+    id: &'static str,
+    label: &'static str,
+    family: AttributeClass,
+) -> AttributeDescriptor {
+    descriptor(id, label, family, AttributeValueType::Indexed, None)
+}
+
+const fn color(
+    id: &'static str,
+    label: &'static str,
+    family: AttributeClass,
+) -> AttributeDescriptor {
+    descriptor(id, label, family, AttributeValueType::Color, None)
+}
+
+const fn control(
+    id: &'static str,
+    label: &'static str,
+    family: AttributeClass,
+) -> AttributeDescriptor {
+    descriptor(id, label, family, AttributeValueType::Control, None)
+}
 
 const fn descriptor(
     id: &'static str,
@@ -1251,20 +1513,58 @@ mod attribute_registry_tests {
             Some(EncoderPlacement::new(EncoderGroup::Shapers, 1, 1))
         );
         assert_eq!(
+            configuration.placement_for(&AttributeKey("media.folder".into())),
+            Some(EncoderPlacement::new(EncoderGroup::Media, 1, 1))
+        );
+        assert!(
+            attribute_descriptor(&AttributeKey("media.rotation".into())).cyclic,
+            "canonical rotation metadata must wrap instead of clamp"
+        );
+        assert_eq!(
+            configuration
+                .placements
+                .iter()
+                .map(|placement| placement.encoder.group)
+                .collect::<HashSet<_>>(),
+            HashSet::from([
+                EncoderGroup::Intensity,
+                EncoderGroup::Color,
+                EncoderGroup::Position,
+                EncoderGroup::Beam,
+                EncoderGroup::Shapers,
+                EncoderGroup::Focus,
+                EncoderGroup::Control,
+                EncoderGroup::Media,
+            ])
+        );
+        assert_eq!(
             configuration
                 .activation_group_for(&AttributeKey("color.wheel.1".into()))
                 .unwrap()
                 .members,
-            [AttributeKey("color.wheel.1".into())]
+            [
+                AttributeKey("color.wheel.1".into()),
+                AttributeKey("color.wheel.1.rotation".into())
+            ]
         );
         let links = configuration.activation_links();
         assert_eq!(
             links[&AttributeKey("pan".into())],
-            [AttributeKey("tilt".into())]
+            [
+                AttributeKey("tilt".into()),
+                AttributeKey("position.rotation".into())
+            ]
         );
         assert_eq!(
             links[&AttributeKey("tilt".into())],
-            [AttributeKey("pan".into())]
+            [
+                AttributeKey("pan".into()),
+                AttributeKey("position.rotation".into())
+            ]
+        );
+        assert_eq!(
+            links[&AttributeKey("media.folder".into())],
+            [AttributeKey("media.file".into())]
         );
         assert!(links[&AttributeKey("intensity".into())].is_empty());
         assert!(!links.contains_key(&AttributeKey("control".into())));
@@ -1472,7 +1772,7 @@ mod attribute_registry_tests {
         add_custom(
             &mut configuration,
             custom_descriptor("vendor.reset", AttributeValueType::Control, false),
-            EncoderPlacement::new(EncoderGroup::Control, 2, 1),
+            EncoderPlacement::new(EncoderGroup::Control, 2, 2),
         );
         configuration.validate().unwrap();
         assert!(

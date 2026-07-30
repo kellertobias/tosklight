@@ -37,19 +37,21 @@ chapter is the complete encoder and activation reference.
 | `tilt` | Tilt | Position | Continuous | Degrees | Uses the profile's physical Tilt range. |
 | `beam` | Beam | Beam | Continuous | Percent | Generic beam attribute retained for profiles without a narrower semantic. |
 | `focus` | Focus | Focus | Continuous | Percent | Near/far direction comes from the profile's authored physical range. |
-| `zoom` | Zoom | Focus | Continuous | Degrees | Beam angle or zoom range. The current registry internally classifies it as Beam. |
-| `iris` | Iris | Focus | Continuous | Percent | Aperture. The current registry internally classifies it as Beam. |
+| `zoom` | Zoom | Focus | Continuous | Degrees | Beam angle or zoom range. |
+| `iris` | Iris | Shapers | Continuous | Percent | Aperture and the first member of the default Shapers activation group. |
 | `gobo.1` | Gobo 1 | Beam | Indexed | — | First indexed gobo wheel or selector. |
 | `gobo.2` | Gobo 2 | Beam | Indexed | — | Second indexed gobo wheel or selector. |
-| `shutter` | Shutter | Beam | Indexed | — | Profile-defined open, closed, strobe, and related functions. |
-| `strobe` | Strobe | Beam | Continuous | Hz | Continuous strobe rate when the fixture exposes it separately. |
+| `shutter` | Shutter | Intensity | Indexed | — | Profile-defined open, closed, strobe, and related functions. |
+| `strobe` | Strobe | Intensity | Continuous | Hz | Continuous strobe rate when the fixture exposes it separately. |
 | `control` | Control | Control | Control | — | Generic typed control/function channel. |
 
-## Preserved custom attributes already seen in shipped fixtures
+## Fixture-facing attributes already seen in shipped fixtures
 
-The shipped fixture packages currently use these additional IDs. They are real preserved fixture data, but they fall back to generic Custom metadata until promoted into the canonical registry or described by a future desk extension.
+The shipped fixture packages currently use these additional physical/profile IDs. A profile maps
+the generic concepts among them into the canonical registry described below; manufacturer-specific
+concepts remain preserved fixture-facing IDs or show-owned custom descriptors.
 
-| Area | Existing non-registry IDs |
+| Area | Existing fixture-facing IDs |
 |---|---|
 | Extended color | `color.cold_white`, `color.warm_white`, `color.hue`, `color.saturation`, `color.temperature`, `color.indigo`, `color.lime` |
 | Focus and atmosphere | `frost`, `fan`, `fog`, `switch` |
@@ -63,11 +65,14 @@ The shipped fixture packages currently use these additional IDs. They are real p
 | Fixture plate/pixel effects | `fixture.plate_background_master`, `fixture.plate_flash_duration`, `fixture.plate_flash_rate`, `fixture.plate_fx_movement`, `fixture.plate_fx_select`, `fixture.plate_pixel_master` |
 | Package placeholders | `fixture.unused_4`, `fixture.unused_7`, `fixture.unused_8` |
 
-This list describes the current shipped library, not a recommendation to standardize every `fixture.*` name. Generic concepts such as Frost, Prism, Pan/Tilt Speed, and Shaper blades should gain canonical descriptors. Manufacturer-specific macros, reserved slots, and unusual effects should remain typed fixture functions or custom attributes.
+This list describes the current shipped library, not a recommendation to standardize every
+`fixture.*` name. Generic Frost, Prism, Pan/Tilt Speed, and Shaper blade concepts map to their
+canonical descriptors. Manufacturer-specific macros, reserved slots, and unusual effects remain
+typed fixture functions or custom attributes.
 
 ## Default attribute vocabulary and encoder placement
 
-The target registry separates the desk's canonical mapping layer from names carried by
+The registry separates the desk's canonical mapping layer from names carried by
 fixture packages. A package keeps the fixture attribute identity that describes its
 physical channel; the mapping layer presents a coherent programmer attribute. The
 preferred encoder location uses `P<page>/E<encoder>` across the desk's six encoders.

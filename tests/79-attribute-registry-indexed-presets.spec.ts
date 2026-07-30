@@ -46,6 +46,16 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 			await expect(
 				registry.getByRole("heading", { name: group, exact: true }),
 			).toBeVisible();
+		await expect(
+			registry.getByText("media.folder · page 1, encoder 1", {
+				exact: true,
+			}),
+		).toBeVisible();
+		await expect(
+			registry.getByText("shaper.blade.4.angle · page 2, encoder 4", {
+				exact: true,
+			}),
+		).toBeVisible();
 
 		await registry
 			.getByLabel("New custom attribute")

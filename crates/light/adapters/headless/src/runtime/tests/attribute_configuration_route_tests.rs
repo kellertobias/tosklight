@@ -66,7 +66,10 @@ async fn attribute_configuration_defaults_persist_and_replay_without_eager_show_
     assert_eq!(initial["object_revision"], 0);
     assert!(initial["validation_error"].is_null());
     assert_eq!(initial["configuration"]["version"], 1);
-    assert_eq!(initial["descriptors"].as_array().unwrap().len(), 24);
+    assert_eq!(
+        initial["descriptors"].as_array().unwrap().len(),
+        light_core::ATTRIBUTE_REGISTRY.len()
+    );
 
     let request = serde_json::json!({
         "request_id": "attribute-configuration-1",
