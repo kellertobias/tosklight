@@ -17,6 +17,63 @@ import {
 } from "./parameterValueMutations";
 import type { ParameterProjection } from "./useParameterProjection";
 
+type IndexedPresetTarget = {
+	fixtureId: string;
+	functionId?: string;
+	profileRevision?: number;
+};
+
+function submitIndexedPreset(
+	queue: LatestProgrammerValuesWriteQueue,
+	actions: ParameterValuesMutationPort | null,
+	canWriteValues: boolean,
+	projection: ParameterProjection,
+	attribute: string,
+	semanticId: string,
+	targets: ReadonlyArray<IndexedPresetTarget>,
+) {
+	return queue.submitBarrier(() => {
+		const authoredTargets = targets.flatMap((target) =>
+			target.functionId && target.profileRevision != null
+				? [
+						{
+							fixtureId: target.fixtureId,
+							functionId: target.functionId,
+							expectedProfileRevision: target.profileRevision,
+						},
+					]
+				: [],
+		);
+		if (
+			actions?.applyIndexedPreset &&
+			canWriteValues &&
+			authoredTargets.length === targets.length &&
+			authoredTargets.length
+		)
+			return actions.applyIndexedPreset({
+				requestId: crypto.randomUUID(),
+				expectedSelectionRevision: projection.selectionRevision,
+				attribute,
+				targets: authoredTargets,
+			});
+		return actions?.applyIntent && canWriteValues && targets.length
+			? actions.applyIntent({
+					requestId: crypto.randomUUID(),
+					fixtureIds: targets.map((target) => target.fixtureId),
+					attribute,
+					operation: {
+						type: "absolute_set",
+						value: { kind: "discrete", value: semanticId },
+					},
+					timing:
+						projection.programmerValuesRoute === "preload"
+							? parameterValueTiming(projection.programmerFadeMillis)
+							: immediateParameterTiming(),
+				})
+			: Promise.resolve(null);
+	});
+}
+
 export function useParameterValueActions(projection: ParameterProjection) {
 	const normalActions = useProgrammerValuesActions();
 	const preloadActions = useProgrammerPreloadValuesActions();
@@ -97,52 +154,17 @@ export function useParameterValueActions(projection: ParameterProjection) {
 		applyIndexedPreset: (
 			attribute: string,
 			semanticId: string,
-			targets: ReadonlyArray<{
-				fixtureId: string;
-				functionId?: string;
-				profileRevision?: number;
-			}>,
+			targets: ReadonlyArray<IndexedPresetTarget>,
 		) =>
-			queue.submitBarrier(() => {
-				const authoredTargets = targets.flatMap((target) =>
-					target.functionId && target.profileRevision != null
-						? [
-								{
-									fixtureId: target.fixtureId,
-									functionId: target.functionId,
-									expectedProfileRevision: target.profileRevision,
-								},
-							]
-						: [],
-				);
-				if (
-					actions?.applyIndexedPreset &&
-					canWriteValues &&
-					authoredTargets.length === targets.length &&
-					authoredTargets.length
-				)
-					return actions.applyIndexedPreset({
-						requestId: crypto.randomUUID(),
-						expectedSelectionRevision: projection.selectionRevision,
-						attribute,
-						targets: authoredTargets,
-					});
-				return actions?.applyIntent && canWriteValues && targets.length
-					? actions.applyIntent({
-							requestId: crypto.randomUUID(),
-							fixtureIds: targets.map((target) => target.fixtureId),
-							attribute,
-							operation: {
-								type: "absolute_set",
-								value: { kind: "discrete", value: semanticId },
-							},
-							timing:
-								projection.programmerValuesRoute === "preload"
-									? parameterValueTiming(projection.programmerFadeMillis)
-									: immediateParameterTiming(),
-						})
-					: Promise.resolve(null);
-			}),
+			submitIndexedPreset(
+				queue,
+				actions,
+				canWriteValues,
+				projection,
+				attribute,
+				semanticId,
+				targets,
+			),
 		stepParameter,
 		applyParameterRange: (attribute: string, percentages: number[]) =>
 			queue.submitBarrier(

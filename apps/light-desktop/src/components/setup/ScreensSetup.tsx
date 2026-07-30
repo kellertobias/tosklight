@@ -54,28 +54,15 @@ function ScreensSetupHeader({
 	);
 }
 
-export function ScreensSetup({
-	undoRef,
-	onUndoAvailabilityChange,
-}: {
-	undoRef?: ScreenUndoHandle;
-	onUndoAvailabilityChange?: (available: boolean) => void;
-} = {}) {
-	const server = useScreens();
+function useScreenResourceOptions() {
 	const files = useFiles();
-	useShowObjectView("cue_list", true);
-	const cueListObjects = useCueLists();
 	const desktop = useDesktopBridge();
-	const { state, dispatch } = useApp();
 	const [displays, setDisplays] = useState<Array<{ id: string; name: string }>>(
 		[],
 	);
 	const [textFiles, setTextFiles] = useState<
 		Array<{ root: string; rootLabel: string; path: string; name: string }>
 	>([]);
-	const [defaultScreenPickerOpen, setDefaultScreenPickerOpen] = useState(false);
-	const [defaultPlaybackModalOpen, setDefaultPlaybackModalOpen] =
-		useState(false);
 	useEffect(() => {
 		if (desktop.available) void desktop.listDisplays().then(setDisplays);
 	}, [desktop]);
@@ -111,6 +98,24 @@ export function ScreensSetup({
 			cancelled = true;
 		};
 	}, [desktop.available, files]);
+	return { desktop, displays, textFiles };
+}
+
+export function ScreensSetup({
+	undoRef,
+	onUndoAvailabilityChange,
+}: {
+	undoRef?: ScreenUndoHandle;
+	onUndoAvailabilityChange?: (available: boolean) => void;
+} = {}) {
+	const server = useScreens();
+	useShowObjectView("cue_list", true);
+	const cueListObjects = useCueLists();
+	const { desktop, displays, textFiles } = useScreenResourceOptions();
+	const { state, dispatch } = useApp();
+	const [defaultScreenPickerOpen, setDefaultScreenPickerOpen] = useState(false);
+	const [defaultPlaybackModalOpen, setDefaultPlaybackModalOpen] =
+		useState(false);
 	const updateKeyboardShortcuts = useCallback(
 		(value: boolean) =>
 			dispatch({ type: "SET_REGULAR_NUMBER_SHORTCUTS", value }),

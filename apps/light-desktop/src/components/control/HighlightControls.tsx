@@ -1,5 +1,11 @@
 import { Button } from "@tosklight/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+	type MutableRefObject,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { createPortal } from "react-dom";
 import type {
 	HighlightAction,
@@ -116,34 +122,14 @@ function useHighlightPatchedFixtures(state: HighlightState | null) {
 	return usePatchFixturesById(fixtureIds, enabled);
 }
 
-export function HighlightControls() {
-	const state = useHighlightSnapshot();
+function useHighlightInvocation(
+	state: HighlightState | null,
+	ownedByOther: boolean,
+) {
 	const highlightError = useHighlightErrorMessage();
 	const highlightActions = useHighlightActions();
-	const selection = useProgrammingSelectionView();
-	const selectionActions = useProgrammingSelectionActions();
-	const app = useOptionalApp();
-	const session = useSessionSnapshot();
 	const [pending, setPending] = useState<HighlightAction | null>(null);
-	const [gridPending, setGridPending] = useState(false);
-	const [gridSettingsOpen, setGridSettingsOpen] = useState(false);
-	const [gridError, setGridError] = useState<string | null>(null);
 	const pendingRef = useRef(false);
-	const shiftedAllPointer = useRef(false);
-	const cycleGridRef = useRef<() => void>(() => {});
-	const openGridSettingsRef = useRef<() => void>(() => {});
-	const shiftAllGestureRef = useRef<ShiftAllPressGesture | null>(null);
-	const patch = useHighlightPatchedFixtures(state);
-	const ownedByOther = Boolean(
-		state?.owner_user_id &&
-			session?.user.id &&
-			state.owner_user_id !== session.user.id,
-	);
-	const ownerLabel = state?.owner_user_name?.trim() || "another operator";
-	const outputSuppressed = Boolean(
-		state?.capture_only || (state?.active && !state.output_enabled),
-	);
-
 	const allowed = useCallback(
 		(action: HighlightAction) => {
 			if (pendingRef.current || !state) return false;
@@ -169,12 +155,27 @@ export function HighlightControls() {
 		},
 		[allowed, highlightActions],
 	);
+	return {
+		allowed,
+		dismissError: () => highlightActions?.dismissHighlightError(),
+		error: highlightError,
+		invoke,
+		pending,
+	};
+}
 
-	const clearLatchedShift = useCallback(() => {
-		if (app?.state.shiftArmed) {
-			app.dispatch({ type: "SET_SHIFT_ARMED", value: false });
-		}
-	}, [app]);
+function useSelectionGridControls(
+	clearLatchedShift: () => void,
+	invokeHighlight: (action: HighlightAction) => Promise<void>,
+) {
+	const selection = useProgrammingSelectionView();
+	const selectionActions = useProgrammingSelectionActions();
+	const [gridPending, setGridPending] = useState(false);
+	const [gridSettingsOpen, setGridSettingsOpen] = useState(false);
+	const [gridError, setGridError] = useState<string | null>(null);
+	const cycleGridRef = useRef<() => void>(() => {});
+	const openGridSettingsRef = useRef<() => void>(() => {});
+	const shiftAllGestureRef = useRef<ShiftAllPressGesture | null>(null);
 
 	const invokeGrid = useCallback(
 		async (action: "cycle" | "rows" | "columns") => {
@@ -194,7 +195,6 @@ export function HighlightControls() {
 		},
 		[gridPending, selectionActions],
 	);
-
 	cycleGridRef.current = () => void invokeGrid("cycle");
 	openGridSettingsRef.current = () => {
 		setGridError(null);
@@ -212,7 +212,6 @@ export function HighlightControls() {
 				shiftAllGestureRef.current = null;
 		};
 	}, []);
-
 	useEffect(() => {
 		const openGridSettings = () => openGridSettingsRef.current();
 		window.addEventListener("light:selection-grid-settings", openGridSettings);
@@ -222,12 +221,69 @@ export function HighlightControls() {
 				openGridSettings,
 			);
 	}, []);
+	const saveGridConfiguration = useCallback(
+		async (configuration: SelectionGridConfiguration) => {
+			if (!selectionActions || gridPending) return;
+			setGridError(null);
+			setGridPending(true);
+			try {
+				const outcome =
+					await selectionActions.setGridConfiguration(configuration);
+				if (outcome) setGridSettingsOpen(false);
+				else
+					setGridError(
+						"Grid Settings could not be saved. Refresh and try again.",
+					);
+			} finally {
+				setGridPending(false);
+			}
+		},
+		[gridPending, selectionActions],
+	);
+	const invokeStep = (axis: "previous" | "next", shifted: boolean) => {
+		if (shifted) {
+			clearLatchedShift();
+			void invokeGrid(axis === "previous" ? "columns" : "rows");
+			return;
+		}
+		void invokeHighlight(axis);
+	};
+	return {
+		actionsAvailable: Boolean(selectionActions),
+		closeSettings: () => {
+			if (!gridPending) setGridSettingsOpen(false);
+		},
+		error: gridError,
+		invokeGrid,
+		invokeStep,
+		pending: gridPending,
+		save: saveGridConfiguration,
+		selection,
+		settingsOpen: gridSettingsOpen,
+		shiftAllGestureRef,
+	};
+}
 
+function useHighlightKeyboardShortcuts({
+	allowed,
+	clearLatchedShift,
+	invoke,
+	invokeGrid,
+	shiftAllGestureRef,
+	shiftArmed,
+}: {
+	allowed: (action: HighlightAction) => boolean;
+	clearLatchedShift: () => void;
+	invoke: (action: HighlightAction) => Promise<void>;
+	invokeGrid: (action: "cycle" | "rows" | "columns") => Promise<void>;
+	shiftAllGestureRef: MutableRefObject<ShiftAllPressGesture | null>;
+	shiftArmed: boolean;
+}) {
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat)
 				return;
-			const shifted = event.shiftKey || Boolean(app?.state.shiftArmed);
+			const shifted = event.shiftKey || shiftArmed;
 			const key = event.key.toLowerCase();
 			if (shifted && key === "a") {
 				event.preventDefault();
@@ -282,36 +338,45 @@ export function HighlightControls() {
 			window.removeEventListener("keyup", onKeyUp);
 			window.removeEventListener("blur", cancelGesture);
 		};
-	}, [allowed, app?.state.shiftArmed, clearLatchedShift, invoke, invokeGrid]);
+	}, [
+		allowed,
+		clearLatchedShift,
+		invoke,
+		invokeGrid,
+		shiftAllGestureRef,
+		shiftArmed,
+	]);
+}
 
-	const saveGridConfiguration = useCallback(
-		async (configuration: SelectionGridConfiguration) => {
-			if (!selectionActions || gridPending) return;
-			setGridError(null);
-			setGridPending(true);
-			try {
-				const outcome =
-					await selectionActions.setGridConfiguration(configuration);
-				if (outcome) setGridSettingsOpen(false);
-				else
-					setGridError(
-						"Grid Settings could not be saved. Refresh and try again.",
-					);
-			} finally {
-				setGridPending(false);
-			}
-		},
-		[gridPending, selectionActions],
-	);
-
-	const invokeStep = (axis: "previous" | "next", shifted: boolean) => {
-		if (shifted) {
-			clearLatchedShift();
-			void invokeGrid(axis === "previous" ? "columns" : "rows");
-			return;
-		}
-		void invoke(axis);
-	};
+function HighlightButtons({
+	state,
+	ownedByOther,
+	ownerLabel,
+	allowed,
+	invoke,
+	shiftArmed,
+	gridPending,
+	gridActionsAvailable,
+	invokeStep,
+	shiftAllGestureRef,
+	clearLatchedShift,
+}: {
+	state: HighlightState | null;
+	ownedByOther: boolean;
+	ownerLabel: string;
+	allowed: (action: HighlightAction) => boolean;
+	invoke: (action: HighlightAction) => Promise<void>;
+	shiftArmed: boolean;
+	gridPending: boolean;
+	gridActionsAvailable: boolean;
+	invokeStep: (axis: "previous" | "next", shifted: boolean) => void;
+	shiftAllGestureRef: MutableRefObject<ShiftAllPressGesture | null>;
+	clearLatchedShift: () => void;
+}) {
+	const shiftedAllPointer = useRef(false);
+	const gridStepDisabled = !gridActionsAvailable || gridPending;
+	const stepDisabled = (action: "previous" | "next") =>
+		shiftArmed ? gridStepDisabled : !allowed(action);
 
 	const toggleLabel =
 		ownedByOther && !state?.capture_only
@@ -319,25 +384,8 @@ export function HighlightControls() {
 			: state?.active
 				? "Turn Highlight off"
 				: "Turn Highlight on";
-	const details = state?.remembered
-		.map((fixture) => fixtureDetails(fixture, patch))
-		.filter(Boolean)
-		.join(", ");
-	const title = [
-		highlightAnnouncement(state, patch),
-		details ? `Live step source: ${details}.` : "",
-		"Shortcuts: Alt+H HIGH, Alt+A ALL, Alt+Left/Right PREV/NEXT.",
-	]
-		.filter(Boolean)
-		.join(" ");
-
 	return (
-		<section
-			className={`highlight-controls ${state?.active ? "active" : ""} ${outputSuppressed ? "output-suppressed" : ""}`}
-			aria-label="Highlight and selection stepping"
-			aria-busy={pending !== null || gridPending}
-			title={title}
-		>
+		<>
 			<Button
 				className={`highlight-toggle ${state?.active ? "highlight-armed" : "highlight-off"}`}
 				data-keypad-key="HIGH"
@@ -355,16 +403,9 @@ export function HighlightControls() {
 				data-keypad-key="PREV"
 				aria-label="Previous selection item"
 				aria-keyshortcuts="Alt+ArrowLeft"
-				disabled={
-					app?.state.shiftArmed
-						? !selectionActions || gridPending
-						: !allowed("previous")
-				}
+				disabled={stepDisabled("previous")}
 				onClick={(event) =>
-					invokeStep(
-						"previous",
-						event.shiftKey || Boolean(app?.state.shiftArmed),
-					)
+					invokeStep("previous", event.shiftKey || shiftArmed)
 				}
 			>
 				PREV
@@ -374,14 +415,8 @@ export function HighlightControls() {
 				data-keypad-key="NEXT"
 				aria-label="Next selection item"
 				aria-keyshortcuts="Alt+ArrowRight"
-				disabled={
-					app?.state.shiftArmed
-						? !selectionActions || gridPending
-						: !allowed("next")
-				}
-				onClick={(event) =>
-					invokeStep("next", event.shiftKey || Boolean(app?.state.shiftArmed))
-				}
+				disabled={stepDisabled("next")}
+				onClick={(event) => invokeStep("next", event.shiftKey || shiftArmed)}
 			>
 				NEXT
 			</Button>
@@ -390,13 +425,9 @@ export function HighlightControls() {
 				data-keypad-key="ALL"
 				aria-label="Restore complete selection"
 				aria-keyshortcuts="Alt+A"
-				disabled={
-					app?.state.shiftArmed
-						? !selectionActions || gridPending
-						: !allowed("all")
-				}
+				disabled={shiftArmed ? gridStepDisabled : !allowed("all")}
 				onPointerDown={(event) => {
-					if (event.button !== 0 || !app?.state.shiftArmed) return;
+					if (event.button !== 0 || !shiftArmed) return;
 					event.currentTarget.setPointerCapture?.(event.pointerId);
 					shiftedAllPointer.current = true;
 					shiftAllGestureRef.current?.press();
@@ -422,19 +453,82 @@ export function HighlightControls() {
 			>
 				ALL
 			</Button>
-			<HighlightErrorAlert
-				message={highlightError}
-				onDismiss={() => highlightActions?.dismissHighlightError()}
+		</>
+	);
+}
+
+export function HighlightControls() {
+	const state = useHighlightSnapshot();
+	const app = useOptionalApp();
+	const session = useSessionSnapshot();
+	const patch = useHighlightPatchedFixtures(state);
+	const ownedByOther = Boolean(
+		state?.owner_user_id &&
+			session?.user.id &&
+			state.owner_user_id !== session.user.id,
+	);
+	const ownerLabel = state?.owner_user_name?.trim() || "another operator";
+	const outputSuppressed = Boolean(
+		state?.capture_only || (state?.active && !state.output_enabled),
+	);
+	const highlight = useHighlightInvocation(state, ownedByOther);
+	const clearLatchedShift = useCallback(() => {
+		if (app?.state.shiftArmed)
+			app.dispatch({ type: "SET_SHIFT_ARMED", value: false });
+	}, [app]);
+	const grid = useSelectionGridControls(clearLatchedShift, highlight.invoke);
+	const shiftArmed = Boolean(app?.state.shiftArmed);
+	useHighlightKeyboardShortcuts({
+		allowed: highlight.allowed,
+		clearLatchedShift,
+		invoke: highlight.invoke,
+		invokeGrid: grid.invokeGrid,
+		shiftAllGestureRef: grid.shiftAllGestureRef,
+		shiftArmed,
+	});
+	const details = state?.remembered
+		.map((fixture) => fixtureDetails(fixture, patch))
+		.filter(Boolean)
+		.join(", ");
+	const title = [
+		highlightAnnouncement(state, patch),
+		details ? `Live step source: ${details}.` : "",
+		"Shortcuts: Alt+H HIGH, Alt+A ALL, Alt+Left/Right PREV/NEXT.",
+	]
+		.filter(Boolean)
+		.join(" ");
+
+	return (
+		<section
+			className={`highlight-controls ${state?.active ? "active" : ""} ${outputSuppressed ? "output-suppressed" : ""}`}
+			aria-label="Highlight and selection stepping"
+			aria-busy={highlight.pending !== null || grid.pending}
+			title={title}
+		>
+			<HighlightButtons
+				state={state}
+				ownedByOther={ownedByOther}
+				ownerLabel={ownerLabel}
+				allowed={highlight.allowed}
+				invoke={highlight.invoke}
+				shiftArmed={shiftArmed}
+				gridPending={grid.pending}
+				gridActionsAvailable={grid.actionsAvailable}
+				invokeStep={grid.invokeStep}
+				shiftAllGestureRef={grid.shiftAllGestureRef}
+				clearLatchedShift={clearLatchedShift}
 			/>
-			{gridSettingsOpen && selection ? (
+			<HighlightErrorAlert
+				message={highlight.error}
+				onDismiss={highlight.dismissError}
+			/>
+			{grid.settingsOpen && grid.selection ? (
 				<GridSettingsDialog
-					grid={selection.grid}
-					busy={gridPending}
-					error={gridError}
-					onSave={(configuration) => void saveGridConfiguration(configuration)}
-					onClose={() => {
-						if (!gridPending) setGridSettingsOpen(false);
-					}}
+					grid={grid.selection.grid}
+					busy={grid.pending}
+					error={grid.error}
+					onSave={(configuration) => void grid.save(configuration)}
+					onClose={grid.closeSettings}
 				/>
 			) : null}
 		</section>

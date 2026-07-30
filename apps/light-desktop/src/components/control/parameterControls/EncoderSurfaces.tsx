@@ -47,6 +47,100 @@ function UnassignedEncoder({
 	);
 }
 
+function indexedPresetConfiguration(indexedPresets: IndexedPresetChoice[]) {
+	return {
+		valueTabLabel: "Direct input",
+		presetsTabLabel: "Indexed Presets",
+		showWhenEmpty: true,
+		emptyMessage:
+			"No selected fixture provides a fixed, indexed, or control function for this attribute.",
+		groups: [
+			{
+				label: "Fixed and indexed",
+				options: indexedPresets
+					.filter((choice) => choice.kind !== "control")
+					.map(indexedPresetOption),
+			},
+			{
+				label: "Control actions",
+				options: indexedPresets
+					.filter((choice) => choice.kind === "control")
+					.map(indexedPresetOption),
+			},
+		],
+	};
+}
+
+function applyIndexedPresetChoice(
+	controller: ParameterController,
+	attribute: string,
+	choice: IndexedPresetChoice,
+) {
+	if (choice.disabled) return;
+	if (choice.semanticId) {
+		void controller.applyIndexedPreset(
+			attribute,
+			choice.semanticId,
+			choice.targets,
+		);
+		return;
+	}
+	const actions = controller.programmerActions;
+	if (!actions) return;
+	const targets = choice.targets.flatMap((target) =>
+		target.actionId && target.profileRevision != null
+			? [
+					{
+						fixtureId: target.fixtureId,
+						actionId: target.actionId,
+						expectedProfileRevision: target.profileRevision,
+					},
+				]
+			: [],
+	);
+	if (
+		actions.controlFixtureActions &&
+		targets.length === choice.targets.length
+	) {
+		const activate = actions.controlFixtureActions(
+			targets,
+			controller.selectionRevision,
+			true,
+		);
+		void (choice.controlKind === "momentary"
+			? activate.then(() =>
+					actions.controlFixtureActions?.(
+						targets,
+						controller.selectionRevision,
+						false,
+					),
+				)
+			: activate);
+		return;
+	}
+	void Promise.all(
+		choice.targets.flatMap((target) => {
+			if (!target.actionId) return [];
+			const activate = actions.controlFixtureAction(
+				target.fixtureId,
+				target.actionId,
+				true,
+			);
+			return choice.controlKind === "momentary"
+				? [
+						activate.then(() =>
+							actions.controlFixtureAction(
+								target.fixtureId,
+								target.actionId as string,
+								false,
+							),
+						),
+					]
+				: [activate];
+		}),
+	);
+}
+
 function EncoderSurface({
 	controller,
 	attribute,
@@ -85,89 +179,10 @@ function EncoderSurface({
 		controller.selectedFixtureIds,
 		attribute,
 	);
-	const presetConfig = {
-		valueTabLabel: "Direct input",
-		presetsTabLabel: "Indexed Presets",
-		showWhenEmpty: true,
-		emptyMessage:
-			"No selected fixture provides a fixed, indexed, or control function for this attribute.",
-		groups: [
-			{
-				label: "Fixed and indexed",
-				options: indexedPresets
-					.filter((choice) => choice.kind !== "control")
-					.map(indexedPresetOption),
-			},
-			{
-				label: "Control actions",
-				options: indexedPresets
-					.filter((choice) => choice.kind === "control")
-					.map(indexedPresetOption),
-			},
-		],
-	};
+	const presetConfig = indexedPresetConfiguration(indexedPresets);
 	const selectIndexedPreset = (id: string) => {
 		const choice = indexedPresets.find((candidate) => candidate.id === id);
-		if (!choice || choice.disabled) return;
-		if (choice.semanticId) {
-			void controller.applyIndexedPreset(
-				attribute,
-				choice.semanticId,
-				choice.targets,
-			);
-			return;
-		}
-		const actions = controller.programmerActions;
-		if (!actions) return;
-		const targets = choice.targets.flatMap((target) =>
-			target.actionId && target.profileRevision != null
-				? [
-						{
-							fixtureId: target.fixtureId,
-							actionId: target.actionId,
-							expectedProfileRevision: target.profileRevision,
-						},
-					]
-				: [],
-		);
-		if (actions.controlFixtureActions && targets.length === choice.targets.length) {
-			const activate = actions.controlFixtureActions(
-				targets,
-				controller.selectionRevision,
-				true,
-			);
-			void (choice.controlKind === "momentary"
-				? activate.then(() =>
-						actions.controlFixtureActions?.(
-							targets,
-							controller.selectionRevision,
-							false,
-						),
-					)
-				: activate);
-			return;
-		}
-		void Promise.all(
-			choice.targets.flatMap((target) => {
-				if (!target.actionId) return [];
-				const activate = actions.controlFixtureAction(
-					target.fixtureId,
-					target.actionId,
-					true,
-				);
-				return choice.controlKind === "momentary"
-					? [
-							activate.then(() =>
-								actions.controlFixtureAction(
-									target.fixtureId,
-									target.actionId as string,
-									false,
-								),
-							),
-						]
-					: [activate];
-			}),
-		);
+		if (choice) applyIndexedPresetChoice(controller, attribute, choice);
 	};
 	if (controller.hardwareConnected)
 		return (

@@ -490,93 +490,135 @@ function PreparedPackagedStageBenchmark({
 			{exerciseEnabled && <PackagedStageExercise />}
 			<AppProvider>
 				<PatchFeatureBoundary>
-					<div
-						style={{
-							display: "grid",
-							gridTemplateColumns: "1fr 1fr",
-							height: "100vh",
-							minHeight: 0,
-						}}
-					>
-						{stageEnabled && liveVisible ? (
-							<div
-								style={{
-									display: "grid",
-									gridTemplateRows: "1fr 1fr",
-									minHeight: 0,
-								}}
-							>
-								<StageWindow
-									compact
-									stageView={liveView}
-									showGroupShortcuts={false}
-									followPreload={false}
-									stageRenderQuality={quality}
-									showSelection
-									showFloorGrid
-									showBeamGuides
-								/>
-								<StageWindow
-									compact
-									stageView="3d"
-									showGroupShortcuts={false}
-									followPreload
-									stageRenderQuality="lines_only"
-									showSelection={false}
-									showFloorGrid
-									showBeamGuides
-								/>
-							</div>
-						) : (
-							<div
-								data-testid={
-									stageEnabled
-										? "packaged-stage-live-released"
-										: "packaged-stage-output-baseline"
-								}
-								style={
-									stageEnabled
-										? undefined
-										: {
-												alignItems: "center",
-												background: "#090d12",
-												color: "#dbe8f5",
-												display: "flex",
-												flexDirection: "column",
-												fontFamily: "system-ui, sans-serif",
-												gap: 8,
-												justifyContent: "center",
-												textAlign: "center",
-											}
-								}
-							>
-								{!stageEnabled && (
-									<>
-										<strong>Packaged Stage benchmark</strong>
-										<span>No Stage output baseline</span>
-										<small>
-											Stage views appear after {controlDurationSeconds} seconds.
-										</small>
-									</>
-								)}
-							</div>
-						)}
-						{stageEnabled && fixtureSheet ? (
-							<div data-testid="packaged-stage-fixture-sheet">
-								<FixtureSheetWindow compact />
-							</div>
-						) : (
-							<div
-								data-testid="packaged-stage-output-baseline-secondary"
-								style={{ background: "#090d12" }}
-							/>
-						)}
-					</div>
+					<PackagedStageBenchmarkSurface
+						stageEnabled={stageEnabled}
+						liveVisible={liveVisible}
+						liveView={liveView}
+						quality={quality}
+						fixtureSheet={fixtureSheet}
+						controlDurationSeconds={controlDurationSeconds}
+					/>
 					<ConnectionState />
 					<DeskLoadingOverlay />
 				</PatchFeatureBoundary>
 			</AppProvider>
 		</ServerRuntime>
+	);
+}
+
+function PackagedStageBenchmarkSurface({
+	stageEnabled,
+	liveVisible,
+	liveView,
+	quality,
+	fixtureSheet,
+	controlDurationSeconds,
+}: {
+	stageEnabled: boolean;
+	liveVisible: boolean;
+	liveView: "2d" | "3d";
+	quality: StageRenderQuality;
+	fixtureSheet: boolean;
+	controlDurationSeconds: number;
+}) {
+	return (
+		<div
+			style={{
+				display: "grid",
+				gridTemplateColumns: "1fr 1fr",
+				height: "100vh",
+				minHeight: 0,
+			}}
+		>
+			{stageEnabled && liveVisible ? (
+				<div
+					style={{
+						display: "grid",
+						gridTemplateRows: "1fr 1fr",
+						minHeight: 0,
+					}}
+				>
+					<StageWindow
+						compact
+						stageView={liveView}
+						showGroupShortcuts={false}
+						followPreload={false}
+						stageRenderQuality={quality}
+						showSelection
+						showFloorGrid
+						showBeamGuides
+					/>
+					<StageWindow
+						compact
+						stageView="3d"
+						showGroupShortcuts={false}
+						followPreload
+						stageRenderQuality="lines_only"
+						showSelection={false}
+						showFloorGrid
+						showBeamGuides
+					/>
+				</div>
+			) : (
+				<PackagedStageBaseline
+					stageEnabled={stageEnabled}
+					controlDurationSeconds={controlDurationSeconds}
+				/>
+			)}
+			{stageEnabled && fixtureSheet ? (
+				<div data-testid="packaged-stage-fixture-sheet">
+					<FixtureSheetWindow compact />
+				</div>
+			) : (
+				<div
+					data-testid="packaged-stage-output-baseline-secondary"
+					style={{ background: "#090d12" }}
+				/>
+			)}
+		</div>
+	);
+}
+
+function PackagedStageBaseline({
+	stageEnabled,
+	controlDurationSeconds,
+}: {
+	stageEnabled: boolean;
+	controlDurationSeconds: number;
+}) {
+	return (
+		<div
+			data-testid={
+				stageEnabled
+					? "packaged-stage-live-released"
+					: "packaged-stage-output-baseline"
+			}
+			style={
+				stageEnabled
+					? undefined
+					: {
+							alignItems: "center",
+							background: "#090d12",
+							color: "#dbe8f5",
+							display: "flex",
+							flexDirection: "column",
+							fontFamily: "system-ui, sans-serif",
+							gap: 8,
+							justifyContent: "center",
+							textAlign: "center",
+						}
+			}
+		>
+			{!stageEnabled && (
+				<>
+					<strong>Packaged Stage benchmark</strong>
+					<span>No Stage output baseline</span>
+					<small>
+						Stage views appear after {controlDurationSeconds} seconds.
+					</small>
+				</>
+			)}
+		</div>
 	);
 }
 

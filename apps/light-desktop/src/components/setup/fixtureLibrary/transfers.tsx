@@ -19,6 +19,25 @@ interface FixtureLibraryTransfersOptions {
 	setSelectedModeKey: (key: string) => void;
 }
 
+async function downloadFixturePackage(
+	server: ReturnType<typeof useFixtureLibrary>,
+	selectedMode: FixtureDefinition | null,
+) {
+	if (!selectedMode) return;
+	const id = selectedMode.profile_id ?? selectedMode.id;
+	const blob = await server?.exportFixturePackage(id, selectedMode.revision);
+	if (!blob) return;
+	const url = URL.createObjectURL(blob);
+	const anchor = document.createElement("a");
+	anchor.href = url;
+	anchor.download =
+		`${selectedMode.manufacturer}-${selectedMode.name || selectedMode.model}.toskfixture`
+			.replace(/[^a-z0-9._-]+/gi, "-")
+			.toLowerCase();
+	anchor.click();
+	URL.revokeObjectURL(url);
+}
+
 export function useFixtureLibraryTransfers({
 	selectedMode,
 	setSelectedFamilyKey,
@@ -140,26 +159,10 @@ export function useFixtureLibraryTransfers({
 		}
 	};
 
-	const exportSelectedPackage = async () => {
-		if (!selectedMode) return;
-		const id = selectedMode.profile_id ?? selectedMode.id;
-		const blob = await server?.exportFixturePackage(id, selectedMode.revision);
-		if (!blob) return;
-		const url = URL.createObjectURL(blob);
-		const anchor = document.createElement("a");
-		anchor.href = url;
-		anchor.download =
-			`${selectedMode.manufacturer}-${selectedMode.name || selectedMode.model}.toskfixture`
-				.replace(/[^a-z0-9._-]+/gi, "-")
-				.toLowerCase();
-		anchor.click();
-		URL.revokeObjectURL(url);
-	};
-
 	return {
 		busy,
 		error,
-		exportSelectedPackage,
+		exportSelectedPackage: () => downloadFixturePackage(server, selectedMode),
 		confirmPackageMappings,
 		importGdtfFile,
 		importPackage,

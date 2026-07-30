@@ -13,12 +13,12 @@ import {
 	type WindowSettingsTab,
 } from "@tosklight/ui/window-kit";
 import { useState } from "react";
-import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
-import { usePortableGroups } from "../../features/showObjects/ShowObjectsState";
 import {
 	usePlaybackDeskView,
 	usePlaybackRuntimeStatus,
 } from "../../features/playbackRuntime/PlaybackRuntimeView";
+import { usePortableGroups } from "../../features/showObjects/ShowObjectsState";
+import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
 import type { VirtualPlaybackZone } from "../../features/virtualPlaybackZones/contracts";
 import { PRESET_FAMILIES } from "../../presetFamilies";
 import { useApp } from "../../state/AppContext";
@@ -215,7 +215,12 @@ function LayoutPaneSettings({ pane }: { pane: PaneModel }) {
 	const missing =
 		pane.layoutGroupId &&
 		!groups.some((group) => group.id === pane.layoutGroupId)
-			? [{ value: pane.layoutGroupId, label: `Unavailable · ${pane.layoutGroupId}` }]
+			? [
+					{
+						value: pane.layoutGroupId,
+						label: `Unavailable · ${pane.layoutGroupId}`,
+					},
+				]
 			: [];
 	return (
 		<FormLayout labelPlacement="side">
@@ -255,7 +260,10 @@ function PaneLayoutSettings({
 				<TouchSelect
 					label="Grid column"
 					value={pane.x}
-					options={Array.from({ length: GRID_COLUMNS }, (_, index) => index + 1)}
+					options={Array.from(
+						{ length: GRID_COLUMNS },
+						(_, index) => index + 1,
+					)}
 					onChange={(x) =>
 						dispatch({ type: "SET_PANE_RECT", id: pane.id, rect: { x } })
 					}
@@ -271,7 +279,10 @@ function PaneLayoutSettings({
 				<TouchSelect
 					label="Grid width"
 					value={pane.width}
-					options={Array.from({ length: GRID_COLUMNS }, (_, index) => index + 1)}
+					options={Array.from(
+						{ length: GRID_COLUMNS },
+						(_, index) => index + 1,
+					)}
 					onChange={(width) =>
 						dispatch({
 							type: "SET_PANE_RECT",
@@ -316,7 +327,11 @@ function PaneLayoutSettings({
 function StagePaneSettings({ pane }: { pane: PaneModel }) {
 	const { dispatch } = useApp();
 	const setOption = (
-		option: "stageView" | "followPreload" | "showBeamGuides" | "stageRenderQuality",
+		option:
+			| "stageView"
+			| "followPreload"
+			| "showBeamGuides"
+			| "stageRenderQuality",
 		value:
 			| boolean
 			| NonNullable<PaneModel["stageView"]>
@@ -436,8 +451,8 @@ function VirtualPlaybackGridSettings({ pane }: { pane: PaneModel }) {
 			</FormLayout>
 			<p role="status">
 				{(rows * columns).toLocaleString()} of{" "}
-				{MAX_VIRTUAL_PLAYBACK_CELLS.toLocaleString()} available Virtual
-				Playback positions.
+				{MAX_VIRTUAL_PLAYBACK_CELLS.toLocaleString()} available Virtual Playback
+				positions.
 			</p>
 		</>
 	);
@@ -484,6 +499,186 @@ function paneLayoutTab(pane: PaneModel, maximized: boolean): WindowSettingsTab {
 	};
 }
 
+function FileManagerPaneSettings({ pane }: { pane: PaneModel }) {
+	const { dispatch } = useApp();
+	return (
+		<FormLayout labelPlacement="side">
+			<SwitchField
+				label="Hidden files"
+				offLabel="Hidden"
+				onLabel="Visible"
+				checked={Boolean(pane.fileManagerShowHidden)}
+				onChange={(event) =>
+					dispatch({
+						type: "SET_FILE_MANAGER_SHOW_HIDDEN",
+						id: pane.id,
+						value: event.target.checked,
+					})
+				}
+			/>
+		</FormLayout>
+	);
+}
+
+function TextEditorPaneSettings({ pane }: { pane: PaneModel }) {
+	const { dispatch } = useApp();
+	return (
+		<FormLayout labelPlacement="side">
+			<SwitchField
+				label="Editing"
+				offLabel="Editable"
+				onLabel="Read only"
+				checked={Boolean(pane.textEditorReadOnly)}
+				onChange={(event) =>
+					dispatch({
+						type: "SET_TEXT_EDITOR_SETTINGS",
+						id: pane.id,
+						readOnly: event.target.checked,
+					})
+				}
+			/>
+			<MultiValueToggleField
+				label="View"
+				value={pane.textEditorMode ?? "plain"}
+				onChange={(mode) =>
+					dispatch({ type: "SET_TEXT_EDITOR_SETTINGS", id: pane.id, mode })
+				}
+				options={[
+					{ value: "plain", label: "Plain Text" },
+					{ value: "markdown", label: "Rendered Markdown" },
+					{ value: "split", label: "Edit + Markdown" },
+				]}
+			/>
+		</FormLayout>
+	);
+}
+
+function PaneGroupShortcutsSettings({ pane }: { pane: PaneModel }) {
+	const { dispatch } = useApp();
+	return (
+		<SwitchField
+			label="Group shortcuts"
+			offLabel="Hidden"
+			onLabel="Visible"
+			checked={Boolean(pane.showGroupShortcuts)}
+			onChange={(event) =>
+				dispatch({
+					type: "SET_PANE_GROUP_SHORTCUTS",
+					id: pane.id,
+					value: event.target.checked,
+				})
+			}
+		/>
+	);
+}
+
+function VirtualPlaybackExclusionSettings({
+	pane,
+	close,
+}: {
+	pane: PaneModel;
+	close: () => void;
+}) {
+	const { dispatch } = useApp();
+	return (
+		<VirtualPlaybackZoneSettings
+			pane={pane}
+			onEditZone={(zone) => {
+				dispatch({
+					type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT",
+					edit: {
+						zoneId: zone.id,
+						name: zone.name,
+						playbackNumbers: [...zone.playbackNumbers],
+					},
+				});
+				close();
+			}}
+		/>
+	);
+}
+
+function paneSpecificTabs(
+	pane: PaneModel,
+	cuePaneCueLists: readonly CuePaneCuelistPlayback[],
+	close: () => void,
+) {
+	const tabs: WindowSettingsTab[] = [];
+	if (pane.kind === "cues")
+		tabs.push({
+			id: "cues",
+			label: "Cues",
+			content: <CuePaneSettings pane={pane} cueLists={cuePaneCueLists} />,
+		});
+	const poolType =
+		pane.kind === "presets"
+			? "preset"
+			: pane.kind === "groups"
+				? "group"
+				: ["cuelists", "cuelist_pool", "qlists", "qlist_pool"].includes(
+							pane.kind,
+						)
+					? "cuelist"
+					: pane.kind === "dynamics"
+						? "dynamic"
+						: null;
+	if (poolType)
+		tabs.push({
+			id: "pool",
+			label: "Pool",
+			content:
+				poolType === "preset" ? (
+					<PresetPoolPaneSettings pane={pane} />
+				) : (
+					<PoolColorSettings objectType={poolType} paneId={pane.id} />
+				),
+		});
+	if (pane.kind === "stage")
+		tabs.push({
+			id: "stage",
+			label: "Stage",
+			content: <StagePaneSettings pane={pane} />,
+		});
+	if (pane.kind === "layout")
+		tabs.push({
+			id: "layout-group",
+			label: "Layout",
+			content: <LayoutPaneSettings pane={pane} />,
+		});
+	if (pane.kind === "virtual_playbacks")
+		tabs.push(
+			{
+				id: "virtual",
+				label: "Virtual Playbacks",
+				content: <VirtualPlaybackGridSettings pane={pane} />,
+			},
+			{
+				id: "virtual-exclusion-zones",
+				label: "Exclusion Zones",
+				content: <VirtualPlaybackExclusionSettings pane={pane} close={close} />,
+			},
+		);
+	if (pane.kind === "file_manager")
+		tabs.push({
+			id: "files",
+			label: "File Manager",
+			content: <FileManagerPaneSettings pane={pane} />,
+		});
+	if (pane.kind === "text_editor")
+		tabs.push({
+			id: "editor",
+			label: "Text Editor",
+			content: <TextEditorPaneSettings pane={pane} />,
+		});
+	if (["stage", "fixtures", "presets"].includes(pane.kind))
+		tabs.push({
+			id: "shortcuts",
+			label: "Shortcuts",
+			content: <PaneGroupShortcutsSettings pane={pane} />,
+		});
+	return tabs;
+}
+
 export function PaneSettingsModal() {
 	const { state } = useApp();
 	if (!state.paneSettingsId) return null;
@@ -498,152 +693,9 @@ function PaneSettingsDialog({ pane }: { pane: PaneModel }) {
 	const cuePaneCueLists = useCuePaneCuelistPlaybacks(pane.kind === "cues");
 	const close = () => dispatch({ type: "SET_PANE_SETTINGS", id: null });
 	const maximized = state.maximizedPaneId === pane.id;
-	const tabs: WindowSettingsTab[] = [paneLayoutTab(pane, maximized)];
-	if (pane.kind === "cues") {
-		tabs.push({
-			id: "cues",
-			label: "Cues",
-			content: <CuePaneSettings pane={pane} cueLists={cuePaneCueLists} />,
-		});
-	}
-	if (pane.kind === "presets")
-		tabs.push({
-			id: "pool",
-			label: "Pool",
-			content: <PresetPoolPaneSettings pane={pane} />,
-		});
-	if (pane.kind === "groups")
-		tabs.push({
-			id: "pool",
-			label: "Pool",
-			content: <PoolColorSettings objectType="group" paneId={pane.id} />,
-		});
-	if (["cuelists", "cuelist_pool", "qlists", "qlist_pool"].includes(pane.kind))
-		tabs.push({
-			id: "pool",
-			label: "Pool",
-			content: <PoolColorSettings objectType="cuelist" paneId={pane.id} />,
-		});
-	if (pane.kind === "dynamics")
-		tabs.push({
-			id: "pool",
-			label: "Pool",
-			content: <PoolColorSettings objectType="dynamic" paneId={pane.id} />,
-		});
-	if (pane.kind === "stage")
-		tabs.push({
-			id: "stage",
-			label: "Stage",
-			content: <StagePaneSettings pane={pane} />,
-		});
-	if (pane.kind === "layout")
-		tabs.push({
-			id: "layout-group",
-			label: "Layout",
-			content: <LayoutPaneSettings pane={pane} />,
-		});
-	if (pane.kind === "virtual_playbacks") {
-		tabs.push({
-			id: "virtual",
-			label: "Virtual Playbacks",
-			content: <VirtualPlaybackGridSettings pane={pane} />,
-		});
-		tabs.push({
-			id: "virtual-exclusion-zones",
-			label: "Exclusion Zones",
-			content: (
-				<VirtualPlaybackZoneSettings
-					pane={pane}
-					onEditZone={(zone) => {
-						dispatch({
-							type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT",
-							edit: {
-								zoneId: zone.id,
-								name: zone.name,
-								playbackNumbers: [...zone.playbackNumbers],
-							},
-						});
-						close();
-					}}
-				/>
-			),
-		});
-	}
-	if (pane.kind === "file_manager")
-		tabs.push({
-			id: "files",
-			label: "File Manager",
-			content: (
-				<FormLayout labelPlacement="side">
-					<SwitchField
-						label="Hidden files"
-						offLabel="Hidden"
-						onLabel="Visible"
-						checked={Boolean(pane.fileManagerShowHidden)}
-						onChange={(event) =>
-							dispatch({
-								type: "SET_FILE_MANAGER_SHOW_HIDDEN",
-								id: pane.id,
-								value: event.target.checked,
-							})
-						}
-					/>
-				</FormLayout>
-			),
-		});
-	if (pane.kind === "text_editor")
-		tabs.push({
-			id: "editor",
-			label: "Text Editor",
-			content: (
-				<FormLayout labelPlacement="side">
-					<SwitchField
-						label="Editing"
-						offLabel="Editable"
-						onLabel="Read only"
-						checked={Boolean(pane.textEditorReadOnly)}
-						onChange={(event) =>
-							dispatch({
-								type: "SET_TEXT_EDITOR_SETTINGS",
-								id: pane.id,
-								readOnly: event.target.checked,
-							})
-						}
-					/>
-					<MultiValueToggleField
-						label="View"
-						value={pane.textEditorMode ?? "plain"}
-						onChange={(mode) =>
-							dispatch({ type: "SET_TEXT_EDITOR_SETTINGS", id: pane.id, mode })
-						}
-						options={[
-							{ value: "plain", label: "Plain Text" },
-							{ value: "markdown", label: "Rendered Markdown" },
-							{ value: "split", label: "Edit + Markdown" },
-						]}
-					/>
-				</FormLayout>
-			),
-		});
-	if (["stage", "fixtures", "presets"].includes(pane.kind))
-		tabs.push({
-			id: "shortcuts",
-			label: "Shortcuts",
-			content: (
-				<SwitchField
-					label="Group shortcuts"
-					offLabel="Hidden"
-					onLabel="Visible"
-					checked={Boolean(pane.showGroupShortcuts)}
-					onChange={(event) =>
-						dispatch({
-							type: "SET_PANE_GROUP_SHORTCUTS",
-							id: pane.id,
-							value: event.target.checked,
-						})
-					}
-				/>
-			),
-		});
+	const tabs = [
+		paneLayoutTab(pane, maximized),
+		...paneSpecificTabs(pane, cuePaneCueLists, close),
+	];
 	return <WindowSettings title="Pane Settings" tabs={tabs} onClose={close} />;
 }
