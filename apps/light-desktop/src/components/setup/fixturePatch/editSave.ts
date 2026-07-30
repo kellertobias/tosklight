@@ -3,7 +3,7 @@ import { parsePatchAddress } from "../../input/ConsoleFields";
 import { maxRaw } from "../fixtureProfileModel";
 import { compatibleHighlightOverrides, isDmxPatchable } from "../patchUtils";
 import type { PatchController } from "./controller";
-import { applyEdit } from "./editSession";
+import { applyEdit, completeEdit } from "./editSession";
 import { parseFixtureNumber, parseVirtualFixtureNumber } from "./fixtureIds";
 import {
 	definitionModeChannels,
@@ -32,6 +32,40 @@ export function saveEdit(
 				move_in_black_delay_millis: Math.max(0, Math.round(seconds * 1000)),
 			});
 	}
+	if (edit === "group_masters")
+		void savePolicy(
+			controller,
+			{ type: "group_masters", controlled: value === "true" },
+			{ group_masters_enabled: value === "true" },
+		);
+	if (edit === "grand_master")
+		void savePolicy(
+			controller,
+			{ type: "grand_master", controlled: value === "true" },
+			{ grand_master_enabled: value === "true" },
+		);
+	if (edit === "invert_pan")
+		void savePolicy(
+			controller,
+			{
+				type: "axis_inversion",
+				axis: "pan",
+				inverted: value === "true",
+				multipatchInstanceId: null,
+			},
+			{ invert_pan: value === "true" },
+		);
+	if (edit === "invert_tilt")
+		void savePolicy(
+			controller,
+			{
+				type: "axis_inversion",
+				axis: "tilt",
+				inverted: value === "true",
+				multipatchInstanceId: null,
+			},
+			{ invert_tilt: value === "true" },
+		);
 	if (edit === "location" || edit === "rotation")
 		void applyEdit(controller, {
 			// A single-axis edit recomposes over the fixture's current siblings so it can
@@ -51,6 +85,23 @@ export function saveEdit(
 		});
 	}
 	void all;
+}
+
+async function savePolicy(
+	controller: PatchController,
+	action: Parameters<typeof controller.patch.updatePolicy>[1],
+	changes: Parameters<typeof controller.patch.updatePolicy>[2],
+) {
+	const selected = controller.data.selected;
+	if (!selected) return;
+	if (
+		await controller.patch.updatePolicy(
+			selected.fixture_id,
+			action,
+			changes,
+		)
+	)
+		completeEdit(controller);
 }
 
 function saveFixtureNumber(controller: PatchController, value: string) {

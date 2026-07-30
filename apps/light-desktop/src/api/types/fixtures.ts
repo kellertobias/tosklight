@@ -21,6 +21,10 @@ export interface PatchedFixture {
 	location?: { x: number; y: number; z: number };
 	rotation?: { x: number; y: number; z: number };
 	multipatch?: MultiPatchInstance[];
+	group_masters_enabled?: boolean;
+	grand_master_enabled?: boolean;
+	invert_pan?: boolean;
+	invert_tilt?: boolean;
 	/** Schema-v2 fixtures patch each independently addressable split separately. */
 	split_patches?: SplitPatch[];
 	/** Exact raw values captured with the embedded profile snapshot. */
@@ -37,6 +41,8 @@ export interface MultiPatchInstance {
 	location: { x: number; y: number; z: number };
 	rotation: { x: number; y: number; z: number };
 	split_patches?: SplitPatch[];
+	invert_pan?: boolean;
+	invert_tilt?: boolean;
 }
 
 export interface SplitPatch {

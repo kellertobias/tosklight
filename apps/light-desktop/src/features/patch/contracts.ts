@@ -31,6 +31,8 @@ export interface PatchMultiPatch {
 	splitPatches: readonly PatchSplitAssignment[];
 	location: PatchFixtureLocation;
 	rotation: PatchFixtureRotation;
+	invertPan?: boolean;
+	invertTilt?: boolean;
 }
 
 export interface PatchHighlightOverride {
@@ -52,6 +54,10 @@ export interface PatchFixtureWrite {
 	location: PatchFixtureLocation;
 	rotation: PatchFixtureRotation;
 	multipatch: readonly PatchMultiPatch[];
+	groupMastersEnabled?: boolean;
+	grandMasterEnabled?: boolean;
+	invertPan?: boolean;
+	invertTilt?: boolean;
 	moveInBlackEnabled: boolean;
 	moveInBlackDelayMillis: number;
 	highlightOverrides: readonly PatchHighlightOverride[];
@@ -138,6 +144,16 @@ export interface PatchMutation {
 	removeFixtureIds: readonly string[];
 	placements?: readonly PatchPlacement[];
 }
+
+export type PatchFixturePolicyAction =
+	| { type: "group_masters"; controlled: boolean }
+	| { type: "grand_master"; controlled: boolean }
+	| {
+			type: "axis_inversion";
+			axis: "pan" | "tilt";
+			inverted: boolean;
+			multipatchInstanceId: string | null;
+	  };
 
 export interface PatchSnapshot {
 	showId: string;

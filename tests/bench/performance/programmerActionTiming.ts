@@ -1,5 +1,8 @@
 import { expect, type Page } from "@playwright/test";
-import type { LiveAction } from "../../../apps/light-desktop/src/api/generated/light-wire";
+import type {
+	DynamicInstanceActionOutcome,
+	LiveAction,
+} from "../../../apps/light-desktop/src/api/generated/light-wire";
 import type { ApiDriver } from "../core/api";
 import type { LightBench } from "../core/lightBench";
 import type { SimulatedHardware } from "../hardware/hardwareScenario";
@@ -84,6 +87,10 @@ export class BrowserProgrammerActionTiming {
 					: "settled";
 			})
 			.toBe("settled");
+		// The timing record deliberately settles on the first affected frame. Advance once more
+		// after measuring so a configured Programmer fade cannot leak a partial value into the
+		// next independent route assertion.
+		if (intent.requiresOutputFrame) await this.bench.freeRunClock(4_000);
 		expect(matched).toBeDefined();
 		expect(matched?.succeeded).toBe(true);
 		expect(matched?.requires_output_frame).toBe(intent.requiresOutputFrame);
@@ -225,15 +232,17 @@ export class BrowserProgrammerActionTiming {
 			{ showId },
 		);
 		const requestId = crypto.randomUUID();
-		return this.expectAction(
+		let outcome: DynamicInstanceActionOutcome | undefined;
+		const timing = await this.expectAction(
 			{
 				source: "websocket",
 				route: "websocket",
 				action: "dynamic",
 				requiresOutputFrame: true,
 			},
-			() =>
-				this.api.liveAction(
+			async () => {
+				const response =
+					await this.api.liveAction<DynamicInstanceActionOutcome>(
 					{
 						type: "dynamic_start",
 						request: {
@@ -252,8 +261,25 @@ export class BrowserProgrammerActionTiming {
 						},
 					},
 					requestId,
-				),
+				);
+				outcome = response.payload;
+			},
 		);
+		if (!outcome)
+			throw new Error("Dynamic timing action returned no controller outcome");
+		const offRequestId = crypto.randomUUID();
+		await this.api.liveAction(
+			{
+				type: "dynamic_off",
+				request: {
+					controller_id: outcome.controller_id,
+					request: { request_id: offRequestId, timing: {} },
+				},
+			},
+			offRequestId,
+		);
+		await this.bench.freeRunClock(1_000);
+		return timing;
 	}
 
 	async expectKeyboardCommand(

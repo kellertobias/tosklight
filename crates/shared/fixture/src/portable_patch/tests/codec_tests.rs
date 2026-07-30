@@ -1,5 +1,7 @@
 use super::support::{fixture, profile};
-use crate::{PatchedFixturePatch, PortablePatchError, PortablePatchedFixtureRecord};
+use crate::{
+    PatchedFixture, PatchedFixturePatch, PortablePatchError, PortablePatchedFixtureRecord,
+};
 use serde_json::{Value, json};
 
 #[test]
@@ -20,6 +22,54 @@ fn new_write_contains_only_profile_reference_and_patch_owned_fields() {
     assert_eq!(body["multipatch"], json!(fixture.multipatch));
     assert!(body.get("definition").is_none());
     assert!(!contains_key(body, "profile_snapshot"));
+}
+
+#[test]
+fn legacy_inline_and_reference_records_default_output_policies_compatibly() {
+    let profile = profile();
+    let fixture = fixture(&profile);
+    let strip = |body: &mut Value| {
+        for field in [
+            "group_masters_enabled",
+            "grand_master_enabled",
+            "invert_pan",
+            "invert_tilt",
+        ] {
+            body.as_object_mut().unwrap().remove(field);
+        }
+        body["multipatch"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("invert_pan");
+        body["multipatch"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("invert_tilt");
+    };
+
+    let mut inline = serde_json::to_value(&fixture).unwrap();
+    strip(&mut inline);
+    let inline: PatchedFixture = serde_json::from_value(inline).unwrap();
+    assert!(inline.group_masters_enabled);
+    assert!(inline.grand_master_enabled);
+    assert!(!inline.invert_pan);
+    assert!(!inline.invert_tilt);
+    assert!(!inline.multipatch[0].invert_pan);
+    assert!(!inline.multipatch[0].invert_tilt);
+
+    let record = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap();
+    let mut reference = record.body().clone();
+    strip(&mut reference);
+    let decoded = PortablePatchedFixtureRecord::decode(reference)
+        .unwrap()
+        .patch()
+        .unwrap();
+    assert!(decoded.group_masters_enabled);
+    assert!(decoded.grand_master_enabled);
+    assert!(!decoded.invert_pan);
+    assert!(!decoded.invert_tilt);
+    assert!(!decoded.multipatch[0].invert_pan);
+    assert!(!decoded.multipatch[0].invert_tilt);
 }
 
 #[test]

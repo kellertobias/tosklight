@@ -32,6 +32,34 @@ export function definitionModeChannels(
 	);
 }
 
+export function fixturePolicyApplicability(definition: FixtureDefinition) {
+	const channels = definitionModeChannels(definition);
+	const legacyAttributes = definition.heads.flatMap((head) =>
+		head.parameters.map((parameter) => parameter.attribute.toLowerCase()),
+	);
+	const hasAttribute = (name: string) =>
+		channels.length
+			? channels.some(
+					(channel) =>
+						channel.attribute.toLowerCase() === name ||
+						(channel.functions ?? []).some(
+							(fn) => fn.attribute.toLowerCase() === name,
+						),
+				)
+			: legacyAttributes.includes(name);
+	const legacyIntensity = !channels.length && legacyAttributes.includes("intensity");
+	return {
+		groupMasters:
+			legacyIntensity ||
+			channels.some((channel) => channel.reacts_to_group_master),
+		grandMaster:
+			legacyIntensity ||
+			channels.some((channel) => channel.reacts_to_grand_master),
+		pan: isDmxPatchable(definition) && hasAttribute("pan"),
+		tilt: isDmxPatchable(definition) && hasAttribute("tilt"),
+	};
+}
+
 export function effectiveSplitPatches(
 	definition: FixtureDefinition,
 	patches: SplitPatch[] | undefined,

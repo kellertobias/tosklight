@@ -55,6 +55,14 @@ pub struct PatchedFixturePatch {
     #[serde(default)]
     pub multipatch: Vec<MultiPatchInstance>,
     #[serde(default = "default_true")]
+    pub group_masters_enabled: bool,
+    #[serde(default = "default_true")]
+    pub grand_master_enabled: bool,
+    #[serde(default)]
+    pub invert_pan: bool,
+    #[serde(default)]
+    pub invert_tilt: bool,
+    #[serde(default = "default_true")]
     pub move_in_black_enabled: bool,
     #[serde(default)]
     pub move_in_black_delay_millis: u64,
@@ -78,6 +86,10 @@ impl PatchedFixturePatch {
             rotation: fixture.rotation,
             logical_heads: fixture.logical_heads.clone(),
             multipatch: fixture.multipatch.clone(),
+            group_masters_enabled: fixture.group_masters_enabled,
+            grand_master_enabled: fixture.grand_master_enabled,
+            invert_pan: fixture.invert_pan,
+            invert_tilt: fixture.invert_tilt,
             move_in_black_enabled: fixture.move_in_black_enabled,
             move_in_black_delay_millis: fixture.move_in_black_delay_millis,
             highlight_overrides: fixture.highlight_overrides.clone(),

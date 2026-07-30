@@ -34,6 +34,63 @@ const fixture = (device_type: string, name: string) =>
 	}) as PatchedFixture;
 
 describe("3D stage presentation and cue state", () => {
+	it("projects opposite physical Pan inversion independently for multi-patch instances", () => {
+		const mover = fixture("moving wash", "Opposite movers");
+		const fixtures = [
+			{
+				fixture: mover,
+				instanceId: "normal",
+				invertPan: false,
+				index: 0,
+				position: {
+					x: -1,
+					y: 0,
+					z: 3,
+					rotationX: 0,
+					rotationY: 0,
+					rotationZ: 0,
+				},
+			},
+			{
+				fixture: mover,
+				instanceId: "inverted",
+				invertPan: true,
+				index: 1,
+				position: {
+					x: 1,
+					y: 0,
+					z: 3,
+					rotationX: 0,
+					rotationY: 0,
+					rotationZ: 0,
+				},
+			},
+		];
+		const snapshot: VisualizationSnapshot = {
+			revision: 1,
+			generated_at: "",
+			grand_master: 1,
+			blackout: false,
+			values: [
+				{
+					fixture_id: "fixture",
+					attribute: "pan",
+					value: { kind: "normalized", value: 0.25 },
+				},
+			],
+		};
+		const built = buildStageScene(fixtures, snapshot);
+		const normal = built.fixtureObjects
+			.get("normal")
+			?.getObjectByName("centered-rotating-yoke");
+		const inverted = built.fixtureObjects
+			.get("inverted")
+			?.getObjectByName("centered-rotating-yoke");
+		expect(normal?.rotation.y).toBeCloseTo(-Math.PI / 2);
+		expect(inverted?.rotation.y).toBeCloseTo(Math.PI / 2);
+		disposeScene(built.scene);
+	});
+
 	it("applies routine fallback values without replacing retained scene resources", () => {
 		const mover = fixture("moving wash", "A7 LED Wash");
 		const fixtures = [

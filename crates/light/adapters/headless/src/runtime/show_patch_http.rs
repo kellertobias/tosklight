@@ -1,7 +1,10 @@
-use super::{AppState, ServerShowPatchPorts, Session, ShowContext, authenticate, parse_if_match};
+use super::{
+    AppState, ServerShowPatchPorts, Session, ShowContext, TolerantJson, authenticate,
+    parse_if_match,
+};
 use axum::{
     Json, Router,
-    extract::{State, rejection::JsonRejection},
+    extract::{Path, State, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -10,12 +13,19 @@ use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource, PatchFixturesCommand,
 };
 use light_core::ShowId;
-use light_wire::v2::patch::{PatchErrorResponse, PatchFixturesRequest};
+use light_wire::v2::patch::{
+    PatchErrorResponse, PatchFixturePolicyActionRequest, PatchFixturesRequest,
+};
+use uuid::Uuid;
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v2/patch", get(patch_snapshot))
         .route("/api/v2/patch/fixtures", post(patch_fixtures))
+        .route(
+            "/api/v2/patch/fixtures/{fixture_id}/policy",
+            post(patch_fixture_policy),
+        )
 }
 
 async fn patch_snapshot(
@@ -35,13 +45,43 @@ async fn patch_fixtures(
     State(state): State<AppState>,
     show: ShowContext,
     headers: HeaderMap,
-    request: Result<Json<PatchFixturesRequest>, JsonRejection>,
+    request: Result<TolerantJson<PatchFixturesRequest>, JsonRejection>,
 ) -> Result<Response, PatchHttpError> {
     let session = authenticate(&state, &headers).map_err(PatchHttpError::api)?;
     let show_id = show.resolve(&state).map_err(PatchHttpError::api)?;
     let expected_patch_revision = parse_if_match(&headers).map_err(PatchHttpError::api)?;
-    let Json(request) = request.map_err(|error| PatchHttpError::bad_request(error.body_text()))?;
+    let TolerantJson(request) =
+        request.map_err(|error| PatchHttpError::bad_request(error.body_text()))?;
     let action = patch_action(show_id, &session, expected_patch_revision, request)?;
+    let result = run_patch_fixtures(state, action).await?;
+    let response = super::show_patch_wire::wire_outcome(result);
+    Ok(json_with_etag(response.delta.patch_revision, response))
+}
+
+async fn patch_fixture_policy(
+    State(state): State<AppState>,
+    Path(fixture_id): Path<Uuid>,
+    show: ShowContext,
+    headers: HeaderMap,
+    request: Result<TolerantJson<PatchFixturePolicyActionRequest>, JsonRejection>,
+) -> Result<Response, PatchHttpError> {
+    let session = authenticate(&state, &headers).map_err(PatchHttpError::api)?;
+    let show_id = show.resolve(&state).map_err(PatchHttpError::api)?;
+    let expected_patch_revision = parse_if_match(&headers).map_err(PatchHttpError::api)?;
+    let TolerantJson(request) =
+        request.map_err(|error| PatchHttpError::bad_request(error.body_text()))?;
+    let context = http_context(&session);
+    let snapshot = run_patch_snapshot(state.clone(), context, show_id).await?;
+    let request_id = request.request_id.clone();
+    let command =
+        super::show_patch_wire::application_policy_command(show_id, fixture_id, request, &snapshot)
+            .map_err(PatchHttpError::bad_request)?;
+    let action = ActionEnvelope {
+        context: http_context(&session)
+            .with_request_id(request_id)
+            .with_expected_revision(expected_patch_revision),
+        command,
+    };
     let result = run_patch_fixtures(state, action).await?;
     let response = super::show_patch_wire::wire_outcome(result);
     Ok(json_with_etag(response.delta.patch_revision, response))

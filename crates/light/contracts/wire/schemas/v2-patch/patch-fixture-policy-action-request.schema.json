@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PatchFixturePolicyActionRequest",
+  "description": "One sparse operator intent for a patch-owned output policy.",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "set_group_masters"
+        },
+        "controlled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "action",
+        "controlled"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "set_grand_master"
+        },
+        "controlled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "action",
+        "controlled"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "set_axis_inversion"
+        },
+        "axis": {
+          "$ref": "#/$defs/PatchFixtureAxis"
+        },
+        "inverted": {
+          "type": "boolean"
+        },
+        "multipatch_instance_id": {
+          "description": "Absent targets the root physical fixture; present targets one multi-patch instance.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "action",
+        "axis",
+        "inverted"
+      ]
+    }
+  ],
+  "required": [
+    "request_id"
+  ],
+  "$defs": {
+    "PatchFixtureAxis": {
+      "type": "string",
+      "enum": [
+        "pan",
+        "tilt"
+      ]
+    }
+  }
+}

@@ -78,6 +78,8 @@ fn highlight_scenario() -> HighlightScenario {
         split_patches: vec![],
         location: Default::default(),
         rotation: Default::default(),
+        invert_pan: false,
+        invert_tilt: false,
     });
     let fixture_template = fixture.clone();
     let cue_list = test_cue_list(
@@ -176,6 +178,10 @@ fn highlight_fixture(physical: FixtureId) -> PatchedFixture {
         rotation: Default::default(),
         logical_heads: vec![],
         multipatch: vec![],
+        group_masters_enabled: true,
+        grand_master_enabled: true,
+        invert_pan: false,
+        invert_tilt: false,
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),

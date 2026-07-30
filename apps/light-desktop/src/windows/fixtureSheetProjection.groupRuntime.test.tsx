@@ -68,6 +68,7 @@ const mocks = vi.hoisted(() => {
 			safe_values: {},
 		},
 		logical_heads: [],
+		group_masters_enabled: true,
 	};
 	const server = {
 		bootstrap: { active_show: { id: "show-a" } },
@@ -129,6 +130,7 @@ beforeEach(() => {
 	mocks.ready = true;
 	mocks.runtime.master = 0.4;
 	mocks.runtime.playbackNumber = 17;
+	mocks.server.patch.fixtures[0].group_masters_enabled = true;
 });
 
 afterEach(cleanup);
@@ -153,5 +155,11 @@ describe("Fixture Sheet scoped Group runtime", () => {
 
 		expect(view.result.current.rows).toEqual([]);
 		expect(view.result.current.groupRuntimeLoading).toBe(true);
+	});
+
+	it("does not report a limiting Group when the logical fixture ignores Group Masters", () => {
+		mocks.server.patch.fixtures[0].group_masters_enabled = false;
+		const view = renderHook(rows);
+		expect(view.result.current.rows[0].limitingGroups).toEqual([]);
 	});
 });

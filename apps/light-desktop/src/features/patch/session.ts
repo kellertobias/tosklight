@@ -1,6 +1,7 @@
 import type { PatchedFixture } from "../../api/types";
 import type {
 	PatchEventMessage,
+	PatchFixturePolicyAction,
 	PatchMutation,
 	PatchMutationOutcome,
 	PatchPlacement,
@@ -144,6 +145,36 @@ export class PatchSession {
 		});
 	}
 
+	updatePolicy(
+		fixtureId: string,
+		action: PatchFixturePolicyAction,
+		changes: Partial<PatchedFixture>,
+	): Promise<PatchMutationOutcome> {
+		const lifecycle = this.writableLifecycle();
+		if (lifecycle == null) return Promise.reject(authorityChanged());
+		const fixture = this.store
+			.getSnapshot()
+			.fixtures.find((candidate) => candidate.fixture_id === fixtureId);
+		if (!fixture)
+			return Promise.reject(new Error("Patched fixture was not found"));
+		const requestId = crypto.randomUUID();
+		const optimistic = changedPatchFixtureCandidate(fixture, changes);
+		const performanceSample =
+			frontendPerformanceDiagnostics.beginPatchMutation(requestId, 1);
+		this.store.begin(requestId, [optimistic], []);
+		performanceSample.optimisticStorePublished();
+		return this.enqueueWrite(() =>
+			this.runPolicy(
+				requestId,
+				fixtureId,
+				action,
+				changes,
+				lifecycle,
+				performanceSample,
+			),
+		);
+	}
+
 	deleteFixture(fixtureId: string): Promise<PatchMutationOutcome> {
 		return this.patchFixtures([], [fixtureId]);
 	}
@@ -207,6 +238,90 @@ export class PatchSession {
 		} catch (reason) {
 			if (!this.isActive(lifecycle)) throw authorityChanged();
 			return this.failPatch(requestId, asError(reason), lifecycle);
+		}
+	}
+
+	private async runPolicy(
+		requestId: string,
+		fixtureId: string,
+		action: PatchFixturePolicyAction,
+		changes: Partial<PatchedFixture>,
+		lifecycle: number,
+		performanceSample: ReturnType<
+			typeof frontendPerformanceDiagnostics.beginPatchMutation
+		>,
+	): Promise<PatchMutationOutcome> {
+		try {
+			for (let conflicts = 0; ; conflicts++) {
+				this.requireActiveLifecycle(lifecycle);
+				const current = this.store.fixtureBefore(requestId, fixtureId);
+				if (!current)
+					throw new Error("Patched fixture was not found");
+				this.store.replacePending(
+					requestId,
+					[changedPatchFixtureCandidate(current, changes)],
+					[],
+				);
+				try {
+					const outcome = await this.sendPolicyReplaySafe(
+						fixtureId,
+						requestId,
+						action,
+						lifecycle,
+					);
+					performanceSample.responseDecoded();
+					this.requireRequestIdentity(requestId, outcome);
+					const result = this.store.applyOutcome(requestId, outcome);
+					performanceSample.authoritativeStorePublished();
+					afterVisiblePaint(performanceSample.visiblePainted);
+					if (result === "repair") await this.repair();
+					return outcome;
+				} catch (reason) {
+					const error = asError(reason);
+					if (!isConflict(error) || conflicts >= MAX_CONFLICT_RETRIES)
+						throw error;
+					await this.repair();
+				}
+			}
+		} catch (reason) {
+			if (!this.isActive(lifecycle)) throw authorityChanged();
+			return this.failPatch(requestId, asError(reason), lifecycle);
+		}
+	}
+
+	private async sendPolicyReplaySafe(
+		fixtureId: string,
+		requestId: string,
+		action: PatchFixturePolicyAction,
+		lifecycle: number,
+	): Promise<PatchMutationOutcome> {
+		const updatePolicy = this.transport.patchFixturePolicy?.bind(this.transport);
+		if (!updatePolicy)
+			throw new Error("Patch policy updates are not supported by this transport");
+		const expectedRevision = this.requiredRevision();
+		try {
+			const outcome = await updatePolicy(
+				this.showId,
+				fixtureId,
+				expectedRevision,
+				requestId,
+				action,
+			);
+			this.requireActiveLifecycle(lifecycle);
+			return outcome;
+		} catch (reason) {
+			this.requireActiveLifecycle(lifecycle);
+			const error = asError(reason);
+			if (!isAmbiguous(error)) throw error;
+			await this.repair();
+			this.requireActiveLifecycle(lifecycle);
+			return updatePolicy(
+				this.showId,
+				fixtureId,
+				expectedRevision,
+				requestId,
+				action,
+			);
 		}
 	}
 

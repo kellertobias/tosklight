@@ -22,13 +22,24 @@ export function MultipatchVectorDialog() {
 	const controller = usePatchController();
 	const edit = controller.ui.multipatchEdit;
 	if (!edit || edit.kind === "address") return null;
+	const policy =
+		edit.kind === "invert_pan" || edit.kind === "invert_tilt";
 	const close = () => requestMultipatchEditClose(controller);
 	return (
 		<ModalRegistration onClose={close}>
 			<div className="stacked-modal-layer">
 			<section className="nested-modal patch-edit-modal">
 				<ModalTitleBar
-					title={`Set multi-patch ${vectorEditTitle(edit.kind, edit.axis)}`}
+					title={`Set multi-patch ${
+						policy
+							? edit.kind === "invert_pan"
+								? "Invert Pan"
+								: "Invert Tilt"
+							: vectorEditTitle(
+									edit.kind as "location" | "rotation",
+									edit.axis,
+								)
+					}`}
 					actions={
 						<Button
 							className="primary"
@@ -41,7 +52,18 @@ export function MultipatchVectorDialog() {
 					onClose={close}
 				/>
 				<EditError />
-				<VectorInputs kind={edit.kind} axis={edit.axis} />
+				{policy ? (
+					<PolicySelect
+						label={edit.kind === "invert_pan" ? "Pan direction" : "Tilt direction"}
+						falseLabel="Normal"
+						trueLabel="Inverted"
+					/>
+				) : (
+					<VectorInputs
+						kind={edit.kind as "location" | "rotation"}
+						axis={edit.axis}
+					/>
+				)}
 			</section>
 			</div>
 		</ModalRegistration>
@@ -160,11 +182,68 @@ function FixtureEditFields() {
 				onChange={(event) => controller.ui.setEditText(event.target.value)}
 			/>
 		);
+	if (edit === "group_masters" || edit === "grand_master")
+		return (
+			<>
+				<PolicySelect
+					label={
+						edit === "group_masters"
+							? "Group Masters"
+							: "Grand Master"
+					}
+					falseLabel="Ignored"
+					trueLabel="Controlled"
+				/>
+				{editText === "false" && (
+					<p className="patch-policy-warning" role="alert">
+						This fixture can remain live while the{" "}
+						{edit === "group_masters"
+							? "Group Masters are reduced."
+							: "Grand Master is reduced."}
+					</p>
+				)}
+			</>
+		);
+	if (edit === "invert_pan" || edit === "invert_tilt")
+		return (
+			<PolicySelect
+				label={edit === "invert_pan" ? "Pan direction" : "Tilt direction"}
+				falseLabel="Normal"
+				trueLabel="Inverted"
+			/>
+		);
 	if (edit === "highlight") return <HighlightFields />;
 	if (edit === "location" || edit === "rotation")
 		return <VectorInputs kind={edit} axis={controller.ui.editAxis ?? undefined} />;
 	if (edit === "mode") return <ModeField />;
 	return null;
+}
+
+function PolicySelect({
+	label,
+	falseLabel,
+	trueLabel,
+}: {
+	label: string;
+	falseLabel: string;
+	trueLabel: string;
+}) {
+	const controller = usePatchController();
+	return (
+		// biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label.
+		<label>
+			{label}
+			<Select
+				autoFocus
+				aria-label={`${label} value`}
+				value={controller.ui.editText}
+				onChange={(event) => controller.ui.setEditText(event.target.value)}
+			>
+				<option value="true">{trueLabel}</option>
+				<option value="false">{falseLabel}</option>
+			</Select>
+		</label>
+	);
 }
 
 function HighlightFields() {
@@ -311,5 +390,9 @@ function editTitle(
 	if (edit === "mib") return "MIB";
 	if (edit === "mib_delay") return "MIB Delay";
 	if (edit === "highlight") return "Highlight Look";
+	if (edit === "group_masters") return "Group Masters";
+	if (edit === "grand_master") return "Grand Master";
+	if (edit === "invert_pan") return "Invert Pan";
+	if (edit === "invert_tilt") return "Invert Tilt";
 	return edit;
 }

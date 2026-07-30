@@ -57,7 +57,6 @@
           "$ref": "#/$defs/PatchDirectControlProtocol"
         }
       },
-      "additionalProperties": false,
       "required": [
         "protocol",
         "ip_address",
@@ -97,11 +96,27 @@
           "format": "uint32",
           "minimum": 0
         },
+        "grand_master_enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "group_masters_enabled": {
+          "type": "boolean",
+          "default": true
+        },
         "highlight_overrides": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/PatchHighlightOverrideInput"
           }
+        },
+        "invert_pan": {
+          "type": "boolean",
+          "default": false
+        },
+        "invert_tilt": {
+          "type": "boolean",
+          "default": false
         },
         "layer_id": {
           "type": "string"
@@ -159,7 +174,6 @@
           "minimum": 0
         }
       },
-      "additionalProperties": false,
       "required": [
         "fixture_id",
         "name",
@@ -193,7 +207,6 @@
           "format": "int32"
         }
       },
-      "additionalProperties": false,
       "required": [
         "x",
         "y",
@@ -217,7 +230,6 @@
           "format": "float"
         }
       },
-      "additionalProperties": false,
       "required": [
         "x",
         "y",
@@ -237,7 +249,6 @@
           "minimum": 0
         }
       },
-      "additionalProperties": false,
       "required": [
         "channel_id",
         "raw_value"
@@ -249,6 +260,14 @@
         "id": {
           "type": "string",
           "format": "uuid"
+        },
+        "invert_pan": {
+          "type": "boolean",
+          "default": false
+        },
+        "invert_tilt": {
+          "type": "boolean",
+          "default": false
         },
         "location": {
           "$ref": "#/$defs/PatchFixtureLocation"
@@ -267,7 +286,6 @@
           "minItems": 1
         }
       },
-      "additionalProperties": false,
       "required": [
         "id",
         "name",
@@ -356,7 +374,6 @@
           "minimum": 0
         }
       },
-      "additionalProperties": false,
       "required": [
         "split"
       ]

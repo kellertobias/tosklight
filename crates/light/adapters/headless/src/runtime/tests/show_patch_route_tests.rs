@@ -76,6 +76,52 @@ async fn v2_patch_route_resolves_ordered_placement_and_replays_authoritative_add
 }
 
 #[tokio::test]
+async fn v2_patch_policy_route_applies_one_sparse_idempotent_intent() {
+    let (state, data_dir) = test_state();
+    let (profile_id, mode_id) = install_patch_route_profile(&state);
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "Sparse fixture policy").await;
+    let show_id = show["id"].as_str().unwrap();
+    open_show_for_patch_test(&app, &token, show_id).await;
+    let request = valid_patch_request_for(profile_id, mode_id, "policy-fixture");
+    let fixture_id = request["fixtures"][0]["fixture_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let created = post_patch(&app, &token, show_id, Some(0), request).await;
+    assert_eq!(created.status(), StatusCode::OK);
+    let created = json(created).await;
+    assert_eq!(created["fixtures"][0]["group_masters_enabled"], true);
+    assert_eq!(created["fixtures"][0]["grand_master_enabled"], true);
+    assert_eq!(created["fixtures"][0]["invert_pan"], false);
+    assert_eq!(created["fixtures"][0]["invert_tilt"], false);
+
+    let body = serde_json::json!({
+        "request_id": "ignore-groups",
+        "action": "set_group_masters",
+        "controlled": false,
+        "future_client_context": {"ignored": true}
+    });
+    let changed = post_patch_policy(&app, &token, show_id, &fixture_id, 1, body.clone()).await;
+    let changed_status = changed.status();
+    let changed = json(changed).await;
+    assert_eq!(changed_status, StatusCode::OK, "{changed}");
+    assert_eq!(changed["fixtures"][0]["group_masters_enabled"], false);
+    assert_eq!(changed["fixtures"][0]["grand_master_enabled"], true);
+    assert_eq!(changed["fixtures"][0]["invert_pan"], false);
+    assert_eq!(changed["fixtures"][0]["invert_tilt"], false);
+
+    let replay = post_patch_policy(&app, &token, show_id, &fixture_id, 1, body).await;
+    let replay_status = replay.status();
+    let replay = json(replay).await;
+    assert_eq!(replay_status, StatusCode::OK, "{replay}");
+    assert_eq!(replay["replayed"], true);
+    assert_eq!(replay["patch_revision"], 2);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_patch_snapshot_authenticates_and_returns_the_patch_revision_etag() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
@@ -496,6 +542,33 @@ fn install_patch_route_profile(state: &AppState) -> (Uuid, Uuid) {
     profile.manufacturer = "Route Test".into();
     profile.name = "Patch Fixture".into();
     profile.short_name = "Patch".into();
+    let head_id = profile.modes[0].heads[0].id;
+    profile.modes[0].splits[0].footprint = 1;
+    profile.modes[0]
+        .channels
+        .push(light_fixture::FixtureChannel {
+            id: Uuid::new_v4(),
+            head_id,
+            split: 1,
+            fixture_attribute: light_core::AttributeKey("intensity".into()),
+            attribute: light_core::AttributeKey("intensity".into()),
+            canonical_transform: light_fixture::CanonicalTransform::Identity,
+            resolution: light_fixture::ChannelResolution::U8,
+            secondary_slots: vec![],
+            default_raw: 0,
+            highlight_raw: 255,
+            physical_min: None,
+            physical_max: None,
+            unit: None,
+            invert: false,
+            snap: false,
+            reacts_to_virtual_intensity: false,
+            reacts_to_sequence_master: false,
+            reacts_to_group_master: true,
+            reacts_to_grand_master: true,
+            behavior: light_fixture::ChannelBehavior::Controlled,
+            functions: vec![],
+        });
     let profile = state.installation.save_fixture_profile(profile, 0).unwrap();
     (profile.id.0, profile.modes[0].id)
 }
@@ -529,6 +602,28 @@ async fn post_patch(
     }
     app.clone()
         .oneshot(request.body(Body::from(body.to_string())).unwrap())
+        .await
+        .unwrap()
+}
+
+async fn post_patch_policy(
+    app: &Router,
+    token: &str,
+    show_id: &str,
+    fixture_id: &str,
+    patch_revision: u64,
+    body: serde_json::Value,
+) -> Response {
+    app.clone()
+        .oneshot(
+            Request::post(format!("/api/v2/patch/fixtures/{fixture_id}/policy"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-show", show_id)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::IF_MATCH, patch_revision.to_string())
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
         .await
         .unwrap()
 }

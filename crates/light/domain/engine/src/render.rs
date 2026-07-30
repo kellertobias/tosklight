@@ -1,10 +1,13 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use light_core::Universe;
 
 use super::{
-    ContributionBatch, Engine, EngineError, GroupMasterIndex, RenderOptions, RenderResult,
-    RuntimeGeneration, encode_profile_split, render_fixture, resolve_profile_fixture,
+    AxisInversion, ContributionBatch, Engine, EngineError, GroupMasterIndex, RenderOptions,
+    RenderResult, RuntimeGeneration, encode_profile_split, render_fixture, resolve_profile_fixture,
 };
 
 impl Engine {
@@ -69,68 +72,7 @@ impl Engine {
                         EngineError::Invalid("schema-v2 fixture projection plan is missing".into())
                     })?;
                 let footprints = fixture.definition.split_footprints();
-                let single_patch = if fixture.multipatch.is_empty() {
-                    match fixture.split_patches.as_slice() {
-                        [patch] => Some((patch.split, patch.universe, patch.address)),
-                        [] => Some((1, fixture.universe, fixture.address)),
-                        _ => None,
-                    }
-                } else {
-                    None
-                };
-                if let Some((split, universe, address)) = single_patch {
-                    let output = resolve_profile_fixture(
-                        fixture,
-                        mode,
-                        projection,
-                        None,
-                        &profile_values,
-                        options,
-                        group_masters,
-                        &group_master_flashes,
-                        &highlighted_fixtures,
-                    )?;
-                    insert_profile_visualization_values(&mut profile_visualization_values, &output);
-                    let (Some(universe), Some(address)) = (universe, address) else {
-                        continue;
-                    };
-                    let footprint = footprints.get(&split).copied().ok_or_else(|| {
-                        EngineError::Invalid(format!("fixture split {split} has no footprint"))
-                    })?;
-                    let frame = universes.entry(universe).or_insert([0; 512]);
-                    let last_slot = address
-                        .saturating_sub(1)
-                        .saturating_add(footprint)
-                        .min(light_output::DMX_SLOTS as u16);
-                    patched_slots
-                        .entry(universe)
-                        .and_modify(|current| *current = (*current).max(last_slot))
-                        .or_insert(last_slot);
-                    encode_profile_split(frame, encoding, split, address, &output)?;
-                    continue;
-                }
-                let mut patches = fixture.effective_split_patches();
-                for instance in &fixture.multipatch {
-                    patches.extend(instance.effective_split_patches());
-                }
-                let mut destinations = Vec::with_capacity(patches.len());
-                for patch in &patches {
-                    let (Some(universe), Some(address)) = (patch.universe, patch.address) else {
-                        continue;
-                    };
-                    let footprint = footprints.get(&patch.split).copied().ok_or_else(|| {
-                        EngineError::Invalid(format!(
-                            "fixture split {} has no footprint",
-                            patch.split
-                        ))
-                    })?;
-                    destinations.push((patch.split, universe, address, footprint));
-                }
-                let included_splits = destinations
-                    .iter()
-                    .map(|(split, _, _, _)| *split)
-                    .collect::<Vec<_>>();
-                let output = resolve_profile_fixture(
+                let root_output = resolve_profile_fixture(
                     fixture,
                     mode,
                     projection,
@@ -140,22 +82,47 @@ impl Engine {
                     group_masters,
                     &group_master_flashes,
                     &highlighted_fixtures,
+                    AxisInversion {
+                        pan: fixture.invert_pan,
+                        tilt: fixture.invert_tilt,
+                    },
                 )?;
-                insert_profile_visualization_values(&mut profile_visualization_values, &output);
-                if included_splits.is_empty() {
-                    continue;
-                }
-                for (split, universe, address, footprint) in destinations {
-                    let frame = universes.entry(universe).or_insert([0; 512]);
-                    let last_slot = address
-                        .saturating_sub(1)
-                        .saturating_add(footprint)
-                        .min(light_output::DMX_SLOTS as u16);
-                    patched_slots
-                        .entry(universe)
-                        .and_modify(|current| *current = (*current).max(last_slot))
-                        .or_insert(last_slot);
-                    encode_profile_split(frame, encoding, split, address, &output)?;
+                insert_profile_visualization_values(
+                    &mut profile_visualization_values,
+                    &root_output,
+                );
+                encode_profile_destination(
+                    fixture.effective_split_patches(),
+                    &footprints,
+                    encoding,
+                    &root_output,
+                    &mut universes,
+                    &mut patched_slots,
+                )?;
+                for instance in &fixture.multipatch {
+                    let instance_output = resolve_profile_fixture(
+                        fixture,
+                        mode,
+                        projection,
+                        None,
+                        &profile_values,
+                        options,
+                        group_masters,
+                        &group_master_flashes,
+                        &highlighted_fixtures,
+                        AxisInversion {
+                            pan: instance.invert_pan,
+                            tilt: instance.invert_tilt,
+                        },
+                    )?;
+                    encode_profile_destination(
+                        instance.effective_split_patches(),
+                        &footprints,
+                        encoding,
+                        &instance_output,
+                        &mut universes,
+                        &mut patched_slots,
+                    )?;
                 }
                 continue;
             }
@@ -192,6 +159,35 @@ impl Engine {
     }
 }
 
+fn encode_profile_destination(
+    patches: Vec<light_fixture::SplitPatch>,
+    footprints: &BTreeMap<u16, u16>,
+    encoding: &light_fixture::FixtureModeEncodingPlan,
+    output: &crate::profile_projection::ResolvedProfileFixtureOutput,
+    universes: &mut HashMap<Universe, light_output::DmxFrame>,
+    patched_slots: &mut HashMap<Universe, u16>,
+) -> Result<(), EngineError> {
+    for patch in patches {
+        let (Some(universe), Some(address)) = (patch.universe, patch.address) else {
+            continue;
+        };
+        let footprint = footprints.get(&patch.split).copied().ok_or_else(|| {
+            EngineError::Invalid(format!("fixture split {} has no footprint", patch.split))
+        })?;
+        let frame = universes.entry(universe).or_insert([0; 512]);
+        let last_slot = address
+            .saturating_sub(1)
+            .saturating_add(footprint)
+            .min(light_output::DMX_SLOTS as u16);
+        patched_slots
+            .entry(universe)
+            .and_modify(|current| *current = (*current).max(last_slot))
+            .or_insert(last_slot);
+        encode_profile_split(frame, encoding, patch.split, address, output)?;
+    }
+    Ok(())
+}
+
 fn insert_profile_visualization_values(
     values: &mut HashMap<
         (light_core::FixtureId, light_core::AttributeKey),
@@ -222,14 +218,21 @@ fn render_legacy_fixture(
     universes: &mut HashMap<Universe, light_output::DmxFrame>,
     patched_slots: &mut HashMap<Universe, u16>,
 ) -> Result<(), EngineError> {
-    let mut patches = vec![(fixture.universe, fixture.address)];
-    patches.extend(
-        fixture
-            .multipatch
-            .iter()
-            .map(|instance| (instance.universe, instance.address)),
-    );
-    for (universe, address) in patches {
+    let mut patches = vec![(
+        fixture.universe,
+        fixture.address,
+        fixture.invert_pan,
+        fixture.invert_tilt,
+    )];
+    patches.extend(fixture.multipatch.iter().map(|instance| {
+        (
+            instance.universe,
+            instance.address,
+            instance.invert_pan,
+            instance.invert_tilt,
+        )
+    }));
+    for (universe, address, invert_pan, invert_tilt) in patches {
         let (Some(universe), Some(address)) = (universe, address) else {
             continue;
         };
@@ -245,6 +248,8 @@ fn render_legacy_fixture(
         let mut instance = fixture.clone();
         instance.universe = Some(universe);
         instance.address = Some(address);
+        instance.invert_pan = invert_pan;
+        instance.invert_tilt = invert_tilt;
         render_fixture(
             frame,
             &instance,

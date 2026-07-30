@@ -41,6 +41,194 @@ fn single_patch_fast_path_preserves_profile_visualization_for_patched_and_unpatc
 }
 
 #[test]
+fn physical_axis_inversion_is_independent_for_root_and_multipatch() {
+    let (mut fixture, fixture_id) = schema_v2_fixture(&[
+        ("pan", false, false, false, false, false),
+        ("tilt", false, false, false, false, false),
+    ]);
+    fixture.invert_pan = true;
+    fixture.multipatch = vec![MultiPatchInstance {
+        id: uuid::Uuid::new_v4(),
+        name: "Opposite hang".into(),
+        universe: Some(1),
+        address: Some(10),
+        split_patches: vec![],
+        location: Default::default(),
+        rotation: Default::default(),
+        invert_pan: false,
+        invert_tilt: true,
+    }];
+    let programmers = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    programmers.start(session, UserId::new());
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey("pan".into()),
+        AttributeValue::Normalized(0.25),
+    );
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey("tilt".into()),
+        AttributeValue::Normalized(0.75),
+    );
+    let engine = Engine::new(programmers.clone());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    let rendered = engine.render(RenderOptions::default()).unwrap();
+    assert_eq!(&rendered.universes[&1][0..2], &[191, 191]);
+    assert_eq!(&rendered.universes[&1][9..11], &[64, 64]);
+    assert_eq!(
+        engine
+            .resolved_values()
+            .get(&(fixture_id, AttributeKey("pan".into()))),
+        Some(&AttributeValue::Normalized(0.25)),
+        "physical inversion must not rewrite the shared Programmer value"
+    );
+
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey("pan".into()),
+        AttributeValue::Normalized(0.5),
+    );
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey("tilt".into()),
+        AttributeValue::Normalized(0.5),
+    );
+    let midpoint = engine.render(RenderOptions::default()).unwrap();
+    assert_eq!(&midpoint.universes[&1][0..2], &[128, 128]);
+    assert_eq!(&midpoint.universes[&1][9..11], &[128, 128]);
+
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey("pan".into()),
+        AttributeValue::Normalized(0.0),
+    );
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey("tilt".into()),
+        AttributeValue::Normalized(0.0),
+    );
+    let low = engine.render(RenderOptions::default()).unwrap();
+    assert_eq!(&low.universes[&1][0..2], &[255, 0]);
+    assert_eq!(&low.universes[&1][9..11], &[0, 255]);
+
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey("pan".into()),
+        AttributeValue::Normalized(1.0),
+    );
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey("tilt".into()),
+        AttributeValue::Normalized(1.0),
+    );
+    let high = engine.render(RenderOptions::default()).unwrap();
+    assert_eq!(&high.universes[&1][0..2], &[0, 255]);
+    assert_eq!(&high.universes[&1][9..11], &[255, 0]);
+}
+
+#[test]
+fn patch_and_profile_axis_inversion_compose_exactly_once() {
+    let (mut fixture, fixture_id) =
+        schema_v2_fixture(&[("pan", false, false, false, false, false)]);
+    fixture.invert_pan = true;
+    fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].channels[0].invert = true;
+    fixture.multipatch = vec![MultiPatchInstance {
+        id: uuid::Uuid::new_v4(),
+        name: "Profile inversion only".into(),
+        universe: Some(1),
+        address: Some(10),
+        split_patches: vec![],
+        location: Default::default(),
+        rotation: Default::default(),
+        invert_pan: false,
+        invert_tilt: false,
+    }];
+    let programmers = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    programmers.start(session, UserId::new());
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey("pan".into()),
+        AttributeValue::Normalized(0.25),
+    );
+    let engine = Engine::new(programmers);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            ..Default::default()
+        })
+        .unwrap();
+    let frame = &engine.render(RenderOptions::default()).unwrap().universes[&1];
+    assert_eq!(frame[0], 64, "two inversions cancel physically");
+    assert_eq!(frame[9], 191, "profile inversion applies once");
+}
+
+#[test]
+fn patch_axis_inversion_preserves_exact_msb_first_encoding_at_every_resolution() {
+    let cases = [
+        (ChannelResolution::U8, vec![], vec![0xbf]),
+        (ChannelResolution::U16, vec![2], vec![0xbf, 0xff]),
+        (ChannelResolution::U24, vec![2, 3], vec![0xbf, 0xff, 0xff]),
+        (
+            ChannelResolution::U32,
+            vec![2, 3, 4],
+            vec![0xc0, 0x00, 0x00, 0x00],
+        ),
+    ];
+    for (resolution, secondary_slots, expected) in cases {
+        let (mut fixture, fixture_id) =
+            schema_v2_fixture(&[("pan", false, false, false, false, false)]);
+        fixture.invert_pan = true;
+        let mode = &mut fixture.definition.profile_snapshot.as_mut().unwrap().modes[0];
+        mode.splits[0].footprint = resolution.bytes() as u16;
+        let channel = &mut mode.channels[0];
+        channel.resolution = resolution;
+        channel.secondary_slots = secondary_slots;
+        channel.highlight_raw = resolution.max_raw();
+        channel.functions = vec![ChannelFunction::continuous(
+            "Pan",
+            AttributeKey("pan".into()),
+            resolution.max_raw(),
+        )];
+
+        let programmers = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        programmers.start(session, UserId::new());
+        programmers.set(
+            session,
+            fixture_id,
+            AttributeKey("pan".into()),
+            AttributeValue::Normalized(0.25),
+        );
+        let engine = Engine::new(programmers);
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture].into(),
+                ..Default::default()
+            })
+            .unwrap();
+        let frame = &engine.render(RenderOptions::default()).unwrap().universes[&1];
+        assert_eq!(&frame[..expected.len()], expected.as_slice());
+    }
+}
+
+#[test]
 fn borrowed_profile_lookup_matches_owned_hold_last_resolution() {
     let (fixture, fixture_id) = schema_v2_fixture(&[
         ("intensity", false, false, false, false, true),
@@ -206,7 +394,13 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
             ],
             location: Default::default(),
             rotation: Default::default(),
+            invert_pan: false,
+            invert_tilt: false,
         }],
+        group_masters_enabled: true,
+        grand_master_enabled: true,
+        invert_pan: false,
+        invert_tilt: false,
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),

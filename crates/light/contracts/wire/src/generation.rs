@@ -25,8 +25,8 @@ use crate::v2::group_recording::{
     GroupRecordErrorResponse, GroupRecordOutcome, GroupRecordRequest,
 };
 use crate::v2::patch::{
-    PatchDelta, PatchErrorResponse, PatchFixtureProjection, PatchFixturesOutcome,
-    PatchFixturesRequest, PatchProfileRevisionProjection, PatchSnapshot,
+    PatchDelta, PatchErrorResponse, PatchFixturePolicyActionRequest, PatchFixtureProjection,
+    PatchFixturesOutcome, PatchFixturesRequest, PatchProfileRevisionProjection, PatchSnapshot,
 };
 use crate::v2::playback::{
     PlaybackActionOutcome, PlaybackActionRequest, PlaybackErrorResponse, PlaybackRuntimeSnapshot,
@@ -256,6 +256,9 @@ fn playback_and_show_artifacts() -> Vec<GeneratedArtifact> {
             "playback-topology-error-response",
         ),
         patch_request_schema::<PatchFixturesRequest>("patch-fixtures-request"),
+        patch_request_schema::<PatchFixturePolicyActionRequest>(
+            "patch-fixture-policy-action-request",
+        ),
         patch_response_schema::<PatchFixturesOutcome>("patch-fixtures-outcome"),
         patch_response_schema::<PatchErrorResponse>("patch-error-response"),
         patch_response_schema::<PatchSnapshot>("patch-snapshot"),

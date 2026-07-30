@@ -3,6 +3,7 @@ use light_core::{FixtureId, ShowId};
 use light_fixture as fixture;
 use light_wire::v2::patch as wire;
 use std::collections::BTreeMap;
+use uuid::Uuid;
 
 pub(crate) fn application_command(
     show_id: ShowId,
@@ -25,6 +26,103 @@ pub(crate) fn application_command(
             .into_iter()
             .map(application_placement)
             .collect(),
+    })
+}
+
+pub(crate) fn application_policy_command(
+    show_id: ShowId,
+    fixture_id: Uuid,
+    request: wire::PatchFixturePolicyActionRequest,
+    snapshot: &application::PatchSnapshot,
+) -> Result<application::PatchFixturesCommand, String> {
+    let fixture = snapshot
+        .fixtures
+        .iter()
+        .find(|fixture| fixture.patch.fixture_id.0 == fixture_id)
+        .ok_or_else(|| "fixture does not exist".to_owned())?;
+    let mut candidate = application::PatchFixtureCandidate {
+        profile: fixture.profile,
+        patch: fixture.patch.clone(),
+    };
+    let profile = snapshot
+        .profile_revisions
+        .iter()
+        .find(|profile| {
+            profile.profile_id == fixture.profile.profile_id
+                && profile.profile_revision == fixture.profile.profile_revision
+        })
+        .ok_or_else(|| "fixture profile revision is missing from the Patch snapshot".to_owned())?;
+    let profile_snapshot: fixture::FixtureProfile =
+        serde_json::from_value(profile.profile_snapshot.clone())
+            .map_err(|error| format!("fixture profile snapshot is invalid: {error}"))?;
+    let mode = profile_snapshot
+        .mode(fixture.profile.mode_id)
+        .ok_or_else(|| "fixture mode is missing from its profile snapshot".to_owned())?;
+    match request.action {
+        wire::PatchFixturePolicyAction::SetGroupMasters { controlled } => {
+            if !mode
+                .channels
+                .iter()
+                .any(|channel| channel.reacts_to_group_master)
+            {
+                return Err("fixture mode has no Group Master eligible channels".into());
+            }
+            candidate.patch.group_masters_enabled = controlled;
+        }
+        wire::PatchFixturePolicyAction::SetGrandMaster { controlled } => {
+            if !mode
+                .channels
+                .iter()
+                .any(|channel| channel.reacts_to_grand_master)
+            {
+                return Err("fixture mode has no Grand Master eligible channels".into());
+            }
+            candidate.patch.grand_master_enabled = controlled;
+        }
+        wire::PatchFixturePolicyAction::SetAxisInversion {
+            axis,
+            inverted,
+            multipatch_instance_id,
+        } => {
+            let attribute = match axis {
+                wire::PatchFixtureAxis::Pan => "pan",
+                wire::PatchFixtureAxis::Tilt => "tilt",
+            };
+            let applicable = profile.patch_policy == fixture::PatchPolicy::Dmx
+                && mode.channels.iter().any(|channel| {
+                    channel.attribute.0.eq_ignore_ascii_case(attribute)
+                        || channel
+                            .functions
+                            .iter()
+                            .any(|function| function.attribute.0.eq_ignore_ascii_case(attribute))
+                });
+            if !applicable {
+                return Err(format!("fixture mode has no applicable {attribute} axis"));
+            }
+            if let Some(instance_id) = multipatch_instance_id {
+                let instance = candidate
+                    .patch
+                    .multipatch
+                    .iter_mut()
+                    .find(|instance| instance.id == instance_id)
+                    .ok_or_else(|| "multi-patch instance does not exist".to_owned())?;
+                match axis {
+                    wire::PatchFixtureAxis::Pan => instance.invert_pan = inverted,
+                    wire::PatchFixtureAxis::Tilt => instance.invert_tilt = inverted,
+                }
+            } else {
+                match axis {
+                    wire::PatchFixtureAxis::Pan => candidate.patch.invert_pan = inverted,
+                    wire::PatchFixtureAxis::Tilt => candidate.patch.invert_tilt = inverted,
+                }
+            }
+        }
+    }
+    Ok(application::PatchFixturesCommand {
+        show_id,
+        fixtures: vec![candidate],
+        remove_fixture_ids: Vec::new(),
+        placements: Vec::new(),
     })
 }
 
@@ -139,6 +237,10 @@ fn application_fixture(
                 .into_iter()
                 .map(application_multipatch)
                 .collect(),
+            group_masters_enabled: input.group_masters_enabled,
+            grand_master_enabled: input.grand_master_enabled,
+            invert_pan: input.invert_pan,
+            invert_tilt: input.invert_tilt,
             move_in_black_enabled: input.move_in_black_enabled,
             move_in_black_delay_millis: input.move_in_black_delay_millis,
             highlight_overrides: application_highlights(input.highlight_overrides)?,
@@ -198,6 +300,8 @@ fn application_multipatch(input: wire::PatchMultiPatchInput) -> fixture::MultiPa
             .collect(),
         location: application_location(input.location),
         rotation: application_rotation(input.rotation),
+        invert_pan: input.invert_pan,
+        invert_tilt: input.invert_tilt,
     }
 }
 
@@ -242,6 +346,10 @@ fn wire_fixture(input: &application::PatchFixtureProjection) -> wire::PatchFixtu
             })
             .collect(),
         multipatch: patch.multipatch.iter().map(wire_multipatch).collect(),
+        group_masters_enabled: patch.group_masters_enabled,
+        grand_master_enabled: patch.grand_master_enabled,
+        invert_pan: patch.invert_pan,
+        invert_tilt: patch.invert_tilt,
         move_in_black_enabled: patch.move_in_black_enabled,
         move_in_black_delay_millis: patch.move_in_black_delay_millis,
         highlight_overrides: patch
@@ -300,6 +408,8 @@ fn wire_multipatch(instance: &fixture::MultiPatchInstance) -> wire::PatchMultiPa
         split_patches: instance.split_patches.iter().map(wire_split).collect(),
         location: wire_location(instance.location),
         rotation: wire_rotation(instance.rotation),
+        invert_pan: instance.invert_pan,
+        invert_tilt: instance.invert_tilt,
     }
 }
 

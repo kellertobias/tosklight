@@ -59,7 +59,7 @@ pub(crate) use move_in_black_runtime::{MoveInBlackKey, MoveInBlackRuntime};
 pub(crate) use profile_blackout::blackout_raw;
 pub(crate) use profile_color::{channel_visual_level, profile_visual_color};
 pub(crate) use profile_encoding::ProfileEncodingIndex;
-pub(crate) use profile_projection::{encode_profile_split, resolve_profile_fixture};
+pub(crate) use profile_projection::{AxisInversion, encode_profile_split, resolve_profile_fixture};
 pub(crate) use profile_projection_plan::{FixtureProjectionPlan, ProfileProjectionIndex};
 pub(crate) use profile_value_index::ProfileValueIndex;
 pub(crate) use programmer_fade::{

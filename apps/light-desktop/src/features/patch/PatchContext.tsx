@@ -12,7 +12,10 @@ import {
 	createPatchDefinitionResolver,
 	type PatchFixtureCandidate,
 } from "./model";
-import type { PatchFixtureProjection } from "./contracts";
+import type {
+	PatchFixturePolicyAction,
+	PatchFixtureProjection,
+} from "./contracts";
 import type { PatchPlacement } from "./contracts";
 import { PatchSession } from "./session";
 import type { PatchStore, PatchStoreSnapshot } from "./store";
@@ -50,6 +53,11 @@ export interface PatchContextValue extends PatchStoreSnapshot {
 	): Promise<readonly PatchedFixtureResult[] | null>;
 	updateFixture(
 		fixtureId: string,
+		changes: Partial<PatchedFixture>,
+	): Promise<boolean>;
+	updatePolicy(
+		fixtureId: string,
+		action: PatchFixturePolicyAction,
 		changes: Partial<PatchedFixture>,
 	): Promise<boolean>;
 	deleteFixture(fixtureId: string): Promise<boolean>;
@@ -132,6 +140,15 @@ export function PatchViewProvider({
 				if (!session || snapshot.status !== "ready") return false;
 				try {
 					await session.updateFixture(fixtureId, changes);
+					return true;
+				} catch {
+					return false;
+				}
+			},
+			updatePolicy: async (fixtureId, action, changes) => {
+				if (!session || snapshot.status !== "ready") return false;
+				try {
+					await session.updatePolicy(fixtureId, action, changes);
 					return true;
 				} catch {
 					return false;

@@ -10,7 +10,10 @@ import {
 	usePatchStatus,
 } from "../../features/patch/PatchState";
 import { useVisualizationRuntimeView } from "../../features/visualizationRuntime/VisualizationRuntimeView";
-import { fixtureValue } from "../fixtureVisualization";
+import {
+	fixtureProfileOutputValue,
+	fixtureValue,
+} from "../fixtureVisualization";
 import { migrateStagePosition, type Stage3dFixture } from "../stage3dScene";
 import type { StageFixturePresentation, StageLayoutModel } from "./types";
 
@@ -63,12 +66,22 @@ export function fixturePresentation(
 	visualization: VisualizationSnapshot | null,
 	patchPreviewSelected: boolean,
 ): StageFixturePresentation {
+	const physicalAxis = (axis: "pan" | "tilt", inverted: boolean) => {
+		const value = fixtureValue(visualization, fixture, axis);
+		return inverted ? 1 - Math.max(0, Math.min(1, value)) : value;
+	};
+	const profileIntensity = fixtureProfileOutputValue(
+		visualization,
+		fixture,
+		"intensity",
+	);
 	const intensity = patchPreviewSelected
 		? 1
-		: (visualization?.blackout
+		: (profileIntensity ??
+			(visualization?.blackout
 				? 0
 				: fixtureValue(visualization, fixture, "intensity")) *
-			(visualization?.grand_master ?? 1);
+				(visualization?.grand_master ?? 1));
 	const red = fixtureValue(visualization, fixture, "color.red", 1);
 	const green = fixtureValue(visualization, fixture, "color.green", 1);
 	const blue = fixtureValue(visualization, fixture, "color.blue", 1);
@@ -82,8 +95,8 @@ export function fixturePresentation(
 		icon: fixture.definition.icon_asset ?? null,
 		color: `rgb(${Math.round(red * 255)},${Math.round(green * 255)},${Math.round(blue * 255)})`,
 		dimmer: Math.round(intensity * 100),
-		pan: fixtureValue(visualization, fixture, "pan"),
-		tilt: fixtureValue(visualization, fixture, "tilt"),
+		pan: physicalAxis("pan", fixture.invert_pan ?? false),
+		tilt: physicalAxis("tilt", fixture.invert_tilt ?? false),
 	};
 }
 
@@ -112,6 +125,8 @@ function useFixtures3d(
 						id: fixture.fixture_id,
 						location: fixture.location,
 						rotation: fixture.rotation,
+						invert_pan: fixture.invert_pan,
+						invert_tilt: fixture.invert_tilt,
 					},
 					...(fixture.multipatch ?? []),
 				].map((instance, instanceIndex): Stage3dFixture => {
@@ -131,6 +146,8 @@ function useFixtures3d(
 					return {
 						fixture,
 						instanceId: instance.id,
+						invertPan: instance.invert_pan ?? false,
+						invertTilt: instance.invert_tilt ?? false,
 						index,
 						position:
 							layout.positions3d[instance.id] ??

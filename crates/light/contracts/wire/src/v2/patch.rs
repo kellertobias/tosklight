@@ -30,6 +30,39 @@ pub struct PatchFixturesRequest {
     pub placements: Vec<PatchPlacementIntent>,
 }
 
+/// One sparse operator intent for a patch-owned output policy.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchFixturePolicyActionRequest {
+    #[schemars(length(min = 1, max = 128))]
+    pub request_id: String,
+    #[serde(flatten)]
+    pub action: PatchFixturePolicyAction,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum PatchFixturePolicyAction {
+    SetGroupMasters {
+        controlled: bool,
+    },
+    SetGrandMaster {
+        controlled: bool,
+    },
+    SetAxisInversion {
+        axis: PatchFixtureAxis,
+        inverted: bool,
+        /// Absent targets the root physical fixture; present targets one multi-patch instance.
+        multipatch_instance_id: Option<Uuid>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PatchFixtureAxis {
+    Pan,
+    Tilt,
+}
+
 /// One ordered fixture batch whose per-split addresses are resolved by the server.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PatchPlacementIntent {
@@ -68,7 +101,6 @@ pub struct PatchOperatorAddressOverride {
 
 /// One fixture candidate containing only identities and state owned by the portable patch.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PatchFixtureInput {
     /// Stable identity generated once by the caller and retained across an idempotent retry.
     pub fixture_id: Uuid,
@@ -87,6 +119,14 @@ pub struct PatchFixtureInput {
     pub location: PatchFixtureLocation,
     pub rotation: PatchFixtureRotation,
     pub multipatch: Vec<PatchMultiPatchInput>,
+    #[serde(default = "default_true")]
+    pub group_masters_enabled: bool,
+    #[serde(default = "default_true")]
+    pub grand_master_enabled: bool,
+    #[serde(default)]
+    pub invert_pan: bool,
+    #[serde(default)]
+    pub invert_tilt: bool,
     pub move_in_black_enabled: bool,
     #[ts(type = "number")]
     pub move_in_black_delay_millis: u64,
@@ -94,7 +134,6 @@ pub struct PatchFixtureInput {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PatchSplitAssignment {
     pub split: u16,
     pub universe: Option<u16>,
@@ -102,7 +141,6 @@ pub struct PatchSplitAssignment {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PatchDirectControlEndpoint {
     pub protocol: PatchDirectControlProtocol,
     /// Transport adapters validate this as an IP address before invoking the application service.
@@ -118,7 +156,6 @@ pub enum PatchDirectControlProtocol {
 
 /// Stage position in integer millimetres.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PatchFixtureLocation {
     pub x: i32,
     pub y: i32,
@@ -127,7 +164,6 @@ pub struct PatchFixtureLocation {
 
 /// Stage rotation in degrees.
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PatchFixtureRotation {
     pub x: f32,
     pub y: f32,
@@ -135,7 +171,6 @@ pub struct PatchFixtureRotation {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PatchMultiPatchInput {
     pub id: Uuid,
     pub name: String,
@@ -143,10 +178,13 @@ pub struct PatchMultiPatchInput {
     pub split_patches: Vec<PatchSplitAssignment>,
     pub location: PatchFixtureLocation,
     pub rotation: PatchFixtureRotation,
+    #[serde(default)]
+    pub invert_pan: bool,
+    #[serde(default)]
+    pub invert_tilt: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PatchHighlightOverrideInput {
     pub channel_id: Uuid,
     pub raw_value: u32,
@@ -224,6 +262,10 @@ pub struct PatchFixtureProjection {
     pub rotation: PatchFixtureRotation,
     pub logical_heads: Vec<PatchLogicalHeadProjection>,
     pub multipatch: Vec<PatchMultiPatchProjection>,
+    pub group_masters_enabled: bool,
+    pub grand_master_enabled: bool,
+    pub invert_pan: bool,
+    pub invert_tilt: bool,
     pub move_in_black_enabled: bool,
     #[ts(type = "number")]
     pub move_in_black_delay_millis: u64,
@@ -245,6 +287,8 @@ pub struct PatchMultiPatchProjection {
     pub split_patches: Vec<PatchSplitAssignment>,
     pub location: PatchFixtureLocation,
     pub rotation: PatchFixtureRotation,
+    pub invert_pan: bool,
+    pub invert_tilt: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -294,6 +338,10 @@ pub struct PatchModeProjection {
 pub struct PatchModeSplitProjection {
     pub split: u16,
     pub footprint: u16,
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 #[cfg(test)]

@@ -103,6 +103,8 @@ async fn inactive_show_rejects_invalid_schema_v2_patch_before_persistence() {
         }],
         location: Default::default(),
         rotation: Default::default(),
+        invert_pan: false,
+        invert_tilt: false,
     }];
 
     for invalid in [inconsistent_identity, unknown_split, overlapping_multipatch] {
@@ -159,6 +161,8 @@ async fn inactive_show_rejects_invalid_schema_v2_patch_before_persistence() {
         split_patches: multi_split.split_patches.clone(),
         location: Default::default(),
         rotation: Default::default(),
+        invert_pan: false,
+        invert_tilt: false,
     }];
 
     let mut missing_parent = multi_split.clone();

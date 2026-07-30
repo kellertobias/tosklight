@@ -61,7 +61,8 @@ function usesProfileGeometry(
 function buildStageFixture(item: Stage3dFixture, context: StageSceneContext) {
 	const fixtureId = item.fixture.fixture_id;
 	const selected = context.selected.has(fixtureId);
-	const attributes = context.byFixture.get(fixtureId) ?? new Map();
+	const byFixture = physicalValues(item, context.byFixture);
+	const attributes = byFixture.get(fixtureId) ?? new Map();
 	const { root, instanceId } = createFixtureRoot(item, selected);
 	const mode = profileMode(item.fixture);
 	const profileGeometry =
@@ -69,7 +70,7 @@ function buildStageFixture(item: Stage3dFixture, context: StageSceneContext) {
 			? buildFixtureProfileGeometry({
 					fixture: item.fixture,
 					mode,
-					byFixture: context.byFixture,
+					byFixture,
 					selected,
 					snapshot: context.snapshot,
 					projectedOwners: context.projectedOwners,
@@ -103,6 +104,36 @@ function buildStageFixture(item: Stage3dFixture, context: StageSceneContext) {
 	root.userData.stageFixtureStructureKey = fixtureStructureKey(item);
 	root.userData.stageFixtureTransformKey = fixtureTransformKey(item);
 	return { root, instanceId };
+}
+
+function physicalValues(
+	item: Stage3dFixture,
+	source: StageSceneContext["byFixture"],
+) {
+	if (!item.invertPan && !item.invertTilt) return source;
+	const result = new Map(source);
+	const owners = [
+		item.fixture.fixture_id,
+		...(item.fixture.logical_heads ?? []).map((head) => head.fixture_id),
+	];
+	for (const owner of owners) {
+		const current = source.get(owner);
+		if (!current) continue;
+		const values = new Map(current);
+		for (const [attribute, invert] of [
+			["pan", item.invertPan],
+			["tilt", item.invertTilt],
+		] as const) {
+			const value = values.get(attribute);
+			if (invert && value?.kind === "normalized")
+				values.set(attribute, {
+					kind: "normalized",
+					value: 1 - Math.max(0, Math.min(1, value.value)),
+				});
+		}
+		result.set(owner, values);
+	}
+	return result;
 }
 
 function addStageFloor(scene: THREE.Scene) {
@@ -481,13 +512,14 @@ export function applyStageVisualization(
 			root,
 			showSelection && selected.has(fixtureId),
 		);
-		const attributes = context.byFixture.get(fixtureId) ?? new Map();
+		const byFixture = physicalValues(item, context.byFixture);
+		const attributes = byFixture.get(fixtureId) ?? new Map();
 		const mode = profileMode(item.fixture);
 		if (mode && usesProfileGeometry(item, mode)) {
 			updateFixtureProfileGeometry(root, {
 				fixture: item.fixture,
 				mode,
-				byFixture: context.byFixture,
+				byFixture,
 				selected: false,
 				snapshot,
 				projectedOwners: context.projectedOwners,

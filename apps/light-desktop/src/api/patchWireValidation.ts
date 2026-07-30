@@ -149,6 +149,10 @@ function multipatchAt(value: unknown, path: string): void {
 	splitArrayAt(instance.split_patches, path + ".split_patches");
 	vectorAt(instance.location, path + ".location", true);
 	vectorAt(instance.rotation, path + ".rotation", false);
+	if (instance.invert_pan !== undefined)
+		booleanAt(instance.invert_pan, path + ".invert_pan");
+	if (instance.invert_tilt !== undefined)
+		booleanAt(instance.invert_tilt, path + ".invert_tilt");
 }
 
 function logicalHeadAt(value: unknown, path: string): void {
@@ -193,6 +197,20 @@ function fixtureAt(
 		(instance, index) =>
 			multipatchAt(instance, path + ".multipatch[" + index + "]"),
 	);
+	if (fixture.group_masters_enabled !== undefined)
+		booleanAt(
+			fixture.group_masters_enabled,
+			path + ".group_masters_enabled",
+		);
+	if (fixture.grand_master_enabled !== undefined)
+		booleanAt(
+			fixture.grand_master_enabled,
+			path + ".grand_master_enabled",
+		);
+	if (fixture.invert_pan !== undefined)
+		booleanAt(fixture.invert_pan, path + ".invert_pan");
+	if (fixture.invert_tilt !== undefined)
+		booleanAt(fixture.invert_tilt, path + ".invert_tilt");
 	booleanAt(fixture.move_in_black_enabled, path + ".move_in_black_enabled");
 	unsignedIntegerAt(
 		fixture.move_in_black_delay_millis,

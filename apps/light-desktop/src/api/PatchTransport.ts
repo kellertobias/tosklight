@@ -6,6 +6,7 @@ import type {
 } from "./generated/light-wire";
 import type {
 	PatchDirectControlEndpoint,
+	PatchFixturePolicyAction,
 	PatchFixtureWrite,
 	PatchMutation,
 	PatchPlacement,
@@ -71,6 +72,47 @@ export class HttpPatchTransport implements PatchTransport {
 				method: "POST",
 				headers,
 				body: JSON.stringify(request),
+			},
+		);
+		return decodePatchFixturesOutcome(await this.responseValue(response));
+	}
+
+	async patchFixturePolicy(
+		showId: string,
+		fixtureId: string,
+		expectedPatchRevision: number,
+		requestId: string,
+		action: PatchFixturePolicyAction,
+	) {
+		const headers = this.headers(showId);
+		headers.set("content-type", "application/json");
+		headers.set("if-match", String(expectedPatchRevision));
+		const body =
+			action.type === "group_masters"
+				? {
+						request_id: requestId,
+						action: "set_group_masters",
+						controlled: action.controlled,
+					}
+				: action.type === "grand_master"
+					? {
+							request_id: requestId,
+							action: "set_grand_master",
+							controlled: action.controlled,
+						}
+					: {
+							request_id: requestId,
+							action: "set_axis_inversion",
+							axis: action.axis,
+							inverted: action.inverted,
+							multipatch_instance_id: action.multipatchInstanceId,
+						};
+		const response = await this.fetchImplementation(
+			`${this.patchPath()}/fixtures/${fixtureId}/policy`,
+			{
+				method: "POST",
+				headers,
+				body: JSON.stringify(body),
 			},
 		);
 		return decodePatchFixturesOutcome(await this.responseValue(response));
@@ -234,7 +276,13 @@ export function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
 			split_patches: instance.splitPatches.map((split) => ({ ...split })),
 			location: { ...instance.location },
 			rotation: { ...instance.rotation },
+			invert_pan: instance.invertPan ?? false,
+			invert_tilt: instance.invertTilt ?? false,
 		})),
+		group_masters_enabled: fixture.groupMastersEnabled ?? true,
+		grand_master_enabled: fixture.grandMasterEnabled ?? true,
+		invert_pan: fixture.invertPan ?? false,
+		invert_tilt: fixture.invertTilt ?? false,
 		move_in_black_enabled: fixture.moveInBlackEnabled,
 		move_in_black_delay_millis: fixture.moveInBlackDelayMillis,
 		highlight_overrides: fixture.highlightOverrides.map((override) => ({

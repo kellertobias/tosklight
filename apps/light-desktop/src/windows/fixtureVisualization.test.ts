@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { PatchedFixture, VisualizationSnapshot } from "../api/types";
-import { fixtureValue } from "./fixtureVisualization";
+import {
+	fixtureProfileOutputValue,
+	fixtureValue,
+} from "./fixtureVisualization";
+import { fixturePresentation } from "./stageWindow/useStageVisualization";
 
 const fixture = {
 	fixture_id: "physical",
@@ -92,5 +96,30 @@ describe("fixture visualization values", () => {
 			],
 		} satisfies VisualizationSnapshot;
 		expect(fixtureValue(snapshot, fixture, "pan")).toBe(0.8);
+	});
+
+	it("uses authoritative post-profile intensity for per-fixture master policies", () => {
+		const snapshot = {
+			revision: 1,
+			generated_at: "2026-07-12T00:00:00Z",
+			grand_master: 0.2,
+			blackout: false,
+			values: [
+				{
+					fixture_id: "physical",
+					attribute: "intensity",
+					value: { kind: "normalized", value: 1 },
+				},
+			],
+			profile_output_values: [
+				{
+					fixture_id: "physical",
+					attribute: "intensity",
+					value: { kind: "normalized", value: 1 },
+				},
+			],
+		} satisfies VisualizationSnapshot;
+		expect(fixtureProfileOutputValue(snapshot, fixture, "intensity")).toBe(1);
+		expect(fixturePresentation(fixture, 0, snapshot, false).dimmer).toBe(100);
 	});
 });

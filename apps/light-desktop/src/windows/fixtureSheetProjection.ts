@@ -291,12 +291,35 @@ function indexDynamicStack(
 
 function indexLimitingGroups(
 	groups: readonly FixtureGroup[],
+	fixtures: readonly PatchedFixture[],
 ): Map<string, FixtureGroup[]> {
 	const result = new Map<string, FixtureGroup[]>();
+	const participates = new Map<string, boolean>();
+	for (const fixture of fixtures) {
+		const profileMode =
+			fixture.definition.profile_snapshot?.modes.find(
+				(mode) => mode.id === fixture.definition.mode_id,
+			) ?? fixture.definition.profile_snapshot?.modes[0];
+		const eligible = profileMode
+			? profileMode.channels.some(
+					(channel) => channel.reacts_to_group_master,
+				)
+			: fixture.definition.heads.some((head) =>
+					head.parameters.some((parameter) =>
+						parameter.attribute.toLowerCase().includes("intensity"),
+					),
+				);
+		const active =
+			(fixture.group_masters_enabled ?? true) && eligible;
+		participates.set(fixture.fixture_id, active);
+		for (const head of fixture.logical_heads)
+			participates.set(head.fixture_id, active);
+	}
 	for (const group of groups) {
 		if (group.runtime.playbackNumber == null || group.runtime.master >= 1)
 			continue;
 		for (const fixtureId of group.body.fixtures) {
+			if (!participates.get(fixtureId)) continue;
 			const fixtureGroups = result.get(fixtureId);
 			if (fixtureGroups) fixtureGroups.push(group);
 			else result.set(fixtureId, [group]);
@@ -381,7 +404,10 @@ export function useFixtureSheetRows({
 			groupAuthority.groups,
 		);
 		const dynamicStack = indexDynamicStack(visualization, preloadVisualization);
-		const limitingGroups = indexLimitingGroups(groupAuthority.groups);
+		const limitingGroups = indexLimitingGroups(
+			groupAuthority.groups,
+			patchedFixtures,
+		);
 		return orderedFixtureTargets({
 			fixtures: patchedFixtures,
 			fixtureOrder,

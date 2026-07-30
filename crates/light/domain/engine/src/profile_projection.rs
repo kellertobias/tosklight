@@ -27,6 +27,7 @@ pub(crate) fn resolve_profile_fixture(
     group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
     highlighted_fixtures: &HashSet<FixtureId>,
+    axis_inversion: AxisInversion,
 ) -> Result<ResolvedProfileFixtureOutput, EngineError> {
     let resolution = projection
         .resolution()
@@ -51,11 +52,29 @@ pub(crate) fn resolve_profile_fixture(
             group_masters,
             group_master_flashes,
             highlighted_fixtures,
+            axis_inversion,
             &mut fixture_output.channels,
         )?;
         fixture_output.heads.push(head_output);
     }
     Ok(fixture_output)
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct AxisInversion {
+    pub(crate) pan: bool,
+    pub(crate) tilt: bool,
+}
+
+impl AxisInversion {
+    fn applies(self, attribute: &AttributeKey) -> bool {
+        (self.pan && attribute.0.eq_ignore_ascii_case("pan"))
+            || (self.tilt && attribute.0.eq_ignore_ascii_case("tilt"))
+    }
+
+    fn any(self) -> bool {
+        self.pan || self.tilt
+    }
 }
 
 #[derive(Default)]
@@ -90,13 +109,14 @@ pub(crate) fn resolve_profile_head(
     group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
     highlighted_fixtures: &HashSet<FixtureId>,
+    axis_inversion: AxisInversion,
     channels: &mut Vec<(uuid::Uuid, u32)>,
 ) -> Result<ResolvedProfileHeadOutput, EngineError> {
     let owner = head.owner;
     let highlighted =
         highlighted_fixtures.contains(&fixture.fixture_id) || highlighted_fixtures.contains(&owner);
     let output_highlighted = highlighted && !(fixture.definition.hazardous && options.blackout);
-    let group_scale = if output_highlighted {
+    let group_scale = if output_highlighted || !fixture.group_masters_enabled {
         1.0
     } else {
         group_masters.scale(owner, group_master_flashes)
@@ -111,6 +131,7 @@ pub(crate) fn resolve_profile_head(
     if options.control_loss_progress.is_none()
         && !(fixture.definition.hazardous && options.blackout)
         && borrowed_requested_color.is_none()
+        && !axis_inversion.any()
     {
         let virtual_intensity = if output_highlighted {
             1.0
@@ -148,7 +169,7 @@ pub(crate) fn resolve_profile_head(
                         },
                         sequence_master,
                         group_master: group_scale,
-                        grand_master: grand_master(options),
+                        grand_master: grand_master(fixture, options),
                     }
                 },
             );
@@ -159,6 +180,7 @@ pub(crate) fn resolve_profile_head(
             (channel.id, raw)
         }));
         return Ok(finalize_output(
+            fixture,
             mode,
             head,
             owner,
@@ -180,6 +202,7 @@ pub(crate) fn resolve_profile_head(
         group_masters,
         group_master_flashes,
         highlighted_fixtures,
+        axis_inversion,
     )?;
     let virtual_intensity = virtual_intensity(&inputs);
     let requested_color = requested_color(&inputs.values);
@@ -196,6 +219,7 @@ pub(crate) fn resolve_profile_head(
         channels,
     );
     Ok(finalize_output(
+        fixture,
         mode,
         head,
         inputs.owner,
@@ -230,12 +254,13 @@ fn prepare_head_inputs(
     group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
     highlighted_fixtures: &HashSet<FixtureId>,
+    axis_inversion: AxisInversion,
 ) -> Result<ProfileHeadInputs, EngineError> {
     let owner = head.owner;
     let highlighted =
         highlighted_fixtures.contains(&fixture.fixture_id) || highlighted_fixtures.contains(&owner);
     let output_highlighted = highlighted && !(fixture.definition.hazardous && options.blackout);
-    let group_scale = if output_highlighted {
+    let group_scale = if output_highlighted || !fixture.group_masters_enabled {
         1.0
     } else {
         group_masters.scale(owner, group_master_flashes)
@@ -250,7 +275,22 @@ fn prepare_head_inputs(
     };
     apply_control_loss(fixture, mode, options, &mut inputs);
     apply_hazardous_blackout(fixture, options, &mut inputs.values);
+    apply_axis_inversion(axis_inversion, &mut inputs.values);
     Ok(inputs)
+}
+
+fn apply_axis_inversion(
+    inversion: AxisInversion,
+    values: &mut HashMap<AttributeKey, AttributeValue>,
+) {
+    for (attribute, value) in values {
+        if !inversion.applies(attribute) {
+            continue;
+        }
+        if let AttributeValue::Normalized(normalized) = value {
+            *normalized = 1.0 - normalized.clamp(0.0, 1.0);
+        }
+    }
 }
 
 fn apply_control_loss(
@@ -378,7 +418,7 @@ fn resolve_channels(
                     virtual_intensity: channel_intensity,
                     sequence_master,
                     group_master: inputs.group_scale,
-                    grand_master: grand_master(options),
+                    grand_master: grand_master(fixture, options),
                 }
             },
         );
@@ -407,15 +447,18 @@ fn sequence_master_scale(
         .unwrap_or(1.0)
 }
 
-fn grand_master(options: RenderOptions) -> f32 {
+fn grand_master(fixture: &PatchedFixture, options: RenderOptions) -> f32 {
     if options.blackout {
         0.0
+    } else if !fixture.grand_master_enabled {
+        1.0
     } else {
         options.grand_master.clamp(0.0, 1.0)
     }
 }
 
 fn finalize_output(
+    fixture: &PatchedFixture,
     mode: &FixtureMode,
     head: &ProfileHeadPlan,
     owner: FixtureId,
@@ -432,8 +475,9 @@ fn finalize_output(
         .filter_map(|index| channel_visual_level(mode, channels, mode.channels[*index].id))
         .reduce(f32::max);
     let mut color = profile_visual_color(mode, head_id, channels, requested_color);
-    let intensity = physical_intensity
-        .unwrap_or_else(|| visual_intensity(&mut color, virtual_intensity, group_scale, options));
+    let intensity = physical_intensity.unwrap_or_else(|| {
+        visual_intensity(fixture, &mut color, virtual_intensity, group_scale, options)
+    });
     ResolvedProfileHeadOutput {
         owner,
         intensity,
@@ -442,6 +486,7 @@ fn finalize_output(
 }
 
 fn visual_intensity(
+    fixture: &PatchedFixture,
     color: &mut Option<Xyz>,
     virtual_intensity: f32,
     group_scale: f32,
@@ -461,6 +506,6 @@ fn visual_intensity(
         });
         brightness
     } else {
-        virtual_intensity * group_scale * options.grand_master.clamp(0.0, 1.0)
+        virtual_intensity * group_scale * grand_master(fixture, options)
     }
 }

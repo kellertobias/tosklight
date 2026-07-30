@@ -43,6 +43,18 @@ pub struct PatchedFixture {
     /// An instance without a universe/address exists in the visualizer only.
     #[serde(default)]
     pub multipatch: Vec<MultiPatchInstance>,
+    /// Eligible intensity channels participate in Group Master and Group flash scaling.
+    #[serde(default = "default_true")]
+    pub group_masters_enabled: bool,
+    /// Eligible intensity channels participate in Grand Master scaling.
+    #[serde(default = "default_true")]
+    pub grand_master_enabled: bool,
+    /// Reverse the normalized Pan request for this physical fixture.
+    #[serde(default)]
+    pub invert_pan: bool,
+    /// Reverse the normalized Tilt request for this physical fixture.
+    #[serde(default)]
+    pub invert_tilt: bool,
     /// Preposition Position-family attributes for the next lit Cue while dark.
     #[serde(default = "default_true")]
     pub move_in_black_enabled: bool,
@@ -73,6 +85,12 @@ pub struct MultiPatchInstance {
     pub location: FixtureLocation,
     #[serde(default)]
     pub rotation: FixtureVector,
+    /// Reverse the normalized Pan request for this physical instance.
+    #[serde(default)]
+    pub invert_pan: bool,
+    /// Reverse the normalized Tilt request for this physical instance.
+    #[serde(default)]
+    pub invert_tilt: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -283,6 +283,10 @@ fn patched_fixture(
             (
                 fixture.move_in_black_enabled,
                 fixture.move_in_black_delay_millis,
+                fixture.group_masters_enabled,
+                fixture.grand_master_enabled,
+                fixture.invert_pan,
+                fixture.invert_tilt,
             )
         });
     PatchedFixture {
@@ -313,6 +317,10 @@ fn patched_fixture(
             .collect(),
         move_in_black_enabled: existing_mib.is_none_or(|settings| settings.0),
         move_in_black_delay_millis: existing_mib.map_or(0, |settings| settings.1),
+        group_masters_enabled: existing_mib.is_none_or(|settings| settings.2),
+        grand_master_enabled: existing_mib.is_none_or(|settings| settings.3),
+        invert_pan: existing_mib.is_some_and(|settings| settings.4),
+        invert_tilt: existing_mib.is_some_and(|settings| settings.5),
         highlight_overrides: Default::default(),
         multipatch: Vec::new(),
     }

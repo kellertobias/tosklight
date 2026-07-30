@@ -151,6 +151,10 @@ pub(super) fn patched(
             })
             .collect(),
         multipatch: Vec::new(),
+        group_masters_enabled: true,
+        grand_master_enabled: true,
+        invert_pan: false,
+        invert_tilt: false,
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
@@ -174,5 +178,7 @@ pub(super) fn multipatch(
             y: rotation_y,
             z: 0.0,
         },
+        invert_pan: false,
+        invert_tilt: false,
     }
 }

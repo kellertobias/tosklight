@@ -37,6 +37,11 @@ export function beginMultipatchEdit(
 	axis?: NonNullable<MultiPatchEdit>["axis"],
 ) {
 	const { ui } = controller;
+	if (
+		(kind === "invert_pan" || kind === "invert_tilt") &&
+		!controller.appState.patchSetArmed
+	)
+		return;
 	ui.setEditError("");
 	ui.setSelectedFixture(fixture.fixture_id);
 	ui.setMultipatchEdit({
@@ -66,7 +71,9 @@ export function beginMultipatchEdit(
 				]),
 			),
 		);
-	} else ui.setVector(instance[kind]);
+	} else if (kind === "invert_pan" || kind === "invert_tilt")
+		ui.setEditText(String(instance[kind] ?? false));
+	else ui.setVector(instance[kind]);
 }
 
 export async function saveMultipatchEdit(
@@ -88,6 +95,25 @@ export async function saveMultipatchEdit(
 	const multipatch = (fixture.multipatch ?? []).map((item) =>
 		item.id === instance.id ? { ...item, ...changes } : item,
 	);
+	if (edit.kind === "invert_pan" || edit.kind === "invert_tilt") {
+		const axis = edit.kind === "invert_pan" ? "pan" : "tilt";
+		if (
+			await controller.patch.updatePolicy(
+				fixture.fixture_id,
+				{
+					type: "axis_inversion",
+					axis,
+					inverted: value === "true",
+					multipatchInstanceId: instance.id,
+				},
+				{ multipatch },
+			)
+		) {
+			controller.ui.setMultipatchEdit(null);
+			controller.dispatch({ type: "SET_PATCH_ARMED", value: false });
+		}
+		return;
+	}
 	if (
 		await controller.patch.updateFixture(fixture.fixture_id, {
 			multipatch,
@@ -104,6 +130,8 @@ function multipatchChanges(
 ): Partial<MultiPatchInstance> | null {
 	const edit = controller.ui.multipatchEdit;
 	if (!edit) return null;
+	if (edit.kind === "invert_pan" || edit.kind === "invert_tilt")
+		return { [edit.kind]: value === "true" };
 	if (
 		edit.kind === "address" &&
 		definitionSplits(fixture.definition).length > 1
@@ -192,7 +220,13 @@ export function closeMultipatchEdit(controller: PatchController) {
 
 export function multipatchVectorIsDirty(controller: PatchController) {
 	const edit = controller.ui.multipatchEdit;
-	if (!edit || edit.kind === "address") return false;
+	if (
+		!edit ||
+		edit.kind === "address" ||
+		edit.kind === "invert_pan" ||
+		edit.kind === "invert_tilt"
+	)
+		return false;
 	const fixture = controller.data.all.find(
 		(item) => item.fixture_id === edit.fixtureId,
 	);

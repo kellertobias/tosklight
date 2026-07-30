@@ -489,7 +489,7 @@ export type PatchDirectControlEndpoint = { protocol: PatchDirectControlProtocol,
 ip_address: string, port: number, };
 export type PatchFixtureLocation = { x: number, y: number, z: number, };
 export type PatchFixtureRotation = { x: number, y: number, z: number, };
-export type PatchMultiPatchInput = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, };
+export type PatchMultiPatchInput = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, };
 export type PatchHighlightOverrideInput = { channel_id: string, raw_value: number, };
 export type PatchFixtureInput = {
 /**
@@ -499,7 +499,7 @@ fixture_id: string, fixture_number: number | null, virtual_fixture_number: numbe
 /**
  * Canonical split assignments. An unpatched split has two `null` address fields.
  */
-split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, location: PatchFixtureLocation, rotation: PatchFixtureRotation, multipatch: Array<PatchMultiPatchInput>, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideInput>, };
+split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, location: PatchFixtureLocation, rotation: PatchFixtureRotation, multipatch: Array<PatchMultiPatchInput>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideInput>, };
 export type PatchOperatorAddressOverride = { fixture_id: string, universe: number, address: number, };
 export type PatchSplitPlacementMode = { "type": "consecutive" } | { "type": "operator_overrides", overrides: Array<PatchOperatorAddressOverride>, };
 export type PatchSplitPlacementIntent = { split: number, universe: number | null, address: number | null, mode: PatchSplitPlacementMode, };
@@ -523,15 +523,26 @@ remove_fixture_ids: Array<string>,
  * where fixture split assignments are already explicit.
  */
 placements: Array<PatchPlacementIntent>, };
+export type PatchFixtureAxis = "pan" | "tilt";
+export type PatchFixturePolicyAction = { "action": "set_group_masters", controlled: boolean, } | { "action": "set_grand_master", controlled: boolean, } | { "action": "set_axis_inversion", axis: PatchFixtureAxis, inverted: boolean,
+/**
+ * Absent targets the root physical fixture; present targets one multi-patch instance.
+ */
+multipatch_instance_id: string | null, };
+export type PatchFixturePolicyActionRequest = { request_id: string, } & ({ "action": "set_group_masters", controlled: boolean, } | { "action": "set_grand_master", controlled: boolean, } | { "action": "set_axis_inversion", axis: PatchFixtureAxis, inverted: boolean,
+/**
+ * Absent targets the root physical fixture; present targets one multi-patch instance.
+ */
+multipatch_instance_id: string | null, });
 export type PatchErrorResponse = { error: string, current_revision?: number | null, retryable: boolean, };
 export type PatchLogicalHeadProjection = {
 /**
  * Stable semantic head identity from the selected immutable profile revision.
  */
 profile_head_id: string | null, head_index: number, fixture_id: string, };
-export type PatchMultiPatchProjection = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, };
+export type PatchMultiPatchProjection = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, };
 export type PatchHighlightOverrideProjection = { channel_id: string, raw_value: number, };
-export type PatchFixtureProjection = { fixture_id: string, fixture_revision: number, fixture_number: number | null, virtual_fixture_number: number | null, name: string, profile_id: string, profile_revision: number, mode_id: string, split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, location: PatchFixtureLocation, rotation: PatchFixtureRotation, logical_heads: Array<PatchLogicalHeadProjection>, multipatch: Array<PatchMultiPatchProjection>, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideProjection>, };
+export type PatchFixtureProjection = { fixture_id: string, fixture_revision: number, fixture_number: number | null, virtual_fixture_number: number | null, name: string, profile_id: string, profile_revision: number, mode_id: string, split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, location: PatchFixtureLocation, rotation: PatchFixtureRotation, logical_heads: Array<PatchLogicalHeadProjection>, multipatch: Array<PatchMultiPatchProjection>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideProjection>, };
 export type PatchModeSplitProjection = { split: number, footprint: number, };
 export type PatchModeProjection = { mode_id: string, name: string, splits: Array<PatchModeSplitProjection>, };
 export type PatchProfileRevisionProjection = { profile_id: string, profile_revision: number, content_digest: string, manufacturer: string, name: string, fixture_type: string, patch_policy: PatchProfilePolicy,

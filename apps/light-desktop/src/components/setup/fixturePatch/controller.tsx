@@ -35,6 +35,10 @@ export type EditKind =
 	| "mib"
 	| "mib_delay"
 	| "highlight"
+	| "group_masters"
+	| "grand_master"
+	| "invert_pan"
+	| "invert_tilt"
 	| null;
 
 export type VectorAxis = "x" | "y" | "z";
@@ -42,7 +46,12 @@ export type VectorAxis = "x" | "y" | "z";
 export type MultiPatchEdit = {
 	fixtureId: string;
 	instanceId: string;
-	kind: "address" | "location" | "rotation";
+	kind:
+		| "address"
+		| "location"
+		| "rotation"
+		| "invert_pan"
+		| "invert_tilt";
 	axis?: VectorAxis;
 } | null;
 

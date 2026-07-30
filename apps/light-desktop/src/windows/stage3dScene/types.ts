@@ -12,6 +12,8 @@ export interface Stage3dFixture {
 	position: StagePosition3d;
 	index: number;
 	instanceId?: string;
+	invertPan?: boolean;
+	invertTilt?: boolean;
 }
 
 export type FixtureAttributeValues = Map<string, AttributeValue>;

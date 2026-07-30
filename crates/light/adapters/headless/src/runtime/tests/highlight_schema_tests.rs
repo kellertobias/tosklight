@@ -104,8 +104,12 @@ fn schema_v2_direct_fixture() -> (light_fixture::PatchedFixture, Uuid, [Uuid; 2]
             direct_control: None,
             location: Default::default(),
             rotation: Default::default(),
+            invert_pan: false,
+            invert_tilt: false,
             logical_heads: vec![],
             multipatch: vec![],
+            group_masters_enabled: true,
+            grand_master_enabled: true,
             move_in_black_enabled: true,
             move_in_black_delay_millis: 0,
             highlight_overrides: Default::default(),
@@ -218,6 +222,8 @@ fn highlight_participation_uses_logical_fixture_identities_independent_of_patch(
             split_patches: vec![],
             location: Default::default(),
             rotation: Default::default(),
+            invert_pan: false,
+            invert_tilt: false,
         },
         light_fixture::MultiPatchInstance {
             id: Uuid::new_v4(),
@@ -227,6 +233,8 @@ fn highlight_participation_uses_logical_fixture_identities_independent_of_patch(
             split_patches: vec![],
             location: Default::default(),
             rotation: Default::default(),
+            invert_pan: false,
+            invert_tilt: false,
         },
     ];
 

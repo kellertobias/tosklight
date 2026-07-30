@@ -51,6 +51,7 @@ const server = {
 const patchFeature = {
 	patchFixtures: vi.fn(),
 	updateFixture: vi.fn().mockResolvedValue(true),
+	updatePolicy: vi.fn().mockResolvedValue(true),
 	deleteFixture: vi.fn().mockResolvedValue(true),
 };
 
@@ -91,6 +92,7 @@ vi.mock("../../features/patch/PatchContext", async (importOriginal) => {
 			error: null,
 			patchFixtures: patchFeature.patchFixtures,
 			updateFixture: patchFeature.updateFixture,
+			updatePolicy: patchFeature.updatePolicy,
 			deleteFixture: patchFeature.deleteFixture,
 		}),
 	};
@@ -154,6 +156,60 @@ function splitFixture(): PatchedFixture {
 		move_in_black_delay_millis: 0,
 		highlight_overrides: {},
 	};
+}
+
+function policyFixture(): PatchedFixture {
+	const fixture = splitFixture();
+	const mode = fixture.definition.profile_snapshot?.modes[0];
+	if (!mode) throw new Error("policy fixture mode is missing");
+	const base = mode.channels[0];
+	mode.channels = [
+		{
+			...base,
+			id: "intensity-channel",
+			fixture_attribute: "intensity",
+			attribute: "intensity",
+			reacts_to_group_master: true,
+			reacts_to_grand_master: true,
+		},
+		{
+			...base,
+			id: "pan-channel",
+			fixture_attribute: "pan",
+			attribute: "pan",
+			reacts_to_group_master: false,
+			reacts_to_grand_master: false,
+		},
+		{
+			...base,
+			id: "tilt-channel",
+			fixture_attribute: "tilt",
+			attribute: "tilt",
+			reacts_to_group_master: false,
+			reacts_to_grand_master: false,
+		},
+	];
+	fixture.group_masters_enabled = true;
+	fixture.grand_master_enabled = true;
+	fixture.invert_pan = false;
+	fixture.invert_tilt = false;
+	fixture.multipatch = [
+		{
+			id: "physical-copy",
+			name: "Opposite hang",
+			universe: 3,
+			address: 1,
+			split_patches: [
+				{ split: 1, universe: 3, address: 1 },
+				{ split: 3, universe: 4, address: 1 },
+			],
+			location: { x: 0, y: 0, z: 0 },
+			rotation: { x: 0, y: 0, z: 0 },
+			invert_pan: false,
+			invert_tilt: true,
+		},
+	];
+	return fixture;
 }
 
 function openDimmerPlacement() {
@@ -248,6 +304,7 @@ beforeEach(() => {
 	programming.actions.replace.mockResolvedValue(null);
 	programming.actions.gesture.mockResolvedValue(null);
 	patchFeature.updateFixture.mockResolvedValue(true);
+	patchFeature.updatePolicy.mockResolvedValue(true);
 	patchFeature.deleteFixture.mockResolvedValue(true);
 	patchFeature.patchFixtures.mockImplementation(
 		async (candidates: Array<{ fixture: PatchedFixture }>) =>
@@ -261,6 +318,101 @@ beforeEach(() => {
 afterEach(() => {
 	cleanup();
 	vi.restoreAllMocks();
+});
+
+describe("fixture output policy cells", () => {
+	it("shows independent effective values and only edits a master through armed SET", async () => {
+		server.patch.fixtures = [policyFixture()];
+		render(<FixturePatchSetup />);
+
+		expect(
+			screen.getByRole("button", { name: "Group Masters 17" }),
+		).toHaveTextContent("Controlled");
+		expect(
+			screen.getByRole("button", { name: "Grand Master 17" }),
+		).toHaveTextContent("Controlled");
+		expect(
+			screen.getByRole("button", { name: "Invert Pan 17" }),
+		).toHaveTextContent("Normal");
+		expect(
+			screen.getByRole("button", { name: "Invert Tilt 17" }),
+		).toHaveTextContent("Normal");
+
+		fireEvent.click(screen.getByRole("button", { name: "Group Masters 17" }));
+		expect(
+			screen.queryByRole("heading", { name: "Set fixture Group Masters" }),
+		).not.toBeInTheDocument();
+		expect(patchFeature.updatePolicy).not.toHaveBeenCalled();
+
+		state.patchSetArmed = true;
+		fireEvent.click(screen.getByRole("button", { name: "Group Masters 17" }));
+		const dialog = (
+			await screen.findByRole("heading", {
+				name: "Set fixture Group Masters",
+			})
+		).closest("section") as HTMLElement;
+		fireEvent.click(within(dialog).getByRole("button", { name: "Controlled" }));
+		fireEvent.click(screen.getByRole("option", { name: "Ignored" }));
+		expect(
+			within(dialog).getByText(
+				"This fixture can remain live while the Group Masters are reduced.",
+			),
+		).toBeInTheDocument();
+		fireEvent.click(within(dialog).getByRole("button", { name: "Set" }));
+
+		await waitFor(() =>
+			expect(patchFeature.updatePolicy).toHaveBeenCalledWith(
+				"fixture-split",
+				{ type: "group_masters", controlled: false },
+				{ group_masters_enabled: false },
+			),
+		);
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "SET_PATCH_ARMED",
+			value: false,
+		});
+	});
+
+	it("edits one physical multi-patch axis without changing its shared policy", async () => {
+		server.patch.fixtures = [policyFixture()];
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+		expect(screen.getAllByText("Shared · Controlled")).toHaveLength(2);
+		expect(
+			screen.getByRole("button", {
+				name: "Invert tilt Opposite hang",
+			}),
+		).toHaveTextContent("Inverted");
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "Invert pan Opposite hang" }),
+		);
+		const dialog = (
+			await screen.findByRole("heading", {
+				name: "Set multi-patch Invert Pan",
+			})
+		).closest("section") as HTMLElement;
+		fireEvent.click(within(dialog).getByRole("button", { name: "Normal" }));
+		fireEvent.click(screen.getByRole("option", { name: "Inverted" }));
+		fireEvent.click(within(dialog).getByRole("button", { name: "Set" }));
+
+		await waitFor(() => {
+			const [fixtureId, action, changes] =
+				patchFeature.updatePolicy.mock.calls[0];
+			expect(fixtureId).toBe("fixture-split");
+			expect(action).toEqual({
+				type: "axis_inversion",
+				axis: "pan",
+				inverted: true,
+				multipatchInstanceId: "physical-copy",
+			});
+			expect(changes.multipatch[0]).toMatchObject({
+				id: "physical-copy",
+				invert_pan: true,
+				invert_tilt: true,
+			});
+		});
+	});
 });
 
 describe("selected split selection and SET editing", () => {
@@ -1068,7 +1220,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const fixtureRow = screen.getByRole("row", {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
-		fireEvent.click(within(fixtureRow.cells[9]).getByRole("button"));
+		fireEvent.click(within(fixtureRow.cells[13]).getByRole("button"));
 
 		const modal = screen
 			.getByRole("heading", { name: "Set fixture location X" })
@@ -1111,7 +1263,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const fixtureRow = screen.getByRole("row", {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
-		fireEvent.click(within(fixtureRow.cells[13]).getByRole("button"));
+		fireEvent.click(within(fixtureRow.cells[17]).getByRole("button"));
 
 		const modal = screen
 			.getByRole("heading", { name: "Set fixture rotation Y" })
@@ -1143,7 +1295,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const instanceRow = document.querySelector(
 			"tr.multipatch-row",
 		) as HTMLTableRowElement;
-		fireEvent.click(within(instanceRow.cells[13]).getByRole("button"));
+		fireEvent.click(within(instanceRow.cells[17]).getByRole("button"));
 
 		const modal = screen
 			.getByRole("heading", { name: "Set multi-patch rotation Y" })

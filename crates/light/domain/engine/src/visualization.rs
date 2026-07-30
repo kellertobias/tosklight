@@ -1,4 +1,6 @@
-use crate::{ContributionBatch, Engine, EngineError, RenderOptions, resolve_profile_fixture};
+use crate::{
+    AxisInversion, ContributionBatch, Engine, EngineError, RenderOptions, resolve_profile_fixture,
+};
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use std::collections::HashMap;
 
@@ -69,6 +71,10 @@ impl Engine {
                 group_masters,
                 &group_master_flashes,
                 &highlighted_fixtures,
+                AxisInversion {
+                    pan: fixture.invert_pan,
+                    tilt: fixture.invert_tilt,
+                },
             )?;
             for output in output.heads {
                 projected.insert(

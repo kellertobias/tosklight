@@ -15,6 +15,8 @@ fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_
             split_patches: Vec::new(),
             location: Default::default(),
             rotation: Default::default(),
+            invert_pan: false,
+            invert_tilt: false,
         },
         MultiPatchInstance {
             id: FixtureId::new().0,
@@ -24,6 +26,8 @@ fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_
             split_patches: Vec::new(),
             location: Default::default(),
             rotation: Default::default(),
+            invert_pan: false,
+            invert_tilt: false,
         },
     ];
     programmers.set(

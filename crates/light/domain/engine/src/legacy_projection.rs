@@ -26,7 +26,16 @@ pub(crate) fn render_fixture(
                 .map(|patched| patched.fixture_id)
                 .unwrap_or(fixture.fixture_id)
         };
-        let group_scale = group_masters.scale(owner, group_master_flashes);
+        let group_scale = if fixture.group_masters_enabled {
+            group_masters.scale(owner, group_master_flashes)
+        } else {
+            1.0
+        };
+        let grand_master = if fixture.grand_master_enabled {
+            options.grand_master.clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         let mut abstract_values: HashMap<AttributeKey, AttributeValue> = resolved
             .iter()
             .filter(|((fixture_id, _), _)| *fixture_id == owner)
@@ -59,7 +68,7 @@ pub(crate) fn render_fixture(
                 .and_then(AttributeValue::normalized)
                 .unwrap_or(1.0)
                 * group_scale
-                * options.grand_master.clamp(0.0, 1.0)
+                * grand_master
         };
         let has_physical_dimmer = head
             .parameters
@@ -89,9 +98,14 @@ pub(crate) fn render_fixture(
                 .get(&parameter.attribute)
                 .and_then(AttributeValue::normalized)
                 .unwrap_or(parameter.default);
+            if (fixture.invert_pan && parameter.attribute.0.eq_ignore_ascii_case("pan"))
+                || (fixture.invert_tilt && parameter.attribute.0.eq_ignore_ascii_case("tilt"))
+            {
+                level = 1.0 - level.clamp(0.0, 1.0);
+            }
             if parameter.attribute.is_intensity() {
                 level *= group_scale;
-                level *= options.grand_master.clamp(0.0, 1.0);
+                level *= grand_master;
                 if options.blackout {
                     level = 0.0;
                 }

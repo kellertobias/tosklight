@@ -52,6 +52,71 @@ fn grand_master_and_blackout_affect_intensity() {
 }
 
 #[test]
+fn patch_master_opt_outs_are_independent_and_blackout_remains_authoritative() {
+    let programmers = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    programmers.start(session, UserId::new());
+    let (mut participating, participating_id) = fixture();
+    let (mut ignores_grand, ignores_grand_id) = fixture();
+    let (mut ignores_groups, ignores_groups_id) = fixture();
+    participating.address = Some(1);
+    ignores_grand.address = Some(2);
+    ignores_grand.grand_master_enabled = false;
+    ignores_groups.address = Some(3);
+    ignores_groups.group_masters_enabled = false;
+    for fixture_id in [participating_id, ignores_grand_id, ignores_groups_id] {
+        programmers.set(
+            session,
+            fixture_id,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(1.0),
+        );
+    }
+    let engine = Engine::new(programmers);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![participating, ignores_grand, ignores_groups].into(),
+            playbacks: vec![test_group_playback(1, "all")].into(),
+            groups: vec![GroupDefinition {
+                id: "all".into(),
+                fixtures: vec![participating_id, ignores_grand_id, ignores_groups_id],
+                master: 0.25,
+                playback_fader: Some(1),
+                ..Default::default()
+            }]
+            .into(),
+            ..Default::default()
+        })
+        .unwrap();
+
+    let ordinary = engine
+        .render(RenderOptions {
+            grand_master: 0.5,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(&ordinary.universes[&1][..3], &[32, 64, 128]);
+
+    engine.set_group_master_flash("all".into(), 1.0);
+    let flashed = engine
+        .render(RenderOptions {
+            grand_master: 0.5,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(&flashed.universes[&1][..3], &[128, 255, 128]);
+
+    let blackout = engine
+        .render(RenderOptions {
+            grand_master: 0.5,
+            blackout: true,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(&blackout.universes[&1][..3], &[0, 0, 0]);
+}
+
+#[test]
 fn group_masters_follow_real_assignments_and_resolve_overlap_by_htp() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();
@@ -333,6 +398,10 @@ fn logical_head_master_does_not_limit_sibling_heads() {
             },
         ],
         multipatch: vec![],
+        group_masters_enabled: true,
+        grand_master_enabled: true,
+        invert_pan: false,
+        invert_tilt: false,
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),

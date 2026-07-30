@@ -126,7 +126,13 @@ function mapFixtureProjection(
 			splitPatches: instance.split_patches.map((split) => ({ ...split })),
 			location: { ...instance.location },
 			rotation: { ...instance.rotation },
+			invertPan: instance.invert_pan,
+			invertTilt: instance.invert_tilt,
 		})),
+		groupMastersEnabled: fixture.group_masters_enabled,
+		grandMasterEnabled: fixture.grand_master_enabled,
+		invertPan: fixture.invert_pan,
+		invertTilt: fixture.invert_tilt,
 		moveInBlackEnabled: fixture.move_in_black_enabled,
 		moveInBlackDelayMillis: fixture.move_in_black_delay_millis,
 		highlightOverrides: fixture.highlight_overrides.map((override) => ({

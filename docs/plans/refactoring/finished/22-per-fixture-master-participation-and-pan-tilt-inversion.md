@@ -2,7 +2,8 @@
 
 ## Status
 
-**DOING.** Claimed on 2026-07-30 after issue 21b completed.
+**FINISHED 2026-07-30.** Claimed after issue 21b and completed with focused
+operator, engine, compatibility, and latency verification.
 
 ## Goal
 
@@ -39,8 +40,9 @@ the operator to infer it from Group membership or current output.
 An ordinary click continues to select the fixture or instance without changing show data. `[SET]`
 followed by the cell opens the normal patch-cell editor. The master editors clearly show
 **Controlled** or **Ignored**; the axis editors clearly show **Normal** or **Inverted**. Editing a
-cell applies only that setting and saves as one mutation and one Undo step. Ignoring a master must
-warn that the fixture can remain live when that master is reduced.
+cell applies only that setting and saves as one atomic patch mutation and audit entry. Show Patch
+mutations remain outside Programmer Undo, whose documented scope is Programmer state. Ignoring a
+master must warn that the fixture can remain live when that master is reduced.
 
 Pan/Tilt inversion is stored per physical fixture or multi-patch instance because physical units
 sharing logical programming may be hung in opposite orientations. Master participation belongs
@@ -138,3 +140,54 @@ channels must not receive misleading effective settings.
     a misleading effective setting.
 14. Existing schema-v1 and current shows migrate to the documented defaults; unpatched fixtures
     retain their settings; repatching does not reset them.
+
+## Result
+
+Implemented in `feat(patch): add fixture output policies`.
+
+- Show Patch exposes four independent, SET-gated cells with effective
+  **Controlled**/**Ignored** and **Normal**/**Inverted** values. Inapplicable
+  profile or legacy fixtures show unavailable cells. Multi-patch rows share the
+  logical master policies while retaining independent physical Pan/Tilt
+  inversion.
+- A typed, tolerant, show-guarded, revisioned, and idempotent sparse policy
+  route applies one operator intent without resubmitting unrelated fixture
+  state. Optimistic frontend state reconciles with the authoritative patch
+  outcome and retries revision conflicts.
+- Portable patch records persist all four defaults and physical-instance
+  inversion. Legacy inline/schema-v1 and reference records default to master
+  participation enabled and inversion disabled without a schema-version bump;
+  sparse edits preserve unpatched state, addresses, profiles, and sibling
+  policies.
+- Profile and legacy engine paths apply master opt-outs without bypassing
+  Blackout or profile reaction eligibility. Patch inversion is resolved per
+  physical output destination before authored range/raw inversion and exact
+  MSB-first encoding. Root and multi-patch outputs may therefore move in
+  opposite directions from one logical Programmer value.
+- Fixture Sheet limiting badges ignore Group Masters that the fixture does not
+  participate in. Both 2D and 3D Stage consume the appropriate post-profile
+  intensity, and physical Stage instances apply their own Pan/Tilt direction
+  without mutating shared Programmer, Preset, Cue, or tracking values.
+- The Programmer latency benchmark now isolates its Dynamic probe and settles
+  the configured fade only after recording the first affected frame. The real
+  E2E passes the two-output-tick budget at or below 60 Hz and the four-tick
+  budget at 120 Hz across software, keyboard, HTTP, WebSocket, OSC, and
+  attached-hardware paths.
+
+Verification:
+
+- `cargo fmt --all` and `git diff --check`;
+- affected-package `cargo check`, including `light-headless-runtime` and the
+  real `light-headless` application;
+- 86/86 `light-engine`, 85/85 `light-fixture`, and 96/96 `light-wire` library
+  tests;
+- sparse policy HTTP mutation/replay route test;
+- 68/68 focused Show Patch, Fixture Sheet, 2D Stage, and 3D Stage tests;
+- desktop TypeScript checking and production frontend build; and
+- `tests/77-programmer-action-latency.spec.ts`, 1/1 passed in 49.2 seconds.
+
+The full desktop Vitest run reached 2,098 passing tests and seven failures in
+three unrelated concurrently edited areas: product-demo playback-number
+expectations, selection-event projection, and raw controls in the untracked
+Grid Dynamics/Timecode windows. The issue-22 focused suites and production
+compile are clean; those unrelated working-tree changes were preserved.

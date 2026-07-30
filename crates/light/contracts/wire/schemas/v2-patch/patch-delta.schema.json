@@ -75,7 +75,6 @@
           "$ref": "#/$defs/PatchDirectControlProtocol"
         }
       },
-      "additionalProperties": false,
       "required": [
         "protocol",
         "ip_address",
@@ -105,7 +104,6 @@
           "format": "int32"
         }
       },
-      "additionalProperties": false,
       "required": [
         "x",
         "y",
@@ -143,11 +141,23 @@
           "format": "uint64",
           "minimum": 0
         },
+        "grand_master_enabled": {
+          "type": "boolean"
+        },
+        "group_masters_enabled": {
+          "type": "boolean"
+        },
         "highlight_overrides": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/PatchHighlightOverrideProjection"
           }
+        },
+        "invert_pan": {
+          "type": "boolean"
+        },
+        "invert_tilt": {
+          "type": "boolean"
         },
         "layer_id": {
           "type": "string"
@@ -225,6 +235,10 @@
         "rotation",
         "logical_heads",
         "multipatch",
+        "group_masters_enabled",
+        "grand_master_enabled",
+        "invert_pan",
+        "invert_tilt",
         "move_in_black_enabled",
         "move_in_black_delay_millis",
         "highlight_overrides"
@@ -247,7 +261,6 @@
           "format": "float"
         }
       },
-      "additionalProperties": false,
       "required": [
         "x",
         "y",
@@ -351,6 +364,12 @@
           "type": "string",
           "format": "uuid"
         },
+        "invert_pan": {
+          "type": "boolean"
+        },
+        "invert_tilt": {
+          "type": "boolean"
+        },
         "location": {
           "$ref": "#/$defs/PatchFixtureLocation"
         },
@@ -372,7 +391,9 @@
         "name",
         "split_patches",
         "location",
-        "rotation"
+        "rotation",
+        "invert_pan",
+        "invert_tilt"
       ]
     },
     "PatchProfilePolicy": {
@@ -461,7 +482,6 @@
           "minimum": 0
         }
       },
-      "additionalProperties": false,
       "required": [
         "split",
         "universe",

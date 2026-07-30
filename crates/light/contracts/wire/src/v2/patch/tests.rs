@@ -30,7 +30,7 @@ fn request_contains_references_and_patch_owned_state_only() {
 }
 
 #[test]
-fn request_rejects_mass_assigned_definition_data() {
+fn request_ignores_future_or_non_owned_fixture_properties() {
     let mut value = serde_json::to_value(PatchFixturesRequest {
         request_id: "patch-2".into(),
         fixtures: vec![fixture_input()],
@@ -40,9 +40,27 @@ fn request_rejects_mass_assigned_definition_data() {
     .expect("serialize patch request");
     value["fixtures"][0]["definition"] = serde_json::json!({ "modes": ["catalog"] });
 
-    let error = serde_json::from_value::<PatchFixturesRequest>(value)
-        .expect_err("definition must not cross the patch command boundary");
-    assert!(error.to_string().contains("unknown field `definition`"));
+    let decoded = serde_json::from_value::<PatchFixturesRequest>(value)
+        .expect("unknown properties are ignored without entering the typed command");
+    assert_eq!(decoded.fixtures[0].profile_id, PROFILE_ID);
+}
+
+#[test]
+fn legacy_patch_input_defaults_output_policies_compatibly() {
+    let mut value = serde_json::to_value(fixture_input()).unwrap();
+    for field in [
+        "group_masters_enabled",
+        "grand_master_enabled",
+        "invert_pan",
+        "invert_tilt",
+    ] {
+        value.as_object_mut().unwrap().remove(field);
+    }
+    let decoded: PatchFixtureInput = serde_json::from_value(value).unwrap();
+    assert!(decoded.group_masters_enabled);
+    assert!(decoded.grand_master_enabled);
+    assert!(!decoded.invert_pan);
+    assert!(!decoded.invert_tilt);
 }
 
 #[test]
@@ -82,7 +100,7 @@ fn request_schema_bounds_idempotency_identity_and_batch_collections() {
         schema["$defs"]["PatchFixtureInput"]["properties"]["split_patches"]["minItems"],
         1
     );
-    assert_eq!(
+    assert_ne!(
         schema["$defs"]["PatchFixtureInput"]["additionalProperties"],
         false
     );
@@ -206,6 +224,10 @@ fn fixture_input() -> PatchFixtureInput {
             z: 0.0,
         },
         multipatch: Vec::new(),
+        group_masters_enabled: true,
+        grand_master_enabled: true,
+        invert_pan: false,
+        invert_tilt: false,
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: Vec::new(),
@@ -230,6 +252,10 @@ fn fixture_projection() -> PatchFixtureProjection {
         rotation: input.rotation,
         logical_heads: Vec::new(),
         multipatch: Vec::new(),
+        group_masters_enabled: input.group_masters_enabled,
+        grand_master_enabled: input.grand_master_enabled,
+        invert_pan: input.invert_pan,
+        invert_tilt: input.invert_tilt,
         move_in_black_enabled: input.move_in_black_enabled,
         move_in_black_delay_millis: input.move_in_black_delay_millis,
         highlight_overrides: Vec::new(),

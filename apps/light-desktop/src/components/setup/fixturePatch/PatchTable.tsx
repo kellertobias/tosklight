@@ -13,6 +13,7 @@ import {
 	effectiveSplitPatches,
 	formatFixturePatch,
 	formatInstancePatch,
+	fixturePolicyApplicability,
 } from "./patchModel";
 
 const columns = [
@@ -22,6 +23,10 @@ const columns = [
 	"Manufacturer",
 	"Product / mode",
 	"Patch",
+	"Group Masters",
+	"Grand Master",
+	"Invert Pan",
+	"Invert Tilt",
 	"MIB",
 	"MIB Delay",
 	"Highlight Look",
@@ -100,10 +105,74 @@ function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 		>
 			<FixtureIdentityCells fixture={fixture} />
 			<FixturePatchCell fixture={fixture} />
+			<FixturePolicyCells fixture={fixture} />
 			<FixtureBehaviorCells fixture={fixture} />
 			<FixtureTransformCells fixture={fixture} />
 			<FixtureLayerCell fixture={fixture} />
 		</tr>
+	);
+}
+
+function FixturePolicyCells({ fixture }: { fixture: PatchedFixture }) {
+	const controller = usePatchController();
+	const applicable = fixturePolicyApplicability(fixture.definition);
+	const policyCell = (
+		available: boolean,
+		label: string,
+		value: boolean,
+		kind: "group_masters" | "grand_master" | "invert_pan" | "invert_tilt",
+		trueLabel: string,
+		falseLabel: string,
+	) => (
+		<td>
+			{available ? (
+				<Button
+					className="patch-value"
+					aria-label={`${label} ${fixtureDisplayId(fixture)}`}
+					onClick={() => armEdit(controller, fixture, kind)}
+				>
+					{value ? trueLabel : falseLabel}
+				</Button>
+			) : (
+				<span aria-label={`${label} unavailable`}>—</span>
+			)}
+		</td>
+	);
+	return (
+		<>
+			{policyCell(
+				applicable.groupMasters,
+				"Group Masters",
+				fixture.group_masters_enabled ?? true,
+				"group_masters",
+				"Controlled",
+				"Ignored",
+			)}
+			{policyCell(
+				applicable.grandMaster,
+				"Grand Master",
+				fixture.grand_master_enabled ?? true,
+				"grand_master",
+				"Controlled",
+				"Ignored",
+			)}
+			{policyCell(
+				applicable.pan,
+				"Invert Pan",
+				fixture.invert_pan ?? false,
+				"invert_pan",
+				"Inverted",
+				"Normal",
+			)}
+			{policyCell(
+				applicable.tilt,
+				"Invert Tilt",
+				fixture.invert_tilt ?? false,
+				"invert_tilt",
+				"Inverted",
+				"Normal",
+			)}
+		</>
 	);
 }
 
@@ -298,11 +367,37 @@ function MultiPatchRow({
 	last: boolean;
 }) {
 	const controller = usePatchController();
+	const applicable = fixturePolicyApplicability(fixture.definition);
 	return (
-		<tr className="multipatch-row">
+		<tr
+			className="multipatch-row"
+			onClick={(event) => selectPatchFixture(controller, fixture, event)}
+		>
 			<td className="patch-tree-cell">
 				<MultiPatchBranch last={last} />
 			</td>
+			<td>
+				{applicable.groupMasters
+					? `Shared · ${(fixture.group_masters_enabled ?? true) ? "Controlled" : "Ignored"}`
+					: "—"}
+			</td>
+			<td>
+				{applicable.grandMaster
+					? `Shared · ${(fixture.grand_master_enabled ?? true) ? "Controlled" : "Ignored"}`
+					: "—"}
+			</td>
+			<MultipatchAxisCell
+				fixture={fixture}
+				instance={instance}
+				axis="pan"
+				available={applicable.pan}
+			/>
+			<MultipatchAxisCell
+				fixture={fixture}
+				instance={instance}
+				axis="tilt"
+				available={applicable.tilt}
+			/>
 			<td />
 			<td className="multipatch-name">
 				<strong>{instance.name || "Multi-patch"}</strong>
@@ -365,5 +460,47 @@ function MultiPatchRow({
 			))}
 			<td />
 		</tr>
+	);
+}
+
+function MultipatchAxisCell({
+	fixture,
+	instance,
+	axis,
+	available,
+}: {
+	fixture: PatchedFixture;
+	instance: MultiPatchInstance;
+	axis: "pan" | "tilt";
+	available: boolean;
+}) {
+	const controller = usePatchController();
+	if (!available)
+		return (
+			<td>
+				<span aria-label={`Invert ${axis} unavailable`}>—</span>
+			</td>
+		);
+	const inverted =
+		axis === "pan"
+			? (instance.invert_pan ?? false)
+			: (instance.invert_tilt ?? false);
+	return (
+		<td>
+			<Button
+				className="patch-value"
+				aria-label={`Invert ${axis} ${instance.name || "Multi-patch"}`}
+				onClick={() =>
+					beginMultipatchEdit(
+						controller,
+						fixture,
+						instance,
+						axis === "pan" ? "invert_pan" : "invert_tilt",
+					)
+				}
+			>
+				{inverted ? "Inverted" : "Normal"}
+			</Button>
+		</td>
 	);
 }

@@ -41,6 +41,14 @@ export function armEdit(
 				),
 			),
 		);
+	else if (kind === "group_masters")
+		ui.setEditText(String(fixture.group_masters_enabled ?? true));
+	else if (kind === "grand_master")
+		ui.setEditText(String(fixture.grand_master_enabled ?? true));
+	else if (kind === "invert_pan")
+		ui.setEditText(String(fixture.invert_pan ?? false));
+	else if (kind === "invert_tilt")
+		ui.setEditText(String(fixture.invert_tilt ?? false));
 	else if (kind === "location" || kind === "rotation")
 		ui.setVector(fixture[kind] ?? { x: 0, y: 0, z: 0 });
 	else if (kind === "mode") selectFixtureFamily(controller, fixture);

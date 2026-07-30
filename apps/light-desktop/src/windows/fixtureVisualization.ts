@@ -9,6 +9,10 @@ const visualizationValueIndexes = new WeakMap<
 	VisualizationSnapshot,
 	ReadonlyMap<string, ReadonlyMap<string, IndexedNormalizedValue>>
 >();
+const profileOutputValueIndexes = new WeakMap<
+	VisualizationSnapshot,
+	ReadonlyMap<string, ReadonlyMap<string, IndexedNormalizedValue>>
+>();
 const fixtureDefaultIndexes = new WeakMap<
 	object,
 	ReadonlyMap<string, number>
@@ -60,11 +64,42 @@ export function fixtureValue(
 	return fixtureDefault(fixture, attribute, fallback);
 }
 
+export function fixtureProfileOutputValue(
+	snapshot: VisualizationSnapshot | null,
+	fixture: PatchedFixture,
+	attribute: string,
+) {
+	if (!snapshot?.profile_output_values) return undefined;
+	const values = profileOutputValueIndex(snapshot).get(attribute);
+	let live: IndexedNormalizedValue | undefined;
+	for (const fixtureId of fixtureTargetIds(fixture)) {
+		const candidate = values?.get(fixtureId);
+		if (candidate && (!live || candidate.index < live.index)) live = candidate;
+	}
+	return live?.value;
+}
+
+function profileOutputValueIndex(snapshot: VisualizationSnapshot) {
+	const cached = profileOutputValueIndexes.get(snapshot);
+	if (cached) return cached;
+	const indexed = indexNormalizedValues(snapshot.profile_output_values ?? []);
+	profileOutputValueIndexes.set(snapshot, indexed);
+	return indexed;
+}
+
 function visualizationValueIndex(snapshot: VisualizationSnapshot) {
 	const cached = visualizationValueIndexes.get(snapshot);
 	if (cached) return cached;
+	const indexed = indexNormalizedValues(snapshot.values);
+	visualizationValueIndexes.set(snapshot, indexed);
+	return indexed;
+}
+
+function indexNormalizedValues(
+	entries: NonNullable<VisualizationSnapshot["values"]>,
+) {
 	const indexed = new Map<string, Map<string, IndexedNormalizedValue>>();
-	for (const [index, entry] of snapshot.values.entries()) {
+	for (const [index, entry] of entries.entries()) {
 		if (entry.value.kind !== "normalized") continue;
 		let attributeValues = indexed.get(entry.attribute);
 		if (!attributeValues) {
@@ -77,6 +112,5 @@ function visualizationValueIndex(snapshot: VisualizationSnapshot) {
 				value: entry.value.value,
 			});
 	}
-	visualizationValueIndexes.set(snapshot, indexed);
 	return indexed;
 }
