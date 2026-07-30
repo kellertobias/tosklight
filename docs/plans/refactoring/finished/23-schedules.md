@@ -2,9 +2,7 @@
 
 ## Status
 
-**Doing — refactoring queue item 23.** Implementation is now claimed. Runtime behavior,
-persistence, production UI wiring, command/API behavior, events, documentation, and executable
-tests remain required before this plan can move to `finished/`.
+**Finished — refactoring queue item 23.**
 
 ## Existing Storybook UI design
 
@@ -273,3 +271,46 @@ later recurring occurrences remain eligible to run normally.
     supplies the runtime, a Schedule starts a Macro through that same Macro service.
 19. Failed scheduled occurrences are recorded without blocking output, rendering, other Schedules, or normal desk operation.
 20. Command/API, WebSocket, UI, and future OSC or hardware surfaces use compatible Schedule vocabulary and state.
+
+## Result
+
+Implemented in `df74357d` (`feat(schedules): add authoritative show scheduling`).
+
+- Added show-owned Schedule objects for anchored intervals, typed and advanced calendar rules, and
+  one-time occurrences. Recurrence calculation uses the server timezone, skips gaps and missed
+  runs, deduplicates repeated civil times, and advances interval backlogs arithmetically.
+- Added separately persisted, bounded occurrence claims and results. Claims commit before
+  dispatch, interrupted work is never replayed, history is capped at 100 entries, and duplicate or
+  imported Schedules receive new identities and reset runtime history/anchors.
+- Added authenticated preview, snapshot, create, update, duplicate, enable/disable, and delete
+  routes with revision/idempotency checks, contextual validation, stable page/slot/Playback target
+  verification, generated schemas, and typed runtime events.
+- Scheduled actions use the authoritative Playback application service. Cuelist, Dynamic, and
+  Group master fades are one engine-owned transition rather than repeated scheduler writes.
+- Replaced the Storybook-only Scheduler mock with a production window/controller, authoritative
+  server timezone and occurrence previews, stable Playback selection, event-driven reconciliation,
+  a low-rate repair snapshot, persisted pane layout, actionable validation/results, and an explicit
+  unavailable Macro boundary until item 30 supplies the Macro service.
+- Added operator help at `docs/help/40-Running-a-Show/06-schedules.md`.
+
+Verification completed:
+
+- focused Schedule/domain/persistence/import/backend route and master-transition Rust tests passed;
+- `cargo fmt --check`, the affected Rust package checks, frontend typecheck, focused Biome, and 49
+  focused frontend tests passed;
+- `npm run test:e2e-api`: 26 passed;
+- `npm run test:e2e-ui`: 154 passed, 1 skipped, and 5 unrelated or contention-sensitive failures;
+  the directly relevant 1,000-fixture acceptance was rerun alone and passed in 11.0 seconds with no
+  output deadline misses;
+- `npm run open` built and launched the actual Tauri application; `/api/v2/readiness` returned
+  ready with an active show and no recovery error, the startup log reached an engine snapshot
+  without errors, and the live Fixture Sheet/Stage desktop rendered with stable headers and column
+  geometry.
+
+Known repository-wide failures were not hidden or expanded into this item: the architecture gate
+still reports pre-existing Grid Dynamics state-label debt, output/dynamic ownership debt,
+Running-and-Output direct wire imports, and stale bench/docs inventories; one pre-existing Matter
+lock-assumption unit test remains red. The broad four-worker UI run also exposed an OS
+`setTypeOfService EINVAL`, two existing OSC-test issues, a marginal large-show 4× CPU p95 miss
+(113.7 ms normalized versus 100 ms), and three output deadline misses caused by concurrent heavy
+benches; the isolated 1,000-fixture contract passed.
