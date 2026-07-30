@@ -290,6 +290,23 @@ pub(super) fn plan_value_intent(
         AttributeValue,
     >,
 ) -> Result<Vec<ProgrammingValueMutation>, ActionError> {
+    let count = validate_value_intent(intent, environment)?;
+    if let Some(group_id) = intent.group_id.as_ref() {
+        return plan_group_value_intent(
+            intent,
+            environment,
+            group_id,
+            active_values,
+            active_group_values,
+        );
+    }
+    plan_fixture_value_intent(intent, environment, count, active_values)
+}
+
+fn validate_value_intent(
+    intent: &ProgrammingValueIntent,
+    environment: &ProgrammingValuesEnvironment,
+) -> Result<usize, ActionError> {
     if intent
         .undo_group
         .as_ref()
@@ -336,72 +353,91 @@ pub(super) fn plan_value_intent(
             ),
         ));
     }
-    if let Some(group_id) = intent.group_id.as_ref() {
-        let requested = match &intent.operation {
-            ProgrammingValueOperation::AbsoluteSet(value) => value.clone(),
-            ProgrammingValueOperation::RelativeStep(delta) => {
-                let current = active_group_values
-                    .get(&(group_id.clone(), intent.attribute.clone()))
-                    .cloned()
-                    .or_else(|| {
-                        environment.group_members.get(group_id).and_then(|members| {
-                            group_current_value(environment, members, &intent.attribute)
-                        })
+    Ok(count)
+}
+
+fn plan_group_value_intent(
+    intent: &ProgrammingValueIntent,
+    environment: &ProgrammingValuesEnvironment,
+    group_id: &str,
+    active_values: HashSet<(light_core::FixtureId, light_core::AttributeKey)>,
+    active_group_values: std::collections::HashMap<
+        (String, light_core::AttributeKey),
+        AttributeValue,
+    >,
+) -> Result<Vec<ProgrammingValueMutation>, ActionError> {
+    let requested = match &intent.operation {
+        ProgrammingValueOperation::AbsoluteSet(value) => value.clone(),
+        ProgrammingValueOperation::RelativeStep(delta) => {
+            let current = active_group_values
+                .get(&(group_id.to_owned(), intent.attribute.clone()))
+                .cloned()
+                .or_else(|| {
+                    environment.group_members.get(group_id).and_then(|members| {
+                        group_current_value(environment, members, &intent.attribute)
                     })
-                    .ok_or_else(|| {
-                        ActionError::new(
-                            ActionErrorKind::Invalid,
-                            "relative Group value requires a current normalized value",
-                        )
-                    })?;
-                shift_attribute_value(current, *delta)?
-            }
-        };
-        let mut mutations = vec![ProgrammingValueMutation::SetGroup {
-            group_id: group_id.clone(),
-            attribute: intent.attribute.clone(),
-            value: requested,
-            timing: intent.timing,
-        }];
-        let mut addresses = HashSet::new();
-        let linked_group_values = environment
-            .activation_links
-            .get(&intent.attribute)
-            .into_iter()
-            .flatten()
-            .filter(|linked| {
-                !active_group_values.contains_key(&(group_id.clone(), (*linked).clone()))
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        if let Some(members) = environment.group_members.get(group_id) {
-            for fixture_id in members {
-                for linked in &linked_group_values {
-                    let address = (*fixture_id, linked.clone());
-                    if active_values.contains(&address)
-                        || !environment
-                            .supported_attributes
-                            .get(fixture_id)
-                            .is_some_and(|attributes| attributes.contains(linked))
-                    {
-                        continue;
-                    }
-                    let Some(value) = environment.current_values.get(&address).cloned() else {
-                        continue;
-                    };
-                    push_intent_value(
-                        &mut mutations,
-                        &mut addresses,
-                        *fixture_id,
-                        linked.clone(),
-                        value,
-                        intent.timing,
-                    );
+                })
+                .ok_or_else(|| {
+                    ActionError::new(
+                        ActionErrorKind::Invalid,
+                        "relative Group value requires a current normalized value",
+                    )
+                })?;
+            shift_attribute_value(current, *delta)?
+        }
+    };
+    let mut mutations = vec![ProgrammingValueMutation::SetGroup {
+        group_id: group_id.to_owned(),
+        attribute: intent.attribute.clone(),
+        value: requested,
+        timing: intent.timing,
+    }];
+    let mut addresses = HashSet::new();
+    let linked_group_values = environment
+        .activation_links
+        .get(&intent.attribute)
+        .into_iter()
+        .flatten()
+        .filter(|linked| {
+            !active_group_values.contains_key(&(group_id.to_owned(), (*linked).clone()))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if let Some(members) = environment.group_members.get(group_id) {
+        for fixture_id in members {
+            for linked in &linked_group_values {
+                let address = (*fixture_id, linked.clone());
+                if active_values.contains(&address)
+                    || !environment
+                        .supported_attributes
+                        .get(fixture_id)
+                        .is_some_and(|attributes| attributes.contains(linked))
+                {
+                    continue;
                 }
+                let Some(value) = environment.current_values.get(&address).cloned() else {
+                    continue;
+                };
+                push_intent_value(
+                    &mut mutations,
+                    &mut addresses,
+                    *fixture_id,
+                    linked.clone(),
+                    value,
+                    intent.timing,
+                );
             }
         }
-        return Ok(mutations);
     }
+    Ok(mutations)
+}
+
+fn plan_fixture_value_intent(
+    intent: &ProgrammingValueIntent,
+    environment: &ProgrammingValuesEnvironment,
+    count: usize,
+    active_values: HashSet<(light_core::FixtureId, light_core::AttributeKey)>,
+) -> Result<Vec<ProgrammingValueMutation>, ActionError> {
     let mut mutations = Vec::new();
     let mut addresses = HashSet::new();
     for (index, fixture_id) in intent.fixture_ids.iter().copied().enumerate() {

@@ -256,8 +256,23 @@ pub(super) fn dynamic_contributions_with_auto_off(
         );
     }
     (
-        vec![ContributionBatch::new(candidates.into_iter().map(
-            |((fixture_id, attribute), mut stack)| {
+        vec![dynamic_contribution_batch(candidates, &sources, now)],
+        auto_offs,
+        dynamic_events,
+        after_runtime,
+        samples,
+    )
+}
+
+fn dynamic_contribution_batch(
+    candidates: HashMap<(FixtureId, AttributeKey), Vec<DynamicCandidate>>,
+    sources: &TickSources<'_>,
+    now: chrono::DateTime<chrono::Utc>,
+) -> ContributionBatch {
+    ContributionBatch::new(
+        candidates
+            .into_iter()
+            .map(|((fixture_id, attribute), mut stack)| {
                 stack.sort_by_key(|candidate| {
                     (
                         candidate.priority,
@@ -295,12 +310,7 @@ pub(super) fn dynamic_contributions_with_auto_off(
                     fade_millis: None,
                     delay_millis: None,
                 })
-            },
-        ))],
-        auto_offs,
-        dynamic_events,
-        after_runtime,
-        samples,
+            }),
     )
 }
 

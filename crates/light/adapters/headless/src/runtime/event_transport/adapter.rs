@@ -177,41 +177,7 @@ fn wire_payload(
     sequence: u64,
 ) -> Option<wire::EventPayload> {
     Some(match payload {
-        application::ApplicationEvent::Programming(
-            application::ProgrammingEvent::InteractionChanged(change),
-        ) => wire::EventPayload::ProgrammingInteractionChanged {
-            change: super::super::command_http::interaction_change(change),
-        },
-        application::ApplicationEvent::Programming(
-            application::ProgrammingEvent::ValuesChanged(change),
-        ) => wire::EventPayload::ProgrammingValuesChanged {
-            change: super::super::command_http::values_change(change),
-        },
-        application::ApplicationEvent::Programming(
-            application::ProgrammingEvent::PriorityChanged(change),
-        ) => wire::EventPayload::ProgrammerPriorityChanged {
-            change: super::super::command_http::priority_change(change),
-        },
-        application::ApplicationEvent::Programming(
-            application::ProgrammingEvent::CaptureModeChanged(change),
-        ) => wire::EventPayload::ProgrammingCaptureModeChanged {
-            change: super::super::command_http::capture_mode_change(change),
-        },
-        application::ApplicationEvent::Programming(
-            application::ProgrammingEvent::PreloadValuesChanged(change),
-        ) => wire::EventPayload::ProgrammingPreloadValuesChanged {
-            change: super::super::command_http::preload_values_change(change),
-        },
-        application::ApplicationEvent::Programming(
-            application::ProgrammingEvent::PreloadPlaybackQueueChanged(change),
-        ) => wire::EventPayload::ProgrammingPreloadPlaybackQueueChanged {
-            change: super::super::command_http::preload_playback_queue_change(change),
-        },
-        application::ApplicationEvent::Programming(
-            application::ProgrammingEvent::LifecycleChanged(change),
-        ) => wire::EventPayload::ProgrammingLifecycleChanged {
-            change: super::super::command_http::lifecycle_change(change),
-        },
+        application::ApplicationEvent::Programming(event) => wire_programming_payload(event),
         application::ApplicationEvent::Playback(application::PlaybackEvent::RuntimeChanged(
             change,
         )) => wire::EventPayload::PlaybackRuntimeChanged {
@@ -326,6 +292,46 @@ fn wire_payload(
             }
         }
     })
+}
+
+fn wire_programming_payload(event: &application::ProgrammingEvent) -> wire::EventPayload {
+    match event {
+        application::ProgrammingEvent::InteractionChanged(change) => {
+            wire::EventPayload::ProgrammingInteractionChanged {
+                change: super::super::command_http::interaction_change(change),
+            }
+        }
+        application::ProgrammingEvent::ValuesChanged(change) => {
+            wire::EventPayload::ProgrammingValuesChanged {
+                change: super::super::command_http::values_change(change),
+            }
+        }
+        application::ProgrammingEvent::PriorityChanged(change) => {
+            wire::EventPayload::ProgrammerPriorityChanged {
+                change: super::super::command_http::priority_change(change),
+            }
+        }
+        application::ProgrammingEvent::CaptureModeChanged(change) => {
+            wire::EventPayload::ProgrammingCaptureModeChanged {
+                change: super::super::command_http::capture_mode_change(change),
+            }
+        }
+        application::ProgrammingEvent::PreloadValuesChanged(change) => {
+            wire::EventPayload::ProgrammingPreloadValuesChanged {
+                change: super::super::command_http::preload_values_change(change),
+            }
+        }
+        application::ProgrammingEvent::PreloadPlaybackQueueChanged(change) => {
+            wire::EventPayload::ProgrammingPreloadPlaybackQueueChanged {
+                change: super::super::command_http::preload_playback_queue_change(change),
+            }
+        }
+        application::ProgrammingEvent::LifecycleChanged(change) => {
+            wire::EventPayload::ProgrammingLifecycleChanged {
+                change: super::super::command_http::lifecycle_change(change),
+            }
+        }
+    }
 }
 
 fn wire_schedule_runtime_change(

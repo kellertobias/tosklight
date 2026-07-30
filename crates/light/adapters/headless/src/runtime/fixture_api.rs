@@ -129,28 +129,7 @@ fn execute_action(
         Action::SaveProfile {
             profile,
             expected_revision,
-        } => {
-            let profile = serde_json::from_value(profile)
-                .map_err(|error| ApiError::bad_request(error.to_string()))?;
-            let expected = u32::try_from(expected_revision)
-                .map_err(|_| ApiError::bad_request("fixture profile revision exceeds u32"))?;
-            if expected == 0 {
-                require_known_canonical_attributes(state, &profile)?;
-            }
-            let stored = state
-                .installation
-                .save_fixture_profile(profile, expected)
-                .map_err(ApiError::fixture)?;
-            emit(
-                state,
-                "fixture_profile_changed",
-                serde_json::json!({"id":stored.id,"revision":stored.revision}),
-            );
-            Ok(Result::Profile {
-                profile_id: stored.id.0,
-                revision: stored.revision,
-            })
-        }
+        } => save_profile(state, profile, expected_revision),
         Action::DeleteProfileRevision {
             profile_id,
             revision,
@@ -177,39 +156,7 @@ fn execute_action(
         Action::ImportPackage {
             package_base64,
             attribute_mappings,
-        } => {
-            let package = decode_archive(&package_base64, "fixture package")?;
-            let mut profile = light_fixture::read_fixture_package(&package)
-                .map_err(|error| ApiError::bad_request(error.to_string()))?;
-            let unknown = unknown_canonical_attributes(state, &profile);
-            if !unknown.is_empty() && attribute_mappings.is_empty() {
-                return Ok(Result::ImportRequired {
-                    unknown_attributes: unknown
-                        .into_iter()
-                        .map(|(attribute, value_type)| wire::FixtureImportRequirement {
-                            attribute,
-                            value_type: fixture_import_value_type(value_type),
-                        })
-                        .collect(),
-                });
-            }
-            apply_fixture_attribute_mappings(state, &mut profile, &unknown, attribute_mappings)?;
-            let package = light_fixture::write_fixture_package(&profile)
-                .map_err(|error| ApiError::bad_request(error.to_string()))?;
-            let stored = state
-                .installation
-                .import_fixture_package(&package)
-                .map_err(ApiError::fixture)?;
-            emit(
-                state,
-                "fixture_profile_changed",
-                serde_json::json!({"id":stored.id,"revision":stored.revision,"imported_package":true}),
-            );
-            Ok(Result::Profile {
-                profile_id: stored.id.0,
-                revision: stored.revision,
-            })
-        }
+        } => import_package(state, &package_base64, attribute_mappings),
         Action::AttachGdtf {
             profile_id,
             revision,
@@ -276,6 +223,72 @@ fn execute_action(
             })
         }
     }
+}
+
+fn save_profile(
+    state: &AppState,
+    profile: serde_json::Value,
+    expected_revision: u64,
+) -> Result<wire::FixtureLibraryActionResult, ApiError> {
+    let profile = serde_json::from_value(profile)
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    let expected = u32::try_from(expected_revision)
+        .map_err(|_| ApiError::bad_request("fixture profile revision exceeds u32"))?;
+    if expected == 0 {
+        require_known_canonical_attributes(state, &profile)?;
+    }
+    let stored = state
+        .installation
+        .save_fixture_profile(profile, expected)
+        .map_err(ApiError::fixture)?;
+    emit(
+        state,
+        "fixture_profile_changed",
+        serde_json::json!({"id":stored.id,"revision":stored.revision}),
+    );
+    Ok(wire::FixtureLibraryActionResult::Profile {
+        profile_id: stored.id.0,
+        revision: stored.revision,
+    })
+}
+
+fn import_package(
+    state: &AppState,
+    package_base64: &str,
+    attribute_mappings: Vec<wire::FixtureAttributeMapping>,
+) -> Result<wire::FixtureLibraryActionResult, ApiError> {
+    use wire::FixtureLibraryActionResult as Result;
+    let package = decode_archive(package_base64, "fixture package")?;
+    let mut profile = light_fixture::read_fixture_package(&package)
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    let unknown = unknown_canonical_attributes(state, &profile);
+    if !unknown.is_empty() && attribute_mappings.is_empty() {
+        return Ok(Result::ImportRequired {
+            unknown_attributes: unknown
+                .into_iter()
+                .map(|(attribute, value_type)| wire::FixtureImportRequirement {
+                    attribute,
+                    value_type: fixture_import_value_type(value_type),
+                })
+                .collect(),
+        });
+    }
+    apply_fixture_attribute_mappings(state, &mut profile, &unknown, attribute_mappings)?;
+    let package = light_fixture::write_fixture_package(&profile)
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    let stored = state
+        .installation
+        .import_fixture_package(&package)
+        .map_err(ApiError::fixture)?;
+    emit(
+        state,
+        "fixture_profile_changed",
+        serde_json::json!({"id":stored.id,"revision":stored.revision,"imported_package":true}),
+    );
+    Ok(Result::Profile {
+        profile_id: stored.id.0,
+        revision: stored.revision,
+    })
 }
 
 fn require_known_canonical_attributes(

@@ -313,6 +313,64 @@ pub(super) fn ws_programmer_control_actions(
         .copied()
         .collect::<HashSet<_>>();
     let snapshot = state.output.snapshot();
+    let (assignments, pulse_duration, kind) =
+        validate_control_action_targets(&request, &selected, &snapshot)?;
+    let source = format!(
+        "indexed-control:{}",
+        request
+            .targets
+            .iter()
+            .map(|target| format!("{}:{}", target.fixture_id, target.action_id))
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    let generation = match (kind, request.active) {
+        (light_fixture::ControlActionKind::Latched, _) => {
+            state.programming.set_many(session.id, assignments);
+            persist_programmer(state, session).map_err(|error| error.message)?;
+            None
+        }
+        (_, true) => {
+            state
+                .programming
+                .set_transient_action(session.id, source.clone(), assignments)
+        }
+        (_, false) => {
+            state
+                .programming
+                .release_transient_action(session.id, &source, None);
+            None
+        }
+    };
+    schedule_control_action_release(state, session, &source, pulse_duration, generation)?;
+    Ok(WsControlActionResult {
+        payload: serde_json::json!({
+            "active":request.active,
+            "kind":kind,
+            "pulse_duration_millis":pulse_duration,
+            "programmer":state.programming.get(session.id),
+        }),
+    })
+}
+
+type ControlActionAssignments = Vec<(
+    light_core::FixtureId,
+    light_core::AttributeKey,
+    light_core::AttributeValue,
+)>;
+
+fn validate_control_action_targets(
+    request: &light_wire::v2::live_action::FixtureControlsLiveActionRequest,
+    selected: &HashSet<light_core::FixtureId>,
+    snapshot: &light_engine::EngineSnapshot,
+) -> Result<
+    (
+        ControlActionAssignments,
+        Option<u64>,
+        light_fixture::ControlActionKind,
+    ),
+    String,
+> {
     let mut seen = HashSet::new();
     let mut assignments = Vec::new();
     let mut compatibility = None;
@@ -387,37 +445,20 @@ pub(super) fn ws_programmer_control_actions(
         kind = Some(next_kind);
     }
     let kind = kind.ok_or_else(|| "Indexed Preset control action has no targets".to_owned())?;
-    let source = format!(
-        "indexed-control:{}",
-        request
-            .targets
-            .iter()
-            .map(|target| format!("{}:{}", target.fixture_id, target.action_id))
-            .collect::<Vec<_>>()
-            .join(",")
-    );
-    let generation = match (kind, request.active) {
-        (light_fixture::ControlActionKind::Latched, _) => {
-            state.programming.set_many(session.id, assignments);
-            persist_programmer(state, session).map_err(|error| error.message)?;
-            None
-        }
-        (_, true) => {
-            state
-                .programming
-                .set_transient_action(session.id, source.clone(), assignments)
-        }
-        (_, false) => {
-            state
-                .programming
-                .release_transient_action(session.id, &source, None);
-            None
-        }
-    };
+    Ok((assignments, pulse_duration, kind))
+}
+
+fn schedule_control_action_release(
+    state: &AppState,
+    session: &Session,
+    source: &str,
+    pulse_duration: Option<u64>,
+    generation: Option<u64>,
+) -> Result<(), String> {
     if let (Some(duration_millis), Some(generation)) = (pulse_duration, generation) {
         let task_state = state.clone();
         let task_session = session.clone();
-        let task_source = source.clone();
+        let task_source = source.to_owned();
         let lifecycle = task_state.lifecycle.clone();
         if let Err(error) = lifecycle.schedule(async move {
             tokio::time::sleep(Duration::from_millis(duration_millis)).await;
@@ -434,12 +475,5 @@ pub(super) fn ws_programmer_control_actions(
             return Err(error.to_string());
         }
     }
-    Ok(WsControlActionResult {
-        payload: serde_json::json!({
-            "active":request.active,
-            "kind":kind,
-            "pulse_duration_millis":pulse_duration,
-            "programmer":state.programming.get(session.id),
-        }),
-    })
+    Ok(())
 }
