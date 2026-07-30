@@ -228,6 +228,12 @@ attributes rather than being forced into an unrelated built-in. **Restore recomm
 restores the server-projected built-in activation groups while retaining custom-only groups and
 giving any formerly mixed custom member a safe single-member group.
 
+When a newer ToskLight version adds built-in attributes, an older saved configuration gains those
+new definitions at load time without rewriting the show merely because it was opened. Existing
+custom descriptors and activation choices remain intact. If a custom descriptor used a slot that
+has since become a built-in's preferred position, the custom descriptor moves to the first free
+custom page in the same encoder group.
+
 ## Recommended activation groups
 
 Activation groups decide which supported attributes become active together when one member changes. They do not force every listed attribute onto every fixture; missing members are skipped per fixture and logical head.

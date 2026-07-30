@@ -109,6 +109,7 @@ impl InstalledAttributeConfiguration {
         };
         let decoded =
             serde_json::from_value::<light_core::AttributeConfiguration>(object.body().clone())
+                .map(light_core::AttributeConfiguration::with_current_built_ins)
                 .and_then(|configuration| {
                     configuration
                         .validate()

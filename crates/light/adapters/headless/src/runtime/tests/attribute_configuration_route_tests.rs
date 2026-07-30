@@ -150,3 +150,61 @@ async fn attribute_configuration_defaults_persist_and_replay_without_eager_show_
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[test]
+fn saved_configuration_from_an_older_catalog_is_upgraded_without_rewriting_the_show() {
+    let (_state, data_dir) = test_state();
+    let show_path = data_dir.join("legacy-attribute-catalog.show");
+    let (store, _) = ShowStore::create(&show_path, "Legacy Attribute catalog").unwrap();
+    let mut legacy = light_core::AttributeConfiguration::recommended();
+    legacy
+        .placements
+        .retain(|placement| !placement.attribute.0.starts_with("media."));
+    for group in &mut legacy.activation_groups {
+        group
+            .members
+            .retain(|member| !member.0.starts_with("media."));
+    }
+    legacy
+        .activation_groups
+        .retain(|group| !group.members.is_empty());
+    store
+        .put_object(
+            attribute_configuration::ATTRIBUTE_CONFIGURATION_KIND,
+            attribute_configuration::ATTRIBUTE_CONFIGURATION_ID,
+            &serde_json::to_value(&legacy).unwrap(),
+            0,
+        )
+        .unwrap();
+    let document = store.portable_document().unwrap();
+
+    let installed =
+        attribute_configuration::InstalledAttributeConfiguration::for_document(&document);
+    assert_eq!(installed.validation_error, None);
+    installed.configuration.validate().unwrap();
+    assert_eq!(
+        installed
+            .configuration
+            .placement_for(&light_core::AttributeKey("media.folder".into())),
+        Some(light_core::EncoderPlacement::new(
+            light_core::EncoderGroup::Media,
+            1,
+            1
+        ))
+    );
+    assert!(
+        document
+            .object(
+                attribute_configuration::ATTRIBUTE_CONFIGURATION_KIND,
+                attribute_configuration::ATTRIBUTE_CONFIGURATION_ID,
+            )
+            .unwrap()
+            .body()["placements"]
+            .as_array()
+            .unwrap()
+            .len()
+            < installed.configuration.placements.len(),
+        "runtime compatibility must not eagerly rewrite the portable show object"
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}

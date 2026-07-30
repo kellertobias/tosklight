@@ -329,6 +329,87 @@ impl AttributeConfiguration {
         }
     }
 
+    /// Adds built-ins introduced after this show saved its configuration without rewriting
+    /// existing custom descriptors or activation choices.
+    ///
+    /// Newly recommended slots remain stable. A custom descriptor that occupied a slot before it
+    /// became a built-in preferred location moves to the first free page after that encoder
+    /// group's built-in pages. Newly introduced attributes join an existing matching recommended
+    /// group when one exists; otherwise complete new recommended groups are added, with remaining
+    /// attributes receiving safe single-member groups.
+    pub fn with_current_built_ins(mut self) -> Self {
+        let recommended = Self::recommended();
+        let built_in_ids = ATTRIBUTE_REGISTRY
+            .iter()
+            .map(|descriptor| descriptor.id)
+            .collect::<HashSet<_>>();
+        for placement in &recommended.placements {
+            if self
+                .placements
+                .iter()
+                .any(|candidate| candidate.attribute == placement.attribute)
+            {
+                continue;
+            }
+            if let Some(occupied) = self
+                .placements
+                .iter()
+                .position(|candidate| candidate.encoder == placement.encoder)
+            {
+                let occupant = &self.placements[occupied].attribute;
+                if !built_in_ids.contains(occupant.0.as_str()) {
+                    self.placements[occupied].encoder =
+                        next_custom_encoder_slot(&self.placements, placement.encoder.group);
+                }
+            }
+            self.placements.push(placement.clone());
+        }
+
+        let mut assigned = self
+            .activation_groups
+            .iter()
+            .flat_map(|group| group.members.iter().cloned())
+            .collect::<HashSet<_>>();
+        for recommended_group in &recommended.activation_groups {
+            let missing = recommended_group
+                .members
+                .iter()
+                .filter(|member| !assigned.contains(*member))
+                .cloned()
+                .collect::<Vec<_>>();
+            if missing.is_empty() {
+                continue;
+            }
+            if let Some(existing) = self
+                .activation_groups
+                .iter_mut()
+                .find(|group| group.id == recommended_group.id)
+            {
+                existing.members.extend(missing.iter().cloned());
+                assigned.extend(missing);
+                continue;
+            }
+            if missing.len() == recommended_group.members.len() {
+                self.activation_groups.push(recommended_group.clone());
+                assigned.extend(missing);
+            }
+        }
+        for descriptor in ATTRIBUTE_REGISTRY
+            .iter()
+            .filter(|descriptor| descriptor.recordable)
+        {
+            let id = AttributeKey(descriptor.id.into());
+            if assigned.insert(id.clone()) {
+                self.activation_groups.push(recommended_activation_group(
+                    descriptor.id,
+                    descriptor.label,
+                    &[descriptor.id],
+                ));
+            }
+        }
+        self
+    }
+
     pub fn validate(&self) -> Result<(), AttributeConfigurationError> {
         if self.version != ATTRIBUTE_CONFIGURATION_VERSION {
             return Err(AttributeConfigurationError::UnsupportedVersion {
@@ -497,6 +578,31 @@ impl AttributeConfiguration {
             })
             .collect()
     }
+}
+
+fn next_custom_encoder_slot(
+    placements: &[AttributePlacement],
+    group: EncoderGroup,
+) -> EncoderPlacement {
+    let first_custom_page = recommended_builtin_placements()
+        .into_iter()
+        .filter(|placement| placement.encoder.group == group)
+        .map(|placement| placement.encoder.page)
+        .max()
+        .unwrap_or(0)
+        + 1;
+    for page in first_custom_page..=u16::MAX {
+        for slot in 1..=ENCODER_SLOTS_PER_PAGE {
+            let candidate = EncoderPlacement::new(group, page, slot);
+            if placements
+                .iter()
+                .all(|placement| placement.encoder != candidate)
+            {
+                return candidate;
+            }
+        }
+    }
+    unreachable!("u16 encoder pages cannot be exhausted by an in-memory configuration")
 }
 
 impl Default for AttributeConfiguration {
@@ -1568,6 +1674,72 @@ mod attribute_registry_tests {
         );
         assert!(links[&AttributeKey("intensity".into())].is_empty());
         assert!(!links.contains_key(&AttributeKey("control".into())));
+    }
+
+    #[test]
+    fn saved_legacy_catalog_configuration_adds_new_built_ins_without_losing_custom_choices() {
+        let legacy_ids = HashSet::from([
+            "intensity",
+            "color",
+            "color.red",
+            "color.green",
+            "color.blue",
+            "color.cyan",
+            "color.magenta",
+            "color.yellow",
+            "color.amber",
+            "color.white",
+            "color.uv",
+            "color.wheel.1",
+            "color.wheel.2",
+            "pan",
+            "tilt",
+            "beam",
+            "focus",
+            "zoom",
+            "iris",
+            "gobo.1",
+            "gobo.2",
+            "shutter",
+            "strobe",
+            "control",
+        ]);
+        let mut legacy = AttributeConfiguration::recommended();
+        legacy
+            .placements
+            .retain(|placement| legacy_ids.contains(placement.attribute.0.as_str()));
+        for group in &mut legacy.activation_groups {
+            group
+                .members
+                .retain(|member| legacy_ids.contains(member.0.as_str()));
+        }
+        legacy
+            .activation_groups
+            .retain(|group| !group.members.is_empty());
+        add_custom(
+            &mut legacy,
+            custom_descriptor("vendor.media_surface", AttributeValueType::Continuous, true),
+            EncoderPlacement::new(EncoderGroup::Media, 1, 1),
+        );
+
+        let upgraded = legacy.with_current_built_ins();
+        upgraded.validate().unwrap();
+        assert_eq!(
+            upgraded.placement_for(&AttributeKey("media.folder".into())),
+            Some(EncoderPlacement::new(EncoderGroup::Media, 1, 1))
+        );
+        assert_eq!(
+            upgraded.placement_for(&AttributeKey("vendor.media_surface".into())),
+            Some(EncoderPlacement::new(EncoderGroup::Media, 5, 1))
+        );
+        assert_eq!(
+            upgraded
+                .activation_group_for(&AttributeKey("vendor.media_surface".into()))
+                .unwrap()
+                .members,
+            [AttributeKey("vendor.media_surface".into())]
+        );
+        assert_eq!(upgraded.clone().with_current_built_ins(), upgraded);
     }
 
     #[test]
