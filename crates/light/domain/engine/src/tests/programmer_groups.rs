@@ -269,6 +269,7 @@ fn explicit_cue_change_wins_when_group_expansion_targets_same_attribute() {
                 id: "group".into(),
                 name: "Group".into(),
                 fixtures: vec![logical],
+                grid: Default::default(),
                 master: 1.0,
                 playback_fader: None,
                 programming: Default::default(),
