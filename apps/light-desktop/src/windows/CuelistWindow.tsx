@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useSpeedGroupsBpm } from "../features/configuration/ConfigurationState";
 import { usePlaybackDeskView } from "../features/playbackRuntime/PlaybackRuntimeView";
 import { useCueListTopologyWriter } from "../features/playbackTopology/useCueListTopologyWriter";
-import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { useCueLists } from "../features/showObjects/ShowObjectsState";
+import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { useApp } from "../state/AppContext";
 import { CuelistDetail } from "./cuelistWindow/CuelistDetail";
 import { CuelistPool } from "./cuelistWindow/CuelistPool";
@@ -23,6 +23,8 @@ export function CuelistWindow({
 	showCueSidebar = true,
 	cueListSource = "fixed",
 	fixedCueListNumber,
+	fixedCueListId,
+	viewOnly = false,
 	paneId,
 	thumbnails,
 }: WindowProps & { thumbnails?: Record<number, string> }) {
@@ -46,10 +48,20 @@ export function CuelistWindow({
 	useShowObjectView("playback", active);
 	useShowObjectView("playback_page", active && tab === "pool");
 	const firstAvailableCuelist = pool[0]?.number ?? 1;
+	const hasFixedCueListId = fixedCueListId !== undefined;
+	const fixedDefinition = hasFixedCueListId
+		? pool.find(
+				(definition) =>
+					definition.target.type === "cue_list" &&
+					definition.target.cue_list_id === fixedCueListId,
+			)
+		: undefined;
 	const paneSelectedCuelist =
 		cueListSource === "follow-selection"
 			? (playbackDesk?.selected_playback ?? null)
-			: (fixedCueListNumber ?? firstAvailableCuelist);
+			: hasFixedCueListId
+				? (fixedDefinition?.number ?? null)
+				: (fixedCueListNumber ?? firstAvailableCuelist);
 	const selectedCuelist = builtIn
 		? (state.cuelistBuiltInNumber ?? firstAvailableCuelist)
 		: cueListTab === "cues"
@@ -118,6 +130,8 @@ export function CuelistWindow({
 			onOpenPool={openPool}
 			onOpenSettings={() => openSettings(selectedCuelist)}
 			thumbnails={thumbnails}
+			fixedCueListId={fixedCueListId}
+			viewOnly={viewOnly}
 		/>
 	);
 }

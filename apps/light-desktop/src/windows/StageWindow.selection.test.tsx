@@ -149,8 +149,10 @@ function renderStage({
 	transport = new FakeProgrammingTransport(),
 	loadSnapshot = vi.fn(async () => programmingSnapshot()),
 	applySelection,
+	viewOnly = false,
 }: {
 	active?: boolean;
+	viewOnly?: boolean;
 	store?: ProgrammingInteractionStore;
 	transport?: FakeProgrammingTransport;
 	loadSnapshot?: () => Promise<ProgrammingSnapshot>;
@@ -168,7 +170,7 @@ function renderStage({
 			loadSnapshot={loadSnapshot}
 			applySelection={applySelection}
 		>
-			<StageWindow active={enabled} />
+			<StageWindow active={enabled} viewOnly={viewOnly} />
 		</ProgrammingInteractionViewProvider>
 	);
 	return {
@@ -194,6 +196,18 @@ afterEach(() => {
 });
 
 describe("Stage selection projection", () => {
+	it("suppresses fixture and marquee selection for a fixed view-only Stage", async () => {
+		const applySelection = vi.fn();
+		renderStage({ applySelection, viewOnly: true });
+
+		await screen.findByText("0 selected");
+		fireEvent.click(screen.getByRole("button", { name: "Gesture fixture 2" }));
+		fireEvent.pointerDown(screen.getByTestId("stage-selection"));
+		fireEvent.pointerUp(screen.getByTestId("stage-selection"));
+
+		expect(applySelection).not.toHaveBeenCalled();
+	});
+
 	it("updates ordered Stage selection from peer or OSC events without legacy reloads", async () => {
 		const loadSnapshot = vi.fn(async () => programmingSnapshot());
 		const { transport } = renderStage({ loadSnapshot });

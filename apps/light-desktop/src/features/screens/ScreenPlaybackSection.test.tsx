@@ -1,4 +1,10 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScreenConfiguration, ScreenSnapshot } from "../../api/types";
 import type { ShowObject } from "../showObjects/contracts";
@@ -59,6 +65,7 @@ function screenConfiguration(
 		id: "screen-1",
 		name: "Screen 1",
 		layout: { desks: [], activeDeskId: "desk-1" },
+		content: { type: "desktop" },
 		show_dock: false,
 		show_playbacks: true,
 		playback_count: 4,
@@ -167,14 +174,17 @@ describe("Follow Main secondary screens", () => {
 describe("independent secondary screens", () => {
 	it("tracks only the screen's own page", () => {
 		mocks.desk = { active_page: 9 };
-		mount(source({ screens: snapshot({ "screen-1": 2 }) }), screenConfiguration());
+		mount(
+			source({ screens: snapshot({ "screen-1": 2 }) }),
+			screenConfiguration(),
+		);
 		expect(bankPage()).toBe("2");
 		expect(mocks.deskEnabled.every((enabled) => enabled === false)).toBe(true);
 	});
 
 	it("does not fall back to the desk page or Page 1 without its authority", () => {
 		mocks.desk = { active_page: 9 };
-		mount(source({ screens: snapshot({ "other": 4 }) }), screenConfiguration());
+		mount(source({ screens: snapshot({ other: 4 }) }), screenConfiguration());
 		expect(screen.queryByTestId("fader-bank")).toBeNull();
 		expect(screen.getByRole("status")).toHaveTextContent("Loading Playbacks…");
 	});
@@ -328,7 +338,9 @@ describe("dormant secondary screen Playback authority", () => {
 	it("mounts no Playback or Page authority when Playbacks are hidden", () => {
 		mocks.desk = { active_page: 3 };
 		render(
-			<ScreensProvider source={source({ screens: snapshot({ "screen-1": 2 }) })}>
+			<ScreensProvider
+				source={source({ screens: snapshot({ "screen-1": 2 }) })}
+			>
 				{screenConfiguration({ show_playbacks: false }).show_playbacks ? (
 					<ScreenPlaybackSection screen={screenConfiguration()} />
 				) : null}
@@ -337,6 +349,19 @@ describe("dormant secondary screen Playback authority", () => {
 		expect(mocks.deskEnabled).toEqual([]);
 		expect(mocks.pagesViewMounted).toBe(0);
 		expect(mocks.bankPages).toEqual([]);
+	});
+
+	it("mounts Page Controls without a Playback bank when configured independently", () => {
+		mount(
+			source({ screens: snapshot({ "screen-1": 2 }) }),
+			screenConfiguration({
+				show_playbacks: false,
+				show_page_controls: true,
+			}),
+		);
+		expect(mocks.bankPages).toEqual([]);
+		expect(mocks.pagesViewMounted).toBe(1);
+		expect(document.querySelector(".screen-page-controls")).not.toBeNull();
 	});
 
 	it("mounts no page-control authority when page controls are hidden", () => {
@@ -359,7 +384,10 @@ describe("removed broad Playback facade", () => {
 
 	it("performs no network request for the secondary screen surface", () => {
 		const fetchSpy = vi.spyOn(globalThis, "fetch");
-		mount(source({ screens: snapshot({ "screen-1": 2 }) }), screenConfiguration());
+		mount(
+			source({ screens: snapshot({ "screen-1": 2 }) }),
+			screenConfiguration(),
+		);
 		expect(fetchSpy).not.toHaveBeenCalled();
 		fetchSpy.mockRestore();
 	});

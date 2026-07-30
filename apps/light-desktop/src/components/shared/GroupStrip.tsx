@@ -1,4 +1,7 @@
+import { Button } from "@tosklight/ui";
+import { ButtonGrid } from "@tosklight/ui/window-kit";
 import { useLayoutEffect, useRef, useState } from "react";
+import type { PoolPresentationConfiguration } from "../../api/types";
 import { groups } from "../../data/mockData";
 import {
 	useActiveShowId,
@@ -11,20 +14,17 @@ import {
 	type GroupRecordingTarget,
 } from "../../features/groupRecording/target";
 import { useGroupSelectionActions } from "../../features/groupSelection/useGroupSelectionActions";
-import { usePortableGroups } from "../../features/showObjects/ShowObjectsState";
-import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
-import { useApp } from "../../state/AppContext";
-import { Button } from "@tosklight/ui";
-import { useCommandLineSurface } from "../control/commandLine/useCommandLineSurface";
-import { requestUpdateTarget } from "../control/updateWorkflow";
-import { ButtonGrid } from "@tosklight/ui/window-kit";
-import { type RecordMode, RecordModeDialog } from "./RecordModeDialog";
-import type { PoolPresentationConfiguration } from "../../api/types";
 import {
 	poolSurfaceKey,
 	resolveConfiguredPoolPresentation,
 	usePoolPresentationConfiguration,
 } from "../../features/poolPresentation/poolPresentation";
+import { usePortableGroups } from "../../features/showObjects/ShowObjectsState";
+import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
+import { useApp } from "../../state/AppContext";
+import { useCommandLineSurface } from "../control/commandLine/useCommandLineSurface";
+import { requestUpdateTarget } from "../control/updateWorkflow";
+import { type RecordMode, RecordModeDialog } from "./RecordModeDialog";
 
 const MIN_SHORTCUT_SIZE = 88;
 const SHORTCUT_GAP = 2;
@@ -78,6 +78,7 @@ function GroupShortcut({
 	onDoubleClick,
 	poolPresentation,
 	showId,
+	viewOnly,
 }: {
 	group: ShortcutGroup | null;
 	index: number;
@@ -88,6 +89,7 @@ function GroupShortcut({
 	onDoubleClick: () => void;
 	poolPresentation: PoolPresentationConfiguration;
 	showId: string;
+	viewOnly: boolean;
 }) {
 	const presentation = resolveConfiguredPoolPresentation(poolPresentation, {
 		showId,
@@ -108,8 +110,9 @@ function GroupShortcut({
 			className={`group-card pool-cell ${presentation.className}`}
 			style={presentation.style}
 			aria-pressed={selected}
-			onClick={onClick}
-			onDoubleClick={onDoubleClick}
+			disabled={viewOnly}
+			onClick={viewOnly ? undefined : onClick}
+			onDoubleClick={viewOnly ? undefined : onDoubleClick}
 		>
 			<span className="number">{index + 1}</span>
 			<b>{group?.body.name ?? "Empty"}</b>
@@ -118,17 +121,24 @@ function GroupShortcut({
 	);
 }
 
-export function GroupStrip({ active = true }: { active?: boolean }) {
+export function GroupStrip({
+	active = true,
+	viewOnly = false,
+}: {
+	active?: boolean;
+	viewOnly?: boolean;
+}) {
+	const interactionActive = active && !viewOnly;
 	useShowObjectView("group", active);
 	const bootstrapReady = useBootstrapReady();
 	const groupRecording = useGroupRecording();
 	const commandLine = useCommandLineSurface({
 		selection: true,
-		enabled: active,
+		enabled: interactionActive,
 		observeCommand: false,
 	});
 	const storedGroups = usePortableGroups(active);
-	const groupSelection = useGroupSelectionActions(active);
+	const groupSelection = useGroupSelectionActions(interactionActive);
 	const { state, dispatch } = useApp();
 	const { gridRef, slotCount } = useGroupShortcutCount(active);
 	const poolPresentation = usePoolPresentationConfiguration();
@@ -232,6 +242,7 @@ export function GroupStrip({ active = true }: { active?: boolean }) {
 						}}
 						poolPresentation={poolPresentation}
 						showId={showId}
+						viewOnly={viewOnly}
 					/>
 				))}
 			</ButtonGrid>

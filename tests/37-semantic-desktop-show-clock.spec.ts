@@ -1,13 +1,10 @@
 // @bench-semantic-world
 
 import { expect } from "./bench/core/fixtures";
-import {
-	fixture,
-	fixtureRange,
-} from "./bench/output/fixtureDmx";
-import { PaneType } from "./bench/window-system/paneTypes";
 import { scenario } from "./bench/core/scenario";
+import { fixture, fixtureRange } from "./bench/output/fixtureDmx";
 import { Show } from "./bench/show/showScenario";
+import { PaneType } from "./bench/window-system/paneTypes";
 
 scenario(
 	"BENCH-UI-003",
@@ -26,7 +23,7 @@ scenario(
 
 		const screen = await t.screen.create({
 			name: "Bench output",
-			desktop: "Screenshot Desktop",
+			fixedPane: "fixture_sheet",
 			showDock: false,
 			showPlaybacks: true,
 			showPageControls: true,
@@ -41,6 +38,7 @@ scenario(
 			},
 		});
 		await screen.expectBridgeAction("open_console_screen");
+		await screen.expectFixedPane("fixture_sheet");
 		await screen.close();
 		await screen.expectBridgeAction("close_console_screen");
 		await screen.remove();

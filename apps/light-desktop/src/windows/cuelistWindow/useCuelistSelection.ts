@@ -20,22 +20,31 @@ export function useCuelistPool() {
 export function useSelectedCuelist(
 	selectedCuelist: number | null,
 	enabled = true,
+	fixedCueListId?: string,
 ) {
 	const pool = useCuelistPool();
 	const cueLists = useCueLists();
-	const selectedPlaybackDefinition = pool.find(
-		(definition) => definition.number === selectedCuelist,
-	);
+	const hasFixedCueListId = fixedCueListId !== undefined;
+	const selectedPlaybackDefinition = hasFixedCueListId
+		? pool.find(
+				(definition) =>
+					definition.target.type === "cue_list" &&
+					definition.target.cue_list_id === fixedCueListId,
+			)
+		: pool.find((definition) => definition.number === selectedCuelist);
 	const selectedDefinition =
 		selectedPlaybackDefinition?.target.type === "cue_list"
 			? selectedPlaybackDefinition
 			: undefined;
-	const selectedCueListId =
-		selectedDefinition?.target.type === "cue_list"
+	const selectedCueListId = hasFixedCueListId
+		? fixedCueListId
+		: selectedDefinition?.target.type === "cue_list"
 			? selectedDefinition.target.cue_list_id
 			: null;
 	const legacyFirstCueObject =
-		pool.length === 0 && selectedCuelist === 1 ? cueLists[0] : undefined;
+		!hasFixedCueListId && pool.length === 0 && selectedCuelist === 1
+			? cueLists[0]
+			: undefined;
 	const selectedCueObject = selectedCueListId
 		? cueLists.find((candidate) => candidate.body.id === selectedCueListId)
 		: legacyFirstCueObject;

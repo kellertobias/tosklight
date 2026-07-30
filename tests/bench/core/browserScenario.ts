@@ -4,6 +4,7 @@ import {
 	type Page,
 	type TestInfo,
 } from "@playwright/test";
+import type { FixedScreenPane } from "../../../apps/light-desktop/src/api/types";
 import type { ControllableDesktopAction } from "../../../apps/light-desktop/src/platform/desktop/controllableBrowserDesktopBridge";
 import {
 	BrowserCommands,
@@ -74,6 +75,7 @@ import { BrowserRecipes } from "./recipeScenario";
 export interface ScreenConfigurationIntent {
 	name: string;
 	desktop?: string;
+	fixedPane?: FixedScreenPane["type"];
 	showDock?: boolean;
 	showPlaybacks?: boolean;
 	showPageControls?: boolean;
@@ -97,6 +99,7 @@ export interface ScreenHandle {
 	open(): Promise<void>;
 	close(): Promise<void>;
 	remove(): Promise<void>;
+	expectFixedPane(type: FixedScreenPane["type"]): Promise<void>;
 	expectBridgeAction(type: ControllableDesktopAction["type"]): Promise<void>;
 }
 
@@ -558,6 +561,26 @@ class BrowserScreenHandle implements ScreenHandle {
 		await expect(card).toHaveCount(0);
 	}
 
+	async expectFixedPane(type: FixedScreenPane["type"]): Promise<void> {
+		const surface = await this.browser.context().newPage();
+		try {
+			await surface.goto(
+				`${new URL(this.browser.url()).origin}/?screen=${encodeURIComponent(this.runtimeId)}`,
+			);
+			await expect(
+				surface.locator(
+					`[data-light-surface="fixed-screen-pane"][data-fixed-pane-type="${type}"]`,
+				),
+			).toBeVisible();
+			await expect(surface.locator(".desk-pane")).toHaveCount(0);
+			await expect(
+				surface.getByRole("button", { name: /Pane Settings/ }),
+			).toHaveCount(0);
+		} finally {
+			await surface.close();
+		}
+	}
+
 	async expectBridgeAction(
 		type: ControllableDesktopAction["type"],
 	): Promise<void> {
@@ -621,7 +644,22 @@ export class BrowserScreens {
 		const runtimeId = await card.getAttribute("data-screen-id");
 		if (!runtimeId) throw new Error("Created screen has no runtime identity");
 		await card.getByLabel("Screen name").fill(configuration.name);
-		if (configuration.desktop)
+		if (configuration.fixedPane) {
+			await chooseOption(this.page, card, "Content", "Fixed full-screen pane");
+			const fixedPaneLabels: Record<FixedScreenPane["type"], string> = {
+				fixture_sheet: "Fixture Sheet",
+				stage_2d: "Stage - 2D",
+				stage_3d: "Stage - 3D",
+				cues: "Cues - Cuelist",
+				text: "Text",
+			};
+			await chooseOption(
+				this.page,
+				card,
+				"Pane",
+				fixedPaneLabels[configuration.fixedPane],
+			);
+		} else if (configuration.desktop)
 			await chooseOption(this.page, card, "Desktop", configuration.desktop);
 		await setSwitch(card, "Dock", configuration.showDock);
 		await setSwitch(card, "Playbacks", configuration.showPlaybacks);

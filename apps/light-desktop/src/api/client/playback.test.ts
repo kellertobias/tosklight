@@ -19,6 +19,7 @@ const screen: ScreenConfiguration = {
 	id: SCREEN_ID,
 	name: "Screen",
 	layout: { desks: [], activeDeskId: "main" },
+	content: { type: "desktop" },
 	show_dock: true,
 	show_playbacks: true,
 	playback_count: 8,
@@ -182,10 +183,10 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		expect(request).toHaveBeenNthCalledWith(1, "/api/v2/screens");
 		expect(request).toHaveBeenNthCalledWith(
 			2,
-			"/api/v2/screens/actions",
+			"/api/v2/screens/create",
 			expect.objectContaining({
 				method: "POST",
-				body: expect.stringContaining('"type":"create"'),
+				body: expect.stringContaining('"configuration"'),
 			}),
 		);
 	});
@@ -212,10 +213,50 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		const body = JSON.parse(request.mock.calls[1][1].body as string);
 
 		expect(request.mock.calls[0][0]).toBe("/api/v2/screens");
-		expect(body.action).toMatchObject({
-			type: "update",
-			screen_id: SCREEN_ID,
-			patch: { name: "Renamed", show_dock: null },
+		expect(request.mock.calls[1][0]).toBe(
+			`/api/v2/screens/${SCREEN_ID}/update`,
+		);
+		expect(body.patch).toMatchObject({
+			name: "Renamed",
+			show_dock: null,
+		});
+	});
+
+	it("sends fixed pane content and the atomic Dock update", async () => {
+		const fixed = {
+			...screen,
+			content: {
+				type: "fixed_pane",
+				pane: { type: "cues", cue_list_id: "cue-list-id" },
+			},
+			show_dock: false,
+		} satisfies ScreenConfiguration;
+		const request = vi
+			.fn()
+			.mockResolvedValueOnce({ screens: [screen], active_pages: {} })
+			.mockResolvedValueOnce({
+				request_id: "screen-fixed",
+				replayed: false,
+				screen: fixed,
+				active_page: null,
+			});
+		const client = new PlaybackApiClient({
+			request,
+			blob: vi.fn(),
+			absoluteUrl: vi.fn(),
+			sendAction: vi.fn(),
+		} as unknown as LiveClientTransport);
+
+		await client.screens();
+		await client.putScreen(fixed);
+		const body = JSON.parse(request.mock.calls[1][1].body as string);
+
+		expect(request.mock.calls[1][0]).toBe(
+			`/api/v2/screens/${SCREEN_ID}/update`,
+		);
+		expect(body.patch).toMatchObject({
+			content: fixed.content,
+			show_dock: false,
 		});
 	});
 

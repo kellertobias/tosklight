@@ -217,10 +217,58 @@ export interface PlaybackSurfaceLayout {
 	rows: PlaybackSurfaceRow[];
 }
 
+export type FixedScreenFixtureSheetColumn =
+	| "id"
+	| "icon"
+	| "name"
+	| "patch"
+	| "dimmer"
+	| "color"
+	| "position"
+	| "beam"
+	| "focus";
+
+export type FixedScreenPane =
+	| {
+			type: "fixture_sheet";
+			included_heads: "all" | "no_sub_heads" | "no_master_heads";
+			order: "fixture_id" | "active";
+			active_only: boolean;
+			cue_list_id: string | null;
+			columns: FixedScreenFixtureSheetColumn[];
+			show_type: boolean;
+			show_group_shortcuts: boolean;
+	  }
+	| {
+			type: "stage_2d";
+			follow_preload: boolean;
+			show_floor_grid: boolean;
+	  }
+	| {
+			type: "stage_3d";
+			follow_preload: boolean;
+			show_floor_grid: boolean;
+			show_beam_guides: boolean;
+			render_quality: "lines_only" | "lines_and_beams" | "full";
+			environment_brightness: number;
+	  }
+	| { type: "cues"; cue_list_id: string }
+	| {
+			type: "text";
+			root: string;
+			path: string;
+			mode: "plain" | "markdown";
+	  };
+
+export type ScreenContent =
+	| { type: "desktop" }
+	| { type: "fixed_pane"; pane: FixedScreenPane };
+
 export interface ScreenConfiguration {
 	id: string;
 	name: string;
 	layout: { desks: import("../../types").DeskModel[]; activeDeskId: string };
+	content: ScreenContent;
 	show_dock: boolean;
 	show_playbacks: boolean;
 	playback_count: number;

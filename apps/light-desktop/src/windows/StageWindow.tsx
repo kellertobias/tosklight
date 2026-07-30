@@ -10,9 +10,10 @@ import { useStageVisualization } from "./stageWindow/useStageVisualization";
 
 export function StageWindow(props: StageWindowProps) {
 	const active = props.active ?? true;
+	const interactionActive = active && !props.viewOnly;
 	const options = useStageOptions(props);
 	const layout = useStageLayout();
-	const selection = useStageSelection(active);
+	const selection = useStageSelection(interactionActive);
 	const patchSelectionPreview = props.patchSelectionPreview ?? false;
 	const stage = useStageVisualization(
 		active,
@@ -59,6 +60,7 @@ export function StageWindow(props: StageWindowProps) {
 					selection={selection}
 					active={active}
 					paneId={props.paneId}
+					interactive={!props.viewOnly}
 				/>
 			) : (
 				<Stage2dView
@@ -72,6 +74,7 @@ export function StageWindow(props: StageWindowProps) {
 					patchPreviewFixtures={stage.patchPreviewFixtures}
 					visualizationLane={options.followPreload ? "preload" : "normal"}
 					visualizationActive={active}
+					interactive={!props.viewOnly}
 				/>
 			)}
 			{active &&

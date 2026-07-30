@@ -45,7 +45,11 @@ Use the [Pane Reference](05-Pane-Reference/index.md) for a screenshot and settin
 
 ## Multiple screens
 
-Configure physical screens in **Desk Setup > Screens & playback**. Each screen has its own name, dimensions, touch capability, assigned desk, playback slot range, row count, and page mode. **Follow Main** mirrors the main playback page; **Dedicated Page** keeps an independent page. Screen configuration belongs to the desk installation, while show programming remains in the portable show file.
+Configure physical screens in **Desk Setup > Screens & playback**. Each optional screen has its own
+name, physical window placement, playback layout, page mode, and either a configurable Desktop or
+a view-only **Fixed full-screen pane**. **Follow Main** mirrors the main playback page;
+**Dedicated Page** keeps an independent page. Screen configuration belongs to the desk
+installation, while show programming remains in the portable show file.
 
 ## Where settings are stored
 

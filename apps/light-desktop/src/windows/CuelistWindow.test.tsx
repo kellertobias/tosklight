@@ -400,6 +400,61 @@ describe("CuelistWindow pane selection", () => {
 describe("CuelistWindow fixed and selected playback sources", () => {
 	beforeEach(resetCuelistWindowMocks);
 
+	it("uses the stable fixed Cuelist identity without fallback and keeps Cue rows passive", () => {
+		mocks.state.storeArmed = false;
+		mocks.cueObjects = [
+			{
+				id: "object-main",
+				revision: 1,
+				body: {
+					...editableCueList(),
+					id: "main",
+					cues: [
+						{
+							number: 1,
+							name: "Main opening",
+							fade_millis: 0,
+							delay_millis: 0,
+							trigger: { type: "manual" },
+							changes: [],
+						},
+					],
+				},
+			},
+		];
+		const view = render(
+			<CuelistWindow
+				compact
+				viewOnly
+				cueListTab="cues"
+				cueListSource="fixed"
+				fixedCueListId="main"
+			/>,
+		);
+		const row = within(view.container).getByText("Main opening").closest("tr");
+		expect(row).toHaveAttribute("aria-disabled", "true");
+		expect(row).not.toHaveAttribute("tabindex");
+		if (!row) throw new Error("Expected the fixed Cuelist row");
+		fireEvent.click(row);
+		expect(row).not.toHaveClass("selected");
+
+		view.rerender(
+			<CuelistWindow
+				compact
+				viewOnly
+				cueListTab="cues"
+				cueListSource="fixed"
+				fixedCueListId="missing"
+			/>,
+		);
+		expect(
+			within(view.container).getByText("Fixed Cuelist is unavailable"),
+		).toBeInTheDocument();
+		expect(
+			within(view.container).queryByText("Main opening"),
+		).not.toBeInTheDocument();
+	});
+
 	it("shows a fixed Cuelist or follows the desk's selected Cuelist playback", () => {
 		mocks.state.storeArmed = false;
 		mocks.playbacks.pool = [

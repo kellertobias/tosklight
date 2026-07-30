@@ -1,6 +1,11 @@
 use super::temporary;
-use crate::{DeskStore, PlaybackSurfaceLayout, PlaybackSurfaceRow, ScreenConfiguration};
+use crate::{
+    DeskStore, FixedScreenFixtureColumn, FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder,
+    FixedScreenPane, FixedScreenStageRenderQuality, PlaybackSurfaceLayout, PlaybackSurfaceRow,
+    ScreenConfiguration, ScreenContent,
+};
 use light_core::ShowId;
+use rusqlite::Connection;
 use std::fs;
 use uuid::Uuid;
 
@@ -40,6 +45,7 @@ fn screens_persist_and_keep_independent_pages_per_show() {
                 },
             ],
         }),
+        content: ScreenContent::Desktop,
     };
     store.put_screen(screen).unwrap();
     store.set_screen_page(id, show, 7).unwrap();
@@ -75,6 +81,7 @@ fn screen_playback_range_must_fit_page_slots() {
         bounds: None,
         fullscreen: false,
         playback_layout: None,
+        content: ScreenContent::Desktop,
     };
     assert!(store.put_screen(invalid).is_err());
     drop(store);
@@ -196,6 +203,7 @@ fn removing_a_client_cleans_only_its_desk_owned_installation_state() {
         bounds: None,
         fullscreen: false,
         playback_layout: None,
+        content: ScreenContent::Desktop,
     };
     store.put_screen(screen.clone()).unwrap();
 
@@ -241,6 +249,193 @@ fn removing_a_client_cleans_only_its_desk_owned_installation_state() {
     .unwrap();
     assert!(zones.get(removed.id.to_string()).is_none());
     assert!(zones.get(retained.id.to_string()).is_some());
+    drop(store);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn legacy_screens_migrate_to_desktop_content() {
+    let path = temporary("legacy-screen-content");
+    {
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                r#"CREATE TABLE schema_info(version INTEGER NOT NULL);
+                INSERT INTO schema_info(version) VALUES(9);
+                CREATE TABLE screens(
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    layout_json TEXT NOT NULL,
+                    show_dock INTEGER NOT NULL,
+                    show_playbacks INTEGER NOT NULL,
+                    playback_count INTEGER NOT NULL,
+                    playback_rows INTEGER NOT NULL,
+                    first_playback_slot INTEGER NOT NULL,
+                    page_mode TEXT NOT NULL,
+                    show_page_controls INTEGER NOT NULL,
+                    desired_open INTEGER NOT NULL,
+                    display_id TEXT,
+                    bounds_json TEXT,
+                    fullscreen INTEGER NOT NULL,
+                    playback_layout_json TEXT
+                );
+                INSERT INTO screens VALUES(
+                    '00000000-0000-0000-0000-000000000025',
+                    'Legacy external screen',
+                    '{"desks":[],"activeDeskId":"legacy"}',
+                    1,1,8,1,1,'follow_main',1,0,NULL,NULL,0,NULL
+                );"#,
+            )
+            .unwrap();
+    }
+    let store = DeskStore::open(&path).unwrap();
+    let screen = store.screens().unwrap().remove(0);
+    assert_eq!(screen.content, ScreenContent::Desktop);
+    assert!(screen.show_dock);
+    let version: i64 = store
+        .conn
+        .query_row("SELECT version FROM schema_info", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(version, 10);
+    drop(store);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn fixed_screen_content_round_trips_and_forces_dock_off() {
+    let path = temporary("fixed-screen-content");
+    let store = DeskStore::open(&path).unwrap();
+    let id = Uuid::new_v4();
+    let cue_list_id = Uuid::new_v4();
+    let saved = store
+        .put_screen(ScreenConfiguration {
+            id,
+            name: "Fixed fixtures".into(),
+            layout: serde_json::json!({"desks":[],"activeDeskId":"preserved"}),
+            show_dock: true,
+            show_playbacks: true,
+            playback_count: 8,
+            playback_rows: 1,
+            first_playback_slot: 1,
+            page_mode: "follow_main".into(),
+            show_page_controls: true,
+            desired_open: true,
+            display_id: None,
+            bounds: None,
+            fullscreen: false,
+            playback_layout: None,
+            content: ScreenContent::FixedPane {
+                pane: FixedScreenPane::FixtureSheet {
+                    included_heads: FixedScreenFixtureIncludedHeads::NoSubHeads,
+                    order: FixedScreenFixtureOrder::Active,
+                    active_only: true,
+                    cue_list_id: Some(cue_list_id),
+                    columns: vec![
+                        FixedScreenFixtureColumn::Id,
+                        FixedScreenFixtureColumn::Name,
+                        FixedScreenFixtureColumn::Dimmer,
+                    ],
+                    show_type: false,
+                    show_group_shortcuts: true,
+                },
+            },
+        })
+        .unwrap();
+    assert!(!saved.show_dock);
+    assert_eq!(
+        saved.content,
+        ScreenContent::FixedPane {
+            pane: FixedScreenPane::FixtureSheet {
+                included_heads: FixedScreenFixtureIncludedHeads::NoSubHeads,
+                order: FixedScreenFixtureOrder::Active,
+                active_only: true,
+                cue_list_id: Some(cue_list_id),
+                columns: vec![
+                    FixedScreenFixtureColumn::Id,
+                    FixedScreenFixtureColumn::Name,
+                    FixedScreenFixtureColumn::Dimmer,
+                ],
+                show_type: false,
+                show_group_shortcuts: true,
+            },
+        }
+    );
+    assert_eq!(
+        store.screen(id).unwrap().unwrap().layout["activeDeskId"],
+        "preserved"
+    );
+    drop(store);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn fixed_screen_content_rejects_invalid_display_settings_without_resolving_references() {
+    let path = temporary("fixed-screen-validation");
+    let store = DeskStore::open(&path).unwrap();
+    let base = ScreenConfiguration {
+        id: Uuid::new_v4(),
+        name: "Invalid fixed screen".into(),
+        layout: serde_json::json!({}),
+        show_dock: false,
+        show_playbacks: true,
+        playback_count: 8,
+        playback_rows: 1,
+        first_playback_slot: 1,
+        page_mode: "follow_main".into(),
+        show_page_controls: true,
+        desired_open: false,
+        display_id: None,
+        bounds: None,
+        fullscreen: false,
+        playback_layout: None,
+        content: ScreenContent::Desktop,
+    };
+    assert!(
+        store
+            .put_screen(ScreenConfiguration {
+                content: ScreenContent::FixedPane {
+                    pane: FixedScreenPane::FixtureSheet {
+                        included_heads: FixedScreenFixtureIncludedHeads::All,
+                        order: FixedScreenFixtureOrder::FixtureId,
+                        active_only: false,
+                        cue_list_id: Some(Uuid::new_v4()),
+                        columns: vec![],
+                        show_type: true,
+                        show_group_shortcuts: false,
+                    },
+                },
+                ..base.clone()
+            })
+            .is_err()
+    );
+    assert!(
+        store
+            .put_screen(ScreenConfiguration {
+                content: ScreenContent::FixedPane {
+                    pane: FixedScreenPane::Stage3d {
+                        follow_preload: false,
+                        show_floor_grid: true,
+                        show_beam_guides: true,
+                        render_quality: FixedScreenStageRenderQuality::Full,
+                        environment_brightness: 1.1,
+                    },
+                },
+                ..base.clone()
+            })
+            .is_err()
+    );
+    assert!(
+        store
+            .put_screen(ScreenConfiguration {
+                content: ScreenContent::FixedPane {
+                    pane: FixedScreenPane::Cues {
+                        cue_list_id: String::new(),
+                    },
+                },
+                ..base
+            })
+            .is_ok()
+    );
     drop(store);
     let _ = fs::remove_file(path);
 }

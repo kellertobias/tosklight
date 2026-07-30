@@ -15,13 +15,14 @@ export function useStageFixtureGestures(
 	mode: StageMode,
 	orderedFixtureIds: string[],
 	selection: StageSelectionModel,
+	interactive = true,
 ) {
 	const selectionAnchor = useRef<string | null>(null);
 	const select = (
 		fixtureId: string,
 		event: ReactMouseEvent<HTMLButtonElement>,
 	) => {
-		if (!fixtureId || mode !== "select") return;
+		if (!interactive || !fixtureId || mode !== "select") return;
 		const anchor = selectionAnchor.current;
 		if (event.shiftKey && anchor) {
 			const from = orderedFixtureIds.indexOf(anchor);
@@ -38,9 +39,7 @@ export function useStageFixtureGestures(
 			const toggled = event.ctrlKey || event.metaKey;
 			void selection.applyFixtureGesture(
 				fixtureId,
-				toggled && selection.fixtureIdSet.has(fixtureId)
-					? "remove"
-					: "add",
+				toggled && selection.fixtureIdSet.has(fixtureId) ? "remove" : "add",
 			);
 		}
 		selectionAnchor.current = fixtureId;
@@ -74,6 +73,7 @@ function marqueeHits(
 export function useStageCanvasGestures(
 	mode: StageMode,
 	selection: StageSelectionModel,
+	interactive = true,
 ) {
 	const { state, dispatch } = useApp();
 	const navigationStart = useRef<
@@ -82,6 +82,7 @@ export function useStageCanvasGestures(
 	const marqueeStart = useRef<(Point & { additive: boolean }) | null>(null);
 	const [marquee, setMarquee] = useState<Marquee | null>(null);
 	const begin = (event: ReactPointerEvent<HTMLDivElement>) => {
+		if (!interactive) return;
 		if ((event.target as HTMLElement).closest(".stage-fixture")) return;
 		if (mode === "navigate") {
 			event.currentTarget.setPointerCapture(event.pointerId);
@@ -108,6 +109,7 @@ export function useStageCanvasGestures(
 		}
 	};
 	const update = (event: ReactPointerEvent<HTMLDivElement>) => {
+		if (!interactive) return;
 		if (navigationStart.current && mode === "navigate")
 			dispatch({
 				type: "SET_STAGE_NAVIGATION",
@@ -131,6 +133,7 @@ export function useStageCanvasGestures(
 		});
 	};
 	const finish = (event: ReactPointerEvent<HTMLDivElement>) => {
+		if (!interactive) return;
 		navigationStart.current = null;
 		const start = marqueeStart.current;
 		marqueeStart.current = null;
@@ -157,6 +160,7 @@ export function useStageCanvasGestures(
 		setMarquee(null);
 	};
 	const cancel = () => {
+		if (!interactive) return;
 		navigationStart.current = null;
 		marqueeStart.current = null;
 		setMarquee(null);

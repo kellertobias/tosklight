@@ -14,6 +14,7 @@ const screen: ScreenConfiguration = {
 	bounds: null,
 	fullscreen: false,
 	layout: { desks: [], activeDeskId: "desk" },
+	content: { type: "desktop" },
 	show_dock: true,
 	show_playbacks: true,
 	show_page_controls: true,
@@ -24,7 +25,11 @@ const screen: ScreenConfiguration = {
 	playback_layout: null,
 };
 
-function Harness({ save }: { save: (value: ScreenConfiguration) => Promise<void> }) {
+function Harness({
+	save,
+}: {
+	save: (value: ScreenConfiguration) => Promise<void>;
+}) {
 	useScreenWindowPersistence(screen, save);
 	return null;
 }

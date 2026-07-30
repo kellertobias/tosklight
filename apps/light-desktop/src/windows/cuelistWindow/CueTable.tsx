@@ -1,5 +1,5 @@
-import type { Cue, PlaybackSnapshot } from "../../api/types";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
+import type { Cue, PlaybackSnapshot } from "../../api/types";
 import { cueTriggerKind } from "./cueFormatting";
 
 export interface CueTableEmptyState {
@@ -16,6 +16,7 @@ export function CueTable({
 	thumbnails,
 	emptyState,
 	onSelectCue,
+	interactive = true,
 }: {
 	cues: Cue[];
 	active: PlaybackSnapshot["active"][number] | undefined;
@@ -24,6 +25,7 @@ export function CueTable({
 	thumbnails: Record<number, string>;
 	emptyState: CueTableEmptyState;
 	onSelectCue: (index: number) => void;
+	interactive?: boolean;
 }) {
 	return (
 		<div className="cue-editor">
@@ -45,20 +47,20 @@ export function CueTable({
 						<tbody>
 							{cues.map((cue, index) => (
 								<tr
-									tabIndex={0}
-									aria-disabled={settingsOpen}
+									tabIndex={interactive ? 0 : undefined}
+									aria-disabled={!interactive || settingsOpen}
 									onClick={() => {
-										if (!settingsOpen) onSelectCue(index);
+										if (interactive && !settingsOpen) onSelectCue(index);
 									}}
 									onKeyDown={(event) => {
-										if (settingsOpen) return;
+										if (!interactive || settingsOpen) return;
 										if (event.key === "Enter" || event.key === " ") {
 											event.preventDefault();
 											onSelectCue(index);
 										}
 									}}
 									key={cue.number}
-									className={`${active?.cue_index === index ? "current" : active?.cue_index === index - 1 ? "next" : ""} ${selectedCue === index ? "selected" : ""}`}
+									className={`${active?.cue_index === index ? "current" : active?.cue_index === index - 1 ? "next" : ""} ${interactive && selectedCue === index ? "selected" : ""}`}
 								>
 									<td>
 										{thumbnails[index] && (
@@ -74,6 +76,7 @@ export function CueTable({
 											<small
 												className="cue-dynamics-marker"
 												title="Cue contains tracked Dynamic or FAT content"
+												role="img"
 												aria-label="Contains Dynamics"
 											>
 												∿

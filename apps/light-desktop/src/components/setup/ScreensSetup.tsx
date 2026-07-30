@@ -1,12 +1,16 @@
+import { Button } from "@tosklight/ui";
 import { useCallback, useEffect, useState } from "react";
 import type {
 	PlaybackSurfaceLayout,
 	ScreenConfiguration,
 } from "../../api/types";
+import { useFiles } from "../../features/files/FilesContext";
 import { useScreens } from "../../features/screens/ScreensContext";
+import { useCueLists } from "../../features/showObjects/ShowObjectsState";
+import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
 import { useDesktopBridge } from "../../platform/desktop";
 import { useApp } from "../../state/AppContext";
-import { Button } from "@tosklight/ui";
+import { listTextEditorFiles } from "../../windows/TextEditorWindow";
 import { PlaybackLayoutModal } from "./PlaybackLayoutModal";
 import {
 	createScreenConfiguration,
@@ -58,17 +62,55 @@ export function ScreensSetup({
 	onUndoAvailabilityChange?: (available: boolean) => void;
 } = {}) {
 	const server = useScreens();
+	const files = useFiles();
+	useShowObjectView("cue_list", true);
+	const cueListObjects = useCueLists();
 	const desktop = useDesktopBridge();
 	const { state, dispatch } = useApp();
 	const [displays, setDisplays] = useState<Array<{ id: string; name: string }>>(
 		[],
 	);
+	const [textFiles, setTextFiles] = useState<
+		Array<{ root: string; rootLabel: string; path: string; name: string }>
+	>([]);
 	const [defaultScreenPickerOpen, setDefaultScreenPickerOpen] = useState(false);
 	const [defaultPlaybackModalOpen, setDefaultPlaybackModalOpen] =
 		useState(false);
 	useEffect(() => {
 		if (desktop.available) void desktop.listDisplays().then(setDisplays);
 	}, [desktop]);
+	useEffect(() => {
+		if (!desktop.available) return;
+		let cancelled = false;
+		void files
+			.fileRoots()
+			.then(async (roots) => {
+				const listings = await Promise.all(
+					roots.map(async (root) => ({
+						root,
+						files: (await listTextEditorFiles(files.fileEntries, root.id))
+							.files,
+					})),
+				);
+				if (cancelled) return;
+				setTextFiles(
+					listings.flatMap(({ root, files: entries }) =>
+						entries.map((entry) => ({
+							root: root.id,
+							rootLabel: root.label,
+							path: entry.path,
+							name: entry.name,
+						})),
+					),
+				);
+			})
+			.catch(() => {
+				if (!cancelled) setTextFiles([]);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [desktop.available, files]);
 	const updateKeyboardShortcuts = useCallback(
 		(value: boolean) =>
 			dispatch({ type: "SET_REGULAR_NUMBER_SHORTCUTS", value }),
@@ -139,6 +181,11 @@ export function ScreensSetup({
 							screen={screen}
 							desks={state.desks}
 							displays={displays}
+							cueLists={cueListObjects.map((cueList) => ({
+								id: cueList.body.id,
+								name: cueList.body.name,
+							}))}
+							textFiles={textFiles}
 							save={server.saveScreen}
 							remove={remove}
 						/>

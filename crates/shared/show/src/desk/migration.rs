@@ -13,7 +13,7 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
       CREATE TABLE IF NOT EXISTS control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,osc_alias TEXT NOT NULL UNIQUE COLLATE NOCASE,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3,playback_layout_json TEXT,client_id TEXT,last_connected_at TEXT);
       CREATE TABLE IF NOT EXISTS control_desk_pages(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS control_desk_selections(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,playback INTEGER NOT NULL,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
-      CREATE TABLE IF NOT EXISTS screens(id TEXT PRIMARY KEY,name TEXT NOT NULL,layout_json TEXT NOT NULL DEFAULT '{"desks":[],"activeDeskId":""}',show_dock INTEGER NOT NULL DEFAULT 1,show_playbacks INTEGER NOT NULL DEFAULT 1,playback_count INTEGER NOT NULL DEFAULT 8,playback_rows INTEGER NOT NULL DEFAULT 1,first_playback_slot INTEGER NOT NULL DEFAULT 1,page_mode TEXT NOT NULL DEFAULT 'follow_main',show_page_controls INTEGER NOT NULL DEFAULT 1,desired_open INTEGER NOT NULL DEFAULT 0,display_id TEXT,bounds_json TEXT,fullscreen INTEGER NOT NULL DEFAULT 0,playback_layout_json TEXT);
+      CREATE TABLE IF NOT EXISTS screens(id TEXT PRIMARY KEY,name TEXT NOT NULL,layout_json TEXT NOT NULL DEFAULT '{"desks":[],"activeDeskId":""}',show_dock INTEGER NOT NULL DEFAULT 1,show_playbacks INTEGER NOT NULL DEFAULT 1,playback_count INTEGER NOT NULL DEFAULT 8,playback_rows INTEGER NOT NULL DEFAULT 1,first_playback_slot INTEGER NOT NULL DEFAULT 1,page_mode TEXT NOT NULL DEFAULT 'follow_main',show_page_controls INTEGER NOT NULL DEFAULT 1,desired_open INTEGER NOT NULL DEFAULT 0,display_id TEXT,bounds_json TEXT,fullscreen INTEGER NOT NULL DEFAULT 0,playback_layout_json TEXT,content_json TEXT NOT NULL DEFAULT '{"type":"desktop"}');
       CREATE TABLE IF NOT EXISTS screen_pages(screen_id TEXT NOT NULL,show_id TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(screen_id,show_id),FOREIGN KEY(screen_id) REFERENCES screens(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,token TEXT NOT NULL,programmer_json TEXT NOT NULL,connected INTEGER NOT NULL CHECK(connected IN(0,1)),updated_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id));"#,
     )?;
@@ -45,6 +45,12 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
         "screens",
         "playback_layout_json",
         "playback_layout_json TEXT",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "screens",
+        "content_json",
+        r#"content_json TEXT NOT NULL DEFAULT '{"type":"desktop"}'"#,
     )?;
     add_column_if_missing(
         &tx,

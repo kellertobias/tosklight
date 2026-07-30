@@ -1,15 +1,23 @@
 import type { PresetFamily } from "../presetFamilies";
-import type { StageView } from "../types";
+import type { FixtureSheetColumn, StageView } from "../types";
 
 export interface WindowProps {
 	active?: boolean;
 	builtIn?: boolean;
 	compact?: boolean;
+	viewOnly?: boolean;
 	paneId?: string;
 	showGroupShortcuts?: boolean;
+	fixtureSheetIncludedHeads?: "all" | "no-sub-heads" | "no-master-heads";
+	fixtureSheetOrder?: "fixture-id" | "active";
+	fixtureSheetActiveOnly?: boolean;
+	fixtureSheetCueListId?: string | null;
+	fixtureSheetColumns?: FixtureSheetColumn[];
+	fixtureSheetShowType?: boolean;
 	showCueSidebar?: boolean;
 	cueListSource?: "fixed" | "follow-selection";
 	fixedCueListNumber?: number;
+	fixedCueListId?: string;
 	stageView?: StageView;
 	followPreload?: boolean;
 	showBeamGuides?: boolean;

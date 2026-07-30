@@ -270,12 +270,22 @@ fn control_desk_configuration(config: &Config) -> Vec<String> {
 
 fn screen_configuration(config: &Config) -> Vec<String> {
     vec![
+        FixedScreenFixtureIncludedHeads::decl(config),
+        FixedScreenFixtureOrder::decl(config),
+        FixedScreenFixtureColumn::decl(config),
+        FixedScreenStageRenderQuality::decl(config),
+        FixedScreenTextMode::decl(config),
+        FixedScreenPane::decl(config),
+        ScreenContent::decl(config),
         ScreenPlaybackSurfaceRow::decl(config),
         ScreenPlaybackSurfaceLayout::decl(config),
         ScreenPageMode::decl(config),
         ScreenConfiguration::decl(config),
         ScreenConfigurationSnapshot::decl(config),
         ScreenConfigurationActionRequest::decl(config),
+        ScreenConfigurationCreateRequest::decl(config),
+        ScreenConfigurationUpdateRequest::decl(config),
+        ScreenConfigurationDeleteRequest::decl(config),
         ScreenConfigurationAction::decl(config),
         ScreenConfigurationPatch::decl(config),
         ScreenConfigurationActionOutcome::decl(config),

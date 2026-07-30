@@ -7,6 +7,102 @@ use std::collections::BTreeMap;
 use ts_rs::TS;
 use uuid::Uuid;
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum FixedScreenFixtureIncludedHeads {
+    All,
+    NoSubHeads,
+    NoMasterHeads,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum FixedScreenFixtureOrder {
+    FixtureId,
+    Active,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum FixedScreenFixtureColumn {
+    Id,
+    Icon,
+    Name,
+    Patch,
+    Dimmer,
+    Color,
+    Position,
+    Beam,
+    Focus,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum FixedScreenStageRenderQuality {
+    LinesOnly,
+    LinesAndBeams,
+    Full,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum FixedScreenTextMode {
+    Plain,
+    Markdown,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum FixedScreenPane {
+    FixtureSheet {
+        included_heads: FixedScreenFixtureIncludedHeads,
+        order: FixedScreenFixtureOrder,
+        active_only: bool,
+        cue_list_id: Option<Uuid>,
+        #[schemars(length(min = 1, max = 9))]
+        columns: Vec<FixedScreenFixtureColumn>,
+        show_type: bool,
+        show_group_shortcuts: bool,
+    },
+    #[serde(rename = "stage_2d")]
+    Stage2d {
+        follow_preload: bool,
+        show_floor_grid: bool,
+    },
+    #[serde(rename = "stage_3d")]
+    Stage3d {
+        follow_preload: bool,
+        show_floor_grid: bool,
+        show_beam_guides: bool,
+        render_quality: FixedScreenStageRenderQuality,
+        #[schemars(range(min = 0.0, max = 1.0))]
+        environment_brightness: f64,
+    },
+    Cues {
+        #[serde(default)]
+        cue_list_id: String,
+    },
+    Text {
+        #[serde(default)]
+        #[schemars(length(max = 128))]
+        root: String,
+        #[serde(default)]
+        #[schemars(length(max = 4096))]
+        path: String,
+        mode: FixedScreenTextMode,
+    },
+}
+
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ScreenContent {
+    #[default]
+    Desktop,
+    FixedPane {
+        pane: FixedScreenPane,
+    },
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ScreenPlaybackSurfaceRow {
     pub first_playback_slot: u8,
@@ -46,6 +142,8 @@ pub struct ScreenConfiguration {
     pub bounds: Option<Value>,
     pub fullscreen: bool,
     pub playback_layout: Option<ScreenPlaybackSurfaceLayout>,
+    #[serde(default)]
+    pub content: ScreenContent,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -60,6 +158,26 @@ pub struct ScreenConfigurationActionRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,
     pub action: ScreenConfigurationAction,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ScreenConfigurationCreateRequest {
+    #[schemars(length(min = 1, max = 128))]
+    pub request_id: String,
+    pub configuration: ScreenConfiguration,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ScreenConfigurationUpdateRequest {
+    #[schemars(length(min = 1, max = 128))]
+    pub request_id: String,
+    pub patch: ScreenConfigurationPatch,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ScreenConfigurationDeleteRequest {
+    #[schemars(length(min = 1, max = 128))]
+    pub request_id: String,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -106,6 +224,7 @@ pub struct ScreenConfigurationPatch {
     pub playback_layout: Option<ScreenPlaybackSurfaceLayout>,
     #[serde(default)]
     pub clear_playback_layout: bool,
+    pub content: Option<ScreenContent>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

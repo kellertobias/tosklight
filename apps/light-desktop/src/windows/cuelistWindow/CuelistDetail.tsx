@@ -12,6 +12,7 @@ function emptyState(
 	cueListSource: WindowProps["cueListSource"],
 	selectedCuelist: number | null,
 	selectedPlaybackExists: boolean,
+	viewOnly: boolean,
 ): CueTableEmptyState {
 	if (cueListAvailable)
 		return {
@@ -41,7 +42,9 @@ function emptyState(
 	}
 	return {
 		title: "Fixed Cuelist is unavailable",
-		description: "Choose an available Cuelist in this pane's settings.",
+		description: viewOnly
+			? "The configured Cuelist is missing or unavailable."
+			: "Choose an available Cuelist in this pane's settings.",
 		icon: "◎",
 	};
 }
@@ -58,10 +61,16 @@ interface CuelistDetailProps {
 	onOpenPool: () => void;
 	onOpenSettings: () => void;
 	thumbnails?: Record<number, string>;
+	fixedCueListId?: string;
+	viewOnly?: boolean;
 }
 
 export function CuelistDetail(props: CuelistDetailProps) {
-	const selection = useSelectedCuelist(props.selectedCuelist, props.active);
+	const selection = useSelectedCuelist(
+		props.selectedCuelist,
+		props.active,
+		props.fixedCueListId,
+	);
 	const cues = selection.cueList?.cues ?? [];
 	const editor = useCueEditor({
 		cues,
@@ -73,7 +82,9 @@ export function CuelistDetail(props: CuelistDetailProps) {
 	const generatedThumbnails = useCueThumbnails(cues, props.active);
 	const thumbnails = props.thumbnails ?? generatedThumbnails;
 	const showProperties =
-		props.showCueSidebar && (!props.compact || props.cueListTab === "cues");
+		!props.viewOnly &&
+		props.showCueSidebar &&
+		(!props.compact || props.cueListTab === "cues");
 	return (
 		<div className="cuelist-window">
 			{!props.compact && (
@@ -114,8 +125,10 @@ export function CuelistDetail(props: CuelistDetailProps) {
 						props.cueListSource,
 						props.selectedCuelist,
 						Boolean(selection.selectedPlaybackDefinition),
+						Boolean(props.viewOnly),
 					)}
 					onSelectCue={editor.setSelectedCue}
+					interactive={!props.viewOnly}
 				/>
 				{showProperties && editor.cueDraft && (
 					<CueProperties

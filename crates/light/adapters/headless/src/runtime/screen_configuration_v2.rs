@@ -9,6 +9,9 @@ const REQUEST_CACHE_ENTRY_LIMIT: usize = 1_024;
 pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v2/screens", get(snapshot))
+        .route("/api/v2/screens/create", post(create))
+        .route("/api/v2/screens/{screen_id}/update", post(update))
+        .route("/api/v2/screens/{screen_id}/delete", post(delete))
         .route("/api/v2/screens/actions", post(apply_action))
 }
 
@@ -26,23 +29,84 @@ async fn apply_action(
     TolerantJson(request): TolerantJson<wire::ScreenConfigurationActionRequest>,
 ) -> Result<Json<wire::ScreenConfigurationActionOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    show_objects_v2::validate_request_id(&request.request_id)?;
+    apply_authenticated_action(&state, &session, request.request_id, request.action).await
+}
+
+async fn create(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    TolerantJson(request): TolerantJson<wire::ScreenConfigurationCreateRequest>,
+) -> Result<Json<wire::ScreenConfigurationActionOutcome>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    apply_authenticated_action(
+        &state,
+        &session,
+        request.request_id,
+        wire::ScreenConfigurationAction::Create {
+            configuration: request.configuration,
+        },
+    )
+    .await
+}
+
+async fn update(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(screen_id): Path<Uuid>,
+    TolerantJson(request): TolerantJson<wire::ScreenConfigurationUpdateRequest>,
+) -> Result<Json<wire::ScreenConfigurationActionOutcome>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    apply_authenticated_action(
+        &state,
+        &session,
+        request.request_id,
+        wire::ScreenConfigurationAction::Update {
+            screen_id,
+            patch: request.patch,
+        },
+    )
+    .await
+}
+
+async fn delete(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(screen_id): Path<Uuid>,
+    TolerantJson(request): TolerantJson<wire::ScreenConfigurationDeleteRequest>,
+) -> Result<Json<wire::ScreenConfigurationActionOutcome>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    apply_authenticated_action(
+        &state,
+        &session,
+        request.request_id,
+        wire::ScreenConfigurationAction::Delete { screen_id },
+    )
+    .await
+}
+
+async fn apply_authenticated_action(
+    state: &AppState,
+    session: &Session,
+    request_id: String,
+    action: wire::ScreenConfigurationAction,
+) -> Result<Json<wire::ScreenConfigurationActionOutcome>, ApiError> {
+    show_objects_v2::validate_request_id(&request_id)?;
     let key = ReplayKey {
         session_id: session.id.0,
-        request_id: request.request_id.clone(),
+        request_id: request_id.clone(),
     };
     if let Some(outcome) = state
         .replay
-        .lookup_screen_configuration(&key, &request.action)
+        .lookup_screen_configuration(&key, &action)
         .await?
     {
         return Ok(Json(outcome));
     }
-    let mut outcome = execute_action(&state, request.action.clone())?;
-    outcome.request_id = request.request_id;
+    let mut outcome = execute_action(state, action.clone())?;
+    outcome.request_id = request_id;
     state
         .replay
-        .insert_screen_configuration(key, request.action, outcome.clone())
+        .insert_screen_configuration(key, action, outcome.clone())
         .await;
     Ok(Json(outcome))
 }
@@ -204,6 +268,9 @@ fn apply_patch(
     } else if let Some(layout) = patch.playback_layout {
         screen.playback_layout = Some(domain_layout(layout));
     }
+    if let Some(content) = patch.content {
+        screen.content = domain_content(content);
+    }
     Ok(screen)
 }
 
@@ -224,6 +291,7 @@ fn domain_screen(screen: wire::ScreenConfiguration) -> Result<ScreenConfiguratio
         bounds: screen.bounds,
         fullscreen: screen.fullscreen,
         playback_layout: screen.playback_layout.map(domain_layout),
+        content: domain_content(screen.content),
     })
 }
 
@@ -248,7 +316,218 @@ fn wire_screen(screen: ScreenConfiguration) -> Result<wire::ScreenConfiguration,
         bounds: screen.bounds,
         fullscreen: screen.fullscreen,
         playback_layout: screen.playback_layout.map(wire_layout),
+        content: wire_content(screen.content),
     })
+}
+
+fn domain_content(content: wire::ScreenContent) -> light_show::ScreenContent {
+    match content {
+        wire::ScreenContent::Desktop => light_show::ScreenContent::Desktop,
+        wire::ScreenContent::FixedPane { pane } => light_show::ScreenContent::FixedPane {
+            pane: domain_fixed_pane(pane),
+        },
+    }
+}
+
+fn domain_fixed_pane(pane: wire::FixedScreenPane) -> light_show::FixedScreenPane {
+    match pane {
+        wire::FixedScreenPane::FixtureSheet {
+            included_heads,
+            order,
+            active_only,
+            cue_list_id,
+            columns,
+            show_type,
+            show_group_shortcuts,
+        } => light_show::FixedScreenPane::FixtureSheet {
+            included_heads: match included_heads {
+                wire::FixedScreenFixtureIncludedHeads::All => {
+                    light_show::FixedScreenFixtureIncludedHeads::All
+                }
+                wire::FixedScreenFixtureIncludedHeads::NoSubHeads => {
+                    light_show::FixedScreenFixtureIncludedHeads::NoSubHeads
+                }
+                wire::FixedScreenFixtureIncludedHeads::NoMasterHeads => {
+                    light_show::FixedScreenFixtureIncludedHeads::NoMasterHeads
+                }
+            },
+            order: match order {
+                wire::FixedScreenFixtureOrder::FixtureId => {
+                    light_show::FixedScreenFixtureOrder::FixtureId
+                }
+                wire::FixedScreenFixtureOrder::Active => {
+                    light_show::FixedScreenFixtureOrder::Active
+                }
+            },
+            active_only,
+            cue_list_id,
+            columns: columns.into_iter().map(domain_fixture_column).collect(),
+            show_type,
+            show_group_shortcuts,
+        },
+        wire::FixedScreenPane::Stage2d {
+            follow_preload,
+            show_floor_grid,
+        } => light_show::FixedScreenPane::Stage2d {
+            follow_preload,
+            show_floor_grid,
+        },
+        wire::FixedScreenPane::Stage3d {
+            follow_preload,
+            show_floor_grid,
+            show_beam_guides,
+            render_quality,
+            environment_brightness,
+        } => light_show::FixedScreenPane::Stage3d {
+            follow_preload,
+            show_floor_grid,
+            show_beam_guides,
+            render_quality: match render_quality {
+                wire::FixedScreenStageRenderQuality::LinesOnly => {
+                    light_show::FixedScreenStageRenderQuality::LinesOnly
+                }
+                wire::FixedScreenStageRenderQuality::LinesAndBeams => {
+                    light_show::FixedScreenStageRenderQuality::LinesAndBeams
+                }
+                wire::FixedScreenStageRenderQuality::Full => {
+                    light_show::FixedScreenStageRenderQuality::Full
+                }
+            },
+            environment_brightness,
+        },
+        wire::FixedScreenPane::Cues { cue_list_id } => {
+            light_show::FixedScreenPane::Cues { cue_list_id }
+        }
+        wire::FixedScreenPane::Text { root, path, mode } => light_show::FixedScreenPane::Text {
+            root,
+            path,
+            mode: match mode {
+                wire::FixedScreenTextMode::Plain => light_show::FixedScreenTextMode::Plain,
+                wire::FixedScreenTextMode::Markdown => light_show::FixedScreenTextMode::Markdown,
+            },
+        },
+    }
+}
+
+fn domain_fixture_column(
+    column: wire::FixedScreenFixtureColumn,
+) -> light_show::FixedScreenFixtureColumn {
+    match column {
+        wire::FixedScreenFixtureColumn::Id => light_show::FixedScreenFixtureColumn::Id,
+        wire::FixedScreenFixtureColumn::Icon => light_show::FixedScreenFixtureColumn::Icon,
+        wire::FixedScreenFixtureColumn::Name => light_show::FixedScreenFixtureColumn::Name,
+        wire::FixedScreenFixtureColumn::Patch => light_show::FixedScreenFixtureColumn::Patch,
+        wire::FixedScreenFixtureColumn::Dimmer => light_show::FixedScreenFixtureColumn::Dimmer,
+        wire::FixedScreenFixtureColumn::Color => light_show::FixedScreenFixtureColumn::Color,
+        wire::FixedScreenFixtureColumn::Position => light_show::FixedScreenFixtureColumn::Position,
+        wire::FixedScreenFixtureColumn::Beam => light_show::FixedScreenFixtureColumn::Beam,
+        wire::FixedScreenFixtureColumn::Focus => light_show::FixedScreenFixtureColumn::Focus,
+    }
+}
+
+fn wire_content(content: light_show::ScreenContent) -> wire::ScreenContent {
+    match content {
+        light_show::ScreenContent::Desktop => wire::ScreenContent::Desktop,
+        light_show::ScreenContent::FixedPane { pane } => wire::ScreenContent::FixedPane {
+            pane: wire_fixed_pane(pane),
+        },
+    }
+}
+
+fn wire_fixed_pane(pane: light_show::FixedScreenPane) -> wire::FixedScreenPane {
+    match pane {
+        light_show::FixedScreenPane::FixtureSheet {
+            included_heads,
+            order,
+            active_only,
+            cue_list_id,
+            columns,
+            show_type,
+            show_group_shortcuts,
+        } => wire::FixedScreenPane::FixtureSheet {
+            included_heads: match included_heads {
+                light_show::FixedScreenFixtureIncludedHeads::All => {
+                    wire::FixedScreenFixtureIncludedHeads::All
+                }
+                light_show::FixedScreenFixtureIncludedHeads::NoSubHeads => {
+                    wire::FixedScreenFixtureIncludedHeads::NoSubHeads
+                }
+                light_show::FixedScreenFixtureIncludedHeads::NoMasterHeads => {
+                    wire::FixedScreenFixtureIncludedHeads::NoMasterHeads
+                }
+            },
+            order: match order {
+                light_show::FixedScreenFixtureOrder::FixtureId => {
+                    wire::FixedScreenFixtureOrder::FixtureId
+                }
+                light_show::FixedScreenFixtureOrder::Active => {
+                    wire::FixedScreenFixtureOrder::Active
+                }
+            },
+            active_only,
+            cue_list_id,
+            columns: columns.into_iter().map(wire_fixture_column).collect(),
+            show_type,
+            show_group_shortcuts,
+        },
+        light_show::FixedScreenPane::Stage2d {
+            follow_preload,
+            show_floor_grid,
+        } => wire::FixedScreenPane::Stage2d {
+            follow_preload,
+            show_floor_grid,
+        },
+        light_show::FixedScreenPane::Stage3d {
+            follow_preload,
+            show_floor_grid,
+            show_beam_guides,
+            render_quality,
+            environment_brightness,
+        } => wire::FixedScreenPane::Stage3d {
+            follow_preload,
+            show_floor_grid,
+            show_beam_guides,
+            render_quality: match render_quality {
+                light_show::FixedScreenStageRenderQuality::LinesOnly => {
+                    wire::FixedScreenStageRenderQuality::LinesOnly
+                }
+                light_show::FixedScreenStageRenderQuality::LinesAndBeams => {
+                    wire::FixedScreenStageRenderQuality::LinesAndBeams
+                }
+                light_show::FixedScreenStageRenderQuality::Full => {
+                    wire::FixedScreenStageRenderQuality::Full
+                }
+            },
+            environment_brightness,
+        },
+        light_show::FixedScreenPane::Cues { cue_list_id } => {
+            wire::FixedScreenPane::Cues { cue_list_id }
+        }
+        light_show::FixedScreenPane::Text { root, path, mode } => wire::FixedScreenPane::Text {
+            root,
+            path,
+            mode: match mode {
+                light_show::FixedScreenTextMode::Plain => wire::FixedScreenTextMode::Plain,
+                light_show::FixedScreenTextMode::Markdown => wire::FixedScreenTextMode::Markdown,
+            },
+        },
+    }
+}
+
+fn wire_fixture_column(
+    column: light_show::FixedScreenFixtureColumn,
+) -> wire::FixedScreenFixtureColumn {
+    match column {
+        light_show::FixedScreenFixtureColumn::Id => wire::FixedScreenFixtureColumn::Id,
+        light_show::FixedScreenFixtureColumn::Icon => wire::FixedScreenFixtureColumn::Icon,
+        light_show::FixedScreenFixtureColumn::Name => wire::FixedScreenFixtureColumn::Name,
+        light_show::FixedScreenFixtureColumn::Patch => wire::FixedScreenFixtureColumn::Patch,
+        light_show::FixedScreenFixtureColumn::Dimmer => wire::FixedScreenFixtureColumn::Dimmer,
+        light_show::FixedScreenFixtureColumn::Color => wire::FixedScreenFixtureColumn::Color,
+        light_show::FixedScreenFixtureColumn::Position => wire::FixedScreenFixtureColumn::Position,
+        light_show::FixedScreenFixtureColumn::Beam => wire::FixedScreenFixtureColumn::Beam,
+        light_show::FixedScreenFixtureColumn::Focus => wire::FixedScreenFixtureColumn::Focus,
+    }
 }
 
 fn domain_layout(layout: wire::ScreenPlaybackSurfaceLayout) -> light_show::PlaybackSurfaceLayout {

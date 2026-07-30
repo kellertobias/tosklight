@@ -1,8 +1,8 @@
 import { Button } from "@tosklight/ui";
 import { type CSSProperties, useRef } from "react";
 import type { PatchedFixture } from "../../api/types";
-import { useVisualizationRuntimeSnapshotSubscription } from "../../features/visualizationRuntime/VisualizationRuntimeView";
 import type { VisualizationRuntimeLane } from "../../features/visualizationRuntime/contracts";
+import { useVisualizationRuntimeSnapshotSubscription } from "../../features/visualizationRuntime/VisualizationRuntimeView";
 import type {
 	StageFixturePresentation,
 	StageLayoutModel,
@@ -80,6 +80,7 @@ export function Stage2dView({
 	patchPreviewFixtures = [],
 	visualizationLane = "normal",
 	visualizationActive = false,
+	interactive = true,
 }: {
 	compact?: boolean;
 	fixtures: StageFixturePresentation[];
@@ -91,6 +92,7 @@ export function Stage2dView({
 	patchPreviewFixtures?: readonly string[];
 	visualizationLane?: VisualizationRuntimeLane;
 	visualizationActive?: boolean;
+	interactive?: boolean;
 }) {
 	const rootRef = useRef<HTMLDivElement>(null);
 	useVisualizationRuntimeSnapshotSubscription(
@@ -129,12 +131,14 @@ export function Stage2dView({
 		options.mode,
 		orderedFixtureIds,
 		selection,
+		interactive,
 	);
-	const canvas = useStageCanvasGestures(options.mode, selection);
+	const canvas = useStageCanvasGestures(options.mode, selection, interactive);
 	const columns = compact ? 6 : 8;
 	return (
 		<div
 			className={`stage-canvas stage-mode-${options.mode}`}
+			data-interaction={interactive ? "enabled" : "view-only"}
 			ref={rootRef}
 			onPointerDown={canvas.begin}
 			onPointerMove={canvas.update}

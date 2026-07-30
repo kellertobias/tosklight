@@ -2,6 +2,98 @@ use light_core::{Revision, SessionId, ShowId, UserId};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FixedScreenFixtureIncludedHeads {
+    All,
+    NoSubHeads,
+    NoMasterHeads,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FixedScreenFixtureOrder {
+    FixtureId,
+    Active,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FixedScreenFixtureColumn {
+    Id,
+    Icon,
+    Name,
+    Patch,
+    Dimmer,
+    Color,
+    Position,
+    Beam,
+    Focus,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FixedScreenStageRenderQuality {
+    LinesOnly,
+    LinesAndBeams,
+    Full,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FixedScreenTextMode {
+    Plain,
+    Markdown,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum FixedScreenPane {
+    FixtureSheet {
+        included_heads: FixedScreenFixtureIncludedHeads,
+        order: FixedScreenFixtureOrder,
+        active_only: bool,
+        cue_list_id: Option<Uuid>,
+        columns: Vec<FixedScreenFixtureColumn>,
+        show_type: bool,
+        show_group_shortcuts: bool,
+    },
+    #[serde(rename = "stage_2d")]
+    Stage2d {
+        follow_preload: bool,
+        show_floor_grid: bool,
+    },
+    #[serde(rename = "stage_3d")]
+    Stage3d {
+        follow_preload: bool,
+        show_floor_grid: bool,
+        show_beam_guides: bool,
+        render_quality: FixedScreenStageRenderQuality,
+        environment_brightness: f64,
+    },
+    Cues {
+        #[serde(default)]
+        cue_list_id: String,
+    },
+    Text {
+        #[serde(default)]
+        root: String,
+        #[serde(default)]
+        path: String,
+        mode: FixedScreenTextMode,
+    },
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ScreenContent {
+    #[default]
+    Desktop,
+    FixedPane {
+        pane: FixedScreenPane,
+    },
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct DeskUser {
     pub id: UserId,
@@ -59,6 +151,8 @@ pub struct ScreenConfiguration {
     pub fullscreen: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub playback_layout: Option<PlaybackSurfaceLayout>,
+    #[serde(default)]
+    pub content: ScreenContent,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

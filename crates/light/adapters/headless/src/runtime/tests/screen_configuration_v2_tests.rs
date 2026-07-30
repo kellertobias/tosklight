@@ -168,6 +168,7 @@ async fn screen_configuration_v2_reads_existing_desk_store_rows_without_migratio
             bounds: Some(serde_json::json!({"x":1,"y":2,"width":800,"height":600})),
             fullscreen: true,
             playback_layout: None,
+            content: light_show::ScreenContent::Desktop,
         })
         .unwrap();
     let app = router(state);
@@ -190,10 +191,197 @@ async fn screen_configuration_v2_reads_existing_desk_store_rows_without_migratio
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
+#[tokio::test]
+async fn screen_configuration_intent_routes_persist_fixed_content_and_keep_dock_off() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+    let screen_id = Uuid::new_v4();
+    let missing_cue_list_id = Uuid::new_v4();
+    let created = post_screen_intent(
+        &app,
+        &token,
+        "/api/v2/screens/create",
+        serde_json::json!({
+            "request_id":"fixed-screen-create",
+            "configuration":{
+                "id":screen_id,
+                "name":"Fixed fixtures",
+                "layout":{"desks":[],"activeDeskId":"preserved"},
+                "show_dock":true,
+                "show_playbacks":true,
+                "playback_count":8,
+                "playback_rows":1,
+                "first_playback_slot":1,
+                "page_mode":"follow_main",
+                "show_page_controls":true,
+                "desired_open":false,
+                "display_id":null,
+                "bounds":null,
+                "fullscreen":false,
+                "playback_layout":null,
+                "content":{
+                    "type":"fixed_pane",
+                    "pane":{
+                        "type":"fixture_sheet",
+                        "included_heads":"no_sub_heads",
+                        "order":"active",
+                        "active_only":true,
+                        "cue_list_id":missing_cue_list_id,
+                        "columns":["id","name","dimmer"],
+                        "show_type":false,
+                        "show_group_shortcuts":true
+                    }
+                }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::OK);
+    let created = json(created).await;
+    assert_eq!(created["screen"]["show_dock"], false);
+    assert_eq!(
+        created["screen"]["content"]["pane"]["cue_list_id"],
+        missing_cue_list_id.to_string()
+    );
+
+    let update_body = serde_json::json!({
+        "request_id":"fixed-screen-update",
+        "patch":{
+            "show_dock":true,
+            "content":{
+                "type":"fixed_pane",
+                "pane":{
+                    "type":"stage_3d",
+                    "follow_preload":true,
+                    "show_floor_grid":false,
+                    "show_beam_guides":true,
+                    "render_quality":"full",
+                    "environment_brightness":0.75
+                }
+            },
+            "clear_bounds":false,
+            "clear_display_id":false,
+            "clear_playback_layout":false
+        }
+    });
+    let updated = post_screen_intent(
+        &app,
+        &token,
+        &format!("/api/v2/screens/{screen_id}/update"),
+        update_body.clone(),
+    )
+    .await;
+    assert_eq!(updated.status(), StatusCode::OK);
+    let updated = json(updated).await;
+    assert_eq!(updated["screen"]["show_dock"], false);
+    assert_eq!(
+        updated["screen"]["content"]["pane"]["environment_brightness"],
+        0.75
+    );
+
+    let replay = post_screen_intent(
+        &app,
+        &token,
+        &format!("/api/v2/screens/{screen_id}/update"),
+        update_body,
+    )
+    .await;
+    assert_eq!(replay.status(), StatusCode::OK);
+    assert_eq!(json(replay).await["replayed"], true);
+
+    let desktop = post_screen_intent(
+        &app,
+        &token,
+        &format!("/api/v2/screens/{screen_id}/update"),
+        serde_json::json!({
+            "request_id":"fixed-screen-desktop",
+            "patch":{
+                "content":{"type":"desktop"},
+                "clear_bounds":false,
+                "clear_display_id":false,
+                "clear_playback_layout":false
+            }
+        }),
+    )
+    .await;
+    assert_eq!(desktop.status(), StatusCode::OK);
+    let desktop = json(desktop).await;
+    assert_eq!(desktop["screen"]["content"]["type"], "desktop");
+    assert_eq!(desktop["screen"]["show_dock"], false);
+    assert_eq!(desktop["screen"]["layout"]["activeDeskId"], "preserved");
+
+    let deleted = post_screen_intent(
+        &app,
+        &token,
+        &format!("/api/v2/screens/{screen_id}/delete"),
+        serde_json::json!({"request_id":"fixed-screen-delete"}),
+    )
+    .await;
+    assert_eq!(deleted.status(), StatusCode::OK);
+    assert!(json(deleted).await["screen"].is_null());
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn screen_configuration_intent_routes_reject_invalid_fixed_display_settings() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+    let response = post_screen_intent(
+        &app,
+        &token,
+        "/api/v2/screens/create",
+        serde_json::json!({
+            "request_id":"invalid-fixed-screen",
+            "configuration":{
+                "id":Uuid::new_v4(),
+                "name":"Invalid Stage",
+                "layout":{},
+                "show_dock":false,
+                "show_playbacks":true,
+                "playback_count":8,
+                "playback_rows":1,
+                "first_playback_slot":1,
+                "page_mode":"follow_main",
+                "show_page_controls":true,
+                "desired_open":false,
+                "display_id":null,
+                "bounds":null,
+                "fullscreen":false,
+                "playback_layout":null,
+                "content":{
+                    "type":"fixed_pane",
+                    "pane":{
+                        "type":"stage_3d",
+                        "follow_preload":false,
+                        "show_floor_grid":true,
+                        "show_beam_guides":true,
+                        "render_quality":"full",
+                        "environment_brightness":1.5
+                    }
+                }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
 async fn post_screen_action(app: &Router, token: &str, body: serde_json::Value) -> Response {
+    post_screen_intent(app, token, "/api/v2/screens/actions", body).await
+}
+
+async fn post_screen_intent(
+    app: &Router,
+    token: &str,
+    path: &str,
+    body: serde_json::Value,
+) -> Response {
     app.clone()
         .oneshot(
-            Request::post("/api/v2/screens/actions")
+            Request::post(path)
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(body.to_string()))

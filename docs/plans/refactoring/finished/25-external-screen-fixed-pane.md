@@ -2,9 +2,8 @@
 
 ## Status
 
-**Doing — refactoring queue item 25.** Implementation is claimed. Screen configuration, native
-window rendering, view-only pane behavior, persistence, help, and executable acceptance coverage
-must be completed before this plan moves to `finished/`.
+**Finished — refactoring queue item 25.** Screen configuration, native window rendering,
+view-only pane behavior, persistence, help, and executable acceptance coverage are complete.
 
 ## Goal
 
@@ -79,3 +78,48 @@ The external screen must show a clear non-interactive empty or unavailable state
 10. Missing or unavailable fixed content produces a clear empty state and never silently changes the configured content.
 11. The mode remains distinct from native-window fullscreen and works whether that native screen window is fullscreen or windowed.
 12. Browser-only operation does not claim support for optional native external-screen windows.
+
+## Result
+
+Implemented and accepted on 2026-07-30 in `feat(screens): add fixed external panes`.
+
+- Optional screens now persist either their existing Desktop content or one typed fixed pane:
+  Fixture Sheet, Stage - 2D, Stage - 3D, one stable Cuelist identity, or one stored text identity.
+  Schema-9 desk data migrates to Desktop without rewriting portable shows. Missing Cuelists and
+  text files remain configured and render an explicit unavailable state rather than falling back.
+- Desk Setup exposes only the five allowed panes and their applicable display settings. Selecting
+  fixed content atomically disables and clears Dock; returning to Desktop leaves Dock off until the
+  operator deliberately enables it. Playbacks, Page Controls, physical display, bounds, and native
+  fullscreen remain independent.
+- The secondary screen branches before Desktop layout hydration and autosave. Fixed panes fill the
+  pane workspace without Desktop, pane chrome, resize controls, or Pane Settings. Fixture, Group,
+  Cue, Stage, and text mutation paths are explicitly disabled while live values and running state
+  continue to update.
+- Fixed Stage reuses Plan 21's existing bounded latest-value subscription and adaptive render
+  lifecycle. It adds no synchronous projection, polling loop, or per-update render path, so an
+  auxiliary Stage cannot introduce a new way to block the operator UI or output scheduler.
+- Screen create, update, and delete use typed sparse replay-safe routes. The historical action route
+  remains for compatibility and the independently scoped page action.
+
+Verification passed:
+
+- `cargo test -p light-show --offline`: 69 passed.
+- `cargo test -p light-headless-runtime --offline screen_configuration -- --nocapture`: 4 passed.
+- `cargo test -p light-wire --offline --test generated_contracts`: 1 passed.
+- `cargo fmt --all -- --check` and generated wire-contract verification.
+- Eight focused desktop test files: 70 passed; the renderer/passive slice accounts for 48 tests and
+  the complete setup/client integration is included in the same run.
+- Desktop TypeScript typecheck and focused Biome checks.
+- `npm run test:e2e -- tests/37-semantic-desktop-show-clock.spec.ts`: 3 passed. The representative
+  semantic scenario configures a fixed Fixture Sheet, opens its screen route, and verifies that the
+  rendered surface has neither normal pane chrome nor Pane Settings.
+- `npm run open` rebuilt and opened the bundled macOS Tauri application. Readiness returned
+  `ready` in 3.5 ms with no active-show error or recovery mode. Through the actual Tauri
+  accessibility path, **Screen 1** changed to **Fixed full-screen pane / Fixture Sheet**, persisted
+  Dock off, opened as a separate native window, exposed the configured table and disabled Group
+  shortcuts with no pane action button, and retained the same fixed content after native fullscreen
+  was enabled. The screen was then restored to its original closed, windowed Desktop configuration.
+
+This verifies one physical macOS display arrangement in both windowed and native-fullscreen modes;
+multi-monitor placement was not independently characterized. Browser coverage verifies renderer
+semantics and bridge intent only and does not claim native optional-window support.

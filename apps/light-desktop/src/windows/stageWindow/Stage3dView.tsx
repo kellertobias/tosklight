@@ -15,6 +15,7 @@ export function Stage3dView({
 	selection,
 	active,
 	paneId,
+	interactive = true,
 }: {
 	fixtures: Stage3dFixture[];
 	visualization: VisualizationSnapshot | null;
@@ -26,6 +27,7 @@ export function Stage3dView({
 	selection: StageSelectionModel;
 	active?: boolean;
 	paneId?: string;
+	interactive?: boolean;
 }) {
 	return (
 		<div
@@ -48,6 +50,7 @@ export function Stage3dView({
 				visualizationActive={active ?? false}
 				paneId={paneId}
 				onSelect={(fixtureId, additive) => {
+					if (!interactive) return;
 					void selection.applyFixtureGesture(
 						fixtureId,
 						additive && selection.fixtureIdSet.has(fixtureId)

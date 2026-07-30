@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ClientSummary, ScreenConfiguration } from "../../api/types";
 import { DefaultScreenPicker, ScreenSettingsCard } from "./ScreensSetup";
@@ -7,6 +13,7 @@ const configuredScreen: ScreenConfiguration = {
 	id: "screen-1",
 	name: "Screen 1",
 	layout: { desks: [], activeDeskId: "main" },
+	content: { type: "desktop" },
 	show_dock: true,
 	show_playbacks: true,
 	playback_count: 8,
@@ -44,7 +51,9 @@ describe("additional screen settings", () => {
 		expect(
 			screen.getByRole("heading", { name: "Playbacks" }),
 		).toBeInTheDocument();
-		expect(screen.getByRole("button", { name: "Configure Playbacks" })).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Configure Playbacks" }),
+		).toBeInTheDocument();
 		expect(
 			screen.getByRole("button", { name: "Remove Screen" }),
 		).toBeInTheDocument();
@@ -66,29 +75,67 @@ describe("additional screen settings", () => {
 		const save = vi.fn(async (value: ScreenConfiguration) => {
 			saved.push(value);
 		});
-		render(<ScreenSettingsCard screen={configuredScreen} displays={[]} save={save} remove={vi.fn()} />);
+		render(
+			<ScreenSettingsCard
+				screen={configuredScreen}
+				displays={[]}
+				save={save}
+				remove={vi.fn()}
+			/>,
+		);
 
-		fireEvent.click(screen.getByRole("button", { name: "Configure Playbacks" }));
-		expect(screen.getByRole("dialog", { name: "Configure Playbacks" })).toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Configure Playbacks" }),
+		);
+		expect(
+			screen.getByRole("dialog", { name: "Configure Playbacks" }),
+		).toBeInTheDocument();
 		const addRow = screen.getByRole("button", { name: "Add Row" });
 		const saveAction = screen.getByRole("button", { name: "Save" });
 		expect(addRow.parentElement).toHaveClass("ui-modal-title-actions");
 		expect(saveAction.parentElement).toHaveClass("ui-modal-title-actions");
-		expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Cancel" }),
+		).not.toBeInTheDocument();
 		fireEvent.click(addRow);
-		expect(screen.getByRole("button", { name: "Remove row 2" })).toBeInTheDocument();
-		const secondRowHandle = screen.getByRole("button", { name: "Reorder playback row 2" });
-		const firstRowHandle = screen.getByRole("button", { name: "Reorder playback row 1" });
+		expect(
+			screen.getByRole("button", { name: "Remove row 2" }),
+		).toBeInTheDocument();
+		const secondRowHandle = screen.getByRole("button", {
+			name: "Reorder playback row 2",
+		});
+		const firstRowHandle = screen.getByRole("button", {
+			name: "Reorder playback row 1",
+		});
 		const firstRow = firstRowHandle.closest(".playback-row-configuration");
 		expect(firstRow).not.toBeNull();
 		expect(secondRowHandle).toHaveTextContent("⠿");
 		expect(secondRowHandle).not.toHaveTextContent("Row 2");
 		const elementFromPoint = document.elementFromPoint;
-		Object.defineProperty(secondRowHandle, "setPointerCapture", { configurable: true, value: vi.fn() });
-		Object.defineProperty(document, "elementFromPoint", { configurable: true, value: vi.fn(() => firstRow) });
-		fireEvent.pointerDown(secondRowHandle, { pointerId: 1, pointerType: "mouse", clientX: 20, clientY: 120 });
-		fireEvent.pointerMove(secondRowHandle, { pointerId: 1, pointerType: "mouse", clientX: 20, clientY: 60 });
-		Object.defineProperty(document, "elementFromPoint", { configurable: true, value: elementFromPoint });
+		Object.defineProperty(secondRowHandle, "setPointerCapture", {
+			configurable: true,
+			value: vi.fn(),
+		});
+		Object.defineProperty(document, "elementFromPoint", {
+			configurable: true,
+			value: vi.fn(() => firstRow),
+		});
+		fireEvent.pointerDown(secondRowHandle, {
+			pointerId: 1,
+			pointerType: "mouse",
+			clientX: 20,
+			clientY: 120,
+		});
+		fireEvent.pointerMove(secondRowHandle, {
+			pointerId: 1,
+			pointerType: "mouse",
+			clientX: 20,
+			clientY: 60,
+		});
+		Object.defineProperty(document, "elementFromPoint", {
+			configurable: true,
+			value: elementFromPoint,
+		});
 		fireEvent.click(screen.getByRole("button", { name: "Follow Main" }));
 		fireEvent.click(screen.getByRole("option", { name: "Dedicated Page" }));
 		fireEvent.click(saveAction);
@@ -100,23 +147,126 @@ describe("additional screen settings", () => {
 			playback_rows: 2,
 			playback_layout: {
 				playbacks_per_row: 8,
-				rows: [
-					{ first_playback_slot: 9 },
-					{ first_playback_slot: 1 },
-				],
+				rows: [{ first_playback_slot: 9 }, { first_playback_slot: 1 }],
 			},
+		});
+	});
+
+	it("offers only the fixed-pane allowlist and enforces the Dock constraint", async () => {
+		const saved: ScreenConfiguration[] = [];
+		const save = vi.fn(async (value: ScreenConfiguration) => {
+			saved.push(value);
+		});
+		render(
+			<ScreenSettingsCard
+				screen={configuredScreen}
+				displays={[]}
+				cueLists={[{ id: "cue-list-id", name: "7 · Walk-in" }]}
+				textFiles={[
+					{
+						root: "shows",
+						rootLabel: "Shows",
+						path: "notes/walk-in.md",
+						name: "walk-in.md",
+					},
+				]}
+				save={save}
+				remove={vi.fn()}
+			/>,
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Desktop" }));
+		fireEvent.click(
+			screen.getByRole("option", { name: "Fixed full-screen pane" }),
+		);
+
+		const dock = screen.getByRole("switch", { name: "Dock" });
+		expect(dock).toBeDisabled();
+		expect(dock).not.toBeChecked();
+		expect(screen.getByRole("button", { name: "Fixture Sheet" })).toBeVisible();
+		fireEvent.click(screen.getByRole("button", { name: "Fixture Sheet" }));
+		for (const label of [
+			"Fixture Sheet",
+			"Stage - 2D",
+			"Stage - 3D",
+			"Cues - Cuelist",
+			"Text",
+		])
+			expect(screen.getByRole("option", { name: label })).toBeVisible();
+		expect(screen.queryByRole("option", { name: "DMX output" })).toBeNull();
+
+		await waitFor(() => expect(save).toHaveBeenCalledOnce());
+		expect(saved[0]).toMatchObject({
+			content: {
+				type: "fixed_pane",
+				pane: { type: "fixture_sheet" },
+			},
+			show_dock: false,
+			show_playbacks: true,
+			show_page_controls: true,
+		});
+	});
+
+	it("keeps missing fixed objects configured and leaves Dock off after returning to Desktop", async () => {
+		const fixed: ScreenConfiguration = {
+			...configuredScreen,
+			content: {
+				type: "fixed_pane",
+				pane: { type: "cues", cue_list_id: "missing-cuelist" },
+			},
+			show_dock: false,
+		};
+		const saved: ScreenConfiguration[] = [];
+		render(
+			<ScreenSettingsCard
+				screen={fixed}
+				displays={[]}
+				save={async (value) => {
+					saved.push(value);
+				}}
+				remove={vi.fn()}
+			/>,
+		);
+
+		expect(
+			screen.getByRole("button", {
+				name: "Configured Cuelist is unavailable",
+			}),
+		).toBeVisible();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Fixed full-screen pane" }),
+		);
+		fireEvent.click(screen.getByRole("option", { name: "Desktop" }));
+
+		await waitFor(() => expect(saved).toHaveLength(1));
+		expect(saved[0]).toMatchObject({
+			content: { type: "desktop" },
+			show_dock: false,
 		});
 	});
 });
 
 describe("default screen picker", () => {
-	const client = (id: string, name: string, connected: boolean, last: string | null, canRemove = !connected): ClientSummary => ({
+	const client = (
+		id: string,
+		name: string,
+		connected: boolean,
+		last: string | null,
+		canRemove = !connected,
+	): ClientSummary => ({
 		client_id: id,
 		name,
 		connected,
 		last_connected_at: last,
 		can_remove: canRemove,
-		desk: { id: `desk-${id}`, name: `${name} screen`, osc_alias: id, columns: 8, rows: 2, buttons: 3 },
+		desk: {
+			id: `desk-${id}`,
+			name: `${name} screen`,
+			osc_alias: id,
+			columns: 8,
+			rows: 2,
+			buttons: 3,
+		},
 	});
 
 	it("groups and sorts authoritative presence while identifying current client and default separately", () => {
@@ -126,10 +276,28 @@ describe("default screen picker", () => {
 		render(
 			<DefaultScreenPicker
 				clients={[
-					client("connected-old", "Connected old", true, "2026-07-15T10:00:00Z", false),
+					client(
+						"connected-old",
+						"Connected old",
+						true,
+						"2026-07-15T10:00:00Z",
+						false,
+					),
 					client("unknown", "Unknown", false, null),
-					client("historical-new", "Historical new", false, "2026-07-17T10:00:00Z", false),
-					client("connected-new", "Connected new", true, "2026-07-17T11:00:00Z", false),
+					client(
+						"historical-new",
+						"Historical new",
+						false,
+						"2026-07-17T10:00:00Z",
+						false,
+					),
+					client(
+						"connected-new",
+						"Connected new",
+						true,
+						"2026-07-17T11:00:00Z",
+						false,
+					),
 				]}
 				currentClientId="connected-old"
 				currentDeskId="desk-historical-new"
@@ -143,11 +311,20 @@ describe("default screen picker", () => {
 			screen.getByRole("heading", { name: "Choose default screen" }),
 		).toBeInTheDocument();
 		const rows = screen.getAllByRole("article");
-		expect(rows.map((row) => row.querySelector("b")?.textContent)).toEqual(["Connected new", "Connected old", "Historical new", "Unknown"]);
+		expect(rows.map((row) => row.querySelector("b")?.textContent)).toEqual([
+			"Connected new",
+			"Connected old",
+			"Historical new",
+			"Unknown",
+		]);
 		expect(screen.getByText("Current client")).toBeInTheDocument();
 		expect(screen.getAllByText("Current default screen")).toHaveLength(2);
 		expect(screen.getByText(/Last connected unknown/)).toBeInTheDocument();
-		expect(screen.getAllByRole("button", { name: "Remove client" }).filter((button) => !button.hasAttribute("disabled"))).toHaveLength(1);
+		expect(
+			screen
+				.getAllByRole("button", { name: "Remove client" })
+				.filter((button) => !button.hasAttribute("disabled")),
+		).toHaveLength(1);
 		fireEvent.click(
 			screen.getAllByRole("button", { name: "Use as default screen" })[0],
 		);
@@ -160,13 +337,32 @@ describe("default screen picker", () => {
 
 	it("requires named confirmation and reports a reconnect race without removing other state claims", async () => {
 		const remove = vi.fn(async () => false);
-		render(<DefaultScreenPicker clients={[client("old", "Old wing", false, "2026-07-01T10:00:00Z")]} currentClientId="current" currentDeskId="desk-current" onSelect={vi.fn()} onRemove={remove} onClose={vi.fn()}/>);
+		render(
+			<DefaultScreenPicker
+				clients={[client("old", "Old wing", false, "2026-07-01T10:00:00Z")]}
+				currentClientId="current"
+				currentDeskId="desk-current"
+				onSelect={vi.fn()}
+				onRemove={remove}
+				onClose={vi.fn()}
+			/>,
+		);
 		fireEvent.click(screen.getByRole("button", { name: "Remove client" }));
-		const confirmation = screen.getByRole("alertdialog", { name: "Remove client Old wing?" });
-		expect(confirmation).toHaveTextContent("per-show page and playback selection, desk lock, Update defaults");
-		expect(confirmation).toHaveTextContent("Portable shows, Virtual Playback assignments and exclusion zones, users, optional screens, other clients, and installation-wide configuration will not change");
-		fireEvent.click(screen.getAllByRole("button", { name: "Remove client" }).at(-1)!);
+		const confirmation = screen.getByRole("alertdialog", {
+			name: "Remove client Old wing?",
+		});
+		expect(confirmation).toHaveTextContent(
+			"per-show page and playback selection, desk lock, Update defaults",
+		);
+		expect(confirmation).toHaveTextContent(
+			"Portable shows, Virtual Playback assignments and exclusion zones, users, optional screens, other clients, and installation-wide configuration will not change",
+		);
+		fireEvent.click(
+			screen.getAllByRole("button", { name: "Remove client" }).at(-1)!,
+		);
 		await waitFor(() => expect(remove).toHaveBeenCalledWith("desk-old"));
-		expect(await screen.findByRole("alert")).toHaveTextContent("may have reconnected");
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"may have reconnected",
+		);
 	});
 });

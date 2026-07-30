@@ -10,7 +10,10 @@ import type {
 	ScreenConfigurationAction,
 	ScreenConfigurationActionOutcome,
 	ScreenConfigurationActionRequest,
+	ScreenConfigurationCreateRequest,
+	ScreenConfigurationDeleteRequest,
 	ScreenConfigurationPatch,
+	ScreenConfigurationUpdateRequest,
 	ScreenConfiguration as WireScreenConfiguration,
 } from "../generated/light-wire";
 import { decodePlaybackOutcome, decodePlaybackSnapshot } from "../playbackWire";
@@ -166,11 +169,35 @@ export class PlaybackApiClient {
 	private screenAction(
 		action: ScreenConfigurationAction,
 	): Promise<ScreenConfigurationActionOutcome> {
-		const request: ScreenConfigurationActionRequest = {
-			request_id: crypto.randomUUID(),
-			action,
-		};
-		return this.transport.request("/api/v2/screens/actions", {
+		const requestId = crypto.randomUUID();
+		let path: string;
+		let request:
+			| ScreenConfigurationActionRequest
+			| ScreenConfigurationCreateRequest
+			| ScreenConfigurationUpdateRequest
+			| ScreenConfigurationDeleteRequest;
+		switch (action.type) {
+			case "create":
+				path = "/api/v2/screens/create";
+				request = {
+					request_id: requestId,
+					configuration: action.configuration,
+				};
+				break;
+			case "update":
+				path = `/api/v2/screens/${action.screen_id}/update`;
+				request = { request_id: requestId, patch: action.patch };
+				break;
+			case "delete":
+				path = `/api/v2/screens/${action.screen_id}/delete`;
+				request = { request_id: requestId };
+				break;
+			case "set_page":
+				path = "/api/v2/screens/actions";
+				request = { request_id: requestId, action };
+				break;
+		}
+		return this.transport.request(path, {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(request),
@@ -209,6 +236,7 @@ function screenPatch(
 	return {
 		name: changed(current.name, next.name),
 		layout: changed(current.layout, next.layout),
+		content: changed(current.content, next.content),
 		show_dock: changed(current.show_dock, next.show_dock),
 		show_playbacks: changed(current.show_playbacks, next.show_playbacks),
 		playback_count: changed(current.playback_count, next.playback_count),

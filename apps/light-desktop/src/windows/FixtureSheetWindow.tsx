@@ -35,11 +35,19 @@ import type { WindowProps } from "./windowTypes";
 export function FixtureSheetWindow({
 	active = true,
 	compact,
+	viewOnly = false,
 	showGroupShortcuts,
+	fixtureSheetIncludedHeads,
+	fixtureSheetOrder,
+	fixtureSheetActiveOnly,
+	fixtureSheetCueListId,
+	fixtureSheetColumns: forcedColumns,
+	fixtureSheetShowType,
 }: WindowProps) {
 	const highlight = useHighlightSnapshot();
-	const selection = useProgrammingSelectionView(active);
-	const selectionActions = useProgrammingSelectionActions(active);
+	const interactionActive = active && !viewOnly;
+	const selection = useProgrammingSelectionView(interactionActive);
+	const selectionActions = useProgrammingSelectionActions(interactionActive);
 	const preload = useProgrammerPreloadLifecycleView(active);
 	const { state } = useApp();
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
@@ -50,18 +58,28 @@ export function FixtureSheetWindow({
 	const groupsVisible = compact
 		? Boolean(showGroupShortcuts)
 		: state.fixtureGroupsVisible;
-	const fixtureOrder = compact ? "fixture-id" : state.fixtureSheetOrder;
-	const activeOnly = compact ? false : state.fixtureSheetActiveOnly;
+	const fixtureOrder = compact
+		? (fixtureSheetOrder ?? "fixture-id")
+		: state.fixtureSheetOrder;
+	const activeOnly = compact
+		? (fixtureSheetActiveOnly ?? false)
+		: state.fixtureSheetActiveOnly;
 	const cuelistFilter = useFixtureSheetCuelistAuthority({
-		enabled: active && !compact,
-		savedCueListId: state.fixtureSheetCueListId,
+		enabled: active && (!compact || fixtureSheetCueListId != null),
+		savedCueListId: compact
+			? (fixtureSheetCueListId ?? "")
+			: state.fixtureSheetCueListId,
 	});
 	const cueListId = cuelistFilter.selectedCueListId;
 	const visibleColumnIds = compact
-		? DEFAULT_FIXTURE_SHEET_COLUMNS
+		? (forcedColumns ?? DEFAULT_FIXTURE_SHEET_COLUMNS)
 		: state.fixtureSheetColumns;
-	const showType = compact || state.fixtureSheetShowType;
-	const includedHeads = compact ? "all" : state.fixtureSheetIncludedHeads;
+	const showType = compact
+		? (fixtureSheetShowType ?? true)
+		: state.fixtureSheetShowType;
+	const includedHeads = compact
+		? (fixtureSheetIncludedHeads ?? "all")
+		: state.fixtureSheetIncludedHeads;
 	const { visualization, preloadVisualization } = useFixtureSheetVisualizations(
 		preload.armed || preload.active,
 		active,
@@ -139,20 +157,27 @@ export function FixtureSheetWindow({
 				<FixtureSheetTable
 					activeRow={activeRow}
 					columns={columns}
-					onActivate={(fixtureId) =>
-						void selectionActions?.gesture({
-							source: { type: "fixture", fixtureId },
-							resolvedFixtures: [fixtureId],
-						})
+					onActivate={
+						viewOnly
+							? undefined
+							: (fixtureId) =>
+									void selectionActions?.gesture({
+										source: { type: "fixture", fixtureId },
+										resolvedFixtures: [fixtureId],
+									})
 					}
-					onActiveRowChange={setActiveRow}
+					onActiveRowChange={viewOnly ? undefined : setActiveRow}
 					onVisibleFixtureIdsChange={onVisibleFixtureIdsChange}
 					presentStep={presentStep}
 					rows={rows}
 					selectedFixtureIds={selectedFixtureIds}
 				/>
 			}
-			groups={groupsVisible ? <GroupStrip active={active} /> : null}
+			groups={
+				groupsVisible ? (
+					<GroupStrip active={active} viewOnly={viewOnly} />
+				) : null
+			}
 			settings={
 				settingsAnchor ? (
 					<FixtureSheetSettings
