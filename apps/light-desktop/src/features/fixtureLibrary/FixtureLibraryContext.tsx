@@ -5,6 +5,10 @@ import type {
 	PatchLayer,
 	VersionedObject,
 } from "../../api/types";
+import type {
+	FixtureAttributeMapping,
+} from "../../api/generated/light-wire";
+import type { FixturePackageImportOutcome } from "../../api/client/fixtures";
 
 /**
  * Scoped fixture-library desk state and transfer actions for the library and patch setup
@@ -29,7 +33,10 @@ export interface FixtureLibraryState {
 		revision: number,
 		source: Uint8Array,
 	) => Promise<boolean>;
-	importFixturePackage: (source: Uint8Array) => Promise<FixtureProfile>;
+	importFixturePackage: (
+		source: Uint8Array,
+		attributeMappings?: FixtureAttributeMapping[],
+	) => Promise<FixturePackageImportOutcome>;
 	exportFixturePackage: (id: string, revision: number) => Promise<Blob>;
 }
 

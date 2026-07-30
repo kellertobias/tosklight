@@ -77,9 +77,16 @@ export function createFixtureLibraryActions(
 				return false;
 			}
 		},
-		importFixturePackage: async (source) => {
+		importFixturePackage: async (source, attributeMappings) => {
 			try {
-				const imported = await api.fixtures.importFixturePackage(source);
+				const imported = await api.fixtures.importFixturePackage(
+					source,
+					attributeMappings,
+				);
+				if (imported.type === "import_required") {
+					setError(null);
+					return imported;
+				}
 				setFixtureProfiles(await api.fixtures.fixtureProfiles());
 				setFixtureProfileWarnings(await api.fixtures.fixtureProfileWarnings());
 				setFixtureLibrary(await api.fixtures.fixtureLibrary());

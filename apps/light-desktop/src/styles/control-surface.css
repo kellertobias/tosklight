@@ -1591,6 +1591,23 @@ button.large-danger:disabled {
 .gdtf-import-modal {
 	width: min(560px, calc(100vw - 30px)) !important;
 }
+.fixture-package-import-modal {
+	width: min(720px, calc(100vw - 30px)) !important;
+}
+.fixture-package-attribute-mappings {
+	display: grid;
+	gap: 8px;
+	margin: 10px 0;
+}
+.fixture-package-attribute-mappings label {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(220px, 1fr);
+	align-items: center;
+	gap: 12px;
+}
+.fixture-package-attribute-mappings select {
+	min-width: 0;
+}
 .fixture-browser-modal,
 .fixture-placement-modal {
 	width: calc(100vw - 24px) !important;

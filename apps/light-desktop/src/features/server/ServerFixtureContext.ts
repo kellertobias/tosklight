@@ -3,6 +3,8 @@ import type {
 	FixtureProfile,
 	PatchLayer,
 } from "../../api/types";
+import type { FixtureAttributeMapping } from "../../api/generated/light-wire";
+import type { FixturePackageImportOutcome } from "../../api/client/fixtures";
 
 export interface ServerFixtureContext {
 	refreshMediaPreview: (fixtureId: string, source?: number) => Promise<boolean>;
@@ -23,7 +25,10 @@ export interface ServerFixtureContext {
 		revision: number,
 		source: Uint8Array,
 	) => Promise<boolean>;
-	importFixturePackage: (source: Uint8Array) => Promise<FixtureProfile>;
+	importFixturePackage: (
+		source: Uint8Array,
+		attributeMappings?: FixtureAttributeMapping[],
+	) => Promise<FixturePackageImportOutcome>;
 	exportFixturePackage: (id: string, revision: number) => Promise<Blob>;
 	savePatchLayer: (layer: PatchLayer) => Promise<boolean>;
 }

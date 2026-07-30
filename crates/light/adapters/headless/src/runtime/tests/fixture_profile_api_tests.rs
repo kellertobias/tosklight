@@ -101,7 +101,7 @@ async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
     assert_eq!(new_profile.status(), StatusCode::BAD_REQUEST);
 
     let package = light_fixture::write_fixture_package(&profile).unwrap();
-    let request = |request_id: &str| {
+    let request = |request_id: &str, attribute_mappings: serde_json::Value| {
         Request::post("/api/v2/fixture-library")
             .header(header::AUTHORIZATION, format!("Bearer {token}"))
             .header(header::CONTENT_TYPE, "application/json")
@@ -110,7 +110,8 @@ async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
                     "request_id": request_id,
                     "action": {
                         "type": "import_package",
-                        "package_base64": STANDARD.encode(&package)
+                        "package_base64": STANDARD.encode(&package),
+                        "attribute_mappings": attribute_mappings
                     }
                 })
                 .to_string(),
@@ -118,20 +119,48 @@ async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
             .unwrap()
     };
 
-    let paused = app.clone().oneshot(request("unknown-package")).await.unwrap();
-    assert_eq!(paused.status(), StatusCode::BAD_REQUEST);
-    assert!(
-        String::from_utf8(
-            paused
-                .into_body()
-                .collect()
-                .await
-                .unwrap()
-                .to_bytes()
-                .to_vec()
-        )
+    let paused = app
+        .clone()
+        .oneshot(request("unknown-package", serde_json::json!([])))
+        .await
+        .unwrap();
+    assert_eq!(paused.status(), StatusCode::OK);
+    let paused = json(paused).await;
+    assert_eq!(paused["result"]["type"], "import_required");
+    assert_eq!(
+        paused["result"]["unknown_attributes"],
+        serde_json::json!([{
+            "attribute": "vendor.test.feature",
+            "value_type": "indexed"
+        }])
+    );
+
+    let mapped = app
+        .clone()
+        .oneshot(request(
+            "mapped-package",
+            serde_json::json!([{
+                "source_attribute": "vendor.test.feature",
+                "target_attribute": "shutter"
+            }]),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(mapped.status(), StatusCode::OK);
+    let mapped = json(mapped).await;
+    assert_eq!(mapped["result"]["type"], "profile");
+    let mapped_profile = state
+        .installation
+        .fixture_profile(profile.id, mapped["result"]["revision"].as_u64().unwrap() as u32)
         .unwrap()
-        .contains("vendor.test.feature")
+        .unwrap();
+    assert_eq!(
+        mapped_profile.modes[0].channels[0].fixture_attribute,
+        light_core::AttributeKey("vendor.test.feature".into())
+    );
+    assert_eq!(
+        mapped_profile.modes[0].channels[0].attribute,
+        light_core::AttributeKey("shutter".into())
     );
 
     {
@@ -170,7 +199,10 @@ async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
         );
         installed.configuration.validate().unwrap();
     }
-    let imported = app.oneshot(request("configured-package")).await.unwrap();
+    let imported = app
+        .oneshot(request("configured-package", serde_json::json!([])))
+        .await
+        .unwrap();
     let imported_status = imported.status();
     let imported_body = String::from_utf8(
         imported

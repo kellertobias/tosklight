@@ -297,7 +297,10 @@ const marketingFixtureLibrary: FixtureLibraryState = {
 	deleteFixtureProfile: async () => undefined,
 	fixtureProfileRevisions: async () => [],
 	saveFixtureProfileSourceGdtf: async () => true,
-	importFixturePackage: async () => marketingFixtureProfiles[0],
+	importFixturePackage: async () => ({
+		type: "profile",
+		profile: marketingFixtureProfiles[0],
+	}),
 	exportFixturePackage: async () => new Blob(),
 };
 

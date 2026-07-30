@@ -3,6 +3,8 @@ import type {
 	FixtureProfile,
 } from "../types";
 import type {
+	FixtureAttributeMapping,
+	FixtureImportRequirement,
 	FixtureLibraryAction,
 	FixtureLibraryActionOutcome,
 	FixtureDefinitionsSnapshot,
@@ -14,6 +16,10 @@ import type { PatchSnapshot } from "../../features/patch/contracts";
 import { decodePatchSnapshot } from "../patchWire";
 import type { ClientTransport } from "./transport";
 import { jsonRequest } from "./transport";
+
+export type FixturePackageImportOutcome =
+	| { type: "profile"; profile: FixtureProfile }
+	| { type: "import_required"; unknown_attributes: FixtureImportRequirement[] };
 
 export class FixtureApiClient {
 	constructor(private readonly transport: ClientTransport) {}
@@ -91,15 +97,26 @@ export class FixtureApiClient {
 		});
 	}
 
-	async importFixturePackage(source: Uint8Array): Promise<FixtureProfile> {
+	async importFixturePackage(
+		source: Uint8Array,
+		attributeMappings: FixtureAttributeMapping[] = [],
+	): Promise<FixturePackageImportOutcome> {
 		const result = await this.fixtureAction({
 			type: "import_package",
 			package_base64: await bytesToBase64(source),
+			attribute_mappings: attributeMappings,
 		});
+		if (result.type === "import_required") return result;
 		if (result.type !== "profile") {
 			throw new Error(`Expected fixture profile result, received ${result.type}`);
 		}
-		return this.profileFromAuthority(result.profile_id, result.revision);
+		return {
+			type: "profile",
+			profile: await this.profileFromAuthority(
+				result.profile_id,
+				result.revision,
+			),
+		};
 	}
 
 	exportFixturePackage(id: string, revision: number): Promise<Blob> {

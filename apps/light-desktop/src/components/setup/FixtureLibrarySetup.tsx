@@ -105,8 +105,13 @@ export function FixtureLibrarySetup({
 				error={transfers.error}
 				modal={transfers.modal}
 				close={() => transfers.setModal(null)}
+				confirmPackageMappings={transfers.confirmPackageMappings}
 				importGdtfFile={transfers.importGdtfFile}
 				importPackage={transfers.importPackage}
+				mappingCandidates={transfers.mappingCandidates}
+				mappings={transfers.mappings}
+				requirements={transfers.requirements}
+				setMapping={transfers.setMapping}
 			/>
 			{revisions.history && (
 				<FixtureRevisionHistory

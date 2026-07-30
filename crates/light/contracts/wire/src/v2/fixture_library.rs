@@ -10,6 +10,8 @@ use serde_json::Value;
 use ts_rs::TS;
 use uuid::Uuid;
 
+pub use super::attribute_configuration::AttributeValueType;
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct FixtureDefinitionsSnapshot {
     #[ts(type = "unknown[]")]
@@ -55,6 +57,8 @@ pub enum FixtureLibraryAction {
     },
     ImportPackage {
         package_base64: String,
+        #[serde(default)]
+        attribute_mappings: Vec<FixtureAttributeMapping>,
     },
     AttachGdtf {
         profile_id: Uuid,
@@ -79,6 +83,18 @@ pub struct FixtureLibraryActionOutcome {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureAttributeMapping {
+    pub source_attribute: String,
+    pub target_attribute: String,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureImportRequirement {
+    pub attribute: String,
+    pub value_type: AttributeValueType,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FixtureLibraryActionResult {
     Profile {
@@ -97,6 +113,9 @@ pub enum FixtureLibraryActionResult {
     GdtfAttached {
         profile_id: Uuid,
         revision: u32,
+    },
+    ImportRequired {
+        unknown_attributes: Vec<FixtureImportRequirement>,
     },
 }
 

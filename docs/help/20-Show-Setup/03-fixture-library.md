@@ -71,11 +71,13 @@ To author one manually, export a similar fixture, rename `.toskfixture` to `.zip
 For safety, import rejects unsafe or duplicate paths, symbolic links, unsupported compression, undeclared files, invalid raster data, non-self-contained GLBs, archives over 64 MiB compressed or 128 MiB expanded, more than 32 entries, and manifests over 64 MiB. The supported MIME type is `application/vnd.tosklight.fixture+zip`.
 
 If a new package uses a canonical attribute ID that the active show does not know, import pauses
-without storing the profile. The import dialog names every unknown ID and directs you to **Show →
-Desk Setup → Programmer → Attributes**. Map the fixture-facing attribute to a compatible built-in
-canonical attribute, or create a custom descriptor with a unique encoder position and activation
-group, then retry the unchanged source file. Existing profile revisions with preserved unknown IDs
-remain readable and exportable; this preflight applies when new fixture data enters the library.
+without storing the profile. The import dialog names every unknown ID and lets you map each one to
+an active configured descriptor with the same value type. The fixture-facing ID remains in the
+package revision while the chosen descriptor becomes its canonical Programmer identity. To retain
+a new identity instead, create a custom descriptor with a unique encoder position and activation
+group under **Show → Desk Setup → Programmer → Attributes**, then choose the unchanged source file
+again. Existing profile revisions with preserved unknown IDs remain readable and exportable; this
+preflight applies when new fixture data enters the library.
 
 ## Import GDTF
 

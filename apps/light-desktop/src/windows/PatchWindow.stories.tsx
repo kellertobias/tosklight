@@ -189,7 +189,10 @@ const storyLibrary = {
 	deleteFixtureProfile: async () => undefined,
 	fixtureProfileRevisions: async () => [],
 	saveFixtureProfileSourceGdtf: async () => true,
-	importFixturePackage: async () => washProfile,
+	importFixturePackage: async () => ({
+		type: "profile" as const,
+		profile: washProfile,
+	}),
 	exportFixturePackage: async () => new Blob(),
 };
 

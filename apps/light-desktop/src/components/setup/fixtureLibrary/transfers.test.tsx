@@ -27,11 +27,18 @@ function fixtureLibrary(
 }
 
 describe("useFixtureLibraryTransfers", () => {
-	it("keeps a paused package import open with its actionable server error", async () => {
-		const reason = new Error(
-			"Fixture import paused: map or create canonical descriptors for vendor.test.feature in Show > Desk Setup > Programmer > Attributes, then retry the import",
-		);
-		const library = fixtureLibrary(vi.fn().mockRejectedValue(reason));
+	it("keeps a package import open while the operator resolves unknown attributes", async () => {
+		const requirement = {
+			attribute: "vendor.test.feature",
+			value_type: "indexed" as const,
+		};
+		const importFixturePackage = vi
+			.fn()
+			.mockResolvedValue({
+				type: "import_required",
+				unknown_attributes: [requirement],
+			});
+		const library = fixtureLibrary(importFixturePackage);
 		const wrapper = ({ children }: PropsWithChildren) => (
 			<FixtureLibraryProvider library={library}>
 				{children}
@@ -55,7 +62,21 @@ describe("useFixtureLibraryTransfers", () => {
 		);
 
 		expect(result.current.modal).toBe("package");
-		expect(result.current.error).toBe(reason.message);
+		expect(result.current.error).toBeNull();
 		expect(result.current.busy).toBe(false);
+		expect(result.current.requirements).toEqual([requirement]);
+
+		act(() => result.current.setMapping(requirement.attribute, "shutter"));
+		await act(() => result.current.confirmPackageMappings());
+
+		expect(importFixturePackage).toHaveBeenLastCalledWith(
+			expect.any(Uint8Array),
+			[
+				{
+					source_attribute: "vendor.test.feature",
+					target_attribute: "shutter",
+				},
+			],
+		);
 	});
 });

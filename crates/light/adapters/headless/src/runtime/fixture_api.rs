@@ -174,11 +174,28 @@ fn execute_action(
                 revision,
             })
         }
-        Action::ImportPackage { package_base64 } => {
+        Action::ImportPackage {
+            package_base64,
+            attribute_mappings,
+        } => {
             let package = decode_archive(&package_base64, "fixture package")?;
-            let profile = light_fixture::read_fixture_package(&package)
+            let mut profile = light_fixture::read_fixture_package(&package)
                 .map_err(|error| ApiError::bad_request(error.to_string()))?;
-            require_known_canonical_attributes(state, &profile)?;
+            let unknown = unknown_canonical_attributes(state, &profile);
+            if !unknown.is_empty() && attribute_mappings.is_empty() {
+                return Ok(Result::ImportRequired {
+                    unknown_attributes: unknown
+                        .into_iter()
+                        .map(|(attribute, value_type)| wire::FixtureImportRequirement {
+                            attribute,
+                            value_type: fixture_import_value_type(value_type),
+                        })
+                        .collect(),
+                });
+            }
+            apply_fixture_attribute_mappings(state, &mut profile, &unknown, attribute_mappings)?;
+            let package = light_fixture::write_fixture_package(&profile)
+                .map_err(|error| ApiError::bad_request(error.to_string()))?;
             let stored = state
                 .installation
                 .import_fixture_package(&package)
@@ -265,35 +282,10 @@ fn require_known_canonical_attributes(
     state: &AppState,
     profile: &light_fixture::FixtureProfile,
 ) -> Result<(), ApiError> {
-    let installed = state.attributes.installed.read();
-    let custom = installed
-        .configuration
-        .custom_attributes
-        .iter()
-        .map(|descriptor| descriptor.id.0.as_str())
-        .collect::<HashSet<_>>();
-    let mut unknown = profile
-        .modes
-        .iter()
-        .flat_map(|mode| &mode.channels)
-        .flat_map(|channel| {
-            std::iter::once(channel.attribute.0.as_str()).chain(
-                channel
-                    .functions
-                    .iter()
-                    .map(|function| function.attribute.0.as_str()),
-            )
-        })
-        .filter(|attribute| {
-            !light_core::ATTRIBUTE_REGISTRY
-                .iter()
-                .any(|descriptor| descriptor.id == *attribute)
-                && !custom.contains(attribute)
-        })
-        .map(str::to_owned)
+    let unknown = unknown_canonical_attributes(state, profile)
+        .into_iter()
+        .map(|(attribute, _)| attribute)
         .collect::<Vec<_>>();
-    unknown.sort();
-    unknown.dedup();
     if unknown.is_empty() {
         return Ok(());
     }
@@ -301,6 +293,186 @@ fn require_known_canonical_attributes(
         "Fixture import paused: map or create canonical descriptors for {} in Show > Desk Setup > Programmer > Attributes, then retry the import",
         unknown.join(", ")
     )))
+}
+
+fn unknown_canonical_attributes(
+    state: &AppState,
+    profile: &light_fixture::FixtureProfile,
+) -> Vec<(String, light_core::AttributeValueType)> {
+    let installed = state.attributes.installed.read();
+    let custom = installed
+        .configuration
+        .custom_attributes
+        .iter()
+        .map(|descriptor| descriptor.id.0.as_str())
+        .collect::<HashSet<_>>();
+    let is_unknown = |attribute: &str| {
+        !light_core::ATTRIBUTE_REGISTRY
+            .iter()
+            .any(|descriptor| descriptor.id == attribute)
+            && !custom.contains(attribute)
+    };
+    let mut unknown = HashMap::<String, light_core::AttributeValueType>::new();
+    for channel in profile.modes.iter().flat_map(|mode| &mode.channels) {
+        if is_unknown(&channel.attribute.0) {
+            unknown
+                .entry(channel.attribute.0.clone())
+                .or_insert(light_core::AttributeValueType::Continuous);
+        }
+        for function in &channel.functions {
+            if !is_unknown(&function.attribute.0) {
+                continue;
+            }
+            let value_type = match function.behavior {
+                light_fixture::ChannelFunctionBehavior::Control { .. } => {
+                    light_core::AttributeValueType::Control
+                }
+                light_fixture::ChannelFunctionBehavior::Fixed { .. }
+                | light_fixture::ChannelFunctionBehavior::Indexed { .. } => {
+                    light_core::AttributeValueType::Indexed
+                }
+                light_fixture::ChannelFunctionBehavior::Continuous { .. } => {
+                    light_core::AttributeValueType::Continuous
+                }
+            };
+            unknown
+                .entry(function.attribute.0.clone())
+                .and_modify(|current| {
+                    if import_value_type_rank(value_type) > import_value_type_rank(*current) {
+                        *current = value_type;
+                    }
+                })
+                .or_insert(value_type);
+        }
+    }
+    let mut unknown = unknown.into_iter().collect::<Vec<_>>();
+    unknown.sort_by(|left, right| left.0.cmp(&right.0));
+    unknown
+}
+
+fn import_value_type_rank(value_type: light_core::AttributeValueType) -> u8 {
+    match value_type {
+        light_core::AttributeValueType::Continuous => 0,
+        light_core::AttributeValueType::Color => 1,
+        light_core::AttributeValueType::Indexed => 2,
+        light_core::AttributeValueType::Control => 3,
+    }
+}
+
+fn fixture_import_value_type(
+    value_type: light_core::AttributeValueType,
+) -> wire::AttributeValueType {
+    match value_type {
+        light_core::AttributeValueType::Continuous => wire::AttributeValueType::Continuous,
+        light_core::AttributeValueType::Color => wire::AttributeValueType::Color,
+        light_core::AttributeValueType::Indexed => wire::AttributeValueType::Indexed,
+        light_core::AttributeValueType::Control => wire::AttributeValueType::Control,
+    }
+}
+
+fn apply_fixture_attribute_mappings(
+    state: &AppState,
+    profile: &mut light_fixture::FixtureProfile,
+    unknown: &[(String, light_core::AttributeValueType)],
+    mappings: Vec<wire::FixtureAttributeMapping>,
+) -> Result<(), ApiError> {
+    if unknown.is_empty() {
+        if mappings.is_empty() {
+            return Ok(());
+        }
+        return Err(ApiError::bad_request(
+            "attribute mappings were supplied but the fixture package has no unknown attributes",
+        ));
+    }
+    let expected = unknown
+        .iter()
+        .map(|(attribute, value_type)| (attribute.as_str(), *value_type))
+        .collect::<HashMap<_, _>>();
+    let installed = state.attributes.installed.read();
+    let mut targets = light_core::ATTRIBUTE_REGISTRY
+        .iter()
+        .map(|descriptor| (descriptor.id, (descriptor.value_type, false)))
+        .collect::<HashMap<_, _>>();
+    targets.extend(
+        installed
+            .configuration
+            .custom_attributes
+            .iter()
+            .map(|descriptor| {
+                (
+                    descriptor.id.0.as_str(),
+                    (
+                        descriptor.value_type,
+                        descriptor.lifecycle == light_core::CustomAttributeLifecycle::Retired,
+                    ),
+                )
+            }),
+    );
+    let mut resolved = HashMap::<String, String>::new();
+    for mapping in mappings {
+        let source_type = expected
+            .get(mapping.source_attribute.as_str())
+            .copied()
+            .ok_or_else(|| {
+                ApiError::bad_request(format!(
+                    "attribute mapping source `{}` is not an unknown attribute in this package",
+                    mapping.source_attribute
+                ))
+            })?;
+        let (target_type, retired) = targets
+            .get(mapping.target_attribute.as_str())
+            .copied()
+            .ok_or_else(|| {
+                ApiError::bad_request(format!(
+                    "attribute mapping target `{}` is not configured",
+                    mapping.target_attribute
+                ))
+            })?;
+        if retired {
+            return Err(ApiError::bad_request(format!(
+                "attribute mapping target `{}` is retired",
+                mapping.target_attribute
+            )));
+        }
+        if source_type != target_type {
+            return Err(ApiError::bad_request(format!(
+                "attribute mapping `{}` to `{}` is incompatible: expected {:?}, received {:?}",
+                mapping.source_attribute, mapping.target_attribute, source_type, target_type
+            )));
+        }
+        if resolved
+            .insert(mapping.source_attribute.clone(), mapping.target_attribute)
+            .is_some()
+        {
+            return Err(ApiError::bad_request(format!(
+                "attribute mapping source `{}` appears more than once",
+                mapping.source_attribute
+            )));
+        }
+    }
+    let missing = expected
+        .keys()
+        .filter(|source| !resolved.contains_key(**source))
+        .copied()
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        return Err(ApiError::bad_request(format!(
+            "Fixture import paused: choose a compatible mapping for {}",
+            missing.join(", ")
+        )));
+    }
+    drop(installed);
+    for channel in profile.modes.iter_mut().flat_map(|mode| &mut mode.channels) {
+        if let Some(target) = resolved.get(&channel.attribute.0) {
+            channel.attribute = light_core::AttributeKey(target.clone());
+        }
+        for function in &mut channel.functions {
+            if let Some(target) = resolved.get(&function.attribute.0) {
+                function.attribute = light_core::AttributeKey(target.clone());
+            }
+        }
+    }
+    require_known_canonical_attributes(state, profile)
 }
 
 async fn export_fixture_package(
