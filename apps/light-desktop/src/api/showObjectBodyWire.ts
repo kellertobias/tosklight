@@ -266,10 +266,16 @@ function decodeUserLayout(value: unknown, path: string): StoredDeskLayout {
 			};
 		},
 	);
-	if (body.windowSettings != null)
-		recordAt(body.windowSettings, `${path}.windowSettings`);
+	let windowSettings = body.windowSettings;
+	if (windowSettings != null) {
+		const decoded = recordAt(windowSettings, `${path}.windowSettings`);
+		if (decoded.layoutGroupId != null)
+			stringAt(decoded.layoutGroupId, `${path}.windowSettings.layoutGroupId`);
+		windowSettings = decoded;
+	}
 	return {
 		...body,
+		...(windowSettings == null ? {} : { windowSettings }),
 		desks,
 		activeDeskId: stringAt(body.activeDeskId, `${path}.activeDeskId`),
 	};

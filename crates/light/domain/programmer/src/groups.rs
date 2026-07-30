@@ -79,13 +79,33 @@ pub struct GroupDefinition {
     pub fixtures: Vec<FixtureId>,
     /// Portable Stage-derived grid configuration. Cells are intentionally not stored: they are
     /// rebuilt from current Stage positions so moving a fixture cannot rewrite Group order.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_grid_configuration")]
     pub grid: GridMethodConfiguration,
     pub derived_from: Option<DerivedGroup>,
     pub frozen_from: Option<FrozenGroup>,
     pub programming: HashMap<AttributeKey, AttributeValue>,
     pub master: f32,
     pub playback_fader: Option<u8>,
+}
+
+fn deserialize_grid_configuration<'de, D>(
+    deserializer: D,
+) -> Result<GridMethodConfiguration, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum GridConfigurationRepresentation {
+        Valid(GridMethodConfiguration),
+        Invalid(serde::de::IgnoredAny),
+    }
+    Ok(
+        match GridConfigurationRepresentation::deserialize(deserializer)? {
+            GridConfigurationRepresentation::Valid(configuration) => configuration,
+            GridConfigurationRepresentation::Invalid(_) => GridMethodConfiguration::default(),
+        },
+    )
 }
 
 impl Default for GroupDefinition {

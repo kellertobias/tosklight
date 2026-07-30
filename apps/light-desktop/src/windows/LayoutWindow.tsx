@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { usePortableGroups } from "../features/showObjects/ShowObjectsState";
 import { useBootstrapReady } from "../features/deskSnapshot/DeskSnapshotState";
@@ -30,6 +30,18 @@ export function LayoutWindow({
 		group?.body.fixtures ?? [],
 	);
 	const anchor = useRef<string | null>(null);
+	const drag = useRef<{
+		x: number;
+		y: number;
+		additive: boolean;
+		pointerId: number;
+	} | null>(null);
+	const [marquee, setMarquee] = useState<{
+		left: number;
+		top: number;
+		width: number;
+		height: number;
+	} | null>(null);
 	const projection = useMemo(() => {
 		const positions: SelectionGridPositions = {
 			positions2d: { ...layout.positions },
@@ -95,11 +107,14 @@ export function LayoutWindow({
 			const first = projection.order.indexOf(anchor.current);
 			const last = projection.order.indexOf(fixtureId);
 			if (first >= 0 && last >= 0) {
+				const range = projection.order.slice(
+					Math.min(first, last),
+					Math.max(first, last) + 1,
+				);
 				void selection.replaceFixtureIds(
-					projection.order.slice(
-						Math.min(first, last),
-						Math.max(first, last) + 1,
-					),
+					event.metaKey || event.ctrlKey
+						? orderedUnion(selection.fixtureIds, range)
+						: range,
 				);
 				return;
 			}
@@ -111,6 +126,63 @@ export function LayoutWindow({
 				selection.fixtureIdSet.has(fixtureId) ? "remove" : "add",
 			);
 		else void selection.replaceFixtureIds([fixtureId]);
+	};
+	const beginMarquee = (event: React.PointerEvent<HTMLDivElement>) => {
+		if (viewOnly || event.target !== event.currentTarget) return;
+		const bounds = event.currentTarget.getBoundingClientRect();
+		drag.current = {
+			x: event.clientX,
+			y: event.clientY,
+			additive: event.metaKey || event.ctrlKey,
+			pointerId: event.pointerId,
+		};
+		event.currentTarget.setPointerCapture(event.pointerId);
+		setMarquee({
+			left: event.clientX - bounds.left,
+			top: event.clientY - bounds.top,
+			width: 0,
+			height: 0,
+		});
+	};
+	const moveMarquee = (event: React.PointerEvent<HTMLDivElement>) => {
+		const start = drag.current;
+		if (!start || start.pointerId !== event.pointerId) return;
+		const bounds = event.currentTarget.getBoundingClientRect();
+		setMarquee({
+			left: Math.min(start.x, event.clientX) - bounds.left,
+			top: Math.min(start.y, event.clientY) - bounds.top,
+			width: Math.abs(event.clientX - start.x),
+			height: Math.abs(event.clientY - start.y),
+		});
+	};
+	const finishMarquee = (event: React.PointerEvent<HTMLDivElement>) => {
+		const start = drag.current;
+		if (!start || start.pointerId !== event.pointerId) return;
+		drag.current = null;
+		setMarquee(null);
+		const left = Math.min(start.x, event.clientX);
+		const right = Math.max(start.x, event.clientX);
+		const top = Math.min(start.y, event.clientY);
+		const bottom = Math.max(start.y, event.clientY);
+		const hitIds = new Set(
+			[...event.currentTarget.querySelectorAll<HTMLElement>("[data-layout-fixture-id]")]
+				.filter((element) => {
+					const bounds = element.getBoundingClientRect();
+					return (
+						bounds.right >= left &&
+						bounds.left <= right &&
+						bounds.bottom >= top &&
+						bounds.top <= bottom
+					);
+				})
+				.map((element) => element.dataset.layoutFixtureId ?? ""),
+		);
+		const hits = projection.order.filter((fixtureId) => hitIds.has(fixtureId));
+		if (hits.length === 0) return;
+		anchor.current = hits.at(-1) ?? null;
+		void selection.replaceFixtureIds(
+			start.additive ? orderedUnion(selection.fixtureIds, hits) : hits,
+		);
 	};
 
 	return (
@@ -173,6 +245,13 @@ export function LayoutWindow({
 						gridTemplateColumns: `repeat(${projection.columns}, minmax(5rem, 1fr))`,
 						gridTemplateRows: `repeat(${projection.rows}, minmax(4rem, 1fr))`,
 					}}
+					onPointerDown={beginMarquee}
+					onPointerMove={moveMarquee}
+					onPointerUp={finishMarquee}
+					onPointerCancel={() => {
+						drag.current = null;
+						setMarquee(null);
+					}}
 				>
 					{projection.cells.map((cell) => {
 						const fixture = inheritedPresentation(cell.fixtureId);
@@ -183,6 +262,7 @@ export function LayoutWindow({
 								type="button"
 								className={`layout-cell ${selected ? "selected" : ""} ${fixture ? "" : "missing"}`}
 								aria-pressed={selected}
+								data-layout-fixture-id={cell.fixtureId}
 								aria-label={
 									fixture
 										? `Fixture ${fixture.fixtureNumber}, ${fixture.dimmer}%`
@@ -203,8 +283,27 @@ export function LayoutWindow({
 							</button>
 						);
 					})}
+					{marquee && (
+						<span
+							className="layout-marquee"
+							aria-hidden="true"
+							style={marquee}
+						/>
+					)}
 				</div>
 			)}
 		</section>
 	);
+}
+
+function orderedUnion(first: readonly string[], second: readonly string[]) {
+	const seen = new Set(first);
+	return [
+		...first,
+		...second.filter((fixtureId) => {
+			if (seen.has(fixtureId)) return false;
+			seen.add(fixtureId);
+			return true;
+		}),
+	];
 }

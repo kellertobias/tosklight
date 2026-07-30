@@ -36,9 +36,18 @@
 }
 
 .layout-grid {
+	position: relative;
 	display: grid;
 	min-block-size: 100%;
 	gap: 0.4rem;
+}
+
+.layout-marquee {
+	position: absolute;
+	z-index: 2;
+	border: 1px solid var(--cyan);
+	background: color-mix(in srgb, var(--cyan) 16%, transparent);
+	pointer-events: none;
 }
 
 .layout-cell {

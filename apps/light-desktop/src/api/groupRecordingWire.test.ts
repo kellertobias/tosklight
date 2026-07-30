@@ -91,20 +91,23 @@ describe("Group recording wire", () => {
 		);
 		expect(outcome.group.object?.body.grid).toEqual(grid);
 
-		expect(() =>
+		expect(
 			decodeGroupRecordingOutcome(
 				storedOutcome({
 					group: {
 						...storedOutcome().group,
 						body: {
 							...storedOutcome().group.body,
-							grid: { method: "vertical_axis_z" },
+							grid: { method: "unknown" },
 						},
 					},
 				}),
 				REQUEST,
-			),
-		).toThrow("$.group.body.grid.axis_origin");
+			).group.object?.body.grid,
+		).toEqual({
+			method: "stage2d",
+			axis_origin: { x: 0, y: 0, z: 0 },
+		});
 	});
 
 	it("accepts a losslessly preserved legacy body with only fixtures", () => {

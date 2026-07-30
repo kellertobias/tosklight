@@ -85,6 +85,8 @@ describe("LayoutWindow", () => {
 		mocks.bootstrapReady = true;
 		mocks.selected = new Set();
 		mocks.groups = [group("1", "Front", ["a", "b"])];
+		if (!HTMLElement.prototype.setPointerCapture)
+			HTMLElement.prototype.setPointerCapture = vi.fn();
 	});
 	afterEach(cleanup);
 
@@ -124,4 +126,38 @@ describe("LayoutWindow", () => {
 		fireEvent.click(second, { shiftKey: true });
 		expect(mocks.replace).toHaveBeenLastCalledWith(["a", "b"]);
 	});
+
+	it("marquee-selects intersecting cells in deterministic grid order", () => {
+		render(<LayoutWindow compact paneId="layout-a" layoutGroupId="1" />);
+		const grid = screen.getByLabelText("Front fixture layout");
+		const first = screen.getByRole("button", { name: "Fixture 1, 75%" });
+		const second = screen.getByRole("button", { name: "Fixture 2, 25%" });
+		vi.spyOn(grid, "getBoundingClientRect").mockReturnValue(
+			rect(0, 0, 120, 80),
+		);
+		vi.spyOn(first, "getBoundingClientRect").mockReturnValue(
+			rect(10, 10, 40, 40),
+		);
+		vi.spyOn(second, "getBoundingClientRect").mockReturnValue(
+			rect(70, 10, 40, 40),
+		);
+		fireEvent.pointerDown(grid, { pointerId: 1, clientX: 0, clientY: 0 });
+		fireEvent.pointerMove(grid, { pointerId: 1, clientX: 55, clientY: 55 });
+		fireEvent.pointerUp(grid, { pointerId: 1, clientX: 55, clientY: 55 });
+		expect(mocks.replace).toHaveBeenLastCalledWith(["a"]);
+	});
 });
+
+function rect(x: number, y: number, width: number, height: number): DOMRect {
+	return {
+		x,
+		y,
+		left: x,
+		top: y,
+		right: x + width,
+		bottom: y + height,
+		width,
+		height,
+		toJSON: () => ({}),
+	} as DOMRect;
+}

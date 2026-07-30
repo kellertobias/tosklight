@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn legacy_and_malformed_group_grids_fall_back_without_losing_membership() {
+    let fixture = FixtureId::new();
+    for grid in [
+        serde_json::Value::Null,
+        serde_json::json!({"method": "unknown_future_method"}),
+        serde_json::json!({"method": "vertical_axis_z", "axis_origin": "invalid"}),
+    ] {
+        let mut body = serde_json::json!({
+            "id": "1",
+            "name": "Front",
+            "fixtures": [fixture]
+        });
+        if !grid.is_null() {
+            body["grid"] = grid;
+        }
+        let group: GroupDefinition = serde_json::from_value(body).unwrap();
+        assert_eq!(group.fixtures, vec![fixture]);
+        assert_eq!(group.grid, GridMethodConfiguration::default());
+    }
+}
+
+#[test]
 fn releasing_one_scoped_attribute_preserves_every_other_contribution() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();
