@@ -4,6 +4,12 @@ Preload capture configuration lives in **Desk Setup > Programmer**. MIDI, OSC, R
 
 ![Desk input status and Preload capture settings](../assets/screenshots/workflows/desk-setup-inputs.png)
 
+## Highlight Look
+
+Open **Desk Setup > Programmer > Highlight Look** to configure the transient identification look shared by every show and operator desk connected to this server. Intensity is required. Shutter is fixed to the fixture profile's authored **Open** function and cannot be changed to a raw, closed, or strobe value. Color can be Ignore or one named color; Iris, Zoom, Focus, and Frost independently use Ignore or a normalized value. Ignore leaves the current programmer, playback, default, or other lower-priority value visible.
+
+This is installation data, not portable show content. **Highlight patch selection via DMX** uses the same look and only controls whether Patch Preview selection reaches physical output. A **NeedsReview** or **LegacyRaw** warning means an older show contains raw per-fixture Highlight data. Review the semantic settings before choosing **Use semantic Highlight Look**; that choice changes evaluation policy but preserves the original show data for compatibility.
+
 ## OSC
 
 Network & Inputs reports the active OSC bind address; it does not edit that binding. Configure the server-side OSC bind through the installation configuration, then return here to verify what the running desk loaded. Bind only to the trusted lighting-network interface. One ToskLight application and the OSC hardware subscribed to its alias form one desk: a physical button continues that desk's visible command and behaves like the corresponding UI button. A different desk alias retains its own command line, page, and button state. Programmer values are owned by the logged-in user instead, so a value that has been confirmed into that user's programmer is visible from the same user's sessions on every desk without copying the originating desk's unfinished interaction state.
