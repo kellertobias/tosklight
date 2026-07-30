@@ -1,11 +1,23 @@
-//! Neutral clock and scheduler ports for application-layer timing.
-//!
-//! Wall-clock recurrence rules remain future product policy. Runtime services use the monotonic
-//! boundary for delays so clock corrections cannot move an already selected deadline.
+//! Schedule definitions, wall-clock recurrence policy, and neutral scheduler ports.
 
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
+
+mod expression;
+mod model;
+mod recurrence;
+
+pub use expression::CalendarExpression;
+pub use model::{
+    CalendarRule, IntervalSkip, MAXIMUM_PLAYBACK_FADE_MILLIS, MAXIMUM_SCHEDULE_PREVIEW,
+    MINIMUM_INTERVAL_SECONDS, MonthWeekOrdinal, PlaybackMasterTransition, ScheduleDefinition,
+    ScheduleId, ScheduleMacroId, ScheduleOccurrence, ScheduleOccurrenceIdentity,
+    ScheduleOccurrenceKey, ScheduleOccurrenceProjection, ScheduleOccurrenceResult,
+    ScheduleOccurrenceStatus, ScheduleRuntimeChange, ScheduleTarget, ScheduleTrigger,
+    ScheduleValidationError, ScheduleWeekday, ScheduledPlaybackAction, ScheduledPlaybackKind,
+};
+pub use recurrence::ScheduleRecurrence;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct MonotonicMoment(pub Duration);

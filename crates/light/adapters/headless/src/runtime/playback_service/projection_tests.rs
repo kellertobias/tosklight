@@ -158,6 +158,7 @@ fn dynamic_projection_reports_hidden_controller_identity_speed_and_coverage() {
         fader_value: 1.0,
         size: 0.75,
         master: 0.8,
+        master_transition: None,
         local_speed_multiplier: assignment.local_speed_multiplier,
         learned_duration_millis: None,
         last_learn_tap_millis: None,

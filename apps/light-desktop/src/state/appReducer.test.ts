@@ -106,6 +106,47 @@ describe("appReducer desk creation and layout hydration", () => {
 		expect(hydrated.builtIn).toBe("groups");
 		expect(hydrated.dockMode).toBe("builtins");
 	});
+
+	it("creates and safely hydrates persisted Scheduler pane layout", () => {
+		const emptyDesk = {
+			...initialState,
+			activeDeskId: "scheduler-test",
+			desks: [{ id: "scheduler-test", name: "Scheduler", panes: [] }],
+			windowPicker: { x: 1, y: 1, width: 12, height: 10 },
+		};
+		const added = appReducer(emptyDesk, {
+			type: "ADD_WINDOW",
+			kind: "scheduler",
+		});
+		expect(added.desks[0].panes[0]).toMatchObject({
+			kind: "scheduler",
+			title: "Scheduler",
+			schedulerShowList: true,
+			schedulerShowCalendar: true,
+		});
+
+		const hydrated = appReducer(added, {
+			type: "HYDRATE_LAYOUT",
+			desks: [
+				{
+					id: "scheduler-test",
+					name: "Scheduler",
+					panes: [
+						{
+							...added.desks[0].panes[0],
+							schedulerShowList: false,
+							schedulerShowCalendar: false,
+						},
+					],
+				},
+			],
+			activeDeskId: "scheduler-test",
+		});
+		expect(hydrated.desks[0].panes[0]).toMatchObject({
+			schedulerShowList: true,
+			schedulerShowCalendar: false,
+		});
+	});
 });
 
 describe("appReducer dock navigation and File Manager returns", () => {
@@ -556,7 +597,9 @@ describe("appReducer legacy pane layout hydration", () => {
 
 		expect(virtual.virtualPlaybackRows ?? 2).toBe(2);
 		expect(virtual.virtualPlaybackColumns ?? 2).toBe(2);
-		expect(virtual.virtualPlaybackPageMode ?? "follow_main").toBe("follow_main");
+		expect(virtual.virtualPlaybackPageMode ?? "follow_main").toBe(
+			"follow_main",
+		);
 		expect(virtual.virtualPlaybackPinnedPage ?? 1).toBe(1);
 		expect(virtual.virtualPlaybackCells ?? []).toEqual([]);
 		expect(virtual.virtualPlaybackExclusionZones ?? []).toEqual([]);

@@ -1,46 +1,32 @@
 import {
-	Button,
-	FormField,
 	FormLayout,
-	ModalLayer,
-	ModalTitleBar,
 	NumberField,
 	SelectField,
 	SwitchField,
 	TextField,
 } from "@tosklight/ui";
-import { useState } from "react";
+import type {
+	PlaybackScheduleTarget,
+	ScheduleDraft,
+	ScheduledPlaybackAction,
+} from "../../features/scheduler/contracts";
 
-export type TimingKind = "fixed" | "recurring";
-export type Frequency =
-	| "selected_days"
-	| "interval_minutes"
-	| "interval_days"
-	| "monthly"
-	| "custom";
-export type TargetKind = "macro" | "playback";
+export type ScheduleEditorTab = "name" | "when" | "action";
 
 export interface ScheduleEditorForm {
 	name: string;
 	enabled: boolean;
-	timingKind: TimingKind;
-	date: string;
-	time: string;
-	frequency: Frequency;
-	selectedDays: string[];
-	intervalMinutes: number;
-	intervalDays: number;
-	monthlyOrdinal: string;
-	monthlyWeekday: string;
-	cron: string;
-	targetKind: TargetKind;
-	macro: string;
-	page: number;
-	playback: number;
-	action: string;
+	timingType: "interval" | "calendar_expression" | "one_time";
+	intervalSeconds: number;
+	calendarExpression: string;
+	oneTimeDate: string;
+	oneTimeTime: string;
+	remainEnabledAfterSuccess: boolean;
+	playbackId: string;
+	action: ScheduledPlaybackAction;
 	setMaster: boolean;
-	master: number;
-	fade: number;
+	masterPercent: number;
+	fadeSeconds: number;
 }
 
 type UpdateForm = <Key extends keyof ScheduleEditorForm>(
@@ -48,644 +34,318 @@ type UpdateForm = <Key extends keyof ScheduleEditorForm>(
 	value: ScheduleEditorForm[Key],
 ) => void;
 
-export const weekdayOptions = [
-	{ value: "1", short: "Mon", label: "Monday" },
-	{ value: "2", short: "Tue", label: "Tuesday" },
-	{ value: "3", short: "Wed", label: "Wednesday" },
-	{ value: "4", short: "Thu", label: "Thursday" },
-	{ value: "5", short: "Fri", label: "Friday" },
-	{ value: "6", short: "Sat", label: "Saturday" },
-	{ value: "0", short: "Sun", label: "Sunday" },
-] as const;
-
-interface PlaybackPageOption {
-	value: string;
-	label: string;
-	groups: {
-		label: string;
-		playbacks: { number: number; name: string; detail: string }[];
-	}[];
+export function scheduleEditorForm(
+	draft: ScheduleDraft | null,
+	targets: readonly PlaybackScheduleTarget[],
+	serverDate: string,
+): ScheduleEditorForm {
+	return {
+		name: draft?.name ?? "New schedule",
+		enabled: draft?.enabled ?? true,
+		timingType: draft?.timing.type ?? "interval",
+		intervalSeconds:
+			draft?.timing.type === "interval" ? draft.timing.everySeconds : 300,
+		calendarExpression:
+			draft?.timing.type === "calendar_expression"
+				? draft.timing.expression
+				: "0 14 * * 1",
+		oneTimeDate:
+			draft?.timing.type === "one_time" ? draft.timing.localDate : serverDate,
+		oneTimeTime:
+			draft?.timing.type === "one_time" ? draft.timing.localTime : "14:00:00",
+		remainEnabledAfterSuccess:
+			draft?.timing.type === "one_time"
+				? draft.timing.remainEnabledAfterSuccess
+				: false,
+		playbackId:
+			draft?.target.type === "playback"
+				? draft.target.playbackId
+				: (targets[0]?.id ?? ""),
+		action: draft?.target.type === "playback" ? draft.target.action : "go",
+		setMaster:
+			draft?.target.type === "playback" && draft.target.masterPercent != null,
+		masterPercent:
+			draft?.target.type === "playback"
+				? (draft.target.masterPercent ?? 100)
+				: 100,
+		fadeSeconds:
+			draft?.target.type === "playback"
+				? (draft.target.fadeMillis ?? 0) / 1_000
+				: 0,
+	};
 }
 
-const playbackPages: PlaybackPageOption[] = [
-	{
-		value: "1",
-		label: "Page 1 · Main",
-		groups: [
-			{
-				label: "Main looks",
-				playbacks: [
-					{ number: 1, name: "Opening Look", detail: "Cue 4 · Solo" },
-					{ number: 2, name: "Front Wash", detail: "12 fixtures · 48%" },
-					{ number: 3, name: "Foyer Preset", detail: "House · 24%" },
-					{ number: 4, name: "Circle Dynamic", detail: "Dynamic 12" },
-				],
-			},
-			{
-				label: "Utilities",
-				playbacks: [
-					{ number: 5, name: "Grand Master", detail: "Master · 100%" },
-					{ number: 6, name: "House Preset", detail: "House · 24%" },
-				],
-			},
-		],
-	},
-	{
-		value: "2",
-		label: "Page 2 · Party",
-		groups: [
-			{
-				label: "Party",
-				playbacks: [
-					{ number: 1, name: "Dance Floor", detail: "Cue list 21" },
-					{ number: 4, name: "Mirrorball", detail: "Cue list 24" },
-					{ number: 8, name: "Worklights", detail: "Utility · 100%" },
-					{ number: 10, name: "Last Song", detail: "Macro handoff" },
-				],
-			},
-		],
-	},
-	{
-		value: "3",
-		label: "Page 3 · House",
-		groups: [
-			{
-				label: "House and safety",
-				playbacks: [
-					{ number: 1, name: "Auditorium", detail: "House · 60%" },
-					{ number: 2, name: "Foyer", detail: "House · 80%" },
-					{ number: 3, name: "Cleaning", detail: "Worklight preset" },
-				],
-			},
-		],
-	},
-];
+export function draftFromScheduleEditor(
+	form: ScheduleEditorForm,
+	targets: readonly PlaybackScheduleTarget[],
+): ScheduleDraft | null {
+	const target = targets.find((candidate) => candidate.id === form.playbackId);
+	if (!target) return null;
+	return {
+		name: form.name.trim(),
+		enabled: form.enabled,
+		timing:
+			form.timingType === "interval"
+				? {
+						type: "interval",
+						everySeconds: Math.max(1, Math.round(form.intervalSeconds)),
+						anchor: "activation",
+					}
+				: form.timingType === "calendar_expression"
+					? {
+							type: "calendar_expression",
+							expression: form.calendarExpression.trim(),
+							summary: "",
+						}
+					: {
+							type: "one_time",
+							localDate: form.oneTimeDate,
+							localTime: form.oneTimeTime,
+							remainEnabledAfterSuccess: form.remainEnabledAfterSuccess,
+						},
+		target: {
+			type: "playback",
+			playbackId: target.id,
+			label: target.label,
+			page: target.page,
+			slot: target.slot,
+			playback: target.playback,
+			action: form.action,
+			masterPercent:
+				form.setMaster && target.supportsMaster
+					? Math.max(0, Math.min(100, form.masterPercent))
+					: null,
+			fadeMillis:
+				form.setMaster && target.supportsMaster
+					? Math.max(0, Math.round(form.fadeSeconds * 1_000))
+					: null,
+		},
+	};
+}
 
 export function ScheduleEditorTabs({
 	activeTab,
 	form,
-	summary,
-	resolvedCron,
+	timezone,
+	playbackTargets,
 	update,
 }: {
-	activeTab: string;
+	activeTab: ScheduleEditorTab;
 	form: ScheduleEditorForm;
-	summary: string;
-	resolvedCron: string;
+	timezone: string;
+	playbackTargets: readonly PlaybackScheduleTarget[];
 	update: UpdateForm;
 }) {
-	if (activeTab === "schedule") return <NameTab form={form} update={update} />;
-	if (activeTab === "when")
+	if (activeTab === "name")
 		return (
-			<WhenTab
-				form={form}
-				summary={summary}
-				resolvedCron={resolvedCron}
-				update={update}
-			/>
-		);
-	if (activeTab === "trigger")
-		return <TriggerTab form={form} update={update} />;
-	return null;
-}
-
-function NameTab({
-	form,
-	update,
-}: {
-	form: ScheduleEditorForm;
-	update: UpdateForm;
-}) {
-	return (
-		<section className="scheduler-editor-section">
-			<FormLayout columns={2}>
-				<TextField
-					label="Name"
-					value={form.name}
-					onChange={(event) => update("name", event.target.value)}
-				/>
-				<SwitchField
-					label="Enabled"
-					offLabel="Disabled"
-					onLabel="Enabled"
-					checked={form.enabled}
-					onChange={(event) => update("enabled", event.target.checked)}
-				/>
-			</FormLayout>
-		</section>
-	);
-}
-
-function WhenTab({
-	form,
-	summary,
-	resolvedCron,
-	update,
-}: {
-	form: ScheduleEditorForm;
-	summary: string;
-	resolvedCron: string;
-	update: UpdateForm;
-}) {
-	return (
-		<section className="scheduler-editor-section">
-			<div
-				className={
-					form.timingKind === "fixed"
-						? "scheduler-fixed-timing-row"
-						: "scheduler-when-repeat-row"
-				}
-			>
-				<SelectField
-					label="When"
-					value={form.timingKind}
-					options={[
-						{ value: "fixed", label: "Fixed date" },
-						{ value: "recurring", label: "Repeating rule" },
-					]}
-					onChange={(value) => update("timingKind", value as TimingKind)}
-				/>
-				{form.timingKind === "fixed" ? (
-					<FixedTimingFields form={form} update={update} />
-				) : (
-					<SelectField
-						className="scheduler-repeat-control"
-						label="Repeat"
-						value={form.frequency}
-						options={[
-							{
-								value: "selected_days",
-								label: "On selected days of the week",
-							},
-							{ value: "interval_minutes", label: "Every <n> minutes" },
-							{ value: "interval_days", label: "Every <n> days" },
-							{ value: "monthly", label: "On a weekday of the month" },
-							{ value: "custom", label: "Advanced / custom cron" },
-						]}
-						onChange={(value) => update("frequency", value as Frequency)}
+			<section className="scheduler-editor-section">
+				<FormLayout columns={2}>
+					<TextField
+						label="Name"
+						value={form.name}
+						onChange={(event) => update("name", event.target.value)}
 					/>
-				)}
-			</div>
-			{form.timingKind === "recurring" && (
-				<RecurringTiming
-					form={form}
-					summary={summary}
-					resolvedCron={resolvedCron}
-					update={update}
-				/>
-			)}
-		</section>
-	);
-}
-
-function FixedTimingFields({
-	form,
-	update,
-}: {
-	form: ScheduleEditorForm;
-	update: UpdateForm;
-}) {
+					<SwitchField
+						label="Enabled"
+						offLabel="Disabled"
+						onLabel="Enabled"
+						checked={form.enabled}
+						onChange={(event) => update("enabled", event.target.checked)}
+					/>
+				</FormLayout>
+			</section>
+		);
+	if (activeTab === "when")
+		return <WhenFields form={form} timezone={timezone} update={update} />;
 	return (
-		<>
-			<TextField
-				label="Date"
-				value={form.date}
-				description="YYYY-MM-DD"
-				onChange={(event) => update("date", event.target.value)}
-			/>
-			<div className="scheduler-compact-time-field">
-				<TextField
-					label="Time"
-					value={form.time}
-					description="24-hour time"
-					onChange={(event) => update("time", event.target.value)}
-				/>
-			</div>
-		</>
-	);
-}
-
-function RecurringTiming({
-	form,
-	summary,
-	resolvedCron,
-	update,
-}: {
-	form: ScheduleEditorForm;
-	summary: string;
-	resolvedCron: string;
-	update: UpdateForm;
-}) {
-	if (form.frequency === "custom")
-		return <CustomRule cron={form.cron} update={update} />;
-	return (
-		<RuleBuilder
+		<ActionFields
 			form={form}
-			summary={summary}
-			resolvedCron={resolvedCron}
+			playbackTargets={playbackTargets}
 			update={update}
 		/>
 	);
 }
 
-function CustomRule({ cron, update }: { cron: string; update: UpdateForm }) {
-	return (
-		<div className="scheduler-custom-rule">
-			<TextField
-				label="Cron expression"
-				value={cron}
-				description="minute · hour · day · month · weekday"
-				onChange={(event) => update("cron", event.target.value)}
-			/>
-			<aside aria-label="Next five occurrences">
-				<strong>Next 5 occurrences</strong>
-				<ol>
-					{[
-						"Friday, 31 July 2026",
-						"Friday, 7 August 2026",
-						"Friday, 14 August 2026",
-						"Friday, 21 August 2026",
-						"Friday, 28 August 2026",
-					].map((occurrence) => (
-						<li key={occurrence}>
-							<span>{occurrence}</span>
-							<time>19:00</time>
-						</li>
-					))}
-				</ol>
-			</aside>
-		</div>
-	);
-}
-
-function RuleBuilder({
+function WhenFields({
 	form,
-	summary,
-	resolvedCron,
+	timezone,
 	update,
 }: {
 	form: ScheduleEditorForm;
-	summary: string;
-	resolvedCron: string;
-	update: UpdateForm;
-}) {
-	return (
-		<div className="scheduler-rule-builder">
-			{form.frequency === "selected_days" && (
-				<WeekdayPicker selected={form.selectedDays} update={update} />
-			)}
-			{form.frequency === "interval_days" && (
-				<NumberField
-					label="Interval"
-					min={1}
-					unit="days"
-					value={form.intervalDays}
-					onChange={(event) =>
-						update("intervalDays", Number(event.target.value) || 1)
-					}
-				/>
-			)}
-			{form.frequency === "interval_minutes" && (
-				<NumberField
-					label="Interval"
-					min={1}
-					max={59}
-					unit="minutes"
-					value={form.intervalMinutes}
-					onChange={(event) =>
-						update("intervalMinutes", Number(event.target.value) || 1)
-					}
-				/>
-			)}
-			{form.frequency === "monthly" && (
-				<MonthlyFields form={form} update={update} />
-			)}
-			{form.frequency !== "interval_minutes" && (
-				<div className="scheduler-compact-time-field">
-					<TextField
-						label="Time"
-						value={form.time}
-						description="24-hour time"
-						onChange={(event) => update("time", event.target.value)}
-					/>
-				</div>
-			)}
-			<div className="scheduler-rule-summary">
-				<small>This schedule will run</small>
-				<strong>{summary}</strong>
-				<code>{resolvedCron}</code>
-			</div>
-		</div>
-	);
-}
-
-function WeekdayPicker({
-	selected,
-	update,
-}: {
-	selected: string[];
-	update: UpdateForm;
-}) {
-	return (
-		<FormField
-			label="Days"
-			description="Choose one or more days."
-			className="scheduler-weekday-field"
-		>
-			<fieldset className="scheduler-weekdays">
-				<legend>Days of the week</legend>
-				{weekdayOptions.map((day) => {
-					const active = selected.includes(day.value);
-					return (
-						<Button
-							key={day.value}
-							active={active}
-							aria-pressed={active}
-							onClick={() =>
-								update(
-									"selectedDays",
-									active
-										? selected.length > 1
-											? selected.filter((value) => value !== day.value)
-											: selected
-										: [...selected, day.value],
-								)
-							}
-						>
-							{day.short}
-						</Button>
-					);
-				})}
-			</fieldset>
-		</FormField>
-	);
-}
-
-function MonthlyFields({
-	form,
-	update,
-}: {
-	form: ScheduleEditorForm;
-	update: UpdateForm;
-}) {
-	return (
-		<>
-			<SelectField
-				label="Occurrence"
-				value={form.monthlyOrdinal}
-				options={[
-					{ value: "first", label: "First" },
-					{ value: "second", label: "Second" },
-					{ value: "third", label: "Third" },
-					{ value: "fourth", label: "Fourth" },
-					{ value: "last", label: "Last" },
-				]}
-				onChange={(value) => update("monthlyOrdinal", value)}
-			/>
-			<SelectField
-				label="Weekday"
-				value={form.monthlyWeekday}
-				options={weekdayOptions.map((day) => ({
-					value: day.value,
-					label: day.label,
-				}))}
-				onChange={(value) => update("monthlyWeekday", value)}
-			/>
-		</>
-	);
-}
-
-function TriggerTab({
-	form,
-	update,
-}: {
-	form: ScheduleEditorForm;
+	timezone: string;
 	update: UpdateForm;
 }) {
 	return (
 		<section className="scheduler-editor-section">
-			<div className="scheduler-trigger-target-row">
-				<SelectField
-					label="Trigger"
-					value={form.targetKind}
-					options={[
-						{ value: "macro", label: "Macro" },
-						{ value: "playback", label: "Playback" },
-					]}
-					onChange={(value) => update("targetKind", value as TargetKind)}
+			<SelectField
+				label="Trigger type"
+				value={form.timingType}
+				options={[
+					{ value: "interval", label: "Interval" },
+					{
+						value: "calendar_expression",
+						label: "Calendar expression",
+					},
+					{ value: "one_time", label: "One-time" },
+				]}
+				onChange={(value) =>
+					update("timingType", value as ScheduleEditorForm["timingType"])
+				}
+			/>
+			<p className="scheduler-timezone" role="status">
+				Authoritative server timezone:{" "}
+				<strong>{timezone || "Unavailable"}</strong>
+			</p>
+			{form.timingType === "interval" && (
+				<>
+					<NumberField
+						label="Interval"
+						min={1}
+						unit="seconds"
+						value={form.intervalSeconds}
+						onChange={(event) =>
+							update("intervalSeconds", Number(event.target.value) || 1)
+						}
+					/>
+					<small>
+						The interval is anchored when this Schedule becomes active. The
+						server validates the minimum duration.
+					</small>
+				</>
+			)}
+			{form.timingType === "calendar_expression" && (
+				<TextField
+					label="Calendar expression"
+					value={form.calendarExpression}
+					description="Server-supported five-field calendar expression"
+					onChange={(event) => update("calendarExpression", event.target.value)}
 				/>
-				{form.targetKind === "macro" ? (
-					<SelectField
-						label="Macro"
-						value={form.macro}
-						options={[
-							{ value: "101 · Venue open", label: "101 · Venue open" },
-							{ value: "102 · Venue close", label: "102 · Venue close" },
-							{ value: "204 · Festival day", label: "204 · Festival day" },
-						]}
-						onChange={(value) => update("macro", value)}
+			)}
+			{form.timingType === "one_time" && (
+				<>
+					<FormLayout columns={2}>
+						<TextField
+							label="Date"
+							value={form.oneTimeDate}
+							description="YYYY-MM-DD"
+							onChange={(event) => update("oneTimeDate", event.target.value)}
+						/>
+						<TextField
+							label="Time"
+							value={form.oneTimeTime}
+							description="HH:MM:SS"
+							onChange={(event) => update("oneTimeTime", event.target.value)}
+						/>
+					</FormLayout>
+					<SwitchField
+						label="After successful occurrence"
+						offLabel="Disable Schedule"
+						onLabel="Keep enabled as history"
+						checked={form.remainEnabledAfterSuccess}
+						onChange={(event) =>
+							update("remainEnabledAfterSuccess", event.target.checked)
+						}
 					/>
-				) : (
-					<PlaybackPickerField
-						page={form.page}
-						playback={form.playback}
-						onChange={(page, playback) => {
-							update("page", page);
-							update("playback", playback);
-						}}
-					/>
-				)}
-			</div>
-			{form.targetKind === "playback" && (
-				<PlaybackActionFields form={form} update={update} />
+				</>
 			)}
 		</section>
 	);
 }
 
-function PlaybackActionFields({
+function ActionFields({
 	form,
+	playbackTargets,
 	update,
 }: {
 	form: ScheduleEditorForm;
+	playbackTargets: readonly PlaybackScheduleTarget[];
 	update: UpdateForm;
 }) {
+	const target = playbackTargets.find(
+		(candidate) => candidate.id === form.playbackId,
+	);
+	const supportedActions = target?.supportedActions ?? [];
 	return (
-		<>
-			<FormLayout columns={1}>
-				<SelectField
-					label="Button action"
-					value={form.action}
-					options={["Go", "Pause", "On", "Off", "Release", "Toggle"].map(
-						(value) => ({ value, label: value }),
-					)}
-					onChange={(value) => update("action", value)}
-				/>
-			</FormLayout>
+		<section className="scheduler-editor-section">
+			<SelectField
+				label="Action family"
+				value="playback"
+				options={[
+					{ value: "playback", label: "Playback" },
+					{ value: "macro", label: "Start Macro (unavailable)" },
+				]}
+				onChange={() => undefined}
+			/>
+			<p className="scheduler-unavailable">
+				Macro scheduling becomes available when the Macro runtime is installed.
+			</p>
+			<SelectField
+				label="Playback"
+				value={form.playbackId}
+				options={playbackTargets.map((candidate) => ({
+					value: candidate.id,
+					label: `Page ${candidate.page} · Slot ${candidate.slot} · Playback ${candidate.playback} · ${candidate.label}`,
+				}))}
+				onChange={(value) => {
+					const next = playbackTargets.find(
+						(candidate) => candidate.id === value,
+					);
+					update("playbackId", value);
+					if (next && !next.supportedActions.includes(form.action))
+						update("action", next.supportedActions[0] ?? "go");
+				}}
+			/>
+			<SelectField
+				label="Playback action"
+				value={form.action}
+				options={supportedActions.map((action) => ({
+					value: action,
+					label: playbackActionLabel(action),
+				}))}
+				onChange={(value) => update("action", value as ScheduledPlaybackAction)}
+			/>
 			<SwitchField
 				label="Set playback master"
 				offLabel="Leave unchanged"
 				onLabel="Set master"
-				description="Move the master when the scheduled action starts."
 				checked={form.setMaster}
+				disabled={!target?.supportsMaster}
 				onChange={(event) => update("setMaster", event.target.checked)}
 			/>
-			{form.setMaster && (
+			{form.setMaster && target?.supportsMaster && (
 				<FormLayout columns={2}>
 					<NumberField
 						label="Master"
 						min={0}
 						max={100}
 						unit="%"
-						value={form.master}
+						value={form.masterPercent}
 						onChange={(event) =>
-							update("master", Number(event.target.value) || 0)
+							update("masterPercent", Number(event.target.value) || 0)
 						}
 					/>
 					<NumberField
-						label="Fade in"
+						label="Fade time"
 						min={0}
 						unit="s"
-						value={form.fade}
+						value={form.fadeSeconds}
 						onChange={(event) =>
-							update("fade", Number(event.target.value) || 0)
+							update("fadeSeconds", Number(event.target.value) || 0)
 						}
 					/>
 				</FormLayout>
 			)}
-		</>
+		</section>
 	);
 }
 
-function PlaybackPickerField({
-	page,
-	playback,
-	onChange,
-}: {
-	page: number;
-	playback: number;
-	onChange: (page: number, playback: number) => void;
-}) {
-	const [open, setOpen] = useState(false);
-	const [pickerPage, setPickerPage] = useState(String(page));
-	const currentPage =
-		playbackPages.find((candidate) => candidate.value === String(page)) ??
-		playbackPages[0];
-	const currentPlayback = currentPage.groups
-		.flatMap((group) => group.playbacks)
-		.find((candidate) => candidate.number === playback);
-	const pickerPageDefinition =
-		playbackPages.find((candidate) => candidate.value === pickerPage) ??
-		playbackPages[0];
-	return (
-		<FormField
-			label="Playback"
-			description="Choose a page, then select a named playback."
-		>
-			<Button
-				className="scheduler-playback-trigger"
-				contentAlign="left"
-				aria-haspopup="dialog"
-				onClick={() => {
-					setPickerPage(String(page));
-					setOpen(true);
-				}}
-			>
-				<span>
-					<strong>{currentPlayback?.name ?? `Playback ${playback}`}</strong>
-					<small>
-						{currentPage.label} · Playback {playback}
-					</small>
-				</span>
-				<b aria-hidden="true">›</b>
-			</Button>
-			{open && (
-				<PlaybackPickerModal
-					page={page}
-					playback={playback}
-					pickerPage={pickerPage}
-					definition={pickerPageDefinition}
-					onPage={setPickerPage}
-					onPick={(nextPlayback) => {
-						onChange(Number(pickerPage), nextPlayback);
-						setOpen(false);
-					}}
-					onClose={() => setOpen(false)}
-				/>
-			)}
-		</FormField>
-	);
-}
-
-function PlaybackPickerModal({
-	page,
-	playback,
-	pickerPage,
-	definition,
-	onPage,
-	onPick,
-	onClose,
-}: {
-	page: number;
-	playback: number;
-	pickerPage: string;
-	definition: PlaybackPageOption;
-	onPage: (page: string) => void;
-	onPick: (playback: number) => void;
-	onClose: () => void;
-}) {
-	return (
-		<ModalLayer
-			ariaLabel="Choose playback"
-			className="scheduler-playback-picker-layer"
-			dialogClassName="scheduler-playback-picker"
-			onClose={onClose}
-		>
-			<ModalTitleBar
-				title="Choose playback"
-				details="Select a page, then choose from its available playbacks"
-				actions={
-					<SelectField
-						className="ui-icon-group-control"
-						label="Playback page"
-						ariaLabel="Playback page"
-						size="compact"
-						value={pickerPage}
-						options={playbackPages.map((candidate) => ({
-							value: candidate.value,
-							label: candidate.label,
-						}))}
-						onChange={onPage}
-					/>
-				}
-				closeLabel="Close playback picker"
-				onClose={onClose}
-			/>
-			<div className="scheduler-playback-groups">
-				{definition.groups.map((group) => (
-					<section key={group.label}>
-						<h3>{group.label}</h3>
-						<div className="scheduler-playback-grid">
-							{group.playbacks.map((candidate) => (
-								<Button
-									key={candidate.number}
-									active={
-										Number(pickerPage) === page && candidate.number === playback
-									}
-									contentAlign="left"
-									onClick={() => onPick(candidate.number)}
-								>
-									<b>{candidate.number}</b>
-									<span>
-										<strong>{candidate.name}</strong>
-										<small>{candidate.detail}</small>
-									</span>
-								</Button>
-							))}
-						</div>
-					</section>
-				))}
-			</div>
-		</ModalLayer>
-	);
+export function playbackActionLabel(action: ScheduledPlaybackAction) {
+	return {
+		go: "Go",
+		pause: "Pause",
+		on: "On",
+		off: "Off",
+		release: "Release",
+		toggle: "Toggle",
+	}[action];
 }

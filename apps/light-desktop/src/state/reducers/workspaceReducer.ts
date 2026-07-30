@@ -26,10 +26,7 @@ function addWindow(
 						? "File Manager"
 						: kind === "text_editor"
 							? "Text Editor"
-							: cueListWindowTitle(
-									kind[0].toUpperCase() + kind.slice(1),
-									kind,
-								),
+							: cueListWindowTitle(kind[0].toUpperCase() + kind.slice(1), kind),
 		...(kind === "virtual_playbacks"
 			? {
 					virtualPlaybackRows: 2,
@@ -44,11 +41,12 @@ function addWindow(
 		...(kind === "text_editor"
 			? { textEditorReadOnly: false, textEditorMode: "plain" as const }
 			: {}),
+		...(kind === "scheduler"
+			? { schedulerShowList: true, schedulerShowCalendar: true }
+			: {}),
 		...state.windowPicker,
 	};
-	const activeDesk = state.desks.find(
-		(desk) => desk.id === state.activeDeskId,
-	);
+	const activeDesk = state.desks.find((desk) => desk.id === state.activeDeskId);
 	if (activeDesk?.panes.some((item) => overlaps(pane, item)))
 		return { ...state, windowPicker: null };
 	return {

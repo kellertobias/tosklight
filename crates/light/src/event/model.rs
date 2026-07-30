@@ -215,6 +215,7 @@ pub enum ShowEvent {
     VirtualPlaybackExclusionZonesChanged(VirtualPlaybackExclusionZonesChange),
     ShowLibraryChanged(ShowLibraryNotification),
     FixtureLibraryChanged(FixtureLibraryNotification),
+    ScheduleRuntimeChanged(crate::ScheduleRuntimeChange),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -706,6 +707,36 @@ impl EventDraft {
             correlation_id: Some(context.correlation_id),
             delivery: DeliveryPolicy::Lossless,
             payload: ApplicationEvent::Show(ShowEvent::SelectiveImportApplied(change)),
+        }
+    }
+
+    pub fn schedule_runtime_changed(change: crate::ScheduleRuntimeChange) -> Self {
+        let object = EventObject::show_object(
+            change.show_id,
+            ActiveShowObjectKind::Schedule,
+            &change.schedule_id.to_string(),
+        );
+        Self {
+            desk_id: None,
+            class: if change.validation_error.is_some()
+                || change
+                    .last_result
+                    .as_ref()
+                    .is_some_and(|result| result.status == crate::ScheduleOccurrenceStatus::Failed)
+            {
+                EventClass::Error
+            } else {
+                EventClass::Projection
+            },
+            object: Some(object),
+            related_objects: vec![EventObject::show_object_kind(
+                change.show_id,
+                ActiveShowObjectKind::Schedule,
+            )],
+            source: EventSource::Runtime,
+            correlation_id: None,
+            delivery: DeliveryPolicy::Replaceable,
+            payload: ApplicationEvent::Show(ShowEvent::ScheduleRuntimeChanged(change)),
         }
     }
 }

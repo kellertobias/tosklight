@@ -2,7 +2,7 @@
 
 use crate::runtime::{
     AppState, OwnedRuntimeTask, control_input_tasks, matter_bridge_sync, output_scheduler,
-    persist_output_runtime, playback_service,
+    persist_output_runtime, playback_service, schedules_v2,
 };
 use anyhow::Context;
 use tokio::task::JoinHandle;
@@ -110,6 +110,10 @@ impl CapabilitySupervisors {
                 .visualization_frame_hub()
                 .run_sampler(runtime_tasks.cancellation()),
         );
+        runtime_tasks.spawn(schedules_v2::run_scheduler(
+            state.clone(),
+            runtime_tasks.cancellation(),
+        ));
 
         Self {
             root_cancellation,

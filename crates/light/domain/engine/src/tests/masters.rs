@@ -273,6 +273,58 @@ fn group_master_runtime_update_is_targeted_idempotent_and_revision_neutral() {
 }
 
 #[test]
+fn group_master_transition_advances_on_render_without_scheduler_updates() {
+    let started = Utc::now();
+    let clock = Arc::new(ManualClock::new(started));
+    let shared: SharedClock = clock.clone();
+    let programmers = ProgrammerRegistry::with_clock(shared);
+    let session = SessionId::new();
+    programmers.start(session, UserId::new());
+    let (fixture, logical) = fixture();
+    programmers.set(
+        session,
+        logical,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.8),
+    );
+    let engine = Engine::new(programmers);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            playbacks: vec![test_group_playback(1, "front")].into(),
+            groups: vec![GroupDefinition {
+                id: "front".into(),
+                fixtures: vec![logical],
+                master: 0.25,
+                playback_fader: Some(1),
+                ..Default::default()
+            }]
+            .into(),
+            ..Default::default()
+        })
+        .unwrap();
+
+    assert!(
+        engine
+            .set_group_master_transition("front", 0.75, 1_000)
+            .unwrap()
+    );
+    assert_eq!(engine.group_master("front"), Some(0.25));
+    assert_eq!(engine.group_master_for_persistence("front"), Some(0.75));
+    clock.advance_millis(500);
+    assert_eq!(
+        engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+        102
+    );
+    assert_eq!(engine.group_master_for_persistence("front"), Some(0.75));
+    clock.advance_millis(500);
+    assert_eq!(
+        engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+        153
+    );
+}
+
+#[test]
 fn group_master_flash_is_temporary_and_does_not_move_the_fader() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();

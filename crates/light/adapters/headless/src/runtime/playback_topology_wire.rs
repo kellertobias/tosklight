@@ -458,6 +458,7 @@ fn wire_kind(
         | Input::Dynamic
         | Input::PatchLayer
         | Input::Preset
+        | Input::Schedule
         | Input::StageLayout
         | Input::UserLayout => Err(application::ActionError::new(
             application::ActionErrorKind::Internal,

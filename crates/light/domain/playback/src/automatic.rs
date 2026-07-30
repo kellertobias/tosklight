@@ -43,10 +43,10 @@ pub struct PlaybackTickResult {
 
 impl PlaybackEngine {
     pub fn tick(&mut self, now: DateTime<Utc>, timecode_frame: Option<u64>) -> PlaybackTickResult {
+        self.advance_master_transitions(now);
         if self.dynamics_paused_at.is_some() {
             return PlaybackTickResult::default();
         }
-        self.advance_master_transitions(now);
         PlaybackTickResult {
             transitions: self.advance_automatic_cues(now, timecode_frame),
         }
@@ -66,6 +66,9 @@ impl PlaybackEngine {
         }
         for playback in self.temporary.values_mut() {
             update_master_transition(playback, now);
+        }
+        for playback in self.active_dynamics.values_mut() {
+            update_dynamic_master_transition(playback, now);
         }
     }
 
@@ -120,6 +123,20 @@ fn update_master_transition(playback: &mut ActivePlayback, now: DateTime<Utc>) -
     }
     playback.master_transition = None;
     transition.release_after
+}
+
+fn update_dynamic_master_transition(
+    playback: &mut super::ActiveDynamicPlayback,
+    now: DateTime<Utc>,
+) {
+    let Some(transition) = playback.master_transition.clone() else {
+        return;
+    };
+    let progress = transition_progress(&transition, now);
+    playback.master = transition.from + (transition.to - transition.from) * progress;
+    if progress >= 1.0 {
+        playback.master_transition = None;
+    }
 }
 
 fn transition_progress(transition: &PlaybackMasterTransition, now: DateTime<Utc>) -> f32 {

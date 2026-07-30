@@ -1988,6 +1988,22 @@
           "type": "object",
           "properties": {
             "change": {
+              "$ref": "#/$defs/ScheduleRuntimeChange"
+            },
+            "type": {
+              "type": "string",
+              "const": "schedule_runtime_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
               "$ref": "#/$defs/SelectiveImportChange"
             },
             "type": {
@@ -5364,6 +5380,105 @@
         "message"
       ]
     },
+    "ScheduleOccurrenceProjection": {
+      "type": "object",
+      "properties": {
+        "local_time": {
+          "description": "Civil timestamp formatted in the authoritative server timezone.",
+          "type": "string"
+        },
+        "occurrence_id": {
+          "type": "string"
+        },
+        "scheduled_for": {
+          "description": "RFC 3339 instant used for ordering and exactly-once claims.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurrence_id",
+        "scheduled_for",
+        "local_time"
+      ]
+    },
+    "ScheduleOccurrenceResult": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "occurrence": {
+          "$ref": "#/$defs/ScheduleOccurrenceProjection"
+        },
+        "recorded_at": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ScheduleOccurrenceStatus"
+        }
+      },
+      "required": [
+        "occurrence",
+        "status",
+        "recorded_at"
+      ]
+    },
+    "ScheduleOccurrenceStatus": {
+      "type": "string",
+      "enum": [
+        "claimed",
+        "completed",
+        "failed",
+        "skipped",
+        "interrupted"
+      ]
+    },
+    "ScheduleRuntimeChange": {
+      "type": "object",
+      "properties": {
+        "last_result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScheduleOccurrenceResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "next_occurrence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScheduleOccurrenceProjection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "schedule_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "validation_error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "show_id",
+        "schedule_id"
+      ]
+    },
     "ScreenNotification": {
       "type": "object",
       "properties": {
@@ -5689,6 +5804,34 @@
             "kind": {
               "type": "string",
               "const": "preset"
+            },
+            "object_id": {
+              "type": "string"
+            },
+            "object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "object_id",
+            "object_revision",
+            "body",
+            "deleted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "deleted": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "const": "schedule"
             },
             "object_id": {
               "type": "string"

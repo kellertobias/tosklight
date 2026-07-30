@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SchedulePreviewRequest",
+  "type": "object",
+  "properties": {
+    "count": {
+      "type": "integer",
+      "format": "uint8",
+      "default": 5,
+      "maximum": 255,
+      "minimum": 0
+    },
+    "trigger": {
+      "$ref": "#/$defs/ScheduleTrigger"
+    }
+  },
+  "required": [
+    "trigger"
+  ],
+  "$defs": {
+    "ScheduleCalendarRule": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "weekly"
+            },
+            "weekdays": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ScheduleWeekday"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "weekdays",
+            "at"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "day": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "monthly_day"
+            }
+          },
+          "required": [
+            "type",
+            "day",
+            "at"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "ordinal": {
+              "$ref": "#/$defs/ScheduleMonthWeekOrdinal"
+            },
+            "type": {
+              "type": "string",
+              "const": "monthly_weekday"
+            },
+            "weekday": {
+              "$ref": "#/$defs/ScheduleWeekday"
+            }
+          },
+          "required": [
+            "type",
+            "ordinal",
+            "weekday",
+            "at"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expression": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "expression"
+            }
+          },
+          "required": [
+            "type",
+            "expression"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "anchor": {
+              "type": "string"
+            },
+            "at": {
+              "type": "string"
+            },
+            "every_days": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "every_n_days"
+            }
+          },
+          "required": [
+            "type",
+            "every_days",
+            "anchor",
+            "at"
+          ]
+        }
+      ]
+    },
+    "ScheduleMonthWeekOrdinal": {
+      "type": "string",
+      "enum": [
+        "first",
+        "second",
+        "third",
+        "fourth",
+        "last"
+      ]
+    },
+    "ScheduleTrigger": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "enabled_at": {
+              "description": "RFC 3339 instant established when the Schedule became enabled.",
+              "type": "string"
+            },
+            "every_seconds": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "interval"
+            }
+          },
+          "required": [
+            "type",
+            "every_seconds",
+            "enabled_at"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "rule": {
+              "$ref": "#/$defs/ScheduleCalendarRule"
+            },
+            "type": {
+              "type": "string",
+              "const": "calendar"
+            }
+          },
+          "required": [
+            "type",
+            "rule"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "at": {
+              "description": "Server-local civil timestamp without a per-Schedule timezone.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "one_time"
+            }
+          },
+          "required": [
+            "type",
+            "at"
+          ]
+        }
+      ]
+    },
+    "ScheduleWeekday": {
+      "type": "string",
+      "enum": [
+        "sunday",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday"
+      ]
+    }
+  }
+}

@@ -61,7 +61,8 @@ pub(super) fn may_activate_playback(action: PlaybackAction) -> bool {
         | PlaybackAction::Swap { .. }
         | PlaybackAction::ConfiguredButton { .. }
         // A zero fader value still activates an inactive manual-XFade Playback.
-        | PlaybackAction::Master(_) => true,
+        | PlaybackAction::Master(_)
+        | PlaybackAction::MasterTransition { .. } => true,
         PlaybackAction::GoTo(_) => true,
         PlaybackAction::Crossfade { enabled } | PlaybackAction::Temporary { enabled, .. } => {
             enabled
@@ -83,7 +84,9 @@ pub(super) fn may_trigger_auto_off(
         PlaybackAction::ConfiguredButton { number, pressed } => {
             pressed && configured_button_triggers_auto_off(definition, number)
         }
-        PlaybackAction::Master(_) => definition.fader == light_playback::PlaybackFaderMode::Master,
+        PlaybackAction::Master(_) | PlaybackAction::MasterTransition { .. } => {
+            definition.fader == light_playback::PlaybackFaderMode::Master
+        }
         PlaybackAction::GoTo(_) => true,
         _ => false,
     }

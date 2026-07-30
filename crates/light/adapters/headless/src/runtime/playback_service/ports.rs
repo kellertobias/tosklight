@@ -412,6 +412,63 @@ impl ServerPlaybackPorts<'_> {
             unreachable!("pool Playback address was validated")
         };
         let definition = playback_definition(self.state, number)?;
+        if let PlaybackAction::MasterTransition {
+            level,
+            duration_millis,
+        } = action
+        {
+            let changed = match &definition.target {
+                light_playback::PlaybackTarget::CueList { .. }
+                | light_playback::PlaybackTarget::Dynamic { .. } => {
+                    let transition = self
+                        .state
+                        .output
+                        .execute_pool_playback_with_activation(
+                            number,
+                            light_engine::PoolPlaybackAction::SetMasterTransition {
+                                value: level.value(),
+                                duration_millis: u64::from(duration_millis),
+                            },
+                            &[],
+                            None,
+                        )
+                        .map_err(invalid)?;
+                    let EnginePlaybackOutcome::Changed(effect) = transition.outcome else {
+                        return Err(invalid("unexpected master-transition outcome"));
+                    };
+                    if effect.durable()
+                        && let Err(error) = persist_active_playbacks(self.state)
+                    {
+                        self.mark_persistence_pending(context, "active_playbacks", error);
+                    }
+                    effect.changed()
+                }
+                light_playback::PlaybackTarget::Group { group_id } => {
+                    let changed = self
+                        .state
+                        .output
+                        .set_group_master_transition(
+                            group_id,
+                            level.value(),
+                            u64::from(duration_millis),
+                        )
+                        .map_err(|error| invalid(error.to_string()))?;
+                    if changed && let Err(error) = persist_output_runtime(self.state) {
+                        self.mark_persistence_pending(context, "output_runtime", error);
+                    }
+                    changed
+                }
+                _ => {
+                    return Err(invalid(
+                        "master transition is incompatible with this Playback target",
+                    ));
+                }
+            };
+            return Ok(PlaybackExecution::Pool {
+                changed,
+                pending: None,
+            });
+        }
         let (action_name, input) = legacy_action(action);
         if captures_preload(context.source)
             && let Some(pending) =

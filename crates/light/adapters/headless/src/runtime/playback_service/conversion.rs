@@ -96,6 +96,9 @@ fn structured_action(
 ) -> (&'static str, Option<f32>, Option<f64>, Option<u8>) {
     match action {
         PlaybackAction::Master(value) => ("master", Some(value.value()), None, None),
+        PlaybackAction::MasterTransition { .. } => {
+            unreachable!("master transitions use the typed Playback boundary")
+        }
         PlaybackAction::GoTo(number) => ("go-to", None, Some(number.value()), None),
         PlaybackAction::Load(number) => ("load", None, Some(number.value()), None),
         PlaybackAction::ConfiguredButton { number, .. } => ("button", None, None, Some(number)),
@@ -135,6 +138,7 @@ fn simple_action_name(action: PlaybackAction) -> &'static str {
         PlaybackAction::Temporary { enabled: true, .. } => "temp-on",
         PlaybackAction::Temporary { enabled: false, .. } => "temp-off",
         PlaybackAction::Master(_)
+        | PlaybackAction::MasterTransition { .. }
         | PlaybackAction::GoTo(_)
         | PlaybackAction::Load(_)
         | PlaybackAction::ConfiguredButton { .. } => unreachable!("structured action"),
@@ -183,7 +187,10 @@ pub(super) fn parse_pending(
 }
 
 pub(super) fn action_touched(action: PlaybackAction) -> bool {
-    matches!(action, PlaybackAction::Master(_)) || action.pressed().unwrap_or(true)
+    matches!(
+        action,
+        PlaybackAction::Master(_) | PlaybackAction::MasterTransition { .. }
+    ) || action.pressed().unwrap_or(true)
 }
 
 pub(super) const fn source_name(source: ActionSource) -> &'static str {

@@ -193,6 +193,12 @@ fn normalize_body(
             request,
         )
         .map(ActiveShowObjectBody::Preset),
+        ActiveShowObjectBody::Schedule(request) => normalize_schedule(
+            existing.and_then(ActiveShowObjectBody::schedule),
+            mutation,
+            request,
+        )
+        .map(ActiveShowObjectBody::Schedule),
         ActiveShowObjectBody::StageLayout(request) => normalize_passthrough(
             existing.and_then(ActiveShowObjectBody::stage_layout),
             request,
@@ -258,6 +264,20 @@ fn normalize_preset(
     normalized
         .reconcile_address(&mutation.object_id)
         .map_err(invalid)?;
+    LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)
+}
+
+fn normalize_schedule(
+    existing: Option<&LosslessBody<crate::ScheduleDefinition>>,
+    mutation: &ActiveShowObjectMutation,
+    request: &LosslessBody<crate::ScheduleDefinition>,
+) -> Result<LosslessBody<crate::ScheduleDefinition>, ActionError> {
+    let mut normalized = request.typed().clone();
+    normalized.id = crate::ScheduleId(
+        uuid::Uuid::parse_str(&mutation.object_id)
+            .map_err(|error| invalid(format!("invalid Schedule storage id: {error}")))?,
+    );
+    normalized.validate().map_err(invalid)?;
     LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)
 }
 

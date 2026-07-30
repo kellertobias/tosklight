@@ -292,6 +292,11 @@ fn wire_payload(
                 change: wire_show_objects_change(change),
             }
         }
+        application::ApplicationEvent::Show(application::ShowEvent::ScheduleRuntimeChanged(
+            change,
+        )) => wire::EventPayload::ScheduleRuntimeChanged {
+            change: wire_schedule_runtime_change(change),
+        },
         application::ApplicationEvent::Show(application::ShowEvent::SelectiveImportApplied(
             change,
         )) => wire::EventPayload::SelectiveImportApplied {
@@ -321,6 +326,54 @@ fn wire_payload(
             }
         }
     })
+}
+
+fn wire_schedule_runtime_change(
+    change: &application::ScheduleRuntimeChange,
+) -> light_wire::v2::schedules::ScheduleRuntimeChange {
+    light_wire::v2::schedules::ScheduleRuntimeChange {
+        show_id: change.show_id.0,
+        schedule_id: change.schedule_id,
+        next_occurrence: change
+            .next_occurrence
+            .as_ref()
+            .map(wire_schedule_occurrence),
+        last_result: change.last_result.as_ref().map(|result| {
+            light_wire::v2::schedules::ScheduleOccurrenceResult {
+                occurrence: wire_schedule_occurrence(&result.occurrence),
+                status: match result.status {
+                    application::ScheduleOccurrenceStatus::Claimed => {
+                        light_wire::v2::schedules::ScheduleOccurrenceStatus::Claimed
+                    }
+                    application::ScheduleOccurrenceStatus::Completed => {
+                        light_wire::v2::schedules::ScheduleOccurrenceStatus::Completed
+                    }
+                    application::ScheduleOccurrenceStatus::Failed => {
+                        light_wire::v2::schedules::ScheduleOccurrenceStatus::Failed
+                    }
+                    application::ScheduleOccurrenceStatus::Skipped => {
+                        light_wire::v2::schedules::ScheduleOccurrenceStatus::Skipped
+                    }
+                    application::ScheduleOccurrenceStatus::Interrupted => {
+                        light_wire::v2::schedules::ScheduleOccurrenceStatus::Interrupted
+                    }
+                },
+                recorded_at: result.recorded_at.clone(),
+                message: result.message.clone(),
+            }
+        }),
+        validation_error: change.validation_error.clone(),
+    }
+}
+
+fn wire_schedule_occurrence(
+    occurrence: &application::ScheduleOccurrenceProjection,
+) -> light_wire::v2::schedules::ScheduleOccurrenceProjection {
+    light_wire::v2::schedules::ScheduleOccurrenceProjection {
+        occurrence_id: occurrence.occurrence_id.clone(),
+        scheduled_for: occurrence.scheduled_for.clone(),
+        local_time: occurrence.local_time.clone(),
+    }
 }
 
 fn wire_dynamic_runtime_change(
@@ -609,6 +662,7 @@ fn wire_show_object_change(change: &application::ActiveShowObjectChange) -> wire
         application::ActiveShowObjectKind::Playback => variant!(Playback),
         application::ActiveShowObjectKind::PlaybackPage => variant!(PlaybackPage),
         application::ActiveShowObjectKind::Preset => variant!(Preset),
+        application::ActiveShowObjectKind::Schedule => variant!(Schedule),
         application::ActiveShowObjectKind::StageLayout => variant!(StageLayout),
         application::ActiveShowObjectKind::UserLayout => variant!(UserLayout),
     }

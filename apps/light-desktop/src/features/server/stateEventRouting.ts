@@ -182,6 +182,14 @@ function refreshSelection(
 		.catch(() => undefined);
 }
 
+function installScheduleRuntime(
+	event: RuntimeCapabilityEvent,
+	state: ServerState,
+) {
+	if (event.type !== "schedule_runtime_changed") return;
+	state.schedulerRuntimeStore.install(event.change);
+}
+
 export function createStateEventRouter(
 	getState: () => ServerState,
 	session: SessionResponse,
@@ -198,6 +206,7 @@ export function createStateEventRouter(
 		refreshShows(event, state);
 		refreshMedia(event, state);
 		refreshSelection(event, session, state);
+		installScheduleRuntime(event, state);
 	};
 }
 

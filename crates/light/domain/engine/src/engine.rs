@@ -3,6 +3,7 @@ use crate::{
     ProfileProjectionIndex, ProgrammerTransition, ProgrammerTransitionKey, RuntimeGeneration,
 };
 use arc_swap::ArcSwap;
+use chrono::{DateTime, Utc};
 use light_core::{FixtureId, SharedClock};
 use light_playback::PlaybackEngine;
 use light_programmer::ProgrammerRegistry;
@@ -30,6 +31,7 @@ pub struct Engine {
     dynamic_programmer_cache: Mutex<DynamicProgrammerCache>,
     pub(crate) move_in_black: Mutex<HashMap<MoveInBlackKey, MoveInBlackRuntime>>,
     pub(crate) group_master_flashes: RwLock<HashMap<String, f32>>,
+    pub(crate) group_master_transitions: Mutex<HashMap<String, GroupMasterTransition>>,
     /// Live Highlight is an output overlay, not programmer/show data. Ownership and remembered
     /// selection live in the server; the engine only needs the currently lit fixture identities.
     pub(crate) highlighted_fixtures: RwLock<HashSet<FixtureId>>,
@@ -76,6 +78,7 @@ impl Engine {
             dynamic_programmer_cache: Mutex::new(DynamicProgrammerCache::default()),
             move_in_black: Mutex::new(HashMap::new()),
             group_master_flashes: RwLock::new(HashMap::new()),
+            group_master_transitions: Mutex::new(HashMap::new()),
             highlighted_fixtures: RwLock::new(HashSet::new()),
             clock,
         }
@@ -164,4 +167,12 @@ impl Engine {
         }
         Arc::clone(&cache.values)
     }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct GroupMasterTransition {
+    pub(crate) from: f32,
+    pub(crate) to: f32,
+    pub(crate) started_at: DateTime<Utc>,
+    pub(crate) duration_millis: u64,
 }

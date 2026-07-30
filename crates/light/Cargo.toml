@@ -6,6 +6,7 @@ license-file.workspace = true
 
 [dependencies]
 chrono.workspace = true
+jiff.workspace = true
 light-core = { path = "../shared/core" }
 light-dynamics = { path = "domain/dynamics" }
 light-engine = { path = "domain/engine", default-features = false }

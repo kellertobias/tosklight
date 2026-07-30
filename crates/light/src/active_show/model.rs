@@ -18,6 +18,7 @@ pub enum ActiveShowObjectKind {
     Playback,
     PlaybackPage,
     Preset,
+    Schedule,
     StageLayout,
     UserLayout,
 }
@@ -34,6 +35,7 @@ pub enum ActiveShowObjectBody {
     Playback(LosslessBody<PlaybackDefinition>),
     PlaybackPage(LosslessBody<PlaybackPage>),
     Preset(LosslessBody<Preset>),
+    Schedule(LosslessBody<crate::ScheduleDefinition>),
     StageLayout(LosslessBody<StageLayout>),
     UserLayout(LosslessBody<UserLayout>),
 }
@@ -49,6 +51,7 @@ impl ActiveShowObjectBody {
             ActiveShowObjectKind::Playback => Self::Playback(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::PlaybackPage => Self::PlaybackPage(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Preset => Self::Preset(LosslessBody::decode(raw)?),
+            ActiveShowObjectKind::Schedule => Self::Schedule(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::StageLayout => Self::StageLayout(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::UserLayout => Self::UserLayout(LosslessBody::decode(raw)?),
         })
@@ -63,6 +66,7 @@ impl ActiveShowObjectBody {
             Self::Playback(_) => ActiveShowObjectKind::Playback,
             Self::PlaybackPage(_) => ActiveShowObjectKind::PlaybackPage,
             Self::Preset(_) => ActiveShowObjectKind::Preset,
+            Self::Schedule(_) => ActiveShowObjectKind::Schedule,
             Self::StageLayout(_) => ActiveShowObjectKind::StageLayout,
             Self::UserLayout(_) => ActiveShowObjectKind::UserLayout,
         }
@@ -77,6 +81,7 @@ impl ActiveShowObjectBody {
             Self::Playback(body) => body.encode(),
             Self::PlaybackPage(body) => body.encode(),
             Self::Preset(body) => body.encode(),
+            Self::Schedule(body) => body.encode(),
             Self::StageLayout(body) => body.encode(),
             Self::UserLayout(body) => body.encode(),
         }
@@ -127,6 +132,13 @@ impl ActiveShowObjectBody {
     pub(crate) fn preset(&self) -> Option<&LosslessBody<Preset>> {
         match self {
             Self::Preset(body) => Some(body),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn schedule(&self) -> Option<&LosslessBody<crate::ScheduleDefinition>> {
+        match self {
+            Self::Schedule(body) => Some(body),
             _ => None,
         }
     }
@@ -188,6 +200,7 @@ fn validate_family_shape(
         ActiveShowObjectKind::PlaybackPage => &["number", "name", "slots", "virtual_playbacks"],
         // `values` was absent from early empty Presets and is defaulted by the typed model.
         ActiveShowObjectKind::Preset => &["name", "family", "number"],
+        ActiveShowObjectKind::Schedule => &["id", "name", "enabled", "trigger", "target"],
         ActiveShowObjectKind::StageLayout => &["positions"],
         ActiveShowObjectKind::UserLayout => &["desks", "activeDeskId"],
     };
@@ -209,6 +222,7 @@ fn looks_like_other_family(object: &serde_json::Map<String, serde_json::Value>) 
         &["number", "name", "target"],
         &["number", "name", "slots", "virtual_playbacks"],
         &["name", "family", "number"],
+        &["id", "name", "enabled", "trigger", "target"],
         &["positions"],
     ]
     .into_iter()
@@ -284,6 +298,7 @@ impl ActiveShowObjectKind {
             "playback" => Some(Self::Playback),
             "playback_page" => Some(Self::PlaybackPage),
             "preset" => Some(Self::Preset),
+            "schedule" => Some(Self::Schedule),
             "stage_layout" => Some(Self::StageLayout),
             "user_layout" => Some(Self::UserLayout),
             _ => None,
@@ -299,6 +314,7 @@ impl ActiveShowObjectKind {
             Self::Playback => "playback",
             Self::PlaybackPage => "playback_page",
             Self::Preset => "preset",
+            Self::Schedule => "schedule",
             Self::StageLayout => "stage_layout",
             Self::UserLayout => "user_layout",
         }

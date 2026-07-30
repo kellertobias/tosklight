@@ -43,10 +43,15 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
                 continue;
             }
             match rewrite_body(&item.body, source, &item.descriptor, identities, profiles) {
-                Ok(body) => writes.push(PlannedWrite {
-                    destination: item.destination.clone(),
-                    body,
-                }),
+                Ok(mut body) => {
+                    if source.kind() == "schedule" {
+                        reset_schedule_anchor(&mut body);
+                    }
+                    writes.push(PlannedWrite {
+                        destination: item.destination.clone(),
+                        body,
+                    })
+                }
                 Err(message) => self.blockers.push(ImportBlocker::ReferenceRewrite {
                     owner: source.clone(),
                     message,
@@ -119,5 +124,30 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
             previews.push(ImportManagedAssetPreview { asset, action });
         }
         (previews, copies)
+    }
+}
+
+fn reset_schedule_anchor(body: &mut serde_json::Value) {
+    let Some(trigger) = body.get_mut("trigger") else {
+        return;
+    };
+    match trigger.get("type").and_then(serde_json::Value::as_str) {
+        Some("interval") => {
+            trigger["enabled_at"] = serde_json::Value::String(chrono::Utc::now().to_rfc3339());
+        }
+        Some("calendar")
+            if trigger
+                .pointer("/rule/type")
+                .and_then(serde_json::Value::as_str)
+                == Some("every_n_days") =>
+        {
+            trigger["rule"]["anchor"] = serde_json::Value::String(
+                chrono::Local::now()
+                    .date_naive()
+                    .format("%Y-%m-%d")
+                    .to_string(),
+            );
+        }
+        _ => {}
     }
 }

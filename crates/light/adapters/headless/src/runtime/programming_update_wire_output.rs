@@ -124,6 +124,7 @@ fn wire_kind(
         | app::ActiveShowObjectKind::Dynamic
         | app::ActiveShowObjectKind::Playback
         | app::ActiveShowObjectKind::PlaybackPage
+        | app::ActiveShowObjectKind::Schedule
         | app::ActiveShowObjectKind::StageLayout
         | app::ActiveShowObjectKind::UserLayout => {
             Err(internal("Update returned an unrelated show object kind"))

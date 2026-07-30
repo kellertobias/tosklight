@@ -46,6 +46,12 @@ export type Action =
 	  }
 	| { type: "SET_PANE_PRESET_COLORS"; id: string; value: boolean }
 	| {
+			type: "SET_PANE_SCHEDULER_LAYOUT";
+			id: string;
+			showList: boolean;
+			showCalendar: boolean;
+	  }
+	| {
 			type: "SET_VIRTUAL_PLAYBACK_GRID";
 			id: string;
 			rows: number;

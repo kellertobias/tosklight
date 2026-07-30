@@ -295,6 +295,7 @@ pub(in crate::runtime) struct ReplayResource {
     show_object: Arc<tokio::sync::Mutex<show_objects_v2::ShowObjectReplayCache>>,
     show_object_intent:
         Arc<tokio::sync::Mutex<show_object_intents_v2::ShowObjectIntentReplayCache>>,
+    schedules: Arc<tokio::sync::Mutex<schedules_v2::ScheduleReplayCache>>,
     preset_generation: Arc<tokio::sync::Mutex<live_action_http::PresetGenerationReplayCache>>,
     screen_configuration:
         Arc<tokio::sync::Mutex<screen_configuration_v2::ScreenConfigurationReplayCache>>,
@@ -313,6 +314,7 @@ impl Default for ReplayResource {
             fixture_library: Arc::default(),
             show_object: Arc::default(),
             show_object_intent: Arc::default(),
+            schedules: Arc::default(),
             preset_generation: Arc::default(),
             screen_configuration: Arc::default(),
             control_desk_configuration: Arc::default(),

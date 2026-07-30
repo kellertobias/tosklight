@@ -322,6 +322,32 @@ pub(super) fn playback_page_descriptor(
     Ok(descriptor)
 }
 
+pub(super) fn schedule_descriptor(
+    object: &PortableShowObject,
+) -> Result<ImportObjectDescriptor, String> {
+    let mut descriptor = id_descriptor(object)?;
+    match object
+        .body()
+        .pointer("/target/type")
+        .and_then(Value::as_str)
+    {
+        Some("playback") => add_optional_direct_reference(
+            object.body(),
+            "/target/playback_number",
+            "playback",
+            &mut descriptor,
+        )?,
+        Some("macro") => add_optional_direct_reference(
+            object.body(),
+            "/target/macro_id",
+            "macro",
+            &mut descriptor,
+        )?,
+        _ => {}
+    }
+    Ok(descriptor)
+}
+
 pub(super) fn stage_layout_descriptor(
     object: &PortableShowObject,
     source: &FixtureIdentityCatalog,

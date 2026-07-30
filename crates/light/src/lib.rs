@@ -178,8 +178,14 @@ pub use programming::{
     SelectionGestureSource,
 };
 pub use scheduling::{
-    MonotonicClock, MonotonicMoment, MonotonicScheduler, SchedulerError, SchedulerErrorKind,
-    WallClock, deadline_after,
+    CalendarExpression, CalendarRule, IntervalSkip, MAXIMUM_PLAYBACK_FADE_MILLIS,
+    MAXIMUM_SCHEDULE_PREVIEW, MINIMUM_INTERVAL_SECONDS, MonotonicClock, MonotonicMoment,
+    MonotonicScheduler, MonthWeekOrdinal, PlaybackMasterTransition, ScheduleDefinition, ScheduleId,
+    ScheduleMacroId, ScheduleOccurrence, ScheduleOccurrenceIdentity, ScheduleOccurrenceKey,
+    ScheduleOccurrenceProjection, ScheduleOccurrenceResult, ScheduleOccurrenceStatus,
+    ScheduleRecurrence, ScheduleRuntimeChange, ScheduleTarget, ScheduleTrigger,
+    ScheduleValidationError, ScheduleWeekday, ScheduledPlaybackAction, ScheduledPlaybackKind,
+    SchedulerError, SchedulerErrorKind, WallClock, deadline_after,
 };
 pub use selective_import::{
     AppliedImportObject, ApplySelectiveShowImportCommand, ImportBlocker, ImportConflict,

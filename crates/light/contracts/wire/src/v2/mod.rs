@@ -28,6 +28,7 @@ pub mod programmer_priority;
 pub mod programming;
 pub mod programming_update;
 pub mod runtime;
+pub mod schedules;
 pub mod screen_configuration;
 pub mod selective_import;
 pub mod show_library;

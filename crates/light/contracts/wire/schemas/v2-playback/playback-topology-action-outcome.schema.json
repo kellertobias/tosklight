@@ -256,6 +256,7 @@
         "playback",
         "playback_page",
         "preset",
+        "schedule",
         "stage_layout",
         "user_layout"
       ]

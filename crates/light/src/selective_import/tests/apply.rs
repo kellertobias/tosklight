@@ -173,6 +173,89 @@ fn apply_rewrites_duplicate_identity_and_all_imported_references() {
 }
 
 #[test]
+fn importing_schedule_assigns_a_new_identity_and_resets_recurrence_anchors() {
+    let rig = TestRig::new();
+    let interval_id = uuid::Uuid::new_v4().to_string();
+    let calendar_id = uuid::Uuid::new_v4().to_string();
+    rig.source_object("macro", "doors", json!({"id":"doors"}));
+    rig.source_object(
+        "schedule",
+        &interval_id,
+        json!({
+            "id":interval_id,
+            "name":"Interval",
+            "enabled":true,
+            "trigger":{
+                "type":"interval",
+                "every_seconds":300,
+                "enabled_at":"2000-01-01T00:00:00Z"
+            },
+            "target":{"type":"macro","macro_id":"doors"}
+        }),
+    );
+    rig.source_object(
+        "schedule",
+        &calendar_id,
+        json!({
+            "id":calendar_id,
+            "name":"Every two days",
+            "enabled":true,
+            "trigger":{
+                "type":"calendar",
+                "rule":{
+                    "type":"every_n_days",
+                    "every_days":2,
+                    "anchor":"2000-01-01",
+                    "at":"14:00:00"
+                }
+            },
+            "target":{"type":"macro","macro_id":"doors"}
+        }),
+    );
+    let request = SelectiveShowImportRequest::new(
+        rig.source_id,
+        rig.target_id,
+        [key("schedule", &interval_id), key("schedule", &calendar_id)],
+    );
+    let preview = rig.preview(request);
+    let imported = preview
+        .objects
+        .iter()
+        .filter(|object| object.source.kind() == "schedule")
+        .collect::<Vec<_>>();
+    assert_eq!(imported.len(), 2);
+    assert!(
+        imported
+            .iter()
+            .all(|object| object.destination != object.source)
+    );
+
+    rig.apply(&preview).unwrap();
+    let target = rig.target_document();
+    let interval = target
+        .object("schedule", imported[0].destination.id())
+        .unwrap()
+        .body();
+    let calendar = target
+        .object("schedule", imported[1].destination.id())
+        .unwrap()
+        .body();
+    let (interval, calendar) = if interval["trigger"]["type"] == "interval" {
+        (interval, calendar)
+    } else {
+        (calendar, interval)
+    };
+    assert_ne!(interval["trigger"]["enabled_at"], "2000-01-01T00:00:00Z");
+    assert_eq!(
+        calendar["trigger"]["rule"]["anchor"],
+        chrono::Local::now()
+            .date_naive()
+            .format("%Y-%m-%d")
+            .to_string()
+    );
+}
+
+#[test]
 fn apply_copies_profile_snapshot_without_inferencing_unknown_asset_fields() {
     let rig = TestRig::new();
     let id = light_core::FixtureId::new();

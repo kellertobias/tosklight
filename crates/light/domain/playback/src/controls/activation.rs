@@ -161,6 +161,78 @@ impl PlaybackEngine {
         self.set_master_inner_mutation(number, value, false)
     }
 
+    /// Starts one engine-owned transition of the target's authoritative master.
+    ///
+    /// This is intentionally independent of the configured physical fader mode. Automation
+    /// submits the final level and duration once; the Playback tick owns all intermediate values.
+    pub fn set_master_transition_mutation(
+        &mut self,
+        number: u16,
+        value: f32,
+        duration_millis: u64,
+    ) -> Result<PlaybackMutation<()>, String> {
+        if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+            return Err("playback master must be within 0-1".into());
+        }
+        if duration_millis > 60_000 {
+            return Err("playback master transition must be within 0-60000 milliseconds".into());
+        }
+        let started_at = self.clock.now();
+        if self.dynamic_assignment(number).is_some() {
+            let identity = PlaybackIdentity::physical(number)?;
+            if value > 0.0
+                && !self
+                    .active_dynamics
+                    .get(&identity)
+                    .is_some_and(|active| active.enabled)
+            {
+                self.on_dynamic_at_mutation(identity)?;
+            }
+            let active = self
+                .active_dynamics
+                .get_mut(&identity)
+                .ok_or("Playback is not assigned to a Dynamic")?;
+            let before = active.clone();
+            if duration_millis == 0 {
+                active.master = value;
+                active.master_transition = None;
+            } else {
+                active.master_transition = Some(PlaybackMasterTransition {
+                    from: active.master,
+                    to: value,
+                    started_at,
+                    duration_millis,
+                    release_after: false,
+                });
+            }
+            return Ok(PlaybackMutation::new((), durable_effect(*active != before)));
+        }
+
+        let id = self.cue_list_for(number)?;
+        let key = PlaybackKey::Number(number);
+        if value > 0.0 && !self.active.contains_key(&key) {
+            self.go_at_key(key, id, started_at)?;
+        }
+        let active = self
+            .active
+            .get_mut(&key)
+            .ok_or("playback is inactive at zero master")?;
+        let before = active.clone();
+        if duration_millis == 0 {
+            active.master = value;
+            active.master_transition = None;
+        } else {
+            active.master_transition = Some(PlaybackMasterTransition {
+                from: active.master,
+                to: value,
+                started_at,
+                duration_millis,
+                release_after: false,
+            });
+        }
+        Ok(PlaybackMutation::new((), durable_effect(*active != before)))
+    }
+
     /// Set the authoritative level through a virtual fader supplied by a remote control
     /// protocol. Faderless/button-only layouts intentionally have no local fader, but their
     /// playback master remains a valid runtime control and feedback source.

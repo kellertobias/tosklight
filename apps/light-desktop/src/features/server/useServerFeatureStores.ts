@@ -1,10 +1,9 @@
 import { useRef } from "react";
+import { CommandHistoryStore } from "../commandHistory/CommandHistoryState";
 import { ConfigurationStore } from "../configuration/store";
 import { DeskLockStore } from "../deskLock/store";
-import { CommandHistoryStore } from "../commandHistory/CommandHistoryState";
 import { DeskSnapshotStore } from "../deskSnapshot/store";
 import { HighlightStore } from "../highlight/store";
-import { ShellStatusStore } from "../shellStatus/store";
 import { OutputRuntimeStore } from "../outputRuntime/store";
 import { PlaybackRuntimeStore } from "../playbackRuntime/store";
 import { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
@@ -15,6 +14,8 @@ import { ProgrammerPreloadValuesStore } from "../programmerPreloadValues/store";
 import { ProgrammerPriorityStore } from "../programmerPriority/store";
 import { ProgrammerValuesStore } from "../programmerValues/store";
 import { ProgrammingInteractionStore } from "../programmingInteraction/store";
+import { SchedulerRuntimeStore } from "../scheduler/runtimeStore";
+import { ShellStatusStore } from "../shellStatus/store";
 import { SpeedGroupRuntimeStore } from "../speedGroupRuntime/store";
 import { StageLayoutStore } from "../stageLayout/store";
 
@@ -32,6 +33,7 @@ export function useServerFeatureStores() {
 		highlightStore: useRef(new HighlightStore()).current,
 		shellStatusStore: useRef(new ShellStatusStore()).current,
 		stageLayoutStore: useRef(new StageLayoutStore()).current,
+		schedulerRuntimeStore: useRef(new SchedulerRuntimeStore()).current,
 		outputRuntimeStore: outputRuntimeStore.current,
 		speedGroupRuntimeStore: speedGroupRuntimeStore.current,
 		playbackRuntimeStore: useRef(new PlaybackRuntimeStore()).current,

@@ -19,6 +19,7 @@ export type BuiltInWindow =
 	| "playback_pool"
 	| "cue_list"
 	| "dynamics"
+	| "scheduler"
 	| "channels"
 	| "dmx"
 	| "patch"
@@ -76,6 +77,8 @@ export interface PaneModel extends GridRect {
 	stageRenderQuality?: StageRenderQuality;
 	presetFamily?: AppState["presetFamily"];
 	presetPoolColors?: boolean;
+	schedulerShowList?: boolean;
+	schedulerShowCalendar?: boolean;
 	virtualPlaybackRows?: number;
 	virtualPlaybackColumns?: number;
 	virtualPlaybackPageMode?: VirtualPlaybackPageMode;

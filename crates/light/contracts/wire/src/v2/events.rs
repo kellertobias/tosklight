@@ -9,6 +9,7 @@ use super::{
     programmer_priority::ProgrammerPriorityChange,
     programming::{ProgrammingCaptureModeChange, ProgrammingValuesChange},
     runtime::RuntimeHighlightState,
+    schedules::ScheduleRuntimeChange,
     speed_group::SpeedGroupChange,
     virtual_playback_zones::VirtualPlaybackExclusionZonesChange,
 };
@@ -208,6 +209,9 @@ pub enum EventPayload {
     },
     ShowObjectsChanged {
         change: ShowObjectsChange,
+    },
+    ScheduleRuntimeChanged {
+        change: ScheduleRuntimeChange,
     },
     SelectiveImportApplied {
         change: Box<SelectiveImportChange>,
@@ -623,6 +627,14 @@ pub enum ShowObjectChange {
         body: Option<serde_json::Value>,
         deleted: bool,
     },
+    Schedule {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        deleted: bool,
+    },
     StageLayout {
         object_id: String,
         #[ts(type = "number")]
@@ -651,6 +663,7 @@ pub enum ShowObjectKind {
     Playback,
     PlaybackPage,
     Preset,
+    Schedule,
     StageLayout,
     UserLayout,
 }

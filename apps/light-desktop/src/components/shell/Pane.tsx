@@ -152,6 +152,16 @@ export function Pane({
 					stageRenderQuality={pane.stageRenderQuality ?? "lines_and_beams"}
 					presetFamily={pane.presetFamily ?? state.presetFamily}
 					presetPoolColors={pane.presetPoolColors ?? true}
+					schedulerShowList={pane.schedulerShowList ?? true}
+					schedulerShowCalendar={pane.schedulerShowCalendar ?? true}
+					onSchedulerLayoutChange={({ showList, showCalendar }) =>
+						dispatch({
+							type: "SET_PANE_SCHEDULER_LAYOUT",
+							id: pane.id,
+							showList,
+							showCalendar,
+						})
+					}
 				/>
 			</PaneChromeProvider>
 		</PaneView>

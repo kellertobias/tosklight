@@ -331,6 +331,7 @@ const BUILT_IN_WINDOWS: readonly BuiltInWindow[] = [
 	"playback_pool",
 	"cue_list",
 	"dynamics",
+	"scheduler",
 	"channels",
 	"dmx",
 	"patch",

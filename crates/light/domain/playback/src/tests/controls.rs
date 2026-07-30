@@ -453,6 +453,56 @@ fn dynamic_playback_fader_pause_speed_flash_and_restore_are_authoritative() {
 }
 
 #[test]
+fn scheduled_master_transitions_are_advanced_by_the_playback_tick() {
+    let started = Utc::now();
+    let clock = Arc::new(light_core::ManualClock::new(started));
+    let fixture = FixtureId::new();
+    let mut cue = Cue::new(1.0);
+    cue.changes.push(value(fixture, "intensity", 1.0));
+    let cue_list = list(vec![cue]);
+    let cue_list_id = cue_list.id;
+    let mut engine = PlaybackEngine::with_clock(clock.clone());
+    engine.register(cue_list).unwrap();
+    engine
+        .register_definition(definition(1, cue_list_id))
+        .unwrap();
+    engine.set_master(1, 0.2).unwrap();
+
+    engine
+        .set_master_transition_mutation(1, 0.8, 1_000)
+        .unwrap();
+    assert_eq!(engine.runtime()[0].master, 0.2);
+    clock.advance_millis(500);
+    engine.tick(started + chrono::Duration::milliseconds(500), None);
+    assert!((engine.runtime()[0].master - 0.5).abs() < 0.001);
+    clock.advance_millis(500);
+    engine.tick(started + chrono::Duration::milliseconds(1_000), None);
+    assert_eq!(engine.runtime()[0].master, 0.8);
+    assert!(engine.runtime()[0].master_transition.is_none());
+}
+
+#[test]
+fn dynamic_master_transition_does_not_rewrite_the_physical_fader_assignment() {
+    let started = Utc::now();
+    let clock = Arc::new(light_core::ManualClock::new(started));
+    let definition = dynamic_playback_definition(17, DynamicPlaybackFaderMode::Size, true);
+    let mut engine = PlaybackEngine::with_clock(clock.clone());
+    engine.register_definition(definition).unwrap();
+    engine.set_master(17, 0.4).unwrap();
+    let before = engine.active_dynamic_playbacks()[0].clone();
+
+    engine
+        .set_master_transition_mutation(17, 0.2, 1_000)
+        .unwrap();
+    clock.advance_millis(500);
+    engine.tick(started + chrono::Duration::milliseconds(500), None);
+    let active = &engine.active_dynamic_playbacks()[0];
+    assert!((active.master - 0.6).abs() < 0.001);
+    assert_eq!(active.fader_value, before.fader_value);
+    assert_eq!(active.size, before.size);
+}
+
+#[test]
 fn targetless_dynamic_playback_requires_an_explicit_assignment_scope() {
     let mut definition = dynamic_playback_definition(18, DynamicPlaybackFaderMode::Master, true);
     let PlaybackTarget::Dynamic { assignment } = &mut definition.target else {

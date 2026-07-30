@@ -95,6 +95,7 @@ fn projection_for_kind(
         | ActiveShowObjectKind::Dynamic
         | ActiveShowObjectKind::PatchLayer
         | ActiveShowObjectKind::Preset
+        | ActiveShowObjectKind::Schedule
         | ActiveShowObjectKind::StageLayout
         | ActiveShowObjectKind::UserLayout => None,
     }

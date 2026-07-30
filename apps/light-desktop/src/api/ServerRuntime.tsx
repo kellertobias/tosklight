@@ -15,6 +15,8 @@ import { MediaServersProvider } from "../features/mediaServers/MediaServersConte
 import { PlaybackTopologyProvider } from "../features/playbackTopology/PlaybackTopologyProvider";
 import { PresetRecordingProvider } from "../features/presetRecording/PresetRecordingProvider";
 import { ProgrammerActionsProvider } from "../features/programmerActions/ProgrammerActionsContext";
+import { SchedulerProvider } from "../features/scheduler/SchedulerContext";
+import { useServerSchedulerController } from "../features/scheduler/useServerSchedulerController";
 import { ScreensProvider } from "../features/screens/ScreensContext";
 import {
 	SelectiveImportProvider,
@@ -488,35 +490,23 @@ export function ServerRuntime({
 		shellStatusActions,
 	} = useProviderActionSources(value);
 	const dynamicsActions = useDynamicsActionSource(state);
+	const scheduler = useServerSchedulerController({
+		api: state.api,
+		showId: state.bootstrap?.active_show?.id ?? null,
+		showObjectsStore: state.showObjectsStore,
+		runtimeStore: state.schedulerRuntimeStore,
+		canWrite: sessionRole === "primary" && state.status === "connected",
+		reportError: state.setError,
+	});
 	return (
-		<ServerConnectionOwner
-			state={state}
-			loadShowObjects={loadShowObjects}
-			sessionRole={sessionRole}
-		>
-			<ServerActionProviderStack
+		<SchedulerProvider controller={scheduler}>
+			<ServerConnectionOwner
 				state={state}
-				data={{
-					fileSource,
-					screenSource,
-					showLifecycle,
-					deskConnection,
-					fixtureLibraryState,
-					mediaServersState,
-				}}
-				actions={{
-					highlightActions,
-					programmerActions,
-					dmxDiagnostics,
-					soundToLightActions,
-					shellStatusActions,
-				}}
-				dynamicsActions={dynamicsActions}
+				loadShowObjects={loadShowObjects}
+				sessionRole={sessionRole}
 			>
-				<ServerShowProviderStack
+				<ServerActionProviderStack
 					state={state}
-					boundaries={boundaries}
-					value={value}
 					data={{
 						fileSource,
 						screenSource,
@@ -525,12 +515,34 @@ export function ServerRuntime({
 						fixtureLibraryState,
 						mediaServersState,
 					}}
-					selectiveImportSource={selectiveImportSource}
-					sessionRole={sessionRole}
+					actions={{
+						highlightActions,
+						programmerActions,
+						dmxDiagnostics,
+						soundToLightActions,
+						shellStatusActions,
+					}}
+					dynamicsActions={dynamicsActions}
 				>
-					{children}
-				</ServerShowProviderStack>
-			</ServerActionProviderStack>
-		</ServerConnectionOwner>
+					<ServerShowProviderStack
+						state={state}
+						boundaries={boundaries}
+						value={value}
+						data={{
+							fileSource,
+							screenSource,
+							showLifecycle,
+							deskConnection,
+							fixtureLibraryState,
+							mediaServersState,
+						}}
+						selectiveImportSource={selectiveImportSource}
+						sessionRole={sessionRole}
+					>
+						{children}
+					</ServerShowProviderStack>
+				</ServerActionProviderStack>
+			</ServerConnectionOwner>
+		</SchedulerProvider>
 	);
 }

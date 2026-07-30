@@ -1,0 +1,357 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScheduleUpdateRequest",
+  "type": "object",
+  "properties": {
+    "expected_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "patch": {
+      "$ref": "#/$defs/SchedulePatch"
+    },
+    "request_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id",
+    "expected_revision",
+    "patch"
+  ],
+  "$defs": {
+    "ScheduleCalendarRule": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "weekly"
+            },
+            "weekdays": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ScheduleWeekday"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "weekdays",
+            "at"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "day": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "monthly_day"
+            }
+          },
+          "required": [
+            "type",
+            "day",
+            "at"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "ordinal": {
+              "$ref": "#/$defs/ScheduleMonthWeekOrdinal"
+            },
+            "type": {
+              "type": "string",
+              "const": "monthly_weekday"
+            },
+            "weekday": {
+              "$ref": "#/$defs/ScheduleWeekday"
+            }
+          },
+          "required": [
+            "type",
+            "ordinal",
+            "weekday",
+            "at"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expression": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "expression"
+            }
+          },
+          "required": [
+            "type",
+            "expression"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "anchor": {
+              "type": "string"
+            },
+            "at": {
+              "type": "string"
+            },
+            "every_days": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "every_n_days"
+            }
+          },
+          "required": [
+            "type",
+            "every_days",
+            "anchor",
+            "at"
+          ]
+        }
+      ]
+    },
+    "ScheduleMasterTransition": {
+      "type": "object",
+      "properties": {
+        "fade_millis": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "level": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "level",
+        "fade_millis"
+      ]
+    },
+    "ScheduleMonthWeekOrdinal": {
+      "type": "string",
+      "enum": [
+        "first",
+        "second",
+        "third",
+        "fourth",
+        "last"
+      ]
+    },
+    "SchedulePatch": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScheduleTarget"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trigger": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScheduleTrigger"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "SchedulePlaybackAction": {
+      "type": "string",
+      "enum": [
+        "go",
+        "pause",
+        "on",
+        "off",
+        "release",
+        "toggle"
+      ]
+    },
+    "ScheduleTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "$ref": "#/$defs/SchedulePlaybackAction"
+            },
+            "master_transition": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ScheduleMasterTransition"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "page": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "playback_number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "slot": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "playback"
+            }
+          },
+          "required": [
+            "type",
+            "page",
+            "slot",
+            "playback_number",
+            "action"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "macro_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "macro"
+            }
+          },
+          "required": [
+            "type",
+            "macro_id"
+          ]
+        }
+      ]
+    },
+    "ScheduleTrigger": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "enabled_at": {
+              "description": "RFC 3339 instant established when the Schedule became enabled.",
+              "type": "string"
+            },
+            "every_seconds": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "interval"
+            }
+          },
+          "required": [
+            "type",
+            "every_seconds",
+            "enabled_at"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "rule": {
+              "$ref": "#/$defs/ScheduleCalendarRule"
+            },
+            "type": {
+              "type": "string",
+              "const": "calendar"
+            }
+          },
+          "required": [
+            "type",
+            "rule"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "at": {
+              "description": "Server-local civil timestamp without a per-Schedule timezone.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "one_time"
+            }
+          },
+          "required": [
+            "type",
+            "at"
+          ]
+        }
+      ]
+    },
+    "ScheduleWeekday": {
+      "type": "string",
+      "enum": [
+        "sunday",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday"
+      ]
+    }
+  }
+}

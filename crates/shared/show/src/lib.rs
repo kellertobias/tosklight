@@ -21,7 +21,9 @@ pub use portable::{
     PortableShowCandidate, PortableShowCandidateObject, PortableShowCandidateObjects,
     PortableShowCandidateProfiles, PortableShowCommit, PortableShowDocument, PortableShowObject,
     PortableShowObjectKey, PortableShowObjectUndo, PortableShowRevision, PortableShowTransaction,
-    apply_delta, canonical_fixture_profile_json, canonicalize_legacy_inline_profile_snapshots,
+    ScheduleOccurrenceClaim, ScheduleOccurrenceClaimResult, ScheduleOccurrenceRecord,
+    ScheduleOccurrenceResolution, ScheduleOccurrenceStatus, SkippedScheduleOccurrence, apply_delta,
+    canonical_fixture_profile_json, canonicalize_legacy_inline_profile_snapshots,
     discover_legacy_inline_profile_snapshots, merge_typed, merge_typed_request,
     strip_zero_u64_echo,
 };

@@ -121,7 +121,15 @@ pub(super) fn persist_output_runtime(state: &AppState) -> Result<(), ApiError> {
             .snapshot()
             .groups
             .iter()
-            .map(|group| (group.id.clone(), group.master))
+            .map(|group| {
+                (
+                    group.id.clone(),
+                    state
+                        .output
+                        .group_master_for_persistence(&group.id)
+                        .unwrap_or(group.master),
+                )
+            })
             .collect(),
     };
     let serialized =

@@ -365,6 +365,7 @@ fn active_dynamic_playback(
         fader_value: 1.0,
         size: 1.0,
         master: 1.0,
+        master_transition: None,
         local_speed_multiplier: assignment.local_speed_multiplier,
         learned_duration_millis: assignment.learned_duration_millis,
         last_learn_tap_millis: None,

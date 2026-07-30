@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SchedulePreview",
+  "type": "object",
+  "properties": {
+    "occurrences": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ScheduleOccurrenceProjection"
+      }
+    },
+    "server_now": {
+      "type": "string"
+    },
+    "timezone": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "timezone",
+    "server_now",
+    "occurrences"
+  ],
+  "$defs": {
+    "ScheduleOccurrenceProjection": {
+      "type": "object",
+      "properties": {
+        "local_time": {
+          "description": "Civil timestamp formatted in the authoritative server timezone.",
+          "type": "string"
+        },
+        "occurrence_id": {
+          "type": "string"
+        },
+        "scheduled_for": {
+          "description": "RFC 3339 instant used for ordering and exactly-once claims.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurrence_id",
+        "scheduled_for",
+        "local_time"
+      ]
+    }
+  }
+}

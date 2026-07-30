@@ -7,6 +7,7 @@ import { MediaOutputApiClient } from "./mediaOutput";
 import { PlaybackApiClient } from "./playback";
 import { ProgrammingApiClient } from "./programming";
 import { LightClientRuntime } from "./runtime";
+import { SchedulesApiClient } from "./schedules";
 import { SelectiveImportApiClient } from "./selectiveImport";
 import { ShowObjectsApiClient } from "./showObjects";
 import { ShowApiClient } from "./shows";
@@ -32,6 +33,7 @@ export function createLightApi(baseUrl?: string) {
 		playback: new PlaybackApiClient(transport),
 		programming: new ProgrammingApiClient(transport),
 		selectiveImport: new SelectiveImportApiClient(transport),
+		schedules: new SchedulesApiClient(transport),
 		showObjects: new ShowObjectsApiClient(transport),
 		shows: new ShowApiClient(transport),
 	};

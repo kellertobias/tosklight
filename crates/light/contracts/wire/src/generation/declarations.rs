@@ -28,6 +28,7 @@ use crate::v2::programmer_priority::*;
 use crate::v2::programming::*;
 use crate::v2::programming_update::*;
 use crate::v2::runtime::*;
+use crate::v2::schedules::*;
 use crate::v2::screen_configuration::*;
 use crate::v2::selective_import::*;
 use crate::v2::show_library::*;
@@ -57,6 +58,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(patch(config));
     declarations.extend(stage_layout(config));
     declarations.extend(runtime(config));
+    declarations.extend(schedules(config));
     declarations.extend(screen_configuration(config));
     declarations.extend(virtual_playback_zones(config));
     declarations.extend(visualization(config));
@@ -65,6 +67,34 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(interaction(config));
     declarations.extend(live_actions(config));
     declarations
+}
+
+fn schedules(config: &Config) -> Vec<String> {
+    vec![
+        ScheduleDefinition::decl(config),
+        ScheduleTrigger::decl(config),
+        ScheduleCalendarRule::decl(config),
+        ScheduleWeekday::decl(config),
+        ScheduleMonthWeekOrdinal::decl(config),
+        ScheduleTarget::decl(config),
+        SchedulePlaybackAction::decl(config),
+        ScheduleMasterTransition::decl(config),
+        ScheduleOccurrenceProjection::decl(config),
+        ScheduleOccurrenceStatus::decl(config),
+        ScheduleOccurrenceResult::decl(config),
+        ScheduleProjection::decl(config),
+        ScheduleSnapshot::decl(config),
+        SchedulePreviewRequest::decl(config),
+        SchedulePreview::decl(config),
+        ScheduleCreateDefinition::decl(config),
+        ScheduleCreateRequest::decl(config),
+        ScheduleUpdateRequest::decl(config),
+        SchedulePatch::decl(config),
+        ScheduleDuplicateRequest::decl(config),
+        ScheduleDeleteRequest::decl(config),
+        ScheduleMutationOutcome::decl(config),
+        ScheduleRuntimeChange::decl(config),
+    ]
 }
 
 fn visualization(config: &Config) -> Vec<String> {

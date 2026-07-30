@@ -206,6 +206,8 @@ pub struct ActiveDynamicPlayback {
     pub size: f32,
     #[serde(default = "default_master")]
     pub master: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub master_transition: Option<PlaybackMasterTransition>,
     #[serde(default = "default_dynamic_speed_multiplier")]
     pub local_speed_multiplier: light_dynamics::Rational,
     #[serde(default)]

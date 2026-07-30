@@ -8,7 +8,8 @@ use light_core::{Revision, ShowId};
 use light_show::{
     AtomicObjectDelete, AtomicObjectWrite, PortableShowCommit, PortableShowDocument,
     PortableShowObjectUndo, PortableShowRevision, PortableShowTransaction, RevisionCopySource,
-    ShowStore, StoreError, VersionedObject,
+    ScheduleOccurrenceClaim, ScheduleOccurrenceClaimResult, ScheduleOccurrenceRecord,
+    ScheduleOccurrenceResolution, ShowStore, StoreError, VersionedObject,
 };
 use std::path::Path;
 
@@ -93,6 +94,40 @@ impl ActiveShowRepository {
         object_id: &str,
     ) -> Result<(PortableShowRevision, Option<VersionedObject>), StoreError> {
         self.store.object_with_portable_revision(kind, object_id)
+    }
+
+    pub(crate) fn claim_schedule_occurrence(
+        &self,
+        claim: &ScheduleOccurrenceClaim,
+    ) -> Result<ScheduleOccurrenceClaimResult, StoreError> {
+        self.store.claim_schedule_occurrence(claim)
+    }
+
+    pub(crate) fn resolve_schedule_occurrence(
+        &self,
+        schedule_id: &str,
+        occurrence_id: &str,
+        resolution: ScheduleOccurrenceResolution,
+        resolved_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<ScheduleOccurrenceRecord, StoreError> {
+        self.store
+            .resolve_schedule_occurrence(schedule_id, occurrence_id, resolution, resolved_at)
+    }
+
+    pub(crate) fn schedule_occurrence_history(
+        &self,
+        schedule_id: &str,
+    ) -> Result<Vec<ScheduleOccurrenceRecord>, StoreError> {
+        self.store.schedule_occurrence_history(schedule_id)
+    }
+
+    pub(crate) fn interrupt_claimed_schedule_occurrences(
+        &self,
+        resolved_at: chrono::DateTime<chrono::Utc>,
+        reason: &str,
+    ) -> Result<usize, StoreError> {
+        self.store
+            .interrupt_claimed_schedule_occurrences(resolved_at, reason)
     }
 
     pub(crate) fn put_object(

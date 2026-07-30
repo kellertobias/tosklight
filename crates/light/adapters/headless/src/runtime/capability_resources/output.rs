@@ -551,6 +551,14 @@ impl OutputResource {
         self.engine.group_master_flash(group_id)
     }
 
+    pub(in crate::runtime) fn group_master(&self, group_id: &str) -> Option<f32> {
+        self.engine.group_master(group_id)
+    }
+
+    pub(in crate::runtime) fn group_master_for_persistence(&self, group_id: &str) -> Option<f32> {
+        self.engine.group_master_for_persistence(group_id)
+    }
+
     pub(in crate::runtime) fn set_highlighted_fixtures(
         &self,
         fixtures: impl IntoIterator<Item = light_core::FixtureId>,
@@ -676,6 +684,16 @@ impl OutputResource {
         value: f32,
     ) -> Result<bool, EngineError> {
         self.engine.set_group_master(group_id, value)
+    }
+
+    pub(in crate::runtime) fn set_group_master_transition(
+        &self,
+        group_id: &str,
+        value: f32,
+        duration_millis: u64,
+    ) -> Result<bool, EngineError> {
+        self.engine
+            .set_group_master_transition(group_id, value, duration_millis)
     }
 
     pub(in crate::runtime) fn set_group_master_flash(&self, group_id: String, value: f32) {

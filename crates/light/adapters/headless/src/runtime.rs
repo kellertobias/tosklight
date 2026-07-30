@@ -169,6 +169,7 @@ mod programmer_group_commands;
 mod programmer_selection_values;
 mod programming_interaction;
 mod request_context;
+mod schedules_v2;
 mod screen_configuration_v2;
 mod screens_playback;
 mod selective_import_adapter;

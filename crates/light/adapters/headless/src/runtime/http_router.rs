@@ -17,6 +17,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(control_desk_configuration_v2::router())
         .merge(desk_management_v2::router())
         .merge(screen_configuration_v2::router())
+        .merge(schedules_v2::router())
         .merge(virtual_playback_zones_http::router())
         .merge(programming_update_http::router())
         .merge(show_patch_http::router())

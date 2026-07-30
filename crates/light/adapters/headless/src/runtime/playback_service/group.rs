@@ -22,6 +22,24 @@ pub(super) fn execute(
     }
     let changed = match action {
         PlaybackAction::Master(level) => set_master(ports, context, group_id, level)?,
+        PlaybackAction::MasterTransition {
+            level,
+            duration_millis,
+        } => {
+            let changed = ports
+                .state
+                .output
+                .set_group_master_transition(
+                    group_id.as_str(),
+                    level.value(),
+                    u64::from(duration_millis),
+                )
+                .map_err(|error| invalid(error.to_string()))?;
+            if changed && let Err(error) = persist_output_runtime(ports.state) {
+                ports.mark_persistence_pending(context, "output_runtime", error);
+            }
+            changed
+        }
         PlaybackAction::Flash { pressed } => set_flash(ports, group_id, pressed),
         _ => return Err(invalid("action is incompatible with Group runtime")),
     };

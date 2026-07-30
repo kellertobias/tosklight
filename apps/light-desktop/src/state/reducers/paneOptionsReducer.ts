@@ -1,8 +1,8 @@
-import type { AppState } from "../../types";
 import {
 	MAX_PLAYBACK_PAGE,
 	VIRTUAL_PLAYBACKS_PER_PAGE,
 } from "../../api/virtualPlaybackAddress";
+import type { AppState } from "../../types";
 import type { Action } from "../appActions";
 import { clamp } from "../reducerHelpers";
 
@@ -61,6 +61,26 @@ export function reducePaneOptions(
 								panes: desk.panes.map((pane) =>
 									pane.id === action.id
 										? { ...pane, presetPoolColors: action.value }
+										: pane,
+								),
+							},
+				),
+			};
+		case "SET_PANE_SCHEDULER_LAYOUT":
+			return {
+				...state,
+				desks: state.desks.map((desk) =>
+					desk.id !== state.activeDeskId
+						? desk
+						: {
+								...desk,
+								panes: desk.panes.map((pane) =>
+									pane.id === action.id
+										? {
+												...pane,
+												schedulerShowList: action.showList,
+												schedulerShowCalendar: action.showCalendar,
+											}
 										: pane,
 								),
 							},

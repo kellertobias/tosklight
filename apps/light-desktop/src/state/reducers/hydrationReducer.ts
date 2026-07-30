@@ -29,6 +29,20 @@ function isRetiredDevelopmentWindow(kind: unknown): boolean {
 	return kind === "development";
 }
 
+function schedulerPaneLayout(pane: AppState["desks"][number]["panes"][number]) {
+	const requestedList = pane.schedulerShowList !== false;
+	const requestedCalendar = pane.schedulerShowCalendar !== false;
+	return requestedList || requestedCalendar
+		? {
+				schedulerShowList: requestedList,
+				schedulerShowCalendar: requestedCalendar,
+			}
+		: {
+				schedulerShowList: true,
+				schedulerShowCalendar: false,
+			};
+}
+
 export function reduceHydration(
 	state: AppState,
 	action: Action,
@@ -92,6 +106,7 @@ export function reduceHydration(
 											),
 										}
 									: {}),
+								...(kind === "scheduler" ? schedulerPaneLayout(pane) : {}),
 							};
 							if (pane.kind !== "presets") return migrated;
 							const legacyDefault =

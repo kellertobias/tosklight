@@ -69,43 +69,107 @@ impl CueNumber {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum PlaybackAction {
-    Go { pressed: bool },
-    Back { pressed: bool },
-    Pause { pressed: bool },
+    Go {
+        pressed: bool,
+    },
+    Back {
+        pressed: bool,
+    },
+    Pause {
+        pressed: bool,
+    },
     Release,
-    On { pressed: bool },
-    Off { pressed: bool },
-    Toggle { pressed: bool },
-    FastForward { pressed: bool },
-    FastRewind { pressed: bool },
-    Flash { pressed: bool },
-    Temp { pressed: bool },
-    Swap { pressed: bool },
-    Select { pressed: bool },
-    SelectContents { pressed: bool },
-    SelectDereferenced { pressed: bool },
-    Learn { pressed: bool },
-    Double { pressed: bool },
-    Half { pressed: bool },
-    Blackout { pressed: bool },
-    PauseDynamics { pressed: bool },
-    DynamicRestart { pressed: bool },
-    DynamicDoubleSpeed { pressed: bool },
-    DynamicHalfSpeed { pressed: bool },
-    DynamicLearnSpeed { pressed: bool },
-    None { pressed: bool },
+    On {
+        pressed: bool,
+    },
+    Off {
+        pressed: bool,
+    },
+    Toggle {
+        pressed: bool,
+    },
+    FastForward {
+        pressed: bool,
+    },
+    FastRewind {
+        pressed: bool,
+    },
+    Flash {
+        pressed: bool,
+    },
+    Temp {
+        pressed: bool,
+    },
+    Swap {
+        pressed: bool,
+    },
+    Select {
+        pressed: bool,
+    },
+    SelectContents {
+        pressed: bool,
+    },
+    SelectDereferenced {
+        pressed: bool,
+    },
+    Learn {
+        pressed: bool,
+    },
+    Double {
+        pressed: bool,
+    },
+    Half {
+        pressed: bool,
+    },
+    Blackout {
+        pressed: bool,
+    },
+    PauseDynamics {
+        pressed: bool,
+    },
+    DynamicRestart {
+        pressed: bool,
+    },
+    DynamicDoubleSpeed {
+        pressed: bool,
+    },
+    DynamicHalfSpeed {
+        pressed: bool,
+    },
+    DynamicLearnSpeed {
+        pressed: bool,
+    },
+    None {
+        pressed: bool,
+    },
     Master(PlaybackLevel),
+    MasterTransition {
+        level: PlaybackLevel,
+        duration_millis: u32,
+    },
     GoTo(CueNumber),
     Load(CueNumber),
-    Crossfade { enabled: bool },
-    Temporary { enabled: bool, pressed: bool },
-    ConfiguredButton { number: u8, pressed: bool },
+    Crossfade {
+        enabled: bool,
+    },
+    Temporary {
+        enabled: bool,
+        pressed: bool,
+    },
+    ConfiguredButton {
+        number: u8,
+        pressed: bool,
+    },
 }
 
 impl PlaybackAction {
     pub const fn pressed(self) -> Option<bool> {
         match self {
-            Self::Release | Self::Master(_) | Self::GoTo(_) | Self::Load(_) => None,
+            Self::Release
+            | Self::Master(_)
+            | Self::MasterTransition { .. }
+            | Self::GoTo(_)
+            | Self::Load(_) => None,
             Self::Crossfade { .. } => None,
             Self::Temporary { pressed, .. }
             | Self::ConfiguredButton { pressed, .. }

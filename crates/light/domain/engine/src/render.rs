@@ -21,6 +21,7 @@ impl Engine {
         options: RenderOptions,
         sampled: &[ContributionBatch],
     ) -> Result<RenderResult, EngineError> {
+        self.advance_group_master_transitions();
         let generation = self.generation.load_full();
         self.render_generation(&generation, options, sampled)
     }

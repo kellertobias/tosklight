@@ -287,7 +287,9 @@ fn validate_address_action(
     if matches!(address, PlaybackAddress::Group(_))
         && !matches!(
             action,
-            super::PlaybackAction::Master(_) | super::PlaybackAction::Flash { .. }
+            super::PlaybackAction::Master(_)
+                | super::PlaybackAction::MasterTransition { .. }
+                | super::PlaybackAction::Flash { .. }
         )
     {
         return Err(ActionError::new(

@@ -261,6 +261,13 @@ impl GroupMasterIndex {
             .reduce(f32::max)
             .unwrap_or(1.0)
     }
+
+    pub(crate) fn master(&self, group_id: &str) -> Option<f32> {
+        self.masters
+            .iter()
+            .find(|binding| binding.group_id == group_id)
+            .map(|binding| binding.master)
+    }
 }
 
 fn compile_snap_attributes(snapshot: &EngineSnapshot) -> HashMap<FixtureId, HashSet<AttributeKey>> {

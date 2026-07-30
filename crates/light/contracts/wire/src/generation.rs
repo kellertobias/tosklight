@@ -65,6 +65,11 @@ use crate::v2::programming_update::{
     ProgrammingUpdateSettingsProjection, ProgrammingUpdateTargetsRequest,
     ProgrammingUpdateTargetsResponse,
 };
+use crate::v2::schedules::{
+    ScheduleCreateRequest, ScheduleDeleteRequest, ScheduleDuplicateRequest,
+    ScheduleMutationOutcome, SchedulePreview, SchedulePreviewRequest, ScheduleSnapshot,
+    ScheduleUpdateRequest,
+};
 use crate::v2::selective_import::{
     SelectiveImportApplyRequest, SelectiveImportCatalog, SelectiveImportErrorResponse,
     SelectiveImportOutcome, SelectiveImportPreview, SelectiveImportSelection,
@@ -84,6 +89,7 @@ const PLAYBACK_SCHEMA_DIRECTORY: &str = "crates/light/contracts/wire/schemas/v2-
 const PROGRAMMING_SCHEMA_DIRECTORY: &str = "crates/light/contracts/wire/schemas/v2-programming";
 const SELECTIVE_IMPORT_SCHEMA_DIRECTORY: &str =
     "crates/light/contracts/wire/schemas/v2-selective-import";
+const SCHEDULE_SCHEMA_DIRECTORY: &str = "crates/light/contracts/wire/schemas/v2-schedules";
 const STAGE_LAYOUT_SCHEMA_DIRECTORY: &str = "crates/light/contracts/wire/schemas/v2-stage-layout";
 
 /// One generated artifact relative to the workspace root.
@@ -99,7 +105,21 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
     artifacts.extend(output::artifacts());
     artifacts.extend(programming_artifacts());
     artifacts.extend(playback_and_show_artifacts());
+    artifacts.extend(schedule_artifacts());
     artifacts
+}
+
+fn schedule_artifacts() -> Vec<GeneratedArtifact> {
+    vec![
+        schedule_request_schema::<SchedulePreviewRequest>("preview-request"),
+        schedule_response_schema::<SchedulePreview>("preview"),
+        schedule_request_schema::<ScheduleCreateRequest>("create-request"),
+        schedule_request_schema::<ScheduleUpdateRequest>("update-request"),
+        schedule_request_schema::<ScheduleDuplicateRequest>("duplicate-request"),
+        schedule_request_schema::<ScheduleDeleteRequest>("delete-request"),
+        schedule_response_schema::<ScheduleMutationOutcome>("mutation-outcome"),
+        schedule_response_schema::<ScheduleSnapshot>("snapshot"),
+    ]
 }
 
 fn command_and_event_artifacts() -> Vec<GeneratedArtifact> {
@@ -305,6 +325,22 @@ fn event_request_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
 
 fn event_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
     event_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
+}
+
+fn schedule_request_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    namespaced_schema::<T>(
+        SCHEDULE_SCHEMA_DIRECTORY,
+        name,
+        SchemaSettings::draft2020_12().for_deserialize(),
+    )
+}
+
+fn schedule_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    namespaced_schema::<T>(
+        SCHEDULE_SCHEMA_DIRECTORY,
+        name,
+        SchemaSettings::draft2020_12().for_serialize(),
+    )
 }
 
 fn patch_request_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {

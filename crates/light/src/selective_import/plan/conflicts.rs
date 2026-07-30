@@ -13,6 +13,11 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
         source_body: &serde_json::Value,
     ) -> (ImportObjectAction, PortableShowObjectKey) {
         let resolution = self.request.conflict_resolutions.get(key).copied();
+        if key.kind() == "schedule"
+            && !matches!(resolution, Some(ImportConflictResolution::KeepDestination))
+        {
+            return self.duplicate_action(key);
+        }
         let Some(target) = self.target.object(key.kind(), key.id()) else {
             return self.action_without_conflict(key, resolution);
         };
