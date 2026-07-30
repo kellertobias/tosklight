@@ -1,177 +1,221 @@
 <p align="center">
-  <img src="apps/light-desktop/src-tauri/icons/icon.png" alt="ToskLight application icon" width="96" height="96">
+  <img src="assets/branding/tosklight-app-icon.png" alt="ToskLight application icon" width="128" height="128">
 </p>
 
 <h1 align="center">ToskLight</h1>
 
+<p align="center">
+  A professional show-lighting desk for productions that need real desk concepts without a
+  full-size desk budget.
+</p>
+
 > [!CAUTION]
-> **ToskLight is not yet even a release candidate.** You are welcome to test the published releases, but the code is still unstable and may break with every new version.
+> **ToskLight is not yet a release candidate.** Published builds are available for testing, but
+> the software and its show-file format may still change between versions.
 
-`tosk-light` is a show-lighting desk, engine, and headless control application for programming fixtures, groups, cue lists, playback faders, and Art-Net/sACN output from one portable show file. The operator UI is built around a command line, live programmer, fixture sheet, 3D stage view, cue list pool, and playback section so the same show can be edited from the desktop app or browser-connected desks.
+Industry-standard lighting desks are excellent tools and worth every penny. Smaller productions,
+however, should not have to learn throwaway workflows simply because their budget is smaller.
+ToskLight bridges that gap: it brings professional concepts such as a command line, Programmer,
+tracking, Groups, Presets, Cuelists, Playbacks, and portable show files to macOS, Windows, Linux,
+and browser-connected desks.
 
-Start with the [quickstart help](docs/help/00-quickstart.markdown) or browse the full [operator help](docs/help).
+<p align="center">
+  <strong><a href="https://kellertobias.github.io/tosklight/">Operator manual, product demo, and downloads →</a></strong>
+</p>
 
-![Light programming desk with fixture selection, group shortcuts, 3D stage preview, and live programmer](docs/help/assets/screenshots/default-desk-overview.png)
+<p align="center">
+  <a href="https://kellertobias.github.io/tosklight/">
+    <img src="https://kellertobias.github.io/tosklight/screenshots/application-overview.png" alt="ToskLight operator desktop with Fixture Sheet, 3D Stage, Groups, Presets, and Playbacks" width="49%">
+  </a>
+  <a href="https://kellertobias.github.io/tosklight/">
+    <img src="https://kellertobias.github.io/tosklight/screenshots/stage-3d.png" alt="ToskLight 3D Stage visualizer" width="49%">
+  </a>
+</p>
 
-![Light Cuelist detail with playback faders and group masters](docs/help/assets/screenshots/cuelist-playback.png)
+The screenshots above are generated from the current application stories and published with the
+[ToskLight GitHub Pages site](https://kellertobias.github.io/tosklight/). The site also hosts the
+[operator manual](https://kellertobias.github.io/tosklight/manual/), the generated product demo,
+and current release downloads.
 
-## Run Light headless
+## Features
 
-```sh
-npm run dev
-```
+- Command-line and keypad operation with a live LTP Programmer.
+- Ordered fixture Groups, reusable Presets, sparse tracked Cues, Cuelists, Playbacks, and group
+  masters.
+- Fixture Sheet, Channels and DMX inspection, plus built-in 2D and 3D Stage views.
+- Dynamics, fade/follow/timecode playback, ArtTimeCode, MTC, OSC, MIDI, and attached OSC hardware.
+- Art-Net and sACN output, including explicit routing and health diagnostics.
+- GDTF-style fixture packages, multi-head fixtures, multi-patch Stage instances, MVR workflows,
+  and CITP/MSEX media-server integration.
+- One authoritative desk shared by the Tauri desktop app, browser clients, keyboard, OSC, and
+  attached hardware surfaces.
 
-Open `http://127.0.0.1:5000`. A new desk contains an enabled `Operator` user. Use `--bind 0.0.0.0:5000` only on a trusted control network.
+## Development
 
-Set `LIGHT_DESK_TOKEN` when exposing the server on a LAN. API clients then send the shared value in `X-Light-Desk-Token`; the embedded UI provides a desk-token field. This protects the desk boundary while usernames remain passwordless.
-
-## Development and builds
-
-```sh
-npm run dev                    # Light headless + Tauri app with UI hot reload
-npm run open             # debug builds, stop old instances, and open the app
-npm run manual           # PDF and deployable HTML manuals from docs/help Markdown
-npm run bundle          # self-contained server ZIPs for macOS, Windows, Linux AMD64, and Linux ARM64
-npm run bundle:install  # build archives and install/open ~/Applications/ToskLight.app
-npm run migrate-artifacts # explicitly move legacy ./light-data into .artifacts/runtime/
-npm run clean             # remove reproducible artifacts while preserving runtime data
-```
-
-The generated manuals are written to `.artifacts/generated/manual/pdf/tosklight-manual.pdf` and
-`.artifacts/generated/manual/html/tosklight-manual/index.html`. The webhost-ready package is
-`.artifacts/generated/manual/html/tosklight-manual-html.zip`; extract it directly into a document
-root to deploy the single-page manual and its images.
-Use `npm run test:help-screenshots` to intentionally refresh the application images
-consumed by the Help window, PDF, and HTML manual. See the
-[manual authoring guide](docs/help/99-Development/04-manual-and-help-screenshots.md) for the Markdown and screenshot
-contract.
-
-Repository-owned assets live under `assets/`. The transferable shipped
-fixture packages are in `assets/fixture-library/`; a successful `npm run test:demo`
-atomically refreshes the completed portable show at `assets/demo.show`.
-
-`npm run bundle` ships the web UI inside each `light-headless` binary. It creates a
-universal macOS binary plus Windows, Linux AMD64, and Linux ARM64 binaries in
-`.artifacts/release/`; Linux binaries are statically linked. Building the non-macOS
-targets requires `zig`, `cargo-zigbuild`, and the Rust targets named by the
-build script. The portable Linux binaries omit native USB-MIDI because it
-depends on the target machine's ALSA library; RTP-MIDI, OSC, and network output
-remain available.
-
-Both local run commands store desk data in `.artifacts/runtime/light-data/` by default. Existing `./light-data` state is never moved implicitly: run `npm run migrate-artifacts` once after reviewing the destination. If both locations contain data, the command stops without merging them. Set `LIGHT_DATA_DIR` to use a different directory. The app talks to the server on `127.0.0.1:5000`; `npm run dev` restarts cleanly as one foreground environment, while backend source changes currently require restarting the command.
-
-All repository-local build products, manuals, release packages, test evidence, caches, and scratch files live below ignored `.artifacts/`. `npm run clean` removes only reproducible subtrees and preserves the active development runtime. Runtime removal is deliberately separate and prints the exact confirmation command because it includes local shows and desk state.
-
-The server maintains:
-
-- `desk.sqlite`: desk users, show-library index, active show, server settings, and durable session programmers.
-- `shows/*.show`: portable, versioned SQLite show files.
-- A fixed-deadline 44 Hz render scheduler with health counters exposed by `/api/v2/bootstrap`.
-
-## Code tour for new developers
-
-The repository ships a guided onboarding tour under [`.tour/`](.tour). Start it with
-[CodeSafari](https://github.com/kellertobias/codesafari) — no install required:
+Start the complete desktop application through the authoritative development path:
 
 ```sh
-npm run codesafari
-npx --yes "@tobisk/codesafari@1.0.0" validate .
-npm run pages:generate
+npm run open
 ```
 
-The viewer opens a read-only IDE: a file tree, a source pane, and a step panel, so you can follow a
-tour and still explore any file. `pages:generate` creates the responsive, deployable export under
-`.artifacts/generated/pages/safari/`. It covers:
+This builds the frontend, Rust server, and Tauri applications, starts the app-owned server, checks
+its readiness, and opens ToskLight.
 
-- **Tours** — Orientation; One Value from desk input to DMX; Cue Tracking and Goto; Ordered
-  Selection; Value Spreading; the Portable Show; Add a Capability; Recording and Live References;
-  Fixture Semantics; Playback Runtime; State Ownership to Pixels; and Rust/Tauri for TypeScript
-  developers.
-- **Components** — Control UI, app-local UI primitives, Tauri apps, Backend/Application, Engine &
-  Output, Help Generator, and Testbench.
-- **Glossary** — the operator vocabulary (Cue, Playback, Programmer, patch) and the architecture
-  concepts (action context, projections, revisions, tick budget) you need before reading the code.
+| Task | Command | Result |
+| --- | --- | --- |
+| Build the operator manual | `npm run manual` | Verified PDF and deployable HTML manual under `.artifacts/generated/manual/` |
+| Bundle release artifacts | `npm run bundle` | Desktop packages and standalone server archives under `.artifacts/release/` |
+| Bundle and install locally | `npm run bundle:install` | Builds the archives and installs/opens the macOS application |
+| Build the public site | `npm run pages:generate` | Landing page, manual, Code Safari, semantic test catalog, and release assets under `.artifacts/generated/pages/` |
+| Run the headless development server | `npm run dev:headless` | Embedded browser UI at `http://127.0.0.1:5000` |
 
-Every page is plain Markdown, so it is also readable directly on the file system or on the
-repository host. `docs/engineering/` remains the authority for architecture rules; the tour links
-into it rather than restating it.
+See [Build and test commands](docs/engineering/build-and-test-commands.md) for the complete command
+catalog and [Manual and help screenshots](docs/help/99-Development/04-manual-and-help-screenshots.md)
+for the documentation workflow.
 
-## API model
+### Supported operating systems
 
-- Typed REST under `/api/v2` provides sessions, bootstrap snapshots, show upload/download/open, revisioned show objects, patch inspection, programmer management, playback actions, and diagnostics.
-- `/api/v2/media-servers` exposes authenticated CITP media-server status, bounded thumbnail retrieval, and
-  live-preview snapshots for fixture profiles that explicitly support direct IP control.
-- Mutating versioned objects require `If-Match: <revision>` and return an `ETag`. Revision zero creates an object; stale revisions return HTTP 409.
-- WebSocket `/api/v2/events` publishes ordered filtered changes and accepts versioned, request-ID-bearing typed commands after subscription. REST remains the authoritative snapshot/recovery path after an event gap.
-- A session authenticates a device as a configured user. Selection, command line, programmer values, blind/preview/highlight modes, editing context, and bounded undo/redo history belong to that user and are shared across their connected devices. Disconnected programmers remain present until explicitly cleared and survive server restart. New desks create an `Operator` user, and new devices select it unless a different user was remembered locally.
+| Platform | Desktop application | Standalone/headless server |
+| --- | --- | --- |
+| macOS | Apple Silicon (M1 and later) | Universal macOS archive |
+| Windows | 64-bit installer | Windows AMD64 archive |
+| Linux | x86_64 AppImage and Debian package | Linux AMD64 archive |
+| Raspberry Pi | Use the browser desk from another computer | Pi 4 or Pi 5, 64-bit Raspberry Pi OS, ARM64 archive |
 
-Show objects use the kinds `patched_fixture`, `cue_list`, `dynamic`, and `route` for the live engine snapshot. Other kinds such as presets, groups, mappings, and user layouts use the same revisioned object store.
+The release builds are currently unsigned. Cross-compiling the non-macOS server archives requires
+the Rust targets used by the build script, `zig`, and `cargo-zigbuild`. Portable Linux server
+binaries omit native USB-MIDI because that transport depends on the target system's ALSA library;
+RTP-MIDI, OSC, and network output remain available.
 
-## Verification
+## How ToskLight is structured
 
-[Build and test commands](docs/engineering/build-and-test-commands.md) documents every `npm run` dev, build, and test script, what `npm run test:architecture` enforces, and which check to run for which change.
+ToskLight is a Rust workspace with TypeScript/React operator interfaces hosted by Tauri. Every
+control surface enters the same application command path before the domain model and immutable
+engine snapshots resolve Programmer, Playback, Group, Cue, and Dynamic contributions. Output runs
+on a fixed-deadline scheduler and publishes Art-Net or sACN without waiting for browser projection
+or visualization work.
 
-All persisted-data changes are also governed by the [backward-compatibility acceptance criteria](docs/acceptance-criteria.md). A feature is not complete until legacy-file behavior is migrated and tested, or the compatibility requirement has been explicitly decided with the operator.
+- `crates/light/domain/` owns Programmer, Playback, engine, and output semantics.
+- `crates/light/adapters/headless/` owns REST, WebSocket, OSC, sessions, persistence, and server
+  orchestration.
+- `apps/light-desktop/` is the main operator application.
+- `apps/light-hardware-controls/` is the sibling application for attached controls.
+- `apps/ui-library/` contains shared operator components and deterministic Storybook surfaces.
+- `tests/` contains the semantic Playwright acceptance suite and shared test bench.
 
-The repository does not currently ship a standalone UI package or Storybook. Reusable presentation
-primitives live in `apps/light-desktop/src/components/common/` and
-`apps/light-desktop/src/components/window-kit/`; their executable gates are the Control UI component
-tests, typecheck/production build in `npm run test:unit`, and the real-browser coverage in
-`npm run test:e2e-ui`.
+Read the [architecture overview](docs/engineering/architecture-overview.md) for the dependency
+rules or open the generated [Code Safari](https://kellertobias.github.io/tosklight/safari/) for a
+guided route through the codebase.
+
+### Show files and desk data
+
+ToskLight stores portable shows as versioned SQLite `.show` files. They contain fixtures, patch,
+Groups, Presets, Cuelists, Cues, Dynamics, routes, and other show-owned objects and can move between
+desks.
+
+`desk.sqlite` is deliberately separate. It stores desk users, settings, screens, the show-library
+index, the active show, retained revisions, and durable Programmer recovery. A show file must never
+be treated as a copy of the desk database. Persisted changes follow the
+[backward-compatibility acceptance criteria](docs/acceptance-criteria.md): existing valid shows
+must load or migrate without losing the original unless a compatibility break is explicitly
+accepted.
+
+## Tests and engineering documentation
 
 ```sh
-cargo test --workspace --no-fail-fast
-cargo clippy --workspace --all-targets -- -D warnings
-cargo run --release -p light-headless --bin light-benchmark --no-default-features -- \
-  --profile all --protocol artnet --transport encode-only --seconds 5 \
-  --mutation-gate --hardware-label "machine model, CPU, RAM and power mode"
-cd apps/light-desktop && npm run typecheck && npm test -- --run && npm run build && npm run test:e2e
+npm run test:unit
+npm run test:e2e-api
+npm run test:e2e-ui
+npm run test:e2e -- tests/<focused-spec>.spec.ts
+npm run test:desktop-smoke
 ```
 
-The release-only benchmark emits JSON for the 32-universe/100 Hz hard floor, the
-64-universe/120 Hz target, and both 4- and 8-universe/40 Hz low-power profiles. Each universe is
-filled through the real Engine render, contribution arbitration, schema-v2 fixture projection, and
-selected production protocol encoder. The scenario overlaps Playback, Programmer, static Group,
-and Dynamic values; the Dynamic owns one mapped slot that has no static or Programmer value, and a
-focused test proves consecutive logical ticks change that slot. Use `--protocol sacn` for the other
-production codec and `--transport loopback` for separately reported, safe local UDP `send_to`
-timing. Loopback is benchmark-owned and is not presented as production `NetworkOutput` socket
-delivery. Each scenario preserves that ordinary scheduled pipeline as its floor measurement, then
-reports an unpaced render-only diagnostic with four prebuilt sampled batches replacing a realistic
-slice of Programmer and Playback assignments. The JSON explicitly identifies unavailable CPU, allocation,
-sub-render phase, production socket, and sound-to-light measurements; do not infer those values from
-total latency. Run it on each target, including Raspberry Pi-class hardware, before choosing that
-desk's configured universe ceiling, and retain the JSON with the exact hardware label.
-`--mutation-gate` additionally measures a cue edit through candidate compilation, runtime
-preparation, and generation installation against paired 120- and 1,200-fixture projections; it
-fails when untouched projections are rebuilt, the result diverges from the full compiler, or p95
-latency scales with fixture count.
+The suite separates Rust and TypeScript unit/architecture checks, API acceptance, real-browser UI
+behavior, deterministic Storybook screenshots, generated help screenshots, product-demo
+generation, packaged desktop checks, and release performance evidence.
 
-For the sustained complex-show acceptance run, use:
+- [Semantic test catalog](https://kellertobias.github.io/tosklight/semantic-tests/semantic-test-catalog.html)
+  — searchable, human-readable contracts compiled statically from the Playwright suite.
+- [Code Safari](https://kellertobias.github.io/tosklight/safari/) — guided architecture,
+  operator-action, persistence, testing, and Rust/Tauri tours.
+- [Engineering documentation](docs/engineering/) — API, architecture, build, performance, and
+  compatibility rules.
+- [Human-readable acceptance scenarios](docs/testing/) — operator-facing behavior and surface
+  parity.
 
-```sh
-npm run benchmark:sustained-output -- --seconds 120 \
-  --hardware-label "machine model, CPU, RAM, OS and power mode"
-```
+## Scale and limits
 
-Use `--seconds 60` for the one-minute variant. This release run loads the shipped fixture packages
-and patches 20 Showtec Sunstrip LED RGB 42206 in 30 Channel mode, 40 ROBE Robin 600X LEDWash in
-Mode 1, 32 ROBE Robin DLS Profile in Mode 1, and 32 ROBE Robin LEDBeam 150 in Standard 16-bit mode.
-Those fixtures occupy 4,288 slots. It fills the remaining 12,096 slots with 4,000 Generic RGB LED
-fixtures in three-channel RGB virtual-dimmer mode and 24 in four-channel RGBD mode so fixtures do
-not cross universe boundaries. The resulting 4,148-fixture show fills all 16,384 slots across 32
-universes.
+The canonical demo is a realistic, release-blocking packaged-desktop show with **262 controllable
+fixtures**, **301 physical Stage instances**, **3,783 occupied DMX slots**, 38 Groups, 30 Presets,
+30 Dynamics, seven Cuelists, and 13 Playbacks.
 
-Every timed frame evaluates overlapping Group, Cue/Playback, Dynamic, and Programmer contributions
-before both Art-Net and sACN encoding and UDP loopback delivery. The command schedules 125 Hz to
-prove operational headroom above the 100 Hz floor and also reports sampled replacement
-contributions as a separate render-only diagnostic. It retains JSON and stderr under
-`.artifacts/performance`, prints the average frame rate and the minimum completed frame rate across
-every one-second interval, and exits non-zero if the average or any interval falls below 100 Hz.
-Dropped, deferred, and late frames remain explicit diagnostics.
+| Profile | Contract |
+| --- | --- |
+| Typical show / built-in Stage | Around 300 fixtures or fewer; the 3D Stage is expected to remain real-time. |
+| Supported interactive ceiling | Exactly 1,000 physical instances at 60 Hz on sufficiently fast supported hardware. Programmer, Fixture Sheet, Playbacks, navigation, and output remain usable and real-time; Stage may reduce detail or stutter, but must remain bounded. |
+| Output profiles | A representative supported show prefers 16 or fewer substantially occupied universes. Up to 32 occupied universes is the supported upper stress profile; 64 universes is optional capacity evidence. |
+| Beyond the supported profile | 2,000- and 4,000-fixture headless runs are breakpoint probes, not interactive Stage claims. In one Apple M5 Max measurement, 2,000 fixtures sustained 60.20 ticks/s; 4,000 reached 39.63 ticks/s with drops, deferrals, and missed deadlines. Those numbers are evidence from that machine, not universal maxima. |
 
-## Implementation status
+Fixture count alone is not enough to characterize a show. Release evidence also varies occupied
+universes, active Cuelists and fades, Dynamics, and Dynamic lane count. A 20-Dynamic workload is
+representative, not a product maximum.
 
-Implemented foundations include fixture-library JSON/SQLite interchange, multi-head patching, 8–32-bit DMX encoding, calibrated XYZ emitter mixing, virtual dimmers, sparse tracked cues and cue-only restoration, HTP/LTP priority resolution, attribute dynamics sampling, immutable engine snapshots, live Art-Net/sACN UDP output, ArtTimeCode/MTC/OSC parsing, explicit timecode source fallback, CITP/MSEX thumbnail and live-preview transport, portable show backups, durable session-isolated programmers, REST/WebSocket control, and the standalone operator page.
+<details>
+<summary>Detailed performance and responsiveness contract</summary>
 
-The server includes native MIDI input, an Apple Network MIDI/RTP-MIDI transport subset, fade/follow/timecode playback, Dynamics in the render path, desk/input configuration, optional LAN boundary authentication, automatic retained backups, rollback transitions, and an operational responsive UI. USB DMX and DMX input intentionally remain extension points. Hardware-specific Raspberry Pi capacity still must be established by running the included benchmark on the target device.
+### Output and control priority
+
+Engine evaluation and DMX/network output have absolute priority over API projection,
+serialization, browser rendering, Fixture Sheet work, and visualization:
+
+- A client, stalled connection, or expensive projection must never delay an output tick or change
+  the cadence of a running Cue fade or Dynamic.
+- Engine and output code must not await visualization or client-specific work.
+- Non-critical publication uses bounded latest-value delivery and discards superseded samples
+  before they create backpressure.
+- Software, keyboard, OSC, and attached-hardware actions must reach their authoritative outcome
+  and, when applicable, the first output frame containing the change within two configured output
+  ticks at rates up to 60 Hz, or four ticks above 60 Hz.
+
+Go and other Playback triggers are time-critical. Immediate local feedback accompanies the
+authoritative action, but optimistic presentation never substitutes for the output-tick budget.
+An operated encoder, fader, or control must respond continuously without jumping while the event
+stream reconciles it.
+
+### Warm bundled UI and sampled telemetry
+
+The bundled desktop keeps ordinary operator surfaces warm. Fixture Sheet, Fixture Built-ins,
+Preset Built-ins, Group Built-ins, Cuelist Built-ins, and Dynamic Built-ins must appear without a
+loading screen or blocking fetch. A previously unused Stage, very large Timecode editor, or another
+genuinely heavy cold surface may show explicit loading progress. A browser-connected desk may take
+approximately 500 ms for equivalent cold navigation; the bundled frontend remains the primary
+responsiveness contract.
+
+- Current Cue and Playback state, visible Playback faders, command line, selection, and controls
+  being operated update immediately.
+- Cue fade progress animates locally from authoritative start, duration, pause, speed, and
+  completion events.
+- Values changed only by an external fade, Cue, or Dynamic may use a 5 Hz latest-value sample and
+  skip intermediate values while remaining eventually consistent.
+- Fixture Sheet opens and scrolls from warm identity, structure, base/programming values, and
+  cached state. Newly visible rows may initially show cached values, but refresh within 100–200 ms.
+- Fixture Sheet shows stable base/programming values plus Dynamic identity and state; the DMX
+  window owns high-cadence inspection of resolved output.
+- Hidden surfaces, off-screen rows, and invisible columns do not subscribe to high-frequency
+  values.
+
+These rules allow telemetry and visualization to become less detailed under load while the
+operator's input path, Cue/Playback state, and physical output remain immediate and deterministic.
+
+</details>
+
+## License
+
+ToskLight is free to use, copy, modify, and distribute, including for commercial productions and
+paid installation, operation, support, or maintenance. You may not sell ToskLight itself or bundle
+it with hardware sold as a product without a separate written license. Distributed modified
+versions must publish their complete source under the same license; branding restrictions and the
+no-warranty terms also apply.
+
+Read the binding [ToskLight Community License](LICENSE) and the plain-language
+[license FAQ](docs/license-faq.md).

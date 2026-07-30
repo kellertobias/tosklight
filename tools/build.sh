@@ -97,8 +97,8 @@ build_pages() {
   cp -R "$ROOT/docs/site/." "$LIGHT_PAGES_DIR/"
   node "$ROOT/tools/semantic-test-docs/cli.mjs" --write \
     --output-dir "$LIGHT_PAGES_DIR/semantic-tests"
-  # Same application icon the operator manual renders in its hero and sidebar.
-  cp "$ROOT/apps/light-desktop/src-tauri/icons/icon.png" "$LIGHT_PAGES_DIR/icon.png"
+  # Publish the full-resolution application artwork, including the approved Apple-style effects.
+  cp "$ROOT/assets/branding/tosklight-app-icon.png" "$LIGHT_PAGES_DIR/icon.png"
   # GitHub Pages otherwise runs the output through Jekyll and drops _-prefixed assets.
   touch "$LIGHT_PAGES_DIR/.nojekyll"
 

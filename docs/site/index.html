@@ -29,11 +29,46 @@
         font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       }
       a { color: var(--accent); }
-      .wrap { max-width: 62rem; margin: 0 auto; padding: 0 1.5rem; }
-      header { padding: 5rem 0 3rem; text-align: center; }
-      header img { width: 96px; height: 96px; }
+      .wrap { max-width: 68rem; margin: 0 auto; padding: 0 1.5rem; }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem 0;
+        border-bottom: 1px solid var(--edge);
+      }
+      .topbar strong { color: var(--text); }
+      .topbar-links { display: flex; align-items: center; gap: 1rem; }
+      .topbar a { text-decoration: none; }
+      .manual-link {
+        padding: 0.45rem 0.9rem;
+        background: var(--accent);
+        border: 1px solid var(--accent);
+        border-radius: 0.45rem;
+        color: #12151c;
+        font-weight: 700;
+      }
+      header { padding: 4rem 0 3rem; text-align: center; }
+      header img { width: 112px; height: 112px; }
       h1 { font-size: clamp(2.2rem, 6vw, 3.4rem); margin: 1rem 0 0.5rem; letter-spacing: -0.02em; }
       .tagline { color: var(--muted); font-size: 1.15rem; max-width: 44rem; margin: 0 auto; }
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.8rem;
+        margin-top: 1.5rem;
+      }
+      .hero-action {
+        padding: 0.6rem 1rem;
+        border: 1px solid var(--edge);
+        border-radius: 0.45rem;
+        color: var(--text);
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .hero-action-primary { border-color: var(--accent); color: var(--accent); }
       .version {
         display: inline-block;
         margin-top: 1.25rem;
@@ -64,6 +99,10 @@
       .card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
       section { padding: 2.5rem 0; border-top: 1px solid var(--edge); }
       section h2 { font-size: 1.4rem; margin: 0 0 1rem; }
+      section h3 { margin: 1.5rem 0 0.5rem; }
+      .marketing-copy { max-width: 52rem; font-size: 1.08rem; }
+      .marketing-copy p { color: var(--muted); }
+      .marketing-copy strong { color: var(--text); }
       ul.features { margin: 0; padding-left: 1.2rem; color: var(--muted); }
       ul.features li { margin-bottom: 0.4rem; }
       ul.features strong { color: var(--text); font-weight: 600; }
@@ -161,6 +200,26 @@
       .performance-degraded { border-left-color: var(--degraded); }
       .performance-degraded strong { color: var(--degraded); }
       .performance-unknown { border-left-color: var(--muted); }
+      .specs {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+      }
+      .spec {
+        padding: 1.2rem;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 0.7rem;
+      }
+      .spec strong { display: block; margin-bottom: 0.25rem; }
+      .spec span { color: var(--muted); font-size: 0.9rem; }
+      .developer-note { color: var(--muted); }
+      code { padding: 0.1rem 0.3rem; background: #20262d; border-radius: 0.25rem; }
+      @media (max-width: 38rem) {
+        .topbar { align-items: flex-start; }
+        .topbar-links { align-items: flex-end; flex-direction: column; gap: 0.5rem; }
+        header { padding-top: 3rem; }
+      }
       footer {
         padding: 2.5rem 0 4rem;
         border-top: 1px solid var(--edge);
@@ -174,13 +233,26 @@
   </head>
   <body>
     <div class="wrap">
+      <nav class="topbar" aria-label="Primary">
+        <strong>ToskLight</strong>
+        <div class="topbar-links">
+          <a class="manual-link" href="manual/">Operator manual →</a>
+          <a href="tosklight-manual.pdf">PDF manual</a>
+          <a href="#downloads">Downloads</a>
+        </div>
+      </nav>
+
       <header>
         <img src="icon.png" alt="ToskLight application icon" />
         <h1>ToskLight</h1>
         <p class="tagline">
-          A show-lighting desk, engine, and control server — fixtures, groups, cue lists, playback
-          faders, and Art-Net/sACN output from one portable show file.
+          The DMX lighting desk for small and medium venues — professional programming,
+          playback, visualization, and output from one portable show file.
         </p>
+        <div class="hero-actions">
+          <a class="hero-action hero-action-primary" href="manual/">Read the operator manual</a>
+          <a class="hero-action" href="#downloads">Download ToskLight</a>
+        </div>
         <a
           class="version"
           id="version"
@@ -190,33 +262,48 @@
         >
       </header>
 
-      <div class="cards">
-        <a class="card" href="manual/">
-          <h2>Operator manual →</h2>
-          <p>The full operator help: command line, programmer, patch, cue lists, playback, and output.</p>
-        </a>
-        <a class="card" href="safari/">
-          <h2>Code safari →</h2>
-          <p>A guided tour of the codebase — architecture, one action end to end, and how to add a capability.</p>
-        </a>
-        <a class="card" href="semantic-tests/semantic-test-catalog.html">
-          <h2>Semantic test catalog →</h2>
-          <p>Searchable human-readable contracts for the static Playwright scenario suite.</p>
-        </a>
-        <a class="card" href="#downloads">
-          <h2>Downloads →</h2>
-          <p>Desktop application and standalone server builds for macOS, Windows, and Linux.</p>
-        </a>
-        <a class="card" href="#performance">
-          <h2>Release performance →</h2>
-          <p>The measured 32-universe, 100 Hz health of the current release artifact.</p>
-        </a>
-      </div>
+      <section>
+        <h2>See the desk in action</h2>
+        <p class="section-lede">
+          This Full HD product demo is generated by the narrated acceptance test for the release
+          commit, so the workflow and application shown here stay tied to tested behavior.
+        </p>
+        __DEMO__
+      </section>
 
       <section>
-        <h2>The desk</h2>
+        <div class="marketing-copy">
+          <h2>Professional concepts should survive a smaller budget.</h2>
+          <p>
+            Industry-standard lighting desks are excellent tools and worth every penny. But below
+            that price point, small productions are often left with workflows that do not transfer
+            when the venue, show, or operator grows.
+          </p>
+          <p>
+            <strong>ToskLight is built to bridge that gap.</strong> Start by pointing and clicking,
+            then grow into the command line, Programmer, tracking, Groups, Presets, Cuelists, and
+            Playbacks used by professional desks. The hours spent learning the software should
+            remain useful on the next show and the next control surface.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2>Everything a live desk needs</h2>
+        <ul class="features">
+          <li><strong>Programmer and command line.</strong> Select fixtures, work with real keypad grammar, spread values, and build reusable looks.</li>
+          <li><strong>Referencing and tracking.</strong> Ordered Groups, Presets, sparse tracked Cues, Preload, GO, and page-aware Playbacks.</li>
+          <li><strong>Visualization.</strong> Fixture Sheet, Channels, DMX, and built-in 2D and 3D Stage views stay connected to the live desk.</li>
+          <li><strong>Fixture and show exchange.</strong> Transfer fixture packages and portable SQLite show files; use MVR for venue data.</li>
+          <li><strong>Output and integration.</strong> Art-Net, sACN, OSC, MIDI, timecode, attached hardware, and browser-connected operator surfaces.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Explore the current application</h2>
         <p class="section-lede">
-          Generated from the current help screenshots — the same images the operator manual uses.
+          These reviewed screenshots are regenerated from deterministic application stories for
+          every Pages release.
         </p>
         <div class="gallery">
         __GALLERY__
@@ -224,22 +311,33 @@
       </section>
 
       <section>
-        <h2>Product demo</h2>
-        <p class="section-lede">
-          Generated by the narrated Full HD product-demo acceptance test for this release commit.
-        </p>
-        __DEMO__
-      </section>
-
-      <section>
-        <h2>What it does</h2>
-        <ul class="features">
-          <li><strong>Command line first.</strong> Keypad grammar and muscle memory, matching a real desk.</li>
-          <li><strong>Live programmer.</strong> LTP programmer values over HTP playback, with a fixture sheet and 3D stage view.</li>
-          <li><strong>Cue lists and playback.</strong> Cue list pool, playback faders, and group masters with page addressing.</li>
-          <li><strong>One desk, many surfaces.</strong> Desktop app, browser, keyboard, and attached OSC hardware share one command line.</li>
-          <li><strong>Portable show files.</strong> Shows move between desks; desk-level data stays behind.</li>
-        </ul>
+        <h2>Technical specifications</h2>
+        <div class="specs">
+          <div class="spec">
+            <strong>Demo show</strong>
+            <span>262 controllable fixtures, 301 physical Stage instances, 3,783 occupied slots.</span>
+          </div>
+          <div class="spec">
+            <strong>Interactive scale</strong>
+            <span>Real-time Stage around 300 fixtures; desk and output remain usable at 60 Hz at the supported 1,000-instance ceiling.</span>
+          </div>
+          <div class="spec">
+            <strong>Show files</strong>
+            <span>Portable, versioned SQLite documents, kept separate from desk users and settings.</span>
+          </div>
+          <div class="spec">
+            <strong>Output</strong>
+            <span>Art-Net and sACN with a fixed-deadline render scheduler and isolated client publication.</span>
+          </div>
+          <div class="spec">
+            <strong>Desktop platforms</strong>
+            <span>macOS Apple Silicon, Windows 64-bit, and Linux x86_64.</span>
+          </div>
+          <div class="spec">
+            <strong>Headless platforms</strong>
+            <span>macOS, Windows, Linux AMD64, and Raspberry Pi 4/5 ARM64 with a browser desk.</span>
+          </div>
+        </div>
       </section>
 
       <section id="downloads">
@@ -266,18 +364,45 @@
       </section>
 
       <section>
-        <h2>Run the standalone server</h2>
-        <p style="color: var(--muted)">
+        <h2>Standalone server</h2>
+        <p class="developer-note">
           Download the server archive for your platform, unpack it, and run <code>light-headless</code>.
           The operator UI is embedded — open <code>http://127.0.0.1:5000</code>. Bind beyond localhost
           only on a trusted control network, and set <code>LIGHT_DESK_TOKEN</code> when you do.
         </p>
       </section>
 
+      <section id="developers">
+        <h2>For developers</h2>
+        <p class="section-lede">
+          ToskLight is a Rust workspace with TypeScript/React operator interfaces hosted by Tauri.
+          Start the full desktop development path with <code>npm run open</code>.
+        </p>
+        <div class="cards">
+          <a class="card" href="safari/">
+            <h2>Code Safari →</h2>
+            <p>Guided routes through architecture, one operator action end to end, persistence, tests, and Rust/Tauri.</p>
+          </a>
+          <a class="card" href="semantic-tests/semantic-test-catalog.html">
+            <h2>Semantic test catalog →</h2>
+            <p>Searchable human-readable contracts compiled statically from the Playwright scenario suite.</p>
+          </a>
+          <a class="card" href="https://github.com/kellertobias/tosklight">
+            <h2>Source and development →</h2>
+            <p>Build commands, architecture documentation, issues, and the complete repository on GitHub.</p>
+          </a>
+        </div>
+      </section>
+
       <footer>
         <p>
-          <a href="https://github.com/kellertobias/tosklight">Source on GitHub</a> ·
-          <a href="tosklight-manual.pdf">Manual (PDF)</a>
+          Free to use, modify, and operate — including for commercial productions — under the
+          <a href="https://github.com/kellertobias/tosklight/blob/main/LICENSE">ToskLight Community License</a>.
+        </p>
+        <p>
+          <a href="manual/">Operator manual</a> ·
+          <a href="tosklight-manual.pdf">PDF manual</a> ·
+          <a href="https://github.com/kellertobias/tosklight">Source on GitHub</a>
         </p>
         <p>
           A project by <a href="https://tobisk.de">tobisk.de</a> ·
