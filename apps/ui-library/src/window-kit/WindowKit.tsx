@@ -510,6 +510,14 @@ export interface DataTableColumn<T> {
 	align?: "left" | "center" | "right";
 	render: (row: T, index: number) => ReactNode;
 }
+
+function dataTableIndices(start: number, end: number) {
+	return Array.from(
+		{ length: Math.max(0, end - start) },
+		(_, offset) => start + offset,
+	);
+}
+
 export function DataTable<T>({
 	columns,
 	rows,
@@ -576,10 +584,7 @@ export function DataTable<T>({
 		.join(" ");
 	const start = usesViewport ? viewport.start : 0;
 	const end = usesViewport ? viewport.end : total;
-	const visibleIndices = Array.from(
-		{ length: Math.max(0, end - start) },
-		(_, offset) => start + offset,
-	);
+	const visibleIndices = dataTableIndices(start, end);
 	const visibleRows = useMemo(
 		() => rows.slice(reportedViewport.start, reportedViewport.end),
 		[reportedViewport.end, reportedViewport.start, rows],
