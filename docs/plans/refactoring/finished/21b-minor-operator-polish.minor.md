@@ -2,7 +2,7 @@
 
 ## Status
 
-**DOING.** Claimed on 2026-07-30 with 66% large-window usage remaining.
+**FINISHED 2026-07-30.** Claimed with 66% large-window usage remaining.
 
 ## Items
 
@@ -49,5 +49,26 @@ command-line path. The tests must prove that:
 
 Make the seconds in the clock slightly larger while preserving the existing clock layout and avoiding overlap in hardware-connected and software-only modes.
 
+
+## Result
+
+Implemented in `fix(operator): polish command selection and clock`.
+
+- Command Line History now folds upward from the command-line field instead of
+  appearing as a detached top-of-screen modal. The field remains visible in
+  context, the surface stays above workspace panes, and current command errors
+  open and can be acknowledged inside the same history surface.
+- Positive missing fixture numbers now resolve to no fixture without weakening
+  malformed-number validation. Missing endpoints and internal range gaps are
+  skipped. `Fixture Thru Enter` resolves every existing fixture in
+  fixture-number order, including unpatched fixtures.
+- Clock seconds increased from 7 px to 9 px without changing the clock's outer
+  dimensions.
+- Focused verification passed: desktop type checking; 16 command-line component
+  tests; Rust formatting and the missing-fixture parser regression; the exact
+  10, 11, and 12 fixture operator scenario; folded history through reconnect
+  and attached-hardware mode; and computed clock geometry in software-only and
+  hardware-connected layouts. The full suites were deliberately not run, as
+  required by this minor plan.
 
 Commit but do not run full tests suites.
