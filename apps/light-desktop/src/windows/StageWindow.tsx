@@ -44,8 +44,10 @@ export function StageWindow(props: StageWindowProps) {
 		>
 			{!props.compact && (
 				<StageHeader
+					layout={layout}
 					options={options}
 					selectedCount={selection.fixtureIds.length}
+					writable={!props.viewOnly}
 				/>
 			)}
 			{options.view === "3d" ? (

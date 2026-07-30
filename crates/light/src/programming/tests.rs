@@ -741,3 +741,129 @@ fn live_group_selection_stays_referenced_and_frozen_selection_dereferences() {
         })
     );
 }
+
+#[test]
+fn semantic_grid_actions_configure_cycle_and_reorder_with_independent_axes() {
+    let harness = Harness::new(ActionSource::UserInterface);
+    let session = SessionId(harness.context.session_id.unwrap());
+    let fixtures = [FixtureId::new(), FixtureId::new(), FixtureId::new()];
+    {
+        let mut environment = harness.ports.selection_environment.lock();
+        for (fixture, (x, y)) in fixtures.iter().zip([(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]) {
+            environment
+                .selectable_fixtures
+                .insert(*fixture, vec![*fixture]);
+            environment
+                .stage_positions_2d
+                .insert(*fixture, light_programmer::StageGridPosition2d { x, y });
+            environment.stage_positions_3d.insert(
+                *fixture,
+                light_programmer::StageGridPosition { x, y, z: 0.0 },
+            );
+        }
+    }
+    let initial_revision = harness.registry.selection(session).unwrap().revision;
+    harness.handle(ProgrammingCommand::ReplaceSelection {
+        fixtures: fixtures.to_vec(),
+        expected_revision: initial_revision,
+    });
+
+    let revision = harness.registry.selection(session).unwrap().revision;
+    let configured = harness.handle(ProgrammingCommand::SetSelectionGridConfiguration {
+        configuration: light_programmer::GridMethodConfiguration {
+            method: light_programmer::GridMethod::TopToBottom,
+            ..Default::default()
+        },
+        expected_revision: revision,
+    });
+    assert!(matches!(
+        configured.outcome,
+        ProgrammingOutcome::Accepted {
+            action: ProgrammingAction::SelectionGridConfigurationSet,
+            ..
+        }
+    ));
+    let cycled = harness.handle(ProgrammingCommand::CycleSelectionGridMethod);
+    assert_eq!(
+        cycled.selection.unwrap().grid.configuration.method,
+        light_programmer::GridMethod::BottomToTop
+    );
+
+    let first_rows = harness.handle(ProgrammingCommand::ReorderSelectionFromGrid {
+        axis: light_programmer::GridTraversalAxis::Rows,
+    });
+    assert_eq!(
+        first_rows.selection.unwrap().grid.rows_first,
+        light_programmer::RowsFirstTraversal::TopRight
+    );
+    let first_columns = harness.handle(ProgrammingCommand::ReorderSelectionFromGrid {
+        axis: light_programmer::GridTraversalAxis::Columns,
+    });
+    let selection = first_columns.selection.unwrap();
+    assert_eq!(
+        selection.grid.rows_first,
+        light_programmer::RowsFirstTraversal::TopRight
+    );
+    assert_eq!(
+        selection.grid.columns_first,
+        light_programmer::ColumnsFirstTraversal::BottomLeft
+    );
+    assert_eq!(
+        selection.expression,
+        Some(light_programmer::SelectionExpression::Static)
+    );
+    assert_eq!(
+        harness.ports.persisted.lock().as_slice(),
+        [
+            "programmer.selection.replace",
+            "programmer.selection.grid.configure",
+            "programmer.selection.grid.cycle",
+            "programmer.selection.grid.reorder",
+            "programmer.selection.grid.reorder",
+        ]
+    );
+}
+
+#[test]
+fn selection_grid_configuration_rejects_stale_revision_and_non_finite_origin() {
+    let harness = Harness::new(ActionSource::Http);
+    let session = SessionId(harness.context.session_id.unwrap());
+    let revision = harness.registry.selection(session).unwrap().revision;
+    harness.handle(ProgrammingCommand::CycleSelectionGridMethod);
+
+    let stale = harness.service.handle(
+        ActionEnvelope {
+            context: harness.context.clone(),
+            command: ProgrammingCommand::SetSelectionGridConfiguration {
+                configuration: Default::default(),
+                expected_revision: revision,
+            },
+        },
+        &harness.ports,
+    );
+    assert_eq!(stale.unwrap_err().kind, ActionErrorKind::Conflict);
+
+    let current_revision = harness.registry.selection(session).unwrap().revision;
+    let invalid = harness.service.handle(
+        ActionEnvelope {
+            context: harness.context.clone(),
+            command: ProgrammingCommand::SetSelectionGridConfiguration {
+                configuration: light_programmer::GridMethodConfiguration {
+                    method: light_programmer::GridMethod::VerticalAxisZ,
+                    axis_origin: light_programmer::AxisOrigin {
+                        x: f64::NAN,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                },
+                expected_revision: current_revision,
+            },
+        },
+        &harness.ports,
+    );
+    assert_eq!(invalid.unwrap_err().kind, ActionErrorKind::Invalid);
+    assert_eq!(
+        harness.registry.selection(session).unwrap().revision,
+        current_revision
+    );
+}

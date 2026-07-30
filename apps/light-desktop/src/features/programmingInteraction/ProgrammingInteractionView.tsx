@@ -22,6 +22,7 @@ import {
 import type {
 	ProgrammingCapability,
 	SelectionActionOutcome,
+	SelectionGridConfiguration,
 	SelectionRule,
 } from "./contracts";
 import {
@@ -68,6 +69,13 @@ export interface ProgrammingSelectionActions {
 		intent: ProgrammingGroupSelectionIntent,
 	): Promise<SelectionActionOutcome | null>;
 	applyRule(rule: SelectionRule): Promise<SelectionActionOutcome | null>;
+	cycleGridMethod(): Promise<SelectionActionOutcome | null>;
+	setGridConfiguration(
+		configuration: SelectionGridConfiguration,
+	): Promise<SelectionActionOutcome | null>;
+	reorderFromGrid(
+		axis: "rows" | "columns",
+	): Promise<SelectionActionOutcome | null>;
 }
 
 /** Stable lifecycle seam for action-only features that depend on selection. */
@@ -189,6 +197,10 @@ export function ProgrammingInteractionViewProvider({
 						gesture: (intent) => selectionWriter.gesture(intent),
 						selectGroup: (intent) => selectionWriter.selectGroup(intent),
 						applyRule: (rule) => selectionWriter.applyRule(rule),
+						cycleGridMethod: () => selectionWriter.cycleGridMethod(),
+						setGridConfiguration: (configuration) =>
+							selectionWriter.setGridConfiguration(configuration),
+						reorderFromGrid: (axis) => selectionWriter.reorderFromGrid(axis),
 					}
 				: null,
 		[selectionWriter],

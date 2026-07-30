@@ -6,7 +6,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 /// Authoritative interaction context shared by every control surface attached to one desk.
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingInteractionProjection {
     pub desk_id: Uuid,
     pub command_line: CommandLineResponse,
@@ -14,7 +14,7 @@ pub struct ProgrammingInteractionProjection {
 }
 
 /// Sparse authoritative components changed by one semantic Programmer interaction.
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(untagged)]
 pub enum ProgrammingInteractionChange {
     Both {
@@ -33,13 +33,81 @@ pub enum ProgrammingInteractionChange {
 }
 
 /// Ordered desk-local selection and the operation revision which produced it.
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammerSelectionProjection {
     pub selected: Vec<Uuid>,
     pub expression: Option<ProgrammerSelectionExpression>,
     #[ts(type = "number")]
     pub revision: u64,
     pub gesture_open: bool,
+    /// Portable method plus independent traversal cursors. Older servers and repaired snapshots
+    /// default to the documented 2D Stage grid.
+    #[serde(default)]
+    pub grid: ProgrammerSelectionGrid,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ProgrammerSelectionGrid {
+    pub configuration: ProgrammerSelectionGridConfiguration,
+    pub rows_first: ProgrammerRowsFirstTraversal,
+    pub columns_first: ProgrammerColumnsFirstTraversal,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ProgrammerSelectionGridConfiguration {
+    pub method: ProgrammerSelectionGridMethod,
+    #[serde(default)]
+    pub axis_origin: ProgrammerSelectionGridAxisOrigin,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ProgrammerSelectionGridAxisOrigin {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ProgrammerSelectionGridMethod {
+    #[default]
+    Stage2d,
+    TopToBottom,
+    BottomToTop,
+    FrontToBack,
+    BackToFront,
+    LeftToRight,
+    RightToLeft,
+    HorizontalAxisX,
+    VerticalAxisZ,
+    RoomDepthAxisY,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ProgrammerRowsFirstTraversal {
+    #[default]
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ProgrammerColumnsFirstTraversal {
+    #[default]
+    TopLeft,
+    BottomLeft,
+    TopRight,
+    BottomRight,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ProgrammerSelectionGridTraversalAxis {
+    Rows,
+    Columns,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -84,7 +152,7 @@ pub enum ProgrammerSelectionReference {
 }
 
 /// Narrow repair snapshot for one desk's interaction stream.
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingInteractionSnapshot {
     pub cursor: EventSnapshotCursor,
     pub projection: ProgrammingInteractionProjection,
@@ -166,6 +234,7 @@ mod tests {
             expression: Some(ProgrammerSelectionExpression::Static),
             revision: 3,
             gesture_open: true,
+            grid: ProgrammerSelectionGrid::default(),
         }
     }
 }

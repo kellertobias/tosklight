@@ -11,6 +11,7 @@ impl ProgrammerState {
         ProgrammerSnapshot {
             selected: self.selected.clone(),
             selection_expression: self.selection_expression.clone(),
+            selection_grid: self.selection_grid,
             values: self.values.clone(),
             dynamic_values: self.dynamic_values.clone(),
             group_values: self.group_values.clone(),
@@ -32,6 +33,7 @@ impl ProgrammerState {
     pub(crate) fn restore_snapshot(&mut self, snapshot: ProgrammerSnapshot, now: DateTime<Utc>) {
         self.selected = snapshot.selected;
         self.selection_expression = snapshot.selection_expression;
+        self.selection_grid = snapshot.selection_grid;
         self.values = snapshot.values;
         self.dynamic_values = snapshot.dynamic_values;
         self.group_values = snapshot.group_values;
@@ -88,7 +90,15 @@ impl ProgrammerRegistry {
     pub fn undo(&self, session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
-        let (selected, expression, user_id, values_changed, preload_values_changed, queue_changed) = {
+        let (
+            selected,
+            expression,
+            grid,
+            user_id,
+            values_changed,
+            preload_values_changed,
+            queue_changed,
+        ) = {
             let mut states = self.states.write();
             let Some(state) = states.get_mut(&self.key(session)) else {
                 return false;
@@ -108,6 +118,7 @@ impl ProgrammerRegistry {
             (
                 state.selected.clone(),
                 state.selection_expression.clone(),
+                state.selection_grid,
                 state.user_id,
                 values_changed,
                 preload_values_changed,
@@ -121,6 +132,7 @@ impl ProgrammerRegistry {
                 expression,
                 revision: self.next_selection_revision(),
                 gesture_open: false,
+                grid,
             },
         );
         if values_changed {
@@ -137,7 +149,15 @@ impl ProgrammerRegistry {
     pub fn redo(&self, session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
-        let (selected, expression, user_id, values_changed, preload_values_changed, queue_changed) = {
+        let (
+            selected,
+            expression,
+            grid,
+            user_id,
+            values_changed,
+            preload_values_changed,
+            queue_changed,
+        ) = {
             let mut states = self.states.write();
             let Some(state) = states.get_mut(&self.key(session)) else {
                 return false;
@@ -157,6 +177,7 @@ impl ProgrammerRegistry {
             (
                 state.selected.clone(),
                 state.selection_expression.clone(),
+                state.selection_grid,
                 state.user_id,
                 values_changed,
                 preload_values_changed,
@@ -170,6 +191,7 @@ impl ProgrammerRegistry {
                 expression,
                 revision: self.next_selection_revision(),
                 gesture_open: false,
+                grid,
             },
         );
         if values_changed {

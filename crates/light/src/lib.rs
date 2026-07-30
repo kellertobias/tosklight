@@ -34,7 +34,8 @@ pub use active_show::{
     ActiveShowUnitOfWork, BackupIdentity, MutateActiveShowObjectsCommand,
     MutateActiveShowObjectsResult, MutateOutputRouteCommand, MutateOutputRouteResult,
     OutputRouteChange, OutputRouteMutation, PatchLayer, StageCamera3d, StageLayout,
-    StagePosition2d, StagePosition3d, UndoActiveShowObjectCommand, UndoActiveShowObjectResult,
+    StagePosition2d, StagePosition3d, StagePositions2dConfig, StagePositions2dProvenance,
+    StageProjection2d, UndoActiveShowObjectCommand, UndoActiveShowObjectResult,
     UndoActiveShowRecordingCommand, UndoActiveShowRecordingObject,
     UndoActiveShowRecordingOperation, UserLayout,
 };

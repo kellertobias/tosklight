@@ -243,7 +243,11 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
                 "master": 1.0,
                 "name": "Current",
                 "playback_fader": null,
-                "programming": {}
+                "programming": {},
+                "grid": {
+                    "method": "stage2d",
+                    "axis_origin": {"x": 0.0, "y": 0.0, "z": 0.0}
+                }
             }),
             1,
         )

@@ -1,6 +1,7 @@
 use crate::{
-    DerivedGroup, GroupDefinition, ProgrammerRegistry, ProgrammerSelection, SelectionExpression,
-    SelectionReference, SelectionRule, merge_ordered_group_membership, resolve_group,
+    DerivedGroup, GridMethodConfiguration, GroupDefinition, ProgrammerRegistry,
+    ProgrammerSelection, SelectionExpression, SelectionReference, SelectionRule,
+    merge_ordered_group_membership, resolve_group,
 };
 use light_core::{FixtureId, SessionId};
 use std::collections::{HashMap, HashSet};
@@ -14,6 +15,7 @@ use std::collections::{HashMap, HashSet};
 pub struct GroupRecordingCapture {
     fixtures: Vec<FixtureId>,
     relationship: GroupRecordingRelationship,
+    grid: GridMethodConfiguration,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -43,6 +45,7 @@ impl GroupRecordingCapture {
         let mut group = existing.cloned().unwrap_or_else(|| new_group(group_id));
         group.id = group_id.to_owned();
         group.fixtures.clone_from(&self.fixtures);
+        group.grid = self.grid;
         group.derived_from = None;
         group.frozen_from = None;
         self.apply_relationship(&mut group, groups);
@@ -85,6 +88,7 @@ impl GroupRecordingCapture {
         Self {
             fixtures: ordered_unique(selection.selected),
             relationship: relationship(selection.expression),
+            grid: selection.grid.configuration,
         }
     }
 

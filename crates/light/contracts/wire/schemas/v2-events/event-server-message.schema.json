@@ -3871,6 +3871,15 @@
         "timecode"
       ]
     },
+    "ProgrammerColumnsFirstTraversal": {
+      "type": "string",
+      "enum": [
+        "top_left",
+        "bottom_left",
+        "top_right",
+        "bottom_right"
+      ]
+    },
     "ProgrammerPriorityChange": {
       "oneOf": [
         {
@@ -3944,6 +3953,15 @@
         "revision",
         "priority",
         "changed_at"
+      ]
+    },
+    "ProgrammerRowsFirstTraversal": {
+      "type": "string",
+      "enum": [
+        "top_left",
+        "top_right",
+        "bottom_left",
+        "bottom_right"
       ]
     },
     "ProgrammerSelectionExpression": {
@@ -4020,6 +4038,82 @@
         }
       ]
     },
+    "ProgrammerSelectionGrid": {
+      "type": "object",
+      "properties": {
+        "columns_first": {
+          "$ref": "#/$defs/ProgrammerColumnsFirstTraversal"
+        },
+        "configuration": {
+          "$ref": "#/$defs/ProgrammerSelectionGridConfiguration"
+        },
+        "rows_first": {
+          "$ref": "#/$defs/ProgrammerRowsFirstTraversal"
+        }
+      },
+      "required": [
+        "configuration",
+        "rows_first",
+        "columns_first"
+      ]
+    },
+    "ProgrammerSelectionGridAxisOrigin": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        },
+        "z": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "ProgrammerSelectionGridConfiguration": {
+      "type": "object",
+      "properties": {
+        "axis_origin": {
+          "$ref": "#/$defs/ProgrammerSelectionGridAxisOrigin",
+          "default": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        "method": {
+          "$ref": "#/$defs/ProgrammerSelectionGridMethod"
+        }
+      },
+      "required": [
+        "method",
+        "axis_origin"
+      ]
+    },
+    "ProgrammerSelectionGridMethod": {
+      "type": "string",
+      "enum": [
+        "stage2d",
+        "top_to_bottom",
+        "bottom_to_top",
+        "front_to_back",
+        "back_to_front",
+        "left_to_right",
+        "right_to_left",
+        "horizontal_axis_x",
+        "vertical_axis_z",
+        "room_depth_axis_y"
+      ]
+    },
     "ProgrammerSelectionProjection": {
       "description": "Ordered desk-local selection and the operation revision which produced it.",
       "type": "object",
@@ -4036,6 +4130,22 @@
         },
         "gesture_open": {
           "type": "boolean"
+        },
+        "grid": {
+          "description": "Portable method plus independent traversal cursors. Older servers and repaired snapshots\ndefault to the documented 2D Stage grid.",
+          "$ref": "#/$defs/ProgrammerSelectionGrid",
+          "default": {
+            "columns_first": "top_left",
+            "configuration": {
+              "axis_origin": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "method": "stage2d"
+            },
+            "rows_first": "top_left"
+          }
         },
         "revision": {
           "type": "integer",
@@ -4054,7 +4164,8 @@
         "selected",
         "expression",
         "revision",
-        "gesture_open"
+        "gesture_open",
+        "grid"
       ]
     },
     "ProgrammerSelectionReference": {

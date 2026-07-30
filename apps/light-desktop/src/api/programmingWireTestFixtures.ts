@@ -36,6 +36,14 @@ export function programmingSelection(
 		},
 		revision: 6,
 		gesture_open: true,
+		grid: {
+			configuration: {
+				method: "stage2d",
+				axis_origin: { x: 0, y: 0, z: 0 },
+			},
+			rows_first: "top_left",
+			columns_first: "top_left",
+		},
 		...overrides,
 	};
 }

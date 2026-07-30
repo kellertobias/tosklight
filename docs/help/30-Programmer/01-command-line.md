@@ -75,6 +75,15 @@ The num block places `[HIGH]`, `[PREV]`, `[NEXT]`, and `[ALL]` in one horizontal
 
 The command-bar space between the command line and the REC/Preload controls contains no Highlight status menu, selection summary, or suppression panel. Normal state is visible through the HIGH key's lit/unlit state and the Fixture Sheet's complete-versus-stepped selection treatment. An actionable Highlight error opens a dedicated dismissible alert above panes and modal surfaces without changing the num-block grid or the HIGH key's size.
 
+The shifted Highlight-row keys operate on the current selection grid. A short `[SHIFT] [ALL]`
+cycles to the next grid method; holding the combination for 650 ms opens **Grid Settings** without
+also invoking ALL. `[SHIFT] [NEXT]` rewrites the ordered selection using the next Rows-first
+traversal, and `[SHIFT] [PREV]` uses the next Columns-first traversal. These are explicit ordering
+actions: changing the grid method alone never changes the ordered selection. On the computer
+keyboard, use `[KBD:SHIFT]` with the corresponding Alt shortcut. Software Shift is latched for one
+action; attached hardware Shift remains held. Unshifted ALL, PREV, and NEXT retain their Highlight
+behavior.
+
 On the software desk, **Programmer Fade** occupies exactly two button columns by two complete button rows. Its label, current value, unit, and touch/value interaction remain visible, and the next command row follows after the ordinary num-block grid gap.
 
 The hardware simulator keeps the same HIGH/PREV/NEXT/ALL column alignment but uses the two-column-by-two-row command area for **RECORD** and **PRELOAD GO**: each button occupies one column and both rows. Its fader area shows equal full-height **Programmer Fade** and **Cue Fade** faders directly beside each other. The simulator has no separate Highlight display or status panel; authoritative selection and step details remain on the main desk's Fixture Sheet and in protocol feedback.

@@ -86,6 +86,7 @@ impl ProgrammerRegistry {
             priority: 100,
             selected: vec![],
             selection_expression: None,
+            selection_grid: Default::default(),
             values: vec![],
             dynamic_values: Arc::new(vec![]),
             transient_values: vec![],
@@ -196,6 +197,7 @@ impl ProgrammerRegistry {
                 expression: state.selection_expression.clone(),
                 revision: self.next_selection_revision(),
                 gesture_open: false,
+                grid: state.selection_grid,
             },
         );
         self.command_contexts
@@ -262,6 +264,7 @@ impl ProgrammerRegistry {
             .map(|selection| selection.selected.clone())
             .unwrap_or_default();
         state.selection_expression = selection.and_then(|selection| selection.expression.clone());
+        state.selection_grid = selection.map_or_else(Default::default, |selection| selection.grid);
     }
 
     pub(crate) fn close_selection_gesture(&self, session: SessionId) -> bool {

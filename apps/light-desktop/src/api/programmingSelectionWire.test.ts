@@ -22,6 +22,14 @@ function outcome() {
 			},
 			revision: 4,
 			gesture_open: true,
+			grid: {
+				configuration: {
+					method: "vertical_axis_z",
+					axis_origin: { x: 1, y: 2, z: 3 },
+				},
+				rows_first: "top_right",
+				columns_first: "bottom_left",
+			},
 		},
 		event_sequence: 12,
 		replayed: false,
@@ -62,10 +70,61 @@ describe("Programming selection wire boundary", () => {
 				},
 				revision: 4,
 				gestureOpen: true,
+				grid: {
+					configuration: {
+						method: "vertical_axis_z",
+						axisOrigin: { x: 1, y: 2, z: 3 },
+					},
+					rowsFirst: "top_right",
+					columnsFirst: "bottom_left",
+				},
 			},
 			eventSequence: 12,
 			replayed: false,
 			warning: "persistence is pending",
+		});
+	});
+
+	it("encodes all semantic grid actions without fixture-order payloads", () => {
+		expect(
+			encodeSelectionActionRequest({
+				requestId: REQUEST_ID,
+				action: { type: "cycle_grid_method" },
+			}),
+		).toEqual({
+			request_id: REQUEST_ID,
+			action: "cycle_grid_method",
+		});
+		expect(
+			encodeSelectionActionRequest({
+				requestId: REQUEST_ID,
+				action: {
+					type: "set_grid_configuration",
+					configuration: {
+						method: "room_depth_axis_y",
+						axisOrigin: { x: 1, y: 2, z: 3 },
+					},
+					expectedRevision: 7,
+				},
+			}),
+		).toEqual({
+			request_id: REQUEST_ID,
+			action: "set_grid_configuration",
+			configuration: {
+				method: "room_depth_axis_y",
+				axis_origin: { x: 1, y: 2, z: 3 },
+			},
+			expected_revision: 7,
+		});
+		expect(
+			encodeSelectionActionRequest({
+				requestId: REQUEST_ID,
+				action: { type: "reorder_from_grid", axis: "columns" },
+			}),
+		).toEqual({
+			request_id: REQUEST_ID,
+			action: "reorder_from_grid",
+			axis: "columns",
 		});
 	});
 

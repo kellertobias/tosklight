@@ -5,6 +5,7 @@ import {
 	StageLayoutStateProvider,
 	useStageLayoutRevision,
 	useStagePositions,
+	useStagePositions2dConfig,
 	useStagePositions3d,
 } from "./StageLayoutState";
 import { type StageLayoutObject, StageLayoutStore } from "./store";
@@ -88,6 +89,45 @@ describe("scoped stage layout", () => {
 		);
 
 		expect(observed.current).toBe(7);
+	});
+
+	it("exposes stored provenance and infers legacy compatibility defaults", () => {
+		const store = new StageLayoutStore();
+		store.install(layout(1, { fixture: { x: 1, y: 2, rotation: 0 } }));
+		const observed: {
+			current: ReturnType<typeof useStagePositions2dConfig> | null;
+		} = { current: null };
+		function Reader() {
+			observed.current = useStagePositions2dConfig();
+			return null;
+		}
+		const view = render(
+			<StageLayoutStateProvider store={store}>
+				<Reader />
+			</StageLayoutStateProvider>,
+		);
+		expect(observed.current).toEqual({
+			provenance: "manual",
+			projection: "front_to_back",
+		});
+
+		act(() =>
+			store.install({
+				...layout(2, {}),
+				body: {
+					...layout(2, {}).body,
+					positions2dConfig: {
+						provenance: "automatic",
+						projection: "top_to_bottom",
+					},
+				},
+			}),
+		);
+		expect(observed.current).toEqual({
+			provenance: "automatic",
+			projection: "top_to_bottom",
+		});
+		view.unmount();
 	});
 
 	it("reports empty positions and revision zero outside a mounted boundary", () => {

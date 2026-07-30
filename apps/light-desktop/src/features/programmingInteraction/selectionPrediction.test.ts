@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { SelectionProjection } from "./contracts";
+import {
+	DEFAULT_SELECTION_GRID_STATE,
+	type SelectionProjection,
+} from "./contracts";
 import {
 	applySelectionRule,
 	gestureSelectionPrediction,
@@ -19,6 +22,7 @@ function selection(
 		expression: { type: "static" },
 		revision: 7,
 		gestureOpen: false,
+		grid: DEFAULT_SELECTION_GRID_STATE,
 		...overrides,
 	};
 }
@@ -44,6 +48,7 @@ describe("selection predictions", () => {
 			expression: { type: "static" },
 			revision: 7,
 			gestureOpen: false,
+			grid: DEFAULT_SELECTION_GRID_STATE,
 		});
 	});
 

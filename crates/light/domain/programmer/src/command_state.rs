@@ -203,6 +203,7 @@ impl ProgrammerRegistry {
                 expression: selection.expression.clone(),
                 revision: selection.revision,
                 gesture_open: selection.gesture_open,
+                grid: selection.grid,
             })
             .unwrap_or_default()
     }

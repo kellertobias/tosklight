@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { DEFAULT_SELECTION_GRID_STATE } from "../../features/programmingInteraction/contracts";
 import { ProgrammingApiClient } from "./programming";
 import type { LiveClientTransport } from "./transport";
 
@@ -53,6 +54,7 @@ function decodedInteractionSnapshot() {
 				expression: { type: "static" },
 				revision: 3,
 				gestureOpen: false,
+				grid: DEFAULT_SELECTION_GRID_STATE,
 			},
 		},
 	};

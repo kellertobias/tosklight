@@ -251,6 +251,14 @@ fn assert_patch(fixtures: &[PatchedFixture]) {
 fn assert_layout(store: &ShowStore, fixtures: &[PatchedFixture]) {
     let layout = store.objects("stage_layout").unwrap().pop().unwrap().body;
     assert_eq!(layout["positions3d"].as_object().unwrap().len(), 70);
+    assert_eq!(layout["positions"].as_object().unwrap().len(), 70);
+    assert_eq!(
+        layout["positions2dConfig"],
+        serde_json::json!({
+            "provenance": "automatic",
+            "projection": "front_to_back"
+        })
+    );
     assert!(layout.get("assets").is_none());
     let multipatched = fixtures
         .iter()

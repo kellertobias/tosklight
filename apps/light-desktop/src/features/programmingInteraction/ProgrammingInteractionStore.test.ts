@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type {
+import {
 	CommandLineProjection,
+	DEFAULT_SELECTION_GRID_STATE,
 	ProgrammingChange,
 	ProgrammingSnapshot,
 	SelectionProjection,
@@ -29,7 +30,13 @@ function selection(
 	selected = [FIXTURE_1, FIXTURE_2],
 	expression: SelectionProjection["expression"] = { type: "static" },
 ): SelectionProjection {
-	return { selected, expression, revision, gestureOpen: false };
+	return {
+		selected,
+		expression,
+		revision,
+		gestureOpen: false,
+		grid: DEFAULT_SELECTION_GRID_STATE,
+	};
 }
 
 function snapshot(

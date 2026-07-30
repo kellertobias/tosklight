@@ -105,7 +105,7 @@ async fn move_selection_applies_one_uniform_delta_server_side_in_selection_order
         show_id,
         &serde_json::json!({
             "version": 2,
-            "positions": { legacy.to_string(): {"x": 50.0, "y": 50.0, "rotation": 90.0} },
+            "positions": { legacy.to_string(): {"x": 50.0, "y": 50.0, "rotation": 90.0, "future_position_field": "kept"} },
             "positions3d": {
                 a.to_string(): {"x": 1.0, "y": 2.0, "z": 3.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0},
                 b.to_string(): {"x": -2.0, "y": 0.5, "z": 5.0, "rotationX": 10.0, "rotationY": 0.0, "rotationZ": 0.0, "future_field": "kept"},
@@ -155,6 +155,15 @@ async fn move_selection_applies_one_uniform_delta_server_side_in_selection_order
     assert_eq!(positions3d[legacy.to_string()]["rotationZ"], 90.0);
     assert!(positions3d[absent.to_string()].is_null());
     assert_eq!(layout["body"]["positions"][legacy.to_string()]["x"], 50.0);
+    assert_eq!(
+        layout["body"]["positions"][legacy.to_string()]["future_position_field"],
+        "kept"
+    );
+    assert_eq!(
+        layout["body"]["positions2dConfig"],
+        serde_json::json!({"provenance": "manual", "projection": "front_to_back"}),
+        "a legacy non-empty 2D layout is materialized as manual and never regenerated"
+    );
     assert_eq!(layout["body"]["future_layout_field"], true);
     assert_eq!(layout["body"]["camera3d"]["position"][2], 2.0);
 
@@ -426,6 +435,99 @@ async fn move_selection_defaults_patched_fixtures_without_any_stored_position() 
         positions3d.as_object().unwrap().len(),
         2,
         "only the selected fixtures gain persisted entries"
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn automatic_2d_projection_refreshes_on_3d_edits_but_manual_layout_is_preserved() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "Automatic 2D stage").await;
+    let show_id = show["id"].as_str().unwrap();
+    open_show(&app, &token, show_id).await;
+    let (left, right) = (Uuid::new_v4(), Uuid::new_v4());
+    seed_stage_layout(
+        &state,
+        &token,
+        show_id,
+        &serde_json::json!({
+            "version": 2,
+            "positions3d": {
+                left.to_string(): {"x": -5.0, "y": 0.0, "z": 0.0},
+                right.to_string(): {"x": 5.0, "y": 0.0, "z": 10.0},
+            },
+            "future_layout_field": "kept",
+        }),
+    )
+    .await;
+
+    let regenerate = serde_json::json!({
+        "request_id": "regenerate-back",
+        "action": {"type": "regenerate_2d", "projection": "back_to_front"},
+    });
+    let outcome = json(post_stage_layout_action(&app, &token, &regenerate).await).await;
+    assert_eq!(outcome["changed"], true);
+    let generated = read_stage_layout(&app, &token, show_id).await;
+    assert_eq!(
+        generated["body"]["positions2dConfig"],
+        serde_json::json!({"provenance": "automatic", "projection": "back_to_front"})
+    );
+    assert_eq!(generated["body"]["positions"][left.to_string()]["x"], 95.0);
+    assert_eq!(generated["body"]["positions"][right.to_string()]["y"], 5.0);
+    assert_eq!(generated["body"]["future_layout_field"], "kept");
+
+    let manual = serde_json::json!({
+        "request_id": "manual-position",
+        "action": {
+            "type": "set_position_2d",
+            "fixture_id": left,
+            "position": {"x": 23.0, "y": 37.0, "rotation": 12.0},
+        },
+    });
+    assert_eq!(
+        post_stage_layout_action(&app, &token, &manual)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        post_stage_layout_action(
+            &app,
+            &token,
+            &move_request("move-after-manual", &[left], "z", 100.0),
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    let preserved = read_stage_layout(&app, &token, show_id).await;
+    assert_eq!(
+        preserved["body"]["positions2dConfig"]["provenance"],
+        "manual"
+    );
+    assert_eq!(preserved["body"]["positions"][left.to_string()]["x"], 23.0);
+    assert_eq!(preserved["body"]["positions"][left.to_string()]["y"], 37.0);
+
+    let explicit = serde_json::json!({
+        "request_id": "regenerate-top",
+        "action": {"type": "regenerate_2d", "projection": "top_to_bottom"},
+    });
+    assert_eq!(
+        post_stage_layout_action(&app, &token, &explicit)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let regenerated = read_stage_layout(&app, &token, show_id).await;
+    assert_eq!(
+        regenerated["body"]["positions2dConfig"],
+        serde_json::json!({"provenance": "automatic", "projection": "top_to_bottom"})
+    );
+    assert_ne!(
+        regenerated["body"]["positions"][left.to_string()]["x"],
+        23.0
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }

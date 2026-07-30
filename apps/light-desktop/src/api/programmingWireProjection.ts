@@ -5,6 +5,8 @@ import type {
 	ProgrammingChange,
 	ProgrammingProjection,
 	SelectionExpression,
+	SelectionGridConfiguration,
+	SelectionGridState,
 	SelectionProjection,
 	SelectionReference,
 	SelectionRule,
@@ -17,6 +19,7 @@ import {
 	positiveIntegerAt,
 	recordAt,
 	stringAt,
+	numberAt,
 } from "./playbackWirePrimitives";
 import { WireValidationError } from "./wireValidation";
 
@@ -222,6 +225,73 @@ export function decodeProgrammingSelection(
 				: decodeSelectionExpression(selection.expression, `${path}.expression`),
 		revision: integerAt(selection.revision, `${path}.revision`),
 		gestureOpen: booleanAt(selection.gesture_open, `${path}.gesture_open`),
+		grid:
+			selection.grid === undefined
+				? defaultSelectionGridState()
+				: decodeSelectionGrid(selection.grid, `${path}.grid`),
+	};
+}
+
+function decodeSelectionGrid(value: unknown, path: string): SelectionGridState {
+	const grid = recordAt(value, path);
+	return {
+		configuration: decodeSelectionGridConfiguration(
+			grid.configuration,
+			`${path}.configuration`,
+		),
+		rowsFirst: enumAt(grid.rows_first, `${path}.rows_first`, [
+			"top_left",
+			"top_right",
+			"bottom_left",
+			"bottom_right",
+		]),
+		columnsFirst: enumAt(grid.columns_first, `${path}.columns_first`, [
+			"top_left",
+			"bottom_left",
+			"top_right",
+			"bottom_right",
+		]),
+	};
+}
+
+function decodeSelectionGridConfiguration(
+	value: unknown,
+	path: string,
+): SelectionGridConfiguration {
+	const configuration = recordAt(value, path);
+	const origin = recordAt(
+		configuration.axis_origin,
+		`${path}.axis_origin`,
+	);
+	return {
+		method: enumAt(configuration.method, `${path}.method`, [
+			"stage2d",
+			"top_to_bottom",
+			"bottom_to_top",
+			"front_to_back",
+			"back_to_front",
+			"left_to_right",
+			"right_to_left",
+			"horizontal_axis_x",
+			"vertical_axis_z",
+			"room_depth_axis_y",
+		]),
+		axisOrigin: {
+			x: numberAt(origin.x, `${path}.axis_origin.x`),
+			y: numberAt(origin.y, `${path}.axis_origin.y`),
+			z: numberAt(origin.z, `${path}.axis_origin.z`),
+		},
+	};
+}
+
+function defaultSelectionGridState(): SelectionGridState {
+	return {
+		configuration: {
+			method: "stage2d",
+			axisOrigin: { x: 0, y: 0, z: 0 },
+		},
+		rowsFirst: "top_left",
+		columnsFirst: "top_left",
 	};
 }
 

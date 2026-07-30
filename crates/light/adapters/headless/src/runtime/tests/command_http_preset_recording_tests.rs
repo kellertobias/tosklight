@@ -220,6 +220,7 @@ async fn osc_record_key_sequence_commits_through_the_typed_preset_capability() {
             shift_held: false,
             update_record_started: None,
             update_first_release: None,
+            selection_grid_all_started: None,
             last_highlight_action: None,
         },
     );

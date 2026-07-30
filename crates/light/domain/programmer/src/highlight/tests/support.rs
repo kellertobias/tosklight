@@ -22,6 +22,7 @@ pub(super) fn selection(
         expression,
         revision,
         gesture_open: false,
+        grid: Default::default(),
     }
 }
 

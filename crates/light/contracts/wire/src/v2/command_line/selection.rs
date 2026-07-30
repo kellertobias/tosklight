@@ -1,17 +1,20 @@
-use super::{ProgrammerSelectionProjection, ProgrammerSelectionRule};
+use super::{
+    ProgrammerSelectionGridConfiguration, ProgrammerSelectionGridTraversalAxis,
+    ProgrammerSelectionProjection, ProgrammerSelectionRule,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingSelectionActionRequest {
     pub request_id: String,
     #[serde(flatten)]
     pub action: ProgrammingSelectionAction,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum ProgrammingSelectionAction {
     Replace {
@@ -33,6 +36,15 @@ pub enum ProgrammingSelectionAction {
     ApplyRule {
         rule: ProgrammerSelectionRule,
     },
+    CycleGridMethod,
+    SetGridConfiguration {
+        configuration: ProgrammerSelectionGridConfiguration,
+        #[ts(type = "number")]
+        expected_revision: u64,
+    },
+    ReorderFromGrid {
+        axis: ProgrammerSelectionGridTraversalAxis,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -43,7 +55,7 @@ pub enum ProgrammingSelectionGestureSource {
     DereferencedGroup { group_id: String },
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingSelectionActionOutcome {
     pub request_id: String,
     pub correlation_id: Uuid,
@@ -66,6 +78,9 @@ pub enum ProgrammingSelectionAcceptedAction {
     GestureApplied,
     GroupSelected,
     RuleApplied,
+    GridMethodCycled,
+    GridConfigurationSet,
+    GridReordered,
 }
 
 #[cfg(test)]
@@ -127,6 +142,46 @@ mod tests {
             }),
         ] {
             assert!(serde_json::from_value::<ProgrammingSelectionActionRequest>(gesture).is_err());
+        }
+    }
+
+    #[test]
+    fn grid_configuration_requires_a_complete_typed_action() {
+        let configured = serde_json::json!({
+            "request_id": "selection-grid-1",
+            "action": "set_grid_configuration",
+            "configuration": {
+                "method": "vertical_axis_z",
+                "axis_origin": {"x": 1.0, "y": 2.0, "z": 3.0}
+            },
+            "expected_revision": 9
+        });
+        assert!(matches!(
+            serde_json::from_value::<ProgrammingSelectionActionRequest>(configured)
+                .unwrap()
+                .action,
+            ProgrammingSelectionAction::SetGridConfiguration { .. }
+        ));
+        for malformed in [
+            serde_json::json!({
+                "request_id": "selection-grid-2",
+                "action": "set_grid_configuration",
+                "configuration": {"method": "vertical_axis_z"}
+            }),
+            serde_json::json!({
+                "request_id": "selection-grid-3",
+                "action": "set_grid_configuration",
+                "configuration": {"method": "diagonal"}
+            }),
+            serde_json::json!({
+                "request_id": "selection-grid-4",
+                "action": "reorder_from_grid",
+                "axis": "diagonal"
+            }),
+        ] {
+            assert!(
+                serde_json::from_value::<ProgrammingSelectionActionRequest>(malformed).is_err()
+            );
         }
     }
 }

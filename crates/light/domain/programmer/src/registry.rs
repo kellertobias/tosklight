@@ -570,9 +570,11 @@ impl ProgrammerRegistry {
                 if let Some(selection) = selection_contexts.get(command_context) {
                     state.selected = selection.selected.clone();
                     state.selection_expression = selection.expression.clone();
+                    state.selection_grid = selection.grid;
                 } else {
                     state.selected.clear();
                     state.selection_expression = None;
+                    state.selection_grid = Default::default();
                 }
                 Some(state)
             })
@@ -595,9 +597,11 @@ impl ProgrammerRegistry {
         if let Some(selection) = selection_contexts.get(&command_context) {
             state.selected = selection.selected.clone();
             state.selection_expression = selection.expression.clone();
+            state.selection_grid = selection.grid;
         } else {
             state.selected.clear();
             state.selection_expression = None;
+            state.selection_grid = Default::default();
         }
         Some(state)
     }
@@ -612,6 +616,7 @@ impl ProgrammerRegistry {
                 expression: selection.expression.clone(),
                 revision: selection.revision,
                 gesture_open: selection.gesture_open,
+                grid: selection.grid,
             })
     }
 }

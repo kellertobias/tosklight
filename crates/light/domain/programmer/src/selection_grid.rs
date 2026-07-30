@@ -1,6 +1,7 @@
 use light_core::FixtureId;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
 
 /// Stage coordinates used by selection-grid projection.
 ///
@@ -12,17 +13,49 @@ pub struct StageGridPosition {
     pub z: f64,
 }
 
+/// Operator-authored 2D Stage coordinates. They are independent from the 3D Stage position:
+/// manual 2D placement must not be reconstructed from XYZ.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct StageGridPosition2d {
+    pub x: f64,
+    pub y: f64,
+}
+
+impl StageGridPosition2d {
+    fn is_finite(self) -> bool {
+        self.x.is_finite() && self.y.is_finite()
+    }
+}
+
 impl StageGridPosition {
     fn is_finite(self) -> bool {
         self.x.is_finite() && self.y.is_finite() && self.z.is_finite()
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
 pub struct AxisOrigin {
     pub x: f64,
     pub y: f64,
     pub z: f64,
+}
+
+impl PartialEq for AxisOrigin {
+    fn eq(&self, other: &Self) -> bool {
+        self.x.to_bits() == other.x.to_bits()
+            && self.y.to_bits() == other.y.to_bits()
+            && self.z.to_bits() == other.z.to_bits()
+    }
+}
+
+impl Eq for AxisOrigin {}
+
+impl Hash for AxisOrigin {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.x.to_bits().hash(state);
+        self.y.to_bits().hash(state);
+        self.z.to_bits().hash(state);
+    }
 }
 
 impl AxisOrigin {
@@ -87,7 +120,7 @@ impl GridMethod {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct GridMethodConfiguration {
     pub method: GridMethod,
     #[serde(default)]
@@ -97,9 +130,10 @@ pub struct GridMethodConfiguration {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PositionedFixture {
     pub fixture_id: FixtureId,
-    /// Missing Stage positions remain in the selection grid and are placed in a deterministic
-    /// overflow row after all positioned fixtures.
-    pub position: Option<StageGridPosition>,
+    /// The authored/automatic 2D Stage position used exclusively by [`GridMethod::Stage2d`].
+    pub position_2d: Option<StageGridPosition2d>,
+    /// The XYZ Stage position used by all directional and cylindrical methods.
+    pub position_3d: Option<StageGridPosition>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -141,17 +175,29 @@ impl SelectionGrid {
         let mut projected = Vec::with_capacity(fixtures.len());
         let mut missing = Vec::new();
         for fixture in fixtures {
-            let Some(position) = fixture.position else {
-                missing.push(fixture.fixture_id);
-                continue;
+            let (horizontal, vertical) = if configuration.method == GridMethod::Stage2d {
+                let Some(position) = fixture.position_2d else {
+                    missing.push(fixture.fixture_id);
+                    continue;
+                };
+                if !position.is_finite() {
+                    return Err(GridConstructionError::NonFinitePosition {
+                        fixture_id: fixture.fixture_id,
+                    });
+                }
+                (position.x, -position.y)
+            } else {
+                let Some(position) = fixture.position_3d else {
+                    missing.push(fixture.fixture_id);
+                    continue;
+                };
+                if !position.is_finite() {
+                    return Err(GridConstructionError::NonFinitePosition {
+                        fixture_id: fixture.fixture_id,
+                    });
+                }
+                project(configuration.method, configuration.axis_origin, position)
             };
-            if !position.is_finite() {
-                return Err(GridConstructionError::NonFinitePosition {
-                    fixture_id: fixture.fixture_id,
-                });
-            }
-            let (horizontal, vertical) =
-                project(configuration.method, configuration.axis_origin, position);
             projected.push(Projection {
                 fixture_id: fixture.fixture_id,
                 horizontal,
@@ -259,7 +305,8 @@ impl SelectionGrid {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RowsFirstTraversal {
     #[default]
     TopLeft,
@@ -280,13 +327,21 @@ impl RowsFirstTraversal {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ColumnsFirstTraversal {
     #[default]
     TopLeft,
     BottomLeft,
     TopRight,
     BottomRight,
+}
+
+/// The two independent operator traversal families.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum GridTraversalAxis {
+    Rows,
+    Columns,
 }
 
 impl ColumnsFirstTraversal {
@@ -308,7 +363,8 @@ fn project(method: GridMethod, origin: AxisOrigin, position: StageGridPosition) 
     match method {
         // Stage's 2D Y coordinate grows down-screen, so negate it into the module's
         // positive-is-up vertical convention.
-        GridMethod::Stage2d | GridMethod::TopToBottom => (position.x, -position.y),
+        GridMethod::Stage2d => unreachable!("2D Stage projection uses its independent position"),
+        GridMethod::TopToBottom => (position.x, -position.y),
         // Looking from the opposite end of an axis mirrors the view horizontally.
         GridMethod::BottomToTop => (-position.x, -position.y),
         GridMethod::FrontToBack => (position.x, position.z),
@@ -345,14 +401,16 @@ mod tests {
     fn fixture(number: u128, x: f64, y: f64, z: f64) -> PositionedFixture {
         PositionedFixture {
             fixture_id: FixtureId(Uuid::from_u128(number)),
-            position: Some(StageGridPosition { x, y, z }),
+            position_2d: Some(StageGridPosition2d { x, y }),
+            position_3d: Some(StageGridPosition { x, y, z }),
         }
     }
 
     fn missing(number: u128) -> PositionedFixture {
         PositionedFixture {
             fixture_id: FixtureId(Uuid::from_u128(number)),
-            position: None,
+            position_2d: None,
+            position_3d: None,
         }
     }
 
@@ -400,6 +458,39 @@ mod tests {
         let expected = vec![(1, 0, 0), (2, 0, 1), (3, 1, 0)];
         assert_eq!(cells(GridMethod::Stage2d, &fixtures), expected);
         assert_eq!(cells(GridMethod::TopToBottom, &fixtures), expected);
+    }
+
+    #[test]
+    fn stage_2d_uses_its_independent_authored_positions_while_3d_methods_use_xyz() {
+        let fixtures = [
+            PositionedFixture {
+                fixture_id: FixtureId(Uuid::from_u128(1)),
+                position_2d: Some(StageGridPosition2d { x: 90.0, y: 90.0 }),
+                position_3d: Some(StageGridPosition {
+                    x: -4.0,
+                    y: -4.0,
+                    z: 0.0,
+                }),
+            },
+            PositionedFixture {
+                fixture_id: FixtureId(Uuid::from_u128(2)),
+                position_2d: Some(StageGridPosition2d { x: 10.0, y: 10.0 }),
+                position_3d: Some(StageGridPosition {
+                    x: 4.0,
+                    y: 4.0,
+                    z: 0.0,
+                }),
+            },
+        ];
+
+        assert_eq!(
+            cells(GridMethod::Stage2d, &fixtures),
+            vec![(2, 0, 0), (1, 1, 1)]
+        );
+        assert_eq!(
+            cells(GridMethod::TopToBottom, &fixtures),
+            vec![(1, 0, 0), (2, 1, 1)]
+        );
     }
 
     #[test]

@@ -31,6 +31,7 @@ fn dynamics_osc_actions_and_feedback_share_exact_runtime_identity() {
         shift_held: false,
         update_record_started: None,
         update_first_release: None,
+        selection_grid_all_started: None,
         last_highlight_action: None,
     };
     state

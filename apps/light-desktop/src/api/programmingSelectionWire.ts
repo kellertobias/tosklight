@@ -56,6 +56,9 @@ export function decodeSelectionActionOutcome(
 			"gesture_applied",
 			"group_selected",
 			"rule_applied",
+			"grid_method_cycled",
+			"grid_configuration_set",
+			"grid_reordered",
 		]),
 		applied: integerAt(outcome.applied, "$.applied"),
 		selection: decodeProgrammingSelection(outcome.selection, "$.selection"),
@@ -92,6 +95,19 @@ function encodeAction(action: SelectionAction): ProgrammingSelectionAction {
 			};
 		case "apply_rule":
 			return { action: "apply_rule", rule: encodeRule(action.rule) };
+		case "cycle_grid_method":
+			return { action: "cycle_grid_method" };
+		case "set_grid_configuration":
+			return {
+				action: "set_grid_configuration",
+				configuration: {
+					method: action.configuration.method,
+					axis_origin: { ...action.configuration.axisOrigin },
+				},
+				expected_revision: action.expectedRevision,
+			};
+		case "reorder_from_grid":
+			return { action: "reorder_from_grid", axis: action.axis };
 	}
 }
 

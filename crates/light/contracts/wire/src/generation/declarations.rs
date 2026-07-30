@@ -754,6 +754,8 @@ fn patch(config: &Config) -> Vec<String> {
 fn stage_layout(config: &Config) -> Vec<String> {
     vec![
         StagePositionAxis::decl(config),
+        StagePosition2d::decl(config),
+        StageProjection2d::decl(config),
         StageLayoutAction::decl(config),
         StageLayoutActionRequest::decl(config),
         StageLayoutActionOutcome::decl(config),
@@ -797,6 +799,13 @@ fn interaction(config: &Config) -> Vec<String> {
         ProgrammerSelectionRule::decl(config),
         ProgrammerSelectionReference::decl(config),
         ProgrammerSelectionExpression::decl(config),
+        ProgrammerSelectionGridAxisOrigin::decl(config),
+        ProgrammerSelectionGridMethod::decl(config),
+        ProgrammerSelectionGridConfiguration::decl(config),
+        ProgrammerRowsFirstTraversal::decl(config),
+        ProgrammerColumnsFirstTraversal::decl(config),
+        ProgrammerSelectionGridTraversalAxis::decl(config),
+        ProgrammerSelectionGrid::decl(config),
         ProgrammerSelectionProjection::decl(config),
         ProgrammingInteractionProjection::decl(config),
         ProgrammingInteractionChange::decl(config),

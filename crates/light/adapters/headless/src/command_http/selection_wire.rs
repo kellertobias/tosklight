@@ -3,7 +3,9 @@ use light_application::{
     SelectionGestureSource,
 };
 use light_wire::v2::command_line::{
-    ProgrammerSelectionRule, ProgrammingSelectionAcceptedAction, ProgrammingSelectionAction,
+    ProgrammerSelectionGridConfiguration, ProgrammerSelectionGridMethod,
+    ProgrammerSelectionGridTraversalAxis, ProgrammerSelectionRule,
+    ProgrammingSelectionAcceptedAction, ProgrammingSelectionAction,
     ProgrammingSelectionActionOutcome, ProgrammingSelectionGestureSource,
 };
 
@@ -42,7 +44,57 @@ pub(crate) fn selection_command(
         ProgrammingSelectionAction::ApplyRule { rule } => ProgrammingCommand::ApplySelectionRule {
             rule: selection_rule(rule)?,
         },
+        ProgrammingSelectionAction::CycleGridMethod => ProgrammingCommand::CycleSelectionGridMethod,
+        ProgrammingSelectionAction::SetGridConfiguration {
+            configuration,
+            expected_revision,
+        } => ProgrammingCommand::SetSelectionGridConfiguration {
+            configuration: grid_configuration(configuration),
+            expected_revision,
+        },
+        ProgrammingSelectionAction::ReorderFromGrid { axis } => {
+            ProgrammingCommand::ReorderSelectionFromGrid {
+                axis: match axis {
+                    ProgrammerSelectionGridTraversalAxis::Rows => {
+                        light_programmer::GridTraversalAxis::Rows
+                    }
+                    ProgrammerSelectionGridTraversalAxis::Columns => {
+                        light_programmer::GridTraversalAxis::Columns
+                    }
+                },
+            }
+        }
     })
+}
+
+fn grid_configuration(
+    value: ProgrammerSelectionGridConfiguration,
+) -> light_programmer::GridMethodConfiguration {
+    light_programmer::GridMethodConfiguration {
+        method: match value.method {
+            ProgrammerSelectionGridMethod::Stage2d => light_programmer::GridMethod::Stage2d,
+            ProgrammerSelectionGridMethod::TopToBottom => light_programmer::GridMethod::TopToBottom,
+            ProgrammerSelectionGridMethod::BottomToTop => light_programmer::GridMethod::BottomToTop,
+            ProgrammerSelectionGridMethod::FrontToBack => light_programmer::GridMethod::FrontToBack,
+            ProgrammerSelectionGridMethod::BackToFront => light_programmer::GridMethod::BackToFront,
+            ProgrammerSelectionGridMethod::LeftToRight => light_programmer::GridMethod::LeftToRight,
+            ProgrammerSelectionGridMethod::RightToLeft => light_programmer::GridMethod::RightToLeft,
+            ProgrammerSelectionGridMethod::HorizontalAxisX => {
+                light_programmer::GridMethod::HorizontalAxisX
+            }
+            ProgrammerSelectionGridMethod::VerticalAxisZ => {
+                light_programmer::GridMethod::VerticalAxisZ
+            }
+            ProgrammerSelectionGridMethod::RoomDepthAxisY => {
+                light_programmer::GridMethod::RoomDepthAxisY
+            }
+        },
+        axis_origin: light_programmer::AxisOrigin {
+            x: value.axis_origin.x,
+            y: value.axis_origin.y,
+            z: value.axis_origin.z,
+        },
+    }
 }
 
 pub(crate) fn selection_response(
@@ -133,6 +185,15 @@ fn selection_action(
         ProgrammingAction::GroupSelected => Ok(ProgrammingSelectionAcceptedAction::GroupSelected),
         ProgrammingAction::SelectionRuleApplied => {
             Ok(ProgrammingSelectionAcceptedAction::RuleApplied)
+        }
+        ProgrammingAction::SelectionGridMethodCycled => {
+            Ok(ProgrammingSelectionAcceptedAction::GridMethodCycled)
+        }
+        ProgrammingAction::SelectionGridConfigurationSet => {
+            Ok(ProgrammingSelectionAcceptedAction::GridConfigurationSet)
+        }
+        ProgrammingAction::SelectionGridReordered => {
+            Ok(ProgrammingSelectionAcceptedAction::GridReordered)
         }
         _ => Err(ApiError::internal(
             "selection service returned a command-line action",

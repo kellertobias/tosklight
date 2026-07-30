@@ -1,13 +1,14 @@
+import { Button, SelectField } from "@tosklight/ui";
 import { useMemo, useRef, useState } from "react";
-import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
-import { usePortableGroups } from "../features/showObjects/ShowObjectsState";
 import { useBootstrapReady } from "../features/deskSnapshot/DeskSnapshotState";
+import { usePortableGroups } from "../features/showObjects/ShowObjectsState";
+import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { useApp } from "../state/AppContext";
+import { useLayoutVisualization } from "./layoutWindow/useLayoutVisualization";
 import type { SelectionGridPositions } from "./selectionGrid";
 import { rowsFirst, selectionGridCells } from "./selectionGrid";
 import { useStageLayout } from "./stageWindow/useStageLayout";
 import { useStageSelection } from "./stageWindow/useStageSelection";
-import { useLayoutVisualization } from "./layoutWindow/useLayoutVisualization";
 import type { WindowProps } from "./windowTypes";
 
 export function LayoutWindow({
@@ -74,12 +75,7 @@ export function LayoutWindow({
 			columns: Math.max(1, ...cells.map((cell) => cell.column + 1)),
 			rows: Math.max(1, ...cells.map((cell) => cell.row + 1)),
 		};
-	}, [
-		group,
-		layout.positions,
-		layout.positions3d,
-		visualization.fixtures,
-	]);
+	}, [group, layout.positions, layout.positions3d, visualization.fixtures]);
 	const presentations = useMemo(
 		() =>
 			new Map(
@@ -165,7 +161,11 @@ export function LayoutWindow({
 		const top = Math.min(start.y, event.clientY);
 		const bottom = Math.max(start.y, event.clientY);
 		const hitIds = new Set(
-			[...event.currentTarget.querySelectorAll<HTMLElement>("[data-layout-fixture-id]")]
+			[
+				...event.currentTarget.querySelectorAll<HTMLElement>(
+					"[data-layout-fixture-id]",
+				),
+			]
 				.filter((element) => {
 					const bounds = element.getBoundingClientRect();
 					return (
@@ -192,32 +192,29 @@ export function LayoutWindow({
 		>
 			{!compact && (
 				<header className="layout-window-header">
-					<label>
-						Group
-						<select
-							value={selectedGroupId ?? ""}
-							onChange={(event) =>
-								dispatch({
-									type: "SET_LAYOUT_GROUP",
-									groupId: event.target.value,
-								})
-							}
-						>
-							<option value="">Choose a Group</option>
-							{selectedGroupId &&
-								!groups.some((candidate) => candidate.id === selectedGroupId) && (
-									<option value={selectedGroupId}>
-										Unavailable · {selectedGroupId}
-									</option>
-								)}
-							{groups.map((candidate) => (
-								<option key={candidate.id} value={candidate.id}>
-									{candidate.id} ·{" "}
-									{candidate.body.name || `Group ${candidate.id}`}
-								</option>
-							))}
-						</select>
-					</label>
+					<SelectField
+						label="Group"
+						value={selectedGroupId ?? ""}
+						options={[
+							{ value: "", label: "Choose a Group" },
+							...(selectedGroupId &&
+							!groups.some((candidate) => candidate.id === selectedGroupId)
+								? [
+										{
+											value: selectedGroupId,
+											label: `Unavailable · ${selectedGroupId}`,
+										},
+									]
+								: []),
+							...groups.map((candidate) => ({
+								value: candidate.id,
+								label: `${candidate.id} · ${candidate.body.name || `Group ${candidate.id}`}`,
+							})),
+						]}
+						onChange={(groupId) =>
+							dispatch({ type: "SET_LAYOUT_GROUP", groupId })
+						}
+					/>
 				</header>
 			)}
 			{!selectedGroupId ? (
@@ -238,7 +235,7 @@ export function LayoutWindow({
 					{group.body.name || `Group ${group.id}`} is empty.
 				</div>
 			) : (
-				<div
+				<section
 					className="layout-grid"
 					aria-label={`${group.body.name || `Group ${group.id}`} fixture layout`}
 					style={{
@@ -257,9 +254,8 @@ export function LayoutWindow({
 						const fixture = inheritedPresentation(cell.fixtureId);
 						const selected = selection.fixtureIdSet.has(cell.fixtureId);
 						return (
-							<button
+							<Button
 								key={cell.fixtureId}
-								type="button"
 								className={`layout-cell ${selected ? "selected" : ""} ${fixture ? "" : "missing"}`}
 								aria-pressed={selected}
 								data-layout-fixture-id={cell.fixtureId}
@@ -268,11 +264,13 @@ export function LayoutWindow({
 										? `Fixture ${fixture.fixtureNumber}, ${fixture.dimmer}%`
 										: `Unavailable fixture ${cell.fixtureId}`
 								}
-								style={{
-									gridColumn: cell.column + 1,
-									gridRow: cell.row + 1,
-									"--layout-fixture-color": fixture?.color ?? "transparent",
-								} as React.CSSProperties}
+								style={
+									{
+										gridColumn: cell.column + 1,
+										gridRow: cell.row + 1,
+										"--layout-fixture-color": fixture?.color ?? "transparent",
+									} as React.CSSProperties
+								}
 								onClick={(event) => selectFixture(cell.fixtureId, event)}
 							>
 								<strong>{fixture?.fixtureNumber ?? cell.fixtureId}</strong>
@@ -280,7 +278,7 @@ export function LayoutWindow({
 									{fixture ? `${fixture.dimmer}%` : "Unavailable"}
 								</span>
 								<span className="layout-cell-color" aria-hidden="true" />
-							</button>
+							</Button>
 						);
 					})}
 					{marquee && (
@@ -290,7 +288,7 @@ export function LayoutWindow({
 							style={marquee}
 						/>
 					)}
-				</div>
+				</section>
 			)}
 		</section>
 	);

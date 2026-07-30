@@ -58,6 +58,114 @@ function requestAt(
 }
 
 describe("ProgrammingSelectionWriter", () => {
+	it("sends grid actions semantically and reconciles their complete authority", async () => {
+		const store = readyStore();
+		const apply = vi.fn(
+			async (_deskId: string, request: SelectionActionRequest) => {
+				const current = store.getSnapshot().selection ?? selection();
+				const next =
+					request.action.type === "cycle_grid_method"
+						? {
+								...current,
+								revision: current.revision + 1,
+								grid: {
+									configuration: {
+										...current.grid.configuration,
+										method: "top_to_bottom" as const,
+									},
+									rowsFirst: "top_left" as const,
+									columnsFirst: "top_left" as const,
+								},
+							}
+						: request.action.type === "set_grid_configuration"
+							? {
+									...current,
+									revision: current.revision + 1,
+									grid: {
+										configuration: request.action.configuration,
+										rowsFirst: "top_left" as const,
+										columnsFirst: "top_left" as const,
+									},
+								}
+							: {
+									...current,
+									revision: current.revision + 1,
+									grid: {
+										...current.grid,
+										rowsFirst: "top_right" as const,
+									},
+								};
+				return outcome(request, next);
+			},
+		);
+		const writer = new ProgrammingSelectionWriter({
+			deskId: DESK_ID,
+			store,
+			apply,
+			loadSnapshot: vi.fn(),
+		});
+
+		await expect(writer.cycleGridMethod()).resolves.not.toBeNull();
+		expect(requestAt(apply, 0).action).toEqual({ type: "cycle_grid_method" });
+
+		const configured = {
+			method: "vertical_axis_z" as const,
+			axisOrigin: { x: 1, y: 2, z: 3 },
+		};
+		await expect(
+			writer.setGridConfiguration(configured),
+		).resolves.not.toBeNull();
+		expect(requestAt(apply, 1).action).toEqual({
+			type: "set_grid_configuration",
+			configuration: configured,
+			expectedRevision: 2,
+		});
+
+		await expect(writer.reorderFromGrid("rows")).resolves.not.toBeNull();
+		expect(requestAt(apply, 2).action).toEqual({
+			type: "reorder_from_grid",
+			axis: "rows",
+		});
+		expect(store.getSnapshot().selection?.grid).toEqual({
+			configuration: configured,
+			rowsFirst: "top_right",
+			columnsFirst: "top_left",
+		});
+	});
+
+	it("does not double-cycle when authority arrives before the response", async () => {
+		const store = readyStore();
+		const response = deferred<SelectionActionOutcome>();
+		const apply = vi.fn().mockReturnValue(response.promise);
+		const writer = new ProgrammingSelectionWriter({
+			deskId: DESK_ID,
+			store,
+			apply,
+			loadSnapshot: vi.fn(),
+		});
+
+		const write = writer.cycleGridMethod();
+		await vi.waitFor(() => expect(apply).toHaveBeenCalledOnce());
+		const authority = {
+			...selection(2),
+			grid: {
+				...selection(2).grid,
+				configuration: {
+					...selection(2).grid.configuration,
+					method: "top_to_bottom" as const,
+				},
+			},
+		};
+		store.applyChange({ deskId: DESK_ID, selection: authority }, 27);
+		expect(store.getSnapshot().selection?.grid.configuration.method).toBe(
+			"top_to_bottom",
+		);
+
+		response.resolve(outcome(requestAt(apply, 0), authority));
+		await expect(write).resolves.not.toBeNull();
+		expect(store.getSnapshot().selection).toEqual(authority);
+	});
+
 	it("applies the selection optimistically before the request completes", async () => {
 		const store = readyStore();
 		const response = deferred<SelectionActionOutcome>();

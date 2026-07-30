@@ -24,6 +24,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
             shift_held: false,
             update_record_started: None,
             update_first_release: None,
+            selection_grid_all_started: None,
             last_highlight_action: None,
         },
     );
@@ -203,6 +204,155 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
 }
 
 #[test]
+fn shifted_highlight_keys_share_grid_authority_without_leaking_ordinary_all() {
+    let (state, data_dir) = test_state();
+    let user = state.installation.users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "osc-grid-test".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programming.start(session.id, user.id);
+    state.sessions.insert_session(session.clone());
+    let source: SocketAddr = "127.0.0.1:9014".parse().unwrap();
+    state.integrations.register_osc_subscriber(
+        "grid-test".into(),
+        OscSubscriber {
+            desk_alias: "main".into(),
+            target: source,
+            command_source: source,
+            session_id: session.id,
+            last_seen: Instant::now(),
+            shifted: false,
+            shift_held: false,
+            update_record_started: None,
+            update_first_release: None,
+            selection_grid_all_started: None,
+            last_highlight_action: None,
+        },
+    );
+    let send_programmer = |action: &str, pressed: bool| {
+        handle_programmer_osc(
+            &state,
+            &format!("/light/main/programmer/{action}"),
+            &[OscArgument::Bool(pressed)],
+            Some("127.0.0.1:9014"),
+        );
+    };
+    let send_highlight = |action: &str, pressed: bool| {
+        handle_highlight_osc(
+            &state,
+            &format!("/light/main/highlight/{action}"),
+            &[OscArgument::Bool(pressed)],
+            Some("127.0.0.1:9014"),
+        );
+    };
+    let ordinary_all_count = || {
+        state
+            .events
+            .audit_events()
+            .iter()
+            .filter(|event| {
+                event.kind == "highlight_changed" && event.payload["action"] == "all"
+            })
+            .count()
+    };
+
+    // Released Shift remains latched for one short ALL gesture.
+    send_programmer("shift", true);
+    send_programmer("shift", false);
+    assert!(state.integrations.osc_subscriber("grid-test").unwrap().shifted);
+    send_highlight("all", true);
+    assert_eq!(
+        state
+            .programming
+            .selection(session.id)
+            .unwrap()
+            .grid
+            .configuration
+            .method,
+        light_programmer::GridMethod::Stage2d
+    );
+    send_highlight("all", false);
+    assert_eq!(
+        state
+            .programming
+            .selection(session.id)
+            .unwrap()
+            .grid
+            .configuration
+            .method,
+        light_programmer::GridMethod::TopToBottom
+    );
+    assert_eq!(ordinary_all_count(), 0);
+    assert!(!state.integrations.osc_subscriber("grid-test").unwrap().shifted);
+    assert!(state.events.audit_events().iter().any(|event| {
+        event.kind == "programmer_changed"
+            && event.payload["command"] == "programmer.selection.grid.cycle"
+            && event.payload["source"] == "osc"
+    }));
+
+    // A long ALL release opens settings and neither cycles nor reaches Highlight ALL.
+    send_programmer("shift", true);
+    send_programmer("shift", false);
+    send_highlight("all", true);
+    state.integrations.set_selection_grid_all_started(
+        "grid-test",
+        Instant::now() - Duration::from_millis(700),
+    );
+    send_highlight("all", false);
+    assert_eq!(
+        state
+            .programming
+            .selection(session.id)
+            .unwrap()
+            .grid
+            .configuration
+            .method,
+        light_programmer::GridMethod::TopToBottom
+    );
+    assert_eq!(ordinary_all_count(), 0);
+    assert!(state.events.audit_events().iter().any(|event| {
+        event.kind == "desk_action"
+            && event.payload["action"] == "selection-grid-settings"
+            && event.payload["desk_id"] == serde_json::json!(session.desk.id)
+            && event.payload["session_id"] == serde_json::json!(session.id)
+    }));
+
+    // Held Shift remains effective across NEXT and PREV; released/latching Shift is consumed.
+    send_programmer("shift", true);
+    send_highlight("next", true);
+    send_highlight("prev", true);
+    let held = state.integrations.osc_subscriber("grid-test").unwrap();
+    assert!(held.shift_held);
+    assert!(!held.shifted);
+    let grid = state.programming.selection(session.id).unwrap().grid;
+    assert_eq!(grid.rows_first, light_programmer::RowsFirstTraversal::TopRight);
+    assert_eq!(
+        grid.columns_first,
+        light_programmer::ColumnsFirstTraversal::BottomLeft
+    );
+    send_programmer("shift", false);
+    let released = state.integrations.osc_subscriber("grid-test").unwrap();
+    assert!(!released.shift_held);
+    assert!(!released.shifted);
+    send_highlight("next", false);
+    send_highlight("prev", false);
+
+    send_programmer("shift", true);
+    send_programmer("shift", false);
+    send_highlight("next", true);
+    assert!(!state.integrations.osc_subscriber("grid-test").unwrap().shifted);
+
+    // Unshifted ALL retains the original Highlight behavior.
+    send_highlight("all", true);
+    assert_eq!(ordinary_all_count(), 1);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn osc_playback_source_cannot_cross_its_subscribed_desk_alias() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
@@ -227,6 +377,7 @@ fn osc_playback_source_cannot_cross_its_subscribed_desk_alias() {
             shift_held: false,
             update_record_started: None,
             update_first_release: None,
+            selection_grid_all_started: None,
             last_highlight_action: None,
         },
     );
@@ -269,6 +420,7 @@ fn held_shift_record_short_double_and_long_gestures_are_mutually_distinct() {
             shift_held: false,
             update_record_started: None,
             update_first_release: None,
+            selection_grid_all_started: None,
             last_highlight_action: None,
         },
     );

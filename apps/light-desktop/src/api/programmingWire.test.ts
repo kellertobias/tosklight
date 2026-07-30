@@ -59,6 +59,14 @@ function decodedSelection(
 		expression,
 		revision: 6,
 		gestureOpen: true,
+		grid: {
+			configuration: {
+				method: "stage2d",
+				axisOrigin: { x: 0, y: 0, z: 0 },
+			},
+			rowsFirst: "top_left",
+			columnsFirst: "top_left",
+		},
 	};
 }
 

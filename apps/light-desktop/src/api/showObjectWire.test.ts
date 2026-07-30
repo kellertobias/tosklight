@@ -181,6 +181,35 @@ describe("show-object wire decoders", () => {
 		expect(decoded.body).toMatchObject(body);
 	});
 
+	it("infers legacy Stage provenance and rejects malformed projection config", () => {
+		const legacy = decodeShowObject(
+			versioned("stage_layout", "main", {
+				version: 2,
+				positions: { fixture: { x: 1, y: 2, rotation: 0 } },
+				positions3d: {},
+			}),
+			"stage_layout",
+		);
+		expect(legacy.body.positions2dConfig).toEqual({
+			provenance: "manual",
+			projection: "front_to_back",
+		});
+		expect(() =>
+			decodeShowObject(
+				versioned("stage_layout", "main", {
+					version: 2,
+					positions: {},
+					positions3d: {},
+					positions2dConfig: {
+						provenance: "automatic",
+						projection: "perspective",
+					},
+				}),
+				"stage_layout",
+			),
+		).toThrow(WireValidationError);
+	});
+
 	it.each([
 		["mismatched object kind", versioned("preset", CUE_LIST_ID, cueListBody())],
 		[

@@ -8,8 +8,8 @@ use crate::{
 };
 use light_core::{FixtureId, SessionId};
 use light_programmer::{
-    SelectionExpression, SelectionReference, SelectionReplaceError, SelectionRule,
-    apply_selection_rule, resolve_group,
+    PositionedFixture, SelectionExpression, SelectionGrid, SelectionReference,
+    SelectionReplaceError, SelectionRule, apply_selection_rule, resolve_group,
 };
 use std::collections::HashSet;
 use support::{accepted, selection_replace_error, unknown_programmer};
@@ -56,8 +56,84 @@ impl SelectionOperation<'_> {
                 expected_revision,
             } => self.select_group(group_id, *frozen, rule, *expected_revision),
             ProgrammingCommand::ApplySelectionRule { rule } => self.apply_rule(rule),
+            ProgrammingCommand::CycleSelectionGridMethod => self.cycle_grid_method(),
+            ProgrammingCommand::SetSelectionGridConfiguration {
+                configuration,
+                expected_revision,
+            } => self.set_grid_configuration(*configuration, *expected_revision),
+            ProgrammingCommand::ReorderSelectionFromGrid { axis } => self.reorder_from_grid(*axis),
             _ => unreachable!("selection dispatch accepts only selection commands"),
         }
+    }
+
+    fn cycle_grid_method(&self) -> Result<ProgrammingOutcome, ActionError> {
+        self.service
+            .programmers
+            .cycle_selection_grid_method(self.session)
+            .ok_or_else(unknown_programmer)?;
+        self.accept(
+            ProgrammingAction::SelectionGridMethodCycled,
+            "programmer.selection.grid.cycle",
+        )
+    }
+
+    fn set_grid_configuration(
+        &self,
+        configuration: light_programmer::GridMethodConfiguration,
+        expected_revision: u64,
+    ) -> Result<ProgrammingOutcome, ActionError> {
+        if !configuration.axis_origin.x.is_finite()
+            || !configuration.axis_origin.y.is_finite()
+            || !configuration.axis_origin.z.is_finite()
+        {
+            return Err(invalid(
+                "selection grid origin must contain finite coordinates",
+            ));
+        }
+        self.service
+            .programmers
+            .set_selection_grid_configuration_if_revision(
+                self.session,
+                expected_revision,
+                configuration,
+            )
+            .map_err(selection_replace_error)?;
+        self.accept(
+            ProgrammingAction::SelectionGridConfigurationSet,
+            "programmer.selection.grid.configure",
+        )
+    }
+
+    fn reorder_from_grid(
+        &self,
+        axis: light_programmer::GridTraversalAxis,
+    ) -> Result<ProgrammingOutcome, ActionError> {
+        let selection = self
+            .service
+            .programmers
+            .selection(self.session)
+            .ok_or_else(unknown_programmer)?;
+        let environment =
+            self.environment(ProgrammingSelectionQuery::Grid(selection.selected.clone()))?;
+        let positioned = selection
+            .selected
+            .iter()
+            .map(|fixture_id| PositionedFixture {
+                fixture_id: *fixture_id,
+                position_2d: environment.stage_positions_2d.get(fixture_id).copied(),
+                position_3d: environment.stage_positions_3d.get(fixture_id).copied(),
+            })
+            .collect::<Vec<_>>();
+        let grid = SelectionGrid::from_stage_positions(&positioned, selection.grid.configuration)
+            .map_err(|_| invalid("selection grid contains invalid Stage coordinates"))?;
+        self.service
+            .programmers
+            .reorder_selection_from_grid(self.session, &grid, axis)
+            .ok_or_else(unknown_programmer)?;
+        self.accept(
+            ProgrammingAction::SelectionGridReordered,
+            "programmer.selection.grid.reorder",
+        )
     }
 
     fn replace_selection(
@@ -124,9 +200,19 @@ impl SelectionOperation<'_> {
         let environment =
             self.environment(ProgrammingSelectionQuery::Groups(vec![group_id.to_owned()]))?;
         let (selected, expression) = group_selection(group_id, frozen, rule, &environment)?;
+        let configuration = environment
+            .groups
+            .get(group_id)
+            .map_or_else(Default::default, |group| group.grid);
         self.service
             .programmers
-            .replace_selection_if_revision(self.session, expected_revision, selected, expression)
+            .replace_selection_with_grid_if_revision(
+                self.session,
+                expected_revision,
+                selected,
+                expression,
+                configuration,
+            )
             .map_err(selection_replace_error)?;
         self.accept(
             ProgrammingAction::GroupSelected,
@@ -138,13 +224,17 @@ impl SelectionOperation<'_> {
         validate_rule(rule)?;
         const MAX_RETRIES: usize = 8;
         for attempt in 0..MAX_RETRIES {
-            let (revision, selected, expression) = self.rule_candidate(rule)?;
-            let replaced = self.service.programmers.replace_selection_if_revision(
-                self.session,
-                revision,
-                selected,
-                expression,
-            );
+            let (revision, selected, expression, configuration) = self.rule_candidate(rule)?;
+            let replaced = self
+                .service
+                .programmers
+                .replace_selection_with_grid_if_revision(
+                    self.session,
+                    revision,
+                    selected,
+                    expression,
+                    configuration,
+                );
             match replaced {
                 Ok(_) => {
                     return self.accept(
@@ -163,7 +253,15 @@ impl SelectionOperation<'_> {
     fn rule_candidate(
         &self,
         rule: &SelectionRule,
-    ) -> Result<(u64, Vec<FixtureId>, SelectionExpression), ActionError> {
+    ) -> Result<
+        (
+            u64,
+            Vec<FixtureId>,
+            SelectionExpression,
+            light_programmer::GridMethodConfiguration,
+        ),
+        ActionError,
+    > {
         let current = self
             .service
             .programmers
@@ -184,6 +282,7 @@ impl SelectionOperation<'_> {
             current.revision,
             apply_selection_rule(&base, rule),
             expression,
+            current.grid.configuration,
         ))
     }
 

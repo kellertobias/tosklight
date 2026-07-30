@@ -9,6 +9,7 @@ import { ProgrammerValuesStore } from "../programmerValues/store";
 import { FakeProgrammerValuesTransport } from "../programmerValues/testFixtures";
 import { ProgrammingInteractionViewProvider } from "../programmingInteraction/ProgrammingInteractionView";
 import { ProgrammingInteractionStore } from "../programmingInteraction/store";
+import { DEFAULT_SELECTION_GRID_STATE } from "../programmingInteraction/contracts";
 import { FakeProgrammingTransport } from "../programmingInteraction/testFixtures";
 import type { ShowObjectKind } from "../showObjects/contracts";
 import { ShowObjectsViewProvider } from "../showObjects/ShowObjectsView";
@@ -123,6 +124,7 @@ describe("PresetRecallProvider", () => {
 					expression: { type: "static" as const },
 					revision: 8,
 					gestureOpen: false,
+					grid: DEFAULT_SELECTION_GRID_STATE,
 				},
 			},
 		}));

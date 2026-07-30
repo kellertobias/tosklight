@@ -81,7 +81,9 @@ Only the full Stage window exposes **Select fixtures** and **Navigate**. A Stage
 
 Positions are edited in **Show Patch**: physical patch and multi-patch placement provides every fixture's location and rotation, with **Preview Stage** for visual feedback while patching. Add a truss, platform, curtain, or other scenery object from the **Venue** manufacturer in **Show Patch**; these visual-only fixtures receive `0.x` fixture IDs and no DMX address.
 
-The full Stage settings also control the 2D/3D view, Group shortcuts, selection visibility, 3D beam direction guides, the 3D floor grid, environment brightness, and **Render quality**. A Stage pane stores its own settings independently, so a Live pane and a **Follow Preload** pane can use different views and qualities.
+The full Stage settings also control the 2D/3D view, Group shortcuts, selection visibility, 3D beam direction guides, the 3D floor grid, environment brightness, and **Render quality**. They identify whether the saved 2D layout is **Automatic** or **Manual** and show its current projection. On the writable primary desk, **Regenerate 2D layout** intentionally replaces the complete 2D layout from the saved 3D positions using **Top to Bottom**, **Bottom to Top**, **Front to Back**, **Back to Front**, **Left to Right**, or **Right to Left**. Ordinary 3D position changes keep an Automatic layout synchronized; once a 2D position is edited manually, later 3D edits preserve that manual placement until the operator explicitly regenerates it. Passive external screens and secondary desk surfaces can see the current provenance but cannot regenerate it.
+
+A Stage pane stores its own viewing settings independently, so a Live pane and a **Follow Preload** pane can use different views and qualities. The 2D fixture layout itself remains portable show data shared by every Stage surface.
 
 **Render quality** has four operational choices:
 

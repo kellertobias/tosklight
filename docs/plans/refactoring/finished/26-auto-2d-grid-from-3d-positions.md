@@ -2,9 +2,9 @@
 
 ## Status
 
-**Doing — refactoring queue item 26.** Implementation is claimed. Selection-grid domain behavior,
-cross-surface actions, Group compatibility, Layout-pane rendering, persistence, and executable
-acceptance coverage must be complete before this plan moves to `finished/`.
+**Finished — refactoring queue item 26.** Selection-grid authority, cross-surface actions, Group
+compatibility, Layout rendering, automatic 2D generation, persistence, and executable acceptance
+coverage are complete.
 
 ## Operator intent
 
@@ -154,3 +154,48 @@ Stage-position changes and any affected live grid state must be published consis
 ## Deferred work
 
 This feature deliberately does not include Dynamics, manual Rows/Columns grid construction, editable grid cells, point projection, or arbitrary projection cameras. Dynamics may later replace its initial Stage-position ordering provider with these grids without changing this feature's selection and Group contracts or the Dynamic phase contract.
+
+## Result
+
+Completed on 2026-07-30.
+
+- Selection-grid configuration, independent Rows-first and Columns-first cursors, and the current
+  grid now live with the authoritative Programmer selection. All ten methods use deterministic
+  ranks, stable tie-breaking, explicit XYZ axis origins, and distinct stored 2D/3D positions.
+- Groups persist their grid configuration without coupling it to ordered membership. Single and
+  matching multi-Group selections reuse their complete configuration; mixed configurations fall
+  back to 2D Stage. Record/overwrite, Merge, Subtract, Update, derived/frozen membership,
+  intentionally empty Groups, legacy Groups, logical heads, unpatched fixtures, and missing
+  fixtures retain their documented semantics.
+- Short and held Shift+ALL are mutually exclusive across software, keyboard, OSC, and attached
+  controls. A short release cycles the grid; a 650 ms hold opens the scoped Grid Settings action
+  without leaking ordinary ALL. Shift+NEXT/PREV perform the authoritative Rows-first/Columns-first
+  reorder, while unshifted Highlight stepping remains unchanged. REST, WebSocket, event
+  projection, optimistic reconciliation, revision protection, and replay-safe actions share the
+  same application service.
+- Legacy 3D-only layouts receive a one-time deterministic 2D projection. Explicit automatic
+  provenance avoids no-op startup revision bumps; 3D edits refresh automatic layouts, manual 2D
+  edits remain protected, and the primary writable Stage surface can deliberately regenerate with
+  any of the six named projections. The seeded default show now contains its automatic 2D layout.
+- Layout is available as a pane and full window. Each persisted pane owns one Group ID, renders
+  only fixture identity plus eventually consistent live intensity/color, and supports click,
+  additive/toggle, range, and marquee selection through the shared Programmer authority. Empty
+  and unavailable Groups remain distinct, and simultaneous panes keep independent Group content.
+  Deterministic Storybook states cover representative and two-pane layouts.
+
+Verification:
+
+- `cargo test -p light-programmer --lib --offline`: 115 passed.
+- `cargo test -p light-application --lib --offline`: 455 passed.
+- `cargo test -p light-wire --offline`: 97 unit tests and the generated-contract gate passed.
+- `cargo test -p light-headless-runtime --lib --offline -- --test-threads=1`: 582 passed, one
+  ignored; the two remaining failures are pre-existing environment/state gates outside this plan
+  (CITP loopback binding is denied in the sandbox, and the Matter adapter is already enabled).
+  The focused grid HTTP, automatic-layout migration, OSC Shift gesture, and ordinary Highlight
+  regression tests all pass.
+- Desktop typecheck passes. The integrated Plan 26 desktop suites pass for grid gestures/settings,
+  wire decoding and prediction, Layout interaction/multi-pane isolation, Stage settings, and
+  automatic-layout state. The broad desktop wrapper was stopped after an unrelated open-handle
+  stall; its raw-control audit now names only concurrent Grid Dynamics and Timecode work, not
+  Plan 26.
+- `cargo fmt --all -- --check` and `git diff --check` pass.

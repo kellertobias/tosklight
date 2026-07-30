@@ -525,6 +525,7 @@ mod tests {
             expression: Some(SelectionExpression::Static),
             revision: 7,
             gesture_open: false,
+            grid: Default::default(),
         }
     }
 

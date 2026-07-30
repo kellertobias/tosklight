@@ -589,11 +589,13 @@ export type PatchSnapshot = { show_id: string, show_revision: number, patch_revi
  */
 profile_revisions: Array<PatchProfileRevisionProjection>, };
 export type StagePositionAxis = "x" | "y" | "z" | "rotation_x" | "rotation_y" | "rotation_z";
+export type StagePosition2d = { x: number, y: number, rotation: number, };
+export type StageProjection2d = "top_to_bottom" | "bottom_to_top" | "front_to_back" | "back_to_front" | "left_to_right" | "right_to_left";
 export type StageLayoutAction = { "type": "move_selection", fixture_ids: Array<string>, axis: StagePositionAxis,
 /**
  * Meters for translation axes, degrees for rotation axes. Must be finite.
  */
-delta: number, };
+delta: number, } | { "type": "set_position_2d", fixture_id: string, position: StagePosition2d, } | { "type": "regenerate_2d", projection: StageProjection2d, };
 export type StageLayoutActionRequest = {
 /**
  * Client-generated idempotency identity, scoped to the authenticated desk session.
@@ -818,14 +820,26 @@ export type ShowObjectActionOutcome = { request_id: string, replayed: boolean, s
 export type ProgrammerSelectionRule = { "type": "all" } | { "type": "odd" } | { "type": "even" } | { "type": "every_nth", n: number, offset: number, };
 export type ProgrammerSelectionReference = { "type": "fixture", fixture_id: string, } | { "type": "live_group", group_id: string, } | { "type": "remove_fixture", fixture_id: string, } | { "type": "remove_live_group", group_id: string, };
 export type ProgrammerSelectionExpression = { "type": "static" } | { "type": "live_group", group_id: string, rule: ProgrammerSelectionRule, } | { "type": "playback_contents", items: Array<ProgrammerSelectionReference>, } | { "type": "sources", items: Array<ProgrammerSelectionReference>, };
-export type ProgrammerSelectionProjection = { selected: Array<string>, expression: ProgrammerSelectionExpression | null, revision: number, gesture_open: boolean, };
+export type ProgrammerSelectionGridAxisOrigin = { x: number, y: number, z: number, };
+export type ProgrammerSelectionGridMethod = "stage2d" | "top_to_bottom" | "bottom_to_top" | "front_to_back" | "back_to_front" | "left_to_right" | "right_to_left" | "horizontal_axis_x" | "vertical_axis_z" | "room_depth_axis_y";
+export type ProgrammerSelectionGridConfiguration = { method: ProgrammerSelectionGridMethod, axis_origin: ProgrammerSelectionGridAxisOrigin, };
+export type ProgrammerRowsFirstTraversal = "top_left" | "top_right" | "bottom_left" | "bottom_right";
+export type ProgrammerColumnsFirstTraversal = "top_left" | "bottom_left" | "top_right" | "bottom_right";
+export type ProgrammerSelectionGridTraversalAxis = "rows" | "columns";
+export type ProgrammerSelectionGrid = { configuration: ProgrammerSelectionGridConfiguration, rows_first: ProgrammerRowsFirstTraversal, columns_first: ProgrammerColumnsFirstTraversal, };
+export type ProgrammerSelectionProjection = { selected: Array<string>, expression: ProgrammerSelectionExpression | null, revision: number, gesture_open: boolean,
+/**
+ * Portable method plus independent traversal cursors. Older servers and repaired snapshots
+ * default to the documented 2D Stage grid.
+ */
+grid: ProgrammerSelectionGrid, };
 export type ProgrammingInteractionProjection = { desk_id: string, command_line: CommandLineResponse, selection: ProgrammerSelectionProjection, };
 export type ProgrammingInteractionChange = { desk_id: string, command_line: CommandLineResponse, selection: ProgrammerSelectionProjection, } | { desk_id: string, command_line: CommandLineResponse, } | { desk_id: string, selection: ProgrammerSelectionProjection, };
 export type ProgrammingInteractionSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingInteractionProjection, };
 export type ProgrammingSelectionGestureSource = { "type": "fixture", fixture_id: string, } | { "type": "live_group", group_id: string, } | { "type": "dereferenced_group", group_id: string, };
-export type ProgrammingSelectionAction = { "action": "replace", fixtures: Array<string>, expected_revision: number, } | { "action": "gesture", source: ProgrammingSelectionGestureSource, remove: boolean, } | { "action": "select_group", group_id: string, frozen: boolean, rule: ProgrammerSelectionRule, expected_revision: number, } | { "action": "apply_rule", rule: ProgrammerSelectionRule, };
-export type ProgrammingSelectionActionRequest = { request_id: string, } & ({ "action": "replace", fixtures: Array<string>, expected_revision: number, } | { "action": "gesture", source: ProgrammingSelectionGestureSource, remove: boolean, } | { "action": "select_group", group_id: string, frozen: boolean, rule: ProgrammerSelectionRule, expected_revision: number, } | { "action": "apply_rule", rule: ProgrammerSelectionRule, });
-export type ProgrammingSelectionAcceptedAction = "replaced" | "gesture_applied" | "group_selected" | "rule_applied";
+export type ProgrammingSelectionAction = { "action": "replace", fixtures: Array<string>, expected_revision: number, } | { "action": "gesture", source: ProgrammingSelectionGestureSource, remove: boolean, } | { "action": "select_group", group_id: string, frozen: boolean, rule: ProgrammerSelectionRule, expected_revision: number, } | { "action": "apply_rule", rule: ProgrammerSelectionRule, } | { "action": "cycle_grid_method" } | { "action": "set_grid_configuration", configuration: ProgrammerSelectionGridConfiguration, expected_revision: number, } | { "action": "reorder_from_grid", axis: ProgrammerSelectionGridTraversalAxis, };
+export type ProgrammingSelectionActionRequest = { request_id: string, } & ({ "action": "replace", fixtures: Array<string>, expected_revision: number, } | { "action": "gesture", source: ProgrammingSelectionGestureSource, remove: boolean, } | { "action": "select_group", group_id: string, frozen: boolean, rule: ProgrammerSelectionRule, expected_revision: number, } | { "action": "apply_rule", rule: ProgrammerSelectionRule, } | { "action": "cycle_grid_method" } | { "action": "set_grid_configuration", configuration: ProgrammerSelectionGridConfiguration, expected_revision: number, } | { "action": "reorder_from_grid", axis: ProgrammerSelectionGridTraversalAxis, });
+export type ProgrammingSelectionAcceptedAction = "replaced" | "gesture_applied" | "group_selected" | "rule_applied" | "grid_method_cycled" | "grid_configuration_set" | "grid_reordered";
 export type ProgrammingSelectionActionOutcome = { request_id: string, correlation_id: string, action: ProgrammingSelectionAcceptedAction, applied: number, selection: ProgrammerSelectionProjection, event_sequence: number, replayed: boolean, warning?: string | null, };
 export type LiveActionMessageType = "action";
 export type PresetRecallLiveActionRequest = { request_id: string, show_id: string, request: PresetRecallRequest, };

@@ -44,17 +44,25 @@ files, contracts, runtime state, and verification surfaces do not overlap.
 | 17 | [Dynamics lane layout and interaction regression](finished/14a-dynamics-lane-layout-and-interaction-regression.md) | Completed full-width lane geometry, valid sibling interactions, and production Storybook regression coverage. |
 | 18 | [Dedicated Virtual Playbacks and exclusion zones](finished/18-virtual-playbacks-and-exclusion-zones.md) | Completed: stable 300-control Virtual Playback banks and portable show-wide number-based exclusion zones. |
 | 19 | [Repository-wide dead-code removal](finished/19-repository-wide-dead-code-removal.md) | Completed repository-wide audit, safe removal, retained-path classification, and source-size hard-limit cleanup. |
-| 20 | [Three-tier demo and benchmark shows](doing/20-three-tier-demo-and-benchmark-shows.md) | In progress: build the realistic demo, 1,000-fixture interactive benchmark, and 2,000–4,000-fixture headless stress workloads before the final Stage optimization phase. |
-| 21 | [Efficient built-in Stage visualizer](pending/21-efficient-built-in-stage-visualizer.md) | Optimize isolated visualization telemetry, retained rendering, and the four Stage render qualities against the completed benchmark workloads, then run the final performance sweep. |
+| 20 | [Three-tier demo and benchmark shows](finished/20-three-tier-demo-and-benchmark-shows.md) | Completed realistic demo, 1,000-fixture interactive benchmark, and 2,000–4,000-fixture headless stress workloads for the final Stage optimization phase. |
+| 21 | [Efficient built-in Stage visualizer](finished/21-efficient-built-in-stage-visualizer.md) | Completed bounded latest-value telemetry, adaptive Stage rendering, Fixture Sheet virtualization, and the benchmark/end-to-end performance gate. |
+| 22 | [Per-fixture master participation and Pan/Tilt inversion](finished/22-per-fixture-master-participation-and-pan-tilt-inversion.md) | Completed per-fixture Group Master and Grand Master participation plus Pan/Tilt inversion in Show Patch. |
+| 23 | [Schedules](finished/23-schedules.md) | Completed authoritative scheduling, persistence, validation, APIs, events, and the Scheduler operator surface. |
+| 25 | [External screen fixed full-screen pane](finished/25-external-screen-fixed-pane.md) | Completed desk-configured, view-only fixed panes for optional external screens. |
+| 26 | [Selection grids, Layout pane, and Auto 2D Grid](finished/26-auto-2d-grid-from-3d-positions.md) | Finished: deterministic auto-2D generation, persisted selection grids, shared Shift actions, and the Layout pane are complete. |
+| 27 | [Partial Show Load](pending/27-partial-show-load.md) | Complete the existing selective-import UI with feature-family, complete-Patch, patch-layer, replacement/additive, and one-Undo-step acceptance. |
+| 28 | [Desk-wide Highlight look](pending/28-desk-wide-highlight-look.md) | Build desk-owned semantic Highlight configuration on the completed Highlight application service. |
+| 29 | [Attribute registry, activation groups, and Indexed Presets](pending/29-attribute-registry-and-activation-groups.md) | Complete the canonical registry, coherent programmer activation, Indexed Presets, persistence, and cross-surface contracts. |
+| 30 | [Macros](pending/30-macros-and-scheduled-macros.md) | Implement the settled TypeScript Macro package, runtime, permission, interaction, and persistence contract after the Attribute Registry. This is the final queued refactoring to start. |
+| 31 | [Supported scale, output isolation, and warm operator UI](pending/31-supported-scale-output-isolation-and-warm-operator-ui.md) | Preserve the proven 1,000-fixture benchmark and carry only remaining scale/isolation improvements after Macros. |
 
 Product-roadmap work under `docs/plans/Next` and `docs/plans/Later` remains separate unless a queue
 file explicitly links it as its behavior contract.
 
-The queue's filenames and table use the same execution order: finish Dynamics, finish Dedicated
-Virtual Playbacks and exclusion zones, remove dead code, build the separate demo and benchmark
-shows, then optimize the Stage renderer against those workloads and run the final performance
-sweep. Macros, Schedules, and Timecode follow this queue; they orchestrate or control Playbacks
-and are not prerequisites for measuring the render/output hot path.
+The queue's filenames and table use the same execution order. Plans through selection grids and
+automatic 2D layout are complete. Continue with Partial Show Load, the desk-wide Highlight look,
+the attribute registry with activation groups and Indexed Presets, Macros, and then any remaining
+supported-scale/output-isolation work. Timecode remains outside this queue.
 
 ## Completed Storybook lane
 

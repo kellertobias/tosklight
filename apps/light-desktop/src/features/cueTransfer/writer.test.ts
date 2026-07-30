@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type {
+import {
 	CommandLineProjection,
+	DEFAULT_SELECTION_GRID_STATE,
 	PendingCommandChoice,
 } from "../programmingInteraction/contracts";
 import { ProgrammingInteractionStore } from "../programmingInteraction/store";
@@ -150,6 +151,7 @@ function setup(
 				expression: null,
 				revision: 1,
 				gestureOpen: false,
+				grid: DEFAULT_SELECTION_GRID_STATE,
 			},
 		},
 	});

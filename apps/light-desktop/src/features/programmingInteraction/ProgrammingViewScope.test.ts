@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { ProgrammingChange } from "./contracts";
+import {
+	DEFAULT_SELECTION_GRID_STATE,
+	type ProgrammingChange,
+} from "./contracts";
 import { ProgrammingViewScope } from "./scope";
 
 const DESK_ID = "11111111-1111-4111-8111-111111111111";
@@ -25,6 +28,7 @@ function selectionChange(): ProgrammingChange {
 			expression: null,
 			revision: 1,
 			gestureOpen: false,
+			grid: DEFAULT_SELECTION_GRID_STATE,
 		},
 	};
 }

@@ -169,6 +169,19 @@ function decodeStageLayout(value: unknown, path: string): StoredStageLayout {
 		body.positions3d == null
 			? undefined
 			: position3dMap(body.positions3d, `${path}.positions3d`);
+	const positions2dConfig =
+		body.positions2dConfig == null
+			? {
+					provenance:
+						Object.keys(positions).length === 0
+							? ("automatic" as const)
+							: ("manual" as const),
+					projection: "front_to_back" as const,
+				}
+			: decodePositions2dConfig(
+					body.positions2dConfig,
+					`${path}.positions2dConfig`,
+				);
 	if (body.camera3d != null) {
 		const camera = recordAt(body.camera3d, `${path}.camera3d`);
 		vector3(camera.position, `${path}.camera3d.position`);
@@ -185,7 +198,37 @@ function decodeStageLayout(value: unknown, path: string): StoredStageLayout {
 		...(version === undefined ? {} : { version }),
 		positions,
 		...(positions3d === undefined ? {} : { positions3d }),
+		positions2dConfig,
 	};
+}
+
+function decodePositions2dConfig(
+	value: unknown,
+	path: string,
+): NonNullable<StoredStageLayout["positions2dConfig"]> {
+	const config = recordAt(value, path);
+	const provenance = stringAt(config.provenance, `${path}.provenance`);
+	if (provenance !== "automatic" && provenance !== "manual")
+		throw new WireValidationError(
+			`${path}.provenance`,
+			"automatic | manual",
+			provenance,
+		);
+	const projection = stringAt(config.projection, `${path}.projection`);
+	if (
+		projection !== "top_to_bottom" &&
+		projection !== "bottom_to_top" &&
+		projection !== "front_to_back" &&
+		projection !== "back_to_front" &&
+		projection !== "left_to_right" &&
+		projection !== "right_to_left"
+	)
+		throw new WireValidationError(
+			`${path}.projection`,
+			"known orthographic projection",
+			projection,
+		);
+	return { provenance, projection };
 }
 
 function position2dMap(

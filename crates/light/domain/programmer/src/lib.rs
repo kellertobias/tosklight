@@ -66,13 +66,13 @@ pub use preload_values::{
 pub use presets::{Preset, PresetAddress, PresetFamily, PresetStoreMode};
 pub use registry::ProgrammerRegistry;
 pub use selection::{
-    ProgrammerSelection, SelectionExpression, SelectionReference, SelectionReplaceError,
-    SelectionRule, apply_selection_rule, resolve_selection_references,
+    ProgrammerSelection, SelectionExpression, SelectionGridState, SelectionReference,
+    SelectionReplaceError, SelectionRule, apply_selection_rule, resolve_selection_references,
 };
 pub use selection_grid::{
     AxisOrigin, ColumnsFirstTraversal, GridCell, GridConstructionError, GridMethod,
-    GridMethodConfiguration, PositionedFixture, RowsFirstTraversal, SelectionGrid,
-    StageGridPosition,
+    GridMethodConfiguration, GridTraversalAxis, PositionedFixture, RowsFirstTraversal,
+    SelectionGrid, StageGridPosition, StageGridPosition2d,
 };
 pub use state::{
     ProgrammerFixtureUpdate, ProgrammerGroupUpdate, ProgrammerOutputState, ProgrammerSnapshot,

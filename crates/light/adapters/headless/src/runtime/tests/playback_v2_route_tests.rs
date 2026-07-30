@@ -1006,6 +1006,7 @@ async fn osc_group_playback_selection_uses_the_same_typed_event_boundary() {
             shift_held: false,
             update_record_started: None,
             update_first_release: None,
+            selection_grid_all_started: None,
             last_highlight_action: None,
         },
     );

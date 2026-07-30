@@ -120,9 +120,40 @@ pub(super) fn migrate(
         "playback" => migrate_playback(object)?,
         "preset" => migrate_preset(object)?,
         "route" => migrate_route(object)?,
+        "stage_layout" => migrate_stage_layout(object)?,
         _ => return Ok(None),
     };
     Ok((migrated != *object.body()).then(|| ObjectUpdate::from_object(object, migrated)))
+}
+
+fn migrate_stage_layout(object: PortableShowCandidateObject<'_>) -> Result<Value, ActionError> {
+    let mut layout = serde_json::from_value::<crate::StageLayout>(object.body().clone())
+        .map_err(|error| invalid_object(object, error))?;
+    let is_legacy = layout.positions_2d_config.is_none();
+    let automatic = layout.effective_positions_2d_config().provenance
+        == crate::StagePositions2dProvenance::Automatic;
+    if is_legacy && automatic {
+        let projection = layout.effective_positions_2d_config().projection;
+        layout.regenerate_positions_2d(projection);
+    } else if is_legacy {
+        layout.mark_positions_2d_manual();
+    }
+
+    let mut migrated = object.body().clone();
+    let body = required_object_mut(&mut migrated, object)?;
+    if is_legacy && automatic {
+        body.insert(
+            "positions".into(),
+            serde_json::to_value(&layout.positions)
+                .map_err(|error| invalid_object(object, error))?,
+        );
+    }
+    body.insert(
+        "positions2dConfig".into(),
+        serde_json::to_value(layout.effective_positions_2d_config())
+            .map_err(|error| invalid_object(object, error))?,
+    );
+    Ok(migrated)
 }
 
 fn migrate_cue_list(object: PortableShowCandidateObject<'_>) -> Result<Value, ActionError> {

@@ -343,9 +343,7 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         _context: &ActionContext,
         query: &ProgrammingSelectionQuery,
     ) -> Result<ProgrammingSelectionEnvironment, ActionError> {
-        Ok(super::selection_environment::selection_environment(
-            self.state, query,
-        ))
+        super::selection_environment::selection_environment(self.state, query)
     }
 
     fn values_environment(

@@ -102,6 +102,79 @@ async fn programming_selection_gestures_return_the_complete_authoritative_contex
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
+#[tokio::test]
+async fn programming_selection_grid_actions_round_trip_through_http_and_snapshot_authority() {
+    let scenario = CommandHttpScenario::new().await;
+    let initial = scenario
+        .state
+        .programming
+        .selection(scenario.session.id)
+        .unwrap();
+    let configured = json(
+        scenario
+            .selection_action(serde_json::json!({
+                "request_id": "selection-grid-configure",
+                "action": "set_grid_configuration",
+                "configuration": {
+                    "method": "vertical_axis_z",
+                    "axis_origin": {"x": 1.0, "y": 2.0, "z": 3.0}
+                },
+                "expected_revision": initial.revision,
+            }))
+            .await,
+    )
+    .await;
+    assert_eq!(configured["action"], "grid_configuration_set");
+    assert_eq!(
+        configured["selection"]["grid"],
+        serde_json::json!({
+            "configuration": {
+                "method": "vertical_axis_z",
+                "axis_origin": {"x": 1.0, "y": 2.0, "z": 3.0}
+            },
+            "rows_first": "top_left",
+            "columns_first": "top_left"
+        })
+    );
+
+    let cycled = json(
+        scenario
+            .selection_action(serde_json::json!({
+                "request_id": "selection-grid-cycle",
+                "action": "cycle_grid_method",
+            }))
+            .await,
+    )
+    .await;
+    assert_eq!(cycled["action"], "grid_method_cycled");
+    assert_eq!(
+        cycled["selection"]["grid"]["configuration"]["method"],
+        "room_depth_axis_y"
+    );
+
+    let reordered = json(
+        scenario
+            .selection_action(serde_json::json!({
+                "request_id": "selection-grid-reorder",
+                "action": "reorder_from_grid",
+                "axis": "columns",
+            }))
+            .await,
+    )
+    .await;
+    assert_eq!(reordered["action"], "grid_reordered");
+    assert_eq!(
+        reordered["selection"]["grid"]["columns_first"],
+        "bottom_left"
+    );
+    let snapshot = json(scenario.interaction_snapshot().await).await;
+    assert_eq!(
+        snapshot["projection"]["selection"],
+        reordered["selection"]
+    );
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
 fn selection_events(
     scenario: &CommandHttpScenario,
 ) -> Vec<std::sync::Arc<light_application::EventEnvelope>> {

@@ -10,7 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vite
 import { GroupStrip } from "../../components/shared/GroupStrip";
 import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import { GroupPoolGrid } from "../../windows/groupsWindow/GroupPoolGrid";
-import type {
+import {
+	DEFAULT_SELECTION_GRID_STATE,
 	ProgrammingSnapshot,
 	SelectionActionOutcome,
 	SelectionActionRequest,
@@ -435,6 +436,7 @@ describe("scoped Group activation", () => {
 					expression: { type: "live_group", groupId: "1", rule: { type: "all" } },
 					revision: 2,
 					gestureOpen: false,
+					grid: DEFAULT_SELECTION_GRID_STATE,
 				}),
 		);
 		render(view(context, <GroupStrip />));

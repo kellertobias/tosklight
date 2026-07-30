@@ -1,4 +1,5 @@
 import type { Cue } from "../../api/types";
+import type { StageProjection2d } from "../../api/generated/light-wire";
 import type { DeskModel } from "../../types";
 
 export interface StoredDeskLayout {
@@ -37,6 +38,10 @@ export interface StoredStageLayout {
 	camera3d?: {
 		position: [number, number, number];
 		target: [number, number, number];
+	};
+	positions2dConfig?: {
+		provenance: "automatic" | "manual";
+		projection: StageProjection2d;
 	};
 }
 

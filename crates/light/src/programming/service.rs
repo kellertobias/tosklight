@@ -269,7 +269,10 @@ impl ProgrammingService {
             command @ (ProgrammingCommand::ReplaceSelection { .. }
             | ProgrammingCommand::ApplySelectionGesture { .. }
             | ProgrammingCommand::SelectGroup { .. }
-            | ProgrammingCommand::ApplySelectionRule { .. }) => {
+            | ProgrammingCommand::ApplySelectionRule { .. }
+            | ProgrammingCommand::CycleSelectionGridMethod
+            | ProgrammingCommand::SetSelectionGridConfiguration { .. }
+            | ProgrammingCommand::ReorderSelectionFromGrid { .. }) => {
                 self.apply_selection(session, command, &action.context, ports)?
             }
         };

@@ -11,6 +11,7 @@ import { SchedulesApiClient } from "./schedules";
 import { SelectiveImportApiClient } from "./selectiveImport";
 import { ShowObjectsApiClient } from "./showObjects";
 import { ShowApiClient } from "./shows";
+import { StageLayoutApiClient } from "./stageLayout";
 
 /**
  * Capability registry for one desk connection.
@@ -36,6 +37,7 @@ export function createLightApi(baseUrl?: string) {
 		schedules: new SchedulesApiClient(transport),
 		showObjects: new ShowObjectsApiClient(transport),
 		shows: new ShowApiClient(transport),
+		stageLayout: new StageLayoutApiClient(transport),
 	};
 }
 

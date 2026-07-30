@@ -333,6 +333,40 @@ pub(crate) fn route_osc_command_key_outcome(
     )
 }
 
+pub(crate) fn route_osc_programming_command(
+    state: &AppState,
+    session: &Session,
+    desk_alias: &str,
+    command: ProgrammingCommand,
+    request_id: Option<&str>,
+) -> bool {
+    let Ok(_activation) = state.active_show.try_acquire() else {
+        publish_osc_rejection(
+            state,
+            session,
+            "the active show is changing; retry the Programmer action".into(),
+        );
+        return false;
+    };
+    let context = ActionContext::operator(
+        session.desk.id,
+        session.user.id.0,
+        session.id.0,
+        ActionSource::Osc,
+    );
+    let context = request_id.map_or(context.clone(), |id| context.with_request_id(id));
+    match run_service_with_source(state, session, context, command, "osc") {
+        Ok(result) => {
+            publish_osc_result(state, session, desk_alias, &result);
+            true
+        }
+        Err(error) => {
+            publish_osc_rejection(state, session, error.message);
+            false
+        }
+    }
+}
+
 fn publish_osc_rejection(state: &AppState, session: &Session, error: String) {
     super::super::emit(
         state,

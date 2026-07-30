@@ -11,7 +11,7 @@ use super::*;
 use crate::tolerant_json::TolerantJson;
 use light_wire::v2::stage_layout::{
     StageLayoutAction, StageLayoutActionOutcome, StageLayoutActionRequest,
-    StageLayoutErrorResponse, StagePositionAxis,
+    StageLayoutErrorResponse, StagePositionAxis, StageProjection2d as WireStageProjection2d,
 };
 use std::collections::VecDeque;
 
@@ -63,17 +63,39 @@ async fn stage_layout_action(
         .enumerate()
         .filter_map(|(index, object)| Uuid::parse_str(&object.id).ok().map(|id| (id, index)))
         .collect();
-    let StageLayoutAction::MoveSelection {
-        fixture_ids,
-        axis,
-        delta,
-    } = &request.action;
-    let moved = apply_selection_move(&mut body, fixture_ids, *axis, *delta, &patched_order)?;
-    let outcome = if moved.is_empty() {
+    let (affected, changed) = match &request.action {
+        StageLayoutAction::MoveSelection {
+            fixture_ids,
+            axis,
+            delta,
+        } => {
+            let moved =
+                apply_selection_move(&mut body, fixture_ids, *axis, *delta, &patched_order)?;
+            if !moved.is_empty() {
+                refresh_automatic_positions_2d(&mut body)?;
+            }
+            let changed = !moved.is_empty();
+            (moved, changed)
+        }
+        StageLayoutAction::SetPosition2d {
+            fixture_id,
+            position,
+        } => {
+            let changed = apply_position_2d_edit(&mut body, *fixture_id, *position)?;
+            (Vec::new(), changed)
+        }
+        StageLayoutAction::Regenerate2d { projection } => {
+            let before = body.clone();
+            regenerate_positions_2d(&mut body, domain_projection(*projection))?;
+            let changed = body != before;
+            (Vec::new(), changed)
+        }
+    };
+    let outcome = if !changed {
         StageLayoutActionOutcome {
             request_id: request.request_id.clone(),
             revision: expected,
-            moved_fixture_ids: moved,
+            moved_fixture_ids: affected,
             replayed: false,
             changed: false,
         }
@@ -113,7 +135,7 @@ async fn stage_layout_action(
         StageLayoutActionOutcome {
             request_id: request.request_id.clone(),
             revision: change.object_revision,
-            moved_fixture_ids: moved,
+            moved_fixture_ids: affected,
             replayed: false,
             changed: true,
         }
@@ -131,23 +153,153 @@ fn validate_request(request: &StageLayoutActionRequest) -> Result<(), StageLayou
             "request_id must be between 1 and 128 characters",
         ));
     }
-    let StageLayoutAction::MoveSelection {
-        fixture_ids, delta, ..
-    } = &request.action;
-    if fixture_ids.is_empty() {
-        return Err(StageLayoutHttpError::bad_request(
-            "fixture_ids must contain at least one fixture",
-        ));
-    }
-    if fixture_ids.len() > 10_000 {
-        return Err(StageLayoutHttpError::bad_request(
-            "fixture_ids must not exceed 10000 entries",
-        ));
-    }
-    if !delta.is_finite() {
-        return Err(StageLayoutHttpError::bad_request("delta must be finite"));
+    match &request.action {
+        StageLayoutAction::MoveSelection {
+            fixture_ids, delta, ..
+        } => {
+            if fixture_ids.is_empty() {
+                return Err(StageLayoutHttpError::bad_request(
+                    "fixture_ids must contain at least one fixture",
+                ));
+            }
+            if fixture_ids.len() > 10_000 {
+                return Err(StageLayoutHttpError::bad_request(
+                    "fixture_ids must not exceed 10000 entries",
+                ));
+            }
+            if !delta.is_finite() {
+                return Err(StageLayoutHttpError::bad_request("delta must be finite"));
+            }
+        }
+        StageLayoutAction::SetPosition2d { position, .. } => {
+            if !position.x.is_finite() || !position.y.is_finite() || !position.rotation.is_finite()
+            {
+                return Err(StageLayoutHttpError::bad_request(
+                    "2D position values must be finite",
+                ));
+            }
+        }
+        StageLayoutAction::Regenerate2d { .. } => {}
     }
     Ok(())
+}
+
+fn apply_position_2d_edit(
+    body: &mut serde_json::Value,
+    fixture_id: Uuid,
+    position: light_wire::v2::stage_layout::StagePosition2d,
+) -> Result<bool, StageLayoutHttpError> {
+    let was_manual = decode_stage_layout(body)?
+        .effective_positions_2d_config()
+        .provenance
+        == light_application::StagePositions2dProvenance::Manual;
+    let layout = body
+        .as_object_mut()
+        .ok_or_else(|| StageLayoutHttpError::conflict("stored stage layout is not an object"))?;
+    let positions = layout
+        .entry("positions")
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    let positions = positions.as_object_mut().ok_or_else(|| {
+        StageLayoutHttpError::conflict("stored stage layout positions is not an object")
+    })?;
+    let next = serde_json::json!({
+        "x": position.x,
+        "y": position.y,
+        "rotation": position.rotation,
+    });
+    let unchanged = positions.get(&fixture_id.to_string()) == Some(&next);
+    if unchanged && was_manual {
+        return Ok(false);
+    }
+    if !unchanged {
+        positions.insert(fixture_id.to_string(), next);
+    }
+    mark_positions_2d_manual(body)?;
+    Ok(true)
+}
+
+fn mark_positions_2d_manual(body: &mut serde_json::Value) -> Result<(), StageLayoutHttpError> {
+    let mut typed = decode_stage_layout(body)?;
+    typed.mark_positions_2d_manual();
+    persist_positions_2d_config(body, &typed)
+}
+
+fn refresh_automatic_positions_2d(
+    body: &mut serde_json::Value,
+) -> Result<(), StageLayoutHttpError> {
+    let mut typed = decode_stage_layout(body)?;
+    if typed.effective_positions_2d_config().provenance
+        == light_application::StagePositions2dProvenance::Manual
+    {
+        typed.mark_positions_2d_manual();
+        // Materialize the compatibility inference but retain every opaque field inside the
+        // operator-authored 2D entries.
+        persist_positions_2d_config(body, &typed)
+    } else {
+        typed.refresh_automatic_positions_2d();
+        persist_positions_2d_state(body, &typed)
+    }
+}
+
+fn regenerate_positions_2d(
+    body: &mut serde_json::Value,
+    projection: light_application::StageProjection2d,
+) -> Result<(), StageLayoutHttpError> {
+    let mut typed = decode_stage_layout(body)?;
+    typed.regenerate_positions_2d(projection);
+    persist_positions_2d_state(body, &typed)?;
+    Ok(())
+}
+
+fn decode_stage_layout(
+    body: &serde_json::Value,
+) -> Result<light_application::StageLayout, StageLayoutHttpError> {
+    serde_json::from_value(body.clone()).map_err(|error| {
+        StageLayoutHttpError::conflict(format!("stored stage layout is malformed: {error}"))
+    })
+}
+
+fn persist_positions_2d_state(
+    body: &mut serde_json::Value,
+    typed: &light_application::StageLayout,
+) -> Result<(), StageLayoutHttpError> {
+    let layout = body
+        .as_object_mut()
+        .ok_or_else(|| StageLayoutHttpError::conflict("stored stage layout is not an object"))?;
+    layout.insert(
+        "positions".into(),
+        serde_json::to_value(&typed.positions).map_err(|error| {
+            StageLayoutHttpError::conflict(format!("could not encode 2D positions: {error}"))
+        })?,
+    );
+    persist_positions_2d_config(body, typed)
+}
+
+fn persist_positions_2d_config(
+    body: &mut serde_json::Value,
+    typed: &light_application::StageLayout,
+) -> Result<(), StageLayoutHttpError> {
+    let layout = body
+        .as_object_mut()
+        .ok_or_else(|| StageLayoutHttpError::conflict("stored stage layout is not an object"))?;
+    layout.insert(
+        "positions2dConfig".into(),
+        serde_json::to_value(typed.effective_positions_2d_config()).map_err(|error| {
+            StageLayoutHttpError::conflict(format!("could not encode 2D layout config: {error}"))
+        })?,
+    );
+    Ok(())
+}
+
+fn domain_projection(value: WireStageProjection2d) -> light_application::StageProjection2d {
+    match value {
+        WireStageProjection2d::TopToBottom => light_application::StageProjection2d::TopToBottom,
+        WireStageProjection2d::BottomToTop => light_application::StageProjection2d::BottomToTop,
+        WireStageProjection2d::FrontToBack => light_application::StageProjection2d::FrontToBack,
+        WireStageProjection2d::BackToFront => light_application::StageProjection2d::BackToFront,
+        WireStageProjection2d::LeftToRight => light_application::StageProjection2d::LeftToRight,
+        WireStageProjection2d::RightToLeft => light_application::StageProjection2d::RightToLeft,
+    }
 }
 
 /// Applies one uniform axis delta across the ordered selection, mutating only the touched

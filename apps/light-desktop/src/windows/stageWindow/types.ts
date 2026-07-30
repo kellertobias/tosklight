@@ -46,4 +46,8 @@ export interface StageFixturePresentation {
 export interface StageLayoutModel {
 	positions: Record<string, { x: number; y: number; rotation: number }>;
 	positions3d: Record<string, StagePosition3d>;
+	positions2dConfig: {
+		provenance: "automatic" | "manual";
+		projection: import("../../api/generated/light-wire").StageProjection2d;
+	};
 }

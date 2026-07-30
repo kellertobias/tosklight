@@ -2,6 +2,8 @@
 
 Stage provides an operator selection surface for the saved spatial model; the model itself is edited in **Show Patch**.
 
+When a show has 3D fixture positions but no manually authored 2D placement, ToskLight creates a deterministic 2D layout automatically. Open the full Stage settings to see whether the 2D layout is **Automatic** or **Manual**. The writable primary desk can deliberately choose one of the six named orthographic projections and press **Regenerate 2D layout**. This replaces the 2D placement; it does not move the fixtures in 3D. Manual 2D placement remains protected from later automatic updates until this command is used.
+
 ## Position fixtures
 
 Fixture positions and rotations are part of the patch: open **Show > Show Patch** and edit a fixture's placement for accurate meter-based values. Multi-patch instances can have their own physical positions while sharing logical programming.

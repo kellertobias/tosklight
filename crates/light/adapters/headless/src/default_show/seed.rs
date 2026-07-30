@@ -1,5 +1,6 @@
 use super::DEFAULT_SHOW_NAME;
 use super::definition::{definition, multipatch, patched, sunstrip_definition};
+use light_application::{StageLayout, StageProjection2d};
 use light_fixture::{FixtureDefinition, FixtureLocation, PatchedFixture};
 use light_show::{ShowStore, StoreError};
 use serde_json::json;
@@ -359,12 +360,10 @@ fn persist_default_fixtures(
         )?;
     }
     let positions3d = stage_positions(fixtures);
-    store.put_object(
-        "stage_layout",
-        "main",
-        &json!({"version":2,"positions":{},"positions3d":positions3d}),
-        0,
-    )?;
+    let mut layout: StageLayout =
+        serde_json::from_value(json!({"version":2,"positions3d":positions3d}))?;
+    layout.regenerate_positions_2d(StageProjection2d::FrontToBack);
+    store.put_object("stage_layout", "main", &serde_json::to_value(layout)?, 0)?;
     Ok(())
 }
 

@@ -33,6 +33,33 @@ pub enum StageLayoutAction {
         /// Meters for translation axes, degrees for rotation axes. Must be finite.
         delta: f64,
     },
+    /// Writes one operator-authored 2D position and switches the layout to manual provenance.
+    #[serde(rename = "set_position_2d")]
+    SetPosition2d {
+        fixture_id: Uuid,
+        position: StagePosition2d,
+    },
+    /// Intentionally replaces the complete 2D map from the stored 3D positions.
+    #[serde(rename = "regenerate_2d")]
+    Regenerate2d { projection: StageProjection2d },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct StagePosition2d {
+    pub x: f64,
+    pub y: f64,
+    pub rotation: f64,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum StageProjection2d {
+    TopToBottom,
+    BottomToTop,
+    FrontToBack,
+    BackToFront,
+    LeftToRight,
+    RightToLeft,
 }
 
 /// One editable component of a fixture's 3D stage position.

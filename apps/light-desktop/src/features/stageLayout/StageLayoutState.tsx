@@ -16,9 +16,18 @@ import {
 
 type Positions = StoredStageLayout["positions"];
 type Positions3d = Record<string, StagePosition3d>;
+type Positions2dConfig = NonNullable<StoredStageLayout["positions2dConfig"]>;
 
 const EMPTY_POSITIONS: Positions = {};
 const EMPTY_POSITIONS_3D: Positions3d = {};
+const AUTOMATIC_FRONT_PROJECTION: Positions2dConfig = {
+	provenance: "automatic",
+	projection: "front_to_back",
+};
+const MANUAL_FRONT_PROJECTION: Positions2dConfig = {
+	provenance: "manual",
+	projection: "front_to_back",
+};
 
 const StageLayoutStoreContext = createContext<StageLayoutStore | null>(null);
 
@@ -41,6 +50,10 @@ export function useStagePositions3d(): Positions3d {
 	return useStageLayoutSelector(selectPositions3d);
 }
 
+export function useStagePositions2dConfig(): Positions2dConfig {
+	return useStageLayoutSelector(selectPositions2dConfig);
+}
+
 /** The stored revision a stage-layout write must be made against. */
 export function useStageLayoutRevision(): number {
 	return useStageLayoutSelector(selectRevision);
@@ -56,6 +69,16 @@ function selectPositions(snapshot: StageLayoutSnapshot): Positions {
 
 function selectPositions3d(snapshot: StageLayoutSnapshot): Positions3d {
 	return snapshot.layout?.body.positions3d ?? EMPTY_POSITIONS_3D;
+}
+
+function selectPositions2dConfig(
+	snapshot: StageLayoutSnapshot,
+): Positions2dConfig {
+	const layout = snapshot.layout?.body;
+	if (layout?.positions2dConfig) return layout.positions2dConfig;
+	return layout && Object.keys(layout.positions).length > 0
+		? MANUAL_FRONT_PROJECTION
+		: AUTOMATIC_FRONT_PROJECTION;
 }
 
 function selectRevision(snapshot: StageLayoutSnapshot): number {

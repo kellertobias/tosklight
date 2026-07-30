@@ -2,6 +2,8 @@ import type {
 	ProgrammingSnapshot,
 	SelectionAction,
 	SelectionActionOutcome,
+	SelectionGridConfiguration,
+	SelectionGridMethod,
 	SelectionGestureSource,
 	SelectionRule,
 } from "./contracts";
@@ -27,7 +29,13 @@ type SelectionIntent =
 			frozen: boolean;
 			rule: SelectionRule;
 	  }
-	| { type: "apply_rule"; rule: SelectionRule };
+	| { type: "apply_rule"; rule: SelectionRule }
+	| { type: "cycle_grid_method" }
+	| {
+			type: "set_grid_configuration";
+			configuration: SelectionGridConfiguration;
+	  }
+	| { type: "reorder_from_grid"; axis: "rows" | "columns" };
 
 interface QueuedSelectionWrite {
 	requestId: string;
@@ -137,6 +145,42 @@ export class ProgrammingSelectionWriter {
 		return this.enqueue(
 			{ type: "apply_rule", rule },
 			() => ruleSelectionPrediction(rule),
+		);
+	}
+
+	cycleGridMethod() {
+		const current = this.options.store.getSnapshot().selection;
+		const method = current
+			? nextGridMethod(current.grid.configuration.method)
+			: "stage2d";
+		return this.enqueue(
+			{ type: "cycle_grid_method" },
+			() => setGridConfigurationPrediction({
+				...(current?.grid.configuration ?? {
+					method: "stage2d",
+					axisOrigin: { x: 0, y: 0, z: 0 },
+				}),
+				method,
+			}),
+		);
+	}
+
+	setGridConfiguration(configuration: SelectionGridConfiguration) {
+		validateGridConfiguration(configuration);
+		const captured = {
+			method: configuration.method,
+			axisOrigin: { ...configuration.axisOrigin },
+		};
+		return this.enqueue(
+			{ type: "set_grid_configuration", configuration: captured },
+			() => setGridConfigurationPrediction(captured),
+		);
+	}
+
+	reorderFromGrid(axis: "rows" | "columns") {
+		return this.enqueue(
+			{ type: "reorder_from_grid", axis },
+			() => (current) => current,
 		);
 	}
 
@@ -309,9 +353,12 @@ export class ProgrammingSelectionWriter {
 			case "replace":
 				return { ...intent, expectedRevision: revision };
 			case "select_group":
+			case "set_grid_configuration":
 				return { ...intent, expectedRevision: revision };
 			case "gesture":
 			case "apply_rule":
+			case "cycle_grid_method":
+			case "reorder_from_grid":
 				return intent;
 		}
 	}
@@ -362,6 +409,44 @@ export class ProgrammingSelectionWriter {
 	private expectedScope() {
 		return this.scope ?? -1;
 	}
+}
+
+const GRID_METHODS: readonly SelectionGridMethod[] = [
+	"stage2d",
+	"top_to_bottom",
+	"bottom_to_top",
+	"front_to_back",
+	"back_to_front",
+	"left_to_right",
+	"right_to_left",
+	"horizontal_axis_x",
+	"vertical_axis_z",
+	"room_depth_axis_y",
+];
+
+function nextGridMethod(method: SelectionGridMethod): SelectionGridMethod {
+	const index = GRID_METHODS.indexOf(method);
+	return GRID_METHODS[(index + 1) % GRID_METHODS.length] ?? "stage2d";
+}
+
+function setGridConfigurationPrediction(
+	configuration: SelectionGridConfiguration,
+): SelectionReducer {
+	return (current) => ({
+		...current,
+		gestureOpen: false,
+		grid: {
+			configuration,
+			rowsFirst: "top_left",
+			columnsFirst: "top_left",
+		},
+	});
+}
+
+function validateGridConfiguration(configuration: SelectionGridConfiguration) {
+	const { x, y, z } = configuration.axisOrigin;
+	if (![x, y, z].every(Number.isFinite))
+		throw new Error("Selection grid origin must contain finite coordinates");
 }
 
 function httpStatus(reason: unknown) {

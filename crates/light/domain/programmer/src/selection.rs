@@ -1,5 +1,9 @@
 use crate::ProgrammerRegistry;
 use crate::groups::{GroupDefinition, resolve_group};
+use crate::selection_grid::{
+    ColumnsFirstTraversal, GridMethodConfiguration, GridTraversalAxis, RowsFirstTraversal,
+    SelectionGrid,
+};
 use light_core::{FixtureId, SessionId};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -126,6 +130,25 @@ pub(crate) struct SelectionContext {
     /// True only while consecutive ordinary surface selections are being accumulated. A value
     /// entry or an explicit selection/clear operation closes the gesture.
     pub(crate) gesture_open: bool,
+    pub(crate) grid: SelectionGridState,
+}
+
+/// Persisted configuration and independent traversal cursors for one ordered selection.
+///
+/// Grid cells are derived from current Stage positions and are deliberately not persisted.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(default)]
+pub struct SelectionGridState {
+    pub configuration: GridMethodConfiguration,
+    pub rows_first: RowsFirstTraversal,
+    pub columns_first: ColumnsFirstTraversal,
+}
+
+impl SelectionGridState {
+    fn reset_traversals(&mut self) {
+        self.rows_first = RowsFirstTraversal::default();
+        self.columns_first = ColumnsFirstTraversal::default();
+    }
 }
 
 /// Desk-local authoritative programmer selection plus the interaction identity that produced it.
@@ -136,6 +159,7 @@ pub struct ProgrammerSelection {
     pub expression: Option<SelectionExpression>,
     pub revision: u64,
     pub gesture_open: bool,
+    pub grid: SelectionGridState,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -151,6 +175,23 @@ impl ProgrammerRegistry {
         expected_revision: u64,
         fixtures: impl IntoIterator<Item = FixtureId>,
         expression: SelectionExpression,
+    ) -> Result<ProgrammerSelection, SelectionReplaceError> {
+        self.replace_selection_with_grid_if_revision(
+            session,
+            expected_revision,
+            fixtures,
+            expression,
+            GridMethodConfiguration::default(),
+        )
+    }
+
+    pub fn replace_selection_with_grid_if_revision(
+        &self,
+        session: SessionId,
+        expected_revision: u64,
+        fixtures: impl IntoIterator<Item = FixtureId>,
+        expression: SelectionExpression,
+        configuration: GridMethodConfiguration,
     ) -> Result<ProgrammerSelection, SelectionReplaceError> {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
@@ -178,6 +219,10 @@ impl ProgrammerRegistry {
             state.checkpoint();
             state.selected = selected.clone();
             state.selection_expression = Some(expression.clone());
+            state.selection_grid = SelectionGridState {
+                configuration,
+                ..SelectionGridState::default()
+            };
             state.last_activity = self.clock.now();
         }
         let selection = ProgrammerSelection {
@@ -185,6 +230,10 @@ impl ProgrammerRegistry {
             expression: Some(expression),
             revision: self.next_selection_revision(),
             gesture_open: false,
+            grid: SelectionGridState {
+                configuration,
+                ..SelectionGridState::default()
+            },
         };
         self.selection_contexts.write().insert(
             context,
@@ -193,6 +242,7 @@ impl ProgrammerRegistry {
                 expression: selection.expression.clone(),
                 revision: selection.revision,
                 gesture_open: false,
+                grid: selection.grid,
             },
         );
         Ok(selection)
@@ -213,6 +263,7 @@ impl ProgrammerRegistry {
             // desk-local selection context below.
             state.selected = selected.clone();
             state.selection_expression = expression.clone();
+            state.selection_grid = SelectionGridState::default();
             state.last_activity = self.clock.now();
         }
         let revision = self.next_selection_revision();
@@ -223,6 +274,7 @@ impl ProgrammerRegistry {
                 expression,
                 revision,
                 gesture_open: false,
+                grid: SelectionGridState::default(),
             },
         );
         revision
@@ -239,6 +291,7 @@ impl ProgrammerRegistry {
             state.checkpoint();
             state.selected = fixtures.clone();
             state.selection_expression = Some(expression.clone());
+            state.selection_grid = SelectionGridState::default();
             state.last_activity = self.clock.now();
         }
         let revision = self.next_selection_revision();
@@ -249,6 +302,7 @@ impl ProgrammerRegistry {
                 expression: Some(expression),
                 revision,
                 gesture_open: false,
+                grid: SelectionGridState::default(),
             },
         );
         revision
@@ -269,7 +323,7 @@ impl ProgrammerRegistry {
         }
         let context = self.command_context(session);
         let revision = self.next_selection_revision();
-        let (selected, expression) = {
+        let (selected, expression, grid) = {
             let mut selections = self.selection_contexts.write();
             let selection = selections.entry(context).or_default();
             let mut items = if selection.gesture_open {
@@ -282,20 +336,135 @@ impl ProgrammerRegistry {
             };
             items.extend(references);
             let selected = resolve_selection_references(&items, groups);
+            let configuration =
+                common_grid_configuration(&items, groups, selection.grid.configuration);
             let expression = SelectionExpression::Sources { items };
             selection.selected = selected.clone();
             selection.expression = Some(expression.clone());
             selection.revision = revision;
             selection.gesture_open = true;
-            (selected, expression)
+            selection.grid.configuration = configuration;
+            selection.grid.reset_traversals();
+            (selected, expression, selection.grid)
         };
         if let Some(state) = self.states.write().get_mut(&self.key(session)) {
             state.checkpoint();
             state.selected = selected;
             state.selection_expression = Some(expression);
+            state.selection_grid = grid;
             state.last_activity = self.clock.now();
         }
         true
+    }
+
+    pub fn set_selection_grid_configuration_if_revision(
+        &self,
+        session: SessionId,
+        expected_revision: u64,
+        configuration: GridMethodConfiguration,
+    ) -> Result<ProgrammerSelection, SelectionReplaceError> {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        if !self.sessions.read().contains_key(&session) {
+            return Err(SelectionReplaceError::UnknownSession);
+        }
+        let context = self.command_context(session);
+        let actual_revision = self
+            .selection_contexts
+            .read()
+            .get(&context)
+            .map_or(0, |selection| selection.revision);
+        if actual_revision != expected_revision {
+            return Err(SelectionReplaceError::RevisionConflict {
+                expected: expected_revision,
+                actual: actual_revision,
+            });
+        }
+        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
+            state.checkpoint();
+            state.selection_grid.configuration = configuration;
+            state.selection_grid.reset_traversals();
+            state.last_activity = self.clock.now();
+        }
+        let revision = self.next_selection_revision();
+        let mut selections = self.selection_contexts.write();
+        let selection = selections.entry(context).or_default();
+        selection.grid.configuration = configuration;
+        selection.grid.reset_traversals();
+        selection.revision = revision;
+        selection.gesture_open = false;
+        Ok(ProgrammerSelection {
+            selected: selection.selected.clone(),
+            expression: selection.expression.clone(),
+            revision,
+            gesture_open: false,
+            grid: selection.grid,
+        })
+    }
+
+    pub fn cycle_selection_grid_method(&self, session: SessionId) -> Option<ProgrammerSelection> {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        let current = self.selection(session)?;
+        let mut configuration = current.grid.configuration;
+        configuration.method = configuration.method.next();
+        self.set_selection_grid_configuration_if_revision(session, current.revision, configuration)
+            .ok()
+    }
+
+    pub fn reorder_selection_from_grid(
+        &self,
+        session: SessionId,
+        grid: &SelectionGrid,
+        axis: GridTraversalAxis,
+    ) -> Option<ProgrammerSelection> {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        if !self.sessions.read().contains_key(&session) {
+            return None;
+        }
+        let context = self.command_context(session);
+        let (selected, grid_state) = {
+            let mut selections = self.selection_contexts.write();
+            let selection = selections.get_mut(&context)?;
+            let expected = selection.selected.iter().copied().collect::<HashSet<_>>();
+            let actual = grid
+                .cells
+                .iter()
+                .map(|cell| cell.fixture_id)
+                .collect::<HashSet<_>>();
+            if expected.len() != selection.selected.len()
+                || actual.len() != grid.cells.len()
+                || actual != expected
+            {
+                return None;
+            }
+            let selected = match axis {
+                GridTraversalAxis::Rows => {
+                    let selected = grid.rows_first(selection.grid.rows_first);
+                    selection.grid.rows_first = selection.grid.rows_first.next();
+                    selected
+                }
+                GridTraversalAxis::Columns => {
+                    let selected = grid.columns_first(selection.grid.columns_first);
+                    selection.grid.columns_first = selection.grid.columns_first.next();
+                    selected
+                }
+            };
+            selection.selected.clone_from(&selected);
+            selection.expression = Some(SelectionExpression::Static);
+            selection.revision = self.next_selection_revision();
+            selection.gesture_open = false;
+            (selected, selection.grid)
+        };
+        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
+            state.checkpoint();
+            state.selected.clone_from(&selected);
+            state.selection_expression = Some(SelectionExpression::Static);
+            state.selection_grid = grid_state;
+            state.last_activity = self.clock.now();
+        }
+        self.selection(session)
     }
 
     pub fn refresh_live_selections(&self, groups: &HashMap<String, GroupDefinition>) {
@@ -317,9 +486,37 @@ impl ProgrammerRegistry {
                     && selection.selected != resolved
                 {
                     selection.selected = resolved;
+                    selection.grid.reset_traversals();
                     selection.revision = self.next_selection_revision();
                 }
             }
         });
     }
+}
+
+fn common_grid_configuration(
+    references: &[SelectionReference],
+    groups: &HashMap<String, GroupDefinition>,
+    current: GridMethodConfiguration,
+) -> GridMethodConfiguration {
+    let mut common = None;
+    for reference in references {
+        let configuration = match reference {
+            SelectionReference::LiveGroup { group_id } => {
+                let Some(group) = groups.get(group_id) else {
+                    return GridMethodConfiguration::default();
+                };
+                group.grid
+            }
+            SelectionReference::Fixture { .. }
+            | SelectionReference::RemoveFixture { .. }
+            | SelectionReference::RemoveLiveGroup { .. } => continue,
+        };
+        match common {
+            None => common = Some(configuration),
+            Some(current) if current == configuration => {}
+            Some(_) => return GridMethodConfiguration::default(),
+        }
+    }
+    common.unwrap_or(current)
 }

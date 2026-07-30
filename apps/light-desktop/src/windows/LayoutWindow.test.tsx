@@ -98,6 +98,31 @@ describe("LayoutWindow", () => {
 		expect(screen.getByText("25%")).toBeInTheDocument();
 	});
 
+	it("keeps two panes bound to distinct persisted Group ids", () => {
+		mocks.groups = [group("1", "Front", ["a"]), group("2", "Back", ["b"])];
+		render(
+			<>
+				<LayoutWindow compact paneId="layout-front" layoutGroupId="1" />
+				<LayoutWindow compact paneId="layout-back" layoutGroupId="2" />
+			</>,
+		);
+
+		const front = screen.getByLabelText("Front fixture layout");
+		const back = screen.getByLabelText("Back fixture layout");
+		expect(
+			front.querySelector('[data-layout-fixture-id="a"]'),
+		).toBeInTheDocument();
+		expect(
+			front.querySelector('[data-layout-fixture-id="b"]'),
+		).not.toBeInTheDocument();
+		expect(
+			back.querySelector('[data-layout-fixture-id="b"]'),
+		).toBeInTheDocument();
+		expect(
+			back.querySelector('[data-layout-fixture-id="a"]'),
+		).not.toBeInTheDocument();
+	});
+
 	it("keeps empty and unavailable Groups distinct", () => {
 		mocks.groups = [group("2", "Stored Empty", [])];
 		const view = render(

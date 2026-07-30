@@ -69,7 +69,10 @@ fn wire_action(action: ProgrammingAction) -> CommandAcceptedAction {
         ProgrammingAction::SelectionReplaced
         | ProgrammingAction::SelectionGestureApplied
         | ProgrammingAction::GroupSelected
-        | ProgrammingAction::SelectionRuleApplied => {
+        | ProgrammingAction::SelectionRuleApplied
+        | ProgrammingAction::SelectionGridMethodCycled
+        | ProgrammingAction::SelectionGridConfigurationSet
+        | ProgrammingAction::SelectionGridReordered => {
             unreachable!("selection actions use the selection response contract")
         }
     }

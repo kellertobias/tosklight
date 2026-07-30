@@ -10,6 +10,7 @@ import { ProgrammerLifecycleStore } from "../programmerLifecycle/store";
 import { ProgrammerPreloadPlaybackQueueStore } from "../programmerPreloadPlaybackQueue/store";
 import { ProgrammerPreloadValuesStore } from "../programmerPreloadValues/store";
 import { ProgrammingInteractionStore } from "../programmingInteraction/store";
+import { DEFAULT_SELECTION_GRID_STATE } from "../programmingInteraction/contracts";
 import { ShowObjectsStore } from "../showObjects/store";
 import type {
 	ProgrammerPreloadLifecycleOutcome,
@@ -185,6 +186,7 @@ export function lifecycleWriterHarness(
 				expression: { type: "static" },
 				revision: 1,
 				gestureOpen: false,
+				grid: DEFAULT_SELECTION_GRID_STATE,
 			},
 		},
 	});

@@ -7,6 +7,91 @@ use serde_json::json;
 use uuid::Uuid;
 
 #[test]
+fn stage_layout_migration_generates_automatic_2d_and_preserves_legacy_manual_entries() {
+    let (left, right) = (Uuid::new_v4(), Uuid::new_v4());
+    let automatic = json!({
+        "version": 2,
+        "positions3d": {
+            left.to_string(): {"x": -5.0, "y": 0.0, "z": 0.0},
+            right.to_string(): {"x": 5.0, "y": 0.0, "z": 10.0},
+        },
+        "future_layout": "kept"
+    });
+    let manual_fixture = Uuid::new_v4();
+    let manual = json!({
+        "version": 2,
+        "positions": {
+            manual_fixture.to_string(): {
+                "x": 23.0,
+                "y": 37.0,
+                "rotation": 12.0,
+                "future_position": "kept"
+            }
+        },
+        "positions3d": {
+            manual_fixture.to_string(): {"x": 99.0, "y": 88.0, "z": 77.0}
+        }
+    });
+    let originals = vec![
+        ("stage_layout", "automatic", automatic.clone()),
+        ("stage_layout", "manual", manual.clone()),
+    ];
+    let (store, document) = document_with_objects(&originals);
+    let mut transaction = document.transaction();
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+    assert_eq!(stored_body(&store, "stage_layout", "automatic"), automatic);
+    assert_eq!(stored_body(&store, "stage_layout", "manual"), manual);
+
+    let candidate = document.candidate(&transaction).unwrap();
+    let generated = candidate
+        .object("stage_layout", "automatic")
+        .unwrap()
+        .body();
+    assert_eq!(
+        generated["positions2dConfig"],
+        json!({"provenance": "automatic", "projection": "front_to_back"})
+    );
+    assert_eq!(generated["positions"][left.to_string()]["x"], 5.0);
+    assert_eq!(generated["positions"][left.to_string()]["y"], 95.0);
+    assert_eq!(generated["positions"][right.to_string()]["x"], 95.0);
+    assert_eq!(generated["positions"][right.to_string()]["y"], 5.0);
+    assert_eq!(generated["future_layout"], "kept");
+
+    let preserved = candidate.object("stage_layout", "manual").unwrap().body();
+    assert_eq!(
+        preserved["positions2dConfig"],
+        json!({"provenance": "manual", "projection": "front_to_back"})
+    );
+    assert_eq!(
+        preserved["positions"][manual_fixture.to_string()]["x"],
+        23.0
+    );
+    assert_eq!(
+        preserved["positions"][manual_fixture.to_string()]["future_position"],
+        "kept"
+    );
+
+    let migrated = candidate
+        .objects()
+        .map(|object| {
+            (
+                object.key().kind().to_owned(),
+                object.key().id().to_owned(),
+                object.body().clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let migrated_refs = migrated
+        .iter()
+        .map(|(kind, id, body)| (kind.as_str(), id.as_str(), body.clone()))
+        .collect::<Vec<_>>();
+    let (_, migrated_document) = document_with_objects(&migrated_refs);
+    let mut second_pass = migrated_document.transaction();
+    stage_candidate_migrations(&migrated_document, &mut second_pass).unwrap();
+    assert!(second_pass.is_empty(), "Stage migration must be idempotent");
+}
+
+#[test]
 fn defaults_are_raw_preserving_side_effect_free_and_compile_equivalent() {
     let cue_list_id = CueListId::new();
     let cue_list = CueList {

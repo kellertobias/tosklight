@@ -605,6 +605,10 @@ fn object_undo_commits_pending_migrations_in_the_same_compiled_candidate() {
     let defaults = json!({
         "color":null,
         "icon":null,
+        "grid":{
+            "method":"stage2d",
+            "axis_origin":{"x":0.0,"y":0.0,"z":0.0}
+        },
         "derived_from":null,
         "frozen_from":null,
         "programming":{},

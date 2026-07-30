@@ -25,7 +25,10 @@ export function Pane({
 }) {
 	const { state, dispatch } = useApp();
 	const selection = useProgrammingSelectionView(
-		active && (pane.kind === "stage" || pane.kind === "fixtures"),
+		active &&
+			(pane.kind === "stage" ||
+				pane.kind === "fixtures" ||
+				pane.kind === "layout"),
 	);
 	const commandLineActions = useProgrammingCommandLineActions();
 	const deleteArmed = useProgrammingDeleteCommandActive();
@@ -117,6 +120,11 @@ export function Pane({
 										primary: `${selection?.selected.length ?? 0} selected`,
 										secondary: <SourceLegend />,
 									}
+								: pane.kind === "layout"
+									? {
+											primary: `${selection?.selected.length ?? 0} selected`,
+											secondary: "Live intensity and color",
+										}
 								: undefined
 			}
 			toolbar={

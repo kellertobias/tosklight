@@ -371,8 +371,11 @@ function ServerShowProviderStack({
 }>) {
 	const showId = state.bootstrap?.active_show?.id ?? null;
 	return (
-		<ServerDeskBoundaries state={state}>
-			<ServerVisualizationRuntimeBoundary state={state} sessionRole={sessionRole}>
+		<ServerDeskBoundaries state={state} sessionRole={sessionRole}>
+			<ServerVisualizationRuntimeBoundary
+				state={state}
+				sessionRole={sessionRole}
+			>
 				<ShowObjectsViewProvider
 					showId={showId}
 					authorityKey={boundaries.showObjectsAuthorityKey}

@@ -21,6 +21,7 @@ impl RecordingPorts {
                     expression: None,
                     revision: 1,
                     gesture_open: false,
+                    grid: Default::default(),
                 },
                 fixtures: Vec::new(),
                 groups: HashMap::new(),
@@ -51,6 +52,7 @@ impl HighlightPorts for RecordingPorts {
             expression: write.expression.clone(),
             revision: 2,
             gesture_open: false,
+            grid: Default::default(),
         })
     }
 
