@@ -50,7 +50,7 @@ files, contracts, runtime state, and verification surfaces do not overlap.
 | 23 | [Schedules](finished/23-schedules.md) | Completed authoritative scheduling, persistence, validation, APIs, events, and the Scheduler operator surface. |
 | 25 | [External screen fixed full-screen pane](finished/25-external-screen-fixed-pane.md) | Completed desk-configured, view-only fixed panes for optional external screens. |
 | 26 | [Selection grids, Layout pane, and Auto 2D Grid](finished/26-auto-2d-grid-from-3d-positions.md) | Finished: deterministic auto-2D generation, persisted selection grids, shared Shift actions, and the Layout pane are complete. |
-| 27 | [Partial Show Load](pending/27-partial-show-load.md) | Complete the existing selective-import UI with feature-family, complete-Patch, patch-layer, replacement/additive, and one-Undo-step acceptance. |
+| 27 | [Partial Show Load](doing/27-partial-show-load.md) | In progress: complete the existing selective-import UI with feature-family, complete-Patch, patch-layer, replacement/additive, and one-Undo-step acceptance. |
 | 28 | [Desk-wide Highlight look](pending/28-desk-wide-highlight-look.md) | Build desk-owned semantic Highlight configuration on the completed Highlight application service. |
 | 29 | [Attribute registry, activation groups, and Indexed Presets](pending/29-attribute-registry-and-activation-groups.md) | Complete the canonical registry, coherent programmer activation, Indexed Presets, persistence, and cross-surface contracts. |
 | 30 | [Macros](pending/30-macros-and-scheduled-macros.md) | Implement the settled TypeScript Macro package, runtime, permission, interaction, and persistence contract after the Attribute Registry. This is the final queued refactoring to start. |
