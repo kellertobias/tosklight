@@ -79,6 +79,25 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 - **Pass:** Encoder and channel-fader output is immediate and carries no explicit `0s` recording override; mixed offsets clamp safely; a drag shares one undo entry; software and hardware feedback agree; Preset and PRELOAD transitions retain Programmer Fade.
 - **Executable scenario:** [TIME-002](../../../tests/05-virtual-time-persistence-and-recovery.spec.ts), encoder component/application tests, and cross-surface encoder coverage.
 
+### CROSS-004 — Attribute activation groups and Indexed Presets
+
+- **Starting show:** A working show with two embedded fixture profiles whose compatible **Dots**
+  function uses different raw DMX values, plus partial, incompatible, multi-channel control, and
+  hazardous cases.
+- **Surface:** Desk Setup attribute registry, six-slot encoder pages, software/hardware **Set
+  Value**, typed Programmer HTTP/WebSocket actions, Fixture Sheet, Stage, and physical output.
+- **Actions:** Configure and restore activation groups, program linked attributes, apply
+  fixed/indexed rows, activate and release typed control rows, and replay stale selection/profile
+  requests.
+- **Pass:** Registry changes persist with the show; activation is server-owned and one Undo step;
+  per-profile raw values resolve behind one semantic row; output is immediate within the Programmer
+  tick contract; transient controls are atomic/non-recordable; unsafe or stale requests are
+  rejected; numbered show Presets remain separate.
+- **Executable scenario:** CROSS-004 in the cross-surface acceptance document, focused runtime and
+  fixture tests, `AttributeRegistrySettings.test.tsx`, `indexedPresetChoices.test.ts`, and
+  `ParameterControls.test.tsx`, plus root
+  `tests/79-attribute-registry-indexed-presets.spec.ts`.
+
 ### PROG-001 — Selection persists through value entry until replaced or cleared
 
 - **Starting show:** Load canonical `compact-rig.show`, immediately Save As `prog-001.show`, and use the active copy.

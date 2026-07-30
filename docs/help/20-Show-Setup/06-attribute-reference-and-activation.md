@@ -1,23 +1,22 @@
 # Attribute Reference and Activation Examples
 
-ToskLight identifies fixture capabilities with stable attribute IDs. Today, fixture
-profiles use those IDs directly for their exact channels, resolutions, ranges,
-functions, defaults, and physical units. The planned registry adds an explicit mapping
-from the fixture-package attribute into the desk's canonical internal attribute.
+ToskLight identifies fixture capabilities with stable attribute IDs. Fixture profiles
+retain their authored fixture-facing identity and explicitly map recordable channels
+into the desk's canonical attribute registry.
 Programmer values, Presets, Cues, API/OSC feedback, and Stage visualization use the
 canonical ID instead of relying on a manufacturer's channel number or naming scheme.
 
-This reference distinguishes three states:
+This reference distinguishes two states:
 
 - **Built in**: present in the current authoritative attribute registry.
-- **Preserved custom**: an imported profile or show may already carry another stable string ID, but ToskLight currently gives it only generic Custom metadata.
-- **Planned**: a proposed canonical descriptor for [Attribute Registry, Activation Groups, and Indexed Presets](../../plans/Next/71-attribute-registry-and-activation-groups.md). Planned entries are not yet guaranteed operator controls.
+- **Custom**: show-owned metadata supplies the label, type, units, encoder position, lifecycle, and activation group for a stable namespaced ID.
 
 The exact raw DMX ranges always come from the fixture profile. Names such as Shutter Open or Strobe Fast describe semantic functions; they do not mean that `0` or `255` is universally safe.
 
-## Current built-in attributes
+## Built-in attributes
 
-The current registry contains these 24 descriptors:
+The table below introduces the long-standing core IDs; the default placement table later in this
+chapter is the complete encoder and activation reference.
 
 | Stable ID | Operator label | Attribute group | Value type | Default unit | Notes |
 |---|---|---|---|---|---|
@@ -46,8 +45,6 @@ The current registry contains these 24 descriptors:
 | `strobe` | Strobe | Beam | Continuous | Hz | Continuous strobe rate when the fixture exposes it separately. |
 | `control` | Control | Control | Control | — | Generic typed control/function channel. |
 
-The current code has no built-in Shapers or Media class. Those names already appear on some programmer surfaces and fixture packages, but they are not yet authoritative registry metadata.
-
 ## Preserved custom attributes already seen in shipped fixtures
 
 The shipped fixture packages currently use these additional IDs. They are real preserved fixture data, but they fall back to generic Custom metadata until promoted into the canonical registry or described by a future desk extension.
@@ -68,7 +65,7 @@ The shipped fixture packages currently use these additional IDs. They are real p
 
 This list describes the current shipped library, not a recommendation to standardize every `fixture.*` name. Generic concepts such as Frost, Prism, Pan/Tilt Speed, and Shaper blades should gain canonical descriptors. Manufacturer-specific macros, reserved slots, and unusual effects should remain typed fixture functions or custom attributes.
 
-## Proposed known attribute vocabulary
+## Default attribute vocabulary and encoder placement
 
 The target registry separates the desk's canonical mapping layer from names carried by
 fixture packages. A package keeps the fixture attribute identity that describes its
@@ -213,9 +210,18 @@ Function semantics and attribute identity are related but distinct. A single phy
 
 ## Custom attributes
 
-Imported fixture profiles and show data may already contain IDs outside the built-in registry. ToskLight preserves those strings, but the current fallback presents only a generic **Custom** continuous value. It does not yet provide desk-level fields for label, group, unit, type, or semantic functions.
+Imported fixture profiles and show data may contain IDs outside the built-in registry. ToskLight
+preserves those strings losslessly. **Show → Desk Setup → Programmer → Attributes** creates and
+edits show-owned metadata without changing the stable ID: label, value type, units, cyclic or
+bounded behavior, recording eligibility, encoder group/page/slot, lifecycle, and exactly one
+activation group. Retiring a descriptor removes it from new authoring while old fixture, Programmer,
+Preset, Cue, and revision data remains resolvable.
 
-The planned Desk Setup registry will add that metadata without changing the stable ID. Use a namespaced ID such as `vendor.feature` or `custom.feature` and avoid reusing a built-in ID for a different meaning. Manufacturer-specific control ranges should remain fixture functions or custom attributes rather than being forced into an unrelated built-in.
+Use a namespaced ID such as `vendor.feature` or `custom.feature` and avoid reusing a built-in ID for
+a different meaning. Manufacturer-specific control ranges should remain fixture functions or custom
+attributes rather than being forced into an unrelated built-in. **Restore recommended defaults**
+restores the server-projected built-in activation groups while retaining custom-only groups and
+giving any formerly mixed custom member a safe single-member group.
 
 ## Recommended activation groups
 
@@ -234,6 +240,6 @@ Intensity is normally a single-member group. Shutter and Strobe should not autom
 Color Mix and Color Wheel are deliberately separate recommended groups. A production can
 reconfigure them, but changing Red should not select or capture a wheel slot by default.
 Focus, Zoom, Frost, Gobos, and Prisms remain independent recommended choices. Iris is the
-exception here because it belongs to the proposed Shapers activation group.
+exception here because it belongs to the default Shapers activation group.
 
 When one member changes, linked values are captured once from the authoritative current Normal, Blind, or Preload context and then remain fixed in the Programmer. Changing the Desk Setup grouping affects future activations only and never rewrites recorded Cues.

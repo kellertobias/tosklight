@@ -102,6 +102,7 @@ export function FixtureLibrarySetup({
 			/>
 			<FixtureImportDialogs
 				busy={transfers.busy}
+				error={transfers.error}
 				modal={transfers.modal}
 				close={() => transfers.setModal(null)}
 				importGdtfFile={transfers.importGdtfFile}

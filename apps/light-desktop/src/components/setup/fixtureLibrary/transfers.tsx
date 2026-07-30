@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
-import type { FixtureDefinition } from "../../../api/types";
 import { ModalRegistration, ModalTitleBar } from "@tosklight/ui";
+import { useState } from "react";
+import type { FixtureDefinition } from "../../../api/types";
+import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import { RootConfinedFilePickerButton } from "../../files/RootConfinedFilePickerButton";
 import { fixtureProfileFromDefinitions } from "../fixtureProfileModel";
 import { importGdtfData } from "./gdtf";
@@ -22,6 +22,12 @@ export function useFixtureLibraryTransfers({
 	const server = useFixtureLibrary();
 	const [busy, setBusy] = useState(false);
 	const [modal, setModal] = useState<FixtureImportModal>(null);
+	const [error, setError] = useState<string | null>(null);
+
+	const selectModal = (next: FixtureImportModal) => {
+		setError(null);
+		setModal(next);
+	};
 
 	const selectImportedProfile = (profile: {
 		id: string;
@@ -42,6 +48,7 @@ export function useFixtureLibraryTransfers({
 
 	const importGdtfFile = async (file?: File) => {
 		if (!file) return;
+		setError(null);
 		setBusy(true);
 		try {
 			const source = new Uint8Array(await file.arrayBuffer());
@@ -60,6 +67,8 @@ export function useFixtureLibraryTransfers({
 			) {
 				selectImportedProfile(saved);
 			}
+		} catch (reason) {
+			setError(reason instanceof Error ? reason.message : String(reason));
 		} finally {
 			setBusy(false);
 		}
@@ -67,12 +76,15 @@ export function useFixtureLibraryTransfers({
 
 	const importPackage = async (file?: File) => {
 		if (!file) return;
+		setError(null);
 		setBusy(true);
 		try {
 			const imported = await server?.importFixturePackage(
 				new Uint8Array(await file.arrayBuffer()),
 			);
 			if (imported) selectImportedProfile(imported);
+		} catch (reason) {
+			setError(reason instanceof Error ? reason.message : String(reason));
 		} finally {
 			setBusy(false);
 		}
@@ -96,16 +108,18 @@ export function useFixtureLibraryTransfers({
 
 	return {
 		busy,
+		error,
 		exportSelectedPackage,
 		importGdtfFile,
 		importPackage,
 		modal,
-		setModal,
+		setModal: selectModal,
 	};
 }
 
 interface FixtureImportDialogsProps {
 	busy: boolean;
+	error: string | null;
 	modal: FixtureImportModal;
 	close: () => void;
 	importGdtfFile: (file?: File) => Promise<void>;
@@ -114,6 +128,7 @@ interface FixtureImportDialogsProps {
 
 export function FixtureImportDialogs({
 	busy,
+	error,
 	modal,
 	close,
 	importGdtfFile,
@@ -124,48 +139,50 @@ export function FixtureImportDialogs({
 			{modal === "gdtf" && (
 				<ModalRegistration onClose={close}>
 					<div className="stacked-modal-layer">
-					<section className="nested-modal gdtf-import-modal">
-						<ModalTitleBar
-							title="Import GDTF"
-							closeLabel="Close Import GDTF"
-							onClose={close}
-						/>
-						<p>
-							Select a GDTF archive. Every DMX mode will be imported into the
-							desk-wide fixture library.
-						</p>
-						<RootConfinedFilePickerButton
-							variant="primary"
-							disabled={busy}
-							label={busy ? "Importing…" : "Choose GDTF file"}
-							allowedExtensions={["gdtf"]}
-							onFiles={(files) => importGdtfFile(files[0])}
-						/>
-					</section>
+						<section className="nested-modal gdtf-import-modal">
+							<ModalTitleBar
+								title="Import GDTF"
+								closeLabel="Close Import GDTF"
+								onClose={close}
+							/>
+							<p>
+								Select a GDTF archive. Every DMX mode will be imported into the
+								desk-wide fixture library.
+							</p>
+							{error && <p role="alert">{error}</p>}
+							<RootConfinedFilePickerButton
+								variant="primary"
+								disabled={busy}
+								label={busy ? "Importing…" : "Choose GDTF file"}
+								allowedExtensions={["gdtf"]}
+								onFiles={(files) => importGdtfFile(files[0])}
+							/>
+						</section>
 					</div>
 				</ModalRegistration>
 			)}
 			{modal === "package" && (
 				<ModalRegistration onClose={close}>
 					<div className="stacked-modal-layer">
-					<section className="nested-modal fixture-package-import-modal">
-						<ModalTitleBar
-							title="Import fixture"
-							closeLabel="Close Import fixture"
-							onClose={close}
-						/>
-						<p>
-							Select a transferable .toskfixture package. Its modes, photograph,
-							stage icon, and 3D model travel together.
-						</p>
-						<RootConfinedFilePickerButton
-							variant="primary"
-							disabled={busy}
-							label={busy ? "Importing…" : "Choose fixture package"}
-							allowedExtensions={["toskfixture"]}
-							onFiles={(files) => importPackage(files[0])}
-						/>
-					</section>
+						<section className="nested-modal fixture-package-import-modal">
+							<ModalTitleBar
+								title="Import fixture"
+								closeLabel="Close Import fixture"
+								onClose={close}
+							/>
+							<p>
+								Select a transferable .toskfixture package. Its modes,
+								photograph, stage icon, and 3D model travel together.
+							</p>
+							{error && <p role="alert">{error}</p>}
+							<RootConfinedFilePickerButton
+								variant="primary"
+								disabled={busy}
+								label={busy ? "Importing…" : "Choose fixture package"}
+								allowedExtensions={["toskfixture"]}
+								onFiles={(files) => importPackage(files[0])}
+							/>
+						</section>
 					</div>
 				</ModalRegistration>
 			)}

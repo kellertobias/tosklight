@@ -134,6 +134,9 @@ fn execute_action(
                 .map_err(|error| ApiError::bad_request(error.to_string()))?;
             let expected = u32::try_from(expected_revision)
                 .map_err(|_| ApiError::bad_request("fixture profile revision exceeds u32"))?;
+            if expected == 0 {
+                require_known_canonical_attributes(state, &profile)?;
+            }
             let stored = state
                 .installation
                 .save_fixture_profile(profile, expected)
@@ -173,6 +176,9 @@ fn execute_action(
         }
         Action::ImportPackage { package_base64 } => {
             let package = decode_archive(&package_base64, "fixture package")?;
+            let profile = light_fixture::read_fixture_package(&package)
+                .map_err(|error| ApiError::bad_request(error.to_string()))?;
+            require_known_canonical_attributes(state, &profile)?;
             let stored = state
                 .installation
                 .import_fixture_package(&package)
@@ -253,6 +259,48 @@ fn execute_action(
             })
         }
     }
+}
+
+fn require_known_canonical_attributes(
+    state: &AppState,
+    profile: &light_fixture::FixtureProfile,
+) -> Result<(), ApiError> {
+    let installed = state.attributes.installed.read();
+    let custom = installed
+        .configuration
+        .custom_attributes
+        .iter()
+        .map(|descriptor| descriptor.id.0.as_str())
+        .collect::<HashSet<_>>();
+    let mut unknown = profile
+        .modes
+        .iter()
+        .flat_map(|mode| &mode.channels)
+        .flat_map(|channel| {
+            std::iter::once(channel.attribute.0.as_str()).chain(
+                channel
+                    .functions
+                    .iter()
+                    .map(|function| function.attribute.0.as_str()),
+            )
+        })
+        .filter(|attribute| {
+            !light_core::ATTRIBUTE_REGISTRY
+                .iter()
+                .any(|descriptor| descriptor.id == *attribute)
+                && !custom.contains(attribute)
+        })
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    unknown.sort();
+    unknown.dedup();
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    Err(ApiError::bad_request(format!(
+        "Fixture import paused: map or create canonical descriptors for {} in Show > Desk Setup > Programmer > Attributes, then retry the import",
+        unknown.join(", ")
+    )))
 }
 
 async fn export_fixture_package(

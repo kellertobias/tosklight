@@ -215,7 +215,21 @@ A spread follows the authoritative selection order, including a separately compl
 
 An attribute touch encoder is a relative control, not a fader. Its card contains `+10`, `+1`, **Set Value**, `−1`, and `−10` from top to bottom. A step tap changes every selected fixture by that many percentage points while preserving mixed-value offsets and clamping at the attribute bounds. Holding and dragging above or below the start point changes continuously; greater displacement increases the rate. Mouse wheel and trackpad scrolling use one-point steps, with Shift selecting ten-point steps. Indexed values that do not have a safe relative mapping are visibly constrained instead of being guessed.
 
-The center **Set Value** zone opens deliberate absolute entry. With multiple fixtures selected, the modal accepts `0 [THRU] 50 [ENTER]` and spreads that attribute over the ordered selection exactly like the command line. Relative steps, continuous encoder movement, encoder Set Value, attached hardware/OSC encoder turns, and channel faders update the encoder target, Fixture Sheet, Stage, and physical output immediately even when Programmer Fade is non-zero. These immediate operations store no explicit zero-second timing override, so a later Cue still uses its normal Cue or playback timing fallback. Preset recall and **PRELOAD GO** retain Programmer Fade where documented.
+The center **Set Value** zone opens deliberate absolute entry. Its title bar keeps **Direct input**
+and **Indexed Presets** under the selected attribute. Direct input contains the absolute fader,
+number block, numeric entry, and `THRU` spread. Indexed Presets lists fixed, indexed, and typed
+control functions authored by the selected fixtures' embedded profile revisions. A compatible
+same-named choice is shown once for all supported fixtures; a partial or incompatible choice
+identifies its exact fixture scope. These are fixture functions, not numbered show Presets.
+
+With multiple fixtures selected, Direct input accepts `0 [THRU] 50 [ENTER]` and spreads that
+attribute over the ordered selection exactly like the command line. Relative steps, continuous
+encoder movement, encoder Set Value, fixed/indexed choices, attached hardware/OSC encoder turns,
+and channel faders update the encoder target, Fixture Sheet, Stage, and physical output immediately
+even when Programmer Fade is non-zero. These immediate operations store no explicit zero-second
+timing override, so a later Cue still uses its normal Cue or playback timing fallback. Momentary,
+timed, latched, multi-channel, and hazardous control functions retain their authored action and
+safety behavior. Preset recall and **PRELOAD GO** retain Programmer Fade where documented.
 
 ### Dynamics and Fixed At
 

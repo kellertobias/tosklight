@@ -64,6 +64,129 @@ async fn fixture_profile_api_rejects_invalid_discrete_wheel_before_storing_revis
 }
 
 #[tokio::test]
+async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let (fixture, _, _) = schema_v2_direct_fixture();
+    let mut profile = *fixture.definition.profile_snapshot.unwrap();
+    let unknown = light_core::AttributeKey("vendor.test.feature".into());
+    profile.modes[0].channels[0].fixture_attribute = unknown.clone();
+    profile.modes[0].channels[0].attribute = unknown.clone();
+    for function in &mut profile.modes[0].channels[0].functions {
+        function.attribute = unknown.clone();
+    }
+    profile.modes[0].channels[1].attribute = light_core::AttributeKey("control".into());
+    let new_profile = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/fixture-library")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": "unknown-new-profile",
+                        "action": {
+                            "type": "save_profile",
+                            "profile": profile.clone(),
+                            "expected_revision": 0
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(new_profile.status(), StatusCode::BAD_REQUEST);
+
+    let package = light_fixture::write_fixture_package(&profile).unwrap();
+    let request = |request_id: &str| {
+        Request::post("/api/v2/fixture-library")
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                serde_json::json!({
+                    "request_id": request_id,
+                    "action": {
+                        "type": "import_package",
+                        "package_base64": STANDARD.encode(&package)
+                    }
+                })
+                .to_string(),
+            ))
+            .unwrap()
+    };
+
+    let paused = app.clone().oneshot(request("unknown-package")).await.unwrap();
+    assert_eq!(paused.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        String::from_utf8(
+            paused
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .to_vec()
+        )
+        .unwrap()
+        .contains("vendor.test.feature")
+    );
+
+    {
+        let mut installed = state.attributes.installed.write();
+        installed.configuration.custom_attributes.push(
+            light_core::CustomAttributeDescriptor {
+                id: unknown.clone(),
+                label: "Vendor feature".into(),
+                value_type: light_core::AttributeValueType::Indexed,
+                display_unit: None,
+                physical_unit: None,
+                normalized_bounds: None,
+                domain_bounds: None,
+                cyclic: false,
+                recordable: true,
+                lifecycle: light_core::CustomAttributeLifecycle::Active,
+            },
+        );
+        installed
+            .configuration
+            .placements
+            .push(light_core::AttributePlacement {
+                attribute: unknown.clone(),
+                encoder: light_core::EncoderPlacement::new(
+                    light_core::EncoderGroup::Beam,
+                    99,
+                    1,
+                ),
+            });
+        installed.configuration.activation_groups.push(
+            light_core::AttributeActivationGroup {
+                id: "vendor-test-feature".into(),
+                label: "Vendor feature".into(),
+                members: vec![unknown],
+            },
+        );
+        installed.configuration.validate().unwrap();
+    }
+    let imported = app.oneshot(request("configured-package")).await.unwrap();
+    let imported_status = imported.status();
+    let imported_body = String::from_utf8(
+        imported
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .to_vec(),
+    )
+    .unwrap();
+    assert_eq!(imported_status, StatusCode::OK, "{imported_body}");
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn inactive_show_rejects_invalid_schema_v2_patch_before_persistence() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

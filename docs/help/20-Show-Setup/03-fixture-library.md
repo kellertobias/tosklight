@@ -70,11 +70,21 @@ To author one manually, export a similar fixture, rename `.toskfixture` to `.zip
 
 For safety, import rejects unsafe or duplicate paths, symbolic links, unsupported compression, undeclared files, invalid raster data, non-self-contained GLBs, archives over 64 MiB compressed or 128 MiB expanded, more than 32 entries, and manifests over 64 MiB. The supported MIME type is `application/vnd.tosklight.fixture+zip`.
 
+If a new package uses a canonical attribute ID that the active show does not know, import pauses
+without storing the profile. The import dialog names every unknown ID and directs you to **Show →
+Desk Setup → Programmer → Attributes**. Map the fixture-facing attribute to a compatible built-in
+canonical attribute, or create a custom descriptor with a unique encoder position and activation
+group, then retry the unchanged source file. Existing profile revisions with preserved unknown IDs
+remain readable and exportable; this preflight applies when new fixture data enters the library.
+
 ## Import GDTF
 
 Choose **Import GDTF** and select a `.gdtf` archive. ToskLight normalizes the supported modes, channels, physical information, emitters, capabilities, geometry, and model into a fixture profile and retains the original GDTF bytes beside every resulting immutable revision. MVR export can therefore use the retained source instead of reconstructing an archive from lossy normalized data.
 
-An import or migration error leaves the original data untouched and appears as an actionable warning in the Fixture Library. Do not delete the source row until the warning has been investigated or the fixture has been recovered.
+The same canonical-attribute preflight applies before a newly normalized GDTF profile is stored. An
+import or migration error leaves the original data untouched and appears in the open import dialog
+or as an actionable warning in the Fixture Library. Do not delete the source row until the warning
+has been investigated or the fixture has been recovered.
 
 ![Import every mode from a local GDTF archive](../assets/screenshots/workflows/fixture-library-import.png)
 
@@ -110,7 +120,9 @@ Changing a newly added channel's attribute, additive/subtractive calibration, or
 
 Each channel retains its fixture-facing attribute identity and explicitly maps it to one canonical Programmer attribute. The mapping is normally identity; subtractive Cyan, Magenta, and Yellow filtration map inversely to canonical Red, Green, and Blue. It also configures physical range/unit, fixture-channel inversion, snap, virtual-intensity reaction, sequence/group/grand-master reactions, and prioritized functions. Exact raw and typed control values are never reinterpreted by the canonical normalized mapping. **Static** channels normally output their default and use their Highlight value only while identified. Snap channels bypass programmer, Cue, Move in Black, and safety transitions.
 
-A physical channel may contain ordered continuous, fixed, indexed-color/gobo, or control functions. Only an explicitly programmed function claims it; the highest configured priority wins, and releasing it reveals the next claim or channel default. Typed control actions can atomically set several channels and be latched, momentary, or timed. Assign their operator meaning explicitly as Lamp On, Lamp Off, Reset, Fan Auto, Fan Low, Fan High, Fan Max, or Custom. Lamp On is the fixture manufacturer's discharge-lamp ignition/strike command; it does not set intensity or color and fixtures without that authored action are skipped. Lamp On, Lamp Off, and Reset are normally momentary or timed runtime overrides and are never recorded or persisted as programmer values. Releasing them reveals the latest underlying value on a shared control channel, so a latched fan mode remains in force. Fan modes are normally latched. Highlight is a separate transient identification look and is toggled off with Highlight itself; it is not a control action or programmer value. All authored control actions appear by name in **Control → Special Dialog**.
+A physical channel may contain ordered continuous, fixed, indexed-color/gobo, or control functions. Each function keeps its stable ID, semantic attribute, name, exact raw range/value, priority, and action behavior in the portable profile. Fixed, indexed, and control are behaviors inside that semantic attribute, not separate Programmer attributes or encoder families. The encoder's **Set Value → Indexed Presets** tab projects those functions from the exact profile revision embedded in the active show.
+
+Only an explicitly programmed function claims its channel; the highest configured priority wins, and releasing it reveals the next claim or channel default. Typed control actions can atomically set several channels and be latched, momentary, or timed. Assign their operator meaning explicitly as Lamp On, Lamp Off, Reset, Fan Auto, Fan Low, Fan High, Fan Max, or Custom. Lamp On is the fixture manufacturer's discharge-lamp ignition/strike command; it does not set intensity or color and fixtures without that authored action are skipped. Lamp On, Lamp Off, and Reset are normally momentary or timed runtime overrides and are never recorded or persisted as programmer values. Releasing them reveals the latest underlying value on a shared control channel, so a latched fan mode remains in force. Fan modes are normally latched. Highlight is a separate transient identification look and is toggled off with Highlight itself; it is not a control action or programmer value. All authored control actions appear by name in **Control → Special Dialog** and under their semantic encoder's **Indexed Presets** tab.
 
 ### Color
 

@@ -251,6 +251,32 @@ Before each variant's action, mark its event/OSC/UDP observers. After the accept
 - **Pass:** Scalar steps use repeatable one- and ten-point deltas, mixed offsets are preserved and clamped, one continuous drag is one undo entry, Set Value is the only absolute encoder path, indexed values are visibly constrained, every encoder/channel-fader surface is immediate with no stored `0s` override, the recorded Cue uses normal fallback timing, and Preset recall plus PRELOAD GO still use Programmer Fade.
 - **Executable coverage:** root Playwright TIME-002 and encoder cross-surface scenarios, `TouchEncoder.test.tsx`, parameter mutation tests, and focused Programmer/application tests.
 
+## CROSS-004 — Attribute activation and Indexed Presets share embedded-profile authority
+
+- **Starting state:** Open a working show containing two selected fixture profiles with a compatible
+  Gobo choice named **Dots** at different authored raw values, a partial choice, an incompatible
+  same-name function, and a safe two-channel momentary control action. Set Programmer Fade to five
+  seconds and keep Fixture Sheet plus Stage visible.
+- **Actions:** Change one Color Mix member, inspect linked captures, open the Gobo encoder's **Set
+  Value** modal, switch between **Direct input** and **Indexed Presets**, apply the combined **Dots**
+  row, then press the combined momentary control row. Repeat after changing the selection and after
+  replacing one embedded profile revision. Restore recommended activation defaults in Desk Setup.
+- **Oracle:** Show-owned registry/object revisions, ordered Programmer values and Undo depth,
+  per-fixture semantic values, resolved DMX bytes, Fixture Sheet/Stage feedback, transient control
+  lifetime, and the untouched recorded Cue collection.
+- **Pass:** Linked supported values freeze once in one Programmer mutation; missing attributes and
+  other heads are skipped. **Dots** resolves each embedded profile's own raw value immediately with
+  no stored `0s` timing override. Partial/incompatible functions remain scoped. Stale selection or
+  profile requests are rejected. The multi-channel control action activates and releases atomically,
+  remains non-recordable, and cannot bypass hazardous-fixture safety. Restoring defaults changes
+  future activation only and does not rewrite Programmer values or Cues.
+- **Executable coverage:** authoritative programmer HTTP/WebSocket tests, fixture profile
+  mapping/resolution tests, `AttributeRegistrySettings.test.tsx`,
+  `indexedPresetChoices.test.ts`, and `ParameterControls.test.tsx`; root
+  `tests/79-attribute-registry-indexed-presets.spec.ts` exercises custom-attribute creation through
+  visible Desk Setup and the visible Set Value workflow against two embedded revisions, asserting
+  persisted registry state, authoritative Programmer state, and real DMX output.
+
 ## Highlight and Step Through boundary coverage
 
 Focused server, fixture, engine, and control-surface tests cover Highlight without inventing a client-local step model:
