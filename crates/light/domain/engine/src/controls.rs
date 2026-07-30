@@ -1,6 +1,7 @@
 use crate::engine::GroupMasterTransition;
 use crate::{Engine, EngineError, GroupMasterGenerationUpdate, RuntimeGeneration};
 use light_core::FixtureId;
+use light_fixture::{ChannelFunctionBehavior, HighlightLook};
 use std::cell::Cell;
 
 impl Engine {
@@ -132,5 +133,91 @@ impl Engine {
             .collect::<Vec<_>>();
         fixtures.sort_by_key(|fixture| fixture.0);
         fixtures
+    }
+
+    /// Replace the installation-owned semantic Highlight look without touching show or
+    /// programmer state.
+    pub fn set_highlight_look(&self, look: HighlightLook) -> Result<(), EngineError> {
+        look.validate()
+            .map_err(|error| EngineError::Invalid(error.to_string()))?;
+        *self.highlight_look.write() = look;
+        Ok(())
+    }
+
+    pub fn highlight_look(&self) -> HighlightLook {
+        self.highlight_look.read().clone()
+    }
+
+    /// Fixture-authoring feedback for the current semantic Highlight configuration. This is a
+    /// read-only projection and never changes show or runtime state.
+    pub fn highlight_look_warnings(&self, look: &HighlightLook) -> Vec<String> {
+        if look.compatibility != light_fixture::HighlightLookCompatibility::Semantic {
+            return Vec::new();
+        }
+        let snapshot = self.generation.load();
+        snapshot
+            .snapshot()
+            .fixtures
+            .iter()
+            .filter_map(|fixture| {
+                let profile = fixture.definition.profile_snapshot.as_deref()?;
+                let mode = profile.mode(fixture.definition.mode_id?)?;
+                let has_attribute = |name: &str| {
+                    mode.channels.iter().any(|channel| {
+                        channel.attribute.0.eq_ignore_ascii_case(name)
+                            || channel
+                                .functions
+                                .iter()
+                                .any(|function| function.attribute.0.eq_ignore_ascii_case(name))
+                    })
+                };
+                let mut issues = Vec::new();
+                if has_attribute("shutter")
+                    && !mode.channels.iter().any(|channel| {
+                        channel.functions.iter().any(|function| {
+                            function.attribute.0.eq_ignore_ascii_case("shutter")
+                                && matches!(
+                                    &function.behavior,
+                                    ChannelFunctionBehavior::Fixed { semantic_id, .. }
+                                        | ChannelFunctionBehavior::Indexed { semantic_id, .. }
+                                        if semantic_id.eq_ignore_ascii_case("open")
+                                )
+                        })
+                    })
+                {
+                    issues.push("Shutter Open is not authored");
+                }
+                if let Some(color) = look.color
+                    && !mode.heads.iter().any(|head| {
+                        mode.resolve_highlight_color(head.id, color)
+                            .is_ok_and(|values| !values.is_empty())
+                    })
+                {
+                    issues.push("Color is unavailable");
+                }
+                for (label, configured) in [
+                    ("Iris", look.iris.is_some()),
+                    ("Zoom", look.zoom.is_some()),
+                    ("Focus", look.focus.is_some()),
+                    ("Frost", look.frost.is_some()),
+                ] {
+                    if configured && !has_attribute(&label.to_ascii_lowercase()) {
+                        issues.push(match label {
+                            "Iris" => "Iris is unavailable",
+                            "Zoom" => "Zoom is unavailable",
+                            "Focus" => "Focus is unavailable",
+                            _ => "Frost is unavailable",
+                        });
+                    }
+                }
+                (!issues.is_empty()).then(|| {
+                    let identity = fixture
+                        .fixture_number
+                        .map(|number| format!("Fixture {number}"))
+                        .unwrap_or_else(|| format!("Fixture {}", fixture.fixture_id.0));
+                    format!("{identity} {}: {}", fixture.name, issues.join("; "))
+                })
+            })
+            .collect()
     }
 }

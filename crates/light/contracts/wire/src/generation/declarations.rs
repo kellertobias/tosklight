@@ -209,6 +209,9 @@ fn desk_management(config: &Config) -> Vec<String> {
     vec![
         ConfigurationUpdateRequest::decl(config),
         ConfigurationPatch::decl(config),
+        HighlightLookConfiguration::decl(config),
+        HighlightLookColor::decl(config),
+        HighlightLookCompatibility::decl(config),
         PoolPresentationConfiguration::decl(config),
         PoolColorPalette::decl(config),
         PresetPoolColorPalette::decl(config),

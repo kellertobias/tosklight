@@ -68,6 +68,9 @@ pub struct ConfigurationPatch {
     pub patch_preview_highlight_dmx: Option<bool>,
     #[serde(default)]
     #[ts(optional = nullable)]
+    pub highlight_look: Option<HighlightLookConfiguration>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
     pub matter_enabled: Option<bool>,
     #[serde(default)]
     #[ts(optional = nullable)]
@@ -78,6 +81,47 @@ pub struct ConfigurationPatch {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub file_manager_roots: Option<Vec<FileManagerRoot>>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct HighlightLookConfiguration {
+    pub intensity: f32,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub color: Option<HighlightLookColor>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub iris: Option<f32>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub zoom: Option<f32>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub focus: Option<f32>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub frost: Option<f32>,
+    pub compatibility: HighlightLookCompatibility,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum HighlightLookCompatibility {
+    Semantic,
+    LegacyRaw,
+    NeedsReview,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum HighlightLookColor {
+    White,
+    Red,
+    Green,
+    Blue,
+    Cyan,
+    Magenta,
+    Amber,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -288,4 +332,32 @@ pub struct UserCreateRequest {
 
 fn default_true() -> bool {
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn configuration_patch_accepts_named_semantic_highlight_look() {
+        let request: ConfigurationUpdateRequest = serde_json::from_value(serde_json::json!({
+            "request_id": "highlight-look",
+            "patch": {
+                "highlight_look": {
+                    "intensity": 0.75,
+                    "color": "amber",
+                    "iris": null,
+                    "zoom": 0.5,
+                    "focus": null,
+                    "frost": null,
+                    "compatibility": "semantic"
+                }
+            }
+        }))
+        .unwrap();
+        let look = request.patch.highlight_look.unwrap();
+        assert_eq!(look.color, Some(HighlightLookColor::Amber));
+        assert_eq!(look.compatibility, HighlightLookCompatibility::Semantic);
+        assert_eq!(look.zoom, Some(0.5));
+    }
 }

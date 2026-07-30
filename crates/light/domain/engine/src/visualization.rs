@@ -45,6 +45,7 @@ impl Engine {
         let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();
         let highlighted_fixtures = self.highlighted_fixtures.read();
+        let highlight_look = self.highlight_look.read();
         let mut projected = HashMap::new();
         for fixture in snapshot.fixtures.iter() {
             let Some(profile) = fixture.definition.profile_snapshot.as_deref() else {
@@ -71,6 +72,7 @@ impl Engine {
                 group_masters,
                 &group_master_flashes,
                 &highlighted_fixtures,
+                &highlight_look,
                 AxisInversion {
                     pan: fixture.invert_pan,
                     tilt: fixture.invert_tilt,

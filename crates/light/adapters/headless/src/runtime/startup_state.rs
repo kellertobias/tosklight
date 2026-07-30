@@ -329,7 +329,7 @@ fn load_engine(
     let engine = Arc::new(Engine::new(programmers.clone()));
     let active_show_error = compile_active_show(&engine, persistent);
     tracing::info!("engine snapshot ready");
-    configure_engine(&engine, &persistent.configuration);
+    configure_engine(&engine, &persistent.configuration)?;
     restore_active_playbacks(persistent, &engine, active_show_error.as_deref())?;
     Ok((engine, active_show_error))
 }
@@ -347,12 +347,15 @@ fn compile_active_show(engine: &Engine, persistent: &PersistentState) -> Option<
     Some(message)
 }
 
-fn configure_engine(engine: &Engine, configuration: &DeskConfiguration) {
+fn configure_engine(engine: &Engine, configuration: &DeskConfiguration) -> anyhow::Result<()> {
     engine.set_control_timing(
         configuration.speed_groups_bpm,
         configuration.programmer_fade_millis,
         configuration.sequence_master_fade_millis,
     );
+    engine
+        .set_highlight_look(configuration.highlight_look.clone())
+        .map_err(|error| anyhow::anyhow!(error.to_string()))
 }
 
 fn restore_active_playbacks(

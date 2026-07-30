@@ -530,6 +530,18 @@ fn patched_configuration(
     if let Some(value) = patch.patch_preview_highlight_dmx {
         configuration.patch_preview_highlight_dmx = value;
     }
+    if let Some(value) = patch.highlight_look {
+        let look = application_highlight_look(value);
+        if look.compatibility == light_fixture::HighlightLookCompatibility::Semantic
+            && configuration.highlight_look.compatibility
+                != light_fixture::HighlightLookCompatibility::Semantic
+        {
+            configuration.highlight_legacy_overrides_acknowledged = true;
+        } else if look.compatibility != light_fixture::HighlightLookCompatibility::Semantic {
+            configuration.highlight_legacy_overrides_acknowledged = false;
+        }
+        configuration.highlight_look = look;
+    }
     if let Some(value) = patch.matter_enabled {
         configuration.matter_enabled = value;
     }
@@ -552,6 +564,39 @@ fn patched_configuration(
     }
     configuration.validate()?;
     Ok(configuration)
+}
+
+fn application_highlight_look(
+    value: wire::HighlightLookConfiguration,
+) -> light_fixture::HighlightLook {
+    light_fixture::HighlightLook {
+        intensity: value.intensity,
+        shutter: light_fixture::HighlightShutterPolicy::Open,
+        color: value.color.map(|color| match color {
+            wire::HighlightLookColor::White => light_fixture::HighlightColor::White,
+            wire::HighlightLookColor::Red => light_fixture::HighlightColor::Red,
+            wire::HighlightLookColor::Green => light_fixture::HighlightColor::Green,
+            wire::HighlightLookColor::Blue => light_fixture::HighlightColor::Blue,
+            wire::HighlightLookColor::Cyan => light_fixture::HighlightColor::Cyan,
+            wire::HighlightLookColor::Magenta => light_fixture::HighlightColor::Magenta,
+            wire::HighlightLookColor::Amber => light_fixture::HighlightColor::Amber,
+        }),
+        iris: value.iris,
+        zoom: value.zoom,
+        focus: value.focus,
+        frost: value.frost,
+        compatibility: match value.compatibility {
+            wire::HighlightLookCompatibility::Semantic => {
+                light_fixture::HighlightLookCompatibility::Semantic
+            }
+            wire::HighlightLookCompatibility::LegacyRaw => {
+                light_fixture::HighlightLookCompatibility::LegacyRaw
+            }
+            wire::HighlightLookCompatibility::NeedsReview => {
+                light_fixture::HighlightLookCompatibility::NeedsReview
+            }
+        },
+    }
 }
 
 fn application_pool_presentation(
@@ -744,5 +789,42 @@ impl DeskManagementReplayCache {
                 self.entries.remove(&expired);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod highlight_compatibility_tests {
+    use super::*;
+
+    fn highlight_patch(compatibility: &str) -> wire::ConfigurationPatch {
+        serde_json::from_value(serde_json::json!({
+            "highlight_look": {
+                "intensity": 1.0,
+                "color": null,
+                "iris": null,
+                "zoom": null,
+                "focus": null,
+                "frost": null,
+                "compatibility": compatibility,
+            }
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn choosing_semantic_highlight_acknowledges_preserved_legacy_maps() {
+        let mut configuration = DeskConfiguration::default();
+        configuration.highlight_look.compatibility =
+            light_fixture::HighlightLookCompatibility::NeedsReview;
+
+        let semantic = patched_configuration(configuration, highlight_patch("semantic")).unwrap();
+        assert!(semantic.highlight_legacy_overrides_acknowledged);
+        assert_eq!(
+            semantic.highlight_look.compatibility,
+            light_fixture::HighlightLookCompatibility::Semantic
+        );
+
+        let legacy = patched_configuration(semantic, highlight_patch("legacy_raw")).unwrap();
+        assert!(!legacy.highlight_legacy_overrides_acknowledged);
     }
 }

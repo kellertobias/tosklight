@@ -38,6 +38,7 @@ impl Engine {
         let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();
         let highlighted_fixtures = self.highlighted_fixtures.read();
+        let highlight_look = self.highlight_look.read();
         let mut universes = HashMap::new();
         let mut patched_slots: HashMap<Universe, u16> = HashMap::new();
         let mut profile_visualization_values =
@@ -83,6 +84,7 @@ impl Engine {
                     group_masters,
                     &group_master_flashes,
                     &highlighted_fixtures,
+                    &highlight_look,
                     AxisInversion {
                         pan: fixture.invert_pan,
                         tilt: fixture.invert_tilt,
@@ -111,6 +113,7 @@ impl Engine {
                         group_masters,
                         &group_master_flashes,
                         &highlighted_fixtures,
+                        &highlight_look,
                         AxisInversion {
                             pan: instance.invert_pan,
                             tilt: instance.invert_tilt,

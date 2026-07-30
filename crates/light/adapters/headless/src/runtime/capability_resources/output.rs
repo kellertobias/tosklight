@@ -570,6 +570,20 @@ impl OutputResource {
         self.engine.clear_highlighted_fixtures();
     }
 
+    pub(in crate::runtime) fn set_highlight_look(
+        &self,
+        look: light_fixture::HighlightLook,
+    ) -> Result<(), light_engine::EngineError> {
+        self.engine.set_highlight_look(look)
+    }
+
+    pub(in crate::runtime) fn highlight_look_warnings(
+        &self,
+        look: &light_fixture::HighlightLook,
+    ) -> Vec<String> {
+        self.engine.highlight_look_warnings(look)
+    }
+
     #[cfg(test)]
     pub(in crate::runtime) fn highlighted_fixtures(&self) -> Vec<light_core::FixtureId> {
         self.engine.highlighted_fixtures()

@@ -6,8 +6,9 @@ use crate::{
 };
 use light_core::{AttributeKey, AttributeValue, FixtureId, Xyz};
 use light_fixture::{
-    BoundFixtureModeResolution, ChannelScales, FixtureChannel, FixtureMode,
-    FixtureModeEncodingPlan, PatchedFixture, SignalLossPolicy,
+    BoundFixtureModeResolution, ChannelFunctionBehavior, ChannelScales, FixtureChannel,
+    FixtureMode, FixtureModeEncodingPlan, HighlightColor, HighlightLook,
+    HighlightLookCompatibility, HighlightShutterPolicy, PatchedFixture, SignalLossPolicy,
 };
 use light_output::DmxFrame;
 use std::collections::{HashMap, HashSet};
@@ -27,6 +28,7 @@ pub(crate) fn resolve_profile_fixture(
     group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
     highlighted_fixtures: &HashSet<FixtureId>,
+    highlight_look: &HighlightLook,
     axis_inversion: AxisInversion,
 ) -> Result<ResolvedProfileFixtureOutput, EngineError> {
     let resolution = projection
@@ -52,6 +54,7 @@ pub(crate) fn resolve_profile_fixture(
             group_masters,
             group_master_flashes,
             highlighted_fixtures,
+            highlight_look,
             axis_inversion,
             &mut fixture_output.channels,
         )?;
@@ -93,6 +96,8 @@ struct ProfileHeadInputs {
     owner: FixtureId,
     head_id: uuid::Uuid,
     output_highlighted: bool,
+    legacy_raw_highlight: bool,
+    semantic_highlight_color: Option<HighlightColor>,
     group_scale: f32,
     values: HashMap<AttributeKey, AttributeValue>,
     sequence_masters: HashMap<AttributeKey, ApplicableSequenceMaster>,
@@ -109,6 +114,7 @@ pub(crate) fn resolve_profile_head(
     group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
     highlighted_fixtures: &HashSet<FixtureId>,
+    highlight_look: &HighlightLook,
     axis_inversion: AxisInversion,
     channels: &mut Vec<(uuid::Uuid, u32)>,
 ) -> Result<ResolvedProfileHeadOutput, EngineError> {
@@ -116,6 +122,8 @@ pub(crate) fn resolve_profile_head(
     let highlighted =
         highlighted_fixtures.contains(&fixture.fixture_id) || highlighted_fixtures.contains(&owner);
     let output_highlighted = highlighted && !(fixture.definition.hazardous && options.blackout);
+    let legacy_raw_highlight =
+        output_highlighted && highlight_look.compatibility != HighlightLookCompatibility::Semantic;
     let group_scale = if output_highlighted || !fixture.group_masters_enabled {
         1.0
     } else {
@@ -132,6 +140,7 @@ pub(crate) fn resolve_profile_head(
         && !(fixture.definition.hazardous && options.blackout)
         && borrowed_requested_color.is_none()
         && !axis_inversion.any()
+        && (!output_highlighted || legacy_raw_highlight)
     {
         let virtual_intensity = if output_highlighted {
             1.0
@@ -148,7 +157,7 @@ pub(crate) fn resolve_profile_head(
             let resolved = resolution.resolve_channel_with(
                 *channel_index,
                 |attribute| values.value(owner, attribute),
-                output_highlighted,
+                legacy_raw_highlight,
                 fixture.highlight_overrides.get(&channel.id).copied(),
                 |active| {
                     let sequence_master = active
@@ -202,6 +211,7 @@ pub(crate) fn resolve_profile_head(
         group_masters,
         group_master_flashes,
         highlighted_fixtures,
+        highlight_look,
         axis_inversion,
     )?;
     let virtual_intensity = virtual_intensity(&inputs);
@@ -254,12 +264,15 @@ fn prepare_head_inputs(
     group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
     highlighted_fixtures: &HashSet<FixtureId>,
+    highlight_look: &HighlightLook,
     axis_inversion: AxisInversion,
 ) -> Result<ProfileHeadInputs, EngineError> {
     let owner = head.owner;
     let highlighted =
         highlighted_fixtures.contains(&fixture.fixture_id) || highlighted_fixtures.contains(&owner);
     let output_highlighted = highlighted && !(fixture.definition.hazardous && options.blackout);
+    let legacy_raw_highlight =
+        output_highlighted && highlight_look.compatibility != HighlightLookCompatibility::Semantic;
     let group_scale = if output_highlighted || !fixture.group_masters_enabled {
         1.0
     } else {
@@ -269,6 +282,8 @@ fn prepare_head_inputs(
         owner,
         head_id: head.head_id,
         output_highlighted,
+        legacy_raw_highlight,
+        semantic_highlight_color: None,
         group_scale,
         values: values.values(owner),
         sequence_masters: values.sequence_masters(owner),
@@ -276,7 +291,66 @@ fn prepare_head_inputs(
     apply_control_loss(fixture, mode, options, &mut inputs);
     apply_hazardous_blackout(fixture, options, &mut inputs.values);
     apply_axis_inversion(axis_inversion, &mut inputs.values);
+    apply_semantic_highlight(mode, head, highlight_look, &mut inputs)?;
     Ok(inputs)
+}
+
+fn apply_semantic_highlight(
+    mode: &FixtureMode,
+    head: &ProfileHeadPlan,
+    look: &HighlightLook,
+    inputs: &mut ProfileHeadInputs,
+) -> Result<(), EngineError> {
+    if !inputs.output_highlighted || look.compatibility != HighlightLookCompatibility::Semantic {
+        return Ok(());
+    }
+    inputs.values.insert(
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(look.intensity),
+    );
+    let has_authored_shutter_open = head.channel_indices.iter().any(|index| {
+        mode.channels[*index].functions.iter().any(|function| {
+            function.attribute.0.eq_ignore_ascii_case("shutter")
+                && matches!(
+                    &function.behavior,
+                    ChannelFunctionBehavior::Fixed { semantic_id, .. }
+                        | ChannelFunctionBehavior::Indexed { semantic_id, .. }
+                        if semantic_id.eq_ignore_ascii_case("open")
+                )
+        })
+    });
+    if look.shutter == HighlightShutterPolicy::Open && has_authored_shutter_open {
+        inputs.values.insert(
+            AttributeKey("shutter".into()),
+            AttributeValue::Discrete("open".into()),
+        );
+    }
+    if let Some(color) = look.color {
+        let supported = !mode
+            .resolve_highlight_color(inputs.head_id, color)
+            .map_err(|error| EngineError::Invalid(error.to_string()))?
+            .is_empty();
+        if supported {
+            inputs.values.insert(
+                AttributeKey("color".into()),
+                AttributeValue::ColorXyz(color.to_xyz()),
+            );
+            inputs.semantic_highlight_color = Some(color);
+        }
+    }
+    for (name, value) in [
+        ("iris", look.iris),
+        ("zoom", look.zoom),
+        ("focus", look.focus),
+        ("frost", look.frost),
+    ] {
+        if let Some(value) = value {
+            inputs
+                .values
+                .insert(AttributeKey(name.into()), AttributeValue::Normalized(value));
+        }
+    }
+    Ok(())
 }
 
 fn apply_axis_inversion(
@@ -359,10 +433,12 @@ fn resolve_requested_color(
     };
     let color_attribute = AttributeKey("color".into());
     let color_master = inputs.sequence_masters.get(&color_attribute).copied();
-    for (channel_id, raw) in mode
-        .resolve_color(inputs.head_id, target)
-        .map_err(|error| EngineError::Invalid(error.to_string()))?
-    {
+    let resolved = match inputs.semantic_highlight_color {
+        Some(color) => mode.resolve_highlight_color(inputs.head_id, color),
+        None => mode.resolve_color(inputs.head_id, target),
+    }
+    .map_err(|error| EngineError::Invalid(error.to_string()))?;
+    for (channel_id, raw) in resolved {
         let Some(channel) = mode
             .channels
             .iter()
@@ -404,7 +480,7 @@ fn resolve_channels(
         let resolved = resolution.resolve_channel(
             *channel_index,
             &inputs.values,
-            inputs.output_highlighted,
+            inputs.legacy_raw_highlight,
             fixture.highlight_overrides.get(&channel.id).copied(),
             |active| {
                 let sequence_master =

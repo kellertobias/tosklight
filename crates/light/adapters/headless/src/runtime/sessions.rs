@@ -11,6 +11,16 @@ pub(super) async fn update_configuration(
     let _session = authenticate(&state, &headers)?;
     configuration.validate()?;
     let previous = state.installation.configuration();
+    if configuration.highlight_look.compatibility
+        == light_fixture::HighlightLookCompatibility::Semantic
+    {
+        configuration.highlight_legacy_overrides_acknowledged |= previous
+            .highlight_legacy_overrides_acknowledged
+            || previous.highlight_look.compatibility
+                != light_fixture::HighlightLookCompatibility::Semantic;
+    } else {
+        configuration.highlight_legacy_overrides_acknowledged = false;
+    }
     let now = application_millis(&state);
     configuration.speed_group_sound_to_light = state.output.configure_speed_groups(
         previous.speed_groups_bpm,
@@ -19,6 +29,10 @@ pub(super) async fn update_configuration(
         now,
     )?;
     state.output.set_frame_rate_hz(configuration.frame_rate_hz);
+    state
+        .output
+        .set_highlight_look(configuration.highlight_look.clone())
+        .map_err(|error| ApiError::internal(error.to_string()))?;
     state
         .output
         .configure_timecode(configuration.timecode_sources.clone());
@@ -37,13 +51,14 @@ pub(super) async fn update_configuration(
     persist_server_configuration(&state)?;
     refresh_speed_group_engine(&state);
     let matter = refresh_matter_bridge(&state);
+    let wire_configuration = wire_configuration_value(&configuration)?;
     emit(
         &state,
         "server_configuration_changed",
-        serde_json::json!({"configuration":configuration,"requires_restart":requires_restart,"matter":&matter}),
+        serde_json::json!({"configuration":&wire_configuration,"requires_restart":requires_restart,"matter":&matter}),
     );
     Ok(Json(
-        serde_json::json!({"configuration":configuration,"requires_restart":requires_restart,"matter":matter}),
+        serde_json::json!({"configuration":wire_configuration,"requires_restart":requires_restart,"matter":matter}),
     ))
 }
 pub(super) async fn create_session(

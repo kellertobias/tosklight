@@ -191,6 +191,38 @@ fn discrete_color_wheel_selects_measured_slot_as_an_exact_fixture_raw_value() {
 }
 
 #[test]
+fn highlight_color_uses_an_authored_semantic_wheel_slot_without_measurement() {
+    let mut profile = FixtureProfile::blank();
+    let mode = &mut profile.modes[0];
+    let head_id = mode.heads[0].id;
+    let mut wheel = channel(head_id, ChannelResolution::U8, vec![]);
+    wheel.attribute = AttributeKey("color.wheel.1".into());
+    let wheel_id = wheel.id;
+    mode.channels = vec![wheel];
+    mode.color_systems = vec![HeadColorSystem {
+        head_id,
+        correction_matrix: identity_color_correction(),
+        system: ColorSystem::DiscreteWheel {
+            channel_id: wheel_id,
+            slots: vec![ColorWheelSlot {
+                semantic_id: "blue".into(),
+                label: "Blue".into(),
+                dmx_from: 100,
+                dmx_to: 140,
+                measured_xyz: None,
+            }],
+        },
+    }];
+    mode.validate().unwrap();
+
+    assert_eq!(
+        mode.resolve_highlight_color(head_id, crate::HighlightColor::Blue)
+            .unwrap()[&wheel_id],
+        120
+    );
+}
+
+#[test]
 fn rejects_non_finite_and_negative_additive_calibration() {
     let valid = additive_color_mode();
     valid.validate().unwrap();

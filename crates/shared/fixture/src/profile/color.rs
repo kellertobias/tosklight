@@ -1,10 +1,34 @@
 use super::{ColorSystem, FixtureMode, ProfileError};
-use crate::{ColorCalibration, EmitterCalibration, mix_color};
+use crate::{ColorCalibration, EmitterCalibration, HighlightColor, mix_color};
 use light_core::Xyz;
 use std::collections::HashMap;
 use uuid::Uuid;
 
 impl FixtureMode {
+    /// Resolve one named operator Highlight color. An authored semantic wheel slot wins before
+    /// calibrated mixing or the ordinary closest-measured-slot fallback.
+    pub fn resolve_highlight_color(
+        &self,
+        head_id: Uuid,
+        color: HighlightColor,
+    ) -> Result<HashMap<Uuid, u32>, ProfileError> {
+        if let Some(ColorSystem::DiscreteWheel { channel_id, slots }) = self
+            .color_systems
+            .iter()
+            .find(|system| system.head_id == head_id)
+            .map(|system| &system.system)
+            && let Some(slot) = slots
+                .iter()
+                .find(|slot| semantic_slot_matches(&slot.semantic_id, color))
+        {
+            return Ok(HashMap::from([(
+                *channel_id,
+                slot.dmx_from + (slot.dmx_to - slot.dmx_from) / 2,
+            )]));
+        }
+        self.resolve_color(head_id, color.to_xyz())
+    }
+
     /// Resolve an abstract XYZ color through the configured head system. Additive calibration uses
     /// bounded non-negative optimization; missing calibration falls back deterministically to RGB
     /// or CMY. UV/non-visible emitters are excluded unless directly programmed.
@@ -139,6 +163,25 @@ impl FixtureMode {
             }
         }
         Ok(output)
+    }
+}
+
+fn semantic_slot_matches(semantic_id: &str, color: HighlightColor) -> bool {
+    let normalized = semantic_id
+        .trim()
+        .to_ascii_lowercase()
+        .replace([' ', '-'], "_");
+    match color {
+        HighlightColor::White => matches!(
+            normalized.as_str(),
+            "white" | "open" | "clear" | "no_color" | "nocolor"
+        ),
+        HighlightColor::Red => normalized == "red",
+        HighlightColor::Green => normalized == "green",
+        HighlightColor::Blue => normalized == "blue",
+        HighlightColor::Cyan => normalized == "cyan",
+        HighlightColor::Magenta => normalized == "magenta",
+        HighlightColor::Amber => normalized == "amber",
     }
 }
 

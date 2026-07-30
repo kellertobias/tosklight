@@ -127,6 +127,7 @@ mod fixture_api_replay;
 mod generated_presets;
 mod group_selection;
 mod highlight_api;
+mod highlight_compatibility;
 mod highlight_service_adapter;
 mod lifecycle;
 mod live_action_http;

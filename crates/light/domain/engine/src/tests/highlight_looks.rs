@@ -1,6 +1,120 @@
 use super::*;
 
 #[test]
+fn semantic_highlight_applies_only_authored_identification_attributes() {
+    let (mut fixture, fixture_id) = schema_v2_fixture(&[
+        ("intensity", false, false, false, false, false),
+        ("shutter", true, false, false, false, false),
+        ("gobo", true, false, false, false, false),
+    ]);
+    let mode = &mut fixture.definition.profile_snapshot.as_mut().unwrap().modes[0];
+    mode.channels[0].default_raw = 9;
+    mode.channels[0].highlight_raw = 255;
+    mode.channels[1].default_raw = 7;
+    mode.channels[1].highlight_raw = 244;
+    mode.channels[1].functions = vec![ChannelFunction {
+        id: uuid::Uuid::new_v4(),
+        name: "Open".into(),
+        dmx_from: 80,
+        dmx_to: 110,
+        attribute: AttributeKey("shutter".into()),
+        priority: 0,
+        behavior: light_fixture::ChannelFunctionBehavior::Fixed {
+            semantic_id: "open".into(),
+            label: "Open".into(),
+            raw_value: 96,
+        },
+    }];
+    mode.channels[2].default_raw = 42;
+    mode.channels[2].highlight_raw = 233;
+
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    engine
+        .set_highlight_look(light_fixture::HighlightLook {
+            intensity: 0.4,
+            ..Default::default()
+        })
+        .unwrap();
+    engine.set_highlighted_fixtures([fixture_id]);
+
+    assert_eq!(
+        &engine.render(RenderOptions::default()).unwrap().universes[&1][0..3],
+        &[102, 96, 42],
+        "semantic Highlight must use the configured intensity and authored Open function without changing Gobo"
+    );
+}
+
+#[test]
+fn semantic_highlight_does_not_guess_an_unauthored_shutter_open_value() {
+    let (mut fixture, fixture_id) =
+        schema_v2_fixture(&[("shutter", true, false, false, false, false)]);
+    let channel = &mut fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].channels[0];
+    channel.default_raw = 31;
+    channel.highlight_raw = 255;
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    engine
+        .set_highlight_look(light_fixture::HighlightLook::default())
+        .unwrap();
+    engine.set_highlighted_fixtures([fixture_id]);
+
+    assert_eq!(
+        engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+        31,
+        "a profile without semantic Open must retain its ordinary resolved value"
+    );
+}
+
+#[test]
+fn unsupported_semantic_highlight_color_leaves_the_fixture_value_unchanged() {
+    let (mut fixture, fixture_id) =
+        schema_v2_fixture(&[("color.wheel.1", true, false, false, false, false)]);
+    let channel = &mut fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].channels[0];
+    channel.default_raw = 57;
+    channel.highlight_raw = 255;
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    engine
+        .set_highlight_look(light_fixture::HighlightLook {
+            color: Some(light_fixture::HighlightColor::Blue),
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(
+        engine
+            .highlight_look_warnings(&engine.highlight_look())
+            .iter()
+            .any(|warning| warning.contains("Color is unavailable"))
+    );
+    engine.set_highlighted_fixtures([fixture_id]);
+
+    assert_eq!(
+        engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+        57,
+        "an unrepresentable optional color must retain the ordinary resolved value"
+    );
+}
+
+#[test]
 fn fixture_highlight_override_renders_an_individual_blue_identification_look() {
     let mut profile = FixtureProfile::blank();
     profile.manufacturer = "Test".into();

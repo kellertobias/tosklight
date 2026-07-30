@@ -133,6 +133,7 @@ pub(super) fn prepare_show_for_runtime(
     state: &AppState,
     entry: &ShowEntry,
 ) -> Result<PreparedEngineSnapshot, ApiError> {
+    highlight_compatibility::require_review_for_show(state, entry)?;
     let backup = ShowMutationBackupPlan::migration(
         state.installation.data_dir(),
         entry,

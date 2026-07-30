@@ -56,8 +56,16 @@ pub(super) async fn shutdown_server(
 }
 pub(super) async fn configuration(State(state): State<AppState>) -> Json<serde_json::Value> {
     let matter = refresh_matter_bridge(&state);
+    let configuration = state.installation.configuration();
+    let mut value =
+        wire_configuration_value(&configuration).expect("configuration is serializable");
+    value["highlight_look_feedback"] = serde_json::json!(
+        state
+            .output
+            .highlight_look_warnings(&configuration.highlight_look)
+    );
     Json(
-        serde_json::json!({"configuration":state.installation.configuration(),"output_health":state.output.health_snapshot(),"matter":matter}),
+        serde_json::json!({"configuration":value,"output_health":state.output.health_snapshot(),"matter":matter}),
     )
 }
 

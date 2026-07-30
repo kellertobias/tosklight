@@ -154,6 +154,14 @@ pub(super) struct DeskConfiguration {
     pub(super) preload_virtual_playback_actions: bool,
     /// Allow Show Patch's scoped Stage preview selection to identify fixtures on DMX.
     pub(super) patch_preview_highlight_dmx: bool,
+    /// Installation-wide semantic Highlight contribution. A missing field means the installation
+    /// predates this ownership boundary and its portable raw overrides require review.
+    #[serde(default = "legacy_highlight_look")]
+    pub(super) highlight_look: light_fixture::HighlightLook,
+    /// An explicit installation-wide decision to ignore preserved legacy raw maps. This remains
+    /// false for fresh defaults until a legacy show is actually encountered and reviewed.
+    #[serde(default)]
+    pub(super) highlight_legacy_overrides_acknowledged: bool,
     /// Desk-persistent opt-in for the global page/playback Matter bridge.
     pub(super) matter_enabled: bool,
     /// Pool colors are a desk presentation preference, never portable show content.
@@ -216,6 +224,8 @@ impl Default for DeskConfiguration {
             preload_physical_playback_actions: true,
             preload_virtual_playback_actions: false,
             patch_preview_highlight_dmx: false,
+            highlight_look: light_fixture::HighlightLook::default(),
+            highlight_legacy_overrides_acknowledged: false,
             matter_enabled: false,
             pool_presentation: PoolPresentationConfiguration::default(),
             update_settings_by_desk: HashMap::new(),
@@ -269,6 +279,9 @@ impl DeskConfiguration {
                 "fade times must be 0-60000 milliseconds",
             ));
         }
+        self.highlight_look
+            .validate()
+            .map_err(|error| ApiError::bad_request(error.to_string()))?;
         let mut root_ids = std::collections::HashSet::new();
         for root in &self.file_manager_roots {
             if root.id.trim().is_empty() || root.label.trim().is_empty() || !root.path.is_absolute()
@@ -285,6 +298,92 @@ impl DeskConfiguration {
         }
         self.pool_presentation.validate()?;
         Ok(())
+    }
+}
+
+fn legacy_highlight_look() -> light_fixture::HighlightLook {
+    light_fixture::HighlightLook::needs_review()
+}
+
+pub(super) fn wire_configuration_value(
+    configuration: &DeskConfiguration,
+) -> Result<serde_json::Value, ApiError> {
+    let mut value = serde_json::to_value(configuration)
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    value["highlight_look"] =
+        serde_json::to_value(wire_highlight_look(&configuration.highlight_look))
+            .map_err(|error| ApiError::internal(error.to_string()))?;
+    Ok(value)
+}
+
+fn wire_highlight_look(
+    value: &light_fixture::HighlightLook,
+) -> light_wire::v2::desk_management::HighlightLookConfiguration {
+    use light_wire::v2::desk_management as wire;
+    wire::HighlightLookConfiguration {
+        intensity: value.intensity,
+        color: value.color.map(|color| match color {
+            light_fixture::HighlightColor::White => wire::HighlightLookColor::White,
+            light_fixture::HighlightColor::Red => wire::HighlightLookColor::Red,
+            light_fixture::HighlightColor::Green => wire::HighlightLookColor::Green,
+            light_fixture::HighlightColor::Blue => wire::HighlightLookColor::Blue,
+            light_fixture::HighlightColor::Cyan => wire::HighlightLookColor::Cyan,
+            light_fixture::HighlightColor::Magenta => wire::HighlightLookColor::Magenta,
+            light_fixture::HighlightColor::Amber => wire::HighlightLookColor::Amber,
+        }),
+        iris: value.iris,
+        zoom: value.zoom,
+        focus: value.focus,
+        frost: value.frost,
+        compatibility: match value.compatibility {
+            light_fixture::HighlightLookCompatibility::Semantic => {
+                wire::HighlightLookCompatibility::Semantic
+            }
+            light_fixture::HighlightLookCompatibility::LegacyRaw => {
+                wire::HighlightLookCompatibility::LegacyRaw
+            }
+            light_fixture::HighlightLookCompatibility::NeedsReview => {
+                wire::HighlightLookCompatibility::NeedsReview
+            }
+        },
+    }
+}
+
+#[cfg(test)]
+mod highlight_look_tests {
+    use super::*;
+
+    #[test]
+    fn fresh_configuration_is_semantic_but_missing_persisted_field_needs_review() {
+        assert_eq!(
+            DeskConfiguration::default().highlight_look.compatibility,
+            light_fixture::HighlightLookCompatibility::Semantic
+        );
+
+        let mut legacy = serde_json::to_value(DeskConfiguration::default()).unwrap();
+        legacy.as_object_mut().unwrap().remove("highlight_look");
+        let decoded: DeskConfiguration = serde_json::from_value(legacy).unwrap();
+        assert_eq!(
+            decoded.highlight_look.compatibility,
+            light_fixture::HighlightLookCompatibility::NeedsReview
+        );
+    }
+
+    #[test]
+    fn invalid_highlight_values_fail_configuration_validation() {
+        let mut configuration = DeskConfiguration::default();
+        configuration.highlight_look.frost = Some(-0.01);
+        let error = configuration.validate().unwrap_err();
+        assert!(error.message.contains("frost"), "{}", error.message);
+    }
+
+    #[test]
+    fn configuration_transport_projects_named_abstract_color() {
+        let mut configuration = DeskConfiguration::default();
+        configuration.highlight_look.color = Some(light_fixture::HighlightColor::Blue);
+        let wire = wire_configuration_value(&configuration).unwrap();
+        assert_eq!(wire["highlight_look"]["color"], "blue");
+        assert!(wire["highlight_look"].get("shutter").is_none());
     }
 }
 
