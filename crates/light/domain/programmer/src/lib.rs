@@ -20,6 +20,7 @@ mod preset_capture;
 mod presets;
 mod registry;
 mod selection;
+mod selection_grid;
 mod sessions;
 mod state;
 mod transactions;
@@ -67,6 +68,11 @@ pub use registry::ProgrammerRegistry;
 pub use selection::{
     ProgrammerSelection, SelectionExpression, SelectionReference, SelectionReplaceError,
     SelectionRule, apply_selection_rule, resolve_selection_references,
+};
+pub use selection_grid::{
+    AxisOrigin, ColumnsFirstTraversal, GridCell, GridConstructionError, GridMethod,
+    GridMethodConfiguration, PositionedFixture, RowsFirstTraversal, SelectionGrid,
+    StageGridPosition,
 };
 pub use state::{
     ProgrammerFixtureUpdate, ProgrammerGroupUpdate, ProgrammerOutputState, ProgrammerSnapshot,

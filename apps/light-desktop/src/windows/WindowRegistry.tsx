@@ -8,6 +8,7 @@ import { FileManagerWindow } from "./FileManagerWindow";
 import { FixtureSheetWindow } from "./FixtureSheetWindow";
 import { GroupsWindow } from "./GroupsWindow";
 import { HelpWindow } from "./HelpWindow";
+import { LayoutWindow } from "./LayoutWindow";
 import { PatchWindow } from "./PatchWindow";
 import { PresetsWindow } from "./PresetsWindow";
 import { SchedulerWindow } from "./SchedulerWindow";
@@ -24,6 +25,7 @@ export const windowRegistry: Record<
 	stage: StageWindow,
 	groups: GroupsWindow,
 	fixtures: FixtureSheetWindow,
+	layout: LayoutWindow,
 	presets: PresetsWindow,
 	cuelists: CuelistWindow,
 	cuelist_pool: (props) => <CuelistWindow {...props} cueListTab="pool" />,

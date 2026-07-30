@@ -240,9 +240,14 @@ function decodeUserLayout(value: unknown, path: string): StoredDeskLayout {
 						kind === "virtual_playbacks"
 							? decodeVirtualPlaybackPane(pane, panePath)
 							: {};
+					const layoutGroupId =
+						pane.layoutGroupId == null
+							? undefined
+							: stringAt(pane.layoutGroupId, `${panePath}.layoutGroupId`);
 					return {
 						...pane,
 						...virtualFields,
+						...(layoutGroupId === undefined ? {} : { layoutGroupId }),
 						id: stringAt(pane.id, `${panePath}.id`),
 						kind,
 						title: stringAt(pane.title, `${panePath}.title`),
@@ -320,6 +325,7 @@ const BUILT_IN_WINDOWS: readonly BuiltInWindow[] = [
 	"stage",
 	"groups",
 	"fixtures",
+	"layout",
 	"presets",
 	"cuelists",
 	"cuelist_pool",

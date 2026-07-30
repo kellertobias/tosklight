@@ -150,6 +150,7 @@ export function Pane({
 					followPreload={Boolean(pane.followPreload)}
 					showBeamGuides={pane.showBeamGuides ?? true}
 					stageRenderQuality={pane.stageRenderQuality ?? "lines_and_beams"}
+					layoutGroupId={pane.layoutGroupId}
 					presetFamily={pane.presetFamily ?? state.presetFamily}
 					presetPoolColors={pane.presetPoolColors ?? true}
 					schedulerShowList={pane.schedulerShowList ?? true}

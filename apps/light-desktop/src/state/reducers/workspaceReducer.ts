@@ -69,6 +69,8 @@ export function reduceWorkspace(
 			return { ...state, stageMode: action.value };
 		case "SET_STAGE_VIEW":
 			return { ...state, stageView: action.value };
+		case "SET_LAYOUT_GROUP":
+			return { ...state, layoutGroupId: action.groupId };
 		case "SET_STAGE_NAVIGATION":
 			return {
 				...state,

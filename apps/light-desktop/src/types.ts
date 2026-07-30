@@ -7,6 +7,7 @@ export type BuiltInWindow =
 	| "stage"
 	| "groups"
 	| "fixtures"
+	| "layout"
 	| "presets"
 	| "cuelists"
 	| "cuelist_pool"
@@ -75,6 +76,7 @@ export interface PaneModel extends GridRect {
 	followPreload?: boolean;
 	showBeamGuides?: boolean;
 	stageRenderQuality?: StageRenderQuality;
+	layoutGroupId?: string;
 	presetFamily?: AppState["presetFamily"];
 	presetPoolColors?: boolean;
 	schedulerShowList?: boolean;
@@ -208,6 +210,7 @@ export interface AppState {
 	stageShowBeamGuides: boolean;
 	stageRenderQuality: StageRenderQuality;
 	stageEnvironmentBrightness: number;
+	layoutGroupId: string;
 	dmxDotSize: DmxDotSize;
 	fixtureSheetOrder: FixtureSheetOrder;
 	fixtureSheetActiveOnly: boolean;
@@ -258,6 +261,7 @@ export interface WindowSettings {
 	stageShowBeamGuides: boolean;
 	stageRenderQuality: StageRenderQuality;
 	stageEnvironmentBrightness: number;
+	layoutGroupId: string;
 	dmxDotSize: DmxDotSize;
 	fixtureSheetOrder: FixtureSheetOrder;
 	fixtureSheetActiveOnly: boolean;

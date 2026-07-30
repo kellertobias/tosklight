@@ -219,6 +219,7 @@ fn migrate_group(object: PortableShowCandidateObject<'_>) -> Result<Value, Actio
     for field in [
         "color",
         "icon",
+        "grid",
         "derived_from",
         "frozen_from",
         "programming",

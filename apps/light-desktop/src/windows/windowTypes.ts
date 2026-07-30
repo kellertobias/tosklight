@@ -22,6 +22,7 @@ export interface WindowProps {
 	followPreload?: boolean;
 	showBeamGuides?: boolean;
 	stageRenderQuality?: import("../types").StageRenderQuality;
+	layoutGroupId?: string;
 	cueListTab?: "pool" | "cues";
 	presetFamily?: PresetFamily;
 	presetPoolColors?: boolean;

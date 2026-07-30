@@ -1,0 +1,127 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LayoutWindow } from "./LayoutWindow";
+
+const mocks = vi.hoisted(() => ({
+	dispatch: vi.fn(),
+	replace: vi.fn(),
+	gesture: vi.fn(),
+	bootstrapReady: true,
+	groups: [] as Array<Record<string, unknown>>,
+	selected: new Set<string>(),
+}));
+
+vi.mock("../state/AppContext", () => ({
+	useApp: () => ({
+		state: { layoutGroupId: "" },
+		dispatch: mocks.dispatch,
+	}),
+}));
+vi.mock("../features/showObjects/ShowObjectsView", () => ({
+	useShowObjectView: vi.fn(),
+}));
+vi.mock("../features/showObjects/ShowObjectsState", () => ({
+	usePortableGroups: () => mocks.groups,
+}));
+vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
+	useBootstrapReady: () => mocks.bootstrapReady,
+}));
+vi.mock("./stageWindow/useStageLayout", () => ({
+	useStageLayout: () => ({
+		positions: {
+			a: { x: 0, y: 0, rotation: 0 },
+			b: { x: 2, y: 0, rotation: 0 },
+		},
+		positions3d: {},
+	}),
+}));
+vi.mock("./stageWindow/useStageSelection", () => ({
+	useStageSelection: () => ({
+		fixtureIds: [...mocks.selected],
+		fixtureIdSet: mocks.selected,
+		firstFixtureId: [...mocks.selected][0] ?? null,
+		applyFixtureGesture: mocks.gesture,
+		replaceFixtureIds: mocks.replace,
+		clear: vi.fn(),
+	}),
+}));
+vi.mock("./layoutWindow/useLayoutVisualization", () => ({
+	useLayoutVisualization: () => ({
+		presentations: [
+			{
+				fixtureId: "a",
+				fixtureNumber: 1,
+				name: "A",
+				color: "rgb(255,0,0)",
+				dimmer: 75,
+			},
+			{
+				fixtureId: "b",
+				fixtureNumber: 2,
+				name: "B",
+				color: "rgb(0,0,255)",
+				dimmer: 25,
+			},
+		],
+		fixtures: [],
+	}),
+}));
+
+function group(id: string, name: string, fixtures: string[]) {
+	return {
+		kind: "group",
+		id,
+		revision: 1,
+		updated_at: "",
+		body: { name, fixtures, grid: { method: "stage2d" } },
+	};
+}
+
+describe("LayoutWindow", () => {
+	beforeEach(() => {
+		mocks.dispatch.mockReset();
+		mocks.replace.mockReset();
+		mocks.gesture.mockReset();
+		mocks.bootstrapReady = true;
+		mocks.selected = new Set();
+		mocks.groups = [group("1", "Front", ["a", "b"])];
+	});
+	afterEach(cleanup);
+
+	it("renders only the configured Group with live intensity and color", () => {
+		render(<LayoutWindow compact paneId="layout-a" layoutGroupId="1" />);
+		expect(screen.getByRole("button", { name: "Fixture 1, 75%" })).toHaveStyle(
+			"--layout-fixture-color: rgb(255,0,0)",
+		);
+		expect(screen.getByText("25%")).toBeInTheDocument();
+	});
+
+	it("keeps empty and unavailable Groups distinct", () => {
+		mocks.groups = [group("2", "Stored Empty", [])];
+		const view = render(
+			<LayoutWindow compact paneId="layout-a" layoutGroupId="2" />,
+		);
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"Stored Empty is empty",
+		);
+		view.rerender(
+			<LayoutWindow compact paneId="layout-a" layoutGroupId="missing" />,
+		);
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"Group missing is unavailable",
+		);
+	});
+
+	it("uses the shared authoritative selection for click, toggle, and range", () => {
+		render(<LayoutWindow compact paneId="layout-a" layoutGroupId="1" />);
+		const first = screen.getByRole("button", { name: "Fixture 1, 75%" });
+		const second = screen.getByRole("button", { name: "Fixture 2, 25%" });
+		fireEvent.click(first);
+		expect(mocks.replace).toHaveBeenLastCalledWith(["a"]);
+		mocks.selected.add("a");
+		fireEvent.click(first, { metaKey: true });
+		expect(mocks.gesture).toHaveBeenLastCalledWith("a", "remove");
+		fireEvent.click(second, { shiftKey: true });
+		expect(mocks.replace).toHaveBeenLastCalledWith(["a", "b"]);
+	});
+});

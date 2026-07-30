@@ -316,11 +316,29 @@ export interface VersionedObject<T = Record<string, unknown>> {
 
 export * from "./types/configuration";
 
+export type SelectionGridMethod =
+	| "stage2d"
+	| "top_to_bottom"
+	| "bottom_to_top"
+	| "front_to_back"
+	| "back_to_front"
+	| "left_to_right"
+	| "right_to_left"
+	| "horizontal_axis_x"
+	| "vertical_axis_z"
+	| "room_depth_axis_y";
+
+export interface SelectionGridConfiguration {
+	method: SelectionGridMethod;
+	axis_origin?: { x: number; y: number; z: number };
+}
+
 export interface StoredGroup {
 	name?: string;
 	color?: string;
 	icon?: string;
 	fixtures: string[];
+	grid?: SelectionGridConfiguration;
 	master?: number;
 	playback_fader?: number | null;
 	programming?: Record<string, unknown>;

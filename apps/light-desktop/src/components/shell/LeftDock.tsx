@@ -11,6 +11,7 @@ import { type ShowIndicator, useShowIndicator } from "./showIndicator";
 export const builtIns: Array<[BuiltInWindow, string, string]> = [
 	["stage", "⌖", "Stage"],
 	["fixtures", "♙", "Fixtures"],
+	["layout", "▦", "Layout"],
 	["presets", "▣", "Presets"],
 	["cuelists", "▶", "Cuelists"],
 	["dynamics", "∿", "Dynamics"],

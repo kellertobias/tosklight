@@ -527,6 +527,10 @@ async function applyPaneConfiguration<T extends PaneType>(
 				})
 				.click();
 	}
+	if (type === "layout" && options.groupId !== undefined) {
+		await dialog.getByRole("tab", { name: "Layout" }).click();
+		await dialog.getByLabel("Group").selectOption(String(options.groupId));
+	}
 	if (type === "presets") {
 		await dialog.getByRole("tab", { name: "Pool" }).click();
 		if (options.family)

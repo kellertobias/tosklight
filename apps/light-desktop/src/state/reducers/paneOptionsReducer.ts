@@ -14,6 +14,22 @@ export function reducePaneOptions(
 	action: Action,
 ): AppState | undefined {
 	switch (action.type) {
+		case "SET_PANE_LAYOUT_GROUP":
+			return {
+				...state,
+				desks: state.desks.map((desk) =>
+					desk.id !== state.activeDeskId
+						? desk
+						: {
+								...desk,
+								panes: desk.panes.map((pane) =>
+									pane.id === action.id
+										? { ...pane, layoutGroupId: action.groupId }
+										: pane,
+								),
+							},
+				),
+			};
 		case "SET_PANE_STAGE_OPTION":
 			return {
 				...state,

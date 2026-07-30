@@ -246,12 +246,7 @@ pub(super) async fn visualization_snapshot(
                 "profile_output_values".into(),
                 serde_json::Value::Array(Vec::new()),
             );
-            let fixture_ids = query.fixture_ids.as_deref().map(|fixture_ids| {
-                fixture_ids
-                    .split(',')
-                    .filter_map(|fixture_id| Uuid::parse_str(fixture_id).ok())
-                    .collect::<HashSet<_>>()
-            });
+            let fixture_ids = requested_visualization_fixture_ids(query.fixture_ids.as_deref());
             if let Some(dynamic_stack) = snapshot
                 .get_mut("dynamic_stack")
                 .and_then(serde_json::Value::as_array_mut)
@@ -305,7 +300,12 @@ pub(super) async fn visualization_snapshot(
         }
         snapshot
     } else {
-        visualization_snapshot_for_session(&state, &session, query.preload)?
+        let mut snapshot = visualization_snapshot_for_session(&state, &session, query.preload)?;
+        if let Some(fixture_ids) = requested_visualization_fixture_ids(query.fixture_ids.as_deref())
+        {
+            retain_visualization_fixtures(&mut snapshot, &fixture_ids);
+        }
+        snapshot
     };
     let projection_duration = projection_started.elapsed();
     if let Some(source) = source.as_ref()
@@ -331,6 +331,42 @@ pub(super) async fn visualization_snapshot(
         source.as_deref(),
     );
     Ok(Json(snapshot))
+}
+
+fn requested_visualization_fixture_ids(value: Option<&str>) -> Option<HashSet<Uuid>> {
+    value.map(|fixture_ids| {
+        fixture_ids
+            .split(',')
+            .take(10_000)
+            .filter_map(|fixture_id| Uuid::parse_str(fixture_id).ok())
+            .collect()
+    })
+}
+
+/// Retains only the eventually-consistent display values requested by a scoped UI consumer.
+///
+/// Projection remains authoritative and complete before this cheap boundary filter. This keeps
+/// Layout/Fixture Sheet transfer and JSON work proportional to visible fixtures without changing
+/// output, Programmer, or Stage-render timing.
+fn retain_visualization_fixtures(snapshot: &mut serde_json::Value, fixture_ids: &HashSet<Uuid>) {
+    let Some(snapshot) = snapshot.as_object_mut() else {
+        return;
+    };
+    for field in ["values", "profile_output_values", "dynamic_stack"] {
+        let Some(entries) = snapshot
+            .get_mut(field)
+            .and_then(serde_json::Value::as_array_mut)
+        else {
+            continue;
+        };
+        entries.retain(|entry| {
+            entry
+                .get("fixture_id")
+                .and_then(serde_json::Value::as_str)
+                .and_then(|fixture_id| Uuid::parse_str(fixture_id).ok())
+                .is_some_and(|fixture_id| fixture_ids.contains(&fixture_id))
+        });
+    }
 }
 
 fn compact_fixture_sheet_dynamic_stack(dynamic_stack: &mut Vec<serde_json::Value>) {
@@ -394,6 +430,39 @@ fn compact_fixture_sheet_dynamic_stack(dynamic_stack: &mut Vec<serde_json::Value
         compacted.push(entry);
     }
     *dynamic_stack = compacted;
+}
+
+#[cfg(test)]
+mod scoped_visualization_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn normal_snapshot_filter_keeps_only_requested_fixture_values() {
+        let included = Uuid::from_u128(1);
+        let excluded = Uuid::from_u128(2);
+        let mut snapshot = json!({
+            "values": [
+                {"fixture_id": included, "attribute": "intensity", "value": 0.5},
+                {"fixture_id": excluded, "attribute": "intensity", "value": 1.0}
+            ],
+            "profile_output_values": [
+                {"fixture_id": included, "attribute": "intensity", "value": 0.4},
+                {"fixture_id": excluded, "attribute": "intensity", "value": 0.9}
+            ],
+            "dynamic_stack": [
+                {"fixture_id": included, "attribute": "intensity"},
+                {"fixture_id": excluded, "attribute": "intensity"}
+            ],
+            "revision": 7
+        });
+        retain_visualization_fixtures(&mut snapshot, &HashSet::from([included]));
+        for field in ["values", "profile_output_values", "dynamic_stack"] {
+            assert_eq!(snapshot[field].as_array().unwrap().len(), 1);
+            assert_eq!(snapshot[field][0]["fixture_id"], included.to_string());
+        }
+        assert_eq!(snapshot["revision"], 7);
+    }
 }
 
 fn fixture_sheet_dynamic_summary_line(entry: &serde_json::Value) -> String {

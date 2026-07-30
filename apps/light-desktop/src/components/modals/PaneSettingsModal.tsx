@@ -13,6 +13,8 @@ import {
 	type WindowSettingsTab,
 } from "@tosklight/ui/window-kit";
 import { useState } from "react";
+import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
+import { usePortableGroups } from "../../features/showObjects/ShowObjectsState";
 import {
 	usePlaybackDeskView,
 	usePlaybackRuntimeStatus,
@@ -201,6 +203,36 @@ function CuePaneSettings({
 						value: event.target.checked,
 					})
 				}
+			/>
+		</FormLayout>
+	);
+}
+
+function LayoutPaneSettings({ pane }: { pane: PaneModel }) {
+	const { dispatch } = useApp();
+	useShowObjectView("group");
+	const groups = usePortableGroups();
+	const missing =
+		pane.layoutGroupId &&
+		!groups.some((group) => group.id === pane.layoutGroupId)
+			? [{ value: pane.layoutGroupId, label: `Unavailable · ${pane.layoutGroupId}` }]
+			: [];
+	return (
+		<FormLayout labelPlacement="side">
+			<SelectField
+				label="Group"
+				value={pane.layoutGroupId ?? ""}
+				onChange={(groupId) =>
+					dispatch({ type: "SET_PANE_LAYOUT_GROUP", id: pane.id, groupId })
+				}
+				options={[
+					{ value: "", label: "Choose a Group" },
+					...missing,
+					...groups.map((group) => ({
+						value: group.id,
+						label: `${group.id} · ${group.body.name || `Group ${group.id}`}`,
+					})),
+				]}
 			/>
 		</FormLayout>
 	);
@@ -503,6 +535,12 @@ function PaneSettingsDialog({ pane }: { pane: PaneModel }) {
 			id: "stage",
 			label: "Stage",
 			content: <StagePaneSettings pane={pane} />,
+		});
+	if (pane.kind === "layout")
+		tabs.push({
+			id: "layout-group",
+			label: "Layout",
+			content: <LayoutPaneSettings pane={pane} />,
 		});
 	if (pane.kind === "virtual_playbacks") {
 		tabs.push({

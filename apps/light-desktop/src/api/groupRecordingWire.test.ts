@@ -75,6 +75,38 @@ describe("Group recording wire", () => {
 		});
 	});
 
+	it("validates and preserves portable selection-grid configuration", () => {
+		const grid = {
+			method: "vertical_axis_z",
+			axis_origin: { x: 1, y: 2, z: 3 },
+		};
+		const outcome = decodeGroupRecordingOutcome(
+			storedOutcome({
+				group: {
+					...storedOutcome().group,
+					body: { ...storedOutcome().group.body, grid },
+				},
+			}),
+			REQUEST,
+		);
+		expect(outcome.group.object?.body.grid).toEqual(grid);
+
+		expect(() =>
+			decodeGroupRecordingOutcome(
+				storedOutcome({
+					group: {
+						...storedOutcome().group,
+						body: {
+							...storedOutcome().group.body,
+							grid: { method: "vertical_axis_z" },
+						},
+					},
+				}),
+				REQUEST,
+			),
+		).toThrow("$.group.body.grid.axis_origin");
+	});
+
 	it("accepts a losslessly preserved legacy body with only fixtures", () => {
 		const outcome = decodeGroupRecordingOutcome(
 			storedOutcome({

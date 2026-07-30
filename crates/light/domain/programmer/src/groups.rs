@@ -1,5 +1,6 @@
 use crate::ProgrammerRegistry;
 use crate::selection::{SelectionRule, apply_selection_rule};
+use crate::selection_grid::GridMethodConfiguration;
 use crate::state::ProgrammerValueTiming;
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId};
@@ -76,6 +77,10 @@ pub struct GroupDefinition {
     pub color: Option<String>,
     pub icon: Option<String>,
     pub fixtures: Vec<FixtureId>,
+    /// Portable Stage-derived grid configuration. Cells are intentionally not stored: they are
+    /// rebuilt from current Stage positions so moving a fixture cannot rewrite Group order.
+    #[serde(default)]
+    pub grid: GridMethodConfiguration,
     pub derived_from: Option<DerivedGroup>,
     pub frozen_from: Option<FrozenGroup>,
     pub programming: HashMap<AttributeKey, AttributeValue>,
@@ -91,6 +96,7 @@ impl Default for GroupDefinition {
             color: None,
             icon: None,
             fixtures: vec![],
+            grid: GridMethodConfiguration::default(),
             derived_from: None,
             frozen_from: None,
             programming: HashMap::new(),

@@ -209,6 +209,10 @@ function equalGroup(left: GroupObject, right: GroupObject | undefined) {
 		leftBody.icon === rightBody.icon &&
 		leftBody.master === rightBody.master &&
 		leftBody.playback_fader === rightBody.playback_fader &&
+		leftBody.grid?.method === rightBody.grid?.method &&
+		leftBody.grid?.axis_origin?.x === rightBody.grid?.axis_origin?.x &&
+		leftBody.grid?.axis_origin?.y === rightBody.grid?.axis_origin?.y &&
+		leftBody.grid?.axis_origin?.z === rightBody.grid?.axis_origin?.z &&
 		leftBody.programming === rightBody.programming &&
 		leftBody.derived_from === rightBody.derived_from &&
 		leftBody.frozen_from === rightBody.frozen_from &&

@@ -35,12 +35,42 @@ export function decodeRecordedGroupBody(
 		derivedGroupAt(body.derived_from, "$.group.body.derived_from");
 	if ("frozen_from" in body)
 		frozenGroupAt(body.frozen_from, "$.group.body.frozen_from");
+	if ("grid" in body) gridAt(body.grid, "$.group.body.grid");
 	if ("programming" in body)
 		programmingAt(body.programming, "$.group.body.programming");
 	if ("master" in body) numberAt(body.master, "$.group.body.master");
 	if ("playback_fader" in body)
 		playbackFaderAt(body.playback_fader, "$.group.body.playback_fader");
 	return { ...body, fixtures } as ShowObject<"group">["body"];
+}
+
+function gridAt(value: unknown, path: string) {
+	const grid = recordAt(value, path);
+	const method = enumAt(grid.method, `${path}.method`, [
+		"stage2d",
+		"top_to_bottom",
+		"bottom_to_top",
+		"front_to_back",
+		"back_to_front",
+		"left_to_right",
+		"right_to_left",
+		"horizontal_axis_x",
+		"vertical_axis_z",
+		"room_depth_axis_y",
+	]);
+	const axisMethod = [
+		"horizontal_axis_x",
+		"vertical_axis_z",
+		"room_depth_axis_y",
+	].includes(method);
+	if (grid.axis_origin == null) {
+		if (axisMethod)
+			invalid(`${path}.axis_origin`, "finite XYZ axis origin", grid.axis_origin);
+		return;
+	}
+	const origin = recordAt(grid.axis_origin, `${path}.axis_origin`);
+	for (const coordinate of ["x", "y", "z"])
+		numberAt(origin[coordinate], `${path}.axis_origin.${coordinate}`);
 }
 
 function derivedGroupAt(value: unknown, path: string) {

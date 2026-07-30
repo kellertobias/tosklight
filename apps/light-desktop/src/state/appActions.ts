@@ -22,6 +22,8 @@ export type Action =
 	  }
 	| { type: "SET_PANE_RECT"; id: string; rect: Partial<GridRect> }
 	| { type: "SET_PANE_GROUP_SHORTCUTS"; id: string; value: boolean }
+	| { type: "SET_PANE_LAYOUT_GROUP"; id: string; groupId: string }
+	| { type: "SET_LAYOUT_GROUP"; groupId: string }
 	| { type: "SET_PANE_CUE_SIDEBAR"; id: string; value: boolean }
 	| {
 			type: "SET_PANE_CUELIST";

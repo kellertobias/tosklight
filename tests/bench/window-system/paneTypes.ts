@@ -2,6 +2,7 @@ export enum PaneType {
 	Stage = "stage",
 	Groups = "groups",
 	Fixtures = "fixtures",
+	Layout = "layout",
 	Presets = "presets",
 	Cuelists = "cuelists",
 	CuelistPool = "cuelist_pool",
@@ -23,6 +24,7 @@ export enum PaneType {
 export type BuiltInPaneType =
 	| PaneType.Stage
 	| PaneType.Fixtures
+	| PaneType.Layout
 	| PaneType.Presets
 	| PaneType.Cuelists
 	| PaneType.Dynamics
@@ -31,6 +33,7 @@ export type BuiltInPaneType =
 export const builtInPaneTypes: readonly BuiltInPaneType[] = [
 	PaneType.Stage,
 	PaneType.Fixtures,
+	PaneType.Layout,
 	PaneType.Presets,
 	PaneType.Cuelists,
 	PaneType.Dynamics,
@@ -40,6 +43,7 @@ export const builtInPaneTypes: readonly BuiltInPaneType[] = [
 export const builtInLabels: Readonly<Record<BuiltInPaneType, string>> = {
 	[PaneType.Stage]: "Stage",
 	[PaneType.Fixtures]: "Fixtures",
+	[PaneType.Layout]: "Layout",
 	[PaneType.Presets]: "Presets",
 	[PaneType.Cuelists]: "Cuelists",
 	[PaneType.Dynamics]: "Dynamics",
@@ -50,6 +54,7 @@ export type OperatorPaneType =
 	| PaneType.Stage
 	| PaneType.Groups
 	| PaneType.Fixtures
+	| PaneType.Layout
 	| PaneType.Presets
 	| PaneType.Cuelists
 	| PaneType.CuelistPool
@@ -95,6 +100,10 @@ export interface FixtureSheetPaneConfiguration {
 	showGroupShortcuts?: boolean;
 }
 
+export interface LayoutPaneConfiguration {
+	groupId?: string;
+}
+
 export interface PresetPaneConfiguration {
 	family?: PresetFamily;
 	poolColors?: boolean;
@@ -121,7 +130,9 @@ export type PaneConfiguration<T extends PaneType> = T extends PaneType.Stage
 	? StagePaneConfiguration
 	: T extends PaneType.Fixtures
 		? FixtureSheetPaneConfiguration
-		: T extends PaneType.Presets
+		: T extends PaneType.Layout
+			? LayoutPaneConfiguration
+			: T extends PaneType.Presets
 			? PresetPaneConfiguration
 			: T extends PaneType.Cues
 				? CuesPaneConfiguration
@@ -135,6 +146,7 @@ export const paneLabels: Readonly<Record<PaneType, string>> = {
 	[PaneType.Stage]: "Stage",
 	[PaneType.Groups]: "Group pool",
 	[PaneType.Fixtures]: "Fixture sheet",
+	[PaneType.Layout]: "Layout",
 	[PaneType.Presets]: "Preset pool",
 	[PaneType.Cuelists]: "Cuelists",
 	[PaneType.CuelistPool]: "Cuelist Pool",
