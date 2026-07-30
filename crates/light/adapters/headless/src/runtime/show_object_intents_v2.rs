@@ -324,7 +324,7 @@ async fn dynamic_delete_action(
     }
     let definition = decode_dynamic(object.body.clone())?;
     let fallback = light_dynamics::DynamicDefinitionSnapshot {
-        definition: Box::new(definition.clone()),
+        definition: Arc::new(definition.clone()),
     };
     let mut mutations = Vec::new();
     for kind in ["cue_list", "playback"] {

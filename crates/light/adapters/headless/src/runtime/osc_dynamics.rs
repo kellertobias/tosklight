@@ -13,13 +13,13 @@ pub(super) fn handle_dynamics_osc(
     address: &str,
     arguments: &[OscArgument],
     source: Option<&str>,
-) {
+) -> bool {
     let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
     if parts.first() != Some(&"light") {
-        return;
+        return false;
     }
     let Some((session, desk_alias, feedback_target)) = osc_session(state, &parts, source) else {
-        return;
+        return false;
     };
     let operation = if parts.len() == 5 && parts[2] == "dynamic" {
         pool_operation(state, &session, parts[3], parts[4], arguments)
@@ -28,7 +28,7 @@ pub(super) fn handle_dynamics_osc(
     } else if parts.len() == 4 && parts[2] == "programmer" && parts[3] == "fix-at" {
         fix_at_operation(state, &session, arguments)
     } else {
-        return;
+        return false;
     };
 
     match operation {
@@ -43,7 +43,7 @@ pub(super) fn handle_dynamics_osc(
                         address,
                         &error.message,
                     );
-                    return;
+                    return false;
                 }
                 if let Err(error) = persist_output_runtime(state) {
                     emit_rejection(
@@ -54,7 +54,7 @@ pub(super) fn handle_dynamics_osc(
                         address,
                         &error.message,
                     );
-                    return;
+                    return false;
                 }
             }
             emit(
@@ -68,15 +68,19 @@ pub(super) fn handle_dynamics_osc(
                     "source": "osc",
                 }),
             );
+            changed
         }
-        Err(message) => emit_rejection(
-            state,
-            &session,
-            &desk_alias,
-            feedback_target,
-            address,
-            &message,
-        ),
+        Err(message) => {
+            emit_rejection(
+                state,
+                &session,
+                &desk_alias,
+                feedback_target,
+                address,
+                &message,
+            );
+            false
+        }
     }
 }
 

@@ -5,10 +5,13 @@ import type {
 	PatchedFixture,
 	VisualizationSnapshot,
 } from "../../api/types";
-import type {
-	FixtureAttributeValues,
-	FixtureValuesById,
-} from "./types";
+import type { FixtureAttributeValues, FixtureValuesById } from "./types";
+
+const parameterDefaults = new WeakMap<
+	PatchedFixture["definition"],
+	Map<string, number>
+>();
+const profileModes = new WeakMap<PatchedFixture, FixtureMode | null>();
 
 export function normalized(
 	value: AttributeValue | undefined,
@@ -22,12 +25,16 @@ export function parameterDefault(
 	attribute: string,
 	fallback: number,
 ) {
-	return (
-		fixture.definition.heads
-			?.flatMap((head) => head.parameters)
-			.find((parameter) => parameter.attribute === attribute)?.default ??
-		fallback
-	);
+	let defaults = parameterDefaults.get(fixture.definition);
+	if (!defaults) {
+		defaults = new Map();
+		for (const head of fixture.definition.heads ?? [])
+			for (const parameter of head.parameters)
+				if (!defaults.has(parameter.attribute))
+					defaults.set(parameter.attribute, parameter.default);
+		parameterDefaults.set(fixture.definition, defaults);
+	}
+	return defaults.get(attribute) ?? fallback;
 }
 
 export function capabilityName(
@@ -79,24 +86,28 @@ export function valuesByFixture(
 	snapshot: VisualizationSnapshot | null,
 ): FixtureValuesById {
 	const result: FixtureValuesById = new Map();
-	for (const entry of [
-		...(snapshot?.values ?? []),
-		...(snapshot?.profile_output_values ?? []),
-	]) {
-		const attributes = result.get(entry.fixture_id) ?? new Map();
-		attributes.set(entry.attribute, entry.value);
-		result.set(entry.fixture_id, attributes);
-	}
+	const install = (entries: NonNullable<VisualizationSnapshot>["values"]) => {
+		for (const entry of entries) {
+			const attributes = result.get(entry.fixture_id) ?? new Map();
+			attributes.set(entry.attribute, entry.value);
+			result.set(entry.fixture_id, attributes);
+		}
+	};
+	install(snapshot?.values ?? []);
+	install(snapshot?.profile_output_values ?? []);
 	return result;
 }
 
 export function profileMode(fixture: PatchedFixture) {
+	const retained = profileModes.get(fixture);
+	if (retained !== undefined) return retained;
 	const profile = fixture.definition.profile_snapshot;
-	return (
+	const mode =
 		profile?.modes.find((mode) => mode.id === fixture.definition.mode_id) ??
 		profile?.modes.find((mode) => mode.name === fixture.definition.mode) ??
-		null
-	);
+		null;
+	profileModes.set(fixture, mode);
+	return mode;
 }
 
 export function headOwnerId(
@@ -123,13 +134,12 @@ export function attributesForHead(
 	headId: string,
 	byFixture: FixtureValuesById,
 ) {
-	const attributes = new Map(byFixture.get(fixture.fixture_id) ?? []);
 	const owner = headOwnerId(fixture, mode, headId);
-	if (owner !== fixture.fixture_id) {
-		for (const [attribute, value] of byFixture.get(owner) ?? []) {
-			attributes.set(attribute, value);
-		}
-	}
+	const fixtureAttributes = byFixture.get(fixture.fixture_id);
+	if (owner === fixture.fixture_id) return fixtureAttributes ?? new Map();
+	const attributes = new Map(fixtureAttributes ?? []);
+	for (const [attribute, value] of byFixture.get(owner) ?? [])
+		attributes.set(attribute, value);
 	return attributes;
 }
 

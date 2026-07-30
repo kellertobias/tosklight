@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { VisualizationSnapshot } from "../../api/types";
 import {
+	changedStageFixtureIds,
 	interpolateVisualizationSnapshot,
 	remainingStageInterpolationMillis,
+	shouldInterpolateStageChanges,
+	shouldInterpolateStageSceneChanges,
 	stageVisualizationChanged,
 } from "./interpolation";
 
@@ -61,6 +64,26 @@ describe("interpolateVisualizationSnapshot", () => {
 		).toBe(0);
 	});
 
+	it("skips intermediate preview values for a large fan-out update", () => {
+		expect(
+			shouldInterpolateStageChanges(
+				new Set(Array.from({ length: 96 }, (_, index) => `fixture-${index}`)),
+			),
+		).toBe(true);
+		expect(
+			shouldInterpolateStageChanges(
+				new Set(Array.from({ length: 97 }, (_, index) => `fixture-${index}`)),
+			),
+		).toBe(false);
+		expect(shouldInterpolateStageChanges(null)).toBe(false);
+	});
+
+	it("skips intermediate preview values when the retained scene is large", () => {
+		const changed = new Set(["fixture-1"]);
+		expect(shouldInterpolateStageSceneChanges(160, changed)).toBe(true);
+		expect(shouldInterpolateStageSceneChanges(161, changed)).toBe(false);
+	});
+
 	it("ignores source metadata churn when the visible Stage values are unchanged", () => {
 		const from = snapshot(1, false, [
 			normalized("intensity", 0.5),
@@ -87,6 +110,38 @@ describe("interpolateVisualizationSnapshot", () => {
 				values: [normalized("intensity", 0.75)],
 			}),
 		).toBe(true);
+	});
+
+	it("identifies only fixtures whose rendered values changed", () => {
+		const from = snapshot(1, false, [
+			normalized("intensity", 0.2),
+			{
+				...normalized("intensity", 0.5),
+				fixture_id: "fixture-2",
+			},
+		]);
+		const to = {
+			...snapshot(2, false, [
+				normalized("intensity", 0.8),
+				{
+					...normalized("intensity", 0.5),
+					fixture_id: "fixture-2",
+				},
+			]),
+			profile_output_values: [
+				{
+					...normalized("pan", 0.6),
+					fixture_id: "logical-head-3",
+				},
+			],
+		};
+
+		expect(changedStageFixtureIds(from, to)).toEqual(
+			new Set(["fixture-1", "logical-head-3"]),
+		);
+		expect(
+			changedStageFixtureIds(from, { ...to, grand_master: 0.5 }),
+		).toBeNull();
 	});
 });
 

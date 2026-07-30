@@ -2,21 +2,19 @@ use super::dynamic_projection::DynamicPlaybackControl;
 use super::*;
 
 pub(super) fn reconcile_dynamic_playbacks(
-    engine: &Engine,
     dynamics: &mut light_dynamics::DynamicRuntime,
     now_millis: u64,
+    snapshot: &light_engine::EngineSnapshot,
+    active: &[light_playback::ActiveDynamicPlayback],
 ) -> HashMap<Uuid, DynamicPlaybackControl> {
-    let snapshot = engine.snapshot();
-    let active = engine
-        .active_dynamic_playbacks()
-        .into_iter()
-        .filter(|playback| playback.enabled)
-        .collect::<Vec<_>>();
     let desired_ids = active
         .iter()
         .map(dynamic_playback_controller_id)
         .collect::<HashSet<_>>();
     release_stale_playback_controllers(dynamics, &snapshot, &desired_ids, now_millis);
+    if active.is_empty() {
+        return HashMap::new();
+    }
 
     let definitions = snapshot
         .dynamics
@@ -210,29 +208,28 @@ fn dynamic_playback_controller_id(playback: &light_playback::ActiveDynamicPlayba
 }
 
 pub(super) fn reconcile_programmer_dynamics(
-    engine: &Engine,
     dynamics: &mut light_dynamics::DynamicRuntime,
     now_millis: u64,
+    snapshot: &light_engine::EngineSnapshot,
+    programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
     extra_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
 ) {
-    struct DesiredController {
+    struct DesiredController<'a> {
         programmer_id: Uuid,
         priority: i16,
         activated_at_millis: u64,
-        reference: light_dynamics::DynamicReference,
-        overrides: light_dynamics::DynamicInstanceOverrides,
+        reference: &'a light_dynamics::DynamicReference,
+        overrides: &'a light_dynamics::DynamicInstanceOverrides,
         timing: light_dynamics::DynamicValueTiming,
         targets: Vec<FixtureId>,
+        target_ids: HashSet<FixtureId>,
     }
 
-    let values = engine
-        .dynamic_programmer_values()
-        .into_iter()
-        .chain(extra_values.iter().cloned());
+    let values = programmer_values.iter().chain(extra_values);
     let mut desired = HashMap::<Uuid, DesiredController>::new();
     let mut off = HashMap::<Uuid, light_dynamics::DynamicValueTiming>::new();
     for (programmer_id, priority, stored) in values {
-        match stored.value {
+        match &stored.value {
             light_dynamics::DynamicSemanticValue::DynamicOn {
                 instance_link,
                 dynamic,
@@ -242,17 +239,18 @@ pub(super) fn reconcile_programmer_dynamics(
             } => {
                 let controller =
                     desired
-                        .entry(instance_link)
+                        .entry(*instance_link)
                         .or_insert_with(|| DesiredController {
-                            programmer_id,
-                            priority,
+                            programmer_id: *programmer_id,
+                            priority: *priority,
                             activated_at_millis: stored.changed_at_millis,
                             reference: dynamic,
                             overrides,
-                            timing,
+                            timing: *timing,
                             targets: Vec::new(),
+                            target_ids: HashSet::new(),
                         });
-                if !controller.targets.contains(&stored.fixture_id) {
+                if controller.target_ids.insert(stored.fixture_id) {
                     controller.targets.push(stored.fixture_id);
                 }
             }
@@ -260,7 +258,7 @@ pub(super) fn reconcile_programmer_dynamics(
                 instance_link,
                 timing,
             } => {
-                off.entry(instance_link).or_insert(timing);
+                off.entry(*instance_link).or_insert(*timing);
             }
             light_dynamics::DynamicSemanticValue::Static { .. }
             | light_dynamics::DynamicSemanticValue::FixAt { .. }
@@ -293,8 +291,10 @@ pub(super) fn reconcile_programmer_dynamics(
             let _ = dynamics.off_controller(instance_id, controller.id, now_millis, 0, 0);
         }
     }
+    if desired.is_empty() {
+        return;
+    }
 
-    let snapshot = engine.snapshot();
     let definitions = snapshot
         .dynamics
         .iter()
@@ -351,25 +351,27 @@ pub(super) fn reconcile_programmer_dynamics(
 }
 
 pub(super) fn reconcile_cue_dynamics(
-    engine: &Engine,
     dynamics: &mut light_dynamics::DynamicRuntime,
     now_millis: u64,
+    snapshot: &light_engine::EngineSnapshot,
+    cue_values: &[light_playback::ActiveCueDynamicValue],
 ) {
-    struct DesiredController {
+    struct DesiredController<'a> {
         controller_id: Uuid,
         instance_link: Uuid,
         cue_list_id: light_core::CueListId,
         priority: i16,
         activated_at_millis: u64,
-        reference: light_dynamics::DynamicReference,
-        overrides: light_dynamics::DynamicInstanceOverrides,
+        reference: &'a light_dynamics::DynamicReference,
+        overrides: &'a light_dynamics::DynamicInstanceOverrides,
         timing: light_dynamics::DynamicValueTiming,
         targets: Vec<FixtureId>,
+        target_ids: HashSet<FixtureId>,
     }
 
     let mut desired = Vec::<DesiredController>::new();
     let mut release_timings = HashMap::<Uuid, light_dynamics::DynamicValueTiming>::new();
-    for stored in engine.active_cue_dynamic_values() {
+    for stored in cue_values {
         if let light_dynamics::DynamicSemanticValue::DynamicOff {
             instance_link,
             timing,
@@ -387,30 +389,31 @@ pub(super) fn reconcile_cue_dynamics(
             overrides,
             timing,
             ..
-        } = stored.value
+        } = &stored.value
         else {
             continue;
         };
-        let controller_id = cue_dynamic_controller_id(stored.cue_list_id, instance_link);
+        let controller_id = cue_dynamic_controller_id(stored.cue_list_id, *instance_link);
         if let Some(controller) = desired
             .iter_mut()
             .find(|candidate| candidate.controller_id == controller_id)
         {
-            if !controller.targets.contains(&stored.fixture_id) {
+            if controller.target_ids.insert(stored.fixture_id) {
                 controller.targets.push(stored.fixture_id);
             }
             continue;
         }
         desired.push(DesiredController {
             controller_id,
-            instance_link,
+            instance_link: *instance_link,
             cue_list_id: stored.cue_list_id,
             priority: stored.priority,
             activated_at_millis: stored.changed_at_millis,
             reference: dynamic,
             overrides,
-            timing,
+            timing: *timing,
             targets: vec![stored.fixture_id],
+            target_ids: HashSet::from([stored.fixture_id]),
         });
     }
 
@@ -419,8 +422,10 @@ pub(super) fn reconcile_cue_dynamics(
         .map(|controller| controller.controller_id)
         .collect::<HashSet<_>>();
     release_inactive_cue_controllers(dynamics, &desired_ids, &release_timings, now_millis);
+    if desired.is_empty() {
+        return;
+    }
 
-    let snapshot = engine.snapshot();
     let definitions = snapshot
         .dynamics
         .iter()

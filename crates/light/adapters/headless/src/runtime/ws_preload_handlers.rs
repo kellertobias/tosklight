@@ -177,8 +177,7 @@ fn finish_ws_execution(
         command_http::ExistingCommandOutcome::ChoiceRequired { pending_choice } => {
             Ok(serde_json::json!({
                 "applied":0,
-                "pending_choice":command_http::wire_choice(pending_choice),
-                "programmer":state.programming.get(session.id)
+                "pending_choice":command_http::wire_choice(pending_choice)
             }))
         }
         command_http::ExistingCommandOutcome::Accepted {
@@ -187,8 +186,7 @@ fn finish_ws_execution(
             ..
         } => Ok(serde_json::json!({
             "applied":applied,
-            "persistence_warning":persistence_warning,
-            "programmer":state.programming.get(session.id)
+            "persistence_warning":persistence_warning
         })),
         command_http::ExistingCommandOutcome::Rejected { error } => Err(error),
     }

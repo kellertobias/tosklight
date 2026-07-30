@@ -655,13 +655,38 @@ export type VisualizationScope = {
  */
 show_id: string | null, };
 export type VisualizationLane = "normal" | "preload";
-export type VisualizationClientMessage = { "type": "subscribe", lanes: Array<VisualizationLane>, max_rate_hz: number, } | { "type": "unsubscribe", lanes: Array<VisualizationLane>, } | { "type": "resynchronize", lane: VisualizationLane, };
+export type VisualizationClientMessage = { "type": "subscribe", lanes: Array<VisualizationLane>, max_rate_hz: number,
+/**
+ * Opt into application-level flow control. The server then retains at
+ * most one in-flight batch and one newest pending source until the
+ * client acknowledges the highest processed sequence.
+ */
+acknowledgements: boolean,
+/**
+ * Include the diagnostic Dynamic source stack. Stage and channel
+ * consumers need only resolved values; Fixture Sheet claims this
+ * heavier projection explicitly.
+ */
+include_dynamic_stack: boolean,
+/**
+ * Permit deltas to omit an unchanged Dynamic stack. Missing means
+ * retain the previously installed stack; an explicit empty array
+ * still clears it. Older clients leave this disabled and continue to
+ * receive the complete array on every delta.
+ */
+sparse_dynamic_stack: boolean,
+/**
+ * Permit the server to encode all lane messages for one publication as
+ * a single JSON array/WebSocket frame. Older clients leave this
+ * disabled and continue to receive one JSON object per frame.
+ */
+batched_messages: boolean, } | { "type": "unsubscribe", lanes: Array<VisualizationLane>, } | { "type": "resynchronize", lane: VisualizationLane, } | { "type": "acknowledge", sequence: number, };
 export type VisualizationValue = { fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, };
 export type VisualizationValueKey = { fixture_id: string, attribute: string, };
 export type VisualizationStackEntryType = "ordinary_static" | "dynamic" | "fix_at" | "dynamic_off" | "static";
-export type VisualizationDynamicStackEntry = { fixture_id: string, attribute: string, entry_type: VisualizationStackEntryType, priority: number, changed_at_millis: number, source: string, dynamic_id: string | null, pool_number: number | null, name: string, runtime_instance_id: string | null, controller_id: string | null, lane_id: string | null, size: number | null, activation_mix: number | null, paused: boolean, hidden: boolean, pending: boolean, winning: boolean, value: ProgrammingPreloadAttributeValue | null, resolved_value: ProgrammingPreloadAttributeValue | null, };
+export type VisualizationDynamicStackEntry = { fixture_id: string, attribute: string, entry_type: VisualizationStackEntryType, priority: number, changed_at_millis: number, source: string, dynamic_id?: string | null, pool_number?: number | null, name: string, runtime_instance_id?: string | null, controller_id?: string | null, lane_id?: string | null, size?: number | null, activation_mix?: number | null, paused: boolean, hidden: boolean, pending: boolean, winning: boolean, value?: ProgrammingPreloadAttributeValue | null, resolved_value?: ProgrammingPreloadAttributeValue | null, };
 export type VisualizationLaneSnapshot = { scope: VisualizationScope, revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, dynamic_stack?: Array<VisualizationDynamicStackEntry>, profile_output_values: Array<VisualizationValue>, };
-export type VisualizationLaneDelta = { scope: VisualizationScope, revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, removed_values: Array<VisualizationValueKey>, dynamic_stack: Array<VisualizationDynamicStackEntry>, profile_output_values: Array<VisualizationValue>, removed_profile_output_values: Array<VisualizationValueKey>, };
+export type VisualizationLaneDelta = { scope: VisualizationScope, revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, removed_values: Array<VisualizationValueKey>, dynamic_stack?: Array<VisualizationDynamicStackEntry> | null, profile_output_values: Array<VisualizationValue>, removed_profile_output_values: Array<VisualizationValueKey>, };
 export type VisualizationServerMessage = { "type": "hello", protocol_version: number, max_rate_hz: number, lanes: Array<VisualizationLane>, scope: VisualizationScope, } | { "type": "snapshot", lane: VisualizationLane, scope: VisualizationScope, sequence: number, source_frame: number, source_timestamp: string, published_at: string, snapshot: VisualizationLaneSnapshot, } | { "type": "delta", lane: VisualizationLane, scope: VisualizationScope, sequence: number, source_frame: number, source_timestamp: string, published_at: string, delta: VisualizationLaneDelta, } | { "type": "heartbeat", scope: VisualizationScope, sequence: number, published_at: string, } | { "type": "structural_invalidation", scope: VisualizationScope, revision: number, } | { "type": "error", code: string, message: string, };
 export type SelectiveImportObjectKey = { kind: string, id: string, };
 export type SelectiveImportConflictResolution = "keep_destination" | "replace_destination" | "duplicate";

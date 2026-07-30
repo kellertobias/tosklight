@@ -53,7 +53,7 @@ impl Engine {
         let groups = generation.groups();
         let has_samples = sampled.iter().any(|batch| !batch.is_empty());
         let mut playback = self.resolve_playback(generation, now, advance_playback, sampled);
-        let programmers = self.programmers.active();
+        let programmers = self.programmers.active_output_states();
         let programmer = {
             let underlay = crate::programmer_resolution::programmers_need_underlay(&programmers)
                 .then(|| {

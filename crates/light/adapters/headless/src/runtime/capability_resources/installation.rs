@@ -168,11 +168,29 @@ impl InstallationResource {
         self.desk.lock().update_user(id, name, enabled)
     }
 
-    pub(in crate::runtime) fn save_session(
+    pub(in crate::runtime) fn defer_session_save(
         &self,
-        session: &PersistedSession,
-    ) -> Result<(), light_show::StoreError> {
-        self.desk.lock().save_session(session)
+        session: DeferredProgrammerPersistence,
+    ) -> Result<(), String> {
+        #[cfg(test)]
+        {
+            let programmer_json =
+                serde_json::to_string(&session.programmer).map_err(|error| error.to_string())?;
+            return self
+                .desk
+                .lock()
+                .save_session(&PersistedSession {
+                    id: session.id,
+                    user_id: session.user_id,
+                    token: session.token,
+                    programmer_json,
+                    connected: session.connected,
+                    updated_at: session.updated_at,
+                })
+                .map_err(|error| error.to_string());
+        }
+        #[cfg(not(test))]
+        self.session_persistence.schedule(session)
     }
 
     #[cfg(test)]

@@ -1,7 +1,18 @@
-export function changingPresentationGaps(frames, applicationSuspend) {
+export function changingPresentationGaps(
+	frames,
+	applicationSuspend,
+	showSwitch,
+	contextRecovery,
+) {
 	const groups = new Map();
 	for (const frame of frames) {
-		const key = `${frame.lane}:${frame.showId ?? "unknown"}:${frame.scopeActivation ?? 0}:${frame.visibilitySegment}:${lifecycleSegment(frame, applicationSuspend)}`;
+		if (
+			frameOverlapsApplicationSuspend(frame, applicationSuspend) ||
+			frameOverlapsShowSwitch(frame, showSwitch) ||
+			frameOverlapsContextRecovery(frame, contextRecovery)
+		)
+			continue;
+		const key = `${frame.lane}:${frame.showId ?? "unknown"}:${frame.scopeActivation ?? 0}:${frame.claimActivation ?? 0}:${frame.visibilitySegment}:${lifecycleSegment(frame, applicationSuspend, showSwitch, contextRecovery)}`;
 		const group = groups.get(key) ?? [];
 		group.push(frame);
 		groups.set(key, group);
@@ -36,23 +47,71 @@ export function changingPresentationGaps(frames, applicationSuspend) {
 	return gaps;
 }
 
-export function laneSourceCadenceGaps(frames, applicationSuspend) {
+export function laneSourceCadenceGaps(
+	frames,
+	applicationSuspend,
+	showSwitch,
+	contextRecovery,
+) {
 	const lanes = new Map();
 	for (const frame of frames) {
+		if (
+			frameOverlapsApplicationSuspend(frame, applicationSuspend) ||
+			frameOverlapsShowSwitch(frame, showSwitch) ||
+			frameOverlapsContextRecovery(frame, contextRecovery)
+		)
+			continue;
 		const sourceAt = frameSourceAt(frame);
 		if (!Number.isFinite(sourceAt)) continue;
-		const laneKey = `${frame.lane}:${frame.showId ?? "unknown"}:${frame.scopeActivation ?? 0}:${lifecycleSegment(frame, applicationSuspend)}`;
+		const laneKey = `${frame.lane}:${frame.showId ?? "unknown"}:${frame.scopeActivation ?? 0}:${frame.claimActivation ?? 0}:${lifecycleSegment(frame, applicationSuspend, showSwitch, contextRecovery)}`;
 		const lane = lanes.get(laneKey) ?? [];
-		lane.push(sourceAt);
+		lane.push({ sourceAt, visibleChanged: frame.visibleChanged === true });
 		lanes.set(laneKey, lane);
 	}
 	return [...lanes.values()].flatMap((values) => {
-		const ordered = [...new Set(values)].sort((left, right) => left - right);
+		const ordered = values.sort(
+			(left, right) => left.sourceAt - right.sourceAt,
+		);
 		const gaps = [];
-		for (let index = 1; index < ordered.length; index++)
-			gaps.push(ordered[index] - ordered[index - 1]);
+		let previousChangingSourceAt = null;
+		for (const value of ordered) {
+			if (!value.visibleChanged) {
+				previousChangingSourceAt = null;
+				continue;
+			}
+			if (
+				Number.isFinite(previousChangingSourceAt) &&
+				value.sourceAt !== previousChangingSourceAt
+			)
+				gaps.push(value.sourceAt - previousChangingSourceAt);
+			previousChangingSourceAt = value.sourceAt;
+		}
 		return gaps;
 	});
+}
+
+export function frameOverlapsApplicationSuspend(frame, applicationSuspend) {
+	const suspendedAt = Date.parse(applicationSuspend?.startedAt);
+	const resumedAt = Date.parse(applicationSuspend?.finishedAt);
+	if (!Number.isFinite(suspendedAt) || !Number.isFinite(resumedAt)) return false;
+	const times = [
+		frameSourceAt(frame),
+		frame.receivedAt,
+		frame.firstCanvasSubmittedAt,
+		frame.settledCanvasSubmittedAt,
+	].filter(Number.isFinite);
+	if (!times.length) return false;
+	return Math.min(...times) <= resumedAt && Math.max(...times) >= suspendedAt;
+}
+
+export function frameOverlapsShowSwitch(frame, showSwitch) {
+	return (showSwitch?.intervals ?? []).some((interval) =>
+		frameOverlapsInterval(frame, interval),
+	);
+}
+
+export function frameOverlapsContextRecovery(frame, contextRecovery) {
+	return frameOverlapsInterval(frame, contextRecovery);
 }
 
 export function latestChangingFrameDidNotSettle(frames, completedAt) {
@@ -73,10 +132,38 @@ export function latestChangingFrameDidNotSettle(frames, completedAt) {
 	);
 }
 
-function lifecycleSegment(frame, applicationSuspend) {
+function lifecycleSegment(
+	frame,
+	applicationSuspend,
+	showSwitch,
+	contextRecovery,
+) {
 	const resumedAt = Date.parse(applicationSuspend?.finishedAt);
-	if (!Number.isFinite(resumedAt)) return 0;
-	return frameSourceAt(frame) >= resumedAt ? 1 : 0;
+	const sourceAt = frameSourceAt(frame);
+	const suspendSegment =
+		Number.isFinite(resumedAt) && sourceAt >= resumedAt ? 1 : 0;
+	const showSwitchSegment = (showSwitch?.intervals ?? []).filter((interval) => {
+		const finishedAt = Date.parse(interval.finishedAt);
+		return Number.isFinite(finishedAt) && sourceAt >= finishedAt;
+	}).length;
+	const recoveryFinishedAt = Date.parse(contextRecovery?.finishedAt);
+	const recoverySegment =
+		Number.isFinite(recoveryFinishedAt) && sourceAt >= recoveryFinishedAt ? 1 : 0;
+	return `${suspendSegment}:${showSwitchSegment}:${recoverySegment}`;
+}
+
+function frameOverlapsInterval(frame, interval) {
+	const startedAt = Date.parse(interval?.startedAt);
+	const finishedAt = Date.parse(interval?.finishedAt);
+	if (!Number.isFinite(startedAt) || !Number.isFinite(finishedAt)) return false;
+	const times = [
+		frameSourceAt(frame),
+		frame.receivedAt,
+		frame.firstCanvasSubmittedAt,
+		frame.settledCanvasSubmittedAt,
+	].filter(Number.isFinite);
+	if (!times.length) return false;
+	return Math.min(...times) <= finishedAt && Math.max(...times) >= startedAt;
 }
 
 function frameSourceAt(frame) {

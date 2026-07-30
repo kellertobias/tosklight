@@ -433,7 +433,7 @@ impl DynamicsService {
             dynamic_id: Some(definition.id),
             last_known_pool_number: definition.pool_number,
             embedded_fallback: DynamicDefinitionSnapshot {
-                definition: Box::new(definition.clone()),
+                definition: Arc::new(definition.clone()),
             },
         };
         let mutations = targets
@@ -575,7 +575,7 @@ impl DynamicsService {
             })
             .collect::<HashMap<_, _>>();
         if preload {
-            for stored in &state.preload_dynamic_pending {
+            for stored in state.preload_dynamic_pending.iter() {
                 source_values.insert(
                     (stored.fixture_id, stored.attribute.clone()),
                     stored.clone(),
@@ -1020,7 +1020,7 @@ fn controller_dynamic_id(
     state
         .dynamic_values
         .iter()
-        .chain(&state.preload_dynamic_pending)
+        .chain(state.preload_dynamic_pending.iter())
         .find_map(|stored| match &stored.value {
             DynamicSemanticValue::DynamicOn {
                 instance_link,
@@ -1115,8 +1115,8 @@ fn controller_targets(
     let mut targets = Vec::new();
     for stored in state
         .dynamic_values
-        .into_iter()
-        .chain(state.preload_dynamic_pending)
+        .iter()
+        .chain(state.preload_dynamic_pending.iter())
     {
         if matches!(
             stored.value,
@@ -1145,7 +1145,7 @@ fn store_off(
         .iter()
         .chain(
             preload
-                .then_some(&state.preload_dynamic_pending)
+                .then(|| state.preload_dynamic_pending.iter())
                 .into_iter()
                 .flatten(),
         )

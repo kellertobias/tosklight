@@ -40,6 +40,7 @@ import {
 	ProgrammingInteractionStore,
 } from "./store";
 import type { ProgrammingEventTransport } from "./transport";
+import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
 
 interface ProgrammingInteractionViewProviderProps {
 	showId: string | null;
@@ -56,6 +57,7 @@ interface ProgrammingInteractionViewProviderProps {
 }
 
 export interface ProgrammingSelectionActions {
+	status(): "ready" | "loading" | "scope-mismatch" | "stopped";
 	replace(
 		intent: ProgrammingSelectionReplacementIntent,
 	): Promise<SelectionActionOutcome | null>;
@@ -182,6 +184,7 @@ export function ProgrammingInteractionViewProvider({
 		() =>
 			selectionWriter
 				? {
+						status: () => selectionWriter.status(),
 						replace: (intent) => selectionWriter.replace(intent),
 						gesture: (intent) => selectionWriter.gesture(intent),
 						selectGroup: (intent) => selectionWriter.selectGroup(intent),
@@ -204,10 +207,10 @@ export function ProgrammingInteractionViewProvider({
 	);
 	useLayoutEffect(() => {
 		store.reset(showId, deskId, authorityKey);
-		return () => session?.stop();
-	}, [authorityKey, deskId, session, showId, store]);
-	useEffect(() => () => commandLineWriter?.stop(), [commandLineWriter]);
-	useEffect(() => () => selectionWriter?.stop(), [selectionWriter]);
+	}, [authorityKey, deskId, showId, store]);
+	useStrictModeSafeStop(session);
+	useStrictModeSafeStop(commandLineWriter);
+	useStrictModeSafeStop(selectionWriter);
 	return (
 		<StoreContext.Provider value={store}>
 			<SessionContext.Provider value={session}>

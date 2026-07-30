@@ -21,32 +21,69 @@ type RendererLifecycleOptions = {
 	controlsRef: MutableRefObject<OrbitControls | null>;
 	cameraTargetRef: MutableRefObject<THREE.Vector3>;
 	acknowledgeDesktopMirrorRender: (() => void) | null | undefined;
+	pixelRatioCap?: number;
 };
 
-export function mountStageRenderer({
-	container,
-	controller,
-	dispatch,
-	diagnosticsRef,
-	cameraRef,
-	controlsRef,
-	cameraTargetRef,
-	acknowledgeDesktopMirrorRender,
-}: RendererLifecycleOptions) {
-	const renderer = new THREE.WebGLRenderer({ antialias: true });
+export function mountStageRenderer(options: RendererLifecycleOptions) {
+	let disposed = false;
+	let cleanup: ((disposeRetainedScene: boolean) => void) | null = null;
+	const mount = (recoveringFromContextLoss: boolean) => {
+		if (disposed) return;
+		const retainedCameraPosition =
+			options.cameraRef.current?.position.clone() ?? null;
+		const retainedCameraTarget =
+			options.controlsRef.current?.target.clone() ??
+			options.cameraTargetRef.current.clone();
+		cleanup?.(false);
+		cleanup = mountStageRendererInstance(
+			options,
+			mount,
+			recoveringFromContextLoss,
+			retainedCameraPosition,
+			retainedCameraTarget,
+		);
+	};
+	mount(false);
+	return () => {
+		disposed = true;
+		cleanup?.(true);
+		cleanup = null;
+	};
+}
+
+function mountStageRendererInstance(
+	{
+		container,
+		controller,
+		dispatch,
+		diagnosticsRef,
+		cameraRef,
+		controlsRef,
+		cameraTargetRef,
+		acknowledgeDesktopMirrorRender,
+		pixelRatioCap,
+	}: RendererLifecycleOptions,
+	remountAfterContextLoss: (recoveringFromContextLoss: boolean) => void,
+	recoveringFromContextLoss: boolean,
+	retainedCameraPosition: THREE.Vector3 | null,
+	retainedCameraTarget: THREE.Vector3,
+) {
+	const renderer = new THREE.WebGLRenderer({ antialias: false });
 	frontendPerformanceDiagnostics.recordStageRendererCreated();
 	frontendPerformanceDiagnostics.recordStageRendererCapabilities(
 		rendererCapabilities(renderer),
 	);
-	renderer.setPixelRatio(Math.min(devicePixelRatio, 1.25));
+	renderer.setPixelRatio(Math.min(devicePixelRatio, pixelRatioCap ?? 1.25));
 	renderer.outputColorSpace = THREE.SRGBColorSpace;
 	renderer.shadowMap.enabled = true;
 	renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 	renderer.shadowMap.autoUpdate = false;
 	container.replaceChildren(renderer.domElement);
 	const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 100);
+	if (retainedCameraPosition) camera.position.copy(retainedCameraPosition);
 	const controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = true;
+	controls.target.copy(retainedCameraTarget);
 	cameraRef.current = camera;
 	controlsRef.current = controls;
 	const renderLoop = createStageRenderLoop({
@@ -56,6 +93,8 @@ export function mountStageRenderer({
 		controller,
 		diagnosticsRef,
 		acknowledgeDesktopMirrorRender,
+		onContextRecoveryFailed: () => remountAfterContextLoss(true),
+		recordContextRecoveryOnNextRender: recoveringFromContextLoss,
 	});
 	const { requestRender, handleContextLost, handleContextRestored } =
 		renderLoop;
@@ -97,7 +136,7 @@ export function mountStageRenderer({
 	observer.observe(container);
 	resize();
 	requestRender();
-	return () => {
+	return (disposeRetainedScene: boolean) => {
 		renderLoop.cancel();
 		if (controller.invalidateRef.current === requestRender)
 			controller.invalidateRef.current = null;
@@ -114,10 +153,12 @@ export function mountStageRenderer({
 			"webglcontextrestored",
 			handleContextRestored,
 		);
-		const scene = controller.sceneRef.current;
-		controller.sceneRef.current = null;
-		controller.fixtureObjectsRef.current = new Map();
-		if (scene) disposeScene(scene);
+		if (disposeRetainedScene) {
+			const scene = controller.sceneRef.current;
+			controller.sceneRef.current = null;
+			controller.fixtureObjectsRef.current = new Map();
+			if (scene) disposeScene(scene);
+		}
 		cameraRef.current = null;
 		controlsRef.current = null;
 		renderer.forceContextLoss();

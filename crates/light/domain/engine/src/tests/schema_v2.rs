@@ -1,6 +1,93 @@
 use super::*;
 
 #[test]
+fn single_patch_fast_path_preserves_profile_visualization_for_patched_and_unpatched_fixtures() {
+    let (mut fixture, fixture_id) =
+        schema_v2_fixture(&[("intensity", false, false, false, false, false)]);
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture.clone()].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+
+    let patched = engine.render(RenderOptions::default()).unwrap();
+    assert!(patched.universes.contains_key(&1));
+    assert!(
+        patched
+            .profile_visualization_values
+            .contains_key(&(fixture_id, AttributeKey::intensity()))
+    );
+
+    fixture.universe = None;
+    fixture.address = None;
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 2,
+            ..Default::default()
+        })
+        .unwrap();
+
+    let unpatched = engine.render(RenderOptions::default()).unwrap();
+    assert!(unpatched.universes.is_empty());
+    assert!(
+        unpatched
+            .profile_visualization_values
+            .contains_key(&(fixture_id, AttributeKey::intensity()))
+    );
+}
+
+#[test]
+fn borrowed_profile_lookup_matches_owned_hold_last_resolution() {
+    let (fixture, fixture_id) = schema_v2_fixture(&[
+        ("intensity", false, false, false, false, true),
+        ("color.red", false, true, false, false, false),
+        ("color.green", false, true, false, false, false),
+        ("color.blue", false, true, false, false, false),
+    ]);
+    let programmers = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    programmers.start(session, UserId::new());
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.65),
+    );
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey("color.red".into()),
+        AttributeValue::Normalized(0.4),
+    );
+    let engine = Engine::new(programmers);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+
+    let borrowed = engine.render(RenderOptions::default()).unwrap();
+    let owned = engine
+        .render(RenderOptions {
+            control_loss_progress: Some(0.5),
+            ..RenderOptions::default()
+        })
+        .unwrap();
+
+    assert_eq!(borrowed.universes, owned.universes);
+    assert_eq!(
+        borrowed.profile_visualization_values,
+        owned.profile_visualization_values
+    );
+}
+
+#[test]
 fn schema_v2_renders_one_head_channels_to_independent_splits() {
     let mut profile = FixtureProfile::blank();
     profile.manufacturer = "Test".into();

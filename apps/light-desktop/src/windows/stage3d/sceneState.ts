@@ -19,7 +19,7 @@ export function useStageSceneState(
 		latestVisualizationRef: useRef(visualization),
 		interactingRef: useRef(false),
 		callbacksRef: useRef(callbacks),
-		invalidateRef: useRef<(() => void) | null>(null),
+		invalidateRef: useRef<((immediate?: boolean) => void) | null>(null),
 		modelCacheRef: useRef<StageModelCache | null>(null),
 		resourceCacheRef: useRef<StageProceduralResourceCache | null>(null),
 		mountedModelsRef: useRef(new Map<string, MountedModelLease>()),

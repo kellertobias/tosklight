@@ -50,7 +50,7 @@ pub(super) async fn advance_test_clock(
     refresh_speed_group_engine(&state);
     let action_timing = state.action_timing.begin_output_render();
     let (rendered, visualization_scope) = {
-        let _activation = state.active_show.acquire().await;
+        let _activation = state.active_show.acquire_shared().await;
         let visualization_scope = light_wire::v2::visualization::VisualizationScope {
             show_id: state.active_show.current().map(|show| show.id.0),
         };
@@ -142,6 +142,26 @@ pub(super) async fn free_run_test_clock(
 pub(super) struct TestOutputFailure {
     pub(super) destination: SocketAddr,
     pub(super) enabled: bool,
+}
+
+#[derive(Deserialize)]
+pub(super) struct TestOutputFrameRate {
+    pub(super) frame_rate_hz: u16,
+}
+
+/// Test-bench-only override for exercising latency budgets outside the desk's currently
+/// configurable 40-44 Hz DMX range. The route is unavailable in normal runtime mode.
+pub(super) async fn set_test_output_frame_rate(
+    State(state): State<AppState>,
+    Json(input): Json<TestOutputFrameRate>,
+) -> Result<StatusCode, ApiError> {
+    if !(1..=240).contains(&input.frame_rate_hz) {
+        return Err(ApiError::bad_request(
+            "test frame_rate_hz must be within 1-240",
+        ));
+    }
+    state.output.set_frame_rate_hz(input.frame_rate_hz);
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub(super) async fn set_test_output_failure(

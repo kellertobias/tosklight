@@ -27,17 +27,24 @@ createRoot(document.getElementById("root")!).render(
 		<SessionHandoffProvider handoff={sessionHandoff}>
 			<DesktopProvider bridge={desktop}>
 				<ModalProvider>
-					{packagedStageBenchmark?.profile === "improved-beam-spike" ? (
+					{stageView ? (
+						<StageViewApp />
+					) : packagedStageBenchmark?.profile === "improved-beam-spike" ? (
 						<PackagedImprovedBeamSpikeApp />
 					) : packagedStageBenchmark ? (
 						<PackagedStageBenchmarkApp
 							durationSeconds={packagedStageBenchmark.durationSeconds}
+							controlDurationSeconds={
+								packagedStageBenchmark.controlDurationSeconds
+							}
 							profile={packagedStageBenchmark.profile}
+							additionalStageWindow={
+								packagedStageBenchmark.additionalStageWindow
+							}
+							fixtureSheet={packagedStageBenchmark.fixtureSheet}
 						/>
 					) : productDemo ? (
 						<ProductDemoApp />
-					) : stageView ? (
-						<StageViewApp />
 					) : screenId ? (
 						<ScreenApp id={screenId} />
 					) : (

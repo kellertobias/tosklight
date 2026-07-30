@@ -5,7 +5,7 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import { useLayoutEffect } from "react";
+import { StrictMode, useLayoutEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Button } from "@tosklight/ui";
 import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
@@ -374,6 +374,48 @@ describe("ProgrammingInteractionViewProvider", () => {
 		await waitFor(() =>
 			expect(transport.subscriptions[0].close).toHaveBeenCalledOnce(),
 		);
+	});
+
+	it("keeps selection writes live through StrictMode effect replay", async () => {
+		const store = new ProgrammingInteractionStore();
+		const transport = new FakeProgrammingTransport();
+		const applySelection = vi.fn(
+			async (_deskId: string, request: SelectionActionRequest) => ({
+				requestId: request.requestId,
+				correlationId: request.requestId,
+				action: "replaced" as const,
+				applied: 1,
+				selection: selection(2, [FIXTURE_2]),
+				eventSequence: 11,
+				replayed: false,
+				warning: null,
+			}),
+		);
+		const rendered = render(
+			<StrictMode>
+				<ProgrammingInteractionViewProvider
+					showId={SHOW_ID}
+					deskId={DESK_ID}
+					store={store}
+					transport={transport}
+					loadSnapshot={async () => programmingSnapshot()}
+					applySelection={applySelection}
+				>
+					<SelectionMutationProbe onWrite={() => undefined} />
+				</ProgrammingInteractionViewProvider>
+			</StrictMode>,
+		);
+		await waitFor(() =>
+			expect(store.getSnapshot().selection).toEqual(selection(1, [FIXTURE_1])),
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Select fixture 2" }));
+
+		await waitFor(() => expect(applySelection).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(store.getSnapshot().selection).toEqual(selection(2, [FIXTURE_2])),
+		);
+		rendered.unmount();
 	});
 
 	it("performs no work for a hidden view and isolates irrelevant events", async () => {

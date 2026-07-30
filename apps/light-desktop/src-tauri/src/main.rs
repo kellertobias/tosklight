@@ -21,6 +21,7 @@ fn main() {
             lifecycle::frontend_ready,
             packaged_benchmark::packaged_stage_benchmark_config,
             packaged_benchmark::packaged_stage_benchmark_prepared,
+            packaged_benchmark::focus_packaged_stage_benchmark_window,
             packaged_benchmark::append_packaged_stage_benchmark_sample
         ])
         .setup(|app| {

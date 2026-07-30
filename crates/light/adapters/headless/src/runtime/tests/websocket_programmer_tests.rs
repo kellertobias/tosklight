@@ -267,7 +267,7 @@ async fn websocket_actions_are_typed_owned_and_revision_checked() {
     let _ = std::fs::remove_dir_all(data_dir);
 }
 #[tokio::test]
-async fn group_master_set_never_replaces_a_snapshot_during_show_activation() {
+async fn group_master_rejects_exclusive_show_change_but_not_output_read_permit() {
     let (state, data_dir) = test_state();
     state
         .output.replace_snapshot(EngineSnapshot {
@@ -310,6 +310,7 @@ async fn group_master_set_never_replaces_a_snapshot_during_show_activation() {
     assert_eq!(state.output.snapshot().groups[0].master, 1.0);
 
     drop(activation);
+    let output_read = state.active_show.acquire_shared().await;
     let applied = dispatch_live_action(
         &state,
         &session,
@@ -317,6 +318,7 @@ async fn group_master_set_never_replaces_a_snapshot_during_show_activation() {
     );
     assert!(applied.ok, "{:?}", applied.error);
     assert_eq!(state.output.snapshot().groups[0].master, 0.5);
+    drop(output_read);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

@@ -26,6 +26,7 @@ export function StageWindow(props: StageWindowProps) {
 			(props.compact
 				? `compact-stage-${options.followPreload ? "preload" : "live"}`
 				: `stage-window-${options.followPreload ? "preload" : "live"}`),
+		props.visualizationIntervalMillis,
 	);
 	return (
 		<div
@@ -54,6 +55,7 @@ export function StageWindow(props: StageWindowProps) {
 					patchSelectionPreview={patchSelectionPreview}
 					patchPreviewFixtures={stage.patchPreviewFixtures}
 					camera3d={props.camera3d}
+					pixelRatioCap={props.pixelRatioCap}
 					selection={selection}
 					active={active}
 					paneId={props.paneId}
@@ -82,7 +84,7 @@ export function StageWindow(props: StageWindowProps) {
 					</div>
 				) : (
 					<div className="stage-visualization-state" role="status">
-						Connecting to {options.followPreload ? "Preload" : "Live"}{" "}
+						Loading {options.followPreload ? "Preload" : "Live"} Stage
 						visualization…
 					</div>
 				))}

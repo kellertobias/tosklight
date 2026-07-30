@@ -100,13 +100,21 @@ describe("VisualizationRuntimeSession", () => {
 
 		expect(transport.openStream).toHaveBeenCalledOnce();
 		expect(transport.loadSnapshot).not.toHaveBeenCalled();
-		expect(updateClaims).toHaveBeenLastCalledWith(["normal", "preload"], 10);
+		expect(updateClaims).toHaveBeenLastCalledWith(
+			["normal", "preload"],
+			10,
+			false,
+		);
 		observer?.snapshot("normal", snapshot("normal"));
 		expect(store.getSnapshot().normal.status).toBe("ready");
 
 		releasePreload();
-		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 10);
+		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 10, false);
 		releaseNormal();
+		expect(updateClaims).toHaveBeenLastCalledWith([], 10, false);
+		expect(updateClaims.mock.invocationCallOrder.at(-1)).toBeLessThan(
+			close.mock.invocationCallOrder[0],
+		);
 		expect(close).toHaveBeenCalledOnce();
 	});
 
@@ -128,9 +136,39 @@ describe("VisualizationRuntimeSession", () => {
 		session.activate("preload", 100);
 
 		releaseFirstNormal();
-		expect(updateClaims).toHaveBeenLastCalledWith(["normal", "preload"], 10);
+		expect(updateClaims).toHaveBeenLastCalledWith(
+			["normal", "preload"],
+			10,
+			false,
+		);
 		releaseSecondNormal();
-		expect(updateClaims).toHaveBeenLastCalledWith(["preload"], 10);
+		expect(updateClaims).toHaveBeenLastCalledWith(["preload"], 10, false);
+	});
+
+	it("claims the diagnostic Dynamic stack only while a requesting consumer is active", () => {
+		const store = new VisualizationRuntimeStore();
+		store.reset(scope);
+		const updateClaims = vi.fn();
+		const transport: VisualizationRuntimeTransport = {
+			loadSnapshot: vi.fn(),
+			openStream: vi.fn(() => ({ updateClaims, close: vi.fn() })),
+		};
+		const session = new VisualizationRuntimeSession({
+			scope,
+			store,
+			transport,
+		});
+		session.activate("normal", 100, "stage");
+		const releaseFixtureSheet = session.activate(
+			"normal",
+			250,
+			"fixture-sheet",
+			true,
+		);
+
+		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 10, true);
+		releaseFixtureSheet();
+		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 10, false);
 	});
 
 	it("drops an old response after immediate scope replacement", async () => {

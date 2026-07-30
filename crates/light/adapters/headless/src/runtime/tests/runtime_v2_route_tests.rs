@@ -263,6 +263,25 @@ async fn visualization_snapshot_reports_authoritative_source_and_route_costs() {
         .is_ok()
     );
 
+    let dynamic_stack = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v2/output/visualization?dynamic_stack_only=true")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(dynamic_stack.status(), StatusCode::OK);
+    let dynamic_stack = json(dynamic_stack).await;
+    assert_eq!(dynamic_stack["values"], serde_json::json!([]));
+    assert_eq!(
+        dynamic_stack["profile_output_values"],
+        serde_json::json!([])
+    );
+    assert!(dynamic_stack["dynamic_stack"].is_array());
+
     let diagnostics = app
         .oneshot(
             Request::get("/api/v2/diagnostics")
@@ -274,7 +293,7 @@ async fn visualization_snapshot_reports_authoritative_source_and_route_costs() {
         .unwrap();
     assert_eq!(diagnostics.status(), StatusCode::OK);
     let visualization_metrics = &json(diagnostics).await["visualization"];
-    assert_eq!(visualization_metrics["snapshot_requests"], 1);
+    assert_eq!(visualization_metrics["snapshot_requests"], 2);
     assert_eq!(visualization_metrics["snapshot_source_frame"], 1);
     assert!(
         visualization_metrics["snapshot_projection_micros"].is_number(),

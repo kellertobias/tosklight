@@ -89,9 +89,17 @@ describe("3D stage presentation and cue state", () => {
 		const yoke = scene.getObjectByName("centered-rotating-yoke");
 		const volume = scene.getObjectByName("beam-volume") as THREE.Mesh;
 		const material = volume.material as THREE.MeshBasicMaterial;
+		const sourceMaterial = (
+			scene.getObjectByName("light-emitting-surface") as THREE.Mesh<
+				THREE.BufferGeometry,
+				THREE.Material
+			>
+		).material;
 		const geometry = volume.geometry;
 		const footprint = scene.getObjectByName("beam-ground-footprint");
 		const previousOpacity = material.opacity;
+		const previousMaterialVersion = material.version;
+		const previousSourceMaterialVersion = sourceMaterial.version;
 
 		applyStageVisualization(
 			fixtures,
@@ -109,6 +117,8 @@ describe("3D stage presentation and cue state", () => {
 		expect(volume.material).toBe(material);
 		expect(scene.getObjectByName("beam-ground-footprint")).toBe(footprint);
 		expect(material.opacity).toBeGreaterThan(previousOpacity);
+		expect(material.version).toBe(previousMaterialVersion);
+		expect(sourceMaterial.version).toBe(previousSourceMaterialVersion);
 		expect(yoke?.rotation.y).toBeCloseTo(Math.PI / 2);
 	});
 
@@ -215,6 +225,30 @@ describe("3D stage presentation and cue state", () => {
 		expect(built.fixtureObjects.get("first")).toBe(firstRoot);
 		expect(firstRoot?.position.x).toBe(1);
 		expect(built.fixtureObjects.get("second")).toBe(secondRoot);
+
+		const operationallyUpdatedFirst = {
+			...firstFixture,
+			name: "Updated operator label",
+			universe: 12,
+			address: 101,
+			definition: {
+				...firstFixture.definition,
+				name: "Equivalent projection copy",
+			},
+		};
+		const operationalResult = reconcileStageFixtures(
+			built.scene,
+			built.fixtureObjects,
+			[item(operationallyUpdatedFirst, 1), item(secondFixture, 2)],
+			null,
+			new Set(),
+			true,
+			new Set(),
+			"lines_and_beams",
+			resources,
+		);
+		expect(operationalResult.changedFixtures).toHaveLength(0);
+		expect(built.fixtureObjects.get("first")).toBe(firstRoot);
 
 		const revisedFirst = {
 			...firstFixture,
@@ -671,8 +705,8 @@ describe("emitter direction and Patch selection", () => {
 		);
 		expect(retained.fixtureObjects.values().next().value).toBe(retainedRoot);
 		expect(
-			retained.scene.getObjectByName("beam-improved-volume"),
-		).toBeUndefined();
+			retained.scene.getObjectByName("beam-improved-volume")?.visible,
+		).toBe(false);
 		expect(retained.scene.getObjectByName("beam-volume")?.visible).toBe(true);
 
 		const withoutFloor = buildStageScene(

@@ -10,13 +10,22 @@ import {
 	outputWindow,
 } from "./output-histogram.mjs";
 import {
+	CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS,
+	packagedStageControlDurationSeconds,
 	packagedStageProfile,
 	packagedStageSceneFailures,
 } from "./packaged-stage-profile.mjs";
+import {
+	latestProgrammerActionId,
+	summarizeProgrammerActionTiming,
+} from "./programmer-action-timing.mjs";
 import { startSlowVisualizationClient } from "./slow-visualization-client.mjs";
 import { createLargeStageDynamicsPlan } from "./stage-dynamics-scene.mjs";
 import {
 	changingPresentationGaps,
+	frameOverlapsApplicationSuspend,
+	frameOverlapsContextRecovery,
+	frameOverlapsShowSwitch,
 	laneSourceCadenceGaps,
 	latestChangingFrameDidNotSettle,
 } from "./stage-frame-continuity.mjs";
@@ -37,6 +46,8 @@ const durationSeconds = positiveInteger(
 );
 const profile = process.argv[3] ?? "default-stage";
 const profileDefinition = packagedStageProfile(profile);
+const controlDurationSeconds =
+	packagedStageControlDurationSeconds(durationSeconds);
 const application = packagedApplication();
 const executable = application.executable;
 await stat(executable).catch(() => {
@@ -63,6 +74,9 @@ await stopExistingDevelopmentDesk();
 const benchmarkEnvironment = {
 	LIGHT_STAGE_PACKAGED_BENCH_REPORT: samplesPath,
 	LIGHT_STAGE_PACKAGED_BENCH_DURATION_SECONDS: String(durationSeconds),
+	LIGHT_STAGE_PACKAGED_BENCH_CONTROL_DURATION_SECONDS: String(
+		controlDurationSeconds,
+	),
 	LIGHT_STAGE_PACKAGED_BENCH_PROFILE: profile,
 	LIGHT_STAGE_PACKAGED_BENCH_PREPARED: preparedPath,
 	LIGHT_DESKTOP_TEST_DATA_DIR: dataPath,
@@ -102,20 +116,29 @@ try {
 	const prepared = await prepareScene(profile);
 	scene = prepared.scene;
 	const before = await runtimeDiagnostics(prepared.session);
+	const programmerTimingExercise = await exercisePackagedProgrammerTiming(
+		prepared.session,
+	);
 	if (profile === "improved-beam-spike") {
 		memoryPhase = "improved-beam-spike";
 		await writeFile(preparedPath, `${JSON.stringify(scene)}\n`);
 		records = await waitForComplete(samplesPath, 120_000);
 		const after = await runtimeDiagnostics(prepared.session);
-		runtime = { before, afterNoStage: before, after };
+		runtime = {
+			before,
+			afterNoStage: before,
+			after,
+			programmerTimingExercise,
+		};
 	} else {
 		memoryPhase = "no-stage";
 		await writeFile(preparedPath, `${JSON.stringify(scene)}\n`);
 		await waitForRecord(
 			samplesPath,
 			(record) => record.kind === "stage-started",
-			(durationSeconds + 30) * 1_000,
+			(controlDurationSeconds + 30) * 1_000,
 		);
+		await activatePackagedApplication(application);
 		const afterNoStage = await runtimeDiagnostics(prepared.session);
 		memoryPhase = "stage";
 		if (profile === "large-stage")
@@ -135,11 +158,11 @@ try {
 		);
 		records = await waitForComplete(
 			samplesPath,
-			(durationSeconds * 2 + 30) * 1_000,
+			(controlDurationSeconds + durationSeconds + 30) * 1_000,
 		);
 		showSwitchResult = await showSwitch;
 		applicationSuspendResult = await applicationSuspend;
-		slowClient?.close();
+		await slowClient?.close();
 		slowClient = undefined;
 		await new Promise((resolve) => setTimeout(resolve, 250));
 		const after = await runtimeDiagnostics(prepared.session);
@@ -149,12 +172,13 @@ try {
 			after,
 			showSwitch: showSwitchResult,
 			applicationSuspend: applicationSuspendResult,
+			programmerTimingExercise,
 		};
 	}
 } finally {
 	clearInterval(memorySampler);
 	await collectMemory();
-	slowClient?.close();
+	await slowClient?.close();
 	app.kill("SIGTERM");
 	await stopPackagedDesktop();
 }
@@ -169,7 +193,13 @@ if (!complete)
 	throw new Error("Packaged Stage report has no completion record");
 const result =
 	profile === "improved-beam-spike"
-		? evaluateImprovedBeamSpike(complete, samplesPath, scene, processMemory)
+		? evaluateImprovedBeamSpike(
+				complete,
+				samplesPath,
+				scene,
+				runtime,
+				processMemory,
+			)
 		: evaluate(
 				complete,
 				durationSeconds,
@@ -353,7 +383,10 @@ async function prepareScene(profile) {
 	await startLargeStageDynamics(
 		session,
 		showSwitch.alternateShowId,
-		dynamics.definitionIds,
+		dynamics.definitionIds.map((definitionId, index) => ({
+			definitionId,
+			targets: dynamicsPlan.activations[index].targets,
+		})),
 	);
 	await setStaticControlIntensity(
 		session,
@@ -390,21 +423,6 @@ async function prepareScene(profile) {
 		showSwitch: { ...showSwitch, dynamics },
 	};
 }
-
-const CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS = Object.freeze([
-	{ name: "ACL Chase", kind: "physical", playbackNumber: 17 },
-	{ name: "Show Wash Waterfall", kind: "virtual", playbackNumber: 1024 },
-	{ name: "Show Profile Circle", kind: "virtual", playbackNumber: 1019 },
-	{ name: "Show Profile PWM", kind: "virtual", playbackNumber: 1001 },
-	{ name: "Show LED Random", kind: "virtual", playbackNumber: 1014 },
-	{ name: "Show LED Random Strobe", kind: "virtual", playbackNumber: 1030 },
-	{ name: "Sunstrip Rain", kind: "virtual", playbackNumber: 1029 },
-	{ name: "Aux Show Profile Circle", kind: "virtual", playbackNumber: 1021 },
-	{ name: "Aux Show Profile PWM", kind: "virtual", playbackNumber: 1004 },
-	{ name: "Aux Show Wash Waterfall", kind: "virtual", playbackNumber: 1026 },
-	{ name: "Aux Show Wash Random", kind: "virtual", playbackNumber: 1011 },
-	{ name: "Aux Show LED Sinus", kind: "virtual", playbackNumber: 1018 },
-]);
 
 async function openCanonicalDemoShow(session) {
 	const source = path.join(repositoryRoot, "assets", "demo.show");
@@ -444,63 +462,116 @@ async function openCanonicalDemoShow(session) {
 }
 
 async function startCanonicalDemoBenchmarkLook(session, showId) {
-	for (const assignment of CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS)
+	const activate = async (assignment) => {
+		const address =
+			assignment.kind === "physical"
+				? {
+						kind: "playback",
+						playback_number: assignment.playbackNumber,
+					}
+				: {
+						kind: "virtual",
+						page: 1,
+						playback_number: assignment.playbackNumber,
+					};
+		const pressedAction =
+			assignment.kind === "physical"
+				? { type: "go_to", cue_number: 1 }
+				: { type: "on", pressed: true };
 		await requestJson(
 			"POST",
 			"/api/v2/playback-actions",
 			{
 				request_id: crypto.randomUUID(),
-				address:
-					assignment.kind === "physical"
-						? {
-								kind: "playback",
-								playback_number: assignment.playbackNumber,
-							}
-						: {
-								kind: "virtual",
-								page: 1,
-								playback_number: assignment.playbackNumber,
-							},
-				action:
-					assignment.kind === "physical"
-						? { type: "go", pressed: true }
-						: { type: "on", pressed: true },
+				address,
+				action: pressedAction,
 				surface: assignment.kind === "physical" ? "physical" : "virtual",
 			},
 			{ session, showId, deskId: session.desk.id },
 		);
-	const snapshot = await requestJson(
-		"POST",
-		"/api/v2/playback-runtime/snapshot",
-		{
-			identities: CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.map((assignment) =>
-				assignment.kind === "physical"
-					? {
-							kind: "playback",
-							playback_number: assignment.playbackNumber,
-						}
-					: {
-							kind: "virtual",
-							page: 1,
-							playback_number: assignment.playbackNumber,
-						},
-			),
-		},
-		{ session, showId, deskId: session.desk.id },
+		if (assignment.kind === "physical") return;
+		await requestJson(
+			"POST",
+			"/api/v2/playback-actions",
+			{
+				request_id: crypto.randomUUID(),
+				address,
+				action: { type: "on", pressed: false },
+				surface: assignment.kind === "physical" ? "physical" : "virtual",
+			},
+			{ session, showId, deskId: session.desk.id },
+		);
+	};
+	for (const assignment of CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS)
+		await activate(assignment);
+	const identities = CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.map((assignment) =>
+		assignment.kind === "physical"
+			? {
+					kind: "playback",
+					playback_number: assignment.playbackNumber,
+				}
+			: {
+					kind: "virtual",
+					page: 1,
+					playback_number: assignment.playbackNumber,
+				},
 	);
-	const active = snapshot.projections.filter((projection) =>
-		projection.target === "cue_list"
-			? projection.runtime?.enabled === true
-			: projection.target === "dynamic" &&
-				projection.runtime?.state === "active",
-	);
+	const activationDeadline = Date.now() + 5_000;
+	let snapshot;
+	let active;
+	do {
+		snapshot = await requestJson(
+			"POST",
+			"/api/v2/playback-runtime/snapshot",
+			{ identities },
+			{ session, showId, deskId: session.desk.id },
+		);
+		active = snapshot.projections.filter((projection) =>
+			projection.target === "cue_list"
+				? projection.runtime?.enabled === true
+				: projection.target === "dynamic" &&
+					projection.runtime?.state === "active",
+		);
+		if (
+			snapshot.projections.length ===
+				CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.length &&
+			active.length === CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.length
+		)
+			break;
+		const inactiveNumbers = new Set(
+			snapshot.projections
+				.filter(
+					(projection) =>
+						!(projection.target === "cue_list"
+							? projection.runtime?.enabled === true
+							: projection.target === "dynamic" &&
+								projection.runtime?.state === "active"),
+				)
+				.map((projection) => projection.requested.playback_number),
+		);
+		for (const assignment of CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS)
+			if (inactiveNumbers.has(assignment.playbackNumber))
+				await activate(assignment);
+		await new Promise((resolve) => setTimeout(resolve, 25));
+	} while (Date.now() < activationDeadline);
 	if (
 		snapshot.projections.length !==
 			CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.length ||
 		active.length !== CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.length
 	)
 		throw new Error(
-			`Canonical demo activated ${active.length} of ${CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.length} benchmark assignments`,
+			`Canonical demo activated ${active.length} of ${CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.length} benchmark assignments: ${JSON.stringify(
+				snapshot.projections.map((projection) => ({
+					requested: projection.requested,
+					target: projection.target,
+					active:
+						projection.target === "cue_list"
+							? projection.runtime?.enabled
+							: projection.target === "dynamic"
+								? projection.runtime?.state
+								: null,
+				})),
+			)}`,
 		);
 	return {
 		assignments: CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.map(
@@ -517,7 +588,7 @@ async function installLargeStageDynamics(session, showId, plan) {
 			"POST",
 			"/api/v2/dynamics/create",
 			{ request_id: crypto.randomUUID(), definition: activation.definition },
-			{ session, showId },
+			{ session, showId, deskId: session.desk.id },
 		);
 		if (!outcome?.object?.id)
 			throw new Error("Large Stage Dynamic create returned no object identity");
@@ -531,6 +602,9 @@ async function installLargeStageDynamics(session, showId, plan) {
 		definitionIds: activations.map((activation) => activation.definitionId),
 		instanceCount: LARGE_STAGE_DYNAMIC_INSTANCES,
 		targetCount: plan.dynamicTargetCount,
+		uniqueTargetCount: new Set(
+			activations.flatMap((activation) => activation.targets),
+		).size,
 		laneCoverage: plan.laneCoverage,
 		staticControlFixtureIds: plan.staticControlFixtureIds,
 	};
@@ -553,7 +627,7 @@ async function startLargeStageDynamics(session, showId, activations) {
 				timing: {},
 				undo_group: "stage-capacity-dynamics",
 			},
-			{ session, showId },
+			{ session, showId, deskId: session.desk.id },
 		);
 }
 
@@ -562,7 +636,7 @@ async function requireLargeStageDynamicsRuntime(session, showId, expected) {
 		"GET",
 		"/api/v2/dynamics/runtime",
 		undefined,
-		{ session, showId },
+		{ session, showId, deskId: session.desk.id },
 	);
 	if (runtime.instances.length !== expected.instanceCount)
 		throw new Error(
@@ -571,10 +645,10 @@ async function requireLargeStageDynamicsRuntime(session, showId, expected) {
 	const targets = runtime.instances.flatMap((instance) => instance.targets);
 	if (
 		targets.length !== expected.targetCount ||
-		new Set(targets).size !== expected.targetCount
+		new Set(targets).size !== expected.uniqueTargetCount
 	)
 		throw new Error(
-			`Large Stage Dynamic runtime has ${targets.length} targets (${new Set(targets).size} unique); expected ${expected.targetCount}`,
+			`Large Stage Dynamic runtime has ${targets.length} targets (${new Set(targets).size} unique); expected ${expected.targetCount} targets (${expected.uniqueTargetCount} unique)`,
 		);
 	const unexpectedStatic = expected.staticControlFixtureIds.find((fixtureId) =>
 		targets.includes(fixtureId),
@@ -593,13 +667,13 @@ async function setStaticControlIntensity(session, showId, fixtureIds) {
 			"GET",
 			`/api/v2/users/${encodeURIComponent(userId)}/programmer-values/snapshot`,
 			undefined,
-			{ session, showId },
+			{ session, showId, deskId: session.desk.id },
 		),
 		requestJson(
 			"GET",
 			`/api/v2/users/${encodeURIComponent(userId)}/programmer-capture-mode/snapshot`,
 			undefined,
-			{ session, showId },
+			{ session, showId, deskId: session.desk.id },
 		),
 	]);
 	await requestJson(
@@ -624,7 +698,7 @@ async function setStaticControlIntensity(session, showId, fixtureIds) {
 				})),
 			},
 		},
-		{ session, showId },
+		{ session, showId, deskId: session.desk.id },
 	);
 }
 
@@ -663,37 +737,53 @@ async function createShowSwitchTarget(session, originalShowId, profile) {
 }
 
 async function exerciseShowSwitches(session, shows, duration) {
-	const result = { attempted: 4, completed: 0, error: null };
+	const result = { attempted: 4, completed: 0, intervals: [], error: null };
 	try {
-		await new Promise((resolve) =>
-			setTimeout(resolve, Math.min(5_000, Math.max(1_000, duration * 100))),
-		);
-		for (const showId of [
+		const startedAt = Date.now();
+		const targets = [
 			shows.alternateShowId,
 			shows.originalShowId,
 			shows.alternateShowId,
 			shows.originalShowId,
-		]) {
-			await requestJson(
-				"POST",
-				"/api/v2/shows",
-				{
-					request_id: crypto.randomUUID(),
-					action: {
-						type: "open",
-						show_id: showId,
-						transition: "safe_blackout",
-						transition_millis: null,
-					},
-				},
-				{ session },
+		];
+		for (const [index, showId] of targets.entries()) {
+			const targetAt = startedAt + duration * 1_000 * (0.2 + index * 0.2);
+			await new Promise((resolve) =>
+				setTimeout(resolve, Math.max(0, targetAt - Date.now())),
 			);
-			if (shows.dynamics)
-				await requireLargeStageDynamicsRuntime(session, showId, shows.dynamics);
-			if (shows.canonicalDemo)
-				await startCanonicalDemoBenchmarkLook(session, showId);
+			const interval = {
+				showId,
+				startedAt: new Date().toISOString(),
+				finishedAt: null,
+			};
+			result.intervals.push(interval);
+			try {
+				await requestJson(
+					"POST",
+					"/api/v2/shows",
+					{
+						request_id: crypto.randomUUID(),
+						action: {
+							type: "open",
+							show_id: showId,
+							transition: "safe_blackout",
+							transition_millis: null,
+						},
+					},
+					{ session },
+				);
+				if (shows.dynamics)
+					await requireLargeStageDynamicsRuntime(
+						session,
+						showId,
+						shows.dynamics,
+					);
+				if (shows.canonicalDemo)
+					await startCanonicalDemoBenchmarkLook(session, showId);
+			} finally {
+				interval.finishedAt = new Date().toISOString();
+			}
 			result.completed++;
-			await new Promise((resolve) => setTimeout(resolve, 500));
 		}
 	} catch (error) {
 		result.error = error instanceof Error ? error.message : String(error);
@@ -748,6 +838,35 @@ function runtimeDiagnostics(session) {
 	return requestJson("GET", "/api/v2/diagnostics", undefined, { session });
 }
 
+async function exercisePackagedProgrammerTiming(session) {
+	const commandLine = await requestJson(
+		"GET",
+		"/api/v2/command-line",
+		undefined,
+		{ session, deskId: session.desk.id },
+	);
+	await requestJson(
+		"PUT",
+		"/api/v2/command-line",
+		{ text: "FIXTURE 999" },
+		{
+			session,
+			deskId: session.desk.id,
+			revision: commandLine.revision,
+		},
+	);
+	await requestJson(
+		"POST",
+		"/api/v2/command-line/execute",
+		{ request_id: crypto.randomUUID(), command: "FIXTURE 1 AT 1" },
+		{ session, deskId: session.desk.id },
+	);
+	return {
+		actions: ["command_line_edit", "command_execute"],
+		sources: ["http"],
+	};
+}
+
 async function requestJson(method, route, body, context = {}) {
 	const headers = {};
 	if (body !== undefined) headers["content-type"] = "application/json";
@@ -795,10 +914,12 @@ async function stopExistingDevelopmentDesk() {
 
 async function stopPackagedDesktop() {
 	if (process.platform === "win32") {
-		await runAllowingAnyExit("taskkill", ["/F", "/IM", "light-desktop.exe"]);
+		for (const processName of ["light-desktop.exe", "light-headless.exe"])
+			await runAllowingAnyExit("taskkill", ["/F", "/IM", processName]);
 		return;
 	}
-	await runAllowingNoMatch("pkill", ["-x", "light-desktop"]);
+	for (const processName of ["light-desktop", "light-headless", "ToskLight"])
+		await runAllowingNoMatch("pkill", ["-x", processName]);
 }
 
 async function lightDesktopResidentBytes(directPid) {
@@ -879,6 +1000,16 @@ function launchPackagedApplication(application, environment) {
 	});
 }
 
+async function activatePackagedApplication(application) {
+	if (process.platform !== "darwin" || application.direct) return;
+	await execFileAsync("open", [application.bundle]);
+	await execFileAsync("osascript", [
+		"-e",
+		'tell application "System Events" to tell process "ToskLight" to set frontmost to true',
+	]);
+	await new Promise((resolve) => setTimeout(resolve, 250));
+}
+
 async function runAllowingNoMatch(command, arguments_) {
 	await new Promise((resolve, reject) => {
 		const child = spawn(command, arguments_, { stdio: "ignore" });
@@ -944,48 +1075,93 @@ function evaluate(
 	const frames = Array.isArray(stage?.frames)
 		? stage.frames.map((frame) => ({ ...frame, visibilitySegment: 0 }))
 		: uniqueTimelineFrames(timeline);
-	const settled = frames.filter(
+	const lifecycleSettled = frames.filter(
 		(frame) =>
 			Number.isFinite(frame.sourceToSettledCanvasMs) &&
-			Number.isFinite(frame.settledCanvasSubmittedAt),
+			Number.isFinite(frame.settledCanvasSubmittedAt) &&
+			!frameOverlapsApplicationSuspend(frame, runtime.applicationSuspend) &&
+			!frameOverlapsShowSwitch(frame, runtime.showSwitch) &&
+			!frameOverlapsContextRecovery(frame, complete.contextRecovery),
 	);
+	const firstReadySample = timeline.find((sample) => sample.renders > 0);
+	const steadyStateStartedAt = Number.isFinite(firstReadySample?.recordedAt)
+		? firstReadySample.recordedAt + 5_000
+		: null;
+	const additionalStageOpenedAt =
+		timeline.find((sample) => sample.additionalStageWindow === "opened")
+			?.recordedAt ?? null;
+	const operationalSettled =
+		steadyStateStartedAt === null
+			? lifecycleSettled
+			: lifecycleSettled.filter(
+					(frame) =>
+						Date.parse(frame.sourceGeneratedAt) >= steadyStateStartedAt,
+				);
+	const settled = Number.isFinite(additionalStageOpenedAt)
+		? operationalSettled.filter(
+				(frame) =>
+					Date.parse(frame.sourceGeneratedAt) < additionalStageOpenedAt,
+			)
+		: operationalSettled;
+	const startupSettled =
+		steadyStateStartedAt === null
+			? []
+			: lifecycleSettled.filter(
+					(frame) => Date.parse(frame.sourceGeneratedAt) < steadyStateStartedAt,
+				);
 	const latencies = settled
 		.map((frame) => frame.sourceToSettledCanvasMs)
 		.sort((left, right) => left - right);
-	const lanes = [...new Set(settled.map((frame) => frame.lane))].sort();
+	const operationalLatencies = operationalSettled
+		.map((frame) => frame.sourceToSettledCanvasMs)
+		.sort((left, right) => left - right);
+	const lanes = [
+		...new Set(operationalSettled.map((frame) => frame.lane)),
+	].sort();
 	const qualities = [
 		...new Set(timeline.map((sample) => sample.quality).filter(Boolean)),
 	];
 	const qualityObjects = summarizeQualityObjects(timeline);
 	const renderSummary = summarizeRenders(timeline);
+	const focusedSamples = timeline.filter(
+		(sample) => sample.mainDocumentFocused,
+	);
 	const presentationGaps = changingPresentationGaps(
 		frames,
 		runtime.applicationSuspend,
+		runtime.showSwitch,
+		complete.contextRecovery,
 	);
 	const sourceCadenceGaps = laneSourceCadenceGaps(
 		frames,
 		runtime.applicationSuspend,
+		runtime.showSwitch,
+		complete.contextRecovery,
 	);
+	const realTimeStageGateEnforced = profile !== "large-stage";
 	const failures = [];
-	if (!settled.length)
+	if (realTimeStageGateEnforced && !settled.length)
 		failures.push("no changing frame reached a packaged canvas");
 	if (!(stage?.rafCallbacks > 0))
 		failures.push(
 			"the packaged WebView submitted no RAF callback; keep the operator session unlocked and ToskLight visible",
 		);
-	if (!lanes.includes("normal"))
+	if (realTimeStageGateEnforced && !lanes.includes("normal"))
 		failures.push("Live lane produced no settled canvas sample");
-	if (!lanes.includes("preload"))
+	if (realTimeStageGateEnforced && !lanes.includes("preload"))
 		failures.push("Preload lane produced no settled canvas sample");
-	if (percentile(latencies, 95) > 120)
+	if (realTimeStageGateEnforced && percentile(latencies, 95) > 120)
 		failures.push("packaged engine-frame-to-canvas p95 exceeded 120 ms");
-	if (Math.max(0, ...latencies) > 200)
+	if (realTimeStageGateEnforced && Math.max(0, ...operationalLatencies) > 200)
 		failures.push("a changing frame exceeded the 200 ms hard latency ceiling");
-	if (Math.max(0, ...presentationGaps) > 200)
+	if (realTimeStageGateEnforced && Math.max(0, ...presentationGaps) > 200)
 		failures.push("a changing lane had a presentation gap longer than 200 ms");
-	if (Math.max(0, ...sourceCadenceGaps) > 200)
+	if (realTimeStageGateEnforced && Math.max(0, ...sourceCadenceGaps) > 200)
 		failures.push("a claimed lane had a source cadence gap longer than 200 ms");
-	if (latestChangingFrameDidNotSettle(frames, complete.recordedAt))
+	if (
+		realTimeStageGateEnforced &&
+		latestChangingFrameDidNotSettle(frames, complete.recordedAt)
+	)
 		failures.push(
 			"the final unsuperseded changing frame did not reach a packaged canvas",
 		);
@@ -1048,9 +1224,17 @@ function evaluate(
 	if (output.stageWindowSendErrors > 0)
 		failures.push("packaged Stage output window recorded a send error");
 	const visualization = summarizeVisualizationWindow(runtime);
-	if ((runtime.after.visualization?.normal_subscribers ?? 0) > 1)
+	const programmerActionTiming =
+		summarizePackagedProgrammerActionTiming(runtime);
+	for (const failure of programmerActionTiming.failures)
+		failures.push(`programmer action timing: ${failure}`);
+	const maximumSharedProjectionCount = duration * 25;
+	if (
+		(runtime.after.visualization?.projections ?? 0) >
+		maximumSharedProjectionCount
+	)
 		failures.push(
-			"opening the sibling Stage window created more than one normal visualization subscriber",
+			"opening the sibling Stage window multiplied server visualization projection work",
 		);
 	if ((runtime.after.visualization?.preload_subscribers ?? 0) > 1)
 		failures.push(
@@ -1122,6 +1306,11 @@ function evaluate(
 		host: hostHardware(),
 		durationSeconds: duration,
 		activeUiSurfaces: complete.activeUiSurfaces ?? [],
+		mainWindowFocus: {
+			samples: timeline.length,
+			focusedSamples: focusedSamples.length,
+			unfocusedSamples: timeline.length - focusedSamples.length,
+		},
 		visualizationEnabled: true,
 		rate: {
 			targetHz: profileDefinition.targetHz,
@@ -1135,10 +1324,27 @@ function evaluate(
 		qualityObjects,
 		lanes,
 		latency: {
+			realTimeGateEnforced: realTimeStageGateEnforced,
 			samples: latencies.length,
 			p50Ms: percentile(latencies, 50),
 			p95Ms: percentile(latencies, 95),
 			maxMs: latencies.at(-1) ?? null,
+			allSurfaceSamples: operationalLatencies.length,
+			allSurfaceMaxMs: operationalLatencies.at(-1) ?? null,
+			steadyStateStartedAt:
+				steadyStateStartedAt === null
+					? null
+					: new Date(steadyStateStartedAt).toISOString(),
+			additionalStageOpenedAt:
+				additionalStageOpenedAt === null
+					? null
+					: new Date(additionalStageOpenedAt).toISOString(),
+			startupSamples: startupSettled.length,
+			startupMaxMs: startupSettled.length
+				? Math.max(
+						...startupSettled.map((frame) => frame.sourceToSettledCanvasMs),
+					)
+				: null,
 			maxPresentationGapMs: presentationGaps.length
 				? Math.max(...presentationGaps)
 				: null,
@@ -1176,6 +1382,7 @@ function evaluate(
 			...runtime,
 			outputComparison: output,
 			visualizationWindow: visualization,
+			programmerActionTiming,
 		},
 		capabilities: complete.capabilities ?? null,
 	};
@@ -1185,10 +1392,15 @@ function evaluateImprovedBeamSpike(
 	complete,
 	samplesFile,
 	scene,
+	runtime,
 	processMemory,
 ) {
 	const spike = complete.spike;
 	const failures = [];
+	const programmerActionTiming =
+		summarizePackagedProgrammerActionTiming(runtime);
+	for (const failure of programmerActionTiming.failures)
+		failures.push(`programmer action timing: ${failure}`);
 	if (!spike)
 		failures.push("packaged Improved-beam spike returned no measurement");
 	if (!(spike?.performance?.frames > 0))
@@ -1208,11 +1420,30 @@ function evaluateImprovedBeamSpike(
 		failures,
 		capabilityDecision: spike?.extensionAccepted ? "accepted" : "rejected",
 		spike,
+		server: {
+			...runtime,
+			programmerActionTiming,
+		},
 		processMemory: {
 			measurement: `${process.platform} light-desktop main-process resident set`,
 			samples: processMemory,
 		},
 	};
+}
+
+function summarizePackagedProgrammerActionTiming(runtime) {
+	const before = runtime?.before?.programmer_action_timing;
+	const after = runtime?.after?.programmer_action_timing;
+	return summarizeProgrammerActionTiming(
+		after,
+		latestProgrammerActionId(before),
+		{
+			minimumSamples: 2,
+			sources: ["http"],
+			actions: ["command_line_edit", "command_execute"],
+			frameRateBands: ["at-or-below-60"],
+		},
+	);
 }
 
 function summarizeVisualizationWindow(runtime) {

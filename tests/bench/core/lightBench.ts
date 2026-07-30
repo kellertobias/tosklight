@@ -12,7 +12,13 @@ import { CURRENT_FIXTURE_PROFILE_SCHEMA_VERSION } from "../../support/fixtureSch
 const { artifactPaths } = artifactResolver;
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const SERVER = path.join(artifactPaths.cargo, "debug", process.platform === "win32" ? "light-headless.exe" : "light-headless");
+const SERVER =
+  process.env.LIGHT_E2E_SERVER ??
+  path.join(
+    artifactPaths.cargo,
+    "debug",
+    process.platform === "win32" ? "light-headless.exe" : "light-headless",
+  );
 
 export interface TestShow { id: string; fixtureIds: string[]; session: Session }
 export interface ClockFrame {
@@ -66,6 +72,7 @@ export class LightBench {
     });
     if (!response.ok) throw new Error(`Server shutdown failed: ${response.status} ${await response.text()}`);
     await this.waitForServerExit(process, 5_000);
+    this.releaseServerProcess(process);
     this.process = undefined;
     return pid;
   }
@@ -77,6 +84,7 @@ export class LightBench {
       process.kill("SIGKILL");
       await this.waitForServerExit(process, 2_000);
     }
+    if (process) this.releaseServerProcess(process);
     this.process = undefined;
     return pid;
   }
@@ -255,13 +263,19 @@ export class LightBench {
   }
 
   async stop(): Promise<void> {
-    const udpClosures: Promise<void>[] = this.oscHardware.map((hardware) => hardware.close());
-    this.oscHardware.length = 0;
-    if (this.artnet) udpClosures.push(this.artnet.close());
-    if (this.sacn) udpClosures.push(this.sacn.close());
-    await Promise.all(udpClosures);
-    await this.stopServerAbruptly();
-    if (this.dataDir) await fs.rm(this.dataDir, { recursive: true, force: true });
+    try {
+      // Stop the continuous output producer before closing its UDP receivers.
+      // With many universes, closing receivers while the server is still
+      // flooding them can indefinitely starve Node's socket close callbacks.
+      await this.stopServerAbruptly();
+      const udpClosures: Promise<void>[] = this.oscHardware.map((hardware) => hardware.close());
+      this.oscHardware.length = 0;
+      if (this.artnet) udpClosures.push(this.artnet.close());
+      if (this.sacn) udpClosures.push(this.sacn.close());
+      await Promise.all(udpClosures);
+    } finally {
+      if (this.dataDir) await fs.rm(this.dataDir, { recursive: true, force: true });
+    }
   }
 
   private async waitForServerExit(process: ChildProcess, timeout: number): Promise<void> {
@@ -281,6 +295,14 @@ export class LightBench {
       // Avoid missing an exit that lands between the initial check and listener setup.
       if (process.exitCode !== null) onExit();
     });
+  }
+
+  private releaseServerProcess(process: ChildProcess): void {
+    process.stdout?.removeAllListeners("data");
+    process.stderr?.removeAllListeners("data");
+    process.stdout?.destroy();
+    process.stderr?.destroy();
+    process.unref();
   }
 
   private async waitUntilReady(): Promise<void> {

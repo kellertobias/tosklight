@@ -7,6 +7,8 @@ export interface StageWindowProps extends WindowProps {
 	showSelection?: boolean;
 	showFloorGrid?: boolean;
 	environmentBrightness?: number;
+	visualizationIntervalMillis?: number;
+	pixelRatioCap?: number;
 	camera3d?: {
 		position: readonly [number, number, number];
 		target: readonly [number, number, number];

@@ -180,6 +180,7 @@ function createSpotLight(beam: THREE.Object3D) {
 	target.name = "stage-improved-spotlight-target";
 	beam.add(light, target);
 	light.target = target;
+	beam.userData.stageImprovedLightingActive = true;
 	return light;
 }
 
@@ -191,6 +192,7 @@ function disposeSpotLight(beam: THREE.Object3D) {
 		light.dispose();
 	}
 	target?.removeFromParent();
+	beam.userData.stageImprovedLightingActive = false;
 }
 
 function prepareOpaqueStageGeometry(scene: THREE.Scene) {
@@ -287,24 +289,38 @@ export function refreshImprovedBeamLighting(
 	scene: THREE.Scene,
 	renderQuality: StageRenderQuality,
 ) {
-	const directionalBeams: THREE.Object3D[] = [];
-	scene.updateMatrixWorld(true);
-	scene.traverse((object) => {
-		if (object.userData.stageDirectionalBeam === true)
-			directionalBeams.push(object);
-	});
+	let directionalBeams = scene.userData.stageDirectionalBeams as
+		| THREE.Object3D[]
+		| undefined;
+	if (!directionalBeams) {
+		directionalBeams = [];
+		scene.traverse((object) => {
+			if (object.userData.stageDirectionalBeam === true)
+				directionalBeams?.push(object);
+		});
+		scene.userData.stageDirectionalBeams = directionalBeams;
+	}
+	const previousEnhanced =
+		(scene.userData.stageImprovedEnhancedBeams as
+			| Set<THREE.Object3D>
+			| undefined) ?? new Set();
 	if (renderQuality !== "improved_beams") {
+		if (scene.userData.stageImprovedLightingQuality === "improved_beams")
+			for (const beam of previousEnhanced) resetImprovedBeam(beam);
+		scene.userData.stageImprovedLightingQuality = renderQuality;
+		scene.userData.stageImprovedEnhancedBeams = new Set();
 		scene.userData.stageImprovedBeamBudget = [];
 		scene.userData.stageImprovedShadowSignature = null;
 		scene.userData.stageImprovedShadowsDirty = false;
-		for (const beam of directionalBeams) resetImprovedBeam(beam);
 		return;
 	}
 
+	scene.userData.stageImprovedLightingQuality = renderQuality;
+	scene.updateMatrixWorld(true);
 	const enhanced = selectEnhancedBeams(scene, directionalBeams);
-	for (const beam of directionalBeams) {
+	for (const beam of previousEnhanced)
 		if (!enhanced.has(beam)) resetImprovedBeam(beam);
-	}
+	scene.userData.stageImprovedEnhancedBeams = enhanced;
 	const opaqueMeshes = prepareOpaqueStageGeometry(scene);
 	const raycaster = new THREE.Raycaster();
 	for (const beam of enhanced)

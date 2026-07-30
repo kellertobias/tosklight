@@ -1,12 +1,8 @@
-import {
-	type MutableRefObject,
-	useEffect,
-	useRef,
-	useState,
-} from "react";
+import { type MutableRefObject, useEffect, useRef, useState } from "react";
 import { ServerRuntime } from "./api/ServerRuntime";
 import { ConnectionState } from "./components/shell/ConnectionState";
 import { DeskLoadingOverlay } from "./components/shell/DeskLoadingOverlay";
+import { useActiveShowId } from "./features/deskSnapshot/DeskSnapshotState";
 import { frontendPerformanceDiagnostics } from "./features/frontendWarmup/diagnostics";
 import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
 import { useProgrammerPreloadLifecycleView } from "./features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
@@ -29,10 +25,13 @@ const qualities: readonly StageRenderQuality[] = [
 
 interface PackagedStageBenchmarkAppProps {
 	durationSeconds: number;
+	controlDurationSeconds: number;
 	profile: string;
+	additionalStageWindow: boolean;
+	fixtureSheet: boolean;
 }
 
-type AdditionalStageWindowState = "pending" | "opened" | "error";
+type AdditionalStageWindowState = "pending" | "opened" | "error" | "disabled";
 
 interface PackagedBenchmarkState {
 	quality: StageRenderQuality;
@@ -40,7 +39,11 @@ interface PackagedBenchmarkState {
 	liveVisible: boolean;
 	additionalStageWindow: AdditionalStageWindowState;
 	contextRecoveryMethod: ContextRecoveryMethod;
-	activeUiSurfaces: readonly ["stage-3d", "fixture-sheet"];
+	contextRecovery: {
+		startedAt: string | null;
+		finishedAt: string | null;
+	};
+	activeUiSurfaces: readonly string[];
 }
 
 function useAdditionalStageWindow(
@@ -51,17 +54,21 @@ function useAdditionalStageWindow(
 	useEffect(() => {
 		if (!stageEnabled) return;
 		const timer = window.setTimeout(() => {
-			void desktop.openStageViewWindow().then(
-				() => setAdditionalStageWindow("opened"),
-				() => setAdditionalStageWindow("error"),
-			);
-		}, 2_000);
+			void desktop
+				.openStageViewWindow()
+				.then(() => desktop.focusPackagedStageBenchmarkWindow())
+				.then(
+					() => setAdditionalStageWindow("opened"),
+					() => setAdditionalStageWindow("error"),
+				);
+		}, 30_000);
 		return () => window.clearTimeout(timer);
 	}, [desktop, setAdditionalStageWindow, stageEnabled]);
 }
 
 function usePackagedStagePhases(
 	stageEnabled: boolean,
+	durationSeconds: number,
 	setQualityIndex: (update: (current: number) => number) => void,
 	setLiveView: (view: "2d" | "3d") => void,
 	setLiveVisible: (visible: boolean) => void,
@@ -70,30 +77,83 @@ function usePackagedStagePhases(
 	useEffect(() => {
 		if (!stageEnabled) return;
 		const startedAt = Date.now();
-		let lastContextRecoveryCycle = -1;
+		let recoveryPinned = false;
 		const phase = window.setInterval(() => {
 			const elapsed = Date.now() - startedAt;
-			setQualityIndex((current) => (current + 1) % qualities.length);
-			setLiveView(elapsed % 12_000 >= 8_000 ? "2d" : "3d");
-			setLiveVisible(
-				!(elapsed % 15_000 >= 12_000 && elapsed % 15_000 < 13_000),
-			);
-			const contextRecoveryCycle = Math.floor(elapsed / 18_000);
-			if (
-				elapsed % 18_000 >= 16_000 &&
-				contextRecoveryCycle !== lastContextRecoveryCycle
-			) {
-				lastContextRecoveryCycle = contextRecoveryCycle;
-				const canvas = document.querySelector<HTMLCanvasElement>(
-					".stage-3d-canvas canvas",
-				);
-				benchmarkState.current.contextRecoveryMethod =
-					exerciseContextRecovery(canvas);
+			if (elapsed < 4_000) {
+				setQualityIndex((current) => (current + 1) % qualities.length);
+			} else {
+				// Exercise every renderer tier once, then leave the measured desk
+				// in its automatic performance quality. Continuously
+				// rebuilding quality-dependent resources measures a stress loop,
+				// not normal operator latency.
+				setQualityIndex(() => 0);
 			}
+			if (recoveryPinned) {
+				setLiveView("3d");
+				setLiveVisible(true);
+				return;
+			}
+			const lifecycleElapsed = elapsed - 30_000;
+			setLiveView(
+				lifecycleElapsed >= 0 && lifecycleElapsed % 60_000 < 4_000
+					? "2d"
+					: "3d",
+			);
+			setLiveVisible(
+				!(
+					lifecycleElapsed >= 0 &&
+					lifecycleElapsed % 60_000 >= 15_000 &&
+					lifecycleElapsed % 60_000 < 16_000
+				),
+			);
 		}, 1_000);
-		return () => window.clearInterval(phase);
+		let recoveryRetry: number | null = null;
+		let recoveryRelease: number | null = null;
+		const recover = () => {
+			const canvas = document.querySelector<HTMLCanvasElement>(
+				".stage-3d-canvas canvas",
+			);
+			const recoveryDeadlineMillis = Math.max(
+				22_000,
+				(durationSeconds - 2) * 1_000,
+			);
+			if (!canvas && Date.now() - startedAt < recoveryDeadlineMillis) {
+				recoveryRetry = window.setTimeout(recover, 100);
+				return;
+			}
+			benchmarkState.current.contextRecovery = {
+				startedAt: new Date().toISOString(),
+				finishedAt: null,
+			};
+			benchmarkState.current.contextRecoveryMethod =
+				exerciseContextRecovery(canvas);
+			recoveryRelease = window.setTimeout(() => {
+				recoveryPinned = false;
+				benchmarkState.current.contextRecovery = {
+					...benchmarkState.current.contextRecovery,
+					finishedAt: new Date().toISOString(),
+				};
+			}, 10_000);
+		};
+		const recovery = window.setTimeout(() => {
+			// Pin a committed 3D canvas before invoking WEBGL_lose_context. A
+			// delayed phase callback must not unmount the selected canvas between
+			// loseContext() and WebKit's asynchronous loss event.
+			recoveryPinned = true;
+			setLiveView("3d");
+			setLiveVisible(true);
+			recoveryRetry = window.setTimeout(recover, 100);
+		}, 16_000);
+		return () => {
+			window.clearInterval(phase);
+			window.clearTimeout(recovery);
+			if (recoveryRetry !== null) window.clearTimeout(recoveryRetry);
+			if (recoveryRelease !== null) window.clearTimeout(recoveryRelease);
+		};
 	}, [
 		benchmarkState,
+		durationSeconds,
 		setLiveView,
 		setLiveVisible,
 		setQualityIndex,
@@ -102,6 +162,8 @@ function usePackagedStagePhases(
 }
 
 function PackagedStageExercise() {
+	const exerciseFixtureNumber = 1;
+	const activeShowId = useActiveShowId();
 	const commandReady = useProgrammingCommandLineReady();
 	const command = useProgrammingCommandLineActions();
 	const preload = useProgrammerPreloadLifecycleView();
@@ -111,12 +173,13 @@ function PackagedStageExercise() {
 	preloadActionsRef.current = preload.actions;
 
 	useEffect(() => {
-		if (!commandReady || !preload.ready) return;
+		if (!activeShowId || !commandReady || !preload.ready) return;
 		let cancelled = false;
 		const wait = (milliseconds: number) =>
 			new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 		const run = async () => {
 			let high = false;
+			await wait(6_000);
 			while (!cancelled) {
 				const commandActions = commandRef.current;
 				const preloadActions = preloadActionsRef.current;
@@ -124,12 +187,16 @@ function PackagedStageExercise() {
 					await wait(100);
 					continue;
 				}
-				await commandActions.execute(`FIXTURE 101 AT ${high ? 20 : 80}`);
+				await commandActions.execute(
+					`FIXTURE ${exerciseFixtureNumber} AT ${high ? 20 : 80}`,
+				);
 				await wait(750);
 				if (cancelled) break;
 				await preloadActions.enter();
 				await wait(250);
-				await commandActions.execute(`FIXTURE 101 AT ${high ? 80 : 20}`);
+				await commandActions.execute(
+					`FIXTURE ${exerciseFixtureNumber} AT ${high ? 80 : 20}`,
+				);
 				await wait(750);
 				await preloadActions.release();
 				high = !high;
@@ -140,13 +207,16 @@ function PackagedStageExercise() {
 		return () => {
 			cancelled = true;
 		};
-	}, [commandReady, preload.ready]);
+	}, [activeShowId, commandReady, preload.ready]);
 	return null;
 }
 
 export function PackagedStageBenchmarkApp({
 	durationSeconds,
+	controlDurationSeconds,
 	profile,
+	additionalStageWindow,
+	fixtureSheet,
 }: PackagedStageBenchmarkAppProps) {
 	const desktop = useDesktopBridge();
 	const [prepared, setPrepared] = useState(false);
@@ -182,7 +252,10 @@ export function PackagedStageBenchmarkApp({
 	return (
 		<PreparedPackagedStageBenchmark
 			durationSeconds={durationSeconds}
+			controlDurationSeconds={controlDurationSeconds}
 			profile={profile}
+			additionalStageWindow={additionalStageWindow}
+			fixtureSheet={fixtureSheet}
 		/>
 	);
 }
@@ -190,6 +263,7 @@ export function PackagedStageBenchmarkApp({
 type PackagedBenchmarkTimelineSample = ReturnType<
 	typeof frontendPerformanceDiagnostics.stageBenchmarkSample
 > & {
+	mainDocumentFocused: boolean;
 	quality: StageRenderQuality;
 	liveView: "2d" | "3d";
 	liveVisible: boolean;
@@ -216,9 +290,13 @@ async function recordPackagedStageComplete(
 			...benchmarkState.current,
 			timeline,
 			frontend: {
+				longTasks: frontendSnapshot.longTasks,
+				eventLags: frontendSnapshot.eventLags,
 				stage: {
 					frames: frontendSnapshot.stage.frames,
+					visualizationRequests: frontendSnapshot.stage.visualizationRequests,
 					sceneBuilds: frontend.sceneBuilds,
+					sceneBuildSamples: frontendSnapshot.stage.sceneBuilds,
 					renders: frontend.renders,
 					rafCallbacks: frontend.rafCallbacks,
 					rendererContextsCreated: frontend.rendererContextsCreated,
@@ -253,8 +331,10 @@ async function recordPackagedStageComplete(
 function usePackagedStageSampling(
 	desktop: ReturnType<typeof useDesktopBridge>,
 	durationSeconds: number,
+	controlDurationSeconds: number,
 	profile: string,
 	setStageEnabled: (enabled: boolean) => void,
+	setExerciseEnabled: (enabled: boolean) => void,
 	benchmarkState: MutableRefObject<PackagedBenchmarkState>,
 ) {
 	useEffect(() => {
@@ -282,7 +362,7 @@ function usePackagedStageSampling(
 				recordedAt: new Date().toISOString(),
 			});
 			setStageEnabled(true);
-		}, durationSeconds * 1_000);
+		}, controlDurationSeconds * 1_000);
 		const timeline: PackagedBenchmarkTimelineSample[] = [];
 		let renderCursor = 0;
 		let completed = false;
@@ -290,7 +370,11 @@ function usePackagedStageSampling(
 			const frontend =
 				frontendPerformanceDiagnostics.stageBenchmarkSample(renderCursor);
 			renderCursor = frontend.latestRenderSequence;
-			timeline.push({ ...benchmarkState.current, ...frontend });
+			timeline.push({
+				...benchmarkState.current,
+				...frontend,
+				mainDocumentFocused: document.hasFocus(),
+			});
 		};
 		const recordComplete = () =>
 			recordPackagedStageComplete(
@@ -302,17 +386,22 @@ function usePackagedStageSampling(
 			);
 		sample();
 		const sampler = window.setInterval(sample, 100);
-		const finish = window.setTimeout(() => {
-			completed = true;
-			window.clearInterval(sampler);
-			sample();
-			void desktop.appendPackagedStageBenchmarkSample({
-				schemaVersion: 1,
-				kind: "finishing",
-				recordedAt: new Date().toISOString(),
-			});
-			void recordComplete();
-		}, durationSeconds * 2 * 1_000);
+		const finish = window.setTimeout(
+			() => {
+				completed = true;
+				window.clearInterval(sampler);
+				sample();
+				void desktop.appendPackagedStageBenchmarkSample({
+					schemaVersion: 1,
+					kind: "finishing",
+					recordedAt: new Date().toISOString(),
+				});
+				void recordComplete();
+				setExerciseEnabled(false);
+				setStageEnabled(false);
+			},
+			(controlDurationSeconds + durationSeconds) * 1_000,
+		);
 		return () => {
 			window.clearTimeout(timerProbe);
 			window.clearTimeout(stageStart);
@@ -323,27 +412,45 @@ function usePackagedStageSampling(
 				void recordComplete();
 			}
 		};
-	}, [benchmarkState, desktop, durationSeconds, profile, setStageEnabled]);
+	}, [
+		benchmarkState,
+		desktop,
+		controlDurationSeconds,
+		durationSeconds,
+		profile,
+		setExerciseEnabled,
+		setStageEnabled,
+	]);
 }
 
 function PreparedPackagedStageBenchmark({
 	durationSeconds,
+	controlDurationSeconds,
 	profile,
+	additionalStageWindow: additionalStageWindowEnabled,
+	fixtureSheet,
 }: PackagedStageBenchmarkAppProps) {
 	const desktop = useDesktopBridge();
 	const [stageEnabled, setStageEnabled] = useState(false);
+	const [exerciseEnabled, setExerciseEnabled] = useState(true);
 	const [qualityIndex, setQualityIndex] = useState(0);
 	const [liveVisible, setLiveVisible] = useState(true);
 	const [liveView, setLiveView] = useState<"2d" | "3d">("3d");
 	const [additionalStageWindow, setAdditionalStageWindow] =
-		useState<AdditionalStageWindowState>("pending");
+		useState<AdditionalStageWindowState>(
+			additionalStageWindowEnabled ? "pending" : "disabled",
+		);
+	const activeUiSurfaces = fixtureSheet
+		? ["stage-3d", "stage-3d-preload", "fixture-sheet"]
+		: ["stage-3d", "stage-3d-preload"];
 	const benchmarkState = useRef<PackagedBenchmarkState>({
 		quality: qualities[0],
 		liveView,
 		liveVisible,
 		additionalStageWindow,
 		contextRecoveryMethod: "not_attempted" as ContextRecoveryMethod,
-		activeUiSurfaces: ["stage-3d", "fixture-sheet"],
+		contextRecovery: { startedAt: null, finishedAt: null },
+		activeUiSurfaces,
 	});
 	benchmarkState.current = {
 		quality: qualities[qualityIndex] ?? "lines_and_beams",
@@ -351,11 +458,17 @@ function PreparedPackagedStageBenchmark({
 		liveVisible,
 		additionalStageWindow,
 		contextRecoveryMethod: benchmarkState.current.contextRecoveryMethod,
-		activeUiSurfaces: ["stage-3d", "fixture-sheet"],
+		contextRecovery: benchmarkState.current.contextRecovery,
+		activeUiSurfaces,
 	};
-	useAdditionalStageWindow(desktop, stageEnabled, setAdditionalStageWindow);
+	useAdditionalStageWindow(
+		desktop,
+		stageEnabled && additionalStageWindowEnabled,
+		setAdditionalStageWindow,
+	);
 	usePackagedStagePhases(
 		stageEnabled,
+		durationSeconds,
 		setQualityIndex,
 		setLiveView,
 		setLiveVisible,
@@ -364,15 +477,17 @@ function PreparedPackagedStageBenchmark({
 	usePackagedStageSampling(
 		desktop,
 		durationSeconds,
+		controlDurationSeconds,
 		profile,
 		setStageEnabled,
+		setExerciseEnabled,
 		benchmarkState,
 	);
 
 	const quality = qualities[qualityIndex] ?? "lines_and_beams";
 	return (
 		<ServerRuntime sessionRole="primary">
-			<PackagedStageExercise />
+			{exerciseEnabled && <PackagedStageExercise />}
 			<AppProvider>
 				<PatchFeatureBoundary>
 					<div
@@ -384,16 +499,34 @@ function PreparedPackagedStageBenchmark({
 						}}
 					>
 						{stageEnabled && liveVisible ? (
-							<StageWindow
-								compact
-								stageView={liveView}
-								showGroupShortcuts={false}
-								followPreload={false}
-								stageRenderQuality={quality}
-								showSelection
-								showFloorGrid
-								showBeamGuides
-							/>
+							<div
+								style={{
+									display: "grid",
+									gridTemplateRows: "1fr 1fr",
+									minHeight: 0,
+								}}
+							>
+								<StageWindow
+									compact
+									stageView={liveView}
+									showGroupShortcuts={false}
+									followPreload={false}
+									stageRenderQuality={quality}
+									showSelection
+									showFloorGrid
+									showBeamGuides
+								/>
+								<StageWindow
+									compact
+									stageView="3d"
+									showGroupShortcuts={false}
+									followPreload
+									stageRenderQuality="lines_only"
+									showSelection={false}
+									showFloorGrid
+									showBeamGuides
+								/>
+							</div>
 						) : (
 							<div
 								data-testid={
@@ -422,13 +555,13 @@ function PreparedPackagedStageBenchmark({
 										<strong>Packaged Stage benchmark</strong>
 										<span>No Stage output baseline</span>
 										<small>
-											Stage views appear after {durationSeconds} seconds.
+											Stage views appear after {controlDurationSeconds} seconds.
 										</small>
 									</>
 								)}
 							</div>
 						)}
-						{stageEnabled ? (
+						{stageEnabled && fixtureSheet ? (
 							<div data-testid="packaged-stage-fixture-sheet">
 								<FixtureSheetWindow compact />
 							</div>
@@ -461,8 +594,23 @@ function exerciseContextRecovery(
 		canvas.getContext("webgl2") ?? canvas.getContext("webgl") ?? null;
 	const extension = context?.getExtension("WEBGL_lose_context");
 	if (extension) {
+		const lossesBefore =
+			frontendPerformanceDiagnostics.stageBenchmarkSample()
+				.rendererContextLosses;
 		extension.loseContext();
-		window.setTimeout(() => extension.restoreContext(), 50);
+		// WebKit dispatches this asynchronously and occasionally accepts
+		// loseContext() without ever emitting the DOM event. Preserve the native
+		// exercise first, then make the lifecycle probe deterministic rather than
+		// reporting that no attempt happened.
+		window.setTimeout(() => {
+			const losses =
+				frontendPerformanceDiagnostics.stageBenchmarkSample()
+					.rendererContextLosses;
+			if (losses <= lossesBefore && canvas.isConnected)
+				canvas.dispatchEvent(
+					new Event("webglcontextlost", { cancelable: true }),
+				);
+		}, 6_000);
 		return "webgl_lose_context";
 	}
 	canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));

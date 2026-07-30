@@ -28,6 +28,22 @@ fn selection_revision_identifies_operations_but_ignores_value_changes() {
 }
 
 #[test]
+fn persisted_programmer_omits_live_undo_and_redo_history() {
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    registry.start(session, UserId::new());
+    registry.select(session, [FixtureId::new()]);
+
+    let encoded = serde_json::to_value(registry.get(session).unwrap()).unwrap();
+
+    assert!(encoded.get("undo").is_none());
+    assert!(encoded.get("redo").is_none());
+    let restored: ProgrammerState = serde_json::from_value(encoded).unwrap();
+    assert!(restored.undo.is_empty());
+    assert!(restored.redo.is_empty());
+}
+
+#[test]
 fn revisioned_selection_replacement_cannot_overwrite_a_concurrent_change() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();

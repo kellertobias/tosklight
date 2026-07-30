@@ -21,12 +21,25 @@ import { StageProceduralResourceCache } from "./resources";
 import { setSelectionOutlineVisibility } from "./sceneObjects";
 import type { Stage3dFixture, StageSceneContext } from "./types";
 
+const footprintOrigin = new THREE.Vector3();
+const footprintRotation = new THREE.Quaternion();
+const footprintDirection = new THREE.Vector3();
+const footprintTangent = new THREE.Vector3();
+const footprintBitangent = new THREE.Vector3();
+const footprintRay = new THREE.Vector3();
+const footprintPoint = new THREE.Vector3();
+const footprintUp = new THREE.Vector3(0, 1, 0);
+const footprintSide = new THREE.Vector3(1, 0, 0);
+
 function fixtureStructureKey(item: Stage3dFixture) {
-	return JSON.stringify([
-		item.fixture.definition,
-		item.fixture.logical_heads,
+	const definition = item.fixture.definition;
+	return [
+		definition.id,
+		definition.revision,
+		definition.profile_id ?? "",
+		definition.mode_id ?? "",
 		item.instanceId ?? item.fixture.fixture_id,
-	]);
+	].join("\u0000");
 }
 
 function fixtureTransformKey(item: Stage3dFixture) {
@@ -68,6 +81,8 @@ function buildStageFixture(item: Stage3dFixture, context: StageSceneContext) {
 			: null;
 	if (profileGeometry) {
 		root.add(profileGeometry);
+		root.userData.stageProfileGeometryRuntime =
+			profileGeometry.userData.stageProfileGeometryRuntime;
 	} else {
 		mountFallbackFixture(
 			root,
@@ -151,16 +166,47 @@ function updateGroundFootprint(
 	const active = beam.userData.stageBeamActive === true;
 	footprint.visible = active;
 	if (!active) return;
-	const origin = beam.getWorldPosition(new THREE.Vector3());
-	const direction = new THREE.Vector3(0, -1, 0)
-		.applyQuaternion(beam.getWorldQuaternion(new THREE.Quaternion()))
+	const origin = footprintOrigin.setFromMatrixPosition(beam.matrixWorld);
+	const rotation = footprintRotation.setFromRotationMatrix(beam.matrixWorld);
+	const referenceRadius = Number(beam.userData.stageBeamRadius);
+	const referenceDistance = Number(beam.userData.stageBeamDistance);
+	const material = footprint.material as THREE.LineBasicMaterial;
+	material.color.set(String(beam.userData.stageBeamColor ?? "#ffffff"));
+	material.opacity = THREE.MathUtils.clamp(
+		0.18 + Number(beam.userData.stageBeamIntensity ?? 0) * 0.5,
+		0.18,
+		0.68,
+	);
+	const geometrySignature = [
+		origin.x,
+		origin.y,
+		origin.z,
+		rotation.x,
+		rotation.y,
+		rotation.z,
+		rotation.w,
+		referenceRadius,
+		referenceDistance,
+	];
+	const previousSignature = footprint.userData.stageGroundGeometrySignature as
+		| number[]
+		| undefined;
+	if (
+		previousSignature?.length === geometrySignature.length &&
+		previousSignature.every(
+			(value, index) => value === geometrySignature[index],
+		)
+	)
+		return;
+	footprint.userData.stageGroundGeometrySignature = geometrySignature;
+	const direction = footprintDirection
+		.set(0, -1, 0)
+		.applyQuaternion(rotation)
 		.normalize();
 	if (direction.y >= -0.001) {
 		footprint.visible = false;
 		return;
 	}
-	const referenceRadius = Number(beam.userData.stageBeamRadius);
-	const referenceDistance = Number(beam.userData.stageBeamDistance);
 	if (
 		!Number.isFinite(referenceRadius) ||
 		!Number.isFinite(referenceDistance) ||
@@ -170,15 +216,13 @@ function updateGroundFootprint(
 		return;
 	}
 	const halfAngle = Math.atan(referenceRadius / referenceDistance);
-	const tangent = new THREE.Vector3()
+	const tangent = footprintTangent
 		.crossVectors(
 			direction,
-			Math.abs(direction.y) < 0.99
-				? new THREE.Vector3(0, 1, 0)
-				: new THREE.Vector3(1, 0, 0),
+			Math.abs(direction.y) < 0.99 ? footprintUp : footprintSide,
 		)
 		.normalize();
-	const bitangent = new THREE.Vector3()
+	const bitangent = footprintBitangent
 		.crossVectors(direction, tangent)
 		.normalize();
 	const position = footprint.geometry.getAttribute(
@@ -186,8 +230,8 @@ function updateGroundFootprint(
 	) as THREE.BufferAttribute;
 	for (let index = 0; index < 49; index++) {
 		const angle = (index / 48) * Math.PI * 2;
-		const ray = direction
-			.clone()
+		const ray = footprintRay
+			.copy(direction)
 			.multiplyScalar(Math.cos(halfAngle))
 			.addScaledVector(tangent, Math.cos(angle) * Math.sin(halfAngle))
 			.addScaledVector(bitangent, Math.sin(angle) * Math.sin(halfAngle))
@@ -204,35 +248,37 @@ function updateGroundFootprint(
 			footprint.visible = false;
 			return;
 		}
-		const point = origin.clone().addScaledVector(ray, rayDistance);
+		const point = footprintPoint.copy(origin).addScaledVector(ray, rayDistance);
 		position.setXYZ(index, point.x, groundReferenceY, point.z);
 	}
 	position.needsUpdate = true;
 	footprint.geometry.computeBoundingSphere();
-	const material = footprint.material as THREE.LineBasicMaterial;
-	material.color.set(String(beam.userData.stageBeamColor ?? "#ffffff"));
-	material.opacity = THREE.MathUtils.clamp(
-		0.18 + Number(beam.userData.stageBeamIntensity ?? 0) * 0.5,
-		0.18,
-		0.68,
-	);
 }
 
-function refreshGroundFootprints(scene: THREE.Scene) {
+function refreshGroundFootprints(
+	scene: THREE.Scene,
+	changedFixtureIds?: ReadonlySet<string>,
+	renderQuality: StageRenderQuality = "lines_and_beams",
+) {
+	const footprints = scene.userData.stageGroundFootprints as
+		| Map<string, THREE.LineLoop>
+		| undefined;
+	const beams = scene.userData.stageDirectionalBeams as
+		| THREE.Object3D[]
+		| undefined;
+	if (!footprints || !beams) return;
+	if (renderQuality !== "lines_only" && renderQuality !== "lines_and_beams") {
+		for (const footprint of footprints.values()) footprint.visible = false;
+		return;
+	}
 	scene.updateMatrixWorld(true);
-	const footprints = new Map<string, THREE.LineLoop>();
-	scene.traverse((object) => {
-		if (
-			object.name === "beam-ground-footprint" &&
-			object instanceof THREE.LineLoop
-		)
-			footprints.set(String(object.userData.stageBeamSource), object);
-	});
-	scene.traverse((beam) => {
-		if (beam.userData.stageDirectionalBeam !== true) return;
+	for (const beam of beams) {
+		const fixtureId = beam.userData.stageFixtureId as string | undefined;
+		if (changedFixtureIds && fixtureId && !changedFixtureIds.has(fixtureId))
+			continue;
 		const footprint = footprints.get(beam.uuid);
 		if (footprint) updateGroundFootprint(footprint, beam);
-	});
+	}
 }
 
 function addGroundFootprints(
@@ -244,7 +290,12 @@ function addGroundFootprints(
 	scene.traverse((object) => {
 		if (object.userData.stageDirectionalBeam === true) beams.push(object);
 	});
+	const footprints = new Map<string, THREE.LineLoop>();
 	for (const beam of beams) {
+		let fixtureRoot: THREE.Object3D | null = beam;
+		while (fixtureRoot && typeof fixtureRoot.userData.fixtureId !== "string")
+			fixtureRoot = fixtureRoot.parent;
+		beam.userData.stageFixtureId = fixtureRoot?.userData.fixtureId;
 		const footprint = new THREE.LineLoop(
 			new THREE.BufferGeometry().setAttribute(
 				"position",
@@ -259,11 +310,14 @@ function addGroundFootprints(
 		footprint.name = "beam-ground-footprint";
 		footprint.userData.stageBeamSource = beam.uuid;
 		scene.add(footprint);
+		footprints.set(beam.uuid, footprint);
 		updateGroundFootprint(footprint, beam);
 		footprint.visible =
 			footprint.visible &&
 			(renderQuality === "lines_only" || renderQuality === "lines_and_beams");
 	}
+	scene.userData.stageDirectionalBeams = beams;
+	scene.userData.stageGroundFootprints = footprints;
 }
 
 function removeGroundFootprints(scene: THREE.Scene) {
@@ -275,6 +329,8 @@ function removeGroundFootprints(scene: THREE.Scene) {
 		footprint.removeFromParent();
 		disposeObjectResources(footprint);
 	}
+	scene.userData.stageDirectionalBeams = undefined;
+	scene.userData.stageGroundFootprints = undefined;
 }
 
 export function reconcileStageFixtures(
@@ -341,7 +397,7 @@ export function reconcileStageFixtures(
 	if (directionalStructureChanged) {
 		removeGroundFootprints(scene);
 		addGroundFootprints(scene, renderQuality);
-	} else refreshGroundFootprints(scene);
+	} else refreshGroundFootprints(scene, undefined, renderQuality);
 	refreshImprovedBeamLighting(scene, renderQuality);
 	return { changedFixtures, removedInstanceIds };
 }
@@ -389,6 +445,7 @@ export function applyStageVisualization(
 	virtualHighlight: Set<string> = new Set(),
 	selected: Set<string> = new Set(),
 	showSelection = false,
+	changedFixtureIds?: ReadonlySet<string>,
 ) {
 	const scene =
 		fixtureObjects.values().next().value?.parent instanceof THREE.Scene
@@ -405,11 +462,21 @@ export function applyStageVisualization(
 		renderQuality,
 		resources,
 	);
+	const updatedFixtureIds = changedFixtureIds ? new Set<string>() : undefined;
 	for (const item of fixtures) {
+		const fixtureId = item.fixture.fixture_id;
+		if (
+			changedFixtureIds &&
+			!changedFixtureIds.has(fixtureId) &&
+			!item.fixture.logical_heads.some((head) =>
+				changedFixtureIds.has(head.fixture_id),
+			)
+		)
+			continue;
+		updatedFixtureIds?.add(fixtureId);
 		const instanceId = item.instanceId ?? item.fixture.fixture_id;
 		const root = fixtureObjects.get(instanceId);
 		if (!root) continue;
-		const fixtureId = item.fixture.fixture_id;
 		setSelectionOutlineVisibility(
 			root,
 			showSelection && selected.has(fixtureId),
@@ -446,13 +513,7 @@ export function applyStageVisualization(
 			);
 		}
 	}
-	refreshGroundFootprints(scene);
-	scene.traverse((object) => {
-		if (object.name === "beam-ground-footprint")
-			object.visible =
-				object.visible &&
-				(renderQuality === "lines_only" || renderQuality === "lines_and_beams");
-	});
+	refreshGroundFootprints(scene, updatedFixtureIds, renderQuality);
 	refreshImprovedBeamLighting(scene, renderQuality);
 }
 

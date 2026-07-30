@@ -23,7 +23,10 @@ export interface ConsoleScreenWindow {
 
 export interface PackagedStageBenchmarkConfig {
 	durationSeconds: number;
+	controlDurationSeconds: number;
 	profile: string;
+	additionalStageWindow: boolean;
+	fixtureSheet: boolean;
 }
 
 export interface DesktopBridge {
@@ -40,6 +43,7 @@ export interface DesktopBridge {
 	openStageViewWindow(): Promise<void>;
 	packagedStageBenchmarkConfig(): Promise<PackagedStageBenchmarkConfig | null>;
 	packagedStageBenchmarkPrepared(): Promise<boolean>;
+	focusPackagedStageBenchmarkWindow(): Promise<void>;
 	appendPackagedStageBenchmarkSample(sample: unknown): Promise<void>;
 	currentWindowState(): Promise<DesktopWindowState>;
 	currentWindowFullscreen(): Promise<boolean>;

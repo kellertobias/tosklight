@@ -1,20 +1,24 @@
-import {
-	useActiveShowId,
-	useBootstrapReady,
-} from "../features/deskSnapshot/DeskSnapshotState";
+import { useEffect, useMemo, useState } from "react";
 import type {
 	CueList,
 	PatchedFixture,
 	VisualizationSnapshot,
 } from "../api/types";
+import type { AttributeValue } from "../api/types/playback";
 import { fixtures } from "../data/mockData";
+import {
+	useActiveShowId,
+	useBootstrapReady,
+} from "../features/deskSnapshot/DeskSnapshotState";
 import {
 	type RuntimeGroup,
 	useGroupRuntimeAuthority,
 } from "../features/groupRuntime/groupRuntimeAuthority";
 import { usePatchedFixturesView } from "../features/patch/PatchState";
+import type { ProgrammerPreloadValuesProjection } from "../features/programmerPreloadValues/contracts";
+import type { ProgrammerValuesProjection } from "../features/programmerValues/contracts";
 import { useProgrammerValueTargets } from "../features/programmerValues/useProgrammerValueTargets";
-import { useVisualizationRuntimeSnapshot } from "../features/visualizationRuntime/VisualizationRuntimeView";
+import { useVisualizationRuntimeRead } from "../features/visualizationRuntime/VisualizationRuntimeView";
 import type { FixtureSheetIncludedHeads, FixtureSheetOrder } from "../types";
 import {
 	activeProgrammerFixtureIds,
@@ -23,12 +27,21 @@ import {
 } from "./fixtureSheetFilters";
 import {
 	fixtureSheetTargets,
+	targetDefault,
 	targetHasAttribute,
-	targetValue,
 } from "./fixtureSheetTargets";
 
 type FixtureSheetTarget = ReturnType<typeof fixtureSheetTargets>[number];
 type FixtureGroup = RuntimeGroup;
+type ProgrammingValue = {
+	value: AttributeValue;
+	programmerOrder: number;
+};
+type DynamicStackEntry = NonNullable<
+	VisualizationSnapshot["dynamic_stack"]
+>[number];
+type ProgrammingValueIndex = Map<string, Map<string, ProgrammingValue>>;
+type DynamicStackIndex = Map<string, DynamicStackEntry[]>;
 
 function targetFamilyActive(
 	target: FixtureSheetTarget,
@@ -81,23 +94,27 @@ function orderedFixtureTargets({
 function fixtureSheetRow({
 	target,
 	index,
-	visualization,
-	preloadVisualization,
-	groups,
+	programmerValues,
+	preloadValues,
+	dynamicStack,
+	limitingGroups,
 }: {
 	target: FixtureSheetTarget;
 	index: number;
-	visualization: VisualizationSnapshot | null;
-	preloadVisualization: VisualizationSnapshot | null;
-	groups: readonly FixtureGroup[];
+	programmerValues: ProgrammingValueIndex;
+	preloadValues: ProgrammingValueIndex;
+	dynamicStack: readonly DynamicStackEntry[];
+	limitingGroups: readonly FixtureGroup[];
 }) {
 	const patched = target.fixture;
-	const intensity = targetValue(visualization, target, "intensity");
-	const red = targetValue(visualization, target, "color.red", 1);
-	const green = targetValue(visualization, target, "color.green", 1);
-	const blue = targetValue(visualization, target, "color.blue", 1);
-	const pan = targetValue(visualization, target, "pan");
-	const tilt = targetValue(visualization, target, "tilt");
+	const targetValues = programmerValues.get(target.fixtureId);
+	const targetPreloadValues = preloadValues.get(target.fixtureId);
+	const intensity = indexedTargetValue(targetValues, target, "intensity");
+	const red = indexedTargetValue(targetValues, target, "color.red", 1);
+	const green = indexedTargetValue(targetValues, target, "color.green", 1);
+	const blue = indexedTargetValue(targetValues, target, "color.blue", 1);
+	const pan = indexedTargetValue(targetValues, target, "pan");
+	const tilt = indexedTargetValue(targetValues, target, "tilt");
 	const base = fixtures[index % fixtures.length];
 	const hasIntensity = targetHasAttribute(target, "intensity");
 	const hasColor = target.heads.some((head) =>
@@ -108,42 +125,35 @@ function fixtureSheetRow({
 	const hasPosition =
 		targetHasAttribute(target, "pan") || targetHasAttribute(target, "tilt");
 	const preloadIntensity =
-		preloadVisualization && hasIntensity
-			? targetValue(preloadVisualization, target, "intensity")
+		hasIntensity && targetPreloadValues
+			? indexedTargetValue(targetPreloadValues, target, "intensity")
 			: null;
 	const preloadRed =
-		preloadVisualization && hasColor
-			? targetValue(preloadVisualization, target, "color.red", 1)
+		hasColor && targetPreloadValues
+			? indexedTargetValue(targetPreloadValues, target, "color.red", 1)
 			: null;
 	const preloadGreen =
-		preloadVisualization && hasColor
-			? targetValue(preloadVisualization, target, "color.green", 1)
+		hasColor && targetPreloadValues
+			? indexedTargetValue(targetPreloadValues, target, "color.green", 1)
 			: null;
 	const preloadBlue =
-		preloadVisualization && hasColor
-			? targetValue(preloadVisualization, target, "color.blue", 1)
+		hasColor && targetPreloadValues
+			? indexedTargetValue(targetPreloadValues, target, "color.blue", 1)
 			: null;
 	const preloadPan =
-		preloadVisualization && hasPosition
-			? targetValue(preloadVisualization, target, "pan")
+		hasPosition && targetPreloadValues
+			? indexedTargetValue(targetPreloadValues, target, "pan")
 			: null;
 	const preloadTilt =
-		preloadVisualization && hasPosition
-			? targetValue(preloadVisualization, target, "tilt")
+		hasPosition && targetPreloadValues
+			? indexedTargetValue(targetPreloadValues, target, "tilt")
 			: null;
 	const hasLiveColor =
-		visualization?.values.some(
-			(entry) =>
-				entry.fixture_id === target.fixtureId &&
-				entry.attribute.startsWith("color."),
-		) ?? false;
+		targetValues != null &&
+		[...targetValues.keys()].some((attribute) =>
+			attribute.startsWith("color."),
+		);
 	const color = `rgb(${Math.round(red * 255)}, ${Math.round(green * 255)}, ${Math.round(blue * 255)})`;
-	const dynamicStack =
-		visualization?.dynamic_stack?.filter(
-			(entry) =>
-				entry.fixture_id === target.fixtureId &&
-				entry.entry_type !== "ordinary_static",
-		) ?? [];
 	return {
 		...base,
 		id: target.displayId,
@@ -179,12 +189,7 @@ function fixtureSheetRow({
 		sources: {
 			...base.sources,
 			dimmer:
-				hasIntensity &&
-				visualization?.values.some(
-					(entry) =>
-						entry.fixture_id === target.fixtureId &&
-						entry.attribute === "intensity",
-				)
+				hasIntensity && targetValues?.has("intensity")
 					? ("programmer" as const)
 					: ("default" as const),
 			color:
@@ -193,23 +198,124 @@ function fixtureSheetRow({
 					: ("default" as const),
 			position:
 				hasPosition &&
-				visualization?.values.some(
-					(entry) =>
-						entry.fixture_id === target.fixtureId &&
-						(entry.attribute === "pan" || entry.attribute === "tilt"),
-				)
+				(targetValues?.has("pan") === true ||
+					targetValues?.has("tilt") === true)
 					? ("programmer" as const)
 					: ("default" as const),
 		},
-		limitingGroups: groups.filter(
-			(group) =>
-				group.runtime.playbackNumber != null &&
-				group.body.fixtures.includes(target.fixtureId) &&
-				group.runtime.master < 1,
-		),
+		limitingGroups,
 		positionLabel: hasPosition ? undefined : "—",
 		dynamicStack,
 	};
+}
+
+export function fixtureSheetProgrammerValueIndex(
+	projection:
+		| ProgrammerValuesProjection
+		| ProgrammerPreloadValuesProjection
+		| null
+		| undefined,
+	groups: readonly FixtureGroup[],
+): ProgrammingValueIndex {
+	const result: ProgrammingValueIndex = new Map();
+	const assign = (
+		fixtureId: string,
+		attribute: string,
+		value: AttributeValue,
+		programmerOrder: number,
+	) => {
+		let fixtureValues = result.get(fixtureId);
+		if (!fixtureValues) {
+			fixtureValues = new Map();
+			result.set(fixtureId, fixtureValues);
+		}
+		const current = fixtureValues.get(attribute);
+		if (!current || current.programmerOrder <= programmerOrder)
+			fixtureValues.set(attribute, { value, programmerOrder });
+	};
+	for (const value of projection?.fixtureValues ?? [])
+		assign(
+			value.fixtureId,
+			value.attribute,
+			value.value,
+			value.programmerOrder,
+		);
+	const groupsById = new Map(groups.map((group) => [group.id, group]));
+	for (const value of projection?.groupValues ?? []) {
+		const fixtureIds = groupsById.get(value.groupId)?.body.fixtures ?? [];
+		fixtureIds.forEach((fixtureId, index) => {
+			assign(
+				fixtureId,
+				value.attribute,
+				programmerValueForFixture(value.value, index, fixtureIds.length),
+				value.programmerOrder,
+			);
+		});
+	}
+	return result;
+}
+
+function programmerValueForFixture(
+	value: AttributeValue,
+	index: number,
+	count: number,
+): AttributeValue {
+	if (value.kind !== "spread") return value;
+	const points = value.value;
+	if (!points.length) return { kind: "normalized", value: 0 };
+	if (points.length === 1 || count <= 1)
+		return { kind: "normalized", value: points[0] ?? 0 };
+	const position = (index / (count - 1)) * (points.length - 1);
+	const lower = Math.floor(position);
+	const upper = Math.min(points.length - 1, lower + 1);
+	const mix = position - lower;
+	const start = points[lower] ?? 0;
+	const finish = points[upper] ?? start;
+	return { kind: "normalized", value: start + (finish - start) * mix };
+}
+
+function indexDynamicStack(
+	...snapshots: Array<VisualizationSnapshot | null>
+): DynamicStackIndex {
+	const result: DynamicStackIndex = new Map();
+	for (const snapshot of snapshots) {
+		for (const entry of snapshot?.dynamic_stack ?? []) {
+			if (entry.entry_type === "ordinary_static") continue;
+			const fixtureEntries = result.get(entry.fixture_id);
+			if (fixtureEntries) fixtureEntries.push(entry);
+			else result.set(entry.fixture_id, [entry]);
+		}
+	}
+	return result;
+}
+
+function indexLimitingGroups(
+	groups: readonly FixtureGroup[],
+): Map<string, FixtureGroup[]> {
+	const result = new Map<string, FixtureGroup[]>();
+	for (const group of groups) {
+		if (group.runtime.playbackNumber == null || group.runtime.master >= 1)
+			continue;
+		for (const fixtureId of group.body.fixtures) {
+			const fixtureGroups = result.get(fixtureId);
+			if (fixtureGroups) fixtureGroups.push(group);
+			else result.set(fixtureId, [group]);
+		}
+	}
+	return result;
+}
+
+function indexedTargetValue(
+	values: Map<string, ProgrammingValue> | undefined,
+	target: FixtureSheetTarget,
+	attribute: string,
+	fallback = 0,
+) {
+	if (!targetHasAttribute(target, attribute)) return fallback;
+	const value = values?.get(attribute)?.value;
+	return value?.kind === "normalized"
+		? value.value
+		: targetDefault(target, attribute, fallback);
 }
 
 function demoFixtureSheetRows() {
@@ -235,6 +341,8 @@ function demoFixtureSheetRows() {
 export function useFixtureSheetRows({
 	visualization,
 	preloadVisualization,
+	programmerValues,
+	preloadProgrammerValues,
 	fixtureOrder,
 	activeOnly,
 	selectedCueList,
@@ -243,6 +351,8 @@ export function useFixtureSheetRows({
 }: {
 	visualization: VisualizationSnapshot | null;
 	preloadVisualization: VisualizationSnapshot | null;
+	programmerValues?: ProgrammerValuesProjection | null;
+	preloadProgrammerValues?: ProgrammerPreloadValuesProjection | null;
 	fixtureOrder: FixtureSheetOrder;
 	activeOnly: boolean;
 	selectedCueList: CueList | null;
@@ -259,21 +369,20 @@ export function useFixtureSheetRows({
 	const activeValueTargets = useProgrammerValueTargets(observesActiveValues);
 	const activeValuesLoading =
 		observesActiveValues && activeValueTargets === null;
-	if (!bootstrapReady) {
-		return {
-			rows: demoFixtureSheetRows(),
-			activeValuesLoading: false,
-			groupRuntimeLoading: false,
-		};
-	}
-	if (observesGroupRuntime && !groupAuthority.serving)
-		return {
-			rows: [],
-			activeValuesLoading,
-			groupRuntimeLoading: true,
-		};
-	return {
-		rows: orderedFixtureTargets({
+	const rows = useMemo(() => {
+		if (!bootstrapReady) return demoFixtureSheetRows();
+		if (observesGroupRuntime && !groupAuthority.serving) return [];
+		const indexedProgrammerValues = fixtureSheetProgrammerValueIndex(
+			programmerValues,
+			groupAuthority.groups,
+		);
+		const preloadValues = fixtureSheetProgrammerValueIndex(
+			preloadProgrammerValues,
+			groupAuthority.groups,
+		);
+		const dynamicStack = indexDynamicStack(visualization, preloadVisualization);
+		const limitingGroups = indexLimitingGroups(groupAuthority.groups);
+		return orderedFixtureTargets({
 			fixtures: patchedFixtures,
 			fixtureOrder,
 			activeOnly,
@@ -285,13 +394,33 @@ export function useFixtureSheetRows({
 			fixtureSheetRow({
 				target,
 				index,
-				visualization,
-				preloadVisualization,
-				groups: groupAuthority.groups,
+				programmerValues: indexedProgrammerValues,
+				preloadValues,
+				dynamicStack: dynamicStack.get(target.fixtureId) ?? [],
+				limitingGroups: limitingGroups.get(target.fixtureId) ?? [],
 			}),
-		),
-		activeValuesLoading,
-		groupRuntimeLoading: false,
+		);
+	}, [
+		activeOnly,
+		activeValueTargets,
+		bootstrapReady,
+		fixtureOrder,
+		groupAuthority.groups,
+		groupAuthority.serving,
+		includedHeads,
+		observesGroupRuntime,
+		patchedFixtures,
+		preloadProgrammerValues,
+		preloadVisualization,
+		programmerValues,
+		selectedCueList,
+		visualization,
+	]);
+	return {
+		rows,
+		activeValuesLoading: bootstrapReady ? activeValuesLoading : false,
+		groupRuntimeLoading:
+			bootstrapReady && observesGroupRuntime && !groupAuthority.serving,
 	};
 }
 
@@ -307,18 +436,58 @@ export type FixtureSheetRow = OptionalDynamicStack<
 export function useFixtureSheetVisualizations(
 	preloadActive: boolean,
 	active = true,
+	fixtureIds: readonly string[] = [],
 ) {
-	const visualization = useVisualizationRuntimeSnapshot({
-		enabled: active,
-		intervalMillis: 250,
-		consumerId: "fixture-sheet-live",
-	});
-	const preloadVisualization = useVisualizationRuntimeSnapshot({
-		lane: "preload",
-		enabled: active && preloadActive,
-		intervalMillis: 250,
-		consumerId: "fixture-sheet-preload",
-	});
+	const visualization = useEventuallyConsistentFixtureSheetSnapshot(
+		"normal",
+		active,
+		fixtureIds,
+	);
+	const preloadVisualization = useEventuallyConsistentFixtureSheetSnapshot(
+		"preload",
+		active && preloadActive,
+		fixtureIds,
+	);
 
 	return { visualization, preloadVisualization };
+}
+
+function useEventuallyConsistentFixtureSheetSnapshot(
+	lane: "normal" | "preload",
+	enabled: boolean,
+	fixtureIds: readonly string[],
+) {
+	const read = useVisualizationRuntimeRead(lane, {
+		dynamicStackOnly: true,
+		fixtureIds,
+	});
+	const [snapshot, setSnapshot] = useState<VisualizationSnapshot | null>(null);
+	useEffect(() => {
+		if (!enabled || fixtureIds.length === 0) {
+			setSnapshot(null);
+			return;
+		}
+		let cancelled = false;
+		let inFlight = false;
+		const refresh = async () => {
+			if (inFlight) return;
+			inFlight = true;
+			try {
+				const next = await read();
+				if (!cancelled) setSnapshot(next);
+			} catch {
+				// The regular connection/error surfaces remain authoritative.
+				// Keep the last Dynamic identity projection while reconnecting.
+			} finally {
+				inFlight = false;
+			}
+		};
+		void refresh();
+		const timer = globalThis.setInterval(() => void refresh(), 2_000);
+		return () => {
+			cancelled = true;
+			globalThis.clearInterval(timer);
+		};
+	}, [enabled, read]);
+	return snapshot;
 }

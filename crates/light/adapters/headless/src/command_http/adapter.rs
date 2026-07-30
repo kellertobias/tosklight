@@ -289,15 +289,15 @@ pub(super) fn run_snapshot(
         .map_err(action_error)
 }
 
-pub(crate) fn route_osc_command_key(
+pub(crate) fn route_osc_command_key_outcome(
     state: &AppState,
     session: &Session,
     desk_alias: &str,
     action: &str,
     request_id: Option<&str>,
-) -> bool {
+) -> Option<bool> {
     let Some(key) = osc_command_key(action) else {
-        return false;
+        return None;
     };
     let Ok(_activation) = state.active_show.try_acquire() else {
         publish_osc_rejection(
@@ -305,7 +305,7 @@ pub(crate) fn route_osc_command_key(
             session,
             "the active show is changing; retry the Programmer action".into(),
         );
-        return true;
+        return Some(false);
     };
     let context = ActionContext::operator(
         session.desk.id,
@@ -319,11 +319,18 @@ pub(crate) fn route_osc_command_key(
         phase: CommandKeyPhase::Press,
         execute_policy: ExecutionPolicy::Compatibility,
     };
-    match run_service_with_source(state, session, context, command, "osc") {
-        Ok(result) => publish_osc_result(state, session, desk_alias, &result),
-        Err(error) => publish_osc_rejection(state, session, error.message),
-    }
-    true
+    Some(
+        match run_service_with_source(state, session, context, command, "osc") {
+            Ok(result) => {
+                publish_osc_result(state, session, desk_alias, &result);
+                true
+            }
+            Err(error) => {
+                publish_osc_rejection(state, session, error.message);
+                false
+            }
+        },
+    )
 }
 
 fn publish_osc_rejection(state: &AppState, session: &Session, error: String) {

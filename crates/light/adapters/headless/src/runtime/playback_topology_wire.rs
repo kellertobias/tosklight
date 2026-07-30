@@ -258,7 +258,7 @@ fn application_target(
                         dynamic_id: assignment.dynamic_id,
                         last_known_pool_number: assignment.last_known_pool_number,
                         embedded_fallback: light_dynamics::DynamicDefinitionSnapshot {
-                            definition: Box::new(definition),
+                            definition: Arc::new(definition),
                         },
                     },
                     revision: assignment.revision,

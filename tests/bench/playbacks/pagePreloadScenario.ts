@@ -485,21 +485,7 @@ export class BrowserPreload {
 		attribute: string;
 		value: AttributeValue;
 	}) {
-		const session = this.session();
-		const scope = { showId: this.showId(), userId: session.user.id };
-		const transport = new HttpProgrammerPreloadValuesTransport({
-			baseUrl: this.api.baseUrl,
-			sessionToken: session.token,
-			authenticatedUserId: session.user.id,
-		});
-		const [patch, values, captureMode] = await Promise.all([
-			this.api.patch(),
-			transport.loadSnapshot(scope),
-			new HttpProgrammerCaptureModeTransport({
-				baseUrl: this.api.baseUrl,
-				sessionToken: session.token,
-			}).loadSnapshot(scope),
-		]);
+		const patch = await this.api.patch();
 		const fixtures = patch.fixtures.filter(
 			(fixture) => fixture.fixture_number === valid(input.fixture, "Fixture"),
 		);
@@ -507,13 +493,39 @@ export class BrowserPreload {
 			throw new Error(
 				`Fixture ${input.fixture} ${fixtures.length ? "is ambiguous" : "is not present in the active patch"}`,
 			);
+		await this.setFixtureValueById({
+			fixtureId: fixtures[0].fixture_id,
+			attribute: input.attribute,
+			value: input.value,
+		});
+	}
+
+	async setFixtureValueById(input: {
+		fixtureId: string;
+		attribute: string;
+		value: AttributeValue;
+	}) {
+		const session = this.session();
+		const scope = { showId: this.showId(), userId: session.user.id };
+		const transport = new HttpProgrammerPreloadValuesTransport({
+			baseUrl: this.api.baseUrl,
+			sessionToken: session.token,
+			authenticatedUserId: session.user.id,
+		});
+		const [values, captureMode] = await Promise.all([
+			transport.loadSnapshot(scope),
+			new HttpProgrammerCaptureModeTransport({
+				baseUrl: this.api.baseUrl,
+				sessionToken: session.token,
+			}).loadSnapshot(scope),
+		]);
 		await transport.applyAction(scope, {
 			requestId: crypto.randomUUID(),
 			expectedPreloadRevision: values.projection.revision,
 			expectedCaptureModeRevision: captureMode.projection.revision,
 			action: {
 				action: "set_fixture",
-				fixtureId: fixtures[0].fixture_id,
+				fixtureId: input.fixtureId,
 				attribute: input.attribute,
 				value: input.value,
 				timing: { fade: false, fadeMillis: null, delayMillis: null },

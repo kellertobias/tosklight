@@ -1,6 +1,7 @@
 use crate::ProgrammerRegistry;
 use light_core::{AttributeKey, FixtureId, SessionId};
 use light_dynamics::{DynamicAddressValue, DynamicSemanticValue};
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// One server-resolved mutation of the first-class Dynamic/FAT Programmer layer.
@@ -61,9 +62,9 @@ impl ProgrammerRegistry {
         }
         state.active_value_undo_group = undo_group.map(str::to_owned);
         let values = if preload {
-            &mut state.preload_dynamic_pending
+            Arc::make_mut(&mut state.preload_dynamic_pending)
         } else {
-            &mut state.dynamic_values
+            Arc::make_mut(&mut state.dynamic_values)
         };
         for mutation in mutations {
             apply_mutation(self, values, mutation);

@@ -319,6 +319,57 @@ impl DynamicRuntime {
         }
     }
 
+    /// Snapshot only the runtime identity and controller state consumed on the output path.
+    ///
+    /// Output arbitration, transition events, auto-off, and the visualization Dynamic stack do
+    /// not read phase maps, random streams, synchronized hold samples, or retained sample values.
+    /// Omitting those persistence-only fields avoids cloning and sorting the largest runtime maps
+    /// twice per output frame while leaving `snapshot()` and show persistence unchanged.
+    pub fn output_projection_snapshot(&self) -> DynamicRuntimeSnapshot {
+        let mut instances = self
+            .instances
+            .values()
+            .map(|instance| {
+                let mut controllers = instance.controllers.values().cloned().collect::<Vec<_>>();
+                controllers.sort_by_key(|controller| controller.id);
+                let mut controller_transitions = instance
+                    .controller_transitions
+                    .values()
+                    .copied()
+                    .collect::<Vec<_>>();
+                controller_transitions.sort_by_key(|transition| transition.controller_id);
+                DynamicInstanceSnapshot {
+                    id: instance.id,
+                    definition: instance.definition.as_ref().clone(),
+                    targets: instance.targets.clone(),
+                    phase_by_target: Vec::new(),
+                    phase_by_lane_target: Vec::new(),
+                    controllers,
+                    controller_transitions,
+                    started_at_millis: instance.started_at_millis,
+                    paused_at_millis: instance.paused_at_millis,
+                    paused_elapsed_millis: instance.paused_elapsed_millis,
+                    activation_policy: instance.activation_policy,
+                    pending_until_millis: instance.pending_until_millis,
+                    speed_paused_at_millis: instance.speed_paused_at_millis,
+                    speed_paused_elapsed_millis: instance.speed_paused_elapsed_millis,
+                    random_streams: Vec::new(),
+                    completed: instance.completed,
+                    synchronized_hold_elapsed_millis: None,
+                    last_synchronized_elapsed_millis: None,
+                    synchronized_resume_transition: instance.synchronized_resume_transition,
+                    last_sample_values: Vec::new(),
+                    synchronized_hold_values: Vec::new(),
+                }
+            })
+            .collect::<Vec<_>>();
+        instances.sort_by_key(|instance| instance.id);
+        DynamicRuntimeSnapshot {
+            global_paused: self.global_paused,
+            instances,
+        }
+    }
+
     pub fn restore_snapshot(
         &mut self,
         snapshot: DynamicRuntimeSnapshot,

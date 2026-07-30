@@ -30,12 +30,37 @@ pub enum VisualizationClientMessage {
     Subscribe {
         lanes: Vec<VisualizationLane>,
         max_rate_hz: u8,
+        /// Opt into application-level flow control. The server then retains at
+        /// most one in-flight batch and one newest pending source until the
+        /// client acknowledges the highest processed sequence.
+        #[serde(default)]
+        acknowledgements: bool,
+        /// Include the diagnostic Dynamic source stack. Stage and channel
+        /// consumers need only resolved values; Fixture Sheet claims this
+        /// heavier projection explicitly.
+        #[serde(default)]
+        include_dynamic_stack: bool,
+        /// Permit deltas to omit an unchanged Dynamic stack. Missing means
+        /// retain the previously installed stack; an explicit empty array
+        /// still clears it. Older clients leave this disabled and continue to
+        /// receive the complete array on every delta.
+        #[serde(default)]
+        sparse_dynamic_stack: bool,
+        /// Permit the server to encode all lane messages for one publication as
+        /// a single JSON array/WebSocket frame. Older clients leave this
+        /// disabled and continue to receive one JSON object per frame.
+        #[serde(default)]
+        batched_messages: bool,
     },
     Unsubscribe {
         lanes: Vec<VisualizationLane>,
     },
     Resynchronize {
         lane: VisualizationLane,
+    },
+    Acknowledge {
+        #[ts(type = "number")]
+        sequence: u64,
     },
 }
 
@@ -71,19 +96,28 @@ pub struct VisualizationDynamicStackEntry {
     #[ts(type = "number")]
     pub changed_at_millis: u64,
     pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dynamic_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pool_number: Option<u16>,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_instance_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub controller_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lane_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub activation_mix: Option<f32>,
     pub paused: bool,
     pub hidden: bool,
     pub pending: bool,
     pub winning: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<ProgrammingPreloadAttributeValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolved_value: Option<ProgrammingPreloadAttributeValue>,
 }
 
@@ -113,7 +147,8 @@ pub struct VisualizationLaneDelta {
     pub preload: bool,
     pub values: Vec<VisualizationValue>,
     pub removed_values: Vec<VisualizationValueKey>,
-    pub dynamic_stack: Vec<VisualizationDynamicStackEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dynamic_stack: Option<Vec<VisualizationDynamicStackEntry>>,
     pub profile_output_values: Vec<VisualizationValue>,
     pub removed_profile_output_values: Vec<VisualizationValueKey>,
 }
@@ -184,8 +219,34 @@ mod tests {
             VisualizationClientMessage::Subscribe {
                 lanes: vec![VisualizationLane::Normal],
                 max_rate_hz: 10,
+                acknowledgements: false,
+                include_dynamic_stack: false,
+                sparse_dynamic_stack: false,
+                batched_messages: false,
             }
         );
+    }
+
+    #[test]
+    fn sparse_dynamic_stack_distinguishes_unchanged_from_clear() {
+        let mut delta = VisualizationLaneDelta {
+            scope: VisualizationScope { show_id: None },
+            revision: 1,
+            generated_at: "2026-07-29T00:00:00Z".into(),
+            grand_master: 1.0,
+            blackout: false,
+            preload: false,
+            values: Vec::new(),
+            removed_values: Vec::new(),
+            dynamic_stack: None,
+            profile_output_values: Vec::new(),
+            removed_profile_output_values: Vec::new(),
+        };
+        let unchanged = serde_json::to_value(&delta).expect("delta serializes");
+        assert!(unchanged.get("dynamic_stack").is_none());
+        delta.dynamic_stack = Some(Vec::new());
+        let cleared = serde_json::to_value(&delta).expect("clear delta serializes");
+        assert_eq!(cleared["dynamic_stack"], serde_json::json!([]));
     }
 
     #[test]

@@ -17,6 +17,9 @@ pub(in crate::runtime) struct OutputResource {
     test_clock_lock: Arc<tokio::sync::Mutex<()>>,
     speed_groups: Arc<Mutex<[SpeedGroupController; 5]>>,
     dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
+    programmer_reconciliation_cache: Arc<output_scheduler::ProgrammerReconciliationCache>,
+    visualization_dynamics: Arc<Mutex<Option<CachedVisualizationDynamics>>>,
+    visualization_ordinary: Arc<Mutex<Option<CachedVisualizationOrdinary>>>,
     dynamic_auto_offs: Arc<Mutex<Vec<light_playback::PlaybackIdentity>>>,
     visualization_frames: Arc<super::visualization_frame::VisualizationFrameHub>,
     sound_capture_owners: Arc<Mutex<[Option<SoundCaptureOwner>; 5]>>,
@@ -28,6 +31,24 @@ pub(in crate::runtime) struct OutputResource {
     speed_group_persistence_attempts: Arc<AtomicU64>,
     #[cfg(test)]
     speed_group_persistence_failure: Arc<std::sync::atomic::AtomicBool>,
+}
+
+#[derive(Clone)]
+pub(in crate::runtime) struct CachedVisualizationDynamics {
+    pub(in crate::runtime) runtime: light_dynamics::DynamicRuntimeSnapshot,
+    pub(in crate::runtime) samples: Vec<light_dynamics::DynamicRuntimeSample>,
+}
+
+pub(in crate::runtime) struct OutputSemanticRenderTiming {
+    pub(in crate::runtime) dynamic: Duration,
+    pub(in crate::runtime) engine: Duration,
+}
+
+struct CachedVisualizationOrdinary {
+    snapshot: Arc<EngineSnapshot>,
+    captured_at: std::time::Instant,
+    values:
+        Arc<HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>>,
 }
 
 #[derive(Clone)]
@@ -127,6 +148,11 @@ impl OutputResource {
             test_clock_lock: Arc::default(),
             speed_groups,
             dynamics,
+            programmer_reconciliation_cache: Arc::new(
+                output_scheduler::ProgrammerReconciliationCache::default(),
+            ),
+            visualization_dynamics: Arc::new(Mutex::new(None)),
+            visualization_ordinary: Arc::new(Mutex::new(None)),
             dynamic_auto_offs,
             visualization_frames,
             sound_capture_owners: Arc::new(Mutex::new([None; 5])),
@@ -179,7 +205,9 @@ impl OutputResource {
         &self,
         key: super::visualization_frame::VisualizationProjectionKey,
         source: &super::visualization_frame::PublishedVisualizationFrame,
-        build: impl FnOnce()
+        build: impl FnOnce(
+            bool,
+        )
             -> Result<light_wire::v2::visualization::VisualizationLaneSnapshot, ApiError>,
     ) -> Result<Arc<super::visualization_frame::ProjectedVisualizationFrame>, ApiError> {
         self.visualization_frames.projection(key, source, build)
@@ -356,6 +384,27 @@ impl OutputResource {
         self.engine.resolved_values()
     }
 
+    pub(in crate::runtime) fn cached_visualization_ordinary_values(
+        &self,
+    ) -> Arc<HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>>
+    {
+        let snapshot = self.engine.snapshot();
+        let mut cached = self.visualization_ordinary.lock();
+        if let Some(cached) = cached.as_ref()
+            && Arc::ptr_eq(&cached.snapshot, &snapshot)
+            && cached.captured_at.elapsed() < Duration::from_millis(250)
+        {
+            return Arc::clone(&cached.values);
+        }
+        let values = Arc::new(self.engine.resolved_values());
+        *cached = Some(CachedVisualizationOrdinary {
+            snapshot,
+            captured_at: std::time::Instant::now(),
+            values: Arc::clone(&values),
+        });
+        values
+    }
+
     #[cfg(test)]
     pub(in crate::runtime) fn visualization_dynamic_values(
         &self,
@@ -395,7 +444,7 @@ impl OutputResource {
             &self.rate,
             extra_programmer_values,
         );
-        let runtime_snapshot = visualization_runtime.lock().snapshot();
+        let runtime_snapshot = visualization_runtime.lock().output_projection_snapshot();
         (
             self.engine
                 .resolved_values_with_contribution_batches(&sampled),
@@ -404,9 +453,15 @@ impl OutputResource {
         )
     }
 
+    pub(in crate::runtime) fn cached_visualization_dynamics(
+        &self,
+    ) -> Option<CachedVisualizationDynamics> {
+        self.visualization_dynamics.lock().clone()
+    }
+
     pub(in crate::runtime) fn dynamic_programmer_values(
         &self,
-    ) -> Vec<(Uuid, i16, light_dynamics::DynamicAddressValue)> {
+    ) -> Arc<Vec<(Uuid, i16, light_dynamics::DynamicAddressValue)>> {
         self.engine.dynamic_programmer_values()
     }
 
@@ -641,21 +696,44 @@ impl OutputResource {
         playback: &PlaybackRenderCapability,
         options: RenderOptions,
     ) -> Result<light_engine::RenderResult, EngineError> {
-        let sampled = output_scheduler::dynamic_contributions(
+        self.render_with_playback_events_timed(active_show, playback, options)
+            .map(|(rendered, _)| rendered)
+    }
+
+    pub(in crate::runtime) fn render_with_playback_events_timed(
+        &self,
+        active_show: &ActiveShowProjection,
+        playback: &PlaybackRenderCapability,
+        options: RenderOptions,
+    ) -> Result<(light_engine::RenderResult, OutputSemanticRenderTiming), EngineError> {
+        let dynamic_started = Instant::now();
+        let (sampled, runtime, samples) = output_scheduler::dynamic_contributions_cached(
             &self.engine,
             &self.dynamics,
             &self.speed_groups,
             &self.rate,
             &[],
+            &self.programmer_reconciliation_cache,
             true,
         );
-        output_scheduler::render_with_playback_events(
+        let dynamic = dynamic_started.elapsed();
+        *self.visualization_dynamics.lock() =
+            Some(CachedVisualizationDynamics { runtime, samples });
+        let engine_started = Instant::now();
+        let rendered = output_scheduler::render_with_playback_events(
             &self.engine,
             active_show,
             playback,
             options,
             &sampled,
-        )
+        )?;
+        Ok((
+            rendered,
+            OutputSemanticRenderTiming {
+                dynamic,
+                engine: engine_started.elapsed(),
+            },
+        ))
     }
 
     #[cfg(test)]

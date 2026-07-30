@@ -63,6 +63,13 @@ test("builds the exact realistic 970-record and 1,000-instance Stage profile", (
 	);
 	assert.ok(
 		built.fixtures
+			.filter((fixture) => fixture.fixture_number !== null)
+			.flatMap((fixture) => [fixture, ...fixture.multipatch])
+			.every((instance) => instance.location.z > 0),
+		"every lighting emitter is mounted above the Stage ground plane",
+	);
+	assert.ok(
+		built.fixtures
 			.flatMap((fixture) => [fixture, ...fixture.multipatch])
 			.every((instance) =>
 				instance.split_patches.every(

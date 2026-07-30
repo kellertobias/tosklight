@@ -11,10 +11,108 @@ type InstallationDeskStore = DeskStore;
 #[derive(Clone)]
 pub(in crate::runtime) struct InstallationResource {
     desk: Arc<Mutex<DeskStore>>,
+    #[cfg(not(test))]
+    session_persistence: Arc<SessionPersistenceQueue>,
     fixture_library: Arc<Mutex<light_fixture::FixtureLibrary>>,
     data_dir: PathBuf,
     configuration: Arc<RwLock<DeskConfiguration>>,
     desk_token: Option<Arc<str>>,
+}
+
+#[cfg(not(test))]
+struct SessionPersistenceQueue {
+    sender: Mutex<Option<std::sync::mpsc::Sender<DeferredProgrammerPersistence>>>,
+    worker: Mutex<Option<std::thread::JoinHandle<()>>>,
+}
+
+pub(in crate::runtime) struct DeferredProgrammerPersistence {
+    pub(in crate::runtime) id: SessionId,
+    pub(in crate::runtime) user_id: light_core::UserId,
+    pub(in crate::runtime) token: String,
+    pub(in crate::runtime) programmer: light_programmer::ProgrammerState,
+    pub(in crate::runtime) connected: bool,
+    pub(in crate::runtime) updated_at: String,
+}
+
+#[cfg(not(test))]
+impl SessionPersistenceQueue {
+    fn new(desk: Arc<Mutex<DeskStore>>) -> Self {
+        let (sender, receiver) = std::sync::mpsc::channel::<DeferredProgrammerPersistence>();
+        let worker = std::thread::Builder::new()
+            .name("light-programmer-persistence".into())
+            .spawn(move || {
+                while let Ok(first) = receiver.recv() {
+                    let mut pending = HashMap::from([(first.id, first)]);
+                    // Programmer actions can arrive at encoder/key-repeat cadence. Wait for one
+                    // short quiet window and retain only the newest state per session so JSON
+                    // serialization never competes with the acknowledgement or first output tick.
+                    loop {
+                        match receiver.recv_timeout(std::time::Duration::from_secs(1)) {
+                            Ok(next) => {
+                                pending.insert(next.id, next);
+                            }
+                            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => break,
+                            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                        }
+                    }
+                    for session in pending.into_values() {
+                        let programmer_json = match serde_json::to_string(&session.programmer) {
+                            Ok(programmer_json) => programmer_json,
+                            Err(error) => {
+                                tracing::error!(
+                                    session_id = ?session.id,
+                                    %error,
+                                    "deferred Programmer serialization failed"
+                                );
+                                continue;
+                            }
+                        };
+                        let persisted = PersistedSession {
+                            id: session.id,
+                            user_id: session.user_id,
+                            token: session.token,
+                            programmer_json,
+                            connected: session.connected,
+                            updated_at: session.updated_at,
+                        };
+                        if let Err(error) = desk.lock().save_session(&persisted) {
+                            tracing::error!(
+                                session_id = ?session.id,
+                                %error,
+                                "deferred Programmer persistence failed"
+                            );
+                        }
+                    }
+                }
+            })
+            .expect("Programmer persistence worker must start");
+        Self {
+            sender: Mutex::new(Some(sender)),
+            worker: Mutex::new(Some(worker)),
+        }
+    }
+
+    fn schedule(&self, session: DeferredProgrammerPersistence) -> Result<(), String> {
+        self.sender
+            .lock()
+            .as_ref()
+            .ok_or_else(|| "Programmer persistence worker is unavailable".to_owned())?
+            .send(session)
+            .map_err(|_| "Programmer persistence worker is unavailable".to_owned())
+    }
+}
+
+#[cfg(not(test))]
+impl Drop for SessionPersistenceQueue {
+    fn drop(&mut self) {
+        // Disconnect first so recv_timeout wakes immediately, persists the newest queued state,
+        // and lets graceful desk shutdown wait for the durable write instead of losing the last
+        // second of Programmer interaction.
+        self.sender.get_mut().take();
+        if let Some(worker) = self.worker.get_mut().take() {
+            let _ = worker.join();
+        }
+    }
 }
 
 impl InstallationResource {
@@ -49,8 +147,11 @@ impl InstallationResource {
         configuration: DeskConfiguration,
         desk_token: Option<Arc<str>>,
     ) -> Self {
+        let desk = Arc::new(Mutex::new(desk));
         Self {
-            desk: Arc::new(Mutex::new(desk)),
+            #[cfg(not(test))]
+            session_persistence: Arc::new(SessionPersistenceQueue::new(Arc::clone(&desk))),
+            desk,
             fixture_library: Arc::new(Mutex::new(fixture_library)),
             data_dir,
             configuration: Arc::new(RwLock::new(configuration)),
@@ -117,6 +218,7 @@ impl HighlightResource {
 #[derive(Clone)]
 pub(in crate::runtime) struct ActiveShowResource {
     activation: ActiveShowCoordinator,
+    show_change: Arc<tokio::sync::Mutex<()>>,
     active: Arc<RwLock<Option<ShowEntry>>>,
     document: Arc<Mutex<Option<light_show::PortableShowDocument>>>,
     backup_checkpoint: Arc<Mutex<Option<(light_core::ShowId, u64)>>>,
@@ -146,6 +248,7 @@ impl ActiveShowResource {
     ) -> Self {
         Self {
             activation,
+            show_change: Arc::default(),
             active,
             document: Arc::default(),
             backup_checkpoint: Arc::default(),

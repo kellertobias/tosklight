@@ -32,7 +32,10 @@ pub(crate) fn resolve_profile_fixture(
         .resolution()
         .bind(mode)
         .map_err(|error| EngineError::Invalid(error.to_string()))?;
-    let mut fixture_output = ResolvedProfileFixtureOutput::default();
+    let mut fixture_output = ResolvedProfileFixtureOutput {
+        heads: Vec::with_capacity(projection.heads().len()),
+        channels: Vec::with_capacity(mode.channels.len()),
+    };
     for head in projection
         .heads()
         .iter()
@@ -48,10 +51,8 @@ pub(crate) fn resolve_profile_fixture(
             group_masters,
             group_master_flashes,
             highlighted_fixtures,
+            &mut fixture_output.channels,
         )?;
-        fixture_output
-            .channels
-            .extend(head_output.channels.iter().copied());
         fixture_output.heads.push(head_output);
     }
     Ok(fixture_output)
@@ -65,7 +66,6 @@ pub(crate) struct ResolvedProfileFixtureOutput {
 
 pub(crate) struct ResolvedProfileHeadOutput {
     pub(crate) owner: FixtureId,
-    pub(crate) channels: Vec<(uuid::Uuid, u32)>,
     pub(crate) intensity: f32,
     pub(crate) color: Option<Xyz>,
 }
@@ -90,7 +90,87 @@ pub(crate) fn resolve_profile_head(
     group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
     highlighted_fixtures: &HashSet<FixtureId>,
+    channels: &mut Vec<(uuid::Uuid, u32)>,
 ) -> Result<ResolvedProfileHeadOutput, EngineError> {
+    let owner = head.owner;
+    let highlighted =
+        highlighted_fixtures.contains(&fixture.fixture_id) || highlighted_fixtures.contains(&owner);
+    let output_highlighted = highlighted && !(fixture.definition.hazardous && options.blackout);
+    let group_scale = if output_highlighted {
+        1.0
+    } else {
+        group_masters.scale(owner, group_master_flashes)
+    };
+    let borrowed_requested_color =
+        values
+            .value_named(owner, "color")
+            .and_then(|value| match value {
+                AttributeValue::ColorXyz(color) => Some(*color),
+                _ => None,
+            });
+    if options.control_loss_progress.is_none()
+        && !(fixture.definition.hazardous && options.blackout)
+        && borrowed_requested_color.is_none()
+    {
+        let virtual_intensity = if output_highlighted {
+            1.0
+        } else {
+            values
+                .value_named(owner, "intensity")
+                .and_then(AttributeValue::normalized)
+                .unwrap_or(1.0)
+        };
+        let intensity_master = values.sequence_master_named(owner, "intensity");
+        let channel_start = channels.len();
+        channels.extend(head.channel_indices.iter().map(|channel_index| {
+            let channel = &mode.channels[*channel_index];
+            let resolved = resolution.resolve_channel_with(
+                *channel_index,
+                |attribute| values.value(owner, attribute),
+                output_highlighted,
+                fixture.highlight_overrides.get(&channel.id).copied(),
+                |active| {
+                    let sequence_master = active
+                        .filter(|attribute| !attribute.is_intensity())
+                        .and_then(|attribute| values.sequence_master(owner, attribute))
+                        .filter(|master| {
+                            !channel.reacts_to_virtual_intensity
+                                || intensity_master
+                                    .is_none_or(|intensity| intensity.source != master.source)
+                        })
+                        .map(|master| master.scale)
+                        .unwrap_or(1.0);
+                    ChannelScales {
+                        virtual_intensity: if active.is_some_and(AttributeKey::is_intensity) {
+                            1.0
+                        } else {
+                            virtual_intensity
+                        },
+                        sequence_master,
+                        group_master: group_scale,
+                        grand_master: grand_master(options),
+                    }
+                },
+            );
+            let mut raw = resolved.raw;
+            if options.blackout {
+                raw = blackout_raw(mode, channel, raw);
+            }
+            (channel.id, raw)
+        }));
+        return Ok(finalize_output(
+            mode,
+            head,
+            owner,
+            head.head_id,
+            group_scale,
+            &channels[channel_start..],
+            virtual_intensity,
+            None,
+            options,
+        ));
+    }
+
     let mut inputs = prepare_head_inputs(
         fixture,
         mode,
@@ -104,7 +184,8 @@ pub(crate) fn resolve_profile_head(
     let virtual_intensity = virtual_intensity(&inputs);
     let requested_color = requested_color(&inputs.values);
     resolve_requested_color(mode, &mut inputs, requested_color)?;
-    let channels = resolve_channels(
+    let channel_start = channels.len();
+    resolve_channels(
         fixture,
         mode,
         head,
@@ -112,12 +193,15 @@ pub(crate) fn resolve_profile_head(
         &inputs,
         virtual_intensity,
         options,
+        channels,
     );
     Ok(finalize_output(
         mode,
         head,
-        inputs,
-        channels,
+        inputs.owner,
+        inputs.head_id,
+        inputs.group_scale,
+        &channels[channel_start..],
         virtual_intensity,
         requested_color,
         options,
@@ -269,43 +353,41 @@ fn resolve_channels(
     inputs: &ProfileHeadInputs,
     virtual_intensity: f32,
     options: RenderOptions,
-) -> Vec<(uuid::Uuid, u32)> {
+    channels: &mut Vec<(uuid::Uuid, u32)>,
+) {
     let intensity_master = inputs
         .sequence_masters
         .get(&AttributeKey::intensity())
         .copied();
-    head.channel_indices
-        .iter()
-        .map(|channel_index| {
-            let channel = &mode.channels[*channel_index];
-            let resolved = resolution.resolve_channel(
-                *channel_index,
-                &inputs.values,
-                inputs.output_highlighted,
-                fixture.highlight_overrides.get(&channel.id).copied(),
-                |active| {
-                    let sequence_master =
-                        sequence_master_scale(channel, active, inputs, intensity_master);
-                    let channel_intensity = if active.is_some_and(AttributeKey::is_intensity) {
-                        1.0
-                    } else {
-                        virtual_intensity
-                    };
-                    ChannelScales {
-                        virtual_intensity: channel_intensity,
-                        sequence_master,
-                        group_master: inputs.group_scale,
-                        grand_master: grand_master(options),
-                    }
-                },
-            );
-            let mut raw = resolved.raw;
-            if options.blackout {
-                raw = blackout_raw(mode, channel, raw);
-            }
-            (channel.id, raw)
-        })
-        .collect()
+    channels.extend(head.channel_indices.iter().map(|channel_index| {
+        let channel = &mode.channels[*channel_index];
+        let resolved = resolution.resolve_channel(
+            *channel_index,
+            &inputs.values,
+            inputs.output_highlighted,
+            fixture.highlight_overrides.get(&channel.id).copied(),
+            |active| {
+                let sequence_master =
+                    sequence_master_scale(channel, active, inputs, intensity_master);
+                let channel_intensity = if active.is_some_and(AttributeKey::is_intensity) {
+                    1.0
+                } else {
+                    virtual_intensity
+                };
+                ChannelScales {
+                    virtual_intensity: channel_intensity,
+                    sequence_master,
+                    group_master: inputs.group_scale,
+                    grand_master: grand_master(options),
+                }
+            },
+        );
+        let mut raw = resolved.raw;
+        if options.blackout {
+            raw = blackout_raw(mode, channel, raw);
+        }
+        (channel.id, raw)
+    }))
 }
 
 fn sequence_master_scale(
@@ -336,25 +418,24 @@ fn grand_master(options: RenderOptions) -> f32 {
 fn finalize_output(
     mode: &FixtureMode,
     head: &ProfileHeadPlan,
-    inputs: ProfileHeadInputs,
-    channels: Vec<(uuid::Uuid, u32)>,
+    owner: FixtureId,
+    head_id: uuid::Uuid,
+    group_scale: f32,
+    channels: &[(uuid::Uuid, u32)],
     virtual_intensity: f32,
     requested_color: Option<Xyz>,
     options: RenderOptions,
 ) -> ResolvedProfileHeadOutput {
-    let channel_map = channels.iter().copied().collect::<HashMap<_, _>>();
     let physical_intensity = head
         .intensity_channel_indices
         .iter()
-        .filter_map(|index| channel_visual_level(mode, &channel_map, mode.channels[*index].id))
+        .filter_map(|index| channel_visual_level(mode, channels, mode.channels[*index].id))
         .reduce(f32::max);
-    let mut color = profile_visual_color(mode, inputs.head_id, &channel_map, requested_color);
-    let intensity = physical_intensity.unwrap_or_else(|| {
-        visual_intensity(&mut color, virtual_intensity, inputs.group_scale, options)
-    });
+    let mut color = profile_visual_color(mode, head_id, channels, requested_color);
+    let intensity = physical_intensity
+        .unwrap_or_else(|| visual_intensity(&mut color, virtual_intensity, group_scale, options));
     ResolvedProfileHeadOutput {
-        owner: inputs.owner,
-        channels,
+        owner,
         intensity,
         color,
     }

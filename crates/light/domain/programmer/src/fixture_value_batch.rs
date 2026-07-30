@@ -46,6 +46,9 @@ impl FixtureValueBatch {
         changed_at: DateTime<Utc>,
     ) {
         self.replace_once(fixture_id, attribute);
+        self.additions.retain(|existing| {
+            existing.fixture_id != fixture_id || existing.attribute != *attribute
+        });
         self.touched.insert(fixture_id, attribute);
         self.additions.push(TimedValue {
             fixture_id,
@@ -63,6 +66,9 @@ impl FixtureValueBatch {
 
     pub(crate) fn release(&mut self, fixture_id: FixtureId, attribute: &AttributeKey) {
         self.replace_once(fixture_id, attribute);
+        self.additions.retain(|existing| {
+            existing.fixture_id != fixture_id || existing.attribute != *attribute
+        });
     }
 
     pub(crate) fn commit(mut self, values: &mut Vec<TimedValue>) -> FixtureAddresses {
@@ -72,10 +78,7 @@ impl FixtureValueBatch {
     }
 
     fn replace_once(&mut self, fixture_id: FixtureId, attribute: &AttributeKey) {
-        debug_assert!(
-            self.replaced.insert(fixture_id, attribute),
-            "Programmer value batches must contain unique addresses"
-        );
+        self.replaced.insert(fixture_id, attribute);
     }
 }
 

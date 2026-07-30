@@ -75,6 +75,7 @@ export function controllableBrowserDesktopBridge(
 		openStageViewWindow: () => perform({ type: "open_stage_view_window" }),
 		packagedStageBenchmarkConfig: async () => null,
 		packagedStageBenchmarkPrepared: async () => false,
+		focusPackagedStageBenchmarkWindow: async () => undefined,
 		appendPackagedStageBenchmarkSample: async () => undefined,
 		currentWindowState: async () =>
 			decodeWindowState(await port.currentWindowState()),

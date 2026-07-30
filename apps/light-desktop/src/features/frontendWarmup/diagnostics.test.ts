@@ -255,4 +255,30 @@ describe("frontend performance diagnostics", () => {
 			},
 		});
 	});
+
+	it("segments Stage frame cadence across intentional WebGL recovery", async () => {
+		const { frontendPerformanceDiagnostics: diagnostics } = await import(
+			"./diagnostics"
+		);
+		diagnostics.recordStageLaneClaims(["stage-live"], []);
+		const frame = (sourceFrame: number) =>
+			diagnostics.recordStageFrameReceived({
+				lane: "normal",
+				showId: "show",
+				scopeActivation: 1,
+				sourceFrame,
+				sourceGeneratedAt: new Date().toISOString(),
+			});
+		frame(1);
+		diagnostics.recordStageRendererContextLost("normal");
+		frame(2);
+		diagnostics.recordStageRendererContextRestored("normal");
+		frame(3);
+
+		expect(
+			diagnostics
+				.snapshot()
+				.stage.frames.map((sample) => sample.claimActivation),
+		).toEqual([1, 2, 3]);
+	});
 });

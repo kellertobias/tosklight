@@ -4,6 +4,9 @@ use super::*;
 pub(super) struct VisualizationQuery {
     #[serde(default)]
     pub(super) preload: bool,
+    #[serde(default)]
+    pub(super) dynamic_stack_only: bool,
+    pub(super) fixture_ids: Option<String>,
 }
 pub(super) async fn media_servers(
     State(state): State<AppState>,

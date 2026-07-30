@@ -511,7 +511,7 @@ async fn deleting_a_dynamic_snapshots_cue_and_playback_references_without_old_sl
         serde_json::from_value(definition_json.clone()).unwrap();
     let dynamic_id = definition.id;
     let fallback = light_dynamics::DynamicDefinitionSnapshot {
-        definition: Box::new(definition.clone()),
+        definition: Arc::new(definition.clone()),
     };
     let reference = light_dynamics::DynamicReference {
         dynamic_id: Some(dynamic_id),

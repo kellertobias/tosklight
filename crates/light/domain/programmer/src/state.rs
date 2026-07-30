@@ -26,12 +26,12 @@ pub struct ProgrammerSnapshot {
     pub selected: Vec<FixtureId>,
     pub selection_expression: Option<SelectionExpression>,
     pub values: Vec<TimedValue>,
-    pub dynamic_values: Vec<DynamicAddressValue>,
+    pub dynamic_values: Arc<Vec<DynamicAddressValue>>,
     pub group_values: GroupProgrammerValues,
     pub preload_pending: Vec<TimedValue>,
     pub preload_active: Vec<TimedValue>,
-    pub preload_dynamic_pending: Vec<DynamicAddressValue>,
-    pub preload_dynamic_active: Vec<DynamicAddressValue>,
+    pub preload_dynamic_pending: Arc<Vec<DynamicAddressValue>>,
+    pub preload_dynamic_active: Arc<Vec<DynamicAddressValue>>,
     pub preload_group_pending: GroupProgrammerValues,
     pub preload_group_active: GroupProgrammerValues,
     pub preload_playback_pending: Vec<PreloadPlaybackAction>,
@@ -53,7 +53,7 @@ pub struct ProgrammerState {
     pub selection_expression: Option<SelectionExpression>,
     pub values: Vec<TimedValue>,
     #[serde(default)]
-    pub dynamic_values: Vec<DynamicAddressValue>,
+    pub dynamic_values: Arc<Vec<DynamicAddressValue>>,
     /// Runtime-only fixture-control overrides. These sit above normal programmer values while a
     /// momentary or timed action is active, but are never recorded, persisted, or added to Undo.
     #[serde(skip)]
@@ -65,9 +65,9 @@ pub struct ProgrammerState {
     #[serde(default)]
     pub preload_active: Vec<TimedValue>,
     #[serde(default)]
-    pub preload_dynamic_pending: Vec<DynamicAddressValue>,
+    pub preload_dynamic_pending: Arc<Vec<DynamicAddressValue>>,
     #[serde(default)]
-    pub preload_dynamic_active: Vec<DynamicAddressValue>,
+    pub preload_dynamic_active: Arc<Vec<DynamicAddressValue>>,
     #[serde(default)]
     pub preload_group_pending: GroupProgrammerValues,
     #[serde(default)]
@@ -94,13 +94,33 @@ pub struct ProgrammerState {
     pub highlight: bool,
     #[serde(default)]
     pub active_context: Option<String>,
-    #[serde(default)]
+    /// Undo is live desk interaction history, not durable Programmer content. Persisting every
+    /// snapshot duplicates large Dynamic payloads and puts whole-history JSON serialization on
+    /// every operator action. Older persisted sessions may still contain this field and remain
+    /// readable, but new session writes deliberately omit it.
+    #[serde(default, skip_serializing)]
     pub undo: Vec<Arc<ProgrammerSnapshot>>,
-    #[serde(default)]
+    /// Redo has the same live-session lifetime as Undo.
+    #[serde(default, skip_serializing)]
     pub redo: Vec<Arc<ProgrammerSnapshot>>,
     /// Runtime-only identity for coalescing samples from one continuous encoder gesture.
     #[serde(skip)]
     pub active_value_undo_group: Option<String>,
+}
+
+/// Minimal owned Programmer projection consumed by the output renderer.
+///
+/// Keeping this separate from `ProgrammerState` prevents a render tick from cloning selection,
+/// command, pending Preload, and up to 100 Undo snapshots while it holds the registry read lock.
+#[derive(Clone, Debug)]
+pub struct ProgrammerOutputState {
+    pub id: ProgrammerId,
+    pub priority: i16,
+    pub values: Vec<TimedValue>,
+    pub transient_values: Vec<TransientProgrammerAction>,
+    pub group_values: GroupProgrammerValues,
+    pub preload_active: Vec<TimedValue>,
+    pub preload_group_active: GroupProgrammerValues,
 }
 
 #[derive(Clone, Debug)]
@@ -127,6 +147,34 @@ impl ProgrammerState {
         &self,
         selected_fixtures: &[FixtureId],
     ) -> ProgrammerUpdateContent {
+        let (fixture_values, group_values) = self.update_projection_values();
+        ProgrammerUpdateContent {
+            fixture_values,
+            group_values,
+            dynamic_values: self.dynamic_values.to_vec(),
+            selected_fixtures: selected_fixtures.to_vec(),
+        }
+    }
+
+    /// Value-event diff input sharing the immutable Dynamic layer across ordinary commands.
+    pub fn update_projection_content(
+        &self,
+    ) -> (
+        Vec<ProgrammerFixtureUpdate>,
+        Vec<ProgrammerGroupUpdate>,
+        Arc<Vec<DynamicAddressValue>>,
+    ) {
+        let (fixture_values, group_values) = self.update_projection_values();
+        (
+            fixture_values,
+            group_values,
+            Arc::clone(&self.dynamic_values),
+        )
+    }
+
+    fn update_projection_values(
+        &self,
+    ) -> (Vec<ProgrammerFixtureUpdate>, Vec<ProgrammerGroupUpdate>) {
         let mut fixture_values = self
             .values
             .iter()
@@ -171,12 +219,7 @@ impl ProgrammerState {
                 .then_with(|| left.attribute.cmp(&right.attribute))
         });
 
-        ProgrammerUpdateContent {
-            fixture_values,
-            group_values,
-            dynamic_values: self.dynamic_values.clone(),
-            selected_fixtures: selected_fixtures.to_vec(),
-        }
+        (fixture_values, group_values)
     }
 }
 

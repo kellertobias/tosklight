@@ -814,7 +814,7 @@ fn programmer_values_draft(user_id: Uuid, revision: u64) -> EventDraft {
         ProgrammingValuesChange {
             delta: Default::default(),
             projection: ProgrammingValuesProjection {
-                dynamic_values: Vec::new(),
+                dynamic_values: Vec::new().into(),
                 user_id: UserId(user_id),
                 revision,
                 fixture_values: Vec::new(),

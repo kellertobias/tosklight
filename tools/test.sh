@@ -16,6 +16,7 @@ architecture(){
   "$ROOT/tools/test-artifact-paths.sh"
   node --test "$ROOT/tools/cargo-workspace-lints.test.mjs"
   node --test "$ROOT/tools/check-control-state-labels.test.mjs"
+  node --test "$ROOT/tools/programmer-action-timing.test.mjs"
   node --test "$ROOT/tools/run-release-performance.test.mjs"
   node --test "$ROOT/tools/run-sustained-output-benchmark.test.mjs"
   node --test "$ROOT/tools/semantic-test-docs/"*.test.mjs

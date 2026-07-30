@@ -127,8 +127,8 @@ pub(super) fn load_engine_snapshot_with_override(
     prepare_show_load(entry, override_value).map(PreparedShowLoad::into_snapshot)
 }
 
-/// Caller must hold an active-show coordinator permit from this exact read through runtime
-/// installation.
+/// Compiles and migrates a show before the short active-runtime installation boundary. Callers
+/// serialize competing show-change workflows with `ActiveShowResource::acquire_show_change`.
 pub(super) fn prepare_show_for_runtime(
     state: &AppState,
     entry: &ShowEntry,

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { frontendPerformanceDiagnostics } from "../features/frontendWarmup/diagnostics";
 import type { VisualizationRuntimeScope } from "../features/visualizationRuntime/contracts";
 import { VisualizationRuntimeProtocolError } from "../features/visualizationRuntime/transport";
@@ -52,6 +52,35 @@ class FakeWebSocket extends EventTarget {
 }
 
 describe("HttpVisualizationRuntimeTransport", () => {
+	beforeEach(() => {
+		vi.spyOn(Date, "now").mockReturnValue(
+			Date.parse("2026-07-21T09:00:00.050Z"),
+		);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("sends the final unsubscribe before closing the shared socket", () => {
+		FakeWebSocket.instances = [];
+		const stream = createTransport(
+			vi.fn<typeof globalThis.fetch>(),
+			FakeWebSocket as unknown as typeof WebSocket,
+		).openStream(scope, { snapshot: vi.fn(), error: vi.fn() });
+		stream.updateClaims(["normal"], 10);
+		const socket = FakeWebSocket.instances[0];
+		socket?.open();
+
+		stream.updateClaims([], 10);
+
+		expect(socket?.sent.map((message) => JSON.parse(message))).toContainEqual({
+			type: "unsubscribe",
+			lanes: ["normal"],
+		});
+		expect(socket?.readyState).toBe(3);
+	});
+
 	it("loads only the exact v1 Visualization endpoint with authenticated headers", async () => {
 		const diagnosticCount =
 			frontendPerformanceDiagnostics.snapshot().stage.visualizationRequests
@@ -110,7 +139,26 @@ describe("HttpVisualizationRuntimeTransport", () => {
 		);
 	});
 
-	it("correlates optional HTTP source metadata without adding it to the domain snapshot", async () => {
+	it("requests a lightweight Dynamic-stack-only projection for paperwork", async () => {
+		const fetch = vi.fn(
+			async (
+				_input: Parameters<typeof globalThis.fetch>[0],
+				_init?: Parameters<typeof globalThis.fetch>[1],
+			) => response(snapshot(false)),
+		);
+		const transport = createTransport(fetch);
+
+		await transport.loadSnapshot(scope, "normal", {
+			dynamicStackOnly: true,
+			fixtureIds: ["fixture-1", "fixture-2"],
+		});
+
+		expect(fetch.mock.calls[0]?.[0]).toBe(
+			"http://desk.test/api/v2/output/visualization?dynamic_stack_only=true&fixture_ids=fixture-1%2Cfixture-2",
+		);
+	});
+
+	it("correlates HTTP source age without treating a one-shot read as a Stage frame", async () => {
 		const baseline = frontendPerformanceDiagnostics.snapshot().stage;
 		const frameCount = baseline.frames.length;
 		const requestCount = baseline.visualizationRequests.length;
@@ -136,18 +184,12 @@ describe("HttpVisualizationRuntimeTransport", () => {
 			sourceGeneratedAt: sourceTimestamp,
 			sourceAgeMs: expect.any(Number),
 		});
-		expect(
-			frontendPerformanceDiagnostics.snapshot().stage.frames[frameCount],
-		).toMatchObject({
-			lane: "normal",
-			sourceFrame: 42,
-			sourceGeneratedAt: sourceTimestamp,
-			sourceToReceiveMs: expect.any(Number),
-			projectionToReceiveMs: expect.any(Number),
-		});
+		expect(frontendPerformanceDiagnostics.snapshot().stage.frames).toHaveLength(
+			frameCount,
+		);
 	});
 
-	it("multiplexes claimed lanes over the dedicated authenticated stream", () => {
+	it("multiplexes claimed lanes over the dedicated authenticated stream", async () => {
 		FakeWebSocket.instances = [];
 		const transport = createTransport(
 			vi.fn<typeof globalThis.fetch>(),
@@ -170,6 +212,10 @@ describe("HttpVisualizationRuntimeTransport", () => {
 			type: "subscribe",
 			lanes: ["normal", "preload"],
 			max_rate_hz: 10,
+			include_dynamic_stack: false,
+			sparse_dynamic_stack: true,
+			batched_messages: true,
+			acknowledgements: false,
 		});
 		socket?.message({
 			type: "hello",
@@ -186,13 +232,23 @@ describe("HttpVisualizationRuntimeTransport", () => {
 			source_frame: 7,
 			source_timestamp: "2026-07-21T09:00:00Z",
 			published_at: "2026-07-21T09:00:00Z",
-			snapshot: snapshot(false),
+			snapshot: {
+				...snapshot(false),
+				dynamic_stack: [dynamicStackEntry()],
+			},
 		});
+		await nextTask();
 
 		expect(observer.snapshot).toHaveBeenCalledWith(
 			"normal",
 			expect.objectContaining({ revision: 7, preload: false }),
 		);
+		expect(
+			socket?.sent.map((message) => JSON.parse(message)),
+		).not.toContainEqual({
+			type: "acknowledge",
+			sequence: 1,
+		});
 		expect(observer.error).not.toHaveBeenCalled();
 		socket?.message({
 			type: "delta",
@@ -217,14 +273,15 @@ describe("HttpVisualizationRuntimeTransport", () => {
 					},
 				],
 				removed_values: [],
-				dynamic_stack: [],
 				profile_output_values: [],
 				removed_profile_output_values: [],
 			},
 		});
+		await nextTask();
 		expect(observer.snapshot).toHaveBeenLastCalledWith(
 			"normal",
 			expect.objectContaining({
+				dynamic_stack: [expect.objectContaining({ name: "Pulse" })],
 				values: [
 					expect.objectContaining({
 						value: { kind: "normalized", value: 0.75 },
@@ -232,12 +289,149 @@ describe("HttpVisualizationRuntimeTransport", () => {
 				],
 			}),
 		);
+		expect(
+			socket?.sent.map((message) => JSON.parse(message)),
+		).not.toContainEqual({
+			type: "acknowledge",
+			sequence: 2,
+		});
+		socket?.message({
+			type: "delta",
+			lane: "normal",
+			scope: wireScope,
+			sequence: 3,
+			source_frame: 9,
+			source_timestamp: "2026-07-21T09:00:00.200Z",
+			published_at: "2026-07-21T09:00:00.201Z",
+			delta: {
+				scope: wireScope,
+				revision: 7,
+				generated_at: "2026-07-21T09:00:00.200Z",
+				grand_master: 0.8,
+				blackout: false,
+				preload: false,
+				values: [],
+				removed_values: [],
+				dynamic_stack: [],
+				profile_output_values: [],
+				removed_profile_output_values: [],
+			},
+		});
+		await nextTask();
+		expect(observer.snapshot).toHaveBeenLastCalledWith(
+			"normal",
+			expect.objectContaining({ dynamic_stack: [] }),
+		);
 		socket?.close();
 		expect(observer.error).toHaveBeenCalledWith(
 			expect.objectContaining({
 				message: "Visualization stream closed; reconnecting",
 			}),
 		);
+		stream.close();
+	});
+
+	it("installs a settled full snapshot when reconnecting", () => {
+		FakeWebSocket.instances = [];
+		const observer = { snapshot: vi.fn(), error: vi.fn() };
+		const stream = createTransport(
+			vi.fn<typeof globalThis.fetch>(),
+			FakeWebSocket as unknown as typeof WebSocket,
+		).openStream(scope, observer);
+		stream.updateClaims(["normal"], 10);
+		const socket = FakeWebSocket.instances[0];
+		socket?.open();
+
+		socket?.message({
+			type: "snapshot",
+			lane: "normal",
+			scope: wireScope,
+			sequence: 1,
+			source_frame: 7,
+			source_timestamp: "2026-07-21T08:59:59Z",
+			published_at: "2026-07-21T09:00:00.050Z",
+			snapshot: snapshot(false),
+		});
+
+		expect(observer.snapshot).toHaveBeenCalledWith(
+			"normal",
+			expect.objectContaining({ revision: 7 }),
+		);
+		expect(observer.error).not.toHaveBeenCalled();
+		stream.close();
+	});
+
+	it("merges delta upserts and removals without losing canonical value order", () => {
+		FakeWebSocket.instances = [];
+		const observer = { snapshot: vi.fn(), error: vi.fn() };
+		const stream = createTransport(
+			vi.fn<typeof globalThis.fetch>(),
+			FakeWebSocket as unknown as typeof WebSocket,
+		).openStream(scope, observer);
+		stream.updateClaims(["normal"], 10);
+		const socket = FakeWebSocket.instances[0];
+		socket?.open();
+		const value = (fixture_id: string, attribute: string, level: number) => ({
+			fixture_id,
+			attribute,
+			value: { kind: "normalized", value: level },
+		});
+		socket?.message({
+			type: "snapshot",
+			lane: "normal",
+			scope: wireScope,
+			sequence: 1,
+			source_frame: 1,
+			source_timestamp: "2026-07-21T09:00:00Z",
+			published_at: "2026-07-21T09:00:00Z",
+			snapshot: {
+				...snapshot(false),
+				values: [
+					value("fixture-2", "intensity", 0.2),
+					value("fixture-1", "pan", 0.1),
+					value("fixture-1", "intensity", 0.1),
+				],
+			},
+		});
+		socket?.message({
+			type: "delta",
+			lane: "normal",
+			scope: wireScope,
+			sequence: 2,
+			source_frame: 2,
+			source_timestamp: "2026-07-21T09:00:00.100Z",
+			published_at: "2026-07-21T09:00:00.101Z",
+			delta: {
+				scope: wireScope,
+				revision: 8,
+				generated_at: "2026-07-21T09:00:00.100Z",
+				grand_master: 0.8,
+				blackout: false,
+				preload: false,
+				values: [
+					value("fixture-3", "intensity", 0.3),
+					value("fixture-1", "intensity", 0.9),
+				],
+				removed_values: [{ fixture_id: "fixture-1", attribute: "pan" }],
+				dynamic_stack: [],
+				profile_output_values: [],
+				removed_profile_output_values: [],
+			},
+		});
+
+		expect(
+			observer.snapshot.mock.calls
+				.at(-1)?.[1]
+				.values.map(
+					(entry: { fixture_id: string; attribute: string }) =>
+						`${entry.fixture_id}:${entry.attribute}`,
+				),
+		).toEqual([
+			"fixture-1:intensity",
+			"fixture-2:intensity",
+			"fixture-3:intensity",
+		]);
+		expect(observer.error).not.toHaveBeenCalled();
 		stream.close();
 	});
 
@@ -339,30 +533,7 @@ describe("decodeVisualizationRuntimeSnapshot", () => {
 		const decoded = decodeVisualizationRuntimeSnapshot(
 			{
 				...snapshot(false),
-				dynamic_stack: [
-					{
-						fixture_id: "fixture-1",
-						attribute: "intensity",
-						entry_type: "dynamic",
-						priority: -10,
-						changed_at_millis: 1_234,
-						source: "Programmer",
-						dynamic_id: "33333333-3333-4333-8333-333333333333",
-						pool_number: 1,
-						name: "Pulse",
-						runtime_instance_id: "44444444-4444-4444-8444-444444444444",
-						controller_id: "55555555-5555-4555-8555-555555555555",
-						lane_id: "66666666-6666-4666-8666-666666666666",
-						size: 0.75,
-						activation_mix: 0.5,
-						paused: false,
-						hidden: false,
-						pending: false,
-						winning: true,
-						value: { kind: "normalized", value: 0.4 },
-						resolved_value: { kind: "normalized", value: 0.4 },
-					},
-				],
+				dynamic_stack: [dynamicStackEntry()],
 			},
 			"normal",
 		);
@@ -418,6 +589,10 @@ describe("decodeVisualizationRuntimeSnapshot", () => {
 	});
 });
 
+function nextTask() {
+	return new Promise<void>((resolve) => globalThis.setTimeout(resolve, 10));
+}
+
 function createTransport(
 	fetch: typeof globalThis.fetch,
 	webSocket?: typeof globalThis.WebSocket,
@@ -451,6 +626,31 @@ function snapshot(preload: boolean) {
 		preload,
 		values,
 		profile_output_values: values,
+	};
+}
+
+function dynamicStackEntry() {
+	return {
+		fixture_id: "fixture-1",
+		attribute: "intensity",
+		entry_type: "dynamic",
+		priority: -10,
+		changed_at_millis: 1_234,
+		source: "Programmer",
+		dynamic_id: "33333333-3333-4333-8333-333333333333",
+		pool_number: 1,
+		name: "Pulse",
+		runtime_instance_id: "44444444-4444-4444-8444-444444444444",
+		controller_id: "55555555-5555-4555-8555-555555555555",
+		lane_id: "66666666-6666-4666-8666-666666666666",
+		size: 0.75,
+		activation_mix: 0.5,
+		paused: false,
+		hidden: false,
+		pending: false,
+		winning: true,
+		value: { kind: "normalized", value: 0.4 },
+		resolved_value: { kind: "normalized", value: 0.4 },
 	};
 }
 

@@ -8,6 +8,11 @@ const helpScreenshots = process.env.LIGHT_HELP_SCREENSHOTS === "1";
 const benchUnitTests = /bench\/.*\.test\.ts/;
 
 export default defineConfig({
+  "@playwright/test": {
+    babelPlugins: [
+      [require.resolve("./tools/playwright-react-jsx-import-source.cjs")],
+    ],
+  },
   testDir: "./tests",
   timeout: visualRecording ? 300_000 : 30_000,
   testIgnore: visualRecording

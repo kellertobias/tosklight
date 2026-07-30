@@ -664,7 +664,7 @@ export class BrowserStageVisualizer {
 			).__TOSKLIGHT_STAGE_SOCKET_FAULT__;
 			if (!control?.token)
 				throw new Error("Visualization session token is unavailable");
-			const response = await fetch("/api/v2/diagnostics", {
+			const response = await fetch("/api/v2/diagnostics/performance", {
 				headers: { Authorization: `Bearer ${control.token}` },
 			});
 			if (!response.ok)
@@ -680,34 +680,34 @@ export class BrowserStageVisualizer {
 		evidence: Record<StageRenderQuality, FrontendStageRenderDiagnostic>,
 	): void {
 		const linesOnly = evidence[StageRenderQuality.LinesOnly].visibleObjects;
-		expect.soft(linesOnly.beamVolumes).toBe(0);
-		expect.soft(linesOnly.improvedBeamVolumes).toBe(0);
-		expect.soft(linesOnly.improvedBeamLights).toBe(0);
-		expect.soft(linesOnly.centerLines).toBeGreaterThan(0);
-		expect.soft(linesOnly.groundFootprints).toBeGreaterThan(0);
+		expect(linesOnly.beamVolumes).toBe(0);
+		expect(linesOnly.improvedBeamVolumes).toBe(0);
+		expect(linesOnly.improvedBeamLights).toBe(0);
+		expect(linesOnly.centerLines).toBeGreaterThan(0);
+		expect(linesOnly.groundFootprints).toBeGreaterThan(0);
 
 		const linesAndBeams =
 			evidence[StageRenderQuality.LinesAndBeams].visibleObjects;
-		expect.soft(linesAndBeams.beamVolumes).toBeGreaterThan(0);
-		expect.soft(linesAndBeams.improvedBeamVolumes).toBe(0);
-		expect.soft(linesAndBeams.improvedBeamLights).toBe(0);
-		expect.soft(linesAndBeams.centerLines).toBeGreaterThan(0);
-		expect.soft(linesAndBeams.groundFootprints).toBeGreaterThan(0);
+		expect(linesAndBeams.beamVolumes).toBeGreaterThan(0);
+		expect(linesAndBeams.improvedBeamVolumes).toBe(0);
+		expect(linesAndBeams.improvedBeamLights).toBe(0);
+		expect(linesAndBeams.centerLines).toBeGreaterThan(0);
+		expect(linesAndBeams.groundFootprints).toBeGreaterThan(0);
 
 		const beams = evidence[StageRenderQuality.Beams].visibleObjects;
-		expect.soft(beams.beamVolumes).toBeGreaterThan(0);
-		expect.soft(beams.improvedBeamVolumes).toBe(0);
-		expect.soft(beams.improvedBeamLights).toBe(0);
-		expect.soft(beams.centerLines).toBe(0);
-		expect.soft(beams.groundFootprints).toBe(0);
+		expect(beams.beamVolumes).toBeGreaterThan(0);
+		expect(beams.improvedBeamVolumes).toBe(0);
+		expect(beams.improvedBeamLights).toBe(0);
+		expect(beams.centerLines).toBe(0);
+		expect(beams.groundFootprints).toBe(0);
 
 		const improved = evidence[StageRenderQuality.ImprovedBeams].visibleObjects;
-		expect.soft(improved.beamVolumes).toBe(0);
-		expect.soft(improved.improvedBeamVolumes).toBeGreaterThan(0);
-		expect.soft(improved.improvedBeamLights).toBeGreaterThan(0);
-		expect.soft(improved.improvedBeamLights).toBeLessThanOrEqual(8);
-		expect.soft(improved.centerLines).toBe(0);
-		expect.soft(improved.groundFootprints).toBe(0);
+		expect(improved.beamVolumes).toBe(0);
+		expect(improved.improvedBeamVolumes).toBeGreaterThan(0);
+		expect(improved.improvedBeamLights).toBeGreaterThan(0);
+		expect(improved.improvedBeamLights).toBeLessThanOrEqual(8);
+		expect(improved.centerLines).toBe(0);
+		expect(improved.groundFootprints).toBe(0);
 	}
 }
 

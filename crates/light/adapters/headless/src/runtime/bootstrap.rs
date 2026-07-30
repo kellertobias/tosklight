@@ -180,7 +180,7 @@ fn restore_programmer_dynamics(
     let mut runtime = runtime.lock();
     for programmer in programmers.active_for_sessions() {
         let mut controllers = HashMap::<Uuid, RestoredController>::new();
-        for stored in &programmer.dynamic_values {
+        for stored in programmer.dynamic_values.iter() {
             let light_dynamics::DynamicSemanticValue::DynamicOn {
                 instance_link,
                 dynamic,

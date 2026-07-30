@@ -1,5 +1,6 @@
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -299,7 +300,7 @@ pub struct DynamicReference {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DynamicDefinitionSnapshot {
-    pub definition: Box<DynamicDefinition>,
+    pub definition: Arc<DynamicDefinition>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

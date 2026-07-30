@@ -86,6 +86,21 @@ export class ProgrammingSelectionWriter {
 		this.showId = showId;
 	}
 
+	status(): "ready" | "loading" | "scope-mismatch" | "stopped" {
+		if (this.stopped) return "stopped";
+		const state = this.options.store.getSnapshot();
+		if (
+			state.showId !== this.showId ||
+			state.deskId !== this.options.deskId ||
+			(this.scope !== null &&
+				!this.options.store.isScopeCurrent(this.expectedScope()))
+		)
+			return "scope-mismatch";
+		return this.options.store.authoritativeSelectionRevision() === null
+			? "loading"
+			: "ready";
+	}
+
 	replace({ resolvedFixtures }: ProgrammingSelectionReplacementIntent) {
 		return this.enqueue(
 			{ type: "replace", fixtures: resolvedFixtures },
@@ -164,8 +179,21 @@ export class ProgrammingSelectionWriter {
 	}
 
 	private enqueue(intent: SelectionIntent, prediction: () => SelectionReducer) {
-		if (this.stopped || !this.scopeIsCurrent())
+		if (this.stopped) {
+			this.options.onError?.(
+				new Error("Selection action rejected because its writer is stopped"),
+			);
 			return Promise.resolve(null);
+		}
+		if (!this.scopeIsCurrent()) {
+			const state = this.options.store.getSnapshot();
+			this.options.onError?.(
+				new Error(
+					`Selection action rejected outside its authority scope (writer show ${this.showId}, store show ${state.showId ?? "none"}, writer desk ${this.options.deskId}, store desk ${state.deskId ?? "none"})`,
+				),
+			);
+			return Promise.resolve(null);
+		}
 		let token: string | null;
 		try {
 			token = this.options.store.beginOptimisticSelectionUpdate(
@@ -176,7 +204,12 @@ export class ProgrammingSelectionWriter {
 			this.options.onError?.(asError(reason));
 			return Promise.resolve(null);
 		}
-		if (!token) return Promise.resolve(null);
+		if (!token) {
+			this.options.onError?.(
+				new Error("Selection action rejected before authority was ready"),
+			);
+			return Promise.resolve(null);
+		}
 		return new Promise<SelectionActionOutcome | null>((resolve) => {
 			const queue = this.barrierRunning ? this.deferred : this.queue;
 			queue.push({

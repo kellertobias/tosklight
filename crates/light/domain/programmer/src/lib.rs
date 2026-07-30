@@ -69,8 +69,8 @@ pub use selection::{
     SelectionRule, apply_selection_rule, resolve_selection_references,
 };
 pub use state::{
-    ProgrammerFixtureUpdate, ProgrammerGroupUpdate, ProgrammerSnapshot, ProgrammerState,
-    ProgrammerUpdateContent, TransientProgrammerAction,
+    ProgrammerFixtureUpdate, ProgrammerGroupUpdate, ProgrammerOutputState, ProgrammerSnapshot,
+    ProgrammerState, ProgrammerUpdateContent, TransientProgrammerAction,
 };
 pub use transactions::ProgrammerTransactionSnapshot;
 pub use update_capture::{

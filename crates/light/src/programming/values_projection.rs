@@ -3,9 +3,7 @@ use crate::{ActionContext, ActionError, ActionErrorKind};
 use light_core::{AttributeKey, FixtureId};
 use light_core::{SessionId, UserId};
 use light_dynamics::DynamicAddressValue;
-use light_programmer::{
-    ProgrammerFixtureUpdate, ProgrammerGroupUpdate, ProgrammerRegistry, ProgrammerUpdateContent,
-};
+use light_programmer::{ProgrammerFixtureUpdate, ProgrammerGroupUpdate, ProgrammerRegistry};
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -26,7 +24,7 @@ pub struct ProgrammingValuesProjection {
     pub revision: u64,
     pub fixture_values: Vec<ProgrammerFixtureUpdate>,
     pub group_values: Vec<ProgrammerGroupUpdate>,
-    pub dynamic_values: Vec<DynamicAddressValue>,
+    pub dynamic_values: Arc<Vec<DynamicAddressValue>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -70,7 +68,7 @@ pub struct ProgrammingValuesSnapshot {
 pub(super) struct ProgrammingValuesContent {
     pub(super) fixture_values: Vec<ProgrammerFixtureUpdate>,
     pub(super) group_values: Vec<ProgrammerGroupUpdate>,
-    pub(super) dynamic_values: Vec<DynamicAddressValue>,
+    pub(super) dynamic_values: Arc<Vec<DynamicAddressValue>>,
 }
 
 impl ProgrammingValuesContent {
@@ -98,12 +96,7 @@ impl ProgrammingValuesContent {
                 "the Programmer session does not belong to the requested user",
             ));
         }
-        let ProgrammerUpdateContent {
-            fixture_values,
-            group_values,
-            dynamic_values,
-            selected_fixtures: _,
-        } = state.update_content();
+        let (fixture_values, group_values, dynamic_values) = state.update_projection_content();
         Ok(Self {
             fixture_values,
             group_values,
@@ -151,16 +144,24 @@ impl ProgrammingValuesContent {
             .iter()
             .map(|value| ((value.group_id.clone(), value.attribute.clone()), value))
             .collect::<HashMap<_, _>>();
-        let before_dynamic = before
-            .dynamic_values
-            .iter()
-            .map(|value| ((value.fixture_id, value.attribute.clone()), value))
-            .collect::<HashMap<_, _>>();
-        let after_dynamic = self
-            .dynamic_values
-            .iter()
-            .map(|value| ((value.fixture_id, value.attribute.clone()), value))
-            .collect::<HashMap<_, _>>();
+        let dynamic_changed = !Arc::ptr_eq(&self.dynamic_values, &before.dynamic_values);
+        let before_dynamic = dynamic_changed
+            .then(|| {
+                before
+                    .dynamic_values
+                    .iter()
+                    .map(|value| ((value.fixture_id, value.attribute.clone()), value))
+                    .collect::<HashMap<_, _>>()
+            })
+            .unwrap_or_default();
+        let after_dynamic = dynamic_changed
+            .then(|| {
+                self.dynamic_values
+                    .iter()
+                    .map(|value| ((value.fixture_id, value.attribute.clone()), value))
+                    .collect::<HashMap<_, _>>()
+            })
+            .unwrap_or_default();
 
         let delta = ProgrammingValuesDelta {
             fixture_values: self
@@ -201,25 +202,32 @@ impl ProgrammingValuesContent {
                     attribute: attribute.clone(),
                 })
                 .collect(),
-            dynamic_values: self
-                .dynamic_values
-                .iter()
-                .filter(|value| {
-                    before_dynamic
-                        .get(&(value.fixture_id, value.attribute.clone()))
-                        .copied()
-                        != Some(*value)
-                })
-                .cloned()
-                .collect(),
-            removed_dynamic_values: before_dynamic
-                .keys()
-                .filter(|key| !after_dynamic.contains_key(*key))
-                .map(|(fixture_id, attribute)| ProgrammingFixtureValueAddress {
-                    fixture_id: *fixture_id,
-                    attribute: attribute.clone(),
-                })
-                .collect(),
+            dynamic_values: if dynamic_changed {
+                self.dynamic_values
+                    .iter()
+                    .filter(|value| {
+                        before_dynamic
+                            .get(&(value.fixture_id, value.attribute.clone()))
+                            .copied()
+                            != Some(*value)
+                    })
+                    .cloned()
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            removed_dynamic_values: if dynamic_changed {
+                before_dynamic
+                    .keys()
+                    .filter(|key| !after_dynamic.contains_key(*key))
+                    .map(|(fixture_id, attribute)| ProgrammingFixtureValueAddress {
+                        fixture_id: *fixture_id,
+                        attribute: attribute.clone(),
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            },
         };
         let projection = Arc::new(self.projection(user_id, revision));
         ProgrammingValuesChange { projection, delta }

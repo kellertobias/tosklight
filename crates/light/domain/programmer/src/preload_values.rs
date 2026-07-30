@@ -152,7 +152,7 @@ fn content(state: &crate::ProgrammerState) -> PreloadProgrammerValuesContent {
     PreloadProgrammerValuesContent {
         fixture_values,
         group_values,
-        dynamic_values: state.preload_dynamic_pending.clone(),
+        dynamic_values: state.preload_dynamic_pending.to_vec(),
     }
 }
 

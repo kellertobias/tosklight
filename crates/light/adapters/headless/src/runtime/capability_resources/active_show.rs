@@ -179,6 +179,16 @@ impl ActiveShowResource {
         self.activation.acquire().await
     }
 
+    pub(in crate::runtime) async fn acquire_shared(&self) -> ActiveShowPermit {
+        self.activation.acquire_shared().await
+    }
+
+    /// Serializes whole show-change workflows without excluding output rendering. The output
+    /// coordinator is acquired separately only for the prepared runtime and identity swap.
+    pub(in crate::runtime) async fn acquire_show_change(&self) -> tokio::sync::OwnedMutexGuard<()> {
+        self.show_change.clone().lock_owned().await
+    }
+
     pub(in crate::runtime) fn acquire_blocking(&self) -> ActiveShowPermit {
         self.activation.acquire_blocking()
     }
@@ -247,34 +257,44 @@ impl ActiveShowResource {
 
 #[derive(Clone)]
 pub(in crate::runtime) struct ActiveShowCoordinator {
-    lock: Arc<tokio::sync::Mutex<()>>,
+    lock: Arc<tokio::sync::RwLock<()>>,
 }
 
 impl ActiveShowCoordinator {
     pub(in crate::runtime) fn new() -> Self {
         Self {
-            lock: Arc::new(tokio::sync::Mutex::new(())),
+            lock: Arc::new(tokio::sync::RwLock::new(())),
         }
     }
 
     pub(in crate::runtime) async fn acquire(&self) -> ActiveShowPermit {
-        ActiveShowPermit(self.lock.clone().lock_owned().await)
+        ActiveShowPermit::Exclusive(self.lock.clone().write_owned().await)
+    }
+
+    pub(in crate::runtime) async fn acquire_shared(&self) -> ActiveShowPermit {
+        ActiveShowPermit::Shared(self.lock.clone().read_owned().await)
     }
 
     pub(in crate::runtime) fn acquire_blocking(&self) -> ActiveShowPermit {
-        ActiveShowPermit(self.lock.clone().blocking_lock_owned())
+        ActiveShowPermit::Exclusive(futures_lite::future::block_on(
+            self.lock.clone().write_owned(),
+        ))
     }
 
     pub(in crate::runtime) fn try_acquire(
         &self,
     ) -> Result<ActiveShowPermit, tokio::sync::TryLockError> {
-        self.lock.clone().try_lock_owned().map(ActiveShowPermit)
+        self.lock
+            .clone()
+            .try_read_owned()
+            .map(ActiveShowPermit::Shared)
     }
 }
 
-pub(in crate::runtime) struct ActiveShowPermit(
-    #[allow(dead_code)] tokio::sync::OwnedMutexGuard<()>,
-);
+pub(in crate::runtime) enum ActiveShowPermit {
+    Shared(#[allow(dead_code)] tokio::sync::OwnedRwLockReadGuard<()>),
+    Exclusive(#[allow(dead_code)] tokio::sync::OwnedRwLockWriteGuard<()>),
+}
 
 #[derive(Clone)]
 pub(in crate::runtime) struct ActiveShowProjection {

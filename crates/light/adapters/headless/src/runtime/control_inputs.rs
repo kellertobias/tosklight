@@ -147,17 +147,20 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
     {
         let action_timing =
             begin_authenticated_osc_programmer_timing(state, address, arguments, source.as_deref());
+        let mut programmer_action_succeeded = false;
         if !handle_subscription_osc(state, address, arguments, source.as_deref()) && !input_locked {
             handle_playback_osc(state, address, arguments, source.as_deref());
             handle_highlight_osc(state, address, arguments, source.as_deref());
-            handle_dynamics_osc(state, address, arguments, source.as_deref());
-            handle_programmer_osc(state, address, arguments, source.as_deref());
+            programmer_action_succeeded |=
+                handle_dynamics_osc(state, address, arguments, source.as_deref());
+            programmer_action_succeeded |=
+                handle_programmer_osc(state, address, arguments, source.as_deref());
             handle_timing_osc(state, address, arguments);
             handle_encoder_osc(state, address, arguments, source.as_deref());
         }
         send_osc_feedback(state, false);
         if let Some(action_timing) = action_timing {
-            action_timing.acknowledge(state);
+            action_timing.acknowledge(state, programmer_action_succeeded);
         }
     }
     if input_locked {
@@ -195,8 +198,8 @@ struct AuthenticatedOscActionTiming {
 }
 
 impl AuthenticatedOscActionTiming {
-    fn acknowledge(self, state: &AppState) {
-        let timing = self.receipt.acknowledge(true);
+    fn acknowledge(self, state: &AppState, succeeded: bool) {
+        let timing = self.receipt.acknowledge(succeeded);
         send_action_timing_feedback(state, &self.desk_alias, self.feedback_target, &timing);
     }
 }

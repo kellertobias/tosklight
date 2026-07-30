@@ -26,6 +26,8 @@ export interface LargeStageScene {
 	staticControlInstances: number;
 	occupiedSlots: number;
 	universes: number;
+	fixtureIdsByNumber: Record<number, string>;
+	staticControlFixtureNumber: number;
 }
 
 /**
@@ -108,6 +110,13 @@ export async function installDeterministicLargeStage(
 		throw new Error(
 			`Large Stage has ${runtime.instances.length} active Dynamics; expected ${LARGE_STAGE_DYNAMIC_INSTANCES}`,
 		);
+	const staticControlFixtureNumber = after.fixtures.find(
+		(fixture) =>
+			plan.staticControlFixtureIds.includes(fixture.fixture_id) &&
+			fixture.fixture_number != null,
+	)?.fixture_number;
+	if (staticControlFixtureNumber == null)
+		throw new Error("Large Stage has no numbered static-control fixture");
 
 	return {
 		fixtureRecords: after.fixtures.length,
@@ -120,6 +129,14 @@ export async function installDeterministicLargeStage(
 			plan.staticControlFixtureIds.length + largeScene.addedMultipatchInstances,
 		occupiedSlots: largeScene.patch.occupiedSlots,
 		universes: largeScene.patch.universeCount,
+		fixtureIdsByNumber: Object.fromEntries(
+			after.fixtures.flatMap((fixture) =>
+				fixture.fixture_number == null
+					? []
+					: [[fixture.fixture_number, fixture.fixture_id]],
+			),
+		),
+		staticControlFixtureNumber,
 	};
 }
 

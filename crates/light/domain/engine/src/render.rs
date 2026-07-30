@@ -36,6 +36,8 @@ impl Engine {
         let highlighted_fixtures = self.highlighted_fixtures.read();
         let mut universes = HashMap::new();
         let mut patched_slots: HashMap<Universe, u16> = HashMap::new();
+        let mut profile_visualization_values =
+            HashMap::with_capacity(snapshot.fixtures.len().saturating_mul(2));
         for fixture in snapshot.fixtures.iter() {
             if fixture.definition.schema_version == light_fixture::FIXTURE_PROFILE_SCHEMA_VERSION {
                 let profile = fixture
@@ -67,6 +69,46 @@ impl Engine {
                         EngineError::Invalid("schema-v2 fixture projection plan is missing".into())
                     })?;
                 let footprints = fixture.definition.split_footprints();
+                let single_patch = if fixture.multipatch.is_empty() {
+                    match fixture.split_patches.as_slice() {
+                        [patch] => Some((patch.split, patch.universe, patch.address)),
+                        [] => Some((1, fixture.universe, fixture.address)),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+                if let Some((split, universe, address)) = single_patch {
+                    let output = resolve_profile_fixture(
+                        fixture,
+                        mode,
+                        projection,
+                        None,
+                        &profile_values,
+                        options,
+                        group_masters,
+                        &group_master_flashes,
+                        &highlighted_fixtures,
+                    )?;
+                    insert_profile_visualization_values(&mut profile_visualization_values, &output);
+                    let (Some(universe), Some(address)) = (universe, address) else {
+                        continue;
+                    };
+                    let footprint = footprints.get(&split).copied().ok_or_else(|| {
+                        EngineError::Invalid(format!("fixture split {split} has no footprint"))
+                    })?;
+                    let frame = universes.entry(universe).or_insert([0; 512]);
+                    let last_slot = address
+                        .saturating_sub(1)
+                        .saturating_add(footprint)
+                        .min(light_output::DMX_SLOTS as u16);
+                    patched_slots
+                        .entry(universe)
+                        .and_modify(|current| *current = (*current).max(last_slot))
+                        .or_insert(last_slot);
+                    encode_profile_split(frame, encoding, split, address, &output)?;
+                    continue;
+                }
                 let mut patches = fixture.effective_split_patches();
                 for instance in &fixture.multipatch {
                     patches.extend(instance.effective_split_patches());
@@ -88,20 +130,21 @@ impl Engine {
                     .iter()
                     .map(|(split, _, _, _)| *split)
                     .collect::<Vec<_>>();
-                if included_splits.is_empty() {
-                    continue;
-                }
                 let output = resolve_profile_fixture(
                     fixture,
                     mode,
                     projection,
-                    Some(&included_splits),
+                    None,
                     &profile_values,
                     options,
                     group_masters,
                     &group_master_flashes,
                     &highlighted_fixtures,
                 )?;
+                insert_profile_visualization_values(&mut profile_visualization_values, &output);
+                if included_splits.is_empty() {
+                    continue;
+                }
                 for (split, universe, address, footprint) in destinations {
                     let frame = universes.entry(universe).or_insert([0; 512]);
                     let last_slot = address
@@ -129,6 +172,7 @@ impl Engine {
         Ok(RenderResult {
             universes,
             resolved_values: Arc::new(resolved.values),
+            profile_visualization_values: Arc::new(profile_visualization_values),
             patched_slots,
             revision: snapshot.revision,
             automatic_playback_transitions: resolved.automatic_playback_transitions,
@@ -145,6 +189,27 @@ impl Engine {
         let generation = self.generation.load_full();
         hook();
         self.render_generation(&generation, options, &[])
+    }
+}
+
+fn insert_profile_visualization_values(
+    values: &mut HashMap<
+        (light_core::FixtureId, light_core::AttributeKey),
+        light_core::AttributeValue,
+    >,
+    output: &crate::profile_projection::ResolvedProfileFixtureOutput,
+) {
+    for head in &output.heads {
+        values.insert(
+            (head.owner, light_core::AttributeKey::intensity()),
+            light_core::AttributeValue::Normalized(head.intensity),
+        );
+        if let Some(color) = head.color {
+            values.insert(
+                (head.owner, light_core::AttributeKey("color".into())),
+                light_core::AttributeValue::ColorXyz(color),
+            );
+        }
     }
 }
 

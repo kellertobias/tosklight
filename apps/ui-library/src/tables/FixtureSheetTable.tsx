@@ -3,6 +3,7 @@ import {
 	type DataTableColumn,
 	WindowScrollArea,
 } from "../window-kit";
+import { useCallback } from "react";
 
 export interface FixtureSheetRowView {
 	id: string | number;
@@ -68,6 +69,7 @@ export function FixtureSheetTableView<Row extends FixtureSheetRowView>({
 	columns,
 	onActivate,
 	onActiveRowChange,
+	onVisibleFixtureIdsChange,
 	presentStep,
 	rows,
 	selectedFixtureIds,
@@ -76,10 +78,20 @@ export function FixtureSheetTableView<Row extends FixtureSheetRowView>({
 	columns: DataTableColumn<Row>[];
 	onActivate: (fixtureId: string) => void;
 	onActiveRowChange: (index: number) => void;
+	onVisibleFixtureIdsChange?: (fixtureIds: readonly string[]) => void;
 	presentStep: FixtureStepPresenter<Row>;
 	rows: Row[];
 	selectedFixtureIds: ReadonlySet<string>;
 }) {
+	const visibleRowsChanged = useCallback(
+		(visibleRows: readonly Row[]) =>
+			onVisibleFixtureIdsChange?.(
+				visibleRows
+					.map((fixture) => fixture.fixtureId)
+					.filter((fixtureId) => fixtureId.length > 0),
+			),
+		[onVisibleFixtureIdsChange],
+	);
 	return (
 		<WindowScrollArea className="fixture-table">
 			<DataTable
@@ -98,6 +110,8 @@ export function FixtureSheetTableView<Row extends FixtureSheetRowView>({
 				onActivate={(fixture) =>
 					fixture.fixtureId && onActivate(fixture.fixtureId)
 				}
+				onVisibleRowsChange={visibleRowsChanged}
+				virtualize
 			/>
 		</WindowScrollArea>
 	);

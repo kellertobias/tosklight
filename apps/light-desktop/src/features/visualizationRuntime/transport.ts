@@ -8,6 +8,7 @@ export interface VisualizationRuntimeTransport {
 	loadSnapshot(
 		scope: VisualizationRuntimeScope,
 		lane: VisualizationRuntimeLane,
+		options?: { dynamicStackOnly?: boolean; fixtureIds?: readonly string[] },
 	): Promise<VisualizationSnapshot>;
 	openStream?(
 		scope: VisualizationRuntimeScope,
@@ -27,6 +28,7 @@ export interface VisualizationRuntimeStream {
 	updateClaims(
 		lanes: readonly VisualizationRuntimeLane[],
 		maxRateHz: number,
+		includeDynamicStack?: boolean,
 	): void;
 	close(): void;
 }

@@ -143,6 +143,8 @@ fn dynamic_playback_full_control_requires_complete_persistent_coverage_and_honor
             &completely_covered,
             &default_on,
             &runtime,
+            &[],
+            &[],
             engine.application_time(),
         ),
         vec![light_playback::PlaybackIdentity::physical(1).unwrap()],
@@ -156,6 +158,8 @@ fn dynamic_playback_full_control_requires_complete_persistent_coverage_and_honor
             &completely_covered,
             &opt_out,
             &runtime,
+            &[],
+            &[],
             engine.application_time(),
         )
         .is_empty()
@@ -169,6 +173,8 @@ fn dynamic_playback_full_control_requires_complete_persistent_coverage_and_honor
             &partially_covered,
             &default_on,
             &runtime,
+            &[],
+            &[],
             engine.application_time(),
         )
         .is_empty()
@@ -213,6 +219,8 @@ fn temporary_dynamic_playback_coverage_never_triggers_full_control_auto_off() {
             &samples,
             &controls,
             &runtime,
+            &[],
+            &[],
             engine.application_time(),
         )
         .is_empty()

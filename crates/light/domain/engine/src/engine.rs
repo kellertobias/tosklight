@@ -27,12 +27,25 @@ pub struct Engine {
     pub(crate) sequence_master_fade_millis: AtomicU64,
     pub(crate) programmer_transitions:
         Mutex<HashMap<ProgrammerTransitionKey, ProgrammerTransition>>,
+    dynamic_programmer_cache: Mutex<DynamicProgrammerCache>,
     pub(crate) move_in_black: Mutex<HashMap<MoveInBlackKey, MoveInBlackRuntime>>,
     pub(crate) group_master_flashes: RwLock<HashMap<String, f32>>,
     /// Live Highlight is an output overlay, not programmer/show data. Ownership and remembered
     /// selection live in the server; the engine only needs the currently lit fixture identities.
     pub(crate) highlighted_fixtures: RwLock<HashSet<FixtureId>>,
     pub(crate) clock: SharedClock,
+}
+
+#[derive(Default)]
+struct DynamicProgrammerCache {
+    signature: Vec<(uuid::Uuid, i16, usize, usize, usize, usize)>,
+    sources: Vec<(
+        uuid::Uuid,
+        i16,
+        Arc<Vec<light_dynamics::DynamicAddressValue>>,
+        Arc<Vec<light_dynamics::DynamicAddressValue>>,
+    )>,
+    values: Arc<Vec<(uuid::Uuid, i16, light_dynamics::DynamicAddressValue)>>,
 }
 
 impl Engine {
@@ -60,6 +73,7 @@ impl Engine {
             speed_groups_paused: std::array::from_fn(|_| AtomicBool::new(false)),
             sequence_master_fade_millis: AtomicU64::new(0),
             programmer_transitions: Mutex::new(HashMap::new()),
+            dynamic_programmer_cache: Mutex::new(DynamicProgrammerCache::default()),
             move_in_black: Mutex::new(HashMap::new()),
             group_master_flashes: RwLock::new(HashMap::new()),
             highlighted_fixtures: RwLock::new(HashSet::new()),
@@ -112,17 +126,42 @@ impl Engine {
     /// Returns first-class Dynamic/FAT layers for final priority-then-LTP output arbitration.
     pub fn dynamic_programmer_values(
         &self,
-    ) -> Vec<(uuid::Uuid, i16, light_dynamics::DynamicAddressValue)> {
-        self.programmers
-            .active_for_sessions()
-            .into_iter()
-            .flat_map(|programmer| {
-                programmer
-                    .dynamic_values
-                    .into_iter()
-                    .chain(programmer.preload_dynamic_active)
-                    .map(move |value| (programmer.id.0, programmer.priority, value))
+    ) -> Arc<Vec<(uuid::Uuid, i16, light_dynamics::DynamicAddressValue)>> {
+        let sources = self.programmers.active_dynamic_sources_for_sessions();
+        let signature = sources
+            .iter()
+            .map(|(id, priority, values, preload)| {
+                (
+                    *id,
+                    *priority,
+                    Arc::as_ptr(values) as usize,
+                    values.len(),
+                    Arc::as_ptr(preload) as usize,
+                    preload.len(),
+                )
             })
-            .collect()
+            .collect::<Vec<_>>();
+        let mut cache = self.dynamic_programmer_cache.lock();
+        if cache.signature != signature {
+            let values: Arc<Vec<(uuid::Uuid, i16, light_dynamics::DynamicAddressValue)>> = Arc::new(
+                sources
+                    .iter()
+                    .flat_map(|(id, priority, values, preload)| {
+                        values
+                            .iter()
+                            .chain(preload.iter())
+                            .cloned()
+                            .map(move |value| (*id, *priority, value))
+                    })
+                    .collect(),
+            );
+            cache.values = values;
+            // Retaining the source Arcs is part of the cache identity contract: subsequent
+            // Arc::make_mut calls must allocate a new source even when the entry count is
+            // unchanged, so a same-length value edit cannot leave this projection stale.
+            cache.sources = sources;
+            cache.signature = signature;
+        }
+        Arc::clone(&cache.values)
     }
 }

@@ -28,6 +28,7 @@ interface Props {
 	renderQuality: StageRenderQuality;
 	environmentBrightness: number;
 	camera3d?: StageCamera;
+	pixelRatioCap?: number;
 	visualizationLane?: VisualizationRuntimeLane;
 	visualizationActive?: boolean;
 	paneId?: string;
@@ -45,6 +46,7 @@ export function Stage3dCanvas({
 	renderQuality,
 	environmentBrightness,
 	camera3d,
+	pixelRatioCap,
 	visualizationLane = "normal",
 	visualizationActive = false,
 	paneId,
@@ -87,6 +89,7 @@ export function Stage3dCanvas({
 		controller,
 		dispatch,
 		diagnosticsRef,
+		pixelRatioCap,
 	});
 	useStageCamera({
 		camera: cameraRef,

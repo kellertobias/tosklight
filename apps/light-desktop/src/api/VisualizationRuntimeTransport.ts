@@ -60,15 +60,21 @@ export class HttpVisualizationRuntimeTransport
 	async loadSnapshot(
 		scope: VisualizationRuntimeScope,
 		lane: VisualizationRuntimeLane,
+		options?: { dynamicStackOnly?: boolean; fixtureIds?: readonly string[] },
 	): Promise<VisualizationSnapshot> {
 		this.validateScope(scope);
 		const finishDiagnostic =
 			frontendPerformanceDiagnostics.beginStageVisualizationRequest(lane);
-		const query = lane === "preload" ? "?preload=true" : "";
+		const query = new URLSearchParams();
+		if (lane === "preload") query.set("preload", "true");
+		if (options?.dynamicStackOnly) query.set("dynamic_stack_only", "true");
+		if (options?.fixtureIds?.length)
+			query.set("fixture_ids", options.fixtureIds.join(","));
+		const suffix = query.size ? `?${query}` : "";
 		let response: Response;
 		try {
 			response = await this.fetchImplementation(
-				`${this.baseUrl}/api/v2/output/visualization${query}`,
+				`${this.baseUrl}/api/v2/output/visualization${suffix}`,
 				{ headers: this.headers() },
 			);
 		} catch (reason) {
@@ -84,15 +90,6 @@ export class HttpVisualizationRuntimeTransport
 				undefined,
 				payload.bytes,
 			);
-			if (source.timestamp)
-				frontendPerformanceDiagnostics.recordStageFrameReceived({
-					lane,
-					showId: scope.showId,
-					scopeActivation: this.diagnosticScopeActivation,
-					sourceFrame: source.frame,
-					sourceGeneratedAt: source.timestamp,
-					publishedAt: decoded.generated_at,
-				});
 			return decoded;
 		} catch (reason) {
 			finishDiagnostic(undefined, reason);
@@ -150,11 +147,18 @@ class WebSocketVisualizationRuntimeStream
 	private socket: WebSocket | null = null;
 	private claims = new Set<VisualizationRuntimeLane>();
 	private maxRateHz = 10;
+	private includeDynamicStack = false;
 	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null =
 		null;
 	private reconnectDelay = 250;
 	private stopped = false;
 	private lastSequence = 0;
+	// WebKit acknowledgement round trips can throttle a one-frame publication
+	// window below the renderer's useful cadence. The server's overwrite-old
+	// outgoing queue remains authoritative; the desktop consumes at a bounded rate.
+	private readonly acknowledgementBackpressure = false;
+	private pendingAcknowledgement = 0;
+	private acknowledgementScheduled = false;
 	private snapshots: Record<
 		VisualizationRuntimeLane,
 		VisualizationSnapshot | null
@@ -169,11 +173,17 @@ class WebSocketVisualizationRuntimeStream
 		private readonly WebSocketImplementation: typeof globalThis.WebSocket,
 	) {}
 
-	updateClaims(lanes: readonly VisualizationRuntimeLane[], maxRateHz: number) {
+	updateClaims(
+		lanes: readonly VisualizationRuntimeLane[],
+		maxRateHz: number,
+		includeDynamicStack = false,
+	) {
 		const removed = [...this.claims].filter((lane) => !lanes.includes(lane));
 		this.claims = new Set(lanes);
 		this.maxRateHz = Math.max(1, Math.min(10, Math.floor(maxRateHz)));
+		this.includeDynamicStack = includeDynamicStack;
 		if (!this.claims.size) {
+			if (removed.length) this.send({ type: "unsubscribe", lanes: removed });
 			this.closeSocket();
 			return;
 		}
@@ -208,7 +218,9 @@ class WebSocketVisualizationRuntimeStream
 			this.snapshots = { normal: null, preload: null };
 			this.sendSubscription();
 		});
-		socket.addEventListener("message", (event) => this.receive(event.data));
+		socket.addEventListener("message", (event) =>
+			this.receive(event.data, Date.now()),
+		);
 		socket.addEventListener("error", () =>
 			this.observer.error(
 				new VisualizationRuntimeProtocolError(
@@ -228,13 +240,19 @@ class WebSocketVisualizationRuntimeStream
 		});
 	}
 
-	private receive(raw: unknown) {
+	private receive(raw: unknown, rawReceivedAt: number) {
 		try {
 			if (typeof raw !== "string")
 				throw new VisualizationRuntimeProtocolError(
 					"Visualization stream message was not text",
 				);
-			const message = recordAt(JSON.parse(raw) as unknown, "$");
+			const decoded = JSON.parse(raw) as unknown;
+			if (Array.isArray(decoded)) {
+				for (const message of decoded)
+					this.receive(JSON.stringify(message), rawReceivedAt);
+				return;
+			}
+			const message = recordAt(decoded, "$");
 			const type = stringAt(message.type, "$.type");
 			if (type === "hello") {
 				if (integerAt(message.protocol_version, "$.protocol_version") !== 1)
@@ -274,8 +292,13 @@ class WebSocketVisualizationRuntimeStream
 					sourceFrame,
 					sourceGeneratedAt,
 					publishedAt,
+					rawReceivedAt,
 				});
+				// A complete reconnect snapshot is authoritative even when the output
+				// source has been settled for longer than the changing-frame latency
+				// budget. Its age means "unchanged", not "unsafe to install".
 				this.observer.snapshot(lane, snapshot);
+				this.acknowledge(sequence);
 				return;
 			}
 			if (type === "delta") {
@@ -292,12 +315,14 @@ class WebSocketVisualizationRuntimeStream
 				if (this.lastSequence && sequence !== this.lastSequence + 1) {
 					this.lastSequence = sequence;
 					this.send({ type: "resynchronize", lane });
+					this.acknowledge(sequence);
 					return;
 				}
 				this.lastSequence = sequence;
 				const current = this.snapshots[lane];
 				if (!current) {
 					this.send({ type: "resynchronize", lane });
+					this.acknowledge(sequence);
 					return;
 				}
 				assertVisualizationScope(scope, current.scope, "$.scope");
@@ -310,8 +335,20 @@ class WebSocketVisualizationRuntimeStream
 					sourceFrame,
 					sourceGeneratedAt,
 					publishedAt,
+					rawReceivedAt,
 				});
+				if (staleVisualizationSource(sourceGeneratedAt)) {
+					frontendPerformanceDiagnostics.recordStageFrameApplied(
+						sourceGeneratedAt,
+						true,
+						lane,
+						false,
+					);
+					this.acknowledge(sequence);
+					return;
+				}
 				this.observer.snapshot(lane, snapshot);
+				this.acknowledge(sequence);
 				return;
 			}
 			if (type === "structural_invalidation") {
@@ -335,6 +372,7 @@ class WebSocketVisualizationRuntimeStream
 					for (const lane of this.claims)
 						this.send({ type: "resynchronize", lane });
 				this.lastSequence = sequence;
+				this.acknowledge(sequence);
 				return;
 			}
 			if (type === "error")
@@ -346,6 +384,10 @@ class WebSocketVisualizationRuntimeStream
 			);
 		} catch (reason) {
 			this.observer.error(asError(reason));
+			// An acknowledged stream cannot safely continue after a message that the
+			// client could not process: withholding its acknowledgement would leave
+			// the server waiting forever. Reconnect to negotiate a fresh snapshot.
+			this.closeSocket();
 		}
 	}
 
@@ -355,6 +397,31 @@ class WebSocketVisualizationRuntimeStream
 			type: "subscribe",
 			lanes: [...this.claims],
 			max_rate_hz: this.maxRateHz,
+			include_dynamic_stack: this.includeDynamicStack,
+			sparse_dynamic_stack: true,
+			batched_messages: true,
+			acknowledgements: this.acknowledgementBackpressure,
+		});
+	}
+
+	private acknowledge(sequence: number) {
+		if (!this.acknowledgementBackpressure) return;
+		this.pendingAcknowledgement = Math.max(
+			this.pendingAcknowledgement,
+			sequence,
+		);
+		if (this.acknowledgementScheduled) return;
+		// The observer installs each lane synchronously. A microtask coalesces
+		// same-task protocol work while returning credit promptly; the server-side
+		// one-publication window still replaces superseded visualization state.
+		this.acknowledgementScheduled = true;
+		globalThis.queueMicrotask(() => {
+			if (!this.acknowledgementScheduled) return;
+			this.acknowledgementScheduled = false;
+			const acknowledged = this.pendingAcknowledgement;
+			this.pendingAcknowledgement = 0;
+			if (acknowledged)
+				this.send({ type: "acknowledge", sequence: acknowledged });
 		});
 	}
 
@@ -387,10 +454,17 @@ class WebSocketVisualizationRuntimeStream
 	}
 
 	private closeSocket() {
+		this.acknowledgementScheduled = false;
+		this.pendingAcknowledgement = 0;
 		const socket = this.socket;
 		this.socket = null;
 		socket?.close();
 	}
+}
+
+function staleVisualizationSource(timestamp: string) {
+	const generatedAt = Date.parse(timestamp);
+	return Number.isFinite(generatedAt) && Date.now() - generatedAt > 200;
 }
 
 function applyVisualizationDelta(
@@ -418,10 +492,10 @@ function applyVisualizationDelta(
 			decodeValues(delta.values, "$.delta.values"),
 			decodeRemovedValueKeys(delta.removed_values, "$.delta.removed_values"),
 		),
-		dynamic_stack: decodeDynamicStack(
-			delta.dynamic_stack,
-			"$.delta.dynamic_stack",
-		),
+		dynamic_stack:
+			delta.dynamic_stack === undefined
+				? current.dynamic_stack
+				: decodeDynamicStack(delta.dynamic_stack, "$.delta.dynamic_stack"),
 		profile_output_values: mergeVisualizationValues(
 			current.profile_output_values ?? [],
 			decodeValues(
@@ -451,20 +525,53 @@ function mergeVisualizationValues(
 	upserts: VisualizationSnapshot["values"],
 	removed: readonly string[],
 ) {
-	const values = new Map(
-		current.map((value) => [
-			`${value.fixture_id}\u0000${value.attribute}`,
-			value,
-		]),
+	if (!upserts.length && !removed.length) return current;
+	const removedKeys = new Set(removed);
+	const upsertsByKey = new Map(
+		upserts.map((value) => [visualizationValueKey(value), value]),
 	);
-	for (const key of removed) values.delete(key);
-	for (const value of upserts)
-		values.set(`${value.fixture_id}\u0000${value.attribute}`, value);
-	return [...values.values()].sort(
-		(left, right) =>
-			left.fixture_id.localeCompare(right.fixture_id) ||
-			left.attribute.localeCompare(right.attribute),
+	const retained = current.filter((value) => {
+		const key = visualizationValueKey(value);
+		return !removedKeys.has(key) && !upsertsByKey.has(key);
+	});
+	const sortedUpserts = [...upsertsByKey.values()].sort(
+		compareVisualizationValues,
 	);
+	const merged: VisualizationSnapshot["values"] = [];
+	let retainedIndex = 0;
+	let upsertIndex = 0;
+	while (
+		retainedIndex < retained.length ||
+		upsertIndex < sortedUpserts.length
+	) {
+		const retainedValue = retained[retainedIndex];
+		const upsertValue = sortedUpserts[upsertIndex];
+		if (
+			upsertValue === undefined ||
+			(retainedValue !== undefined &&
+				compareVisualizationValues(retainedValue, upsertValue) < 0)
+		) {
+			merged.push(retainedValue);
+			retainedIndex++;
+		} else {
+			merged.push(upsertValue);
+			upsertIndex++;
+		}
+	}
+	return merged;
+}
+
+function visualizationValueKey(value: VisualizationSnapshot["values"][number]) {
+	return `${value.fixture_id}\u0000${value.attribute}`;
+}
+
+function compareVisualizationValues(
+	left: VisualizationSnapshot["values"][number],
+	right: VisualizationSnapshot["values"][number],
+) {
+	const leftKey = visualizationValueKey(left);
+	const rightKey = visualizationValueKey(right);
+	return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
 }
 
 export function decodeVisualizationRuntimeSnapshot(
@@ -485,7 +592,9 @@ export function decodeVisualizationRuntimeSnapshot(
 		grand_master: normalizedAt(snapshot.grand_master, "$.grand_master"),
 		blackout: booleanAt(snapshot.blackout, "$.blackout"),
 		preload,
-		values: decodeValues(snapshot.values, "$.values"),
+		values: decodeValues(snapshot.values, "$.values").sort(
+			compareVisualizationValues,
+		),
 		dynamic_stack:
 			snapshot.dynamic_stack === undefined
 				? undefined
@@ -493,7 +602,7 @@ export function decodeVisualizationRuntimeSnapshot(
 		profile_output_values: decodeValues(
 			snapshot.profile_output_values,
 			"$.profile_output_values",
-		),
+		).sort(compareVisualizationValues),
 	};
 }
 
@@ -542,6 +651,8 @@ function decodeDynamicStack(value: unknown, path: string) {
 
 function decodeDynamicStackEntry(value: unknown, path: string) {
 	const entry = recordAt(value, path);
+	const optionalBoolean = (field: string) =>
+		entry[field] === undefined ? false : booleanAt(entry[field], `${path}.${field}`);
 	return {
 		fixture_id: stringAt(entry.fixture_id, `${path}.fixture_id`),
 		attribute: stringAt(entry.attribute, `${path}.attribute`),
@@ -552,42 +663,76 @@ function decodeDynamicStackEntry(value: unknown, path: string) {
 			"dynamic_off",
 			"static",
 		]),
-		priority: signedIntegerAt(entry.priority, `${path}.priority`),
-		changed_at_millis: integerAt(
-			entry.changed_at_millis,
-			`${path}.changed_at_millis`,
-		),
+		priority:
+			entry.priority === undefined
+				? 0
+				: signedIntegerAt(entry.priority, `${path}.priority`),
+		changed_at_millis:
+			entry.changed_at_millis === undefined
+				? 0
+				: integerAt(entry.changed_at_millis, `${path}.changed_at_millis`),
 		source: stringAt(entry.source, `${path}.source`),
-		dynamic_id: nullable(entry.dynamic_id, `${path}.dynamic_id`, stringAt),
-		pool_number: nullable(entry.pool_number, `${path}.pool_number`, integerAt),
+		dynamic_id:
+			entry.dynamic_id === undefined
+				? null
+				: nullable(entry.dynamic_id, `${path}.dynamic_id`, stringAt),
+		pool_number:
+			entry.pool_number === undefined
+				? null
+				: nullable(entry.pool_number, `${path}.pool_number`, integerAt),
 		name: stringAt(entry.name, `${path}.name`),
-		runtime_instance_id: nullable(
-			entry.runtime_instance_id,
-			`${path}.runtime_instance_id`,
-			stringAt,
-		),
-		controller_id: nullable(
-			entry.controller_id,
-			`${path}.controller_id`,
-			stringAt,
-		),
-		lane_id: nullable(entry.lane_id, `${path}.lane_id`, stringAt),
-		size: nullable(entry.size, `${path}.size`, numberAt),
-		activation_mix: nullable(
-			entry.activation_mix,
-			`${path}.activation_mix`,
-			normalizedAt,
-		),
-		paused: booleanAt(entry.paused, `${path}.paused`),
-		hidden: booleanAt(entry.hidden, `${path}.hidden`),
-		pending: booleanAt(entry.pending, `${path}.pending`),
-		winning: booleanAt(entry.winning, `${path}.winning`),
-		value: nullable(entry.value, `${path}.value`, decodeAttributeValue),
-		resolved_value: nullable(
-			entry.resolved_value,
-			`${path}.resolved_value`,
-			decodeAttributeValue,
-		),
+		runtime_instance_id:
+			entry.runtime_instance_id === undefined
+				? null
+				: nullable(
+						entry.runtime_instance_id,
+						`${path}.runtime_instance_id`,
+						stringAt,
+					),
+		controller_id:
+			entry.controller_id === undefined
+				? null
+				: nullable(entry.controller_id, `${path}.controller_id`, stringAt),
+		lane_id:
+			entry.lane_id === undefined
+				? null
+				: nullable(entry.lane_id, `${path}.lane_id`, stringAt),
+		size:
+			entry.size === undefined
+				? null
+				: nullable(entry.size, `${path}.size`, numberAt),
+		activation_mix:
+			entry.activation_mix === undefined
+				? null
+				: nullable(
+						entry.activation_mix,
+						`${path}.activation_mix`,
+						normalizedAt,
+					),
+		paused: optionalBoolean("paused"),
+		hidden: optionalBoolean("hidden"),
+		pending: optionalBoolean("pending"),
+		winning: optionalBoolean("winning"),
+		summary_count:
+			entry.summary_count === undefined
+				? undefined
+				: integerAt(entry.summary_count, `${path}.summary_count`),
+		summary_title:
+			entry.summary_title === undefined
+				? undefined
+				: stringAt(entry.summary_title, `${path}.summary_title`),
+		value:
+			entry.value === undefined
+				? null
+				: nullable(entry.value, `${path}.value`, decodeAttributeValue),
+		resolved_value:
+			entry.resolved_value === undefined
+				? null
+				: nullable(
+						entry.resolved_value,
+						`${path}.resolved_value`,
+						decodeAttributeValue,
+					),
 	};
 }
 

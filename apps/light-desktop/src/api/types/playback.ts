@@ -77,6 +77,8 @@ export interface VisualizationSnapshot {
 		hidden: boolean;
 		pending: boolean;
 		winning: boolean;
+		summary_count?: number;
+		summary_title?: string;
 		value?: AttributeValue | null;
 		resolved_value?: AttributeValue | null;
 	}>;

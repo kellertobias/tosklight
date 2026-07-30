@@ -41,6 +41,7 @@ pub(super) async fn apply_legacy_mvr_import(
             return Err(error);
         }
     };
+    let show_change = state.active_show.acquire_show_change().await;
     let activation = state.active_show.acquire().await;
     if active_show_is(state, entry.id) {
         let _ = std::fs::remove_file(&temporary);
@@ -58,7 +59,6 @@ pub(super) async fn apply_legacy_mvr_import(
         )
         .await;
     }
-    let _activation = activation;
     if let Err(error) = ensure_source_revision(&entry, source_revision) {
         let _ = std::fs::remove_file(&temporary);
         return Err(error);
@@ -67,20 +67,32 @@ pub(super) async fn apply_legacy_mvr_import(
         backup_show(state, &entry)?;
     }
     std::fs::rename(&temporary, &entry.path).map_err(ApiError::io)?;
+    drop(activation);
     publish_mvr_definitions(state, new_definitions, &mut warnings);
     if open_after {
         let output_runtime = load_output_runtime_for_show(state, entry.id)?;
         let compiled = load_engine_snapshot(&entry).map_err(ApiError::bad_request)?;
         let context = operator_action_context(&session, light_application::ActionSource::Http);
-        activate_snapshot(state, compiled, &context, &Transition::HoldCurrent, None).await?;
+        let prepared = state
+            .output
+            .prepare_snapshot(compiled)
+            .map_err(|error| ApiError::internal(error.to_string()))?;
+        activate_prepared_show(
+            state,
+            prepared,
+            &context,
+            &Transition::HoldCurrent,
+            None,
+            entry.clone(),
+            output_runtime,
+        )
+        .await?;
         state
             .installation
             .set_active_show(Some(entry.id))
             .map_err(ApiError::store)?;
-        invalidate_active_show_document(state);
-        state.active_show.replace_current(Some(entry.clone()));
-        restore_output_runtime_for_show(state, entry.id, output_runtime);
     }
+    drop(show_change);
     emit(
         state,
         "mvr_imported",

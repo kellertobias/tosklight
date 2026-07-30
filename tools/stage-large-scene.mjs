@@ -215,8 +215,11 @@ function fixtureInput({
 			? venueLocation(entry.key, index)
 			: {
 					x: (column * 2 - 29) * 300,
-					y: entry.category === "static" ? -2_000 : 2_000 + (row % 4) * 600,
-					z: -Math.floor(row / 4) * 800,
+					y:
+						entry.category === "static"
+							? -2_000 - row * 220
+							: 2_000 + row * 300,
+					z: entry.category === "static" ? 2_800 : 4_000,
 				};
 	return {
 		fixture_id: deterministicUuid("1", fixtureIndex),

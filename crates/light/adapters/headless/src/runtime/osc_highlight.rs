@@ -259,7 +259,7 @@ fn route_programmer_osc_action(
     desk_alias: &str,
     action: &str,
     request_id: Option<&str>,
-) {
+) -> bool {
     if action == "set"
         && state.programming.get(session.id).is_some_and(|programmer| {
             matches!(programmer.command_line.trim(), "" | "FIXTURE" | "GROUP")
@@ -270,14 +270,17 @@ fn route_programmer_osc_action(
             "desk_action",
             serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":"set","source":"osc"}),
         );
+        true
     } else if matches!(action, "escape" | "menu" | "prog-playback") {
         emit(
             state,
             "desk_action",
             serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":action,"source":"osc"}),
         );
+        true
     } else {
-        command_http::route_osc_command_key(state, session, desk_alias, action, request_id);
+        command_http::route_osc_command_key_outcome(state, session, desk_alias, action, request_id)
+            .unwrap_or(false)
     }
 }
 
@@ -286,10 +289,10 @@ pub(super) fn handle_programmer_osc(
     address: &str,
     arguments: &[OscArgument],
     source: Option<&str>,
-) {
+) -> bool {
     let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
     if parts.len() < 4 || parts[0] != "light" || parts[2] != "programmer" {
-        return;
+        return false;
     }
     let pressed = osc_pressed(arguments);
     let request_id = arguments.get(1).and_then(|argument| match argument {
@@ -298,27 +301,27 @@ pub(super) fn handle_programmer_osc(
     });
     let source = source.and_then(|value| value.parse::<SocketAddr>().ok());
     let Some((subscriber, session)) = programmer_osc_session(state, source) else {
-        return;
+        return false;
     };
     if read_desk_lock(state, session.desk.id).locked {
-        return;
+        return false;
     }
     let action = parts[3];
     if action == "shift" {
         handle_shift_osc(state, &session, parts[1], source, pressed);
-        return;
+        return true;
     }
     if action == "record" && handle_record_osc(state, &session, &subscriber, source, pressed) {
-        return;
+        return true;
     }
     if !pressed {
-        return;
+        return false;
     }
     if subscriber.shifted
         && (action.starts_with("digit-") || matches!(action, "clear" | "delete" | "del"))
     {
         handle_shifted_shortcut(state, &session, parts[1], action, source, request_id);
-        return;
+        return true;
     }
     if subscriber.shifted && action == "at" {
         if let Some(source) = source {
@@ -342,14 +345,14 @@ pub(super) fn handle_programmer_osc(
             "desk_action",
             serde_json::json!({"desk_alias":parts[1],"desk_id":session.desk.id,"session_id":session.id,"request_id":request_id,"action":"shift-at","source":"osc"}),
         );
-        return;
+        return true;
     }
     let handled = state.programming.run_desk_operation(session.desk.id, || {
         read_desk_lock(state, session.desk.id).locked
             || file_manager::route_osc_input(state, &session, action)
     });
     if handled {
-        return;
+        return true;
     }
-    route_programmer_osc_action(state, &session, parts[1], action, request_id);
+    route_programmer_osc_action(state, &session, parts[1], action, request_id)
 }

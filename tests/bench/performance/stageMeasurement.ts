@@ -17,6 +17,10 @@ import type { ApiDriver } from "../core/api";
 const { artifactPaths } = artifactResolver;
 
 export type StageMeasurementProfile = "default-stage" | "large-stage";
+type RuntimeMeasurementSnapshot = Pick<
+	RuntimeDiagnosticsSnapshot,
+	"output" | "programmer_action_timing" | "visualization"
+>;
 
 export interface StagePerformanceEvidence {
 	schemaVersion: 2;
@@ -62,9 +66,9 @@ export interface StagePerformanceEvidence {
 		browserMemoryBytes: number | null;
 	};
 	server: {
-		before: RuntimeDiagnosticsSnapshot;
-		afterNoStage: RuntimeDiagnosticsSnapshot;
-		after: RuntimeDiagnosticsSnapshot;
+		before: RuntimeMeasurementSnapshot;
+		afterNoStage: RuntimeMeasurementSnapshot;
+		after: RuntimeMeasurementSnapshot;
 		noStageOutputDelta: OutputWindow;
 		outputDelta: OutputWindow;
 		outputComparison: {
@@ -274,7 +278,7 @@ export async function measureStagePerformance(
 		limitations: [
 			"This evidence is a Chromium/Playwright engineering baseline, not packaged macOS WebView evidence.",
 			"The server output p99 uses paired bounded transition windows derived from cumulative fixed-bucket scheduler histograms; it is not the five-minute packaged release gate.",
-			"The large profile adds a separate authenticated WebSocket whose underlying TCP reader is paused; queue replacement or send timeout is recorded independently from the browser message-delivery recovery case.",
+			"The large browser profile measures one lines-only Stage beside the Fixture Sheet; authenticated stalled-client queue replacement is enforced by the packaged benchmark.",
 			"Thresholds remain informational until the packaged WebView can be controlled and sampled.",
 		],
 	};
@@ -318,10 +322,19 @@ async function frontendDiagnostics(
 	});
 }
 
-function runtimeDiagnostics(
+async function runtimeDiagnostics(
 	api: ApiDriver,
-): Promise<RuntimeDiagnosticsSnapshot> {
-	return api.request("GET", "/api/v2/diagnostics");
+): Promise<RuntimeMeasurementSnapshot> {
+	const diagnostics =
+		await api.request<RuntimeMeasurementSnapshot>(
+			"GET",
+			"/api/v2/diagnostics/performance",
+		);
+	return {
+		output: diagnostics.output,
+		programmer_action_timing: diagnostics.programmer_action_timing,
+		visualization: diagnostics.visualization,
+	};
 }
 
 function distribution(values: readonly number[]): Distribution {
@@ -369,10 +382,6 @@ async function writeEvidence(
 		.join("-");
 	const evidencePath = path.join(directory, filename);
 	await fs.writeFile(evidencePath, JSON.stringify(evidence, null, 2));
-	await testInfo.attach(`stage-performance-${evidence.profile}.json`, {
-		path: evidencePath,
-		contentType: "application/json",
-	});
 }
 
 function safeArtifactSegment(value: string | number): string {

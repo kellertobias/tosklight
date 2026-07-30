@@ -9,7 +9,7 @@ export function DeskLoadingOverlay() {
 			className="show-loading-cover"
 			title={loading.title}
 			detail={loading.detail}
-			note="The current desk remains protected until the new show is ready."
+			note="Ready desk controls remain available while show capabilities reconnect."
 		/>
 	);
 }

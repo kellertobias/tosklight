@@ -159,6 +159,31 @@ describe("window kit", () => {
 		fireEvent.keyDown(rows[2], { key: "ArrowDown" });
 		expect(active).toHaveBeenCalledWith(2);
 	});
+	it("bounds virtualized table DOM while preserving the authoritative row count", () => {
+		const visibleRows = vi.fn();
+		render(
+			<div className="ui-window-scroller">
+				<DataTable
+					rows={Array.from({ length: 200 }, (_, index) => ({
+						id: `row-${index}`,
+					}))}
+					columns={[{ id: "name", header: "Name", render: (row) => row.id }]}
+					rowKey={(row) => row.id}
+					onVisibleRowsChange={visibleRows}
+					virtualize
+				/>
+			</div>,
+		);
+		const table = screen.getByRole("table");
+		expect(table).toHaveAttribute("aria-rowcount", "201");
+		expect(table).toHaveClass("virtualized");
+		expect(screen.getAllByRole("row").length).toBeLessThan(40);
+		expect(screen.queryByText("row-199")).not.toBeInTheDocument();
+		expect(visibleRows).toHaveBeenLastCalledWith(
+			expect.arrayContaining([{ id: "row-0" }]),
+		);
+		expect(visibleRows.mock.lastCall?.[0].length).toBeLessThan(40);
+	});
 	it("exposes button grid states", () => {
 		render(
 			<ButtonGrid>

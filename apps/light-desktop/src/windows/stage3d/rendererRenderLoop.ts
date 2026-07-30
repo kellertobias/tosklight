@@ -15,6 +15,8 @@ export function createStageRenderLoop({
 	controller,
 	diagnosticsRef,
 	acknowledgeDesktopMirrorRender,
+	onContextRecoveryFailed,
+	recordContextRecoveryOnNextRender = false,
 }: {
 	renderer: THREE.WebGLRenderer;
 	camera: THREE.PerspectiveCamera;
@@ -25,9 +27,41 @@ export function createStageRenderLoop({
 		paneId: string | null;
 	}>;
 	acknowledgeDesktopMirrorRender: (() => void) | null | undefined;
+	onContextRecoveryFailed?: () => void;
+	recordContextRecoveryOnNextRender?: boolean;
 }) {
 	let frame: number | null = null;
 	let contextLost = false;
+	let contextRecoveryPending = recordContextRecoveryOnNextRender;
+	let contextRecoveryFallbackRequested = false;
+	const contextRestoreTimers = new Set<ReturnType<typeof setTimeout>>();
+	const clearContextRestoreTimers = () => {
+		for (const timer of contextRestoreTimers) clearTimeout(timer);
+		contextRestoreTimers.clear();
+	};
+	const requestNativeContextRestore = () => {
+		const context = renderer.getContext();
+		const extension = context.getExtension(
+			"WEBGL_lose_context",
+		) as WEBGL_lose_context | null;
+		extension?.restoreContext();
+		const timer = setTimeout(() => {
+			contextRestoreTimers.delete(timer);
+			if (contextLost && !context.isContextLost()) completeContextRestore();
+		}, 50);
+		contextRestoreTimers.add(timer);
+	};
+	const completeContextRestore = () => {
+		if (!contextLost) return;
+		clearContextRestoreTimers();
+		contextLost = false;
+		contextRecoveryPending = true;
+		renderer.resetState();
+		controller.recoverContext();
+		if (controller.sceneRef.current)
+			controller.sceneRef.current.userData.stageImprovedShadowsDirty = true;
+		requestRender(true);
+	};
 	const render = () => {
 		frame = null;
 		if (contextLost) return;
@@ -40,6 +74,12 @@ export function createStageRenderLoop({
 			const startedAt = performance.now();
 			renderer.render(scene, camera);
 			const submittedAt = performance.now();
+			if (contextRecoveryPending) {
+				contextRecoveryPending = false;
+				frontendPerformanceDiagnostics.recordStageRendererContextRestored(
+					diagnosticsRef.current.lane,
+				);
+			}
 			acknowledgeDesktopMirrorRender?.();
 			scene.userData.stageImprovedShadowsDirty = false;
 			renderer.shadowMap.needsUpdate = false;
@@ -68,30 +108,57 @@ export function createStageRenderLoop({
 		if (controlsChanged && frame === null)
 			frame = requestAnimationFrame(render);
 	};
-	const requestRender = () => {
-		if (!contextLost && frame === null) frame = requestAnimationFrame(render);
+	const requestRender = (immediate = false) => {
+		if (contextLost) return;
+		if (immediate) {
+			if (frame !== null) cancelAnimationFrame(frame);
+			frame = null;
+			render();
+		} else if (frame === null) {
+			frame = requestAnimationFrame(render);
+		}
 	};
 	return {
 		requestRender,
 		cancel: () => {
 			if (frame !== null) cancelAnimationFrame(frame);
 			frame = null;
+			clearContextRestoreTimers();
 		},
 		handleContextLost: (event: Event) => {
 			event.preventDefault();
-			frontendPerformanceDiagnostics.recordStageRendererContextLost();
+			frontendPerformanceDiagnostics.recordStageRendererContextLost(
+				diagnosticsRef.current.lane,
+			);
+			frontendPerformanceDiagnostics.invalidateUnsettledStageFrame(
+				diagnosticsRef.current.lane,
+			);
 			contextLost = true;
+			contextRecoveryFallbackRequested = false;
 			if (frame !== null) cancelAnimationFrame(frame);
 			frame = null;
+			clearContextRestoreTimers();
+			for (const delay of [50, 250, 750]) {
+				const timer = setTimeout(() => {
+					contextRestoreTimers.delete(timer);
+					if (contextLost) requestNativeContextRestore();
+				}, delay);
+				contextRestoreTimers.add(timer);
+			}
+			const fallbackTimer = setTimeout(() => {
+				contextRestoreTimers.delete(fallbackTimer);
+				if (
+					contextLost &&
+					!contextRecoveryFallbackRequested &&
+					onContextRecoveryFailed
+				) {
+					contextRecoveryFallbackRequested = true;
+					clearContextRestoreTimers();
+					onContextRecoveryFailed();
+				}
+			}, 1_500);
+			contextRestoreTimers.add(fallbackTimer);
 		},
-		handleContextRestored: () => {
-			contextLost = false;
-			frontendPerformanceDiagnostics.recordStageRendererContextRestored();
-			renderer.resetState();
-			controller.recoverContext();
-			if (controller.sceneRef.current)
-				controller.sceneRef.current.userData.stageImprovedShadowsDirty = true;
-			requestRender();
-		},
+		handleContextRestored: completeContextRestore,
 	};
 }

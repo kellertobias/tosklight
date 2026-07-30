@@ -8,7 +8,14 @@ import {
 	StageView,
 } from "./bench/window-system/paneTypes";
 
-test("PLAN76-LARGE-001 @ui @benchmark › opens the exact 1,000-instance interactive tier with Stage and Fixture Sheet", async ({
+interface LargeTierPerformanceDiagnostics {
+	output: {
+		frames_sent: number;
+		deadline_misses: number;
+	};
+}
+
+test("PLAN76-LARGE-001 @ui @benchmark › keeps Fixture Sheet, Programmer, and output live beside the exact 1,000-instance Stage tier", async ({
 	api,
 	bench,
 	desk,
@@ -65,9 +72,141 @@ test("PLAN76-LARGE-001 @ui @benchmark › opens the exact 1,000-instance interac
 		await fixtures.expect.visible();
 		await expect(fixtures.root().locator(".fixture-window")).toBeVisible();
 		await expect(stage.root().locator(".stage-3d-canvas canvas")).toBeVisible();
+		await expect(
+			fixtures.root().getByText("0 selected", { exact: true }),
+		).toBeVisible();
+		const fixtureTable = fixtures.root().getByRole("table");
+		await expect(fixtureTable).toHaveAttribute("aria-rowcount", "1912");
+		expect(
+			await fixtureTable.locator(".ui-data-table-row:not(.header)").count(),
+		).toBeLessThan(80);
+		const fixtureScroller = fixtures
+			.root()
+			.locator(".fixture-table > .ui-window-scroller");
+		const initialLayout = await fixtureTable
+			.locator(".ui-data-table-row.header")
+			.evaluate((header) => ({
+				top: header.getBoundingClientRect().top,
+				columnWidths: Array.from(header.children, (column) =>
+					Number(column.getBoundingClientRect().width.toFixed(2)),
+				),
+			}));
+		await fixtureScroller.evaluate((scroller) => {
+			scroller.scrollTop = 12_000;
+			scroller.dispatchEvent(new Event("scroll"));
+		});
+		await expect
+			.poll(async () =>
+				Number(
+					(await fixtureTable
+						.locator(".ui-data-table-row:not(.header)")
+						.first()
+						.getAttribute("data-table-index")) ?? 0,
+				),
+			)
+			.toBeGreaterThan(100);
+		const scrolledLayout = await fixtureTable
+			.locator(".ui-data-table-row.header")
+			.evaluate((header) => ({
+				top: header.getBoundingClientRect().top,
+				columnWidths: Array.from(header.children, (column) =>
+					Number(column.getBoundingClientRect().width.toFixed(2)),
+				),
+			}));
+		expect(Math.abs(scrolledLayout.top - initialLayout.top)).toBeLessThan(1);
+		expect(scrolledLayout.columnWidths).toEqual(initialLayout.columnWidths);
+		await fixtureScroller.evaluate((scroller) => {
+			scroller.scrollTop = 0;
+			scroller.dispatchEvent(new Event("scroll"));
+		});
+		await expect
+			.poll(async () =>
+				Number(
+					(await fixtureTable
+						.locator(".ui-data-table-row:not(.header)")
+						.first()
+						.getAttribute("data-table-index")) ?? -1,
+				),
+			)
+			.toBe(0);
 
+		const outputBefore = await api.request<LargeTierPerformanceDiagnostics>(
+			"GET",
+			"/api/v2/diagnostics/performance",
+		);
 		await world.clock.freeRunFor("1s");
-		await world.stage.waitForChangingFrame();
+
+		const fixtureSelection = await world.programmerActionTiming.expectAction(
+			{
+				source: "websocket",
+				route: "software",
+				action: "selection",
+				requiresOutputFrame: false,
+			},
+			() => world.selection.fixtures.via.fixtureSheet.item(101),
+		);
+		await expect(
+			fixtures.root().getByText("1 selected", { exact: true }),
+		).toBeVisible();
+
+		const command = await world.programmerActionTiming
+			.expectKeyboardCommand("FIXTURE 101 AT 35")
+			.catch((error: unknown) => {
+				console.error(bench.recentLog());
+				throw error;
+			});
+		await expect(
+			page.getByRole("textbox", { name: "Command line", exact: true }),
+		).toHaveValue("FIXTURE");
+
+		const outputAfter = await api.request<LargeTierPerformanceDiagnostics>(
+			"GET",
+			"/api/v2/diagnostics/performance",
+		);
+		expect(outputAfter.output.frames_sent).toBeGreaterThan(
+			outputBefore.output.frames_sent,
+		);
+		expect(outputAfter.output.deadline_misses).toBe(
+			outputBefore.output.deadline_misses,
+		);
+
+		// Exact 1,000-instance Stage rendering may stutter. The capacity contract
+		// requires liveness and isolation instead of a real-time canvas cadence.
+		await world.stage.expectLane(stage, "live");
+		await expect(stage.root().locator(".stage-3d-canvas canvas")).toBeVisible();
+		expect(page.isClosed()).toBe(false);
+
+		await testInfo.attach("plan76-interactive-large-isolation.json", {
+			body: Buffer.from(
+				JSON.stringify(
+					{
+						scene: {
+							fixtureRecords: scene.fixtureRecords,
+							fixtureInstances: scene.fixtureInstances,
+						},
+						fixtureSheet: {
+							open: true,
+							selectedFixture: 101,
+						},
+						programmerTiming: {
+							fixtureSelection,
+							command,
+						},
+						output: {
+							before: outputBefore.output,
+							after: outputAfter.output,
+						},
+						stage: {
+							realTimeCadenceRequired: false,
+							liveAndRecoverable: true,
+						},
+					},
+					null,
+					2,
+				),
+			),
+			contentType: "application/json",
+		});
 		await stage.screenshot("plan76-interactive-large-stage-and-fixture-sheet");
 	} catch (reason) {
 		failure = reason;

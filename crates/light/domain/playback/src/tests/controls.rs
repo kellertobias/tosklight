@@ -360,7 +360,7 @@ fn dynamic_playback_definition(
                 dynamic_id: Some(dynamic_id),
                 last_known_pool_number: number,
                 embedded_fallback: light_dynamics::DynamicDefinitionSnapshot {
-                    definition: Box::new(definition),
+                    definition: Arc::new(definition),
                 },
             },
             revision: 1,

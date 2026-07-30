@@ -11,6 +11,7 @@ export class VisualizationRuntimeStore {
 	private readonly listeners = new Set<() => void>();
 	private scopeGeneration = 0;
 	private state = emptyState();
+	private frameNotificationScheduled = false;
 
 	readonly subscribe = (listener: () => void) => {
 		this.listeners.add(listener);
@@ -26,7 +27,10 @@ export class VisualizationRuntimeStore {
 		this.emit();
 	}
 
-	setLoading(lane: VisualizationRuntimeLane, expectedScope = this.scopeGeneration) {
+	setLoading(
+		lane: VisualizationRuntimeLane,
+		expectedScope = this.scopeGeneration,
+	) {
 		return this.updateLane(
 			lane,
 			(current) => ({ ...current, status: "loading", error: null }),
@@ -34,7 +38,10 @@ export class VisualizationRuntimeStore {
 		);
 	}
 
-	setIdle(lane: VisualizationRuntimeLane, expectedScope = this.scopeGeneration) {
+	setIdle(
+		lane: VisualizationRuntimeLane,
+		expectedScope = this.scopeGeneration,
+	) {
 		return this.updateLane(
 			lane,
 			(current) => ({ ...current, status: "idle", error: null }),
@@ -54,6 +61,30 @@ export class VisualizationRuntimeStore {
 			() => ({ status: "ready", snapshot, error: null }),
 			expectedScope,
 		);
+	}
+
+	/**
+	 * Installs the newest streamed lane state synchronously and notifies
+	 * subscribers at the end of the current protocol task. A timer or animation
+	 * frame can be deferred for hundreds of milliseconds while WebKit services a
+	 * GPU/lifecycle event; a microtask keeps the authoritative Stage path current
+	 * while still coalescing same-task installs.
+	 */
+	installStreamed(
+		lane: VisualizationRuntimeLane,
+		snapshot: VisualizationSnapshot,
+		expectedScope = this.scopeGeneration,
+	) {
+		if (!this.isScopeCurrent(expectedScope)) return false;
+		assertLane(snapshot, lane);
+		const installed = this.updateLane(
+			lane,
+			() => ({ status: "ready", snapshot, error: null }),
+			expectedScope,
+			false,
+		);
+		if (installed) this.scheduleStreamNotification();
+		return installed;
 	}
 
 	setError(
@@ -90,12 +121,22 @@ export class VisualizationRuntimeStore {
 			current: VisualizationRuntimeLaneState,
 		) => VisualizationRuntimeLaneState,
 		expectedScope: number,
+		emit = true,
 	) {
 		if (!this.isScopeCurrent(expectedScope)) return false;
 		const next = update(this.state[lane]);
 		this.state = { ...this.state, [lane]: next };
-		this.emit();
+		if (emit) this.emit();
 		return true;
+	}
+
+	private scheduleStreamNotification() {
+		if (this.frameNotificationScheduled) return;
+		this.frameNotificationScheduled = true;
+		globalThis.queueMicrotask(() => {
+			this.frameNotificationScheduled = false;
+			this.emit();
+		});
 	}
 
 	private emit() {

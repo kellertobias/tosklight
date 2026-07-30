@@ -21,6 +21,11 @@ import type { FixtureAttributeValues, FixtureValuesById } from "./types";
 type GeometryGraph = FixtureMode["geometry"];
 type GeometryNode = GeometryGraph["nodes"][number];
 type GeometryNodeParts = { group: THREE.Group; anchor: THREE.Group };
+type ProfileGeometryRuntime = {
+	nodes: Map<string, GeometryNodeParts>;
+	relatedHeads: Map<string, Set<string>>;
+	emitters: Map<string, THREE.Group>;
+};
 
 export type ProfileGeometryOptions = {
 	fixture: PatchedFixture;
@@ -262,6 +267,16 @@ export function buildFixtureProfileGeometry(options: ProfileGeometryOptions) {
 	const nodes = createGeometryNodes(options);
 	mountNodeHierarchy(options.mode.geometry, nodes, root);
 	mountEmitters(options, nodes, root);
+	root.userData.stageProfileGeometryRuntime = {
+		nodes,
+		relatedHeads: relatedHeadsByNode(options.mode.geometry),
+		emitters: new Map(
+			options.mode.geometry.emitters.flatMap((emitter) => {
+				const group = root.getObjectByName(`geometry-emitter:${emitter.id}`);
+				return group instanceof THREE.Group ? [[emitter.id, group]] : [];
+			}),
+		),
+	} satisfies ProfileGeometryRuntime;
 	addSelectionOutline(root, options.selected);
 	return root;
 }
@@ -270,9 +285,16 @@ export function updateFixtureProfileGeometry(
 	root: THREE.Object3D,
 	options: ProfileGeometryOptions,
 ) {
-	const relatedHeads = relatedHeadsByNode(options.mode.geometry);
+	const runtime = (root.userData.stageProfileGeometryRuntime ??
+		root.getObjectByName("fixture-profile-geometry")?.userData
+			.stageProfileGeometryRuntime) as ProfileGeometryRuntime | undefined;
+	const relatedHeads =
+		runtime?.relatedHeads ?? relatedHeadsByNode(options.mode.geometry);
 	for (const node of options.mode.geometry.nodes) {
-		const group = root.getObjectByName(`geometry-node:${node.id}`);
+		if (!node.motion) continue;
+		const group =
+			runtime?.nodes.get(node.id)?.group ??
+			root.getObjectByName(`geometry-node:${node.id}`);
 		if (!(group instanceof THREE.Group)) continue;
 		const translation = millimetres(node.transform.translation);
 		const rotation = { ...node.transform.rotation_degrees };
@@ -291,7 +313,9 @@ export function updateFixtureProfileGeometry(
 		);
 	}
 	for (const emitter of options.mode.geometry.emitters) {
-		const group = root.getObjectByName(`geometry-emitter:${emitter.id}`);
+		const group =
+			runtime?.emitters.get(emitter.id) ??
+			root.getObjectByName(`geometry-emitter:${emitter.id}`);
 		if (!(group instanceof THREE.Group)) continue;
 		const attributes = attributesForHead(
 			options.fixture,

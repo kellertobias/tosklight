@@ -8,6 +8,7 @@ import {
 	useContext,
 	useEffect,
 	useLayoutEffect,
+	useMemo,
 	useRef,
 	useState,
 } from "react";
@@ -519,8 +520,10 @@ export function DataTable<T>({
 	activeIndex,
 	onActiveIndexChange,
 	onActivate,
+	onVisibleRowsChange,
 	emptyRows = 0,
 	className = "",
+	virtualize = false,
 }: {
 	columns: DataTableColumn<T>[];
 	rows: T[];
@@ -534,11 +537,19 @@ export function DataTable<T>({
 	activeIndex?: number;
 	onActiveIndexChange?: (index: number) => void;
 	onActivate?: (row: T, index: number) => void;
+	onVisibleRowsChange?: (rows: readonly T[]) => void;
 	emptyRows?: number;
 	className?: string;
+	virtualize?: boolean;
 }) {
 	const host = useRef<HTMLDivElement>(null);
 	const [fillRows, setFillRows] = useState(emptyRows);
+	const [viewport, setViewport] = useState({ start: 0, end: 40 });
+	const [reportedViewport, setReportedViewport] = useState({
+		start: 0,
+		end: 0,
+	});
+	const tableFocused = useRef(false);
 	useLayoutEffect(() => {
 		const node = host.current;
 		if (!node) return;
@@ -558,6 +569,58 @@ export function DataTable<T>({
 		return () => observer.disconnect();
 	}, [rows.length]);
 	const total = rows.length + fillRows;
+	const usesViewport = virtualize && total > 100;
+	useLayoutEffect(() => {
+		if (!usesViewport) setViewport({ start: 0, end: total });
+		const node = host.current;
+		const scroller = node?.closest<HTMLElement>(".ui-window-scroller");
+		if (!node || !scroller) return;
+		const measureViewport = () => {
+			const rowHeight = 43;
+			const headerHeight = 40;
+			const overscan = 12;
+			const visibleStart = Math.max(
+				0,
+				Math.floor(Math.max(0, scroller.scrollTop - headerHeight) / rowHeight),
+			);
+			const visibleRows = Math.max(
+				1,
+				Math.min(64, Math.ceil(scroller.clientHeight / rowHeight)),
+			);
+			const visibleEnd = Math.min(rows.length, visibleStart + visibleRows + 1);
+			setReportedViewport((current) =>
+				current.start === visibleStart && current.end === visibleEnd
+					? current
+					: { start: visibleStart, end: visibleEnd },
+			);
+			if (!usesViewport) return;
+			const start = Math.max(0, visibleStart - overscan);
+			const end = Math.min(total, visibleStart + visibleRows + overscan);
+			setViewport((current) =>
+				current.start === start && current.end === end
+					? current
+					: { start, end },
+			);
+		};
+		const observer =
+			typeof ResizeObserver === "undefined"
+				? null
+				: new ResizeObserver(measureViewport);
+		scroller.addEventListener("scroll", measureViewport, { passive: true });
+		observer?.observe(scroller);
+		measureViewport();
+		return () => {
+			scroller.removeEventListener("scroll", measureViewport);
+			observer?.disconnect();
+		};
+	}, [rows.length, total, usesViewport]);
+	useLayoutEffect(() => {
+		if (!usesViewport || !tableFocused.current || activeIndex == null) return;
+		const row = host.current?.querySelector<HTMLElement>(
+			`[data-table-index="${activeIndex}"]`,
+		);
+		row?.scrollIntoView({ block: "nearest" });
+	}, [activeIndex, usesViewport, viewport]);
 	const keyDown = (event: KeyboardEvent, index: number) => {
 		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
 			event.preventDefault();
@@ -576,14 +639,35 @@ export function DataTable<T>({
 	const template = columns
 		.map((column) => column.width ?? "minmax(0,1fr)")
 		.join(" ");
+	const start = usesViewport ? viewport.start : 0;
+	const end = usesViewport ? viewport.end : total;
+	const visibleIndices = Array.from(
+		{ length: Math.max(0, end - start) },
+		(_, offset) => start + offset,
+	);
+	const visibleRows = useMemo(
+		() => rows.slice(reportedViewport.start, reportedViewport.end),
+		[reportedViewport.end, reportedViewport.start, rows],
+	);
+	useEffect(() => {
+		onVisibleRowsChange?.(visibleRows);
+	}, [onVisibleRowsChange, visibleRows]);
 	return (
 		<div
 			ref={host}
-			className={`ui-data-table ${className}`}
+			className={`ui-data-table ${usesViewport ? "virtualized" : ""} ${className}`}
 			role="table"
+			aria-rowcount={total + 1}
+			onFocusCapture={() => {
+				tableFocused.current = true;
+			}}
+			onBlurCapture={(event) => {
+				if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+					tableFocused.current = false;
+			}}
 			style={{ "--table-columns": template } as CSSProperties}
 		>
-			<div className="ui-data-table-row header" role="row">
+			<div className="ui-data-table-row header" role="row" aria-rowindex={1}>
 				{columns.map((column) => (
 					<span
 						role="columnheader"
@@ -594,7 +678,14 @@ export function DataTable<T>({
 					</span>
 				))}
 			</div>
-			{Array.from({ length: total }, (_, index) => {
+			{usesViewport && start > 0 && (
+				<div
+					className="ui-data-table-spacer"
+					style={{ height: start * 43 }}
+					aria-hidden="true"
+				/>
+			)}
+			{visibleIndices.map((index) => {
 				const row = rows[index];
 				const isEmpty = row == null;
 				const dataAttributes = row
@@ -605,9 +696,10 @@ export function DataTable<T>({
 						{...dataAttributes}
 						key={row ? rowKey(row, index) : `empty-${index}`}
 						role="row"
+						aria-rowindex={index + 2}
+						data-table-index={index}
 						tabIndex={index === (activeIndex ?? 0) ? 0 : -1}
 						className={`ui-data-table-row ${isEmpty ? "empty" : ""} ${row && selected?.(row) ? "selected" : ""} ${row ? (rowClassName?.(row, index) ?? "") : ""} ${index === activeIndex ? "active" : ""}`}
-						onFocus={() => onActiveIndexChange?.(index)}
 						onClick={() => {
 							onActiveIndexChange?.(index);
 							if (row) onActivate?.(row, index);
@@ -626,6 +718,13 @@ export function DataTable<T>({
 					</div>
 				);
 			})}
+			{usesViewport && end < total && (
+				<div
+					className="ui-data-table-spacer"
+					style={{ height: (total - end) * 43 }}
+					aria-hidden="true"
+				/>
+			)}
 		</div>
 	);
 }

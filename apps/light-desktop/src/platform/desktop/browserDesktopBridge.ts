@@ -17,6 +17,7 @@ export const browserDesktopBridge: DesktopBridge = {
 	openStageViewWindow: noAction,
 	packagedStageBenchmarkConfig: async () => null,
 	packagedStageBenchmarkPrepared: async () => false,
+	focusPackagedStageBenchmarkWindow: noAction,
 	appendPackagedStageBenchmarkSample: noAction,
 	currentWindowState: async () => ({
 		displayId: null,

@@ -1,14 +1,26 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { VisualizationSnapshot } from "../../api/types";
+import { frontendPerformanceDiagnostics } from "../frontendWarmup/diagnostics";
 import type {
 	VisualizationRuntimeLane,
 	VisualizationRuntimeScope,
 } from "./contracts";
 import { VisualizationRuntimeStore } from "./store";
-import type { VisualizationRuntimeTransport } from "./transport";
+import type {
+	VisualizationRuntimeStreamObserver,
+	VisualizationRuntimeTransport,
+} from "./transport";
 import {
+	useDesktopVisualizationRuntimeRenderAcknowledgement,
 	useVisualizationRuntimeSnapshotSubscription,
 	useVisualizationRuntimeView,
 	VisualizationRuntimeProvider,
@@ -113,13 +125,17 @@ describe("VisualizationRuntimeProvider", () => {
 			),
 		);
 		await waitFor(() =>
-			expect(updateClaims).toHaveBeenLastCalledWith(["normal", "preload"], 4),
+			expect(updateClaims).toHaveBeenLastCalledWith(
+				["normal", "preload"],
+				4,
+				false,
+			),
 		);
 
 		rendered.rerender(provider(<Probe lane="preload" />, transport));
 
 		await waitFor(() =>
-			expect(updateClaims).toHaveBeenLastCalledWith(["preload"], 4),
+			expect(updateClaims).toHaveBeenLastCalledWith(["preload"], 4, false),
 		);
 	});
 
@@ -173,16 +189,20 @@ describe("VisualizationRuntimeProvider", () => {
 		expect(screen.getByText("normal:ready:2")).toBeInTheDocument();
 	});
 
-	it("routes a secondary desktop Stage claim through the owner runtime", async () => {
+	it("opens the secondary desktop Stage stream directly without cloning owner state", async () => {
 		vi.stubGlobal("BroadcastChannel", TestBroadcastChannel);
 		vi.stubGlobal("__TAURI_INTERNALS__", {});
-		const ownerTransport = fakeTransport();
+		let observer: VisualizationRuntimeStreamObserver | null = null;
+		const updateClaims = vi.fn();
 		const mirrorTransport = {
 			...fakeTransport(),
-			openStream: vi.fn(() => ({
-				updateClaims: vi.fn(),
-				close: vi.fn(),
-			})),
+			openStream: vi.fn((_scope, nextObserver) => {
+				observer = nextObserver;
+				return {
+					updateClaims,
+					close: vi.fn(),
+				};
+			}),
 		} satisfies VisualizationRuntimeTransport;
 		render(
 			<>
@@ -191,14 +211,14 @@ describe("VisualizationRuntimeProvider", () => {
 					sessionId={SESSION_ID}
 					authorityKey="server-a|generation-1"
 					desktopAuthorityKey="server-a|shared-desk"
-					transport={ownerTransport}
+					transport={fakeTransport()}
 					desktopRole="owner"
 				>
 					<div />
 				</VisualizationRuntimeProvider>
 				<VisualizationRuntimeProvider
 					showId={SHOW_ID}
-					sessionId={SESSION_ID}
+					sessionId="33333333-3333-4333-8333-333333333333"
 					authorityKey="server-a|generation-2"
 					desktopAuthorityKey="server-a|shared-desk"
 					transport={mirrorTransport}
@@ -210,18 +230,107 @@ describe("VisualizationRuntimeProvider", () => {
 		);
 
 		await waitFor(() =>
+			expect(mirrorTransport.openStream).toHaveBeenCalledOnce(),
+		);
+		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 4, false);
+		act(() => observer?.snapshot("normal", snapshot("normal")));
+		await waitFor(() =>
 			expect(screen.getByText("normal:ready:1")).toBeInTheDocument(),
 		);
-		expect(ownerTransport.loadSnapshot).toHaveBeenCalledOnce();
 		expect(mirrorTransport.loadSnapshot).not.toHaveBeenCalled();
-		expect(mirrorTransport.openStream).not.toHaveBeenCalled();
+		expect(
+			TestBroadcastChannel.messages.some(
+				(message) =>
+					typeof message === "object" &&
+					message !== null &&
+					"type" in message &&
+					(message.type === "state" || message.type === "claim"),
+			),
+		).toBe(false);
 	});
 
-	it("preserves the owner's stale error on a mirrored snapshot", async () => {
+	it("restarts the direct secondary stream at a replacement scope", async () => {
 		vi.stubGlobal("BroadcastChannel", TestBroadcastChannel);
 		vi.stubGlobal("__TAURI_INTERNALS__", {});
-		const ownerStore = new VisualizationRuntimeStore();
-		const mirrorStore = new VisualizationRuntimeStore();
+		const closeA = vi.fn();
+		const transportA = {
+			...fakeTransport(),
+			openStream: vi.fn(() => ({
+				updateClaims: vi.fn(),
+				close: closeA,
+			})),
+		} satisfies VisualizationRuntimeTransport;
+		const transportB = {
+			...fakeTransport(),
+			openStream: vi.fn(() => ({
+				updateClaims: vi.fn(),
+				close: vi.fn(),
+			})),
+		} satisfies VisualizationRuntimeTransport;
+		const view = (showId: string, transport: VisualizationRuntimeTransport) => (
+			<VisualizationRuntimeProvider
+				showId={showId}
+				sessionId={SESSION_ID}
+				authorityKey={`server-a|${showId}`}
+				desktopAuthorityKey="server-a|shared-desk"
+				transport={transport}
+				desktopRole="mirror"
+			>
+				<Probe />
+			</VisualizationRuntimeProvider>
+		);
+		const rendered = render(view(SHOW_ID, transportA));
+		await waitFor(() => expect(transportA.openStream).toHaveBeenCalledOnce());
+
+		rendered.rerender(view("44444444-4444-4444-8444-444444444444", transportB));
+
+		await waitFor(() => expect(transportB.openStream).toHaveBeenCalledOnce());
+		await waitFor(() => expect(closeA).toHaveBeenCalled());
+	});
+
+	it("broadcasts only lightweight owner authority heartbeats", async () => {
+		vi.stubGlobal("BroadcastChannel", TestBroadcastChannel);
+		vi.stubGlobal("__TAURI_INTERNALS__", {});
+		render(
+			<VisualizationRuntimeProvider
+				showId={SHOW_ID}
+				sessionId={SESSION_ID}
+				authorityKey="server-a|generation-1"
+				desktopAuthorityKey="server-a|shared-desk"
+				transport={fakeTransport()}
+				desktopRole="owner"
+			>
+				<div />
+			</VisualizationRuntimeProvider>,
+		);
+
+		await waitFor(() =>
+			expect(TestBroadcastChannel.messages).toContainEqual(
+				expect.objectContaining({
+					type: "owner-heartbeat",
+					showId: SHOW_ID,
+					authorityKey: "server-a|shared-desk",
+				}),
+			),
+		);
+		expect(
+			TestBroadcastChannel.messages.some(
+				(message) =>
+					typeof message === "object" &&
+					message !== null &&
+					"type" in message &&
+					message.type === "state",
+			),
+		).toBe(false);
+	});
+
+	it("keeps the lightweight secondary-window render acknowledgement", async () => {
+		vi.stubGlobal("BroadcastChannel", TestBroadcastChannel);
+		vi.stubGlobal("__TAURI_INTERNALS__", {});
+		const record = vi.spyOn(
+			frontendPerformanceDiagnostics,
+			"recordStageDesktopMirrorRender",
+		);
 		render(
 			<>
 				<VisualizationRuntimeProvider
@@ -230,64 +339,36 @@ describe("VisualizationRuntimeProvider", () => {
 					authorityKey="server-a|generation-1"
 					desktopAuthorityKey="server-a|shared-desk"
 					transport={fakeTransport()}
-					store={ownerStore}
 					desktopRole="owner"
 				>
 					<div />
 				</VisualizationRuntimeProvider>
 				<VisualizationRuntimeProvider
 					showId={SHOW_ID}
-					sessionId={SESSION_ID}
+					sessionId="33333333-3333-4333-8333-333333333333"
 					authorityKey="server-a|generation-2"
 					desktopAuthorityKey="server-a|shared-desk"
 					transport={fakeTransport()}
-					store={mirrorStore}
 					desktopRole="mirror"
 				>
-					<Probe />
+					<RenderAckProbe />
 				</VisualizationRuntimeProvider>
 			</>,
 		);
-		await waitFor(() =>
-			expect(mirrorStore.getSnapshot().normal.snapshot).not.toBeNull(),
-		);
 
-		act(() => ownerStore.setError("normal", new Error("stream interrupted")));
-
-		await waitFor(() =>
-			expect(mirrorStore.getSnapshot().normal.error?.message).toBe(
-				"stream interrupted",
-			),
-		);
-		expect(mirrorStore.getSnapshot().normal.status).toBe("ready");
-	});
-
-	it("falls back to its own runtime when desktop bridge delivery never arrives", async () => {
-		vi.useFakeTimers();
-		vi.stubGlobal("BroadcastChannel", TestBroadcastChannel);
-		vi.stubGlobal("__TAURI_INTERNALS__", {});
-		const transport = fakeTransport();
-		render(
-			<VisualizationRuntimeProvider
-				showId={SHOW_ID}
-				sessionId={SESSION_ID}
-				authorityKey="server-a|generation-2"
-				desktopAuthorityKey="server-a|shared-desk"
-				transport={transport}
-				desktopRole="mirror"
-			>
-				<Probe />
-			</VisualizationRuntimeProvider>,
-		);
-
-		await act(async () => {
-			vi.advanceTimersByTime(6_000);
-			await Promise.resolve();
-		});
-
-		expect(transport.loadSnapshot).toHaveBeenCalledOnce();
+		fireEvent.click(screen.getByRole("button", { name: "Acknowledge render" }));
+		await waitFor(() => expect(record).toHaveBeenCalledOnce());
 	});
 });
+
+function RenderAckProbe() {
+	const acknowledge = useDesktopVisualizationRuntimeRenderAcknowledgement();
+	return (
+		<button type="button" onClick={() => acknowledge?.()}>
+			Acknowledge render
+		</button>
+	);
+}
 
 function Probe({
 	lane = "normal",
@@ -385,6 +466,7 @@ function deferred<T>() {
 
 class TestBroadcastChannel {
 	static readonly instances = new Set<TestBroadcastChannel>();
+	static readonly messages: unknown[] = [];
 	onmessage: ((event: MessageEvent) => void) | null = null;
 
 	constructor(readonly name: string) {
@@ -392,6 +474,7 @@ class TestBroadcastChannel {
 	}
 
 	postMessage(data: unknown) {
+		TestBroadcastChannel.messages.push(data);
 		for (const instance of TestBroadcastChannel.instances) {
 			if (instance === this || instance.name !== this.name) continue;
 			queueMicrotask(() => instance.onmessage?.({ data } as MessageEvent));
@@ -404,5 +487,6 @@ class TestBroadcastChannel {
 
 	static reset() {
 		TestBroadcastChannel.instances.clear();
+		TestBroadcastChannel.messages.length = 0;
 	}
 }

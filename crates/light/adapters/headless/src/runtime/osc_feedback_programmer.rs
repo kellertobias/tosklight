@@ -294,7 +294,7 @@ fn send_programmer_dynamic_feedback(
         HashMap::<Uuid, (u16, String, light_dynamics::DynamicInstanceOverrides, usize)>::new();
     let mut fix_at_count = 0_usize;
     if let Some(programmer) = programmer {
-        for stored in &programmer.dynamic_values {
+        for stored in programmer.dynamic_values.iter() {
             match &stored.value {
                 light_dynamics::DynamicSemanticValue::DynamicOn {
                     instance_link,

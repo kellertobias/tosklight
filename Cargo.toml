@@ -61,3 +61,9 @@ light-wire = { path = "crates/light/contracts/wire" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+
+# The desk's development build is also the normal `npm run open` and Playwright runtime.
+# Keep assertions and debug information, but optimize the per-frame semantic/output loops so
+# development and acceptance runs can sustain the configured DMX cadence.
+[profile.dev]
+opt-level = 1

@@ -16,7 +16,9 @@ use light_dynamics::ScalarSourceResolver;
 use light_engine::{
     ContributionBatch, ContributionSample, Engine, EngineError, RenderOptions, RenderResult,
 };
-use light_output::{DmxFrame, NetworkOutput, OutputHealth, Protocol, run_scheduler_dynamic};
+use light_output::{
+    DmxFrame, NetworkOutput, OutputHealth, Protocol, run_scheduler_dynamic_wakeable,
+};
 use light_playback::PlaybackIdentity;
 use light_wire::v2::visualization::VisualizationScope;
 use parking_lot::Mutex;
@@ -26,7 +28,11 @@ use std::{
     io,
     net::IpAddr,
     pin::Pin,
-    sync::{Arc, atomic::AtomicU16},
+    sync::{
+        Arc,
+        atomic::{AtomicU16, AtomicU64, Ordering},
+    },
+    time::{Duration, Instant},
 };
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -39,6 +45,9 @@ use dynamic_projection::dynamic_contributions_with_auto_off;
 pub(super) use dynamic_projection::{
     DynamicPlaybackControl, dynamic_transition_events, fully_controlled_dynamic_playbacks,
 };
+pub(in crate::runtime) use dynamic_projection::{
+    ProgrammerReconciliationCache, dynamic_contributions_cached,
+};
 pub(super) use dynamic_projection::{dynamic_contributions, dynamic_projection};
 use dynamic_reconciliation::{
     reconcile_cue_dynamics, reconcile_dynamic_playbacks, reconcile_programmer_dynamics,
@@ -47,6 +56,9 @@ use dynamic_reconciliation::{
 type OutputSequences = HashMap<(Protocol, Universe), u8>;
 type SharedSequences = Arc<tokio::sync::Mutex<OutputSequences>>;
 pub(super) type OutputTask = Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'static>>;
+const SLOW_OUTPUT_PHASE_THRESHOLD: Duration = Duration::from_millis(20);
+const SLOW_OUTPUT_PHASE_SAMPLE_LIMIT: u64 = 128;
+static SLOW_OUTPUT_PHASE_SAMPLES: AtomicU64 = AtomicU64::new(0);
 
 pub(super) struct Config {
     pub bind_ip: IpAddr,
@@ -79,6 +91,7 @@ struct SharedResources {
     pub(super) output: Arc<NetworkOutput>,
     pub(super) sequences: SharedSequences,
     pub(super) control: Arc<Mutex<OutputControl>>,
+    programmer_reconciliation_cache: Arc<ProgrammerReconciliationCache>,
 }
 
 #[derive(Clone)]
@@ -98,6 +111,7 @@ struct Runtime {
     pub(super) dynamic_auto_offs: Arc<Mutex<Vec<PlaybackIdentity>>>,
     pub(super) visualization_frames: Arc<VisualizationFrameHub>,
     pub(super) action_timing: ActionTimingResource,
+    pub(super) programmer_reconciliation_cache: Arc<ProgrammerReconciliationCache>,
 }
 
 pub(super) async fn start(config: Config) -> anyhow::Result<OutputScheduler> {
@@ -169,7 +183,14 @@ async fn run(
         return;
     }
     let cancellation = runtime.cancellation.clone();
-    run_scheduler_dynamic(rate, cancellation, health, || render_tick(runtime.clone())).await;
+    run_scheduler_dynamic_wakeable(
+        rate,
+        cancellation,
+        health,
+        runtime.action_timing.output_wake(),
+        || render_tick(runtime.clone()),
+    )
+    .await;
 }
 
 // @tour one-action-end-to-end:30 Render semantic state into routed frames
@@ -186,12 +207,13 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         let visualization_scope = VisualizationScope {
             show_id: runtime.active_show.current().map(|show| show.id.0),
         };
-        let (sampled, auto_offs, dynamic_events, _) = dynamic_contributions_with_auto_off(
+        let (sampled, auto_offs, dynamic_events, _, _) = dynamic_contributions_with_auto_off(
             &runtime.engine,
             &runtime.dynamics,
             &runtime.speed_groups,
             &runtime.rate,
             &[],
+            Some(&runtime.programmer_reconciliation_cache),
             true,
         );
         if !auto_offs.is_empty() {
@@ -262,34 +284,75 @@ async fn send_retained_output(runtime: &Runtime) -> io::Result<u64> {
 /// Runs one test-bench frame through the same render, routing, sequence, health-facing output
 /// boundary as the production scheduler.
 pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
+    let tick_started = Instant::now();
     let action_timing = state.action_timing.begin_output_render();
-    let (rendered, visualization_scope) = {
-        let _activation = state.active_show.acquire().await;
+    let (rendered, semantic_timing, visualization_scope) = {
+        let _activation = state.active_show.acquire_shared().await;
         let visualization_scope = VisualizationScope {
             show_id: state.active_show.current().map(|show| show.id.0),
         };
         let playback = state.playback.render_capability();
-        let rendered = state
+        let (rendered, semantic_timing) = state
             .output
-            .render_with_playback_events(
+            .render_with_playback_events_timed(
                 &state.active_show.output_projection(),
                 &playback,
                 state.output.render_options(),
             )
             .map_err(io::Error::other)?;
-        (rendered, visualization_scope)
+        (rendered, semantic_timing, visualization_scope)
     };
+    let publish_started = Instant::now();
     let frames = state
         .output
         .render_frames_and_publish(&rendered, visualization_scope);
+    let publish = publish_started.elapsed();
+    let send_started = Instant::now();
     let result = state
         .output
         .send_network_routes(&rendered.routes, &frames, &rendered.patched_slots)
         .await;
+    let send = send_started.elapsed();
+    trace_slow_output_phases(
+        tick_started.elapsed(),
+        semantic_timing.dynamic,
+        semantic_timing.engine,
+        publish,
+        send,
+    );
     if result.is_ok() {
         state.action_timing.complete_output_render(action_timing);
     }
     result
+}
+
+fn trace_slow_output_phases(
+    total: Duration,
+    dynamic: Duration,
+    engine: Duration,
+    publish: Duration,
+    send: Duration,
+) {
+    if total < SLOW_OUTPUT_PHASE_THRESHOLD {
+        return;
+    }
+    let sample = SLOW_OUTPUT_PHASE_SAMPLES.fetch_add(1, Ordering::Relaxed);
+    if sample >= SLOW_OUTPUT_PHASE_SAMPLE_LIMIT {
+        return;
+    }
+    tracing::info!(
+        sample = sample + 1,
+        total_micros = duration_micros(total),
+        dynamic_micros = duration_micros(dynamic),
+        engine_micros = duration_micros(engine),
+        publish_micros = duration_micros(publish),
+        send_micros = duration_micros(send),
+        "slow output tick phase sample"
+    );
+}
+
+fn duration_micros(duration: Duration) -> u64 {
+    u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
 }
 
 pub(super) fn render_with_playback_events(
@@ -483,6 +546,7 @@ impl SharedResources {
             output: bind_output(config.bind_ip).await?,
             sequences: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             control: create_control(&config.persisted_runtime),
+            programmer_reconciliation_cache: Arc::new(ProgrammerReconciliationCache::default()),
         })
     }
 
@@ -503,6 +567,7 @@ impl SharedResources {
             dynamic_auto_offs: Arc::clone(&config.dynamic_auto_offs),
             visualization_frames: Arc::clone(&config.visualization_frames),
             action_timing: config.action_timing.clone(),
+            programmer_reconciliation_cache: Arc::clone(&self.programmer_reconciliation_cache),
         }
     }
 

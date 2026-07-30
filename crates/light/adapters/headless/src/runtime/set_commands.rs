@@ -140,7 +140,7 @@ fn assign_dynamic_playback(
                 dynamic_id: Some(dynamic.id),
                 last_known_pool_number: dynamic.pool_number,
                 embedded_fallback: light_dynamics::DynamicDefinitionSnapshot {
-                    definition: Box::new(dynamic.clone()),
+                    definition: Arc::new(dynamic.clone()),
                 },
             },
             revision: assignment_revision,

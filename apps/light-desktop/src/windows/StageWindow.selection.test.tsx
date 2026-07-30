@@ -334,7 +334,7 @@ describe("Stage selection projection", () => {
 		renderStage();
 
 		expect(screen.getByRole("status")).toHaveTextContent(
-			"Connecting to Live visualization…",
+			"Loading Live Stage visualization…",
 		);
 	});
 

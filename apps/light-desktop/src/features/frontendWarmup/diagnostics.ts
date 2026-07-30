@@ -99,10 +99,13 @@ export interface FrontendStageFrameDiagnostic {
 	lane: "normal" | "preload";
 	showId: string;
 	scopeActivation: number;
+	claimActivation: number;
 	sourceFrame: number | null;
 	sourceGeneratedAt: string;
 	publishedAt: string | null;
+	rawReceivedAt: number;
 	receivedAt: number;
+	transportDecodeMs: number;
 	firstAppliedAt: number | null;
 	settledAppliedAt: number | null;
 	firstCanvasSubmittedAt: number | null;
@@ -188,6 +191,8 @@ class FrontendPerformanceDiagnostics {
 		[];
 	private readonly stageFrames: FrontendStageFrameDiagnostic[] = [];
 	private readonly stageClaims: FrontendStageClaimDiagnostic[] = [];
+	private readonly stageClaimActivations = { normal: 0, preload: 0 };
+	private readonly stageClaimActive = { normal: false, preload: false };
 	private readonly stageSceneBuilds: FrontendStageSceneBuildDiagnostic[] = [];
 	private readonly stageModelLoads: FrontendStageModelLoadDiagnostic[] = [];
 	private readonly stageRenders: SequencedFrontendStageRenderDiagnostic[] = [];
@@ -429,6 +434,7 @@ class FrontendPerformanceDiagnostics {
 		sourceFrame = null,
 		sourceGeneratedAt,
 		publishedAt = null,
+		rawReceivedAt = Date.now(),
 	}: {
 		lane: "normal" | "preload";
 		showId: string;
@@ -436,6 +442,7 @@ class FrontendPerformanceDiagnostics {
 		sourceFrame?: number | null;
 		sourceGeneratedAt: string;
 		publishedAt?: string | null;
+		rawReceivedAt?: number;
 	}) {
 		const receivedAt = Date.now();
 		const sourceAt = Date.parse(sourceGeneratedAt);
@@ -447,10 +454,13 @@ class FrontendPerformanceDiagnostics {
 				lane,
 				showId,
 				scopeActivation,
+				claimActivation: this.stageClaimActivations[lane],
 				sourceFrame,
 				sourceGeneratedAt,
 				publishedAt,
+				rawReceivedAt,
 				receivedAt,
+				transportDecodeMs: Math.max(0, receivedAt - rawReceivedAt),
 				firstAppliedAt: null,
 				settledAppliedAt: null,
 				firstCanvasSubmittedAt: null,
@@ -472,6 +482,15 @@ class FrontendPerformanceDiagnostics {
 	}
 
 	recordStageLaneClaims(normal: readonly string[], preload: readonly string[]) {
+		for (const [lane, claims] of [
+			["normal", normal],
+			["preload", preload],
+		] as const) {
+			const active = claims.length > 0;
+			if (active && !this.stageClaimActive[lane])
+				this.stageClaimActivations[lane]++;
+			this.stageClaimActive[lane] = active;
+		}
 		pushBounded(
 			this.stageClaims,
 			{
@@ -497,13 +516,23 @@ class FrontendPerformanceDiagnostics {
 		if (visibleChanged !== undefined) sample.visibleChanged ??= visibleChanged;
 	}
 
+	invalidateUnsettledStageFrame(lane: "normal" | "preload") {
+		for (let index = this.stageFrames.length - 1; index >= 0; index--) {
+			const sample = this.stageFrames[index];
+			if (sample?.lane !== lane) continue;
+			if (sample.settledCanvasSubmittedAt === null)
+				sample.visibleChanged = false;
+			return;
+		}
+	}
+
 	recordStageFrameCanvasSubmitted(
 		sourceGeneratedAt: string | undefined,
 		settled: boolean,
 		lane?: "normal" | "preload",
 	) {
 		const sample = this.latestStageFrame(sourceGeneratedAt, lane);
-		if (!sample) return;
+		if (!sample || sample.visibleChanged === false) return;
 		const submittedAt = Date.now();
 		sample.firstCanvasSubmittedAt ??= submittedAt;
 		if (settled && sample.settledCanvasSubmittedAt === null) {
@@ -533,12 +562,14 @@ class FrontendPerformanceDiagnostics {
 		this.stageRendererContextsDisposed++;
 	}
 
-	recordStageRendererContextLost() {
+	recordStageRendererContextLost(lane?: "normal" | "preload") {
 		this.stageRendererContextLosses++;
+		if (lane) this.stageClaimActivations[lane]++;
 	}
 
-	recordStageRendererContextRestored() {
+	recordStageRendererContextRestored(lane?: "normal" | "preload") {
 		this.stageRendererContextRestores++;
+		if (lane) this.stageClaimActivations[lane]++;
 	}
 
 	recordStageDesktopMirrorRender() {

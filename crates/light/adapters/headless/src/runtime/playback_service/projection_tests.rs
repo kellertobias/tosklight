@@ -128,7 +128,7 @@ fn dynamic_projection_reports_hidden_controller_identity_speed_and_coverage() {
             dynamic_id: Some(definition.id),
             last_known_pool_number: definition.pool_number,
             embedded_fallback: light_dynamics::DynamicDefinitionSnapshot {
-                definition: Box::new(definition.clone()),
+                definition: Arc::new(definition.clone()),
             },
         },
         revision: 1,

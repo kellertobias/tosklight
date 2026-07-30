@@ -29,6 +29,30 @@ impl<'a> ProfileValueIndex<'a> {
             .collect()
     }
 
+    pub(crate) fn value(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&'a AttributeValue> {
+        self.values.get(&fixture_id).and_then(|values| {
+            values
+                .iter()
+                .find_map(|(candidate, value)| (*candidate == attribute).then_some(*value))
+        })
+    }
+
+    pub(crate) fn value_named(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &str,
+    ) -> Option<&'a AttributeValue> {
+        self.values.get(&fixture_id).and_then(|values| {
+            values
+                .iter()
+                .find_map(|(candidate, value)| (candidate.0 == attribute).then_some(*value))
+        })
+    }
+
     pub(crate) fn sequence_masters(
         &self,
         fixture_id: FixtureId,
@@ -40,6 +64,30 @@ impl<'a> ProfileValueIndex<'a> {
             .iter()
             .map(|(attribute, master)| ((*attribute).clone(), *master))
             .collect()
+    }
+
+    pub(crate) fn sequence_master(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<ApplicableSequenceMaster> {
+        self.sequence_masters.get(&fixture_id).and_then(|masters| {
+            masters
+                .iter()
+                .find_map(|(candidate, master)| (*candidate == attribute).then_some(*master))
+        })
+    }
+
+    pub(crate) fn sequence_master_named(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &str,
+    ) -> Option<ApplicableSequenceMaster> {
+        self.sequence_masters.get(&fixture_id).and_then(|masters| {
+            masters
+                .iter()
+                .find_map(|(candidate, master)| (candidate.0 == attribute).then_some(*master))
+        })
     }
 }
 

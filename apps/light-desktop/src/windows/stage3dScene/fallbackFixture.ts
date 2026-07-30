@@ -34,12 +34,24 @@ type FallbackRenderState = {
 	radius: number;
 };
 
+const directionalFixtures = new WeakMap<PatchedFixture, boolean>();
+const sourceVisibleColor = new THREE.Color();
+const sourceBrightColor = new THREE.Color();
+const sourceBaseColor = new THREE.Color(0x485158);
+const sourceWhiteColor = new THREE.Color(0xffffff);
+const rootBeamDirection = new THREE.Vector3();
+const rootBeamDown = new THREE.Vector3(0, -1, 0);
+
 export function fallbackEmitterIsDirectional(fixture: PatchedFixture) {
+	const retained = directionalFixtures.get(fixture);
+	if (retained !== undefined) return retained;
 	const text =
 		`${fixture.definition.device_type} ${fixture.definition.manufacturer} ${fixture.definition.name} ${fixture.definition.model}`.toLowerCase();
-	if (/sun\s*strip|sunstrip|strip light|striplight/.test(text)) return false;
-	if (/\bstrobe\b/.test(text) && !/blinder/.test(text)) return false;
-	return true;
+	const directional =
+		!/sun\s*strip|sunstrip|strip light|striplight/.test(text) &&
+		(!/\bstrobe\b/.test(text) || /blinder/.test(text));
+	directionalFixtures.set(fixture, directional);
+	return directional;
 }
 
 function fallbackIntensity(
@@ -265,12 +277,14 @@ function addFallbackBeamVisuals(
 
 function orientRootBeam(beam: THREE.Group, state: FallbackRenderState) {
 	beam.position.y = -0.62;
-	const direction = new THREE.Vector3(
-		-Math.sin(state.pan) * Math.sin(state.tilt),
-		-Math.cos(state.tilt),
-		-Math.cos(state.pan) * Math.sin(state.tilt),
-	).normalize();
-	beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), direction);
+	rootBeamDirection
+		.set(
+			-Math.sin(state.pan) * Math.sin(state.tilt),
+			-Math.cos(state.tilt),
+			-Math.cos(state.pan) * Math.sin(state.tilt),
+		)
+		.normalize();
+	beam.quaternion.setFromUnitVectors(rootBeamDown, rootBeamDirection);
 }
 
 function fallbackBeamParent(
@@ -327,19 +341,53 @@ export function mountFallbackFixture(
 
 function updateBuiltInSource(source: THREE.Mesh, state: FallbackRenderState) {
 	const level = THREE.MathUtils.clamp(state.intensity, 0, 1);
-	const visible = new THREE.Color(0x485158).lerp(
-		state.color
-			.clone()
-			.lerp(new THREE.Color(0xffffff), 0.82)
-			.multiplyScalar(2.98),
-		level,
-	);
+	sourceBrightColor
+		.copy(state.color)
+		.lerp(sourceWhiteColor, 0.82)
+		.multiplyScalar(2.98);
+	sourceVisibleColor.copy(sourceBaseColor).lerp(sourceBrightColor, level);
 	const material = source.material as THREE.Material & {
 		color?: THREE.Color;
 	};
-	material.color?.copy(visible);
-	material.needsUpdate = true;
+	material.color?.copy(sourceVisibleColor);
 	source.userData.active = level > 0.001;
+}
+
+type FallbackFixtureRuntime = {
+	yoke: THREE.Object3D | null;
+	head: THREE.Object3D | null;
+	scannerPan: THREE.Object3D | null;
+	scannerTilt: THREE.Object3D | null;
+	scannerBeam: THREE.Object3D | null;
+	sources: THREE.Mesh[];
+	beam: THREE.Group | null;
+};
+
+function fallbackFixtureRuntime(root: THREE.Object3D) {
+	const retained = root.userData.stageFallbackFixtureRuntime as
+		| FallbackFixtureRuntime
+		| undefined;
+	if (retained) return retained;
+	const sources: THREE.Mesh[] = [];
+	root.traverse((object) => {
+		if (
+			object.name.startsWith("light-emitting-surface") &&
+			object instanceof THREE.Mesh
+		)
+			sources.push(object);
+	});
+	const beam = root.getObjectByName("fallback-beam");
+	const runtime: FallbackFixtureRuntime = {
+		yoke: root.getObjectByName("centered-rotating-yoke") ?? null,
+		head: root.getObjectByName("tilting-head") ?? null,
+		scannerPan: root.getObjectByName("scanner-pan") ?? null,
+		scannerTilt: root.getObjectByName("scanner-tilt") ?? null,
+		scannerBeam: root.getObjectByName("scanner-beam-mount") ?? null,
+		sources,
+		beam: beam instanceof THREE.Group ? beam : null,
+	};
+	root.userData.stageFallbackFixtureRuntime = runtime;
+	return runtime;
 }
 
 export function updateFallbackFixture(
@@ -351,25 +399,20 @@ export function updateFallbackFixture(
 	renderQuality: StageRenderQuality,
 	resources?: StageProceduralResourceCache,
 ) {
-	const yoke = root.getObjectByName("centered-rotating-yoke");
+	const runtime = fallbackFixtureRuntime(root);
+	const yoke = runtime.yoke;
 	if (yoke) yoke.rotation.y = state.pan;
-	const head = root.getObjectByName("tilting-head");
+	const head = runtime.head;
 	if (head) head.rotation.x = state.tilt;
-	const scannerPan = root.getObjectByName("scanner-pan");
+	const scannerPan = runtime.scannerPan;
 	if (scannerPan) scannerPan.rotation.y = state.pan;
-	const scannerTilt = root.getObjectByName("scanner-tilt");
+	const scannerTilt = runtime.scannerTilt;
 	if (scannerTilt) scannerTilt.rotation.x = Math.PI / 4 + state.tilt / 2;
-	const scannerBeam = root.getObjectByName("scanner-beam-mount");
+	const scannerBeam = runtime.scannerBeam;
 	if (scannerBeam) scannerBeam.rotation.x = Math.PI / 2 - state.tilt;
-	root.traverse((object) => {
-		if (
-			object.name.startsWith("light-emitting-surface") &&
-			object instanceof THREE.Mesh
-		)
-			updateBuiltInSource(object, state);
-	});
-	const beam = root.getObjectByName("fallback-beam");
-	if (!(beam instanceof THREE.Group)) return;
+	for (const source of runtime.sources) updateBuiltInSource(source, state);
+	const beam = runtime.beam;
+	if (!beam) return;
 	if (beam.parent === root) orientRootBeam(beam, state);
 	const previousRadius = Number(beam.userData.stageBeamRadius) || state.radius;
 	const radiusScale = state.radius / Math.max(previousRadius, 1e-6);
@@ -395,16 +438,6 @@ export function updateFallbackFixture(
 			improved.scale.copy(volume.scale);
 			beam.add(improved);
 		}
-	} else if (renderQuality !== "improved_beams" && existingImproved) {
-		if (existingImproved instanceof THREE.Mesh) {
-			if (!existingImproved.geometry.userData.stageSharedProceduralResource)
-				existingImproved.geometry.dispose();
-			for (const material of Array.isArray(existingImproved.material)
-				? existingImproved.material
-				: [existingImproved.material])
-				material.dispose();
-		}
-		existingImproved.removeFromParent();
 	}
 	for (const object of beam.children) {
 		if (

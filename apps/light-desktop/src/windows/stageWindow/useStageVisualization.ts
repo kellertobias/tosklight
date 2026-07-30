@@ -1,8 +1,14 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import type { PatchedFixture, VisualizationSnapshot } from "../../api/types";
 import { fixtures as visualFixtures } from "../../data/mockData";
-import { useBootstrapReady } from "../../features/deskSnapshot/DeskSnapshotState";
-import { usePatchedFixturesView } from "../../features/patch/PatchState";
+import {
+	useActiveShowId,
+	useBootstrapReady,
+} from "../../features/deskSnapshot/DeskSnapshotState";
+import {
+	usePatchedFixturesView,
+	usePatchStatus,
+} from "../../features/patch/PatchState";
 import { useVisualizationRuntimeView } from "../../features/visualizationRuntime/VisualizationRuntimeView";
 import { fixtureValue } from "../fixtureVisualization";
 import { migrateStagePosition, type Stage3dFixture } from "../stage3dScene";
@@ -13,21 +19,33 @@ function useVisualizationView(
 	active: boolean,
 	reconcileSnapshots: boolean,
 	consumerId?: string,
+	intervalMillis = 100,
 ) {
 	return useVisualizationRuntimeView({
 		lane: followPreload ? "preload" : "normal",
 		enabled: active,
-		intervalMillis: 100,
+		intervalMillis,
 		reconcileSnapshots,
 		consumerId,
 	});
 }
 
 function usePatchedFixtures(override?: readonly PatchedFixture[]) {
+	const activeShowId = useActiveShowId();
 	const owned = usePatchedFixturesView(!override);
+	const status = usePatchStatus(!override);
+	const retained = useRef<readonly PatchedFixture[]>([]);
+	const authoritative = override ?? owned;
+	if (!override && !activeShowId) retained.current = [];
+	else if (override || status.status !== "loading")
+		retained.current = authoritative;
+	const visible =
+		!override && status.status === "loading" && authoritative.length === 0
+			? retained.current
+			: authoritative;
 	return useMemo(
 		() =>
-			[...(override ?? owned)].sort(
+			[...visible].sort(
 				(left, right) =>
 					(left.virtual_fixture_number ?? Number.MAX_SAFE_INTEGER) -
 						(right.virtual_fixture_number ?? Number.MAX_SAFE_INTEGER) ||
@@ -35,7 +53,7 @@ function usePatchedFixtures(override?: readonly PatchedFixture[]) {
 						(right.fixture_number ?? Number.MAX_SAFE_INTEGER) ||
 					left.fixture_id.localeCompare(right.fixture_id),
 			),
-		[override, owned],
+		[visible],
 	);
 }
 
@@ -157,6 +175,7 @@ export function useStageVisualization(
 	patchedFixtures?: readonly PatchedFixture[],
 	reconcileSnapshots = true,
 	consumerId?: string,
+	intervalMillis = 100,
 ) {
 	const bootstrapReady = useBootstrapReady();
 	const visualizationView = useVisualizationView(
@@ -164,6 +183,7 @@ export function useStageVisualization(
 		active,
 		reconcileSnapshots,
 		consumerId,
+		intervalMillis,
 	);
 	const visualization = visualizationView.snapshot;
 	const stageFixtures = usePatchedFixtures(patchedFixtures);

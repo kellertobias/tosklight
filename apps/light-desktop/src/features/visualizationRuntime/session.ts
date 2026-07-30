@@ -6,13 +6,20 @@ import type {
 } from "./contracts";
 import type { VisualizationRuntimeStore } from "./store";
 import {
-	type VisualizationRuntimeTransport,
 	VisualizationRuntimeProtocolError,
 	type VisualizationRuntimeStream,
+	type VisualizationRuntimeTransport,
 } from "./transport";
 
 interface LaneRuntime {
-	claims: Map<number, { intervalMillis: number; consumerId: string }>;
+	claims: Map<
+		number,
+		{
+			intervalMillis: number;
+			consumerId: string;
+			includeDynamicStack: boolean;
+		}
+	>;
 	generation: number;
 	inFlight: boolean;
 	queued: boolean;
@@ -52,13 +59,18 @@ export class VisualizationRuntimeSession {
 		lane: VisualizationRuntimeLane,
 		intervalMillis: number,
 		consumerId = "anonymous",
+		includeDynamicStack = false,
 	) {
 		assertInterval(intervalMillis);
 		if (this.stopped || !this.store.matchesScope(this.scope)) return () => {};
 		const runtime = this.lanes[lane];
 		const first = runtime.claims.size === 0;
 		const claimId = ++this.nextClaimId;
-		runtime.claims.set(claimId, { intervalMillis, consumerId });
+		runtime.claims.set(claimId, {
+			intervalMillis,
+			consumerId,
+			includeDynamicStack,
+		});
 		this.recordClaims();
 		if (first) {
 			runtime.generation++;
@@ -80,12 +92,15 @@ export class VisualizationRuntimeSession {
 	 * polling lane. The caller consumes the returned snapshot directly; the shared
 	 * lane projections are not touched.
 	 */
-	read(lane: VisualizationRuntimeLane): Promise<VisualizationSnapshot> {
+	read(
+		lane: VisualizationRuntimeLane,
+		options?: { dynamicStackOnly?: boolean; fixtureIds?: readonly string[] },
+	): Promise<VisualizationSnapshot> {
 		if (this.stopped || !this.store.matchesScope(this.scope))
 			return Promise.reject(
 				new Error("The visualization runtime view is unavailable"),
 			);
-		return this.transport.loadSnapshot(this.scope, lane);
+		return this.transport.loadSnapshot(this.scope, lane, options);
 	}
 
 	stop() {
@@ -196,6 +211,7 @@ export class VisualizationRuntimeSession {
 			(lane) => this.lanes[lane].claims.size > 0,
 		);
 		if (!claimedLanes.length) {
+			this.stream?.updateClaims([], 10, false);
 			this.stream?.close();
 			this.stream = null;
 			return;
@@ -209,7 +225,7 @@ export class VisualizationRuntimeSession {
 						!this.store.matchesScope(this.scope)
 					)
 						return;
-					this.store.install(lane, snapshot, this.store.captureScope());
+					this.store.installStreamed(lane, snapshot, this.store.captureScope());
 					this.onError?.(null);
 				},
 				error: (error) => {
@@ -230,6 +246,11 @@ export class VisualizationRuntimeSession {
 		this.stream?.updateClaims(
 			claimedLanes,
 			Math.max(1, Math.min(10, Math.ceil(1_000 / fastest))),
+			claimedLanes.some((lane) =>
+				[...this.lanes[lane].claims.values()].some(
+					(claim) => claim.includeDynamicStack,
+				),
+			),
 		);
 	}
 

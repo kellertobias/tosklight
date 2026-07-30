@@ -478,7 +478,7 @@ fn programming_values_keep_user_scope_full_projection_and_action_identity() {
                 ..Default::default()
             },
             projection: ProgrammingValuesProjection {
-                dynamic_values: Vec::new(),
+                dynamic_values: Vec::new().into(),
                 user_id,
                 revision: 7,
                 fixture_values: Vec::new(),

@@ -103,7 +103,7 @@ pub(super) async fn open_show_revision(
         let _ = std::fs::remove_file(&copy_path);
         return Err(ApiError::store(error));
     }
-    let _activation = state.active_show.acquire().await;
+    let _show_change = state.active_show.acquire_show_change().await;
     let output_runtime = load_output_runtime_for_show(&state, copy.id)?;
     let prepared = match prepare_show_for_runtime(&state, &copy) {
         Ok(prepared) => prepared,
@@ -116,12 +116,14 @@ pub(super) async fn open_show_revision(
     let previous = state.active_show.current().clone();
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
     let context = operator_action_context(&session, light_application::ActionSource::Http);
-    activate_prepared_snapshot(
+    activate_prepared_show(
         &state,
         prepared,
         &context,
         &transition,
         input.transition_millis,
+        copy.clone(),
+        output_runtime,
     )
     .await?;
     state
@@ -136,10 +138,6 @@ pub(super) async fn open_show_revision(
             .set_setting("previous_active_show_id", &previous.id.0.to_string())
             .map_err(ApiError::store)?;
     }
-    invalidate_active_show_document(&state);
-    state.active_show.replace_current(Some(copy.clone()));
-    state.active_show.set_error(None);
-    restore_output_runtime_for_show(&state, copy.id, output_runtime);
     emit(
         &state,
         "show_opened",

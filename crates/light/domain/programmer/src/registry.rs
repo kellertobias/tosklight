@@ -1,6 +1,6 @@
 use crate::command_state::CommandLineState;
 use crate::selection::{ProgrammerSelection, SelectionContext};
-use crate::state::ProgrammerState;
+use crate::state::{ProgrammerOutputState, ProgrammerState};
 use light_core::{SessionId, SharedClock, SystemClock, UserId};
 use parking_lot::{ReentrantMutex, RwLock};
 use std::collections::HashMap;
@@ -445,7 +445,7 @@ impl ProgrammerRegistry {
         state.values.clear();
         state.transient_values.clear();
         state.group_values.clear();
-        state.dynamic_values.clear();
+        Arc::make_mut(&mut state.dynamic_values).clear();
         state.last_activity = self.clock.now();
         let user_id = state.user_id;
         drop(states);
@@ -502,6 +502,44 @@ impl ProgrammerRegistry {
     }
     pub fn active(&self) -> Vec<ProgrammerState> {
         self.states.read().values().cloned().collect()
+    }
+    pub fn active_output_states(&self) -> Vec<ProgrammerOutputState> {
+        self.states
+            .read()
+            .values()
+            .map(|state| ProgrammerOutputState {
+                id: state.id,
+                priority: state.priority,
+                values: state.values.clone(),
+                transient_values: state.transient_values.clone(),
+                group_values: state.group_values.clone(),
+                preload_active: state.preload_active.clone(),
+                preload_group_active: state.preload_group_active.clone(),
+            })
+            .collect()
+    }
+    pub fn active_dynamic_sources_for_sessions(
+        &self,
+    ) -> Vec<(
+        uuid::Uuid,
+        i16,
+        Arc<Vec<light_dynamics::DynamicAddressValue>>,
+        Arc<Vec<light_dynamics::DynamicAddressValue>>,
+    )> {
+        let states = self.states.read();
+        self.sessions
+            .read()
+            .values()
+            .filter_map(|key| states.get(key))
+            .map(|state| {
+                (
+                    state.id.0,
+                    state.priority,
+                    Arc::clone(&state.dynamic_values),
+                    Arc::clone(&state.preload_dynamic_active),
+                )
+            })
+            .collect()
     }
     pub fn active_for_sessions(&self) -> Vec<ProgrammerState> {
         self.active_sessions_for_user(None)

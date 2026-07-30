@@ -5,18 +5,18 @@ pub(super) fn persist_programmer(state: &AppState, session: &Session) -> Result<
         .programming
         .get(session.id)
         .ok_or_else(|| ApiError::not_found("programmer"))?;
+    let connected = programmer.connected;
     state
         .installation
-        .save_session(&PersistedSession {
+        .defer_session_save(DeferredProgrammerPersistence {
             id: session.id,
             user_id: session.user.id,
             token: session.token.clone(),
-            programmer_json: serde_json::to_string(&programmer)
-                .map_err(|error| ApiError::internal(error.to_string()))?,
-            connected: programmer.connected,
+            programmer,
+            connected,
             updated_at: chrono::Utc::now().to_rfc3339(),
         })
-        .map_err(ApiError::store)
+        .map_err(ApiError::internal)
 }
 
 pub(super) fn active_playbacks_setting(show_id: light_core::ShowId) -> String {

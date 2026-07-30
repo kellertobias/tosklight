@@ -180,8 +180,16 @@ function DynamicStackSummary({
 		),
 	);
 	if (!entries.length) return null;
+	const count = entries.reduce(
+		(total, entry) => total + (entry.summary_count ?? 1),
+		0,
+	);
 	const title = entries
 		.map((entry) => {
+			if (entry.summary_title) {
+				const hidden = Math.max(0, (entry.summary_count ?? 1) - 3);
+				return `${entry.summary_title}${hidden ? `\n… ${hidden} more` : ""}`;
+			}
 			const state = [
 				entry.winning ? "winning" : null,
 				entry.pending ? "pending" : null,
@@ -197,7 +205,7 @@ function DynamicStackSummary({
 		.join("\n");
 	return (
 		<small className="fixture-dynamic-stack" title={title}>
-			∿ {entries.length}
+			∿ {count}
 		</small>
 	);
 }

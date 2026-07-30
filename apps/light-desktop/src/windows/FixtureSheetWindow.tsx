@@ -1,9 +1,18 @@
-import { type ReactNode, useMemo, useState } from "react";
+import { FixtureSheetTableView as FixtureSheetTable } from "@tosklight/ui/tables";
+import { WindowHeader } from "@tosklight/ui/window-kit";
+import {
+	type ReactNode,
+	useCallback,
+	useDeferredValue,
+	useMemo,
+	useState,
+} from "react";
 import { GroupStrip } from "../components/shared/GroupStrip";
 import { SourceLegend } from "../components/shared/SourceLegend";
-import { WindowHeader } from "@tosklight/ui/window-kit";
 import { useHighlightSnapshot } from "../features/highlight/HighlightState";
 import { useProgrammerPreloadLifecycleView } from "../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
+import { useProgrammerPreloadValuesView } from "../features/programmerPreloadValues/ProgrammerPreloadValuesView";
+import { useProgrammerValuesView } from "../features/programmerValues/ProgrammerValuesView";
 import {
 	useProgrammingSelectionActions,
 	useProgrammingSelectionView,
@@ -14,7 +23,6 @@ import {
 	DEFAULT_FIXTURE_SHEET_COLUMNS,
 	FixtureSheetSettings,
 } from "./FixtureSheetSettings";
-import { FixtureSheetTableView as FixtureSheetTable } from "@tosklight/ui/tables";
 import { fixtureSheetColumns } from "./fixtureSheetColumns";
 import { useFixtureSheetCuelistAuthority } from "./fixtureSheetCuelistAuthority";
 import {
@@ -36,6 +44,9 @@ export function FixtureSheetWindow({
 	const { state } = useApp();
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	const [activeRow, setActiveRow] = useState(0);
+	const [visibleFixtureIds, setVisibleFixtureIds] = useState<readonly string[]>(
+		[],
+	);
 	const groupsVisible = compact
 		? Boolean(showGroupShortcuts)
 		: state.fixtureGroupsVisible;
@@ -54,11 +65,24 @@ export function FixtureSheetWindow({
 	const { visualization, preloadVisualization } = useFixtureSheetVisualizations(
 		preload.armed || preload.active,
 		active,
+		visibleFixtureIds,
+	);
+	const programmerValues = useProgrammerValuesView(active);
+	const preloadProgrammerValues = useProgrammerPreloadValuesView(
+		active && (preload.armed || preload.active),
+	);
+	const deferredVisualization = useDeferredValue(visualization);
+	const deferredPreloadVisualization = useDeferredValue(preloadVisualization);
+	const deferredProgrammerValues = useDeferredValue(programmerValues);
+	const deferredPreloadProgrammerValues = useDeferredValue(
+		preloadProgrammerValues,
 	);
 	const { rows, activeValuesLoading, groupRuntimeLoading } =
 		useFixtureSheetRows({
-			visualization,
-			preloadVisualization,
+			visualization: deferredVisualization,
+			preloadVisualization: deferredPreloadVisualization,
+			programmerValues: deferredProgrammerValues,
+			preloadProgrammerValues: deferredPreloadProgrammerValues,
 			fixtureOrder,
 			activeOnly,
 			selectedCueList: cuelistFilter.selectedCueList,
@@ -80,11 +104,33 @@ export function FixtureSheetWindow({
 		() => new Set(selection?.selected ?? []),
 		[selection?.selected],
 	);
+	const selectionActionStatus =
+		typeof selectionActions?.status === "function"
+			? selectionActions.status()
+			: selectionActions
+				? "ready"
+				: "loading";
+	const onVisibleFixtureIdsChange = useCallback(
+		(fixtureIds: readonly string[]) => {
+			setVisibleFixtureIds((current) =>
+				current.length === fixtureIds.length &&
+				current.every((fixtureId, index) => fixtureId === fixtureIds[index])
+					? current
+					: [...fixtureIds],
+			);
+		},
+		[],
+	);
 
 	return (
 		<FixtureSheetWindowView
 			compact={compact}
-			selectionCount={selection?.selected.length ?? 0}
+			selectionCount={
+				selection && selectionActionStatus === "ready"
+					? selection.selected.length
+					: null
+			}
+			selectionActionStatus={selectionActionStatus}
 			info={<SourceLegend />}
 			activeValuesLoading={activeValuesLoading}
 			groupRuntimeLoading={groupRuntimeLoading}
@@ -100,6 +146,7 @@ export function FixtureSheetWindow({
 						})
 					}
 					onActiveRowChange={setActiveRow}
+					onVisibleFixtureIdsChange={onVisibleFixtureIdsChange}
 					presentStep={presentStep}
 					rows={rows}
 					selectedFixtureIds={selectedFixtureIds}
@@ -127,6 +174,7 @@ export function FixtureSheetWindow({
 export function FixtureSheetWindowView({
 	compact,
 	selectionCount,
+	selectionActionStatus,
 	info,
 	activeValuesLoading,
 	groupRuntimeLoading,
@@ -136,7 +184,8 @@ export function FixtureSheetWindowView({
 	settings,
 }: {
 	compact?: boolean;
-	selectionCount: number;
+	selectionCount: number | null;
+	selectionActionStatus?: "ready" | "loading" | "scope-mismatch" | "stopped";
 	info?: ReactNode;
 	activeValuesLoading?: boolean;
 	groupRuntimeLoading?: boolean;
@@ -146,12 +195,18 @@ export function FixtureSheetWindowView({
 	settings?: ReactNode;
 }) {
 	return (
-		<div className="fixture-window">
+		<div
+			className="fixture-window"
+			data-selection-action-status={selectionActionStatus}
+		>
 			{!compact && (
 				<WindowHeader
 					title="Fixture Sheet"
 					info={{
-						primary: `${selectionCount} selected`,
+						primary:
+							selectionCount == null
+								? "Selection loading…"
+								: `${selectionCount} selected`,
 						secondary: info,
 					}}
 					settings

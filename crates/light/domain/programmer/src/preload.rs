@@ -4,6 +4,7 @@ use crate::{PreloadPlaybackQueueAction, PreloadPlaybackQueueSurface};
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, SessionId};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -74,15 +75,15 @@ impl ProgrammerRegistry {
             }
             let committed_at_millis =
                 u64::try_from(committed_at.timestamp_millis()).unwrap_or_default();
-            for mut incoming in std::mem::take(&mut state.preload_dynamic_pending) {
+            for mut incoming in std::mem::take(Arc::make_mut(&mut state.preload_dynamic_pending)) {
                 incoming.changed_at_millis = committed_at_millis;
                 let instance_link = dynamic_instance_link(&incoming.value);
-                state.preload_dynamic_active.retain(|stored| {
+                Arc::make_mut(&mut state.preload_dynamic_active).retain(|stored| {
                     stored.fixture_id != incoming.fixture_id
                         || stored.attribute != incoming.attribute
                         || dynamic_instance_link(&stored.value) != instance_link
                 });
-                state.preload_dynamic_active.push(incoming);
+                Arc::make_mut(&mut state.preload_dynamic_active).push(incoming);
             }
             // Committed queued Playback activations keep the Preload scene releasable via
             // hold-to-release even when no attribute values were retained.
@@ -189,7 +190,7 @@ impl ProgrammerRegistry {
             let queue_changed = !state.preload_playback_pending.is_empty();
             state.checkpoint();
             state.preload_pending.clear();
-            state.preload_dynamic_pending.clear();
+            Arc::make_mut(&mut state.preload_dynamic_pending).clear();
             state.preload_group_pending.clear();
             state.preload_playback_pending.clear();
             state.last_activity = self.clock.now();
@@ -229,8 +230,8 @@ impl ProgrammerRegistry {
         state.checkpoint();
         state.preload_pending.clear();
         state.preload_active.clear();
-        state.preload_dynamic_pending.clear();
-        state.preload_dynamic_active.clear();
+        Arc::make_mut(&mut state.preload_dynamic_pending).clear();
+        Arc::make_mut(&mut state.preload_dynamic_active).clear();
         state.preload_group_pending.clear();
         state.preload_group_active.clear();
         state.preload_playback_pending.clear();

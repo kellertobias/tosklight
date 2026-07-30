@@ -22,6 +22,7 @@ export function useStageRenderer({
 	controller,
 	dispatch,
 	diagnosticsRef,
+	pixelRatioCap,
 }: {
 	hostRef: MutableRefObject<HTMLDivElement | null>;
 	controller: StageSceneController;
@@ -30,6 +31,7 @@ export function useStageRenderer({
 		lane: "normal" | "preload";
 		paneId: string | null;
 	}>;
+	pixelRatioCap?: number;
 }) {
 	const acknowledgeDesktopMirrorRender =
 		useDesktopVisualizationRuntimeRenderAcknowledgement();
@@ -49,6 +51,7 @@ export function useStageRenderer({
 			controlsRef,
 			cameraTargetRef,
 			acknowledgeDesktopMirrorRender,
+			pixelRatioCap,
 		});
 	}, [
 		acknowledgeDesktopMirrorRender,
@@ -56,9 +59,14 @@ export function useStageRenderer({
 		diagnosticsRef,
 		dispatch,
 		hostRef,
+		pixelRatioCap,
 	]);
 
-	return { cameraRef, controlsRef, cameraTargetRef };
+	return {
+		cameraRef,
+		controlsRef,
+		cameraTargetRef,
+	};
 }
 
 export function useStageCamera({

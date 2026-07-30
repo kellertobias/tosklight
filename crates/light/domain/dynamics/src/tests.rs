@@ -1,6 +1,6 @@
 use super::*;
 use light_core::{AttributeKey, FixtureId};
-use std::collections::HashMap;
+use std::{cell::Cell, collections::HashMap};
 use uuid::Uuid;
 
 mod runtime_control;
@@ -12,6 +12,22 @@ struct Sources {
 
 impl ScalarSourceResolver for Sources {
     fn current(&self, _: FixtureId, _: &AttributeKey) -> Option<f32> {
+        Some(self.current)
+    }
+
+    fn preset(&self, _: &str, _: FixtureId, _: &AttributeKey) -> Option<f32> {
+        None
+    }
+}
+
+struct CountingSources {
+    current: f32,
+    current_calls: Cell<usize>,
+}
+
+impl ScalarSourceResolver for CountingSources {
+    fn current(&self, _: FixtureId, _: &AttributeKey) -> Option<f32> {
+        self.current_calls.set(self.current_calls.get() + 1);
         Some(self.current)
     }
 
@@ -94,6 +110,35 @@ fn definition(lane: DynamicLane) -> DynamicDefinition {
         default_activation: ActivationPolicy::StartNow,
         activation_boundary: ActivationBoundary::Beat,
     }
+}
+
+#[test]
+fn full_size_controller_does_not_resolve_an_unused_current_underlay() {
+    let target = FixtureId::new();
+    let mut dynamic_lane = lane();
+    dynamic_lane.mode = DynamicLaneMode::MaxMin;
+    let definition = definition(dynamic_lane);
+    let definition_id = definition.id;
+    let mut runtime = DynamicRuntime::default();
+    runtime.install_definitions([definition]).unwrap();
+    let instance = runtime
+        .start(start_request(
+            definition_id,
+            controller(101, 1, false),
+            target,
+            0,
+            false,
+        ))
+        .unwrap();
+    let sources = CountingSources {
+        current: 0.25,
+        current_calls: Cell::new(0),
+    };
+
+    let sample = runtime.sample(instance, 250, 1_000, 10, &sources).unwrap();
+
+    assert_eq!(sources.current_calls.get(), 0);
+    assert_eq!(sample.len(), 1);
 }
 
 fn selection_phase(offset_degrees: f32) -> PhaseDistribution {
@@ -885,7 +930,35 @@ fn runtime_snapshot_round_trip_preserves_epoch_pause_controllers_and_random_inde
         .unwrap();
     runtime.set_global_paused(true, 1_500);
 
-    let serialized = serde_json::to_string(&runtime.snapshot()).unwrap();
+    let full_snapshot = runtime.snapshot();
+    let output_snapshot = runtime.output_projection_snapshot();
+    assert_eq!(output_snapshot.global_paused, full_snapshot.global_paused);
+    assert_eq!(
+        output_snapshot.instances.len(),
+        full_snapshot.instances.len()
+    );
+    let full_instance = &full_snapshot.instances[0];
+    let output_instance = &output_snapshot.instances[0];
+    assert_eq!(output_instance.id, full_instance.id);
+    assert_eq!(output_instance.definition, full_instance.definition);
+    assert_eq!(output_instance.targets, full_instance.targets);
+    assert_eq!(output_instance.controllers, full_instance.controllers);
+    assert_eq!(
+        output_instance.controller_transitions,
+        full_instance.controller_transitions
+    );
+    assert_eq!(
+        output_instance.pending_until_millis,
+        full_instance.pending_until_millis
+    );
+    assert_eq!(output_instance.completed, full_instance.completed);
+    assert!(output_instance.phase_by_target.is_empty());
+    assert!(output_instance.phase_by_lane_target.is_empty());
+    assert!(output_instance.random_streams.is_empty());
+    assert!(output_instance.last_sample_values.is_empty());
+    assert!(output_instance.synchronized_hold_values.is_empty());
+
+    let serialized = serde_json::to_string(&full_snapshot).unwrap();
     let snapshot: DynamicRuntimeSnapshot = serde_json::from_str(&serialized).unwrap();
     let mut restored = DynamicRuntime::default();
     restored.restore_snapshot(snapshot).unwrap();

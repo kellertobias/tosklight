@@ -100,6 +100,10 @@ fn with_test_routes(router: Router<AppState>, enabled: bool) -> Router<AppState>
         .route("/api/v2/test/clock/reset", post(reset_test_clock))
         .route("/api/v2/test/clock/advance", post(advance_test_clock))
         .route("/api/v2/test/clock/free-run", post(free_run_test_clock))
+        .route(
+            "/api/v2/test/output/frame-rate",
+            post(set_test_output_frame_rate),
+        )
         .route("/api/v2/test/output/failure", post(set_test_output_failure))
         .route(
             "/api/v2/test/shows/{show_id}/objects/{kind}/{object_id}",
@@ -229,12 +233,35 @@ fn programmer_http_action(method: &Method, path: &str) -> Option<(&'static str, 
         "/api/v2/programming-align/actions" => Some(("align", true)),
         "/api/v2/fixture-controls/actions" => Some(("fixture_control", true)),
         "/api/v2/presets/recall" => Some(("preset_recall", true)),
-        _ if path.contains("programming-selection") => Some(("selection", true)),
-        _ if path.contains("programming-preload-values") => Some(("preload_values", false)),
-        _ if path.contains("programming-values") => Some(("values", true)),
+        _ if path.contains("programming-selection") => Some(("selection", false)),
+        _ if path.contains("programmer-preload-values") => Some(("preload_values", false)),
+        _ if path.contains("programmer-values") => Some(("values", true)),
         _ if path.contains("programmer-preload") => Some(("preload_lifecycle", true)),
         _ if path.contains("programmer-priority") => Some(("priority", true)),
         _ if path.contains("/dynamics/") => Some(("dynamic", true)),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod action_timing_route_tests {
+    use super::*;
+
+    #[test]
+    fn typed_programmer_value_routes_match_their_actual_v2_paths() {
+        assert_eq!(
+            programmer_http_action(
+                &Method::POST,
+                "/api/v2/users/operator/programmer-values/actions"
+            ),
+            Some(("values", true))
+        );
+        assert_eq!(
+            programmer_http_action(
+                &Method::POST,
+                "/api/v2/users/operator/programmer-preload-values/actions"
+            ),
+            Some(("preload_values", false))
+        );
     }
 }

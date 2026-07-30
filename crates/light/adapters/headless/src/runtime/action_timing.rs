@@ -35,6 +35,7 @@ struct ActionTimingInner {
     measurements: Mutex<VecDeque<ActionMeasurement>>,
     output_epochs: Mutex<VecDeque<OutputEpoch>>,
     causal_origins: Mutex<HashMap<(String, String), CausalOrigin>>,
+    output_wake: Arc<tokio::sync::Notify>,
 }
 
 struct CausalOrigin {
@@ -103,6 +104,7 @@ impl Default for ActionTimingResource {
                 measurements: Mutex::new(VecDeque::with_capacity(MEASUREMENT_CAPACITY)),
                 output_epochs: Mutex::new(VecDeque::with_capacity(OUTPUT_EPOCH_CAPACITY)),
                 causal_origins: Mutex::new(HashMap::new()),
+                output_wake: Arc::new(tokio::sync::Notify::new()),
             }),
         }
     }
@@ -129,6 +131,10 @@ impl ActionTimingResource {
             may_change_output,
             osc_feedback: None,
         }
+    }
+
+    pub(super) fn output_wake(&self) -> Arc<tokio::sync::Notify> {
+        Arc::clone(&self.inner.output_wake)
     }
 
     pub(super) fn begin_causal_origin(
@@ -249,11 +255,14 @@ impl ActionTimingReceipt {
         let acknowledged_at = Instant::now();
         let acknowledged_output_tick = self.resource.inner.output_tick.load(Ordering::Acquire);
         let visibility_epoch = (succeeded && self.may_change_output).then(|| {
-            self.resource
+            let visibility_epoch = self
+                .resource
                 .inner
                 .visibility_epoch
                 .fetch_add(1, Ordering::AcqRel)
-                + 1
+                + 1;
+            self.resource.inner.output_wake.notify_one();
+            visibility_epoch
         });
         let measurement = ActionMeasurement {
             action_id: self.action_id,
@@ -419,4 +428,16 @@ mod tests {
         assert_eq!(measurements[1].source, "osc");
         assert_eq!(measurements[1].request_id, "encoder-1");
     }
+}
+#[tokio::test]
+async fn successful_output_action_wakes_the_scheduler() {
+    let timing = ActionTimingResource::default();
+    let wake = timing.output_wake();
+    let receipt = timing.begin("websocket", "preload_lifecycle", "wake", 44, true);
+
+    receipt.acknowledge(true);
+
+    tokio::time::timeout(Duration::from_millis(10), wake.notified())
+        .await
+        .expect("successful output action leaves a scheduler wake permit");
 }

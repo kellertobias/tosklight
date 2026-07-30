@@ -230,7 +230,83 @@ pub(super) async fn visualization_snapshot(
     show.verify(&state)?;
     let source = state.output.latest_visualization_frame();
     let projection_started = Instant::now();
-    let mut snapshot = visualization_snapshot_for_session(&state, &session, query.preload)?;
+    let mut snapshot = if query.dynamic_stack_only {
+        let mut snapshot = visualization_snapshot_for_session_content_from_resolved(
+            &state,
+            &session,
+            query.preload,
+            true,
+            true,
+            None,
+            None,
+        )?;
+        if let Some(snapshot) = snapshot.as_object_mut() {
+            snapshot.insert("values".into(), serde_json::Value::Array(Vec::new()));
+            snapshot.insert(
+                "profile_output_values".into(),
+                serde_json::Value::Array(Vec::new()),
+            );
+            let fixture_ids = query.fixture_ids.as_deref().map(|fixture_ids| {
+                fixture_ids
+                    .split(',')
+                    .filter_map(|fixture_id| Uuid::parse_str(fixture_id).ok())
+                    .collect::<HashSet<_>>()
+            });
+            if let Some(dynamic_stack) = snapshot
+                .get_mut("dynamic_stack")
+                .and_then(serde_json::Value::as_array_mut)
+            {
+                dynamic_stack.retain_mut(|entry| {
+                    if entry.get("entry_type").and_then(serde_json::Value::as_str)
+                        == Some("ordinary_static")
+                    {
+                        return false;
+                    }
+                    if let Some(fixture_ids) = fixture_ids.as_ref()
+                        && !entry
+                            .get("fixture_id")
+                            .and_then(serde_json::Value::as_str)
+                            .and_then(|fixture_id| Uuid::parse_str(fixture_id).ok())
+                            .is_some_and(|fixture_id| fixture_ids.contains(&fixture_id))
+                    {
+                        return false;
+                    }
+                    let displayed_attribute = entry
+                        .get("attribute")
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(|attribute| {
+                            matches!(attribute, "intensity" | "pan" | "tilt")
+                                || attribute.starts_with("color")
+                        });
+                    if !displayed_attribute {
+                        return false;
+                    }
+                    if let Some(entry) = entry.as_object_mut() {
+                        entry.retain(|field, _| {
+                            matches!(
+                                field.as_str(),
+                                "fixture_id"
+                                    | "attribute"
+                                    | "entry_type"
+                                    | "source"
+                                    | "name"
+                                    | "size"
+                                    | "paused"
+                                    | "hidden"
+                                    | "pending"
+                                    | "winning"
+                            )
+                        });
+                    }
+                    true
+                });
+                compact_fixture_sheet_dynamic_stack(dynamic_stack);
+            }
+        }
+        snapshot
+    } else {
+        visualization_snapshot_for_session(&state, &session, query.preload)?
+    };
     let projection_duration = projection_started.elapsed();
     if let Some(source) = source.as_ref()
         && let Some(snapshot) = snapshot.as_object_mut()
@@ -257,10 +333,140 @@ pub(super) async fn visualization_snapshot(
     Ok(Json(snapshot))
 }
 
+fn compact_fixture_sheet_dynamic_stack(dynamic_stack: &mut Vec<serde_json::Value>) {
+    let mut compacted = Vec::new();
+    let mut positions = HashMap::<(String, String), usize>::new();
+    for mut entry in std::mem::take(dynamic_stack) {
+        let Some(fixture_id) = entry
+            .get("fixture_id")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+        else {
+            continue;
+        };
+        let Some(attribute) = entry
+            .get("attribute")
+            .and_then(serde_json::Value::as_str)
+            .map(|attribute| match attribute {
+                "intensity" => "intensity",
+                "pan" | "tilt" => "pan",
+                attribute if attribute.starts_with("color") => "color",
+                attribute => attribute,
+            })
+            .map(str::to_owned)
+        else {
+            continue;
+        };
+        if let Some(entry) = entry.as_object_mut() {
+            entry.insert("attribute".into(), attribute.clone().into());
+        }
+        let summary_line = fixture_sheet_dynamic_summary_line(&entry);
+        if let Some(position) = positions.get(&(fixture_id.clone(), attribute.clone())) {
+            let Some(existing) = compacted
+                .get_mut(*position)
+                .and_then(serde_json::Value::as_object_mut)
+            else {
+                continue;
+            };
+            let count = existing
+                .get("summary_count")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(1)
+                + 1;
+            existing.insert("summary_count".into(), count.into());
+            if count <= 3
+                && let Some(title) = existing
+                    .get("summary_title")
+                    .and_then(serde_json::Value::as_str)
+            {
+                let mut title = title.to_owned();
+                title.push('\n');
+                title.push_str(&summary_line);
+                existing.insert("summary_title".into(), title.into());
+            }
+            continue;
+        }
+        if let Some(entry) = entry.as_object_mut() {
+            entry.insert("summary_count".into(), 1.into());
+            entry.insert("summary_title".into(), summary_line.into());
+        }
+        positions.insert((fixture_id, attribute), compacted.len());
+        compacted.push(entry);
+    }
+    *dynamic_stack = compacted;
+}
+
+fn fixture_sheet_dynamic_summary_line(entry: &serde_json::Value) -> String {
+    let name = entry
+        .get("name")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("Dynamic");
+    let source = entry
+        .get("source")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    let mut details = Vec::new();
+    if let Some(size) = entry.get("size").and_then(serde_json::Value::as_f64) {
+        details.push(format!("Size {:.0}%", size * 100.0));
+    }
+    for (field, label) in [
+        ("winning", "winning"),
+        ("pending", "pending"),
+        ("paused", "paused"),
+        ("hidden", "hidden"),
+    ] {
+        if entry
+            .get(field)
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+        {
+            details.push(label.into());
+        }
+    }
+    if details.is_empty() {
+        format!("{name} · {source}")
+    } else {
+        format!("{name} · {source} · {}", details.join(", "))
+    }
+}
+
 pub(super) fn visualization_snapshot_for_session(
     state: &AppState,
     session: &Session,
     preload: bool,
+) -> Result<serde_json::Value, ApiError> {
+    visualization_snapshot_for_session_content(state, session, preload, true)
+}
+
+pub(super) fn visualization_snapshot_for_session_content(
+    state: &AppState,
+    session: &Session,
+    preload: bool,
+    include_dynamic_stack: bool,
+) -> Result<serde_json::Value, ApiError> {
+    visualization_snapshot_for_session_content_from_resolved(
+        state,
+        session,
+        preload,
+        include_dynamic_stack,
+        false,
+        None,
+        None,
+    )
+}
+
+pub(super) fn visualization_snapshot_for_session_content_from_resolved(
+    state: &AppState,
+    session: &Session,
+    preload: bool,
+    include_dynamic_stack: bool,
+    summarize_dynamic_stack: bool,
+    authoritative_resolved: Option<
+        &HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>,
+    >,
+    authoritative_profile_output: Option<
+        &HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>,
+    >,
 ) -> Result<serde_json::Value, ApiError> {
     let snapshot = state.output.snapshot();
     let options = state.output.render_options();
@@ -276,17 +482,46 @@ pub(super) fn visualization_snapshot_for_session(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let ordinary = state.output.resolved_values();
-    let (mut resolved, dynamic_runtime, dynamic_samples) = state
-        .output
-        .visualization_dynamic_projection(&extra_dynamic_values, preload);
+    let has_preload_overrides = programmer.as_ref().is_some_and(|programmer| {
+        !programmer.preload_active.is_empty()
+            || !programmer.preload_pending.is_empty()
+            || !programmer.preload_group_active.is_empty()
+            || !programmer.preload_group_pending.is_empty()
+            || !extra_dynamic_values.is_empty()
+    });
+    let ordinary = include_dynamic_stack
+        .then(|| state.output.cached_visualization_ordinary_values())
+        .unwrap_or_default();
+    let authoritative = authoritative_resolved.filter(|_| extra_dynamic_values.is_empty());
+    let cached_dynamics = include_dynamic_stack
+        .then(|| state.output.cached_visualization_dynamics())
+        .flatten();
+    let (mut resolved, dynamic_runtime, dynamic_samples) =
+        match (authoritative, include_dynamic_stack, cached_dynamics) {
+            (Some(resolved), false, _) => (
+                std::borrow::Cow::Borrowed(resolved),
+                light_dynamics::DynamicRuntimeSnapshot::default(),
+                Vec::new(),
+            ),
+            (Some(resolved), true, Some(cached)) => (
+                std::borrow::Cow::Borrowed(resolved),
+                cached.runtime,
+                cached.samples,
+            ),
+            _ => {
+                let (resolved, runtime, samples) = state
+                    .output
+                    .visualization_dynamic_projection(&extra_dynamic_values, preload);
+                (std::borrow::Cow::Owned(resolved), runtime, samples)
+            }
+        };
     if preload && let Some(programmer) = programmer {
         for value in programmer
             .preload_active
             .iter()
             .chain(&programmer.preload_pending)
         {
-            resolved.insert(
+            resolved.to_mut().insert(
                 (value.fixture_id, value.attribute.clone()),
                 value.value.clone(),
             );
@@ -304,43 +539,43 @@ pub(super) fn visualization_snapshot_for_session(
             if let Ok(fixtures) = light_programmer::resolve_group(group_id, &groups) {
                 for fixture in fixtures {
                     for (attribute, value) in attributes {
-                        resolved.insert((fixture, attribute.clone()), value.value.clone());
+                        resolved
+                            .to_mut()
+                            .insert((fixture, attribute.clone()), value.value.clone());
                     }
                 }
             }
         }
     }
-    let profile_output_values = state
-        .output
-        .profile_visualization_values(&resolved, options)
-        .map_err(|error| ApiError::internal(error.to_string()))?
-        .into_iter()
-        .map(|((fixture_id, attribute), value)| {
-            serde_json::json!({
-                "fixture_id": fixture_id,
-                "attribute": attribute,
-                "value": value,
-            })
+    let profile_output_values = if has_preload_overrides {
+        let projected = state
+            .output
+            .profile_visualization_values(resolved.as_ref(), options)
+            .map_err(|error| ApiError::internal(error.to_string()))?;
+        visualization_wire_values(&projected)
+    } else if let Some(authoritative) = authoritative_profile_output {
+        visualization_wire_values(authoritative)
+    } else {
+        let projected = state
+            .output
+            .profile_visualization_values(resolved.as_ref(), options)
+            .map_err(|error| ApiError::internal(error.to_string()))?;
+        visualization_wire_values(&projected)
+    };
+    let values = visualization_wire_values(resolved.as_ref());
+    let dynamic_stack = include_dynamic_stack
+        .then(|| {
+            dynamic_stack_projection(
+                state,
+                ordinary.as_ref(),
+                resolved.as_ref(),
+                &dynamic_runtime,
+                &dynamic_samples,
+                &extra_dynamic_values,
+                summarize_dynamic_stack,
+            )
         })
-        .collect::<Vec<_>>();
-    let values = resolved
-        .iter()
-        .map(|((fixture_id, attribute), value)| {
-            serde_json::json!({
-                "fixture_id": fixture_id,
-                "attribute": attribute,
-                "value": value,
-            })
-        })
-        .collect::<Vec<_>>();
-    let dynamic_stack = dynamic_stack_projection(
-        &state,
-        &ordinary,
-        &resolved,
-        &dynamic_runtime,
-        &dynamic_samples,
-        &extra_dynamic_values,
-    );
+        .unwrap_or_default();
     let show_id = state.active_show.current().map(|show| show.id.0);
     Ok(serde_json::json!({
         "scope": {
@@ -355,6 +590,21 @@ pub(super) fn visualization_snapshot_for_session(
         "dynamic_stack": dynamic_stack,
         "profile_output_values": profile_output_values,
     }))
+}
+
+fn visualization_wire_values(
+    values: &HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>,
+) -> Vec<serde_json::Value> {
+    values
+        .iter()
+        .map(|((fixture_id, attribute), value)| {
+            serde_json::json!({
+                "fixture_id": fixture_id,
+                "attribute": attribute,
+                "value": value,
+            })
+        })
+        .collect()
 }
 
 #[derive(Serialize)]
@@ -394,6 +644,7 @@ fn dynamic_stack_projection(
     runtime: &light_dynamics::DynamicRuntimeSnapshot,
     samples: &[light_dynamics::DynamicRuntimeSample],
     extra: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
+    summary: bool,
 ) -> Vec<DynamicStackEntry> {
     let now_millis =
         u64::try_from(state.output.application_time().timestamp_millis()).unwrap_or_default();
@@ -405,11 +656,13 @@ fn dynamic_stack_projection(
         runtime,
         samples,
         now_millis,
+        summary,
     );
     for (programmer_id, priority, stored) in state
         .output
         .dynamic_programmer_values()
-        .into_iter()
+        .iter()
+        .cloned()
         .chain(extra.iter().cloned())
     {
         push_semantic_stack_entry(
@@ -418,6 +671,7 @@ fn dynamic_stack_projection(
             priority,
             format!("Programmer {programmer_id}"),
             resolved,
+            summary,
         );
     }
     for stored in state.output.active_cue_dynamic_values() {
@@ -433,6 +687,7 @@ fn dynamic_stack_projection(
             stored.priority,
             format!("Cue {}", stored.current_cue_id),
             resolved,
+            summary,
         );
     }
     entries.sort_by(|left, right| {
@@ -459,7 +714,9 @@ fn push_runtime_stack_entries(
     runtime: &light_dynamics::DynamicRuntimeSnapshot,
     samples: &[light_dynamics::DynamicRuntimeSample],
     now_millis: u64,
+    summary: bool,
 ) {
+    let mut ordinary_entries = HashSet::new();
     let dynamic_winners = samples
         .iter()
         .fold(
@@ -489,15 +746,17 @@ fn push_runtime_stack_entries(
         .into_iter()
         .map(|(key, sample)| (key, sample.controller_id))
         .collect::<HashMap<_, _>>();
-    let samples = samples
-        .iter()
-        .map(|sample| {
-            (
-                (sample.controller_id, sample.target, sample.lane_id),
-                sample.value,
-            )
-        })
-        .collect::<HashMap<_, _>>();
+    let sample_values = (!summary).then(|| {
+        samples
+            .iter()
+            .map(|sample| {
+                (
+                    (sample.controller_id, sample.target, sample.lane_id),
+                    sample.value,
+                )
+            })
+            .collect::<HashMap<_, _>>()
+    });
     for instance in &runtime.instances {
         let transitions = instance
             .controller_transitions
@@ -542,18 +801,17 @@ fn push_runtime_stack_entries(
                         hidden: winner != Some(controller.id),
                         pending,
                         winning: winner == Some(controller.id),
-                        value: samples
-                            .get(&(controller.id, *target, lane.id))
-                            .copied()
+                        value: sample_values
+                            .as_ref()
+                            .and_then(|samples| {
+                                samples.get(&(controller.id, *target, lane.id)).copied()
+                            })
                             .map(light_core::AttributeValue::Normalized),
-                        resolved_value: resolved.get(&key).cloned(),
+                        resolved_value: (!summary).then(|| resolved.get(&key).cloned()).flatten(),
                     });
-                    if let Some(value) = ordinary.get(&key)
-                        && !entries.iter().any(|entry| {
-                            entry.fixture_id == target.0
-                                && entry.attribute == lane.attribute.0
-                                && entry.entry_type == "ordinary_static"
-                        })
+                    if !summary
+                        && let Some(value) = ordinary.get(&key)
+                        && ordinary_entries.insert(key.clone())
                     {
                         entries.push(DynamicStackEntry {
                             fixture_id: target.0,
@@ -593,6 +851,7 @@ fn push_semantic_stack_entry(
         (light_core::FixtureId, light_core::AttributeKey),
         light_core::AttributeValue,
     >,
+    summary: bool,
 ) {
     let key = (stored.fixture_id, stored.attribute.clone());
     let (entry_type, name, instance, value) = match stored.value {
@@ -633,7 +892,7 @@ fn push_semantic_stack_entry(
         hidden: false,
         pending: false,
         winning: true,
-        value,
-        resolved_value: resolved.get(&key).cloned(),
+        value: (!summary).then_some(value).flatten(),
+        resolved_value: (!summary).then(|| resolved.get(&key).cloned()).flatten(),
     });
 }

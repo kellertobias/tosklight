@@ -5,6 +5,8 @@ import type { AttributeValue, VisualizationSnapshot } from "../../api/types";
 // the authoritative value early is non-predictive and prevents the next source
 // sample from cancelling the preceding sample before its canvas submission.
 export const STAGE_INTERPOLATION_MILLIS = 60;
+export const MAX_INTERPOLATED_STAGE_FIXTURES = 96;
+export const MAX_INTERPOLATED_STAGE_SCENE_FIXTURES = 160;
 
 export function stageVisualizationChanged(
 	from: VisualizationSnapshot,
@@ -19,6 +21,46 @@ export function stageVisualizationChanged(
 			from.profile_output_values ?? [],
 			to.profile_output_values ?? [],
 		)
+	);
+}
+
+export function changedStageFixtureIds(
+	from: VisualizationSnapshot,
+	to: VisualizationSnapshot,
+) {
+	if (
+		from.preload !== to.preload ||
+		from.blackout !== to.blackout ||
+		from.grand_master !== to.grand_master
+	)
+		return null;
+	const changed = new Set<string>();
+	collectChangedFixtureIds(from.values, to.values, changed);
+	collectChangedFixtureIds(
+		from.profile_output_values ?? [],
+		to.profile_output_values ?? [],
+		changed,
+	);
+	return changed;
+}
+
+export function shouldInterpolateStageChanges(
+	changedFixtureIds: ReadonlySet<string> | null,
+) {
+	return (
+		changedFixtureIds !== null &&
+		changedFixtureIds.size > 0 &&
+		changedFixtureIds.size <= MAX_INTERPOLATED_STAGE_FIXTURES
+	);
+}
+
+export function shouldInterpolateStageSceneChanges(
+	sceneFixtureCount: number,
+	changedFixtureIds: ReadonlySet<string> | null,
+) {
+	return (
+		sceneFixtureCount <= MAX_INTERPOLATED_STAGE_SCENE_FIXTURES &&
+		shouldInterpolateStageChanges(changedFixtureIds)
 	);
 }
 
@@ -160,6 +202,25 @@ function sameEntries<
 			return false;
 	}
 	return true;
+}
+
+function collectChangedFixtureIds<
+	T extends {
+		fixture_id: string;
+		attribute: string;
+		value: AttributeValue;
+	},
+>(left: readonly T[], right: readonly T[], changed: Set<string>) {
+	const previous = new Map(
+		left.map((entry) => [entryKey(entry), entry] as const),
+	);
+	for (const entry of right) {
+		const before = previous.get(entryKey(entry));
+		if (!before || !sameAttribute(before.value, entry.value))
+			changed.add(entry.fixture_id);
+		previous.delete(entryKey(entry));
+	}
+	for (const entry of previous.values()) changed.add(entry.fixture_id);
 }
 
 function sameAttribute(left: AttributeValue, right: AttributeValue) {

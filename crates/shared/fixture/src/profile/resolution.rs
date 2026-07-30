@@ -275,7 +275,15 @@ pub(super) fn function_value(
     values: &HashMap<AttributeKey, AttributeValue>,
     transform: CanonicalTransform,
 ) -> Option<ResolvedChannelRaw> {
-    let value = values.get(&function.attribute)?;
+    function_value_for(function, values.get(&function.attribute), transform)
+}
+
+pub(super) fn function_value_for(
+    function: &ChannelFunction,
+    value: Option<&AttributeValue>,
+    transform: CanonicalTransform,
+) -> Option<ResolvedChannelRaw> {
+    let value = value?;
     match (&function.behavior, value) {
         (ChannelFunctionBehavior::Continuous { .. }, value) => {
             mapped_canonical_raw(value, function.dmx_from, function.dmx_to, transform)

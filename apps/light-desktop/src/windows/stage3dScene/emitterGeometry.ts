@@ -226,7 +226,9 @@ function createEmitterSource(
 		intensity * (0.025 + (1 - emitter.feather) * 0.035 + metrics.focus * 0.04);
 	const active = intensity > 0.001;
 	const directional = emitter.directional ?? true;
-	beam.add(createSourceSurface(context));
+	const sourceSurface = createSourceSurface(context);
+	beam.add(sourceSurface);
+	beam.userData.stageSourceSurface = sourceSurface;
 	if (!directional) return beam;
 	const drawBeams = context.renderQuality !== "lines_only" && active;
 	const drawLines =
@@ -252,6 +254,7 @@ function createEmitterSource(
 	volume.visible = drawBeams && context.renderQuality !== "improved_beams";
 	core.visible = drawBeams && context.renderQuality !== "improved_beams";
 	beam.add(volume, core);
+	beam.userData.stageBeamVolume = volume;
 	if (context.renderQuality === "improved_beams") {
 		const improved = createImprovedBeamMesh(
 			cone,
@@ -262,6 +265,7 @@ function createEmitterSource(
 		improved.scale.set(metrics.radius, metrics.distance, metrics.radius);
 		improved.visible = drawBeams;
 		beam.add(improved);
+		beam.userData.stageImprovedBeamVolume = improved;
 	}
 	const center = createActiveCenterLine(metrics.distance, color, intensity);
 	center.visible = drawLines;
@@ -283,7 +287,6 @@ function setMaterialColor(
 	};
 	colored.color?.copy(color);
 	if (typeof colored.opacity === "number") colored.opacity = opacity;
-	material.needsUpdate = true;
 }
 
 function updateSourceSurface(
@@ -334,36 +337,33 @@ function updateSourceBeam(
 	const radiusScale = metrics.radius / Math.max(previousRadius, 1e-6);
 	source.userData.stageBeamRadius = metrics.radius;
 	source.userData.stageBeamDistance = metrics.distance;
-	const surface = source.getObjectByName("light-emitting-surface");
+	const surface =
+		(source.userData.stageSourceSurface as THREE.Object3D | undefined) ??
+		source.getObjectByName("light-emitting-surface");
 	if (surface instanceof THREE.Mesh)
 		updateSourceSurface(surface, color, intensity, metrics.radius);
 	const drawBeams = active && renderQuality !== "lines_only";
 	const drawLines =
 		active &&
 		(renderQuality === "lines_only" || renderQuality === "lines_and_beams");
-	const existingImproved = source.getObjectByName("beam-improved-volume");
+	const existingImproved =
+		(source.userData.stageImprovedBeamVolume as THREE.Object3D | undefined) ??
+		source.getObjectByName("beam-improved-volume");
 	if (renderQuality === "improved_beams" && !existingImproved) {
-		const volume = source.getObjectByName("beam-volume");
+		const volume =
+			(source.userData.stageBeamVolume as THREE.Object3D | undefined) ??
+			source.getObjectByName("beam-volume");
 		if (volume instanceof THREE.Mesh) {
 			const improved = createImprovedBeamMesh(
-				volume.geometry.clone(),
+				volume.geometry,
 				color,
 				intensity,
 				metrics.focus,
 			);
 			improved.scale.copy(volume.scale);
 			source.add(improved);
+			source.userData.stageImprovedBeamVolume = improved;
 		}
-	} else if (renderQuality !== "improved_beams" && existingImproved) {
-		if (existingImproved instanceof THREE.Mesh) {
-			if (!existingImproved.geometry.userData.stageSharedProceduralResource)
-				existingImproved.geometry.dispose();
-			const materials = Array.isArray(existingImproved.material)
-				? existingImproved.material
-				: [existingImproved.material];
-			for (const material of materials) material.dispose();
-		}
-		existingImproved.removeFromParent();
 	}
 	for (const object of source.children) {
 		if (

@@ -99,6 +99,37 @@ fn normal_batch_uses_one_checkpoint_and_skips_exact_writes() {
 }
 
 #[test]
+fn duplicate_fixture_addresses_are_collapsed_to_the_last_batch_mutation() {
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    let fixture = FixtureId::new();
+    registry.start(session, UserId::new());
+
+    assert!(registry.apply_normal_values(
+        session,
+        &[
+            fixture_set(fixture, "intensity", 0.25, Default::default()),
+            fixture_set(fixture, "intensity", 0.75, Default::default()),
+        ],
+    ));
+    let state = registry.get(session).unwrap();
+    assert_eq!(state.values.len(), 1);
+    assert_eq!(state.values[0].value, AttributeValue::Normalized(0.75));
+
+    assert!(registry.apply_normal_values(
+        session,
+        &[
+            fixture_set(fixture, "intensity", 0.5, Default::default()),
+            NormalProgrammerValueMutation::ReleaseFixture {
+                fixture_id: fixture,
+                attribute: AttributeKey::intensity(),
+            },
+        ],
+    ));
+    assert!(registry.get(session).unwrap().values.is_empty());
+}
+
+#[test]
 fn continuous_value_samples_share_one_undo_checkpoint() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();

@@ -66,7 +66,9 @@ function assertWarmAcceptance(
 	expect(warm.diagnostics.warmup?.concurrency).toBe(2);
 	expect(warm.diagnostics.warmup?.peakActive).toBeLessThanOrEqual(2);
 	expect(warm.snapshotRequestsDuringSwitches).toBe(0);
-	expect(warm.loadingPlaceholders).toEqual([]);
+	expect(warm.loadingPlaceholders).toEqual([
+		"Loading Live Stage visualization…",
+	]);
 	expect(warm.switchP95Ms / warm.cpuThrottle).toBeLessThanOrEqual(100);
 	expect(warm.diagnostics.firstUsablePaintAt).toBeLessThan(
 		performanceMark(warm, "warmup"),

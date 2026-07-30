@@ -1,6 +1,6 @@
 use super::{
     ChannelBehavior, ChannelScales, FixtureMode, ProfileError,
-    resolution::{ResolvedChannelRaw, function_value, mapped_canonical_raw, scale_channel_raw},
+    resolution::{ResolvedChannelRaw, function_value_for, mapped_canonical_raw, scale_channel_raw},
 };
 use light_core::{AttributeKey, AttributeValue};
 use std::collections::HashMap;
@@ -89,6 +89,25 @@ impl BoundFixtureModeResolution<'_> {
         highlight_override: Option<u32>,
         scales: impl FnOnce(Option<&AttributeKey>) -> ChannelScales,
     ) -> PlannedChannelResolution<'_> {
+        self.resolve_channel_with(
+            channel_index,
+            |attribute| values.get(attribute),
+            highlighted,
+            highlight_override,
+            scales,
+        )
+    }
+
+    /// Resolve a channel from a borrowed semantic lookup without requiring a per-head owned map.
+    #[inline]
+    pub fn resolve_channel_with<'values>(
+        &self,
+        channel_index: usize,
+        value: impl Fn(&AttributeKey) -> Option<&'values AttributeValue>,
+        highlighted: bool,
+        highlight_override: Option<u32>,
+        scales: impl FnOnce(Option<&AttributeKey>) -> ChannelScales,
+    ) -> PlannedChannelResolution<'_> {
         let channel = &self.mode.channels[channel_index];
         let compiled = &self.plan.channels[channel_index];
         debug_assert_eq!(channel.id, compiled.channel_id);
@@ -97,11 +116,15 @@ impl BoundFixtureModeResolution<'_> {
             .iter()
             .filter_map(|index| channel.functions.get(*index))
             .find_map(|function| {
-                function_value(function, values, channel.canonical_transform)
-                    .map(|raw| (function, raw))
+                function_value_for(
+                    function,
+                    value(&function.attribute),
+                    channel.canonical_transform,
+                )
+                .map(|raw| (function, raw))
             });
-        let control_value = values.get(&compiled.control_attribute);
-        let attribute_value = values.get(&channel.attribute);
+        let control_value = value(&compiled.control_attribute);
+        let attribute_value = value(&channel.attribute);
         let active_attribute = if channel.behavior == ChannelBehavior::Static {
             None
         } else if control_value.is_some() {

@@ -1,12 +1,58 @@
 use super::*;
+use std::sync::OnceLock;
 
-struct TickSources {
-    values: HashMap<(FixtureId, AttributeKey), AttributeValue>,
+type DynamicProgrammerValues = Vec<(Uuid, i16, light_dynamics::DynamicAddressValue)>;
+
+#[derive(Default)]
+pub(in crate::runtime) struct ProgrammerReconciliationCache {
+    signature: Mutex<
+        Option<(
+            Arc<DynamicProgrammerValues>,
+            Arc<light_engine::EngineSnapshot>,
+        )>,
+    >,
 }
 
-impl light_dynamics::ScalarSourceResolver for TickSources {
+impl ProgrammerReconciliationCache {
+    fn changed(
+        &self,
+        values: &Arc<DynamicProgrammerValues>,
+        snapshot: &Arc<light_engine::EngineSnapshot>,
+    ) -> bool {
+        let mut signature = self.signature.lock();
+        let changed = signature
+            .as_ref()
+            .is_none_or(|(previous_values, previous_snapshot)| {
+                !Arc::ptr_eq(previous_values, values) || !Arc::ptr_eq(previous_snapshot, snapshot)
+            });
+        if changed {
+            *signature = Some((Arc::clone(values), Arc::clone(snapshot)));
+        }
+        changed
+    }
+}
+
+struct TickSources<'a> {
+    engine: &'a Engine,
+    values: OnceLock<HashMap<(FixtureId, AttributeKey), AttributeValue>>,
+}
+
+impl<'a> TickSources<'a> {
+    fn new(engine: &'a Engine) -> Self {
+        Self {
+            engine,
+            values: OnceLock::new(),
+        }
+    }
+
+    fn values(&self) -> &HashMap<(FixtureId, AttributeKey), AttributeValue> {
+        self.values.get_or_init(|| self.engine.resolved_values())
+    }
+}
+
+impl light_dynamics::ScalarSourceResolver for TickSources<'_> {
     fn current(&self, target: FixtureId, attribute: &AttributeKey) -> Option<f32> {
-        self.values
+        self.values()
             .get(&(target, attribute.clone()))
             .and_then(AttributeValue::normalized)
     }
@@ -35,9 +81,35 @@ pub(in crate::runtime) fn dynamic_contributions(
         speed_groups,
         rate,
         extra_programmer_values,
+        None,
         apply_auto_off,
     )
     .0
+}
+
+pub(in crate::runtime) fn dynamic_contributions_cached(
+    engine: &Engine,
+    dynamics: &Mutex<light_dynamics::DynamicRuntime>,
+    speed_groups: &Mutex<[light_control::speed::SpeedGroupController; 5]>,
+    rate: &AtomicU16,
+    extra_programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
+    programmer_reconciliation_cache: &ProgrammerReconciliationCache,
+    apply_auto_off: bool,
+) -> (
+    Vec<ContributionBatch>,
+    light_dynamics::DynamicRuntimeSnapshot,
+    Vec<light_dynamics::DynamicRuntimeSample>,
+) {
+    let (batches, _, _, runtime, samples) = dynamic_contributions_with_auto_off(
+        engine,
+        dynamics,
+        speed_groups,
+        rate,
+        extra_programmer_values,
+        Some(programmer_reconciliation_cache),
+        apply_auto_off,
+    );
+    (batches, runtime, samples)
 }
 
 pub(in crate::runtime) fn dynamic_projection(
@@ -50,12 +122,13 @@ pub(in crate::runtime) fn dynamic_projection(
     Vec<ContributionBatch>,
     Vec<light_dynamics::DynamicRuntimeSample>,
 ) {
-    let (batches, _, _, samples) = dynamic_contributions_with_auto_off(
+    let (batches, _, _, _, samples) = dynamic_contributions_with_auto_off(
         engine,
         dynamics,
         speed_groups,
         rate,
         extra_programmer_values,
+        None,
         false,
     );
     (batches, samples)
@@ -67,18 +140,22 @@ pub(super) fn dynamic_contributions_with_auto_off(
     speed_groups: &Mutex<[light_control::speed::SpeedGroupController; 5]>,
     rate: &AtomicU16,
     extra_programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
+    programmer_reconciliation_cache: Option<&ProgrammerReconciliationCache>,
     apply_auto_off: bool,
 ) -> (
     Vec<ContributionBatch>,
     Vec<PlaybackIdentity>,
     Vec<light_application::EventDraft>,
+    light_dynamics::DynamicRuntimeSnapshot,
     Vec<light_dynamics::DynamicRuntimeSample>,
 ) {
     let now = engine.application_time();
     let now_millis = u64::try_from(now.timestamp_millis()).unwrap_or_default();
-    let sources = TickSources {
-        values: engine.resolved_values(),
-    };
+    // Most ticks have no Dynamic source that needs an underlay value. Keep the whole-show
+    // semantic projection lazy so the ordinary output path does not resolve every Playback,
+    // Group, and Programmer contribution once here and then again during DMX rendering.
+    // Dynamic sampling and candidate blending share this cache when either actually needs it.
+    let sources = TickSources::new(engine);
     let speed_groups = speed_groups.lock();
     let speed_transports = std::array::from_fn(|index| {
         let snapshot = speed_groups[index].snapshot(now_millis);
@@ -91,16 +168,58 @@ pub(super) fn dynamic_contributions_with_auto_off(
         }
     });
     drop(speed_groups);
+    let mut dynamics = dynamics.lock();
+    let before_runtime = dynamics.output_projection_snapshot();
+    let programmer_values = engine.dynamic_programmer_values();
+    let cue_values = engine.active_cue_dynamic_values();
+    let active_dynamic_playbacks = engine
+        .active_dynamic_playbacks()
+        .into_iter()
+        .filter(|playback| playback.enabled)
+        .collect::<Vec<_>>();
+    let playback_paused = engine.playback_dynamics().paused;
+    if dynamic_tick_is_idle(
+        &before_runtime,
+        &programmer_values,
+        &cue_values,
+        &active_dynamic_playbacks,
+        extra_programmer_values,
+        playback_paused,
+    ) {
+        return (
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            before_runtime,
+            Vec::new(),
+        );
+    }
+
     let rate = u64::from(rate.load(std::sync::atomic::Ordering::Relaxed).max(1));
     let interval = (1_000 / rate).max(1);
-    let mut dynamics = dynamics.lock();
-    let before_runtime = dynamics.snapshot();
-    dynamics.set_global_paused(engine.playback_dynamics().paused, now_millis);
-    reconcile_programmer_dynamics(engine, &mut dynamics, now_millis, extra_programmer_values);
-    reconcile_cue_dynamics(engine, &mut dynamics, now_millis);
-    let playback_controls = reconcile_dynamic_playbacks(engine, &mut dynamics, now_millis);
+    let engine_snapshot = engine.snapshot();
+    dynamics.set_global_paused(playback_paused, now_millis);
+    let reconcile_programmer = !extra_programmer_values.is_empty()
+        || programmer_reconciliation_cache
+            .is_none_or(|cache| cache.changed(&programmer_values, &engine_snapshot));
+    if reconcile_programmer {
+        reconcile_programmer_dynamics(
+            &mut dynamics,
+            now_millis,
+            &engine_snapshot,
+            &programmer_values,
+            extra_programmer_values,
+        );
+    }
+    reconcile_cue_dynamics(&mut dynamics, now_millis, &engine_snapshot, &cue_values);
+    let playback_controls = reconcile_dynamic_playbacks(
+        &mut dynamics,
+        now_millis,
+        &engine_snapshot,
+        &active_dynamic_playbacks,
+    );
     let samples = dynamics.sample_all(now_millis, interval, &speed_transports, &sources);
-    let after_runtime = dynamics.snapshot();
+    let after_runtime = dynamics.output_projection_snapshot();
     drop(dynamics);
     let dynamic_events = dynamic_transition_events(&before_runtime, &after_runtime, now_millis);
     let auto_offs = if apply_auto_off {
@@ -109,6 +228,8 @@ pub(super) fn dynamic_contributions_with_auto_off(
             &samples,
             &playback_controls,
             &after_runtime,
+            &programmer_values,
+            &cue_values,
             now,
         );
         engine.auto_off_fully_controlled_dynamic_playbacks_at(fully_controlled)
@@ -117,7 +238,8 @@ pub(super) fn dynamic_contributions_with_auto_off(
     };
 
     let candidates = collect_dynamic_candidates(
-        engine,
+        &programmer_values,
+        &cue_values,
         extra_programmer_values,
         &samples,
         &playback_controls,
@@ -125,7 +247,13 @@ pub(super) fn dynamic_contributions_with_auto_off(
         now_millis,
     );
     if candidates.is_empty() {
-        return (Vec::new(), auto_offs, dynamic_events, samples);
+        return (
+            Vec::new(),
+            auto_offs,
+            dynamic_events,
+            after_runtime,
+            samples,
+        );
     }
     (
         vec![ContributionBatch::new(candidates.into_iter().map(
@@ -138,18 +266,12 @@ pub(super) fn dynamic_contributions_with_auto_off(
                     )
                 });
                 let has_dynamic = stack.iter().any(|candidate| candidate.dynamic);
-                let mut resolved = sources
-                    .values
-                    .get(&(fixture_id, attribute.clone()))
-                    .cloned()
-                    .unwrap_or_else(|| stack[0].value.clone());
-                for candidate in &stack {
-                    resolved = blend_attribute_value(
-                        resolved,
-                        candidate.value.clone(),
-                        candidate.activation_mix,
-                    );
-                }
+                let resolved = resolve_dynamic_stack(&stack, || {
+                    sources
+                        .values()
+                        .get(&(fixture_id, attribute.clone()))
+                        .cloned()
+                });
                 let candidate = stack
                     .last()
                     .expect("one Dynamic/FAT candidate exists for every stack");
@@ -177,8 +299,45 @@ pub(super) fn dynamic_contributions_with_auto_off(
         ))],
         auto_offs,
         dynamic_events,
+        after_runtime,
         samples,
     )
+}
+
+fn dynamic_tick_is_idle(
+    runtime: &light_dynamics::DynamicRuntimeSnapshot,
+    programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
+    cue_values: &[light_playback::ActiveCueDynamicValue],
+    active_playbacks: &[light_playback::ActiveDynamicPlayback],
+    extra_programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
+    playback_paused: bool,
+) -> bool {
+    dynamic_tick_is_idle_from_presence(
+        runtime.instances.is_empty(),
+        runtime.global_paused,
+        playback_paused,
+        !programmer_values.is_empty(),
+        !cue_values.is_empty(),
+        !active_playbacks.is_empty(),
+        !extra_programmer_values.is_empty(),
+    )
+}
+
+fn dynamic_tick_is_idle_from_presence(
+    runtime_empty: bool,
+    runtime_paused: bool,
+    playback_paused: bool,
+    has_programmer_values: bool,
+    has_cue_values: bool,
+    has_active_playbacks: bool,
+    has_extra_programmer_values: bool,
+) -> bool {
+    runtime_empty
+        && runtime_paused == playback_paused
+        && !has_programmer_values
+        && !has_cue_values
+        && !has_active_playbacks
+        && !has_extra_programmer_values
 }
 
 struct DynamicCandidate {
@@ -190,8 +349,32 @@ struct DynamicCandidate {
     dynamic: bool,
 }
 
+fn resolve_dynamic_stack(
+    stack: &[DynamicCandidate],
+    resolve_underlay: impl FnOnce() -> Option<AttributeValue>,
+) -> AttributeValue {
+    let (first, remaining) = stack
+        .split_first()
+        .expect("one Dynamic/FAT candidate exists for every stack");
+    let mut resolved = if first.activation_mix >= 1.0 {
+        first.value.clone()
+    } else {
+        blend_attribute_value(
+            resolve_underlay().unwrap_or_else(|| first.value.clone()),
+            first.value.clone(),
+            first.activation_mix,
+        )
+    };
+    for candidate in remaining {
+        resolved =
+            blend_attribute_value(resolved, candidate.value.clone(), candidate.activation_mix);
+    }
+    resolved
+}
+
 fn collect_dynamic_candidates(
-    engine: &Engine,
+    programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
+    cue_values: &[light_playback::ActiveCueDynamicValue],
     extra_programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
     samples: &[light_dynamics::DynamicRuntimeSample],
     playback_controls: &HashMap<Uuid, DynamicPlaybackControl>,
@@ -241,25 +424,23 @@ fn collect_dynamic_candidates(
             },
         );
     }
-    for (_, priority, stored) in engine
-        .dynamic_programmer_values()
-        .into_iter()
-        .chain(extra_programmer_values.iter().cloned())
-    {
-        let (value, timing) = match stored.value {
-            light_dynamics::DynamicSemanticValue::Static { value, timing } => (value, timing),
+    for (_, priority, stored) in programmer_values.iter().chain(extra_programmer_values) {
+        let (value, timing) = match &stored.value {
+            light_dynamics::DynamicSemanticValue::Static { value, timing } => {
+                (value.clone(), *timing)
+            }
             light_dynamics::DynamicSemanticValue::FixAt { value, timing } => {
-                (AttributeValue::Normalized(value), timing)
+                (AttributeValue::Normalized(*value), *timing)
             }
             light_dynamics::DynamicSemanticValue::DynamicOn { .. }
             | light_dynamics::DynamicSemanticValue::DynamicOff { .. }
             | light_dynamics::DynamicSemanticValue::Release => continue,
         };
         consider(
-            (stored.fixture_id, stored.attribute),
+            (stored.fixture_id, stored.attribute.clone()),
             DynamicCandidate {
                 value,
-                priority,
+                priority: *priority,
                 changed_at_millis: stored.changed_at_millis,
                 stable_order: u128::from(stored.programmer_order),
                 activation_mix: authored_activation_mix(
@@ -271,18 +452,20 @@ fn collect_dynamic_candidates(
             },
         );
     }
-    for stored in engine.active_cue_dynamic_values() {
-        let (value, timing) = match stored.value {
-            light_dynamics::DynamicSemanticValue::Static { value, timing } => (value, timing),
+    for stored in cue_values {
+        let (value, timing) = match &stored.value {
+            light_dynamics::DynamicSemanticValue::Static { value, timing } => {
+                (value.clone(), *timing)
+            }
             light_dynamics::DynamicSemanticValue::FixAt { value, timing } => {
-                (AttributeValue::Normalized(value), timing)
+                (AttributeValue::Normalized(*value), *timing)
             }
             light_dynamics::DynamicSemanticValue::DynamicOn { .. }
             | light_dynamics::DynamicSemanticValue::DynamicOff { .. }
             | light_dynamics::DynamicSemanticValue::Release => continue,
         };
         consider(
-            (stored.fixture_id, stored.attribute),
+            (stored.fixture_id, stored.attribute.clone()),
             DynamicCandidate {
                 value,
                 priority: stored.priority,
@@ -560,8 +743,16 @@ pub(in crate::runtime) fn fully_controlled_dynamic_playbacks(
     samples: &[light_dynamics::DynamicRuntimeSample],
     controls: &HashMap<Uuid, DynamicPlaybackControl>,
     runtime: &light_dynamics::DynamicRuntimeSnapshot,
+    programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
+    cue_values: &[light_playback::ActiveCueDynamicValue],
     now: chrono::DateTime<chrono::Utc>,
 ) -> Vec<PlaybackIdentity> {
+    if !controls
+        .values()
+        .any(|control| control.auto_off_full_control)
+    {
+        return Vec::new();
+    }
     let persistent = engine
         .playback_contributions_at(now)
         .into_iter()
@@ -584,7 +775,7 @@ pub(in crate::runtime) fn fully_controlled_dynamic_playbacks(
                 .map(|controller| (controller.id, controller.source.clone()))
         })
         .collect::<HashMap<_, _>>();
-    let persistent_fat = persistent_fat_values(engine);
+    let persistent_fat = persistent_fat_values(programmer_values, cue_values);
     for sample in samples {
         if let Some(control) = controls.get(&sample.controller_id)
             && control.auto_off_full_control
@@ -655,38 +846,36 @@ struct PersistentFatValue {
     changed_at_millis: u64,
 }
 
-fn persistent_fat_values(engine: &Engine) -> Vec<PersistentFatValue> {
-    let programmer =
-        engine
-            .dynamic_programmer_values()
-            .into_iter()
-            .filter_map(|(_, priority, stored)| {
-                matches!(
-                    stored.value,
-                    light_dynamics::DynamicSemanticValue::FixAt { .. }
-                )
-                .then_some(PersistentFatValue {
-                    fixture_id: stored.fixture_id,
-                    attribute: stored.attribute,
-                    priority,
-                    changed_at_millis: stored.changed_at_millis,
-                })
-            });
-    let cues = engine
-        .active_cue_dynamic_values()
-        .into_iter()
-        .filter_map(|stored| {
+fn persistent_fat_values(
+    programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
+    cue_values: &[light_playback::ActiveCueDynamicValue],
+) -> Vec<PersistentFatValue> {
+    let programmer = programmer_values
+        .iter()
+        .filter_map(|(_, priority, stored)| {
             matches!(
-                stored.value,
+                &stored.value,
                 light_dynamics::DynamicSemanticValue::FixAt { .. }
             )
             .then_some(PersistentFatValue {
                 fixture_id: stored.fixture_id,
-                attribute: stored.attribute,
-                priority: stored.priority,
+                attribute: stored.attribute.clone(),
+                priority: *priority,
                 changed_at_millis: stored.changed_at_millis,
             })
         });
+    let cues = cue_values.iter().filter_map(|stored| {
+        matches!(
+            &stored.value,
+            light_dynamics::DynamicSemanticValue::FixAt { .. }
+        )
+        .then_some(PersistentFatValue {
+            fixture_id: stored.fixture_id,
+            attribute: stored.attribute.clone(),
+            priority: stored.priority,
+            changed_at_millis: stored.changed_at_millis,
+        })
+    });
     programmer.chain(cues).collect()
 }
 
@@ -737,4 +926,90 @@ fn persistent_playback_wins_dynamic(
     }
     u64::try_from(candidate.value.changed_at.timestamp_millis()).unwrap_or_default()
         > dynamic.activated_at_millis
+}
+
+#[cfg(test)]
+mod tick_source_tests {
+    use super::*;
+    use light_programmer::ProgrammerRegistry;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[test]
+    fn tick_sources_defer_whole_show_resolution() {
+        let engine = Engine::new(ProgrammerRegistry::default());
+        let sources = TickSources::new(&engine);
+
+        assert!(
+            sources.values.get().is_none(),
+            "constructing an output tick must not eagerly resolve the whole show"
+        );
+    }
+
+    #[test]
+    fn fully_active_first_candidate_does_not_resolve_the_underlay() {
+        let underlay_requested = AtomicBool::new(false);
+        let stack = [DynamicCandidate {
+            value: AttributeValue::Normalized(0.75),
+            priority: 10,
+            changed_at_millis: 1,
+            stable_order: 1,
+            activation_mix: 1.0,
+            dynamic: true,
+        }];
+
+        let resolved = resolve_dynamic_stack(&stack, || {
+            underlay_requested.store(true, Ordering::Relaxed);
+            Some(AttributeValue::Normalized(0.25))
+        });
+
+        assert_eq!(resolved, AttributeValue::Normalized(0.75));
+        assert!(
+            !underlay_requested.load(Ordering::Relaxed),
+            "a fully active winning candidate makes the underlay irrelevant"
+        );
+    }
+
+    #[test]
+    fn fading_first_candidate_blends_from_the_underlay() {
+        let stack = [DynamicCandidate {
+            value: AttributeValue::Normalized(1.0),
+            priority: 10,
+            changed_at_millis: 1,
+            stable_order: 1,
+            activation_mix: 0.5,
+            dynamic: true,
+        }];
+
+        let resolved = resolve_dynamic_stack(&stack, || Some(AttributeValue::Normalized(0.0)));
+
+        assert_eq!(resolved, AttributeValue::Normalized(0.5));
+    }
+
+    #[test]
+    fn only_a_completely_static_tick_is_idle() {
+        assert!(dynamic_tick_is_idle_from_presence(
+            true, false, false, false, false, false, false,
+        ));
+
+        for non_idle in [
+            dynamic_tick_is_idle_from_presence(false, false, false, false, false, false, false),
+            dynamic_tick_is_idle_from_presence(true, false, true, false, false, false, false),
+            dynamic_tick_is_idle_from_presence(true, false, false, true, false, false, false),
+            dynamic_tick_is_idle_from_presence(true, false, false, false, true, false, false),
+            dynamic_tick_is_idle_from_presence(true, false, false, false, false, true, false),
+            dynamic_tick_is_idle_from_presence(true, false, false, false, false, false, true),
+        ] {
+            assert!(
+                !non_idle,
+                "runtime, pause, Dynamic/FAT, Playback, and extra inputs must use the full path"
+            );
+        }
+    }
+
+    #[test]
+    fn matching_paused_state_can_still_be_idle() {
+        assert!(dynamic_tick_is_idle_from_presence(
+            true, true, true, false, false, false, false,
+        ));
+    }
 }

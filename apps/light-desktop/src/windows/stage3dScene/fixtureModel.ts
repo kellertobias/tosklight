@@ -171,6 +171,7 @@ export function mountFixtureModel(
 		scale,
 		selected,
 	);
+	root.userData.stageFallbackFixtureRuntime = undefined;
 	if (mounted) return mounted;
 	mountWholeModel(root, model, fixture, instanceId, scale, selected);
 	return 1;

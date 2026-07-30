@@ -5,8 +5,10 @@ import { frontendPerformanceDiagnostics } from "../../features/frontendWarmup/di
 import type { StageRenderQuality } from "../../types";
 import { applyStageVisualization, type Stage3dFixture } from "../stage3dScene";
 import {
+	changedStageFixtureIds,
 	interpolateVisualizationSnapshot,
 	remainingStageInterpolationMillis,
+	shouldInterpolateStageSceneChanges,
 	stageVisualizationChanged,
 } from "./interpolation";
 
@@ -26,7 +28,7 @@ type VisualizationOptions = {
 	appliedRenderQualityRef: MutableRefObject<StageRenderQuality>;
 	interactingRef: MutableRefObject<boolean>;
 	sceneRef: MutableRefObject<THREE.Scene | null>;
-	invalidateRef: MutableRefObject<(() => void) | null>;
+	invalidateRef: MutableRefObject<((immediate?: boolean) => void) | null>;
 	installVisualizationRef: MutableRefObject<
 		(
 			snapshot: VisualizationSnapshot | null,
@@ -38,10 +40,13 @@ type VisualizationOptions = {
 export function useStageVisualizationLifecycle(options: VisualizationOptions) {
 	useEffect(() => {
 		let frame: number | null = null;
+		const virtualHighlight = new Set(options.virtualHighlight);
+		const selected = new Set(options.selected);
 		const apply = (
 			snapshot: VisualizationSnapshot | null,
 			settled: boolean,
 			visibleChanged = true,
+			changedFixtureIds?: ReadonlySet<string> | null,
 		) => {
 			options.displayedVisualizationRef.current = snapshot;
 			options.visualizationSettledRef.current = settled;
@@ -51,13 +56,17 @@ export function useStageVisualizationLifecycle(options: VisualizationOptions) {
 				options.fixtureObjectsRef.current,
 				options.showBeamGuides,
 				options.renderQuality,
-				new Set(options.virtualHighlight),
-				new Set(options.selected),
+				virtualHighlight,
+				selected,
 				options.showSelection,
+				changedFixtureIds ?? undefined,
 			);
 			options.appliedRenderQualityRef.current = options.renderQuality;
 			recordFrameApplied(snapshot, settled, visibleChanged);
-			options.invalidateRef.current?.();
+			// This apply already runs at the browser's chosen interpolation
+			// boundary. Submitting here avoids adding a second animation-frame
+			// queue before the authoritative values reach the canvas.
+			options.invalidateRef.current?.(true);
 		};
 		options.installVisualizationRef.current = (
 			target,
@@ -79,23 +88,48 @@ export function useStageVisualizationLifecycle(options: VisualizationOptions) {
 				if (forceVisibleApply) apply(target, true, false);
 				return;
 			}
+			// A dependency such as render quality or selection can require every
+			// retained fixture to be revisited even when only a subset of values
+			// changed between snapshots.
+			const changedFixtureIds = forceVisibleApply
+				? null
+				: changedStageFixtureIds(from, target);
+			// Large fan-out previews are latest-value and eventually consistent.
+			// Applying hundreds of interpolated fixture mutations before the final
+			// authoritative state creates a long WebView task and delays the desk.
+			if (
+				!shouldInterpolateStageSceneChanges(
+					options.fixtures.length,
+					changedFixtureIds,
+				)
+			) {
+				apply(target, true, true, changedFixtureIds);
+				return;
+			}
 			const interpolationMillis = remainingStageInterpolationMillis(
 				target.generated_at,
 			);
 			if (interpolationMillis === 0) {
-				apply(target, true);
+				apply(target, true, true, changedFixtureIds);
 				return;
 			}
 			const startedAt = performance.now();
+			let intermediateApplied = false;
 			const step = (now: number) => {
 				const progress = Math.min(
 					1,
 					Math.max(0, (now - startedAt) / interpolationMillis),
 				);
-				apply(
-					interpolateVisualizationSnapshot(from, target, progress),
-					progress >= 1,
-				);
+				if (progress >= 1) apply(target, true, true, changedFixtureIds);
+				else if (!intermediateApplied) {
+					intermediateApplied = true;
+					apply(
+						interpolateVisualizationSnapshot(from, target, progress),
+						false,
+						true,
+						changedFixtureIds,
+					);
+				}
 				if (progress < 1) frame = requestAnimationFrame(step);
 				else frame = null;
 			};

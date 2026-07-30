@@ -3,6 +3,7 @@ use crate::fixture_value_batch::{
 };
 use crate::{GroupProgrammerValue, ProgrammerRegistry};
 use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId, TimedValue};
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct NormalProgrammerValueTiming {
@@ -126,7 +127,7 @@ impl ProgrammerRegistry {
         state.active_value_undo_group = None;
         state.values.clear();
         state.group_values.clear();
-        state.dynamic_values.clear();
+        Arc::make_mut(&mut state.dynamic_values).clear();
         state.last_activity = self.clock.now();
         let user_id = state.user_id;
         drop(states);

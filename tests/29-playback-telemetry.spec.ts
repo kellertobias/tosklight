@@ -50,9 +50,11 @@ test("TELEMETRY-001 @ui › playback fades stream ~10 Hz delta samples without p
   await api.playbackNumberAction(1, "go", {});
   await api.playbackNumberAction(2, "go", {});
 
-  // One simulated second of render frames at the configured 44 Hz output rate. The frame
-  // divider (4) must produce ~11 sampled ticks while the fades progress.
-  for (let frame = 0; frame < 44; frame += 1) await bench.tick(23);
+  // One wall-paced second at the configured 44 Hz output rate. The frame divider (4)
+  // must produce ~11 sampled ticks while the fades progress. Using the production
+  // scheduler matters here: an instantaneous virtual-frame burst may intentionally
+  // coalesce replaceable telemetry to its latest eventually-consistent value.
+  await bench.freeRunClock(1_000);
   await expect.poll(() => telemetryTicks.length, { timeout: 10_000 }).toBeGreaterThanOrEqual(8);
 
   expect(telemetryTicks.length).toBeLessThanOrEqual(13);
@@ -82,9 +84,9 @@ test("TELEMETRY-001 @ui › playback fades stream ~10 Hz delta samples without p
   expect(snapshotRequests.length).toBe(hydrationSnapshots);
 
   // Once the fades settle, unchanged sweeps stop producing ticks entirely.
-  for (let frame = 0; frame < 176; frame += 1) await bench.tick(23);
+  await bench.freeRunClock(4_000);
   const settled = telemetryTicks.length;
-  for (let frame = 0; frame < 44; frame += 1) await bench.tick(23);
+  await bench.freeRunClock(1_000);
   expect(telemetryTicks.length).toBe(settled);
   expect(snapshotRequests.length).toBe(hydrationSnapshots);
 });

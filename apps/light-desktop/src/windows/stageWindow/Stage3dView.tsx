@@ -11,6 +11,7 @@ export function Stage3dView({
 	patchSelectionPreview,
 	patchPreviewFixtures,
 	camera3d,
+	pixelRatioCap,
 	selection,
 	active,
 	paneId,
@@ -21,6 +22,7 @@ export function Stage3dView({
 	patchSelectionPreview: boolean;
 	patchPreviewFixtures: string[];
 	camera3d: StageWindowProps["camera3d"];
+	pixelRatioCap?: number;
 	selection: StageSelectionModel;
 	active?: boolean;
 	paneId?: string;
@@ -41,6 +43,7 @@ export function Stage3dView({
 				renderQuality={options.renderQuality}
 				environmentBrightness={options.environmentBrightness}
 				camera3d={camera3d}
+				pixelRatioCap={pixelRatioCap}
 				visualizationLane={options.followPreload ? "preload" : "normal"}
 				visualizationActive={active ?? false}
 				paneId={paneId}

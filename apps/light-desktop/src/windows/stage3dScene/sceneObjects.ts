@@ -75,6 +75,7 @@ export function setSelectionOutlineVisibility(
 	object: THREE.Object3D,
 	visible: boolean,
 ) {
+	if (object.userData.stageSelected === visible) return;
 	object.userData.stageSelected = visible;
 	if (visible) {
 		addSelectionOutline(object);

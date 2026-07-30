@@ -13,7 +13,7 @@ export type StageSceneController = {
 	latestVisualizationRef: MutableRefObject<VisualizationSnapshot | null>;
 	interactingRef: MutableRefObject<boolean>;
 	callbacksRef: MutableRefObject<Stage3dCallbacks>;
-	invalidateRef: MutableRefObject<(() => void) | null>;
+	invalidateRef: MutableRefObject<((immediate?: boolean) => void) | null>;
 	displayedVisualizationRef: MutableRefObject<VisualizationSnapshot | null>;
 	visualizationSettledRef: MutableRefObject<boolean>;
 	appliedRenderQualityRef: MutableRefObject<StageRenderQuality>;

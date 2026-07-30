@@ -5,7 +5,9 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, MergeMode, ProgrammerId, TimedValue};
-use light_programmer::{GroupDefinition, GroupProgrammerValue, ProgrammerState, resolve_group};
+use light_programmer::{
+    GroupDefinition, GroupProgrammerValue, ProgrammerOutputState, resolve_group,
+};
 use std::{collections::HashMap, sync::Arc};
 
 type GroupValues = HashMap<String, HashMap<AttributeKey, GroupProgrammerValue>>;
@@ -37,7 +39,7 @@ struct ProgrammerValueResolver<'a> {
     has_replacements: bool,
 }
 
-pub(crate) fn programmers_need_underlay(programmers: &[ProgrammerState]) -> bool {
+pub(crate) fn programmers_need_underlay(programmers: &[ProgrammerOutputState]) -> bool {
     programmers.iter().any(|programmer| {
         programmer
             .values
@@ -62,7 +64,7 @@ pub(crate) fn programmers_need_underlay(programmers: &[ProgrammerState]) -> bool
 impl Engine {
     pub(crate) fn programmer_contributions(
         &self,
-        programmers: Vec<ProgrammerState>,
+        programmers: Vec<ProgrammerOutputState>,
         generation: &RuntimeGeneration,
         now: DateTime<Utc>,
         groups: &HashMap<String, GroupDefinition>,
@@ -90,7 +92,7 @@ impl Engine {
     #[allow(clippy::too_many_arguments)]
     fn resolve_programmer(
         &self,
-        programmer: ProgrammerState,
+        programmer: ProgrammerOutputState,
         generation: &RuntimeGeneration,
         now: DateTime<Utc>,
         groups: &HashMap<String, GroupDefinition>,
@@ -98,7 +100,7 @@ impl Engine {
         sampled: &[ContributionBatch],
         has_replacements: bool,
     ) -> Vec<TimedValue> {
-        let ProgrammerState {
+        let ProgrammerOutputState {
             id,
             priority,
             values,

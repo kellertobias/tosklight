@@ -55,6 +55,11 @@ export function useStageScene({
 	selectionRef.current = { selected, showSelection };
 
 	useEffect(() => {
+		// The canvas subscribes directly to the visualization store so retained
+		// objects can update without waiting for the parent React projection.
+		// When that parent subsequently commits the same snapshot, do not cancel
+		// and restart the already scheduled interpolation/render frame.
+		if (latestVisualizationRef.current === visualization) return;
 		latestVisualizationRef.current = visualization;
 		if (!interactingRef.current) installVisualizationRef.current(visualization);
 	}, [visualization]);

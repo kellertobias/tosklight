@@ -20,6 +20,8 @@ describe("DeskLoadingOverlay", () => {
 		const status = screen.getByRole("status");
 		expect(status).toHaveAttribute("aria-busy", "true");
 		expect(status).toHaveTextContent("Loading show Festival…");
-		expect(status).toHaveTextContent("current desk remains protected");
+		expect(status).toHaveTextContent(
+			"Ready desk controls remain available while show capabilities reconnect.",
+		);
 	});
 });

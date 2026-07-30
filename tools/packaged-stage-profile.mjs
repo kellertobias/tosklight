@@ -29,6 +29,21 @@ export const PACKAGED_STAGE_PROFILES = Object.freeze({
 	}),
 });
 
+export const CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS = Object.freeze([
+	{ name: "ACL Chase", kind: "physical", playbackNumber: 17 },
+	{ name: "Show Wash Waterfall", kind: "virtual", playbackNumber: 1024 },
+	{ name: "Show Profile Circle", kind: "virtual", playbackNumber: 1019 },
+	{ name: "Show Profile PWM", kind: "virtual", playbackNumber: 1001 },
+	{ name: "Show LED Random", kind: "virtual", playbackNumber: 1014 },
+	{ name: "Show LED Random Strobe", kind: "virtual", playbackNumber: 1030 },
+	{ name: "Sunstrip Rain", kind: "virtual", playbackNumber: 1029 },
+	{ name: "Aux Show Profile Circle", kind: "virtual", playbackNumber: 1021 },
+	{ name: "Aux Show Profile PWM", kind: "virtual", playbackNumber: 1004 },
+	{ name: "Aux Show Wash Waterfall", kind: "virtual", playbackNumber: 1026 },
+	{ name: "Aux Show Wash Random", kind: "virtual", playbackNumber: 1011 },
+	{ name: "Aux Show LED Sinus", kind: "virtual", playbackNumber: 1018 },
+]);
+
 export function packagedStageProfile(profile) {
 	const definition = PACKAGED_STAGE_PROFILES[profile];
 	if (definition) return definition;
@@ -52,4 +67,8 @@ export function packagedStageSceneFailures(profile, scene) {
 			`${profile} resolved ${scene.fixtureInstances} physical instances; expected ${expected.fixtureInstances}`,
 		);
 	return failures;
+}
+
+export function packagedStageControlDurationSeconds(durationSeconds) {
+	return Math.min(durationSeconds, 300);
 }

@@ -27,7 +27,6 @@ export function ServerVisualizationRuntimeBoundary({
 	].join("|");
 	const desktopAuthorityKey = [
 		serverUrl,
-		sessionId ?? "",
 		state.session?.desk.id ?? "",
 		state.session?.user.id ?? "",
 	].join("|");

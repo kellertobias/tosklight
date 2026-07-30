@@ -15,7 +15,8 @@ use light_playback::{
     PlaybackDefinition, PlaybackFaderMode, PlaybackTarget, RestartMode, WrapMode,
 };
 use light_programmer::{
-    DerivedGroup, FrozenGroup, GroupDefinition, ProgrammerRegistry, SelectionRule,
+    DerivedGroup, DynamicProgrammerValueMutation, FrozenGroup, GroupDefinition, ProgrammerRegistry,
+    SelectionRule,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -101,6 +102,35 @@ fn fixture() -> (PatchedFixture, FixtureId) {
         },
         logical,
     )
+}
+
+#[test]
+fn same_length_dynamic_programmer_edit_invalidates_flattened_projection() {
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    let fixture = FixtureId::new();
+    registry.start(session, UserId::new());
+    let engine = Engine::new(registry.clone());
+    let mutation = |value| DynamicProgrammerValueMutation::Set {
+        fixture_id: fixture,
+        attribute: AttributeKey::intensity(),
+        value: light_dynamics::DynamicSemanticValue::FixAt {
+            value,
+            timing: light_dynamics::DynamicValueTiming::default(),
+        },
+    };
+
+    assert!(registry.apply_dynamic_values(session, &[mutation(0.25)], None));
+    let first = engine.dynamic_programmer_values();
+    assert!(registry.apply_dynamic_values(session, &[mutation(0.75)], None));
+    let second = engine.dynamic_programmer_values();
+
+    assert!(!Arc::ptr_eq(&first, &second));
+    assert!(matches!(
+        &second[0].2.value,
+        light_dynamics::DynamicSemanticValue::FixAt { value, .. }
+            if (*value - 0.75).abs() < f32::EPSILON
+    ));
 }
 
 fn schema_v2_fixture(

@@ -1,24 +1,27 @@
 use light_core::Xyz;
 use light_fixture::{ColorSystem, FixtureMode, srgb_to_xyz};
-use std::collections::HashMap;
 
 pub(crate) fn channel_visual_level(
     mode: &FixtureMode,
-    channels: &HashMap<uuid::Uuid, u32>,
+    channels: &[(uuid::Uuid, u32)],
     channel_id: uuid::Uuid,
 ) -> Option<f32> {
     let channel = mode
         .channels
         .iter()
         .find(|channel| channel.id == channel_id)?;
-    let level = channels.get(&channel_id).copied()? as f32 / channel.resolution.max_raw() as f32;
+    let level = channels
+        .iter()
+        .find_map(|(candidate, raw)| (*candidate == channel_id).then_some(*raw))?
+        as f32
+        / channel.resolution.max_raw() as f32;
     Some(if channel.invert { 1.0 - level } else { level }.clamp(0.0, 1.0))
 }
 
 pub(crate) fn profile_visual_color(
     mode: &FixtureMode,
     head_id: uuid::Uuid,
-    channels: &HashMap<uuid::Uuid, u32>,
+    channels: &[(uuid::Uuid, u32)],
     fallback: Option<Xyz>,
 ) -> Option<Xyz> {
     let system = mode
@@ -55,7 +58,9 @@ pub(crate) fn profile_visual_color(
             1.0 - channel_visual_level(mode, channels, *yellow_channel_id).unwrap_or(0.0),
         )),
         Some(ColorSystem::DiscreteWheel { channel_id, slots }) => {
-            let raw = channels.get(channel_id).copied()?;
+            let raw = channels
+                .iter()
+                .find_map(|(candidate, raw)| (candidate == channel_id).then_some(*raw))?;
             slots
                 .iter()
                 .find(|slot| raw >= slot.dmx_from && raw <= slot.dmx_to)
@@ -69,7 +74,7 @@ pub(crate) fn profile_visual_color(
 fn rgb_fallback(
     mode: &FixtureMode,
     head_id: uuid::Uuid,
-    channels: &HashMap<uuid::Uuid, u32>,
+    channels: &[(uuid::Uuid, u32)],
 ) -> Option<Xyz> {
     let level = |attribute: &str| {
         mode.channels

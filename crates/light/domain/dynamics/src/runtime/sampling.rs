@@ -445,10 +445,14 @@ fn collect_controller_samples(
             ) else {
                 continue;
             };
-            let value = environment
-                .sources
-                .current(*target, &lane.attribute)
-                .map_or(value, |base| base + (value - base) * controller.size);
+            let value = if controller.size == 1.0 {
+                value
+            } else {
+                environment
+                    .sources
+                    .current(*target, &lane.attribute)
+                    .map_or(value, |base| base + (value - base) * controller.size)
+            };
             let sample_key = (controller.id, *target, lane.id);
             let value =
                 held_or_live_value(instance, sample_key, value, frame.synchronized_resume_mix);

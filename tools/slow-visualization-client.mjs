@@ -23,10 +23,16 @@ export async function startSlowVisualizationClient(baseUrl, token) {
 			}),
 		);
 	}, 100);
+	resynchronize.unref?.();
 	return {
-		close() {
+		async close() {
 			clearInterval(resynchronize);
+			socket.resume();
+			if (socket.closed) return;
+			const closed = new Promise((resolve) => socket.once("close", resolve));
 			socket.destroy();
+			socket.unref();
+			await closed;
 		},
 	};
 }

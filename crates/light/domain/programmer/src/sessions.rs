@@ -3,6 +3,7 @@ use crate::selection::SelectionContext;
 use crate::{ProgrammerRegistry, ProgrammerState};
 use light_core::{ProgrammerId, SessionId, UserId};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 impl ProgrammerRegistry {
@@ -86,13 +87,13 @@ impl ProgrammerRegistry {
             selected: vec![],
             selection_expression: None,
             values: vec![],
-            dynamic_values: vec![],
+            dynamic_values: Arc::new(vec![]),
             transient_values: vec![],
             group_values: HashMap::new(),
             preload_pending: vec![],
             preload_active: vec![],
-            preload_dynamic_pending: vec![],
-            preload_dynamic_active: vec![],
+            preload_dynamic_pending: Arc::new(vec![]),
+            preload_dynamic_active: Arc::new(vec![]),
             preload_group_pending: HashMap::new(),
             preload_group_active: HashMap::new(),
             preload_playback_pending: vec![],

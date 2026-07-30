@@ -102,7 +102,7 @@ fn acknowledge_live_action(
 
 fn programmer_action_timing(action: &LiveAction) -> Option<(&'static str, bool)> {
     match action {
-        LiveAction::ProgrammingSelection(_) => Some(("selection", true)),
+        LiveAction::ProgrammingSelection(_) => Some(("selection", false)),
         LiveAction::ProgrammingValues(_) => Some(("values", true)),
         LiveAction::ProgrammerCaptureMode(_) => Some(("capture_mode", true)),
         LiveAction::ProgrammerPriority(_) => Some(("priority", true)),

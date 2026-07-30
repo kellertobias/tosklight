@@ -17,7 +17,7 @@ pub(super) async fn open_show(
     if !FsPath::new(&entry.path).exists() {
         return Err(ApiError::bad_request("show file is unavailable"));
     }
-    let _activation = state.active_show.acquire().await;
+    let _show_change = state.active_show.acquire_show_change().await;
     validate_show_file(&entry.path).map_err(ApiError::store)?;
     let output_runtime = load_output_runtime_for_show(&state, entry.id)?;
     let previous = state.active_show.current().clone();
@@ -30,22 +30,20 @@ pub(super) async fn open_show(
     let prepared = prepare_show_for_runtime(&state, &entry)?;
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
     let context = operator_action_context(&session, light_application::ActionSource::Http);
-    activate_prepared_snapshot(
+    activate_prepared_show(
         &state,
         prepared,
         &context,
         &transition,
         input.transition_millis,
+        entry.clone(),
+        output_runtime,
     )
     .await?;
     state
         .installation
         .set_active_show(Some(entry.id))
         .map_err(ApiError::store)?;
-    invalidate_active_show_document(&state);
-    state.active_show.replace_current(Some(entry.clone()));
-    state.active_show.set_error(None);
-    restore_output_runtime_for_show(&state, entry.id, output_runtime);
     emit(
         &state,
         "show_opened",
@@ -83,7 +81,7 @@ pub(super) async fn open_clean_default_show(
         let _ = std::fs::remove_file(&path);
         return Err(ApiError::store(error));
     }
-    let _activation = state.active_show.acquire().await;
+    let _show_change = state.active_show.acquire_show_change().await;
     let output_runtime = load_output_runtime_for_show(&state, entry.id)?;
     let prepared = match prepare_show_for_runtime(&state, &entry) {
         Ok(prepared) => prepared,
@@ -96,12 +94,14 @@ pub(super) async fn open_clean_default_show(
     let previous = state.active_show.current().clone();
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
     let context = operator_action_context(&session, light_application::ActionSource::Http);
-    activate_prepared_snapshot(
+    activate_prepared_show(
         &state,
         prepared,
         &context,
         &transition,
         input.transition_millis,
+        entry.clone(),
+        output_runtime,
     )
     .await?;
     state
@@ -114,10 +114,6 @@ pub(super) async fn open_clean_default_show(
             .set_setting("previous_active_show_id", &previous.id.0.to_string())
             .map_err(ApiError::store)?;
     }
-    invalidate_active_show_document(&state);
-    state.active_show.replace_current(Some(entry.clone()));
-    state.active_show.set_error(None);
-    restore_output_runtime_for_show(&state, entry.id, output_runtime);
     emit(
         &state,
         "show_opened",
@@ -145,18 +141,20 @@ pub(super) async fn rollback_show(
         .show(previous_id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("rollback show"))?;
-    let _activation = state.active_show.acquire().await;
+    let _show_change = state.active_show.acquire_show_change().await;
     let output_runtime = load_output_runtime_for_show(&state, entry.id)?;
     let prepared = prepare_show_for_runtime(&state, &entry)?;
     let current = state.active_show.current().clone();
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
     let context = operator_action_context(&session, light_application::ActionSource::Http);
-    activate_prepared_snapshot(
+    activate_prepared_show(
         &state,
         prepared,
         &context,
         &transition,
         input.transition_millis,
+        entry.clone(),
+        output_runtime,
     )
     .await?;
     state
@@ -169,10 +167,6 @@ pub(super) async fn rollback_show(
             .set_setting("previous_active_show_id", &current.id.0.to_string())
             .map_err(ApiError::store)?;
     }
-    invalidate_active_show_document(&state);
-    state.active_show.replace_current(Some(entry.clone()));
-    state.active_show.set_error(None);
-    restore_output_runtime_for_show(&state, entry.id, output_runtime);
     emit(
         &state,
         "show_rolled_back",

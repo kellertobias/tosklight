@@ -2,7 +2,8 @@
 //! visualization-owned task, never on the output scheduler.
 
 use super::{
-    ApiError, AppState, Session, ShowContext, event_transport, visualization_snapshot_for_session,
+    ApiError, AppState, Session, ShowContext, event_transport,
+    visualization_snapshot_for_session_content_from_resolved,
 };
 use axum::{
     Router,
@@ -12,17 +13,13 @@ use axum::{
     routing::get,
 };
 use futures_util::{SinkExt, StreamExt};
-use light_core::AttributeValue;
-use light_wire::v2::{
-    preload_values::{ProgrammingPreloadAttributeValue, ProgrammingPreloadColorXyz},
-    visualization::{
-        VISUALIZATION_MAX_RATE_HZ, VISUALIZATION_PROTOCOL_VERSION, VisualizationClientMessage,
-        VisualizationLane, VisualizationLaneSnapshot, VisualizationScope,
-        VisualizationServerMessage, VisualizationValue,
-    },
+use light_wire::v2::visualization::{
+    VISUALIZATION_MAX_RATE_HZ, VISUALIZATION_PROTOCOL_VERSION, VisualizationClientMessage,
+    VisualizationLane, VisualizationLaneSnapshot, VisualizationScope, VisualizationServerMessage,
+    VisualizationStackEntryType,
 };
 use std::{
-    collections::HashSet,
+    collections::{HashSet, VecDeque},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -35,15 +32,27 @@ use tokio::time::Instant;
 const VISUALIZATION_STREAM_ROUTE: &str = "/api/v2/visualization/stream";
 const MAX_VISUALIZATION_CLIENT_MESSAGE_BYTES: usize = 16 * 1024;
 const VISUALIZATION_SEND_TIMEOUT: Duration = Duration::from_millis(500);
+// Keep backpressure on the server side, where the latest publication replaces
+// stale work. Allowing several frames into WebKit's WebSocket event queue makes
+// old visualization values contend with the operator UI before they can be
+// acknowledged or discarded.
+const MAX_UNACKNOWLEDGED_PUBLICATIONS: usize = 1;
 
 struct LatestOutgoing {
     output: super::OutputResource,
     batches: LatestBatch,
+    batched_messages: AtomicBool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum VisualizationOutgoingMessage {
+    Server(VisualizationServerMessage),
+    Raw(Message),
 }
 
 #[derive(Default)]
 struct LatestBatch {
-    pending: Mutex<Option<Vec<Message>>>,
+    pending: Mutex<Option<Vec<VisualizationOutgoingMessage>>>,
     notify: Notify,
     closed: AtomicBool,
 }
@@ -53,10 +62,15 @@ impl LatestOutgoing {
         Self {
             output,
             batches: LatestBatch::default(),
+            batched_messages: AtomicBool::new(false),
         }
     }
 
-    async fn replace(&self, messages: Vec<Message>, replacement: Vec<Message>) -> bool {
+    async fn replace(
+        &self,
+        messages: Vec<VisualizationOutgoingMessage>,
+        replacement: Vec<VisualizationOutgoingMessage>,
+    ) -> bool {
         let Some(replaced_pending) = self.batches.replace(messages, replacement).await else {
             return false;
         };
@@ -65,7 +79,7 @@ impl LatestOutgoing {
         true
     }
 
-    async fn next(&self) -> Option<Vec<Message>> {
+    async fn next(&self) -> Option<Vec<VisualizationOutgoingMessage>> {
         let messages = self.batches.next().await;
         if messages.is_some() {
             self.output.record_visualization_stream_queue_take();
@@ -82,10 +96,22 @@ impl LatestOutgoing {
     async fn has_pending(&self) -> bool {
         self.batches.pending.lock().await.is_some()
     }
+
+    fn set_batched_messages(&self, enabled: bool) {
+        self.batched_messages.store(enabled, Ordering::Release);
+    }
+
+    fn batched_messages(&self) -> bool {
+        self.batched_messages.load(Ordering::Acquire)
+    }
 }
 
 impl LatestBatch {
-    async fn replace(&self, messages: Vec<Message>, replacement: Vec<Message>) -> Option<bool> {
+    async fn replace(
+        &self,
+        messages: Vec<VisualizationOutgoingMessage>,
+        replacement: Vec<VisualizationOutgoingMessage>,
+    ) -> Option<bool> {
         if self.closed.load(Ordering::Acquire) {
             return None;
         }
@@ -104,7 +130,7 @@ impl LatestBatch {
         Some(replaced_pending)
     }
 
-    async fn next(&self) -> Option<Vec<Message>> {
+    async fn next(&self) -> Option<Vec<VisualizationOutgoingMessage>> {
         loop {
             let notified = self.notify.notified();
             if let Some(messages) = self.pending.lock().await.take() {
@@ -135,7 +161,7 @@ struct ClientRateThrottle {
 impl ClientRateThrottle {
     fn new() -> Self {
         Self {
-            period: super::visualization_frame::VISUALIZATION_PUBLICATION_INTERVAL,
+            period: Duration::from_secs_f64(1.0 / f64::from(VISUALIZATION_MAX_RATE_HZ)),
             next_allowed: Instant::now(),
             observed_sequence: 0,
             pending: None,
@@ -143,16 +169,13 @@ impl ClientRateThrottle {
     }
 
     fn set_rate(&mut self, rate_hz: u8) {
-        self.period = if rate_hz == VISUALIZATION_MAX_RATE_HZ {
-            Duration::ZERO
-        } else {
-            Duration::from_secs_f64(1.0 / f64::from(rate_hz))
-        };
+        self.period = Duration::from_secs_f64(1.0 / f64::from(rate_hz));
         self.next_allowed = Instant::now();
         self.observed_sequence = 0;
         self.pending = None;
     }
 
+    #[cfg(test)]
     fn observe(
         &mut self,
         source: Arc<super::visualization_frame::PublishedVisualizationFrame>,
@@ -161,6 +184,14 @@ impl ClientRateThrottle {
         self.observed_sequence = source.sequence;
         self.pending = Some(source);
         self.take_due(now)
+    }
+
+    fn queue_observed(
+        &mut self,
+        source: Arc<super::visualization_frame::PublishedVisualizationFrame>,
+    ) {
+        self.observed_sequence = source.sequence;
+        self.pending = Some(source);
     }
 
     fn take_due(
@@ -195,10 +226,14 @@ struct ClientPublicationState {
     outgoing_sequence: u64,
     last_normal_source: u64,
     last_preload_source: u64,
+    last_normal_snapshot: Option<Arc<VisualizationLaneSnapshot>>,
+    last_preload_snapshot: Option<Arc<VisualizationLaneSnapshot>>,
     last_normal_structure: Option<(VisualizationScope, u64)>,
     last_preload_structure: Option<(VisualizationScope, u64)>,
     last_heartbeat: Instant,
     force_snapshot: bool,
+    acknowledgements: bool,
+    unacknowledged_sequences: VecDeque<u64>,
 }
 
 impl ClientPublicationState {
@@ -207,16 +242,44 @@ impl ClientPublicationState {
             outgoing_sequence: 0,
             last_normal_source: 0,
             last_preload_source: 0,
+            last_normal_snapshot: None,
+            last_preload_snapshot: None,
             last_normal_structure: None,
             last_preload_structure: None,
             last_heartbeat: Instant::now(),
             force_snapshot: false,
+            acknowledgements: false,
+            unacknowledged_sequences: VecDeque::new(),
         }
+    }
+
+    fn set_acknowledgements(&mut self, acknowledgements: bool) {
+        self.acknowledgements = acknowledgements;
+        if !acknowledgements {
+            self.unacknowledged_sequences.clear();
+        }
+    }
+
+    fn acknowledge(&mut self, sequence: u64) {
+        while self
+            .unacknowledged_sequences
+            .front()
+            .is_some_and(|awaiting| sequence >= *awaiting)
+        {
+            self.unacknowledged_sequences.pop_front();
+        }
+    }
+
+    fn can_publish(&self) -> bool {
+        !self.acknowledgements
+            || self.unacknowledged_sequences.len() < MAX_UNACKNOWLEDGED_PUBLICATIONS
     }
 
     fn reset_subscriptions(&mut self) {
         self.last_normal_source = 0;
         self.last_preload_source = 0;
+        self.last_normal_snapshot = None;
+        self.last_preload_snapshot = None;
         self.last_normal_structure = None;
         self.last_preload_structure = None;
     }
@@ -232,13 +295,45 @@ impl ClientPublicationState {
         let mut sent_frame = false;
         let mut responses = Vec::new();
         let mut replacement_responses = Vec::new();
-        for lane in [VisualizationLane::Normal, VisualizationLane::Preload] {
-            if !subscribed.lanes.contains(&lane) {
-                continue;
-            }
+        let projected = futures_util::future::join_all(
+            [VisualizationLane::Normal, VisualizationLane::Preload]
+                .into_iter()
+                .filter(|lane| subscribed.lanes.contains(lane))
+                .map(|lane| {
+                    let key = subscribed.key(lane);
+                    let projection_state = state.clone();
+                    let projection_session = session.clone();
+                    let projection_source = Arc::clone(&source);
+                    async move {
+                        let snapshot = tokio::task::spawn_blocking(move || {
+                            projection_state.output.visualization_projection(
+                                key,
+                                &projection_source,
+                                |refresh_dynamic_stack| {
+                                    lane_snapshot(
+                                        &projection_state,
+                                        &projection_session,
+                                        lane,
+                                        &projection_source,
+                                        refresh_dynamic_stack,
+                                    )
+                                },
+                            )
+                        })
+                        .await;
+                        (lane, snapshot)
+                    }
+                }),
+        )
+        .await;
+        for (lane, projected) in projected {
             let previous = match lane {
                 VisualizationLane::Normal => &mut self.last_normal_source,
                 VisualizationLane::Preload => &mut self.last_preload_source,
+            };
+            let previous_snapshot = match lane {
+                VisualizationLane::Normal => &mut self.last_normal_snapshot,
+                VisualizationLane::Preload => &mut self.last_preload_snapshot,
             };
             let previous_structure = match lane {
                 VisualizationLane::Normal => &mut self.last_normal_structure,
@@ -257,25 +352,9 @@ impl ClientPublicationState {
                 responses.push(invalidation.clone());
                 replacement_responses.push(invalidation);
                 *previous = 0;
+                *previous_snapshot = None;
             }
-            let key = subscribed.key(lane);
-            let projection_state = state.clone();
-            let projection_session = session.clone();
-            let projection_source = Arc::clone(&source);
-            let snapshot = match tokio::task::spawn_blocking(move || {
-                projection_state
-                    .output
-                    .visualization_projection(key, &projection_source, || {
-                        lane_snapshot(
-                            &projection_state,
-                            &projection_session,
-                            lane,
-                            &projection_source,
-                        )
-                    })
-            })
-            .await
-            {
+            let snapshot = match projected {
                 Ok(Ok(snapshot)) => snapshot,
                 Ok(Err(error)) => {
                     let response = VisualizationServerMessage::Error {
@@ -311,10 +390,19 @@ impl ClientPublicationState {
                 published_at: published_at.clone(),
                 snapshot: snapshot.snapshot.as_ref().clone(),
             };
-            let response = if !self.force_snapshot
-                && *previous != 0
-                && snapshot.previous_source_sequence == Some(*previous)
+            let response = if !self.force_snapshot && *previous != 0 && previous_snapshot.is_some()
             {
+                let mut delta = if snapshot.previous_source_sequence == Some(*previous) {
+                    snapshot.delta.as_ref().clone()
+                } else {
+                    super::visualization_frame::lane_delta(
+                        previous_snapshot.as_deref(),
+                        snapshot.snapshot.as_ref(),
+                    )
+                };
+                if !subscribed.sparse_dynamic_stack && delta.dynamic_stack.is_none() {
+                    delta.dynamic_stack = Some(snapshot.snapshot.dynamic_stack.clone());
+                }
                 VisualizationServerMessage::Delta {
                     lane,
                     scope: source.scope,
@@ -322,7 +410,7 @@ impl ClientPublicationState {
                     source_frame: snapshot.lane_source_sequence,
                     source_timestamp,
                     published_at,
-                    delta: snapshot.delta.as_ref().clone(),
+                    delta,
                 }
             } else {
                 snapshot_response.clone()
@@ -330,6 +418,7 @@ impl ClientPublicationState {
             responses.push(response);
             replacement_responses.push(snapshot_response);
             *previous = source.sequence;
+            *previous_snapshot = Some(Arc::clone(&snapshot.snapshot));
             *previous_structure = Some((source.scope, source.show_revision));
             sent_frame = true;
             self.last_heartbeat = Instant::now();
@@ -347,6 +436,10 @@ impl ClientPublicationState {
         }
         if sent_frame {
             self.force_snapshot = false;
+            if self.acknowledgements {
+                self.unacknowledged_sequences
+                    .push_back(self.outgoing_sequence);
+            }
         }
         true
     }
@@ -357,7 +450,10 @@ impl ClientPublicationState {
         state: &AppState,
         outgoing: &LatestOutgoing,
     ) -> bool {
-        if self.last_heartbeat.elapsed() < Duration::from_secs(2) || outgoing.has_pending().await {
+        if !self.can_publish()
+            || self.last_heartbeat.elapsed() < Duration::from_secs(2)
+            || outgoing.has_pending().await
+        {
             return true;
         }
         self.outgoing_sequence += 1;
@@ -369,6 +465,10 @@ impl ClientPublicationState {
         if !enqueue(outgoing, &state.output, [&heartbeat], [&heartbeat]).await {
             return false;
         }
+        if self.acknowledgements {
+            self.unacknowledged_sequences
+                .push_back(self.outgoing_sequence);
+        }
         self.last_heartbeat = Instant::now();
         true
     }
@@ -378,6 +478,8 @@ struct SubscriptionClaims {
     output: super::OutputResource,
     session_id: uuid::Uuid,
     lanes: HashSet<VisualizationLane>,
+    include_dynamic_stack: bool,
+    sparse_dynamic_stack: bool,
 }
 
 impl SubscriptionClaims {
@@ -386,7 +488,29 @@ impl SubscriptionClaims {
             output,
             session_id,
             lanes: HashSet::new(),
+            include_dynamic_stack: false,
+            sparse_dynamic_stack: false,
         }
+    }
+
+    fn set_include_dynamic_stack(&mut self, include_dynamic_stack: bool) {
+        if self.include_dynamic_stack == include_dynamic_stack {
+            return;
+        }
+        let lanes = self.lanes.iter().copied().collect::<Vec<_>>();
+        for lane in &lanes {
+            self.output
+                .change_visualization_projection_claim(self.key(*lane), -1);
+        }
+        self.include_dynamic_stack = include_dynamic_stack;
+        for lane in lanes {
+            self.output
+                .change_visualization_projection_claim(self.key(lane), 1);
+        }
+    }
+
+    fn set_sparse_dynamic_stack(&mut self, sparse_dynamic_stack: bool) {
+        self.sparse_dynamic_stack = sparse_dynamic_stack;
     }
 
     fn subscribe(&mut self, lanes: impl IntoIterator<Item = VisualizationLane>) {
@@ -415,10 +539,15 @@ impl SubscriptionClaims {
     ) -> super::visualization_frame::VisualizationProjectionKey {
         match lane {
             VisualizationLane::Normal => {
-                super::visualization_frame::VisualizationProjectionKey::Normal
+                super::visualization_frame::VisualizationProjectionKey::Normal {
+                    include_dynamic_stack: self.include_dynamic_stack,
+                }
             }
             VisualizationLane::Preload => {
-                super::visualization_frame::VisualizationProjectionKey::Preload(self.session_id)
+                super::visualization_frame::VisualizationProjectionKey::Preload {
+                    session_id: self.session_id,
+                    include_dynamic_stack: self.include_dynamic_stack,
+                }
             }
         }
     }
@@ -430,10 +559,15 @@ impl Drop for SubscriptionClaims {
             self.output.change_visualization_subscribers(lane, -1);
             let key = match lane {
                 VisualizationLane::Normal => {
-                    super::visualization_frame::VisualizationProjectionKey::Normal
+                    super::visualization_frame::VisualizationProjectionKey::Normal {
+                        include_dynamic_stack: self.include_dynamic_stack,
+                    }
                 }
                 VisualizationLane::Preload => {
-                    super::visualization_frame::VisualizationProjectionKey::Preload(self.session_id)
+                    super::visualization_frame::VisualizationProjectionKey::Preload {
+                        session_id: self.session_id,
+                        include_dynamic_stack: self.include_dynamic_stack,
+                    }
                 }
             };
             self.output.change_visualization_projection_claim(key, -1);
@@ -520,7 +654,14 @@ async fn handle_socket_messages(
                             }
                         };
                         match request {
-                            VisualizationClientMessage::Subscribe { lanes, max_rate_hz } => {
+                            VisualizationClientMessage::Subscribe {
+                                lanes,
+                                max_rate_hz,
+                                acknowledgements,
+                                include_dynamic_stack,
+                                sparse_dynamic_stack,
+                                batched_messages,
+                            } => {
                                 if max_rate_hz == 0 || max_rate_hz > VISUALIZATION_MAX_RATE_HZ {
                                     let response = VisualizationServerMessage::Error {
                                         code: "invalid_rate".into(),
@@ -532,7 +673,11 @@ async fn handle_socket_messages(
                                     publication.force_snapshot = true;
                                     continue;
                                 }
+                                subscribed.set_include_dynamic_stack(include_dynamic_stack);
+                                subscribed.set_sparse_dynamic_stack(sparse_dynamic_stack);
+                                outgoing.set_batched_messages(batched_messages);
                                 subscribed.subscribe(lanes);
+                                publication.set_acknowledgements(acknowledgements);
                                 throttle.set_rate(max_rate_hz);
                                 publication.reset_subscriptions();
                             }
@@ -544,19 +689,33 @@ async fn handle_socket_messages(
                             }
                             VisualizationClientMessage::Resynchronize { lane } => {
                                 match lane {
-                                    VisualizationLane::Normal => publication.last_normal_source = 0,
-                                    VisualizationLane::Preload => publication.last_preload_source = 0,
+                                    VisualizationLane::Normal => {
+                                        publication.last_normal_source = 0;
+                                        publication.last_normal_snapshot = None;
+                                    }
+                                    VisualizationLane::Preload => {
+                                        publication.last_preload_source = 0;
+                                        publication.last_preload_snapshot = None;
+                                    }
                                 }
                                 publication.force_snapshot = true;
                                 throttle.queue_current(state.output.sampled_visualization_frame());
+                            }
+                            VisualizationClientMessage::Acknowledge { sequence } => {
+                                publication.acknowledge(sequence);
+                                if publication.can_publish() {
+                                    ready_source = throttle.take_due(Instant::now());
+                                }
                             }
                         }
                     }
                     Message::Ping(payload) => {
                         if !outgoing
                             .replace(
-                                vec![Message::Pong(payload.clone())],
-                                vec![Message::Pong(payload)],
+                                vec![VisualizationOutgoingMessage::Raw(Message::Pong(
+                                    payload.clone(),
+                                ))],
+                                vec![VisualizationOutgoingMessage::Raw(Message::Pong(payload))],
                             )
                             .await
                         {
@@ -573,9 +732,14 @@ async fn handle_socket_messages(
                 .wait_for_visualization_sample_after(throttle.observed_sequence),
                 if !subscribed.lanes.is_empty() =>
             {
-                ready_source = throttle.observe(source, Instant::now());
+                throttle.queue_observed(source);
+                if publication.can_publish() {
+                    ready_source = throttle.take_due(Instant::now());
+                }
             }
-            _ = tokio::time::sleep_until(throttle.next_allowed), if throttle.pending.is_some() => {
+            _ = tokio::time::sleep_until(throttle.next_allowed),
+                if throttle.pending.is_some() && publication.can_publish() =>
+            {
                 ready_source = throttle.take_due(Instant::now());
             }
             _ = heartbeat.tick(), if !subscribed.lanes.is_empty() => {
@@ -603,6 +767,30 @@ async fn run_writer(
     outgoing: Arc<LatestOutgoing>,
 ) {
     while let Some(messages) = outgoing.next().await {
+        let batched_messages = outgoing.batched_messages();
+        let serialized = tokio::task::spawn_blocking(move || {
+            let started = Instant::now();
+            let messages = serialize_outgoing_messages(messages, batched_messages);
+            (started.elapsed(), messages)
+        })
+        .await;
+        let Ok((serialization_duration, Ok(messages))) = serialized else {
+            outgoing.close().await;
+            return;
+        };
+        let payload_bytes = messages
+            .iter()
+            .map(|message| match message {
+                Message::Text(message) => message.len(),
+                Message::Binary(message) | Message::Ping(message) | Message::Pong(message) => {
+                    message.len()
+                }
+                Message::Close(_) => 0,
+            })
+            .sum::<usize>() as u64;
+        outgoing
+            .output
+            .record_visualization_stream_serialization(serialization_duration, payload_bytes);
         let started = Instant::now();
         let succeeded = tokio::time::timeout(VISUALIZATION_SEND_TIMEOUT, async {
             for message in messages {
@@ -622,45 +810,54 @@ async fn run_writer(
     }
 }
 
+fn serialize_outgoing_messages(
+    messages: Vec<VisualizationOutgoingMessage>,
+    batched_messages: bool,
+) -> Result<Vec<Message>, serde_json::Error> {
+    if batched_messages
+        && messages.len() > 1
+        && messages
+            .iter()
+            .all(|message| matches!(message, VisualizationOutgoingMessage::Server(_)))
+    {
+        let messages = messages
+            .into_iter()
+            .filter_map(|message| match message {
+                VisualizationOutgoingMessage::Server(message) => Some(message),
+                VisualizationOutgoingMessage::Raw(_) => None,
+            })
+            .collect::<Vec<_>>();
+        return serde_json::to_string(&messages)
+            .map(|messages| vec![Message::Text(messages.into())]);
+    }
+    messages
+        .into_iter()
+        .map(|message| match message {
+            VisualizationOutgoingMessage::Server(message) => {
+                serde_json::to_string(&message).map(|message| Message::Text(message.into()))
+            }
+            VisualizationOutgoingMessage::Raw(message) => Ok(message),
+        })
+        .collect()
+}
+
 async fn enqueue<'a>(
     outgoing: &LatestOutgoing,
-    output: &super::OutputResource,
+    _output: &super::OutputResource,
     messages: impl IntoIterator<Item = &'a VisualizationServerMessage>,
     replacement: impl IntoIterator<Item = &'a VisualizationServerMessage>,
 ) -> bool {
-    let messages = messages.into_iter().cloned().collect::<Vec<_>>();
-    let replacement = replacement.into_iter().cloned().collect::<Vec<_>>();
-    let serialized = tokio::task::spawn_blocking(move || {
-        let started = Instant::now();
-        let messages = messages
-            .iter()
-            .map(serde_json::to_string)
-            .collect::<Result<Vec<_>, _>>();
-        let replacement = replacement
-            .iter()
-            .map(serde_json::to_string)
-            .collect::<Result<Vec<_>, _>>();
-        (started.elapsed(), messages, replacement)
-    })
-    .await;
-    let Ok((duration, Ok(messages), Ok(replacement))) = serialized else {
-        return false;
-    };
-    let payload_bytes = messages.iter().map(String::len).sum::<usize>() as u64
-        + replacement.iter().map(String::len).sum::<usize>() as u64;
-    output.record_visualization_stream_serialization(duration, payload_bytes);
-    outgoing
-        .replace(
-            messages
-                .into_iter()
-                .map(|message| Message::Text(message.into()))
-                .collect(),
-            replacement
-                .into_iter()
-                .map(|message| Message::Text(message.into()))
-                .collect(),
-        )
-        .await
+    let messages = messages
+        .into_iter()
+        .cloned()
+        .map(VisualizationOutgoingMessage::Server)
+        .collect::<Vec<_>>();
+    let replacement = replacement
+        .into_iter()
+        .cloned()
+        .map(VisualizationOutgoingMessage::Server)
+        .collect::<Vec<_>>();
+    outgoing.replace(messages, replacement).await
 }
 
 fn lane_snapshot(
@@ -668,29 +865,57 @@ fn lane_snapshot(
     session: &Session,
     lane: VisualizationLane,
     source: &super::visualization_frame::PublishedVisualizationFrame,
+    include_dynamic_stack: bool,
 ) -> Result<VisualizationLaneSnapshot, ApiError> {
-    if lane == VisualizationLane::Preload {
-        let mut snapshot: VisualizationLaneSnapshot =
-            serde_json::from_value(visualization_snapshot_for_session(state, session, true)?)
-                .map_err(|error| ApiError::internal(error.to_string()))?;
-        snapshot.scope = source.scope;
-        return Ok(snapshot);
-    }
-    let profile_output_values = state
-        .output
-        .profile_visualization_values(&source.values, source.options)
-        .map_err(|error| ApiError::internal(error.to_string()))?;
+    let preload = lane == VisualizationLane::Preload;
     let mut snapshot: VisualizationLaneSnapshot =
-        serde_json::from_value(visualization_snapshot_for_session(state, session, false)?)
-            .map_err(|error| ApiError::internal(error.to_string()))?;
+        serde_json::from_value(visualization_snapshot_for_session_content_from_resolved(
+            state,
+            session,
+            preload,
+            include_dynamic_stack,
+            true,
+            Some(source.values.as_ref()),
+            Some(source.profile_visualization_values.as_ref()),
+        )?)
+        .map_err(|error| ApiError::internal(error.to_string()))?;
     snapshot.scope = source.scope;
     snapshot.revision = source.show_revision;
-    snapshot.generated_at = chrono::DateTime::<chrono::Utc>::from(source.generated_at).to_rfc3339();
-    snapshot.grand_master = source.options.grand_master;
-    snapshot.blackout = source.options.blackout;
-    snapshot.values = ordered_values(&source.values);
-    snapshot.profile_output_values = ordered_values(&profile_output_values);
+    if !preload {
+        snapshot.generated_at =
+            chrono::DateTime::<chrono::Utc>::from(source.generated_at).to_rfc3339();
+        snapshot.grand_master = source.options.grand_master;
+        snapshot.blackout = source.options.blackout;
+    }
+    if include_dynamic_stack {
+        // Fixture Sheet consumes Dynamic identity and state; live sampled and
+        // resolved values belong to the DMX/output view. Do not make every
+        // Stage publication carry ordinary static entries or duplicate values.
+        snapshot
+            .dynamic_stack
+            .retain(|entry| entry.entry_type != VisualizationStackEntryType::OrdinaryStatic);
+        for entry in &mut snapshot.dynamic_stack {
+            entry.value = None;
+            entry.resolved_value = None;
+            entry.activation_mix = None;
+        }
+    } else {
+        snapshot
+            .values
+            .retain(|entry| stage_visualization_attribute(&entry.attribute));
+        snapshot
+            .profile_output_values
+            .retain(|entry| stage_visualization_attribute(&entry.attribute));
+    }
     Ok(snapshot)
+}
+
+fn stage_visualization_attribute(attribute: &str) -> bool {
+    matches!(
+        attribute,
+        "intensity" | "pan" | "tilt" | "zoom" | "focus" | "beam.zoom" | "beam.focus" | "gobo"
+    ) || attribute == "color"
+        || attribute.starts_with("color.")
 }
 
 fn current_scope(state: &AppState) -> VisualizationScope {
@@ -715,47 +940,6 @@ fn decode_client_message(text: &str) -> Result<VisualizationClientMessage, serde
         &raw,
     );
     Ok(message)
-}
-
-fn ordered_values(
-    values: &std::collections::HashMap<
-        (light_core::FixtureId, light_core::AttributeKey),
-        AttributeValue,
-    >,
-) -> Vec<VisualizationValue> {
-    let mut values = values
-        .iter()
-        .map(|((fixture_id, attribute), value)| VisualizationValue {
-            fixture_id: fixture_id.0,
-            attribute: attribute.0.clone(),
-            value: wire_value(value),
-        })
-        .collect::<Vec<_>>();
-    values.sort_by(|left, right| {
-        left.fixture_id
-            .cmp(&right.fixture_id)
-            .then_with(|| left.attribute.cmp(&right.attribute))
-    });
-    values
-}
-
-fn wire_value(value: &AttributeValue) -> ProgrammingPreloadAttributeValue {
-    match value {
-        AttributeValue::Normalized(value) => ProgrammingPreloadAttributeValue::Normalized(*value),
-        AttributeValue::Spread(value) => ProgrammingPreloadAttributeValue::Spread(value.clone()),
-        AttributeValue::Discrete(value) => {
-            ProgrammingPreloadAttributeValue::Discrete(value.clone())
-        }
-        AttributeValue::ColorXyz(value) => {
-            ProgrammingPreloadAttributeValue::ColorXyz(ProgrammingPreloadColorXyz {
-                x: value.x,
-                y: value.y,
-                z: value.z,
-            })
-        }
-        AttributeValue::RawDmx(value) => ProgrammingPreloadAttributeValue::RawDmx(*value),
-        AttributeValue::RawDmxExact(value) => ProgrammingPreloadAttributeValue::RawDmxExact(*value),
-    }
 }
 
 async fn send_direct(socket: &mut WebSocket, message: &impl serde::Serialize) -> bool {
@@ -785,6 +969,7 @@ mod tests {
                 show_revision: sequence,
                 options: light_engine::RenderOptions::default(),
                 values: Arc::new(std::collections::HashMap::new()),
+                profile_visualization_values: Arc::new(std::collections::HashMap::new()),
             },
         )
     }
@@ -822,6 +1007,10 @@ mod tests {
             VisualizationClientMessage::Subscribe {
                 lanes: vec![VisualizationLane::Normal],
                 max_rate_hz: 10,
+                acknowledgements: false,
+                include_dynamic_stack: false,
+                sparse_dynamic_stack: false,
+                batched_messages: false,
             }
         );
     }
@@ -831,14 +1020,43 @@ mod tests {
         assert_eq!(MAX_VISUALIZATION_CLIENT_MESSAGE_BYTES, 16 * 1024);
     }
 
+    #[test]
+    fn negotiated_lane_batch_uses_one_websocket_text_frame() {
+        let message = || {
+            VisualizationOutgoingMessage::Server(VisualizationServerMessage::Error {
+                code: "test".into(),
+                message: "message".into(),
+            })
+        };
+        let batched = serialize_outgoing_messages(vec![message(), message()], true).unwrap();
+        assert_eq!(batched.len(), 1);
+        let Message::Text(payload) = &batched[0] else {
+            panic!("lane batch must be text");
+        };
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(payload)
+                .unwrap()
+                .as_array()
+                .map(Vec::len),
+            Some(2)
+        );
+
+        let legacy = serialize_outgoing_messages(vec![message(), message()], false).unwrap();
+        assert_eq!(legacy.len(), 2);
+    }
+
     #[tokio::test]
     async fn stalled_client_queue_retains_only_the_latest_complete_batch() {
         let queue = LatestBatch::default();
         assert_eq!(
             queue
                 .replace(
-                    vec![Message::Text("stale".into())],
-                    vec![Message::Text("first replacement".into())],
+                    vec![VisualizationOutgoingMessage::Raw(Message::Text(
+                        "stale".into(),
+                    ))],
+                    vec![VisualizationOutgoingMessage::Raw(Message::Text(
+                        "first replacement".into(),
+                    ))],
                 )
                 .await,
             Some(false)
@@ -846,20 +1064,50 @@ mod tests {
         assert_eq!(
             queue
                 .replace(
-                    vec![Message::Text("incoherent delta".into())],
-                    vec![Message::Text("latest snapshot".into())],
+                    vec![VisualizationOutgoingMessage::Raw(Message::Text(
+                        "incoherent delta".into(),
+                    ))],
+                    vec![VisualizationOutgoingMessage::Raw(Message::Text(
+                        "latest snapshot".into(),
+                    ))],
                 )
                 .await,
             Some(true)
         );
 
         let batch = queue.next().await.unwrap();
-        assert_eq!(batch, vec![Message::Text("latest snapshot".into())]);
+        assert_eq!(
+            batch,
+            vec![VisualizationOutgoingMessage::Raw(Message::Text(
+                "latest snapshot".into()
+            ))]
+        );
         assert!(queue.pending.lock().await.is_none());
     }
 
+    #[test]
+    fn negotiated_acknowledgements_hold_publication_until_the_batch_is_processed() {
+        let mut publication = ClientPublicationState::new();
+        publication.set_acknowledgements(true);
+        publication
+            .unacknowledged_sequences
+            .extend(1..=MAX_UNACKNOWLEDGED_PUBLICATIONS as u64);
+
+        assert!(!publication.can_publish());
+        publication.acknowledge(1);
+        assert!(publication.can_publish());
+        assert_eq!(
+            publication.unacknowledged_sequences,
+            VecDeque::from_iter(2..=MAX_UNACKNOWLEDGED_PUBLICATIONS as u64)
+        );
+
+        publication.set_acknowledgements(false);
+        assert!(publication.can_publish());
+        assert!(publication.unacknowledged_sequences.is_empty());
+    }
+
     #[tokio::test(start_paused = true)]
-    async fn ten_hz_notification_uses_the_shared_sampler_as_its_only_throttle() {
+    async fn ten_hz_notification_retains_the_client_send_cap() {
         let mut throttle = ClientRateThrottle::new();
         throttle.set_rate(10);
         let first = throttle.observe(source(1), Instant::now()).unwrap();
@@ -867,7 +1115,9 @@ mod tests {
         throttle.mark_sent(Instant::now());
 
         tokio::time::advance(Duration::from_millis(1)).await;
-        let second = throttle.observe(source(2), Instant::now()).unwrap();
+        assert!(throttle.observe(source(2), Instant::now()).is_none());
+        tokio::time::advance(Duration::from_millis(99)).await;
+        let second = throttle.take_due(Instant::now()).unwrap();
         assert_eq!(second.sequence, 2);
     }
 
@@ -940,5 +1190,28 @@ mod tests {
         assert!(throttle.observe(source(2), Instant::now()).is_none());
         tokio::time::advance(Duration::from_micros(334)).await;
         assert_eq!(throttle.take_due(Instant::now()).unwrap().sequence, 2);
+    }
+
+    #[test]
+    fn stage_stream_keeps_only_attributes_consumed_by_the_renderer() {
+        for attribute in [
+            "intensity",
+            "pan",
+            "tilt",
+            "zoom",
+            "focus",
+            "beam.zoom",
+            "beam.focus",
+            "gobo",
+            "color",
+            "color.red",
+            "color.green",
+            "color.blue",
+        ] {
+            assert!(stage_visualization_attribute(attribute), "{attribute}");
+        }
+        for attribute in ["shutter", "strobe", "media.playback", "control.reset"] {
+            assert!(!stage_visualization_attribute(attribute), "{attribute}");
+        }
     }
 }

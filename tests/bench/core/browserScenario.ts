@@ -38,6 +38,7 @@ import {
 	type OutputPacketAssertion,
 } from "../output/outputPacketScenario";
 import { BrowserOutput } from "../output/outputScenario";
+import { BrowserProgrammerActionTiming } from "../performance/programmerActionTiming";
 import {
 	BrowserCues,
 	BrowserRecording,
@@ -133,6 +134,7 @@ export class BrowserScenarioWorld {
 	readonly systemIntegration: BrowserSystemIntegrations;
 	readonly dmx: BrowserDmx;
 	readonly output: BrowserOutput;
+	readonly programmerActionTiming: BrowserProgrammerActionTiming;
 	readonly timing: BrowserTiming;
 	readonly programmer: BrowserProgrammer;
 	readonly speedGroup: BrowserSpeedGroups;
@@ -318,6 +320,11 @@ export class BrowserScenarioWorld {
 		this.systemIntegration = new BrowserSystemIntegrations(api, page);
 		this.dmx = new BrowserDmx(api);
 		this.output = new BrowserOutput(api, desk, page);
+		this.programmerActionTiming = new BrowserProgrammerActionTiming(
+			api,
+			bench,
+			page,
+		);
 		this.programmer = new BrowserProgrammer(api);
 		this.special = new BrowserProgrammerSpecials(
 			api,

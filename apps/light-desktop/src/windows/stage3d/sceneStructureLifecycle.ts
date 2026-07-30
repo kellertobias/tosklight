@@ -38,7 +38,7 @@ type StructureOptions = {
 	mountedModelsRef: MutableRefObject<Map<string, MountedModelLease>>;
 	sceneConfigurationRef: MutableRefObject<StageSceneConfiguration | null>;
 	appliedRenderQualityRef: MutableRefObject<StageRenderQuality>;
-	invalidateRef: MutableRefObject<(() => void) | null>;
+	invalidateRef: MutableRefObject<((immediate?: boolean) => void) | null>;
 	modelCache: StageModelCache;
 	resources: StageProceduralResourceCache;
 	isSelected: (fixtureId: string) => boolean;

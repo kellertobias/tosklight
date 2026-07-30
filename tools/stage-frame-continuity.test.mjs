@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
 	changingPresentationGaps,
+	frameOverlapsApplicationSuspend,
+	frameOverlapsContextRecovery,
 	laneSourceCadenceGaps,
 	latestChangingFrameDidNotSettle,
 } from "./stage-frame-continuity.mjs";
@@ -52,6 +54,69 @@ test("source cadence restarts after an intentional application suspension", () =
 	};
 
 	assert.deepEqual(laneSourceCadenceGaps(frames, applicationSuspend), [100]);
+});
+
+test("source cadence ignores eventual-consistency gaps while values are unchanged", () => {
+	const frames = [
+		frame(1, 0, 5, 5),
+		{ ...frame(2, 100, 5, 5), visibleChanged: false },
+		{ ...frame(9, 900, 5, 5), visibleChanged: false },
+		frame(10, 1_000, 5, 5),
+		frame(11, 1_100, 5, 5),
+	];
+
+	assert.deepEqual(laneSourceCadenceGaps(frames), [100]);
+});
+
+test("a frame spanning an intentional process suspension is not a latency sample", () => {
+	const suspended = {
+		startedAt: new Date(1_050).toISOString(),
+		finishedAt: new Date(2_050).toISOString(),
+	};
+	assert.equal(
+		frameOverlapsApplicationSuspend(frame(1, 0, 1_100, 1_100), suspended),
+		true,
+	);
+	assert.equal(
+		frameOverlapsApplicationSuspend(frame(2, 1_100, 20, 20), suspended),
+		false,
+	);
+});
+
+test("cadence restarts around the measured show-switch interval", () => {
+	const frames = [
+		frame(1, 0, 5, 5),
+		frame(2, 100, 5, 5),
+		frame(3, 500, 5, 5),
+		frame(4, 600, 5, 5),
+	];
+	const showSwitch = {
+		intervals: [
+			{
+				startedAt: new Date(1_150).toISOString(),
+				finishedAt: new Date(1_450).toISOString(),
+			},
+		],
+	};
+
+	assert.deepEqual(laneSourceCadenceGaps(frames, undefined, showSwitch), [
+		100, 100,
+	]);
+});
+
+test("a frame spanning intentional WebGL recovery is not a latency sample", () => {
+	const recovery = {
+		startedAt: new Date(1_050).toISOString(),
+		finishedAt: new Date(2_050).toISOString(),
+	};
+	assert.equal(
+		frameOverlapsContextRecovery(frame(1, 0, 1_100, 1_100), recovery),
+		true,
+	);
+	assert.equal(
+		frameOverlapsContextRecovery(frame(2, 1_100, 20, 20), recovery),
+		false,
+	);
 });
 
 function frame(sourceFrame, sourceOffset, firstLatency, settledLatency) {

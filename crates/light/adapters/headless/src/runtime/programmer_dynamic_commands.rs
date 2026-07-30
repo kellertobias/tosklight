@@ -221,7 +221,7 @@ fn command_controller_candidates(
     for stored in programmer
         .dynamic_values
         .iter()
-        .chain(&programmer.preload_dynamic_pending)
+        .chain(programmer.preload_dynamic_pending.iter())
     {
         if let light_dynamics::DynamicSemanticValue::DynamicOn {
             instance_link,

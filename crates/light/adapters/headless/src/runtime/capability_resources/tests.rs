@@ -396,6 +396,13 @@ mod tests {
         resource.set_error(None);
         assert!(resource.error().is_none());
 
+        let show_change = resource.acquire_show_change().await;
+        assert!(
+            resource.try_acquire().is_ok(),
+            "preparing a show change must not exclude output rendering"
+        );
+        drop(show_change);
+
         let permit = resource.acquire().await;
         assert!(resource.try_acquire().is_err());
         drop(permit);
