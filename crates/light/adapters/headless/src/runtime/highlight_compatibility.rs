@@ -4,7 +4,9 @@
 //! does not migrate or normalize portable show objects: until the operator or a later migration
 //! explicitly resolves a legacy look, the original show remains the compatibility authority.
 
-use light_show::{PortableShowDocument, ShowStore, StoreError};
+use light_show::PortableShowDocument;
+#[cfg(test)]
+use light_show::{ShowStore, StoreError};
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 pub(super) struct HighlightCompatibilityReport {
@@ -39,6 +41,7 @@ pub(super) enum LegacyHighlightIssue {
 }
 
 /// Opens one immutable portable snapshot and reports legacy raw Highlight state without writing.
+#[cfg(test)]
 pub(super) fn inspect_highlight_compatibility(
     store: &ShowStore,
 ) -> Result<HighlightCompatibilityReport, StoreError> {
