@@ -1,4 +1,7 @@
-use super::locations::{array_at, identity_at, primary_identity, scalar_at, value_location};
+use super::locations::{
+    add_optional_direct_reference, array_at, identity_at, primary_identity, scalar_at,
+    value_location,
+};
 use crate::selective_import::model::ImportProfileReference;
 use crate::selective_import::{
     ImportIdentityFormat, ImportObjectDescriptor, ImportOwnedIdentity, ImportProfileKey,
@@ -19,6 +22,7 @@ pub(super) struct IdentityOwner {
 pub(crate) struct FixtureIdentityCatalog {
     owners: BTreeMap<String, IdentityOwner>,
     ambiguous: BTreeSet<String>,
+    patch_layers: BTreeSet<String>,
 }
 
 impl FixtureIdentityCatalog {
@@ -40,6 +44,11 @@ impl FixtureIdentityCatalog {
                 }
             }
         }
+        catalog.patch_layers.extend(
+            document
+                .objects_of_kind("patch_layer")
+                .map(|object| object.key().id().to_owned()),
+        );
         catalog
     }
 
@@ -52,6 +61,10 @@ impl FixtureIdentityCatalog {
             return Err(format!("fixture identity {value} is owned more than once"));
         }
         Ok(self.owners.get(value))
+    }
+
+    pub(super) fn has_patch_layer(&self, layer_id: &str) -> bool {
+        self.patch_layers.contains(layer_id)
     }
 
     fn insert(&mut self, value: String, owner: IdentityOwner) {
@@ -69,6 +82,8 @@ impl FixtureIdentityCatalog {
 
 pub(super) fn fixture_descriptor(
     object: &PortableShowObject,
+    source: &FixtureIdentityCatalog,
+    target: &FixtureIdentityCatalog,
 ) -> Result<ImportObjectDescriptor, String> {
     let mut descriptor = ImportObjectDescriptor {
         identities: fixture_identities(object)?,
@@ -76,6 +91,16 @@ pub(super) fn fixture_descriptor(
     };
     if let Some(reference) = fixture_profile_reference(object)? {
         descriptor.profile_references.push(reference);
+    }
+    if object
+        .body()
+        .get("layer_id")
+        .and_then(Value::as_str)
+        .is_some_and(|layer_id| {
+            source.has_patch_layer(layer_id) || target.has_patch_layer(layer_id)
+        })
+    {
+        add_optional_direct_reference(object.body(), "/layer_id", "patch_layer", &mut descriptor)?;
     }
     Ok(descriptor)
 }
@@ -109,17 +134,13 @@ fn fixture_identities(object: &PortableShowObject) -> Result<Vec<ImportOwnedIden
             slot,
         )?);
     }
-    let mut multipatch_slots = BTreeSet::new();
     for (index, instance) in array_at(object.body(), "/multipatch")
         .into_iter()
         .flatten()
         .enumerate()
     {
         let value = scalar_at(instance, "/id")?;
-        let slot = format!("multipatch:{value}");
-        if !multipatch_slots.insert(slot.clone()) {
-            return Err(format!("multipatch identity {value} occurs more than once"));
-        }
+        let slot = format!("multipatch:{index}");
         identities.push(ImportOwnedIdentity {
             slot,
             value,

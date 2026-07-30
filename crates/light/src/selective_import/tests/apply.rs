@@ -611,6 +611,65 @@ fn one_patch_layer_merges_only_its_fixtures_and_stage_geometry() {
 }
 
 #[test]
+fn additive_patch_layer_rewrites_membership_and_appends_fixture_numbers() {
+    let rig = TestRig::new();
+    let mut source = portable_fixture_record(150_000, 2);
+    let target = portable_fixture_record(160_000, 10);
+    source.body["layer_id"] = json!("front");
+    rig.source_profile(&source.profile);
+    rig.target_profile(&target.profile);
+    rig.source_object(
+        "patch_layer",
+        "front",
+        json!({"id":"front","name":"Front","order":1}),
+    );
+    rig.target_object(
+        "patch_layer",
+        "front",
+        json!({"id":"front","name":"Existing Front","order":1}),
+    );
+    rig.source_object(
+        "patched_fixture",
+        &source.fixture_id.0.to_string(),
+        source.body,
+    );
+    rig.target_object(
+        "patched_fixture",
+        &target.fixture_id.0.to_string(),
+        target.body,
+    );
+
+    let preview = rig.preview(
+        rig.request("patch_layer", "front")
+            .with_mode(ImportLoadMode::AddToEnd),
+    );
+
+    assert!(preview.can_apply(), "{:?}", preview.blockers);
+    let imported_layer = preview
+        .objects
+        .iter()
+        .find(|object| object.source == key("patch_layer", "front"))
+        .unwrap()
+        .destination
+        .clone();
+    let imported_fixture = preview
+        .objects
+        .iter()
+        .find(|object| object.source == key("patched_fixture", &source.fixture_id.0.to_string()))
+        .unwrap()
+        .destination
+        .clone();
+    rig.apply(&preview).unwrap();
+
+    let target = rig.target_document();
+    let fixture = target
+        .object(imported_fixture.kind(), imported_fixture.id())
+        .unwrap();
+    assert_eq!(fixture.body()["layer_id"], imported_layer.id());
+    assert_eq!(fixture.body()["fixture_number"], 11);
+}
+
+#[test]
 fn legacy_inline_fixture_materializes_profile_and_retains_unknown_data() {
     let rig = TestRig::new();
     let legacy = legacy_fixture_record(120_000, 3);

@@ -58,6 +58,7 @@ pub(super) struct Planner<'a, P: SelectiveShowImportPorts> {
     source_custom_descriptors: CustomDescriptorCatalog,
     target_custom_descriptors: CustomDescriptorCatalog,
     allocator: IdentityAllocator,
+    next_fixture_number: Option<u64>,
     pending: BTreeSet<PortableShowObjectKey>,
     scoped_stage_layouts: BTreeSet<PortableShowObjectKey>,
     scoped_stage_identities: BTreeSet<String>,
@@ -180,6 +181,13 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
                 .collect::<BTreeSet<_>>()
         };
         pending.extend(scoped_stage_layouts.iter().cloned());
+        let next_fixture_number = target
+            .objects()
+            .filter(|object| matches!(object.key().kind(), "fixture" | "patched_fixture"))
+            .filter_map(|object| object.body().get("fixture_number"))
+            .filter_map(serde_json::Value::as_u64)
+            .max()
+            .map_or(Some(1), |number| number.checked_add(1));
         Self {
             request,
             source_snapshot,
@@ -196,6 +204,7 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
                 keys,
                 identity_values,
             ),
+            next_fixture_number,
             pending,
             scoped_stage_layouts,
             scoped_stage_identities,
@@ -256,7 +265,7 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
         };
         let scoped_stage = self.scoped_stage_layouts.contains(&key);
         let mut descriptor = self.describe_source(&source);
-        let body = if scoped_stage {
+        let mut body = if scoped_stage {
             descriptor.references.retain(|reference| {
                 self.scoped_stage_identities
                     .contains(&reference.source_identity)
@@ -265,11 +274,20 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
         } else {
             source.body().clone()
         };
+        let positional_destination = (!scoped_stage
+            && self.request.mode == super::ImportLoadMode::ReplaceByPosition)
+            .then(|| self.positional_destination(&key, &body, &descriptor))
+            .flatten();
         let (action, destination) = if scoped_stage {
             (ImportObjectAction::MergeScoped, key.clone())
         } else {
-            self.action_for(&key, &body)
+            self.action_for(&key, &body, positional_destination)
         };
+        if matches!(action, ImportObjectAction::Duplicate { .. })
+            && matches!(key.kind(), "fixture" | "patched_fixture")
+        {
+            self.assign_appended_fixture_number(&key, &mut body);
+        }
         let destination_identities =
             self.destination_identities(&key, &destination, &action, &descriptor);
         let traverses = !matches!(action, ImportObjectAction::KeepDestination);
@@ -385,6 +403,52 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
         }
     }
 
+    fn assign_appended_fixture_number(
+        &mut self,
+        key: &PortableShowObjectKey,
+        body: &mut serde_json::Value,
+    ) {
+        let Some(number) = self.next_fixture_number else {
+            self.blockers.push(ImportBlocker::InvalidResolution {
+                key: key.clone(),
+                message: "fixture number space is exhausted".into(),
+            });
+            return;
+        };
+        let Some(object) = body.as_object_mut() else {
+            self.blockers.push(ImportBlocker::InvalidDescriptor {
+                key: key.clone(),
+                message: "fixture body is not an object".into(),
+            });
+            return;
+        };
+        object.insert("fixture_number".into(), serde_json::Value::from(number));
+        self.next_fixture_number = number.checked_add(1);
+    }
+
+    fn positional_destination(
+        &mut self,
+        source: &PortableShowObjectKey,
+        body: &serde_json::Value,
+        descriptor: &ImportObjectDescriptor,
+    ) -> Option<PortableShowObjectKey> {
+        let position = positional_identity(source.kind(), body, descriptor)?;
+        let candidates = self
+            .target
+            .objects_of_kind(source.kind())
+            .cloned()
+            .collect::<Vec<_>>();
+        candidates.into_iter().find_map(|candidate| {
+            let candidate_descriptor = self.describe_target(&candidate);
+            (positional_identity(
+                candidate.key().kind(),
+                candidate.body(),
+                &candidate_descriptor,
+            ) == Some(position.clone()))
+            .then(|| candidate.key().clone())
+        })
+    }
+
     pub(super) fn bind_destination(&mut self, dependency: &PortableShowObjectKey) {
         let Some(target) = self
             .target
@@ -401,6 +465,24 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
                 .map(|identity| ((dependency.clone(), identity.slot), identity.value)),
         );
     }
+}
+
+fn positional_identity(
+    kind: &str,
+    body: &serde_json::Value,
+    descriptor: &ImportObjectDescriptor,
+) -> Option<String> {
+    if matches!(kind, "fixture" | "patched_fixture") {
+        return body
+            .get("fixture_number")
+            .and_then(serde_json::Value::as_u64)
+            .map(|number| number.to_string());
+    }
+    descriptor
+        .identities
+        .iter()
+        .find(|identity| identity.slot == "object")
+        .map(|identity| identity.value.clone())
 }
 
 /// Caches capability-owned descriptors once per planning pass. Besides avoiding repeated adapter

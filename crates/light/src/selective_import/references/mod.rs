@@ -66,7 +66,9 @@ pub(super) fn registered_descriptor(
         return Ok(None);
     };
     let descriptor = match kind {
-        RegisteredObjectKind::Fixture => fixtures::fixture_descriptor(object)?,
+        RegisteredObjectKind::Fixture => {
+            fixtures::fixture_descriptor(object, source_fixtures, target_fixtures)?
+        }
         RegisteredObjectKind::PatchLayer => descriptors::patch_layer_descriptor(object)?,
         RegisteredObjectKind::Group => {
             descriptors::group_descriptor(object, source_fixtures, target_fixtures)?

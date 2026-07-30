@@ -11,6 +11,7 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
         &mut self,
         key: &PortableShowObjectKey,
         source_body: &serde_json::Value,
+        positional_destination: Option<PortableShowObjectKey>,
     ) -> (ImportObjectAction, PortableShowObjectKey) {
         let resolution = self.request.conflict_resolutions.get(key).copied();
         if matches!(self.request.mode, ImportLoadMode::AddToEnd) && resolution.is_none() {
@@ -21,11 +22,12 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
         {
             return self.duplicate_action(key);
         }
-        let Some(target) = self.target.object(key.kind(), key.id()) else {
+        let destination = positional_destination.unwrap_or_else(|| key.clone());
+        let Some(target) = self.target.object(destination.kind(), destination.id()) else {
             return self.action_without_conflict(key, resolution);
         };
         if target.body() == source_body {
-            return self.action_for_identical(key, resolution);
+            return self.action_for_identical(key, &destination, resolution);
         }
         self.conflicts.push(ImportConflict {
             key: key.clone(),
@@ -33,13 +35,13 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
         });
         match resolution {
             Some(ImportConflictResolution::KeepDestination) => {
-                (ImportObjectAction::KeepDestination, key.clone())
+                (ImportObjectAction::KeepDestination, destination)
             }
             Some(ImportConflictResolution::ReplaceDestination) => {
-                (ImportObjectAction::ReplaceDestination, key.clone())
+                (ImportObjectAction::ReplaceDestination, destination)
             }
             Some(ImportConflictResolution::Duplicate) => self.duplicate_action(key),
-            None => (ImportObjectAction::ReplaceDestination, key.clone()),
+            None => (ImportObjectAction::ReplaceDestination, destination),
         }
     }
 
@@ -64,15 +66,16 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
     fn action_for_identical(
         &mut self,
         key: &PortableShowObjectKey,
+        destination: &PortableShowObjectKey,
         resolution: Option<ImportConflictResolution>,
     ) -> (ImportObjectAction, PortableShowObjectKey) {
         match resolution {
             Some(ImportConflictResolution::Duplicate) => self.duplicate_action(key),
             Some(ImportConflictResolution::ReplaceDestination) | None => {
-                (ImportObjectAction::SkipIdentical, key.clone())
+                (ImportObjectAction::SkipIdentical, destination.clone())
             }
             Some(ImportConflictResolution::KeepDestination) => {
-                (ImportObjectAction::KeepDestination, key.clone())
+                (ImportObjectAction::KeepDestination, destination.clone())
             }
         }
     }
@@ -107,6 +110,9 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
     ) -> BTreeMap<String, String> {
         if matches!(action, ImportObjectAction::KeepDestination) {
             return self.destination_descriptor_identities(destination, descriptor);
+        }
+        if matches!(action, ImportObjectAction::ReplaceDestination) && source != destination {
+            return self.replacement_destination_identities(source, destination, descriptor);
         }
         let mut identities = BTreeMap::new();
         for identity in &descriptor.identities {
@@ -167,6 +173,44 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
             }
         }
         identities
+    }
+
+    fn replacement_destination_identities(
+        &mut self,
+        source: &PortableShowObjectKey,
+        destination: &PortableShowObjectKey,
+        source_descriptor: &ImportObjectDescriptor,
+    ) -> BTreeMap<String, String> {
+        let target_by_slot = self
+            .target
+            .object(destination.kind(), destination.id())
+            .cloned()
+            .map(|target| self.describe_target(&target))
+            .into_iter()
+            .flat_map(|descriptor| descriptor.identities)
+            .map(|identity| (identity.slot, identity.value))
+            .collect::<BTreeMap<_, _>>();
+        source_descriptor
+            .identities
+            .iter()
+            .map(|identity| {
+                let value = target_by_slot
+                    .get(&identity.slot)
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        self.allocator
+                            .nested_uuid(source, &identity.slot)
+                            .unwrap_or_else(|message| {
+                                self.blockers.push(ImportBlocker::InvalidResolution {
+                                    key: source.clone(),
+                                    message,
+                                });
+                                identity.value.clone()
+                            })
+                    });
+                (identity.slot.clone(), value)
+            })
+            .collect()
     }
 
     pub(super) fn validate_unused_resolutions(&mut self) {

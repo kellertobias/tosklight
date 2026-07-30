@@ -593,7 +593,7 @@ fn logical_heads_and_multipatches_are_owned_identities_not_fixture_dependencies(
 }
 
 #[test]
-fn fixture_number_conflicts_are_blocked_during_preview_candidate_validation() {
+fn replace_by_position_maps_fixture_references_to_the_destination_fixture_number() {
     let rig = TestRig::new();
     let source = portable_fixture_record(20_000, 7);
     let target = portable_fixture_record(30_000, 7);
@@ -609,15 +609,87 @@ fn fixture_number_conflicts_are_blocked_during_preview_candidate_validation() {
         &target.fixture_id.0.to_string(),
         target.body,
     );
+    rig.source_object(
+        "group",
+        "front",
+        json!({"id":"front","fixtures":[source.fixture_id.0]}),
+    );
 
-    let preview = rig.preview(rig.request("patched_fixture", &source.fixture_id.0.to_string()));
+    let preview = rig.preview(rig.request("group", "front"));
 
-    assert!(!preview.can_apply());
     assert!(
-        preview
-            .blockers
-            .iter()
-            .any(|blocker| { matches!(blocker, ImportBlocker::CandidateInvalid { .. }) })
+        preview.objects.iter().any(|object| {
+            object.source == key("patched_fixture", &source.fixture_id.0.to_string())
+                && object.destination == key("patched_fixture", &target.fixture_id.0.to_string())
+                && object.action == ImportObjectAction::ReplaceDestination
+        }),
+        "{:?}",
+        preview.blockers
+    );
+    assert!(preview.can_apply(), "{:?}", preview.blockers);
+    rig.apply(&preview).unwrap();
+    let document = rig.target_document();
+    assert!(
+        document
+            .object("patched_fixture", &source.fixture_id.0.to_string())
+            .is_none()
+    );
+    let target_fixture_id = target.fixture_id.0.to_string();
+    assert_eq!(
+        document
+            .object("group", "front")
+            .unwrap()
+            .body()
+            .pointer("/fixtures/0")
+            .and_then(serde_json::Value::as_str),
+        Some(target_fixture_id.as_str())
+    );
+}
+
+#[test]
+fn add_to_end_allocates_a_fixture_number_after_the_destination_patch() {
+    let rig = TestRig::new();
+    let source = portable_fixture_record(40_000, 2);
+    let target = portable_fixture_record(50_000, 7);
+    rig.source_profile(&source.profile);
+    rig.target_profile(&target.profile);
+    rig.source_object(
+        "patched_fixture",
+        &source.fixture_id.0.to_string(),
+        source.body,
+    );
+    rig.target_object(
+        "patched_fixture",
+        &target.fixture_id.0.to_string(),
+        target.body,
+    );
+
+    let preview = rig.preview(
+        rig.request("patched_fixture", &source.fixture_id.0.to_string())
+            .with_mode(ImportLoadMode::AddToEnd),
+    );
+
+    assert!(preview.can_apply(), "{:?}", preview.blockers);
+    let imported_key = preview
+        .objects
+        .iter()
+        .find(|object| object.source == key("patched_fixture", &source.fixture_id.0.to_string()))
+        .unwrap()
+        .destination
+        .clone();
+    let outcome = rig.apply(&preview).unwrap();
+    let imported = outcome
+        .change
+        .objects
+        .iter()
+        .find(|object| object.key == imported_key)
+        .unwrap();
+    assert_eq!(
+        imported
+            .body
+            .get("fixture_number")
+            .and_then(serde_json::Value::as_u64),
+        Some(8)
     );
 }
 
