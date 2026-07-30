@@ -12,7 +12,22 @@ async fn relative_programmer_ws_intent_starts_from_unowned_profile_default() {
         .find(|session| session.token == token)
         .unwrap();
     open_values_test_show(&app, &token).await;
-    let fixture_id = state.output.snapshot().fixtures[0].fixture_id;
+    let fixture_id = state
+        .output
+        .snapshot()
+        .fixtures
+        .iter()
+        .find(|fixture| {
+            fixture.definition.heads.iter().any(|head| {
+                head.shared
+                    && head
+                        .parameters
+                        .iter()
+                        .any(|parameter| parameter.attribute.is_intensity())
+            })
+        })
+        .expect("default show contains a shared Intensity fixture")
+        .fixture_id;
     let request_id = "ws-programmer-values-default-relative";
 
     let relative = dispatch_live_action(
