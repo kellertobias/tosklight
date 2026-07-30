@@ -357,12 +357,50 @@ fn plan_value_intent(
                 shift_attribute_value(current, *delta)?
             }
         };
-        return Ok(vec![ProgrammingValueMutation::SetGroup {
+        let mut mutations = vec![ProgrammingValueMutation::SetGroup {
             group_id: group_id.clone(),
             attribute: intent.attribute.clone(),
             value: requested,
             timing: intent.timing,
-        }]);
+        }];
+        let mut addresses = HashSet::new();
+        let linked_group_values = environment
+            .activation_links
+            .get(&intent.attribute)
+            .into_iter()
+            .flatten()
+            .filter(|linked| {
+                !active_group_values.contains_key(&(group_id.clone(), (*linked).clone()))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if let Some(members) = environment.group_members.get(group_id) {
+            for fixture_id in members {
+                for linked in &linked_group_values {
+                    let address = (*fixture_id, linked.clone());
+                    if active_values.contains(&address)
+                        || !environment
+                            .supported_attributes
+                            .get(fixture_id)
+                            .is_some_and(|attributes| attributes.contains(linked))
+                    {
+                        continue;
+                    }
+                    let Some(value) = environment.current_values.get(&address).cloned() else {
+                        continue;
+                    };
+                    push_intent_value(
+                        &mut mutations,
+                        &mut addresses,
+                        *fixture_id,
+                        linked.clone(),
+                        value,
+                        intent.timing,
+                    );
+                }
+            }
+        }
+        return Ok(mutations);
     }
     let mut mutations = Vec::new();
     let mut addresses = HashSet::new();

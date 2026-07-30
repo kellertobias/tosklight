@@ -551,6 +551,60 @@ fn relative_group_intent_preserves_live_group_scope_and_mixed_member_values() {
 }
 
 #[test]
+fn group_intent_captures_supported_linked_values_per_fixture_in_one_undo_step() {
+    let mut setup = ValuesSetup::new();
+    let red = AttributeKey("color.red".into());
+    let green = AttributeKey("color.green".into());
+    setup
+        .ports
+        .environment
+        .activation_links
+        .insert(red.clone(), vec![green.clone()]);
+    for (index, fixture) in setup.fixtures.into_iter().enumerate() {
+        setup.ports.environment.current_values.insert(
+            (fixture, green.clone()),
+            AttributeValue::Normalized(index as f32 / 10.0),
+        );
+        if index < 2 {
+            setup
+                .ports
+                .environment
+                .supported_attributes
+                .entry(fixture)
+                .or_default()
+                .extend([red.clone(), green.clone()]);
+        }
+    }
+
+    let result = setup.handle(
+        "group-linked",
+        0,
+        ProgrammingValuesCommand::ApplyIntent {
+            intent: ProgrammingValueIntent {
+                fixture_ids: Vec::new(),
+                group_id: Some("front".into()),
+                attribute: red,
+                operation: ProgrammingValueOperation::AbsoluteSet(AttributeValue::Normalized(0.8)),
+                undo_group: None,
+                timing: Default::default(),
+            },
+        },
+    );
+    let ProgrammingValuesOutcome::Changed { projection, .. } = result.outcome else {
+        panic!("the Group intent should capture linked fixture values")
+    };
+    assert_eq!(projection.group_values.len(), 1);
+    assert_eq!(projection.fixture_values.len(), 2);
+    assert!(
+        projection
+            .fixture_values
+            .iter()
+            .all(|value| value.attribute == green)
+    );
+    assert_eq!(setup.registry.get(setup.session).unwrap().undo.len(), 1);
+}
+
+#[test]
 fn exact_and_interaction_only_actions_do_not_materialize_values() {
     let setup = ValuesSetup::new();
     let initial = ProgrammingValuesCommand::Batch {
