@@ -6,6 +6,28 @@ use crate::{
 use light_core::{SessionId, UserId};
 
 impl ProgrammingService {
+    pub fn remember_selective_import(
+        &self,
+        context: &ActionContext,
+        target: crate::SelectiveShowImportUndoTarget,
+    ) -> Result<(), ActionError> {
+        let (session_id, user_id) = history_identity(context)?;
+        if target.objects.is_empty() {
+            return Ok(());
+        }
+        self.remember_show_mutation(
+            session_id,
+            user_id,
+            context.desk_id,
+            ProgrammingShowUndoTarget {
+                show_id: target.show_id,
+                objects: Vec::new(),
+                portable_objects: target.objects,
+            },
+        );
+        Ok(())
+    }
+
     pub(super) fn remember_show_mutation(
         &self,
         session_id: SessionId,

@@ -155,11 +155,54 @@ export function PreviewDetails(props: {
 		<section aria-label="Selective Show Import preview">
 			<ObjectSummary preview={props.preview} />
 			<DependencySummary preview={props.preview} />
+			<ReferenceEffectSummary preview={props.preview} />
 			<ConflictChoices {...props} />
 			<ProfileChoices {...props} />
 			<ManagedAssetSummary preview={props.preview} />
 			<BlockerSummary preview={props.preview} />
 		</section>
+	);
+}
+
+function ReferenceEffectSummary({
+	preview,
+}: {
+	preview: SelectiveImportPreview;
+}) {
+	const effects = [
+		...preview.objects.flatMap((object) => {
+			const effectByAction: Partial<Record<string, string>> = {
+				replace_destination: "preserved by position",
+				duplicate: "rewritten to appended copy",
+				merge_scoped: "preserved outside selected scope",
+				skip_identical: "skipped as identical",
+			};
+			const effect = effectByAction[object.action];
+			return effect
+				? [`${object.source.kind}/${object.source.id}: ${effect}`]
+				: [];
+		}),
+		...preview.dependencies.flatMap((dependency) =>
+			dependency.disposition === "bound_to_destination"
+				? [
+						`${dependency.owner.kind}/${dependency.owner.id} → ${dependency.dependency.kind}/${dependency.dependency.id}: bound to existing destination`,
+					]
+				: dependency.disposition === "missing"
+					? [
+							`${dependency.owner.kind}/${dependency.owner.id} → ${dependency.dependency.kind}/${dependency.dependency.id}: unresolved`,
+						]
+					: [],
+		),
+	];
+	return (
+		<>
+			<h4>Reference Effects ({effects.length})</h4>
+			{effects.length === 0 ? (
+				<p>None</p>
+			) : (
+				effects.map((effect) => <p key={effect}>{effect}</p>)
+			)}
+		</>
 	);
 }
 

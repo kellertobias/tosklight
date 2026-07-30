@@ -196,7 +196,8 @@ pub use selective_import::{
     ImportProfileConflictResolution, ImportProfileKey, ImportProfilePreview,
     ImportReferenceLocation, SelectiveShowImportChange, SelectiveShowImportPorts,
     SelectiveShowImportPreview, SelectiveShowImportRequest, SelectiveShowImportResult,
-    SelectiveShowImportService, SelectiveShowObjectChange, SelectiveShowProfileChange,
+    SelectiveShowImportService, SelectiveShowImportUndoObject, SelectiveShowImportUndoTarget,
+    SelectiveShowObjectChange, SelectiveShowProfileChange,
 };
 pub use show_compiler::{PreparedShowCandidate, prepare_show_candidate};
 pub use show_patch::{

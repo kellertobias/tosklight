@@ -21,6 +21,7 @@ pub(super) struct ServerSelectiveImportPorts {
     state: AppState,
     active: ServerActiveShowPorts,
     previous_routes: Arc<Mutex<Vec<light_output::OutputRoute>>>,
+    within_programming_interaction: bool,
 }
 
 impl ServerSelectiveImportPorts {
@@ -29,6 +30,22 @@ impl ServerSelectiveImportPorts {
             active: ServerActiveShowPorts::show_objects(state.clone()),
             state,
             previous_routes: Arc::default(),
+            within_programming_interaction: false,
+        }
+    }
+
+    pub(super) fn with_programming_owner(
+        state: AppState,
+        owner: super::ProgrammingInstallOwner,
+    ) -> Self {
+        Self {
+            active: ServerActiveShowPorts::show_objects_with_programming_owner(
+                state.clone(),
+                owner,
+            ),
+            state,
+            previous_routes: Arc::default(),
+            within_programming_interaction: true,
         }
     }
 
@@ -51,6 +68,9 @@ impl ActiveShowPorts for ServerSelectiveImportPorts {
         _show_id: ShowId,
         operation: impl FnOnce() -> Result<T, ActionError>,
     ) -> Result<T, ActionError> {
+        if self.within_programming_interaction {
+            return operation();
+        }
         let _activation = self.state.active_show.acquire_blocking();
         operation()
     }
@@ -168,6 +188,21 @@ impl SelectiveShowImportPorts for ServerSelectiveImportPorts {
 
     fn publish_import_assets(&self, prepared: Self::PreparedImportAssets) {
         debug_assert!(prepared.is_empty());
+    }
+
+    fn record_selective_import_undo(
+        &self,
+        context: &ActionContext,
+        target: light_application::SelectiveShowImportUndoTarget,
+    ) {
+        let recorded = self
+            .state
+            .programming
+            .remember_selective_import(context, target);
+        debug_assert!(
+            recorded.is_ok(),
+            "authenticated selective import lost its Programmer history"
+        );
     }
 
     fn reconcile_selective_import(&self, change: &SelectiveShowImportChange) {

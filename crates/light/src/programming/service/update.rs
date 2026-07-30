@@ -276,6 +276,7 @@ impl ProgrammingService {
                         expected_object_revision: projection.object_revision,
                         operation: ProgrammingShowUndoOperation::RestorePrevious,
                     }],
+                    portable_objects: Vec::new(),
                 },
             );
         }

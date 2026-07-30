@@ -133,6 +133,17 @@ impl ActiveShowResource {
         self.selective_import.apply(action, ports)
     }
 
+    pub(in crate::runtime) fn undo_selective_import<
+        P: light_application::SelectiveShowImportPorts,
+    >(
+        &self,
+        context: &light_application::ActionContext,
+        target: &light_application::SelectiveShowImportUndoTarget,
+        ports: &P,
+    ) -> Result<light_core::Revision, light_application::ActionError> {
+        self.selective_import.undo(context, target, ports)
+    }
+
     pub(in crate::runtime) fn apply_mvr_import<P: light_application::ShowPatchPorts>(
         &self,
         action: light_application::ActionEnvelope<light_application::ApplyActiveMvrImportCommand>,

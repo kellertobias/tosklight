@@ -124,7 +124,7 @@ function ImportComplete({
 	onClose: () => void;
 }) {
 	const message = outcome.changed
-		? `Imported ${outcome.objectChanges.length} object changes into ${activeShowName} as one show revision.`
+		? `Imported ${outcome.objectChanges.length} object changes into ${activeShowName} as one show revision and one operator Undo step.`
 		: "The selected content was already identical. The show was not changed.";
 	return (
 		<section
@@ -225,7 +225,8 @@ function WorkflowActions({ workflow }: { workflow: SelectiveImportWorkflow }) {
 				onClick={() => void workflow.apply()}
 			>
 				Apply{" "}
-				{workflow.mode === "add_to_end" ? "Add to end" : "Replace by position"}
+				{workflow.mode === "add_to_end" ? "Add to end" : "Replace by position"}{" "}
+				as One Undo Step
 			</Button>
 		</footer>
 	);

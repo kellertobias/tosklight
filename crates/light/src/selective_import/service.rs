@@ -1,8 +1,8 @@
 use super::{
     AppliedImportObject, ApplySelectiveShowImportCommand, ImportObjectAction, ImportProfileKey,
     SelectiveShowImportChange, SelectiveShowImportPorts, SelectiveShowImportPreview,
-    SelectiveShowImportRequest, SelectiveShowImportResult, SelectiveShowObjectChange,
-    SelectiveShowProfileChange,
+    SelectiveShowImportRequest, SelectiveShowImportResult, SelectiveShowImportUndoObject,
+    SelectiveShowImportUndoTarget, SelectiveShowObjectChange, SelectiveShowProfileChange,
     plan::{ImportPlan, build_plan},
 };
 use crate::active_show::{CompletedActiveShowTransaction, PreparedActiveShowTransaction};
@@ -11,7 +11,10 @@ use crate::{
     EventDraft, prepare_show_candidate,
 };
 use light_show::{PortableShowDocument, PortableShowTransaction};
-use std::{cell::RefCell, collections::BTreeSet};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+};
 
 /// Lossless, dependency-aware copying between a source show and the active show.
 ///
@@ -87,12 +90,31 @@ impl SelectiveShowImportService {
             |target| {
                 validate_documents(&request, source, target)?;
                 validate_revisions(&envelope.context, &envelope.command, source, target)?;
-                let state = PreparedImportState { plan };
-                if state.plan.writes.is_empty() && state.plan.profiles.is_empty() {
+                if plan.writes.is_empty() && plan.profiles.is_empty() {
+                    let state = PreparedImportState {
+                        plan,
+                        undo_previous: BTreeMap::new(),
+                    };
                     return Ok(PreparedActiveShowTransaction::NoChange(state));
                 }
-                let transaction = stage_transaction(target, &state.plan)?;
+                let transaction = stage_transaction(target, &plan)?;
                 let prepared = prepare_show_candidate(target, transaction)?;
+                let undo_previous = prepared
+                    .transaction()
+                    .changed_object_keys()
+                    .map(|key| {
+                        (
+                            key.clone(),
+                            target
+                                .object(key.kind(), key.id())
+                                .map(|object| object.body().clone()),
+                        )
+                    })
+                    .collect();
+                let state = PreparedImportState {
+                    plan,
+                    undo_previous,
+                };
                 Ok(PreparedActiveShowTransaction::PreparedCommit {
                     prepared: Box::new(prepared),
                     state,
@@ -107,10 +129,88 @@ impl SelectiveShowImportService {
             Err(error) => Err(compensate(error, prepared_assets.into_inner(), ports)),
         }
     }
+
+    pub fn undo<P: SelectiveShowImportPorts>(
+        &self,
+        context: &ActionContext,
+        target: &SelectiveShowImportUndoTarget,
+        ports: &P,
+    ) -> Result<light_core::Revision, ActionError> {
+        self.active_show.transact(
+            context,
+            target.show_id,
+            ports,
+            "selective-import-undo",
+            |document| {
+                let mut transaction = document.transaction();
+                for object in &target.objects {
+                    let current = document.object(object.key.kind(), object.key.id());
+                    if current.map(light_show::PortableShowObject::revision)
+                        != Some(object.expected_object_revision)
+                    {
+                        return Err(conflict(
+                            format!(
+                                "{} {} changed after the partial load",
+                                object.key.kind(),
+                                object.key.id()
+                            ),
+                            document.revision().value(),
+                        ));
+                    }
+                    match &object.previous_body {
+                        Some(body) => {
+                            transaction.put(object.key.kind(), object.key.id(), body.clone());
+                        }
+                        None => {
+                            transaction.delete(object.key.kind(), object.key.id());
+                        }
+                    }
+                }
+                if target
+                    .objects
+                    .iter()
+                    .any(|object| object.key.kind() == "patched_fixture")
+                {
+                    transaction.mark_patch_changed();
+                }
+                let prepared = prepare_show_candidate(document, transaction)?;
+                Ok(PreparedActiveShowTransaction::PreparedCommit {
+                    prepared: Box::new(prepared),
+                    state: (),
+                })
+            },
+            |events, ports, context, completed| {
+                let commit = completed
+                    .commit
+                    .expect("selective import undo always commits a non-empty inverse");
+                let objects = commit
+                    .written_objects()
+                    .iter()
+                    .map(|object| SelectiveShowObjectChange {
+                        key: object.key().clone(),
+                        object_revision: object.revision(),
+                        body: object.body().clone(),
+                    })
+                    .collect();
+                let change = SelectiveShowImportChange {
+                    show_id: target.show_id,
+                    show_revision: commit.revision(),
+                    outcomes: Vec::new(),
+                    objects,
+                    profiles: Vec::new(),
+                    managed_assets: Vec::new(),
+                };
+                ports.reconcile_selective_import(&change);
+                events.publish(EventDraft::selective_import_applied(context, change));
+                commit.revision().value()
+            },
+        )
+    }
 }
 
 struct PreparedImportState {
     plan: ImportPlan,
+    undo_previous: BTreeMap<light_show::PortableShowObjectKey, Option<serde_json::Value>>,
 }
 
 fn complete_import<P: SelectiveShowImportPorts>(
@@ -145,7 +245,27 @@ fn complete_import<P: SelectiveShowImportPorts>(
             object_revision: object.revision(),
             body: object.body().clone(),
         })
-        .collect();
+        .collect::<Vec<_>>();
+    let undo = completed
+        .commit
+        .as_ref()
+        .map(|_| SelectiveShowImportUndoTarget {
+            show_id: completed.state.plan.preview.request.target_show_id,
+            objects: objects
+                .iter()
+                .filter_map(|object| {
+                    completed
+                        .state
+                        .undo_previous
+                        .get(&object.key)
+                        .map(|previous_body| SelectiveShowImportUndoObject {
+                            key: object.key.clone(),
+                            expected_object_revision: object.object_revision,
+                            previous_body: previous_body.clone(),
+                        })
+                })
+                .collect(),
+        });
     let profiles = completed
         .commit
         .as_ref()
@@ -178,6 +298,9 @@ fn complete_import<P: SelectiveShowImportPorts>(
         profiles,
         managed_assets: imported_assets,
     };
+    if let Some(target) = undo.clone() {
+        ports.record_selective_import_undo(context, target);
+    }
     let event_sequence = if changed {
         ports.reconcile_selective_import(&change);
         Some(
@@ -196,6 +319,7 @@ fn complete_import<P: SelectiveShowImportPorts>(
         changed,
         change,
         event_sequence,
+        undo,
     }
 }
 

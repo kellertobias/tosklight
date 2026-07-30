@@ -1,4 +1,7 @@
-use super::{ImportManagedAssetAction, ImportObjectDescriptor, SelectiveShowImportChange};
+use super::{
+    ImportManagedAssetAction, ImportObjectDescriptor, SelectiveShowImportChange,
+    SelectiveShowImportUndoTarget,
+};
 use crate::{ActionContext, ActionError, ActiveShowPorts, AssetReference};
 use light_core::ShowId;
 use light_show::{FixtureProfileRevision, PortableShowDocument, PortableShowObject};
@@ -77,6 +80,13 @@ pub trait SelectiveShowImportPorts: ActiveShowPorts {
     /// infallible: adapters should use an atomic visibility switch or persist a durable publication
     /// receipt and record any later cleanup debt internally.
     fn publish_import_assets(&self, prepared: Self::PreparedImportAssets);
+
+    fn record_selective_import_undo(
+        &self,
+        _context: &ActionContext,
+        _target: SelectiveShowImportUndoTarget,
+    ) {
+    }
 
     fn reconcile_selective_import(&self, change: &SelectiveShowImportChange);
 }

@@ -374,6 +374,20 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
             gesture: super::super::ProgrammingOwnerGesturePolicy::Preserve,
             highlight: super::super::ProgrammingOwnerHighlightPolicy::DeferToOuterInteraction,
         };
+        if !target.portable_objects.is_empty() {
+            let ports = super::super::ServerSelectiveImportPorts::with_programming_owner(
+                self.state.clone(),
+                owner,
+            );
+            return self.state.active_show.undo_selective_import(
+                context,
+                &light_application::SelectiveShowImportUndoTarget {
+                    show_id: target.show_id,
+                    objects: target.portable_objects.clone(),
+                },
+                &ports,
+            );
+        }
         let ports = super::super::ServerActiveShowPorts::show_objects_with_programming_owner(
             self.state.clone(),
             owner,

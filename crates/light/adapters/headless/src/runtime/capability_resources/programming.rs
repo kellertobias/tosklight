@@ -1,6 +1,14 @@
 use super::*;
 
 impl ProgrammingResource {
+    pub(in crate::runtime) fn remember_selective_import(
+        &self,
+        context: &light_application::ActionContext,
+        target: light_application::SelectiveShowImportUndoTarget,
+    ) -> Result<(), light_application::ActionError> {
+        self.service.remember_selective_import(context, target)
+    }
+
     pub(in crate::runtime) fn record_command_history(
         &self,
         entry: CommandHistoryEntry,

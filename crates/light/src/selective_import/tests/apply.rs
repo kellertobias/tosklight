@@ -76,6 +76,30 @@ fn apply_commits_dependency_closure_once_and_preserves_unknown_extensions() {
 }
 
 #[test]
+fn selective_import_undo_restores_replaced_objects_and_deletes_created_objects_once() {
+    let rig = TestRig::new();
+    rig.source_object("macro", "root", json!({"id":"root","macro_id":"child"}));
+    rig.source_object("macro", "child", json!({"id":"child","name":"Source"}));
+    let previous_child = json!({"id":"child","name":"Destination"});
+    rig.target_object("macro", "child", previous_child.clone());
+    let preview = rig.preview(rig.request("macro", "root"));
+
+    let applied = rig.apply(&preview).unwrap();
+    let undo = applied.undo.expect("changed import undo target");
+    let imported_revision = applied.change.show_revision;
+
+    let undone_revision = rig.service.undo(&context(), &undo, &rig.ports).unwrap();
+
+    let target = rig.target_document();
+    assert_eq!(undone_revision, imported_revision.value() + 1);
+    assert!(target.object("macro", "root").is_none());
+    assert_eq!(
+        target.object("macro", "child").unwrap().body(),
+        &previous_child
+    );
+}
+
+#[test]
 fn apply_imports_dynamic_and_its_dependency_closure_as_one_valid_candidate() {
     let rig = TestRig::new();
     let dynamic_id = Uuid::new_v4();

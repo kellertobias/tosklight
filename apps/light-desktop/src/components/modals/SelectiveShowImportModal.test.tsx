@@ -176,7 +176,9 @@ describe("SelectiveShowImportModal", () => {
 		expect(details).toHaveTextContent("Bound To Destination");
 		expect(details).toHaveTextContent("Object Conflict: group/front");
 		expect(
-			screen.getByRole("button", { name: "Apply Replace by position" }),
+			screen.getByRole("button", {
+				name: "Apply Replace by position as One Undo Step",
+			}),
 		).toBeDisabled();
 
 		choose("Resolve group front", "Replace Destination");
@@ -185,7 +187,9 @@ describe("SelectiveShowImportModal", () => {
 			expect(screen.getByText("None — ready to apply.")).toBeVisible(),
 		);
 		fireEvent.click(
-			screen.getByRole("button", { name: "Apply Replace by position" }),
+			screen.getByRole("button", {
+				name: "Apply Replace by position as One Undo Step",
+			}),
 		);
 
 		await waitFor(() => expect(applyImport).toHaveBeenCalledOnce());
@@ -203,7 +207,7 @@ describe("SelectiveShowImportModal", () => {
 		});
 		expect(
 			await screen.findByRole("dialog", { name: "Partial Show Load complete" }),
-		).toHaveTextContent("one show revision");
+		).toHaveTextContent("one show revision and one operator Undo step");
 	});
 
 	it("keeps cancellation available during preview but locks the modal during atomic apply", async () => {
@@ -230,7 +234,9 @@ describe("SelectiveShowImportModal", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Preview Import" }));
 		await screen.findByText("None — ready to apply.");
 		fireEvent.click(
-			screen.getByRole("button", { name: "Apply Replace by position" }),
+			screen.getByRole("button", {
+				name: "Apply Replace by position as One Undo Step",
+			}),
 		);
 
 		expect(await screen.findByText(/cannot be cancelled/)).toBeVisible();
@@ -267,7 +273,9 @@ describe("SelectiveShowImportModal", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Preview Import" }));
 		await screen.findByText("None — ready to apply.");
 		expect(
-			screen.getByRole("button", { name: "Apply Replace by position" }),
+			screen.getByRole("button", {
+				name: "Apply Replace by position as One Undo Step",
+			}),
 		).toBeEnabled();
 
 		fireEvent.click(screen.getByRole("button", { name: "Update Preview" }));
@@ -276,7 +284,9 @@ describe("SelectiveShowImportModal", () => {
 			"source show changed after preview",
 		);
 		expect(
-			screen.getByRole("button", { name: "Apply Replace by position" }),
+			screen.getByRole("button", {
+				name: "Apply Replace by position as One Undo Step",
+			}),
 		).toBeDisabled();
 	});
 
@@ -307,7 +317,9 @@ describe("SelectiveShowImportModal", () => {
 		choose("Resolve group front", "Choose resolution…");
 
 		expect(
-			screen.getByRole("button", { name: "Apply Replace by position" }),
+			screen.getByRole("button", {
+				name: "Apply Replace by position as One Undo Step",
+			}),
 		).toBeDisabled();
 		fireEvent.click(screen.getByRole("button", { name: "Update Preview" }));
 		await waitFor(() => expect(previewImport).toHaveBeenCalledTimes(3));

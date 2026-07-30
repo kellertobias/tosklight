@@ -83,6 +83,7 @@ impl ProgrammingService {
                             ProgrammingShowUndoOperation::RestorePrevious
                         },
                     }],
+                    portable_objects: Vec::new(),
                 },
             );
         }

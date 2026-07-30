@@ -341,6 +341,20 @@ pub struct SelectiveShowImportResult {
     pub changed: bool,
     pub change: SelectiveShowImportChange,
     pub event_sequence: Option<u64>,
+    pub undo: Option<SelectiveShowImportUndoTarget>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SelectiveShowImportUndoTarget {
+    pub show_id: ShowId,
+    pub objects: Vec<SelectiveShowImportUndoObject>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SelectiveShowImportUndoObject {
+    pub key: PortableShowObjectKey,
+    pub expected_object_revision: Revision,
+    pub previous_body: Option<Value>,
 }
 
 #[derive(Clone)]

@@ -9,6 +9,7 @@ const SHOW_HISTORY_LIMIT: usize = 100;
 pub struct ProgrammingShowUndoTarget {
     pub show_id: ShowId,
     pub objects: Vec<ProgrammingShowUndoObject>,
+    pub portable_objects: Vec<crate::SelectiveShowImportUndoObject>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -126,6 +127,7 @@ mod tests {
                 expected_object_revision: revision,
                 operation: ProgrammingShowUndoOperation::RestorePrevious,
             }],
+            portable_objects: Vec::new(),
         }
     }
 

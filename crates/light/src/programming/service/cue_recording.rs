@@ -109,6 +109,7 @@ impl ProgrammingService {
                 ProgrammingShowUndoTarget {
                     show_id: projections.show_id,
                     objects,
+                    portable_objects: Vec::new(),
                 },
             );
         }

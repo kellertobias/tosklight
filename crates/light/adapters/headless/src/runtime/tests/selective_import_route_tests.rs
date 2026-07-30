@@ -114,6 +114,45 @@ async fn v2_selective_import_previews_replace_mode_and_applies_one_atomic_revisi
         "Source Front"
     );
     assert_eq!(state.events.latest_sequence(), baseline_sequence + 1);
+    let session = state
+        .sessions
+        .sessions()
+        .into_iter()
+        .find(|session| session.token == token)
+        .unwrap();
+    let undone = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/command-line/keys")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-desk", session.desk.id.to_string())
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "key":"UND",
+                        "phase":"press",
+                        "request_id":"undo-partial-load"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(undone.status(), StatusCode::OK);
+    assert_eq!(
+        stored_group_name(&state, target_id, "front"),
+        "Target Front"
+    );
+    assert_eq!(
+        ShowStore::open(&show_entry(&state, target_id).path)
+            .unwrap()
+            .portable_document()
+            .unwrap()
+            .revision()
+            .value(),
+        4
+    );
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

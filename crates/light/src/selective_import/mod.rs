@@ -12,8 +12,8 @@ pub use model::{
     ImportObjectDescriptor, ImportObjectReference, ImportOwnedIdentity, ImportProfileAction,
     ImportProfileConflictResolution, ImportProfileKey, ImportProfilePreview,
     ImportReferenceLocation, SelectiveShowImportChange, SelectiveShowImportPreview,
-    SelectiveShowImportRequest, SelectiveShowImportResult, SelectiveShowObjectChange,
-    SelectiveShowProfileChange,
+    SelectiveShowImportRequest, SelectiveShowImportResult, SelectiveShowImportUndoObject,
+    SelectiveShowImportUndoTarget, SelectiveShowObjectChange, SelectiveShowProfileChange,
 };
 pub use ports::SelectiveShowImportPorts;
 pub use service::SelectiveShowImportService;
