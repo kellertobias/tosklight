@@ -1,3 +1,4 @@
+import type { StageProjection2d } from "../../api/client/stageLayout";
 import type { PatchedFixture } from "../../api/types";
 import type { StagePosition3d } from "../../features/server/contracts";
 import type { StageMode, StageRenderQuality, StageView } from "../../types";
@@ -48,6 +49,6 @@ export interface StageLayoutModel {
 	positions3d: Record<string, StagePosition3d>;
 	positions2dConfig: {
 		provenance: "automatic" | "manual";
-		projection: import("../../api/generated/light-wire").StageProjection2d;
+		projection: StageProjection2d;
 	};
 }

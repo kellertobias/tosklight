@@ -5,8 +5,6 @@
 //! explicitly resolves a legacy look, the original show remains the compatibility authority.
 
 use light_show::PortableShowDocument;
-#[cfg(test)]
-use light_show::{ShowStore, StoreError};
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 pub(super) struct HighlightCompatibilityReport {
@@ -38,14 +36,6 @@ pub(super) struct LegacyHighlightFixture {
 pub(super) enum LegacyHighlightIssue {
     RawOverrides,
     InvalidOverrideShape,
-}
-
-/// Opens one immutable portable snapshot and reports legacy raw Highlight state without writing.
-#[cfg(test)]
-pub(super) fn inspect_highlight_compatibility(
-    store: &ShowStore,
-) -> Result<HighlightCompatibilityReport, StoreError> {
-    Ok(inspect_document(&store.portable_document()?))
 }
 
 fn inspect_document(document: &PortableShowDocument) -> HighlightCompatibilityReport {
@@ -143,9 +133,16 @@ mod tests {
     use light_fixture::{
         PatchedFixturePatch, PatchedFixtureProfileReference, PortablePatchedFixtureRecord,
     };
+    use light_show::ShowStore;
     use serde_json::json;
     use std::collections::BTreeMap;
     use uuid::Uuid;
+
+    fn inspect_highlight_compatibility(
+        store: &ShowStore,
+    ) -> Result<HighlightCompatibilityReport, light_show::StoreError> {
+        Ok(inspect_document(&store.portable_document()?))
+    }
 
     fn temporary_show(name: &str) -> (std::path::PathBuf, ShowStore) {
         let path = std::env::temp_dir().join(format!("light-{name}-{}.show", Uuid::new_v4()));

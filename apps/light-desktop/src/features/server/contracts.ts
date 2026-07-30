@@ -1,5 +1,5 @@
+import type { StageProjection2d } from "../../api/client/stageLayout";
 import type { Cue } from "../../api/types";
-import type { StageProjection2d } from "../../api/generated/light-wire";
 import type { DeskModel } from "../../types";
 
 export interface StoredDeskLayout {

@@ -1,21 +1,27 @@
+import type { PatchSnapshot } from "../../features/patch/contracts";
+import type { AttributeValueType } from "../attributeConfigurationModels";
 import type {
-	FixtureDefinition,
-	FixtureProfile,
-} from "../types";
-import type {
-	FixtureAttributeMapping,
-	FixtureImportRequirement,
+	FixtureDefinitionsSnapshot,
 	FixtureLibraryAction,
 	FixtureLibraryActionOutcome,
-	FixtureDefinitionsSnapshot,
 	FixtureLibraryWarningsSnapshot,
-	FixtureProfilesSnapshot,
 	FixtureProfileRevisionsSnapshot,
+	FixtureProfilesSnapshot,
 } from "../generated/light-wire";
-import type { PatchSnapshot } from "../../features/patch/contracts";
 import { decodePatchSnapshot } from "../patchWire";
+import type { FixtureDefinition, FixtureProfile } from "../types";
 import type { ClientTransport } from "./transport";
 import { jsonRequest } from "./transport";
+
+export interface FixtureAttributeMapping {
+	source_attribute: string;
+	target_attribute: string;
+}
+
+export interface FixtureImportRequirement {
+	attribute: string;
+	value_type: AttributeValueType;
+}
 
 export type FixturePackageImportOutcome =
 	| { type: "profile"; profile: FixtureProfile }
@@ -35,9 +41,7 @@ export class FixtureApiClient {
 			.request<FixtureDefinitionsSnapshot>(
 				"/api/v2/fixture-library/definitions",
 			)
-			.then((snapshot) =>
-			decodeFixtureDefinitions(snapshot.definitions),
-		);
+			.then((snapshot) => decodeFixtureDefinitions(snapshot.definitions));
 	}
 
 	fixtureProfiles(): Promise<FixtureProfile[]> {
@@ -71,7 +75,9 @@ export class FixtureApiClient {
 			expected_revision: expectedRevision,
 		});
 		if (result.type !== "profile") {
-			throw new Error(`Expected fixture profile result, received ${result.type}`);
+			throw new Error(
+				`Expected fixture profile result, received ${result.type}`,
+			);
 		}
 		return this.profileFromAuthority(result.profile_id, result.revision);
 	}
@@ -104,11 +110,20 @@ export class FixtureApiClient {
 		const result = await this.fixtureAction({
 			type: "import_package",
 			package_base64: await bytesToBase64(source),
-			attribute_mappings: attributeMappings,
+			attribute_mappings: attributeMappings.map((mapping) => ({ ...mapping })),
 		});
-		if (result.type === "import_required") return result;
+		if (result.type === "import_required")
+			return {
+				type: "import_required",
+				unknown_attributes: result.unknown_attributes.map((requirement) => ({
+					attribute: requirement.attribute,
+					value_type: requirement.value_type,
+				})),
+			};
 		if (result.type !== "profile") {
-			throw new Error(`Expected fixture profile result, received ${result.type}`);
+			throw new Error(
+				`Expected fixture profile result, received ${result.type}`,
+			);
 		}
 		return {
 			type: "profile",
@@ -137,7 +152,9 @@ export class FixtureApiClient {
 			);
 		}
 		const snapshot = await this.definitionSnapshot();
-		const storedDefinition = decodeFixtureDefinitions(snapshot.definitions).find(
+		const storedDefinition = decodeFixtureDefinitions(
+			snapshot.definitions,
+		).find(
 			(candidate) =>
 				candidate.id === result.definition_id &&
 				candidate.revision === result.revision,

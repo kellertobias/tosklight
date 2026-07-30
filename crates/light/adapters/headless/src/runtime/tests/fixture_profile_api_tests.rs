@@ -164,7 +164,7 @@ async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
     );
 
     {
-        let mut installed = state.attributes.installed.write();
+        let mut installed = state.attributes.snapshot();
         installed.configuration.custom_attributes.push(
             light_core::CustomAttributeDescriptor {
                 id: unknown.clone(),
@@ -198,6 +198,7 @@ async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
             },
         );
         installed.configuration.validate().unwrap();
+        state.attributes.replace_installed(installed);
     }
     let imported = app
         .oneshot(request("configured-package", serde_json::json!([])))

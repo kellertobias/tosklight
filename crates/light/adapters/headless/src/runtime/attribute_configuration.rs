@@ -8,7 +8,7 @@ pub(super) const ATTRIBUTE_CONFIGURATION_ID: &str = "default";
 const REPLAY_LIMIT: usize = 1_024;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct ReplayKey {
+pub(super) struct ReplayKey {
     session_id: Uuid,
     show_id: light_core::ShowId,
     request_id: String,
@@ -27,7 +27,7 @@ pub(super) struct AttributeConfigurationReplayCache {
 }
 
 impl AttributeConfigurationReplayCache {
-    fn get(
+    pub(super) fn get(
         &self,
         key: &ReplayKey,
         request: &wire::AttributeConfigurationUpdateRequest,
@@ -45,7 +45,7 @@ impl AttributeConfigurationReplayCache {
         Ok(Some(replayed))
     }
 
-    fn insert(
+    pub(super) fn insert(
         &mut self,
         key: ReplayKey,
         request: wire::AttributeConfigurationUpdateRequest,
@@ -134,43 +134,6 @@ impl InstalledAttributeConfiguration {
                 installed
             }
         }
-    }
-}
-
-impl AttributeConfigurationResource {
-    pub(super) fn snapshot(&self) -> InstalledAttributeConfiguration {
-        self.installed.read().clone()
-    }
-
-    pub(super) fn install_entry(&self, entry: Option<&ShowEntry>) {
-        *self.installed.write() = InstalledAttributeConfiguration::for_entry(entry);
-    }
-
-    pub(super) fn install_document(&self, document: &light_show::PortableShowDocument) {
-        *self.installed.write() = InstalledAttributeConfiguration::for_document(document);
-    }
-
-    pub(super) fn activation_links(
-        &self,
-    ) -> HashMap<light_core::AttributeKey, Vec<light_core::AttributeKey>> {
-        self.installed.read().configuration.activation_links()
-    }
-
-    async fn replay(
-        &self,
-        key: &ReplayKey,
-        request: &wire::AttributeConfigurationUpdateRequest,
-    ) -> Result<Option<wire::AttributeConfigurationUpdateOutcome>, ApiError> {
-        self.replay.lock().await.get(key, request)
-    }
-
-    async fn remember(
-        &self,
-        key: ReplayKey,
-        request: wire::AttributeConfigurationUpdateRequest,
-        outcome: wire::AttributeConfigurationUpdateOutcome,
-    ) {
-        self.replay.lock().await.insert(key, request, outcome);
     }
 }
 

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AttributeConfigurationSnapshot } from "../../api/generated/light-wire";
+import type { AttributeConfigurationSnapshot } from "../../api/client/attributeConfiguration";
 import { AttributeRegistrySettings } from "./AttributeRegistrySettings";
 import type { SetupWindowController } from "./controller";
 
@@ -149,8 +149,7 @@ describe("Desk Setup attribute registry", () => {
 
 		expect(editAttributeConfiguration).toHaveBeenCalledWith({
 			...snapshot.configuration,
-			activation_groups:
-				snapshot.recommended_configuration.activation_groups,
+			activation_groups: snapshot.recommended_configuration.activation_groups,
 		});
 	});
 });

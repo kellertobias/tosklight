@@ -11,7 +11,7 @@ import type {
 	AttributeEncoderGroup,
 	ConfiguredAttributeDescriptor,
 	CustomAttributeDescriptor,
-} from "../../api/generated/light-wire";
+} from "../../api/client/attributeConfiguration";
 import type { SetupWindowController } from "./controller";
 
 const ENCODER_GROUPS: Array<{
@@ -402,9 +402,7 @@ function ActivationGroups({
 				Create activation group
 			</Button>
 			<Button
-				onClick={() =>
-					onChange(restoreRecommendedActivationGroups(snapshot))
-				}
+				onClick={() => onChange(restoreRecommendedActivationGroups(snapshot))}
 			>
 				Restore recommended defaults
 			</Button>

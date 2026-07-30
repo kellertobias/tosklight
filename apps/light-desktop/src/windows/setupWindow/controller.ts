@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { configuredServerUrl } from "../../api/client/serverLocation";
 import type {
 	AttributeConfiguration,
 	AttributeConfigurationPatch,
 	AttributeConfigurationSnapshot,
-} from "../../api/generated/light-wire";
+} from "../../api/client/attributeConfiguration";
+import { configuredServerUrl } from "../../api/client/serverLocation";
 import type { DeskConfiguration, UpdateSettings } from "../../api/types";
 import { defaultUpdateSettings } from "../../components/control/updateWorkflow";
 import {

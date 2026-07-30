@@ -1,10 +1,12 @@
 import type {
+	FixtureAttributeMapping,
+	FixturePackageImportOutcome,
+} from "../../api/client/fixtures";
+import type {
 	FixtureDefinition,
 	FixtureProfile,
 	PatchLayer,
 } from "../../api/types";
-import type { FixtureAttributeMapping } from "../../api/generated/light-wire";
-import type { FixturePackageImportOutcome } from "../../api/client/fixtures";
 
 export interface ServerFixtureContext {
 	refreshMediaPreview: (fixtureId: string, source?: number) => Promise<boolean>;

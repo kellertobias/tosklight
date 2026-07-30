@@ -39,6 +39,12 @@ function relative(file) {
   return path.relative(repositoryRoot, file).split(path.sep).join("/");
 }
 
+function withoutInlineRustTests(source) {
+  const inlineTests =
+    /#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*mod\s+[A-Za-z_][A-Za-z0-9_]*\s*\{/u.exec(source);
+  return inlineTests ? source.slice(0, inlineTests.index) : source;
+}
+
 function rustDependencyDirections() {
   let metadata;
   try {
@@ -193,7 +199,7 @@ function activeShowMutationDirections() {
       deliberateBoundaries.has(name)
     )
       continue;
-    if (directMutation.test(fs.readFileSync(file, "utf8")))
+    if (directMutation.test(withoutInlineRustTests(fs.readFileSync(file, "utf8"))))
       fail(`${name} writes ShowStore directly outside the ActiveShowService or a deliberate library/import boundary`);
   }
 }

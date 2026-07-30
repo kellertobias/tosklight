@@ -5,11 +5,11 @@ import {
 	useContext,
 	useMemo,
 } from "react";
-import type { StageLayoutApiClient } from "../../api/client/stageLayout";
 import type {
 	StageLayoutActionOutcome,
+	StageLayoutApiClient,
 	StageProjection2d,
-} from "../../api/generated/light-wire";
+} from "../../api/client/stageLayout";
 
 interface StageLayoutActions {
 	canWrite: boolean;
@@ -18,7 +18,9 @@ interface StageLayoutActions {
 	): Promise<StageLayoutActionOutcome>;
 }
 
-const StageLayoutActionsContext = createContext<StageLayoutActions | null>(null);
+const StageLayoutActionsContext = createContext<StageLayoutActions | null>(
+	null,
+);
 
 export function StageLayoutActionsProvider({
 	children,

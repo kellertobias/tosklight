@@ -3,7 +3,7 @@ import { useState } from "react";
 import type {
 	FixtureAttributeMapping,
 	FixtureImportRequirement,
-} from "../../../api/generated/light-wire";
+} from "../../../api/client/fixtures";
 import type { FixtureDefinition } from "../../../api/types";
 import { useAttributeRegistry } from "../../../features/deskSnapshot/DeskSnapshotState";
 import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
@@ -30,9 +30,9 @@ export function useFixtureLibraryTransfers({
 	const [modal, setModal] = useState<FixtureImportModal>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [pendingPackage, setPendingPackage] = useState<Uint8Array | null>(null);
-	const [requirements, setRequirements] = useState<
-		FixtureImportRequirement[]
-	>([]);
+	const [requirements, setRequirements] = useState<FixtureImportRequirement[]>(
+		[],
+	);
 	const [mappings, setMappings] = useState<Record<string, string>>({});
 
 	const selectModal = (next: FixtureImportModal) => {
@@ -256,16 +256,16 @@ export function FixtureImportDialogs({
 									<p>
 										Map each package attribute to a compatible configured
 										descriptor. To preserve it as a new identity, first create
-										and place a custom descriptor under <strong>Show → Desk Setup
-										→ Programmer → Attributes</strong>, then choose the package
-										again.
+										and place a custom descriptor under{" "}
+										<strong>Show → Desk Setup → Programmer → Attributes</strong>
+										, then choose the package again.
 									</p>
 									<div className="fixture-package-attribute-mappings">
 										{requirements.map((requirement) => (
 											<label key={requirement.attribute}>
 												<span>
-													<code>{requirement.attribute}</code>{" "}
-													({requirement.value_type})
+													<code>{requirement.attribute}</code> (
+													{requirement.value_type})
 												</span>
 												<select
 													aria-label={`Map ${requirement.attribute}`}
@@ -281,14 +281,10 @@ export function FixtureImportDialogs({
 													{(mappingCandidates ?? [])
 														.filter(
 															(candidate) =>
-																candidate.value_type ===
-																requirement.value_type,
+																candidate.value_type === requirement.value_type,
 														)
 														.map((candidate) => (
-															<option
-																key={candidate.id}
-																value={candidate.id}
-															>
+															<option key={candidate.id} value={candidate.id}>
 																{candidate.label} ({candidate.id})
 															</option>
 														))}
@@ -301,8 +297,7 @@ export function FixtureImportDialogs({
 										disabled={
 											busy ||
 											requirements.some(
-												(requirement) =>
-													!mappings[requirement.attribute],
+												(requirement) => !mappings[requirement.attribute],
 											)
 										}
 										onClick={() => void confirmPackageMappings()}

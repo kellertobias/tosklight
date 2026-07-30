@@ -55,9 +55,10 @@ function isTestSource(file) {
 }
 
 function withoutInlineTests(source) {
-	const inlineTests = /#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*mod\s+tests\s*\{/u.exec(
-		source,
-	);
+	const inlineTests =
+		/#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*mod\s+[A-Za-z_][A-Za-z0-9_]*\s*\{/u.exec(
+			source,
+		);
 	return inlineTests ? source.slice(0, inlineTests.index) : source;
 }
 
@@ -156,18 +157,19 @@ function adapterRawAccess(entries) {
 
 	for (const entry of entries) {
 		const file = normalizePath(entry.path);
+		const source = withoutInlineTests(entry.source);
 		if (isCapabilityResource(file)) {
-			for (const match of entry.source.matchAll(CONCRETE_RESOURCE_FIELD))
+			for (const match of source.matchAll(CONCRETE_RESOURCE_FIELD))
 				addCount(
 					counts,
 					`${file}|concrete-resource-field:${match[0].replace(/\s+/gu, " ")}`,
 				);
-			for (const match of entry.source.matchAll(CONCRETE_RESOURCE_RETURN))
+			for (const match of source.matchAll(CONCRETE_RESOURCE_RETURN))
 				addCount(
 					counts,
 					`${file}|concrete-resource-return:${match[0].replace(/\s+/gu, " ")}`,
 				);
-			for (const match of entry.source.matchAll(PUBLIC_RESOURCE_SIGNATURE)) {
+			for (const match of source.matchAll(PUBLIC_RESOURCE_SIGNATURE)) {
 				if (
 					match[1] !== "new" &&
 					CONCRETE_ACTIVE_SHOW_SERVICE.test(match[0])
@@ -185,12 +187,12 @@ function adapterRawAccess(entries) {
 			!file.startsWith(`${RUNTIME_ROOT}/`)
 		)
 			continue;
-		for (const _match of entry.source.matchAll(stateLock))
+		for (const _match of source.matchAll(stateLock))
 			addCount(counts, `${file}|state-lock`);
-		for (const _match of entry.source.matchAll(compatibilityLock))
+		for (const _match of source.matchAll(compatibilityLock))
 			addCount(counts, `${file}|compatibility-desk-lock`);
 		if (!isCompositionRoot(file)) {
-			for (const match of entry.source.matchAll(rawStore))
+			for (const match of source.matchAll(rawStore))
 				addCount(counts, `${file}|raw-owner:${match[0].replace(/\s+/gu, "")}`);
 		}
 	}

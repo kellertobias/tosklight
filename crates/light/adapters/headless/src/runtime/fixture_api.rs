@@ -299,7 +299,7 @@ fn unknown_canonical_attributes(
     state: &AppState,
     profile: &light_fixture::FixtureProfile,
 ) -> Vec<(String, light_core::AttributeValueType)> {
-    let installed = state.attributes.installed.read();
+    let installed = state.attributes.snapshot();
     let custom = installed
         .configuration
         .custom_attributes
@@ -388,7 +388,7 @@ fn apply_fixture_attribute_mappings(
         .iter()
         .map(|(attribute, value_type)| (attribute.as_str(), *value_type))
         .collect::<HashMap<_, _>>();
-    let installed = state.attributes.installed.read();
+    let installed = state.attributes.snapshot();
     let mut targets = light_core::ATTRIBUTE_REGISTRY
         .iter()
         .map(|descriptor| (descriptor.id, (descriptor.value_type, false)))

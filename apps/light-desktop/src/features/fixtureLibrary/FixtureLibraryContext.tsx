@@ -1,14 +1,14 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
 import type {
+	FixtureAttributeMapping,
+	FixturePackageImportOutcome,
+} from "../../api/client/fixtures";
+import type {
 	FixtureDefinition,
 	FixtureProfile,
 	PatchLayer,
 	VersionedObject,
 } from "../../api/types";
-import type {
-	FixtureAttributeMapping,
-} from "../../api/generated/light-wire";
-import type { FixturePackageImportOutcome } from "../../api/client/fixtures";
 
 /**
  * Scoped fixture-library desk state and transfer actions for the library and patch setup

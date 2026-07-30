@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **154 root cases across 59 files**.
+Default catalog: **162 root cases across 65 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -46,6 +46,7 @@ Default catalog: **154 root cases across 59 files**.
 | 22-client-history-and-removal.spec.ts | CLIENT-001 @ui @restart › client presence, history, removal, and clean re-registration remain desk-local | docs/plans/Done/22-client-history-and-removal.DONE.md | @ui @restart | client-history-and-removal | standard failure evidence | parallel | pending-semantic-migration |
 | 22-fixture-sheet-color-dot-outline.spec.ts | FIXTURE-SHEET-001 @bench @ui › resolved-color dots retain their fill and geometry in software and hardware layouts | repository contract | @bench @ui | fixture-sheet-color-dot-outline | standard failure evidence | parallel | pending-semantic-migration |
 | 29-playback-telemetry.spec.ts | TELEMETRY-001 @ui › playback fades stream ~10 Hz delta samples without polling | repository contract | @ui | playback-telemetry | standard failure evidence | parallel | pending-semantic-migration |
+| 30-command-line-history-panel.spec.ts | COMMAND-HISTORY-002 @ui › folded inspection, reuse, dismissal, reconnect, and hardware layout preserve unfinished input | repository contract | @ui | command-line-history-panel | standard failure evidence | parallel | pending-semantic-migration |
 | 33-record-and-update-menu-colors.spec.ts | WORKFLOW-COLOR-001 @ui › Record red and Update amber remain distinct with and without hardware | repository contract | @ui | record-and-update-menu-colors | standard failure evidence | parallel | pending-semantic-migration |
 | 34-active-playback-colors.spec.ts | PLAYBACK-COLOR-001 @ui › runtime strengthens configured color while selection stays separate | repository contract | @ui | active-playback-colors | standard failure evidence | parallel | pending-semantic-migration |
 | 35-fixture-address-screen.spec.ts | FIXTURE-ADDRESS-001 @ui › integrated address screen keeps the complete map and number block reachable | repository contract | @ui | fixture-address-screen | standard failure evidence | parallel | pending-semantic-migration |
@@ -167,7 +168,14 @@ Default catalog: **154 root cases across 59 files**.
 | 67-stage-performance-baseline.spec.ts | STAGE-PERF-001 @ui › collect informational default-stage frontend and output evidence | repository contract | @ui | stage-performance-baseline | standard failure evidence | parallel | pending-semantic-migration |
 | 67-stage-performance-baseline.spec.ts | STAGE-PERF-002 @ui › collect informational large-stage frontend and output evidence | repository contract | @ui | stage-performance-baseline | standard failure evidence | parallel | pending-semantic-migration |
 | 76-demo-show-generation.spec.ts | DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from one manifest | repository contract | @api | demo-show-generation | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 76-interactive-large-tier.spec.ts | PLAN76-LARGE-001 @ui @benchmark › opens the exact 1,000-instance interactive tier with Stage and Fixture Sheet | repository contract | @ui @benchmark | interactive-large-tier | standard failure evidence | parallel | pending-semantic-migration |
+| 76-interactive-large-tier.spec.ts | PLAN76-LARGE-001 @ui @benchmark › keeps Fixture Sheet, Programmer, and output live beside the exact 1,000-instance Stage tier | repository contract | @ui @benchmark | interactive-large-tier | standard failure evidence | parallel | pending-semantic-migration |
+| 76-packaged-demo-asset.spec.ts | PLAN-76-PACKAGED @api › shipped canonical demo retains its exact packaged benchmark contract | repository contract | @api | packaged-demo-asset | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 77-programmer-action-latency.spec.ts | PERF-PROGRAMMER-001 @bench @ui @performance @programmer › programmer actions acknowledge and reach their first output frame within the output-tick budget | repository contract | @bench @ui @performance @programmer | programmer-action-latency | standard failure evidence | parallel | migrated-semantic-world |
+| 78-missing-fixture-selection.spec.ts | FIXTURE-SELECTION-005 @ui › missing fixture IDs are skipped and Fixture Thru selects every existing fixture | repository contract | @ui | missing-fixture-selection | standard failure evidence | parallel | pending-semantic-migration |
+| 78-missing-fixture-selection.spec.ts | CLOCK-002 @ui › larger clock seconds stay inside the unchanged clock layout with and without attached hardware | repository contract | @ui | missing-fixture-selection | standard failure evidence | parallel | pending-semantic-migration |
+| 79-attribute-registry-indexed-presets.spec.ts | CROSS-004 @ui › Desk Setup creates a fully placed show-owned attribute | docs/testing/04-osc-api-and-cross-surface.md | @ui | attribute-registry-indexed-presets | standard failure evidence | parallel | pending-semantic-migration |
+| 79-attribute-registry-indexed-presets.spec.ts | CROSS-004 @ui › one Indexed Preset resolves each embedded fixture profile | docs/testing/04-osc-api-and-cross-surface.md | @ui | attribute-registry-indexed-presets | standard failure evidence | parallel | pending-semantic-migration |
+| playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints

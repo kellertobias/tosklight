@@ -5,11 +5,11 @@ import {
 	useContext,
 	useMemo,
 } from "react";
-import type { AttributeConfigurationApiClient } from "../../api/client/attributeConfiguration";
 import type {
+	AttributeConfigurationApiClient,
 	AttributeConfigurationPatch,
 	AttributeConfigurationSnapshot,
-} from "../../api/generated/light-wire";
+} from "../../api/client/attributeConfiguration";
 
 export interface AttributeConfigurationActions {
 	canWrite: boolean;

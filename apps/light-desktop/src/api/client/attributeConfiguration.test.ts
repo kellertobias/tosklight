@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AttributeConfigurationSnapshot } from "../generated/light-wire";
-import { AttributeConfigurationApiClient } from "./attributeConfiguration";
+import {
+	AttributeConfigurationApiClient,
+	type AttributeConfigurationSnapshot,
+} from "./attributeConfiguration";
 import type { ClientTransport } from "./transport";
 
 const snapshot: AttributeConfigurationSnapshot = {
@@ -25,12 +27,16 @@ const snapshot: AttributeConfigurationSnapshot = {
 
 describe("AttributeConfigurationApiClient", () => {
 	it("loads and revision-guards show-owned collection patches", async () => {
-		const request = vi.fn(async (_path: string, _init?: RequestInit) => ({
-			request_id: "request-29",
-			replayed: false,
-			snapshot,
-			event_sequence: 4,
-		}));
+		const request = vi.fn(async (path: string, _init?: RequestInit) =>
+			path.endsWith("/update")
+				? {
+						request_id: "request-29",
+						replayed: false,
+						snapshot,
+						event_sequence: 4,
+					}
+				: snapshot,
+		);
 		const client = new AttributeConfigurationApiClient({
 			request,
 		} as unknown as ClientTransport);

@@ -8,7 +8,7 @@ import {
 } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useEffect, useState } from "react";
-import type { StageProjection2d } from "../../api/generated/light-wire";
+import type { StageProjection2d } from "../../api/client/stageLayout";
 import { useStageLayoutActions } from "../../features/stageLayout/StageLayoutActions";
 import { useDesktopBridge } from "../../platform/desktop";
 import { useApp } from "../../state/AppContext";

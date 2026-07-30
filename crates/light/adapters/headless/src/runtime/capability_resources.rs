@@ -4,7 +4,7 @@
 //! instead of a mutable state bag.
 
 use super::attribute_configuration::{
-    AttributeConfigurationReplayCache, InstalledAttributeConfiguration,
+    AttributeConfigurationReplayCache, InstalledAttributeConfiguration, ReplayKey,
 };
 use super::*;
 
@@ -186,8 +186,8 @@ pub(in crate::runtime) struct ProgrammingResource {
 
 #[derive(Clone)]
 pub(in crate::runtime) struct AttributeConfigurationResource {
-    pub(in crate::runtime) installed: Arc<RwLock<InstalledAttributeConfiguration>>,
-    pub(in crate::runtime) replay: Arc<tokio::sync::Mutex<AttributeConfigurationReplayCache>>,
+    installed: Arc<RwLock<InstalledAttributeConfiguration>>,
+    replay: Arc<tokio::sync::Mutex<AttributeConfigurationReplayCache>>,
 }
 
 impl AttributeConfigurationResource {
@@ -196,6 +196,49 @@ impl AttributeConfigurationResource {
             installed: Arc::new(RwLock::new(installed)),
             replay: Arc::default(),
         }
+    }
+
+    pub(super) fn snapshot(&self) -> InstalledAttributeConfiguration {
+        self.installed.read().clone()
+    }
+
+    pub(super) fn install_entry(&self, entry: Option<&ShowEntry>) {
+        *self.installed.write() = InstalledAttributeConfiguration::for_entry(entry);
+    }
+
+    pub(super) fn install_document(&self, document: &light_show::PortableShowDocument) {
+        *self.installed.write() = InstalledAttributeConfiguration::for_document(document);
+    }
+
+    #[cfg(test)]
+    pub(super) fn replace_installed(&self, installed: InstalledAttributeConfiguration) {
+        *self.installed.write() = installed;
+    }
+
+    pub(super) fn activation_links(
+        &self,
+    ) -> HashMap<light_core::AttributeKey, Vec<light_core::AttributeKey>> {
+        self.installed.read().configuration.activation_links()
+    }
+
+    pub(super) async fn replay(
+        &self,
+        key: &ReplayKey,
+        request: &light_wire::v2::attribute_configuration::AttributeConfigurationUpdateRequest,
+    ) -> Result<
+        Option<light_wire::v2::attribute_configuration::AttributeConfigurationUpdateOutcome>,
+        ApiError,
+    > {
+        self.replay.lock().await.get(key, request)
+    }
+
+    pub(super) async fn remember(
+        &self,
+        key: ReplayKey,
+        request: light_wire::v2::attribute_configuration::AttributeConfigurationUpdateRequest,
+        outcome: light_wire::v2::attribute_configuration::AttributeConfigurationUpdateOutcome,
+    ) {
+        self.replay.lock().await.insert(key, request, outcome);
     }
 }
 
