@@ -284,6 +284,9 @@ fn wire_snapshot(
         show_revision: installed.show_revision,
         object_revision: installed.object_revision,
         configuration: wire_configuration(&installed.configuration),
+        recommended_configuration: wire_configuration(
+            &light_core::AttributeConfiguration::recommended(),
+        ),
         descriptors: configured_descriptors(&installed.configuration),
         validation_error: installed.validation_error.clone(),
     }

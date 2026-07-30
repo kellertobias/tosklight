@@ -25,6 +25,25 @@ const snapshot: AttributeConfigurationSnapshot = {
 			{ id: "intensity", label: "Intensity", members: ["intensity"] },
 		],
 	},
+	recommended_configuration: {
+		version: 1,
+		custom_attributes: [],
+		placements: [
+			{
+				attribute: "intensity",
+				encoder_group: "intensity",
+				encoder_page: 1,
+				encoder_slot: 1,
+			},
+		],
+		activation_groups: [
+			{
+				id: "recommended.intensity",
+				label: "Recommended intensity",
+				members: ["intensity"],
+			},
+		],
+	},
 	descriptors: [
 		{
 			id: "intensity",
@@ -107,6 +126,31 @@ describe("Desk Setup attribute registry", () => {
 				...snapshot.configuration.activation_groups,
 				{ id, label: "House Light", members: [id] },
 			],
+		});
+	});
+
+	it("restores the server-projected recommended activation defaults", () => {
+		const editAttributeConfiguration = vi.fn();
+		render(
+			<AttributeRegistrySettings
+				controller={
+					{
+						attributeConfiguration: snapshot,
+						attributeConfigurationError: null,
+						editAttributeConfiguration,
+					} as unknown as SetupWindowController
+				}
+			/>,
+		);
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "Restore recommended defaults" }),
+		);
+
+		expect(editAttributeConfiguration).toHaveBeenCalledWith({
+			...snapshot.configuration,
+			activation_groups:
+				snapshot.recommended_configuration.activation_groups,
 		});
 	});
 });

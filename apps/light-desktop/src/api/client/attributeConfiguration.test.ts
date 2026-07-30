@@ -13,6 +13,12 @@ const snapshot: AttributeConfigurationSnapshot = {
 		placements: [],
 		activation_groups: [],
 	},
+	recommended_configuration: {
+		version: 1,
+		custom_attributes: [],
+		placements: [],
+		activation_groups: [],
+	},
 	descriptors: [],
 	validation_error: null,
 };

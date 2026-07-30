@@ -230,6 +230,10 @@ function AttributeRow({
 							{ value: "control", label: "Control" },
 						]}
 						onChange={(value) =>
+							value !== custom.value_type &&
+							window.confirm(
+								`Change ${custom.label} from ${custom.value_type} to ${value}? This can change the meaning of fixture profiles, Programmer values, Presets, and Cues that use ${custom.id}.`,
+							) &&
 							onChange(
 								updateCustom(configuration, custom.id, {
 									value_type: value as CustomAttributeDescriptor["value_type"],
@@ -397,8 +401,46 @@ function ActivationGroups({
 			<Button disabled={!name.trim() || !member} onClick={create}>
 				Create activation group
 			</Button>
+			<Button
+				onClick={() =>
+					onChange(restoreRecommendedActivationGroups(snapshot))
+				}
+			>
+				Restore recommended defaults
+			</Button>
 		</>
 	);
+}
+
+function restoreRecommendedActivationGroups(
+	snapshot: NonNullable<SetupWindowController["attributeConfiguration"]>,
+): AttributeConfiguration {
+	const configuration = snapshot.configuration;
+	const customIds = new Set(
+		configuration.custom_attributes.map((descriptor) => descriptor.id),
+	);
+	const retainedCustomGroups = configuration.activation_groups.filter(
+		(group) =>
+			group.members.length > 0 &&
+			group.members.every((member) => customIds.has(member)),
+	);
+	const assigned = new Set(
+		retainedCustomGroups.flatMap((group) => group.members),
+	);
+	for (const descriptor of configuration.custom_attributes)
+		if (!assigned.has(descriptor.id))
+			retainedCustomGroups.push({
+				id: descriptor.id,
+				label: descriptor.label,
+				members: [descriptor.id],
+			});
+	return {
+		...configuration,
+		activation_groups: [
+			...snapshot.recommended_configuration.activation_groups,
+			...retainedCustomGroups,
+		],
+	};
 }
 
 function projectedDescriptors(

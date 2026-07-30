@@ -106,6 +106,7 @@ pub struct AttributeConfigurationSnapshot {
     #[ts(type = "number")]
     pub object_revision: u64,
     pub configuration: AttributeConfiguration,
+    pub recommended_configuration: AttributeConfiguration,
     pub descriptors: Vec<ConfiguredAttributeDescriptor>,
     pub validation_error: Option<String>,
 }
