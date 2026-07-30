@@ -800,6 +800,18 @@ jobs:
             fi
           fi
 
+          node --input-type=module -e '
+            import fs from "node:fs";
+            import { normalizePublicPerformanceStatus } from "./tools/performance-publication.mjs";
+            const candidate = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            const normalized = normalizePublicPerformanceStatus(candidate, {
+              version: process.env.VERSION,
+              releaseUrl: process.argv[2]
+            });
+            fs.writeFileSync(process.argv[1], JSON.stringify(normalized, null, 2) + "\n");
+            if (normalized.status === "unknown") process.exit(1);
+          ' "$out/status.json" "$release_url"
+
           if [[ -f "$out/summary.md" ]]; then
             cat "$out/summary.md" >> "$GITHUB_STEP_SUMMARY"
           else
