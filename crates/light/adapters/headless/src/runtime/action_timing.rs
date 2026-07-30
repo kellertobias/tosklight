@@ -301,9 +301,7 @@ impl ActionMeasurement {
         let acknowledgement_within_budget = self
             .acknowledged_output_tick
             .saturating_sub(self.received_output_tick)
-            <= budget_ticks
-            && acknowledgement_wall_micros
-                <= wall_budget_micros(self.output_frame_hz, budget_ticks);
+            <= budget_ticks;
         let first_output_wall_micros = output
             .map(|epoch| duration_micros(epoch.completed_at.duration_since(self.received_at)));
         ActionTimingProjection {
@@ -323,9 +321,6 @@ impl ActionMeasurement {
             output_within_budget: self.visibility_epoch.and_then(|_| {
                 output.map(|epoch| {
                     epoch.output_tick.saturating_sub(self.received_output_tick) <= budget_ticks
-                        && first_output_wall_micros.is_some_and(|micros| {
-                            micros <= wall_budget_micros(self.output_frame_hz, budget_ticks)
-                        })
                 })
             }),
             succeeded: self.succeeded,
@@ -335,12 +330,6 @@ impl ActionMeasurement {
 
 pub(super) const fn action_budget_ticks(output_frame_hz: u16) -> u64 {
     if output_frame_hz <= 60 { 2 } else { 4 }
-}
-
-fn wall_budget_micros(output_frame_hz: u16, budget_ticks: u64) -> u64 {
-    budget_ticks
-        .saturating_mul(1_000_000)
-        .div_ceil(u64::from(output_frame_hz.max(1)))
 }
 
 fn duration_micros(duration: Duration) -> u64 {
@@ -365,6 +354,63 @@ mod tests {
         assert_eq!(action_budget_ticks(61), 4);
         assert_eq!(action_budget_ticks(100), 4);
         assert_eq!(action_budget_ticks(120), 4);
+    }
+
+    #[test]
+    fn irregular_wall_cadence_does_not_fail_an_on_time_output_tick() {
+        let completed_at = Instant::now();
+        let received_at = completed_at - Duration::from_millis(79);
+        let measurement = ActionMeasurement {
+            action_id: 1,
+            source: "websocket".into(),
+            action: "command_execute".into(),
+            request_id: "irregular-cadence".into(),
+            received_output_tick: 41,
+            acknowledged_output_tick: 42,
+            received_at,
+            acknowledged_at: received_at + Duration::from_millis(70),
+            output_frame_hz: 44,
+            visibility_epoch: Some(1),
+            requires_output_frame: true,
+            succeeded: true,
+        };
+        let completed = measurement.projection(&[OutputEpoch {
+            visibility_epoch: 1,
+            output_tick: 43,
+            completed_at,
+        }]);
+
+        assert_eq!(completed.acknowledgement_wall_micros, 70_000);
+        assert_eq!(completed.first_output_wall_micros, Some(79_000));
+        assert!(completed.acknowledgement_within_budget);
+        assert_eq!(completed.output_within_budget, Some(true));
+    }
+
+    #[test]
+    fn short_wall_elapsed_time_does_not_hide_a_late_output_tick() {
+        let received_at = Instant::now();
+        let measurement = ActionMeasurement {
+            action_id: 1,
+            source: "websocket".into(),
+            action: "command_execute".into(),
+            request_id: "late-tick".into(),
+            received_output_tick: 41,
+            acknowledged_output_tick: 42,
+            received_at,
+            acknowledged_at: received_at + Duration::from_millis(1),
+            output_frame_hz: 44,
+            visibility_epoch: Some(1),
+            requires_output_frame: true,
+            succeeded: true,
+        };
+        let completed = measurement.projection(&[OutputEpoch {
+            visibility_epoch: 1,
+            output_tick: 44,
+            completed_at: received_at + Duration::from_millis(2),
+        }]);
+
+        assert_eq!(completed.first_output_wall_micros, Some(2_000));
+        assert_eq!(completed.output_within_budget, Some(false));
     }
 
     #[test]

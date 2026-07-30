@@ -26,7 +26,7 @@ export function summarizeProgrammerActionTiming(
 		const reasons = [];
 		if (record.succeeded !== true) reasons.push("action failed");
 		if (record.acknowledgement_within_budget !== true)
-			reasons.push("ack exceeded tick or wall budget");
+			reasons.push("ack exceeded tick budget");
 		if (
 			record.requires_output_frame === true &&
 			record.output_within_budget == null
@@ -36,7 +36,7 @@ export function summarizeProgrammerActionTiming(
 			record.requires_output_frame === true &&
 			record.output_within_budget !== true
 		)
-			reasons.push("first output frame exceeded tick or wall budget");
+			reasons.push("first output frame exceeded tick budget");
 		return `${record.source}/${record.action} #${record.action_id}: ${reasons.join(", ")}`;
 	});
 	const minimumSamples = requirements.minimumSamples ?? 1;

@@ -34,7 +34,7 @@ test("distinguishes an output frame that is still pending", () => {
 	assert.match(summary.failures[0], /first output frame is pending/);
 });
 
-test("requires both wall-and-tick server gates for ack and output", () => {
+test("reports failed server tick gates for ack and output", () => {
 	const summary = summarizeProgrammerActionTiming([
 		{
 			...settled,
@@ -43,11 +43,8 @@ test("requires both wall-and-tick server gates for ack and output", () => {
 		},
 	]);
 	assert.equal(summary.passed, false);
-	assert.match(summary.failures[0], /ack exceeded tick or wall budget/);
-	assert.match(
-		summary.failures[0],
-		/first output frame exceeded tick or wall budget/,
-	);
+	assert.match(summary.failures[0], /ack exceeded tick budget/);
+	assert.match(summary.failures[0], /first output frame exceeded tick budget/);
 });
 
 test("does not require an output frame for non-output actions", () => {
