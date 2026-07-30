@@ -196,6 +196,23 @@ impl ReplayResource {
             .insert(key, action, outcome);
     }
 
+    pub(in crate::runtime) async fn lookup_schedule(
+        &self,
+        key: &schedules_v2::ReplayKey,
+        action: &schedules_v2::ReplayAction,
+    ) -> Result<Option<light_wire::v2::schedules::ScheduleMutationOutcome>, ApiError> {
+        self.schedules.lock().await.get(key, action)
+    }
+
+    pub(in crate::runtime) async fn insert_schedule(
+        &self,
+        key: schedules_v2::ReplayKey,
+        action: schedules_v2::ReplayAction,
+        outcome: light_wire::v2::schedules::ScheduleMutationOutcome,
+    ) {
+        self.schedules.lock().await.insert(key, action, outcome);
+    }
+
     pub(in crate::runtime) async fn lookup_preset_generation(
         &self,
         key: &live_action_http::PresetGenerationReplayKey,
