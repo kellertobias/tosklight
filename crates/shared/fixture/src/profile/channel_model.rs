@@ -49,6 +49,33 @@ pub enum CanonicalTransform {
     InvertNormalized,
 }
 
+pub(super) fn legacy_canonical_mapping(
+    attribute: &AttributeKey,
+) -> Option<(AttributeKey, CanonicalTransform)> {
+    let (canonical, transform) = match attribute.0.as_str() {
+        "color.cyan" => ("color.red", CanonicalTransform::InvertNormalized),
+        "color.magenta" => ("color.green", CanonicalTransform::InvertNormalized),
+        "color.yellow" => ("color.blue", CanonicalTransform::InvertNormalized),
+        "fog" => ("intensity", CanonicalTransform::Identity),
+        "media.volume" => ("volume", CanonicalTransform::Identity),
+        "fixture.tint" => ("color.tint", CanonicalTransform::Identity),
+        "fixture.pan_tilt_time" => ("position.time", CanonicalTransform::Identity),
+        "fixture.pan_tilt_speed" => ("position.speed", CanonicalTransform::Identity),
+        "prism.prism" | "prism.prism_insertion" => ("prism.1", CanonicalTransform::Identity),
+        "prism.prism_rotation" => ("prism.1.rotation", CanonicalTransform::Identity),
+        "fixture.blade_1" => ("shaper.blade.1.position", CanonicalTransform::Identity),
+        "fixture.blade_2" => ("shaper.blade.2.position", CanonicalTransform::Identity),
+        "fixture.blade_3" => ("shaper.blade.3.position", CanonicalTransform::Identity),
+        "fixture.blade_4" => ("shaper.blade.4.position", CanonicalTransform::Identity),
+        "fixture.framing_module_rotation" | "fixture.barndoor_module_rotation" => {
+            ("shaper.rotation", CanonicalTransform::Identity)
+        }
+        "frost" => ("frost.1", CanonicalTransform::Identity),
+        _ => return None,
+    };
+    Some((AttributeKey(canonical.into()), transform))
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FixtureChannel {
     pub id: Uuid,

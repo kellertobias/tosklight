@@ -95,7 +95,26 @@ impl<'de> Deserialize<'de> for FixtureProfile {
     where
         D: serde::Deserializer<'de>,
     {
-        let canonical = FixtureProfileCanonical::deserialize(deserializer)?;
+        let mut canonical = FixtureProfileCanonical::deserialize(deserializer)?;
+        if canonical.schema_version == 2 {
+            for channel in canonical
+                .modes
+                .iter_mut()
+                .flat_map(|mode| &mut mode.channels)
+            {
+                let legacy = channel.attribute.clone();
+                let Some((attribute, transform)) = super::legacy_canonical_mapping(&legacy) else {
+                    continue;
+                };
+                channel.attribute = attribute.clone();
+                channel.canonical_transform = transform;
+                for function in &mut channel.functions {
+                    if function.attribute == legacy {
+                        function.attribute = attribute.clone();
+                    }
+                }
+            }
+        }
         Ok(Self {
             schema_version: if canonical.schema_version == 2 {
                 FIXTURE_PROFILE_SCHEMA_VERSION

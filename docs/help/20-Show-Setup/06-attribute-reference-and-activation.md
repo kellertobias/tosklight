@@ -234,6 +234,13 @@ custom descriptors and activation choices remain intact. If a custom descriptor 
 has since become a built-in's preferred position, the custom descriptor moves to the first free
 custom page in the same encoder group.
 
+Schema-v2 fixture snapshots keep their original fixture-facing IDs while unambiguous legacy names
+project to the canonical IDs in the table above. Existing Programmer, Preset, Cue, and revision
+data remains byte-for-byte portable: the renderer accepts an old fixture-facing value as a fallback
+until a canonical value for that channel exists. For CMY, that fallback retains the old physical
+filtration amount, while new Red, Green, and Blue values use the inverted canonical mapping. An
+ambiguous legacy name stays an identity mapping instead of being guessed.
+
 ## Recommended activation groups
 
 Activation groups decide which supported attributes become active together when one member changes. They do not force every listed attribute onto every fixture; missing members are skipped per fixture and logical head.

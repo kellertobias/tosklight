@@ -307,6 +307,73 @@ fn schema_v2_channels_migrate_to_explicit_identity_mappings() {
 }
 
 #[test]
+fn schema_v2_cmy_channels_migrate_to_inverted_canonical_rgb_without_losing_identity() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Test".into();
+    profile.name = "Legacy CMY mapping".into();
+    let mode = &mut profile.modes[0];
+    let mut cyan = channel(mode.heads[0].id, ChannelResolution::U8, vec![]);
+    cyan.fixture_attribute = AttributeKey("color.cyan".into());
+    cyan.attribute = AttributeKey("color.cyan".into());
+    cyan.functions = vec![ChannelFunction::continuous(
+        "Cyan filtration",
+        AttributeKey("color.cyan".into()),
+        255,
+    )];
+    mode.channels = vec![cyan];
+    let mut value = serde_json::to_value(&profile).unwrap();
+    value["schema_version"] = serde_json::json!(2);
+    let channel = value["modes"][0]["channels"][0].as_object_mut().unwrap();
+    channel.remove("fixture_attribute");
+    channel.remove("canonical_transform");
+
+    let migrated: FixtureProfile = serde_json::from_value(value).unwrap();
+    let channel = &migrated.modes[0].channels[0];
+    assert_eq!(channel.fixture_attribute, AttributeKey("color.cyan".into()));
+    assert_eq!(channel.attribute, AttributeKey("color.red".into()));
+    assert_eq!(
+        channel.canonical_transform,
+        CanonicalTransform::InvertNormalized
+    );
+    assert_eq!(
+        channel.functions[0].attribute,
+        AttributeKey("color.red".into())
+    );
+    migrated.validate().unwrap();
+}
+
+#[test]
+fn schema_v2_named_aliases_are_limited_to_documented_unambiguous_mappings() {
+    for (legacy, canonical) in [
+        ("fog", "intensity"),
+        ("media.volume", "volume"),
+        ("fixture.tint", "color.tint"),
+        ("fixture.pan_tilt_time", "position.time"),
+        ("fixture.pan_tilt_speed", "position.speed"),
+        ("prism.prism", "prism.1"),
+        ("prism.prism_insertion", "prism.1"),
+        ("prism.prism_rotation", "prism.1.rotation"),
+        ("fixture.blade_1", "shaper.blade.1.position"),
+        ("fixture.blade_2", "shaper.blade.2.position"),
+        ("fixture.blade_3", "shaper.blade.3.position"),
+        ("fixture.blade_4", "shaper.blade.4.position"),
+        ("fixture.framing_module_rotation", "shaper.rotation"),
+        ("fixture.barndoor_module_rotation", "shaper.rotation"),
+        ("frost", "frost.1"),
+    ] {
+        assert_eq!(
+            legacy_canonical_mapping(&AttributeKey(legacy.into())),
+            Some((AttributeKey(canonical.into()), CanonicalTransform::Identity))
+        );
+    }
+    assert_eq!(
+        legacy_canonical_mapping(&AttributeKey("fixture.effect_1".into())),
+        None,
+        "an ambiguous numbered effect remains a preserved custom identity"
+    );
+}
+
+#[test]
 fn complete_physical_metadata_round_trips_and_older_profiles_receive_safe_defaults() {
     let mut profile = FixtureProfile::blank();
     profile.manufacturer = "Test".into();

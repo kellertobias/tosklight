@@ -116,28 +116,53 @@ impl BoundFixtureModeResolution<'_> {
             .iter()
             .filter_map(|index| channel.functions.get(*index))
             .find_map(|function| {
-                function_value_for(
-                    function,
-                    value(&function.attribute),
-                    channel.canonical_transform,
-                )
-                .map(|raw| (function, raw))
+                if let Some(value) = value(&function.attribute) {
+                    function_value_for(function, Some(value), channel.canonical_transform)
+                        .map(|raw| (&function.attribute, raw))
+                } else if function.attribute == channel.attribute
+                    && channel.fixture_attribute != channel.attribute
+                {
+                    function_value_for(
+                        function,
+                        value(&channel.fixture_attribute),
+                        super::CanonicalTransform::Identity,
+                    )
+                    .map(|raw| (&channel.fixture_attribute, raw))
+                } else {
+                    None
+                }
             });
         let control_value = value(&compiled.control_attribute);
-        let attribute_value = value(&channel.attribute);
+        let (attribute_value, active_channel_attribute, attribute_transform) =
+            if let Some(value) = value(&channel.attribute) {
+                (
+                    Some(value),
+                    Some(&channel.attribute),
+                    channel.canonical_transform,
+                )
+            } else if channel.fixture_attribute != channel.attribute {
+                (
+                    value(&channel.fixture_attribute),
+                    Some(&channel.fixture_attribute),
+                    super::CanonicalTransform::Identity,
+                )
+            } else {
+                (None, None, channel.canonical_transform)
+            };
         let active_attribute = if channel.behavior == ChannelBehavior::Static {
             None
         } else if control_value.is_some() {
             Some(&compiled.control_attribute)
-        } else if let Some((function, _)) = winning_function {
-            Some(&function.attribute)
+        } else if let Some((attribute, _)) = winning_function {
+            Some(attribute)
         } else {
-            attribute_value.is_some().then_some(&channel.attribute)
+            attribute_value.and(active_channel_attribute)
         };
         let resolved = resolved_raw(
             channel,
             control_value,
             attribute_value,
+            attribute_transform,
             highlighted,
             highlight_override,
             winning_function.map(|(_, raw)| raw),
@@ -153,6 +178,7 @@ fn resolved_raw(
     channel: &super::FixtureChannel,
     control_value: Option<&AttributeValue>,
     attribute_value: Option<&AttributeValue>,
+    attribute_transform: super::CanonicalTransform,
     highlighted: bool,
     highlight_override: Option<u32>,
     function_raw: Option<ResolvedChannelRaw>,
@@ -169,12 +195,7 @@ fn resolved_raw(
     function_raw
         .or_else(|| {
             attribute_value.and_then(|value| {
-                mapped_canonical_raw(
-                    value,
-                    0,
-                    channel.resolution.max_raw(),
-                    channel.canonical_transform,
-                )
+                mapped_canonical_raw(value, 0, channel.resolution.max_raw(), attribute_transform)
             })
         })
         .unwrap_or(ResolvedChannelRaw::Exact(channel.default_raw))

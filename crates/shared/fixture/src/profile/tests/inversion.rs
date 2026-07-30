@@ -300,4 +300,43 @@ fn fixture_facing_cmy_can_map_to_inverted_canonical_rgb_without_reinterpreting_e
         ),
         37
     );
+    let legacy_value = HashMap::from([(
+        AttributeKey("color.cyan".into()),
+        AttributeValue::Normalized(0.75),
+    )]);
+    assert_eq!(
+        mode.resolve_channel_raw(&cyan, &legacy_value, false, None, ChannelScales::default(),),
+        191,
+        "a stored schema-v2 Cyan value keeps its physical filtration meaning"
+    );
+    let plan = mode.compile_resolution_plan();
+    let bound = plan.bind(&mode).unwrap();
+    assert_eq!(
+        bound
+            .resolve_channel(0, &legacy_value, false, None, |_| ChannelScales::default(),)
+            .raw,
+        191,
+        "the optimized runtime plan preserves the same legacy fallback"
+    );
+    let canonical_wins = HashMap::from([
+        (
+            AttributeKey("color.cyan".into()),
+            AttributeValue::Normalized(0.75),
+        ),
+        (
+            AttributeKey("color.red".into()),
+            AttributeValue::Normalized(0.25),
+        ),
+    ]);
+    assert_eq!(
+        mode.resolve_channel_raw(
+            &cyan,
+            &canonical_wins,
+            false,
+            None,
+            ChannelScales::default(),
+        ),
+        191,
+        "canonical RGB wins when old and new values coexist"
+    );
 }

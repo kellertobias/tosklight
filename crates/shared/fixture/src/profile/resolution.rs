@@ -90,14 +90,19 @@ impl FixtureMode {
                 .iter()
                 .enumerate()
                 .filter_map(|(index, function)| {
-                    function_value(function, values, channel.canonical_transform)
+                    function_value_for_channel(function, channel, values)
                         .map(|raw| (function.priority, std::cmp::Reverse(index), raw))
                 })
                 .max_by_key(|(priority, order, _)| (*priority, *order))
                 .map(|(_, _, raw)| raw)
                 .or_else(|| {
-                    values.get(&channel.attribute).and_then(|value| {
-                        mapped_canonical_raw(value, 0, max, channel.canonical_transform)
+                    let (value, fixture_facing) = channel_attribute_value(channel, values);
+                    value.and_then(|value| {
+                        if fixture_facing {
+                            mapped_raw(value, 0, max)
+                        } else {
+                            mapped_canonical_raw(value, 0, max, channel.canonical_transform)
+                        }
                     })
                 })
                 .unwrap_or(ResolvedChannelRaw::Exact(channel.default_raw))
@@ -125,15 +130,21 @@ impl FixtureMode {
                     .iter()
                     .enumerate()
                     .filter(|(_, function)| {
-                        function_value(function, values, channel.canonical_transform).is_some()
+                        function_value_for_channel(function, channel, values).is_some()
                     })
                     .max_by_key(|(index, function)| (function.priority, std::cmp::Reverse(*index)))
                     .map(|(_, function)| &function.attribute)
             })
             .or_else(|| {
-                values
-                    .contains_key(&channel.attribute)
-                    .then_some(&channel.attribute)
+                if values.contains_key(&channel.attribute) {
+                    Some(&channel.attribute)
+                } else if channel.fixture_attribute != channel.attribute
+                    && values.contains_key(&channel.fixture_attribute)
+                {
+                    Some(&channel.fixture_attribute)
+                } else {
+                    None
+                }
             })
     }
 
@@ -270,12 +281,33 @@ pub(super) enum ResolvedChannelRaw {
     Exact(u32),
 }
 
-pub(super) fn function_value(
+fn function_value_for_channel(
     function: &ChannelFunction,
+    channel: &FixtureChannel,
     values: &HashMap<AttributeKey, AttributeValue>,
-    transform: CanonicalTransform,
 ) -> Option<ResolvedChannelRaw> {
-    function_value_for(function, values.get(&function.attribute), transform)
+    let direct = values.get(&function.attribute);
+    if direct.is_some() {
+        return function_value_for(function, direct, channel.canonical_transform);
+    }
+    let fixture_facing = (function.attribute == channel.attribute
+        && channel.fixture_attribute != channel.attribute)
+        .then(|| values.get(&channel.fixture_attribute))
+        .flatten();
+    function_value_for(function, fixture_facing, CanonicalTransform::Identity)
+}
+
+fn channel_attribute_value<'a>(
+    channel: &FixtureChannel,
+    values: &'a HashMap<AttributeKey, AttributeValue>,
+) -> (Option<&'a AttributeValue>, bool) {
+    if let Some(value) = values.get(&channel.attribute) {
+        (Some(value), false)
+    } else if channel.fixture_attribute != channel.attribute {
+        (values.get(&channel.fixture_attribute), true)
+    } else {
+        (None, false)
+    }
 }
 
 pub(super) fn function_value_for(
