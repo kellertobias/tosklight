@@ -109,6 +109,7 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 					error={controller.zones.error}
 					saving={controller.zones.saving}
 					onClose={() => controller.setCreatingZone(false)}
+					onNameChange={controller.setZoneName}
 					onCreate={(name) => void controller.createZone(name)}
 				/>
 			)}
@@ -170,6 +171,7 @@ function CreateZoneModal(props: {
 	error: string | null;
 	saving: boolean;
 	onClose(): void;
+	onNameChange(name: string): void;
 	onCreate(name: string): void;
 }) {
 	const [draftName, setDraftName] = useState(props.name);
@@ -201,7 +203,10 @@ function CreateZoneModal(props: {
 							autoFocus
 							maxLength={80}
 							value={draftName}
-							onChange={(event) => setDraftName(event.target.value)}
+							onChange={(event) => {
+								setDraftName(event.target.value);
+								props.onNameChange(event.target.value);
+							}}
 						/>
 					</FormLayout>
 					<footer>

@@ -290,26 +290,32 @@ export class BrowserVirtualPlaybacks {
 					exact: true,
 				}),
 			).toBeVisible();
+			await this.hardware
+				.send(`/light/${alias}/programmer/shift`, [false])
+				.catch(() => undefined);
+			const createButton = this.pane(pane).getByRole("button", {
+				name: "Create Exclusion Zone",
+				exact: true,
+			});
+			await this.desk.click(createButton);
+			const dialog = this.page.getByRole("dialog", {
+				name: "Create Exclusion Zone",
+			});
+			await expect(dialog).toBeVisible();
+			const nameInput = dialog.getByLabel("Zone name");
+			await nameInput.fill(name);
+			await expect(nameInput).toHaveValue(name);
+			await nameInput.press("Tab");
+			await this.desk.click(
+				dialog.getByRole("button", { name: "Create zone", exact: true }),
+			);
+			await expect(dialog).toBeHidden();
 		} finally {
 			await this.hardware
 				.send(`/light/${alias}/programmer/shift`, [false])
 				.catch(() => undefined);
 			await this.hardware.disconnect();
 		}
-		const createButton = this.pane(pane).getByRole("button", {
-			name: "Create Exclusion Zone",
-			exact: true,
-		});
-		await this.desk.click(createButton);
-		const dialog = this.page.getByRole("dialog", {
-			name: "Create Exclusion Zone",
-		});
-		await expect(dialog).toBeVisible();
-		await dialog.getByLabel("Zone name").fill(name);
-		await this.desk.click(
-			dialog.getByRole("button", { name: "Create zone", exact: true }),
-		);
-		await expect(dialog).toBeHidden();
 	}
 
 	async deleteExclusionZone(
