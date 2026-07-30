@@ -1,9 +1,8 @@
+import { Button, SearchBar } from "@tosklight/ui";
+import { WindowHeader } from "@tosklight/ui/window-kit";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { Button } from "@tosklight/ui";
 import { usePaneChromeTargets } from "../../components/shell/PaneChromeContext";
-import { SearchBar } from "@tosklight/ui";
-import { WindowHeader } from "@tosklight/ui/window-kit";
 import { FileMenuIcon } from "./FileMenuIcon";
 import type { FileHeaderMenuKind } from "./types";
 import type { FileManagerController } from "./useFileManagerController";
@@ -277,6 +276,17 @@ export function FileManagerHeader({
 	const actions = (
 		<div className="file-manager-header-actions">
 			<Button
+				aria-label="Partial Show Load"
+				disabled={
+					!controller.partialImport.source || controller.partialImport.loading
+				}
+				onClick={() => void controller.partialImport.open()}
+			>
+				{controller.partialImport.loading
+					? "Preparing Partial Load…"
+					: "Partial Show Load"}
+			</Button>
+			<Button
 				aria-label="Edit"
 				aria-haspopup="menu"
 				aria-expanded={state.headerMenu?.kind === "edit"}
@@ -362,13 +372,14 @@ export function FileManagerHeader({
 				/>
 			)}
 			{paneChrome?.info && createPortal(pathControl, paneChrome.info)}
-			{paneChrome?.toolbar && createPortal(
-				<>
-					<SearchBar {...search} onChange={state.setQuery} />
-					{actions}
-				</>,
-				paneChrome.toolbar,
-			)}
+			{paneChrome?.toolbar &&
+				createPortal(
+					<>
+						<SearchBar {...search} onChange={state.setQuery} />
+						{actions}
+					</>,
+					paneChrome.toolbar,
+				)}
 			<HeaderMenu controller={controller} />
 		</>
 	);

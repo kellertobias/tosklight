@@ -1,3 +1,5 @@
+import { SelectiveShowImportModal } from "../../components/modals/SelectiveShowImportModal";
+import { StackedModal } from "../../components/modals/StackedModal";
 import { FileManagerBrowser } from "./FileManagerBrowser";
 import { FileManagerDialogs } from "./FileManagerDialogs";
 import { FileManagerHeader } from "./FileManagerHeader";
@@ -19,6 +21,22 @@ export function FileManagerView({
 			<FileManagerHeader controller={controller} />
 			<FileManagerBrowser controller={controller} />
 			<FileManagerDialogs controller={controller} />
+			{controller.partialImport.dialog &&
+				controller.partialImport.activeShow &&
+				controller.partialImport.capability && (
+					<StackedModal onClose={controller.partialImport.close}>
+						<SelectiveShowImportModal
+							activeShow={controller.partialImport.activeShow}
+							shows={[controller.partialImport.dialog.source]}
+							initialSourceShowId={controller.partialImport.dialog.source.id}
+							initialCatalog={controller.partialImport.dialog.catalog}
+							onClose={controller.partialImport.close}
+							loadCatalog={controller.partialImport.capability.catalog}
+							previewImport={controller.partialImport.capability.preview}
+							applyImport={controller.partialImport.capability.apply}
+						/>
+					</StackedModal>
+				)}
 		</section>
 	);
 }

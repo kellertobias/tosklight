@@ -23,6 +23,8 @@ import {
 export interface SelectiveImportWorkflowOptions {
 	activeShow: ShowEntry;
 	shows: ShowEntry[];
+	initialSourceShowId?: string;
+	initialCatalog?: SelectiveImportCatalog;
 	onClose: () => void;
 	loadCatalog: (
 		targetShowId: string,
@@ -63,11 +65,16 @@ type StateUpdate =
 	| ((current: WorkflowState) => Partial<WorkflowState>);
 type PatchState = (update: StateUpdate) => void;
 
-function initialState(): WorkflowState {
+function initialState(
+	options?: Pick<
+		SelectiveImportWorkflowOptions,
+		"initialSourceShowId" | "initialCatalog"
+	>,
+): WorkflowState {
 	return {
 		mode: "replace_by_position",
-		sourceId: "",
-		catalog: null,
+		sourceId: options?.initialSourceShowId ?? "",
+		catalog: options?.initialCatalog ?? null,
 		selected: new Set(),
 		objectChoices: new Map(),
 		profileChoices: new Map(),
@@ -79,8 +86,13 @@ function initialState(): WorkflowState {
 	};
 }
 
-function useWorkflowState(): [WorkflowState, PatchState] {
-	const [state, setState] = useState(initialState);
+function useWorkflowState(
+	options: Pick<
+		SelectiveImportWorkflowOptions,
+		"initialSourceShowId" | "initialCatalog"
+	>,
+): [WorkflowState, PatchState] {
+	const [state, setState] = useState(() => initialState(options));
 	const patch = (update: StateUpdate) =>
 		setState((current) => ({
 			...current,
@@ -123,7 +135,7 @@ function useAbortableRequest(patch: PatchState) {
 export function useSelectiveImportWorkflow(
 	options: SelectiveImportWorkflowOptions,
 ) {
-	const [state, patch] = useWorkflowState();
+	const [state, patch] = useWorkflowState(options);
 	const requests = useAbortableRequest(patch);
 	const sources = options.shows.filter(
 		(show) => show.id !== options.activeShow.id,

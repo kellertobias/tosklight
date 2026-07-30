@@ -40,9 +40,14 @@ export type SelectiveImportCapability = Pick<
 	"catalog" | "preview" | "apply"
 >;
 
-const SelectiveImportContext = createContext<SelectiveImportCapability | null>(null);
+const SelectiveImportContext = createContext<SelectiveImportCapability | null>(
+	null,
+);
 
-export function SelectiveImportProvider({ source, children }: PropsWithChildren<{
+export function SelectiveImportProvider({
+	source,
+	children,
+}: PropsWithChildren<{
 	source: SelectiveImportSource;
 }>) {
 	const catalog = useStableCallback(source.catalog);
@@ -50,18 +55,24 @@ export function SelectiveImportProvider({ source, children }: PropsWithChildren<
 	const applyCommand = useStableCallback(source.apply);
 	const refresh = useStableCallback(source.refreshCompatibilityState);
 	const reportError = useStableCallback(source.reportError);
-	const apply = useCallback(async (...args: Parameters<typeof source.apply>) => {
-		try {
-			const outcome = await applyCommand(...args);
-			if (outcome.changed) await refresh();
-			reportError(null);
-			return outcome;
-		} catch (reason) {
-			reportError(reason instanceof Error ? reason.message : String(reason));
-			throw reason;
-		}
-	}, [applyCommand, refresh, reportError]);
-	const value = useMemo(() => ({ catalog, preview, apply }), [catalog, preview, apply]);
+	const apply = useCallback(
+		async (...args: Parameters<typeof source.apply>) => {
+			try {
+				const outcome = await applyCommand(...args);
+				if (outcome.changed) await refresh();
+				reportError(null);
+				return outcome;
+			} catch (reason) {
+				reportError(reason instanceof Error ? reason.message : String(reason));
+				throw reason;
+			}
+		},
+		[applyCommand, refresh, reportError],
+	);
+	const value = useMemo(
+		() => ({ catalog, preview, apply }),
+		[catalog, preview, apply],
+	);
 	return (
 		<SelectiveImportContext.Provider value={value}>
 			{children}
@@ -72,7 +83,14 @@ export function SelectiveImportProvider({ source, children }: PropsWithChildren<
 export function useSelectiveImport() {
 	const capability = useContext(SelectiveImportContext);
 	if (!capability) {
-		throw new Error("useSelectiveImport must be used inside SelectiveImportProvider");
+		throw new Error(
+			"useSelectiveImport must be used inside SelectiveImportProvider",
+		);
 	}
 	return capability;
+}
+
+/** Partial Show Load capability, or null outside a connected desk boundary. */
+export function useOptionalSelectiveImport() {
+	return useContext(SelectiveImportContext);
 }

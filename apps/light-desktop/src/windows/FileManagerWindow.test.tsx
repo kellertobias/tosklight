@@ -12,7 +12,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileEntry } from "../api/types";
 import { requestPaneRemoval } from "../components/shell/paneRemovalGuard";
 import { routeControlSurfaceIntent } from "../features/controlSurfaceInteraction/registry";
+import { DeskSnapshotStateProvider } from "../features/deskSnapshot/DeskSnapshotState";
+import { DeskSnapshotStore } from "../features/deskSnapshot/store";
 import { createCommandLineTestAuthority } from "../features/programmingInteraction/testing/commandLineTestAuthority";
+import { SelectiveImportProvider } from "../features/selectiveImport/SelectiveImportContext";
+import {
+	type ShowLifecycleActions,
+	ShowLifecycleProvider,
+} from "../features/showLifecycle/ShowLifecycleContext";
 import {
 	FileManager,
 	nextKeepBothName,
@@ -378,6 +385,81 @@ describe("FileManager layout", () => {
 			screen.getByRole("menuitemcheckbox", { name: "Show Properties Sidebar" }),
 		).toHaveAttribute("aria-checked", "false");
 		expect(screen.getByRole("separator")).toBeVisible();
+	});
+
+	it("opens Partial Show Load for the selected show-library file", async () => {
+		const activeShow = {
+			id: "active",
+			name: "Active",
+			path: "/shows/active.show",
+			revision: 7,
+			updated_at: "2026-07-30T12:00:00Z",
+		};
+		const sourceShow = {
+			id: "source",
+			name: "Source",
+			path: "/shows/source.show",
+			revision: 4,
+			updated_at: "2026-07-30T11:00:00Z",
+		};
+		const sourceFile: FileEntry = {
+			name: "source.show",
+			path: "source.show",
+			kind: "file",
+			size: 4096,
+			modified_millis: 4_000,
+			created_millis: null,
+			hidden: false,
+			writable: true,
+		};
+		mocks.server.fileEntries.mockResolvedValue({
+			root_id: "shows",
+			path: "",
+			entries: [sourceFile],
+		});
+		const catalog = vi.fn().mockResolvedValue({
+			sourceShowId: sourceShow.id,
+			sourceShowName: sourceShow.name,
+			sourceRevision: sourceShow.revision,
+			objects: [],
+		});
+		const store = new DeskSnapshotStore();
+		store.install({ active_show: activeShow } as never, null);
+		const lifecycle = {
+			shows: [activeShow, sourceShow],
+		} as unknown as ShowLifecycleActions;
+		render(
+			<DeskSnapshotStateProvider store={store}>
+				<ShowLifecycleProvider lifecycle={lifecycle}>
+					<SelectiveImportProvider
+						source={{
+							catalog,
+							preview: vi.fn(),
+							apply: vi.fn(),
+							refreshCompatibilityState: vi.fn(),
+							reportError: vi.fn(),
+						}}
+					>
+						<FileManager instanceId="partial-show-load" />
+					</SelectiveImportProvider>
+				</ShowLifecycleProvider>
+			</DeskSnapshotStateProvider>,
+		);
+		const action = screen.getByRole("button", { name: "Partial Show Load" });
+		expect(action).toBeDisabled();
+		fireEvent.click(
+			await screen.findByRole("button", { name: "source.show, file" }),
+		);
+		expect(action).toBeEnabled();
+		fireEvent.click(action);
+		const dialog = await screen.findByRole("dialog", {
+			name: "Partial Show Load",
+		});
+		expect(dialog).toBeVisible();
+		expect(
+			within(dialog).getByRole("button", { name: "Source show" }),
+		).toHaveTextContent(sourceShow.name);
+		expect(catalog).toHaveBeenCalledWith(activeShow.id, sourceShow.id);
 	});
 });
 

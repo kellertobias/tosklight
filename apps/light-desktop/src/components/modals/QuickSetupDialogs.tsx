@@ -1,9 +1,6 @@
-import { createPortal } from "react-dom";
-import type { PropsWithChildren } from "react";
 import {
 	Button,
 	Input,
-	ModalRegistration,
 	ModalTitleBar,
 	NumberField,
 	SelectField,
@@ -11,30 +8,12 @@ import {
 } from "@tosklight/ui";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
 import { ServerErrorNotice } from "../shell/ServerErrorNotice";
-import { SelectiveShowImportModal } from "./SelectiveShowImportModal";
 import type { QuickSetupModel } from "./QuickSetupModal";
+import { SelectiveShowImportModal } from "./SelectiveShowImportModal";
+import { StackedModal } from "./StackedModal";
 
 interface ModelProps {
 	model: QuickSetupModel;
-}
-
-function StackedModal({
-	children,
-	onClose,
-}: PropsWithChildren<{ onClose: () => void }>) {
-	return createPortal(
-		<ModalRegistration onClose={onClose}>
-			<div
-				className="stacked-modal-layer"
-				onPointerDown={(event) => {
-					if (event.target === event.currentTarget) onClose();
-				}}
-			>
-				{children}
-			</div>
-		</ModalRegistration>,
-		document.body,
-	);
 }
 
 function NamedRevisionDialog({ model }: ModelProps) {
