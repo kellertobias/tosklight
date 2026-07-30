@@ -20,6 +20,7 @@ import type {
 	DeskConfiguration,
 	DeskLockState,
 	DeskUser,
+	HighlightLookConfiguration,
 	MatterBridgeStatus,
 	OutputHealth,
 	PoolPresentationConfiguration,
@@ -228,7 +229,7 @@ function soundConfiguration(
 
 function configurationPatch(
 	configuration: DeskConfiguration,
-): ConfigurationPatch {
+): ConfigurationPatch & { highlight_look: HighlightLookConfiguration } {
 	return {
 		frame_rate_hz: configuration.frame_rate_hz,
 		output_bind_ip: configuration.output_bind_ip,
@@ -251,6 +252,15 @@ function configurationPatch(
 			configuration.preload_virtual_playback_actions,
 		patch_preview_highlight_dmx:
 			configuration.patch_preview_highlight_dmx ?? false,
+		highlight_look: configuration.highlight_look ?? {
+			intensity: 1,
+			color: null,
+			iris: null,
+			zoom: null,
+			focus: null,
+			frost: null,
+			compatibility: "needs_review",
+		},
 		matter_enabled: configuration.matter_enabled ?? false,
 		...(configuration.pool_presentation
 			? { pool_presentation: configuration.pool_presentation }

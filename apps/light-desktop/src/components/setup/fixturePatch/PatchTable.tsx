@@ -1,6 +1,6 @@
+import { Button } from "@tosklight/ui";
 import { Fragment } from "react";
 import type { MultiPatchInstance, PatchedFixture } from "../../../api/types";
-import { Button } from "@tosklight/ui";
 import { isDmxPatchable } from "../patchUtils";
 import { usePatchController } from "./controller";
 import { armEdit, selectSplitAddress } from "./editSession";
@@ -11,9 +11,9 @@ import { beginMultipatchEdit } from "./multipatchActions";
 import {
 	definitionSplits,
 	effectiveSplitPatches,
+	fixturePolicyApplicability,
 	formatFixturePatch,
 	formatInstancePatch,
-	fixturePolicyApplicability,
 } from "./patchModel";
 
 const columns = [
@@ -29,7 +29,6 @@ const columns = [
 	"Invert Tilt",
 	"MIB",
 	"MIB Delay",
-	"Highlight Look",
 	"Location X",
 	"Location Y",
 	"Location Z",
@@ -134,7 +133,9 @@ function FixturePolicyCells({ fixture }: { fixture: PatchedFixture }) {
 					{value ? trueLabel : falseLabel}
 				</Button>
 			) : (
-				<span aria-label={`${label} unavailable`}>—</span>
+				<span role="img" aria-label={`${label} unavailable`}>
+					—
+				</span>
 			)}
 		</td>
 	);
@@ -269,10 +270,8 @@ function FixtureBehaviorCells({ fixture }: { fixture: PatchedFixture }) {
 			<>
 				<td>—</td>
 				<td>—</td>
-				<td>—</td>
 			</>
 		);
-	const overrides = Object.keys(fixture.highlight_overrides ?? {}).length;
 	return (
 		<>
 			<td>
@@ -291,17 +290,6 @@ function FixtureBehaviorCells({ fixture }: { fixture: PatchedFixture }) {
 					onClick={() => armEdit(controller, fixture, "mib_delay")}
 				>
 					{(fixture.move_in_black_delay_millis ?? 0) / 1000} s
-				</Button>
-			</td>
-			<td>
-				<Button
-					className="patch-value"
-					aria-label={`Highlight Look ${fixtureDisplayId(fixture)}`}
-					onClick={() => armEdit(controller, fixture, "highlight")}
-				>
-					{overrides
-						? `${overrides} override${overrides === 1 ? "" : "s"}`
-						: "Profile default"}
 				</Button>
 			</td>
 		</>
@@ -421,7 +409,6 @@ function MultiPatchRow({
 			</td>
 			<td />
 			<td />
-			<td />
 			{(["x", "y", "z"] as const).map((axis) => (
 				<td className="patch-secondary" key={`location-${axis}`}>
 					<Button
@@ -478,7 +465,9 @@ function MultipatchAxisCell({
 	if (!available)
 		return (
 			<td>
-				<span aria-label={`Invert ${axis} unavailable`}>—</span>
+				<span role="img" aria-label={`Invert ${axis} unavailable`}>
+					—
+				</span>
 			</td>
 		);
 	const inverted =

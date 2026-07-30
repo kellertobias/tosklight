@@ -321,6 +321,19 @@ afterEach(() => {
 });
 
 describe("fixture output policy cells", () => {
+	it("does not expose per-fixture raw Highlight Look editing", () => {
+		server.patch.fixtures = [policyFixture()];
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+
+		expect(
+			screen.queryByRole("columnheader", { name: "Highlight Look" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Highlight Look 17" }),
+		).not.toBeInTheDocument();
+	});
+
 	it("shows independent effective values and only edits a master through armed SET", async () => {
 		server.patch.fixtures = [policyFixture()];
 		render(<FixturePatchSetup />);
@@ -1220,7 +1233,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const fixtureRow = screen.getByRole("row", {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
-		fireEvent.click(within(fixtureRow.cells[13]).getByRole("button"));
+		fireEvent.click(within(fixtureRow.cells[12]).getByRole("button"));
 
 		const modal = screen
 			.getByRole("heading", { name: "Set fixture location X" })
@@ -1263,7 +1276,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const fixtureRow = screen.getByRole("row", {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
-		fireEvent.click(within(fixtureRow.cells[17]).getByRole("button"));
+		fireEvent.click(within(fixtureRow.cells[16]).getByRole("button"));
 
 		const modal = screen
 			.getByRole("heading", { name: "Set fixture rotation Y" })
@@ -1295,7 +1308,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const instanceRow = document.querySelector(
 			"tr.multipatch-row",
 		) as HTMLTableRowElement;
-		fireEvent.click(within(instanceRow.cells[17]).getByRole("button"));
+		fireEvent.click(within(instanceRow.cells[16]).getByRole("button"));
 
 		const modal = screen
 			.getByRole("heading", { name: "Set multi-patch rotation Y" })

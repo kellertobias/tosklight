@@ -1,9 +1,197 @@
-import { FormLayout, SwitchField } from "@tosklight/ui";
+import {
+	Button,
+	FormLayout,
+	NumberField,
+	SelectField,
+	SwitchField,
+} from "@tosklight/ui";
+import type {
+	HighlightLookColor,
+	HighlightLookConfiguration,
+} from "../../api/types";
 import {
 	RecordDefaultsFields,
 	UpdateDefaultsFields,
 } from "../../components/setup/ProgrammerDefaults";
 import type { SetupWindowController } from "./controller";
+
+const DEFAULT_HIGHLIGHT_LOOK: HighlightLookConfiguration = {
+	intensity: 1,
+	color: null,
+	iris: null,
+	zoom: null,
+	focus: null,
+	frost: null,
+	compatibility: "needs_review",
+};
+
+const COLOR_OPTIONS: Array<{
+	value: HighlightLookColor | "ignore";
+	label: string;
+}> = [
+	{ value: "ignore", label: "Ignore" },
+	{ value: "white", label: "White" },
+	{ value: "red", label: "Red" },
+	{ value: "green", label: "Green" },
+	{ value: "blue", label: "Blue" },
+	{ value: "cyan", label: "Cyan" },
+	{ value: "magenta", label: "Magenta" },
+	{ value: "amber", label: "Amber" },
+];
+
+function normalizedPercent(value: number) {
+	return Math.round(Math.max(0, Math.min(1, value)) * 100);
+}
+
+function OptionalHighlightValue({
+	label,
+	value,
+	onChange,
+}: {
+	label: string;
+	value: number | null;
+	onChange(value: number | null): void;
+}) {
+	return (
+		<>
+			<SelectField
+				label={`${label} contribution`}
+				ariaLabel={`${label} contribution`}
+				value={value == null ? "ignore" : "configured"}
+				options={[
+					{ value: "ignore", label: "Ignore" },
+					{ value: "configured", label: "Configured" },
+				]}
+				onChange={(mode) => onChange(mode === "ignore" ? null : 1)}
+			/>
+			{value != null && (
+				<NumberField
+					label={`${label} (%)`}
+					min={0}
+					max={100}
+					step={1}
+					unit="%"
+					value={normalizedPercent(value)}
+					onChange={(event) =>
+						onChange(
+							Math.max(0, Math.min(100, Number(event.target.value))) / 100,
+						)
+					}
+				/>
+			)}
+		</>
+	);
+}
+
+export function HighlightLookSettings({
+	controller,
+}: {
+	controller: SetupWindowController;
+}) {
+	const { draft } = controller;
+	if (!draft) return null;
+	const look = draft.highlight_look ?? DEFAULT_HIGHLIGHT_LOOK;
+	const update = (changes: Partial<HighlightLookConfiguration>) =>
+		controller.editDraft({
+			...draft,
+			highlight_look: { ...look, ...changes },
+		});
+	const compatibilityMessage =
+		look.compatibility === "legacy_raw"
+			? "LegacyRaw: this installation still has per-fixture raw Highlight overrides. Review the semantic look before choosing it."
+			: look.compatibility === "needs_review"
+				? "NeedsReview: existing raw Highlight overrides could not be translated unambiguously. Review this look before choosing it."
+				: null;
+	return (
+		<article>
+			<header>
+				<b>Highlight Look</b>
+				<small>
+					One semantic identification look for every show on this desk.
+				</small>
+			</header>
+			<FormLayout labelPlacement="side">
+				<NumberField
+					label="Intensity (%)"
+					required
+					min={0}
+					max={100}
+					step={1}
+					unit="%"
+					value={normalizedPercent(look.intensity)}
+					onChange={(event) =>
+						update({
+							intensity:
+								Math.max(0, Math.min(100, Number(event.target.value))) / 100,
+						})
+					}
+				/>
+				<SelectField
+					label="Shutter"
+					ariaLabel="Shutter"
+					value="open"
+					disabled
+					options={[{ value: "open", label: "Open where available" }]}
+					onChange={() => undefined}
+					description="Uses the fixture profile's authored Open function; raw maximum is never assumed."
+				/>
+				<SelectField
+					label="Color"
+					ariaLabel="Color"
+					value={look.color ?? "ignore"}
+					options={COLOR_OPTIONS}
+					onChange={(color) =>
+						update({
+							color: color === "ignore" ? null : (color as HighlightLookColor),
+						})
+					}
+				/>
+				<OptionalHighlightValue
+					label="Iris"
+					value={look.iris}
+					onChange={(iris) => update({ iris })}
+				/>
+				<OptionalHighlightValue
+					label="Zoom"
+					value={look.zoom}
+					onChange={(zoom) => update({ zoom })}
+				/>
+				<OptionalHighlightValue
+					label="Focus"
+					value={look.focus}
+					onChange={(focus) => update({ focus })}
+				/>
+				<OptionalHighlightValue
+					label="Frost"
+					value={look.frost}
+					onChange={(frost) => update({ frost })}
+				/>
+			</FormLayout>
+			{compatibilityMessage && (
+				<div className="modal-error" role="alert">
+					<p>{compatibilityMessage}</p>
+					<Button onClick={() => update({ compatibility: "semantic" })}>
+						Use semantic Highlight Look
+					</Button>
+				</div>
+			)}
+			{look.compatibility === "semantic" &&
+				draft.highlight_look_feedback != null &&
+				draft.highlight_look_feedback.length > 0 && (
+					<div className="modal-error" role="status">
+						<p>
+							Unsupported Highlight parts stay unchanged for these fixtures:
+						</p>
+						<ul>
+							{draft.highlight_look_feedback.map((warning) => (
+								<li key={warning}>{warning}</li>
+							))}
+						</ul>
+					</div>
+				)}
+		</article>
+	);
+}
 
 function PatchHighlightSettings({
 	controller,
@@ -152,6 +340,7 @@ export function ProgrammerSection({
 						onChange={controller.setUpdateSettings}
 					/>
 				</article>
+				<HighlightLookSettings controller={controller} />
 				<PatchHighlightSettings controller={controller} />
 				<CommandLineTimingSettings controller={controller} />
 				<h3 className="setup-subsection-title">Preload</h3>

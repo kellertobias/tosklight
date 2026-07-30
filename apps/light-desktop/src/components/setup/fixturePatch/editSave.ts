@@ -1,12 +1,10 @@
 import type { SplitPatch } from "../../../api/types";
 import { parsePatchAddress } from "../../input/ConsoleFields";
-import { maxRaw } from "../fixtureProfileModel";
 import { compatibleHighlightOverrides, isDmxPatchable } from "../patchUtils";
 import type { PatchController } from "./controller";
 import { applyEdit, completeEdit } from "./editSession";
 import { parseFixtureNumber, parseVirtualFixtureNumber } from "./fixtureIds";
 import {
-	definitionModeChannels,
 	definitionSplits,
 	reconcileModePatchChanges,
 	replaceSelectedSplitPatch,
@@ -71,7 +69,10 @@ export function saveEdit(
 			// A single-axis edit recomposes over the fixture's current siblings so it can
 			// never resubmit a stale value for an axis it did not touch.
 			[edit]: editAxis
-				? { ...(selected[edit] ?? { x: 0, y: 0, z: 0 }), [editAxis]: vector[editAxis] }
+				? {
+						...(selected[edit] ?? { x: 0, y: 0, z: 0 }),
+						[editAxis]: vector[editAxis],
+					}
 				: vector,
 		});
 	if (edit === "mode" && definition) {
@@ -94,13 +95,7 @@ async function savePolicy(
 ) {
 	const selected = controller.data.selected;
 	if (!selected) return;
-	if (
-		await controller.patch.updatePolicy(
-			selected.fixture_id,
-			action,
-			changes,
-		)
-	)
+	if (await controller.patch.updatePolicy(selected.fixture_id, action, changes))
 		completeEdit(controller);
 }
 
@@ -171,38 +166,6 @@ function saveSingleAddress(controller: PatchController, value: string) {
 	} else if (parsed) void applyEdit(controller, parsed);
 	else if (!value.trim())
 		void applyEdit(controller, { universe: null, address: null });
-}
-
-export function saveHighlightEdit(controller: PatchController) {
-	const selected = controller.data.selected;
-	if (!selected) return;
-	const channels = new Map(
-		definitionModeChannels(selected.definition).map((channel) => [
-			channel.id,
-			channel,
-		]),
-	);
-	const highlight_overrides: Record<string, number> = {};
-	for (const [channelId, text] of Object.entries(
-		controller.ui.highlightDrafts,
-	)) {
-		if (!text.trim()) continue;
-		const channel = channels.get(channelId);
-		const raw = Number(text);
-		if (
-			!channel ||
-			!Number.isInteger(raw) ||
-			raw < 0 ||
-			raw > maxRaw(channel.resolution)
-		) {
-			controller.ui.setEditError(
-				`${channel?.attribute ?? "Highlight"} must be an exact raw value from 0 to ${channel ? maxRaw(channel.resolution) : 0}.`,
-			);
-			return;
-		}
-		highlight_overrides[channelId] = raw;
-	}
-	void applyEdit(controller, { highlight_overrides });
 }
 
 export function saveSplitEdit(controller: PatchController) {

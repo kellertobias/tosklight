@@ -6,9 +6,9 @@ import {
 	Select,
 	TextInput,
 } from "@tosklight/ui";
-import { fixtureDefinitionKey, maxRaw } from "../fixtureProfileModel";
+import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { usePatchController } from "./controller";
-import { saveEdit, saveHighlightEdit, saveSplitEdit } from "./editSave";
+import { saveEdit, saveSplitEdit } from "./editSave";
 import { cancelEdit, requestFixtureEditClose } from "./editSession";
 import { FixtureAddressScreen } from "./FixtureAddressScreen";
 import {
@@ -16,55 +16,56 @@ import {
 	requestMultipatchEditClose,
 	saveMultipatchEdit,
 } from "./multipatchActions";
-import { definitionModeChannels, definitionSplits } from "./patchModel";
+import { definitionSplits } from "./patchModel";
 
 export function MultipatchVectorDialog() {
 	const controller = usePatchController();
 	const edit = controller.ui.multipatchEdit;
 	if (!edit || edit.kind === "address") return null;
-	const policy =
-		edit.kind === "invert_pan" || edit.kind === "invert_tilt";
+	const policy = edit.kind === "invert_pan" || edit.kind === "invert_tilt";
 	const close = () => requestMultipatchEditClose(controller);
 	return (
 		<ModalRegistration onClose={close}>
 			<div className="stacked-modal-layer">
-			<section className="nested-modal patch-edit-modal">
-				<ModalTitleBar
-					title={`Set multi-patch ${
-						policy
-							? edit.kind === "invert_pan"
-								? "Invert Pan"
-								: "Invert Tilt"
-							: vectorEditTitle(
-									edit.kind as "location" | "rotation",
-									edit.axis,
-								)
-					}`}
-					actions={
-						<Button
-							className="primary"
-							onClick={() => void saveMultipatchEdit(controller)}
-						>
-							Set
-						</Button>
-					}
-					closeLabel={`Cancel multi-patch ${edit.kind}`}
-					onClose={close}
-				/>
-				<EditError />
-				{policy ? (
-					<PolicySelect
-						label={edit.kind === "invert_pan" ? "Pan direction" : "Tilt direction"}
-						falseLabel="Normal"
-						trueLabel="Inverted"
+				<section className="nested-modal patch-edit-modal">
+					<ModalTitleBar
+						title={`Set multi-patch ${
+							policy
+								? edit.kind === "invert_pan"
+									? "Invert Pan"
+									: "Invert Tilt"
+								: vectorEditTitle(
+										edit.kind as "location" | "rotation",
+										edit.axis,
+									)
+						}`}
+						actions={
+							<Button
+								className="primary"
+								onClick={() => void saveMultipatchEdit(controller)}
+							>
+								Set
+							</Button>
+						}
+						closeLabel={`Cancel multi-patch ${edit.kind}`}
+						onClose={close}
 					/>
-				) : (
-					<VectorInputs
-						kind={edit.kind as "location" | "rotation"}
-						axis={edit.axis}
-					/>
-				)}
-			</section>
+					<EditError />
+					{policy ? (
+						<PolicySelect
+							label={
+								edit.kind === "invert_pan" ? "Pan direction" : "Tilt direction"
+							}
+							falseLabel="Normal"
+							trueLabel="Inverted"
+						/>
+					) : (
+						<VectorInputs
+							kind={edit.kind as "location" | "rotation"}
+							axis={edit.axis}
+						/>
+					)}
+				</section>
 			</div>
 		</ModalRegistration>
 	);
@@ -82,19 +83,19 @@ export function MultipatchAddressDialog() {
 	return (
 		<ModalRegistration onClose={close}>
 			<div className="stacked-modal-layer fixture-address-layer">
-			<FixtureAddressScreen
-				fixture={fixture}
-				instance={instance}
-				fixtures={controller.data.all}
-				initialSplit={null}
-				singleValue={controller.ui.editText}
-				splitValues={controller.ui.editSplitDrafts}
-				error={controller.ui.editError}
-				onSingleValue={controller.ui.setEditText}
-				onSplitValues={controller.ui.setEditSplitDrafts}
-				onCancel={close}
-				onConfirm={() => void saveMultipatchEdit(controller)}
-			/>
+				<FixtureAddressScreen
+					fixture={fixture}
+					instance={instance}
+					fixtures={controller.data.all}
+					initialSplit={null}
+					singleValue={controller.ui.editText}
+					splitValues={controller.ui.editSplitDrafts}
+					error={controller.ui.editError}
+					onSingleValue={controller.ui.setEditText}
+					onSplitValues={controller.ui.setEditSplitDrafts}
+					onCancel={close}
+					onConfirm={() => void saveMultipatchEdit(controller)}
+				/>
 			</div>
 		</ModalRegistration>
 	);
@@ -108,33 +109,29 @@ export function FixtureEditDialog() {
 	return (
 		<ModalRegistration onClose={close}>
 			<div className="stacked-modal-layer">
-			<section className="nested-modal patch-edit-modal">
-				<ModalTitleBar
-					title={`Set fixture ${
-						edit === "location" || edit === "rotation"
-							? vectorEditTitle(edit, controller.ui.editAxis ?? undefined)
-							: editTitle(edit)
-					}`}
-					actions={
-						edit === "name" ? undefined : (
-							<Button
-								className="primary"
-								onClick={() =>
-									edit === "highlight"
-										? saveHighlightEdit(controller)
-										: saveEdit(controller)
-								}
-							>
-								Set
-							</Button>
-						)
-					}
-					closeLabel={`Cancel fixture ${edit}`}
-					onClose={close}
-				/>
-				<EditError />
-				<FixtureEditFields />
-			</section>
+				<section className="nested-modal patch-edit-modal">
+					<ModalTitleBar
+						title={`Set fixture ${
+							edit === "location" || edit === "rotation"
+								? vectorEditTitle(edit, controller.ui.editAxis ?? undefined)
+								: editTitle(edit)
+						}`}
+						actions={
+							edit === "name" ? undefined : (
+								<Button
+									className="primary"
+									onClick={() => saveEdit(controller)}
+								>
+									Set
+								</Button>
+							)
+						}
+						closeLabel={`Cancel fixture ${edit}`}
+						onClose={close}
+					/>
+					<EditError />
+					<FixtureEditFields />
+				</section>
 			</div>
 		</ModalRegistration>
 	);
@@ -186,11 +183,7 @@ function FixtureEditFields() {
 		return (
 			<>
 				<PolicySelect
-					label={
-						edit === "group_masters"
-							? "Group Masters"
-							: "Grand Master"
-					}
+					label={edit === "group_masters" ? "Group Masters" : "Grand Master"}
 					falseLabel="Ignored"
 					trueLabel="Controlled"
 				/>
@@ -212,9 +205,10 @@ function FixtureEditFields() {
 				trueLabel="Inverted"
 			/>
 		);
-	if (edit === "highlight") return <HighlightFields />;
 	if (edit === "location" || edit === "rotation")
-		return <VectorInputs kind={edit} axis={controller.ui.editAxis ?? undefined} />;
+		return (
+			<VectorInputs kind={edit} axis={controller.ui.editAxis ?? undefined} />
+		);
 	if (edit === "mode") return <ModeField />;
 	return null;
 }
@@ -243,35 +237,6 @@ function PolicySelect({
 				<option value="false">{falseLabel}</option>
 			</Select>
 		</label>
-	);
-}
-
-function HighlightFields() {
-	const controller = usePatchController();
-	const selected = controller.data.selected;
-	if (!selected) return null;
-	return (
-		<div className="fixture-highlight-look">
-			<p>
-				Blank values inherit the profile Highlight raw value. Overrides belong
-				to this fixture and remain unchanged when its address changes.
-			</p>
-			{definitionModeChannels(selected.definition).map((channel) => (
-				<NumberField
-					key={channel.id}
-					label={`${channel.attribute} highlight raw (profile ${channel.highlight_raw})`}
-					min={0}
-					max={maxRaw(channel.resolution)}
-					value={controller.ui.highlightDrafts[channel.id] ?? ""}
-					onChange={(event) =>
-						controller.ui.setHighlightDrafts((current) => ({
-							...current,
-							[channel.id]: event.target.value,
-						}))
-					}
-				/>
-			))}
-		</div>
 	);
 }
 
@@ -354,22 +319,22 @@ export function FixtureAddressDialog() {
 	return (
 		<ModalRegistration onClose={close}>
 			<div className="stacked-modal-layer fixture-address-layer">
-			<FixtureAddressScreen
-				fixture={selected}
-				fixtures={controller.data.all}
-				initialSplit={controller.ui.editingSplit}
-				singleValue={controller.ui.editText}
-				splitValues={controller.ui.editSplitDrafts}
-				error={controller.ui.editError}
-				onSingleValue={controller.ui.setEditText}
-				onSplitValues={controller.ui.setEditSplitDrafts}
-				onCancel={close}
-				onConfirm={() =>
-					definitionSplits(selected.definition).length > 1
-						? saveSplitEdit(controller)
-						: saveEdit(controller)
-				}
-			/>
+				<FixtureAddressScreen
+					fixture={selected}
+					fixtures={controller.data.all}
+					initialSplit={controller.ui.editingSplit}
+					singleValue={controller.ui.editText}
+					splitValues={controller.ui.editSplitDrafts}
+					error={controller.ui.editError}
+					onSingleValue={controller.ui.setEditText}
+					onSplitValues={controller.ui.setEditSplitDrafts}
+					onCancel={close}
+					onConfirm={() =>
+						definitionSplits(selected.definition).length > 1
+							? saveSplitEdit(controller)
+							: saveEdit(controller)
+					}
+				/>
 			</div>
 		</ModalRegistration>
 	);
@@ -389,7 +354,6 @@ function editTitle(
 ) {
 	if (edit === "mib") return "MIB";
 	if (edit === "mib_delay") return "MIB Delay";
-	if (edit === "highlight") return "Highlight Look";
 	if (edit === "group_masters") return "Group Masters";
 	if (edit === "grand_master") return "Grand Master";
 	if (edit === "invert_pan") return "Invert Pan";

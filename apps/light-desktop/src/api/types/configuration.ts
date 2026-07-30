@@ -1,3 +1,27 @@
+export type HighlightLookColor =
+	| "white"
+	| "red"
+	| "green"
+	| "blue"
+	| "cyan"
+	| "magenta"
+	| "amber";
+
+export type HighlightLookCompatibility =
+	| "semantic"
+	| "legacy_raw"
+	| "needs_review";
+
+export interface HighlightLookConfiguration {
+	intensity: number;
+	color: HighlightLookColor | null;
+	iris: number | null;
+	zoom: number | null;
+	focus: number | null;
+	frost: number | null;
+	compatibility: HighlightLookCompatibility;
+}
+
 export interface DeskConfiguration {
 	frame_rate_hz: number;
 	output_bind_ip: string;
@@ -22,6 +46,8 @@ export interface DeskConfiguration {
 	preload_physical_playback_actions: boolean;
 	preload_virtual_playback_actions: boolean;
 	patch_preview_highlight_dmx?: boolean;
+	highlight_look?: HighlightLookConfiguration;
+	highlight_look_feedback?: string[];
 	matter_enabled?: boolean;
 	pool_presentation?: PoolPresentationConfiguration;
 	update_settings_by_desk?: Record<string, unknown>;

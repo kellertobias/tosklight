@@ -8,8 +8,8 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import type { PatchedFixture } from "../../../api/types";
+import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import { usePatch, usePatchView } from "../../../features/patch/PatchContext";
 import { useApp } from "../../../state/AppContext";
 import { parsePatchAddress } from "../../input/ConsoleFields";
@@ -34,7 +34,6 @@ export type EditKind =
 	| "mode"
 	| "mib"
 	| "mib_delay"
-	| "highlight"
 	| "group_masters"
 	| "grand_master"
 	| "invert_pan"
@@ -46,12 +45,7 @@ export type VectorAxis = "x" | "y" | "z";
 export type MultiPatchEdit = {
 	fixtureId: string;
 	instanceId: string;
-	kind:
-		| "address"
-		| "location"
-		| "rotation"
-		| "invert_pan"
-		| "invert_tilt";
+	kind: "address" | "location" | "rotation" | "invert_pan" | "invert_tilt";
 	axis?: VectorAxis;
 } | null;
 
@@ -111,9 +105,6 @@ function usePatchUiState() {
 	const [editAxis, setEditAxis] = useState<VectorAxis | null>(null);
 	const [pending, setPending] = useState<Partial<PatchedFixture> | null>(null);
 	const [blockedBy, setBlockedBy] = useState<PatchedFixture[]>([]);
-	const [highlightDrafts, setHighlightDrafts] = useState<
-		Record<string, string>
-	>({});
 	const [multipatchEdit, setMultipatchEdit] = useState<MultiPatchEdit>(null);
 	const [editCloseConfirm, setEditCloseConfirm] = useState<
 		"fixture" | "multipatch" | null
@@ -183,8 +174,6 @@ function usePatchUiState() {
 		setPending,
 		blockedBy,
 		setBlockedBy,
-		highlightDrafts,
-		setHighlightDrafts,
 		multipatchEdit,
 		setMultipatchEdit,
 		editCloseConfirm,

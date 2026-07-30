@@ -33,14 +33,6 @@ export function armEdit(
 		ui.setEditText(String(fixture.move_in_black_enabled ?? true));
 	else if (kind === "mib_delay")
 		ui.setEditText(String((fixture.move_in_black_delay_millis ?? 0) / 1000));
-	else if (kind === "highlight")
-		ui.setHighlightDrafts(
-			Object.fromEntries(
-				Object.entries(fixture.highlight_overrides ?? {}).map(
-					([channelId, raw]) => [channelId, String(raw)],
-				),
-			),
-		);
 	else if (kind === "group_masters")
 		ui.setEditText(String(fixture.group_masters_enabled ?? true));
 	else if (kind === "grand_master")
@@ -52,7 +44,9 @@ export function armEdit(
 	else if (kind === "location" || kind === "rotation")
 		ui.setVector(fixture[kind] ?? { x: 0, y: 0, z: 0 });
 	else if (kind === "mode") selectFixtureFamily(controller, fixture);
-	ui.setEditAxis(kind === "location" || kind === "rotation" ? (axis ?? null) : null);
+	ui.setEditAxis(
+		kind === "location" || kind === "rotation" ? (axis ?? null) : null,
+	);
 	ui.setEdit(kind);
 }
 
@@ -79,12 +73,7 @@ export async function finishEdit(
 ) {
 	const selected = controller.data.selected;
 	if (!selected) return false;
-	if (
-		!(await controller.patch.updateFixture(
-			selected.fixture_id,
-			changes,
-		))
-	)
+	if (!(await controller.patch.updateFixture(selected.fixture_id, changes)))
 		return false;
 	completeEdit(controller);
 	return true;
