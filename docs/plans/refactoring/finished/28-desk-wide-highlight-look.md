@@ -2,10 +2,9 @@
 
 ## Status
 
-**Doing — refactoring queue item 28.** The transport-independent Highlight application service is
-complete. This pass is auditing and implementing Desk Setup ownership, semantic fixture
-resolution, compatibility migration, UI removal, documentation, and executable acceptance
-coverage.
+**Finished — refactoring queue item 28.** Desk Setup now owns one persisted semantic Highlight
+Look, the engine resolves it through fixture-authored capabilities, legacy raw show data remains
+explicitly reviewable, and ordinary Show Patch no longer exposes per-fixture Highlight editing.
 
 ## Goal
 
@@ -76,3 +75,39 @@ Newly saved shows must not acquire raw per-fixture overrides merely because High
 8. Highlight remains transient and cannot be recorded as programmer or Cue data.
 9. Desk settings apply consistently across shows but do not modify portable show content.
 10. Existing raw override maps are preserved and migrated or rejected explicitly rather than silently lost.
+
+## Result
+
+- Added one typed, server-owned `HighlightLook` with required Intensity, authored Shutter Open,
+  named abstract Color, and independently optional Iris, Zoom, Focus, and Frost values. Fresh
+  installations use semantic mode; installations whose persisted configuration predates the field
+  enter an explicit Needs Review state.
+- The engine applies the look only as the transient Highlight contribution. It resolves authored
+  Shutter Open functions, calibrated additive/subtractive color systems, and authored or measured
+  discrete color-wheel slots while leaving unsupported and unlisted attributes unchanged.
+- Preserved legacy raw fixture maps and portable show content. Opening a show containing legacy
+  overrides reports the affected fixtures and revisions and requires an explicit semantic
+  compatibility decision; it does not rewrite the show.
+- Moved operator configuration to **Show > Desk Setup > Programmer**, including visible
+  compatibility feedback, and removed raw Highlight editing from ordinary Show Patch. Fixture
+  profile raw authoring remains available as the compatibility and validation seam.
+- Updated operator help and generated TypeScript wire contracts.
+
+Verification:
+
+- `cargo fmt --all -- --check`
+- `git diff --check`
+- focused fixture, engine, headless compatibility/configuration, generated-contract, and frontend
+  tests passed (including 8 engine Highlight tests, 17 headless Highlight tests, 4 compatibility
+  scanner tests, and 37 focused frontend tests)
+- frontend typecheck and focused Biome checks passed
+- `npm run test:e2e-api` passed: 26 tests
+- focused Playwright acceptance passed: 10 tests across Highlight fixture profiles and semantic
+  system integrations
+- `npm run test:unit` reached one unrelated existing semantic-documentation discovery assertion;
+  all Plan 28 focused unit suites passed
+- `npm run test:desktop-smoke` is not defined by the current repository scripts
+- authoritative `npm run open` built and launched both Tauri applications; live readiness returned
+  ready in 4.951 ms, the current startup log reached engine snapshot ready without errors, and the
+  authenticated `/api/v2/configuration` response exposed the complete Highlight Look,
+  Needs Review compatibility state, and fixture feedback
