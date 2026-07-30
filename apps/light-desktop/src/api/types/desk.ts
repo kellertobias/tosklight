@@ -170,6 +170,20 @@ export interface AttributeDescriptor {
 	domain_max?: number | null;
 	cyclic?: boolean;
 	recordable?: boolean;
+	encoder_group?:
+		| "intensity"
+		| "color"
+		| "position"
+		| "beam"
+		| "shapers"
+		| "focus"
+		| "control"
+		| "media";
+	encoder_page?: number;
+	encoder_slot?: number;
+	built_in?: boolean;
+	retired?: boolean;
+	activation_group_id?: string | null;
 }
 
 export interface SessionResponse {

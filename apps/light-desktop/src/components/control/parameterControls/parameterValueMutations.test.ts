@@ -27,7 +27,11 @@ function projection(
 		normalizedByFixture: new Map(),
 		discrete: new Map(),
 		discreteByFixture: new Map(),
+		encoderGroups: [],
+		encoderPage: 1,
+		encoderPageCount: 1,
 		encoderSlots: Array.from({ length: 6 }, () => "intensity"),
+		attributeLabels: new Map(),
 		hardwareConnected: false,
 		...overrides,
 	};
@@ -81,7 +85,12 @@ describe("parameter value mutation builders", () => {
 			setParameterRangeMutations(
 				projection({
 					programmerValuesRoute: "preload",
-					selectedFixtureIds: ["fixture-4", "fixture-3", "fixture-2", "fixture-1"],
+					selectedFixtureIds: [
+						"fixture-4",
+						"fixture-3",
+						"fixture-2",
+						"fixture-1",
+					],
 				}),
 				"pan",
 				[0, 100, 0],

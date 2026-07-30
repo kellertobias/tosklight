@@ -126,6 +126,12 @@ pub struct RuntimeAttributeDescriptor {
     pub domain_max: Option<f32>,
     pub cyclic: bool,
     pub recordable: bool,
+    pub encoder_group: super::attribute_configuration::AttributeEncoderGroup,
+    pub encoder_page: u16,
+    pub encoder_slot: u8,
+    pub built_in: bool,
+    pub retired: bool,
+    pub activation_group_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

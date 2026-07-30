@@ -105,28 +105,37 @@ export function ParameterFamilyTabs({
 	const editor = useDynamicEditorSession();
 	if (editor.session) return <DynamicEditorTaskTabs />;
 	return (
-		<div className="family-tabs">
-			{(Object.keys(parameterFamilies) as ParameterFamily[]).map((name) => (
-				<Button
-					key={name}
-					aria-label={name}
-					className={`attribute-family ${controller.family === name ? "active" : ""}`}
-					onClick={() => controller.setFamily(name)}
-				>
-					<FamilyLabel full={name} compact={compactFamilyLabels[name]} />
-				</Button>
-			))}
-			<span className="family-spacer" />
-			<AlignmentControl controller={controller} />
-			<SpecialDialogButton controller={controller} />
-			<Button
-				aria-label="Dynamics"
-				className={`dynamics-family ${controller.dynamicsMode ? "active" : ""}`}
-				onClick={() => controller.setDynamicsMode(!controller.dynamicsMode)}
-			>
-				<FamilyLabel full="Dynamics" compact="Dyn" />
-			</Button>
-		</div>
+		<EncoderGroupTabs
+			className="family-tabs"
+			groups={(Object.keys(parameterFamilies) as ParameterFamily[]).map(
+				(name) => ({
+					id: name,
+					label: name,
+					compactLabel: compactFamilyLabels[name],
+					pageCount:
+						controller.encoderGroups.find(
+							(group) => group.id === name.toLowerCase(),
+						)?.pages.length ?? 1,
+				}),
+			)}
+			activeGroup={controller.family}
+			page={controller.encoderPage}
+			pageFormat="of"
+			onChange={controller.selectEncoderGroup}
+			trailing={
+				<>
+					<AlignmentControl controller={controller} />
+					<SpecialDialogButton controller={controller} />
+					<Button
+						aria-label="Dynamics"
+						className={`dynamics-family ${controller.dynamicsMode ? "active" : ""}`}
+						onClick={() => controller.setDynamicsMode(!controller.dynamicsMode)}
+					>
+						<FamilyLabel full="Dynamics" compact="Dyn" />
+					</Button>
+				</>
+			}
+		/>
 	);
 }
 

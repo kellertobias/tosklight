@@ -15,15 +15,21 @@ async fn bootstrap_does_not_relock_the_desk_store() {
     assert_eq!(response.status(), StatusCode::OK);
     let body = json(response).await;
     let attributes = body["attribute_registry"].as_array().unwrap();
-    assert_eq!(attributes.len(), ATTRIBUTE_REGISTRY.len());
+    assert_eq!(attributes.len(), light_core::ATTRIBUTE_REGISTRY.len());
     let zoom = attributes
         .iter()
         .find(|attribute| attribute["id"] == "zoom")
         .expect("canonical Zoom attribute");
     assert_eq!(zoom["label"], "Zoom");
-    assert_eq!(zoom["family"], "beam");
+    assert_eq!(zoom["family"], "focus");
     assert_eq!(zoom["value_type"], "continuous");
     assert_eq!(zoom["default_unit"], "deg");
+    assert_eq!(zoom["encoder_group"], "focus");
+    assert_eq!(zoom["encoder_page"], 1);
+    assert_eq!(zoom["encoder_slot"], 2);
+    assert_eq!(zoom["built_in"], true);
+    assert_eq!(zoom["retired"], false);
+    assert_eq!(zoom["activation_group_id"], "zoom");
     assert!(
         !attributes
             .iter()

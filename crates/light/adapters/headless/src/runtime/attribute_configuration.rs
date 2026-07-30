@@ -289,7 +289,7 @@ fn wire_snapshot(
     }
 }
 
-fn configured_descriptors(
+pub(super) fn configured_descriptors(
     configuration: &light_core::AttributeConfiguration,
 ) -> Vec<wire::ConfiguredAttributeDescriptor> {
     let mut descriptors = light_core::ATTRIBUTE_REGISTRY

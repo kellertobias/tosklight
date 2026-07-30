@@ -64,7 +64,7 @@ use light_control::{
     RtpMidiInput, SmpteTimecode, TimecodeRouter, TimecodeSourceConfig, UdpControlInput,
     UdpInputProtocol, encode_osc_message,
 };
-use light_core::{ATTRIBUTE_REGISTRY, ApplicationClock, ManualClock, SessionId};
+use light_core::{ApplicationClock, ManualClock, SessionId};
 use light_engine::{
     Engine, EngineError, EnginePlaybackCommand, EnginePlaybackOutcome, EngineSnapshot,
     PoolPlaybackAction, PreparedEngineSnapshot, RenderOptions,

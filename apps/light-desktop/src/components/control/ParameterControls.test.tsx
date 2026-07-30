@@ -1,8 +1,16 @@
-import { cleanup, fireEvent, render as rtlRender, screen } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render as rtlRender,
+	screen,
+} from "@testing-library/react";
 import { ModalProvider } from "@tosklight/ui/modals";
 import type { PropsWithChildren } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { VisualizationSnapshot } from "../../api/types";
+import type {
+	AttributeDescriptor,
+	VisualizationSnapshot,
+} from "../../api/types";
 import { DynamicEditorSessionProvider } from "../../features/dynamics/DynamicEditorSessionContext";
 import { selectFixturesForSelection } from "../../features/patch/selectors";
 import type {
@@ -75,6 +83,9 @@ const visualization = vi.hoisted(() => ({
 const patchFixtures = vi.hoisted(() => ({
 	current: [] as Array<Record<string, unknown>>,
 }));
+const attributeRegistry = vi.hoisted(() => ({
+	current: [] as AttributeDescriptor[],
+}));
 vi.mock("../../features/patch/PatchState", async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
 	useSelectedPatchedFixtures: (
@@ -131,6 +142,7 @@ vi.mock("../../state/AppContext", () => ({
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
 	useHardwareConnected: () => Boolean(server.bootstrap?.hardware_connected),
+	useAttributeRegistry: () => attributeRegistry.current,
 }));
 vi.mock(
 	"../../features/programmerActions/ProgrammerActionsContext",
@@ -231,6 +243,7 @@ afterEach(() => {
 	server.selectedGroupId = null;
 	server.groups = [];
 	server.patch.fixtures = [];
+	attributeRegistry.current = [];
 	server.bootstrap.hardware_connected = false;
 	programmerValues.view.ready = true;
 	programmerValues.view.fixtureValues = [];
@@ -342,14 +355,85 @@ describe("ParameterControls projection lifecycle", () => {
 					action: "set_fixture",
 					fixtureId: "fixture-1",
 					attribute: "intensity",
-						value: { kind: "normalized", value: 0.251 },
+					value: { kind: "normalized", value: 0.251 },
 					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 				},
 			],
 		});
 		expect(normalValuesActions.batch).not.toHaveBeenCalled();
 	});
+
+	it("uses show-owned encoder pages without shifting sparse slots", () => {
+		attributeRegistry.current = [
+			attributeDescriptor("color.red", "Red", 1, 1),
+			attributeDescriptor("color.wheel.1", "Color Wheel", 3, 3),
+		];
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [
+			{
+				fixture_id: "fixture-1",
+				logical_heads: [],
+				definition: {
+					heads: [
+						{
+							shared: true,
+							parameters: [
+								{ attribute: "color.red", capabilities: [] },
+								{ attribute: "color.wheel.1", capabilities: [] },
+							],
+						},
+					],
+				},
+			},
+		];
+
+		render(<ParameterControls />);
+		fireEvent.click(screen.getByRole("button", { name: "Color 1 of 2" }));
+
+		expect(
+			screen.getByRole("group", { name: "Enc 1 · Red" }),
+		).toBeInTheDocument();
+		expect(
+			screen.getAllByRole("img", { name: /Encoder \d unassigned/ }),
+		).toHaveLength(5);
+
+		fireEvent.click(screen.getByRole("button", { name: "Color 1 of 2" }));
+
+		expect(screen.getByRole("button", { name: "Color 2 of 2" })).toHaveClass(
+			"is-active",
+		);
+		expect(
+			screen.getByRole("group", { name: "Enc 3 · Color Wheel" }),
+		).toBeInTheDocument();
+		expect(
+			screen.getAllByRole("img", { name: /Encoder \d unassigned/ }),
+		).toHaveLength(5);
+		expect(
+			screen.queryByRole("group", { name: "Enc 1 · Color Wheel" }),
+		).not.toBeInTheDocument();
+	});
 });
+
+function attributeDescriptor(
+	id: string,
+	label: string,
+	encoderPage: number,
+	encoderSlot: number,
+): AttributeDescriptor {
+	return {
+		id,
+		label,
+		family: "color",
+		value_type: "continuous",
+		default_unit: null,
+		encoder_group: "color",
+		encoder_page: encoderPage,
+		encoder_slot: encoderSlot,
+		built_in: true,
+		retired: false,
+		activation_group_id: null,
+	};
+}
 
 function schemaV2Fixture() {
 	return {
@@ -583,17 +667,21 @@ describe("ParameterControls hardware encoders", () => {
 		]) {
 			navigate("down");
 			expect(screen.getByRole("button", { name: family })).toHaveClass(
-				"active",
+				"is-active",
 			);
 		}
 		navigate("up");
-		expect(screen.getByRole("button", { name: "Media" })).toHaveClass("active");
+		expect(screen.getByRole("button", { name: "Media" })).toHaveClass(
+			"is-active",
+		);
 		navigate("left");
 		expect(screen.getByRole("button", { name: "Control" })).toHaveClass(
-			"active",
+			"is-active",
 		);
 		navigate("right");
-		expect(screen.getByRole("button", { name: "Media" })).toHaveClass("active");
+		expect(screen.getByRole("button", { name: "Media" })).toHaveClass(
+			"is-active",
+		);
 	});
 
 	it("uses encoder press as the same cell action and coarse-turns a non-first slot", async () => {
@@ -651,25 +739,31 @@ describe("ParameterControls hardware encoders", () => {
 	it("releases an owned value on exact DELETE plus hardware encoder press and resets DELETE", async () => {
 		server.bootstrap.hardware_connected = true;
 		server.selectedFixtures = ["fixture-1"];
-		server.patch.fixtures = [{
-			fixture_id: "fixture-1",
-			logical_heads: [],
-			definition: {
-				heads: [{
-					shared: true,
-					parameters: [{ attribute: "intensity", capabilities: [] }],
-				}],
+		server.patch.fixtures = [
+			{
+				fixture_id: "fixture-1",
+				logical_heads: [],
+				definition: {
+					heads: [
+						{
+							shared: true,
+							parameters: [{ attribute: "intensity", capabilities: [] }],
+						},
+					],
+				},
 			},
-		}];
-		programmerValues.view.fixtureValues = [{
-			fixtureId: "fixture-1",
-			attribute: "intensity",
-			value: { kind: "normalized", value: 0.5 },
-			programmerOrder: 1,
-			fade: false,
-			fadeMillis: null,
-			delayMillis: null,
-		}];
+		];
+		programmerValues.view.fixtureValues = [
+			{
+				fixtureId: "fixture-1",
+				attribute: "intensity",
+				value: { kind: "normalized", value: 0.5 },
+				programmerOrder: 1,
+				fade: false,
+				fadeMillis: null,
+				delayMillis: null,
+			},
+		];
 		commandLine.text = "DELETE";
 		render(<ParameterControls />);
 
@@ -683,11 +777,13 @@ describe("ParameterControls hardware encoders", () => {
 		await vi.waitFor(() => expect(commandLine.reset).toHaveBeenCalledOnce());
 		expect(normalValuesActions.batch).toHaveBeenCalledWith({
 			requestId: expect.any(String),
-			mutations: [{
-				action: "release_fixture",
-				fixtureId: "fixture-1",
-				attribute: "intensity",
-			}],
+			mutations: [
+				{
+					action: "release_fixture",
+					fixtureId: "fixture-1",
+					attribute: "intensity",
+				},
+			],
 		});
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 	});
@@ -695,16 +791,20 @@ describe("ParameterControls hardware encoders", () => {
 	it("does not release, create zero, reset DELETE, or open Set Value without scoped ownership", () => {
 		server.bootstrap.hardware_connected = true;
 		server.selectedFixtures = ["fixture-1"];
-		server.patch.fixtures = [{
-			fixture_id: "fixture-1",
-			logical_heads: [],
-			definition: {
-				heads: [{
-					shared: true,
-					parameters: [{ attribute: "intensity", capabilities: [] }],
-				}],
+		server.patch.fixtures = [
+			{
+				fixture_id: "fixture-1",
+				logical_heads: [],
+				definition: {
+					heads: [
+						{
+							shared: true,
+							parameters: [{ attribute: "intensity", capabilities: [] }],
+						},
+					],
+				},
 			},
-		}];
+		];
 		commandLine.text = "DELETE";
 		render(<ParameterControls />);
 

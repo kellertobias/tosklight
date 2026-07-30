@@ -1,15 +1,22 @@
 import { useMemo } from "react";
-import { useHardwareConnected } from "../../../features/deskSnapshot/DeskSnapshotState";
-import { useProgrammerActions } from "../../../features/programmerActions/ProgrammerActionsContext";
 import type { VisualizationSnapshot } from "../../../api/types";
+import { useProgrammerFadeMillis } from "../../../features/configuration/ConfigurationState";
+import {
+	useAttributeRegistry,
+	useHardwareConnected,
+} from "../../../features/deskSnapshot/DeskSnapshotState";
+import { useSelectedPatchedFixtures } from "../../../features/patch/PatchState";
+import { useProgrammerActions } from "../../../features/programmerActions/ProgrammerActionsContext";
 import { capturesProgrammerWrites } from "../../../features/programmerCaptureMode/contracts";
 import { useProgrammerCaptureModeView } from "../../../features/programmerCaptureMode/ProgrammerCaptureModeView";
-import { useProgrammerFadeMillis } from "../../../features/configuration/ConfigurationState";
-import { useSelectedPatchedFixtures } from "../../../features/patch/PatchState";
 import { selectedGroupId } from "../../../features/programmingInteraction/contracts";
 import { useProgrammingSelectionView } from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import { useVisualizationRuntimeSnapshot } from "../../../features/visualizationRuntime/VisualizationRuntimeView";
 import { useApp } from "../../../state/AppContext";
+import {
+	type AttributeEncoderPlacement,
+	attributeEncoderGroups,
+} from "./attributeEncoderPages";
 import { type ParameterFamily, parameterFamilies } from "./model";
 import { useParameterPreloadValues } from "./useParameterPreloadValues";
 import { useParameterProgrammerValues } from "./useParameterProgrammerValues";
@@ -81,7 +88,44 @@ function useResolvedValues(
 	}, [visualization, selectedFixtureIds]);
 }
 
-export function useParameterProjection(family: ParameterFamily, active = true) {
+const FAMILY_GROUPS: Record<
+	ParameterFamily,
+	AttributeEncoderPlacement["encoder_group"]
+> = {
+	Intensity: "intensity",
+	Color: "color",
+	Position: "position",
+	Beam: "beam",
+	Shapers: "shapers",
+	Focus: "focus",
+	Control: "control",
+	Media: "media",
+};
+
+function placedRegistry(
+	registry: ReturnType<typeof useAttributeRegistry>,
+): AttributeEncoderPlacement[] {
+	return (registry ?? []).flatMap((descriptor) =>
+		descriptor.encoder_group &&
+		descriptor.encoder_page != null &&
+		descriptor.encoder_slot != null
+			? [
+					{
+						...descriptor,
+						encoder_group: descriptor.encoder_group,
+						encoder_page: descriptor.encoder_page,
+						encoder_slot: descriptor.encoder_slot,
+					},
+				]
+			: [],
+	);
+}
+
+export function useParameterProjection(
+	family: ParameterFamily,
+	page = 1,
+	active = true,
+) {
 	const programmerActions = useProgrammerActions();
 	const hardwareAttached = useHardwareConnected();
 	const { state } = useApp();
@@ -112,9 +156,31 @@ export function useParameterProjection(family: ParameterFamily, active = true) {
 		active,
 	);
 	const programmerFadeMillis = useProgrammerFadeMillis();
+	const registry = useAttributeRegistry();
 	const values = useResolvedValues(visualization, selectedFixtureIds);
-	const attributes = parameterFamilies[family].filter((attribute) =>
+	const encoderGroups = useMemo(
+		() => attributeEncoderGroups(placedRegistry(registry), supported),
+		[registry, supported],
+	);
+	const configuredGroup = encoderGroups.find(
+		(group) => group.id === FAMILY_GROUPS[family],
+	);
+	const configuredPage = configuredGroup?.pages[page - 1];
+	const fallbackAttributes = parameterFamilies[family].filter((attribute) =>
 		supported.has(attribute),
+	);
+	const hasConfiguredRegistry = encoderGroups.some(
+		(group) => group.pages.length > 0,
+	);
+	const encoderSlots = hasConfiguredRegistry
+		? (configuredPage?.slots.map((descriptor) => descriptor?.id ?? null) ??
+			Array.from<null>({ length: 6 }).fill(null))
+		: Array.from(
+				{ length: 6 },
+				(_, index) => fallbackAttributes[index] ?? null,
+			);
+	const attributeLabels = new Map(
+		(registry ?? []).map((descriptor) => [descriptor.id, descriptor.label]),
 	);
 	return {
 		programmerActions,
@@ -134,10 +200,11 @@ export function useParameterProjection(family: ParameterFamily, active = true) {
 		groupProgrammerValues:
 			programmerValuesView?.groupValues ?? EMPTY_PROGRAMMER_VALUES,
 		...values,
-		encoderSlots: Array.from(
-			{ length: 6 },
-			(_, index) => attributes[index] ?? null,
-		),
+		encoderGroups,
+		encoderPage: page,
+		encoderPageCount: Math.max(1, configuredGroup?.pages.length ?? 0),
+		encoderSlots,
+		attributeLabels,
 		hardwareConnected: Boolean(hardwareAttached || state.midiProfile),
 	};
 }

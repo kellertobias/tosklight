@@ -1,13 +1,13 @@
-import { HardwareEncoderDisplay } from "../HardwareEncoderDisplay";
 import { TouchEncoder } from "@tosklight/ui/encoders";
+import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
 import {
 	useProgrammingCommandLineActions,
 	useProgrammingDeleteCommandActive,
 } from "../../../features/programmingInteraction/ProgrammingInteractionView";
+import { HardwareEncoderDisplay } from "../HardwareEncoderDisplay";
 import { formatNormalizedValue, parameterLabels } from "./model";
-import type { ParameterController } from "./useParameterController";
 import { ProgrammerDynamicsSurface } from "./ProgrammerDynamicsSurface";
-import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
+import type { ParameterController } from "./useParameterController";
 
 function attributeColor(attribute: string) {
 	return (
@@ -72,7 +72,10 @@ function EncoderSurface({
 		controller.encoderNormalizedDisplay(attribute) ??
 		formatNormalizedValue(value);
 	const hasScopedValue = controller.hasProgrammerValue(attribute);
-	const label = parameterLabels[attribute] ?? attribute.replaceAll(".", " ");
+	const label =
+		controller.attributeLabels.get(attribute) ??
+		parameterLabels[attribute] ??
+		attribute.replaceAll(".", " ");
 	if (controller.hardwareConnected)
 		return (
 			<HardwareEncoderDisplay

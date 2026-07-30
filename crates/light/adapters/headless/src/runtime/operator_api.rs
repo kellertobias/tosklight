@@ -200,10 +200,12 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
         .collect();
     wire::RuntimeBootstrapSnapshot {
         api_version: "v2".into(),
-        attribute_registry: ATTRIBUTE_REGISTRY
-            .iter()
-            .map(runtime_wire::attribute)
-            .collect(),
+        attribute_registry: attribute_configuration::configured_descriptors(
+            &state.attributes.snapshot().configuration,
+        )
+        .into_iter()
+        .map(runtime_wire::attribute)
+        .collect(),
         users: users.into_iter().map(runtime_wire::user).collect(),
         desks: desks.into_iter().map(runtime_wire::desk).collect(),
         clients,

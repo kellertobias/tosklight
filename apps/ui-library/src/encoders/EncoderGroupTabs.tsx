@@ -15,6 +15,7 @@ export interface EncoderGroupTabsProps<T extends string = string> {
 	onChange(group: T, page: number): void;
 	trailing?: ReactNode;
 	className?: string;
+	pageFormat?: "fraction" | "of";
 }
 
 /**
@@ -28,6 +29,7 @@ export function EncoderGroupTabs<T extends string>({
 	onChange,
 	trailing,
 	className = "",
+	pageFormat = "fraction",
 }: EncoderGroupTabsProps<T>) {
 	return (
 		<div
@@ -39,9 +41,15 @@ export function EncoderGroupTabs<T extends string>({
 				const pageCount = Math.max(1, group.pageCount ?? 1);
 				const active = group.id === activeGroup;
 				const visiblePage = active ? Math.min(Math.max(page, 1), pageCount) : 1;
+				const pageLabel =
+					pageFormat === "of"
+						? `${visiblePage} of ${pageCount}`
+						: `${visiblePage}/${pageCount}`;
 				const fullLabel =
 					pageCount > 1
-						? `${group.label} (${visiblePage}/${pageCount})`
+						? pageFormat === "of"
+							? `${group.label} ${pageLabel}`
+							: `${group.label} (${pageLabel})`
 						: group.label;
 				const compactBase = group.compactLabel ?? group.label;
 				return (
@@ -60,17 +68,13 @@ export function EncoderGroupTabs<T extends string>({
 						<span className="family-label-full" aria-hidden="true">
 							{group.label}
 							{pageCount > 1 && (
-								<small className="encoder-group-page">
-									{visiblePage}/{pageCount}
-								</small>
+								<small className="encoder-group-page">{pageLabel}</small>
 							)}
 						</span>
 						<span className="family-label-compact" aria-hidden="true">
 							{compactBase}
 							{pageCount > 1 && (
-								<small className="encoder-group-page">
-									{visiblePage}/{pageCount}
-								</small>
+								<small className="encoder-group-page">{pageLabel}</small>
 							)}
 						</span>
 					</Button>

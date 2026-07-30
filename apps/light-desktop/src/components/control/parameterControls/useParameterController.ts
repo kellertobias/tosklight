@@ -1,4 +1,4 @@
-import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "../../../state/AppContext";
 import {
 	type AlignMode,
@@ -40,7 +40,8 @@ function createParameterActions(
 
 function useHardwareParameterNavigation(
 	active: boolean,
-	setFamily: Dispatch<SetStateAction<ParameterFamily>>,
+	family: ParameterFamily,
+	onFamily: (family: ParameterFamily) => void,
 ) {
 	useEffect(() => {
 		if (!active) return;
@@ -56,39 +57,48 @@ function useHardwareParameterNavigation(
 						? 1
 						: 0;
 			if (!direction) return;
-			setFamily((current) => {
-				const currentIndex = parameterFamilyOrder.indexOf(current);
-				const nextIndex =
-					(currentIndex + direction + parameterFamilyOrder.length) %
-					parameterFamilyOrder.length;
-				return parameterFamilyOrder[nextIndex];
-			});
+			const currentIndex = parameterFamilyOrder.indexOf(family);
+			const nextIndex =
+				(currentIndex + direction + parameterFamilyOrder.length) %
+				parameterFamilyOrder.length;
+			onFamily(parameterFamilyOrder[nextIndex]);
 		};
 		window.addEventListener("light:encoder-action", handleNavigation);
 		return () =>
 			window.removeEventListener("light:encoder-action", handleNavigation);
-	}, [active, setFamily]);
+	}, [active, family, onFamily]);
 }
 
 export function useParameterController(active = true) {
 	const { dispatch } = useApp();
 	const [family, setFamily] = useState<ParameterFamily>("Intensity");
+	const [encoderPage, setEncoderPage] = useState(1);
 	const [alignMode, setAlignMode] = useState<AlignMode | null>(null);
 	const [dynamicsMode, setDynamicsMode] = useState(false);
-	const projection = useParameterProjection(family, active);
+	const projection = useParameterProjection(family, encoderPage, active);
 	const valueActions = useParameterValueActions(projection);
 	const actions = createParameterActions(projection, valueActions);
 	useHardwareParameterEncoders(projection, actions);
 	useHardwareParameterNavigation(
 		projection.active && projection.hardwareConnected,
-		setFamily,
+		family,
+		(next) => {
+			setFamily(next);
+			setEncoderPage(1);
+		},
 	);
+	const selectEncoderGroup = (next: ParameterFamily, page: number) => {
+		setFamily(next);
+		setEncoderPage(page);
+	};
 	return {
 		...projection,
 		...actions,
 		dispatch,
 		family,
 		setFamily,
+		encoderPage,
+		selectEncoderGroup,
 		alignMode,
 		setAlignMode,
 		dynamicsMode,
