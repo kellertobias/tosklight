@@ -5,9 +5,12 @@ mod attributes;
 mod clock;
 
 pub use attributes::{
-    ATTRIBUTE_REGISTRY, AttributeBounds, AttributeClass, AttributeDescriptor, AttributeKey,
-    AttributeValue, AttributeValueType, MergeMode, PickerColor, ResolvedAttributeDescriptor,
-    TimedValue, Xyz, attribute_descriptor, color_range_color, hsv_to_rgb, spread_position,
+    ATTRIBUTE_CONFIGURATION_VERSION, ATTRIBUTE_REGISTRY, AttributeActivationGroup, AttributeBounds,
+    AttributeClass, AttributeConfiguration, AttributeConfigurationError, AttributeDescriptor,
+    AttributeKey, AttributePlacement, AttributeValue, AttributeValueType,
+    CustomAttributeDescriptor, CustomAttributeLifecycle, ENCODER_SLOTS_PER_PAGE, EncoderGroup,
+    EncoderPlacement, MergeMode, PickerColor, ResolvedAttributeDescriptor, TimedValue, Xyz,
+    attribute_descriptor, color_range_color, hsv_to_rgb, spread_position,
 };
 pub use clock::{ApplicationClock, EngineClock, ManualClock, SharedClock, SystemClock};
 

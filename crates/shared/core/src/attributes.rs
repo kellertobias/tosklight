@@ -1,6 +1,9 @@
 use crate::FixtureId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -41,7 +44,7 @@ pub struct AttributeDescriptor {
     pub recordable: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AttributeBounds {
     pub min: f32,
     pub max: f32,
@@ -77,6 +80,482 @@ pub enum AttributeValueType {
     Color,
     Indexed,
     Control,
+}
+
+pub const ATTRIBUTE_CONFIGURATION_VERSION: u16 = 1;
+pub const ENCODER_SLOTS_PER_PAGE: u8 = 6;
+
+/// The eight fixed programmer tabs. Pages add capacity without changing this hardware-facing
+/// vocabulary.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EncoderGroup {
+    Intensity,
+    Color,
+    Position,
+    Beam,
+    Shapers,
+    Focus,
+    Control,
+    Media,
+}
+
+/// Stable, one-based encoder location within one of the fixed programmer tabs.
+///
+/// Deserialization deliberately remains lossless. Call [`AttributeConfiguration::validate`]
+/// before using persisted data so a future migration can inspect an invalid legacy location
+/// instead of Serde discarding it.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct EncoderPlacement {
+    pub group: EncoderGroup,
+    pub page: u16,
+    pub slot: u8,
+}
+
+impl EncoderPlacement {
+    pub const fn new(group: EncoderGroup, page: u16, slot: u8) -> Self {
+        Self { group, page, slot }
+    }
+
+    pub const fn is_valid(self) -> bool {
+        self.page > 0 && self.slot > 0 && self.slot <= ENCODER_SLOTS_PER_PAGE
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AttributePlacement {
+    pub attribute: AttributeKey,
+    pub encoder: EncoderPlacement,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CustomAttributeLifecycle {
+    #[default]
+    Active,
+    Retired,
+}
+
+/// Show-owned metadata for an operator-authored canonical attribute.
+///
+/// The stable ID is intentionally independent of the editable label. A retired descriptor
+/// remains resolvable in old Programmer, Preset, Cue, and fixture-profile data.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CustomAttributeDescriptor {
+    pub id: AttributeKey,
+    pub label: String,
+    pub value_type: AttributeValueType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_unit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub physical_unit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normalized_bounds: Option<AttributeBounds>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub domain_bounds: Option<AttributeBounds>,
+    #[serde(default)]
+    pub cyclic: bool,
+    pub recordable: bool,
+    #[serde(default)]
+    pub lifecycle: CustomAttributeLifecycle,
+}
+
+impl CustomAttributeDescriptor {
+    /// Generates a collision-resistant stable ID for a newly authored custom descriptor.
+    pub fn generated_id() -> AttributeKey {
+        AttributeKey(format!("custom.{}", Uuid::new_v4()))
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AttributeActivationGroup {
+    /// Stable show-local identity; the label may be edited without changing references.
+    pub id: String,
+    pub label: String,
+    pub members: Vec<AttributeKey>,
+}
+
+/// Versioned, portable show configuration. Descriptor metadata, presentation, and record
+/// activation are separate collections so labels can evolve without rewriting value identities.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AttributeConfiguration {
+    pub version: u16,
+    #[serde(default)]
+    pub custom_attributes: Vec<CustomAttributeDescriptor>,
+    #[serde(default)]
+    pub placements: Vec<AttributePlacement>,
+    #[serde(default)]
+    pub activation_groups: Vec<AttributeActivationGroup>,
+}
+
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+pub enum AttributeConfigurationError {
+    #[error("unsupported attribute configuration version {actual}; expected {expected}")]
+    UnsupportedVersion { actual: u16, expected: u16 },
+    #[error("custom attribute ID `{0}` must be a bounded lowercase namespaced ID")]
+    InvalidCustomId(String),
+    #[error("custom attribute `{0}` shadows a built-in attribute")]
+    BuiltInShadow(String),
+    #[error("duplicate custom attribute ID `{0}`")]
+    DuplicateCustomAttribute(String),
+    #[error("custom attribute `{0}` requires a non-empty label")]
+    EmptyCustomLabel(String),
+    #[error("custom attribute `{0}` has invalid scalar bounds")]
+    InvalidCustomBounds(String),
+    #[error("control attribute `{0}` cannot be recordable")]
+    RecordableControl(String),
+    #[error("attribute `{0}` has no encoder placement")]
+    MissingPlacement(String),
+    #[error("attribute `{0}` has more than one encoder placement")]
+    DuplicatePlacement(String),
+    #[error("attribute `{0}` has an invalid encoder page or slot")]
+    InvalidPlacement(String),
+    #[error("encoder position {group:?} page {page} slot {slot} is assigned more than once")]
+    OccupiedPlacement {
+        group: EncoderGroup,
+        page: u16,
+        slot: u8,
+    },
+    #[error("encoder placement references unknown attribute `{0}`")]
+    UnknownPlacedAttribute(String),
+    #[error("activation group ID `{0}` is empty or duplicated")]
+    InvalidActivationGroupId(String),
+    #[error("activation group `{0}` requires a non-empty label")]
+    EmptyActivationGroupLabel(String),
+    #[error("activation group `{0}` has no members")]
+    EmptyActivationGroup(String),
+    #[error("activation group `{group}` repeats attribute `{attribute}`")]
+    DuplicateActivationMember { group: String, attribute: String },
+    #[error("activation group `{group}` references unknown attribute `{attribute}`")]
+    UnknownActivationMember { group: String, attribute: String },
+    #[error("non-recordable or control attribute `{0}` cannot be in an activation group")]
+    IneligibleActivationMember(String),
+    #[error("activation group `{group}` crosses encoder groups at attribute `{attribute}`")]
+    CrossEncoderActivationGroup { group: String, attribute: String },
+    #[error("recordable attribute `{0}` has no activation group")]
+    MissingActivationGroup(String),
+    #[error("attribute `{0}` belongs to overlapping activation groups")]
+    OverlappingActivationGroup(String),
+}
+
+impl AttributeConfiguration {
+    pub fn recommended() -> Self {
+        let placements = recommended_builtin_placements();
+        let mut linked_groups = vec![
+            recommended_activation_group(
+                "color_mix",
+                "Color Mix",
+                &[
+                    "color",
+                    "color.red",
+                    "color.green",
+                    "color.blue",
+                    "color.amber",
+                    "color.white",
+                    "color.uv",
+                ],
+            ),
+            recommended_activation_group("position", "Position", &["pan", "tilt"]),
+        ];
+        let linked_members = linked_groups
+            .iter()
+            .flat_map(|group| group.members.iter().map(|member| member.0.clone()))
+            .collect::<HashSet<_>>();
+        linked_groups.extend(
+            ATTRIBUTE_REGISTRY
+                .iter()
+                .filter(|descriptor| descriptor.recordable)
+                .filter(|descriptor| !linked_members.contains(descriptor.id))
+                .map(|descriptor| {
+                    recommended_activation_group(descriptor.id, descriptor.label, &[descriptor.id])
+                }),
+        );
+        Self {
+            version: ATTRIBUTE_CONFIGURATION_VERSION,
+            custom_attributes: Vec::new(),
+            placements,
+            activation_groups: linked_groups,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), AttributeConfigurationError> {
+        if self.version != ATTRIBUTE_CONFIGURATION_VERSION {
+            return Err(AttributeConfigurationError::UnsupportedVersion {
+                actual: self.version,
+                expected: ATTRIBUTE_CONFIGURATION_VERSION,
+            });
+        }
+        let mut descriptors = ATTRIBUTE_REGISTRY
+            .iter()
+            .map(|descriptor| {
+                (
+                    descriptor.id,
+                    (descriptor.value_type, descriptor.recordable),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        let built_in_ids = descriptors.keys().copied().collect::<HashSet<_>>();
+        for descriptor in &self.custom_attributes {
+            validate_custom_descriptor(descriptor, &built_in_ids)?;
+            if descriptors
+                .insert(
+                    descriptor.id.0.as_str(),
+                    (descriptor.value_type, descriptor.recordable),
+                )
+                .is_some()
+            {
+                return Err(AttributeConfigurationError::DuplicateCustomAttribute(
+                    descriptor.id.0.clone(),
+                ));
+            }
+        }
+
+        let mut placements = HashMap::new();
+        let mut occupied = HashSet::new();
+        for placement in &self.placements {
+            let id = placement.attribute.0.as_str();
+            if !descriptors.contains_key(id) {
+                return Err(AttributeConfigurationError::UnknownPlacedAttribute(
+                    id.to_owned(),
+                ));
+            }
+            if !placement.encoder.is_valid() {
+                return Err(AttributeConfigurationError::InvalidPlacement(id.to_owned()));
+            }
+            if placements.insert(id, placement.encoder).is_some() {
+                return Err(AttributeConfigurationError::DuplicatePlacement(
+                    id.to_owned(),
+                ));
+            }
+            if !occupied.insert(placement.encoder) {
+                return Err(AttributeConfigurationError::OccupiedPlacement {
+                    group: placement.encoder.group,
+                    page: placement.encoder.page,
+                    slot: placement.encoder.slot,
+                });
+            }
+        }
+        for id in descriptors.keys() {
+            if !placements.contains_key(id) {
+                return Err(AttributeConfigurationError::MissingPlacement(
+                    (*id).to_owned(),
+                ));
+            }
+        }
+
+        let mut group_ids = HashSet::new();
+        let mut activated = HashSet::new();
+        for group in &self.activation_groups {
+            if group.id.trim().is_empty() || !group_ids.insert(group.id.as_str()) {
+                return Err(AttributeConfigurationError::InvalidActivationGroupId(
+                    group.id.clone(),
+                ));
+            }
+            if group.label.trim().is_empty() {
+                return Err(AttributeConfigurationError::EmptyActivationGroupLabel(
+                    group.id.clone(),
+                ));
+            }
+            if group.members.is_empty() {
+                return Err(AttributeConfigurationError::EmptyActivationGroup(
+                    group.id.clone(),
+                ));
+            }
+            let mut members = HashSet::new();
+            let mut encoder_group = None;
+            for member in &group.members {
+                let id = member.0.as_str();
+                if !members.insert(id) {
+                    return Err(AttributeConfigurationError::DuplicateActivationMember {
+                        group: group.id.clone(),
+                        attribute: id.to_owned(),
+                    });
+                }
+                let Some((value_type, recordable)) = descriptors.get(id).copied() else {
+                    return Err(AttributeConfigurationError::UnknownActivationMember {
+                        group: group.id.clone(),
+                        attribute: id.to_owned(),
+                    });
+                };
+                if !recordable || value_type == AttributeValueType::Control {
+                    return Err(AttributeConfigurationError::IneligibleActivationMember(
+                        id.to_owned(),
+                    ));
+                }
+                let member_encoder_group = placements
+                    .get(id)
+                    .expect("every descriptor placement was validated")
+                    .group;
+                if encoder_group
+                    .replace(member_encoder_group)
+                    .is_some_and(|expected| expected != member_encoder_group)
+                {
+                    return Err(AttributeConfigurationError::CrossEncoderActivationGroup {
+                        group: group.id.clone(),
+                        attribute: id.to_owned(),
+                    });
+                }
+                if !activated.insert(id) {
+                    return Err(AttributeConfigurationError::OverlappingActivationGroup(
+                        id.to_owned(),
+                    ));
+                }
+            }
+        }
+        for (id, (value_type, recordable)) in descriptors {
+            if recordable && value_type != AttributeValueType::Control && !activated.contains(id) {
+                return Err(AttributeConfigurationError::MissingActivationGroup(
+                    id.to_owned(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn placement_for(&self, attribute: &AttributeKey) -> Option<EncoderPlacement> {
+        self.placements
+            .iter()
+            .find(|placement| placement.attribute == *attribute)
+            .map(|placement| placement.encoder)
+    }
+
+    pub fn activation_group_for(
+        &self,
+        attribute: &AttributeKey,
+    ) -> Option<&AttributeActivationGroup> {
+        self.activation_groups
+            .iter()
+            .find(|group| group.members.contains(attribute))
+    }
+
+    /// Symmetric linked-member lookup in the stable order authored for each activation group.
+    /// Single-member groups intentionally produce an empty link list.
+    pub fn activation_links(&self) -> HashMap<AttributeKey, Vec<AttributeKey>> {
+        self.activation_groups
+            .iter()
+            .flat_map(|group| {
+                group.members.iter().cloned().map(|member| {
+                    let linked = group
+                        .members
+                        .iter()
+                        .filter(|candidate| **candidate != member)
+                        .cloned()
+                        .collect();
+                    (member, linked)
+                })
+            })
+            .collect()
+    }
+}
+
+impl Default for AttributeConfiguration {
+    fn default() -> Self {
+        Self::recommended()
+    }
+}
+
+fn validate_custom_descriptor(
+    descriptor: &CustomAttributeDescriptor,
+    built_in_ids: &HashSet<&str>,
+) -> Result<(), AttributeConfigurationError> {
+    let id = descriptor.id.0.as_str();
+    if built_in_ids.contains(id) {
+        return Err(AttributeConfigurationError::BuiltInShadow(id.to_owned()));
+    }
+    if !valid_custom_attribute_id(id) {
+        return Err(AttributeConfigurationError::InvalidCustomId(id.to_owned()));
+    }
+    if descriptor.label.trim().is_empty() {
+        return Err(AttributeConfigurationError::EmptyCustomLabel(id.to_owned()));
+    }
+    if descriptor.value_type == AttributeValueType::Control && descriptor.recordable {
+        return Err(AttributeConfigurationError::RecordableControl(
+            id.to_owned(),
+        ));
+    }
+    if descriptor
+        .normalized_bounds
+        .into_iter()
+        .chain(descriptor.domain_bounds)
+        .any(|bounds| {
+            !bounds.min.is_finite() || !bounds.max.is_finite() || bounds.min >= bounds.max
+        })
+        || (descriptor.normalized_bounds.is_some()
+            && descriptor.value_type != AttributeValueType::Continuous)
+    {
+        return Err(AttributeConfigurationError::InvalidCustomBounds(
+            id.to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn valid_custom_attribute_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 128
+        && id.split('.').count() >= 2
+        && id.split('.').all(|segment| {
+            !segment.is_empty()
+                && segment.bytes().all(|byte| {
+                    byte.is_ascii_lowercase()
+                        || byte.is_ascii_digit()
+                        || matches!(byte, b'_' | b'-')
+                })
+        })
+}
+
+fn recommended_activation_group(
+    id: &str,
+    label: &str,
+    members: &[&str],
+) -> AttributeActivationGroup {
+    AttributeActivationGroup {
+        id: id.to_owned(),
+        label: label.to_owned(),
+        members: members
+            .iter()
+            .map(|member| AttributeKey((*member).to_owned()))
+            .collect(),
+    }
+}
+
+fn recommended_builtin_placements() -> Vec<AttributePlacement> {
+    use EncoderGroup::{Beam, Color, Control, Focus, Intensity, Position, Shapers};
+
+    [
+        ("intensity", Intensity, 1, 1),
+        ("shutter", Intensity, 1, 2),
+        ("strobe", Intensity, 1, 3),
+        ("color.red", Color, 1, 1),
+        ("color.green", Color, 1, 2),
+        ("color.blue", Color, 1, 3),
+        ("color.white", Color, 1, 4),
+        ("color.amber", Color, 1, 5),
+        ("color.uv", Color, 1, 6),
+        // Legacy canonical CMY IDs remain distinct and lossless until the explicit compatible
+        // CMY-to-RGB show migration. They are not linked into the recommended Color Mix group.
+        ("color.cyan", Color, 4, 1),
+        ("color.magenta", Color, 4, 2),
+        ("color.yellow", Color, 4, 3),
+        ("color", Color, 3, 2),
+        ("color.wheel.1", Color, 3, 3),
+        ("color.wheel.2", Color, 3, 5),
+        ("pan", Position, 1, 1),
+        ("tilt", Position, 1, 2),
+        ("gobo.1", Beam, 1, 1),
+        ("gobo.2", Beam, 1, 3),
+        ("beam", Beam, 3, 1),
+        ("iris", Shapers, 1, 1),
+        ("focus", Focus, 1, 1),
+        ("zoom", Focus, 1, 2),
+        ("control", Control, 1, 1),
+    ]
+    .into_iter()
+    .map(|(id, group, page, slot)| AttributePlacement {
+        attribute: AttributeKey(id.to_owned()),
+        encoder: EncoderPlacement::new(group, page, slot),
+    })
+    .collect()
 }
 
 /// Built-in attribute registry. Custom attributes remain valid and use their persisted identifier
@@ -755,5 +1234,265 @@ mod attribute_registry_tests {
         assert!(!descriptor.built_in);
         assert!(!descriptor.recordable);
         assert_eq!(descriptor.normalized_bounds, None);
+    }
+
+    #[test]
+    fn recommended_configuration_is_complete_stable_and_symmetric() {
+        let configuration = AttributeConfiguration::recommended();
+        configuration.validate().unwrap();
+        assert_eq!(configuration.version, ATTRIBUTE_CONFIGURATION_VERSION);
+        assert_eq!(configuration.placements.len(), ATTRIBUTE_REGISTRY.len());
+        assert_eq!(
+            configuration.placement_for(&AttributeKey("color.red".into())),
+            Some(EncoderPlacement::new(EncoderGroup::Color, 1, 1))
+        );
+        assert_eq!(
+            configuration.placement_for(&AttributeKey("iris".into())),
+            Some(EncoderPlacement::new(EncoderGroup::Shapers, 1, 1))
+        );
+        assert_eq!(
+            configuration
+                .activation_group_for(&AttributeKey("color.wheel.1".into()))
+                .unwrap()
+                .members,
+            [AttributeKey("color.wheel.1".into())]
+        );
+        let links = configuration.activation_links();
+        assert_eq!(
+            links[&AttributeKey("pan".into())],
+            [AttributeKey("tilt".into())]
+        );
+        assert_eq!(
+            links[&AttributeKey("tilt".into())],
+            [AttributeKey("pan".into())]
+        );
+        assert!(links[&AttributeKey("intensity".into())].is_empty());
+        assert!(!links.contains_key(&AttributeKey("control".into())));
+    }
+
+    #[test]
+    fn encoder_group_vocabulary_is_exact_and_configuration_is_clone_stable() {
+        let groups = [
+            EncoderGroup::Intensity,
+            EncoderGroup::Color,
+            EncoderGroup::Position,
+            EncoderGroup::Beam,
+            EncoderGroup::Shapers,
+            EncoderGroup::Focus,
+            EncoderGroup::Control,
+            EncoderGroup::Media,
+        ];
+        assert_eq!(groups.len(), 8);
+        let configuration = AttributeConfiguration::recommended();
+        assert_eq!(configuration.clone(), configuration);
+    }
+
+    fn custom_descriptor(
+        id: &str,
+        value_type: AttributeValueType,
+        recordable: bool,
+    ) -> CustomAttributeDescriptor {
+        CustomAttributeDescriptor {
+            id: AttributeKey(id.into()),
+            label: "Custom Feature".into(),
+            value_type,
+            display_unit: Some("percent".into()),
+            physical_unit: None,
+            normalized_bounds: (value_type == AttributeValueType::Continuous)
+                .then_some(AttributeBounds { min: 0.0, max: 1.0 }),
+            domain_bounds: None,
+            cyclic: false,
+            recordable,
+            lifecycle: CustomAttributeLifecycle::Active,
+        }
+    }
+
+    fn add_custom(
+        configuration: &mut AttributeConfiguration,
+        descriptor: CustomAttributeDescriptor,
+        encoder: EncoderPlacement,
+    ) {
+        let id = descriptor.id.clone();
+        configuration.custom_attributes.push(descriptor);
+        configuration.placements.push(AttributePlacement {
+            attribute: id.clone(),
+            encoder,
+        });
+        if configuration
+            .custom_attributes
+            .last()
+            .is_some_and(|descriptor| descriptor.recordable)
+        {
+            configuration
+                .activation_groups
+                .push(AttributeActivationGroup {
+                    id: format!("activation.{}", id.0),
+                    label: "Custom Feature".into(),
+                    members: vec![id],
+                });
+        }
+    }
+
+    #[test]
+    fn custom_metadata_accepts_namespaced_ids_and_retirement_without_changing_identity() {
+        let mut configuration = AttributeConfiguration::recommended();
+        let mut descriptor =
+            custom_descriptor("vendor.feature-name", AttributeValueType::Continuous, true);
+        descriptor.lifecycle = CustomAttributeLifecycle::Retired;
+        add_custom(
+            &mut configuration,
+            descriptor,
+            EncoderPlacement::new(EncoderGroup::Beam, 9, 1),
+        );
+        configuration.validate().unwrap();
+        assert_eq!(
+            configuration.custom_attributes[0].id,
+            AttributeKey("vendor.feature-name".into())
+        );
+        let generated = CustomAttributeDescriptor::generated_id();
+        assert!(generated.0.starts_with("custom."));
+        assert!(valid_custom_attribute_id(&generated.0));
+    }
+
+    #[test]
+    fn custom_ids_cannot_shadow_built_ins_or_use_unstable_syntax() {
+        let mut shadow = AttributeConfiguration::recommended();
+        add_custom(
+            &mut shadow,
+            custom_descriptor("color.red", AttributeValueType::Continuous, true),
+            EncoderPlacement::new(EncoderGroup::Color, 9, 1),
+        );
+        assert_eq!(
+            shadow.validate(),
+            Err(AttributeConfigurationError::BuiltInShadow(
+                "color.red".into()
+            ))
+        );
+
+        let mut invalid = AttributeConfiguration::recommended();
+        add_custom(
+            &mut invalid,
+            custom_descriptor("Feature", AttributeValueType::Continuous, true),
+            EncoderPlacement::new(EncoderGroup::Beam, 9, 1),
+        );
+        assert_eq!(
+            invalid.validate(),
+            Err(AttributeConfigurationError::InvalidCustomId(
+                "Feature".into()
+            ))
+        );
+    }
+
+    #[test]
+    fn placements_are_one_based_six_slot_unique_and_complete() {
+        let mut invalid_slot = AttributeConfiguration::recommended();
+        invalid_slot.placements[0].encoder.slot = ENCODER_SLOTS_PER_PAGE + 1;
+        assert!(matches!(
+            invalid_slot.validate(),
+            Err(AttributeConfigurationError::InvalidPlacement(_))
+        ));
+
+        let mut occupied = AttributeConfiguration::recommended();
+        occupied.placements[1].encoder = occupied.placements[0].encoder;
+        assert!(matches!(
+            occupied.validate(),
+            Err(AttributeConfigurationError::OccupiedPlacement { .. })
+        ));
+
+        let mut duplicate = AttributeConfiguration::recommended();
+        duplicate.placements.push(duplicate.placements[0].clone());
+        assert!(matches!(
+            duplicate.validate(),
+            Err(AttributeConfigurationError::DuplicatePlacement(_))
+        ));
+
+        let mut missing = AttributeConfiguration::recommended();
+        missing.placements.pop();
+        assert!(matches!(
+            missing.validate(),
+            Err(AttributeConfigurationError::MissingPlacement(_))
+        ));
+    }
+
+    #[test]
+    fn activation_groups_are_exclusive_recordable_and_within_one_encoder_group() {
+        let mut overlap = AttributeConfiguration::recommended();
+        overlap.activation_groups.push(AttributeActivationGroup {
+            id: "second.intensity".into(),
+            label: "Second Intensity".into(),
+            members: vec![AttributeKey("intensity".into())],
+        });
+        assert_eq!(
+            overlap.validate(),
+            Err(AttributeConfigurationError::OverlappingActivationGroup(
+                "intensity".into()
+            ))
+        );
+
+        let mut cross_group = AttributeConfiguration::recommended();
+        let position = cross_group
+            .activation_groups
+            .iter_mut()
+            .find(|group| group.id == "position")
+            .unwrap();
+        position.members.push(AttributeKey("color.red".into()));
+        assert!(matches!(
+            cross_group.validate(),
+            Err(AttributeConfigurationError::CrossEncoderActivationGroup { .. })
+        ));
+
+        let mut control = AttributeConfiguration::recommended();
+        control.activation_groups.push(AttributeActivationGroup {
+            id: "control".into(),
+            label: "Control".into(),
+            members: vec![AttributeKey("control".into())],
+        });
+        assert_eq!(
+            control.validate(),
+            Err(AttributeConfigurationError::IneligibleActivationMember(
+                "control".into()
+            ))
+        );
+
+        let mut missing = AttributeConfiguration::recommended();
+        missing
+            .activation_groups
+            .retain(|group| !group.members.contains(&AttributeKey("intensity".into())));
+        assert_eq!(
+            missing.validate(),
+            Err(AttributeConfigurationError::MissingActivationGroup(
+                "intensity".into()
+            ))
+        );
+    }
+
+    #[test]
+    fn non_recordable_custom_controls_are_placed_but_never_activated() {
+        let mut configuration = AttributeConfiguration::recommended();
+        add_custom(
+            &mut configuration,
+            custom_descriptor("vendor.reset", AttributeValueType::Control, false),
+            EncoderPlacement::new(EncoderGroup::Control, 2, 1),
+        );
+        configuration.validate().unwrap();
+        assert!(
+            configuration
+                .activation_group_for(&AttributeKey("vendor.reset".into()))
+                .is_none()
+        );
+
+        configuration
+            .activation_groups
+            .push(AttributeActivationGroup {
+                id: "vendor.reset".into(),
+                label: "Reset".into(),
+                members: vec![AttributeKey("vendor.reset".into())],
+            });
+        assert_eq!(
+            configuration.validate(),
+            Err(AttributeConfigurationError::IneligibleActivationMember(
+                "vendor.reset".into()
+            ))
+        );
     }
 }

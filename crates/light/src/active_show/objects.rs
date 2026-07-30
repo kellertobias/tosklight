@@ -62,6 +62,18 @@ fn validate_command(
         if mutation.object_id.is_empty() {
             return Err(invalid("show object id cannot be empty"));
         }
+        if mutation.kind == super::ActiveShowObjectKind::AttributeConfiguration {
+            if mutation.object_id != "default" {
+                return Err(invalid(
+                    "attribute_configuration must use the singleton storage id default",
+                ));
+            }
+            if matches!(mutation.mutation, ActiveShowObjectMutationKind::Delete) {
+                return Err(invalid(
+                    "attribute_configuration cannot be deleted; restore recommended defaults instead",
+                ));
+            }
+        }
         if !targets.insert((mutation.kind, mutation.object_id.as_str())) {
             return Err(invalid(format!(
                 "duplicate {} {} mutation",
@@ -152,6 +164,12 @@ fn normalize_body(
         )));
     }
     match request {
+        ActiveShowObjectBody::AttributeConfiguration(request) => normalize_attribute_configuration(
+            existing.and_then(ActiveShowObjectBody::attribute_configuration),
+            mutation,
+            request,
+        )
+        .map(ActiveShowObjectBody::AttributeConfiguration),
         ActiveShowObjectBody::CueList(request) => normalize_cue_list(
             existing.and_then(ActiveShowObjectBody::cue_list),
             mutation,
@@ -210,6 +228,21 @@ fn normalize_body(
         )
         .map(ActiveShowObjectBody::UserLayout),
     }
+}
+
+fn normalize_attribute_configuration(
+    existing: Option<&LosslessBody<light_core::AttributeConfiguration>>,
+    mutation: &ActiveShowObjectMutation,
+    request: &LosslessBody<light_core::AttributeConfiguration>,
+) -> Result<LosslessBody<light_core::AttributeConfiguration>, ActionError> {
+    if mutation.object_id != "default" {
+        return Err(invalid(
+            "attribute_configuration must use the singleton storage id default",
+        ));
+    }
+    let normalized = request.typed().clone();
+    normalized.validate().map_err(invalid)?;
+    LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)
 }
 
 fn normalize_dynamic(

@@ -1,5 +1,5 @@
 use crate::{ActionContext, ApplicationCommand, CommandFamily};
-use light_core::{Revision, ShowId};
+use light_core::{AttributeConfiguration, Revision, ShowId};
 use light_dynamics::DynamicDefinition;
 use light_output::OutputRoute;
 use light_playback::{CueList, PlaybackDefinition, PlaybackPage};
@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, HashMap};
 /// Portable show-object families whose runtime semantics are owned by the active-show boundary.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ActiveShowObjectKind {
+    AttributeConfiguration,
     CueList,
     Dynamic,
     Group,
@@ -28,6 +29,7 @@ pub enum ActiveShowObjectKind {
 /// `light-show::LosslessBody`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ActiveShowObjectBody {
+    AttributeConfiguration(LosslessBody<AttributeConfiguration>),
     CueList(LosslessBody<CueList>),
     Dynamic(LosslessBody<DynamicDefinition>),
     Group(LosslessBody<GroupDefinition>),
@@ -44,6 +46,9 @@ impl ActiveShowObjectBody {
     pub fn decode(kind: ActiveShowObjectKind, raw: serde_json::Value) -> serde_json::Result<Self> {
         validate_family_shape(kind, &raw)?;
         Ok(match kind {
+            ActiveShowObjectKind::AttributeConfiguration => {
+                Self::AttributeConfiguration(LosslessBody::decode(raw)?)
+            }
             ActiveShowObjectKind::CueList => Self::CueList(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Dynamic => Self::Dynamic(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Group => Self::Group(LosslessBody::decode(raw)?),
@@ -59,6 +64,7 @@ impl ActiveShowObjectBody {
 
     pub const fn kind(&self) -> ActiveShowObjectKind {
         match self {
+            Self::AttributeConfiguration(_) => ActiveShowObjectKind::AttributeConfiguration,
             Self::CueList(_) => ActiveShowObjectKind::CueList,
             Self::Dynamic(_) => ActiveShowObjectKind::Dynamic,
             Self::Group(_) => ActiveShowObjectKind::Group,
@@ -74,6 +80,7 @@ impl ActiveShowObjectBody {
 
     pub fn encode(&self) -> serde_json::Value {
         match self {
+            Self::AttributeConfiguration(body) => body.encode(),
             Self::CueList(body) => body.encode(),
             Self::Dynamic(body) => body.encode(),
             Self::Group(body) => body.encode(),
@@ -84,6 +91,13 @@ impl ActiveShowObjectBody {
             Self::Schedule(body) => body.encode(),
             Self::StageLayout(body) => body.encode(),
             Self::UserLayout(body) => body.encode(),
+        }
+    }
+
+    pub(crate) fn attribute_configuration(&self) -> Option<&LosslessBody<AttributeConfiguration>> {
+        match self {
+            Self::AttributeConfiguration(body) => Some(body),
+            _ => None,
         }
     }
 
@@ -193,6 +207,12 @@ fn validate_family_shape(
         ));
     }
     let required: &[&str] = match kind {
+        ActiveShowObjectKind::AttributeConfiguration => &[
+            "version",
+            "custom_attributes",
+            "placements",
+            "activation_groups",
+        ],
         ActiveShowObjectKind::CueList => &["id", "name", "cues"],
         ActiveShowObjectKind::Dynamic => &[
             "id",
@@ -227,6 +247,12 @@ fn validate_family_shape(
 
 fn looks_like_other_family(object: &serde_json::Map<String, serde_json::Value>) -> bool {
     [
+        &[
+            "version",
+            "custom_attributes",
+            "placements",
+            "activation_groups",
+        ][..],
         &["id", "name", "cues"][..],
         &["id", "pool_number", "revision", "target_binding", "lanes"],
         &["name", "fixtures"],
@@ -466,6 +492,7 @@ pub struct UserLayout {
 impl ActiveShowObjectKind {
     pub fn from_storage_kind(kind: &str) -> Option<Self> {
         match kind {
+            "attribute_configuration" => Some(Self::AttributeConfiguration),
             "cue_list" => Some(Self::CueList),
             "dynamic" => Some(Self::Dynamic),
             "group" => Some(Self::Group),
@@ -482,6 +509,7 @@ impl ActiveShowObjectKind {
 
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::AttributeConfiguration => "attribute_configuration",
             Self::CueList => "cue_list",
             Self::Dynamic => "dynamic",
             Self::Group => "group",

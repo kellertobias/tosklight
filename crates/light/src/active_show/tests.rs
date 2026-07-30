@@ -294,6 +294,58 @@ fn group_batch_preserves_extensions_empty_state_and_ordered_membership() {
 }
 
 #[test]
+fn attribute_configuration_uses_one_lossless_non_deletable_default_object() {
+    let rig = TestRig::new();
+    let mut body = serde_json::to_value(light_core::AttributeConfiguration::recommended()).unwrap();
+    body["future_configuration"] = json!({"kept": true});
+
+    let result = rig
+        .service
+        .mutate_objects(
+            rig.object_action(vec![ActiveShowObjectMutation {
+                kind: ActiveShowObjectKind::AttributeConfiguration,
+                object_id: "default".into(),
+                expected_object_revision: 0,
+                mutation: ActiveShowObjectMutationKind::Put {
+                    body: typed(ActiveShowObjectKind::AttributeConfiguration, body),
+                },
+            }]),
+            &rig.ports,
+        )
+        .unwrap();
+
+    assert_eq!(result.changes[0].object_revision, 1);
+    assert_eq!(
+        rig.object_body("attribute_configuration", "default")["future_configuration"],
+        json!({"kept": true})
+    );
+
+    let error = rig
+        .service
+        .mutate_objects(
+            rig.object_action(vec![ActiveShowObjectMutation {
+                kind: ActiveShowObjectKind::AttributeConfiguration,
+                object_id: "default".into(),
+                expected_object_revision: 1,
+                mutation: ActiveShowObjectMutationKind::Delete,
+            }]),
+            &rig.ports,
+        )
+        .unwrap_err();
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert!(
+        error
+            .message
+            .contains("restore recommended defaults instead")
+    );
+    assert!(
+        rig.document()
+            .object("attribute_configuration", "default")
+            .is_some()
+    );
+}
+
+#[test]
 fn cue_list_mutation_uses_one_prepared_boundary_and_keeps_action_context() {
     let rig = TestRig::new();
     let cue_list_id = light_core::CueListId(Uuid::from_u128(0x601));

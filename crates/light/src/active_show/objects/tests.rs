@@ -244,8 +244,118 @@ fn layout_and_patch_families_preserve_the_complete_lossless_candidate() {
 }
 
 #[test]
+fn attribute_configuration_is_a_validated_lossless_singleton() {
+    let mut request = serde_json::to_value(light_core::AttributeConfiguration::recommended())
+        .expect("recommended attribute configuration should serialize");
+    request["future_configuration"] = json!({"kept": true});
+
+    let mutation = ActiveShowObjectMutation {
+        kind: ActiveShowObjectKind::AttributeConfiguration,
+        object_id: "default".into(),
+        expected_object_revision: 0,
+        mutation: ActiveShowObjectMutationKind::Put {
+            body: ActiveShowObjectBody::decode(
+                ActiveShowObjectKind::AttributeConfiguration,
+                request.clone(),
+            )
+            .unwrap(),
+        },
+    };
+    let body = match &mutation.mutation {
+        ActiveShowObjectMutationKind::Put { body } => body,
+        ActiveShowObjectMutationKind::Delete => unreachable!(),
+    };
+    let normalized = normalize_body(None, &mutation, body).unwrap().encode();
+
+    assert_eq!(normalized["future_configuration"], json!({"kept": true}));
+    assert_eq!(
+        ActiveShowObjectKind::from_storage_kind("attribute_configuration"),
+        Some(ActiveShowObjectKind::AttributeConfiguration)
+    );
+    assert_eq!(
+        ActiveShowObjectKind::AttributeConfiguration.as_str(),
+        "attribute_configuration"
+    );
+}
+
+#[test]
+fn attribute_configuration_update_retains_unknown_nested_fields() {
+    let mut existing = serde_json::to_value(light_core::AttributeConfiguration::recommended())
+        .expect("recommended attribute configuration should serialize");
+    existing["activation_groups"][0]["future_group_policy"] = json!({"kept": true});
+    let mut request = serde_json::to_value(
+        serde_json::from_value::<light_core::AttributeConfiguration>(existing.clone()).unwrap(),
+    )
+    .unwrap();
+    request["activation_groups"][0]["label"] = json!("Updated Color Mix");
+
+    let normalized = normalize(
+        &existing,
+        ActiveShowObjectKind::AttributeConfiguration,
+        "default",
+        request,
+    );
+
+    assert_eq!(
+        normalized["activation_groups"][0]["future_group_policy"],
+        json!({"kept": true})
+    );
+    assert_eq!(
+        normalized["activation_groups"][0]["label"],
+        "Updated Color Mix"
+    );
+}
+
+#[test]
+fn attribute_configuration_rejects_invalid_model_and_non_default_storage_id() {
+    let mut invalid = serde_json::to_value(light_core::AttributeConfiguration::recommended())
+        .expect("recommended attribute configuration should serialize");
+    invalid["version"] = json!(u16::MAX);
+    let invalid_body = ActiveShowObjectBody::decode(
+        ActiveShowObjectKind::AttributeConfiguration,
+        invalid.clone(),
+    )
+    .unwrap();
+    let invalid_mutation = ActiveShowObjectMutation {
+        kind: ActiveShowObjectKind::AttributeConfiguration,
+        object_id: "default".into(),
+        expected_object_revision: 0,
+        mutation: ActiveShowObjectMutationKind::Put { body: invalid_body },
+    };
+    let body = match &invalid_mutation.mutation {
+        ActiveShowObjectMutationKind::Put { body } => body,
+        ActiveShowObjectMutationKind::Delete => unreachable!(),
+    };
+    assert!(normalize_body(None, &invalid_mutation, body).is_err());
+
+    let valid = ActiveShowObjectBody::decode(
+        ActiveShowObjectKind::AttributeConfiguration,
+        serde_json::to_value(light_core::AttributeConfiguration::recommended()).unwrap(),
+    )
+    .unwrap();
+    let wrong_id = ActiveShowObjectMutation {
+        kind: ActiveShowObjectKind::AttributeConfiguration,
+        object_id: "other".into(),
+        expected_object_revision: 0,
+        mutation: ActiveShowObjectMutationKind::Put { body: valid },
+    };
+    let body = match &wrong_id.mutation {
+        ActiveShowObjectMutationKind::Put { body } => body,
+        ActiveShowObjectMutationKind::Delete => unreachable!(),
+    };
+    assert!(normalize_body(None, &wrong_id, body).is_err());
+}
+
+#[test]
 fn every_active_show_family_decodes_to_its_discriminant_and_retains_extensions() {
+    let mut attribute_configuration =
+        serde_json::to_value(light_core::AttributeConfiguration::recommended()).unwrap();
+    attribute_configuration["future_extension"] = json!({"kept": true});
     let families = [
+        (
+            ActiveShowObjectKind::AttributeConfiguration,
+            attribute_configuration,
+        ),
         (ActiveShowObjectKind::CueList, cue_list(CUE_LIST_ID)),
         (ActiveShowObjectKind::Dynamic, dynamic(DYNAMIC_ID)),
         (

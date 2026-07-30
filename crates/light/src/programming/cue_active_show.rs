@@ -91,7 +91,8 @@ fn projection_for_kind(
         ActiveShowObjectKind::CueList => Some(&result.projections.cue_list),
         ActiveShowObjectKind::Playback => result.projections.playback.as_ref(),
         ActiveShowObjectKind::PlaybackPage => result.projections.page.as_ref(),
-        ActiveShowObjectKind::Group
+        ActiveShowObjectKind::AttributeConfiguration
+        | ActiveShowObjectKind::Group
         | ActiveShowObjectKind::Dynamic
         | ActiveShowObjectKind::PatchLayer
         | ActiveShowObjectKind::Preset
