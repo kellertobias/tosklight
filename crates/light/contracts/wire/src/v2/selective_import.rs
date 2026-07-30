@@ -23,6 +23,14 @@ pub enum SelectiveImportConflictResolution {
     Duplicate,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectiveImportLoadMode {
+    #[default]
+    ReplaceByPosition,
+    AddToEnd,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct SelectiveImportConflictChoice {
@@ -54,6 +62,8 @@ pub struct SelectiveImportProfileConflictChoice {
 #[derive(Clone, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct SelectiveImportSelection {
+    #[serde(default)]
+    pub mode: SelectiveImportLoadMode,
     pub selected_objects: Vec<SelectiveImportObjectKey>,
     #[serde(default)]
     pub conflict_resolutions: Vec<SelectiveImportConflictChoice>,
@@ -83,12 +93,33 @@ pub struct SelectiveImportCatalog {
     pub objects: Vec<SelectiveImportCatalogObject>,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectiveImportCatalogSection {
+    FixturePatch,
+    Groups,
+    PresetsMixed,
+    PresetsIntensity,
+    PresetsColor,
+    PresetsPosition,
+    PresetsBeam,
+    Dynamics,
+    Cuelists,
+    Playbacks,
+    Schedules,
+    Stage,
+    Macros,
+    Other,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct SelectiveImportCatalogObject {
     pub key: SelectiveImportObjectKey,
     #[ts(type = "number")]
     pub object_revision: u64,
     pub display_name: String,
+    pub section: SelectiveImportCatalogSection,
+    pub patch_layer_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -291,6 +322,7 @@ mod tests {
             "request_id":"select-groups",
             "expected_source_revision":4,
             "expected_target_revision":9,
+            "mode":"add_to_end",
             "selected_objects":[{"kind":"group","id":"front"}],
             "conflict_resolutions":[{
                 "key":{"kind":"group","id":"front"},
@@ -299,6 +331,7 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(request.selection.selected_objects[0].kind, "group");
+        assert_eq!(request.selection.mode, SelectiveImportLoadMode::AddToEnd);
         assert_eq!(
             request.selection.conflict_resolutions[0].resolution,
             SelectiveImportConflictResolution::Duplicate

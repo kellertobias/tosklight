@@ -8,7 +8,7 @@ mod service;
 pub use model::{
     AppliedImportObject, ApplySelectiveShowImportCommand, ImportBlocker, ImportConflict,
     ImportConflictResolution, ImportDependency, ImportDependencyDisposition, ImportIdentityFormat,
-    ImportManagedAssetAction, ImportManagedAssetPreview, ImportObjectAction,
+    ImportLoadMode, ImportManagedAssetAction, ImportManagedAssetPreview, ImportObjectAction,
     ImportObjectDescriptor, ImportObjectReference, ImportOwnedIdentity, ImportProfileAction,
     ImportProfileConflictResolution, ImportProfileKey, ImportProfilePreview,
     ImportReferenceLocation, SelectiveShowImportChange, SelectiveShowImportPreview,

@@ -5,7 +5,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 #[test]
-fn preview_expands_dependencies_skips_identical_and_reports_conflicts() {
+fn replace_by_position_expands_dependencies_and_replaces_changed_destination() {
     let rig = TestRig::new();
     rig.source_object(
         "macro",
@@ -15,16 +15,17 @@ fn preview_expands_dependencies_skips_identical_and_reports_conflicts() {
     rig.source_object("macro", "child", json!({"id":"child","name":"Source"}));
     rig.target_object("macro", "child", json!({"id":"child","name":"Target"}));
 
-    let blocked = rig.preview(rig.request("macro", "root"));
-    assert!(!blocked.can_apply());
-    assert_eq!(blocked.dependencies.len(), 1);
+    let replaced = rig.preview(rig.request("macro", "root"));
+    assert!(replaced.can_apply());
+    assert_eq!(replaced.dependencies.len(), 1);
     assert_eq!(
-        blocked.dependencies[0].disposition,
+        replaced.dependencies[0].disposition,
         ImportDependencyDisposition::Included
     );
-    assert_eq!(blocked.conflicts.len(), 1);
-    assert!(blocked.blockers.contains(&ImportBlocker::ObjectConflict {
-        key: key("macro", "child")
+    assert_eq!(replaced.conflicts.len(), 1);
+    assert!(replaced.objects.iter().any(|object| {
+        object.source == key("macro", "child")
+            && object.action == ImportObjectAction::ReplaceDestination
     }));
 
     let request = rig.request("macro", "root").resolve(
@@ -37,6 +38,48 @@ fn preview_expands_dependencies_skips_identical_and_reports_conflicts() {
         object.source == key("macro", "child")
             && object.action == ImportObjectAction::KeepDestination
     }));
+}
+
+#[test]
+fn add_to_end_duplicates_selected_objects_and_their_dependency_closure() {
+    let rig = TestRig::new();
+    rig.source_object("macro", "root", json!({"id":"root","macro_id":"child"}));
+    rig.source_object("macro", "child", json!({"id":"child","name":"Source"}));
+
+    let preview = rig.preview(
+        rig.request("macro", "root")
+            .with_mode(ImportLoadMode::AddToEnd),
+    );
+
+    assert!(preview.can_apply());
+    assert_eq!(preview.dependencies.len(), 1);
+    assert!(
+        preview
+            .objects
+            .iter()
+            .all(|object| matches!(object.action, ImportObjectAction::Duplicate { .. }))
+    );
+    assert!(
+        preview
+            .objects
+            .iter()
+            .all(|object| object.source != object.destination)
+    );
+}
+
+#[test]
+fn add_to_end_allocates_after_the_destination_not_after_source_positions() {
+    let rig = TestRig::new();
+    rig.source_object("macro", "100", json!({"id":"100","name":"Source"}));
+    rig.target_object("macro", "3", json!({"id":"3","name":"Destination"}));
+
+    let preview = rig.preview(
+        rig.request("macro", "100")
+            .with_mode(ImportLoadMode::AddToEnd),
+    );
+
+    assert!(preview.can_apply());
+    assert_eq!(preview.objects[0].destination, key("macro", "4"));
 }
 
 #[test]

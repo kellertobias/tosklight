@@ -42,12 +42,42 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
+        },
+        "patch_layer_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "section": {
+          "$ref": "#/$defs/SelectiveImportCatalogSection"
         }
       },
       "required": [
         "key",
         "object_revision",
-        "display_name"
+        "display_name",
+        "section",
+        "patch_layer_id"
+      ]
+    },
+    "SelectiveImportCatalogSection": {
+      "type": "string",
+      "enum": [
+        "fixture_patch",
+        "groups",
+        "presets_mixed",
+        "presets_intensity",
+        "presets_color",
+        "presets_position",
+        "presets_beam",
+        "dynamics",
+        "cuelists",
+        "playbacks",
+        "schedules",
+        "stage",
+        "macros",
+        "other"
       ]
     },
     "SelectiveImportObjectKey": {

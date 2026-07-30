@@ -8,6 +8,8 @@ export type SelectiveImportConflictResolution =
 	| "replace_destination"
 	| "duplicate";
 
+export type SelectiveImportLoadMode = "replace_by_position" | "add_to_end";
+
 export type SelectiveImportProfileConflictResolution =
 	| "keep_destination"
 	| "duplicate";
@@ -45,7 +47,8 @@ export const SELECTIVE_IMPORT_BLOCKER_TYPES = [
 	"candidate_invalid",
 ] as const;
 
-export type SelectiveImportBlockerType = typeof SELECTIVE_IMPORT_BLOCKER_TYPES[number];
+export type SelectiveImportBlockerType =
+	(typeof SELECTIVE_IMPORT_BLOCKER_TYPES)[number];
 
 export interface SelectiveImportProfileKey {
 	profileId: string;
@@ -53,6 +56,7 @@ export interface SelectiveImportProfileKey {
 }
 
 export interface SelectiveImportSelection {
+	mode: SelectiveImportLoadMode;
 	selectedObjects: SelectiveImportObjectKey[];
 	conflictResolutions: Array<{
 		key: SelectiveImportObjectKey;
@@ -78,8 +82,26 @@ export interface SelectiveImportCatalog {
 		key: SelectiveImportObjectKey;
 		objectRevision: number;
 		displayName: string;
+		section: SelectiveImportCatalogSection;
+		patchLayerId: string | null;
 	}>;
 }
+
+export type SelectiveImportCatalogSection =
+	| "fixture_patch"
+	| "groups"
+	| "presets_mixed"
+	| "presets_intensity"
+	| "presets_color"
+	| "presets_position"
+	| "presets_beam"
+	| "dynamics"
+	| "cuelists"
+	| "playbacks"
+	| "schedules"
+	| "stage"
+	| "macros"
+	| "other";
 
 export interface SelectiveImportPreview {
 	sourceShowId: string;

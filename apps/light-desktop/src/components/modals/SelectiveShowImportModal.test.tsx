@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
 	SelectiveImportCatalog,
@@ -18,6 +25,8 @@ const catalog: SelectiveImportCatalog = {
 			key: { kind: "group", id: "front" },
 			objectRevision: 2,
 			displayName: "Front Wash",
+			section: "groups",
+			patchLayerId: null,
 		},
 	],
 };
@@ -43,7 +52,12 @@ function preview(canApply: boolean): SelectiveImportPreview {
 			},
 		],
 		conflicts: canApply
-			? [{ key: { kind: "group", id: "front" }, resolution: "replace_destination" }]
+			? [
+					{
+						key: { kind: "group", id: "front" },
+						resolution: "replace_destination",
+					},
+				]
 			: [{ key: { kind: "group", id: "front" }, resolution: null }],
 		profiles: [],
 		managedAssets: [],
@@ -106,22 +120,29 @@ describe("SelectiveShowImportModal", () => {
 		fireEvent.click(object);
 		fireEvent.click(screen.getByRole("button", { name: "Preview Import" }));
 
-		const details = await screen.findByLabelText("Selective Show Import preview");
+		const details = await screen.findByLabelText(
+			"Selective Show Import preview",
+		);
 		expect(details).toHaveTextContent("Bound To Destination");
 		expect(details).toHaveTextContent("Object Conflict: group/front");
-		expect(screen.getByRole("button", { name: "Apply as One Show Revision" })).toBeDisabled();
+		expect(
+			screen.getByRole("button", { name: "Apply Replace by position" }),
+		).toBeDisabled();
 
 		choose("Resolve group front", "Replace Destination");
 		fireEvent.click(screen.getByRole("button", { name: "Update Preview" }));
 		await waitFor(() =>
 			expect(screen.getByText("None — ready to apply.")).toBeVisible(),
 		);
-		fireEvent.click(screen.getByRole("button", { name: "Apply as One Show Revision" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Apply Replace by position" }),
+		);
 
 		await waitFor(() => expect(applyImport).toHaveBeenCalledOnce());
 		expect(applyImport.mock.calls[0][2]).toMatchObject({
 			expectedSourceRevision: 4,
 			expectedTargetRevision: 9,
+			mode: "replace_by_position",
 			selectedObjects: [{ kind: "group", id: "front" }],
 			conflictResolutions: [
 				{
@@ -130,15 +151,18 @@ describe("SelectiveShowImportModal", () => {
 				},
 			],
 		});
-		expect(await screen.findByRole("dialog", { name: "Partial Show Load complete" })).toHaveTextContent(
-			"one show revision",
-		);
+		expect(
+			await screen.findByRole("dialog", { name: "Partial Show Load complete" }),
+		).toHaveTextContent("one show revision");
 	});
 
 	it("keeps cancellation available during preview but locks the modal during atomic apply", async () => {
 		let completeApply!: (value: SelectiveImportOutcome) => void;
 		const applyImport = vi.fn(
-			() => new Promise<SelectiveImportOutcome>((resolve) => { completeApply = resolve; }),
+			() =>
+				new Promise<SelectiveImportOutcome>((resolve) => {
+					completeApply = resolve;
+				}),
 		);
 		const onClose = vi.fn();
 		render(
@@ -155,12 +179,18 @@ describe("SelectiveShowImportModal", () => {
 		fireEvent.click(await screen.findByLabelText(/Front Wash/));
 		fireEvent.click(screen.getByRole("button", { name: "Preview Import" }));
 		await screen.findByText("None — ready to apply.");
-		fireEvent.click(screen.getByRole("button", { name: "Apply as One Show Revision" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Apply Replace by position" }),
+		);
 
 		expect(await screen.findByText(/cannot be cancelled/)).toBeVisible();
 		expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
 		expect(screen.getByLabelText("Resolve group front")).toBeDisabled();
-		fireEvent.click(within(screen.getByRole("dialog", { name: "Partial Show Load" })).getByRole("button", { name: "Close Partial Show Load" }));
+		fireEvent.click(
+			within(
+				screen.getByRole("dialog", { name: "Partial Show Load" }),
+			).getByRole("button", { name: "Close Partial Show Load" }),
+		);
 		expect(onClose).not.toHaveBeenCalled();
 
 		completeApply(outcome());
@@ -186,12 +216,18 @@ describe("SelectiveShowImportModal", () => {
 		fireEvent.click(await screen.findByLabelText(/Front Wash/));
 		fireEvent.click(screen.getByRole("button", { name: "Preview Import" }));
 		await screen.findByText("None — ready to apply.");
-		expect(screen.getByRole("button", { name: "Apply as One Show Revision" })).toBeEnabled();
+		expect(
+			screen.getByRole("button", { name: "Apply Replace by position" }),
+		).toBeEnabled();
 
 		fireEvent.click(screen.getByRole("button", { name: "Update Preview" }));
 
-		expect(await screen.findByRole("alert")).toHaveTextContent("source show changed after preview");
-		expect(screen.getByRole("button", { name: "Apply as One Show Revision" })).toBeDisabled();
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"source show changed after preview",
+		);
+		expect(
+			screen.getByRole("button", { name: "Apply Replace by position" }),
+		).toBeDisabled();
 	});
 
 	it("removes a cleared conflict choice instead of sending an empty wire enum", async () => {
@@ -220,7 +256,9 @@ describe("SelectiveShowImportModal", () => {
 
 		choose("Resolve group front", "Choose resolution…");
 
-		expect(screen.getByRole("button", { name: "Apply as One Show Revision" })).toBeDisabled();
+		expect(
+			screen.getByRole("button", { name: "Apply Replace by position" }),
+		).toBeDisabled();
 		fireEvent.click(screen.getByRole("button", { name: "Update Preview" }));
 		await waitFor(() => expect(previewImport).toHaveBeenCalledTimes(3));
 		expect(previewImport.mock.calls[2][2].conflictResolutions).toEqual([]);

@@ -41,6 +41,12 @@ pub(super) fn application_request(
     Ok(app::SelectiveShowImportRequest {
         source_show_id,
         target_show_id,
+        mode: match selection.mode {
+            wire::SelectiveImportLoadMode::ReplaceByPosition => {
+                app::ImportLoadMode::ReplaceByPosition
+            }
+            wire::SelectiveImportLoadMode::AddToEnd => app::ImportLoadMode::AddToEnd,
+        },
         selected_objects,
         conflict_resolutions,
         profile_conflict_resolutions,
@@ -58,8 +64,46 @@ pub(super) fn catalog(document: &PortableShowDocument) -> wire::SelectiveImportC
                 key: wire_key(object.key()),
                 object_revision: object.revision(),
                 display_name: display_name(object.key(), object.body()),
+                section: catalog_section(object.key(), object.body()),
+                patch_layer_id: patch_layer_id(object.key(), object.body()),
             })
             .collect(),
+    }
+}
+
+fn catalog_section(
+    key: &PortableShowObjectKey,
+    body: &serde_json::Value,
+) -> wire::SelectiveImportCatalogSection {
+    use wire::SelectiveImportCatalogSection as Section;
+    match key.kind() {
+        "fixture" | "patched_fixture" | "patch_layer" => Section::FixturePatch,
+        "group" => Section::Groups,
+        "preset" => match body.get("family").and_then(serde_json::Value::as_str) {
+            Some("Intensity") => Section::PresetsIntensity,
+            Some("Color") => Section::PresetsColor,
+            Some("Position") => Section::PresetsPosition,
+            Some("Beam") => Section::PresetsBeam,
+            _ => Section::PresetsMixed,
+        },
+        "dynamic" => Section::Dynamics,
+        "cue_list" => Section::Cuelists,
+        "playback" | "playback_page" => Section::Playbacks,
+        "schedule" => Section::Schedules,
+        "stage_layout" => Section::Stage,
+        "macro" => Section::Macros,
+        _ => Section::Other,
+    }
+}
+
+fn patch_layer_id(key: &PortableShowObjectKey, body: &serde_json::Value) -> Option<String> {
+    match key.kind() {
+        "patch_layer" => Some(key.id().to_owned()),
+        "fixture" | "patched_fixture" => body
+            .get("layer_id")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        _ => None,
     }
 }
 

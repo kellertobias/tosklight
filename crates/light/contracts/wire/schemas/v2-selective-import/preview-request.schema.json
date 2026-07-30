@@ -10,6 +10,10 @@
         "$ref": "#/$defs/SelectiveImportConflictChoice"
       }
     },
+    "mode": {
+      "$ref": "#/$defs/SelectiveImportLoadMode",
+      "default": "replace_by_position"
+    },
     "profile_conflict_resolutions": {
       "type": "array",
       "default": [],
@@ -51,6 +55,13 @@
         "keep_destination",
         "replace_destination",
         "duplicate"
+      ]
+    },
+    "SelectiveImportLoadMode": {
+      "type": "string",
+      "enum": [
+        "replace_by_position",
+        "add_to_end"
       ]
     },
     "SelectiveImportObjectKey": {

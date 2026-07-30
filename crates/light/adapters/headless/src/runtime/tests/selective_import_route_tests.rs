@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn v2_selective_import_previews_conflicts_and_applies_one_atomic_revision() {
+async fn v2_selective_import_previews_replace_mode_and_applies_one_atomic_revision() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -42,8 +42,9 @@ async fn v2_selective_import_previews_conflicts_and_applies_one_atomic_revision(
     let catalog = json(catalog).await;
     assert_eq!(catalog["source_revision"], 2);
     assert_eq!(catalog["objects"][0]["display_name"], "Source Front");
+    assert_eq!(catalog["objects"][0]["section"], "groups");
 
-    let blocked = post_import(
+    let replaced = post_import(
         &app,
         &token,
         target_id,
@@ -53,17 +54,14 @@ async fn v2_selective_import_previews_conflicts_and_applies_one_atomic_revision(
         selection(None),
     )
     .await;
-    assert_eq!(blocked.status(), StatusCode::OK);
-    assert_eq!(blocked.headers()[header::ETAG], "\"2\"");
-    let blocked = json(blocked).await;
-    assert_eq!(blocked["can_apply"], false);
-    assert_eq!(blocked["conflicts"][0]["key"]["id"], "front");
-    assert!(
-        blocked["blockers"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|blocker| { blocker["type"] == "object_conflict" })
+    assert_eq!(replaced.status(), StatusCode::OK);
+    assert_eq!(replaced.headers()[header::ETAG], "\"2\"");
+    let replaced = json(replaced).await;
+    assert_eq!(replaced["can_apply"], true);
+    assert_eq!(replaced["conflicts"][0]["key"]["id"], "front");
+    assert_eq!(
+        replaced["objects"][0]["action"]["type"],
+        "replace_destination"
     );
 
     let ready = post_import(
@@ -94,6 +92,7 @@ async fn v2_selective_import_previews_conflicts_and_applies_one_atomic_revision(
             "request_id":"replace-front",
             "expected_source_revision":2,
             "expected_target_revision":2,
+            "mode":"replace_by_position",
             "selected_objects":[{"kind":"group","id":"front"}],
             "conflict_resolutions":[{
                 "key":{"kind":"group","id":"front"},
@@ -174,6 +173,7 @@ async fn v2_selective_import_rejects_stale_target_and_source_previews() {
 
 fn selection(resolution: Option<&str>) -> serde_json::Value {
     serde_json::json!({
+        "mode":"replace_by_position",
         "selected_objects":[{"kind":"group","id":"front"}],
         "conflict_resolutions":resolution.map(|resolution| vec![serde_json::json!({
             "key":{"kind":"group","id":"front"},"resolution":resolution
@@ -202,6 +202,7 @@ async fn apply_one(
             "request_id":request_id,
             "expected_source_revision":source_revision,
             "expected_target_revision":target_revision,
+            "mode":"replace_by_position",
             "selected_objects":[{"kind":"group","id":"front"}],
             "conflict_resolutions":[],
             "profile_conflict_resolutions":[]

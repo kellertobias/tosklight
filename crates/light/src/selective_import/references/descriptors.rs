@@ -26,6 +26,12 @@ pub(super) fn group_descriptor(
     Ok(descriptor)
 }
 
+pub(super) fn patch_layer_descriptor(
+    object: &PortableShowObject,
+) -> Result<ImportObjectDescriptor, String> {
+    id_descriptor(object)
+}
+
 pub(super) fn dynamic_descriptor(
     object: &PortableShowObject,
     source: &FixtureIdentityCatalog,

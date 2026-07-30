@@ -46,14 +46,17 @@ describe("SelectiveImportProvider", () => {
 				<Probe />
 			</SelectiveImportProvider>,
 		);
-		await act(() => capability.apply("target", "source", {
-			requestId: "request",
-			expectedSourceRevision: 4,
-			expectedTargetRevision: 9,
-			selectedObjects: [],
-			conflictResolutions: [],
-			profileConflictResolutions: [],
-		}));
+		await act(() =>
+			capability.apply("target", "source", {
+				requestId: "request",
+				expectedSourceRevision: 4,
+				expectedTargetRevision: 9,
+				mode: "replace_by_position" as const,
+				selectedObjects: [],
+				conflictResolutions: [],
+				profileConflictResolutions: [],
+			}),
+		);
 
 		expect(capabilitySource.apply).toHaveBeenCalledOnce();
 		expect(capabilitySource.refreshCompatibilityState).not.toHaveBeenCalled();
@@ -79,14 +82,18 @@ describe("SelectiveImportProvider", () => {
 			requestId: "request",
 			expectedSourceRevision: 4,
 			expectedTargetRevision: 9,
+			mode: "replace_by_position" as const,
 			selectedObjects: [],
 			conflictResolutions: [],
 			profileConflictResolutions: [],
 		};
 		await act(() => capability.apply("target", "source", request));
 		expect(capabilitySource.refreshCompatibilityState).toHaveBeenCalledOnce();
-		await expect(capability.apply("target", "source", request))
-			.rejects.toThrow("revision changed");
-		expect(capabilitySource.reportError).toHaveBeenLastCalledWith("revision changed");
+		await expect(capability.apply("target", "source", request)).rejects.toThrow(
+			"revision changed",
+		);
+		expect(capabilitySource.reportError).toHaveBeenLastCalledWith(
+			"revision changed",
+		);
 	});
 });

@@ -12,6 +12,7 @@ pub(super) use rewrite::{IdentityMap, ProfileMap, rewrite_body};
 #[derive(Clone, Copy)]
 enum RegisteredObjectKind {
     Fixture,
+    PatchLayer,
     Group,
     Dynamic,
     Preset,
@@ -31,6 +32,7 @@ impl RegisteredObjectKind {
     fn from_name(kind: &str) -> Option<Self> {
         match kind {
             "fixture" | "patched_fixture" => Some(Self::Fixture),
+            "patch_layer" => Some(Self::PatchLayer),
             "group" => Some(Self::Group),
             "dynamic" => Some(Self::Dynamic),
             "preset" => Some(Self::Preset),
@@ -65,6 +67,7 @@ pub(super) fn registered_descriptor(
     };
     let descriptor = match kind {
         RegisteredObjectKind::Fixture => fixtures::fixture_descriptor(object)?,
+        RegisteredObjectKind::PatchLayer => descriptors::patch_layer_descriptor(object)?,
         RegisteredObjectKind::Group => {
             descriptors::group_descriptor(object, source_fixtures, target_fixtures)?
         }

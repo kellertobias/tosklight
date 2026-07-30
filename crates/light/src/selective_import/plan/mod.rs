@@ -78,10 +78,11 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
     ) -> Self {
         let source_fixtures = FixtureIdentityCatalog::from_document(source);
         let target_fixtures = FixtureIdentityCatalog::from_document(target);
-        let reserves_generated_identities = request
-            .conflict_resolutions
-            .values()
-            .any(|resolution| matches!(resolution, super::ImportConflictResolution::Duplicate))
+        let reserves_generated_identities = request.mode == super::ImportLoadMode::AddToEnd
+            || request
+                .conflict_resolutions
+                .values()
+                .any(|resolution| matches!(resolution, super::ImportConflictResolution::Duplicate))
             || request
                 .profile_conflict_resolutions
                 .values()
@@ -103,22 +104,13 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
                     CustomDescriptorCatalog::default(),
                 )
             };
-        let keys = source
+        let mut keys = target
             .objects()
-            .chain(target.objects())
             .map(|object| object.key().clone())
             .collect::<Vec<_>>();
-        let identity_values = source_fixtures
+        let mut identity_values = target_fixtures
             .values()
-            .chain(target_fixtures.values())
-            .chain(source_custom_descriptors.identity_values())
             .chain(target_custom_descriptors.identity_values())
-            .chain(
-                source
-                    .fixture_profile_revisions()
-                    .iter()
-                    .map(|profile| profile.id().profile_id().0.to_string()),
-            )
             .chain(
                 target
                     .fixture_profile_revisions()
@@ -126,6 +118,17 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
                     .map(|profile| profile.id().profile_id().0.to_string()),
             )
             .collect::<Vec<_>>();
+        if request.mode == super::ImportLoadMode::ReplaceByPosition {
+            keys.extend(source.objects().map(|object| object.key().clone()));
+            identity_values.extend(source_fixtures.values());
+            identity_values.extend(source_custom_descriptors.identity_values());
+            identity_values.extend(
+                source
+                    .fixture_profile_revisions()
+                    .iter()
+                    .map(|profile| profile.id().profile_id().0.to_string()),
+            );
+        }
         Self {
             request,
             source_snapshot,

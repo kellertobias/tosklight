@@ -1,6 +1,6 @@
 use super::Planner;
 use crate::selective_import::{
-    ImportBlocker, ImportConflict, ImportConflictResolution, ImportObjectAction,
+    ImportBlocker, ImportConflict, ImportConflictResolution, ImportLoadMode, ImportObjectAction,
     ImportObjectDescriptor, SelectiveShowImportPorts,
 };
 use light_show::PortableShowObjectKey;
@@ -13,6 +13,9 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
         source_body: &serde_json::Value,
     ) -> (ImportObjectAction, PortableShowObjectKey) {
         let resolution = self.request.conflict_resolutions.get(key).copied();
+        if matches!(self.request.mode, ImportLoadMode::AddToEnd) && resolution.is_none() {
+            return self.duplicate_action(key);
+        }
         if key.kind() == "schedule"
             && !matches!(resolution, Some(ImportConflictResolution::KeepDestination))
         {
@@ -36,11 +39,7 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
                 (ImportObjectAction::ReplaceDestination, key.clone())
             }
             Some(ImportConflictResolution::Duplicate) => self.duplicate_action(key),
-            None => {
-                self.blockers
-                    .push(ImportBlocker::ObjectConflict { key: key.clone() });
-                (ImportObjectAction::BlockedConflict, key.clone())
-            }
+            None => (ImportObjectAction::ReplaceDestination, key.clone()),
         }
     }
 

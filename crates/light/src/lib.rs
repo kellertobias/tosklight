@@ -191,7 +191,7 @@ pub use scheduling::{
 pub use selective_import::{
     AppliedImportObject, ApplySelectiveShowImportCommand, ImportBlocker, ImportConflict,
     ImportConflictResolution, ImportDependency, ImportDependencyDisposition, ImportIdentityFormat,
-    ImportManagedAssetAction, ImportManagedAssetPreview, ImportObjectAction,
+    ImportLoadMode, ImportManagedAssetAction, ImportManagedAssetPreview, ImportObjectAction,
     ImportObjectDescriptor, ImportObjectReference, ImportOwnedIdentity, ImportProfileAction,
     ImportProfileConflictResolution, ImportProfileKey, ImportProfilePreview,
     ImportReferenceLocation, SelectiveShowImportChange, SelectiveShowImportPorts,

@@ -766,6 +766,7 @@ fn stage_layout(config: &Config) -> Vec<String> {
 fn selective_import(config: &Config) -> Vec<String> {
     vec![
         SelectiveImportObjectKey::decl(config),
+        SelectiveImportLoadMode::decl(config),
         SelectiveImportConflictResolution::decl(config),
         SelectiveImportConflictChoice::decl(config),
         SelectiveImportProfileKey::decl(config),
@@ -773,6 +774,7 @@ fn selective_import(config: &Config) -> Vec<String> {
         SelectiveImportProfileConflictChoice::decl(config),
         SelectiveImportSelection::decl(config),
         SelectiveImportApplyRequest::decl(config),
+        SelectiveImportCatalogSection::decl(config),
         SelectiveImportCatalogObject::decl(config),
         SelectiveImportCatalog::decl(config),
         SelectiveImportObjectAction::decl(config),

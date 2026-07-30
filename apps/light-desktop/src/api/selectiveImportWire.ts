@@ -20,6 +20,7 @@ export function selectiveImportSelectionToWire(
 	selection: SelectiveImportSelection,
 ): WireSelection {
 	return {
+		mode: selection.mode,
 		selected_objects: selection.selectedObjects,
 		conflict_resolutions: selection.conflictResolutions,
 		profile_conflict_resolutions: selection.profileConflictResolutions.map(
@@ -65,6 +66,26 @@ export function selectiveImportCatalogFromWire(
 					object.display_name,
 					`objects[${index}].display_name`,
 				),
+				section: oneOf(object.section, `objects[${index}].section`, [
+					"fixture_patch",
+					"groups",
+					"presets_mixed",
+					"presets_intensity",
+					"presets_color",
+					"presets_position",
+					"presets_beam",
+					"dynamics",
+					"cuelists",
+					"playbacks",
+					"schedules",
+					"stage",
+					"macros",
+					"other",
+				] as const),
+				patchLayerId:
+					object.patch_layer_id === null
+						? null
+						: text(object.patch_layer_id, `objects[${index}].patch_layer_id`),
 			};
 		}),
 	};
@@ -131,7 +152,10 @@ export function selectiveImportOutcomeFromWire(
 				const asset = record(entry, `managed_assets[${index}]`);
 				return {
 					assetId: text(asset.asset_id, `managed_assets[${index}].asset_id`),
-					revision: integer(asset.revision, `managed_assets[${index}].revision`),
+					revision: integer(
+						asset.revision,
+						`managed_assets[${index}].revision`,
+					),
 				};
 			},
 		),
@@ -141,18 +165,14 @@ export function selectiveImportOutcomeFromWire(
 function mapObjectPreview(value: unknown, index: number) {
 	const item = record(value, `objects[${index}]`);
 	const action = record(item.action, `objects[${index}].action`);
-	const actionType = oneOf(
-		action.type,
-		`objects[${index}].action.type`,
-		[
-			"import_preserving_id",
-			"skip_identical",
-			"keep_destination",
-			"replace_destination",
-			"duplicate",
-			"blocked_conflict",
-		] as const,
-	);
+	const actionType = oneOf(action.type, `objects[${index}].action.type`, [
+		"import_preserving_id",
+		"skip_identical",
+		"keep_destination",
+		"replace_destination",
+		"duplicate",
+		"blocked_conflict",
+	] as const);
 	if (actionType === "duplicate") {
 		objectKey(action.destination, `objects[${index}].action.destination`);
 	}
@@ -219,7 +239,10 @@ function mapAsset(value: unknown, index: number) {
 	return {
 		asset: {
 			assetId: text(asset.asset_id, `managed_assets[${index}].asset.asset_id`),
-			revision: integer(asset.revision, `managed_assets[${index}].asset.revision`),
+			revision: integer(
+				asset.revision,
+				`managed_assets[${index}].asset.revision`,
+			),
 		},
 		action: oneOf(item.action, `managed_assets[${index}].action`, [
 			"copy",
@@ -239,7 +262,9 @@ function mapBlocker(value: unknown, index: number) {
 	);
 	return {
 		type,
-		summary: [label(type), blockerDetail(type, item, index)].filter(Boolean).join(": "),
+		summary: [label(type), blockerDetail(type, item, index)]
+			.filter(Boolean)
+			.join(": "),
 	};
 }
 
@@ -284,7 +309,10 @@ function blockerDetail(
 
 function objectKey(value: unknown, name: string): SelectiveImportObjectKey {
 	const key = record(value, name);
-	return { kind: text(key.kind, `${name}.kind`), id: text(key.id, `${name}.id`) };
+	return {
+		kind: text(key.kind, `${name}.kind`),
+		id: text(key.id, `${name}.id`),
+	};
 }
 
 function objectKeyOrNull(value: unknown, name: string) {
@@ -358,5 +386,7 @@ function oneOf<const T extends readonly string[]>(
 }
 
 function label(value: string) {
-	return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+	return value
+		.replaceAll("_", " ")
+		.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }

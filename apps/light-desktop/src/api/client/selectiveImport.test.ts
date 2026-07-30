@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ClientTransport } from "./transport";
 import { SelectiveImportApiClient } from "./selectiveImport";
+import type { ClientTransport } from "./transport";
 
 function transport() {
 	return {
@@ -11,6 +11,34 @@ function transport() {
 }
 
 describe("SelectiveImportApiClient", () => {
+	it("retains backend-owned section and patch-layer catalog metadata", async () => {
+		const wire = transport();
+		wire.request.mockResolvedValue({
+			source_show_id: "source",
+			source_show_name: "Tour",
+			source_revision: 7,
+			objects: [
+				{
+					key: { kind: "patched_fixture", id: "fixture-a" },
+					object_revision: 3,
+					display_name: "Front Wash",
+					section: "fixture_patch",
+					patch_layer_id: "front",
+				},
+			],
+		});
+
+		const catalog = await new SelectiveImportApiClient(wire).catalog(
+			"target",
+			"source",
+		);
+
+		expect(catalog.objects[0]).toMatchObject({
+			section: "fixture_patch",
+			patchLayerId: "front",
+		});
+	});
+
 	it("keeps preview side-effect free and carries both revisions into apply", async () => {
 		const wire = transport();
 		wire.request
@@ -41,6 +69,7 @@ describe("SelectiveImportApiClient", () => {
 			});
 		const client = new SelectiveImportApiClient(wire);
 		await client.preview("target", "source", {
+			mode: "replace_by_position",
 			selectedObjects: [{ kind: "group", id: "front" }],
 			conflictResolutions: [],
 			profileConflictResolutions: [],
@@ -56,6 +85,7 @@ describe("SelectiveImportApiClient", () => {
 			requestId: "import-front",
 			expectedSourceRevision: 4,
 			expectedTargetRevision: 9,
+			mode: "replace_by_position",
 			selectedObjects: [{ kind: "group", id: "front" }],
 			conflictResolutions: [],
 			profileConflictResolutions: [],
@@ -76,11 +106,13 @@ describe("SelectiveImportApiClient", () => {
 			target_show_id: "target",
 			source_revision: 4,
 			target_revision: 9,
-			objects: [{
-				source: { kind: "group", id: "front" },
-				destination: { kind: "group", id: "front" },
-				action: { type: "silently_drop_unknown" },
-			}],
+			objects: [
+				{
+					source: { kind: "group", id: "front" },
+					destination: { kind: "group", id: "front" },
+					action: { type: "silently_drop_unknown" },
+				},
+			],
 			dependencies: [],
 			conflicts: [],
 			profiles: [],
@@ -90,11 +122,14 @@ describe("SelectiveImportApiClient", () => {
 		});
 		const client = new SelectiveImportApiClient(wire);
 
-		await expect(client.preview("target", "source", {
-			selectedObjects: [{ kind: "group", id: "front" }],
-			conflictResolutions: [],
-			profileConflictResolutions: [],
-		})).rejects.toThrow("objects[0].action.type has an unsupported value");
+		await expect(
+			client.preview("target", "source", {
+				mode: "replace_by_position",
+				selectedObjects: [{ kind: "group", id: "front" }],
+				conflictResolutions: [],
+				profileConflictResolutions: [],
+			}),
+		).rejects.toThrow("objects[0].action.type has an unsupported value");
 	});
 
 	it("rejects unknown blocker discriminators at the transport boundary", async () => {
@@ -114,10 +149,13 @@ describe("SelectiveImportApiClient", () => {
 		});
 		const client = new SelectiveImportApiClient(wire);
 
-		await expect(client.preview("target", "source", {
-			selectedObjects: [{ kind: "group", id: "front" }],
-			conflictResolutions: [],
-			profileConflictResolutions: [],
-		})).rejects.toThrow("blockers[0].type has an unsupported value");
+		await expect(
+			client.preview("target", "source", {
+				mode: "replace_by_position",
+				selectedObjects: [{ kind: "group", id: "front" }],
+				conflictResolutions: [],
+				profileConflictResolutions: [],
+			}),
+		).rejects.toThrow("blockers[0].type has an unsupported value");
 	});
 });

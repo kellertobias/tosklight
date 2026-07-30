@@ -15,6 +15,16 @@ pub enum ImportConflictResolution {
     Duplicate,
 }
 
+/// Top-level operator intent for positioning imported show objects.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ImportLoadMode {
+    /// Reuse occupied destination positions and preserve source positions when they are free.
+    #[default]
+    ReplaceByPosition,
+    /// Allocate a new destination position for every imported object in the dependency closure.
+    AddToEnd,
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct ImportProfileKey {
     pub profile_id: FixtureId,
@@ -50,6 +60,7 @@ pub enum ImportProfileConflictResolution {
 pub struct SelectiveShowImportRequest {
     pub source_show_id: ShowId,
     pub target_show_id: ShowId,
+    pub mode: ImportLoadMode,
     pub selected_objects: BTreeSet<PortableShowObjectKey>,
     pub conflict_resolutions: BTreeMap<PortableShowObjectKey, ImportConflictResolution>,
     pub profile_conflict_resolutions: BTreeMap<ImportProfileKey, ImportProfileConflictResolution>,
@@ -64,10 +75,16 @@ impl SelectiveShowImportRequest {
         Self {
             source_show_id,
             target_show_id,
+            mode: ImportLoadMode::default(),
             selected_objects: selected_objects.into_iter().collect(),
             conflict_resolutions: BTreeMap::new(),
             profile_conflict_resolutions: BTreeMap::new(),
         }
+    }
+
+    pub fn with_mode(mut self, mode: ImportLoadMode) -> Self {
+        self.mode = mode;
+        self
     }
 
     pub fn resolve(

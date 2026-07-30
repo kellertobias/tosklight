@@ -1,6 +1,7 @@
 import type {
 	SelectiveImportCatalog,
 	SelectiveImportConflictResolution,
+	SelectiveImportLoadMode,
 	SelectiveImportObjectKey,
 	SelectiveImportProfileConflictResolution,
 	SelectiveImportProfileKey,
@@ -20,26 +21,35 @@ const ACTION_LABELS: Record<string, string> = {
 
 export function buildSelection(
 	catalog: SelectiveImportCatalog | null,
+	mode: SelectiveImportLoadMode,
 	selected: Set<string>,
 	objectChoices: Map<string, SelectiveImportConflictResolution>,
 	profileChoices: Map<string, SelectiveImportProfileConflictResolution>,
 ): SelectiveImportSelection {
 	return {
-		selectedObjects: catalog?.objects
-			.filter((object) => selected.has(objectKeyId(object.key)))
-			.map((object) => object.key) ?? [],
+		mode,
+		selectedObjects:
+			catalog?.objects
+				.filter((object) => selected.has(objectKeyId(object.key)))
+				.map((object) => object.key) ?? [],
 		conflictResolutions: [...objectChoices].map(([encoded, resolution]) => ({
 			key: decodeObjectKey(encoded),
 			resolution,
 		})),
-		profileConflictResolutions: [...profileChoices].map(([encoded, resolution]) => ({
-			key: decodeProfileKey(encoded),
-			resolution,
-		})),
+		profileConflictResolutions: [...profileChoices].map(
+			([encoded, resolution]) => ({
+				key: decodeProfileKey(encoded),
+				resolution,
+			}),
+		),
 	};
 }
 
-export function updatedMap<T>(source: Map<string, T>, key: string, value: T | null) {
+export function updatedMap<T>(
+	source: Map<string, T>,
+	key: string,
+	value: T | null,
+) {
 	const next = new Map(source);
 	if (value === null) next.delete(key);
 	else next.set(key, value);
