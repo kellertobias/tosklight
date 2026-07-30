@@ -397,3 +397,54 @@ Indexed Presets tests must use at least two different fixture profiles whose sam
     Desk Setup rejects every attempted cross-encoder-group membership.
 33. Creating or importing a custom attribute cannot complete until it has a unique encoder
     slot and an effective activation group within the same encoder group.
+
+## Result
+
+Implemented across `3653f1ae` through `19618c72`.
+
+- Added a show-portable attribute configuration with the complete built-in registry, stable
+  six-encoder page assignments, typed custom descriptors, retirement, same-encoder-group
+  activation validation, recommended defaults, and compatibility upgrades for older saved
+  configurations.
+- Installed the active show's registry into the authoritative runtime. Software controls,
+  command/API and WebSocket programming, Preload, OSC, and attached-hardware intents all use the
+  same grouped mutation path. Linked values are captured from the applicable resolved context,
+  committed atomically with the initiating value, and participate in the existing Undo and record
+  lifecycle.
+- Replaced hard-coded frontend encoder pages with configuration-backed projections and added
+  **Show > Desk Setup > Programmer** management for custom attributes and activation groups,
+  including collision, placement, retirement, and restore-default safeguards.
+- Added **Direct input** and **Indexed Presets** to encoder **Set Value**. Choices are projected
+  from the selected fixtures' embedded profile revisions, merge only when their semantic and
+  action contracts are compatible, retain exact fixture scope otherwise, and resolve each
+  fixture's authored raw value through one authoritative mutation. Typed control actions use a
+  separate atomic server operation rather than becoming recordable scalar values.
+- Fixture-package import now pauses without mutating the library when it encounters an unknown
+  fixture-facing attribute. The retry operation requires a complete, type-compatible mapping to
+  an active descriptor and rewrites only canonical mappings; the authored fixture-facing identity
+  remains portable. Creating a new descriptor remains an explicit Desk Setup operation.
+- Schema-v2 fixture snapshots retain their fixture-facing IDs. Unambiguous legacy aliases project
+  to canonical attributes, including inverse CMY-to-RGB mappings, while ambiguous IDs remain
+  custom identities. Stored legacy Programmer, Preset, Cue, and revision values remain unchanged
+  and resolve through a value-preserving fallback until a canonical value exists; when both exist,
+  the canonical value is authoritative.
+- Updated the Fixture Library, encoder, attribute-reference, API/cross-surface scenario, and bench
+  coverage documentation.
+
+Verification completed:
+
+- active-show configuration tests: 61 passed, including 4 focused configuration cases;
+- attribute registry/core tests: 10 passed;
+- `light-wire`: 98 tests plus generated-contract checks passed;
+- focused fixture import/runtime route tests passed;
+- `light-fixture` full suite passed before the final alias-table case; the final focused run then
+  passed all 4 schema-v2 cases and the CMY direct/compiled resolution case;
+- the focused engine schema-v2 suite passed 11 cases;
+- the current focused frontend registry, fixture-transfer, and Indexed Presets run passed 25
+  tests; the broader implementation-time focused frontend run passed 27 tests;
+- root Playwright `tests/79-attribute-registry-indexed-presets.spec.ts` passed both Desk Setup and
+  real-output cases on the Plan 29 baseline. Its closeout rerun is blocked before launch by the
+  concurrent generated `RuntimeSessionRole` TypeScript change, not by this plan.
+
+The concurrent generated-runtime type also blocks a clean repository-wide desktop typecheck at
+closeout. That unrelated work is intentionally preserved rather than folded into this plan.
