@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "generatedBy": "tools/semantic-test-docs/cli.mjs",
   "sourceMarker": "// @bench-semantic-world",
-  "scenarioCount": 111,
+  "scenarioCount": 112,
   "scenarios": [
     {
       "id": "HIGHLIGHT-006",
@@ -147,7 +147,7 @@
       "title": "captures semantic surfaces and emits typed secondary-screen intent",
       "source": {
         "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-        "line": 12,
+        "line": 9,
         "column": 1
       },
       "preconditions": [
@@ -165,7 +165,7 @@
           "order": 0,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 16,
+            "line": 13,
             "column": 9
           }
         }
@@ -187,7 +187,7 @@
           "order": 1,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 17,
+            "line": 14,
             "column": 9
           }
         },
@@ -207,7 +207,7 @@
           "order": 2,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 18,
+            "line": 15,
             "column": 9
           }
         },
@@ -228,7 +228,7 @@
           "order": 3,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 19,
+            "line": 16,
             "column": 9
           }
         },
@@ -249,7 +249,7 @@
           "order": 4,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 21,
+            "line": 18,
             "column": 9
           }
         },
@@ -270,7 +270,7 @@
           "order": 5,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 22,
+            "line": 19,
             "column": 9
           }
         },
@@ -291,7 +291,7 @@
           "order": 6,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 23,
+            "line": 20,
             "column": 9
           }
         },
@@ -311,7 +311,7 @@
           "order": 7,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 24,
+            "line": 21,
             "column": 9
           }
         },
@@ -330,16 +330,16 @@
           "order": 8,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 25,
+            "line": 22,
             "column": 9
           }
         },
         {
           "kind": "step",
-          "description": "Screen → create with { name: \"Bench output\", desktop: \"Screenshot Desktop\", showDock: false, showPlaybacks: true, showPageControls: true, display: { id: \"display-2\", name: \"Operator display\" }, bounds: { x: 100, y: 80, width: 1024, height: 768 }, fullscreen: false, desiredOpen: true, playbacks: { perRow: 8, rows: [{ first: 41, fader: true, buttons: 3 }], pageMode: \"dedicated\" } }.",
+          "description": "Screen → create with { name: \"Bench output\", fixedPane: \"fixture_sheet\", showDock: false, showPlaybacks: true, showPageControls: true, display: { id: \"display-2\", name: \"Operator display\" }, bounds: { x: 100, y: 80, width: 1024, height: 768 }, fullscreen: false, desiredOpen: true, playbacks: { perRow: 8, rows: [{ first: 41, fader: true, buttons: 3 }], pageMode: \"dedicated\" } }.",
           "call": "screen.create",
           "arguments": [
-            "{ name: \"Bench output\", desktop: \"Screenshot Desktop\", showDock: false, showPlaybacks: true, showPageControls: true, display: { id: \"display-2\", name: \"Operator display\" }, bounds: { x: 100, y: 80, width: 1024, height: 768 }, fullscreen: false, desiredOpen: true, playbacks: { perRow: 8, rows: [{ first: 41, fader: true, buttons: 3 }], pageMode: \"dedicated\" } }"
+            "{ name: \"Bench output\", fixedPane: \"fixture_sheet\", showDock: false, showPlaybacks: true, showPageControls: true, display: { id: \"display-2\", name: \"Operator display\" }, bounds: { x: 100, y: 80, width: 1024, height: 768 }, fullscreen: false, desiredOpen: true, playbacks: { perRow: 8, rows: [{ first: 41, fader: true, buttons: 3 }], pageMode: \"dedicated\" } }"
           ],
           "presentation": {
             "badges": [
@@ -354,8 +354,8 @@
               "bounds"
             ]
           },
-          "expression": "t.screen.create({ name: \"Bench output\", desktop: \"Screenshot Desktop\", showDock: false, showPlaybacks: true, showPageControls: true, display: { id: \"display-2\", name: \"Operator …",
-          "sourceCode": "t.screen.create({\n\t\t\tname: \"Bench output\",\n\t\t\tdesktop: \"Screenshot Desktop\",\n\t\t\tshowDock: false,\n\t\t\tshowPlaybacks: true,\n\t\t\tshowPageControls: true,\n\t\t\tdisplay: { id: \"display-2\", name: \"Operator display\" },\n\t\t\tbounds: { x: 100, y: 80, width: 1024, height: 768 },\n\t\t\tfullscreen: false,\n\t\t\tdesiredOpen: true,\n\t\t\tplaybacks: {\n\t\t\t\tperRow: 8,\n\t\t\t\trows: [{ first: 41, fader: true, buttons: 3 }],\n\t\t\t\tpageMode: \"dedicated\",\n\t\t\t},\n\t\t})",
+          "expression": "t.screen.create({ name: \"Bench output\", fixedPane: \"fixture_sheet\", showDock: false, showPlaybacks: true, showPageControls: true, display: { id: \"display-2\", name: \"Operator dis…",
+          "sourceCode": "t.screen.create({\n\t\t\tname: \"Bench output\",\n\t\t\tfixedPane: \"fixture_sheet\",\n\t\t\tshowDock: false,\n\t\t\tshowPlaybacks: true,\n\t\t\tshowPageControls: true,\n\t\t\tdisplay: { id: \"display-2\", name: \"Operator display\" },\n\t\t\tbounds: { x: 100, y: 80, width: 1024, height: 768 },\n\t\t\tfullscreen: false,\n\t\t\tdesiredOpen: true,\n\t\t\tplaybacks: {\n\t\t\t\tperRow: 8,\n\t\t\t\trows: [{ first: 41, fader: true, buttons: 3 }],\n\t\t\t\tpageMode: \"dedicated\",\n\t\t\t},\n\t\t})",
           "surfaces": [
             "Secondary screen"
           ],
@@ -363,7 +363,7 @@
           "order": 9,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 27,
+            "line": 24,
             "column": 24
           }
         },
@@ -378,10 +378,10 @@
             "Secondary screen"
           ],
           "phase": "scenario",
-          "order": 11,
+          "order": 12,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 44,
+            "line": 42,
             "column": 9
           }
         },
@@ -396,10 +396,10 @@
             "Secondary screen"
           ],
           "phase": "scenario",
-          "order": 13,
+          "order": 14,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 46,
+            "line": 44,
             "column": 9
           }
         }
@@ -421,7 +421,27 @@
           "order": 10,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 43,
+            "line": 40,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Secondary screen → fixed pane is \"fixture_sheet\".",
+          "call": "screenHandle.expectFixedPane",
+          "arguments": [
+            "\"fixture_sheet\""
+          ],
+          "expression": "screen.expectFixedPane(\"fixture_sheet\")",
+          "sourceCode": "screen.expectFixedPane(\"fixture_sheet\")",
+          "surfaces": [
+            "Secondary screen"
+          ],
+          "phase": "scenario",
+          "order": 11,
+          "source": {
+            "file": "tests/37-semantic-desktop-show-clock.spec.ts",
+            "line": 41,
             "column": 9
           }
         },
@@ -438,10 +458,10 @@
             "Secondary screen"
           ],
           "phase": "scenario",
-          "order": 12,
+          "order": 13,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 45,
+            "line": 43,
             "column": 9
           }
         }
@@ -468,7 +488,7 @@
       "title": "runs named create, autosave, Save As, revision, and reopen through visible operator controls",
       "source": {
         "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-        "line": 50,
+        "line": 48,
         "column": 1
       },
       "preconditions": [
@@ -486,7 +506,7 @@
           "order": 0,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 54,
+            "line": 52,
             "column": 9
           }
         },
@@ -506,7 +526,7 @@
           "order": 1,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 55,
+            "line": 53,
             "column": 23
           }
         },
@@ -524,7 +544,7 @@
           "order": 4,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 58,
+            "line": 56,
             "column": 9
           }
         },
@@ -544,7 +564,7 @@
           "order": 5,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 60,
+            "line": 58,
             "column": 9
           }
         },
@@ -564,7 +584,7 @@
           "order": 6,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 61,
+            "line": 59,
             "column": 24
           }
         },
@@ -584,7 +604,7 @@
           "order": 8,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 65,
+            "line": 63,
             "column": 26
           }
         },
@@ -604,7 +624,7 @@
           "order": 10,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 70,
+            "line": 68,
             "column": 27
           }
         },
@@ -624,7 +644,7 @@
           "order": 12,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 74,
+            "line": 72,
             "column": 9
           }
         },
@@ -645,7 +665,7 @@
           "order": 14,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 76,
+            "line": 74,
             "column": 30
           }
         },
@@ -663,7 +683,7 @@
           "order": 16,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 78,
+            "line": 76,
             "column": 9
           }
         }
@@ -686,7 +706,7 @@
           "order": 2,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 56,
+            "line": 54,
             "column": 9
           }
         },
@@ -706,7 +726,7 @@
           "order": 3,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 57,
+            "line": 55,
             "column": 9
           }
         },
@@ -726,7 +746,7 @@
           "order": 7,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 64,
+            "line": 62,
             "column": 9
           }
         },
@@ -746,7 +766,7 @@
           "order": 9,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 66,
+            "line": 64,
             "column": 9
           }
         },
@@ -766,7 +786,7 @@
           "order": 11,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 73,
+            "line": 71,
             "column": 9
           }
         },
@@ -786,7 +806,7 @@
           "order": 13,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 75,
+            "line": 73,
             "column": 9
           }
         },
@@ -806,7 +826,7 @@
           "order": 15,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 77,
+            "line": 75,
             "column": 9
           }
         }
@@ -836,7 +856,7 @@
       "title": "uses exact clock boundaries and fixture-aware logical DMX without hidden ticks",
       "source": {
         "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-        "line": 82,
+        "line": 80,
         "column": 1
       },
       "preconditions": [],
@@ -855,7 +875,7 @@
           "order": 0,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 86,
+            "line": 84,
             "column": 23
           }
         },
@@ -876,7 +896,7 @@
           "order": 3,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 91,
+            "line": 89,
             "column": 9
           }
         }
@@ -899,7 +919,7 @@
           "order": 1,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 87,
+            "line": 85,
             "column": 3
           }
         },
@@ -920,7 +940,7 @@
           "order": 2,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 88,
+            "line": 86,
             "column": 3
           }
         },
@@ -941,7 +961,7 @@
           "order": 4,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 99,
+            "line": 97,
             "column": 3
           }
         },
@@ -962,7 +982,7 @@
           "order": 5,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 105,
+            "line": 103,
             "column": 9
           }
         },
@@ -983,7 +1003,7 @@
           "order": 6,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 106,
+            "line": 104,
             "column": 9
           }
         },
@@ -1004,7 +1024,7 @@
           "order": 7,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 107,
+            "line": 105,
             "column": 9
           }
         },
@@ -1025,7 +1045,7 @@
           "order": 8,
           "source": {
             "file": "tests/37-semantic-desktop-show-clock.spec.ts",
-            "line": 110,
+            "line": 108,
             "column": 9
           }
         }
@@ -49771,6 +49791,404 @@
             "file": "tests/66-semantic-stage-visualizer.spec.ts",
             "line": 118,
             "column": 38
+          }
+        }
+      ]
+    },
+    {
+      "id": "PERF-PROGRAMMER-001",
+      "title": "programmer actions acknowledge and reach their first output frame within the output-tick budget",
+      "source": {
+        "file": "tests/77-programmer-action-latency.spec.ts",
+        "line": 8,
+        "column": 1
+      },
+      "preconditions": [
+        {
+          "kind": "precondition",
+          "description": "Use the isolated Show.TwelveDimmers show.",
+          "call": "show.use",
+          "arguments": [
+            "Show.TwelveDimmers"
+          ],
+          "expression": "t.show.use(Show.TwelveDimmers)",
+          "sourceCode": "t.show.use(Show.TwelveDimmers)",
+          "surfaces": [
+            "Show files"
+          ],
+          "phase": "scenario",
+          "order": 0,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 12,
+            "column": 9
+          }
+        },
+        {
+          "kind": "precondition",
+          "description": "Open the ToskLight browser application.",
+          "call": "app.open",
+          "arguments": [],
+          "expression": "t.app.open()",
+          "sourceCode": "t.app.open()",
+          "surfaces": [
+            "Browser UI"
+          ],
+          "phase": "scenario",
+          "order": 1,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 13,
+            "column": 9
+          }
+        },
+        {
+          "kind": "precondition",
+          "description": "The ToskLight browser application is ready.",
+          "call": "app.expect.ready",
+          "arguments": [],
+          "expression": "t.app.expect.ready()",
+          "sourceCode": "t.app.expect.ready()",
+          "surfaces": [
+            "Browser UI"
+          ],
+          "phase": "scenario",
+          "order": 2,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 14,
+            "column": 9
+          }
+        }
+      ],
+      "steps": [
+        {
+          "kind": "step",
+          "description": "Command → api → type with \"FIXTURE 1\".",
+          "call": "command.via.api.type",
+          "arguments": [
+            "\"FIXTURE 1\""
+          ],
+          "expression": "t.command.via.api.type(\"FIXTURE 1\")",
+          "sourceCode": "t.command.via.api.type(\"FIXTURE 1\")",
+          "surfaces": [
+            "Command line",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 3,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 24,
+            "column": 10
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Selection → fixtures → api → item with 1.",
+          "call": "selection.fixtures.via.api.item",
+          "arguments": [
+            "1"
+          ],
+          "expression": "t.selection.fixtures.via.api.item(1)",
+          "sourceCode": "t.selection.fixtures.via.api.item(1)",
+          "surfaces": [
+            "Selection",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 4,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 33,
+            "column": 10
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Encoder → intensity → dimmer → api → set with 20.",
+          "call": "encoder.intensity.dimmer.via.api.set",
+          "arguments": [
+            "20"
+          ],
+          "expression": "t.encoder.intensity.dimmer.via.api.set(20)",
+          "sourceCode": "t.encoder.intensity.dimmer.via.api.set(20)",
+          "surfaces": [
+            "Encoder controls",
+            "Programmer",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 5,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 42,
+            "column": 10
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Press keypad keys [\"PRE\"].",
+          "call": "keypad.press",
+          "arguments": [
+            "[\"PRE\"]"
+          ],
+          "expression": "t.keypad.press([\"PRE\"])",
+          "sourceCode": "t.keypad.press([\"PRE\"])",
+          "surfaces": [
+            "Command keypad"
+          ],
+          "phase": "scenario",
+          "order": 6,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 63,
+            "column": 10
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Press keypad keys [\"ESC\"].",
+          "call": "keypad.press",
+          "arguments": [
+            "[\"ESC\"]"
+          ],
+          "expression": "t.keypad.press([\"ESC\"])",
+          "sourceCode": "t.keypad.press([\"ESC\"])",
+          "surfaces": [
+            "Command keypad"
+          ],
+          "phase": "scenario",
+          "order": 7,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 65,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Selection → fixtures → api → item with 1.",
+          "call": "selection.fixtures.via.api.item",
+          "arguments": [
+            "1"
+          ],
+          "expression": "t.selection.fixtures.via.api.item(1)",
+          "sourceCode": "t.selection.fixtures.via.api.item(1)",
+          "surfaces": [
+            "Selection",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 8,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 71,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Encoder → intensity → dimmer → api → set with 45.",
+          "call": "encoder.intensity.dimmer.via.api.set",
+          "arguments": [
+            "45"
+          ],
+          "expression": "t.encoder.intensity.dimmer.via.api.set(45)",
+          "sourceCode": "t.encoder.intensity.dimmer.via.api.set(45)",
+          "surfaces": [
+            "Encoder controls",
+            "Programmer",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 9,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 72,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Preset → api → store with PresetFamily.Intensity, 99, { mode: \"overwrite\" }.",
+          "call": "preset.via.api.store",
+          "arguments": [
+            "PresetFamily.Intensity",
+            "99",
+            "{ mode: \"overwrite\" }"
+          ],
+          "expression": "t.preset.via.api.store(PresetFamily.Intensity, 99, { mode: \"overwrite\", })",
+          "sourceCode": "t.preset.via.api.store(PresetFamily.Intensity, 99, {\n\t\t\tmode: \"overwrite\",\n\t\t})",
+          "surfaces": [
+            "Presets",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 10,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 73,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Clear Programmer values through the encoder intent.",
+          "call": "encoder.clear",
+          "arguments": [],
+          "expression": "t.encoder.clear()",
+          "sourceCode": "t.encoder.clear()",
+          "surfaces": [
+            "Encoder controls",
+            "Programmer"
+          ],
+          "phase": "scenario",
+          "order": 11,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 76,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Preset → api → recall with PresetFamily.Intensity, 99.",
+          "call": "preset.via.api.recall",
+          "arguments": [
+            "PresetFamily.Intensity",
+            "99"
+          ],
+          "expression": "t.preset.via.api.recall(PresetFamily.Intensity, 99)",
+          "sourceCode": "t.preset.via.api.recall(PresetFamily.Intensity, 99)",
+          "surfaces": [
+            "Presets",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 12,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 84,
+            "column": 10
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Show → contract identity.",
+          "call": "show.contractIdentity",
+          "arguments": [],
+          "expression": "t.show.contractIdentity()",
+          "sourceCode": "t.show.contractIdentity()",
+          "surfaces": [
+            "Show files"
+          ],
+          "phase": "scenario",
+          "order": 13,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 87,
+            "column": 35
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Connect the simulated attached hardware surface.",
+          "call": "hardware.connect",
+          "arguments": [],
+          "expression": "t.hardware.connect()",
+          "sourceCode": "t.hardware.connect()",
+          "surfaces": [
+            "Attached hardware",
+            "OSC"
+          ],
+          "phase": "scenario",
+          "order": 14,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 90,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Disconnect the simulated attached hardware surface.",
+          "call": "hardware.disconnect",
+          "arguments": [],
+          "expression": "t.hardware.disconnect()",
+          "sourceCode": "t.hardware.disconnect()",
+          "surfaces": [
+            "Attached hardware",
+            "OSC"
+          ],
+          "phase": "cleanup",
+          "order": 15,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 94,
+            "column": 10
+          }
+        }
+      ],
+      "expectedOutcomes": [
+        {
+          "kind": "expected-outcome",
+          "description": "fixture(1) DMX equals { Intensity: 140 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "fixture(1)",
+            "{ Intensity: 140 }"
+          ],
+          "expression": "t.expectFixtureDMX(fixture(1), { Intensity: 140 })",
+          "sourceCode": "t.expectFixtureDMX(fixture(1), { Intensity: 140 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario",
+          "order": 16,
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 107,
+            "column": 9
+          }
+        }
+      ],
+      "contextLabels": [
+        {
+          "kind": "show",
+          "label": "Twelve Dimmers"
+        }
+      ],
+      "testedSurfaces": [
+        "Attached hardware",
+        "Browser UI",
+        "Command keypad",
+        "Command line",
+        "DMX output",
+        "Encoder controls",
+        "OSC",
+        "Presets",
+        "Programmer",
+        "Selection",
+        "Show files",
+        "Typed API"
+      ],
+      "migration": {
+        "status": "unresolved",
+        "contract": "unresolved",
+        "helperFamily": "unresolved",
+        "artifacts": "unresolved",
+        "constraint": "unresolved"
+      },
+      "lastRun": null,
+      "diagnostics": [
+        {
+          "code": "missing-migration-status",
+          "message": "No exact source, ID, and title match exists in the generated migration inventory.",
+          "source": {
+            "file": "tests/77-programmer-action-latency.spec.ts",
+            "line": 8,
+            "column": 1
           }
         }
       ]

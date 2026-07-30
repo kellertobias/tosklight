@@ -72,6 +72,10 @@ export const stageLayout: StageLayoutModel = {
 		profile: { x: 46, y: 38, rotation: 0 },
 	},
 	positions3d: {},
+	positions2dConfig: {
+		provenance: "automatic",
+		projection: "front_to_back",
+	},
 };
 
 export const stageOptions: StageOptionsModel = {

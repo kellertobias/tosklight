@@ -315,6 +315,7 @@ const supportedCallPaths = new Set([
 	"screen.create",
 	"screenHandle.close",
 	"screenHandle.expectBridgeAction",
+	"screenHandle.expectFixedPane",
 	"screenHandle.page.expectSelected",
 	"screenHandle.page.select",
 	"screenHandle.remove",
@@ -513,6 +514,10 @@ const exactNarrations = new Map([
 	[
 		"screenHandle.expectBridgeAction",
 		([action]) => `Secondary-screen bridge action is ${action}.`,
+	],
+	[
+		"screenHandle.expectFixedPane",
+		([pane]) => `Secondary screen → fixed pane is ${pane}.`,
 	],
 	[
 		"screenHandle.page.expectSelected",

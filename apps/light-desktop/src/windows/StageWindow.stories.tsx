@@ -93,6 +93,7 @@ export function MarketingStage3DWindow() {
 				style={{ width: "100%", height: "100%" }}
 			>
 				<StageHeader
+					layout={stageLayout}
 					options={options}
 					selectedCount={stageSelection.fixtureIds.length}
 				/>
