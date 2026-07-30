@@ -52,17 +52,20 @@ files, contracts, runtime state, and verification surfaces do not overlap.
 | 26 | [Selection grids, Layout pane, and Auto 2D Grid](finished/26-auto-2d-grid-from-3d-positions.md) | Finished: deterministic auto-2D generation, persisted selection grids, shared Shift actions, and the Layout pane are complete. |
 | 27 | [Partial Show Load](finished/27-partial-show-load.md) | Finished: one selective-import workflow now provides grouped sections and patch layers, positional replacement, additive allocation and rewrites, scoped Stage merging, File Manager parity, and one operator Undo step. |
 | 28 | [Desk-wide Highlight look](finished/28-desk-wide-highlight-look.md) | Finished: one desk-owned semantic Highlight Look now resolves authored fixture capabilities while preserving explicit legacy compatibility. |
-| 29 | [Attribute registry, activation groups, and Indexed Presets](doing/29-attribute-registry-and-activation-groups.md) | In progress: complete the canonical registry, coherent programmer activation, Indexed Presets, persistence, and cross-surface contracts. |
-| 30 | [Macros](pending/30-macros-and-scheduled-macros.md) | Implement the settled TypeScript Macro package, runtime, permission, interaction, and persistence contract after the Attribute Registry. This is the final queued refactoring to start. |
-| 31 | [Supported scale, output isolation, and warm operator UI](pending/31-supported-scale-output-isolation-and-warm-operator-ui.md) | Preserve the proven 1,000-fixture benchmark and carry only remaining scale/isolation improvements after Macros. |
+| 29 | [Attribute registry, activation groups, and Indexed Presets](finished/29-attribute-registry-and-activation-groups.md) | Completed the canonical registry, coherent programmer activation, Indexed Presets, persistence, fixture-import mapping, and legacy compatibility contracts. |
+| 30 | [Green GitHub CI and visible benchmark results](pending/30-green-github-ci-and-visible-benchmark-results.md) | Make every non-benchmark GitHub CI path green while publishing current measured benchmark numbers, including degraded results, on the static site. |
+| 31 | [Supported scale, output isolation, and warm operator UI](pending/31-supported-scale-output-isolation-and-warm-operator-ui.md) | Preserve the proven 1,000-fixture benchmark and complete any remaining scale/isolation improvements after the Attribute Registry. |
+| 32 | [Macros](pending/32-macros-and-scheduled-macros.md) | Implement the settled TypeScript Macro package, runtime, permission, interaction, and persistence contract after supported-scale/output-isolation work. This is the final queued refactoring to start. |
 
 Product-roadmap work under `docs/plans/Next` and `docs/plans/Later` remains separate unless a queue
 file explicitly links it as its behavior contract.
 
 The queue's filenames and table use the same execution order. Plans through selection grids and
 automatic 2D layout are complete. Continue with Partial Show Load, the desk-wide Highlight look,
-the attribute registry with activation groups and Indexed Presets, Macros, and then any remaining
-supported-scale/output-isolation work. Timecode remains outside this queue.
+the attribute registry with activation groups and Indexed Presets, supported-scale/output-isolation
+work, and then Macros. Between the attribute-registry and supported-scale plans, Plan 30 restores
+green GitHub CI and publishes the benchmark's measured numbers even while its performance result
+is temporarily allowed to be degraded. Timecode remains outside this queue.
 
 ## Completed Storybook lane
 
