@@ -1,4 +1,5 @@
-import { type PropsWithChildren, useMemo } from "react";
+import { type PropsWithChildren, useCallback, useMemo } from "react";
+import { AttributeConfigurationActionsProvider } from "../features/attributeConfiguration/AttributeConfigurationActions";
 import { CueRecordingProvider } from "../features/cueRecording/CueRecordingProvider";
 import { DeskConnectionProvider } from "../features/deskConnection/DeskConnectionContext";
 import { DeskLoadingStateProvider } from "../features/deskLoading/DeskLoadingState";
@@ -493,6 +494,14 @@ export function ServerRuntime({
 		shellStatusActions,
 	} = useProviderActionSources(value);
 	const dynamicsActions = useDynamicsActionSource(state);
+	const refreshAttributeRegistry = useCallback(async () => {
+		const next = await state.api.runtime.bootstrap();
+		state.setBootstrap((current) =>
+			current
+				? { ...current, attribute_registry: next.attribute_registry }
+				: next,
+		);
+	}, [state.api, state.setBootstrap]);
 	const scheduler = useServerSchedulerController({
 		api: state.api,
 		showId: state.bootstrap?.active_show?.id ?? null,
@@ -502,35 +511,20 @@ export function ServerRuntime({
 		reportError: state.setError,
 	});
 	return (
-		<SchedulerProvider controller={scheduler}>
-			<ServerConnectionOwner
-				state={state}
-				loadShowObjects={loadShowObjects}
-				sessionRole={sessionRole}
-			>
-				<ServerActionProviderStack
+		<AttributeConfigurationActionsProvider
+			client={state.api.attributes}
+			showId={state.bootstrap?.active_show?.id ?? null}
+			canWrite={sessionRole === "primary" && state.status === "connected"}
+			onApplied={refreshAttributeRegistry}
+		>
+			<SchedulerProvider controller={scheduler}>
+				<ServerConnectionOwner
 					state={state}
-					data={{
-						fileSource,
-						screenSource,
-						showLifecycle,
-						deskConnection,
-						fixtureLibraryState,
-						mediaServersState,
-					}}
-					actions={{
-						highlightActions,
-						programmerActions,
-						dmxDiagnostics,
-						soundToLightActions,
-						shellStatusActions,
-					}}
-					dynamicsActions={dynamicsActions}
+					loadShowObjects={loadShowObjects}
+					sessionRole={sessionRole}
 				>
-					<ServerShowProviderStack
+					<ServerActionProviderStack
 						state={state}
-						boundaries={boundaries}
-						value={value}
 						data={{
 							fileSource,
 							screenSource,
@@ -539,13 +533,35 @@ export function ServerRuntime({
 							fixtureLibraryState,
 							mediaServersState,
 						}}
-						selectiveImportSource={selectiveImportSource}
-						sessionRole={sessionRole}
+						actions={{
+							highlightActions,
+							programmerActions,
+							dmxDiagnostics,
+							soundToLightActions,
+							shellStatusActions,
+						}}
+						dynamicsActions={dynamicsActions}
 					>
-						{children}
-					</ServerShowProviderStack>
-				</ServerActionProviderStack>
-			</ServerConnectionOwner>
-		</SchedulerProvider>
+						<ServerShowProviderStack
+							state={state}
+							boundaries={boundaries}
+							value={value}
+							data={{
+								fileSource,
+								screenSource,
+								showLifecycle,
+								deskConnection,
+								fixtureLibraryState,
+								mediaServersState,
+							}}
+							selectiveImportSource={selectiveImportSource}
+							sessionRole={sessionRole}
+						>
+							{children}
+						</ServerShowProviderStack>
+					</ServerActionProviderStack>
+				</ServerConnectionOwner>
+			</SchedulerProvider>
+		</AttributeConfigurationActionsProvider>
 	);
 }

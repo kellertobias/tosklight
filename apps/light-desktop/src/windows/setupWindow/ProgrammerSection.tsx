@@ -13,6 +13,7 @@ import {
 	RecordDefaultsFields,
 	UpdateDefaultsFields,
 } from "../../components/setup/ProgrammerDefaults";
+import { AttributeRegistrySettings } from "./AttributeRegistrySettings";
 import type { SetupWindowController } from "./controller";
 
 const DEFAULT_HIGHLIGHT_LOOK: HighlightLookConfiguration = {
@@ -330,6 +331,7 @@ export function ProgrammerSection({
 						onChange={controller.setRecordSettings}
 					/>
 				</article>
+				<AttributeRegistrySettings controller={controller} />
 				<article>
 					<header>
 						<b>Update defaults</b>

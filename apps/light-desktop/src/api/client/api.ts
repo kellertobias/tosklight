@@ -1,3 +1,4 @@
+import { AttributeConfigurationApiClient } from "./attributeConfiguration";
 import { DeskManagementApiClient } from "./deskManagement";
 import { DynamicsApiClient } from "./dynamics";
 import { FileApiClient } from "./files";
@@ -25,6 +26,7 @@ export function createLightApi(baseUrl?: string) {
 	const transport = runtime.capabilityTransport();
 	return {
 		runtime,
+		attributes: new AttributeConfigurationApiClient(transport),
 		desk: new DeskManagementApiClient(transport),
 		dynamics: new DynamicsApiClient(transport),
 		files: new FileApiClient(transport),
