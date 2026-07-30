@@ -533,7 +533,17 @@ jobs:
 
   pages-build:
     name: Documentation / Assemble static website
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.metadata.result == 'success' &&
+      needs.manual.result == 'success' &&
+      needs.help-screenshots.result == 'success' &&
+      needs.marketing-screenshots.result == 'success' &&
+      needs.visual-assets.result == 'success' &&
+      (needs['release-performance'].result == 'success' ||
+       needs['release-performance'].result == 'failure')
     needs:
       - metadata
       - manual
@@ -712,7 +722,6 @@ jobs:
           node-version: 22
 
       - name: Measure the published release or reuse its latest status
-        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -728,16 +737,28 @@ jobs:
             gh release download "v${VERSION}" --pattern "$archive" --dir "$tmp"
             unzip -q "$tmp/$archive" -d "$tmp/unpacked"
             benchmark="$(find "$tmp/unpacked" -type f -name light-benchmark -print -quit)"
-            if [[ -n "$benchmark" ]]; then
-              chmod +x "$benchmark"
-              node tools/run-release-performance.mjs \
-                --binary "$benchmark" \
-                --output-dir "$out" \
-                --version "$VERSION" \
-                --commit "$GITHUB_SHA" \
-                --release-url "$release_url" \
-                --hardware-label "GitHub Actions ubuntu-22.04"
+            if [[ -z "$benchmark" ]]; then
+              node -e '
+                const fs = require("node:fs");
+                fs.writeFileSync(process.argv[1], JSON.stringify({
+                  schema_version: 3,
+                  status: "unknown",
+                  summary: "The published release did not contain the benchmark executable.",
+                  generated_at: new Date().toISOString(),
+                  release: { version: process.env.VERSION, commit: process.env.GITHUB_SHA, url: process.argv[2] },
+                  evidence: { kind: "unknown", baseline: { exit_code: null, signal: null, error: "missing benchmark executable" }, failed_gates: [] }
+                }, null, 2) + "\n");
+              ' "$out/status.json" "$release_url"
+              exit 1
             fi
+            chmod +x "$benchmark"
+            node tools/run-release-performance.mjs \
+              --binary "$benchmark" \
+              --output-dir "$out" \
+              --version "$VERSION" \
+              --commit "$GITHUB_SHA" \
+              --release-url "$release_url" \
+              --hardware-label "GitHub Actions ubuntu-22.04"
 
             if [[ ! -f "$out/status.json" ]]; then
               node -e '
@@ -775,6 +796,7 @@ jobs:
                   release: { version: process.env.VERSION, commit: process.env.GITHUB_SHA, url: process.argv[2] }
                 }, null, 2) + "\n");
               ' "$out/status.json" "$release_url"
+              exit 1
             fi
           fi
 

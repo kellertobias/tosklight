@@ -1,53 +1,251 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import test from "node:test";
+import { spawnSync } from "node:child_process";
+import {
+	chmodSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	writeFileSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
+import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { classifyPerformance } from "./run-release-performance.mjs";
+import { artifactPaths } from "./artifact-paths.mjs";
+import {
+	classifyPerformance,
+	statusDocument,
+} from "./run-release-performance.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const result = (requiredFloorMet, gateMet = true, patchGateMet = true) => ({
-  report: {
-    required_floor_met: requiredFloorMet,
-    show_mutation: { gate_met: gateMet },
-    patch_mutation: patchGateMet == null ? null : { gate_met: patchGateMet },
-  },
+const options = {
+	version: "1.2.3",
+	commit: "0123456789abcdef",
+	"release-url":
+		"https://github.com/kellertobias/tosklight/releases/tag/v1.2.3",
+};
+
+function distribution(p50 = 0, p95 = 0) {
+	return { p50_microseconds: p50, p95_microseconds: p95 };
+}
+
+function report({
+	floor = true,
+	showMutation = true,
+	patchMutation = true,
+	achieved = 100,
+	deadlineMisses = 0,
+} = {}) {
+	return {
+		schema_version: 6,
+		benchmark: "tosklight_render_to_protocol_encoding_pipeline",
+		reference: {
+			hardware_label: "<CI runner>",
+			cpu_model: "Test CPU",
+			logical_cpus: 4,
+			operating_system: "linux",
+			architecture: "x86_64",
+		},
+		scenarios: [
+			{
+				profile: "hard_floor",
+				expectation: "required_floor",
+				release_blocking: true,
+				universes: 32,
+				fixture_count: 1024,
+				fixtures_per_universe: 32,
+				configured_rate_hz: 100,
+				achieved_ticks_per_second: achieved,
+				frame_rate: { minimum_one_second_completed_hz: achieved },
+				deadline: {
+					deadline_misses: deadlineMisses,
+					dropped_ticks: 0,
+					deferred_ticks: 0,
+				},
+			},
+		],
+		required_floor_met: floor,
+		show_mutation: {
+			gate_met: showMutation,
+			small_fixture_count: 120,
+			large_fixture_count: 1200,
+			small: distribution(10, 20),
+			large: distribution(30, 40),
+		},
+		patch_mutation: {
+			gate_met: patchMutation,
+			single_fixture: {
+				total_server: distribution(0, 0),
+				gate_p95_microseconds: 250_000,
+				gate_met: patchMutation,
+			},
+			hundred_fixtures: {
+				total_server: distribution(300, 400),
+				gate_p95_microseconds: 500_000,
+				gate_met: patchMutation,
+			},
+		},
+	};
+}
+
+function stage(value, exitCode = 0) {
+	const scenario = value?.scenarios?.[0];
+	return {
+		exit_code: exitCode,
+		signal: null,
+		error: null,
+		report: value,
+		fixtures_per_universe: scenario?.fixtures_per_universe,
+		fixture_count: scenario?.fixture_count,
+	};
+}
+
+test("invalid or inconsistent benchmark evidence is unknown", () => {
+	assert.equal(
+		classifyPerformance({ valid: false, reason: "invalid" }, null).status,
+		"unknown",
+	);
+	const status = statusDocument(
+		options,
+		stage({ required_floor_met: false }, 1),
+		null,
+	);
+	assert.equal(status.status, "unknown");
+	assert.equal(status.evidence.kind, "unknown");
+	assert.match(status.evidence.baseline.error, /missing required measured/u);
 });
 
-test("unknown is reserved for missing or invalid benchmark evidence", () => {
-  assert.equal(classifyPerformance(null, null).status, "unknown");
-  assert.equal(classifyPerformance({ report: {} }, null).status, "unknown");
+test("measured failures remain degraded with observed numbers and failed gates", () => {
+	const status = statusDocument(
+		options,
+		stage(report({ floor: false, achieved: 91.25, deadlineMisses: 3 }), 1),
+		null,
+	);
+	assert.equal(status.status, "degraded");
+	assert.equal(status.evidence.kind, "measured");
+	assert.equal(status.evidence.baseline.exit_code, 1);
+	assert.deepEqual(status.evidence.failed_gates, ["required_floor"]);
+	assert.equal(status.required_floor.achieved_ticks_per_second, 91.25);
+	assert.equal(status.required_floor.deadline_misses, 3);
+	assert.equal(status.show_mutation.large.p95_microseconds, 40);
+	assert.equal(status.patch.server.single_fixture.p95_microseconds, 0);
+	assert.match(
+		status.report_url,
+		/tosklight-performance-report-1\.2\.3\.zip$/u,
+	);
+	assert.match(status.doubled_density.reason, /required baseline/u);
 });
 
-test("missing the required floor or either mutation gate is degraded", () => {
-  assert.equal(classifyPerformance(result(false), null).status, "degraded");
-  assert.equal(classifyPerformance(result(true, false), null).status, "degraded");
-  assert.equal(classifyPerformance(result(true, true, false), null).status, "degraded");
-  assert.equal(classifyPerformance(result(true, true, null), null).status, "unknown");
+test("passing baseline remains healthy when the optional density probe degrades", () => {
+	const baseline = stage(report(), 0);
+	const doubledReport = report({
+		floor: false,
+		achieved: 82,
+		deadlineMisses: 2,
+	});
+	doubledReport.scenarios[0].fixtures_per_universe = 64;
+	doubledReport.scenarios[0].fixture_count = 2048;
+	delete doubledReport.show_mutation;
+	delete doubledReport.patch_mutation;
+	const status = statusDocument(options, baseline, stage(doubledReport, 1));
+	assert.equal(status.status, "healthy");
+	assert.equal(status.doubled_density.attempted, true);
+	assert.equal(status.doubled_density.met, false);
+	assert.equal(status.doubled_density.achieved_ticks_per_second, 82);
+	assert.equal(status.doubled_density.deadline_misses, 2);
 });
 
-test("passing the required floor is healthy regardless of the optional capacity probe", () => {
-  assert.equal(classifyPerformance(result(true), null).status, "healthy");
-  assert.equal(classifyPerformance(result(true), result(false)).status, "healthy");
-  assert.equal(classifyPerformance(result(true), result(true)).status, "healthy");
+test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
+	const temporary = mkdtempSync(
+		resolve(artifactPaths.tmp, "release-performance-test-"),
+	);
+	const executable = resolve(temporary, "fake-benchmark.mjs");
+	const output = resolve(temporary, "output");
+	mkdirSync(output, { recursive: true });
+	writeFileSync(
+		executable,
+		`#!/usr/bin/env node\nconsole.log(${JSON.stringify(
+			JSON.stringify(report({ floor: false, achieved: 88, deadlineMisses: 4 })),
+		)}); process.exit(1);\n`,
+	);
+	chmodSync(executable, 0o755);
+	const measured = spawnSync(
+		process.execPath,
+		[
+			resolve(ROOT, "tools/run-release-performance.mjs"),
+			"--binary",
+			executable,
+			"--output-dir",
+			output,
+			"--version",
+			options.version,
+			"--commit",
+			options.commit,
+			"--release-url",
+			options["release-url"],
+		],
+		{ encoding: "utf8" },
+	);
+	assert.equal(measured.status, 0, measured.stderr);
+	assert.equal(
+		JSON.parse(readFileSync(resolve(output, "status.json"))).status,
+		"degraded",
+	);
+	assert.equal(
+		JSON.parse(readFileSync(resolve(output, "hard-floor.json")))
+			.required_floor_met,
+		false,
+	);
+
+	writeFileSync(
+		executable,
+		'#!/usr/bin/env node\nconsole.log("not json"); process.exit(1);\n',
+	);
+	const invalid = spawnSync(
+		process.execPath,
+		[
+			resolve(ROOT, "tools/run-release-performance.mjs"),
+			"--binary",
+			executable,
+			"--output-dir",
+			output,
+			"--version",
+			options.version,
+			"--commit",
+			options.commit,
+			"--release-url",
+			options["release-url"],
+		],
+		{ encoding: "utf8" },
+	);
+	assert.equal(invalid.status, 1);
+	assert.equal(
+		JSON.parse(readFileSync(resolve(output, "status.json"))).status,
+		"unknown",
+	);
 });
 
-test("release workflow publishes before measuring and Pages consumes the status", () => {
-  const workflow = readFileSync(resolve(ROOT, ".github/workflows/release.yml"), "utf8");
-  const release = /^  release:\n([\s\S]*?)(?=^  [\w-]+:\n)/mu.exec(workflow)?.[1] ?? "";
-  const performance =
-    /^  release-performance:\n([\s\S]*?)(?=^  [\w-]+:\n)/mu.exec(workflow)?.[1] ?? "";
-  const pages = /^  pages-build:\n([\s\S]*?)(?=^  [\w-]+:\n)/mu.exec(workflow)?.[1] ?? "";
+test("release workflow separates measured degradation from infrastructure failure", () => {
+	const workflow = readFileSync(
+		resolve(ROOT, ".github/workflows/release.yml"),
+		"utf8",
+	);
+	const release =
+		/^ {2}release:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(workflow)?.[1] ?? "";
+	const performance =
+		/^ {2}release-performance:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(
+			workflow,
+		)?.[1] ?? "";
+	const pages =
+		/^ {2}pages-build:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(workflow)?.[1] ??
+		"";
 
-  assert.match(release, /needs:[\s\S]*?- build/u);
-  assert.doesNotMatch(release, /- benchmark|- pages-build/u);
-  assert.match(performance, /needs: \[metadata, release\]/u);
-  assert.match(performance, /gh release download/u);
-  assert.match(performance, /tools\/run-release-performance\.mjs/u);
-  assert.match(performance, /continue-on-error: true/u);
-  assert.match(pages, /release-performance/u);
-  assert.match(pages, /LIGHT_PERFORMANCE_STATUS_FILE/u);
-  const renderer = readFileSync(resolve(ROOT, "tools/render-landing-page.mjs"), "utf8");
-  assert.match(renderer, /performance", "index\.html/u);
-  assert.match(renderer, /Persisted Patch transaction/u);
+	assert.match(release, /needs:[\s\S]*?- build/u);
+	assert.doesNotMatch(release, /- benchmark|- pages-build/u);
+	assert.match(performance, /needs: \[metadata, release\]/u);
+	assert.match(performance, /gh release download/u);
+	assert.match(performance, /tools\/run-release-performance\.mjs/u);
+	assert.doesNotMatch(performance, /continue-on-error: true/u);
+	assert.match(pages, /always\(\)/u);
+	assert.match(pages, /needs\['release-performance'\]\.result/u);
+	assert.match(pages, /LIGHT_PERFORMANCE_STATUS_FILE/u);
 });

@@ -6,6 +6,10 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { artifactPaths } from "./artifact-paths.mjs";
+import {
+	normalizePublicPerformanceStatus,
+	renderPerformancePage,
+} from "./performance-publication.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SCREENSHOTS = resolve(ROOT, "docs/marketing/assets/screenshots");
@@ -87,7 +91,7 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(version)) 
   process.exit(1);
 }
 
-const escape = (value) =>
+const escapeHtml = (value) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 mkdirSync(resolve(siteRoot, "screenshots"), { recursive: true });
@@ -97,8 +101,8 @@ const figures = GALLERY.map(({ file, title, caption }) => {
   copyFileSync(source, resolve(siteRoot, "screenshots", name));
   return (
     `<figure class="shot">` +
-    `<img src="screenshots/${escape(name)}" alt="${escape(title)} — ${escape(caption)}" loading="lazy" decoding="async">` +
-    `<figcaption><strong>${escape(title)}</strong> ${escape(caption)}</figcaption>` +
+    `<img src="screenshots/${escapeHtml(name)}" alt="${escapeHtml(title)} — ${escapeHtml(caption)}" loading="lazy" decoding="async">` +
+    `<figcaption><strong>${escapeHtml(title)}</strong> ${escapeHtml(caption)}</figcaption>` +
     `</figure>`
   );
 }).join("\n        ");
@@ -114,61 +118,40 @@ const downloads = PLATFORMS.map(({ title, note, assets }) => {
       const name = file(version);
       return (
         `<li><div class="download-meta">` +
-        `<span class="download-kind">${escape(kind)}</span>` +
-        `<code>${escape(name)}</code></div>` +
-        `<a class="download-button" href="${escape(downloadUrl(name))}" download>Download</a></li>`
+        `<span class="download-kind">${escapeHtml(kind)}</span>` +
+        `<code>${escapeHtml(name)}</code></div>` +
+        `<a class="download-button" href="${escapeHtml(downloadUrl(name))}" download>Download</a></li>`
       );
     })
     .join("");
   return (
-    `<div class="platform"><h3>${escape(title)}</h3>` +
-    `<p class="platform-note">${escape(note)}</p>` +
+    `<div class="platform"><h3>${escapeHtml(title)}</h3>` +
+    `<p class="platform-note">${escapeHtml(note)}</p>` +
     `<ul class="download-list">${rows}</ul></div>`
   );
 }).join("\n        ");
 
-const knownPerformanceStates = new Set(["healthy", "degraded", "unknown"]);
-let performance = {
-  schema_version: 1,
-  status: "unknown",
-  summary: "No performance result is available for this release.",
-  release: { version, url: releaseUrl },
-};
+let performanceCandidate;
 if (PERFORMANCE_STATUS_FILE && existsSync(PERFORMANCE_STATUS_FILE)) {
   try {
-    const candidate = JSON.parse(readFileSync(PERFORMANCE_STATUS_FILE, "utf8"));
-    if (knownPerformanceStates.has(candidate.status) && typeof candidate.summary === "string") {
-      performance = candidate;
-    }
+    performanceCandidate = JSON.parse(readFileSync(PERFORMANCE_STATUS_FILE, "utf8"));
   } catch {
     // The public site must remain deployable when an infrastructure failure produced
     // an invalid status artifact. The explicit unknown state preserves that distinction.
   }
 }
+const performance = normalizePublicPerformanceStatus(performanceCandidate, {
+  version,
+  releaseUrl,
+});
 mkdirSync(resolve(siteRoot, "performance"), { recursive: true });
 writeFileSync(
   resolve(siteRoot, "performance", "status.json"),
   `${JSON.stringify(performance, null, 2)}\n`,
 );
-const patchServer = performance.patch?.server;
-const metric = (scenario, label) =>
-  `<tr><th>${escape(label)}</th><td>${scenario?.p50_microseconds ?? "—"} µs</td>` +
-  `<td>${scenario?.p95_microseconds ?? "—"} µs</td>` +
-  `<td>${scenario?.gate_p95_microseconds ?? "—"} µs</td>` +
-  `<td>${scenario?.gate_met == null ? "unknown" : scenario.gate_met ? "pass" : "degraded"}</td></tr>`;
 writeFileSync(
   resolve(siteRoot, "performance", "index.html"),
-  `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">` +
-    `<title>ToskLight release performance</title><style>body{font:16px system-ui;max-width:900px;margin:3rem auto;padding:0 1rem;background:#101318;color:#eef2f6}` +
-    `a{color:#72c7ff}table{border-collapse:collapse;width:100%;margin:2rem 0}th,td{border:1px solid #44505c;padding:.7rem;text-align:left}` +
-    `code{background:#20262d;padding:.15rem .35rem}</style><main><p><a href="../">← ToskLight</a></p>` +
-    `<h1>Release performance</h1><p><strong>${escape(performance.status.toUpperCase())}</strong> — ${escape(performance.summary)}</p>` +
-    `<h2>Persisted Patch transaction</h2><table><thead><tr><th>Batch</th><th>p50</th><th>p95</th><th>p95 budget</th><th>Gate</th></tr></thead><tbody>` +
-    metric(patchServer?.single_fixture, "1 fixture") +
-    metric(patchServer?.hundred_fixtures, "100 fixtures") +
-    `</tbody></table><p>UI action-to-visible latency is informational and is not yet a release gate. ` +
-    `Raw per-phase samples, request/response sizes, and machine metadata are retained in the detailed release report.</p>` +
-    `<p><a href="${escape(performance.release?.url ?? releaseUrl)}">Download the detailed benchmark report →</a></p></main></html>`,
+  renderPerformancePage(performance),
 );
 const performanceLabel = {
   healthy: "Performance healthy",
@@ -176,9 +159,9 @@ const performanceLabel = {
   unknown: "Performance unknown",
 }[performance.status];
 const performanceMarkup =
-  `<div class="performance-status performance-${escape(performance.status)}">` +
-  `<strong>${escape(performanceLabel)}</strong>` +
-  `<p>${escape(performance.summary)}</p>` +
+  `<div class="performance-status performance-${escapeHtml(performance.status)}">` +
+  `<strong>${escapeHtml(performanceLabel)}</strong>` +
+  `<p>${escapeHtml(performance.summary)}</p>` +
   `<a href="performance/">Performance details and raw report →</a>` +
   `</div>`;
 
