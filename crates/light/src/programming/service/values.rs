@@ -454,6 +454,11 @@ fn plan_fixture_value_intent(
                 let current = environment
                     .current_values
                     .get(&(fixture_id, intent.attribute.clone()))
+                    .or_else(|| {
+                        environment
+                            .default_values
+                            .get(&(fixture_id, intent.attribute.clone()))
+                    })
                     .and_then(AttributeValue::normalized)
                     .ok_or_else(|| {
                         ActionError::new(
@@ -514,6 +519,11 @@ fn group_current_value(
             environment
                 .current_values
                 .get(&(*fixture_id, attribute.clone()))
+                .or_else(|| {
+                    environment
+                        .default_values
+                        .get(&(*fixture_id, attribute.clone()))
+                })
                 .and_then(AttributeValue::normalized)
         })
         .collect::<Option<Vec<_>>>()?;

@@ -450,6 +450,34 @@ describe("ParameterControls projection lifecycle", () => {
 		).not.toBeInTheDocument();
 	});
 
+	it("keeps legacy family attributes when another family uses registry placement", () => {
+		attributeRegistry.current = [
+			attributeDescriptor("intensity", "Intensity", 1, 1),
+		];
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [
+			{
+				fixture_id: "fixture-1",
+				logical_heads: [],
+				definition: {
+					heads: [
+						{
+							shared: true,
+							parameters: [{ attribute: "gobo", capabilities: [] }],
+						},
+					],
+				},
+			},
+		];
+
+		render(<ParameterControls />);
+		fireEvent.click(screen.getByRole("button", { name: "Beam" }));
+
+		expect(
+			screen.getByRole("group", { name: "Enc 1 · Gobo 1" }),
+		).toBeInTheDocument();
+	});
+
 	it("keeps Direct input and Indexed Presets under the semantic encoder", () => {
 		attributeRegistry.current = [
 			{
@@ -816,6 +844,57 @@ describe("ParameterControls hardware encoders", () => {
 		);
 		navigate("right");
 		expect(screen.getByRole("button", { name: "Media" })).toHaveClass(
+			"is-active",
+		);
+	});
+
+	it("accepts the first routed hardware event before the attachment snapshot arrives", async () => {
+		server.bootstrap.hardware_connected = false;
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [
+			{
+				fixture_id: "fixture-1",
+				logical_heads: [],
+				definition: {
+					heads: [
+						{
+							shared: true,
+							parameters: [{ attribute: "intensity", capabilities: [] }],
+						},
+					],
+				},
+			},
+		];
+		render(<ParameterControls />);
+
+		fireEvent(
+			window,
+			new CustomEvent("light:encoder-action", {
+				detail: {
+					control: "encode/1",
+					value: "up",
+					request_id: "first-hardware-event",
+				},
+			}),
+		);
+		await vi.waitFor(() =>
+			expect(normalValuesActions.applyIntent).toHaveBeenLastCalledWith({
+				requestId: "first-hardware-event",
+				fixtureIds: ["fixture-1"],
+				attribute: "intensity",
+				operation: { type: "relative_step", delta: 0.01 },
+				timing: { fade: false, fadeMillis: null, delayMillis: null },
+				undoGroup: expect.any(String),
+			}),
+		);
+
+		fireEvent(
+			window,
+			new CustomEvent("light:encoder-action", {
+				detail: { control: "nav", value: "down" },
+			}),
+		);
+		expect(screen.getByRole("button", { name: "Color" })).toHaveClass(
 			"is-active",
 		);
 	});

@@ -79,14 +79,10 @@ export function useParameterController(active = true) {
 	const valueActions = useParameterValueActions(projection);
 	const actions = createParameterActions(projection, valueActions);
 	useHardwareParameterEncoders(projection, actions);
-	useHardwareParameterNavigation(
-		projection.active && projection.hardwareConnected,
-		family,
-		(next) => {
-			setFamily(next);
-			setEncoderPage(1);
-		},
-	);
+	useHardwareParameterNavigation(projection.active, family, (next) => {
+		setFamily(next);
+		setEncoderPage(1);
+	});
 	const selectEncoderGroup = (next: ParameterFamily, page: number) => {
 		setFamily(next);
 		setEncoderPage(page);

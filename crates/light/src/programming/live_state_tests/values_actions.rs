@@ -409,13 +409,12 @@ fn value_intent_identity_and_injected_activation_expansion_are_atomic() {
     let fixture = setup.fixtures[0];
     let intensity = AttributeKey::intensity();
     let pan = AttributeKey("pan".into());
-    setup.ports.environment.current_values = HashMap::from([
-        (
-            (fixture, intensity.clone()),
-            AttributeValue::Normalized(0.4),
-        ),
-        ((fixture, pan.clone()), AttributeValue::Normalized(0.7)),
-    ]);
+    setup.ports.environment.current_values =
+        HashMap::from([((fixture, pan.clone()), AttributeValue::Normalized(0.7))]);
+    setup.ports.environment.default_values = HashMap::from([(
+        (fixture, intensity.clone()),
+        AttributeValue::Normalized(0.4),
+    )]);
     setup.ports.environment.supported_attributes =
         HashMap::from([(fixture, HashSet::from([intensity.clone(), pan.clone()]))]);
 

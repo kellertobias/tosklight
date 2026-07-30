@@ -27,9 +27,12 @@ pub struct ProgrammingValuesEnvironment {
     /// Group id → resolved ordered membership. Relative Group intents use this frozen membership
     /// and the same current-value view as fixture intents.
     pub group_members: HashMap<String, Vec<FixtureId>>,
-    /// One frozen view of the values currently feeding output. Relative steps and linked captures
-    /// must all resolve from this same view.
+    /// One frozen view of values explicitly resolved by the engine. Linked captures must only use
+    /// this view so an unowned profile default does not silently become Programmer ownership.
     pub current_values: HashMap<(FixtureId, AttributeKey), AttributeValue>,
+    /// Profile defaults for addresses absent from `current_values`. Relative intents may use this
+    /// fallback as their starting value without materializing unrelated activation links.
+    pub default_values: HashMap<(FixtureId, AttributeKey), AttributeValue>,
     /// Attributes supported by each fixture or logical-head identity.
     pub supported_attributes: HashMap<FixtureId, HashSet<AttributeKey>>,
     /// Application policy input. Empty in current production configuration; tests and the future

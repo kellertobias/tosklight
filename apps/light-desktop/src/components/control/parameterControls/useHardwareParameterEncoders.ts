@@ -77,11 +77,15 @@ export function useHardwareParameterEncoders(
 	const undoGroup = useRef<EncoderUndoGroup | null>(null);
 	latest.current = { projection, actions };
 	useEffect(() => {
-		if (!projection.active || !projection.hardwareConnected) return;
+		if (!projection.active) return;
 		const handleEncoder = (event: Event) => {
 			const { projection, actions } = latest.current;
 			if (!actions.canWriteValues) return;
-			const { control, value, request_id: requestId } = (
+			const {
+				control,
+				value,
+				request_id: requestId,
+			} = (
 				event as CustomEvent<{
 					control: string;
 					value?: string;
@@ -102,8 +106,7 @@ export function useHardwareParameterEncoders(
 			if (
 				!undoGroup.current ||
 				undoGroup.current.key !== key ||
-				now - undoGroup.current.lastSampleAt >
-					ENCODER_UNDO_GROUP_IDLE_MILLIS
+				now - undoGroup.current.lastSampleAt > ENCODER_UNDO_GROUP_IDLE_MILLIS
 			)
 				undoGroup.current = {
 					key,
@@ -143,5 +146,5 @@ export function useHardwareParameterEncoders(
 			undoGroup.current = null;
 			window.removeEventListener("light:encoder-action", handleEncoder);
 		};
-	}, [projection.active, projection.hardwareConnected]);
+	}, [projection.active]);
 }

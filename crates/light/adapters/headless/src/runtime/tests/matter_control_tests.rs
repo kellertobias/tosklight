@@ -384,7 +384,7 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
         })
         .unwrap();
 
-    let activation = state.active_show.try_acquire().unwrap();
+    let activation = state.active_show.acquire_blocking();
     let rejected = apply_matter_playback_write(
         &state,
         matter::endpoint_id(1, 1).unwrap(),

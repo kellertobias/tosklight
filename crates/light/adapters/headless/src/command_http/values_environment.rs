@@ -8,8 +8,6 @@ use super::super::AppState;
 pub(super) fn values_environment(state: &AppState) -> ProgrammingValuesEnvironment {
     let snapshot = state.output.snapshot();
     let group_members = resolved_group_members(&snapshot.groups);
-    let mut current_values = state.output.resolved_values();
-    insert_profile_defaults(&mut current_values, &snapshot.fixtures);
     ProgrammingValuesEnvironment {
         fixture_ids: fixture_ids(&snapshot.fixtures),
         group_memberships: group_members
@@ -17,18 +15,20 @@ pub(super) fn values_environment(state: &AppState) -> ProgrammingValuesEnvironme
             .map(|(id, members)| (id.clone(), members.len()))
             .collect(),
         group_members,
-        // Profile defaults are part of the frozen value currently feeding output even when the
-        // Programmer has not yet taken ownership of that address.
-        current_values,
+        // Linked captures must come from the authoritative resolved context. Profile defaults are
+        // a separate fallback so a relative turn can start correctly without taking ownership of
+        // unrelated linked attributes.
+        current_values: state.output.resolved_values(),
+        default_values: profile_defaults(&snapshot.fixtures),
         supported_attributes: supported_attributes(&snapshot.fixtures),
         activation_links: state.attributes.activation_links(),
     }
 }
 
-fn insert_profile_defaults(
-    values: &mut HashMap<(FixtureId, AttributeKey), AttributeValue>,
+fn profile_defaults(
     fixtures: &[light_fixture::PatchedFixture],
-) {
+) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
+    let mut values = HashMap::new();
     for fixture in fixtures {
         for parameter in fixture
             .definition
@@ -37,9 +37,10 @@ fn insert_profile_defaults(
             .filter(|head| head.shared)
             .flat_map(|head| &head.parameters)
         {
-            values
-                .entry((fixture.fixture_id, parameter.attribute.clone()))
-                .or_insert(AttributeValue::Normalized(parameter.default));
+            values.insert(
+                (fixture.fixture_id, parameter.attribute.clone()),
+                AttributeValue::Normalized(parameter.default),
+            );
         }
         for logical in &fixture.logical_heads {
             let Some(head) = fixture
@@ -51,12 +52,14 @@ fn insert_profile_defaults(
                 continue;
             };
             for parameter in &head.parameters {
-                values
-                    .entry((logical.fixture_id, parameter.attribute.clone()))
-                    .or_insert(AttributeValue::Normalized(parameter.default));
+                values.insert(
+                    (logical.fixture_id, parameter.attribute.clone()),
+                    AttributeValue::Normalized(parameter.default),
+                );
             }
         }
     }
+    values
 }
 
 fn supported_attributes(

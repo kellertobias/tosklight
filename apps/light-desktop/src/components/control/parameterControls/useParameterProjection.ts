@@ -172,10 +172,8 @@ export function useParameterProjection(
 	const fallbackAttributes = parameterFamilies[family].filter((attribute) =>
 		supported.has(attribute),
 	);
-	const hasConfiguredRegistry = encoderGroups.some(
-		(group) => group.pages.length > 0,
-	);
-	const encoderSlots = hasConfiguredRegistry
+	const hasConfiguredFamily = Boolean(configuredGroup?.pages.length);
+	const encoderSlots = hasConfiguredFamily
 		? (configuredPage?.slots.map((descriptor) => descriptor?.id ?? null) ??
 			Array.from<null>({ length: 6 }).fill(null))
 		: Array.from(
