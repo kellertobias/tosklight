@@ -1,4 +1,5 @@
 import {
+	act,
 	cleanup,
 	fireEvent,
 	render as rtlRender,
@@ -115,6 +116,37 @@ function touchDrag(
 }
 
 describe("FixtureProfileEditor generic profile fields", () => {
+	it("preserves rapid sibling identity edits in one React batch", async () => {
+		const profile = blankFixtureProfile();
+		const save = vi.fn(async (draft: FixtureProfile) => draft);
+		render(
+			<FixtureProfileEditor
+				initialProfile={profile}
+				manufacturers={[]}
+				onSave={save}
+				onClose={vi.fn()}
+			/>,
+		);
+
+		act(() => {
+			fireEvent.change(screen.getByLabelText(/^Manufacturer/), {
+				target: { value: "Batch Maker" },
+			});
+			fireEvent.change(screen.getByLabelText(/^Fixture name/), {
+				target: { value: "Batch Fixture" },
+			});
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Save fixture" }));
+
+		await waitFor(() => expect(save).toHaveBeenCalledOnce());
+		expect(save.mock.calls[0][0]).toEqual(
+			expect.objectContaining({
+				manufacturer: "Batch Maker",
+				name: "Batch Fixture",
+			}),
+		);
+	});
+
 	it("authors the focused Generic physical metadata while preserving hidden legacy facts", async () => {
 		const profile = validProfile();
 		profile.physical.connectors = "powerCON TRUE1 TOP; 5-pin XLR in/out";

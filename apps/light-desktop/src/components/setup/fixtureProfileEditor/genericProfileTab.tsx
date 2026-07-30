@@ -1,4 +1,3 @@
-import type { FixtureProfile } from "../../../api/types";
 import {
 	Button,
 	FormLayout,
@@ -7,6 +6,8 @@ import {
 	TextAreaField,
 	TextField,
 } from "@tosklight/ui";
+import type { Dispatch, SetStateAction } from "react";
+import type { FixtureProfile } from "../../../api/types";
 import { AssetField } from "./assets";
 
 const FIXTURE_TYPES = [
@@ -25,7 +26,7 @@ const FIXTURE_TYPES = [
 
 type GenericSectionProps = {
 	draft: FixtureProfile;
-	onChange: (draft: FixtureProfile) => void;
+	onChange: Dispatch<SetStateAction<FixtureProfile>>;
 };
 
 function optionalNumber(value: string) {
@@ -48,7 +49,10 @@ function IdentitySection({
 						clearable
 						value={draft.manufacturer}
 						onChange={(event) =>
-							onChange({ ...draft, manufacturer: event.target.value })
+							onChange((current) => ({
+								...current,
+								manufacturer: event.target.value,
+							}))
 						}
 					/>
 					<Button
@@ -65,14 +69,19 @@ function IdentitySection({
 					label="Fixture name"
 					clearable
 					value={draft.name}
-					onChange={(event) => onChange({ ...draft, name: event.target.value })}
+					onChange={(event) =>
+						onChange((current) => ({ ...current, name: event.target.value }))
+					}
 				/>
 				<TextField
 					label="Fixture short name"
 					clearable
 					value={draft.short_name}
 					onChange={(event) =>
-						onChange({ ...draft, short_name: event.target.value })
+						onChange((current) => ({
+							...current,
+							short_name: event.target.value,
+						}))
 					}
 				/>
 				<SelectField
@@ -82,14 +91,16 @@ function IdentitySection({
 						value,
 						label: value,
 					}))}
-					onChange={(fixture_type) => onChange({ ...draft, fixture_type })}
+					onChange={(fixture_type) =>
+						onChange((current) => ({ ...current, fixture_type }))
+					}
 				/>
 				<AssetField
 					label="Fixture icon"
 					value={draft.stage_icon_asset}
 					extensions={["png", "jpg", "jpeg", "webp"]}
 					onChange={(stage_icon_asset) =>
-						onChange({ ...draft, stage_icon_asset })
+						onChange((current) => ({ ...current, stage_icon_asset }))
 					}
 				/>
 			</FormLayout>
@@ -107,7 +118,7 @@ function NotesAssetsSection({ draft, onChange }: GenericSectionProps) {
 					rows={9}
 					value={draft.notes}
 					onChange={(event) =>
-						onChange({ ...draft, notes: event.target.value })
+						onChange((current) => ({ ...current, notes: event.target.value }))
 					}
 				/>
 			</div>
@@ -119,7 +130,7 @@ function NotesAssetsSection({ draft, onChange }: GenericSectionProps) {
 					value={draft.photograph_asset}
 					extensions={["png", "jpg", "jpeg", "gif", "webp"]}
 					onChange={(photograph_asset) =>
-						onChange({ ...draft, photograph_asset })
+						onChange((current) => ({ ...current, photograph_asset }))
 					}
 				/>
 			</div>
@@ -130,7 +141,9 @@ function NotesAssetsSection({ draft, onChange }: GenericSectionProps) {
 					preview="glb"
 					value={draft.model_asset}
 					extensions={["glb"]}
-					onChange={(model_asset) => onChange({ ...draft, model_asset })}
+					onChange={(model_asset) =>
+						onChange((current) => ({ ...current, model_asset }))
+					}
 				/>
 			</div>
 		</section>
@@ -158,13 +171,13 @@ function PhysicalSection({ draft, onChange }: GenericSectionProps) {
 						min={0}
 						value={draft.physical[key] ?? ""}
 						onChange={(event) =>
-							onChange({
-								...draft,
+							onChange((current) => ({
+								...current,
 								physical: {
-									...draft.physical,
+									...current.physical,
 									[key]: optionalNumber(event.target.value),
 								},
-							})
+							}))
 						}
 					/>
 				))}
@@ -174,13 +187,13 @@ function PhysicalSection({ draft, onChange }: GenericSectionProps) {
 					min={0}
 					value={draft.physical.color_temperature_kelvin ?? ""}
 					onChange={(event) =>
-						onChange({
-							...draft,
+						onChange((current) => ({
+							...current,
 							physical: {
-								...draft.physical,
+								...current.physical,
 								color_temperature_kelvin: optionalNumber(event.target.value),
 							},
-						})
+						}))
 					}
 				/>
 				<NumberField
@@ -189,13 +202,13 @@ function PhysicalSection({ draft, onChange }: GenericSectionProps) {
 					min={0}
 					value={draft.physical.luminous_output_lumens ?? ""}
 					onChange={(event) =>
-						onChange({
-							...draft,
+						onChange((current) => ({
+							...current,
 							physical: {
-								...draft.physical,
+								...current.physical,
 								luminous_output_lumens: optionalNumber(event.target.value),
 							},
-						})
+						}))
 					}
 				/>
 				<NumberField
@@ -204,13 +217,13 @@ function PhysicalSection({ draft, onChange }: GenericSectionProps) {
 					min={0}
 					value={draft.physical.beam_angle_degrees ?? ""}
 					onChange={(event) =>
-						onChange({
-							...draft,
+						onChange((current) => ({
+							...current,
 							physical: {
-								...draft.physical,
+								...current.physical,
 								beam_angle_degrees: optionalNumber(event.target.value),
 							},
-						})
+						}))
 					}
 				/>
 			</FormLayout>
