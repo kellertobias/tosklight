@@ -230,6 +230,49 @@ fn fixture_selection_accepts_minus_before_subsetting() {
 }
 
 #[test]
+fn fixture_selection_skips_missing_positive_numbers_and_supports_fixture_thru() {
+    let base = schema_v2_direct_fixture().0;
+    let fixtures = [10_u32, 11, 12]
+        .into_iter()
+        .map(|number| {
+            let mut fixture = base.clone();
+            fixture.fixture_id = light_core::FixtureId::new();
+            fixture.fixture_number = Some(number);
+            fixture
+        })
+        .collect::<Vec<_>>();
+    let expected = fixtures
+        .iter()
+        .map(|fixture| fixture.fixture_id)
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        parse_fixture_selection(&fixtures, &["999".into()]).unwrap(),
+        Vec::<light_core::FixtureId>::new()
+    );
+    assert_eq!(
+        parse_fixture_selection(
+            &fixtures,
+            &["1".into(), "THRU".into(), "999".into()]
+        )
+        .unwrap(),
+        expected
+    );
+    assert_eq!(
+        parse_fixture_selection(&fixtures, &["9".into(), "THRU".into(), "13".into()]).unwrap(),
+        expected
+    );
+    assert_eq!(
+        parse_fixture_selection(&fixtures, &["THRU".into()]).unwrap(),
+        expected
+    );
+    assert_eq!(
+        parse_fixture_selection(&fixtures, &["not-a-number".into()]).unwrap_err(),
+        "fixture number is invalid"
+    );
+}
+
+#[test]
 fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identity() {
     let mut fixture = schema_v2_direct_fixture().0;
     fixture.fixture_number = Some(1);

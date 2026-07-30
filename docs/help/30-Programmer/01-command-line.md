@@ -6,7 +6,7 @@ With no active command, the command line contains the full editable default `FIX
 
 ## Inspect recent commands
 
-Click or tap the Command Line to open **Command Line History** near the top of the desk. It lists this desk's 50 most recent completed commands newest-first, including whether each command was accepted or rejected, its result or error, execution time, and whether it came from the desk UI or attached OSC hardware. Software, keyboard, and attached-hardware input that shares the authoritative command line creates one entry when Enter is pressed.
+Click or tap the Command Line to fold **Command Line History** upward from the command-line field. It lists this desk's 50 most recent completed commands newest-first, including whether each command was accepted or rejected, its result or error, execution time, and whether it came from the desk UI or attached OSC hardware. A current command error opens in this same surface, where it can be acknowledged without hiding the command that caused it. Software, keyboard, and attached-hardware input that shares the authoritative command line creates one entry when Enter is pressed.
 
 Opening, closing, or inspecting history does not change the unfinished command in the normal command-line field. Choose **Reuse** to copy an earlier command into that field; it is not executed until you press `[ENT]`. Escape, the close button, and a pointer press outside the panel close it while preserving the current input.
 
@@ -135,6 +135,7 @@ Press `[CLR]` once to clear the current selection explicitly without clearing it
 | Selection | Command | Result |
 | --- | --- | --- |
 | One fixture | `1 [ENTER]` | Select fixture 1. |
+| Every fixture | `[FIXTURE] [THRU] [ENTER]` | Select every existing fixture in fixture-number order, including unpatched fixtures. |
 | Complete multi-head fixture | `100 [ENTER]` | Select master 100.0 followed by every child head. |
 | Multi-head masters | `100.0 [THRU] 110.0 [ENTER]` | Select only the masters of fixtures 100 through 110. |
 | Multi-head children | `100 [THRU] 110 [ENTER]` | Select every child head in the range, excluding the masters. |

@@ -84,6 +84,7 @@ describe("CommandLine", () => {
 			hardware: true,
 			completed: true,
 			commandError: "Command rejected",
+			historyOpen: true,
 			persistentError: "Output is unavailable",
 			persistentErrorOpen: true,
 			recordState: "update-armed",
@@ -102,7 +103,12 @@ describe("CommandLine", () => {
 		);
 		expect(screen.getByText("BLACKOUT")).toBeVisible();
 		expect(screen.getByRole("alert")).toHaveTextContent("Command rejected");
-		expect(screen.getByRole("alert").parentElement).toBe(document.body);
+		expect(
+			screen
+				.getByRole("alert")
+				.closest(".command-history-panel")
+				?.parentElement,
+		).toHaveClass("command-field", "command-history-open");
 		expect(screen.getByRole("alertdialog")).toHaveTextContent(
 			"Output is unavailable",
 		);
@@ -164,6 +170,11 @@ describe("CommandLine", () => {
 		expect(
 			screen.getByRole("dialog", { name: "Command line history" }),
 		).toBeVisible();
+		expect(
+			screen
+				.getByRole("dialog", { name: "Command line history" })
+				.parentElement,
+		).toHaveClass("command-field", "command-history-open");
 		fireEvent.click(screen.getByRole("button", { name: "Reuse" }));
 		expect(reused).toHaveBeenCalledWith("GROUP 1 AT FULL");
 		fireEvent.keyDown(window, { key: "Escape" });

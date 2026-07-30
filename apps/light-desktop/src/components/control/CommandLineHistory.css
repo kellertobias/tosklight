@@ -1,18 +1,33 @@
 .command-history-panel {
-	position: fixed;
+	position: absolute;
 	z-index: 1150;
-	top: 12px;
-	left: 50%;
-	width: min(880px, calc(100vw - 24px));
-	max-height: min(62vh, 640px);
+	right: 0;
+	bottom: calc(100% + 5px);
+	left: 0;
+	width: 100%;
+	max-height: min(55vh, 560px);
 	display: grid;
 	grid-template-rows: auto minmax(0, 1fr);
 	overflow: hidden;
-	transform: translateX(-50%);
 	border: 1px solid var(--line2);
 	border-radius: 10px;
 	background: #10151b;
-	box-shadow: 0 18px 70px #000d;
+	box-shadow: 0 -18px 70px #000d;
+	transform-origin: bottom;
+}
+
+.command-field.command-history-open {
+	overflow: visible;
+}
+
+.command-line-left.has-command-history {
+	z-index: 1150;
+}
+
+.control-section:has(.command-line-left.has-command-history) {
+	position: relative;
+	z-index: 1150;
+	overflow: visible;
 }
 
 .command-history-panel > header {
@@ -47,6 +62,34 @@
 	min-height: 120px;
 	overflow: auto;
 	padding: 8px;
+}
+
+.command-history-current-error {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 14px;
+	border-bottom: 1px solid var(--red);
+	background: #381417;
+	color: #ff9da3;
+}
+
+.command-history-current-error b {
+	display: block;
+	font-size: 12px;
+	text-transform: uppercase;
+}
+
+.command-history-current-error p {
+	margin: 3px 0 0;
+}
+
+.command-history-current-error button {
+	min-height: 36px;
+	border: 1px solid var(--red);
+	background: #1d0c0e;
+	color: #ff9da3;
 }
 
 .command-history-entry {

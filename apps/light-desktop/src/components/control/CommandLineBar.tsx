@@ -115,6 +115,9 @@ function useCommandLineBarModel() {
 	const editGeneration = useRef(0);
 	const errors = useCommandErrors(setCompleted);
 	const [historyOpen, setHistoryOpen] = useState(false);
+	useEffect(() => {
+		if (errors.commandError) setHistoryOpen(true);
+	}, [errors.commandError]);
 	const hasRecordableContent =
 		command.selected.length > 0 ||
 		(programmerActivity.ready && programmerActivity.valueCount > 0) ||

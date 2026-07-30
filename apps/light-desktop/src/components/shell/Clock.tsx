@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import "./Clock.css";
 
 export function Clock({ now: fixedNow }: { now?: Date } = {}) {
 	const [liveNow, setLiveNow] = useState(() => new Date());
@@ -14,7 +15,9 @@ export function Clock({ now: fixedNow }: { now?: Date } = {}) {
 		<time className="dock-clock">
 			<span>{hour}</span>
 			<i>
-				<small>{String(now.getSeconds()).padStart(2, "0")}</small>
+				<small className="dock-clock-seconds">
+					{String(now.getSeconds()).padStart(2, "0")}
+				</small>
 			</i>
 			<span>{minute}</span>
 		</time>

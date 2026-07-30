@@ -22,12 +22,15 @@ fn fixture_by_number(
     let number = token
         .parse::<u32>()
         .map_err(|_| "fixture number is invalid")?;
-    snapshot
+    if number == 0 {
+        return Err("fixture numbers start at 1".into());
+    }
+    Ok(snapshot
         .fixtures
         .iter()
         .find(|fixture| fixture.fixture_number == Some(number))
         .map(selectable_fixture_ids)
-        .ok_or_else(|| format!("fixture {number} does not exist"))
+        .unwrap_or_default())
 }
 
 fn group_members(

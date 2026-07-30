@@ -1,5 +1,4 @@
 import { type RefObject, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
 import { Button, Input } from "../controls";
 
 export type CommandLineMode = "programmer" | "playbacks";
@@ -76,22 +75,11 @@ export function CommandLine(props: CommandLineProps) {
 	);
 	return (
 		<header
-			className={`command-line-bar command-line-left ${props.hardware ? "hardware-mode" : ""} ${props.mode === "playbacks" ? "playback-mode" : ""} ${props.commandError ? "has-command-error" : ""}`}
+			className={`command-line-bar command-line-left ${props.hardware ? "hardware-mode" : ""} ${props.mode === "playbacks" ? "playback-mode" : ""} ${props.historyOpen ? "has-command-history" : ""} ${props.commandError ? "has-command-error" : ""}`}
 			aria-busy={!props.ready}
 			data-command-authority={props.ready ? "ready" : "loading"}
 		>
-			<CommandErrorBanner
-				message={props.commandError}
-				onAcknowledge={props.onAcknowledgeCommandError}
-			/>
-			<CommandInputSurface {...props} />
-			<CommandHistoryPanel
-				history={props.history}
-				open={props.historyOpen}
-				panel={historyPanel}
-				onClose={() => props.onHistoryOpenChange(false)}
-				onReuse={props.onReuseHistory}
-			/>
+			<CommandInputSurface {...props} historyPanel={historyPanel} />
 			<PersistentErrorPopover
 				message={props.persistentError}
 				open={props.persistentErrorOpen}
@@ -103,7 +91,11 @@ export function CommandLine(props: CommandLineProps) {
 	);
 }
 
-function CommandInputSurface(props: CommandLineProps) {
+function CommandInputSurface(
+	props: CommandLineProps & {
+		historyPanel: RefObject<HTMLElement | null>;
+	},
+) {
 	return (
 		<>
 			<Button
@@ -118,7 +110,9 @@ function CommandInputSurface(props: CommandLineProps) {
 					<small>PLAYBK</small>
 				</span>
 			</Button>
-			<div className="command-field">
+			<div
+				className={`command-field ${props.historyOpen ? "command-history-open" : ""}`}
+			>
 				<Input
 					className={`command-input ${props.preloadArmed ? "blind" : ""} ${props.recordState === "update-armed" ? "update-armed" : ""} ${props.completed ? "completed" : ""} ${props.commandError ? "error" : ""}`}
 					aria-label="Command line"
@@ -149,6 +143,15 @@ function CommandInputSurface(props: CommandLineProps) {
 				<CommandStatusButton
 					status={props.status}
 					onOpen={props.onOpenStatus}
+				/>
+				<CommandHistoryPanel
+					history={props.history}
+					open={props.historyOpen}
+					panel={props.historyPanel}
+					commandError={props.commandError}
+					onAcknowledgeCommandError={props.onAcknowledgeCommandError}
+					onClose={() => props.onHistoryOpenChange(false)}
+					onReuse={props.onReuseHistory}
 				/>
 			</div>
 			{props.completed && (
@@ -205,23 +208,6 @@ function CommandStatusButton({
 				)}
 			</span>
 		</Button>
-	);
-}
-
-function CommandErrorBanner({
-	message,
-	onAcknowledge,
-}: {
-	message: string | null;
-	onAcknowledge: () => void;
-}) {
-	if (!message) return null;
-	return createPortal(
-		<div className="command-error-message" role="alert">
-			<span>{message}</span>
-			<Button onClick={onAcknowledge}>Acknowledge</Button>
-		</div>,
-		document.body,
 	);
 }
 
@@ -332,17 +318,21 @@ function CommandHistoryPanel({
 	history,
 	open,
 	panel,
+	commandError,
+	onAcknowledgeCommandError,
 	onClose,
 	onReuse,
 }: {
 	history: readonly CommandHistoryItem[];
 	open: boolean;
 	panel: RefObject<HTMLElement | null>;
+	commandError: string | null;
+	onAcknowledgeCommandError: () => void;
 	onClose: () => void;
 	onReuse: (command: string) => void;
 }) {
 	if (!open) return null;
-	return createPortal(
+	return (
 		<section
 			className="command-history-panel"
 			role="dialog"
@@ -359,6 +349,15 @@ function CommandHistoryPanel({
 					×
 				</Button>
 			</header>
+			{commandError && (
+				<div className="command-history-current-error" role="alert">
+					<div>
+						<b>Command error</b>
+						<p>{commandError}</p>
+					</div>
+					<Button onClick={onAcknowledgeCommandError}>Acknowledge</Button>
+				</div>
+			)}
 			<div className="command-history-list">
 				{history.length === 0 ? (
 					<p className="command-history-empty">
@@ -397,8 +396,7 @@ function CommandHistoryPanel({
 					))
 				)}
 			</div>
-		</section>,
-		document.body,
+		</section>
 	);
 }
 

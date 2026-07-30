@@ -50,7 +50,7 @@ pairedScenario<HistoryState>({
   },
 });
 
-test("COMMAND-HISTORY-001 @supplemental-ui › inspection, reuse, dismissal, reconnect, and hardware layout preserve unfinished input", async ({ api, bench, desk, page }) => {
+test("COMMAND-HISTORY-002 @ui › folded inspection, reuse, dismissal, reconnect, and hardware layout preserve unfinished input", async ({ api, bench, desk, page }) => {
   await loadCanonicalCopy(api, bench, "command-history-001-ui-boundaries", "default-stage");
   await execute(api, "FIXTURE 1 AT 25");
   await desk.open(api.baseUrl);
@@ -65,7 +65,7 @@ test("COMMAND-HISTORY-001 @supplemental-ui › inspection, reuse, dismissal, rec
   await expect(panel.getByText("Accepted", { exact: true })).toBeVisible();
   await expect(panel.getByText("FIXTURE 1 AT 25", { exact: true })).toBeVisible();
   expect(await commandGeometry(page)).toEqual(geometry);
-  await expectPanelAboveCommand(panel, page);
+  await expectPanelFoldedFromCommand(panel, page);
 
   await page.keyboard.press("Escape");
   await expect(panel).toBeHidden();
@@ -108,7 +108,7 @@ test("COMMAND-HISTORY-001 @supplemental-ui › inspection, reuse, dismissal, rec
     await page.getByRole("textbox", { name: "Command line" }).click();
     panel = page.getByRole("dialog", { name: "Command line history" });
     await expect(panel.getByText("attached hardware", { exact: false }).first()).toBeVisible();
-    await expectPanelAboveCommand(panel, page);
+    await expectPanelFoldedFromCommand(panel, page);
   } finally {
     await hardware.send("/light/unsubscribe", [clientId]).catch(() => undefined);
     await hardware.close();
@@ -142,11 +142,13 @@ async function commandGeometry(page: Page) {
   });
 }
 
-async function expectPanelAboveCommand(panel: Locator, page: Page) {
+async function expectPanelFoldedFromCommand(panel: Locator, page: Page) {
   const panelBounds = await panel.boundingBox();
-  const commandBounds = await page.locator(".command-line-bar").boundingBox();
+  const commandBounds = await page.locator(".command-field").boundingBox();
   expect(panelBounds).not.toBeNull();
   expect(commandBounds).not.toBeNull();
-  expect(panelBounds!.y).toBeLessThanOrEqual(16);
-  expect(panelBounds!.y + panelBounds!.height).toBeLessThan(commandBounds!.y);
+  expect(Math.abs(panelBounds!.x - commandBounds!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(panelBounds!.width - commandBounds!.width)).toBeLessThanOrEqual(1);
+  expect(panelBounds!.y + panelBounds!.height).toBeLessThanOrEqual(commandBounds!.y);
+  expect(commandBounds!.y - (panelBounds!.y + panelBounds!.height)).toBeLessThanOrEqual(6);
 }
