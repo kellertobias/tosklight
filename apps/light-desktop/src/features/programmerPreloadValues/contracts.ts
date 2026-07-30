@@ -96,6 +96,12 @@ export type ProgrammerPreloadValuesCommand =
 			undoGroup?: string | null;
 			timing: ProgrammerPreloadValueTiming;
 	  }
+	| {
+			action: "apply_indexed_preset";
+			expectedSelectionRevision: number;
+			attribute: string;
+			targets: readonly ProgrammerPreloadIndexedPresetTarget[];
+	  }
 	| { action: "batch"; mutations: readonly ProgrammerPreloadValuesMutation[] };
 
 export interface ProgrammerPreloadValuesActionRequest {
@@ -103,6 +109,12 @@ export interface ProgrammerPreloadValuesActionRequest {
 	expectedPreloadRevision: number;
 	expectedCaptureModeRevision: number;
 	action: ProgrammerPreloadValuesCommand;
+}
+
+export interface ProgrammerPreloadIndexedPresetTarget {
+	fixtureId: string;
+	functionId: string;
+	expectedProfileRevision: number;
 }
 
 interface ProgrammerPreloadValuesOutcomeBase {
@@ -179,6 +191,12 @@ export interface ProgrammerPreloadValuesActions {
 	applyIntent(
 		input: ApplyProgrammerPreloadValueIntentInput,
 	): Promise<ProgrammerPreloadValuesActionOutcome | null>;
+	applyIndexedPreset(input: {
+		requestId: string;
+		expectedSelectionRevision: number;
+		attribute: string;
+		targets: readonly ProgrammerPreloadIndexedPresetTarget[];
+	}): Promise<ProgrammerPreloadValuesActionOutcome | null>;
 	setFixtureValue(
 		input: SetProgrammerPreloadFixtureValueInput,
 	): Promise<ProgrammerPreloadValuesActionOutcome | null>;

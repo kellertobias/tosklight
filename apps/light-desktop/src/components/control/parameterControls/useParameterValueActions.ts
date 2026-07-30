@@ -97,13 +97,40 @@ export function useParameterValueActions(projection: ParameterProjection) {
 		applyIndexedPreset: (
 			attribute: string,
 			semanticId: string,
-			fixtureIds: readonly string[],
+			targets: ReadonlyArray<{
+				fixtureId: string;
+				functionId?: string;
+				profileRevision?: number;
+			}>,
 		) =>
-			queue.submitBarrier(() =>
-				actions?.applyIntent && canWriteValues && fixtureIds.length
+			queue.submitBarrier(() => {
+				const authoredTargets = targets.flatMap((target) =>
+					target.functionId && target.profileRevision != null
+						? [
+								{
+									fixtureId: target.fixtureId,
+									functionId: target.functionId,
+									expectedProfileRevision: target.profileRevision,
+								},
+							]
+						: [],
+				);
+				if (
+					actions?.applyIndexedPreset &&
+					canWriteValues &&
+					authoredTargets.length === targets.length &&
+					authoredTargets.length
+				)
+					return actions.applyIndexedPreset({
+						requestId: crypto.randomUUID(),
+						expectedSelectionRevision: projection.selectionRevision,
+						attribute,
+						targets: authoredTargets,
+					});
+				return actions?.applyIntent && canWriteValues && targets.length
 					? actions.applyIntent({
 							requestId: crypto.randomUUID(),
-							fixtureIds,
+							fixtureIds: targets.map((target) => target.fixtureId),
 							attribute,
 							operation: {
 								type: "absolute_set",
@@ -114,8 +141,8 @@ export function useParameterValueActions(projection: ParameterProjection) {
 									? parameterValueTiming(projection.programmerFadeMillis)
 									: immediateParameterTiming(),
 						})
-					: Promise.resolve(null),
-			),
+					: Promise.resolve(null);
+			}),
 		stepParameter,
 		applyParameterRange: (attribute: string, percentages: number[]) =>
 			queue.submitBarrier(

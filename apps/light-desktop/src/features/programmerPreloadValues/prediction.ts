@@ -34,6 +34,7 @@ export function predictProgrammerPreloadValues(
 				}));
 		return (current) => applyMutations(current, mutations);
 	}
+	if (action.action === "apply_indexed_preset") return (current) => current;
 	const mutations = action.action === "batch" ? action.mutations : [action];
 	return (current) => applyMutations(current, mutations);
 }

@@ -52,13 +52,19 @@ pub(super) fn ws_programmer_preload_values_action(
         return Err("Preload values payload request_id must match the WebSocket request_id".into());
     }
     let request_id = request.request_id;
+    let session_id = context
+        .session_id
+        .map(SessionId)
+        .ok_or_else(|| "Preload values require a session".to_owned())?;
+    let command_action = indexed_presets::preload_action(state, session_id, request.action)
+        .map_err(|error| error.message)?;
     let action = light_application::ActionEnvelope {
         context: context
             .clone()
             .with_expected_revision(request.expected_revision),
         command: light_application::ProgrammingPreloadValuesRequest {
             expected_capture_mode_revision: request.expected_capture_mode_revision,
-            command: command_http::preload_values_command(request.action),
+            command: command_http::preload_values_command(command_action),
         },
     };
     let result = state

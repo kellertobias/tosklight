@@ -121,6 +121,7 @@ describe("ProgrammerPreloadValuesViewProvider", () => {
 		const loadSnapshot = vi.fn(async () => preloadSnapshot());
 		const actions: ProgrammerPreloadValuesActions = {
 			applyIntent: vi.fn(async () => null),
+			applyIndexedPreset: vi.fn(async () => null),
 			setFixtureValue: vi.fn(async () => null),
 			releaseFixtureValue: vi.fn(async () => null),
 			setGroupValue: vi.fn(async () => null),

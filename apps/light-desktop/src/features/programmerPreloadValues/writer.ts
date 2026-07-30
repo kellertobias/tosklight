@@ -74,6 +74,24 @@ export class ProgrammerPreloadValuesWriter
 		});
 	}
 
+	applyIndexedPreset(input: {
+		requestId: string;
+		expectedSelectionRevision: number;
+		attribute: string;
+		targets: ReadonlyArray<{
+			fixtureId: string;
+			functionId: string;
+			expectedProfileRevision: number;
+		}>;
+	}) {
+		return this.enqueue(input.requestId, {
+			action: "apply_indexed_preset",
+			expectedSelectionRevision: input.expectedSelectionRevision,
+			attribute: input.attribute,
+			targets: input.targets,
+		});
+	}
+
 	setFixtureValue(input: SetProgrammerPreloadFixtureValueInput) {
 		return this.enqueue(input.requestId, {
 			action: "set_fixture",

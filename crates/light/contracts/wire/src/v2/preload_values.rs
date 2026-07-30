@@ -140,6 +140,13 @@ pub enum ProgrammingPreloadValuesAction {
         #[serde(default)]
         timing: ProgrammingPreloadValueTiming,
     },
+    ApplyIndexedPreset {
+        #[ts(type = "number")]
+        expected_selection_revision: u64,
+        attribute: String,
+        #[schemars(length(min = 1, max = 10_000))]
+        targets: Vec<super::programming::ProgrammingIndexedPresetTarget>,
+    },
     SetFixture {
         fixture_id: Uuid,
         attribute: String,

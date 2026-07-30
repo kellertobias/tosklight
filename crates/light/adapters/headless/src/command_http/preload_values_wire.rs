@@ -36,6 +36,9 @@ pub(crate) fn command(
                 },
             },
         },
+        wire::ProgrammingPreloadValuesAction::ApplyIndexedPreset { .. } => {
+            unreachable!("Indexed Preset actions are resolved against the active patch first")
+        }
         wire::ProgrammingPreloadValuesAction::SetFixture {
             fixture_id,
             attribute,

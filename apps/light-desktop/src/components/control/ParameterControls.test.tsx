@@ -69,6 +69,7 @@ const preloadProgrammerValues = vi.hoisted(() => ({
 const normalValuesActions = vi.hoisted(() => ({
 	batch: vi.fn(async () => null),
 	applyIntent: vi.fn(async () => null),
+	applyIndexedPreset: vi.fn(async () => null),
 }));
 const commandLine = vi.hoisted(() => ({
 	text: "FIXTURE",
@@ -441,15 +442,17 @@ describe("ParameterControls projection lifecycle", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Show presets" }));
 		fireEvent.click(screen.getByRole("button", { name: /Dots/ }));
 
-		expect(normalValuesActions.applyIntent).toHaveBeenCalledWith({
+		expect(normalValuesActions.applyIndexedPreset).toHaveBeenCalledWith({
 			requestId: expect.any(String),
-			fixtureIds: ["fixture-1"],
+			expectedSelectionRevision: 1,
 			attribute: "gobo.1",
-			operation: {
-				type: "absolute_set",
-				value: { kind: "discrete", value: "gobo.dots" },
-			},
-			timing: { fade: false, fadeMillis: null, delayMillis: null },
+			targets: [
+				{
+					fixtureId: "fixture-1",
+					functionId: "function-1",
+					expectedProfileRevision: 1,
+				},
+			],
 		});
 	});
 });
@@ -489,6 +492,7 @@ function schemaV2Fixture() {
 			],
 			profile_snapshot: {
 				id: "profile-1",
+				revision: 1,
 				modes: [
 					{
 						id: "mode-1",

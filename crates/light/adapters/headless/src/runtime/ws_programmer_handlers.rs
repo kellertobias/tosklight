@@ -133,8 +133,13 @@ pub(super) fn ws_programmer_values_action(
         .clone()
         .with_expected_revision(request.expected_revision);
     let colors = command_http::color_attribute_index(state);
-    let command =
-        command_http::values_command(request.action, &colors).map_err(|error| error.message)?;
+    let session_id = context
+        .session_id
+        .map(SessionId)
+        .ok_or_else(|| "Programmer values require a session".to_owned())?;
+    let action = indexed_presets::programming_action(state, session_id, request.action)
+        .map_err(|error| error.message)?;
+    let command = command_http::values_command(action, &colors).map_err(|error| error.message)?;
     let result = state
         .programming
         .handle_values(

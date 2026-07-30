@@ -192,6 +192,7 @@ export function useParameterProjection(
 		programmerFadeMillis: programmerFadeMillis ?? undefined,
 		selectedFixtureIds,
 		selectedFixtures,
+		selectionRevision: selection?.revision ?? 0,
 		selectedGroupId: selectedGroup,
 		programmerValuesRoute: captureMode
 			? preloadCaptureActive

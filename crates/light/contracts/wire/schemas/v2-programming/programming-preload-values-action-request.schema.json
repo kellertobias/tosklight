@@ -29,6 +29,29 @@
     "action"
   ],
   "$defs": {
+    "ProgrammingIndexedPresetTarget": {
+      "type": "object",
+      "properties": {
+        "expected_profile_revision": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "function_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "fixture_id",
+        "function_id",
+        "expected_profile_revision"
+      ]
+    },
     "ProgrammingPreloadAttributeValue": {
       "oneOf": [
         {
@@ -377,6 +400,37 @@
             "fixture_ids",
             "attribute",
             "operation"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "attribute": {
+              "type": "string"
+            },
+            "expected_selection_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "targets": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProgrammingIndexedPresetTarget"
+              },
+              "maxItems": 10000,
+              "minItems": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "apply_indexed_preset"
+            }
+          },
+          "required": [
+            "type",
+            "expected_selection_revision",
+            "attribute",
+            "targets"
           ]
         },
         {

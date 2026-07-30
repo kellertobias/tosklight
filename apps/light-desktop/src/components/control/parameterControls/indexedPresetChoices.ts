@@ -6,6 +6,8 @@ import type {
 
 export interface IndexedPresetTarget {
 	fixtureId: string;
+	functionId?: string;
+	profileRevision?: number;
 	actionId?: string;
 }
 
@@ -36,7 +38,7 @@ export function indexedPresetChoices(
 		const mode = profile?.modes.find(
 			(candidate) => candidate.id === fixture.definition.mode_id,
 		);
-		if (!mode) continue;
+		if (!profile || !mode) continue;
 		for (const channel of mode.channels) {
 			if (channel.attribute !== attribute) continue;
 			const owner = profileHeadOwner(fixture, mode, channel.head_id);
@@ -55,7 +57,13 @@ export function indexedPresetChoices(
 						kind: behavior.type,
 						semanticId,
 						controlKind: null,
-						targets: [{ fixtureId: owner }],
+						targets: [
+							{
+								fixtureId: owner,
+								functionId: fn.id,
+								profileRevision: profile.revision,
+							},
+						],
 						targetIds: new Set([owner]),
 						disabled: false,
 					});

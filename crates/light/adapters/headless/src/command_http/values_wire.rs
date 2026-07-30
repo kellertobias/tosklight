@@ -35,6 +35,9 @@ pub(crate) fn values_command(
                 timing: application_timing(timing),
             },
         },
+        wire::ProgrammingValuesAction::ApplyIndexedPreset { .. } => {
+            unreachable!("Indexed Preset actions are resolved against the active patch first")
+        }
         wire::ProgrammingValuesAction::SetSelection {
             fixture_ids,
             attribute,

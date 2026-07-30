@@ -19,6 +19,7 @@ function projection(
 		active: true,
 		selectedFixtureIds: ["fixture-3", "fixture-1", "fixture-2"],
 		selectedFixtures: [],
+		selectionRevision: 1,
 		selectedGroupId: null,
 		programmerValuesRoute: "normal",
 		programmerValuesReady: true,

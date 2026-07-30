@@ -528,6 +528,7 @@ fn programming(config: &Config) -> Vec<String> {
         ProgrammingValueTiming::decl(config),
         ProgrammingValueOperation::decl(config),
         ProgrammingValueMutation::decl(config),
+        ProgrammingIndexedPresetTarget::decl(config),
         ProgrammingValuesAction::decl(config),
         ProgrammingValuesActionRequest::decl(config),
         ProgrammingValuesActionState::decl(config),

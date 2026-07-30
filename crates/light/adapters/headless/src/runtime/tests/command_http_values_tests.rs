@@ -884,9 +884,14 @@ async fn set_selection_resolves_the_spread_server_side_in_selection_order() {
 }
 
 #[tokio::test]
-async fn indexed_semantic_intent_uses_each_embedded_profile_raw_value_immediately() {
+async fn indexed_preset_uses_each_embedded_profile_raw_value_immediately() {
     let scenario = CommandHttpScenario::new().await;
     let first = schema_v2_direct_fixture().0;
+    let first_profile_revision = first.definition.profile_snapshot.as_ref().unwrap().revision;
+    let first_function_id = first.definition.profile_snapshot.as_ref().unwrap().modes[0].channels
+        [0]
+    .functions[0]
+        .id;
     let mut second = first.clone();
     second.fixture_id = light_core::FixtureId::new();
     second.fixture_number = Some(2);
@@ -898,6 +903,8 @@ async fn indexed_semantic_intent_uses_each_embedded_profile_raw_value_immediatel
         panic!("schema-v2 test fixture should expose an indexed Gobo function");
     };
     *raw_value = 41;
+    let second_profile_revision = second_profile.revision;
+    let second_function_id = second_profile.modes[0].channels[0].functions[0].id;
     let ids = [first.fixture_id, second.fixture_id];
     scenario
         .state
@@ -908,6 +915,10 @@ async fn indexed_semantic_intent_uses_each_embedded_profile_raw_value_immediatel
             ..EngineSnapshot::default()
         })
         .unwrap();
+    let selection_revision = scenario
+        .state
+        .programming
+        .select(scenario.session.id, ids);
 
     let response = scenario
         .values_action(serde_json::json!({
@@ -915,14 +926,21 @@ async fn indexed_semantic_intent_uses_each_embedded_profile_raw_value_immediatel
             "expected_revision": 0,
             "expected_capture_mode_revision": 0,
             "action": {
-                "type": "apply_intent",
-                "fixture_ids": [ids[0].0, ids[1].0],
+                "type": "apply_indexed_preset",
+                "expected_selection_revision": selection_revision,
                 "attribute": "gobo.1",
-                "operation": {
-                    "type": "absolute_set",
-                    "value": {"kind": "discrete", "value": "gobo.dots"}
-                },
-                "timing": {"fade": false}
+                "targets": [
+                    {
+                        "fixture_id": ids[0].0,
+                        "function_id": first_function_id,
+                        "expected_profile_revision": first_profile_revision
+                    },
+                    {
+                        "fixture_id": ids[1].0,
+                        "function_id": second_function_id,
+                        "expected_profile_revision": second_profile_revision
+                    }
+                ]
             }
         }))
         .await;
@@ -946,5 +964,116 @@ async fn indexed_semantic_intent_uses_each_embedded_profile_raw_value_immediatel
         .universes[&1];
     assert_eq!(frame[0], 93);
     assert_eq!(frame[2], 41);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn indexed_preset_rejects_a_stale_selection_without_mutating_the_programmer() {
+    let scenario = CommandHttpScenario::new().await;
+    let fixture = schema_v2_direct_fixture().0;
+    let fixture_id = fixture.fixture_id;
+    let profile_revision = fixture.definition.profile_snapshot.as_ref().unwrap().revision;
+    let function_id = fixture.definition.profile_snapshot.as_ref().unwrap().modes[0].channels[0]
+        .functions[0]
+        .id;
+    scenario
+        .state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    let stale_revision = scenario
+        .state
+        .programming
+        .select(scenario.session.id, [fixture_id]);
+    scenario
+        .state
+        .programming
+        .select(scenario.session.id, []);
+
+    let response = scenario
+        .values_action(serde_json::json!({
+            "request_id": "stale-indexed-preset",
+            "expected_revision": 0,
+            "expected_capture_mode_revision": 0,
+            "action": {
+                "type": "apply_indexed_preset",
+                "expected_selection_revision": stale_revision,
+                "attribute": "gobo.1",
+                "targets": [{
+                    "fixture_id": fixture_id.0,
+                    "function_id": function_id,
+                    "expected_profile_revision": profile_revision
+                }]
+            }
+        }))
+        .await;
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert!(
+        scenario
+            .state
+            .programming
+            .get(scenario.session.id)
+            .unwrap()
+            .values
+            .is_empty()
+    );
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn indexed_preset_rejects_a_stale_embedded_profile_revision() {
+    let scenario = CommandHttpScenario::new().await;
+    let fixture = schema_v2_direct_fixture().0;
+    let fixture_id = fixture.fixture_id;
+    let profile = fixture.definition.profile_snapshot.as_ref().unwrap();
+    let function_id = profile.modes[0].channels[0].functions[0].id;
+    let stale_profile_revision = profile.revision.saturating_sub(1);
+    scenario
+        .state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    let selection_revision = scenario
+        .state
+        .programming
+        .select(scenario.session.id, [fixture_id]);
+
+    let response = scenario
+        .values_action(serde_json::json!({
+            "request_id": "stale-profile-indexed-preset",
+            "expected_revision": 0,
+            "expected_capture_mode_revision": 0,
+            "action": {
+                "type": "apply_indexed_preset",
+                "expected_selection_revision": selection_revision,
+                "attribute": "gobo.1",
+                "targets": [{
+                    "fixture_id": fixture_id.0,
+                    "function_id": function_id,
+                    "expected_profile_revision": stale_profile_revision
+                }]
+            }
+        }))
+        .await;
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert!(
+        scenario
+            .state
+            .programming
+            .get(scenario.session.id)
+            .unwrap()
+            .values
+            .is_empty()
+    );
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

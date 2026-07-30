@@ -180,6 +180,13 @@ pub struct ProgrammingValuesActionRequest {
     pub action: ProgrammingValuesAction,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ProgrammingIndexedPresetTarget {
+    pub fixture_id: Uuid,
+    pub function_id: Uuid,
+    pub expected_profile_revision: u32,
+}
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingValuesAction {
@@ -202,6 +209,15 @@ pub enum ProgrammingValuesAction {
         undo_group: Option<String>,
         #[serde(default)]
         timing: ProgrammingValueTiming,
+    },
+    /// Resolves authored fixed/indexed functions from the active show's embedded fixture
+    /// revisions after checking that the selection shown by the modal is still current.
+    ApplyIndexedPreset {
+        #[ts(type = "number")]
+        expected_selection_revision: u64,
+        attribute: String,
+        #[schemars(length(min = 1, max = 10_000))]
+        targets: Vec<ProgrammingIndexedPresetTarget>,
     },
     /// Server-side fan-out over an explicitly ordered selection (see
     /// `ProgrammingValueMutation::SetSelection`).

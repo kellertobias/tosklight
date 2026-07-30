@@ -18,7 +18,18 @@ describe("indexedPresetChoices", () => {
 				label: "Dots",
 				semanticId: "gobo.dots",
 				description: "All selected fixtures",
-				targets: [{ fixtureId: "fixture-1" }, { fixtureId: "fixture-2" }],
+				targets: [
+					{
+						fixtureId: "fixture-1",
+						functionId: "profile-1-function",
+						profileRevision: 1,
+					},
+					{
+						fixtureId: "fixture-2",
+						functionId: "profile-2-function",
+						profileRevision: 1,
+					},
+				],
 			}),
 		]);
 	});
@@ -62,6 +73,7 @@ function fixture(
 			name: `Model ${fixtureId.slice(-1)}`,
 			mode_id: modeId,
 			profile_snapshot: {
+				revision: 1,
 				modes: [
 					{
 						id: modeId,

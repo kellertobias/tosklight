@@ -58,9 +58,12 @@ async fn apply_action(
     let request_id = request.request_id.clone();
     let context =
         http_context(&session, Some(&request_id)).with_expected_revision(request.expected_revision);
+    let action =
+        crate::runtime::indexed_presets::preload_action(&state, session.id, request.action)
+            .map_err(PreloadValuesHttpError::application)?;
     let command = light_application::ProgrammingPreloadValuesRequest {
         expected_capture_mode_revision: request.expected_capture_mode_revision,
-        command: super::preload_values_wire::command(request.action),
+        command: super::preload_values_wire::command(action),
     };
     let result = run_action(state, session, ActionEnvelope { context, command }).await?;
     let response = super::preload_values_wire::outcome(request_id, result);

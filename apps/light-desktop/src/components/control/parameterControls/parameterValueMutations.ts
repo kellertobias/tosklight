@@ -19,7 +19,19 @@ export interface ParameterValuesMutationPort {
 		undoGroup?: string | null;
 		timing: ProgrammerValueTiming;
 	}): Promise<unknown>;
+	applyIndexedPreset?(input: {
+		requestId: string;
+		expectedSelectionRevision: number;
+		attribute: string;
+		targets: IndexedPresetMutationTargets;
+	}): Promise<unknown>;
 }
+
+type IndexedPresetMutationTargets = ReadonlyArray<{
+	fixtureId: string;
+	functionId: string;
+	expectedProfileRevision: number;
+}>;
 
 export function parameterValueTiming(
 	programmerFadeMillis: number | undefined,

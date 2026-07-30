@@ -94,6 +94,24 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 		});
 	}
 
+	applyIndexedPreset(input: {
+		requestId: string;
+		expectedSelectionRevision: number;
+		attribute: string;
+		targets: ReadonlyArray<{
+			fixtureId: string;
+			functionId: string;
+			expectedProfileRevision: number;
+		}>;
+	}) {
+		return this.enqueue(input.requestId, {
+			action: "apply_indexed_preset",
+			expectedSelectionRevision: input.expectedSelectionRevision,
+			attribute: input.attribute,
+			targets: input.targets,
+		});
+	}
+
 	releaseFixtureValue(input: ReleaseProgrammerFixtureValueInput) {
 		return this.enqueue(input.requestId, {
 			action: "release_fixture",
@@ -218,7 +236,10 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 		}
 		try {
 			const request = this.requestAtCurrentRevision(write);
-			const outcome = await this.options.applyAction(this.options.scope, request);
+			const outcome = await this.options.applyAction(
+				this.options.scope,
+				request,
+			);
 			if (!this.scopesAreCurrent()) return this.abandon(write.requestId);
 			this.assertResponse(request, outcome);
 			await this.settle(write.requestId, outcome);

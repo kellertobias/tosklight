@@ -162,6 +162,29 @@
         "z"
       ]
     },
+    "ProgrammingIndexedPresetTarget": {
+      "type": "object",
+      "properties": {
+        "expected_profile_revision": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "function_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "fixture_id",
+        "function_id",
+        "expected_profile_revision"
+      ]
+    },
     "ProgrammingPickerColor": {
       "description": "Hue/saturation picker coordinates (both 0..1) as captured by the operator color dialog.",
       "type": "object",
@@ -486,6 +509,38 @@
             "type",
             "attribute",
             "operation"
+          ]
+        },
+        {
+          "description": "Resolves authored fixed/indexed functions from the active show's embedded fixture\nrevisions after checking that the selection shown by the modal is still current.",
+          "type": "object",
+          "properties": {
+            "attribute": {
+              "type": "string"
+            },
+            "expected_selection_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "targets": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProgrammingIndexedPresetTarget"
+              },
+              "maxItems": 10000,
+              "minItems": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "apply_indexed_preset"
+            }
+          },
+          "required": [
+            "type",
+            "expected_selection_revision",
+            "attribute",
+            "targets"
           ]
         },
         {

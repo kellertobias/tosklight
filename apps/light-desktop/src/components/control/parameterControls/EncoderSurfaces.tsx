@@ -113,7 +113,7 @@ function EncoderSurface({
 			void controller.applyIndexedPreset(
 				attribute,
 				choice.semanticId,
-				choice.targets.map((target) => target.fixtureId),
+				choice.targets,
 			);
 			return;
 		}

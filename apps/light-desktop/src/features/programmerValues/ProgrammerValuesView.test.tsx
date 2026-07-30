@@ -77,6 +77,7 @@ function WriterIdentityProbe({
 function actions(): ProgrammerValuesActions {
 	return {
 		applyIntent: vi.fn(async () => null),
+		applyIndexedPreset: vi.fn(async () => null),
 		setFixtureValue: vi.fn(async () => null),
 		releaseFixtureValue: vi.fn(async () => null),
 		setGroupValue: vi.fn(async () => null),

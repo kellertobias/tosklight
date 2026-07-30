@@ -245,6 +245,17 @@ function encodeAction(
 			undo_group: action.undoGroup ?? null,
 			timing: encodeTiming(action.timing),
 		};
+	if (action.action === "apply_indexed_preset")
+		return {
+			type: action.action,
+			expected_selection_revision: action.expectedSelectionRevision,
+			attribute: action.attribute,
+			targets: action.targets.map((target) => ({
+				fixture_id: target.fixtureId,
+				function_id: target.functionId,
+				expected_profile_revision: target.expectedProfileRevision,
+			})),
+		};
 	if (action.action === "batch")
 		return {
 			type: action.action,

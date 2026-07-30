@@ -78,7 +78,10 @@ async fn apply_action(
     let context =
         http_context(&session, Some(&request_id)).with_expected_revision(request.expected_revision);
     let colors = super::color_attributes::color_attribute_index(&state);
-    let command = super::values_wire::values_command(request.action, &colors)
+    let action =
+        crate::runtime::indexed_presets::programming_action(&state, session.id, request.action)
+            .map_err(ValuesHttpError::application)?;
+    let command = super::values_wire::values_command(action, &colors)
         .map_err(ValuesHttpError::application)?;
     let command = light_application::ProgrammingValuesRequest {
         expected_capture_mode_revision: request.expected_capture_mode_revision,

@@ -12,13 +12,18 @@ export function predictProgrammerValues(
 	action: ProgrammerValuesCommand,
 ): ProgrammerValuesOptimisticReducer {
 	if (action.action === "clear") return clearPrediction;
-	if (action.action === "apply_intent") return (current) => current;
+	if (
+		action.action === "apply_intent" ||
+		action.action === "apply_indexed_preset"
+	)
+		return (current) => current;
 	const mutations = action.action === "batch" ? action.mutations : [action];
 	return (current) => applyMutations(current, mutations);
 }
 
 function clearPrediction(current: ProgrammerValuesProjection) {
-	if (!current.fixtureValues.length && !current.groupValues.length) return current;
+	if (!current.fixtureValues.length && !current.groupValues.length)
+		return current;
 	return { ...current, fixtureValues: [], groupValues: [] };
 }
 
@@ -138,7 +143,11 @@ function sameGroupWrite(
 function sameWrite(
 	current: ProgrammerFixtureValue | ProgrammerGroupValue,
 	value: AttributeValue,
-	timing: { fade: boolean; fadeMillis: number | null; delayMillis: number | null },
+	timing: {
+		fade: boolean;
+		fadeMillis: number | null;
+		delayMillis: number | null;
+	},
 ) {
 	return (
 		current.fade === timing.fade &&

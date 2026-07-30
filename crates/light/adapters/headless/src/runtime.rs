@@ -130,6 +130,7 @@ mod group_selection;
 mod highlight_api;
 mod highlight_compatibility;
 mod highlight_service_adapter;
+mod indexed_presets;
 mod lifecycle;
 mod live_action_http;
 mod media_api;

@@ -164,6 +164,12 @@ export type ProgrammerValuesCommand =
 			undoGroup?: string | null;
 			timing: ProgrammerValueTiming;
 	  }
+	| {
+			action: "apply_indexed_preset";
+			expectedSelectionRevision: number;
+			attribute: string;
+			targets: readonly ProgrammerIndexedPresetTarget[];
+	  }
 	| ProgrammerValuesMutation
 	| { action: "batch"; mutations: readonly ProgrammerValuesMutation[] }
 	| { action: "clear" };
@@ -173,6 +179,12 @@ export interface ProgrammerValuesActionRequest {
 	expectedRevision: number;
 	expectedCaptureModeRevision: number;
 	action: ProgrammerValuesCommand;
+}
+
+export interface ProgrammerIndexedPresetTarget {
+	fixtureId: string;
+	functionId: string;
+	expectedProfileRevision: number;
 }
 
 interface ProgrammerValuesOutcomeBase {
@@ -241,6 +253,12 @@ export interface ProgrammerValuesActions {
 			| { type: "relative_step"; delta: number };
 		undoGroup?: string | null;
 		timing: ProgrammerValueTiming;
+	}): Promise<ProgrammerValuesActionOutcome | null>;
+	applyIndexedPreset(input: {
+		requestId: string;
+		expectedSelectionRevision: number;
+		attribute: string;
+		targets: readonly ProgrammerIndexedPresetTarget[];
 	}): Promise<ProgrammerValuesActionOutcome | null>;
 	setFixtureValue(
 		input: SetProgrammerFixtureValueInput,
