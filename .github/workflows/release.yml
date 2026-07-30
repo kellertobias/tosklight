@@ -131,9 +131,46 @@ jobs:
 
       - run: npm run test:unit
 
+  e2e-build:
+    name: Tests / Build Playwright application
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          key: e2e-build
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Build the Playwright application once
+        run: bash tools/test.sh e2e-build
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-application-${{ github.sha }}
+          path: .artifacts/build/cargo/debug/light-headless
+          if-no-files-found: error
+
   e2e:
     name: Tests / Playwright / ${{ matrix.label }}
+    needs: e2e-build
     runs-on: ubuntu-22.04
+    env:
+      LIGHT_REUSE_E2E_BUILD: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -148,14 +185,6 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
-        with:
-          toolchain: stable
-
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
-        with:
-          key: e2e-${{ matrix.artifact }}
-
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
@@ -167,6 +196,14 @@ jobs:
 
       - name: Install Chrome for Playwright
         run: npx playwright install --with-deps chrome
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: playwright-application-${{ github.sha }}
+          path: .artifacts/build/cargo/debug
+
+      - name: Make the Playwright server executable
+        run: chmod +x .artifacts/build/cargo/debug/light-headless
 
       # Each Playwright worker launches its own browser, Rust server, UDP listeners,
       # and isolated show. Keep one worker per runner to prevent local port/timing

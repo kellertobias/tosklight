@@ -54,6 +54,30 @@ test("Playwright exposes only UI and API-exception suites", () => {
 	assert.doesNotMatch(pairedScenario, /\btest\s*\(/u);
 });
 
+test("Playwright shards reuse one exact-commit application build", () => {
+	const workflow = fs.readFileSync(
+		path.join(repositoryRoot, ".github/workflows/release.yml"),
+		"utf8",
+	);
+	const buildJob =
+		/^ {2}e2e-build:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(workflow)?.[1] ?? "";
+	const shardJob =
+		/^ {2}e2e:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(workflow)?.[1] ?? "";
+
+	assert.match(buildJob, /bash tools\/test\.sh e2e-build/u);
+	assert.match(
+		buildJob,
+		/name: playwright-application-\$\{\{ github\.sha \}\}/u,
+	);
+	assert.match(shardJob, /needs: e2e-build/u);
+	assert.match(shardJob, /LIGHT_REUSE_E2E_BUILD: "1"/u);
+	assert.match(
+		shardJob,
+		/name: playwright-application-\$\{\{ github\.sha \}\}/u,
+	);
+	assert.doesNotMatch(shardJob, /rust-toolchain|rust-cache/u);
+});
+
 test("scanner ignores the centralized sender's own envelope and family declarations", () => {
 	const scan = scanTestCommandBoundaries([
 		{

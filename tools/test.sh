@@ -10,8 +10,19 @@ HARDWARE_UI="$ROOT/apps/light-hardware-controls"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 
 # Backs the root package.json test scripts; invoke via `npm run test:<name>`.
-usage(){ echo "Usage: npm run test:{unit|architecture|ui-package|storybook|e2e|e2e-api|e2e-ui|app-icons|artifact-paths|marketing-screenshots|help-screenshots|help-screenshots-live|record|demo|all}"; }
-build_e2e(){ (cd "$UI" && npm run build); cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --no-default-features; }
+usage(){ echo "Usage: npm run test:{unit|architecture|ui-package|storybook|e2e-build|e2e|e2e-api|e2e-ui|app-icons|artifact-paths|marketing-screenshots|help-screenshots|help-screenshots-live|record|demo|all}"; }
+build_e2e(){
+  if [[ "${LIGHT_REUSE_E2E_BUILD:-0}" == "1" ]]; then
+    local server="${LIGHT_E2E_SERVER:-$LIGHT_CARGO_TARGET_DIR/debug/light-headless}"
+    [[ -x "$server" ]] || {
+      echo "error: reusable E2E server is missing or not executable: $server" >&2
+      return 1
+    }
+    return
+  fi
+  (cd "$UI" && npm run build)
+  cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --no-default-features
+}
 architecture(){
   "$ROOT/tools/test-artifact-paths.sh"
   node --test "$ROOT/tools/cargo-workspace-lints.test.mjs"
@@ -62,6 +73,7 @@ case "$command" in
   architecture) architecture ;;
   artifact-paths) "$ROOT/tools/test-artifact-paths.sh" ;;
   unit) unit ;;
+  e2e-build) build_e2e ;;
   e2e) e2e "$@" ;;
   e2e-api) e2e_api "$@" ;;
   e2e-ui) e2e_ui "$@" ;;
