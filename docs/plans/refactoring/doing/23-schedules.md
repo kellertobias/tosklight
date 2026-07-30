@@ -75,31 +75,53 @@ runtime must block activation with an actionable message.
 
 ### Interval
 
-An Interval Schedule fires repeatedly after a configured duration, such as every five minutes. The interval is measured from a documented anchor:
+An Interval Schedule fires repeatedly after a configured duration, such as every five minutes. Its
+persisted anchor is the instant at which it most recently became enabled. The UI displays that
+anchor in the authoritative server timezone. Occurrences are calculated as exact multiples from
+the anchor, never from completion of the previous action, so a slow or failed action cannot cause
+drift. Editing the duration while enabled establishes a new anchor; editing unrelated fields does
+not.
 
-- from the moment the Schedule becomes active;
-- from the previous successful scheduled occurrence; or
-- from a configured start date and time.
-
-The implementation must choose one initial default and display it clearly. Intervals must be bounded by a minimum duration so a bad configuration cannot flood the desk with playback or macro starts.
+The minimum interval is one minute. When time advances across one or more missed multiples, the
+scheduler records at most one bounded skip summary and advances arithmetically to the first future
+multiple. It never enumerates or dispatches an interval backlog.
 
 ### Calendar expression
 
-A Calendar-expression Schedule fires according to a wall-clock recurrence rule. The operator-facing model may use a guided editor, a cron expression, or both, but it must support rules equivalent to:
+A Calendar-expression Schedule fires according to a wall-clock recurrence rule. The guided editor
+stores a typed rule and the advanced editor uses the documented **ToskLight five-field calendar
+expression**:
+
+`minute hour day-of-month month weekday`
+
+Each field accepts `*`, a number, a comma-separated list, an inclusive range, or a positive step.
+Weekday uses `0` for Sunday through `6` for Saturday. A weekday may additionally use `#1` through
+`#4` for an ordinal weekday or `L` for the last such weekday in a month. Seconds are deliberately
+unsupported in recurring expressions. A rule constraining both day-of-month and weekday is
+rejected instead of inheriting the differing OR/AND behavior of common cron dialects. Names,
+macros, Quartz-only fields, years, and other dialect extensions are rejected with a field-specific
+message.
+
+The operator-facing model supports rules equivalent to:
 
 - every Monday at 14:00;
 - the first day of every month;
 - the first Monday of every month;
-- every second day; and
+- every second day from a typed calendar anchor; and
 - other cron-style recurring dates and times that the selected expression format can represent.
 
-The expression format must be documented before implementation. The desk must reject expressions whose behavior is unsupported or ambiguous, such as impossible dates, unsupported seconds fields, unsupported nth-weekday forms, or rules that behave differently across common cron dialects.
+The guided every-N-days rule is anchored to a persisted local calendar date and does not use the
+resetting `*/N` day-of-month meaning. The desk rejects impossible dates, field overflows,
+unsupported ordinal forms, and all other unsupported or ambiguous expressions before activation.
 
 ### One-time
 
-A One-time Schedule fires once at a specific date and time, including seconds. After it runs successfully, the Schedule must either disable itself or remain as a completed historical record according to the chosen product behavior.
+A One-time Schedule fires once at a specific date and time, including seconds. After it runs
+successfully, the Schedule disables itself and remains as a completed historical record.
 
-One-time Schedules in the past must not silently fire on save. The operator must explicitly choose whether a past fixed time is invalid, runs immediately once, or is saved disabled for recordkeeping.
+An enabled One-time Schedule in the past is invalid and cannot be saved or activated. An operator
+may explicitly save the same definition disabled for recordkeeping; it never fires immediately or
+after a restart.
 
 ## Scheduled actions
 
@@ -110,21 +132,38 @@ optional Playback-master level and fade time. The implementation must route each
 through the same authoritative Playback service and reject combinations that do not apply to the
 selected Playback.
 
-The plan must settle whether the target is addressed by page and playback position, by a stable
-Playback assignment identity, by Cuelist identity, or by another explicit show object. It must
-also define what each supported action means for each Playback type:
+The target stores all three parts of the reviewed picker result: explicit page, explicit slot, and
+the stable pool Playback number resolved there when the operator saves. Before every occurrence,
+the server verifies that the page and slot still resolve to that same stable Playback object. An
+empty slot, a replacement in the same slot, moving the Playback elsewhere, deleting it, or changing
+it to an incompatible target makes the Schedule invalid until the operator explicitly retargets
+it; it never follows the new occupant silently.
 
-- Cuelist Playback: GO, Load, Restart, or another explicit action;
-- Group Master: set level, flash, or no supported scheduled action;
-- Speed Master: set rate or no supported scheduled action;
-- Special Playback: action-specific behavior; and
-- empty or unsupported Playback slots: invalid Schedule target.
+The initial action/type matrix is:
+
+- Cuelist and Dynamic Playbacks support **Go**, **Pause**, **On**, **Off**, **Release**, and
+  **Toggle**, plus an optional master transition;
+- Group Playbacks support **On**, **Off**, **Release**, and **Toggle**, plus an optional master
+  transition; **Go** and **Pause** are invalid;
+- Speed Group, Programmer Fade, Cue Fade, and Grand Master Playbacks are not valid Schedule targets
+  in the first release because their reviewed actions do not have one unambiguous meaning; and
+- an empty, unsupported, deleted, moved, or replaced Playback target is invalid.
+
+An optional master transition is one authoritative Playback action containing the target level and
+fade duration. Fade is bounded to 0–60 seconds. A zero-duration transition is immediate. The
+Playback application service owns this behavior for every caller; the Scheduler must not emulate a
+fade by sending repeated fader actions.
 
 The Schedule must use the same authoritative Playback service as UI, keyboard, OSC, hardware controls, HTTP, and Cue-triggered playback actions. Scheduled execution must therefore produce normal playback state, feedback, audit, events, and error handling.
 
 ### Start Macro
 
 Once Macros exist, a Schedule can start a Macro by stable Macro identity. Scheduled Macro execution must use the same Macro service as manual, Cue, Playback, Timecode, HTTP, OSC, or other supported Macro triggers.
+
+Until refactoring item 30 supplies that service and stable Macro identities, the persisted target
+variant and execution port remain forward-compatible but Macro selection is visibly unavailable and
+cannot be activated. Item 23 is complete when that unavailable boundary is tested; the executable
+same-Macro-service acceptance belongs to item 30 and must not be claimed early.
 
 The Schedule feature must not define Macro language, package, permission, Programmer, dialog,
 duplicate-instance, or lifecycle behavior. Those semantics are owned exclusively by
@@ -166,13 +205,25 @@ occurrence must be labeled **Skipped**, never **Completed** or **Failed**.
 ## Persistence and compatibility
 
 Schedules are portable show objects with stable identities, names, enabled state, trigger
-configuration, target action, last-run metadata, and history summary. They do not persist a
-per-Schedule timezone or configurable missed-run policy. Existing shows load with no Schedules and
-no behavior change.
+configuration, target action, and the interval/calendar anchor needed to calculate the next
+occurrence. They do not persist a per-Schedule timezone or configurable missed-run policy.
+Existing shows load with no Schedules and no behavior change.
+
+Occurrence claims, last-result state, and a bounded history of the latest 100 occurrences are
+stored separately from the editable Schedule object. Claiming an occurrence is committed before
+dispatch. A crash after the claim may leave an occurrence marked **Interrupted**, but startup never
+replays it. Completion or failure then updates the same claim. This metadata does not create a
+show-object Undo step or an unbounded object-history stream.
+
+Duplicating or importing a Schedule assigns a new stable Schedule identity, resets interval and
+calendar anchors as applicable, and never copies occurrence history.
 
 Schedule execution is active only while the owning show is active. Loading another show stops evaluating Schedules from the previous show. Partial Show Load must eventually be able to import selected Schedules, preview Playback and Macro dependencies, rewrite references where required, and block unresolved targets.
 
-Deleting or moving a referenced Playback, Cuelist, or Macro must not leave a Schedule silently pointing at a different target. The Schedule becomes invalid, disabled, or requires explicit retargeting according to the chosen product behavior.
+Deleting, moving, replacing, or incompatibly editing a referenced Playback leaves the Schedule
+present and its enabled state unchanged but makes its runtime projection invalid. It cannot execute
+again until the operator explicitly retargets or repairs it. Deleting a future Macro target follows
+the same rule.
 
 ## Surface requirements
 
@@ -218,6 +269,7 @@ later recurring occurrences remain eligible to run normally.
 15. Loading a different show stops evaluating Schedules from the previous show.
 16. A deleted, moved, or unsupported Playback target leaves the Schedule invalid rather than silently retargeted.
 17. Scheduled Playback execution reaches the same authoritative Playback service used by UI, keyboard, OSC, hardware, HTTP, and Cue paths.
-18. Once Macros exist, a Schedule can start a Macro through the same Macro service used by other Macro triggers.
+18. Until Macros exist, Macro targets are visibly unavailable and cannot activate; once item 30
+    supplies the runtime, a Schedule starts a Macro through that same Macro service.
 19. Failed scheduled occurrences are recorded without blocking output, rendering, other Schedules, or normal desk operation.
 20. Command/API, WebSocket, UI, and future OSC or hardware surfaces use compatible Schedule vocabulary and state.
