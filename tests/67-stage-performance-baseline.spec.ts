@@ -18,6 +18,10 @@ import {
 } from "./bench/window-system/paneTypes";
 import { readPatchSnapshot } from "./support/operator/patch";
 
+// At the desk's default 44 Hz output rate, three seconds provides more than
+// 100 scheduler samples so the bounded p99 is not merely the single slowest tick.
+const OUTPUT_P99_SAMPLE_WINDOW = "3s";
+
 for (const profile of ["default-stage", "large-stage"] as const) {
 	test(`STAGE-PERF-${profile === "default-stage" ? "001" : "002"} @ui › collect informational ${profile} frontend and output evidence`, async ({
 		api,
@@ -148,7 +152,7 @@ async function exerciseWithoutStage(
 	await world.selection.clear();
 	await world.selection.fixtures.via.api.item(staticControlFixtureNumber);
 	await setLiveFixtureIntensity(api, staticControlFixtureId, 0.2);
-	await world.clock.freeRunFor("1s");
+	await world.clock.freeRunFor(OUTPUT_P99_SAMPLE_WINDOW);
 	await world.expectFixtureDMX(fixture(staticControlFixtureNumber), {
 		Intensity: 51,
 	});
@@ -237,7 +241,7 @@ async function exerciseStage(
 		fixtureIdsByNumber[staticControlFixtureNumber],
 		0.8,
 	);
-	await world.clock.freeRunFor("1s");
+	await world.clock.freeRunFor(OUTPUT_P99_SAMPLE_WINDOW);
 	await world.expectFixtureDMX(fixture(staticControlFixtureNumber), {
 		Intensity: 204,
 	});
@@ -326,7 +330,7 @@ async function exerciseLargeStage(
 		fixtureIdsByNumber[staticControlFixtureNumber],
 		0.8,
 	);
-	await world.clock.freeRunFor("1s");
+	await world.clock.freeRunFor(OUTPUT_P99_SAMPLE_WINDOW);
 	await world.expectFixtureDMX(fixture(staticControlFixtureNumber), {
 		Intensity: 204,
 	});
@@ -346,7 +350,8 @@ async function setLiveFixtureIntensity(
 	fixtureId: string,
 	value: number,
 ): Promise<void> {
-	if (!fixtureId) throw new Error("Stage control fixture identity is unavailable");
+	if (!fixtureId)
+		throw new Error("Stage control fixture identity is unavailable");
 	if (!api.session) throw new Error("Stage performance session is unavailable");
 	const userId = api.session.user.id;
 	const [values, capture] = await Promise.all([

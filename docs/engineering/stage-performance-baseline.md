@@ -30,8 +30,8 @@ Each report is also attached to its Playwright result. The report records:
 
 Each profile now records two paired bounded comparison windows:
 
-1. a ten-frame one-second transition on a Desktop with no Stage surface; and
-2. a ten-frame one-second transition with one Live Stage, one duplicate Live
+1. a ten-frame three-second transition on a Desktop with no Stage surface; and
+2. a ten-frame three-second transition with one Live Stage, one duplicate Live
    Stage, and one Follow Preload Stage.
 
 The Stage window also covers all four render qualities, rapid quality
@@ -41,7 +41,9 @@ message delivery, and (for the large profile) a separate authenticated
 visualization WebSocket with its underlying TCP reader paused, WebGL context
 recovery, 2D/3D renderer teardown, and duplicate-pane removal. Output
 comparison fields derive a p99 for each bounded window by subtracting the
-cumulative fixed-bucket histograms. The focused browser run enforces the same
+cumulative fixed-bucket histograms. The three-second windows provide more than
+100 scheduler samples at the default 44 Hz rate, so p99 is not reduced to the
+single slowest tick. The focused browser run enforces the same
 1 ms-or-5-percent regression rule for those bounded windows, but does not
 substitute them for the canonical five-minute packaged release gate.
 

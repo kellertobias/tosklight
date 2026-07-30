@@ -33,3 +33,8 @@ test("returns null for an empty bounded window", () => {
 		null,
 	);
 });
+
+test("p99 excludes one isolated outlier only after the window exceeds 100 samples", () => {
+	assert.equal(histogramPercentileMicros(output([43, 0, 0, 1]), 99), 2_000);
+	assert.equal(histogramPercentileMicros(output([100, 0, 0, 1]), 99), 250);
+});
