@@ -14,6 +14,7 @@ const ACTION_LABELS: Record<string, string> = {
 	duplicate: "Import as Copy",
 	import_preserving_id: "Import",
 	keep_destination: "Keep Destination",
+	merge_scoped: "Merge Selected Scope",
 	missing: "Missing",
 	replace_destination: "Replace Destination",
 	skip_identical: "Skip Identical",

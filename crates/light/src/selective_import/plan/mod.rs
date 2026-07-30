@@ -59,6 +59,8 @@ pub(super) struct Planner<'a, P: SelectiveShowImportPorts> {
     target_custom_descriptors: CustomDescriptorCatalog,
     allocator: IdentityAllocator,
     pending: BTreeSet<PortableShowObjectKey>,
+    scoped_stage_layouts: BTreeSet<PortableShowObjectKey>,
+    scoped_stage_identities: BTreeSet<String>,
     items: BTreeMap<PortableShowObjectKey, PlannedItem>,
     dependencies: BTreeSet<DependencyKey>,
     bound_identities: IdentityMap,
@@ -129,6 +131,55 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
                     .map(|profile| profile.id().profile_id().0.to_string()),
             );
         }
+        let mut pending = request.selected_objects.clone();
+        let selected_layers = request
+            .selected_objects
+            .iter()
+            .filter(|key| key.kind() == "patch_layer")
+            .map(|key| key.id().to_owned())
+            .collect::<BTreeSet<_>>();
+        if !selected_layers.is_empty() {
+            pending.extend(
+                source
+                    .objects()
+                    .filter(|object| matches!(object.key().kind(), "fixture" | "patched_fixture"))
+                    .filter(|object| {
+                        object
+                            .body()
+                            .get("layer_id")
+                            .and_then(serde_json::Value::as_str)
+                            .is_some_and(|layer| selected_layers.contains(layer))
+                    })
+                    .map(|object| object.key().clone()),
+            );
+        }
+        let scoped_stage_identities = pending
+            .iter()
+            .filter_map(|key| source.object(key.kind(), key.id()))
+            .filter(|object| matches!(object.key().kind(), "fixture" | "patched_fixture"))
+            .filter_map(|object| {
+                registered_descriptor(object, &source_fixtures, &target_fixtures)
+                    .ok()
+                    .flatten()
+            })
+            .flat_map(|descriptor| {
+                descriptor
+                    .identities
+                    .into_iter()
+                    .map(|identity| identity.value)
+            })
+            .collect::<BTreeSet<_>>();
+        let scoped_stage_layouts = if selected_layers.is_empty() {
+            BTreeSet::new()
+        } else {
+            source
+                .objects()
+                .filter(|object| object.key().kind() == "stage_layout")
+                .map(|object| object.key().clone())
+                .filter(|key| !request.selected_objects.contains(key))
+                .collect::<BTreeSet<_>>()
+        };
+        pending.extend(scoped_stage_layouts.iter().cloned());
         Self {
             request,
             source_snapshot,
@@ -145,7 +196,9 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
                 keys,
                 identity_values,
             ),
-            pending: request.selected_objects.clone(),
+            pending,
+            scoped_stage_layouts,
+            scoped_stage_identities,
             items: BTreeMap::new(),
             dependencies: BTreeSet::new(),
             bound_identities: BTreeMap::new(),
@@ -166,6 +219,7 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
         let (managed_assets, asset_copies) = self.plan_assets();
         let identities = self.identities();
         let writes = self.rewrite_writes(&identities, &profile_map);
+        let writes = self.merge_scoped_stage_writes(writes);
         let preview = self.preview(profile_previews, managed_assets);
         ImportPlan {
             preview,
@@ -200,15 +254,29 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
         let Some(source) = self.source.object(key.kind(), key.id()).cloned() else {
             return;
         };
-        let descriptor = self.describe_source(&source);
-        let (action, destination) = self.action_for(&key, source.body());
+        let scoped_stage = self.scoped_stage_layouts.contains(&key);
+        let mut descriptor = self.describe_source(&source);
+        let body = if scoped_stage {
+            descriptor.references.retain(|reference| {
+                self.scoped_stage_identities
+                    .contains(&reference.source_identity)
+            });
+            filtered_stage_layout(source.body(), &self.scoped_stage_identities)
+        } else {
+            source.body().clone()
+        };
+        let (action, destination) = if scoped_stage {
+            (ImportObjectAction::MergeScoped, key.clone())
+        } else {
+            self.action_for(&key, &body)
+        };
         let destination_identities =
             self.destination_identities(&key, &destination, &action, &descriptor);
         let traverses = !matches!(action, ImportObjectAction::KeepDestination);
         self.items.insert(
             key.clone(),
             PlannedItem {
-                body: source.body().clone(),
+                body,
                 descriptor: descriptor.clone(),
                 destination,
                 destination_identities,
@@ -221,6 +289,22 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
             self.required_assets
                 .extend(descriptor.managed_assets.iter().copied());
         }
+    }
+
+    fn merge_scoped_stage_writes(&self, mut writes: Vec<PlannedWrite>) -> Vec<PlannedWrite> {
+        for write in &mut writes {
+            if !self.scoped_stage_layouts.contains(&write.destination) {
+                continue;
+            }
+            let Some(target) = self
+                .target
+                .object(write.destination.kind(), write.destination.id())
+            else {
+                continue;
+            };
+            write.body = merge_stage_layout(target.body(), &write.body);
+        }
+        writes
     }
 
     fn describe_source(&mut self, object: &PortableShowObject) -> ImportObjectDescriptor {
@@ -391,4 +475,45 @@ fn key_only_descriptor(object: &PortableShowObject) -> ImportObjectDescriptor {
         }],
         ..ImportObjectDescriptor::default()
     }
+}
+
+fn filtered_stage_layout(
+    source: &serde_json::Value,
+    identities: &BTreeSet<String>,
+) -> serde_json::Value {
+    let mut filtered = source.clone();
+    for field in ["positions", "positions3d"] {
+        if let Some(entries) = filtered
+            .get_mut(field)
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            entries.retain(|identity, _| identities.contains(identity));
+        }
+    }
+    filtered
+}
+
+fn merge_stage_layout(
+    target: &serde_json::Value,
+    imported: &serde_json::Value,
+) -> serde_json::Value {
+    let mut merged = target.clone();
+    for field in ["positions", "positions3d"] {
+        let Some(imported_entries) = imported.get(field).and_then(serde_json::Value::as_object)
+        else {
+            continue;
+        };
+        let Some(merged_object) = merged.as_object_mut() else {
+            return imported.clone();
+        };
+        let target_entries = merged_object
+            .entry(field)
+            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+        let Some(target_entries) = target_entries.as_object_mut() else {
+            *target_entries = serde_json::Value::Object(imported_entries.clone());
+            continue;
+        };
+        target_entries.extend(imported_entries.clone());
+    }
+    merged
 }

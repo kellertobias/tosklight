@@ -97,6 +97,56 @@ function choose(label: string, option: string) {
 }
 
 describe("SelectiveShowImportModal", () => {
+	it("selects one patch layer without selecting fixtures in another layer", async () => {
+		const patchCatalog: SelectiveImportCatalog = {
+			...catalog,
+			objects: [
+				{
+					key: { kind: "patch_layer", id: "front" },
+					objectRevision: 1,
+					displayName: "Front Layer",
+					section: "fixture_patch",
+					patchLayerId: "front",
+				},
+				{
+					key: { kind: "patched_fixture", id: "front-fixture" },
+					objectRevision: 1,
+					displayName: "Front Fixture",
+					section: "fixture_patch",
+					patchLayerId: "front",
+				},
+				{
+					key: { kind: "patched_fixture", id: "rear-fixture" },
+					objectRevision: 1,
+					displayName: "Rear Fixture",
+					section: "fixture_patch",
+					patchLayerId: "rear",
+				},
+			],
+		};
+		const previewImport = vi.fn().mockResolvedValue(preview(true));
+		render(
+			<SelectiveShowImportModal
+				activeShow={target}
+				shows={[target, source]}
+				onClose={vi.fn()}
+				loadCatalog={vi.fn().mockResolvedValue(patchCatalog)}
+				previewImport={previewImport}
+				applyImport={vi.fn()}
+			/>,
+		);
+
+		choose("Source show", "Tour Source");
+		fireEvent.click(await screen.findByLabelText("Select patch layer front"));
+		fireEvent.click(screen.getByRole("button", { name: "Preview Import" }));
+
+		await waitFor(() => expect(previewImport).toHaveBeenCalledOnce());
+		expect(previewImport.mock.calls[0][2].selectedObjects).toEqual([
+			{ kind: "patch_layer", id: "front" },
+			{ kind: "patched_fixture", id: "front-fixture" },
+		]);
+	});
+
 	it("requires an explicit preview and conflict resolution before atomic apply", async () => {
 		const loadCatalog = vi.fn().mockResolvedValue(catalog);
 		const previewImport = vi

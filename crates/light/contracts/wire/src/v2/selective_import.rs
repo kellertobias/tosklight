@@ -129,6 +129,7 @@ pub enum SelectiveImportObjectAction {
     SkipIdentical,
     KeepDestination,
     ReplaceDestination,
+    MergeScoped,
     Duplicate {
         destination: SelectiveImportObjectKey,
     },

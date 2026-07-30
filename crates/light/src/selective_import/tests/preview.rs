@@ -83,6 +83,62 @@ fn add_to_end_allocates_after_the_destination_not_after_source_positions() {
 }
 
 #[test]
+fn patch_layer_selection_reports_selected_object_references_outside_the_layer() {
+    let rig = TestRig::new();
+    let front_id = Uuid::from_u128(150_001);
+    let rear_id = Uuid::from_u128(150_002);
+    rig.source_object(
+        "patch_layer",
+        "front",
+        json!({"id":"front","name":"Front","order":1}),
+    );
+    rig.source_object(
+        "patched_fixture",
+        &front_id.to_string(),
+        json!({
+            "fixture_id":front_id,
+            "layer_id":"front",
+            "logical_heads":[],
+            "multipatch":[]
+        }),
+    );
+    rig.source_object(
+        "patched_fixture",
+        &rear_id.to_string(),
+        json!({
+            "fixture_id":rear_id,
+            "layer_id":"rear",
+            "logical_heads":[],
+            "multipatch":[]
+        }),
+    );
+    rig.source_object(
+        "group",
+        "rear-group",
+        serde_json::to_value(light_programmer::GroupDefinition {
+            id: "rear-group".into(),
+            name: "Rear".into(),
+            fixtures: vec![FixtureId(rear_id)],
+            ..Default::default()
+        })
+        .unwrap(),
+    );
+    let request = SelectiveShowImportRequest::new(
+        rig.source_id,
+        rig.target_id,
+        [key("patch_layer", "front"), key("group", "rear-group")],
+    );
+
+    let preview = rig.preview(request);
+
+    assert!(preview.dependencies.iter().any(|dependency| {
+        dependency.owner == key("group", "rear-group")
+            && dependency.dependency == key("patched_fixture", &rear_id.to_string())
+            && dependency.disposition == ImportDependencyDisposition::Included
+    }));
+}
+
+#[test]
 fn dynamic_preview_includes_exact_live_group_and_preset_dependencies() {
     let rig = TestRig::new();
     let dynamic_id = Uuid::new_v4();

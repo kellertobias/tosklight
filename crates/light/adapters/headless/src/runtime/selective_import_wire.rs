@@ -279,6 +279,7 @@ fn object_preview(value: app::AppliedImportObject) -> wire::SelectiveImportObjec
         app::ImportObjectAction::ReplaceDestination => {
             wire::SelectiveImportObjectAction::ReplaceDestination
         }
+        app::ImportObjectAction::MergeScoped => wire::SelectiveImportObjectAction::MergeScoped,
         app::ImportObjectAction::Duplicate { destination } => {
             wire::SelectiveImportObjectAction::Duplicate {
                 destination: wire_key(&destination),

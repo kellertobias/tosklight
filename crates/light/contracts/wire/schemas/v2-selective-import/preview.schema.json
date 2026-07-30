@@ -479,6 +479,18 @@
         {
           "type": "object",
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "merge_scoped"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "destination": {
               "$ref": "#/$defs/SelectiveImportObjectKey"
             },

@@ -165,6 +165,7 @@ pub enum ImportObjectAction {
     SkipIdentical,
     KeepDestination,
     ReplaceDestination,
+    MergeScoped,
     Duplicate { destination: PortableShowObjectKey },
     BlockedConflict,
 }

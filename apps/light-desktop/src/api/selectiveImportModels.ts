@@ -19,6 +19,7 @@ export type SelectiveImportObjectAction =
 	| "skip_identical"
 	| "keep_destination"
 	| "replace_destination"
+	| "merge_scoped"
 	| "duplicate"
 	| "blocked_conflict";
 

@@ -481,6 +481,112 @@ fn stage_layout_references_follow_duplicated_fixture_children() {
 }
 
 #[test]
+fn one_patch_layer_merges_only_its_fixtures_and_stage_geometry() {
+    let rig = TestRig::new();
+    let mut front = portable_fixture_record(130_000, 1);
+    let mut rear = portable_fixture_record(140_000, 2);
+    front.body["layer_id"] = json!("front");
+    rear.body["layer_id"] = json!("rear");
+    rig.source_profile(&front.profile);
+    rig.source_profile(&rear.profile);
+    rig.target_profile(&rear.profile);
+    rig.source_object(
+        "patch_layer",
+        "front",
+        json!({"id":"front","name":"Front","order":1}),
+    );
+    rig.source_object(
+        "patch_layer",
+        "rear",
+        json!({"id":"rear","name":"Rear","order":2}),
+    );
+    rig.target_object(
+        "patch_layer",
+        "rear",
+        json!({"id":"rear","name":"Rear Target","order":2}),
+    );
+    rig.source_object(
+        "patched_fixture",
+        &front.fixture_id.0.to_string(),
+        front.body.clone(),
+    );
+    rig.source_object(
+        "patched_fixture",
+        &rear.fixture_id.0.to_string(),
+        rear.body.clone(),
+    );
+    let mut target_rear = rear.body.clone();
+    target_rear["name"] = json!("Rear Must Stay");
+    target_rear["split_patches"] = json!([{"split":1,"universe":null,"address":null}]);
+    target_rear["multipatch"][0]["split_patches"] =
+        json!([{"split":1,"universe":null,"address":null}]);
+    rig.target_object(
+        "patched_fixture",
+        &rear.fixture_id.0.to_string(),
+        target_rear.clone(),
+    );
+    rig.source_object(
+        "stage_layout",
+        "main",
+        json!({
+            "version":2,
+            "positions":{
+                (front.head_id.0.to_string()):{"x":1,"y":2,"rotation":0},
+                (rear.head_id.0.to_string()):{"x":30,"y":40,"rotation":0}
+            },
+            "positions3d":{}
+        }),
+    );
+    rig.target_object(
+        "stage_layout",
+        "main",
+        json!({
+            "version":2,
+            "positions":{
+                (rear.head_id.0.to_string()):{"x":300,"y":400,"rotation":0}
+            },
+            "positions3d":{},
+            "destination_extension":{"retained":true}
+        }),
+    );
+
+    let preview = rig.preview(rig.request("patch_layer", "front"));
+    assert!(preview.can_apply(), "{:?}", preview.blockers);
+    assert!(preview.objects.iter().any(|object| {
+        object.source == key("stage_layout", "main")
+            && object.action == ImportObjectAction::MergeScoped
+    }));
+    assert!(preview.objects.iter().any(|object| {
+        object.source == key("patched_fixture", &front.fixture_id.0.to_string())
+    }));
+    assert!(
+        !preview.objects.iter().any(|object| {
+            object.source == key("patched_fixture", &rear.fixture_id.0.to_string())
+        })
+    );
+
+    rig.apply(&preview).unwrap();
+
+    let target = rig.target_document();
+    assert_eq!(
+        target
+            .object("patched_fixture", &rear.fixture_id.0.to_string())
+            .unwrap()
+            .body(),
+        &target_rear
+    );
+    assert!(
+        target
+            .object("patched_fixture", &front.fixture_id.0.to_string())
+            .is_some()
+    );
+    let layout = target.object("stage_layout", "main").unwrap().body();
+    assert_eq!(layout["positions"][front.head_id.0.to_string()]["x"], 1);
+    assert_eq!(layout["positions"][rear.head_id.0.to_string()]["x"], 300);
+    assert_eq!(layout["destination_extension"]["retained"], true);
+}
+
+#[test]
 fn legacy_inline_fixture_materializes_profile_and_retains_unknown_data() {
     let rig = TestRig::new();
     let legacy = legacy_fixture_record(120_000, 3);

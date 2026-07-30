@@ -170,6 +170,7 @@ function mapObjectPreview(value: unknown, index: number) {
 		"skip_identical",
 		"keep_destination",
 		"replace_destination",
+		"merge_scoped",
 		"duplicate",
 		"blocked_conflict",
 	] as const);

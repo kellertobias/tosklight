@@ -38,6 +38,7 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
                 item.action,
                 ImportObjectAction::ImportPreservingId
                     | ImportObjectAction::ReplaceDestination
+                    | ImportObjectAction::MergeScoped
                     | ImportObjectAction::Duplicate { .. }
             ) {
                 continue;
