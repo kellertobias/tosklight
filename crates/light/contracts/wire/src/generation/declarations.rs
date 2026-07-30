@@ -201,6 +201,8 @@ fn live_actions(config: &Config) -> Vec<String> {
         ProgrammingAlignOutcome::decl(config),
         FixtureControlLiveActionRequest::decl(config),
         FixtureControlHttpActionRequest::decl(config),
+        FixtureControlTarget::decl(config),
+        FixtureControlsLiveActionRequest::decl(config),
         FixtureControlKind::decl(config),
         FixtureControlOutcome::decl(config),
         GenerateFixturePresetsRequest::decl(config),

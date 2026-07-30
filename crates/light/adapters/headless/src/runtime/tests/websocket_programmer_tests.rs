@@ -735,6 +735,74 @@ async fn transient_control_retriggers_remain_projection_quiet_and_repeated_relea
 }
 
 #[tokio::test]
+async fn combined_indexed_control_targets_share_one_transient_lifetime() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = authenticate_token(&state, &token).unwrap();
+    let (first, action_id, _) = schema_v2_direct_fixture();
+    let mut second = first.clone();
+    second.fixture_id = light_core::FixtureId::new();
+    second.fixture_number = Some(2);
+    second.address = Some(3);
+    let fixture_ids = [first.fixture_id, second.fixture_id];
+    let profile_revision = first.definition.profile_snapshot.as_ref().unwrap().revision;
+    state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![first, second].into(),
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    let selection_revision = state.programming.select(session.id, fixture_ids);
+
+    for (request_id, active, expected_values) in
+        [("combined-control-on", true, 4), ("combined-control-off", false, 0)]
+    {
+        let response = dispatch_live_action(
+            &state,
+            &session,
+            live_action_frame(
+                &session,
+                request_id,
+                serde_json::from_value(serde_json::json!({
+                    "type":"fixture_controls",
+                    "request":{
+                        "request_id":request_id,
+                        "expected_selection_revision":selection_revision,
+                        "targets":[
+                            {
+                                "fixture_id":fixture_ids[0],
+                                "action_id":action_id,
+                                "expected_profile_revision":profile_revision
+                            },
+                            {
+                                "fixture_id":fixture_ids[1],
+                                "action_id":action_id,
+                                "expected_profile_revision":profile_revision
+                            }
+                        ],
+                        "active":active
+                    }
+                }))
+                .unwrap(),
+            ),
+        );
+        assert!(response.ok, "{:?}", response.error);
+        let programmer = state.programming.get(session.id).unwrap();
+        assert!(programmer.transient_values.len() <= 1);
+        assert_eq!(
+            programmer
+                .transient_values
+                .first()
+                .map_or(0, |action| action.values.len()),
+            expected_values
+        );
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn direct_programmer_writes_preserve_resolved_fade_for_recording() {
     let (state, data_dir) = test_state();
     let fixture_definition = schema_v2_direct_fixture().0;

@@ -80,7 +80,13 @@ export function indexedPresetChoices(
 						kind: "control",
 						semanticId: null,
 						controlKind: action.kind,
-						targets: [{ fixtureId: owner, actionId: action.id }],
+						targets: [
+							{
+								fixtureId: owner,
+								actionId: action.id,
+								profileRevision: profile.revision,
+							},
+						],
 						targetIds: new Set([owner]),
 						disabled: fixture.definition.hazardous,
 					});

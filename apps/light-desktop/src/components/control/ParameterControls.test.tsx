@@ -122,6 +122,7 @@ const server = {
 	readVisualization: vi.fn().mockResolvedValue({ values: [] }),
 	alignSelection: vi.fn(),
 	controlFixtureAction: vi.fn(),
+	controlFixtureActions: vi.fn().mockResolvedValue(undefined),
 	generateFixturePresets: vi.fn().mockResolvedValue({ created: [] }),
 };
 Object.defineProperty(server.bootstrap, "active_programmers", {
@@ -153,6 +154,7 @@ vi.mock(
 			undoProgrammer: vi.fn(),
 			clearProgrammer: vi.fn(),
 			controlFixtureAction: server.controlFixtureAction,
+			controlFixtureActions: server.controlFixtureActions,
 			generateFixturePresets: server.generateFixturePresets,
 			alignSelection: server.alignSelection,
 			storePreload: vi.fn(),
@@ -455,6 +457,53 @@ describe("ParameterControls projection lifecycle", () => {
 			],
 		});
 	});
+
+	it("sends a combined momentary control row through one authoritative action", async () => {
+		attributeRegistry.current = [
+			{
+				...attributeDescriptor("gobo.1", "Gobo 1", 1, 1),
+				family: "beam",
+				encoder_group: "beam",
+				value_type: "indexed",
+			},
+		];
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [schemaV2Fixture()];
+
+		render(<ParameterControls />);
+		fireEvent.click(screen.getByRole("button", { name: "Beam" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Enc 1 · Gobo 1 value" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Show presets" }));
+		fireEvent.click(screen.getByRole("button", { name: /Lamp reset/ }));
+		await Promise.resolve();
+
+		expect(server.controlFixtureActions.mock.calls).toEqual([
+			[
+				[
+					{
+						fixtureId: "fixture-1",
+						actionId: "action-1",
+						expectedProfileRevision: 1,
+					},
+				],
+				1,
+				true,
+			],
+			[
+				[
+					{
+						fixtureId: "fixture-1",
+						actionId: "action-1",
+						expectedProfileRevision: 1,
+					},
+				],
+				1,
+				false,
+			],
+		]);
+	});
 });
 
 function attributeDescriptor(
@@ -513,6 +562,14 @@ function schemaV2Fixture() {
 											raw_value: 93,
 										},
 									},
+									{
+										id: "function-control-1",
+										attribute: "gobo.1",
+										behavior: {
+											type: "control",
+											action_id: "action-1",
+										},
+									},
 								],
 							},
 						],
@@ -520,6 +577,7 @@ function schemaV2Fixture() {
 							{
 								id: "action-1",
 								name: "Lamp reset",
+								semantic: "reset",
 								kind: "momentary",
 								duration_millis: null as number | null,
 								assignments: [

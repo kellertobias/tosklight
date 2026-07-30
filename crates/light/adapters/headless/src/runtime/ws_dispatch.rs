@@ -6,8 +6,8 @@ use light_wire::v2::{
         DynamicStartLiveActionRequest,
     },
     live_action::{
-        CommandLineReplaceLiveActionRequest, FixtureControlLiveActionRequest, LiveAction,
-        LiveActionFrame,
+        CommandLineReplaceLiveActionRequest, FixtureControlLiveActionRequest,
+        FixtureControlsLiveActionRequest, LiveAction, LiveActionFrame,
     },
     preload_lifecycle::ProgrammingPreloadLifecycleAction,
 };
@@ -116,6 +116,7 @@ fn programmer_action_timing(action: &LiveAction) -> Option<(&'static str, bool)>
         LiveAction::ProgrammerUndo => Some(("undo", true)),
         LiveAction::ProgrammingAlign(_) => Some(("align", true)),
         LiveAction::FixtureControl(_) => Some(("fixture_control", true)),
+        LiveAction::FixtureControls(_) => Some(("fixture_controls", true)),
         LiveAction::DynamicToggle(_)
         | LiveAction::DynamicStart(_)
         | LiveAction::DynamicOff(_)
@@ -325,6 +326,9 @@ fn dispatch_action(
         }),
         LiveAction::FixtureControl(request) => {
             dispatch_fixture_control(state, session, request, context)
+        }
+        LiveAction::FixtureControls(request) => {
+            dispatch_fixture_controls(state, session, request, context)
         }
         dynamic_action => dispatch_dynamic_action(
             state,
@@ -606,6 +610,20 @@ fn dispatch_fixture_control(
             Err(error) => ActionOutput::plain(Err(error)),
         },
     )
+}
+
+fn dispatch_fixture_controls(
+    state: &AppState,
+    session: &Session,
+    request: FixtureControlsLiveActionRequest,
+    _context: &light_application::ActionContext,
+) -> ActionOutput {
+    match ws_programmer_control_actions(state, session, request) {
+        Ok(result) => ActionOutput {
+            response: Ok(result.payload),
+        },
+        Err(error) => ActionOutput::plain(Err(error)),
+    }
 }
 
 fn action_request<T: serde::Serialize>(

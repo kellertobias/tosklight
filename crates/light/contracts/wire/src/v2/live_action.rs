@@ -61,6 +61,7 @@ pub enum LiveAction {
     ProgrammerUndo,
     ProgrammingAlign(ProgrammingAlignLiveActionRequest),
     FixtureControl(FixtureControlLiveActionRequest),
+    FixtureControls(FixtureControlsLiveActionRequest),
     DynamicToggle(DynamicStartLiveActionRequest),
     DynamicStart(DynamicStartLiveActionRequest),
     DynamicOff(DynamicOffLiveActionRequest),
@@ -205,6 +206,23 @@ pub struct FixtureControlHttpActionRequest {
     pub active: bool,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureControlTarget {
+    pub fixture_id: Uuid,
+    pub action_id: Uuid,
+    pub expected_profile_revision: u32,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureControlsLiveActionRequest {
+    pub request_id: String,
+    #[ts(type = "number")]
+    pub expected_selection_revision: u64,
+    #[schemars(length(min = 1, max = 10_000))]
+    pub targets: Vec<FixtureControlTarget>,
+    pub active: bool,
+}
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingAlignOutcome {
     pub request_id: String,
@@ -280,6 +298,7 @@ impl LiveAction {
             | Self::ProgrammerUndo => None,
             Self::ProgrammingAlign(request) => Some(&request.request_id),
             Self::FixtureControl(request) => Some(&request.request_id),
+            Self::FixtureControls(request) => Some(&request.request_id),
             Self::DynamicToggle(request) | Self::DynamicStart(request) => {
                 Some(&request.request.request_id)
             }

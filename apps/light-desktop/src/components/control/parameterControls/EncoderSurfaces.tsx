@@ -119,6 +119,34 @@ function EncoderSurface({
 		}
 		const actions = controller.programmerActions;
 		if (!actions) return;
+		const targets = choice.targets.flatMap((target) =>
+			target.actionId && target.profileRevision != null
+				? [
+						{
+							fixtureId: target.fixtureId,
+							actionId: target.actionId,
+							expectedProfileRevision: target.profileRevision,
+						},
+					]
+				: [],
+		);
+		if (actions.controlFixtureActions && targets.length === choice.targets.length) {
+			const activate = actions.controlFixtureActions(
+				targets,
+				controller.selectionRevision,
+				true,
+			);
+			void (choice.controlKind === "momentary"
+				? activate.then(() =>
+						actions.controlFixtureActions?.(
+							targets,
+							controller.selectionRevision,
+							false,
+						),
+					)
+				: activate);
+			return;
+		}
 		void Promise.all(
 			choice.targets.flatMap((target) => {
 				if (!target.actionId) return [];

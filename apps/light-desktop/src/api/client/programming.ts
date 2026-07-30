@@ -219,6 +219,34 @@ export class ProgrammingApiClient {
 		);
 	}
 
+	controlFixtureActions(
+		targets: ReadonlyArray<{
+			fixtureId: string;
+			actionId: string;
+			expectedProfileRevision: number;
+		}>,
+		expectedSelectionRevision: number,
+		active: boolean,
+	) {
+		const requestId = crypto.randomUUID();
+		return this.transport.sendAction(
+			{
+				type: "fixture_controls",
+				request: {
+					request_id: requestId,
+					expected_selection_revision: expectedSelectionRevision,
+					targets: targets.map((target) => ({
+						fixture_id: target.fixtureId,
+						action_id: target.actionId,
+						expected_profile_revision: target.expectedProfileRevision,
+					})),
+					active,
+				},
+			},
+			requestId,
+		);
+	}
+
 	generateFixturePresets(
 		fixtureIds: string[],
 		expectedShowRevision: number,

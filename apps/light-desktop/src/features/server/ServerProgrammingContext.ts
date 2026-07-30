@@ -7,6 +7,15 @@ export interface ServerProgrammingContext {
 		actionId: string,
 		active: boolean,
 	) => Promise<void>;
+	controlFixtureActions: (
+		targets: ReadonlyArray<{
+			fixtureId: string;
+			actionId: string;
+			expectedProfileRevision: number;
+		}>,
+		expectedSelectionRevision: number,
+		active: boolean,
+	) => Promise<void>;
 	generateFixturePresets: (
 		fixtureIds: string[],
 	) => Promise<import("../../api/types").GeneratedFixturePresetResult | null>;
