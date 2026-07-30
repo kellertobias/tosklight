@@ -5740,6 +5740,34 @@
             },
             "kind": {
               "type": "string",
+              "const": "attribute_configuration"
+            },
+            "object_id": {
+              "type": "string"
+            },
+            "object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "object_id",
+            "object_revision",
+            "body",
+            "deleted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "deleted": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
               "const": "dynamic"
             },
             "object_id": {

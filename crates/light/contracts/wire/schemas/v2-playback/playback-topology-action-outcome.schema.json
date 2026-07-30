@@ -249,6 +249,7 @@
     "ShowObjectKind": {
       "type": "string",
       "enum": [
+        "attribute_configuration",
         "cue_list",
         "dynamic",
         "group",

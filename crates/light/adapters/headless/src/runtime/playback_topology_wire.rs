@@ -454,7 +454,8 @@ fn wire_kind(
         Input::CueList => Ok(Output::CueList),
         Input::Playback => Ok(Output::Playback),
         Input::PlaybackPage => Ok(Output::PlaybackPage),
-        Input::Group
+        Input::AttributeConfiguration
+        | Input::Group
         | Input::Dynamic
         | Input::PatchLayer
         | Input::Preset

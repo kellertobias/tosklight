@@ -1,5 +1,6 @@
 //! Process bootstrap and ownership of server background tasks.
 
+use super::attribute_configuration::InstalledAttributeConfiguration;
 use super::capabilities::runtime::supervisor::CapabilitySupervisors;
 use super::capability_resources::*;
 use super::{
@@ -315,6 +316,8 @@ fn build_app_state(
     startup: StartupState,
     resources: &RuntimeResources,
 ) -> anyhow::Result<AppState> {
+    let installed_attributes =
+        InstalledAttributeConfiguration::for_entry(startup.persistent.active_show.as_ref());
     let output = resources.scheduler.network_output();
     let output_sequences = resources.scheduler.sequences();
     let output_control = resources.scheduler.control_capability();
@@ -332,6 +335,7 @@ fn build_app_state(
     let selective_import = SelectiveShowImportService::new(active_show_service.clone());
     Ok(AppState {
         action_timing: resources.action_timing.clone(),
+        attributes: AttributeConfigurationResource::new(installed_attributes),
         installation: InstallationResource::new(
             startup.persistent.desk,
             startup.persistent.fixture_library,

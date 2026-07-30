@@ -120,7 +120,8 @@ fn wire_kind(
         app::ActiveShowObjectKind::CueList => Ok(wire::ProgrammingUpdateObjectKind::CueList),
         app::ActiveShowObjectKind::Preset => Ok(wire::ProgrammingUpdateObjectKind::Preset),
         app::ActiveShowObjectKind::Group => Ok(wire::ProgrammingUpdateObjectKind::Group),
-        app::ActiveShowObjectKind::PatchLayer
+        app::ActiveShowObjectKind::AttributeConfiguration
+        | app::ActiveShowObjectKind::PatchLayer
         | app::ActiveShowObjectKind::Dynamic
         | app::ActiveShowObjectKind::Playback
         | app::ActiveShowObjectKind::PlaybackPage

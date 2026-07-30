@@ -107,6 +107,7 @@ mod active_show_adapter;
 mod active_show_objects;
 mod api_error;
 mod api_types;
+mod attribute_configuration;
 mod auth_backup;
 mod boundaries;
 mod capabilities;

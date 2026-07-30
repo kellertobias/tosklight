@@ -66,6 +66,11 @@ fn test_state_with_programmers(
     (
         AppState {
             action_timing: ActionTimingResource::default(),
+            attributes: AttributeConfigurationResource::new(
+                crate::runtime::attribute_configuration::InstalledAttributeConfiguration::recommended(
+                    None, 0,
+                ),
+            ),
             installation: InstallationResource::open_test_installation(data_dir.clone()).unwrap(),
             sessions: SessionResource::new(),
             dynamics: light_application::DynamicsService::new(programmers.clone()),

@@ -3,6 +3,9 @@
 //! Runtime state is grouped by capability so the Axum composition root owns narrow resources
 //! instead of a mutable state bag.
 
+use super::attribute_configuration::{
+    AttributeConfigurationReplayCache, InstalledAttributeConfiguration,
+};
 use super::*;
 
 #[cfg(test)]
@@ -179,6 +182,21 @@ pub(in crate::runtime) struct ProgrammingResource {
     programmers: ProgrammerRegistry,
     service: ProgrammingService,
     command_history: Arc<Mutex<HashMap<Uuid, VecDeque<CommandHistoryEntry>>>>,
+}
+
+#[derive(Clone)]
+pub(in crate::runtime) struct AttributeConfigurationResource {
+    pub(in crate::runtime) installed: Arc<RwLock<InstalledAttributeConfiguration>>,
+    pub(in crate::runtime) replay: Arc<tokio::sync::Mutex<AttributeConfigurationReplayCache>>,
+}
+
+impl AttributeConfigurationResource {
+    pub(in crate::runtime) fn new(installed: InstalledAttributeConfiguration) -> Self {
+        Self {
+            installed: Arc::new(RwLock::new(installed)),
+            replay: Arc::default(),
+        }
+    }
 }
 
 impl ProgrammingResource {

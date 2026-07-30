@@ -302,6 +302,7 @@ impl ActiveShowUnitOfWork for ServerActiveShowUnitOfWork {
                 if let Some(document) = self.document.as_mut() {
                     document.apply_commit(&commit);
                     debug_assert_eq!(document.revision(), commit.revision());
+                    self.state.attributes.install_document(document);
                 }
                 Ok(commit)
             }

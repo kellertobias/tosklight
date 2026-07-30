@@ -1,5 +1,6 @@
 use ts_rs::{Config, TS};
 
+use crate::v2::attribute_configuration::*;
 use crate::v2::command_line::*;
 use crate::v2::control_desk_configuration::*;
 use crate::v2::cue_deletion::*;
@@ -39,7 +40,8 @@ use crate::v2::virtual_playback_zones::*;
 use crate::v2::visualization::*;
 
 pub(super) fn all(config: &Config) -> Vec<String> {
-    let mut declarations = command_line(config);
+    let mut declarations = attribute_configuration(config);
+    declarations.extend(command_line(config));
     declarations.extend(control_desk_configuration(config));
     declarations.extend(desk_management(config));
     declarations.extend(dynamics(config));
@@ -67,6 +69,24 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(interaction(config));
     declarations.extend(live_actions(config));
     declarations
+}
+
+fn attribute_configuration(config: &Config) -> Vec<String> {
+    vec![
+        AttributeEncoderGroup::decl(config),
+        AttributeValueType::decl(config),
+        CustomAttributeLifecycle::decl(config),
+        AttributeBounds::decl(config),
+        CustomAttributeDescriptor::decl(config),
+        AttributePlacement::decl(config),
+        AttributeActivationGroup::decl(config),
+        AttributeConfiguration::decl(config),
+        ConfiguredAttributeDescriptor::decl(config),
+        AttributeConfigurationSnapshot::decl(config),
+        AttributeConfigurationPatch::decl(config),
+        AttributeConfigurationUpdateRequest::decl(config),
+        AttributeConfigurationUpdateOutcome::decl(config),
+    ]
 }
 
 fn schedules(config: &Config) -> Vec<String> {

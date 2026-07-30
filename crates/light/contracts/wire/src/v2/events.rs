@@ -568,6 +568,14 @@ pub struct ShowObjectsChange {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ShowObjectChange {
+    AttributeConfiguration {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        deleted: bool,
+    },
     Dynamic {
         object_id: String,
         #[ts(type = "number")]
@@ -656,6 +664,7 @@ pub enum ShowObjectChange {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum ShowObjectKind {
+    AttributeConfiguration,
     CueList,
     Dynamic,
     Group,

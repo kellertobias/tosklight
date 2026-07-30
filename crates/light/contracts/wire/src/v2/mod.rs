@@ -1,5 +1,6 @@
 //! Version 2 transport contracts.
 
+pub mod attribute_configuration;
 pub mod command_line;
 pub mod control_desk_configuration;
 pub mod cue_deletion;

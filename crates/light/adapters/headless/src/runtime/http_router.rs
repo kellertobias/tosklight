@@ -14,6 +14,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(playback_v2::router())
         .merge(dynamics_http::router())
         .merge(playback_topology_http::router())
+        .merge(attribute_configuration::router())
         .merge(control_desk_configuration_v2::router())
         .merge(desk_management_v2::router())
         .merge(screen_configuration_v2::router())

@@ -3,6 +3,7 @@ use super::*;
 #[derive(Clone)]
 pub(super) struct AppState {
     pub(super) action_timing: ActionTimingResource,
+    pub(super) attributes: AttributeConfigurationResource,
     pub(super) installation: InstallationResource,
     pub(super) sessions: SessionResource,
     pub(super) programming: ProgrammingResource,
