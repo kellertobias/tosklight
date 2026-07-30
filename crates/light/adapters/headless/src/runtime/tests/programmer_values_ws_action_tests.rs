@@ -1,6 +1,56 @@
 use super::*;
 
 #[tokio::test]
+async fn relative_programmer_ws_intent_starts_from_unowned_profile_default() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = state
+        .sessions
+        .sessions()
+        .into_iter()
+        .find(|session| session.token == token)
+        .unwrap();
+    open_values_test_show(&app, &token).await;
+    let fixture_id = state.output.snapshot().fixtures[0].fixture_id;
+    let request_id = "ws-programmer-values-default-relative";
+
+    let relative = dispatch_live_action(
+        &state,
+        &session,
+        live_action_frame(
+            &session,
+            request_id,
+            serde_json::from_value(serde_json::json!({
+                "type": "programming_values",
+                "request": {
+                    "request_id": request_id,
+                    "expected_revision": 0,
+                    "expected_capture_mode_revision": 0,
+                    "action": {
+                        "type": "apply_intent",
+                        "fixture_ids": [fixture_id.0],
+                        "attribute": "intensity",
+                        "operation": {"type": "relative_step", "delta": 0.1},
+                        "timing": {"fade": false}
+                    }
+                }
+            }))
+            .unwrap(),
+        ),
+    );
+
+    assert!(relative.ok, "{:?}", relative.error);
+    let payload = relative.payload.unwrap();
+    assert_eq!(payload["status"], "changed");
+    let value = payload["projection"]["fixture_values"][0]["value"]["value"]
+        .as_f64()
+        .expect("relative value is numeric");
+    assert!((value - 0.1).abs() < f64::from(f32::EPSILON));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn programmer_values_ws_frame_uses_typed_service_and_relative_intent_once() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

@@ -1,13 +1,15 @@
 use std::collections::{HashMap, HashSet};
 
 use light_application::ProgrammingValuesEnvironment;
-use light_core::{AttributeKey, FixtureId};
+use light_core::{AttributeKey, AttributeValue, FixtureId};
 
 use super::super::AppState;
 
 pub(super) fn values_environment(state: &AppState) -> ProgrammingValuesEnvironment {
     let snapshot = state.output.snapshot();
     let group_members = resolved_group_members(&snapshot.groups);
+    let mut current_values = state.output.resolved_values();
+    insert_profile_defaults(&mut current_values, &snapshot.fixtures);
     ProgrammingValuesEnvironment {
         fixture_ids: fixture_ids(&snapshot.fixtures),
         group_memberships: group_members
@@ -15,11 +17,45 @@ pub(super) fn values_environment(state: &AppState) -> ProgrammingValuesEnvironme
             .map(|(id, members)| (id.clone(), members.len()))
             .collect(),
         group_members,
-        // Linked captures must come from the authoritative context projection. Do not invent
-        // profile defaults for addresses absent from that frozen resolved view.
-        current_values: state.output.resolved_values(),
+        // Profile defaults are part of the frozen value currently feeding output even when the
+        // Programmer has not yet taken ownership of that address.
+        current_values,
         supported_attributes: supported_attributes(&snapshot.fixtures),
         activation_links: state.attributes.activation_links(),
+    }
+}
+
+fn insert_profile_defaults(
+    values: &mut HashMap<(FixtureId, AttributeKey), AttributeValue>,
+    fixtures: &[light_fixture::PatchedFixture],
+) {
+    for fixture in fixtures {
+        for parameter in fixture
+            .definition
+            .heads
+            .iter()
+            .filter(|head| head.shared)
+            .flat_map(|head| &head.parameters)
+        {
+            values
+                .entry((fixture.fixture_id, parameter.attribute.clone()))
+                .or_insert(AttributeValue::Normalized(parameter.default));
+        }
+        for logical in &fixture.logical_heads {
+            let Some(head) = fixture
+                .definition
+                .heads
+                .iter()
+                .find(|head| head.index == logical.head_index)
+            else {
+                continue;
+            };
+            for parameter in &head.parameters {
+                values
+                    .entry((logical.fixture_id, parameter.attribute.clone()))
+                    .or_insert(AttributeValue::Normalized(parameter.default));
+            }
+        }
     }
 }
 
