@@ -8,6 +8,42 @@ import {
 } from "./rendererDiagnostics";
 import type { StageSceneController } from "./sceneTypes";
 
+interface StageRenderMetrics {
+	renderer: THREE.WebGLRenderer;
+	controller: StageSceneController;
+	diagnosticsRef: MutableRefObject<{
+		lane: "normal" | "preload";
+		paneId: string | null;
+	}>;
+	scene: THREE.Scene;
+	submittedAt: number;
+	startedAt: number;
+}
+
+function recordStageRender({
+	renderer,
+	controller,
+	diagnosticsRef,
+	scene,
+	submittedAt,
+	startedAt,
+}: StageRenderMetrics) {
+	frontendPerformanceDiagnostics.recordStageRender({
+		...diagnosticsRef.current,
+		renderQuality: controller.appliedRenderQualityRef.current,
+		visibleObjects: visibleStageObjects(scene),
+		submittedAt,
+		durationMs: submittedAt - startedAt,
+		calls: renderer.info.render.calls,
+		transparentDrawCalls: transparentStageDrawCalls(scene),
+		triangles: renderer.info.render.triangles,
+		lines: renderer.info.render.lines,
+		points: renderer.info.render.points,
+		geometries: renderer.info.memory.geometries,
+		textures: renderer.info.memory.textures,
+	});
+}
+
 export function createStageRenderLoop({
 	renderer,
 	camera,
@@ -83,19 +119,13 @@ export function createStageRenderLoop({
 			acknowledgeDesktopMirrorRender?.();
 			scene.userData.stageImprovedShadowsDirty = false;
 			renderer.shadowMap.needsUpdate = false;
-			frontendPerformanceDiagnostics.recordStageRender({
-				...diagnosticsRef.current,
-				renderQuality: controller.appliedRenderQualityRef.current,
-				visibleObjects: visibleStageObjects(scene),
+			recordStageRender({
+				renderer,
+				controller,
+				diagnosticsRef,
+				scene,
 				submittedAt,
-				durationMs: submittedAt - startedAt,
-				calls: renderer.info.render.calls,
-				transparentDrawCalls: transparentStageDrawCalls(scene),
-				triangles: renderer.info.render.triangles,
-				lines: renderer.info.render.lines,
-				points: renderer.info.render.points,
-				geometries: renderer.info.memory.geometries,
-				textures: renderer.info.memory.textures,
+				startedAt,
 			});
 			frontendPerformanceDiagnostics.recordStageFrameCanvasSubmitted(
 				controller.displayedVisualizationRef.current?.generated_at,

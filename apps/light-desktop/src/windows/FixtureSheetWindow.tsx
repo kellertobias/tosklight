@@ -52,9 +52,7 @@ export function FixtureSheetWindow({
 	const { state } = useApp();
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	const [activeRow, setActiveRow] = useState(0);
-	const [visibleFixtureIds, setVisibleFixtureIds] = useState<readonly string[]>(
-		[],
-	);
+	const [visibleFixtureIds, onVisibleFixtureIdsChange] = useVisibleFixtureIds();
 	const groupsVisible = compact
 		? Boolean(showGroupShortcuts)
 		: state.fixtureGroupsVisible;
@@ -122,23 +120,7 @@ export function FixtureSheetWindow({
 		() => new Set(selection?.selected ?? []),
 		[selection?.selected],
 	);
-	const selectionActionStatus =
-		typeof selectionActions?.status === "function"
-			? selectionActions.status()
-			: selectionActions
-				? "ready"
-				: "loading";
-	const onVisibleFixtureIdsChange = useCallback(
-		(fixtureIds: readonly string[]) => {
-			setVisibleFixtureIds((current) =>
-				current.length === fixtureIds.length &&
-				current.every((fixtureId, index) => fixtureId === fixtureIds[index])
-					? current
-					: [...fixtureIds],
-			);
-		},
-		[],
-	);
+	const selectionActionStatus = resolveSelectionActionStatus(selectionActions);
 
 	return (
 		<FixtureSheetWindowView
@@ -194,6 +176,26 @@ export function FixtureSheetWindow({
 			}
 		/>
 	);
+}
+
+function useVisibleFixtureIds() {
+	const [fixtureIds, setFixtureIds] = useState<readonly string[]>([]);
+	const onChange = useCallback((next: readonly string[]) => {
+		setFixtureIds((current) =>
+			current.length === next.length &&
+			current.every((fixtureId, index) => fixtureId === next[index])
+				? current
+				: [...next],
+		);
+	}, []);
+	return [fixtureIds, onChange] as const;
+}
+
+function resolveSelectionActionStatus(
+	actions: ReturnType<typeof useProgrammingSelectionActions>,
+) {
+	if (typeof actions?.status === "function") return actions.status();
+	return actions ? ("ready" as const) : ("loading" as const);
 }
 
 export function FixtureSheetWindowView({

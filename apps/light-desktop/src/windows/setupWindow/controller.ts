@@ -26,16 +26,15 @@ export function useSetupWindowController() {
 	const programmingUpdate = useProgrammingUpdate();
 	const [section, setSection] = useState(0);
 	const [draft, setDraft] = useState<DeskConfiguration | null>(configuration);
-	const [recordSettings, setRecordSettings] =
-		useState<RecordSettings>(loadRecordSettings);
-	const [updateSettings, setUpdateSettings] = useState<UpdateSettings>(
-		defaultUpdateSettings,
-	);
-	const [programmerSettingsLoaded, setProgrammerSettingsLoaded] =
-		useState(false);
-	const [programmerSettingsError, setProgrammerSettingsError] = useState<
-		string | null
-	>(null);
+	const {
+		recordSettings,
+		setRecordSettings,
+		updateSettings,
+		setUpdateSettings,
+		programmerSettingsLoaded,
+		programmerSettingsError,
+		setProgrammerSettingsError,
+	} = useProgrammerSetupSettings(programmingUpdate, section);
 	const [attributeConfiguration, setAttributeConfiguration] =
 		useState<AttributeConfigurationSnapshot | null>(null);
 	const [attributeConfigurationError, setAttributeConfigurationError] =
@@ -74,39 +73,6 @@ export function useSetupWindowController() {
 	useEffect(() => {
 		if (section !== 2) return;
 		let active = true;
-		setProgrammerSettingsLoaded(false);
-		setRecordSettings(loadRecordSettings());
-		setProgrammerSettingsError(null);
-		void programmingUpdate
-			?.loadSettings()
-			.then((settings) => {
-				if (!active) return;
-				setUpdateSettings(settings ?? defaultUpdateSettings);
-				setProgrammerSettingsLoaded(true);
-				if (!settings)
-					setProgrammerSettingsError(
-						"Update defaults could not be loaded; deterministic defaults are shown.",
-					);
-			})
-			.catch((reason) => {
-				if (!active) return;
-				setUpdateSettings(defaultUpdateSettings);
-				setProgrammerSettingsLoaded(true);
-				setProgrammerSettingsError(errorMessage(reason));
-			});
-		if (!programmingUpdate) {
-			setUpdateSettings(defaultUpdateSettings);
-			setProgrammerSettingsLoaded(true);
-			setProgrammerSettingsError("Update defaults are unavailable.");
-		}
-		return () => {
-			active = false;
-		};
-	}, [programmingUpdate, section]);
-
-	useEffect(() => {
-		if (section !== 2) return;
-		let active = true;
 		setAttributeConfigurationError(null);
 		void attributeActions
 			?.load()
@@ -130,11 +96,8 @@ export function useSetupWindowController() {
 		};
 	}, [attributeActions, section]);
 
-	const editDraft = (next: DeskConfiguration) => {
-		draftRevision.current += 1;
-		draftDirty.current = true;
-		setDraft(next);
-	};
+	const editDraft = (next: DeskConfiguration) =>
+		updateDeskDraft(next, draftRevision, draftDirty, setDraft);
 	const save = async () => {
 		if (!draft) return;
 		pendingSave.current = {
@@ -207,6 +170,74 @@ export function useSetupWindowController() {
 }
 
 export type SetupWindowController = ReturnType<typeof useSetupWindowController>;
+
+function updateDeskDraft(
+	next: DeskConfiguration,
+	revision: React.MutableRefObject<number>,
+	dirty: React.MutableRefObject<boolean>,
+	setDraft: React.Dispatch<React.SetStateAction<DeskConfiguration | null>>,
+) {
+	revision.current += 1;
+	dirty.current = true;
+	setDraft(next);
+}
+
+function useProgrammerSetupSettings(
+	programmingUpdate: ReturnType<typeof useProgrammingUpdate>,
+	section: number,
+) {
+	const [recordSettings, setRecordSettings] =
+		useState<RecordSettings>(loadRecordSettings);
+	const [updateSettings, setUpdateSettings] = useState<UpdateSettings>(
+		defaultUpdateSettings,
+	);
+	const [programmerSettingsLoaded, setProgrammerSettingsLoaded] =
+		useState(false);
+	const [programmerSettingsError, setProgrammerSettingsError] = useState<
+		string | null
+	>(null);
+	useEffect(() => {
+		if (section !== 2) return;
+		let active = true;
+		setProgrammerSettingsLoaded(false);
+		setRecordSettings(loadRecordSettings());
+		setProgrammerSettingsError(null);
+		void programmingUpdate
+			?.loadSettings()
+			.then((settings) => {
+				if (!active) return;
+				setUpdateSettings(settings ?? defaultUpdateSettings);
+				setProgrammerSettingsLoaded(true);
+				if (!settings)
+					setProgrammerSettingsError(
+						"Update defaults could not be loaded; deterministic defaults are shown.",
+					);
+			})
+			.catch((reason) => {
+				if (!active) return;
+				setUpdateSettings(defaultUpdateSettings);
+				setProgrammerSettingsLoaded(true);
+				setProgrammerSettingsError(errorMessage(reason));
+			});
+		if (!programmingUpdate) {
+			setUpdateSettings(defaultUpdateSettings);
+			setProgrammerSettingsLoaded(true);
+			setProgrammerSettingsError("Update defaults are unavailable.");
+		}
+		return () => {
+			active = false;
+		};
+	}, [programmingUpdate, section]);
+	return {
+		recordSettings,
+		setRecordSettings,
+		updateSettings,
+		setUpdateSettings,
+		programmerSettingsLoaded,
+		programmerSettingsError,
+		setProgrammerSettingsError,
+	};
+}
 
 function saveUpdateSettings(
 	update: ReturnType<typeof useProgrammingUpdate>,

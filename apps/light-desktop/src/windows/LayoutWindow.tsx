@@ -31,69 +31,8 @@ export function LayoutWindow({
 		group?.body.fixtures ?? [],
 	);
 	const anchor = useRef<string | null>(null);
-	const drag = useRef<{
-		x: number;
-		y: number;
-		additive: boolean;
-		pointerId: number;
-	} | null>(null);
-	const [marquee, setMarquee] = useState<{
-		left: number;
-		top: number;
-		width: number;
-		height: number;
-	} | null>(null);
-	const projection = useMemo(() => {
-		const positions: SelectionGridPositions = {
-			positions2d: { ...layout.positions },
-			positions3d: { ...layout.positions3d },
-		};
-		for (const fixture of visualization.fixtures) {
-			for (const head of fixture.logical_heads) {
-				if (!positions.positions2d[head.fixture_id]) {
-					const position = layout.positions[fixture.fixture_id];
-					if (position)
-						(positions.positions2d as Record<string, typeof position>)[
-							head.fixture_id
-						] = position;
-				}
-				if (!positions.positions3d[head.fixture_id]) {
-					const position = layout.positions3d[fixture.fixture_id];
-					if (position)
-						(positions.positions3d as Record<string, typeof position>)[
-							head.fixture_id
-						] = position;
-				}
-			}
-		}
-		const cells = group
-			? selectionGridCells(group.body.fixtures, group.body.grid, positions)
-			: [];
-		return {
-			cells,
-			order: rowsFirst(cells, "top_left"),
-			columns: Math.max(1, ...cells.map((cell) => cell.column + 1)),
-			rows: Math.max(1, ...cells.map((cell) => cell.row + 1)),
-		};
-	}, [group, layout.positions, layout.positions3d, visualization.fixtures]);
-	const presentations = useMemo(
-		() =>
-			new Map(
-				visualization.presentations.map((fixture) => [
-					fixture.fixtureId,
-					fixture,
-				]),
-			),
-		[visualization.presentations],
-	);
-	const inheritedPresentation = (fixtureId: string) => {
-		const direct = presentations.get(fixtureId);
-		if (direct) return direct;
-		const owner = visualization.fixtures.find((fixture) =>
-			fixture.logical_heads.some((head) => head.fixture_id === fixtureId),
-		);
-		return owner ? presentations.get(owner.fixture_id) : undefined;
-	};
+	const projection = useLayoutProjection(group, layout, visualization.fixtures);
+	const inheritedPresentation = useInheritedPresentation(visualization);
 	const selectFixture = (
 		fixtureId: string,
 		event: React.MouseEvent<HTMLButtonElement>,
@@ -123,67 +62,12 @@ export function LayoutWindow({
 			);
 		else void selection.replaceFixtureIds([fixtureId]);
 	};
-	const beginMarquee = (event: React.PointerEvent<HTMLDivElement>) => {
-		if (viewOnly || event.target !== event.currentTarget) return;
-		const bounds = event.currentTarget.getBoundingClientRect();
-		drag.current = {
-			x: event.clientX,
-			y: event.clientY,
-			additive: event.metaKey || event.ctrlKey,
-			pointerId: event.pointerId,
-		};
-		event.currentTarget.setPointerCapture(event.pointerId);
-		setMarquee({
-			left: event.clientX - bounds.left,
-			top: event.clientY - bounds.top,
-			width: 0,
-			height: 0,
-		});
-	};
-	const moveMarquee = (event: React.PointerEvent<HTMLDivElement>) => {
-		const start = drag.current;
-		if (!start || start.pointerId !== event.pointerId) return;
-		const bounds = event.currentTarget.getBoundingClientRect();
-		setMarquee({
-			left: Math.min(start.x, event.clientX) - bounds.left,
-			top: Math.min(start.y, event.clientY) - bounds.top,
-			width: Math.abs(event.clientX - start.x),
-			height: Math.abs(event.clientY - start.y),
-		});
-	};
-	const finishMarquee = (event: React.PointerEvent<HTMLDivElement>) => {
-		const start = drag.current;
-		if (!start || start.pointerId !== event.pointerId) return;
-		drag.current = null;
-		setMarquee(null);
-		const left = Math.min(start.x, event.clientX);
-		const right = Math.max(start.x, event.clientX);
-		const top = Math.min(start.y, event.clientY);
-		const bottom = Math.max(start.y, event.clientY);
-		const hitIds = new Set(
-			[
-				...event.currentTarget.querySelectorAll<HTMLElement>(
-					"[data-layout-fixture-id]",
-				),
-			]
-				.filter((element) => {
-					const bounds = element.getBoundingClientRect();
-					return (
-						bounds.right >= left &&
-						bounds.left <= right &&
-						bounds.bottom >= top &&
-						bounds.top <= bottom
-					);
-				})
-				.map((element) => element.dataset.layoutFixtureId ?? ""),
-		);
-		const hits = projection.order.filter((fixtureId) => hitIds.has(fixtureId));
-		if (hits.length === 0) return;
-		anchor.current = hits.at(-1) ?? null;
-		void selection.replaceFixtureIds(
-			start.additive ? orderedUnion(selection.fixtureIds, hits) : hits,
-		);
-	};
+	const marqueeSelection = useLayoutMarquee({
+		anchor,
+		order: projection.order,
+		selection,
+		viewOnly: Boolean(viewOnly),
+	});
 
 	return (
 		<section
@@ -191,31 +75,13 @@ export function LayoutWindow({
 			aria-label="Layout"
 		>
 			{!compact && (
-				<header className="layout-window-header">
-					<SelectField
-						label="Group"
-						value={selectedGroupId ?? ""}
-						options={[
-							{ value: "", label: "Choose a Group" },
-							...(selectedGroupId &&
-							!groups.some((candidate) => candidate.id === selectedGroupId)
-								? [
-										{
-											value: selectedGroupId,
-											label: `Unavailable · ${selectedGroupId}`,
-										},
-									]
-								: []),
-							...groups.map((candidate) => ({
-								value: candidate.id,
-								label: `${candidate.id} · ${candidate.body.name || `Group ${candidate.id}`}`,
-							})),
-						]}
-						onChange={(groupId) =>
-							dispatch({ type: "SET_LAYOUT_GROUP", groupId })
-						}
-					/>
-				</header>
+				<LayoutGroupPicker
+					groups={groups}
+					selectedGroupId={selectedGroupId}
+					onChange={(groupId) =>
+						dispatch({ type: "SET_LAYOUT_GROUP", groupId })
+					}
+				/>
 			)}
 			{!selectedGroupId ? (
 				<div className="layout-window-state" role="status">
@@ -242,13 +108,10 @@ export function LayoutWindow({
 						gridTemplateColumns: `repeat(${projection.columns}, minmax(5rem, 1fr))`,
 						gridTemplateRows: `repeat(${projection.rows}, minmax(4rem, 1fr))`,
 					}}
-					onPointerDown={beginMarquee}
-					onPointerMove={moveMarquee}
-					onPointerUp={finishMarquee}
-					onPointerCancel={() => {
-						drag.current = null;
-						setMarquee(null);
-					}}
+					onPointerDown={marqueeSelection.begin}
+					onPointerMove={marqueeSelection.move}
+					onPointerUp={marqueeSelection.finish}
+					onPointerCancel={marqueeSelection.cancel}
 				>
 					{projection.cells.map((cell) => {
 						const fixture = inheritedPresentation(cell.fixtureId);
@@ -281,17 +144,207 @@ export function LayoutWindow({
 							</Button>
 						);
 					})}
-					{marquee && (
+					{marqueeSelection.marquee && (
 						<span
 							className="layout-marquee"
 							aria-hidden="true"
-							style={marquee}
+							style={marqueeSelection.marquee}
 						/>
 					)}
 				</section>
 			)}
 		</section>
 	);
+}
+
+function LayoutGroupPicker({
+	groups,
+	selectedGroupId,
+	onChange,
+}: {
+	groups: ReturnType<typeof usePortableGroups>;
+	selectedGroupId: string | null | undefined;
+	onChange(groupId: string): void;
+}) {
+	return (
+		<header className="layout-window-header">
+			<SelectField
+				label="Group"
+				value={selectedGroupId ?? ""}
+				options={[
+					{ value: "", label: "Choose a Group" },
+					...(selectedGroupId &&
+					!groups.some((candidate) => candidate.id === selectedGroupId)
+						? [
+								{
+									value: selectedGroupId,
+									label: `Unavailable · ${selectedGroupId}`,
+								},
+							]
+						: []),
+					...groups.map((candidate) => ({
+						value: candidate.id,
+						label: `${candidate.id} · ${candidate.body.name || `Group ${candidate.id}`}`,
+					})),
+				]}
+				onChange={onChange}
+			/>
+		</header>
+	);
+}
+
+function useLayoutProjection(
+	group: ReturnType<typeof usePortableGroups>[number] | undefined,
+	layout: ReturnType<typeof useStageLayout>,
+	fixtures: ReturnType<typeof useLayoutVisualization>["fixtures"],
+) {
+	return useMemo(() => {
+		const positions: SelectionGridPositions = {
+			positions2d: { ...layout.positions },
+			positions3d: { ...layout.positions3d },
+		};
+		for (const fixture of fixtures) {
+			for (const head of fixture.logical_heads) {
+				if (!positions.positions2d[head.fixture_id]) {
+					const position = layout.positions[fixture.fixture_id];
+					if (position)
+						(positions.positions2d as Record<string, typeof position>)[
+							head.fixture_id
+						] = position;
+				}
+				if (!positions.positions3d[head.fixture_id]) {
+					const position = layout.positions3d[fixture.fixture_id];
+					if (position)
+						(positions.positions3d as Record<string, typeof position>)[
+							head.fixture_id
+						] = position;
+				}
+			}
+		}
+		const cells = group
+			? selectionGridCells(group.body.fixtures, group.body.grid, positions)
+			: [];
+		return {
+			cells,
+			order: rowsFirst(cells, "top_left"),
+			columns: Math.max(1, ...cells.map((cell) => cell.column + 1)),
+			rows: Math.max(1, ...cells.map((cell) => cell.row + 1)),
+		};
+	}, [fixtures, group, layout.positions, layout.positions3d]);
+}
+
+function useInheritedPresentation(
+	visualization: ReturnType<typeof useLayoutVisualization>,
+) {
+	const presentations = useMemo(
+		() =>
+			new Map(
+				visualization.presentations.map((fixture) => [
+					fixture.fixtureId,
+					fixture,
+				]),
+			),
+		[visualization.presentations],
+	);
+	return (fixtureId: string) => {
+		const direct = presentations.get(fixtureId);
+		if (direct) return direct;
+		const owner = visualization.fixtures.find((fixture) =>
+			fixture.logical_heads.some((head) => head.fixture_id === fixtureId),
+		);
+		return owner ? presentations.get(owner.fixture_id) : undefined;
+	};
+}
+
+function useLayoutMarquee({
+	anchor,
+	order,
+	selection,
+	viewOnly,
+}: {
+	anchor: React.MutableRefObject<string | null>;
+	order: readonly string[];
+	selection: ReturnType<typeof useStageSelection>;
+	viewOnly: boolean;
+}) {
+	const drag = useRef<{
+		x: number;
+		y: number;
+		additive: boolean;
+		pointerId: number;
+	} | null>(null);
+	const [marquee, setMarquee] = useState<React.CSSProperties | null>(null);
+	const begin = (event: React.PointerEvent<HTMLDivElement>) => {
+		if (viewOnly || event.target !== event.currentTarget) return;
+		const bounds = event.currentTarget.getBoundingClientRect();
+		drag.current = {
+			x: event.clientX,
+			y: event.clientY,
+			additive: event.metaKey || event.ctrlKey,
+			pointerId: event.pointerId,
+		};
+		event.currentTarget.setPointerCapture(event.pointerId);
+		setMarquee({
+			left: event.clientX - bounds.left,
+			top: event.clientY - bounds.top,
+			width: 0,
+			height: 0,
+		});
+	};
+	const move = (event: React.PointerEvent<HTMLDivElement>) => {
+		const start = drag.current;
+		if (!start || start.pointerId !== event.pointerId) return;
+		const bounds = event.currentTarget.getBoundingClientRect();
+		setMarquee({
+			left: Math.min(start.x, event.clientX) - bounds.left,
+			top: Math.min(start.y, event.clientY) - bounds.top,
+			width: Math.abs(event.clientX - start.x),
+			height: Math.abs(event.clientY - start.y),
+		});
+	};
+	const finish = (event: React.PointerEvent<HTMLDivElement>) => {
+		const start = drag.current;
+		if (!start || start.pointerId !== event.pointerId) return;
+		drag.current = null;
+		setMarquee(null);
+		const left = Math.min(start.x, event.clientX);
+		const right = Math.max(start.x, event.clientX);
+		const top = Math.min(start.y, event.clientY);
+		const bottom = Math.max(start.y, event.clientY);
+		const hitIds = new Set(
+			[
+				...event.currentTarget.querySelectorAll<HTMLElement>(
+					"[data-layout-fixture-id]",
+				),
+			]
+				.filter((element) => {
+					const bounds = element.getBoundingClientRect();
+					return (
+						bounds.right >= left &&
+						bounds.left <= right &&
+						bounds.bottom >= top &&
+						bounds.top <= bottom
+					);
+				})
+				.map((element) => element.dataset.layoutFixtureId ?? ""),
+		);
+		const hits = order.filter((fixtureId) => hitIds.has(fixtureId));
+		if (hits.length === 0) return;
+		anchor.current = hits.at(-1) ?? null;
+		void selection.replaceFixtureIds(
+			start.additive ? orderedUnion(selection.fixtureIds, hits) : hits,
+		);
+	};
+	return {
+		begin,
+		move,
+		finish,
+		cancel: () => {
+			drag.current = null;
+			setMarquee(null);
+		},
+		marquee,
+	};
 }
 
 function orderedUnion(first: readonly string[], second: readonly string[]) {

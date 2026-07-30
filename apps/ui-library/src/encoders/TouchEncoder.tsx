@@ -473,11 +473,13 @@ export function TouchEncoder({
 		)
 			setEditing(false);
 	};
-	const onWheel = (event: ReactWheelEvent<HTMLElement>) => {
-		if (disabled || indexed || !event.deltaY) return;
-		event.preventDefault();
-		onStep(Math.sign(-event.deltaY) * (event.shiftKey ? fastStep : slowStep));
-	};
+	const onWheel = createEncoderWheelHandler({
+		disabled,
+		fastStep,
+		indexed,
+		onStep,
+		slowStep,
+	});
 	const onKeyDown = createEncoderKeyDownHandler({
 		disabled,
 		indexed,
@@ -529,46 +531,146 @@ export function TouchEncoder({
 					slot={slot}
 					slowStep={slowStep}
 				/>
-				<span id={instructionsId} className="visually-hidden">
-					{choiceMode
-						? "Tap the upper chevron for the next value or the lower chevron for the previous value. Tap the center or press Enter to choose from the available options."
-						: "The upper third increases the value and the lower third decreases it. Drag vertically to accelerate linearly. Tap the full-width center third or press Enter for absolute entry."}
-				</span>
+				<TouchEncoderInstructions choiceMode={choiceMode} id={instructionsId} />
 			</section>
 			{editing && (
-				<TouchEncoderEditor
+				<TouchEncoderEditing
 					label={label}
 					inputValue={inputValue}
-					allowThrough={Boolean(onSetRange)}
 					canRelease={canRelease}
-					presets={presets}
-					presetsOnly={choiceMode || indexed}
 					onInput={setInputValue}
 					onSubmit={submit}
 					onClose={() => setEditing(false)}
+					onSet={onSet}
+					onSetRange={onSetRange}
 					onPresetSelect={onPresetSelect}
-					onRelease={
-						onRelease
-							? () => {
-									onRelease();
-									setEditing(false);
-								}
-							: undefined
-					}
-					fader={
-						indexed
-							? undefined
-							: {
-									label,
-									minimum: minimum * resolvedInputScale,
-									maximum: maximum * resolvedInputScale,
-									step: slowStep * resolvedInputScale,
-									accentColor,
-									onChange: (next) => onSet(clamp(next / resolvedInputScale)),
-								}
-					}
+					onRelease={onRelease}
+					presets={presets}
+					choiceMode={choiceMode}
+					indexed={indexed}
+					minimum={minimum}
+					maximum={maximum}
+					resolvedInputScale={resolvedInputScale}
+					slowStep={slowStep}
+					accentColor={accentColor}
+					clamp={clamp}
 				/>
 			)}
 		</>
+	);
+}
+
+function TouchEncoderInstructions({
+	choiceMode,
+	id,
+}: {
+	choiceMode: boolean;
+	id: string;
+}) {
+	return (
+		<span id={id} className="visually-hidden">
+			{choiceMode
+				? "Tap the upper chevron for the next value or the lower chevron for the previous value. Tap the center or press Enter to choose from the available options."
+				: "The upper third increases the value and the lower third decreases it. Drag vertically to accelerate linearly. Tap the full-width center third or press Enter for absolute entry."}
+		</span>
+	);
+}
+
+function createEncoderWheelHandler({
+	disabled,
+	fastStep,
+	indexed,
+	onStep,
+	slowStep,
+}: {
+	disabled: boolean;
+	fastStep: number;
+	indexed: boolean;
+	onStep(delta: number): void;
+	slowStep: number;
+}) {
+	return (event: ReactWheelEvent<HTMLElement>) => {
+		if (disabled || indexed || !event.deltaY) return;
+		event.preventDefault();
+		onStep(Math.sign(-event.deltaY) * (event.shiftKey ? fastStep : slowStep));
+	};
+}
+
+function TouchEncoderEditing({
+	label,
+	inputValue,
+	canRelease,
+	onInput,
+	onSubmit,
+	onClose,
+	onSet,
+	onSetRange,
+	onPresetSelect,
+	onRelease,
+	presets,
+	choiceMode,
+	indexed,
+	minimum,
+	maximum,
+	resolvedInputScale,
+	slowStep,
+	accentColor,
+	clamp,
+}: Pick<
+	TouchEncoderProps,
+	| "label"
+	| "canRelease"
+	| "onSet"
+	| "onSetRange"
+	| "onPresetSelect"
+	| "onRelease"
+	| "presets"
+	| "minimum"
+	| "maximum"
+	| "slowStep"
+	| "accentColor"
+> & {
+	inputValue: string;
+	onInput(value: string): void;
+	onSubmit(value?: string): void;
+	onClose(): void;
+	choiceMode: boolean;
+	indexed: boolean;
+	resolvedInputScale: number;
+	clamp(value: number): number;
+}) {
+	return (
+		<TouchEncoderEditor
+			label={label}
+			inputValue={inputValue}
+			allowThrough={Boolean(onSetRange)}
+			canRelease={Boolean(canRelease)}
+			presets={presets}
+			presetsOnly={choiceMode || indexed}
+			onInput={onInput}
+			onSubmit={onSubmit}
+			onClose={onClose}
+			onPresetSelect={onPresetSelect}
+			onRelease={
+				onRelease
+					? () => {
+							onRelease();
+							onClose();
+						}
+					: undefined
+			}
+			fader={
+				indexed
+					? undefined
+					: {
+							label,
+							minimum: (minimum ?? 0) * resolvedInputScale,
+							maximum: (maximum ?? 1) * resolvedInputScale,
+							step: (slowStep ?? TOUCH_ENCODER_FINE_STEP) * resolvedInputScale,
+							accentColor,
+							onChange: (next) => onSet(clamp(next / resolvedInputScale)),
+						}
+			}
+		/>
 	);
 }

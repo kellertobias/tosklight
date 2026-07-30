@@ -23,7 +23,7 @@ export function Pane({
 	maximized: boolean;
 	editing: boolean;
 }) {
-	const { state, dispatch } = useApp();
+	const { dispatch } = useApp();
 	const selection = useProgrammingSelectionView(
 		active &&
 			(pane.kind === "stage" ||
@@ -37,7 +37,6 @@ export function Pane({
 	const [chromeToolbar, setChromeToolbar] = useState<HTMLSpanElement | null>(
 		null,
 	);
-	const Window = windowRegistry[pane.kind];
 	const stageActions =
 		pane.kind === "stage"
 			? [
@@ -125,7 +124,7 @@ export function Pane({
 											primary: `${selection?.selected.length ?? 0} selected`,
 											secondary: "Live intensity and color",
 										}
-								: undefined
+									: undefined
 			}
 			toolbar={
 				pane.kind === "file_manager" ||
@@ -145,34 +144,57 @@ export function Pane({
 			}
 			onRectChange={updateRect}
 		>
-			<PaneChromeProvider value={{ info: chromeInfo, toolbar: chromeToolbar }}>
-				<Window
-					active={active}
-					compact
-					paneId={pane.id}
-					showGroupShortcuts={Boolean(pane.showGroupShortcuts)}
-					showCueSidebar={pane.showCueSidebar ?? true}
-					cueListSource={pane.cueListSource ?? "fixed"}
-					fixedCueListNumber={pane.fixedCueListNumber}
-					stageView={pane.stageView ?? state.stageView}
-					followPreload={Boolean(pane.followPreload)}
-					showBeamGuides={pane.showBeamGuides ?? true}
-					stageRenderQuality={pane.stageRenderQuality ?? "lines_and_beams"}
-					layoutGroupId={pane.layoutGroupId}
-					presetFamily={pane.presetFamily ?? state.presetFamily}
-					presetPoolColors={pane.presetPoolColors ?? true}
-					schedulerShowList={pane.schedulerShowList ?? true}
-					schedulerShowCalendar={pane.schedulerShowCalendar ?? true}
-					onSchedulerLayoutChange={({ showList, showCalendar }) =>
-						dispatch({
-							type: "SET_PANE_SCHEDULER_LAYOUT",
-							id: pane.id,
-							showList,
-							showCalendar,
-						})
-					}
-				/>
-			</PaneChromeProvider>
+			<PaneContent
+				active={active}
+				chromeInfo={chromeInfo}
+				chromeToolbar={chromeToolbar}
+				pane={pane}
+			/>
 		</PaneView>
+	);
+}
+
+function PaneContent({
+	active,
+	chromeInfo,
+	chromeToolbar,
+	pane,
+}: {
+	active: boolean;
+	chromeInfo: HTMLSpanElement | null;
+	chromeToolbar: HTMLSpanElement | null;
+	pane: PaneModel;
+}) {
+	const { state, dispatch } = useApp();
+	const Window = windowRegistry[pane.kind];
+	return (
+		<PaneChromeProvider value={{ info: chromeInfo, toolbar: chromeToolbar }}>
+			<Window
+				active={active}
+				compact
+				paneId={pane.id}
+				showGroupShortcuts={Boolean(pane.showGroupShortcuts)}
+				showCueSidebar={pane.showCueSidebar ?? true}
+				cueListSource={pane.cueListSource ?? "fixed"}
+				fixedCueListNumber={pane.fixedCueListNumber}
+				stageView={pane.stageView ?? state.stageView}
+				followPreload={Boolean(pane.followPreload)}
+				showBeamGuides={pane.showBeamGuides ?? true}
+				stageRenderQuality={pane.stageRenderQuality ?? "lines_and_beams"}
+				layoutGroupId={pane.layoutGroupId}
+				presetFamily={pane.presetFamily ?? state.presetFamily}
+				presetPoolColors={pane.presetPoolColors ?? true}
+				schedulerShowList={pane.schedulerShowList ?? true}
+				schedulerShowCalendar={pane.schedulerShowCalendar ?? true}
+				onSchedulerLayoutChange={({ showList, showCalendar }) =>
+					dispatch({
+						type: "SET_PANE_SCHEDULER_LAYOUT",
+						id: pane.id,
+						showList,
+						showCalendar,
+					})
+				}
+			/>
+		</PaneChromeProvider>
 	);
 }

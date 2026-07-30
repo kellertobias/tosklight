@@ -204,139 +204,146 @@ function AttributeRow({
 				}
 			/>
 			{custom && placement && (
-				<>
-					<TextField
-						aria-label={`${descriptor.id} label`}
-						value={custom.label}
-						onChange={(event) =>
-							onChange({
-								...configuration,
-								custom_attributes: configuration.custom_attributes.map(
-									(candidate) =>
-										candidate.id === custom.id
-											? { ...candidate, label: event.target.value }
-											: candidate,
-								),
-							})
-						}
-					/>
-					<SelectField
-						ariaLabel={`${descriptor.id} value type`}
-						value={custom.value_type}
-						options={[
-							{ value: "continuous", label: "Continuous" },
-							{ value: "color", label: "Color" },
-							{ value: "indexed", label: "Indexed" },
-							{ value: "control", label: "Control" },
-						]}
-						onChange={(value) =>
-							value !== custom.value_type &&
-							window.confirm(
-								`Change ${custom.label} from ${custom.value_type} to ${value}? This can change the meaning of fixture profiles, Programmer values, Presets, and Cues that use ${custom.id}.`,
-							) &&
-							onChange(
-								updateCustom(configuration, custom.id, {
-									value_type: value as CustomAttributeDescriptor["value_type"],
-								}),
-							)
-						}
-					/>
-					<TextField
-						aria-label={`${descriptor.id} display unit`}
-						value={custom.display_unit ?? ""}
-						onChange={(event) =>
-							onChange(
-								updateCustom(configuration, custom.id, {
-									display_unit: event.target.value || null,
-								}),
-							)
-						}
-					/>
-					<SelectField
-						ariaLabel={`${descriptor.id} encoder group`}
-						value={placement.encoder_group}
-						options={ENCODER_GROUPS.map(({ id, label }) => ({
-							value: id,
-							label,
-						}))}
-						onChange={(value) =>
-							onChange(
-								moveCustomEncoderGroup(
-									configuration,
-									descriptor.id,
-									value as AttributeEncoderGroup,
-								),
-							)
-						}
-					/>
-					<SelectField
-						ariaLabel={`${descriptor.id} encoder position`}
-						value={`${placement.encoder_page}:${placement.encoder_slot}`}
-						options={availablePositions(
-							configuration,
-							placement.encoder_group,
-							descriptor.id,
-						)}
-						onChange={(value) => {
-							const [encoder_page, encoder_slot] = value.split(":").map(Number);
-							onChange(
-								updatePlacement(configuration, descriptor.id, {
-									encoder_page,
-									encoder_slot,
-								}),
-							);
-						}}
-					/>
-					<SwitchField
-						label="Cyclic"
-						offLabel="Bounded"
-						onLabel="Cyclic"
-						checked={custom.cyclic}
-						onChange={(event) =>
-							onChange(
-								updateCustom(configuration, custom.id, {
-									cyclic: event.target.checked,
-								}),
-							)
-						}
-					/>
-					<SwitchField
-						label="Recordable"
-						offLabel="Transient"
-						onLabel="Recordable"
-						checked={custom.recordable}
-						onChange={(event) =>
-							onChange(
-								updateCustom(configuration, custom.id, {
-									recordable: event.target.checked,
-								}),
-							)
-						}
-					/>
-					<Button
-						onClick={() =>
-							onChange({
-								...configuration,
-								custom_attributes: configuration.custom_attributes.map(
-									(candidate) =>
-										candidate.id === custom.id
-											? {
-													...candidate,
-													lifecycle:
-														candidate.lifecycle === "active"
-															? "retired"
-															: "active",
-												}
-											: candidate,
-								),
-							})
-						}
-					>
-						{custom.lifecycle === "active" ? "Retire" : "Reactivate"}
-					</Button>
-				</>
+				<CustomAttributeControls
+					configuration={configuration}
+					custom={custom}
+					descriptor={descriptor}
+					placement={placement}
+					onChange={onChange}
+				/>
 			)}
 		</li>
+	);
+}
+
+function CustomAttributeControls({
+	configuration,
+	custom,
+	descriptor,
+	placement,
+	onChange,
+}: {
+	configuration: AttributeConfiguration;
+	custom: CustomAttributeDescriptor;
+	descriptor: ConfiguredAttributeDescriptor;
+	placement: AttributeConfiguration["placements"][number];
+	onChange(configuration: AttributeConfiguration): void;
+}) {
+	return (
+		<>
+			<TextField
+				aria-label={`${descriptor.id} label`}
+				value={custom.label}
+				onChange={(event) =>
+					onChange(
+						updateCustom(configuration, custom.id, {
+							label: event.target.value,
+						}),
+					)
+				}
+			/>
+			<SelectField
+				ariaLabel={`${descriptor.id} value type`}
+				value={custom.value_type}
+				options={[
+					{ value: "continuous", label: "Continuous" },
+					{ value: "color", label: "Color" },
+					{ value: "indexed", label: "Indexed" },
+					{ value: "control", label: "Control" },
+				]}
+				onChange={(value) =>
+					value !== custom.value_type &&
+					window.confirm(
+						`Change ${custom.label} from ${custom.value_type} to ${value}? This can change the meaning of fixture profiles, Programmer values, Presets, and Cues that use ${custom.id}.`,
+					) &&
+					onChange(
+						updateCustom(configuration, custom.id, {
+							value_type: value as CustomAttributeDescriptor["value_type"],
+						}),
+					)
+				}
+			/>
+			<TextField
+				aria-label={`${descriptor.id} display unit`}
+				value={custom.display_unit ?? ""}
+				onChange={(event) =>
+					onChange(
+						updateCustom(configuration, custom.id, {
+							display_unit: event.target.value || null,
+						}),
+					)
+				}
+			/>
+			<SelectField
+				ariaLabel={`${descriptor.id} encoder group`}
+				value={placement.encoder_group}
+				options={ENCODER_GROUPS.map(({ id, label }) => ({ value: id, label }))}
+				onChange={(value) =>
+					onChange(
+						moveCustomEncoderGroup(
+							configuration,
+							descriptor.id,
+							value as AttributeEncoderGroup,
+						),
+					)
+				}
+			/>
+			<SelectField
+				ariaLabel={`${descriptor.id} encoder position`}
+				value={`${placement.encoder_page}:${placement.encoder_slot}`}
+				options={availablePositions(
+					configuration,
+					placement.encoder_group,
+					descriptor.id,
+				)}
+				onChange={(value) => {
+					const [encoder_page, encoder_slot] = value.split(":").map(Number);
+					onChange(
+						updatePlacement(configuration, descriptor.id, {
+							encoder_page,
+							encoder_slot,
+						}),
+					);
+				}}
+			/>
+			<SwitchField
+				label="Cyclic"
+				offLabel="Bounded"
+				onLabel="Cyclic"
+				checked={custom.cyclic}
+				onChange={(event) =>
+					onChange(
+						updateCustom(configuration, custom.id, {
+							cyclic: event.target.checked,
+						}),
+					)
+				}
+			/>
+			<SwitchField
+				label="Recordable"
+				offLabel="Transient"
+				onLabel="Recordable"
+				checked={custom.recordable}
+				onChange={(event) =>
+					onChange(
+						updateCustom(configuration, custom.id, {
+							recordable: event.target.checked,
+						}),
+					)
+				}
+			/>
+			<Button
+				onClick={() =>
+					onChange(
+						updateCustom(configuration, custom.id, {
+							lifecycle: custom.lifecycle === "active" ? "retired" : "active",
+						}),
+					)
+				}
+			>
+				{custom.lifecycle === "active" ? "Retire" : "Reactivate"}
+			</Button>
+		</>
 	);
 }
 

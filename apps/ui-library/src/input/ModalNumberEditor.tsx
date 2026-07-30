@@ -156,20 +156,6 @@ export function ModalNumberEditor({
 		setConfirmClose(false);
 		onClose();
 	};
-	const keypad = (
-		<ModalNumberInput
-			value={value}
-			caret={caret}
-			onChange={onChange}
-			onCaretChange={setCaret}
-			onEnter={() => onSubmit(value)}
-			onEscape={requestClose}
-			allowDecimal={allowDecimal}
-			allowThrough={allowThrough}
-			replaceOnFirstInput={replaceOnFirstInput}
-			onPressedKeyChange={setPressedKey}
-		/>
-	);
 	return (
 		<>
 			<ModalLayer
@@ -242,7 +228,18 @@ export function ModalNumberEditor({
 								ariaLabel={`${typeof title === "string" ? title : ariaLabel} value`}
 								pressedKey={pressedKey}
 							/>
-							{keypad}
+							<ModalNumberKeypad
+								allowDecimal={allowDecimal}
+								allowThrough={allowThrough}
+								caret={caret}
+								onCaretChange={setCaret}
+								onChange={onChange}
+								onEnter={() => onSubmit(value)}
+								onEscape={requestClose}
+								onPressedKeyChange={setPressedKey}
+								replaceOnFirstInput={replaceOnFirstInput}
+								value={value}
+							/>
 						</div>
 					</div>
 				)}
@@ -256,6 +253,45 @@ export function ModalNumberEditor({
 				/>
 			)}
 		</>
+	);
+}
+
+function ModalNumberKeypad({
+	allowDecimal,
+	allowThrough,
+	caret,
+	onCaretChange,
+	onChange,
+	onEnter,
+	onEscape,
+	onPressedKeyChange,
+	replaceOnFirstInput,
+	value,
+}: {
+	allowDecimal: boolean;
+	allowThrough: boolean;
+	caret: number;
+	onCaretChange(value: number): void;
+	onChange(value: string): void;
+	onEnter(): void;
+	onEscape(): void;
+	onPressedKeyChange(value: string | null): void;
+	replaceOnFirstInput: boolean;
+	value: string;
+}) {
+	return (
+		<ModalNumberInput
+			value={value}
+			caret={caret}
+			onChange={onChange}
+			onCaretChange={onCaretChange}
+			onEnter={onEnter}
+			onEscape={onEscape}
+			allowDecimal={allowDecimal}
+			allowThrough={allowThrough}
+			replaceOnFirstInput={replaceOnFirstInput}
+			onPressedKeyChange={onPressedKeyChange}
+		/>
 	);
 }
 

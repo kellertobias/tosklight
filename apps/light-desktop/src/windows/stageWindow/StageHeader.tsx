@@ -133,76 +133,75 @@ function StageSettings({
 									{regenerationError}
 								</div>
 							)}
-							{options.view === "3d" && (
-								<>
-									<SwitchField
-										label="Floor grid"
-										offLabel="Hidden"
-										onLabel="Visible"
-										checked={state.stageShowFloorGrid}
-										onChange={(event) =>
-											dispatch({
-												type: "SET_STAGE_OPTIONS",
-												showFloorGrid: event.target.checked,
-											})
-										}
-									/>
-									<SwitchField
-										label="Beam direction guidelines"
-										offLabel="Hidden"
-										onLabel="Visible"
-										checked={state.stageShowBeamGuides}
-										onChange={(event) =>
-											dispatch({
-												type: "SET_STAGE_OPTIONS",
-												showBeamGuides: event.target.checked,
-											})
-										}
-									/>
-									<MultiValueToggleField
-										label="Render quality"
-										description="Improved beams adds feathered falloff. Up to eight highest-contributing directional sources also light opaque Stage surfaces, stop at the first opaque intersection, and cast bounded soft shadows; other sources retain their feathered volume."
-										value={options.renderQuality}
-										onChange={(renderQuality) =>
-											dispatch({
-												type: "SET_STAGE_OPTIONS",
-												renderQuality,
-											})
-										}
-										options={[
-											{ value: "lines_only", label: "Lines only" },
-											{
-												value: "lines_and_beams",
-												label: "Lines + beams",
-											},
-											{ value: "beams", label: "Beams" },
-											{
-												value: "improved_beams",
-												label: "Improved beams",
-											},
-										]}
-									/>
-									<HorizontalFaderField
-										label="Environment brightness"
-										value={state.stageEnvironmentBrightness}
-										minimum={0}
-										maximum={2}
-										step={0.05}
-										display={`${Math.round(state.stageEnvironmentBrightness * 100)}%`}
-										onChange={(environmentBrightness) =>
-											dispatch({
-												type: "SET_STAGE_OPTIONS",
-												environmentBrightness,
-											})
-										}
-									/>
-								</>
-							)}
+							{options.view === "3d" && <Stage3dSettings options={options} />}
 						</FormLayout>
 					),
 				},
 			]}
 		/>
+	);
+}
+
+function Stage3dSettings({ options }: { options: StageOptionsModel }) {
+	const { state, dispatch } = useApp();
+	return (
+		<>
+			<SwitchField
+				label="Floor grid"
+				offLabel="Hidden"
+				onLabel="Visible"
+				checked={state.stageShowFloorGrid}
+				onChange={(event) =>
+					dispatch({
+						type: "SET_STAGE_OPTIONS",
+						showFloorGrid: event.target.checked,
+					})
+				}
+			/>
+			<SwitchField
+				label="Beam direction guidelines"
+				offLabel="Hidden"
+				onLabel="Visible"
+				checked={state.stageShowBeamGuides}
+				onChange={(event) =>
+					dispatch({
+						type: "SET_STAGE_OPTIONS",
+						showBeamGuides: event.target.checked,
+					})
+				}
+			/>
+			<MultiValueToggleField
+				label="Render quality"
+				description="Improved beams adds feathered falloff. Up to eight highest-contributing directional sources also light opaque Stage surfaces, stop at the first opaque intersection, and cast bounded soft shadows; other sources retain their feathered volume."
+				value={options.renderQuality}
+				onChange={(renderQuality) =>
+					dispatch({
+						type: "SET_STAGE_OPTIONS",
+						renderQuality,
+					})
+				}
+				options={[
+					{ value: "lines_only", label: "Lines only" },
+					{ value: "lines_and_beams", label: "Lines + beams" },
+					{ value: "beams", label: "Beams" },
+					{ value: "improved_beams", label: "Improved beams" },
+				]}
+			/>
+			<HorizontalFaderField
+				label="Environment brightness"
+				value={state.stageEnvironmentBrightness}
+				minimum={0}
+				maximum={2}
+				step={0.05}
+				display={`${Math.round(state.stageEnvironmentBrightness * 100)}%`}
+				onChange={(environmentBrightness) =>
+					dispatch({
+						type: "SET_STAGE_OPTIONS",
+						environmentBrightness,
+					})
+				}
+			/>
+		</>
 	);
 }
 

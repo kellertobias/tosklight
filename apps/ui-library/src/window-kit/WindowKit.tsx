@@ -542,85 +542,20 @@ export function DataTable<T>({
 	className?: string;
 	virtualize?: boolean;
 }) {
-	const host = useRef<HTMLDivElement>(null);
-	const [fillRows, setFillRows] = useState(emptyRows);
-	const [viewport, setViewport] = useState({ start: 0, end: 40 });
-	const [reportedViewport, setReportedViewport] = useState({
-		start: 0,
-		end: 0,
+	const tableWindow = useDataTableWindow({
+		activeIndex,
+		emptyRows,
+		rowCount: rows.length,
+		virtualize,
 	});
-	const tableFocused = useRef(false);
-	useLayoutEffect(() => {
-		const node = host.current;
-		if (!node) return;
-		const measure = () => {
-			if (node.clientHeight > 40)
-				setFillRows(
-					Math.max(0, Math.floor((node.clientHeight - 40) / 43) - rows.length),
-				);
-		};
-		if (typeof ResizeObserver === "undefined") {
-			measure();
-			return;
-		}
-		const observer = new ResizeObserver(measure);
-		observer.observe(node);
-		measure();
-		return () => observer.disconnect();
-	}, [rows.length]);
-	const total = rows.length + fillRows;
-	const usesViewport = virtualize && total > 100;
-	useLayoutEffect(() => {
-		if (!usesViewport) setViewport({ start: 0, end: total });
-		const node = host.current;
-		const scroller = node?.closest<HTMLElement>(".ui-window-scroller");
-		if (!node || !scroller) return;
-		const measureViewport = () => {
-			const rowHeight = 43;
-			const headerHeight = 40;
-			const overscan = 12;
-			const visibleStart = Math.max(
-				0,
-				Math.floor(Math.max(0, scroller.scrollTop - headerHeight) / rowHeight),
-			);
-			const visibleRows = Math.max(
-				1,
-				Math.min(64, Math.ceil(scroller.clientHeight / rowHeight)),
-			);
-			const visibleEnd = Math.min(rows.length, visibleStart + visibleRows + 1);
-			setReportedViewport((current) =>
-				current.start === visibleStart && current.end === visibleEnd
-					? current
-					: { start: visibleStart, end: visibleEnd },
-			);
-			if (!usesViewport) return;
-			const start = Math.max(0, visibleStart - overscan);
-			const end = Math.min(total, visibleStart + visibleRows + overscan);
-			setViewport((current) =>
-				current.start === start && current.end === end
-					? current
-					: { start, end },
-			);
-		};
-		const observer =
-			typeof ResizeObserver === "undefined"
-				? null
-				: new ResizeObserver(measureViewport);
-		scroller.addEventListener("scroll", measureViewport, { passive: true });
-		observer?.observe(scroller);
-		measureViewport();
-		return () => {
-			scroller.removeEventListener("scroll", measureViewport);
-			observer?.disconnect();
-		};
-	}, [rows.length, total, usesViewport]);
-	useLayoutEffect(() => {
-		if (!usesViewport || !tableFocused.current || activeIndex == null) return;
-		const row = host.current?.querySelector<HTMLElement>(
-			`[data-table-index="${activeIndex}"]`,
-		);
-		row?.scrollIntoView({ block: "nearest" });
-	}, [activeIndex, usesViewport, viewport]);
+	const {
+		host,
+		reportedViewport,
+		tableFocused,
+		total,
+		usesViewport,
+		viewport,
+	} = tableWindow;
 	const keyDown = (event: KeyboardEvent, index: number) => {
 		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
 			event.preventDefault();
@@ -727,6 +662,104 @@ export function DataTable<T>({
 			)}
 		</div>
 	);
+}
+
+function useDataTableWindow({
+	activeIndex,
+	emptyRows,
+	rowCount,
+	virtualize,
+}: {
+	activeIndex?: number;
+	emptyRows: number;
+	rowCount: number;
+	virtualize: boolean;
+}) {
+	const host = useRef<HTMLDivElement>(null);
+	const tableFocused = useRef(false);
+	const [fillRows, setFillRows] = useState(emptyRows);
+	const [viewport, setViewport] = useState({ start: 0, end: 40 });
+	const [reportedViewport, setReportedViewport] = useState({
+		start: 0,
+		end: 0,
+	});
+	useLayoutEffect(() => {
+		const node = host.current;
+		if (!node) return;
+		const measure = () => {
+			if (node.clientHeight > 40)
+				setFillRows(
+					Math.max(0, Math.floor((node.clientHeight - 40) / 43) - rowCount),
+				);
+		};
+		if (typeof ResizeObserver === "undefined") {
+			measure();
+			return;
+		}
+		const observer = new ResizeObserver(measure);
+		observer.observe(node);
+		measure();
+		return () => observer.disconnect();
+	}, [rowCount]);
+	const total = rowCount + fillRows;
+	const usesViewport = virtualize && total > 100;
+	useLayoutEffect(() => {
+		if (!usesViewport) setViewport({ start: 0, end: total });
+		const node = host.current;
+		const scroller = node?.closest<HTMLElement>(".ui-window-scroller");
+		if (!node || !scroller) return;
+		const measureViewport = () => {
+			const visibleStart = Math.max(
+				0,
+				Math.floor(Math.max(0, scroller.scrollTop - 40) / 43),
+			);
+			const visibleRows = Math.max(
+				1,
+				Math.min(64, Math.ceil(scroller.clientHeight / 43)),
+			);
+			const visibleEnd = Math.min(rowCount, visibleStart + visibleRows + 1);
+			setReportedViewport((current) =>
+				current.start === visibleStart && current.end === visibleEnd
+					? current
+					: { start: visibleStart, end: visibleEnd },
+			);
+			if (!usesViewport) return;
+			const start = Math.max(0, visibleStart - 12);
+			const end = Math.min(total, visibleStart + visibleRows + 12);
+			setViewport((current) =>
+				current.start === start && current.end === end
+					? current
+					: { start, end },
+			);
+		};
+		const observer =
+			typeof ResizeObserver === "undefined"
+				? null
+				: new ResizeObserver(measureViewport);
+		scroller.addEventListener("scroll", measureViewport, { passive: true });
+		observer?.observe(scroller);
+		measureViewport();
+		return () => {
+			scroller.removeEventListener("scroll", measureViewport);
+			observer?.disconnect();
+		};
+	}, [rowCount, total, usesViewport]);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: viewport changes mount the virtualized active row before it can be scrolled into view.
+	useLayoutEffect(() => {
+		if (!usesViewport || !tableFocused.current || activeIndex == null) return;
+		const row = host.current?.querySelector<HTMLElement>(
+			`[data-table-index="${activeIndex}"]`,
+		);
+		row?.scrollIntoView({ block: "nearest" });
+	}, [activeIndex, usesViewport, viewport]);
+	return {
+		host,
+		reportedViewport,
+		tableFocused,
+		total,
+		usesViewport,
+		viewport,
+	};
 }
 
 export function ButtonGrid({

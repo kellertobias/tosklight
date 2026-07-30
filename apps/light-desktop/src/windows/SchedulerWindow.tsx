@@ -193,15 +193,7 @@ export function SchedulerWindow({
 	const contextController = useSchedulerController();
 	const controller = providedController ?? contextController;
 	useSchedulerView(controller, active);
-	const snapshot = controller?.snapshot ?? {
-		status: "error" as const,
-		timezone: "",
-		serverDate: "",
-		schedules: [],
-		playbackTargets: [],
-		canWrite: false,
-		error: "Scheduler runtime is not connected.",
-	};
+	const snapshot = controller?.snapshot ?? unavailableSchedulerSnapshot();
 	const today = serverDateParts(snapshot.serverDate);
 	const [view, setView] = useState<"month" | "year">("month");
 	const [year, setYear] = useState(today.year);
@@ -245,69 +237,20 @@ export function SchedulerWindow({
 	};
 	return (
 		<section className="scheduler-window">
-			<WindowHeader
-				title="Scheduler"
-				info={{
-					primary:
-						snapshot.status === "ready"
-							? `${snapshot.schedules.length} schedules · ${snapshot.timezone}`
-							: "Schedule authority unavailable",
-					secondary: selectedDate ? `Day filter · ${selectedDate}` : undefined,
-				}}
-				actions={[
-					[
-						{
-							id: "create",
-							label: "+ Schedule",
-							variant: "primary",
-							disabled:
-								!controller ||
-								!snapshot.canWrite ||
-								snapshot.status !== "ready",
-							onClick: () => setEditing("new"),
-						},
-					],
-					[
-						{
-							id: "previous",
-							label: "‹",
-							ariaLabel: "Previous period",
-							onClick: () => period(-1),
-						},
-						{
-							id: "today",
-							label: "Today",
-							disabled: !snapshot.serverDate,
-							onClick: () => {
-								setYear(today.year);
-								setMonth(today.month);
-								setSelectedDate(snapshot.serverDate || null);
-							},
-						},
-						{
-							id: "next",
-							label: "›",
-							ariaLabel: "Next period",
-							onClick: () => period(1),
-						},
-					],
-					[
-						{
-							id: "month",
-							label: "Month",
-							active: view === "month",
-							onClick: () => setView("month"),
-						},
-						{
-							id: "year",
-							label: "Year",
-							active: view === "year",
-							onClick: () => setView("year"),
-						},
-					],
-				]}
-				settings
+			<SchedulerHeader
+				controller={controller}
+				onCreate={() => setEditing("new")}
+				onPeriod={period}
 				onSettings={() => setSettingsOpen(true)}
+				onToday={() => {
+					setYear(today.year);
+					setMonth(today.month);
+					setSelectedDate(snapshot.serverDate || null);
+				}}
+				selectedDate={selectedDate}
+				setView={setView}
+				snapshot={snapshot}
+				view={view}
 			/>
 			{snapshot.status === "loading" ? (
 				<div className="scheduler-message" role="status">
@@ -322,110 +265,23 @@ export function SchedulerWindow({
 					)}
 				</div>
 			) : (
-				<>
-					{mutationError && (
-						<p className="scheduler-mutation-error" role="alert">
-							{mutationError}
-						</p>
-					)}
-					<div
-						className={`scheduler-layout ${localShowList && localShowCalendar ? "is-split" : ""}`}
-					>
-						{localShowList && (
-							<aside className="scheduler-list">
-								{selectedDate && (
-									<header className="scheduler-list-heading">
-										<strong>{selectedDate}</strong>
-										<Button
-											size="compact"
-											onClick={() => setSelectedDate(null)}
-										>
-											Show all
-										</Button>
-									</header>
-								)}
-								<WindowScrollArea
-									emptyState={
-										visible.length
-											? null
-											: selectedDate
-												? {
-														title: "No Schedules on this day",
-														description:
-															"Choose another day or clear the day filter.",
-													}
-												: {
-														title: "No Schedules",
-														description:
-															"Create an Interval, Calendar expression, or One-time Schedule.",
-													}
-									}
-								>
-									<div className="scheduler-event-list">
-										{visible.map((schedule) => (
-											<ScheduleCard
-												key={schedule.definition.id}
-												schedule={schedule}
-												canWrite={snapshot.canWrite}
-												onEdit={() => setEditing(schedule)}
-												onEnabled={(enabled) => {
-													if (!controller) return;
-													void mutate(() =>
-														controller.setEnabled(
-															schedule.definition.id,
-															schedule.definition.revision,
-															enabled,
-														),
-													);
-												}}
-												onDuplicate={() => {
-													if (!controller) return;
-													void mutate(() =>
-														controller.duplicate(
-															schedule.definition.id,
-															schedule.definition.revision,
-														),
-													);
-												}}
-												onDelete={() => {
-													if (!controller) return;
-													if (
-														!globalThis.confirm(
-															`Delete Schedule “${schedule.definition.name}”?`,
-														)
-													)
-														return;
-													void mutate(() =>
-														controller.delete(
-															schedule.definition.id,
-															schedule.definition.revision,
-														),
-													);
-												}}
-											/>
-										))}
-									</div>
-								</WindowScrollArea>
-							</aside>
-						)}
-						{localShowCalendar && (
-							<main className="scheduler-calendar">
-								<Calendar
-									view={view}
-									year={year}
-									month={month}
-									markers={markers(snapshot.schedules)}
-									selectedDate={selectedDate}
-									onDaySelect={setSelectedDate}
-									onMonthSelect={(nextMonth) => {
-										setMonth(nextMonth);
-										setView("month");
-									}}
-								/>
-							</main>
-						)}
-					</div>
-				</>
+				<SchedulerReadyContent
+					controller={controller}
+					localShowCalendar={localShowCalendar}
+					localShowList={localShowList}
+					month={month}
+					mutate={mutate}
+					mutationError={mutationError}
+					selectedDate={selectedDate}
+					setEditing={setEditing}
+					setMonth={setMonth}
+					setSelectedDate={setSelectedDate}
+					setView={setView}
+					snapshot={snapshot}
+					view={view}
+					visible={visible}
+					year={year}
+				/>
 			)}
 			{settingsOpen && (
 				<WindowSettings
@@ -471,6 +327,239 @@ export function SchedulerWindow({
 				/>
 			)}
 		</section>
+	);
+}
+
+function unavailableSchedulerSnapshot(): SchedulerController["snapshot"] {
+	return {
+		status: "error",
+		timezone: "",
+		serverDate: "",
+		schedules: [],
+		playbackTargets: [],
+		canWrite: false,
+		error: "Scheduler runtime is not connected.",
+	};
+}
+
+function SchedulerHeader({
+	controller,
+	onCreate,
+	onPeriod,
+	onSettings,
+	onToday,
+	selectedDate,
+	setView,
+	snapshot,
+	view,
+}: {
+	controller: SchedulerController | null | undefined;
+	onCreate(): void;
+	onPeriod(direction: -1 | 1): void;
+	onSettings(): void;
+	onToday(): void;
+	selectedDate: string | null;
+	setView(view: "month" | "year"): void;
+	snapshot: SchedulerController["snapshot"];
+	view: "month" | "year";
+}) {
+	return (
+		<WindowHeader
+			title="Scheduler"
+			info={{
+				primary:
+					snapshot.status === "ready"
+						? `${snapshot.schedules.length} schedules · ${snapshot.timezone}`
+						: "Schedule authority unavailable",
+				secondary: selectedDate ? `Day filter · ${selectedDate}` : undefined,
+			}}
+			actions={[
+				[
+					{
+						id: "create",
+						label: "+ Schedule",
+						variant: "primary",
+						disabled:
+							!controller || !snapshot.canWrite || snapshot.status !== "ready",
+						onClick: onCreate,
+					},
+				],
+				[
+					{
+						id: "previous",
+						label: "‹",
+						ariaLabel: "Previous period",
+						onClick: () => onPeriod(-1),
+					},
+					{
+						id: "today",
+						label: "Today",
+						disabled: !snapshot.serverDate,
+						onClick: onToday,
+					},
+					{
+						id: "next",
+						label: "›",
+						ariaLabel: "Next period",
+						onClick: () => onPeriod(1),
+					},
+				],
+				[
+					{
+						id: "month",
+						label: "Month",
+						active: view === "month",
+						onClick: () => setView("month"),
+					},
+					{
+						id: "year",
+						label: "Year",
+						active: view === "year",
+						onClick: () => setView("year"),
+					},
+				],
+			]}
+			settings
+			onSettings={onSettings}
+		/>
+	);
+}
+
+function SchedulerReadyContent({
+	controller,
+	localShowCalendar,
+	localShowList,
+	month,
+	mutate,
+	mutationError,
+	selectedDate,
+	setEditing,
+	setMonth,
+	setSelectedDate,
+	setView,
+	snapshot,
+	view,
+	visible,
+	year,
+}: {
+	controller: SchedulerController | null | undefined;
+	localShowCalendar: boolean;
+	localShowList: boolean;
+	month: number;
+	mutate(operation: () => Promise<boolean>): Promise<void>;
+	mutationError: string | null;
+	selectedDate: string | null;
+	setEditing(value: ScheduleProjection | "new" | null): void;
+	setMonth(value: number): void;
+	setSelectedDate(value: string | null): void;
+	setView(value: "month" | "year"): void;
+	snapshot: SchedulerController["snapshot"];
+	view: "month" | "year";
+	visible: readonly ScheduleProjection[];
+	year: number;
+}) {
+	return (
+		<>
+			{mutationError && (
+				<p className="scheduler-mutation-error" role="alert">
+					{mutationError}
+				</p>
+			)}
+			<div
+				className={`scheduler-layout ${localShowList && localShowCalendar ? "is-split" : ""}`}
+			>
+				{localShowList && (
+					<aside className="scheduler-list">
+						{selectedDate && (
+							<header className="scheduler-list-heading">
+								<strong>{selectedDate}</strong>
+								<Button size="compact" onClick={() => setSelectedDate(null)}>
+									Show all
+								</Button>
+							</header>
+						)}
+						<WindowScrollArea
+							emptyState={
+								visible.length
+									? null
+									: selectedDate
+										? {
+												title: "No Schedules on this day",
+												description:
+													"Choose another day or clear the day filter.",
+											}
+										: {
+												title: "No Schedules",
+												description:
+													"Create an Interval, Calendar expression, or One-time Schedule.",
+											}
+							}
+						>
+							<div className="scheduler-event-list">
+								{visible.map((schedule) => (
+									<ScheduleCard
+										key={schedule.definition.id}
+										schedule={schedule}
+										canWrite={snapshot.canWrite}
+										onEdit={() => setEditing(schedule)}
+										onEnabled={(enabled) => {
+											if (!controller) return;
+											void mutate(() =>
+												controller.setEnabled(
+													schedule.definition.id,
+													schedule.definition.revision,
+													enabled,
+												),
+											);
+										}}
+										onDuplicate={() => {
+											if (!controller) return;
+											void mutate(() =>
+												controller.duplicate(
+													schedule.definition.id,
+													schedule.definition.revision,
+												),
+											);
+										}}
+										onDelete={() => {
+											if (
+												!controller ||
+												!globalThis.confirm(
+													`Delete Schedule “${schedule.definition.name}”?`,
+												)
+											)
+												return;
+											void mutate(() =>
+												controller.delete(
+													schedule.definition.id,
+													schedule.definition.revision,
+												),
+											);
+										}}
+									/>
+								))}
+							</div>
+						</WindowScrollArea>
+					</aside>
+				)}
+				{localShowCalendar && (
+					<main className="scheduler-calendar">
+						<Calendar
+							view={view}
+							year={year}
+							month={month}
+							markers={markers(snapshot.schedules)}
+							selectedDate={selectedDate}
+							onDaySelect={setSelectedDate}
+							onMonthSelect={(nextMonth) => {
+								setMonth(nextMonth);
+								setView("month");
+							}}
+						/>
+					</main>
+				)}
+			</div>
+		</>
 	);
 }
 
