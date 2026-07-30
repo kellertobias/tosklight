@@ -4,8 +4,10 @@ import { LatestProgrammerValuesWriteQueue } from "../../../features/programmerVa
 import { useProgrammerValuesActions } from "../../../features/programmerValues/ProgrammerValuesView";
 import { useStrictModeSafeStop } from "../../../features/shared/useStrictModeSafeStop";
 import {
+	immediateParameterTiming,
 	type ParameterValuesMutationPort,
 	parameterMutationKey,
+	parameterValueTiming,
 	releaseParameterMutations,
 	setParameterMutations,
 	setParameterRangeMutations,
@@ -92,6 +94,28 @@ export function useParameterValueActions(projection: ParameterProjection) {
 		canWriteValues,
 		relativeSteps: Boolean(actions?.applyIntent),
 		applyParameter,
+		applyIndexedPreset: (
+			attribute: string,
+			semanticId: string,
+			fixtureIds: readonly string[],
+		) =>
+			queue.submitBarrier(() =>
+				actions?.applyIntent && canWriteValues && fixtureIds.length
+					? actions.applyIntent({
+							requestId: crypto.randomUUID(),
+							fixtureIds,
+							attribute,
+							operation: {
+								type: "absolute_set",
+								value: { kind: "discrete", value: semanticId },
+							},
+							timing:
+								projection.programmerValuesRoute === "preload"
+									? parameterValueTiming(projection.programmerFadeMillis)
+									: immediateParameterTiming(),
+						})
+					: Promise.resolve(null),
+			),
 		stepParameter,
 		applyParameterRange: (attribute: string, percentages: number[]) =>
 			queue.submitBarrier(

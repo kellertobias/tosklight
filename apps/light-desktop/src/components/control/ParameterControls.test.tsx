@@ -412,6 +412,46 @@ describe("ParameterControls projection lifecycle", () => {
 			screen.queryByRole("group", { name: "Enc 1 · Color Wheel" }),
 		).not.toBeInTheDocument();
 	});
+
+	it("keeps Direct input and Indexed Presets under the semantic encoder", () => {
+		attributeRegistry.current = [
+			{
+				...attributeDescriptor("gobo.1", "Gobo 1", 1, 1),
+				family: "beam",
+				encoder_group: "beam",
+				value_type: "indexed",
+			},
+		];
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [schemaV2Fixture()];
+
+		render(<ParameterControls />);
+		fireEvent.click(screen.getByRole("button", { name: "Beam" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Enc 1 · Gobo 1 value" }),
+		);
+
+		expect(screen.getByText("Direct input")).toHaveAttribute(
+			"data-active",
+			"true",
+		);
+		expect(screen.getByText("Indexed Presets")).not.toHaveAttribute(
+			"data-active",
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Show presets" }));
+		fireEvent.click(screen.getByRole("button", { name: /Dots/ }));
+
+		expect(normalValuesActions.applyIntent).toHaveBeenCalledWith({
+			requestId: expect.any(String),
+			fixtureIds: ["fixture-1"],
+			attribute: "gobo.1",
+			operation: {
+				type: "absolute_set",
+				value: { kind: "discrete", value: "gobo.dots" },
+			},
+			timing: { fade: false, fadeMillis: null, delayMillis: null },
+		});
+	});
 });
 
 function attributeDescriptor(

@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
 	ModalNumberEditor,
+	type ModalNumberFaderConfig,
 	type ModalNumberPresetConfig,
 } from "../input/ModalNumberEditor";
 import { submitNumericExpression } from "../input/numericExpression";
@@ -226,6 +227,7 @@ function TouchEncoderEditor({
 	onClose,
 	onPresetSelect,
 	onRelease,
+	fader,
 }: {
 	label: string;
 	inputValue: string;
@@ -238,6 +240,7 @@ function TouchEncoderEditor({
 	onClose(): void;
 	onPresetSelect?(value: string): void;
 	onRelease?(): void;
+	fader?: ModalNumberFaderConfig;
 }) {
 	return (
 		<ModalNumberEditor
@@ -251,6 +254,7 @@ function TouchEncoderEditor({
 			allowThrough={allowThrough}
 			presets={presets}
 			presetsOnly={presetsOnly}
+			fader={fader}
 			onPresetSelect={onPresetSelect}
 			onRelease={canRelease ? onRelease : undefined}
 		/>
@@ -437,8 +441,9 @@ export function TouchEncoder({
 	const hasChoices = Boolean(
 		presets?.groups.some((group) => group.options.length),
 	);
+	const indexedWithoutEditor = indexed && !canRelease && !hasChoices;
 	const unavailable =
-		disabled || (indexed && !canRelease) || (choiceMode && !hasChoices);
+		disabled || indexedWithoutEditor || (choiceMode && !hasChoices);
 	const interaction = useTouchEncoderInteraction({
 		continuous: !choiceMode,
 		disabled: unavailable || indexed,
@@ -515,7 +520,7 @@ export function TouchEncoder({
 					display={renderedValue}
 					choiceMode={choiceMode}
 					hasChoices={hasChoices}
-					indexed={indexed && !canRelease}
+					indexed={indexedWithoutEditor}
 					label={label}
 					onStep={(delta) => {
 						if (!indexed) interaction.step(delta);
@@ -549,6 +554,18 @@ export function TouchEncoder({
 									setEditing(false);
 								}
 							: undefined
+					}
+					fader={
+						indexed
+							? undefined
+							: {
+									label,
+									minimum: minimum * resolvedInputScale,
+									maximum: maximum * resolvedInputScale,
+									step: slowStep * resolvedInputScale,
+									accentColor,
+									onChange: (next) => onSet(clamp(next / resolvedInputScale)),
+								}
 					}
 				/>
 			)}

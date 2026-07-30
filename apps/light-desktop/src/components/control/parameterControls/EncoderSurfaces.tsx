@@ -5,6 +5,10 @@ import {
 	useProgrammingDeleteCommandActive,
 } from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import { HardwareEncoderDisplay } from "../HardwareEncoderDisplay";
+import {
+	type IndexedPresetChoice,
+	indexedPresetChoices,
+} from "./indexedPresetChoices";
 import { formatNormalizedValue, parameterLabels } from "./model";
 import { ProgrammerDynamicsSurface } from "./ProgrammerDynamicsSurface";
 import type { ParameterController } from "./useParameterController";
@@ -76,6 +80,67 @@ function EncoderSurface({
 		controller.attributeLabels.get(attribute) ??
 		parameterLabels[attribute] ??
 		attribute.replaceAll(".", " ");
+	const indexedPresets = indexedPresetChoices(
+		controller.selectedFixtures,
+		controller.selectedFixtureIds,
+		attribute,
+	);
+	const presetConfig = {
+		valueTabLabel: "Direct input",
+		presetsTabLabel: "Indexed Presets",
+		showWhenEmpty: true,
+		emptyMessage:
+			"No selected fixture provides a fixed, indexed, or control function for this attribute.",
+		groups: [
+			{
+				label: "Fixed and indexed",
+				options: indexedPresets
+					.filter((choice) => choice.kind !== "control")
+					.map(indexedPresetOption),
+			},
+			{
+				label: "Control actions",
+				options: indexedPresets
+					.filter((choice) => choice.kind === "control")
+					.map(indexedPresetOption),
+			},
+		],
+	};
+	const selectIndexedPreset = (id: string) => {
+		const choice = indexedPresets.find((candidate) => candidate.id === id);
+		if (!choice || choice.disabled) return;
+		if (choice.semanticId) {
+			void controller.applyIndexedPreset(
+				attribute,
+				choice.semanticId,
+				choice.targets.map((target) => target.fixtureId),
+			);
+			return;
+		}
+		const actions = controller.programmerActions;
+		if (!actions) return;
+		void Promise.all(
+			choice.targets.flatMap((target) => {
+				if (!target.actionId) return [];
+				const activate = actions.controlFixtureAction(
+					target.fixtureId,
+					target.actionId,
+					true,
+				);
+				return choice.controlKind === "momentary"
+					? [
+							activate.then(() =>
+								actions.controlFixtureAction(
+									target.fixtureId,
+									target.actionId as string,
+									false,
+								),
+							),
+						]
+					: [activate];
+			}),
+		);
+	};
 	if (controller.hardwareConnected)
 		return (
 			<HardwareEncoderDisplay
@@ -84,6 +149,8 @@ function EncoderSurface({
 				target={{ label, value: discrete ?? display }}
 				editValue={discrete ? undefined : value * 100}
 				canRelease={hasScopedValue}
+				presets={presetConfig}
+				onPresetSelect={selectIndexedPreset}
 				onEdit={
 					discrete || !controller.canWriteValues
 						? undefined
@@ -126,6 +193,8 @@ function EncoderSurface({
 			disabled={!controller.canWriteValues}
 			indexed={Boolean(discrete)}
 			canRelease={hasScopedValue}
+			presets={presetConfig}
+			onPresetSelect={selectIndexedPreset}
 			onStep={(delta, undoGroup) =>
 				void controller.stepParameter(attribute, delta, undoGroup)
 			}
@@ -138,6 +207,15 @@ function EncoderSurface({
 			onRelease={() => void controller.releaseParameter(attribute)}
 		/>
 	);
+}
+
+function indexedPresetOption(choice: IndexedPresetChoice) {
+	return {
+		value: choice.id,
+		label: choice.label,
+		description: choice.description,
+		disabled: choice.disabled,
+	};
 }
 
 export function EncoderSurfaces({

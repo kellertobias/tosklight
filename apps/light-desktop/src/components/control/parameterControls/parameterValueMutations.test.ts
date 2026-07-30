@@ -18,6 +18,7 @@ function projection(
 		state: {} as ParameterProjection["state"],
 		active: true,
 		selectedFixtureIds: ["fixture-3", "fixture-1", "fixture-2"],
+		selectedFixtures: [],
 		selectedGroupId: null,
 		programmerValuesRoute: "normal",
 		programmerValuesReady: true,

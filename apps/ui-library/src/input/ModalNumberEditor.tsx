@@ -28,6 +28,10 @@ export interface ModalNumberFaderConfig {
 export interface ModalNumberPresetConfig {
 	groups: readonly GroupedSelectionGroup<string>[];
 	selectedValue?: string;
+	valueTabLabel?: string;
+	presetsTabLabel?: string;
+	emptyMessage?: string;
+	showWhenEmpty?: boolean;
 }
 
 export interface ModalNumberEditorProps {
@@ -58,6 +62,8 @@ function ModalNumberTitleActions({
 	onModeChange,
 	onRelease,
 	releaseLabel,
+	valueTabLabel,
+	presetsTabLabel,
 }: {
 	beforeTitle?: ReactNode;
 	hasPresets: boolean;
@@ -65,6 +71,8 @@ function ModalNumberTitleActions({
 	onModeChange(): void;
 	onRelease?: () => void;
 	releaseLabel: string;
+	valueTabLabel: string;
+	presetsTabLabel: string;
 }) {
 	if (!beforeTitle && !hasPresets && !onRelease) return null;
 	return (
@@ -77,8 +85,12 @@ function ModalNumberTitleActions({
 					aria-pressed={mode === "presets"}
 					onClick={onModeChange}
 				>
-					<span data-active={mode === "value" || undefined}>Value</span>
-					<span data-active={mode === "presets" || undefined}>Presets</span>
+					<span data-active={mode === "value" || undefined}>
+						{valueTabLabel}
+					</span>
+					<span data-active={mode === "presets" || undefined}>
+						{presetsTabLabel}
+					</span>
 				</Button>
 			)}
 			{onRelease && (
@@ -122,7 +134,9 @@ export function ModalNumberEditor({
 	const [pressedKey, setPressedKey] = useState<string | null>(null);
 	const [faderDirty, setFaderDirty] = useState(false);
 	const [confirmClose, setConfirmClose] = useState(false);
-	const hasPresets = Boolean(presets?.groups.length);
+	const hasPresets = Boolean(
+		presets && (presets.groups.length || presets.showWhenEmpty),
+	);
 	const hasUnsavedChanges = value !== initialValue || faderDirty;
 	const stay = () => setConfirmClose(false);
 	const requestClose = () => {
@@ -183,6 +197,8 @@ export function ModalNumberEditor({
 							}
 							onRelease={onRelease}
 							releaseLabel={releaseLabel}
+							valueTabLabel={presets?.valueTabLabel ?? "Value"}
+							presetsTabLabel={presets?.presetsTabLabel ?? "Presets"}
 						/>
 					}
 					closeLabel={`Close ${ariaLabel}`}
@@ -350,6 +366,9 @@ function ModalNumberPresets({
 }) {
 	return (
 		<div className="ui-grouped-selection-groups modal-number-presets">
+			{config.groups.every((group) => group.options.length === 0) && (
+				<p>{config.emptyMessage ?? "No choices are available."}</p>
+			)}
 			{config.groups.map((group) => (
 				<section key={group.label}>
 					<h3>{group.label}</h3>

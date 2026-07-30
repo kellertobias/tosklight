@@ -882,3 +882,69 @@ async fn set_selection_resolves_the_spread_server_side_in_selection_order() {
     assert_eq!(value_of(ordered[2]), 0.5);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
+
+#[tokio::test]
+async fn indexed_semantic_intent_uses_each_embedded_profile_raw_value_immediately() {
+    let scenario = CommandHttpScenario::new().await;
+    let first = schema_v2_direct_fixture().0;
+    let mut second = first.clone();
+    second.fixture_id = light_core::FixtureId::new();
+    second.fixture_number = Some(2);
+    second.address = Some(3);
+    let second_profile = second.definition.profile_snapshot.as_mut().unwrap();
+    let light_fixture::ChannelFunctionBehavior::Indexed { raw_value, .. } =
+        &mut second_profile.modes[0].channels[0].functions[0].behavior
+    else {
+        panic!("schema-v2 test fixture should expose an indexed Gobo function");
+    };
+    *raw_value = 41;
+    let ids = [first.fixture_id, second.fixture_id];
+    scenario
+        .state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![first, second].into(),
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+
+    let response = scenario
+        .values_action(serde_json::json!({
+            "request_id": "indexed-preset",
+            "expected_revision": 0,
+            "expected_capture_mode_revision": 0,
+            "action": {
+                "type": "apply_intent",
+                "fixture_ids": [ids[0].0, ids[1].0],
+                "attribute": "gobo.1",
+                "operation": {
+                    "type": "absolute_set",
+                    "value": {"kind": "discrete", "value": "gobo.dots"}
+                },
+                "timing": {"fade": false}
+            }
+        }))
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
+    assert_eq!(programmer.values.len(), 2);
+    for value in &programmer.values {
+        assert_eq!(
+            value.value,
+            light_core::AttributeValue::Discrete("gobo.dots".into())
+        );
+        assert!(!value.fade);
+        assert_eq!(value.fade_millis, None);
+    }
+    let frame = scenario
+        .state
+        .output
+        .render(RenderOptions::default())
+        .unwrap()
+        .universes[&1];
+    assert_eq!(frame[0], 93);
+    assert_eq!(frame[2], 41);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}

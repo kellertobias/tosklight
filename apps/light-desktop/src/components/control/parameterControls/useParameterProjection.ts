@@ -40,12 +40,11 @@ function useVisualization(
 }
 
 function useSupportedAttributes(
-	selectedFixtureIds: readonly string[],
+	fixtures: ReturnType<typeof useSelectedPatchedFixtures>,
 	groupId: string | null,
 	active: boolean,
 ) {
 	const group = useSelectedPortableGroup(groupId, active);
-	const fixtures = useSelectedPatchedFixtures(selectedFixtureIds, active);
 	return useMemo(() => {
 		const result = new Set<string>();
 		for (const fixture of fixtures)
@@ -132,6 +131,10 @@ export function useParameterProjection(
 	const selection = useProgrammingSelectionView(active);
 	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
 	const selectedGroup = selectedGroupId(selection);
+	const selectedFixtures = useSelectedPatchedFixtures(
+		selectedFixtureIds,
+		active,
+	);
 	const captureMode = useProgrammerCaptureModeView(active);
 	const preloadCaptureActive = capturesProgrammerWrites(captureMode);
 	const normalValuesView = useParameterProgrammerValues(
@@ -151,7 +154,7 @@ export function useParameterProjection(
 		: null;
 	const visualization = useVisualization(active, selectedFixtureIds);
 	const supported = useSupportedAttributes(
-		selectedFixtureIds,
+		selectedFixtures,
 		selectedGroup,
 		active,
 	);
@@ -188,6 +191,7 @@ export function useParameterProjection(
 		active,
 		programmerFadeMillis: programmerFadeMillis ?? undefined,
 		selectedFixtureIds,
+		selectedFixtures,
 		selectedGroupId: selectedGroup,
 		programmerValuesRoute: captureMode
 			? preloadCaptureActive
