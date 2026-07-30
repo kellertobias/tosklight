@@ -126,6 +126,20 @@ pub enum ProgrammingPreloadValueMutation {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingPreloadValuesAction {
+    ApplyIntent {
+        #[schemars(length(max = 10_000))]
+        fixture_ids: Vec<Uuid>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        group_id: Option<String>,
+        attribute: String,
+        operation: ProgrammingPreloadValueOperation,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        undo_group: Option<String>,
+        #[serde(default)]
+        timing: ProgrammingPreloadValueTiming,
+    },
     SetFixture {
         fixture_id: Uuid,
         attribute: String,
@@ -151,6 +165,17 @@ pub enum ProgrammingPreloadValuesAction {
     Batch {
         #[schemars(length(max = 10_000))]
         mutations: Vec<ProgrammingPreloadValueMutation>,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ProgrammingPreloadValueOperation {
+    AbsoluteSet {
+        value: ProgrammingPreloadAttributeValue,
+    },
+    RelativeStep {
+        delta: f32,
     },
 }
 

@@ -156,6 +156,47 @@ describe("Preload Programmer values snapshot wire", () => {
 });
 
 describe("Preload Programmer values mutation wire", () => {
+	it("encodes one server-owned linked-value intent", () => {
+		expect(
+			encodeProgrammerPreloadValuesActionRequest({
+				requestId: "intent-1",
+				expectedPreloadRevision: 6,
+				expectedCaptureModeRevision: 4,
+				action: {
+					action: "apply_intent",
+					fixtureIds: [FIXTURE_ID],
+					attribute: "color.red",
+					operation: {
+						type: "absolute_set",
+						value: { kind: "normalized", value: 0.8 },
+					},
+					undoGroup: "encoder-gesture",
+					timing: { fade: true, fadeMillis: 500, delayMillis: null },
+				},
+			}),
+		).toEqual({
+			request_id: "intent-1",
+			expected_revision: 6,
+			expected_capture_mode_revision: 4,
+			action: {
+				type: "apply_intent",
+				fixture_ids: [FIXTURE_ID],
+				group_id: null,
+				attribute: "color.red",
+				operation: {
+					type: "absolute_set",
+					value: { kind: "normalized", value: 0.8 },
+				},
+				undo_group: "encoder-gesture",
+				timing: {
+					fade: true,
+					fade_millis: 500,
+					delay_millis: null,
+				},
+			},
+		});
+	});
+
 	it("maps Preload revisions and preserves one ordered batch", () => {
 		expect(
 			encodeProgrammerPreloadValuesActionRequest({

@@ -1,5 +1,6 @@
 import type { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
 import type {
+	ApplyProgrammerPreloadValueIntentInput,
 	BatchProgrammerPreloadValuesInput,
 	ProgrammerPreloadValuesActionOutcome,
 	ProgrammerPreloadValuesActionRequest,
@@ -58,6 +59,18 @@ export class ProgrammerPreloadValuesWriter
 			scope: options.scope,
 			store: options.captureModeStore,
 			repair: options.repairCaptureMode,
+		});
+	}
+
+	applyIntent(input: ApplyProgrammerPreloadValueIntentInput) {
+		return this.enqueue(input.requestId, {
+			action: "apply_intent",
+			fixtureIds: input.fixtureIds,
+			...(input.groupId ? { groupId: input.groupId } : {}),
+			attribute: input.attribute,
+			operation: input.operation,
+			...(input.undoGroup ? { undoGroup: input.undoGroup } : {}),
+			timing: input.timing,
 		});
 	}
 

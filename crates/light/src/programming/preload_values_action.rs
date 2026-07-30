@@ -1,5 +1,5 @@
 use super::ProgrammingPreloadValuesProjection;
-use crate::{ActionContext, ApplicationCommand, CommandFamily};
+use crate::{ActionContext, ApplicationCommand, CommandFamily, ProgrammingValueIntent};
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use std::{borrow::Cow, sync::Arc};
 
@@ -36,6 +36,9 @@ pub enum ProgrammingPreloadValueMutation {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProgrammingPreloadValuesCommand {
+    ApplyIntent {
+        intent: ProgrammingValueIntent,
+    },
     SetFixture {
         fixture_id: FixtureId,
         attribute: AttributeKey,
@@ -64,6 +67,7 @@ pub enum ProgrammingPreloadValuesCommand {
 impl ProgrammingPreloadValuesCommand {
     pub fn mutations(&self) -> Cow<'_, [ProgrammingPreloadValueMutation]> {
         match self {
+            Self::ApplyIntent { .. } => Cow::Borrowed(&[]),
             Self::SetFixture {
                 fixture_id,
                 attribute,
@@ -101,6 +105,17 @@ impl ProgrammingPreloadValuesCommand {
                 attribute: attribute.clone(),
             }]),
             Self::Batch { mutations } => Cow::Borrowed(mutations),
+        }
+    }
+
+    pub const fn intent(&self) -> Option<&ProgrammingValueIntent> {
+        match self {
+            Self::ApplyIntent { intent } => Some(intent),
+            Self::SetFixture { .. }
+            | Self::ReleaseFixture { .. }
+            | Self::SetGroup { .. }
+            | Self::ReleaseGroup { .. }
+            | Self::Batch { .. } => None,
         }
     }
 }

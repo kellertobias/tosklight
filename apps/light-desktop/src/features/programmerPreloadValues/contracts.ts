@@ -85,6 +85,17 @@ export type ProgrammerPreloadValuesMutation =
 
 export type ProgrammerPreloadValuesCommand =
 	| ProgrammerPreloadValuesMutation
+	| {
+			action: "apply_intent";
+			fixtureIds: readonly string[];
+			groupId?: string | null;
+			attribute: string;
+			operation:
+				| { type: "absolute_set"; value: AttributeValue }
+				| { type: "relative_step"; delta: number };
+			undoGroup?: string | null;
+			timing: ProgrammerPreloadValueTiming;
+	  }
 	| { action: "batch"; mutations: readonly ProgrammerPreloadValuesMutation[] };
 
 export interface ProgrammerPreloadValuesActionRequest {
@@ -151,8 +162,23 @@ export interface BatchProgrammerPreloadValuesInput {
 	mutations: readonly ProgrammerPreloadValuesMutation[];
 }
 
+export interface ApplyProgrammerPreloadValueIntentInput {
+	requestId: string;
+	fixtureIds: readonly string[];
+	groupId?: string | null;
+	attribute: string;
+	operation:
+		| { type: "absolute_set"; value: AttributeValue }
+		| { type: "relative_step"; delta: number };
+	undoGroup?: string | null;
+	timing: ProgrammerPreloadValueTiming;
+}
+
 /** View-owned mutation boundary. It stays dormant until authority is mounted. */
 export interface ProgrammerPreloadValuesActions {
+	applyIntent(
+		input: ApplyProgrammerPreloadValueIntentInput,
+	): Promise<ProgrammerPreloadValuesActionOutcome | null>;
 	setFixtureValue(
 		input: SetProgrammerPreloadFixtureValueInput,
 	): Promise<ProgrammerPreloadValuesActionOutcome | null>;

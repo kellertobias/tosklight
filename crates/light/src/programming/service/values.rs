@@ -281,7 +281,7 @@ impl ProgrammingService {
 // @tour value-spreading:40 Expand once at the application boundary
 // The application maps one validated spread over ordered fixture IDs and prepares the complete
 // mutation set before any Programmer state changes.
-fn plan_value_intent(
+pub(super) fn plan_value_intent(
     intent: &ProgrammingValueIntent,
     environment: &ProgrammingValuesEnvironment,
     active_values: HashSet<(light_core::FixtureId, light_core::AttributeKey)>,

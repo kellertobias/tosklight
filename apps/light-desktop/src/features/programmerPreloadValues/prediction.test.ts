@@ -11,6 +11,35 @@ import {
 const timing = { fade: true, fadeMillis: 500, delayMillis: 100 };
 
 describe("predictProgrammerPreloadValues", () => {
+	it("optimistically projects only the requested absolute intent value", () => {
+		const current = preloadProjection();
+		const predicted = predictProgrammerPreloadValues({
+			action: "apply_intent",
+			fixtureIds: [FIXTURE_1, FIXTURE_2],
+			attribute: "color.red",
+			operation: {
+				type: "absolute_set",
+				value: { kind: "normalized", value: 0.8 },
+			},
+			timing,
+		})(current);
+
+		expect(
+			predicted.fixtureValues.filter(
+				(value) => value.attribute === "color.red",
+			),
+		).toEqual([
+			expect.objectContaining({
+				fixtureId: FIXTURE_1,
+				attribute: "color.red",
+			}),
+			expect.objectContaining({
+				fixtureId: FIXTURE_2,
+				attribute: "color.red",
+			}),
+		]);
+	});
+
 	it("preserves ordered batch intent, timing, and Programmer order", () => {
 		const current = preloadProjection({
 			fixtureValues: [preloadFixtureValue(0.2, { programmerOrder: 4 })],

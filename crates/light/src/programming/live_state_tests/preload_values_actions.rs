@@ -1,7 +1,7 @@
 use super::*;
 use crate::{ActionErrorKind, EventObject};
 use light_core::{AttributeKey, AttributeValue};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Default)]
 struct PreloadValuesPorts {
@@ -209,6 +209,90 @@ fn typed_batch_is_one_pending_projection_event_persist_and_checkpoint() {
         super::super::preload_values_projection::projection_read_count(),
         1
     );
+    assert_eq!(
+        setup.registry.get(setup.session).unwrap().undo.len(),
+        undo_before + 1
+    );
+}
+
+#[test]
+fn preload_intent_captures_linked_context_values_once_in_one_checkpoint() {
+    let mut setup = PreloadValuesSetup::new();
+    let fixture = setup.fixtures[0];
+    let red = AttributeKey("color.red".into());
+    let green = AttributeKey("color.green".into());
+    setup.ports.environment.supported_attributes =
+        HashMap::from([(fixture, HashSet::from([red.clone(), green.clone()]))]);
+    setup.ports.environment.current_values = HashMap::from([
+        ((fixture, red.clone()), AttributeValue::Normalized(0.2)),
+        ((fixture, green.clone()), AttributeValue::Normalized(0.6)),
+    ]);
+    setup
+        .ports
+        .environment
+        .activation_links
+        .insert(red.clone(), vec![green.clone()]);
+    let capture_revision = setup.enter_capture();
+    let undo_before = setup.registry.get(setup.session).unwrap().undo.len();
+    let action = setup.action(
+        "preload-linked",
+        0,
+        capture_revision,
+        ProgrammingPreloadValuesCommand::ApplyIntent {
+            intent: ProgrammingValueIntent {
+                fixture_ids: vec![fixture],
+                group_id: None,
+                attribute: red.clone(),
+                operation: ProgrammingValueOperation::AbsoluteSet(AttributeValue::Normalized(0.9)),
+                undo_group: None,
+                timing: ProgrammingValueTiming {
+                    fade: true,
+                    fade_millis: Some(1_000),
+                    delay_millis: None,
+                },
+            },
+        },
+    );
+
+    let result = setup
+        .service
+        .handle_preload_values(action.clone(), &setup.ports)
+        .unwrap();
+    let ProgrammingPreloadValuesOutcome::Changed { projection, .. } = &result.outcome else {
+        panic!("the Preload intent should capture its linked value")
+    };
+    assert_eq!(projection.fixture_values.len(), 2);
+    assert_eq!(
+        projection
+            .fixture_values
+            .iter()
+            .find(|value| value.attribute == red)
+            .and_then(|value| value.value.normalized()),
+        Some(0.9)
+    );
+    assert_eq!(
+        projection
+            .fixture_values
+            .iter()
+            .find(|value| value.attribute == green)
+            .and_then(|value| value.value.normalized()),
+        Some(0.6)
+    );
+    assert_eq!(
+        setup.registry.get(setup.session).unwrap().undo.len(),
+        undo_before + 1
+    );
+
+    setup.ports.environment.current_values.insert(
+        (fixture, AttributeKey("color.green".into())),
+        AttributeValue::Normalized(0.1),
+    );
+    let replay = setup
+        .service
+        .handle_preload_values(action, &setup.ports)
+        .unwrap();
+    assert!(replay.replayed);
+    assert_eq!(replay.outcome, result.outcome);
     assert_eq!(
         setup.registry.get(setup.session).unwrap().undo.len(),
         undo_before + 1

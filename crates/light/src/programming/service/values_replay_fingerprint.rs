@@ -162,6 +162,27 @@ fn hash_value_mutation(hasher: &mut Sha256, mutation: &ProgrammingValueMutation)
 
 fn hash_preload_command(hasher: &mut Sha256, command: &ProgrammingPreloadValuesCommand) {
     match command {
+        ProgrammingPreloadValuesCommand::ApplyIntent { intent } => {
+            hasher.update([5]);
+            hash_len(hasher, intent.fixture_ids.len());
+            for fixture_id in &intent.fixture_ids {
+                hasher.update(fixture_id.0.as_bytes());
+            }
+            hash_optional_bytes(&mut *hasher, intent.group_id.as_deref());
+            hash_bytes(hasher, intent.attribute.0.as_bytes());
+            match &intent.operation {
+                ProgrammingValueOperation::AbsoluteSet(value) => {
+                    hasher.update([0]);
+                    hash_attribute_value(hasher, value);
+                }
+                ProgrammingValueOperation::RelativeStep(delta) => {
+                    hasher.update([1]);
+                    hasher.update(delta.to_bits().to_le_bytes());
+                }
+            }
+            hash_optional_bytes(&mut *hasher, intent.undo_group.as_deref());
+            hash_value_timing(hasher, intent.timing);
+        }
         ProgrammingPreloadValuesCommand::SetFixture {
             fixture_id,
             attribute,

@@ -543,6 +543,7 @@ fn programming(config: &Config) -> Vec<String> {
         ProgrammingPreloadValuesSnapshot::decl(config),
         ProgrammingPreloadValueTiming::decl(config),
         ProgrammingPreloadValueMutation::decl(config),
+        ProgrammingPreloadValueOperation::decl(config),
         ProgrammingPreloadValuesAction::decl(config),
         ProgrammingPreloadValuesActionRequest::decl(config),
         ProgrammingPreloadValuesActionState::decl(config),

@@ -268,6 +268,43 @@
         }
       ]
     },
+    "ProgrammingPreloadValueOperation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "absolute_set"
+            },
+            "value": {
+              "$ref": "#/$defs/ProgrammingPreloadAttributeValue"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "delta": {
+              "type": "number",
+              "format": "float"
+            },
+            "type": {
+              "type": "string",
+              "const": "relative_step"
+            }
+          },
+          "required": [
+            "type",
+            "delta"
+          ]
+        }
+      ]
+    },
     "ProgrammingPreloadValueTiming": {
       "type": "object",
       "properties": {
@@ -295,6 +332,53 @@
     },
     "ProgrammingPreloadValuesAction": {
       "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "attribute": {
+              "type": "string"
+            },
+            "fixture_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "maxItems": 10000
+            },
+            "group_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operation": {
+              "$ref": "#/$defs/ProgrammingPreloadValueOperation"
+            },
+            "timing": {
+              "$ref": "#/$defs/ProgrammingPreloadValueTiming",
+              "default": {
+                "fade": false
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "apply_intent"
+            },
+            "undo_group": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "fixture_ids",
+            "attribute",
+            "operation"
+          ]
+        },
         {
           "type": "object",
           "properties": {

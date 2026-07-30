@@ -12,6 +12,28 @@ import type { ProgrammerPreloadValuesOptimisticReducer } from "./store";
 export function predictProgrammerPreloadValues(
 	action: ProgrammerPreloadValuesCommand,
 ): ProgrammerPreloadValuesOptimisticReducer {
+	if (action.action === "apply_intent") {
+		if (action.operation.type === "relative_step") return (current) => current;
+		const value = action.operation.value;
+		const mutations: ProgrammerPreloadValuesMutation[] = action.groupId
+			? [
+					{
+						action: "set_group",
+						groupId: action.groupId,
+						attribute: action.attribute,
+						value,
+						timing: action.timing,
+					},
+				]
+			: action.fixtureIds.map((fixtureId) => ({
+					action: "set_fixture" as const,
+					fixtureId,
+					attribute: action.attribute,
+					value,
+					timing: action.timing,
+				}));
+		return (current) => applyMutations(current, mutations);
+	}
 	const mutations = action.action === "batch" ? action.mutations : [action];
 	return (current) => applyMutations(current, mutations);
 }

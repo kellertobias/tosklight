@@ -6,6 +6,36 @@ pub(crate) fn command(
     action: wire::ProgrammingPreloadValuesAction,
 ) -> application::ProgrammingPreloadValuesCommand {
     match action {
+        wire::ProgrammingPreloadValuesAction::ApplyIntent {
+            fixture_ids,
+            group_id,
+            attribute,
+            operation,
+            undo_group,
+            timing,
+        } => application::ProgrammingPreloadValuesCommand::ApplyIntent {
+            intent: application::ProgrammingValueIntent {
+                fixture_ids: fixture_ids.into_iter().map(FixtureId).collect(),
+                group_id,
+                attribute: AttributeKey(attribute),
+                operation: match operation {
+                    wire::ProgrammingPreloadValueOperation::AbsoluteSet { value } => {
+                        application::ProgrammingValueOperation::AbsoluteSet(application_value(
+                            value,
+                        ))
+                    }
+                    wire::ProgrammingPreloadValueOperation::RelativeStep { delta } => {
+                        application::ProgrammingValueOperation::RelativeStep(delta)
+                    }
+                },
+                undo_group,
+                timing: application::ProgrammingValueTiming {
+                    fade: timing.fade,
+                    fade_millis: timing.fade_millis,
+                    delay_millis: timing.delay_millis,
+                },
+            },
+        },
         wire::ProgrammingPreloadValuesAction::SetFixture {
             fixture_id,
             attribute,

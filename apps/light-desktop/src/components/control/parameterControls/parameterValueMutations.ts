@@ -155,9 +155,8 @@ export function submitParameterStep(
 	if (!actions.applyIntent) {
 		const base =
 			projection.normalized.get(attribute) ??
-			projection.programmerValues.find(
-				(value) => value.attribute === attribute,
-			)?.value;
+			projection.programmerValues.find((value) => value.attribute === attribute)
+				?.value;
 		const normalized =
 			typeof base === "number"
 				? base
@@ -182,7 +181,10 @@ export function submitParameterStep(
 		attribute,
 		operation: { type: "relative_step", delta },
 		...(undoGroup ? { undoGroup } : {}),
-		timing: immediateParameterTiming(),
+		timing:
+			projection.programmerValuesRoute === "preload"
+				? parameterValueTiming(projection.programmerFadeMillis)
+				: immediateParameterTiming(),
 	});
 }
 
@@ -196,17 +198,22 @@ export function submitParameterAbsoluteIntent(
 ) {
 	if (
 		!actions?.applyIntent ||
-		projection.selectedGroupId ||
-		projection.selectedFixtureIds.length === 0
+		(!projection.selectedGroupId && projection.selectedFixtureIds.length === 0)
 	)
 		return null;
 	return actions.applyIntent({
 		requestId: requestId(),
-		fixtureIds: projection.selectedFixtureIds,
+		fixtureIds: projection.selectedGroupId ? [] : projection.selectedFixtureIds,
+		...(projection.selectedGroupId
+			? { groupId: projection.selectedGroupId }
+			: {}),
 		attribute,
 		operation: { type: "absolute_set", value },
 		...(undoGroup ? { undoGroup } : {}),
-		timing: immediateParameterTiming(),
+		timing:
+			projection.programmerValuesRoute === "preload"
+				? parameterValueTiming(projection.programmerFadeMillis)
+				: immediateParameterTiming(),
 	});
 }
 
@@ -245,9 +252,10 @@ function resolveSpread(points: readonly number[], count: number) {
 			const position = (index * (points.length - 1)) / (count - 1);
 			const left = Math.floor(position);
 			const right = Math.ceil(position);
-			return (points[left] ?? first) +
-				((points[right] ?? first) - (points[left] ?? first)) *
-					(position - left);
+			return (
+				(points[left] ?? first) +
+				((points[right] ?? first) - (points[left] ?? first)) * (position - left)
+			);
 		});
 	const anchors: Array<[number, number]> = [];
 	const denominator = points.length - 1;

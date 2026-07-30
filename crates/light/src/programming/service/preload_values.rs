@@ -3,13 +3,14 @@ use crate::{
     ActionEnvelope, ActionError, ActionErrorKind, ProgrammingPorts,
     ProgrammingPreloadValueMutation, ProgrammingPreloadValueTiming,
     ProgrammingPreloadValuesOutcome, ProgrammingPreloadValuesRequest,
-    ProgrammingPreloadValuesResult,
+    ProgrammingPreloadValuesResult, ProgrammingValueMutation,
 };
 use light_core::{SessionId, UserId};
 use light_programmer::{PreloadProgrammerValueMutation, PreloadProgrammerValueTiming};
-use std::sync::Arc;
+use std::{borrow::Cow, sync::Arc};
 
 use super::preload_values_replay::PreloadReplayIdentity;
+use super::values::plan_value_intent;
 use super::values_replay_fingerprint::preload_request_fingerprint;
 use super::values_validation::{validate_preload_value_mutations, validate_request_id};
 
@@ -68,10 +69,53 @@ impl ProgrammingService {
         capture_mode_revision: u64,
     ) -> Result<ProgrammingPreloadValuesResult, ActionError> {
         let before = Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)?;
-        let mutations = action.command.command.mutations();
+        let raw_mutations = action.command.command.mutations();
+        let environment = (!raw_mutations.is_empty() || action.command.command.intent().is_some())
+            .then(|| ports.values_environment(&action.context))
+            .transpose()?;
+        let planned;
+        let mutations = if let Some(intent) = action.command.command.intent() {
+            let active = self
+                .programmers
+                .preload_pending_values(session)
+                .ok_or_else(|| {
+                    ActionError::new(ActionErrorKind::NotFound, "Preload values are unavailable")
+                })?;
+            planned = plan_value_intent(
+                intent,
+                environment
+                    .as_ref()
+                    .expect("Preload intents load a values environment"),
+                active
+                    .fixture_values
+                    .iter()
+                    .map(|value| (value.fixture_id, value.attribute.clone()))
+                    .collect(),
+                active
+                    .group_values
+                    .iter()
+                    .map(|value| {
+                        (
+                            (value.group_id.clone(), value.attribute.clone()),
+                            value.value.clone(),
+                        )
+                    })
+                    .collect(),
+            )?
+            .into_iter()
+            .map(preload_mutation)
+            .collect::<Vec<_>>();
+            Cow::Owned(planned)
+        } else {
+            raw_mutations
+        };
         if !mutations.is_empty() {
-            let environment = ports.values_environment(&action.context)?;
-            validate_preload_value_mutations(mutations.as_ref(), &environment)?;
+            validate_preload_value_mutations(
+                mutations.as_ref(),
+                environment
+                    .as_ref()
+                    .expect("Preload value mutations load a values environment"),
+            )?;
         }
         let domain_mutations = mutations.iter().map(domain_mutation).collect::<Vec<_>>();
         let changed = self
@@ -192,6 +236,55 @@ impl ProgrammingService {
             .at_related_revision(actual));
         }
         Ok(actual)
+    }
+}
+
+fn preload_mutation(mutation: ProgrammingValueMutation) -> ProgrammingPreloadValueMutation {
+    match mutation {
+        ProgrammingValueMutation::SetFixture {
+            fixture_id,
+            attribute,
+            value,
+            timing,
+        } => ProgrammingPreloadValueMutation::SetFixture {
+            fixture_id,
+            attribute,
+            value,
+            timing: ProgrammingPreloadValueTiming {
+                fade: timing.fade,
+                fade_millis: timing.fade_millis,
+                delay_millis: timing.delay_millis,
+            },
+        },
+        ProgrammingValueMutation::ReleaseFixture {
+            fixture_id,
+            attribute,
+        } => ProgrammingPreloadValueMutation::ReleaseFixture {
+            fixture_id,
+            attribute,
+        },
+        ProgrammingValueMutation::SetGroup {
+            group_id,
+            attribute,
+            value,
+            timing,
+        } => ProgrammingPreloadValueMutation::SetGroup {
+            group_id,
+            attribute,
+            value,
+            timing: ProgrammingPreloadValueTiming {
+                fade: timing.fade,
+                fade_millis: timing.fade_millis,
+                delay_millis: timing.delay_millis,
+            },
+        },
+        ProgrammingValueMutation::ReleaseGroup {
+            group_id,
+            attribute,
+        } => ProgrammingPreloadValueMutation::ReleaseGroup {
+            group_id,
+            attribute,
+        },
     }
 }
 

@@ -226,6 +226,25 @@ function validateRequest(request: ProgrammerPreloadValuesActionRequest) {
 function encodeAction(
 	action: ProgrammerPreloadValuesActionRequest["action"],
 ): WirePreloadValuesAction {
+	if (action.action === "apply_intent")
+		return {
+			type: action.action,
+			fixture_ids: [...action.fixtureIds],
+			group_id: action.groupId ?? null,
+			attribute: action.attribute,
+			operation:
+				action.operation.type === "absolute_set"
+					? {
+							type: action.operation.type,
+							value: action.operation.value,
+						}
+					: {
+							type: action.operation.type,
+							delta: action.operation.delta,
+						},
+			undo_group: action.undoGroup ?? null,
+			timing: encodeTiming(action.timing),
+		};
 	if (action.action === "batch")
 		return {
 			type: action.action,

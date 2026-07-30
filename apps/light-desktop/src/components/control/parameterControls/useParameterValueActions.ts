@@ -10,8 +10,8 @@ import {
 	setParameterMutations,
 	setParameterRangeMutations,
 	submitParameterAbsoluteIntent,
-	submitParameterStep,
 	submitParameterMutations,
+	submitParameterStep,
 } from "./parameterValueMutations";
 import type { ParameterProjection } from "./useParameterProjection";
 
@@ -44,11 +44,7 @@ export function useParameterValueActions(projection: ParameterProjection) {
 		undoGroup?: string | null,
 		requestId?: string,
 	) => {
-		if (
-			projection.programmerValuesRoute === "normal" &&
-			!projection.selectedGroupId &&
-			actions?.applyIntent
-		)
+		if (actions?.applyIntent)
 			return queue.submitLatest(
 				`intent:${projection.selectedFixtureIds.join(",")}:${attribute}`,
 				String(level),
@@ -94,15 +90,13 @@ export function useParameterValueActions(projection: ParameterProjection) {
 		);
 	return {
 		canWriteValues,
-		relativeSteps: Boolean(
-			projection.programmerValuesRoute === "normal" && actions?.applyIntent,
-		),
+		relativeSteps: Boolean(actions?.applyIntent),
 		applyParameter,
 		stepParameter,
 		applyParameterRange: (attribute: string, percentages: number[]) =>
 			queue.submitBarrier(
 				() =>
-					(projection.programmerValuesRoute === "normal" &&
+					(actions?.applyIntent &&
 						submitParameterAbsoluteIntent(
 							canWriteValues ? actions : null,
 							projection,
@@ -114,7 +108,9 @@ export function useParameterValueActions(projection: ParameterProjection) {
 								),
 							},
 						)) ||
-					submit(setParameterRangeMutations(projection, attribute, percentages)),
+					submit(
+						setParameterRangeMutations(projection, attribute, percentages),
+					),
 			),
 		releaseParameter: (attribute: string) =>
 			queue.submitBarrier(() =>
