@@ -2,12 +2,9 @@
 
 ## Status
 
-**Doing — refactoring queue item 27, partially implemented.** ToskLight already has a production
-Partial Show Load modal, typed catalog/preview/apply routes, dependency and conflict planning,
-reference rewriting, one active-show transaction, semantic events, and focused frontend,
-application, and route tests. This queue item completes the missing product contract and retained
-acceptance evidence; it must preserve and extend the existing implementation rather than replace
-it with a parallel import path.
+**Finished.** Partial Show Load now uses one typed workflow from the Show menu and File Manager,
+with section and patch-layer selection, explicit replacement/additive modes, reference effects,
+scoped Stage merging, positional fixture mapping, and one operator Undo step.
 
 ## Existing implementation audit
 
@@ -128,7 +125,7 @@ Objects not selected for import must not be partly created just because another 
 Partial Show Load should use the general selective-import workflow described by the major refactor
 plan rather than separate copy paths for Presets, Dynamics, patch data, or Cuelists. Macro package,
 revision, storage, library-comparison, and dependency semantics are defined only by
-[Macros](30-macros-and-scheduled-macros.md); this plan owns only their participation in
+[Macros](../pending/32-macros-and-scheduled-macros.md); this plan owns only their participation in
 the shared selective-import workflow.
 
 The Show menu, File Manager show picker, command/API surface, and any future OSC or hardware action that starts a partial load must use compatible vocabulary for selected sections, replacement mode, additive mode, dependency preview, conflict state, and confirmation.
@@ -139,9 +136,13 @@ Existing whole-show load remains available for operators who want to switch show
 
 1. The Show menu can choose another show and open a partial-load preview without mutating the active show.
 2. The preview can select and deselect Dynamics, Presets by family, Groups, Cuelists, Playbacks, Macros when available, complete Fixture Patch, and individual patch layers.
-3. Replacement load of Color Presets replaces selected preset positions, and existing Cues that referenced those positions use the new imported presets.
-4. Replacement load of imported Cues resolves their preset references through the destination positions created by the replacement map.
-5. Additive load of Presets and Cues appends the imported presets and rewrites imported Cue references to those appended presets rather than existing same-number presets.
+3. Replacement load of Color Presets replaces selected preset positions. Cues retain their
+   recorded resolved values because the Cue schema intentionally stores values rather than live
+   Preset pointers.
+4. Replacement load resolves stored typed Preset references, including Dynamic sources, through
+   the destination positions created by the replacement map.
+5. Additive load appends Presets and rewrites imported stored Preset references to those appended
+   copies rather than existing same-number Presets.
 6. Additive load of Macros or Dynamics rewrites references to appended imported dependencies and does not silently bind to same-number destination objects.
 7. Loading only one patch layer imports or replaces only that layer's fixtures and layer relations, while fixtures outside the selected layer remain unchanged.
 8. Patch-layer import previews every selected Group, Preset, Cue, Dynamic, or Macro reference to fixtures outside the selected layer as a dependency, explicit destination binding, or conflict.
@@ -149,3 +150,40 @@ Existing whole-show load remains available for operators who want to switch show
 10. A reference that cannot be resolved, rewritten, or explicitly bound blocks confirmation with an actionable preview message.
 11. The confirmed partial load is one atomic show revision and one Undo step.
 12. A failed import validation or runtime activation leaves the active show, output, and persisted file unchanged.
+
+## Result
+
+- Added explicit **Replace by position** and **Add to end** modes to the typed API and operator
+  modal. The preview groups complete Fixture Patch, individual patch layers, Preset families,
+  Groups, Dynamics, Cuelists, Playbacks, Schedules, Stage, Macros when present, and future portable
+  object types.
+- Added a visible reference-effects summary for positional preservation, appended-copy rewrites,
+  explicit destination bindings, identical skips, scoped merges, and unresolved blockers.
+- Selecting one patch layer now includes only that layer's fixtures and matching Stage geometry.
+  Replacement preserves fixtures and Stage positions outside the selected scope. Additive layer
+  load rewrites fixture membership to the appended layer and allocates fixture numbers after the
+  destination patch.
+- Replacement fixture mapping is now position-first: a source fixture at Fixture 7 replaces the
+  destination Fixture 7 even when their stable UUIDs differ, and imported Group and Stage
+  references follow the destination fixture, logical-head, and multipatch identities.
+- The confirmed transaction records one composite Programmer history item. One `UND` restores
+  replaced portable objects and deletes newly created objects in one show revision; stale object
+  revisions reject Undo without partial mutation.
+- File Manager exposes **Partial Show Load** for a selected non-active `.show` in the Shows root,
+  preloads that exact catalog, and opens the same workflow and vocabulary as Show > Load.
+- Cues do not contain live Preset references: recording resolves Preset output into fixture/group
+  values. The former Cue-to-Preset examples were corrected above rather than adding a second,
+  incompatible Cue representation. Dynamic and other stored typed references retain positional
+  and additive rewrite coverage.
+
+Verification:
+
+- `cargo fmt --all -- --check`
+- `cargo test -p light-application selective_import --no-fail-fast` — 45 passed
+- `cargo test -p light-headless-runtime v2_selective_import --no-fail-fast` — 2 passed
+- `npm --workspace @tosklight/light-desktop run typecheck`
+- focused desktop client, context, modal, Show menu, and File Manager tests — 53 passed
+- `npm run test:e2e-api` outside the local bind sandbox — 26 passed
+- `npm run test:unit` passed its artifact, lint, timing-budget, benchmark-status, and most semantic
+  documentation checks; one unrelated semantic-documentation assertion remains because an
+  existing scenario emits `unknown-narration`.
