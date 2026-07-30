@@ -11,7 +11,11 @@ light_absolute_path() {
       return 1
       ;;
   esac
-  if [[ "$value" = /* ]]; then
+  # GitHub's bash shell on Windows preserves native drive-letter paths in
+  # environment overrides. Treat those (and UNC paths) as absolute here;
+  # prefixing them with the repository root produces paths such as
+  # `D:\repo/D:\repo\.artifacts\tmp`, which Node then cannot create.
+  if [[ "$value" = /* || "$value" = [[:alpha:]]:[\\/]* || "$value" = \\\\* ]]; then
     printf '%s\n' "$value"
   else
     printf '%s/%s\n' "$base" "$value"

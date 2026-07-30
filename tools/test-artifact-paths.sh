@@ -6,6 +6,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tools/artifact-paths.sh"
 source "$ROOT/tools/artifact-maintenance.sh"
 
+WINDOWS_REPOSITORY_ROOT='D:\a\tosklight\tosklight'
+WINDOWS_TMP_DIR='D:\a\tosklight\tosklight\.artifacts\tmp'
+[[ "$(light_absolute_path "$WINDOWS_REPOSITORY_ROOT" "$WINDOWS_TMP_DIR")" == "$WINDOWS_TMP_DIR" ]]
+[[ "$(light_absolute_path "$WINDOWS_REPOSITORY_ROOT" 'D:/external/artifacts')" == 'D:/external/artifacts' ]]
+[[ "$(light_absolute_path "$WINDOWS_REPOSITORY_ROOT" '\\server\share\artifacts')" == '\\server\share\artifacts' ]]
+
 BOOTSTRAP_TMP_ROOT="${LIGHT_TMP_DIR:-$ROOT/.artifacts/tmp}"
 mkdir -p "$BOOTSTRAP_TMP_ROOT"
 TEST_ROOT="$(mktemp -d "$BOOTSTRAP_TMP_ROOT/light artifact paths.XXXXXX")"
