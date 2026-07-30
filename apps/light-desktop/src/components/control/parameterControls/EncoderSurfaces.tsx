@@ -171,8 +171,8 @@ function EncoderSurface({
 		formatNormalizedValue(value);
 	const hasScopedValue = controller.hasProgrammerValue(attribute);
 	const label =
-		controller.attributeLabels.get(attribute) ??
 		parameterLabels[attribute] ??
+		controller.attributeLabels.get(attribute) ??
 		attribute.replaceAll(".", " ");
 	const indexedPresets = indexedPresetChoices(
 		controller.selectedFixtures,

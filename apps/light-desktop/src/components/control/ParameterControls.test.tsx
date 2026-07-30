@@ -416,6 +416,40 @@ describe("ParameterControls projection lifecycle", () => {
 		).not.toBeInTheDocument();
 	});
 
+	it("keeps the operator Dimmer label when the registry exposes canonical Intensity metadata", () => {
+		attributeRegistry.current = [
+			{
+				...attributeDescriptor("intensity", "Intensity", 1, 1),
+				family: "intensity",
+				encoder_group: "intensity",
+			},
+		];
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [
+			{
+				fixture_id: "fixture-1",
+				logical_heads: [],
+				definition: {
+					heads: [
+						{
+							shared: true,
+							parameters: [{ attribute: "intensity", capabilities: [] }],
+						},
+					],
+				},
+			},
+		];
+
+		render(<ParameterControls />);
+
+		expect(
+			screen.getByRole("group", { name: "Enc 1 · Dimmer" }),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("group", { name: "Enc 1 · Intensity" }),
+		).not.toBeInTheDocument();
+	});
+
 	it("keeps Direct input and Indexed Presets under the semantic encoder", () => {
 		attributeRegistry.current = [
 			{
