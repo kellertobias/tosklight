@@ -212,3 +212,36 @@ Verification included:
 The product-demo job is green but remains the dominant CI duration at roughly sixteen minutes;
 shortening that real recording is follow-up optimization, not an unverified or skipped Plan 30
 gate.
+
+### 2026-07-31 Storybook and capacity-policy follow-up
+
+The public-site pipeline now preserves the exact static Storybook build used for reviewed Help
+and marketing screenshots, transfers it as the `storybook-static` CI artifact, publishes it at
+`/storybook/`, and links it from the Pages header, developer cards, and footer. Pages assembly
+requires `storybook/index.html`; local assembly builds Storybook only when that reviewed artifact
+is not already available.
+
+The release-performance indicator now applies the revised capacity policy without changing the
+separate packaged UI contracts:
+
+- the canonical 301-physical-instance demo remains a 100 Hz packaged release gate;
+- the released 1,024-fixture engine/output workload is green at a minimum one-second cadence of
+  at least 60 Hz, yellow from 40 Hz through 59.999 Hz, and red below 40 Hz;
+- mutation and persisted Patch gate failures remain red regardless of cadence; and
+- the 2,048-fixture run is always attempted as a non-blocking diagnostic, even when the
+  1,024-fixture workload misses its configured 100 Hz reference.
+
+The normalized report retains the per-phase p50/p95/p99 evidence and identifies the largest
+measured p95 contribution among engine render/fixture projection, protocol encoding, loopback
+delivery, and benchmark validation. The performance page displays that limiting phase for both
+1,024 and 2,048 fixtures and links the raw report for the complete measurements. It explicitly
+states that this Linux release probe has no UI: the exact 1,000-instance Stage plus Fixture Sheet
+usability proof remains the packaged/UI acceptance recorded in Plans 20 and 21.
+
+Focused verification passed with `node --test tools/run-release-performance.test.mjs
+tools/performance-publication.test.mjs`, `npm run storybook:build`, `npm run test:architecture`,
+the complete `npm run test:unit`, and a full `npm run pages:generate` using the same reused manual
+artifact path as CI. A local release-binary policy run measured 1,024 fixtures at 100 Hz minimum
+and 2,048 fixtures at 84 Hz minimum; the limiting p95 phase was engine render and fixture
+projection in both runs. These local numbers validate the report shape and are not substituted
+for the next GitHub runner measurement.

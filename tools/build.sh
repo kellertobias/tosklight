@@ -26,7 +26,7 @@ tools/build.sh is invoked by the root package.json scripts:
   npm run open                 Build debug server and app, stop old instances, and open ToskLight
   npm run manual               Build PDF and deployable HTML manuals from docs/help Markdown
   npm run icons:contact-sheets Refresh Help contact-sheet PNGs from assets/icons SVGs
-  npm run pages:generate       Assemble the public site: landing page, manual, and code safari
+  npm run pages:generate       Assemble the public site: landing page, manual, Storybook, and code safari
   npm run pages:serve [PORT]   Serve the assembled public site locally
   npm run codesafari           Run the CodeSafari code tour locally
   npm run bundle               Create self-contained server archives for macOS, Windows, Linux AMD64/ARM64
@@ -87,11 +87,15 @@ build_pages() {
   else
     build_manual
   fi
+  if [[ ! -f "$LIGHT_STORYBOOK_UI_DIR/index.html" ]]; then
+    npm run storybook:build
+  fi
   build_safari
 
   rm -rf "$LIGHT_PAGES_DIR"
   mkdir -p "$LIGHT_PAGES_DIR"
   cp -R "$LIGHT_MANUAL_HTML_DIR/." "$LIGHT_PAGES_DIR/manual"
+  cp -R "$LIGHT_STORYBOOK_UI_DIR/." "$LIGHT_PAGES_DIR/storybook"
   cp -R "$LIGHT_SAFARI_DIR/." "$LIGHT_PAGES_DIR/safari"
   cp "$LIGHT_MANUAL_PDF" "$LIGHT_PAGES_DIR/tosklight-manual.pdf"
   cp -R "$ROOT/docs/site/." "$LIGHT_PAGES_DIR/"
@@ -107,6 +111,7 @@ build_pages() {
   for required in \
     index.html \
     manual/index.html \
+    storybook/index.html \
     safari/index.html \
     performance/status.json \
     performance/index.html \

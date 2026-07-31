@@ -155,7 +155,8 @@ writeFileSync(
 );
 const performanceLabel = {
   healthy: "Performance healthy",
-  degraded: "Performance degraded",
+  warning: "Performance warning",
+  degraded: "Performance critical",
   unknown: "Performance unknown",
 }[performance.status];
 const performanceMarkup =

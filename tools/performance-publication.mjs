@@ -1,4 +1,9 @@
-const PERFORMANCE_STATES = new Set(["healthy", "degraded", "unknown"]);
+const PERFORMANCE_STATES = new Set([
+	"healthy",
+	"warning",
+	"degraded",
+	"unknown",
+]);
 
 const isObject = (value) =>
 	value !== null && typeof value === "object" && !Array.isArray(value);
@@ -78,6 +83,10 @@ function value(value, unit = "") {
 
 function gate(value_) {
 	return value_ == null ? "unknown" : value_ ? "pass" : "degraded";
+}
+
+function reference(value_) {
+	return value_ == null ? "unknown" : value_ ? "met" : "not met";
 }
 
 function row(label, value_, unit = "") {
@@ -183,9 +192,15 @@ function renderDoubledDensity(doubled) {
 		) +
 		row("Dropped ticks", deadline.dropped_ticks ?? doubled.dropped_ticks) +
 		row("Deferred ticks", deadline.deferred_ticks ?? doubled.deferred_ticks) +
-		row("Gate", gate(doubled.met)) +
+		row(
+			"100 Hz reference (diagnostic)",
+			reference(doubled.configured_target_met),
+		) +
+		row("Limiting measured phase", doubled.limiting_phase?.name) +
+		row("Limiting phase p95", doubled.limiting_phase?.p95_microseconds, " µs") +
 		`</tbody></table>` +
-		reason
+		reason +
+		`<p>This 2,048-fixture capacity probe is diagnostic only and never changes the release indicator.</p>`
 	);
 }
 
@@ -215,8 +230,8 @@ export function renderPerformancePage(performance) {
 		`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">` +
 		`<title>ToskLight release performance</title><style>body{font:16px system-ui;max-width:960px;margin:3rem auto;padding:0 1rem;background:#101318;color:#eef2f6}` +
 		`a{color:#72c7ff}table{border-collapse:collapse;width:100%;margin:1rem 0 2rem}th,td{border:1px solid #44505c;padding:.7rem;text-align:left}` +
-		`code{background:#20262d;padding:.15rem .35rem}</style><main><p><a href="../">← ToskLight</a></p>` +
-		`<h1>Release performance</h1><p><strong>${escapePerformanceText(performance.status.toUpperCase())}</strong> — ${escapePerformanceText(performance.summary)}</p>` +
+		`code{background:#20262d;padding:.15rem .35rem}.healthy{color:#39d98a}.warning{color:#ffd166}.degraded{color:#ff6b6b}.unknown{color:#9aa5b8}</style><main><p><a href="../">← ToskLight</a></p>` +
+		`<h1>Release performance</h1><p><strong class="${escapePerformanceText(performance.status)}">${escapePerformanceText(performance.status.toUpperCase())}</strong> — ${escapePerformanceText(performance.summary)}</p>` +
 		`<h2>Evidence</h2><table><tbody>` +
 		row("Release version", performance.release?.version) +
 		row("Tested commit", performance.release?.commit) +
@@ -224,7 +239,7 @@ export function renderPerformancePage(performance) {
 		row("Runner", runner) +
 		row("Workload", workloadLabel(performance.workload)) +
 		`</tbody></table>` +
-		`<h2>Required output floor</h2><table><tbody>` +
+		`<h2>1,024-fixture released-engine workload</h2><p>Green means at least ${value(required.green_threshold_hz, " Hz")}; yellow means at least ${value(required.yellow_threshold_hz, " Hz")}; below that is red. This released Linux probe measures engine rendering and output encoding without opening a UI. Separate packaged acceptance keeps the 301-instance demo at 100 Hz and proves the exact 1,000-instance show with Stage and Fixture Sheet open while the rest of the desk remains responsive.</p><table><tbody>` +
 		row("Fixtures", required.fixture_count) +
 		row("Universes", required.universes) +
 		row("Fixtures per universe", required.fixtures_per_universe) +
@@ -258,7 +273,17 @@ export function renderPerformancePage(performance) {
 		) +
 		row("Dropped ticks", deadline.dropped_ticks ?? required.dropped_ticks) +
 		row("Deferred ticks", deadline.deferred_ticks ?? required.deferred_ticks) +
-		row("Gate", gate(required.met)) +
+		row("Green threshold met", gate(required.met)) +
+		row(
+			"Configured 100 Hz reference",
+			reference(required.configured_target_met),
+		) +
+		row("Limiting measured phase", required.limiting_phase?.name) +
+		row(
+			"Limiting phase p95",
+			required.limiting_phase?.p95_microseconds,
+			" µs",
+		) +
 		`</tbody></table><p>— means the metric was unavailable in the normalized evidence.</p>` +
 		`<h2>Large-show mutation</h2><table><thead><tr><th>Fixture batch</th><th>p50</th><th>p95</th></tr></thead><tbody>` +
 		`<tr><th>${value(mutation.small?.fixture_count ?? mutation.small_fixture_count, " fixtures")}</th><td>${value(mutation.small?.p50_microseconds, " µs")}</td><td>${value(mutation.small?.p95_microseconds, " µs")}</td></tr>` +
@@ -267,7 +292,7 @@ export function renderPerformancePage(performance) {
 		`<h2>Persisted Patch transaction</h2><table><thead><tr><th>Batch</th><th>p50</th><th>p95</th><th>p95 budget</th><th>Gate</th></tr></thead><tbody>` +
 		renderPatchRows(patchServer) +
 		`</tbody></table><p>UI action-to-visible latency is informational and is not yet a release gate.</p>` +
-		`<h2>Doubled-density probe</h2>${renderDoubledDensity(doubled)}` +
+		`<h2>2,048-fixture limit diagnostic</h2>${renderDoubledDensity(doubled)}` +
 		`<h2>Failed or unavailable gates</h2><p>${failedGates.length > 0 ? failedGates.map(escapePerformanceText).join(", ") : "None reported."}</p>` +
 		reportLink +
 		`</main></html>`

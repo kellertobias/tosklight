@@ -118,6 +118,13 @@ Missing the realistic demo's UI acceptance is a release failure. The 1,000-fixtu
 report the 100 Hz target honestly and must not silently weaken output safety or visible Stage
 acceptance to reach it.
 
+Post-completion policy revision (2026-07-31): the 100 Hz value remains a visible reference, while
+the public capacity indicator for the released 1,024-fixture engine/output proxy is green at
+60 Hz or above, yellow at 40–59.999 Hz, and red below 40 Hz. This does not change the canonical
+301-instance demo's 100 Hz packaged gate or the exact 1,000-instance UI requirement to keep Stage,
+Fixture Sheet, and the rest of the desk responsive. The 2,000+ tier remains informational and now
+reports its measured limiting phase.
+
 ## Completion
 
 Before completion:
