@@ -113,6 +113,41 @@ test("documentation screenshots share one Storybook build", () => {
 	);
 });
 
+test("Storybook stays in developer resources instead of the Pages header", () => {
+	const landingPage = fs.readFileSync(
+		path.join(repositoryRoot, "docs/site/index.html"),
+		"utf8",
+	);
+	const topbar =
+		/<nav class="topbar"[\s\S]*?<\/nav>/u.exec(landingPage)?.[0] ?? "";
+	const developers =
+		/<section id="developers">[\s\S]*?<\/section>/u.exec(landingPage)?.[0] ??
+		"";
+
+	assert.doesNotMatch(topbar, /storybook\//u);
+	assert.match(developers, /href="storybook\/"[\s\S]*Storybook/u);
+});
+
+test("release CI excludes the debugging-only Hardware Controls application", () => {
+	const workflow = fs.readFileSync(
+		path.join(repositoryRoot, ".github/workflows/release.yml"),
+		"utf8",
+	);
+	const landingPageRenderer = fs.readFileSync(
+		path.join(repositoryRoot, "tools/render-landing-page.mjs"),
+		"utf8",
+	);
+
+	assert.doesNotMatch(
+		workflow,
+		/light-hardware-controls|Hardware Controls|tosklight-hardware-controls/u,
+	);
+	assert.doesNotMatch(
+		landingPageRenderer,
+		/Hardware Controls|tosklight-hardware-controls/u,
+	);
+});
+
 test("scanner ignores the centralized sender's own envelope and family declarations", () => {
 	const scan = scanTestCommandBoundaries([
 		{

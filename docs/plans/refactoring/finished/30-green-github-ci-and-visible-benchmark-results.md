@@ -158,8 +158,8 @@ The repair:
 - made Playwright shards consume one exact-commit Linux application build and kept the long
   frontend warmup cases behind the explicit performance suite;
 - repaired deterministic Text Editor and OSC acceptance paths;
-- packaged Hardware Controls as the released macOS `.app` instead of building an unused second
-  DMG;
+- removed the debugging-only Hardware Controls application from release CI and public downloads
+  while retaining its local development path;
 - restored the accidentally disconnected File Manager/Text Editor stylesheet cascade, added an
   architecture guard for its ordered entrypoint and refreshed the reviewed File Manager image;
   and

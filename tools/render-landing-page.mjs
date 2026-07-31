@@ -36,10 +36,6 @@ const PLATFORMS = [
     note: "Apple Silicon (M1 and later). Intel Macs are not supported.",
     assets: [
       { kind: "Desktop application", file: (v) => `tosklight-${v}-macos-arm64.zip` },
-      {
-        kind: "Hardware Controls application",
-        file: (v) => `tosklight-hardware-controls-${v}-macos-arm64.zip`,
-      },
       { kind: "Standalone server", file: (v) => `light-headless-${v}-macos-arm64.zip` },
     ],
   },

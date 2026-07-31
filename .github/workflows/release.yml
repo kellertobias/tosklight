@@ -485,15 +485,6 @@ jobs:
             node tools/ci-smoke-built-desktop.mjs
           fi
 
-      - name: Build the Hardware Controls application
-        if: matrix.slug == 'macos-arm64'
-        shell: bash
-        run: |
-          config="$(npm run --silent artifact-path -- tmp)/tauri-hardware-release.json"
-          node tools/write-tauri-artifact-config.mjs hardware "$config"
-          npm run --prefix apps/light-hardware-controls tauri:build -- \
-            --target ${{ matrix.target }} --bundles app --config "$config"
-
       - name: Stage release artifacts
         shell: bash
         env:
@@ -527,9 +518,6 @@ jobs:
             macos-arm64)
               ditto -c -k --sequesterRsrc --keepParent \
                 "$bundle/macos/ToskLight.app" "$out/tosklight-$version-macos-arm64.zip"
-              ditto -c -k --sequesterRsrc --keepParent \
-                "$bundle/macos/ToskLight Hardware Controls.app" \
-                "$out/tosklight-hardware-controls-$version-macos-arm64.zip"
               ;;
             linux-amd64)
               cp "$bundle"/appimage/*.AppImage "$out/tosklight-$version-linux-amd64.AppImage"
@@ -686,7 +674,6 @@ jobs:
           for required in \
             "light-headless-$VERSION-macos-arm64.zip" \
             "tosklight-$VERSION-macos-arm64.zip" \
-            "tosklight-hardware-controls-$VERSION-macos-arm64.zip" \
             "light-headless-$VERSION-linux-amd64.zip" \
             "tosklight-$VERSION-linux-amd64.AppImage" \
             "tosklight-$VERSION-linux-amd64.deb" \
