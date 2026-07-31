@@ -2,7 +2,7 @@
 
 ## Status
 
-**Doing refactoring queue item 30 — verify the current GitHub commit before implementing.**
+**Finished refactoring queue item 30.**
 Start this plan after
 [Attribute Registry, Activation Groups, and Indexed Presets](../finished/29-attribute-registry-and-activation-groups.md)
 and before
@@ -135,3 +135,80 @@ static performance page must all refer to the intended commit and release eviden
 - `## Result` records the final commit, GitHub run URL, job outcomes, benchmark classification
   and numbers, Pages URL, verification commands, and any explicitly accepted temporary
   benchmark failure.
+
+## Result
+
+Completed on 2026-07-31.
+
+The final implementation commit is
+[`572bbc05aa0f3d30dc8c3c52d4afe0d9381e2206`](https://github.com/kellertobias/tosklight/commit/572bbc05aa0f3d30dc8c3c52d4afe0d9381e2206),
+with the preceding coherent CI repairs in `a8cb775e` and `b45e0dbd`. The exact-commit
+[GitHub workflow run 30598292317](https://github.com/kellertobias/tosklight/actions/runs/30598292317)
+completed successfully. Linting, unit and architecture tests, the single reusable Playwright
+application build, API E2E, all four UI E2E shards, Linux x86_64, Linux ARM64, Windows and macOS
+release archives, reviewed documentation screenshots, the product demo, operator manual,
+release publication, benchmark measurement, static-site assembly and GitHub Pages deployment
+all completed successfully. No required downstream work was skipped.
+
+The repair:
+
+- restored truthful Storybook fixtures and consolidated help and marketing screenshot generation
+  behind one Storybook build;
+- removed the repeated `ts-rs` Serde warning without weakening `deny_unknown_fields`;
+- made Playwright shards consume one exact-commit Linux application build and kept the long
+  frontend warmup cases behind the explicit performance suite;
+- repaired deterministic Text Editor and OSC acceptance paths;
+- packaged Hardware Controls as the released macOS `.app` instead of building an unused second
+  DMG;
+- restored the accidentally disconnected File Manager/Text Editor stylesheet cascade, added an
+  architecture guard for its ordered entrypoint and refreshed the reviewed File Manager image;
+  and
+- retained failure diagnostics and kept benchmark infrastructure failures distinct from valid
+  measured degradation.
+
+The published benchmark is a valid measured **degraded** result. It tested release `0.1.0` at
+commit `572bbc05aa0f3d30dc8c3c52d4afe0d9381e2206` on GitHub Actions
+`ubuntu-22.04` (`AMD EPYC 9V74`, four logical CPUs):
+
+- required floor: 1,024 fixtures, 32 fully packed universes, 32 fixtures per universe, requested
+  100 Hz;
+- achieved cadence: 63.454267 Hz, with a minimum completed one-second cadence of 63 Hz,
+  191 deadline misses, 109 dropped ticks and 180 deferred ticks;
+- large-show mutation gate: pass; 120 fixtures measured 1,727.438 µs p50 and 1,774.978 µs p95,
+  while 1,200 fixtures measured 1,734.078 µs p50 and 1,790.59 µs p95;
+- persisted Patch gate: pass; one fixture measured 114,121.322 µs p50 and 244,117.258 µs p95
+  against a 250,000 µs budget, while 100 fixtures measured 165,273.323 µs p50 and
+  306,632.752 µs p95 against a 500,000 µs budget; and
+- doubled density (2,048 fixtures) was not attempted because the required baseline floor failed.
+
+The required-floor failure is explicitly accepted under this plan's temporary informational
+benchmark policy. Its process exit code remains `1`, `required_floor` remains the failed gate,
+and the public classification remains degraded rather than healthy. Patch UI action-to-visible
+latency remains explicitly informational browser evidence rather than a release gate.
+
+The deployed [performance page](https://kellertobias.github.io/tosklight/performance/) visibly
+contains those numbers. Its
+[`performance/status.json`](https://kellertobias.github.io/tosklight/performance/status.json)
+is byte-identical (SHA-256
+`becd3189468bbaf4e2b422081c3c85eac5bf44681a45e5b287f4198d0643498b`) to the
+[release status asset](https://github.com/kellertobias/tosklight/releases/download/v0.1.0/tosklight-performance-status-0.1.0.json).
+The [detailed raw report](https://github.com/kellertobias/tosklight/releases/download/v0.1.0/tosklight-performance-report-0.1.0.zip)
+contains the measured `hard-floor.json`, normalized status, stderr and summary for the same
+release commit.
+
+Verification included:
+
+- `npm run test:architecture`
+- `bash tools/test-artifact-paths.sh`
+- `bash tools/test.sh documentation-screenshots` in both generation and no-update review modes
+- `bash tools/test.sh e2e-build`
+- `LIGHT_REUSE_E2E_BUILD=1 npm run test:e2e -- tests/50-semantic-files-and-text-editor.spec.ts --grep TEXT-015 --workers=1`
+- focused OSC and Text Editor acceptance runs, frontend builds, Storybook build, generated wire
+  contract checks and command-boundary tests
+- exact-commit GitHub run inspection through every matrix and downstream job
+- deployed Pages and release-asset retrieval, normalized evidence inspection and status-document
+  digest comparison
+
+The product-demo job is green but remains the dominant CI duration at roughly sixteen minutes;
+shortening that real recording is follow-up optimization, not an unverified or skipped Plan 30
+gate.
