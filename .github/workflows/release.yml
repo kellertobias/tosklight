@@ -241,7 +241,9 @@ jobs:
         run: npx playwright install --with-deps chrome
 
       - name: Build Storybook once and generate reviewed screenshots
-        run: UPDATE_MARKETING_SCREENSHOTS=1 bash tools/test.sh documentation-screenshots
+        run: >-
+          UPDATE_HELP_SCREENSHOTS=1 UPDATE_MARKETING_SCREENSHOTS=1
+          bash tools/test.sh documentation-screenshots
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
@@ -483,7 +485,8 @@ jobs:
         run: |
           config="$(npm run --silent artifact-path -- tmp)/tauri-hardware-release.json"
           node tools/write-tauri-artifact-config.mjs hardware "$config"
-          npm run --prefix apps/light-hardware-controls tauri:build -- --target ${{ matrix.target }} --config "$config"
+          npm run --prefix apps/light-hardware-controls tauri:build -- \
+            --target ${{ matrix.target }} --bundles app --config "$config"
 
       - name: Stage release artifacts
         shell: bash

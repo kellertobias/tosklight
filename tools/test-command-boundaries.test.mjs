@@ -100,7 +100,7 @@ test("documentation screenshots share one Storybook build", () => {
 
 	assert.match(
 		screenshotJob,
-		/UPDATE_MARKETING_SCREENSHOTS=1 bash tools\/test\.sh documentation-screenshots/u,
+		/UPDATE_HELP_SCREENSHOTS=1 UPDATE_MARKETING_SCREENSHOTS=1\s+.*bash tools\/test\.sh documentation-screenshots/u,
 	);
 	assert.doesNotMatch(workflow, /^ {2}(help|marketing)-screenshots:/mu);
 	assert.match(

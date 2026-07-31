@@ -3,6 +3,10 @@
 	position: relative;
 }
 
+.text-editor {
+	container: text-editor / inline-size;
+}
+
 .pane-chrome-info-target,
 .pane-chrome-toolbar-target {
 	min-width: 0;
