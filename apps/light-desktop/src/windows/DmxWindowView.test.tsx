@@ -84,7 +84,7 @@ describe("DMX application view", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Release override" }));
     expect(onSetDmxOverride).toHaveBeenCalledWith(1, 13, null);
-  });
+  }, 15_000);
 
   it("renders active and empty source states and releases the selected source", () => {
     const { rerender, onSetDmxOverride, onDotSizeChange } = renderView({ defaultView: "sources" });

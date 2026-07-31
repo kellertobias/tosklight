@@ -1,4 +1,4 @@
-import { Button, ModalTitleBar, SelectField } from "@tosklight/ui";
+import { Button, ModalTitleBar, RadioField, SelectField } from "@tosklight/ui";
 import { type MutableRefObject, useLayoutEffect } from "react";
 import type { SelectiveImportOutcome } from "../../api/selectiveImportModels";
 import {
@@ -75,28 +75,22 @@ function LoadModeSelector({ workflow }: { workflow: SelectiveImportWorkflow }) {
 	return (
 		<fieldset>
 			<legend>Load mode</legend>
-			<label>
-				<input
-					type="radio"
-					name="selective-import-mode"
-					value="replace_by_position"
-					checked={workflow.mode === "replace_by_position"}
-					disabled={workflow.phase !== "idle"}
-					onChange={() => workflow.setMode("replace_by_position")}
-				/>
-				Replace by position
-			</label>
-			<label>
-				<input
-					type="radio"
-					name="selective-import-mode"
-					value="add_to_end"
-					checked={workflow.mode === "add_to_end"}
-					disabled={workflow.phase !== "idle"}
-					onChange={() => workflow.setMode("add_to_end")}
-				/>
-				Add to end
-			</label>
+			<RadioField
+				label="Replace by position"
+				name="selective-import-mode"
+				value="replace_by_position"
+				checked={workflow.mode === "replace_by_position"}
+				disabled={workflow.phase !== "idle"}
+				onChange={() => workflow.setMode("replace_by_position")}
+			/>
+			<RadioField
+				label="Add to end"
+				name="selective-import-mode"
+				value="add_to_end"
+				checked={workflow.mode === "add_to_end"}
+				disabled={workflow.phase !== "idle"}
+				onChange={() => workflow.setMode("add_to_end")}
+			/>
 		</fieldset>
 	);
 }

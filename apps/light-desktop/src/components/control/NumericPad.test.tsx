@@ -117,6 +117,7 @@ let runtimeStatus: "ready" | "loading" | "error" = "ready";
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state, dispatch }),
+	useOptionalApp: () => ({ state, dispatch }),
 }));
 vi.mock("../../features/programmerValues/useProgrammerValuesActivity", () => ({
 	useProgrammerValuesActivity: () => valuesActivity.current,

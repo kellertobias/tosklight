@@ -1,5 +1,20 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+	type Mock,
+} from "vitest";
 import type { PlaybackRuntimeActionApply } from "../playbackRuntime/actionWriter";
 import type {
 	PlaybackIdentity,
@@ -15,6 +30,10 @@ import {
 	SHOW_ID,
 } from "../playbackRuntime/testFixtures";
 import type { ShowObject } from "../showObjects/contracts";
+import {
+	DEMO_PLAYBACK_STRIP_SLOTS,
+	DEMO_PLAYBACK_TOP_SLOTS,
+} from "./demoPlaybackMapping";
 
 const mocks = vi.hoisted(() => ({
 	pagesView: {
@@ -45,14 +64,14 @@ const DEMO_PAGE: ShowObject<"playback_page"> = {
 		number: 1,
 		name: "Page 1",
 		slots: {
-			"1": 11,
-			"2": 12,
-			"3": 13,
-			"4": 14,
-			"21": 21,
-			"22": 22,
-			"23": 23,
-			"24": 24,
+			"11": 1,
+			"16": 2,
+			"17": 3,
+			"4": 4,
+			"12": 21,
+			"13": 22,
+			"14": 23,
+			"15": 24,
 		},
 		virtual_playbacks: {},
 	},
@@ -88,7 +107,7 @@ function allPlaybackButtons() {
 }
 
 function allFaders() {
-	return [1, 2, 3, 4].map((slot) =>
+	return DEMO_PLAYBACK_STRIP_SLOTS.map((slot) =>
 		screen.getByLabelText(`Playback ${slot} fader`),
 	);
 }
@@ -140,15 +159,24 @@ describe("DemoPlaybackControls runtime readiness", () => {
 		expectEveryControlDisabled();
 		expect(screen.queryByText("0%")).not.toBeInTheDocument();
 
-		fireEvent.pointerDown(screen.getByRole("button", { name: "Playback 21 button 1" }));
-		fireEvent.input(screen.getByLabelText("Playback 1 fader"), {
-			target: { value: "0.5" },
-		});
+		fireEvent.pointerDown(
+			screen.getByRole("button", {
+				name: `Playback ${DEMO_PLAYBACK_TOP_SLOTS[0]} button 1`,
+			}),
+		);
+		fireEvent.input(
+			screen.getByLabelText(`Playback ${DEMO_PLAYBACK_STRIP_SLOTS[0]} fader`),
+			{
+				target: { value: "0.5" },
+			},
+		);
 		expect(applyAction).not.toHaveBeenCalled();
 
 		const identities = loadSnapshot.mock.calls[1][0];
 		act(() => deferred.resolve(playbackSnapshot(identities)));
-		await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+		await waitFor(() =>
+			expect(screen.queryByRole("status")).not.toBeInTheDocument(),
+		);
 		for (const control of [...allPlaybackButtons(), ...allFaders()])
 			expect(control).toBeEnabled();
 		expect(screen.getAllByText("100%")).toHaveLength(4);
@@ -164,7 +192,11 @@ describe("DemoPlaybackControls runtime readiness", () => {
 		await waitFor(() => expect(loadSnapshot).toHaveBeenCalledOnce());
 		await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
 		expectEveryControlDisabled();
-		fireEvent.pointerDown(screen.getByRole("button", { name: "Playback 24 button 1" }));
+		fireEvent.pointerDown(
+			screen.getByRole("button", {
+				name: `Playback ${DEMO_PLAYBACK_TOP_SLOTS.at(-1)} button 1`,
+			}),
+		);
 		expect(applyAction).not.toHaveBeenCalled();
 	});
 
@@ -179,7 +211,9 @@ describe("DemoPlaybackControls runtime readiness", () => {
 
 		await waitFor(() =>
 			expect(
-				screen.getByRole("button", { name: "Playback 24 button 1" }),
+				screen.getByRole("button", {
+					name: `Playback ${DEMO_PLAYBACK_TOP_SLOTS.at(-1)} button 1`,
+				}),
 			).toBeEnabled(),
 		);
 		expect(screen.queryByRole("status")).not.toBeInTheDocument();

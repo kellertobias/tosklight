@@ -429,6 +429,10 @@ export type CheckboxFieldProps = CheckProps & {
 	stateLabel?: ReactNode;
 };
 
+export type RadioFieldProps = CheckProps & {
+	stateLabel?: ReactNode;
+};
+
 export type SwitchFieldProps = CheckProps & {
 	/** Describes the false state. Both state labels remain visible. */
 	offLabel?: ReactNode;
@@ -481,6 +485,49 @@ function renderCheckboxField(
 				<span className="ui-check-state">
 					{stateLabel ?? (props.checked ? "Checked" : "Unchecked")}
 				</span>
+			</label>
+		</FormField>
+	);
+}
+
+function renderRadioField(
+	{
+		label,
+		description,
+		error,
+		labelPlacement,
+		className = "",
+		id,
+		stateLabel,
+		"aria-label": ariaLabel,
+		...props
+	}: RadioFieldProps,
+	ref: ForwardedRef<HTMLInputElement>,
+	fieldId: string,
+) {
+	return (
+		<FormField
+			label={label}
+			description={description}
+			error={error}
+			htmlFor={fieldId}
+			labelPlacement={labelPlacement}
+			className={className}
+		>
+			<label className="ui-radio-control">
+				<input
+					{...props}
+					ref={ref}
+					id={fieldId}
+					aria-label={
+						ariaLabel ?? (typeof label === "string" ? label : undefined)
+					}
+					type="radio"
+				/>
+				<span className="ui-radio-mark" aria-hidden="true">
+					●
+				</span>
+				{stateLabel && <span className="ui-check-state">{stateLabel}</span>}
 			</label>
 		</FormField>
 	);
@@ -539,6 +586,12 @@ function renderSwitchField(
 export const CheckboxField = forwardRef<HTMLInputElement, CheckboxFieldProps>(
 	function CheckboxField(props, ref) {
 		return renderCheckboxField(props, ref, useFieldId(props.id));
+	},
+);
+
+export const RadioField = forwardRef<HTMLInputElement, RadioFieldProps>(
+	function RadioField(props, ref) {
+		return renderRadioField(props, ref, useFieldId(props.id));
 	},
 );
 

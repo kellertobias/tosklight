@@ -125,11 +125,7 @@ export function FixtureSheetWindow({
 	return (
 		<FixtureSheetWindowView
 			compact={compact}
-			selectionCount={
-				selection && selectionActionStatus === "ready"
-					? selection.selected.length
-					: null
-			}
+			selectionCount={selection ? selection.selected.length : null}
 			selectionActionStatus={selectionActionStatus}
 			info={<SourceLegend />}
 			activeValuesLoading={activeValuesLoading}

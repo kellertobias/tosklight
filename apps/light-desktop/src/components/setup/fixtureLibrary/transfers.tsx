@@ -1,4 +1,9 @@
-import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
+import {
+	Button,
+	ModalRegistration,
+	ModalTitleBar,
+	SelectField,
+} from "@tosklight/ui";
 import { useState } from "react";
 import type {
 	FixtureAttributeMapping,
@@ -265,34 +270,35 @@ export function FixtureImportDialogs({
 									</p>
 									<div className="fixture-package-attribute-mappings">
 										{requirements.map((requirement) => (
-											<label key={requirement.attribute}>
-												<span>
-													<code>{requirement.attribute}</code> (
-													{requirement.value_type})
-												</span>
-												<select
-													aria-label={`Map ${requirement.attribute}`}
-													value={mappings[requirement.attribute] ?? ""}
-													onChange={(event) =>
-														setMapping(
-															requirement.attribute,
-															event.currentTarget.value,
-														)
-													}
-												>
-													<option value="">Choose descriptor…</option>
-													{(mappingCandidates ?? [])
+											<SelectField
+												key={requirement.attribute}
+												label={
+													<span>
+														<code>{requirement.attribute}</code> (
+														{requirement.value_type})
+													</span>
+												}
+												ariaLabel={`Map ${requirement.attribute}`}
+												value={mappings[requirement.attribute] ?? ""}
+												onChange={(value) =>
+													setMapping(requirement.attribute, value)
+												}
+												options={[
+													{
+														value: "",
+														label: "Choose descriptor…",
+													},
+													...(mappingCandidates ?? [])
 														.filter(
 															(candidate) =>
 																candidate.value_type === requirement.value_type,
 														)
-														.map((candidate) => (
-															<option key={candidate.id} value={candidate.id}>
-																{candidate.label} ({candidate.id})
-															</option>
-														))}
-												</select>
-											</label>
+														.map((candidate) => ({
+															value: candidate.id,
+															label: `${candidate.label} (${candidate.id})`,
+														})),
+												]}
+											/>
 										))}
 									</div>
 									<Button

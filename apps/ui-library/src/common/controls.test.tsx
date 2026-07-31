@@ -20,6 +20,7 @@ import {
 	IconPickerField,
 	MultiValueToggleField,
 	NumberField,
+	RadioField,
 	SelectField,
 	SwitchField,
 	TextAreaField,
@@ -282,7 +283,7 @@ describe("shared controls", () => {
 			screen.queryByRole("dialog", { name: "Notes" }),
 		).not.toBeInTheDocument();
 	});
-	it("keeps checkbox text stable and presents both semantic switch states", () => {
+	it("keeps check, radio, and switch choices semantic", () => {
 		const change = vi.fn();
 		const { container } = render(
 			<FormLayout labelPlacement="side">
@@ -301,6 +302,12 @@ describe("shared controls", () => {
 					checked
 					onChange={change}
 				/>
+				<RadioField
+					label="Replace by position"
+					name="load-mode"
+					value="replace"
+					onChange={change}
+				/>
 			</FormLayout>,
 		);
 		expect(screen.getByText("Show in every workspace")).toBeInTheDocument();
@@ -310,11 +317,15 @@ describe("shared controls", () => {
 		);
 		fireEvent.click(screen.getByRole("checkbox", { name: "Dock" }));
 		fireEvent.click(screen.getByRole("switch", { name: "Fullscreen" }));
-		expect(change).toHaveBeenCalledTimes(2);
+		fireEvent.click(
+			screen.getByRole("radio", { name: "Replace by position" }),
+		);
+		expect(change).toHaveBeenCalledTimes(3);
 		expect(
 			container.querySelectorAll(".ui-form-field.labels-side"),
-		).toHaveLength(2);
+		).toHaveLength(3);
 		expect(container.querySelector(".ui-switch-control")).toBeInTheDocument();
+		expect(container.querySelector(".ui-radio-control")).toBeInTheDocument();
 	});
 	it("retains compatible checkbox and switch state defaults", () => {
 		render(

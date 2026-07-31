@@ -335,6 +335,7 @@
 }
 
 .ui-check-control,
+.ui-radio-control,
 .ui-switch-control {
 	min-height: 50px;
 	display: flex;
@@ -349,6 +350,7 @@
 }
 
 .ui-check-control > input,
+.ui-radio-control > input,
 .ui-switch-control > input {
 	position: absolute;
 	width: 1px;
@@ -370,6 +372,25 @@
 }
 
 .ui-check-control input:checked + .ui-check-mark {
+	border-color: var(--cyan);
+	background: #0a3038;
+	color: var(--cyan);
+}
+
+.ui-radio-mark {
+	width: 30px;
+	height: 30px;
+	flex: none;
+	display: grid;
+	place-items: center;
+	border: 1px solid var(--line2);
+	border-radius: 999px;
+	background: #090d10;
+	color: transparent;
+	font-size: 18px;
+}
+
+.ui-radio-control input:checked + .ui-radio-mark {
 	border-color: var(--cyan);
 	background: #0a3038;
 	color: var(--cyan);
