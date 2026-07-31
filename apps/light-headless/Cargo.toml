@@ -9,6 +9,7 @@ authors.workspace = true
 [features]
 default = ["native-midi"]
 native-midi = ["light-headless-runtime/native-midi"]
+e2e-embedded-ui = ["light-headless-runtime/e2e-embedded-ui"]
 
 [dependencies]
 anyhow.workspace = true

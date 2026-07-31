@@ -21,7 +21,9 @@ build_e2e(){
     return
   fi
   (cd "$UI" && npm run build)
-  cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --no-default-features
+  # Playwright shards reuse this debug executable on separate runners. rust-embed normally reads
+  # assets from disk in debug builds, so opt into a self-contained UI for the transferable binary.
+  cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --no-default-features --features e2e-embedded-ui
 }
 architecture(){
   "$ROOT/tools/test-artifact-paths.sh"

@@ -59,12 +59,20 @@ test("Playwright shards reuse one exact-commit application build", () => {
 		path.join(repositoryRoot, ".github/workflows/release.yml"),
 		"utf8",
 	);
+	const testScript = fs.readFileSync(
+		path.join(repositoryRoot, "tools/test.sh"),
+		"utf8",
+	);
 	const buildJob =
 		/^ {2}e2e-build:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(workflow)?.[1] ?? "";
 	const shardJob =
 		/^ {2}e2e:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(workflow)?.[1] ?? "";
 
 	assert.match(buildJob, /bash tools\/test\.sh e2e-build/u);
+	assert.match(
+		testScript,
+		/cargo build[\s\S]*--features e2e-embedded-ui/u,
+	);
 	assert.match(
 		buildJob,
 		/name: playwright-application-\$\{\{ github\.sha \}\}/u,
