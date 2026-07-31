@@ -155,7 +155,9 @@ test("warning is a valid measured public state", () => {
 	const warning = measuredStatus("warning");
 	warning.summary = "The 1,024-fixture workload is between 40 and 60 Hz.";
 	assert.strictEqual(normalizePublicPerformanceStatus(warning), warning);
-	assert.match(renderPerformancePage(warning), /class="warning">WARNING/u);
+	const page = renderPerformancePage(warning);
+	assert.match(page, /class="warning">WARNING/u);
+	assert.match(page, /<th>Acceptance tier<\/th><td>warning<\/td>/u);
 });
 
 test("unknown and invalid measured classifications cannot masquerade as evidence", () => {

@@ -273,7 +273,7 @@ export function renderPerformancePage(performance) {
 		) +
 		row("Dropped ticks", deadline.dropped_ticks ?? required.dropped_ticks) +
 		row("Deferred ticks", deadline.deferred_ticks ?? required.deferred_ticks) +
-		row("Green threshold met", gate(required.met)) +
+		row("Acceptance tier", performance.status) +
 		row(
 			"Configured 100 Hz reference",
 			reference(required.configured_target_met),
