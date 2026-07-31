@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Locator, Page, TestInfo } from "@playwright/test";
+import type { FrontendPerformanceSnapshot } from "../../../apps/light-desktop/src/features/frontendWarmup/diagnostics";
 import artifactResolver from "../../../tools/artifact-paths.cjs";
 import {
 	activeShowId,
@@ -28,6 +29,11 @@ const SCREENSHOT = path.join(
 	artifactPaths.visual,
 	"product-demo",
 	"tosklight-product-demo-1920x1080.png",
+);
+const PERFORMANCE = path.join(
+	artifactPaths.visual,
+	"product-demo",
+	"canonical-demo-performance.json",
 );
 const DEMO_SHOW = fileURLToPath(
 	new URL("../../../assets/demo.show", import.meta.url),
@@ -60,6 +66,7 @@ export class BrowserProductDemo {
 		);
 		const video = page.video();
 		let completedShow: Buffer | null = null;
+		let performanceBaseline: ProductDemoPerformanceBaseline | null = null;
 		try {
 			await desk.open(`${bench.baseUrl}/?demo=product`);
 			const demo = page.getByTestId("product-demo");
@@ -114,8 +121,8 @@ export class BrowserProductDemo {
 				"262 fixtures",
 			);
 			await expect(fixtureRow(patchWindow, 101)).toBeVisible();
-
 			await configureOutput(desk, page, app, bench);
+			performanceBaseline = await captureProductDemoPerformance(page);
 			await demonstrateGroups(desk, app, keypad, api);
 			await demonstrateFixtureControls(desk, page, demo, app, keypad, api);
 			await demonstratePresetRecall(desk, app, keypad, api);
@@ -132,6 +139,24 @@ export class BrowserProductDemo {
 			await keypadCommand(desk, keypad, ["1", "0", "1", "ENT"]);
 			await keypadCommand(desk, keypad, ["AT", "8", "0", "ENT"]);
 			await expectLiveOutput(api);
+			if (!performanceBaseline) {
+				throw new Error(
+					"The canonical demo performance baseline is unavailable",
+				);
+			}
+			const performanceEvidence = await finishProductDemoPerformance(
+				page,
+				performanceBaseline,
+			);
+			await fs.mkdir(path.dirname(PERFORMANCE), { recursive: true });
+			await fs.writeFile(
+				PERFORMANCE,
+				`${JSON.stringify(performanceEvidence, null, 2)}\n`,
+			);
+			await testInfo.attach("canonical-demo-performance", {
+				path: PERFORMANCE,
+				contentType: "application/json",
+			});
 			if (UPDATE_DEMO_SHOW) {
 				completedShow = await downloadCompletedDemoShow(api, showId);
 			}
@@ -166,6 +191,117 @@ export class BrowserProductDemo {
 			});
 		}
 	}
+}
+
+type ProductDemoPerformanceBaseline = {
+	recordedAt: string;
+	monotonicMs: number;
+	frontend: FrontendPerformanceSnapshot;
+};
+
+async function captureProductDemoPerformance(
+	page: Page,
+): Promise<ProductDemoPerformanceBaseline> {
+	const frontend = await page.evaluate(() => {
+		const snapshot = window.__TOSKLIGHT_FRONTEND_PERFORMANCE__?.snapshot();
+		if (!snapshot)
+			throw new Error("Frontend performance diagnostics are unavailable");
+		return snapshot;
+	});
+	return {
+		recordedAt: new Date().toISOString(),
+		monotonicMs: performance.now(),
+		frontend,
+	};
+}
+
+async function finishProductDemoPerformance(
+	page: Page,
+	baseline: ProductDemoPerformanceBaseline,
+) {
+	await page.evaluate(
+		() =>
+			new Promise<void>((resolve) =>
+				requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+			),
+	);
+	const after = await captureProductDemoPerformance(page);
+	const elapsedMs = Math.max(after.monotonicMs - baseline.monotonicMs, 1);
+	const frames = after.frontend.stage.frames.slice(
+		baseline.frontend.stage.frames.length,
+	);
+	const renders = after.frontend.stage.renders.slice(
+		baseline.frontend.stage.renders.length,
+	);
+	const canvasTimestamps = frames
+		.flatMap(({ settledCanvasSubmittedAt }) =>
+			settledCanvasSubmittedAt === null ? [] : [settledCanvasSubmittedAt],
+		)
+		.sort((left, right) => left - right);
+	const presentationGaps = canvasTimestamps
+		.slice(1)
+		.map((timestamp, index) => timestamp - canvasTimestamps[index]);
+	const sourceToCanvas = frames.flatMap(({ sourceToSettledCanvasMs }) =>
+		sourceToSettledCanvasMs === null ? [] : [sourceToSettledCanvasMs],
+	);
+	const renderDurations = renders.map(({ durationMs }) => durationMs);
+	return {
+		schema_version: 1,
+		measurement_surface: "browser_playwright_product_demo",
+		blocking_release_evidence: false,
+		acceptance_gate: "separate_packaged_tauri",
+		limitations: [
+			"The release CI measurement uses Chromium rather than the packaged Tauri WebView.",
+			"The separate packaged 301-instance acceptance remains authoritative for WebView Stage behavior.",
+		],
+		scene: {
+			fixture_records: 262,
+			physical_instances: 301,
+			stage_visible: true,
+		},
+		window: {
+			started_at: baseline.recordedAt,
+			finished_at: after.recordedAt,
+			elapsed_ms: elapsedMs,
+		},
+		stage: {
+			frames: frames.length,
+			renders: renders.length,
+			presentation_rate_hz:
+				presentationGaps.length === 0
+					? null
+					: 1_000 / average(presentationGaps),
+			presentation_gap_ms: distribution(presentationGaps),
+			source_to_settled_canvas_ms: distribution(sourceToCanvas),
+			render_duration_ms: distribution(renderDurations),
+			max_draw_calls: maximum(renders.map(({ calls }) => calls)),
+			max_triangles: maximum(renders.map(({ triangles }) => triangles)),
+		},
+	};
+}
+
+function distribution(values: readonly number[]) {
+	const sorted = [...values].sort((left, right) => left - right);
+	return {
+		samples: sorted.length,
+		p50: percentile(sorted, 50),
+		p95: percentile(sorted, 95),
+		maximum: sorted.at(-1) ?? null,
+	};
+}
+
+function percentile(values: readonly number[], percentage: number) {
+	if (values.length === 0) return null;
+	const rank = Math.ceil((percentage / 100) * values.length);
+	return values[Math.max(0, rank - 1)];
+}
+
+function average(values: readonly number[]) {
+	return values.reduce((total, value) => total + value, 0) / values.length;
+}
+
+function maximum(values: readonly number[]) {
+	return values.length === 0 ? 0 : Math.max(...values);
 }
 
 async function verifyDemoFrame(demo: Locator, app: Locator, stage: Locator) {

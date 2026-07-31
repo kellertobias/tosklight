@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -315,7 +315,33 @@ function patchEvidence(report) {
 	};
 }
 
-export function statusDocument(options, baseline, doubled) {
+function canonicalDemoEvidence(candidate) {
+	if (
+		candidate?.schema_version !== 1 ||
+		candidate?.measurement_surface !== "browser_playwright_product_demo" ||
+		candidate?.scene?.fixture_records !== 262 ||
+		candidate?.scene?.physical_instances !== 301 ||
+		candidate?.scene?.stage_visible !== true ||
+		!finite(candidate?.window?.elapsed_ms) ||
+		!finite(candidate?.stage?.presentation_rate_hz) ||
+		!finite(candidate?.stage?.source_to_settled_canvas_ms?.p95) ||
+		!finite(candidate?.stage?.render_duration_ms?.p95)
+	) {
+		return {
+			attempted: candidate != null,
+			reason:
+				"The canonical demo did not produce valid current-release performance evidence.",
+		};
+	}
+	return { ...candidate, attempted: true, reason: null };
+}
+
+export function statusDocument(
+	options,
+	baseline,
+	doubled,
+	canonicalDemo = null,
+) {
 	const baselineValidation = validateStage(baseline, { mutations: true });
 	const doubledValidation = doubled
 		? validateStage(doubled, { mutations: false })
@@ -409,6 +435,7 @@ export function statusDocument(options, baseline, doubled) {
 		},
 		show_mutation: mutationEvidence(report),
 		patch: patchEvidence(report),
+		canonical_demo: canonicalDemoEvidence(canonicalDemo),
 		doubled_density: doubled
 			? {
 					attempted: true,
@@ -474,7 +501,17 @@ function main() {
 		false,
 		false,
 	);
-	const status = statusDocument(options, baseline, doubled);
+	let canonicalDemo = null;
+	if (options["canonical-demo-performance"]) {
+		try {
+			canonicalDemo = JSON.parse(
+				readFileSync(resolve(options["canonical-demo-performance"]), "utf8"),
+			);
+		} catch {
+			canonicalDemo = null;
+		}
+	}
+	const status = statusDocument(options, baseline, doubled, canonicalDemo);
 	writeFileSync(
 		resolve(outputDirectory, "status.json"),
 		`${JSON.stringify(status, null, 2)}\n`,
@@ -490,6 +527,8 @@ function main() {
 				`${status.required_floor.universes} universes; green ≥${INTERACTIVE_GREEN_HZ} Hz, yellow ≥${INTERACTIVE_YELLOW_HZ} Hz`,
 			`- Achieved cadence: ${status.required_floor.achieved_ticks_per_second ?? "missing"} Hz`,
 			`- Deadline misses: ${status.required_floor.deadline_misses ?? "missing"}`,
+			`- Canonical demo Stage presentation cadence (301 physical instances): ${status.canonical_demo.stage?.presentation_rate_hz ?? "missing"} Hz`,
+			`- Canonical demo Stage source-to-canvas p95: ${status.canonical_demo.stage?.source_to_settled_canvas_ms?.p95 ?? "missing"} ms`,
 			`- Show mutation p95 (${status.show_mutation?.large.fixture_count ?? "large"} fixtures): ` +
 				`${status.show_mutation?.large.p95_microseconds ?? "missing"} µs`,
 			`- 2,048-fixture diagnostic cadence: ${status.doubled_density.achieved_ticks_per_second ?? "missing"} Hz`,

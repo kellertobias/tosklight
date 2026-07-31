@@ -724,7 +724,7 @@ jobs:
   release-performance:
     name: Release / Measure published artifact
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [metadata, release]
+    needs: [metadata, release, visual-assets]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -741,6 +741,11 @@ jobs:
         with:
           node-version: 22
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: product-demo
+          path: .artifacts/test/visual-inspection/product-demo
+
       - name: Measure the published release or reuse its latest status
         shell: bash
         run: |
@@ -748,6 +753,8 @@ jobs:
           out=".artifacts/performance"
           mkdir -p "$out"
           release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${VERSION}"
+          canonical_demo=".artifacts/test/visual-inspection/product-demo/canonical-demo-performance.json"
+          test -f "$canonical_demo"
 
           if [[ "$RELEASE_CREATED" == "true" ]]; then
             archive="light-headless-${VERSION}-linux-amd64.zip"
@@ -778,7 +785,8 @@ jobs:
               --version "$VERSION" \
               --commit "$GITHUB_SHA" \
               --release-url "$release_url" \
-              --hardware-label "GitHub Actions ubuntu-22.04"
+              --hardware-label "GitHub Actions ubuntu-22.04" \
+              --canonical-demo-performance "$canonical_demo"
 
             if [[ ! -f "$out/status.json" ]]; then
               node -e '

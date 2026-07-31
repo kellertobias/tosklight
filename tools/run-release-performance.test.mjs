@@ -107,6 +107,24 @@ function stage(value, exitCode = 0) {
 	};
 }
 
+function canonicalDemo() {
+	return {
+		schema_version: 1,
+		measurement_surface: "browser_playwright_product_demo",
+		scene: {
+			fixture_records: 262,
+			physical_instances: 301,
+			stage_visible: true,
+		},
+		window: { elapsed_ms: 60_000 },
+		stage: {
+			presentation_rate_hz: 30,
+			source_to_settled_canvas_ms: { p95: 61 },
+			render_duration_ms: { p95: 3 },
+		},
+	};
+}
+
 test("invalid or inconsistent benchmark evidence is unknown", () => {
 	assert.equal(
 		classifyPerformance({ valid: false, reason: "invalid" }, null).status,
@@ -185,6 +203,23 @@ test("the 1,024-fixture indicator uses 60 Hz green and 40 Hz yellow thresholds",
 	);
 });
 
+test("the canonical 301-instance product demo is retained as separate measured evidence", () => {
+	const status = statusDocument(
+		options,
+		stage(report(), 0),
+		null,
+		canonicalDemo(),
+	);
+	assert.equal(status.canonical_demo.attempted, true);
+	assert.equal(status.canonical_demo.scene.physical_instances, 301);
+	assert.equal(status.canonical_demo.stage.presentation_rate_hz, 30);
+	assert.equal(status.canonical_demo.stage.render_duration_ms.p95, 3);
+
+	const unavailable = statusDocument(options, stage(report(), 0), null, {});
+	assert.equal(unavailable.canonical_demo.attempted, true);
+	assert.match(unavailable.canonical_demo.reason, /did not produce valid/u);
+});
+
 test("passing baseline remains healthy when the optional density probe degrades", () => {
 	const baseline = stage(report(), 0);
 	const doubledReport = report({
@@ -210,6 +245,10 @@ test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
 		resolve(artifactPaths.tmp, "release-performance-test-"),
 	);
 	const executable = resolve(temporary, "fake-benchmark.mjs");
+	const canonicalDemoPath = resolve(
+		temporary,
+		"canonical-demo-performance.json",
+	);
 	const output = resolve(temporary, "output");
 	mkdirSync(output, { recursive: true });
 	writeFileSync(
@@ -219,6 +258,7 @@ test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
 		)}); process.exit(1);\n`,
 	);
 	chmodSync(executable, 0o755);
+	writeFileSync(canonicalDemoPath, JSON.stringify(canonicalDemo()));
 	const measured = spawnSync(
 		process.execPath,
 		[
@@ -233,6 +273,8 @@ test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
 			options.commit,
 			"--release-url",
 			options["release-url"],
+			"--canonical-demo-performance",
+			canonicalDemoPath,
 		],
 		{ encoding: "utf8" },
 	);
@@ -240,6 +282,11 @@ test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
 	assert.equal(
 		JSON.parse(readFileSync(resolve(output, "status.json"))).status,
 		"healthy",
+	);
+	assert.equal(
+		JSON.parse(readFileSync(resolve(output, "status.json"))).canonical_demo
+			.scene.physical_instances,
+		301,
 	);
 	assert.equal(
 		JSON.parse(readFileSync(resolve(output, "hard-floor.json")))
@@ -292,7 +339,10 @@ test("release workflow separates measured degradation from infrastructure failur
 
 	assert.match(release, /needs:[\s\S]*?- build/u);
 	assert.doesNotMatch(release, /- benchmark|- pages-build/u);
-	assert.match(performance, /needs: \[metadata, release\]/u);
+	assert.match(performance, /needs: \[metadata, release, visual-assets\]/u);
+	assert.match(performance, /name: product-demo/u);
+	assert.match(performance, /--canonical-demo-performance/u);
+	assert.match(performance, /test -f "\$canonical_demo"/u);
 	assert.match(performance, /gh release download/u);
 	assert.match(performance, /tools\/run-release-performance\.mjs/u);
 	assert.doesNotMatch(performance, /continue-on-error: true/u);

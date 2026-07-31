@@ -204,6 +204,36 @@ function renderDoubledDensity(doubled) {
 	);
 }
 
+function renderCanonicalDemo(canonical) {
+	if (canonical?.reason || canonical?.attempted !== true) {
+		return `<p>${escapePerformanceText(canonical?.reason ?? "No current-release canonical demo measurement is available.")}</p>`;
+	}
+	return (
+		`<p>This is the exact product-demo show with 262 controllable fixture records, 301 physical Stage instances, and the 3D Stage visible. CI measures it in Chromium; the separate packaged Tauri acceptance remains authoritative for WebView behavior.</p><table><tbody>` +
+		row("Controllable fixture records", canonical.scene?.fixture_records) +
+		row("Physical Stage instances", canonical.scene?.physical_instances) +
+		row("Measurement duration", canonical.window?.elapsed_ms, " ms") +
+		row(
+			"Stage presentation cadence",
+			canonical.stage?.presentation_rate_hz,
+			" Hz",
+		) +
+		row(
+			"Stage source-to-canvas p95",
+			canonical.stage?.source_to_settled_canvas_ms?.p95,
+			" ms",
+		) +
+		row(
+			"Stage render-duration p95",
+			canonical.stage?.render_duration_ms?.p95,
+			" ms",
+		) +
+		row("Maximum draw calls", canonical.stage?.max_draw_calls) +
+		row("Maximum triangles", canonical.stage?.max_triangles) +
+		`</tbody></table>`
+	);
+}
+
 export function renderPerformancePage(performance) {
 	const required = performance.required_floor ?? {};
 	const frameRate = required.frame_rate ?? {};
@@ -211,6 +241,7 @@ export function renderPerformancePage(performance) {
 	const mutation = performance.show_mutation ?? performance.mutation ?? {};
 	const patchServer = performance.patch?.server;
 	const doubled = performance.doubled_density ?? {};
+	const canonical = performance.canonical_demo ?? {};
 	const runner =
 		performance.runner?.label ??
 		performance.runner?.hardware_label ??
@@ -239,6 +270,7 @@ export function renderPerformancePage(performance) {
 		row("Runner", runner) +
 		row("Workload", workloadLabel(performance.workload)) +
 		`</tbody></table>` +
+		`<h2>Canonical 301-instance demo show</h2>${renderCanonicalDemo(canonical)}` +
 		`<h2>1,024-fixture released-engine workload</h2><p>Green means at least ${value(required.green_threshold_hz, " Hz")}; yellow means at least ${value(required.yellow_threshold_hz, " Hz")}; below that is red. This released Linux probe measures engine rendering and output encoding without opening a UI. Separate packaged acceptance keeps the 301-instance demo at 100 Hz and proves the exact 1,000-instance show with Stage and Fixture Sheet open while the rest of the desk remains responsive.</p><table><tbody>` +
 		row("Fixtures", required.fixture_count) +
 		row("Universes", required.universes) +

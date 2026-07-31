@@ -79,6 +79,24 @@ function measuredStatus(status = "healthy") {
 				p95_microseconds: 800,
 			},
 		},
+		canonical_demo: {
+			attempted: true,
+			reason: null,
+			measurement_surface: "browser_playwright_product_demo",
+			scene: {
+				fixture_records: 262,
+				physical_instances: 301,
+				stage_visible: true,
+			},
+			window: { elapsed_ms: 60_000 },
+			stage: {
+				presentation_rate_hz: 30,
+				source_to_settled_canvas_ms: { p95: 61 },
+				render_duration_ms: { p95: 3 },
+				max_draw_calls: 402,
+				max_triangles: 120_000,
+			},
+		},
 		show_mutation: {
 			gate_met: true,
 			small: {
@@ -149,6 +167,9 @@ test("healthy and degraded measured statuses retain their public evidence", () =
 	assert.match(page, /Engine render and fixture projection/u);
 	assert.match(page, /Protocol encoding/u);
 	assert.match(page, /diagnostic only/u);
+	assert.match(page, /Canonical 301-instance demo show/u);
+	assert.match(page, /Physical Stage instances<\/th><td>301/u);
+	assert.match(page, /Stage source-to-canvas p95<\/th><td>61 ms/u);
 });
 
 test("warning is a valid measured public state", () => {
