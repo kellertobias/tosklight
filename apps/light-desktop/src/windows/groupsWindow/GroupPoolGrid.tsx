@@ -61,7 +61,12 @@ export function GroupPoolGrid({
 			requestUpdateTarget({ family: { type: "group" }, object_id: id });
 			return;
 		}
-		if (group && /^SET\b/i.test(command.read().text.trim())) {
+		const commandText = command.read().text.trim();
+		if (group && /^SET$/i.test(commandText)) {
+			void command.replace(`SET GROUP ${group.id}`, false);
+			return;
+		}
+		if (group && /^SET\b/i.test(commandText)) {
 			onOpenProperties(group.id);
 			void command.reset();
 			return;

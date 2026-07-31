@@ -319,8 +319,8 @@ function canonicalDemoEvidence(candidate) {
 	if (
 		candidate?.schema_version !== 1 ||
 		candidate?.measurement_surface !== "browser_playwright_product_demo" ||
-		candidate?.scene?.fixture_records !== 262 ||
-		candidate?.scene?.physical_instances !== 301 ||
+		candidate?.scene?.fixture_records !== 295 ||
+		candidate?.scene?.physical_instances !== 343 ||
 		candidate?.scene?.stage_visible !== true ||
 		!finite(candidate?.window?.elapsed_ms) ||
 		!finite(candidate?.stage?.presentation_rate_hz) ||
@@ -527,7 +527,7 @@ function main() {
 				`${status.required_floor.universes} universes; green ≥${INTERACTIVE_GREEN_HZ} Hz, yellow ≥${INTERACTIVE_YELLOW_HZ} Hz`,
 			`- Achieved cadence: ${status.required_floor.achieved_ticks_per_second ?? "missing"} Hz`,
 			`- Deadline misses: ${status.required_floor.deadline_misses ?? "missing"}`,
-			`- Canonical demo Stage presentation cadence (301 physical instances): ${status.canonical_demo.stage?.presentation_rate_hz ?? "missing"} Hz`,
+			`- Canonical demo Stage presentation cadence (343 physical instances): ${status.canonical_demo.stage?.presentation_rate_hz ?? "missing"} Hz`,
 			`- Canonical demo Stage source-to-canvas p95: ${status.canonical_demo.stage?.source_to_settled_canvas_ms?.p95 ?? "missing"} ms`,
 			`- Show mutation p95 (${status.show_mutation?.large.fixture_count ?? "large"} fixtures): ` +
 				`${status.show_mutation?.large.p95_microseconds ?? "missing"} µs`,

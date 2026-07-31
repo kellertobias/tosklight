@@ -6,25 +6,33 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
-import { GroupStrip } from "../../components/shared/GroupStrip";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	type Mock,
+	vi,
+} from "vitest";
 import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
+import { GroupStrip } from "../../components/shared/GroupStrip";
 import { GroupPoolGrid } from "../../windows/groupsWindow/GroupPoolGrid";
 import {
 	DEFAULT_SELECTION_GRID_STATE,
-	ProgrammingSnapshot,
-	SelectionActionOutcome,
-	SelectionActionRequest,
-	SelectionProjection,
+	type ProgrammingSnapshot,
+	type SelectionActionOutcome,
+	type SelectionActionRequest,
+	type SelectionProjection,
 } from "../programmingInteraction/contracts";
 import { ProgrammingInteractionViewProvider } from "../programmingInteraction/ProgrammingInteractionView";
 import { ProgrammingInteractionStore } from "../programmingInteraction/store";
 import {
+	commandLine,
 	DESK_ID,
 	FakeProgrammingTransport,
 	OTHER_DESK_ID,
 	OTHER_SHOW_ID,
-	commandLine,
 	programmingSnapshot,
 	SHOW_ID,
 	selection,
@@ -216,7 +224,9 @@ describe("scoped Group activation", () => {
 
 	beforeEach(() => {
 		mocks.dispatch.mockReset();
-		mocks.replaceCommandLine.mockReset().mockResolvedValue(commandLine(2, "GROUP 1", "GROUP"));
+		mocks.replaceCommandLine
+			.mockReset()
+			.mockResolvedValue(commandLine(2, "GROUP 1", "GROUP"));
 		mocks.recordGroup.mockReset().mockResolvedValue({ status: "changed" });
 		mocks.playbackReads = 0;
 		mocks.state.storeArmed = false;
@@ -283,9 +293,8 @@ describe("scoped Group activation", () => {
 
 	it("keeps a stored empty Group selectable", async () => {
 		const context = harness();
-		context.applySelection.mockImplementation(
-			async (_desk, request) =>
-				groupOutcome(request, selection(2, [])),
+		context.applySelection.mockImplementation(async (_desk, request) =>
+			groupOutcome(request, selection(2, [])),
 		);
 		render(view(context, <GroupStrip />));
 		installGroups(context, [group("1", "Stored Empty", [])]);
@@ -353,9 +362,8 @@ describe("scoped Group activation", () => {
 		const context = harness();
 		// A replay reports the current authority again at its own revision.
 		const unchanged = selection(2, ORDERED_MEMBERS);
-		context.applySelection.mockImplementation(
-			async (_desk, request) =>
-				groupOutcome(request, unchanged, "gesture_applied", true),
+		context.applySelection.mockImplementation(async (_desk, request) =>
+			groupOutcome(request, unchanged, "gesture_applied", true),
 		);
 		render(view(context, <GroupStrip />));
 		installGroups(context, [group("1", "Front Truss")]);
@@ -406,7 +414,9 @@ describe("scoped Group activation", () => {
 		render(view(context, <GroupStrip />));
 		installGroups(context, [group("1", "Front Truss")]);
 		await settleAuthority(context);
-		await waitFor(() => expect(context.transport.subscriptions).toHaveLength(1));
+		await waitFor(() =>
+			expect(context.transport.subscriptions).toHaveLength(1),
+		);
 		const before = context.programming.getSnapshot().selection;
 
 		act(() =>
@@ -429,15 +439,14 @@ describe("scoped Group activation", () => {
 
 	it("marks the activated Group selected from authoritative expression alone", async () => {
 		const context = harness();
-		context.applySelection.mockImplementation(
-			async (_desk, request) =>
-				groupOutcome(request, {
-					selected: ORDERED_MEMBERS,
-					expression: { type: "live_group", groupId: "1", rule: { type: "all" } },
-					revision: 2,
-					gestureOpen: false,
-					grid: DEFAULT_SELECTION_GRID_STATE,
-				}),
+		context.applySelection.mockImplementation(async (_desk, request) =>
+			groupOutcome(request, {
+				selected: ORDERED_MEMBERS,
+				expression: { type: "live_group", groupId: "1", rule: { type: "all" } },
+				revision: 2,
+				gestureOpen: false,
+				grid: DEFAULT_SELECTION_GRID_STATE,
+			}),
 		);
 		render(view(context, <GroupStrip />));
 		installGroups(context, [group("1", "Front Truss")]);
@@ -478,7 +487,12 @@ describe("scoped Group activation", () => {
 
 	it("opens no Programming authority for an inactive Group Pool", async () => {
 		const context = harness();
-		render(view(context, <GroupPool active={false} cards={[group("1", "Front Truss")]} />));
+		render(
+			view(
+				context,
+				<GroupPool active={false} cards={[group("1", "Front Truss")]} />,
+			),
+		);
 		installGroups(context, [group("1", "Front Truss")]);
 		await act(async () => {
 			await Promise.resolve();
@@ -508,6 +522,28 @@ describe("scoped Group activation", () => {
 		expect(context.programming.getSnapshot().selection?.selected).toEqual(
 			ORDERED_MEMBERS,
 		);
+	});
+
+	it("arms a Group Master assignment when SET is followed by a Group Pool card", async () => {
+		const context = harness();
+		context.loadSnapshot.mockResolvedValue(
+			programmingSnapshot({ command: commandLine(1, "SET") }),
+		);
+		const pool = group("21", "Show Profile Odd");
+		render(view(context, <GroupPool cards={[pool]} />));
+		installGroups(context, [pool]);
+		await settleAuthority(context);
+
+		fireEvent.click(screen.getByText("Show Profile Odd").closest("button")!);
+
+		await waitFor(() =>
+			expect(mocks.replaceCommandLine).toHaveBeenCalledWith(
+				DESK_ID,
+				"SET GROUP 21",
+				expect.any(Number),
+			),
+		);
+		expect(context.applySelection).not.toHaveBeenCalled();
 	});
 
 	it("sends no Group Pool selection while Group authority is missing", async () => {

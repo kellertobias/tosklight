@@ -23,8 +23,8 @@ test("PLAN-76-PACKAGED @api › shipped canonical demo retains its exact package
 		(total, fixture) => total + 1 + (fixture.multipatch?.length ?? 0),
 		0,
 	);
-	expect(patch.fixtures).toHaveLength(262);
-	expect(physicalInstances).toBe(301);
+	expect(patch.fixtures).toHaveLength(295);
+	expect(physicalInstances).toBe(343);
 
 	const runtime = await startPlannedDemoBenchmarkLook(api, show.id);
 	const projections = runtime.projections as Array<{

@@ -24,13 +24,13 @@ const DEMO_DMX_UNIVERSES = [1, 2, 3, 4] as const;
 const DEMO_APPLICATION_WIDTH = 1920;
 const DEMO_CHAPTERS = [
 	["SHOW SETUP", "Show Setup"],
-	["GROUP PREPARATION", "Groups"],
-	["TURN LIGHTS ON", "Lamps"],
-	["PRESET PROGRAMMING", "Presets"],
-	["CUE PROGRAMMING", "Cues"],
-	["BUSKING", "Busking"],
-	["PRELOADING", "Preload"],
-	["ACL CHASER · SPEED D", "Chaser"],
+	["OUTPUT CONFIGURATION", "Outputs"],
+	["GROUP SETUP", "Groups"],
+	["PRESET SETUP", "Presets"],
+	["DYNAMICS", "Dynamics"],
+	["CUELIST PROGRAMMING", "Cuelists"],
+	["SHOW COMPLETE", "Complete"],
+	["BUSKING", "Live Demo"],
 ] as const;
 
 function DemoDmxGrid({ universeNumber }: { universeNumber: number }) {

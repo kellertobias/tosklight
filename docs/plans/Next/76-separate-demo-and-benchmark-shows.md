@@ -28,7 +28,7 @@ must remain explicit.
 
 | Tier | Show and runtime | Performance contract |
 |---|---|---|
-| Realistic demo | The exact generated demo inventory below: **262 controllable fixtures and 301 physical Stage instances**, including multi-patches. Run in the packaged desktop with both a 3D Stage view and Fixture Sheet/list visible. | Release-blocking CI acceptance using the programmed benchmark look below. It must remain responsive and satisfy the established interactive Stage, control, output-isolation, and end-to-end gates. A visibly stalled or unusably laggy demo is a failed build and blocks release. |
+| Realistic demo | The exact generated demo inventory below: **262 controllable fixtures plus 33 visual-only Venue records, 295 patch records and 343 physical Stage instances**, including multi-patches. Run in the packaged desktop with both a 3D Stage view and Fixture Sheet/list visible. | Release-blocking CI acceptance using the programmed benchmark look below. It must remain responsive and satisfy the established interactive Stage, control, output-isolation, and end-to-end gates. A visibly stalled or unusably laggy demo is a failed build and blocks release. |
 | Interactive large show | Exactly 1,000 fixture instances, with the packaged desktop, 3D Stage, and Fixture Sheet/list open. | Report the achieved engine/output rate and operator-visible Stage metrics. The target is **100 Hz** for the measured engine/output workload while the UI remains responsive; retain the stricter safety and output-isolation gates from the Stage plan. |
 | Headless stress show | Begin with 2,000 fixtures and scale deterministically to 4,000 when the same generator and hardware can sustain it. Run with every Stage surface and other visualization UI disabled. | Report the achieved rate, deadline misses, work-time percentiles, and resource use in the build. The target is **60 Hz**. Missing 60 Hz is informative and non-blocking, but missing data or silently opening a Stage/UI surface invalidates the report. |
 
@@ -110,14 +110,12 @@ the rig merely to minimize or fill universe count.
 
 Patch and position:
 
-- **4 Fresnels** on the Front Truss, distributed across the width and aimed approximately straight
-  down as the primary front wash;
+- **8 Fresnels** on the Front Truss, arranged as four on the left and four on the right and aimed
+  across the stage as the primary front wash;
 - **2 static Profile lamps** on the Mid Truss, one left and one right, both aimed at the centre
   position;
 - **1 static Profile lamp** at the front, aimed directly at the centre position;
-- **2 pairs of static Profile lamps**, one pair covering the stage-left position and one pair
-  covering the stage-right position; and
-- **2 side Fresnels**, one at stage left and one at stage right, cross-lighting the stage.
+- **1 pair of static Profile lamps**, covering the stage-left and stage-right positions.
 
 These static Profile and Fresnel fixtures are front-lighting tools; do not silently include them
 in the moving-Profile family Groups defined below.
@@ -230,8 +228,8 @@ The generated demo contains **262 independently controllable fixture objects**:
 | Profile moving lights | 54 |
 | Wash moving lights | 46 |
 | Regular LED PARs | 132 |
-| Static Profile lamps | 7 |
-| Fresnels, including the two side Fresnels | 6 |
+| Static Profile lamps | 5 |
+| Front Fresnels | 8 |
 | RGB Sunstrips | 8 |
 | ACL control fixtures | 4 |
 | Four-light blinders | 2 |
@@ -241,9 +239,11 @@ The generated demo contains **262 independently controllable fixture objects**:
 
 The four ACL controls each render as eight physical lamps, adding 28 Stage instances beyond their
 four primaries. The house-light control renders as 12 physical instances, adding 11 beyond its
-primary. Therefore the Stage and realistic benchmark contain exactly **301 physical fixture
-instances**. Logical heads inside the two four-light blinders remain heads of those two fixtures;
-they do not increase the fixture-instance count.
+primary. The lighting patch therefore contains exactly **301 physical lighting instances**.
+Logical heads inside the two four-light blinders remain heads of those two fixtures; they do not
+increase the fixture-instance count. The canonical Venue patch adds 33 visual-only records and
+nine truss multi-patches, bringing the complete Stage to **343 physical instances across 295 patch
+records** without consuming DMX slots.
 
 ## Initial Groups
 

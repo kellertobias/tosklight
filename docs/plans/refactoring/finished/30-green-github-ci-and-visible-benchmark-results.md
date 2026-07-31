@@ -239,8 +239,9 @@ states that this Linux release probe has no UI: the exact 1,000-instance Stage p
 usability proof remains the packaged/UI acceptance recorded in Plans 20 and 21.
 
 The already-required product-demo run now also emits current-release performance evidence for
-the exact canonical show: 262 controllable fixture records, 301 physical Stage instances, and the
-3D Stage visible. Release Performance reports its Stage presentation cadence, source-to-canvas
+the exact canonical show: 262 controllable fixtures, 33 visual-only Venue records, 295 total
+patch records, 343 physical Stage instances, and the 3D Stage visible. Release Performance reports
+its Stage presentation cadence, source-to-canvas
 p95, render-duration p95, maximum draw calls, and maximum triangles. This reuses the existing
 recording window instead of adding another long CI run. The page labels the measurement as
 Chromium evidence and retains the packaged Tauri run as the authoritative 100 Hz output and

@@ -43,8 +43,8 @@ export const PLANNED_DEMO_FIXTURES: readonly DemoFixtureManifestEntry[] = [
   ...family("led", "stage", 301, 16, PROFILES.led, "LED Stage"),
   ...family("led", "audience", 317, 100, PROFILES.led, "LED Audience"),
   ...family("led", "aux", 417, 16, PROFILES.led, "LED Aux"),
-  ...namedRange(11, 7, "Static Profile", PROFILES.staticProfile, ["Front Lights"]),
-  ...namedRange(1, 6, "Fresnel", PROFILES.fresnel, ["Front Lights"]),
+  ...namedRange(11, 5, "Static Profile", PROFILES.staticProfile, ["Front Lights"]),
+  ...namedRange(1, 8, "Fresnel", PROFILES.fresnel, ["Front Lights"]),
   ...namedRange(501, 8, "Sunstrip", PROFILES.sunstrip, ["Sunstrips"]),
   ...[
     ["Back Centre ACL", "ACL 1"],

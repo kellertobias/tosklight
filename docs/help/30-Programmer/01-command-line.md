@@ -412,7 +412,7 @@ Deleting the active Cue removes it from the stored Cuelist but holds its fully r
 
 ## Assigning and configuring playbacks
 
-On the touch UI, press `[SET]`, tap an existing entry in the Cuelist Pool, then tap the target playback fader. The selected Cuelist replaces the current assignment at that page position. Playback pages accept Cuelists only; groups remain in the Groups pool.
+On the touch UI, press `[SET]`, tap an existing entry in the Cuelist Pool, then tap the target playback fader. The selected Cuelist replaces the current assignment at that page position. To create a Group Master with the same physical workflow, press `[SET]`, tap the source Group tile, then tap the target playback. The command line remains armed as `SET GROUP <number>` between the two touches so the destination is explicit.
 
 In the Tauri app and browser UI, right-clicking an element is a shortcut for pressing `[SET]` and then left-clicking that same element. Use it wherever `[SET]` followed by a click configures an element or starts a SET assignment; the native context menu does not open. On a touchscreen, continue to press `[SET]` and then tap the element.
 
@@ -421,6 +421,7 @@ To configure an assigned page playback, press `[SET]` and then tap the playback,
 | Action | Command | Result |
 | --- | --- | --- |
 | Assign a Cuelist | `[SET] <Cuelist-number> [AT] <page> [ . ] <playback-number> [ENTER]` | Assign a Cuelist to a playback on a page. |
+| Assign a Group Master | `[SET] [GRP] <Group-number> [AT] <page> [ . ] <playback-number> [ENTER]` | Create or replace the addressed page playback with a Group Master targeting that Group. |
 | Configure a Cuelist | `[SET] <Cuelist-number> [ENTER]` | Open the Cuelist configuration. |
 | Configure a page playback | `[SET] <page> [ . ] <playback-number> [ENTER]` | Open the configuration for the playback at that page position. |
 

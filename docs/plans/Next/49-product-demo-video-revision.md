@@ -2,11 +2,10 @@
 
 ## Status
 
-**Implemented and reconciled — 2026-07-29.** Plan 20 of the refactoring queue implements this revision
-through the maintained `DEMO-001` scenario. The exact lighting-only inventory in
-[`76-separate-demo-and-benchmark-shows.md`](76-separate-demo-and-benchmark-shows.md) supersedes
-the older scenery-specific patch, curtain, and ACL-location demonstrations below where they
-cannot coexist with the required 262 controllable fixtures and 301 physical Stage instances.
+**Implemented and reconciled — 2026-07-31.** Plan 20 of the refactoring queue implements this
+revision through the maintained `DEMO-001` scenario. The release workload now distinguishes its
+262 controllable lighting fixtures from 33 visual-only Venue records, so the requested scenery and
+visible patch workflow remain part of the same canonical show without changing its DMX workload.
 
 ## Goal
 
@@ -39,10 +38,13 @@ Remove the show setup save step from the visible demo. The scenario may still pe
 
 ## Show setup sequence
 
-Begin from a genuinely empty show and visibly open Show Patch. Then cross one explicit
-fast-forward boundary that generates the canonical Plan 76 lighting venue: seven layers, the exact
-262 controllable fixtures and 301 physical instances, deterministic Stage placement, all groups,
-presets, Cuelists, playbacks, Dynamics, Speed Groups, and desktop layouts.
+Create and verify a genuinely empty show before creating the page whose video is retained. Open
+Show Patch and visibly add all three four-segment trusses through the Touch UI. Keep the first
+segment interaction at normal recording pace, then reduce the gaps between repeated actions.
+Fast-forward the stage deck, curtains, back and side railings, and vertical pipes through the API.
+Visibly patch and place all eight front Fresnels through the UI, add one ACL control and its seven
+multi-patches through the UI, and add one moving Profile through the UI. One final fast-forward
+completes the remaining canonical lighting patch and prepared show objects.
 
 After the boundary, prove the result in the normal operator surfaces and continue using normal
 keypad, pool, fixture-control, playback, and preload paths. The maintained demo must not introduce
@@ -51,12 +53,9 @@ that the recording is required to represent.
 
 ## ACL multipatch positioning workflow
 
-The canonical generator creates four named eight-lamp ACL controls with reviewed deterministic
-multi-patch placement, including the approved Front Split arrangement of four lamps left and four
-right fanning inward. The old visible encoder-modal start-through-end location sequence is
-superseded for this maintained recording: replaying it would require a provisional noncanonical
-patch and duplicate setup path. Encoder through-expression behavior remains independently testable
-outside `DEMO-001`.
+The first canonical ACL set is visibly created with seven multi-patches. The final API boundary
+adopts those UI-created identities and applies their reviewed deterministic fan placement; the
+other three ACL sets are completed by the same canonical generator.
 
 ## Output configuration
 
@@ -116,27 +115,33 @@ goal and result rather than echoing clicks.
 
 The implementation is complete only when the maintained demo video and test satisfy all of the following:
 
-1. The video starts with one title card and then immediately enters show setup.
+1. The video first shows the active empty show, then one title card, and immediately enters setup.
 2. Redundant show setup subsection title cards are gone.
-3. A genuinely empty show and Show Patch are visible before one explicit canonical generation boundary.
-4. The generated lighting venue contains exactly 262 controllable fixtures and 301 physical Stage
-   instances; it contains no demo-only scenery filler.
-5. All four reviewed eight-lamp ACL multi-patches, including Front Split, come from the canonical
+3. The saved video page is created only after a genuinely empty show is active, and Show Patch is
+   the first operator setup surface.
+4. All truss segments are visibly added through Touch UI; only the first uses normal action gaps.
+5. Stage elements, curtains, back and side railings, and vertical pipes use one labelled API
+   fast-forward boundary.
+6. Eight Fresnels are patched and placed visibly through UI; one ACL set with seven multi-patches
+   and one moving Profile are patched visibly through UI.
+7. The complete venue contains 262 controllable lights, 33 visual-only Venue records, 295 total
+   patch records, and 343 physical Stage instances.
+8. All four reviewed eight-lamp ACL multi-patches, including Front Split, come from the canonical
    generator and remain shared with the release workload.
-6. The visible show setup save step is absent.
-7. Output route work is introduced by an **Output Configuration** title card.
-8. Group and preset pools are empty before canonical generation and show only canonical objects
+9. The visible show setup save step is absent.
+10. Output route work is introduced by an **Output Configuration** title card.
+11. Group and preset pools are empty before canonical generation and show only canonical objects
    afterward.
-9. Demo-critical dialogs are centered in the complete recorded desk surface.
-10. Built-in fixture control actions replace the old "Turn lights on" chapter and explain Lamp On,
+12. Demo-critical dialogs are centered in the complete recorded desk surface.
+13. Built-in fixture control actions replace the old "Turn lights on" chapter and explain Lamp On,
     Fan Auto, Reset, Lamp Off, and related actions.
-11. Red preset recall does not perform redundant zeroing of unchanged color channels.
-12. Current-action narration describes operator intent and outcome, not literal clicks.
-13. Fixture Sheet, canonical presets, and the final Cuelist topology are each proved through their
+14. Red preset recall does not perform redundant zeroing of unchanged color channels.
+15. Current-action narration describes operator intent and outcome, not literal clicks.
+16. Fixture Sheet, canonical presets, and the final Cuelist topology are each proved through their
     production built-in surfaces.
-14. Busking activates the canonical benchmark look and produces live DMX output.
-15. Preload is exercised through the physical Preload Go path and finishes with an empty queue.
-16. `./test demo` still produces the maintained product demo video and remains an executable
+17. Busking activates the canonical benchmark look and produces live DMX output.
+18. Preload is exercised through the physical Preload Go path and finishes with an empty queue.
+19. `./test demo` still produces the maintained product demo video and remains an executable
     regression test, not only a scripted recording.
 
 ## Related follow-up risks
@@ -147,7 +152,8 @@ The older encoder-modal through-syntax concern is no longer a dependency of this
 
 ## Result
 
-`DEMO-001` now starts from an empty show, crosses one explicit canonical-generation boundary, and
+`DEMO-001` now creates its retained recording page only after the empty show is active, performs
+the requested visible Touch UI patch sequence with two explicit fast-forward boundaries, and
 continues through production Show Patch, output routing, Fixture Sheet, fixture-control, preset,
 Cuelist, playback, preload, Programmer, Stage, and live DMX paths. The maintained recording passed
 with `LIGHT_VISUAL_RECORDING=1 LIGHT_UPDATE_DEMO_SHOW=1 npm run test:demo`.
@@ -155,12 +161,17 @@ with `LIGHT_VISUAL_RECORDING=1 LIGHT_UPDATE_DEMO_SHOW=1 npm run test:demo`.
 Generated visual evidence:
 
 - `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo-h265.mp4` — 1920×1080,
-  25 fps, 162.84 seconds;
+  HEVC, 25 fps, 793.8 seconds;
 - `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo-1920x1080.png`; and
 - `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo-contact-sheet.png`.
 
 The run refreshed `assets/demo.show`; its SQLite integrity check passes and it contains the exact
-262 patched fixtures, 38 Groups, 30 presets, 30 Dynamics, seven Cuelists, and 13 Playbacks. The
+295 patch records (262 controllable and 33 visual-only), 343 physical Stage instances, eight
+layers, 38 Groups, 30 presets, 30 Dynamics, seven Cuelists, and 13 Playbacks. The
 fixture-control dialog has executable centering coverage against the complete recorded desk
 surface. The royalty-free Theater script and script-specific Theater Cues remain pending exactly
 as allowed by Plan 76.
+
+The authoritative recorded Playwright pass completed in 13.4 minutes including page teardown and
+video saving. The equivalent non-recording `DEMO-001` development regression completed in 1.2
+minutes, so choreography changes can be checked without repeating the full transcode cycle.

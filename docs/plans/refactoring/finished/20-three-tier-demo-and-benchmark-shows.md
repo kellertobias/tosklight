@@ -62,10 +62,10 @@ separate authoritative tiers.
 Replace the ambiguous single demo/benchmark workload with three deterministic, independently
 reported tiers:
 
-1. The exact Plan 76 demo show—262 controllable fixtures and 301 physical Stage instances,
-   including multi-patches—exercised in the packaged desktop with 3D Stage and Fixture Sheet/list
-   open. Its canonical Dynamic/Cuelist benchmark look, responsiveness, and end-to-end gates are
-   release-blocking.
+1. The exact Plan 76 demo show—262 controllable fixtures plus 33 visual-only Venue records, for
+   295 patch records and 343 physical Stage instances including multi-patches—exercised in the
+   packaged desktop with 3D Stage and Fixture Sheet/list open. Its canonical Dynamic/Cuelist
+   benchmark look, responsiveness, and end-to-end gates are release-blocking.
 2. An exactly 1,000-fixture interactive benchmark with the same UI surfaces open. Report its
    achieved engine/output rate and Stage metrics against a 100 Hz target.
 3. A 2,000-fixture headless stress benchmark that can scale to 4,000 fixtures, with every Stage and
@@ -121,7 +121,7 @@ acceptance to reach it.
 Post-completion policy revision (2026-07-31): the 100 Hz value remains a visible reference, while
 the public capacity indicator for the released 1,024-fixture engine/output proxy is green at
 60 Hz or above, yellow at 40–59.999 Hz, and red below 40 Hz. This does not change the canonical
-301-instance demo's 100 Hz packaged gate or the exact 1,000-instance UI requirement to keep Stage,
+343-instance demo's 100 Hz packaged gate or the exact 1,000-instance UI requirement to keep Stage,
 Fixture Sheet, and the rest of the desk responsive. The 2,000+ tier remains informational and now
 reports its measured limiting phase.
 
@@ -143,8 +143,9 @@ Completed on 2026-07-29 with 91% large-window usage remaining.
 
 ### Generated tiers and runtime evidence
 
-- The canonical demo generator produces exactly 262 controllable fixtures, 301 physical Stage
-  instances, 3,783 occupied DMX slots, seven layers, 38 Groups, 30 presets, 30 Dynamics, seven
+- The canonical demo generator produces exactly 262 controllable fixtures and adds 33 visual-only
+  Venue records for 295 total patch records and 343 physical Stage instances. It retains 3,783
+  occupied DMX slots, eight layers, 38 Groups, 30 presets, 30 Dynamics, seven
   Cuelists, 13 Playbacks, Speed Groups A–E, and the reviewed four-set ACL layout. The focused
   `tests/76-demo-show-generation.spec.ts` runtime path passed with all 12 canonical benchmark
   assignments active.
@@ -166,12 +167,12 @@ Headless reports:
 
 ### Maintained demo artifacts
 
-`LIGHT_VISUAL_RECORDING=1 LIGHT_UPDATE_DEMO_SHOW=1 npm run test:demo` passed in 2.8 minutes and
+`LIGHT_VISUAL_RECORDING=1 LIGHT_UPDATE_DEMO_SHOW=1 npm run test:demo` passed in 13.4 minutes and
 refreshed the integrity-checked `assets/demo.show`. Visual inspection used:
 
 - `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo-h265.mp4` — HEVC,
-  1920×1080, 25 fps, 162.84 seconds, 44,425,246 bytes;
-- `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo.webm` — 60,126,305 bytes;
+  1920×1080, 25 fps, 793.8 seconds, 233,126,702 bytes;
+- `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo.webm` — 246,663,355 bytes;
 - `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo-1920x1080.png`; and
 - `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo-contact-sheet.png`.
 

@@ -112,8 +112,8 @@ function canonicalDemo() {
 		schema_version: 1,
 		measurement_surface: "browser_playwright_product_demo",
 		scene: {
-			fixture_records: 262,
-			physical_instances: 301,
+			fixture_records: 295,
+			physical_instances: 343,
 			stage_visible: true,
 		},
 		window: { elapsed_ms: 60_000 },
@@ -203,7 +203,7 @@ test("the 1,024-fixture indicator uses 60 Hz green and 40 Hz yellow thresholds",
 	);
 });
 
-test("the canonical 301-instance product demo is retained as separate measured evidence", () => {
+test("the canonical 343-instance product demo is retained as separate measured evidence", () => {
 	const status = statusDocument(
 		options,
 		stage(report(), 0),
@@ -211,7 +211,7 @@ test("the canonical 301-instance product demo is retained as separate measured e
 		canonicalDemo(),
 	);
 	assert.equal(status.canonical_demo.attempted, true);
-	assert.equal(status.canonical_demo.scene.physical_instances, 301);
+	assert.equal(status.canonical_demo.scene.physical_instances, 343);
 	assert.equal(status.canonical_demo.stage.presentation_rate_hz, 30);
 	assert.equal(status.canonical_demo.stage.render_duration_ms.p95, 3);
 
@@ -286,7 +286,7 @@ test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
 	assert.equal(
 		JSON.parse(readFileSync(resolve(output, "status.json"))).canonical_demo
 			.scene.physical_instances,
-		301,
+		343,
 	);
 	assert.equal(
 		JSON.parse(readFileSync(resolve(output, "hard-floor.json")))
