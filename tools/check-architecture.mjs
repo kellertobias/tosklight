@@ -527,6 +527,30 @@ function isProductionTypeScript(file) {
   );
 }
 
+function desktopStylesheetEntrypoints() {
+  const fileManagerStylesheet = path.join(
+    repositoryRoot,
+    "apps/light-desktop/src/windows/FileManagerWindow.css",
+  );
+  const source = fs.readFileSync(fileManagerStylesheet, "utf8");
+  const orderedImports = [
+    '@import "./fileManager/chrome.css";',
+    '@import "./fileManager/browser.css";',
+    '@import "./fileManager/operations.css";',
+  ];
+  let cursor = -1;
+  for (const stylesheetImport of orderedImports) {
+    const next = source.indexOf(stylesheetImport);
+    if (next < 0) {
+      fail(`${relative(fileManagerStylesheet)} must import ${stylesheetImport}`);
+      continue;
+    }
+    if (next < cursor)
+      fail(`${relative(fileManagerStylesheet)} must preserve its stylesheet cascade order`);
+    cursor = next;
+  }
+}
+
 function legacyPlaybackSnapshotBoundaries() {
   const sourceRoot = path.join(repositoryRoot, "apps/light-desktop/src");
   for (const file of walk(sourceRoot).filter(isProductionTypeScript)) {
@@ -588,6 +612,7 @@ playbackOwnershipBoundaries();
 capabilityStateOwnershipBoundaries();
 typeScriptDependencyDirections();
 sharedUiDependencyDirections();
+desktopStylesheetEntrypoints();
 applicationSourceDirections();
 legacyPlaybackSnapshotBoundaries();
 testCommandBoundaries();
