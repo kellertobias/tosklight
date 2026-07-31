@@ -28,6 +28,8 @@ pub struct PatchFixturesCommand {
     /// Ordered placement intents whose final split assignments are resolved from authoritative
     /// selected-mode footprints before the candidate show is validated and committed.
     pub placements: Vec<PatchPlacementIntent>,
+    /// Ordered coordinate spreads resolved against authoritative candidates on the server.
+    pub vector_spreads: Vec<PatchVectorSpreadIntent>,
 }
 
 impl ApplicationCommand for PatchFixturesCommand {
@@ -61,6 +63,27 @@ pub struct PatchOperatorAddressOverride {
     pub fixture_id: FixtureId,
     pub universe: u16,
     pub address: u16,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PatchVectorSpreadIntent {
+    pub fixture_ids: Vec<FixtureId>,
+    pub kind: PatchVectorKind,
+    pub axis: PatchVectorAxis,
+    pub points: Vec<f32>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PatchVectorKind {
+    Location,
+    Rotation,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PatchVectorAxis {
+    X,
+    Y,
+    Z,
 }
 
 /// Authoritative patch projection for one fixture, without an inline profile definition.

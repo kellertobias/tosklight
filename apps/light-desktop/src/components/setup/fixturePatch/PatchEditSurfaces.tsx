@@ -8,7 +8,7 @@ import {
 } from "@tosklight/ui";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { usePatchController } from "./controller";
-import { saveEdit, saveSplitEdit } from "./editSave";
+import { saveEdit, saveSplitEdit, saveVectorSpread } from "./editSave";
 import { cancelEdit, requestFixtureEditClose } from "./editSession";
 import { FixtureAddressScreen } from "./FixtureAddressScreen";
 import {
@@ -174,7 +174,7 @@ function FixtureEditFields() {
 				label="MIB Delay (s)"
 				min={0}
 				step={0.1}
-				allowDecimal
+					allowDecimal
 				value={editText}
 				onChange={(event) => controller.ui.setEditText(event.target.value)}
 			/>
@@ -255,8 +255,14 @@ function VectorInputs({
 				<NumberField
 					key={entry}
 					autoFocus={Boolean(axis)}
-					label={`${entry.toUpperCase()} ${kind === "location" ? "(m)" : "(°)"}`}
-					allowDecimal
+						label={`${entry.toUpperCase()} ${kind === "location" ? "(m)" : "(°)"}`}
+						allowDecimal
+						allowThrough={Boolean(
+							axis && (controller.selection.orderedFixtureIds?.length ?? 0) > 1,
+						)}
+						onRangeCommit={(points) =>
+							void saveVectorSpread(controller, kind, entry, points)
+						}
 					value={
 						kind === "location"
 							? controller.ui.vector[entry] / 1000

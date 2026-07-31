@@ -582,11 +582,20 @@ export function ModalNumberInput({
 			);
 		}
 		if (key === "−" || key === "-") {
-			const next = replace.current
-				? { value: "-", caret: 1 }
-				: value.startsWith("-")
-					? { value: value.slice(1), caret: Math.max(0, caret - 1) }
-					: { value: `-${value || "0"}`, caret: caret + 1 };
+			if (replace.current) return update({ value: "-", caret: 1 });
+			const before = value.slice(0, caret);
+			const separator = before.toLocaleUpperCase().lastIndexOf("THRU");
+			let tokenStart = separator < 0 ? 0 : separator + 4;
+			while (value[tokenStart] === " ") tokenStart++;
+			const next = value[tokenStart] === "-"
+				? {
+						value: value.slice(0, tokenStart) + value.slice(tokenStart + 1),
+						caret: Math.max(tokenStart, caret - 1),
+					}
+				: {
+						value: value.slice(0, tokenStart) + "-" + value.slice(tokenStart),
+						caret: caret + 1,
+					};
 			return update(next);
 		}
 		if (key === "+") {

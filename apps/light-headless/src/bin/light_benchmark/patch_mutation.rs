@@ -468,6 +468,7 @@ fn wire_request(
             .collect(),
         remove_fixture_ids: Vec::new(),
         placements: Vec::new(),
+        vector_spreads: Vec::new(),
     }
 }
 

@@ -204,7 +204,8 @@ pub use show_patch::{
     PatchChange, PatchFixtureCandidate, PatchFixtureProjection, PatchFixturesCommand,
     PatchFixturesResult, PatchModeProjection, PatchOperatorAddressOverride, PatchPerformancePhase,
     PatchPlacementIntent, PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
-    PatchSplitPlacementMode, ShowPatchPorts, ShowPatchService,
+    PatchSplitPlacementMode, PatchVectorAxis, PatchVectorKind, PatchVectorSpreadIntent,
+    ShowPatchPorts, ShowPatchService,
 };
 pub use speed_group::{
     SPEED_GROUP_COUNT, SpeedBpm, SpeedBpmDelta, SpeedGroupAction, SpeedGroupApplication,

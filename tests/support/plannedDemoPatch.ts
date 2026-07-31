@@ -125,7 +125,9 @@ export function createPlannedDemoPatchInputs(
 ): PlannedDemoPatchResult {
 	const cursor = { universe: 1, address: 1 };
 	let occupiedSlots = 0;
-	const fixtures = PLANNED_DEMO_FIXTURES.map((entry) => {
+	const fixtures = [...PLANNED_DEMO_FIXTURES]
+		.sort((left, right) => patchPriority(left) - patchPriority(right))
+		.map((entry) => {
 		const profile = resolveProfile(profiles, entry);
 		const mode = profile.modes.find(
 			(candidate) => candidate.name === entry.profile.mode,
@@ -174,7 +176,7 @@ export function createPlannedDemoPatchInputs(
 			move_in_black_delay_millis: 0,
 			highlight_overrides: [],
 		};
-	});
+		});
 	const physicalInstances = fixtures.reduce(
 		(count, fixture) => count + 1 + fixture.multipatch.length,
 		0,
@@ -235,26 +237,35 @@ function layerFor(
 	layers: Readonly<Record<string, string>>,
 ) {
 	const name = entry.name;
-	const preferred =
-		name.startsWith("Back ") ||
-		(entry.location === "stage" && stageIndex(entry) < stageBackCount(entry))
-			? "Back Truss"
-			: name.startsWith("Mid ") || entry.location === "stage"
-				? "Mid Truss"
-				: name.startsWith("Front ") ||
-						name.startsWith("Fresnel") ||
-						name.startsWith("Static Profile")
-					? "Front Truss"
-					: entry.location === "audience"
-						? "Audience"
-						: entry.location === "aux"
-							? "Auxiliary"
-							: name.startsWith("House")
-								? "House Lights"
-								: "Floor";
+	const location =
+		entry.location === "stage"
+			? "Stage"
+			: entry.location === "audience"
+				? "Audience"
+				: "Auxilliary";
+	const preferred = name.startsWith("Fresnel")
+		? "Front Lights"
+		: name.startsWith("Static Profile")
+			? "Front Profiles"
+			: entry.roles.includes("All ACLs") || entry.roles.includes("Blinders")
+				? "ACLs & Blinder"
+				: entry.family === "profile"
+					? `Profile ${location}`
+					: entry.family === "wash"
+						? `Wash ${location}`
+						: entry.family === "led" || entry.roles.includes("Sunstrips")
+							? `LED PAR ${location}`
+							: "Stage & Venue";
 	return (
-		layers[preferred] ?? layers.Stage ?? Object.values(layers)[0] ?? "default"
+		layers[preferred] ??
+		layers["Stage & Venue"] ??
+		Object.values(layers)[0] ??
+		"default"
 	);
+}
+
+function patchPriority(entry: DemoFixtureManifestEntry) {
+	return entry.name.startsWith("Fresnel") ? 0 : 1;
 }
 
 function placementFor(entry: DemoFixtureManifestEntry) {
@@ -302,8 +313,12 @@ function ordinaryLocation(entry: DemoFixtureManifestEntry): Point {
 	if (entry.roles.includes("Hazers"))
 		return { x: index ? 3.5 : -3.5, y: 3.5, z: 0.2 };
 	if (entry.name.startsWith("Fresnel")) {
+		const fresnelIndex = entry.number - 1;
 		return {
-			x: index < 4 ? spread(index, 4, -3.8, -3) : spread(index - 4, 4, 3, 3.8),
+			x:
+				fresnelIndex < 4
+					? spread(fresnelIndex, 4, -4, -3)
+					: spread(fresnelIndex - 4, 4, 3, 4),
 			y: -3,
 			z: 4,
 		};

@@ -57,6 +57,9 @@ const PERFORMANCE = path.join(
 const DEMO_SHOW = fileURLToPath(
 	new URL("../../../assets/demo.show", import.meta.url),
 );
+const APPLICATION_ICON = fileURLToPath(
+	new URL("../../../apps/light-desktop/src-tauri/icons/icon.png", import.meta.url),
+);
 const RECORDING = process.env.LIGHT_VISUAL_RECORDING === "1";
 const UPDATE_DEMO_SHOW = process.env.LIGHT_UPDATE_DEMO_SHOW === "1";
 
@@ -111,19 +114,25 @@ export class BrowserProductDemo {
 			const showId = await activeShowId(api);
 			expect(await api.showObjects(showId, "group")).toHaveLength(0);
 			expect(await api.showObjects(showId, "preset")).toHaveLength(0);
+			const layers = await ensurePlannedDemoLayers(api, showId, {});
 			if (RECORDING) {
 				const setupPage = page;
 				page = await setupPage.context().newPage();
 				desk = this.desk.fork(page);
+				const icon = await fs.readFile(APPLICATION_ICON);
+				await desk.prepareProductIntro(
+					`data:image/png;base64,${icon.toString("base64")}`,
+				);
 				await desk.open(`${bench.baseUrl}/?demo=product`);
 				video = page.video();
 				await setupPage.close();
-			}
+			} else await page.reload();
 			const demo = page.getByTestId("product-demo");
 			const app = demo.locator(".product-demo-application");
 			const keypad = demo.locator(".demo-number-block");
 			const stage = demo.locator(".stage-3d-canvas");
 			await verifyDemoFrame(demo, app, stage);
+			await desk.productIntro();
 			await desk.titleCard(
 				"SHOW SETUP",
 				"The recording starts with an empty show. Build the venue through the Touch UI, then accelerate the repetitive patch work.",
@@ -149,6 +158,11 @@ export class BrowserProductDemo {
 			);
 			const patchWindow = app.locator(".show-patch-layout");
 			await expect(patchWindow).toBeVisible();
+			await desk.fastForward(
+				"Creating the production Patch layers before fixtures are assigned.",
+				async () => layers,
+			);
+			await selectPatchLayer(desk, patchWindow, "Trusses");
 			for (let truss = 1; truss <= 3; truss++) {
 				await addFixtureThroughTouchUi(desk, page, {
 					search: "Four-Point Truss",
@@ -178,14 +192,16 @@ export class BrowserProductDemo {
 				"0.2",
 				"0.3",
 			]);
+			await selectPatchLayer(desk, patchWindow, "Stage & Venue");
 			await desk.fastForward(
 				"Adding the stage elements, curtain, back and side railings, and vertical pipes.",
-				() => installPlannedDemoScenery(api, showId, {}),
+				() => installPlannedDemoScenery(api, showId, layers),
 			);
 			expect(await fixtureIdentities(api, ["0.1", "0.2", "0.3"])).toEqual(
 				trussIdentities,
 			);
 			const firstFresnel = requiredFixture(desiredByNumber, 1);
+			await selectPatchLayer(desk, patchWindow, "Front Lights");
 			await addFixtureThroughTouchUi(desk, page, {
 				search: "Dimmer Fresnel",
 				family: "Dimmer Fresnel",
@@ -195,17 +211,34 @@ export class BrowserProductDemo {
 				count: 8,
 				address: fixtureAddress(firstFresnel),
 			});
-			for (let fixtureNumber = 1; fixtureNumber <= 8; fixtureNumber++) {
-				const desired = requiredFixture(desiredByNumber, fixtureNumber);
-				await setFixtureLocationThroughTouchUi(
-					desk,
-					patchWindow,
-					keypad,
-					fixtureNumber,
-					desired.location,
-				);
-			}
+			await expect
+				.poll(async () => {
+					const fixture = (await api.patch()).fixtures.find(
+						(candidate: any) => candidate.fixture_number === 1,
+					);
+					return [fixture?.universe, fixture?.address];
+				})
+				.toEqual([1, 1]);
+			await spreadFixtureLocationThroughTouchUi(
+				desk,
+				patchWindow,
+				1,
+				4,
+				"X",
+				["−", "4", "THRU", "−", "3", "ENTER"],
+			);
+			await expect
+				.poll(async () => {
+					const fixtures = (await api.patch()).fixtures;
+					return [1, 2, 3, 4].map(
+						(number) =>
+							fixtures.find((fixture: any) => fixture.fixture_number === number)
+								?.location.x,
+					);
+				})
+				.toEqual([-4_000, -3_667, -3_333, -3_000]);
 			const acl = requiredFixture(desiredByNumber, 601);
+			await selectPatchLayer(desk, patchWindow, "ACLs & Blinder");
 			await addFixtureThroughTouchUi(desk, page, {
 				search: "ACL",
 				family: "ACL",
@@ -231,6 +264,7 @@ export class BrowserProductDemo {
 				);
 			}
 			const profile = requiredFixture(desiredByNumber, 101);
+			await selectPatchLayer(desk, patchWindow, "Profile Stage");
 			await addFixtureThroughTouchUi(desk, page, {
 				search: "Robin DLS Profile",
 				family: "Robin DLS Profile",
@@ -248,7 +282,6 @@ export class BrowserProductDemo {
 			const canonical = await desk.fastForward(
 				"Patching the rest of the lighting show and reconciling the complete Stage layout.",
 				async () => {
-					const layers = await ensurePlannedDemoLayers(api, showId, {});
 					const scenery = await installPlannedDemoScenery(api, showId, layers);
 					const patch = await installPlannedDemoPatch(api, showId, layers);
 					return { patch, scenery, layers };
@@ -303,7 +336,7 @@ export class BrowserProductDemo {
 			await demonstrateBusking(desk, demo, api, bench, showId);
 			await demonstratePreload(desk, demo, keypad, api);
 
-			await desk.titleCard(
+	await desk.titleCard(
 				"ACL CHASER · SPEED D",
 				"The four-step ACL chase remains active on Speed Group D while a final keypad action proves normal post-generation control.",
 			);
@@ -437,34 +470,45 @@ async function addFixtureThroughTouchUi(
 	await expect(placement).toBeHidden();
 }
 
-async function setFixtureLocationThroughTouchUi(
+async function spreadFixtureLocationThroughTouchUi(
 	desk: DeskDriver,
 	patchWindow: Locator,
-	keypad: Locator,
-	fixtureNumber: number,
-	location: { x: number; y: number; z: number },
+	firstFixture: number,
+	lastFixture: number,
+	axis: "X" | "Y" | "Z",
+	keys: string[],
 ) {
-	const row = fixtureRow(patchWindow, fixtureNumber);
-	await row.scrollIntoViewIfNeeded();
-	for (const [axis, cell, value] of [
-		["X", 12, location.x / 1_000],
-		["Y", 13, location.y / 1_000],
-		["Z", 14, location.z / 1_000],
-	] as const) {
-		await desk.click(keypad.getByRole("button", { name: "SET", exact: true }));
-		await desk.click(row.locator("td").nth(cell).getByRole("button"));
-		const dialog = patchWindow
-			.page()
-			.locator(".patch-edit-modal")
-			.filter({
-				has: patchWindow.page().getByRole("heading", {
-					name: `Set fixture location ${axis}`,
-					exact: true,
-				}),
-			});
-		await dialog.getByLabel(`${axis} (m)`).fill(String(value));
-		await desk.click(dialog.getByRole("button", { name: "Set", exact: true }));
-	}
+	const first = fixtureRow(patchWindow, firstFixture);
+	const last = fixtureRow(patchWindow, lastFixture);
+	await desk.setDemoAction(
+		`Spread Front Lights ${firstFixture}–${lastFixture} across Location ${axis}: ${keys
+			.map((key) => `[${key}]`)
+			.join(" ")}`,
+	);
+	await desk.click(first);
+	await desk.click(last, { modifiers: ["Shift"] });
+	const cell = { X: 12, Y: 13, Z: 14 }[axis];
+	await desk.click(last.locator("td").nth(cell).getByRole("button"), {
+		button: "right",
+	});
+	const edit = patchWindow
+		.page()
+		.locator(".patch-edit-modal")
+		.filter({
+			has: patchWindow.page().getByRole("heading", {
+				name: `Set fixture location ${axis}`,
+				exact: true,
+			}),
+		});
+	const application = patchWindow.page().locator(".product-demo-application");
+	await expectCenteredInDemoSurface(edit, application);
+	await desk.click(edit.getByRole("button", { name: "Open number pad" }));
+	const pad = patchWindow.page().getByRole("dialog", { name: `${axis} (m)` });
+	await expectCenteredInDemoSurface(pad, application);
+	for (const key of keys)
+		await desk.click(pad.getByRole("button", { name: key, exact: true }));
+	await expect(pad).toBeHidden();
+	await expect(edit).toBeHidden();
 }
 
 function requiredFixture(fixtures: Map<number, any>, fixtureNumber: number) {
@@ -682,45 +726,32 @@ async function configureOutput(
 		bench.artnet.port,
 	);
 	await desk.fastForward(
-		"Configuring the remaining sACN and Art-Net output routes.",
+		"Configuring the remaining occupied universes through sACN and Art-Net routes.",
 		async () => {
-			await api.request("POST", "/api/v2/output-routes/actions", {
-				request_id: crypto.randomUUID(),
-				action: {
-					type: "create",
-					route_id: "demo-sacn-2",
-					route: {
-						protocol: "sacn",
-						logical_universe: 2,
-						destination_universe: 2,
-						delivery_mode: "unicast",
-						destination: `127.0.0.1:${bench.sacn.port}`,
-						enabled: true,
-						minimum_slots: 128,
+			for (let universe = 2; universe <= 8; universe++) {
+				const sacn = universe % 2 === 0;
+				await api.request("POST", "/api/v2/output-routes/actions", {
+					request_id: crypto.randomUUID(),
+					action: {
+						type: "create",
+						route_id: `demo-${sacn ? "sacn" : "artnet"}-${universe}`,
+						route: {
+							protocol: sacn ? "sacn" : "art_net",
+							logical_universe: universe,
+							destination_universe: universe,
+							delivery_mode: "unicast",
+							destination: `127.0.0.1:${sacn ? bench.sacn.port : bench.artnet.port}`,
+							enabled: true,
+							minimum_slots: 128,
+						},
 					},
-				},
-			});
-			await api.request("POST", "/api/v2/output-routes/actions", {
-				request_id: crypto.randomUUID(),
-				action: {
-					type: "create",
-					route_id: "demo-artnet-3",
-					route: {
-						protocol: "art_net",
-						logical_universe: 3,
-						destination_universe: 3,
-						delivery_mode: "unicast",
-						destination: `127.0.0.1:${bench.artnet.port}`,
-						enabled: true,
-						minimum_slots: 128,
-					},
-				},
-			});
+				});
+			}
 		},
 	);
 	await expect
 		.poll(async () => (await api.showObjects(showId, "route")).length)
-		.toBe(3);
+		.toBe(8);
 }
 
 async function buildGroups(
@@ -733,10 +764,10 @@ async function buildGroups(
 	showId: string,
 	fixtures: readonly any[],
 ) {
-	await desk.titleCard(
-		"GROUP SETUP · STAGE PROFILES",
-		"Select the Profile moving lights located on Stage through the simulated hardware keypad.",
-	);
+			await desk.titleCard(
+				"GROUP SETUP · STAGE PROFILES",
+				"Select Profile Stage fixtures (101–128) and store them as Group 2: [FIXTURE] [101] [THRU] [128] [ENTER] [RECORD] [Group 2 tile]",
+			);
 	await openGroups(desk, keypad);
 	const groups = app.locator(".group-card");
 	await expect(groups.first()).toBeVisible();
@@ -751,10 +782,9 @@ async function buildGroups(
 		"8",
 		"ENT",
 	]);
-	await desk.titleCard(
-		"GROUP SETUP · NOW STORE AS GROUP",
-		"Press Record, then touch the destination Group tile.",
-	);
+	await desk.setDemoAction(
+			"Store the selected Profile Stage fixtures as Group 2: [RECORD] [Group 2 tile]",
+		);
 	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
 	await desk.click(groupTile(app, 2));
 	await expect
@@ -933,7 +963,7 @@ async function demonstrateFixtureControls(
 	);
 	const dialog = page.locator(".special-dialog-card");
 	await expect(dialog).toContainText(/1 fixtures? selected/);
-	await expectCenteredInDemoSurface(dialog, demo);
+	await expectCenteredInDemoSurface(dialog, app);
 	for (const name of ["Lamps On", "Fan Auto", "Reset", "Lamp Off"]) {
 		const action = dialog.getByRole("button", { name, exact: true });
 		await expect(action).toBeVisible();
@@ -1259,6 +1289,20 @@ function fixtureRow(patchWindow: Locator, fixtureNumber: number | string) {
 		.getByRole("cell", { name: String(fixtureNumber), exact: true })
 		.locator("..")
 		.first();
+}
+
+async function selectPatchLayer(
+	desk: DeskDriver,
+	patchWindow: Locator,
+	name: string,
+) {
+	await desk.setDemoAction(`Select the ${name} layer before adding its fixtures.`);
+	await desk.click(
+		patchWindow
+			.locator(".patch-layers button")
+			.filter({ hasText: name })
+			.first(),
+	);
 }
 
 async function openBuiltIn(desk: DeskDriver, app: Locator, name: string) {

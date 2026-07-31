@@ -524,6 +524,9 @@ export type PatchOperatorAddressOverride = { fixture_id: string, universe: numbe
 export type PatchSplitPlacementMode = { "type": "consecutive" } | { "type": "operator_overrides", overrides: Array<PatchOperatorAddressOverride>, };
 export type PatchSplitPlacementIntent = { split: number, universe: number | null, address: number | null, mode: PatchSplitPlacementMode, };
 export type PatchPlacementIntent = { fixture_ids: Array<string>, splits: Array<PatchSplitPlacementIntent>, };
+export type PatchVectorKind = "location" | "rotation";
+export type PatchVectorAxis = "x" | "y" | "z";
+export type PatchVectorSpreadIntent = { fixture_ids: Array<string>, kind: PatchVectorKind, axis: PatchVectorAxis, points: Array<number>, };
 export type PatchFixturesRequest = {
 /**
  * Client-generated idempotency identity, scoped to the authenticated desk session.
@@ -542,7 +545,11 @@ remove_fixture_ids: Array<string>,
  * Server-resolved placement intents. Empty retains the generic desired-state Patch behavior
  * where fixture split assignments are already explicit.
  */
-placements: Array<PatchPlacementIntent>, };
+placements: Array<PatchPlacementIntent>,
+/**
+ * Server-resolved coordinate spreads over an explicitly ordered fixture selection.
+ */
+vector_spreads: Array<PatchVectorSpreadIntent>, };
 export type PatchFixtureAxis = "pan" | "tilt";
 export type PatchFixturePolicyAction = { "action": "set_group_masters", controlled: boolean, } | { "action": "set_grand_master", controlled: boolean, } | { "action": "set_axis_inversion", axis: PatchFixtureAxis, inverted: boolean,
 /**

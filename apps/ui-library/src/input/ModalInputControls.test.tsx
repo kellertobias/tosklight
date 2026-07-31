@@ -387,6 +387,13 @@ describe("modal input controls", () => {
 		expect(enter).toHaveBeenCalledOnce();
 	});
 
+	it("applies the minus sign independently to both sides of a THRU expression", () => {
+		render(<NumberHarness enter={vi.fn()} escape={vi.fn()} allowThrough />);
+		for (const key of ["−", "4", "THRU", "−", "3"])
+			fireEvent.click(screen.getByRole("button", { name: key }));
+		expect(screen.getByLabelText("value")).toHaveTextContent("-4 THRU -3");
+	});
+
 	it("closes the number input from its ESC button", () => {
 		const escape = vi.fn();
 		render(<NumberHarness enter={vi.fn()} escape={escape} />);

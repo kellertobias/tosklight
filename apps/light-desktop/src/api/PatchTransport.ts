@@ -10,6 +10,7 @@ import type {
 	PatchFixtureWrite,
 	PatchMutation,
 	PatchPlacement,
+	PatchVectorSpread,
 } from "../features/patch/contracts";
 import {
 	type PatchEventObserver,
@@ -65,6 +66,7 @@ export class HttpPatchTransport implements PatchTransport {
 			fixtures: mutation.fixtures.map(toWireFixture),
 			remove_fixture_ids: [...mutation.removeFixtureIds],
 			placements: (mutation.placements ?? []).map(toWirePlacement),
+			vector_spreads: (mutation.vectorSpreads ?? []).map(toWireVectorSpread),
 		};
 		const response = await this.fetchImplementation(
 			this.patchPath() + "/fixtures",
@@ -244,6 +246,15 @@ function toWirePlacement(placement: PatchPlacement): PatchPlacementIntent {
 							})),
 						},
 		})),
+	};
+}
+
+function toWireVectorSpread(spread: PatchVectorSpread) {
+	return {
+		fixture_ids: [...spread.fixtureIds],
+		kind: spread.kind,
+		axis: spread.axis,
+		points: [...spread.points],
 	};
 }
 

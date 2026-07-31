@@ -34,6 +34,14 @@
       "type": "string",
       "maxLength": 128,
       "minLength": 1
+    },
+    "vector_spreads": {
+      "description": "Server-resolved coordinate spreads over an explicitly ordered fixture selection.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PatchVectorSpreadIntent"
+      }
     }
   },
   "required": [
@@ -448,6 +456,55 @@
             "type"
           ]
         }
+      ]
+    },
+    "PatchVectorAxis": {
+      "type": "string",
+      "enum": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "PatchVectorKind": {
+      "type": "string",
+      "enum": [
+        "location",
+        "rotation"
+      ]
+    },
+    "PatchVectorSpreadIntent": {
+      "description": "One ordered, server-resolved spread for a patch-owned location or rotation axis.",
+      "type": "object",
+      "properties": {
+        "axis": {
+          "$ref": "#/$defs/PatchVectorAxis"
+        },
+        "fixture_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "minItems": 1
+        },
+        "kind": {
+          "$ref": "#/$defs/PatchVectorKind"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "minItems": 2
+        }
+      },
+      "required": [
+        "fixture_ids",
+        "kind",
+        "axis",
+        "points"
       ]
     }
   }

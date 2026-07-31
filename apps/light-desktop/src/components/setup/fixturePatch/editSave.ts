@@ -88,6 +88,48 @@ export function saveEdit(
 	void all;
 }
 
+export async function saveVectorSpread(
+	controller: PatchController,
+	kind: "location" | "rotation",
+	axis: "x" | "y" | "z",
+	points: number[],
+) {
+	const fixturesBySelectionId = new Map<string, string>();
+	for (const fixture of controller.data.visible) {
+		const logicalIds = fixture.logical_heads.length
+			? fixture.logical_heads.map((head) => head.fixture_id)
+			: [fixture.fixture_id];
+		for (const id of logicalIds)
+			fixturesBySelectionId.set(id, fixture.fixture_id);
+	}
+	const fixtureIds: string[] = [];
+	const seen = new Set<string>();
+	for (const selectedId of controller.selection.orderedFixtureIds ?? []) {
+		const fixtureId = fixturesBySelectionId.get(selectedId);
+		if (!fixtureId || seen.has(fixtureId)) continue;
+		seen.add(fixtureId);
+		fixtureIds.push(fixtureId);
+	}
+	if (fixtureIds.length < 2) {
+		controller.ui.setEditError(
+			"Select at least two fixtures to spread a value.",
+		);
+		return;
+	}
+	const scaledPoints =
+		kind === "location" ? points.map((point) => point * 1_000) : points;
+	if (
+		await controller.patch.spreadFixtureVector({
+			fixtureIds,
+			kind,
+			axis,
+			points: scaledPoints,
+		})
+	)
+		completeEdit(controller);
+	else controller.ui.setEditError("The fixture spread could not be applied.");
+}
+
 async function savePolicy(
 	controller: PatchController,
 	action: Parameters<typeof controller.patch.updatePolicy>[1],

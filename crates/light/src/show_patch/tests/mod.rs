@@ -4,12 +4,56 @@ use crate::ActionErrorKind;
 use crate::active_show::PreparedActiveShowTransaction;
 use crate::{
     PatchOperatorAddressOverride, PatchPlacementIntent, PatchSplitPlacementIntent,
-    PatchSplitPlacementMode,
+    PatchSplitPlacementMode, PatchVectorAxis, PatchVectorKind, PatchVectorSpreadIntent,
 };
 use light_show::FixtureProfileRevision;
 use serde_json::json;
 use support::{CounterSnapshot, FailurePoint, TestRig, envelope, patch_batch, profile_with_modes};
 use uuid::Uuid;
+
+#[test]
+fn vector_spread_resolves_ordered_fixture_locations_and_replays_exactly() {
+    let (profile, reference) = profile_with_modes(1);
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let mut command = patch_batch(rig.ports.show_id(), reference, 4);
+    let mut fixture_ids = command
+        .fixtures
+        .iter()
+        .map(|fixture| fixture.patch.fixture_id)
+        .collect::<Vec<_>>();
+    fixture_ids.reverse();
+    command.vector_spreads = vec![PatchVectorSpreadIntent {
+        fixture_ids: fixture_ids.clone(),
+        kind: PatchVectorKind::Location,
+        axis: PatchVectorAxis::X,
+        points: vec![-4_000.0, -3_000.0],
+    }];
+
+    let result = rig
+        .service
+        .handle(envelope(command.clone(), "location-spread", 0), &rig.ports)
+        .unwrap();
+    let by_id = result
+        .change
+        .fixtures
+        .iter()
+        .map(|fixture| (fixture.patch.fixture_id, fixture.patch.location.x))
+        .collect::<std::collections::HashMap<_, _>>();
+    assert_eq!(
+        fixture_ids
+            .iter()
+            .map(|fixture_id| by_id[fixture_id])
+            .collect::<Vec<_>>(),
+        vec![-4_000, -3_667, -3_333, -3_000]
+    );
+
+    let replay = rig
+        .service
+        .handle(envelope(command, "location-spread", 0), &rig.ports)
+        .unwrap();
+    assert!(replay.replayed);
+    assert_eq!(replay.change, result.change);
+}
 
 #[test]
 fn placement_intent_resolves_consecutive_addresses_with_sparse_operator_overrides() {
@@ -614,6 +658,7 @@ fn removal_uses_the_same_atomic_compile_and_event_path() {
         fixtures: Vec::new(),
         remove_fixture_ids: vec![fixture_id],
         placements: Vec::new(),
+        vector_spreads: Vec::new(),
     };
 
     let result = rig
@@ -655,6 +700,7 @@ fn removing_an_already_absent_fixture_is_an_idempotent_noop() {
         fixtures: Vec::new(),
         remove_fixture_ids: vec![light_core::FixtureId::new()],
         placements: Vec::new(),
+        vector_spreads: Vec::new(),
     };
 
     let result = rig

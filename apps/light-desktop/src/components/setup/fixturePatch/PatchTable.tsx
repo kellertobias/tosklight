@@ -3,7 +3,11 @@ import { Fragment } from "react";
 import type { MultiPatchInstance, PatchedFixture } from "../../../api/types";
 import { isDmxPatchable } from "../patchUtils";
 import { usePatchController } from "./controller";
-import { armEdit, selectSplitAddress } from "./editSession";
+import {
+	armEdit,
+	armEditFromContextMenu,
+	selectSplitAddress,
+} from "./editSession";
 import { selectPatchFixture } from "./fixtureActions";
 import { FixtureTypeIcon, MultiPatchBranch } from "./fixtureDisplay";
 import { fixtureDisplayId } from "./fixtureIds";
@@ -303,8 +307,12 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 			{(["x", "y", "z"] as const).map((axis) => (
 				<td className="patch-secondary" key={`location-${axis}`}>
 					<Button
-						className="patch-value"
-						onClick={() => armEdit(controller, fixture, "location", axis)}
+							className="patch-value"
+							onClick={() => armEdit(controller, fixture, "location", axis)}
+							onContextMenu={(event) => {
+								event.preventDefault();
+								armEditFromContextMenu(controller, fixture, "location", axis);
+							}}
 					>
 						{((fixture.location?.[axis] ?? 0) / 1000).toFixed(3)} m
 					</Button>

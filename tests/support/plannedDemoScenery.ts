@@ -82,7 +82,7 @@ export async function installPlannedDemoScenery(
 			})),
 			layer_id:
 				layers[entry.layer] ??
-				layers.Stage ??
+				layers["Stage & Venue"] ??
 				Object.values(layers)[0] ??
 				"default",
 			direct_control: null,
@@ -120,7 +120,7 @@ function sceneryEntries(): SceneryEntry[] {
 		name: `${name} Truss Segment 1`,
 		profile: "Four-Point Truss",
 		mode: "2 m",
-		layer: `${name} Truss`,
+			layer: "Trusses",
 		location: { x: -3, y: Number(y), z: 4.15 },
 		multipatches: [-1, 1, 3].map((x, index) => ({
 			name: `${name} Truss Segment ${index + 2}`,
@@ -132,7 +132,7 @@ function sceneryEntries(): SceneryEntry[] {
 		name: `Stage Element ${index + 1}`,
 		profile: "Stage Element 2 × 1 m",
 		mode: "50 cm",
-		layer: "Stage",
+		layer: "Stage & Venue",
 		location: {
 			x: -3 + (index % 4) * 2,
 			y: 0.5 + Math.floor(index / 4),
@@ -144,7 +144,7 @@ function sceneryEntries(): SceneryEntry[] {
 		name: `Back Curtain ${index + 1}`,
 		profile: "Curtain 5 m",
 		mode: "5 m",
-		layer: "Stage",
+		layer: "Stage & Venue",
 		location: { x, y: 4.35, z: 2.5 },
 	}));
 	const railings = [
@@ -153,7 +153,7 @@ function sceneryEntries(): SceneryEntry[] {
 			name: `Back Railing ${index + 1}`,
 			profile: "One-Point Truss / Pipe",
 			mode: "2 m",
-			layer: "Stage",
+			layer: "Stage & Venue",
 			location: { x, y: 4.05, z: 1.35 },
 		})),
 		...[-1, 1].flatMap((side, sideIndex) =>
@@ -162,7 +162,7 @@ function sceneryEntries(): SceneryEntry[] {
 				name: `${side < 0 ? "Left" : "Right"} Railing ${index + 1}`,
 				profile: "One-Point Truss / Pipe",
 				mode: "2 m",
-				layer: "Stage",
+				layer: "Stage & Venue",
 				location: { x: side * 4.05, y, z: 1.35 },
 				rotation: { x: 0, y: 0, z: 90 },
 			})),
@@ -173,7 +173,7 @@ function sceneryEntries(): SceneryEntry[] {
 		name: `Vertical Pipe ${index + 1}`,
 		profile: "One-Point Truss / Pipe",
 		mode: "2.5 m",
-		layer: "Back Truss",
+		layer: "Trusses",
 		location: { x, y: 4.15, z: 2.9 },
 		rotation: { x: 0, y: 90, z: 0 },
 	}));

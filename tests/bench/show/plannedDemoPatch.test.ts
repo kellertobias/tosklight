@@ -30,7 +30,12 @@ const profiles = uniqueProfiles.map((profile, index) => ({
   }],
 })) as any;
 const layers = Object.fromEntries(
-  ["Back Truss", "Mid Truss", "Front Truss", "Floor", "Audience", "Auxiliary", "House Lights"]
+  [
+    "Stage & Venue", "Trusses", "Profile Stage", "Profile Audience",
+    "Profile Auxilliary", "Wash Stage", "Wash Audience", "Wash Auxilliary",
+    "LED PAR Stage", "LED PAR Audience", "LED PAR Auxilliary", "Front Lights",
+    "Front Profiles", "ACLs & Blinder",
+  ]
     .map((name) => [name, `layer-${name}`]),
 );
 
@@ -60,13 +65,25 @@ describe("Plan 76 patch builder", () => {
     }
   });
 
+  it("reserves universe 1 addresses 1-8 for the eight Front Lights", () => {
+    const built = createPlannedDemoPatchInputs(profiles, layers);
+    const fresnels = built.fixtures.filter((fixture) => fixture.fixture_number >= 1 && fixture.fixture_number <= 8);
+    expect(fresnels.map((fixture) => [
+      fixture.split_patches[0].universe,
+      fixture.split_patches[0].address,
+    ])).toEqual(Array.from({ length: 8 }, (_, index) => [1, index + 1]));
+    expect(fresnels.slice(0, 4).map((fixture) => fixture.location.x)).toEqual([
+      -4000, -3667, -3333, -3000,
+    ]);
+  });
+
   it("places four eight-lamp ACL fans on their literal trusses", () => {
     const built = createPlannedDemoPatchInputs(profiles, layers);
     const acls = built.fixtures.filter((fixture) => fixture.fixture_number >= 601 && fixture.fixture_number <= 604);
     expect(acls.every((fixture) => fixture.multipatch.length === 7)).toBe(true);
-    expect(acls.map((fixture) => fixture.layer_id)).toEqual([
-      "layer-Back Truss", "layer-Back Truss", "layer-Mid Truss", "layer-Front Truss",
-    ]);
+    expect(acls.map((fixture) => fixture.layer_id)).toEqual(
+      Array.from({ length: 4 }, () => "layer-ACLs & Blinder"),
+    );
     const front = [acls[3], ...acls[3].multipatch]
       .map((fixture) => fixture.location.x);
     expect(front.filter((x) => x < 0)).toHaveLength(4);

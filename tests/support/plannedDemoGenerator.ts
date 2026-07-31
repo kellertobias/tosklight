@@ -29,14 +29,20 @@ export async function generatePlannedDemo(
 }
 
 const LAYER_NAMES = [
-	"Back Truss",
-	"Mid Truss",
-	"Front Truss",
-	"Floor",
-	"Audience",
-	"Auxiliary",
-	"House Lights",
-	"Stage",
+	"Stage & Venue",
+	"Trusses",
+	"Profile Stage",
+	"Profile Audience",
+	"Profile Auxilliary",
+	"Wash Stage",
+	"Wash Audience",
+	"Wash Auxilliary",
+	"LED PAR Stage",
+	"LED PAR Audience",
+	"LED PAR Auxilliary",
+	"Front Lights",
+	"Front Profiles",
+	"ACLs & Blinder",
 ] as const;
 
 export async function ensurePlannedDemoLayers(

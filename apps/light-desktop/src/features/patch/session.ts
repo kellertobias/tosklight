@@ -5,6 +5,7 @@ import type {
 	PatchMutation,
 	PatchMutationOutcome,
 	PatchPlacement,
+	PatchVectorSpread,
 } from "./contracts";
 import {
 	changedPatchFixtureCandidate,
@@ -145,6 +146,20 @@ export class PatchSession {
 		});
 	}
 
+	spreadFixtureVector(spread: PatchVectorSpread): Promise<PatchMutationOutcome> {
+		if (this.writableLifecycle() == null)
+			return Promise.reject(authorityChanged());
+		const materialize = () =>
+			spread.fixtureIds.map((fixtureId) => {
+				const fixture = this.store
+					.getSnapshot()
+					.fixtures.find((candidate) => candidate.fixture_id === fixtureId);
+				if (!fixture) throw new Error("Patched fixture was not found");
+				return changedPatchFixtureCandidate(fixture, {});
+			});
+		return this.queuePatch(materialize(), [], materialize, [], [spread]);
+	}
+
 	updatePolicy(
 		fixtureId: string,
 		action: PatchFixturePolicyAction,
@@ -184,6 +199,7 @@ export class PatchSession {
 		removeFixtureIds: readonly string[],
 		materialize: CandidateMaterializer,
 		placements: readonly PatchPlacement[] = [],
+		vectorSpreads: readonly PatchVectorSpread[] = [],
 	): Promise<PatchMutationOutcome> {
 		const lifecycle = this.writableLifecycle();
 		if (lifecycle == null) return Promise.reject(authorityChanged());
@@ -201,6 +217,7 @@ export class PatchSession {
 				removeFixtureIds,
 				materialize,
 				placements,
+				vectorSpreads,
 				lifecycle,
 				performanceSample,
 			),
@@ -212,6 +229,7 @@ export class PatchSession {
 		removeFixtureIds: readonly string[],
 		materialize: CandidateMaterializer,
 		placements: readonly PatchPlacement[],
+		vectorSpreads: readonly PatchVectorSpread[],
 		lifecycle: number,
 		performanceSample: ReturnType<
 			typeof frontendPerformanceDiagnostics.beginPatchMutation
@@ -224,6 +242,7 @@ export class PatchSession {
 				removeFixtureIds,
 				materialize,
 				placements,
+				vectorSpreads,
 				lifecycle,
 			);
 			performanceSample.responseDecoded();
@@ -330,6 +349,7 @@ export class PatchSession {
 		removeFixtureIds: readonly string[],
 		materialize: CandidateMaterializer,
 		placements: readonly PatchPlacement[],
+		vectorSpreads: readonly PatchVectorSpread[],
 		lifecycle: number,
 	): Promise<PatchMutationOutcome> {
 		for (let conflicts = 0; ; conflicts++) {
@@ -341,6 +361,7 @@ export class PatchSession {
 				candidates,
 				removeFixtureIds,
 				placements,
+				vectorSpreads,
 			);
 			try {
 				return await this.sendReplaySafe(request, lifecycle);

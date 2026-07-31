@@ -22,6 +22,10 @@ import { StageWindow } from "./windows/StageWindow";
 const DEMO_DMX_CHANNELS = 512;
 const DEMO_DMX_UNIVERSES = [1, 2, 3, 4] as const;
 const DEMO_APPLICATION_WIDTH = 1920;
+const DEMO_APPLICATION_ICON = new URL(
+	"../src-tauri/icons/icon.png",
+	import.meta.url,
+).href;
 const DEMO_CHAPTERS = [
 	["SHOW SETUP", "Show Setup"],
 	["OUTPUT CONFIGURATION", "Outputs"],
@@ -132,6 +136,12 @@ function DemoNarrative() {
 			className="product-demo-narrative"
 			aria-label="Product demo progress"
 		>
+			<img
+				src={DEMO_APPLICATION_ICON}
+				alt=""
+				data-demo-application-icon
+				hidden
+			/>
 			<ol className="product-demo-chapters" data-demo-chapter-strip>
 				{DEMO_CHAPTERS.map(([chapter, label], index) => (
 					<li key={chapter}>
@@ -174,10 +184,41 @@ export function DemoApplicationScreenView({
 		const element = viewport.current;
 		if (!element) return;
 		const resize = () => setScale(element.clientWidth / DEMO_APPLICATION_WIDTH);
-		const observer = new ResizeObserver(resize);
+		const publishBounds = () => {
+			const bounds = element.getBoundingClientRect();
+			document.documentElement.style.setProperty(
+				"--product-demo-app-scale",
+				String(bounds.width / DEMO_APPLICATION_WIDTH),
+			);
+			document.documentElement.style.setProperty(
+				"--product-demo-app-left",
+				`${bounds.left}px`,
+			);
+			document.documentElement.style.setProperty(
+				"--product-demo-app-top",
+				`${bounds.top}px`,
+			);
+			document.documentElement.style.setProperty(
+				"--product-demo-app-width",
+				`${bounds.width}px`,
+			);
+			document.documentElement.style.setProperty(
+				"--product-demo-app-height",
+				`${bounds.height}px`,
+			);
+		};
+		const sync = () => {
+			resize();
+			publishBounds();
+		};
+		const observer = new ResizeObserver(sync);
 		observer.observe(element);
-		resize();
-		return () => observer.disconnect();
+		window.addEventListener("resize", sync);
+		sync();
+		return () => {
+			observer.disconnect();
+			window.removeEventListener("resize", sync);
+		};
 	}, []);
 	return (
 		<section
@@ -210,7 +251,7 @@ function ProductDemoSurface() {
 					showGroupShortcuts={false}
 					followPreload={false}
 					stageRenderQuality="lines_and_beams"
-					showSelection={false}
+					showSelection
 					showFloorGrid={false}
 					showBeamGuides={state.builtIn === "patch"}
 					environmentBrightness={1}
@@ -252,7 +293,7 @@ export function ProductDemoSurfaceView({
 				<DemoCard
 					className="product-demo-stage"
 					title="STAGE · 3D"
-					meta="SELECTION OFF · GROUPS OFF · ENV 100%"
+					meta="FOLLOW SELECTION · GROUPS OFF · ENV 100%"
 				>
 					{stage}
 				</DemoCard>

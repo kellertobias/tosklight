@@ -14,8 +14,10 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
   await loadCanonicalCopy(api, bench, "plan-76-generator", "default-stage");
   const showId = await activeShowId(api);
   const layerNames = [
-    "Back Truss", "Mid Truss", "Front Truss", "Floor",
-    "Audience", "Auxiliary", "House Lights",
+    "Stage & Venue", "Trusses", "Profile Stage", "Profile Audience",
+    "Profile Auxilliary", "Wash Stage", "Wash Audience", "Wash Auxilliary",
+    "LED PAR Stage", "LED PAR Audience", "LED PAR Auxilliary", "Front Lights",
+    "Front Profiles", "ACLs & Blinder",
   ];
   const layers = Object.fromEntries(layerNames.map((name, index) => [
     name,
@@ -33,6 +35,15 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
   });
   expect(generated.lastUniverse).toBeGreaterThan(1);
   expect(generated.occupiedSlots).toBe(3_783);
+	const frontLights = generated.fixtures.filter(
+		(fixture) => fixture.fixture_number >= 1 && fixture.fixture_number <= 8,
+	);
+	expect(
+		frontLights.map((fixture) => [
+			fixture.split_patches[0].universe,
+			fixture.split_patches[0].address,
+		]),
+	).toEqual(Array.from({ length: 8 }, (_, index) => [1, index + 1]));
   expect(generatedShow.scenery).toHaveLength(33);
   const completePatch = await api.patch();
   expect(completePatch.fixtures).toHaveLength(295);

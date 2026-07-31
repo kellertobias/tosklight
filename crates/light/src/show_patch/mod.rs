@@ -11,12 +11,13 @@ mod records;
 mod replay;
 mod service;
 mod validation;
+mod vector_spread;
 
 pub use model::{
     PatchChange, PatchFixtureCandidate, PatchFixtureProjection, PatchFixturesCommand,
     PatchFixturesResult, PatchModeProjection, PatchOperatorAddressOverride, PatchPlacementIntent,
     PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
-    PatchSplitPlacementMode,
+    PatchSplitPlacementMode, PatchVectorAxis, PatchVectorKind, PatchVectorSpreadIntent,
 };
 pub use ports::{PatchPerformancePhase, ShowPatchPorts};
 pub use service::ShowPatchService;

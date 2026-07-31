@@ -57,6 +57,42 @@ pub(super) fn validate_action(
             )));
         }
     }
+    for spread in &command.vector_spreads {
+        if spread.fixture_ids.is_empty() {
+            return Err(invalid(
+                "patch vector spread must contain at least one ordered fixture identity",
+            ));
+        }
+        if spread.points.len() < 2 || spread.points.len() > spread.fixture_ids.len() {
+            return Err(invalid(
+                "patch vector spread requires 2 points and no more points than fixtures",
+            ));
+        }
+        if spread.points.iter().any(|point| !point.is_finite()) {
+            return Err(invalid("patch vector spread points must be finite"));
+        }
+        let mut ordered = HashSet::with_capacity(spread.fixture_ids.len());
+        for fixture_id in &spread.fixture_ids {
+            if !fixture_ids.contains(fixture_id) {
+                return Err(invalid(
+                    "patch vector spread fixture identities must belong to the upsert batch",
+                ));
+            }
+            if !ordered.insert(*fixture_id) {
+                return Err(invalid(
+                    "patch vector spread contains a duplicate ordered fixture identity",
+                ));
+            }
+        }
+        elements = elements
+            .saturating_add(spread.fixture_ids.len())
+            .saturating_add(spread.points.len());
+        if elements > MAX_PATCH_ELEMENTS {
+            return Err(invalid(format!(
+                "patch batch must contain at most {MAX_PATCH_ELEMENTS} nested patch elements"
+            )));
+        }
+    }
     let mut removals = HashSet::with_capacity(command.remove_fixture_ids.len());
     for fixture_id in &command.remove_fixture_ids {
         if !removals.insert(*fixture_id) {

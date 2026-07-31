@@ -11,6 +11,7 @@ fn request_contains_references_and_patch_owned_state_only() {
         fixtures: vec![fixture_input()],
         remove_fixture_ids: Vec::new(),
         placements: Vec::new(),
+        vector_spreads: Vec::new(),
     };
     let value = serde_json::to_value(request).expect("serialize patch request");
     let fixture = value["fixtures"][0]
@@ -36,6 +37,7 @@ fn request_ignores_future_or_non_owned_fixture_properties() {
         fixtures: vec![fixture_input()],
         remove_fixture_ids: Vec::new(),
         placements: Vec::new(),
+        vector_spreads: Vec::new(),
     })
     .expect("serialize patch request");
     value["fixtures"][0]["definition"] = serde_json::json!({ "modes": ["catalog"] });
@@ -73,6 +75,7 @@ fn request_preserves_explicit_unpatched_and_partial_pairs_for_application_valida
         fixtures: vec![fixture],
         remove_fixture_ids: Vec::new(),
         placements: Vec::new(),
+        vector_spreads: Vec::new(),
     })
     .expect("serialize unpatched request");
     let decoded = serde_json::from_value::<PatchFixturesRequest>(value.clone())

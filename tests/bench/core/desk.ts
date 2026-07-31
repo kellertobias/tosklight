@@ -111,6 +111,8 @@ export class DeskDriver {
     await this.page.evaluate(({ title, description }) => {
       const card = document.querySelector<HTMLElement>("#light-recording-title-card");
       if (!card) return;
+	  card.classList.remove("brand");
+	  card.querySelector("img")?.setAttribute("hidden", "");
       card.querySelector("strong")!.textContent = title;
       card.querySelector("p")!.textContent = description;
       card.setAttribute("aria-hidden", "false");
@@ -126,13 +128,75 @@ export class DeskDriver {
     if (Number.isFinite(fadeMillis) && fadeMillis > 0) await this.page.waitForTimeout(fadeMillis);
   }
 
+  async productIntro(stayMillis = Number(process.env.LIGHT_VISUAL_TITLE_CARD_PAUSE ?? 3_200)): Promise<void> {
+	if (this.page.isClosed() || process.env.LIGHT_VISUAL_RECORDING !== "1") return;
+	await this.installRecordingEffects();
+	await this.page.evaluate(() => {
+	  const card = document.querySelector<HTMLElement>("#light-recording-title-card");
+	  const source = document.querySelector<HTMLImageElement>("[data-demo-application-icon]")?.src;
+	  if (!card || !source) return;
+	  const icon = card.querySelector("img")!;
+	  icon.setAttribute("src", source);
+	  icon.removeAttribute("hidden");
+	  card.querySelector("strong")!.textContent = "ToskLight";
+	  card.querySelector("p")!.textContent = "Product Demo";
+	  card.classList.add("brand", "visible");
+	  card.setAttribute("aria-hidden", "false");
+	});
+	if (Number.isFinite(stayMillis) && stayMillis > 0) await this.page.waitForTimeout(stayMillis);
+	await this.page.evaluate(() => {
+	  const card = document.querySelector<HTMLElement>("#light-recording-title-card");
+	  card?.classList.remove("visible");
+	  card?.setAttribute("aria-hidden", "true");
+	});
+	const fadeMillis = Number(process.env.LIGHT_VISUAL_TITLE_CARD_FADE ?? 900);
+	if (Number.isFinite(fadeMillis) && fadeMillis > 0) await this.page.waitForTimeout(fadeMillis);
+  }
+
+  async prepareProductIntro(iconDataUrl: string): Promise<void> {
+	await this.page.addInitScript((icon) => {
+	  const install = () => {
+		if (document.querySelector("#light-recording-title-card")) return;
+		const style = document.createElement("style");
+		style.id = "light-recording-bootstrap-title-style";
+		style.textContent = `#light-recording-title-card{position:fixed;z-index:2147483647;inset:0;display:grid;place-items:center;padding:8vw;color:#f7fcff;background:#061016;font-family:Inter,system-ui,sans-serif;text-align:center}#light-recording-title-card>div{padding:58px 74px;border:1px solid #4dd9e8aa;border-radius:22px;background:#08141b;box-shadow:0 28px 90px #000b}#light-recording-title-card img{display:block;width:220px;height:220px;margin:0 auto 34px;object-fit:contain}#light-recording-title-card strong{display:block;color:#79edf7;font-size:86px;line-height:1.02}#light-recording-title-card p{margin:12px auto 0;color:#a9bbc5;font-size:30px}`;
+		document.head.append(style);
+		const card = document.createElement("aside");
+		card.id = "light-recording-title-card";
+		card.className = "brand visible";
+		card.setAttribute("aria-hidden", "false");
+		card.innerHTML = `<div><img alt="" src="${icon}"><strong>ToskLight</strong><p>Product Demo</p></div>`;
+		document.documentElement.append(card);
+	  };
+	  if (document.readyState === "loading")
+		document.addEventListener("DOMContentLoaded", install, { once: true });
+	  else install();
+	}, iconDataUrl);
+  }
+
+  async setDemoAction(description: string): Promise<void> {
+	if (this.page.isClosed()) return;
+	await this.page.evaluate((copy) => {
+	  const action = document.querySelector<HTMLElement>("[data-demo-current-action]");
+	  if (action) action.textContent = copy;
+	}, description);
+  }
+
   /** Previews a recorded click before dispatching it, then leaves enough time to read the result. */
-  async click(target: Locator): Promise<void> {
-    await this.updateDemoAction(target);
-    if (process.env.LIGHT_VISUAL_RECORDING !== "1") {
-      await target.click();
-      return;
-    }
+  async click(
+	target: Locator,
+	options: {
+	  button?: "left" | "right";
+	  modifiers?: Array<"Alt" | "Control" | "Meta" | "Shift">;
+	} = {},
+	  ): Promise<void> {
+	    if (process.env.LIGHT_VISUAL_RECORDING !== "1") {
+	      await target.click({
+	        button: options.button ?? "left",
+	        modifiers: options.modifiers,
+	      });
+	      return;
+	    }
     await this.installRecordingEffects();
     await target.scrollIntoViewIfNeeded();
     await target.hover();
@@ -148,12 +212,16 @@ export class DeskDriver {
         document.querySelector("#light-recording-click-layer")?.append(preview);
       }, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
     }
-    const defaultPreview = this.recordingClickPace === "compact" ? 120 : 280;
-    const previewMillis = Math.max(120, Number(process.env.LIGHT_VISUAL_CLICK_PREVIEW ?? defaultPreview));
+    const hardwareTyping = await target.evaluate((element) => Boolean(element.closest(".demo-number-block")));
+    const defaultPreview = hardwareTyping ? 80 : this.recordingClickPace === "compact" ? 120 : 280;
+    const previewMillis = Math.max(hardwareTyping ? 80 : 120, Number(process.env.LIGHT_VISUAL_CLICK_PREVIEW ?? defaultPreview));
     if (Number.isFinite(previewMillis)) await this.page.waitForTimeout(previewMillis);
-    await target.click();
-    const defaultPause = this.recordingClickPace === "compact" ? 120 : 280;
-    const settleMillis = Math.max(120, Number(process.env.LIGHT_VISUAL_CLICK_PAUSE ?? defaultPause));
+    await target.click({
+	  button: options.button ?? "left",
+	  modifiers: options.modifiers,
+	});
+    const defaultPause = hardwareTyping ? 80 : this.recordingClickPace === "compact" ? 120 : 280;
+    const settleMillis = Math.max(hardwareTyping ? 80 : 120, Number(process.env.LIGHT_VISUAL_CLICK_PAUSE ?? defaultPause));
     if (Number.isFinite(settleMillis)) await this.page.waitForTimeout(settleMillis);
     await this.page.evaluate(() => {
       document.querySelectorAll(".light-recording-click-target").forEach((element) => element.classList.remove("light-recording-click-target"));
@@ -210,25 +278,6 @@ export class DeskDriver {
       const action = document.querySelector<HTMLElement>("[data-demo-current-action]");
       if (action) action.textContent = description;
     }, { title, description });
-  }
-
-  private async updateDemoAction(target: Locator): Promise<void> {
-    const label = await target.evaluateAll((elements) => {
-      const element = elements[0];
-      if (!(element instanceof HTMLElement)) return null;
-      const inputLabel = element instanceof HTMLInputElement ? element.labels?.[0]?.textContent : null;
-      return element.getAttribute("aria-label")
-        || element.getAttribute("title")
-        || inputLabel
-        || element.textContent
-        || "control";
-    });
-    if (!label) return;
-    await this.page.evaluate((copy) => {
-      const action = document.querySelector<HTMLElement>("[data-demo-current-action]");
-      if (!action) return;
-      action.textContent = `Click ${copy.replace(/\s+/g, " ").trim()}.`;
-    }, label);
   }
 
   /** Adds a human-readable chapter card to visual recordings without affecting fast test runs. */
@@ -292,8 +341,12 @@ export class DeskDriver {
           #light-recording-title-card{position:fixed;z-index:2147483647;inset:0;display:grid;place-items:center;padding:8vw;color:#f7fcff;background:#061016a8;backdrop-filter:blur(18px) brightness(.48);-webkit-backdrop-filter:blur(18px) brightness(.48);opacity:0;visibility:hidden;transition:opacity 600ms ease,visibility 0s linear 600ms;pointer-events:none;font-family:Inter,system-ui,sans-serif;text-align:center}
           #light-recording-title-card.visible{opacity:1;visibility:visible;transition:opacity 420ms ease}
           #light-recording-title-card>div{max-width:1180px;padding:58px 74px;border:1px solid #4dd9e8aa;border-radius:22px;background:#08141be8;box-shadow:0 28px 90px #000b,0 0 42px #37d8e522}
+          #light-recording-title-card img{display:block;width:220px;height:220px;margin:0 auto 34px;object-fit:contain;filter:drop-shadow(0 18px 36px #000a)}
+          #light-recording-title-card img[hidden]{display:none}
           #light-recording-title-card strong{display:block;color:#79edf7;font-size:clamp(48px,5vw,86px);line-height:1.02;letter-spacing:.055em;text-transform:uppercase}
           #light-recording-title-card p{max-width:980px;margin:28px auto 0;color:#e9f2f6;font-size:clamp(22px,2vw,34px);line-height:1.35}
+          #light-recording-title-card.brand strong{text-transform:none;letter-spacing:.015em}
+          #light-recording-title-card.brand p{margin-top:12px;color:#a9bbc5;font-size:clamp(22px,1.65vw,30px)}
           #light-recording-fast-forward{position:fixed;z-index:2147483647;top:24px;left:50%;display:flex;align-items:center;gap:18px;max-width:min(900px,80vw);padding:18px 26px;border:2px solid #79edf7;border-radius:14px;color:#f4fcff;background:#07151eef;box-shadow:0 12px 40px #000b,0 0 30px #37d8e555;transform:translateX(-50%);font:600 20px/1.3 Inter,system-ui,sans-serif;pointer-events:none}
           #light-recording-fast-forward strong{color:#79edf7;font-size:42px;line-height:1;text-shadow:0 0 18px #37d8e5}
           #light-recording-fast-forward[data-placement="narrative"]{position:relative;z-index:1;top:auto;left:auto;align-self:center;width:min(900px,94%);max-width:none;min-height:54px;margin:0 auto 14px;padding:9px 16px;box-sizing:border-box;transform:none;font-size:16px}
@@ -311,7 +364,7 @@ export class DeskDriver {
         const card = document.createElement("aside");
         card.id = "light-recording-title-card";
         card.setAttribute("aria-hidden", "true");
-        card.innerHTML = "<div><strong></strong><p></p></div>";
+        card.innerHTML = "<div><img hidden alt=''><strong></strong><p></p></div>";
         document.documentElement.append(card);
       }
       if (visualWindow.__lightRecordingEffectsInstalled) return;

@@ -50,6 +50,7 @@ const server = {
 };
 const patchFeature = {
 	patchFixtures: vi.fn(),
+	spreadFixtureVector: vi.fn().mockResolvedValue(true),
 	updateFixture: vi.fn().mockResolvedValue(true),
 	updatePolicy: vi.fn().mockResolvedValue(true),
 	deleteFixture: vi.fn().mockResolvedValue(true),
@@ -91,6 +92,7 @@ vi.mock("../../features/patch/PatchContext", async (importOriginal) => {
 			pendingFixtureIds: new Set<string>(),
 			error: null,
 			patchFixtures: patchFeature.patchFixtures,
+			spreadFixtureVector: patchFeature.spreadFixtureVector,
 			updateFixture: patchFeature.updateFixture,
 			updatePolicy: patchFeature.updatePolicy,
 			deleteFixture: patchFeature.deleteFixture,
@@ -304,6 +306,7 @@ beforeEach(() => {
 	programming.actions.replace.mockResolvedValue(null);
 	programming.actions.gesture.mockResolvedValue(null);
 	patchFeature.updateFixture.mockResolvedValue(true);
+	patchFeature.spreadFixtureVector.mockResolvedValue(true);
 	patchFeature.updatePolicy.mockResolvedValue(true);
 	patchFeature.deleteFixture.mockResolvedValue(true);
 	patchFeature.patchFixtures.mockImplementation(
@@ -1225,6 +1228,45 @@ describe("DMX address grid dragging", () => {
 });
 
 describe("schema-v2 location and multi-patch editing", () => {
+	it("spreads a right-clicked location axis across the ordered selection", async () => {
+		const first = splitFixture();
+		const second = splitFixture();
+		second.fixture_id = "fixture-second";
+		second.fixture_number = 18;
+		second.name = "Split Wash 18";
+		second.address = 105;
+		second.split_patches = [
+			{ split: 1, universe: 1, address: 105 },
+			{ split: 3, universe: 2, address: 205 },
+		];
+		server.patch.fixtures = [first, second];
+		programming.selection.selected = ["fixture-second", "fixture-split"];
+		render(<FixturePatchSetup />);
+		const fixtureRow = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+		fireEvent.contextMenu(within(fixtureRow.cells[12]).getByRole("button"));
+
+		const modal = screen
+			.getByRole("heading", { name: "Set fixture location X" })
+			.closest("section") as HTMLElement;
+		fireEvent.click(
+			within(modal).getByRole("button", { name: "Open number pad" }),
+		);
+		for (const key of ["−", "4", "THRU", "−", "3"])
+			fireEvent.click(screen.getByRole("button", { name: key }));
+		fireEvent.click(screen.getByRole("button", { name: "ENTER" }));
+
+		await waitFor(() =>
+			expect(patchFeature.spreadFixtureVector).toHaveBeenCalledWith({
+				fixtureIds: ["fixture-second", "fixture-split"],
+				kind: "location",
+				axis: "x",
+				points: [-4000, -3000],
+			}),
+		);
+	});
+
 	it("keeps Set and Close in the location title bar and confirms discarding changed axes", async () => {
 		const { current } = fixturesWithConflict();
 		server.patch.fixtures = [current];

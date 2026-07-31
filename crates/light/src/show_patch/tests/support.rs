@@ -452,6 +452,7 @@ pub fn patch_batch(
             .collect(),
         remove_fixture_ids: Vec::new(),
         placements: Vec::new(),
+        vector_spreads: Vec::new(),
     }
 }
 

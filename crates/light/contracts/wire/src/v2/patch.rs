@@ -28,6 +28,35 @@ pub struct PatchFixturesRequest {
     /// where fixture split assignments are already explicit.
     #[serde(default)]
     pub placements: Vec<PatchPlacementIntent>,
+    /// Server-resolved coordinate spreads over an explicitly ordered fixture selection.
+    #[serde(default)]
+    pub vector_spreads: Vec<PatchVectorSpreadIntent>,
+}
+
+/// One ordered, server-resolved spread for a patch-owned location or rotation axis.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchVectorSpreadIntent {
+    #[schemars(length(min = 1))]
+    pub fixture_ids: Vec<Uuid>,
+    pub kind: PatchVectorKind,
+    pub axis: PatchVectorAxis,
+    #[schemars(length(min = 2))]
+    pub points: Vec<f32>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PatchVectorKind {
+    Location,
+    Rotation,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PatchVectorAxis {
+    X,
+    Y,
+    Z,
 }
 
 /// One sparse operator intent for a patch-owned output policy.

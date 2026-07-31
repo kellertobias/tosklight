@@ -15,6 +15,7 @@ import {
 import type {
 	PatchFixturePolicyAction,
 	PatchFixtureProjection,
+	PatchVectorSpread,
 } from "./contracts";
 import type { PatchPlacement } from "./contracts";
 import { PatchSession } from "./session";
@@ -55,6 +56,7 @@ export interface PatchContextValue extends PatchStoreSnapshot {
 		fixtureId: string,
 		changes: Partial<PatchedFixture>,
 	): Promise<boolean>;
+	spreadFixtureVector(spread: PatchVectorSpread): Promise<boolean>;
 	updatePolicy(
 		fixtureId: string,
 		action: PatchFixturePolicyAction,
@@ -140,6 +142,15 @@ export function PatchViewProvider({
 				if (!session || snapshot.status !== "ready") return false;
 				try {
 					await session.updateFixture(fixtureId, changes);
+					return true;
+				} catch {
+					return false;
+				}
+			},
+			spreadFixtureVector: async (spread) => {
+				if (!session || snapshot.status !== "ready") return false;
+				try {
+					await session.spreadFixtureVector(spread);
 					return true;
 				} catch {
 					return false;
