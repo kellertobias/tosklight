@@ -2,8 +2,6 @@ import { type ReactNode, useState } from "react";
 import type { ParameterFamily } from "../../../light-desktop/src/components/control/parameterControls/model";
 import { ParameterControlView } from "../../../light-desktop/src/components/control/parameterControls/ParameterControlView";
 import type { ParameterController } from "../../../light-desktop/src/components/control/parameterControls/useParameterController";
-import { ShowObjectsViewProvider } from "../../../light-desktop/src/features/showObjects/ShowObjectsView";
-import { ShowObjectsStore } from "../../../light-desktop/src/features/showObjects/store";
 import { useApp } from "../../../light-desktop/src/state/AppContext";
 import { Button } from "../../src";
 import {
@@ -23,6 +21,7 @@ import {
 } from "../../src/playback";
 import type { SoftwareKey } from "../../src/programmerKeypad";
 import { ApplicationStateHarness } from "../providers/ApplicationStateHarness";
+import { StoryShowObjectsProvider } from "../providers/StoryShowObjectsProvider";
 import { StaticCommandLine } from "./command";
 
 const speedGroups: readonly SpeedGroupViewModel[] = [120, 96, 72, 48, 24].map(
@@ -33,28 +32,10 @@ const speedGroups: readonly SpeedGroupViewModel[] = [120, 96, 72, 48, 24].map(
 		active: true,
 	}),
 );
-const showObjectsStore = new ShowObjectsStore();
-
-function StoryShowObjectsProvider({ children }: { children: ReactNode }) {
-	const unavailable = async () => {
-		throw new Error("The isolated Command Section story has no live show");
-	};
-	return (
-		<ShowObjectsViewProvider
-			showId={null}
-			store={showObjectsStore}
-			transport={null}
-			loadCollection={unavailable}
-			loadObject={unavailable}
-		>
-			{children}
-		</ShowObjectsViewProvider>
-	);
-}
-
 function ProgrammerSurface({ hardware }: { hardware: boolean }) {
 	const { state, dispatch } = useApp();
 	const [family, setFamily] = useState<ParameterFamily>("Intensity");
+	const [encoderPage, setEncoderPage] = useState(1);
 	const [dynamicsMode, setDynamicsMode] = useState(false);
 	const [normalized, setNormalized] = useState(
 		() =>
@@ -101,16 +82,38 @@ function ProgrammerSurface({ hardware }: { hardware: boolean }) {
 		dispatch,
 		family,
 		setFamily,
+		encoderGroups: Object.keys(attributes).map((name) => ({
+			id: name.toLowerCase(),
+			label: name,
+			pages: [{ number: 1, slots: [] }],
+		})),
+		encoderPage,
+		selectEncoderGroup: (next: ParameterFamily, page: number) => {
+			setFamily(next);
+			setEncoderPage(page);
+		},
 		alignMode: null,
 		setAlignMode: () => undefined,
 		dynamicsMode,
 		setDynamicsMode,
 		hardwareConnected: hardware,
 		selectedFixtureIds: ["front-left", "front-right"],
+		selectedFixtures: [],
+		selectionRevision: 1,
 		selectedGroupId: null,
+		programmerValuesRoute: "normal",
+		programmerValuesReady: true,
+		programmerValues: [],
+		groupProgrammerValues: [],
 		encoderSlots: attributes[family],
+		encoderPageCount: 1,
+		attributeLabels: new Map<string, string>(),
 		normalized,
+		normalizedByFixture: new Map<string, Map<string, number>>(),
+		discrete: new Map<string, string>(),
+		discreteByFixture: new Map<string, Map<string, string>>(),
 		programmerTarget: (attribute: string) => normalized.get(attribute),
+		programmerDiscreteTarget: () => undefined,
 		encoderNormalizedDisplay: (attribute: string) =>
 			normalized.has(attribute)
 				? `${Math.round((normalized.get(attribute) ?? 0) * 100)}%`

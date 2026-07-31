@@ -17,7 +17,7 @@ const profiles = [
 ] as const;
 
 for (const profile of profiles)
-	test(`FRONTEND-WARM-001 @ui › ${profile.name} show at ${profile.cpuThrottle}× CPU switches from retained authority`, async ({
+	test(`FRONTEND-WARM-001 @ui @performance › ${profile.name} show at ${profile.cpuThrottle}× CPU switches from retained authority`, async ({
 		api,
 		bench,
 		desk,

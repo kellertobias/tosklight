@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useRef, useState } from "react";
 import { ApplicationStateHarness } from "../../../ui-library/storybook/providers/ApplicationStateHarness";
+import { StoryShowObjectsProvider } from "../../../ui-library/storybook/providers/StoryShowObjectsProvider";
+import type { AttributeConfigurationSnapshot } from "../api/client/attributeConfiguration";
 import type {
 	DeskConfiguration,
 	FixtureProfile,
@@ -18,6 +20,8 @@ import {
 	type DmxDiagnostics,
 	DmxDiagnosticsProvider,
 } from "../features/dmxDiagnostics/DmxDiagnosticsContext";
+import { FilesProvider } from "../features/files/FilesContext";
+import type { FilesContextValue } from "../features/files/types";
 import {
 	FixtureLibraryProvider,
 	type FixtureLibraryState,
@@ -37,6 +41,102 @@ const screens: ScreensContextValue = {
 	updateControlDesk: async () => undefined,
 	selectControlDesk: () => undefined,
 	removeClient: async () => false,
+};
+
+const files: FilesContextValue = {
+	status: "connected",
+	systemPickerFallback: false,
+	fileRoots: async () => [],
+	fileEntries: async (root, path = "") => ({
+		root_id: root,
+		path,
+		entries: [],
+	}),
+	fileMetadata: async () => {
+		throw new Error("The Setup story has no file metadata");
+	},
+	readFileNote: async () => {
+		throw new Error("The Setup story has no file notes");
+	},
+	saveFileNote: async () => {
+		throw new Error("The Setup story cannot save file notes");
+	},
+	readTextFile: async () => {
+		throw new Error("The Setup story has no text files");
+	},
+	saveTextFile: async () => {
+		throw new Error("The Setup story cannot save text files");
+	},
+	fileOperation: async () => ({ paths: [], complete: true, items: [] }),
+	fileContent: async () => new Blob(),
+	fileStreamUrl: async () => "data:application/octet-stream;base64,",
+	fileThumbnail: async () => new Blob(),
+	claimFileInput: async (instanceId, action) => ({
+		instance_id: instanceId,
+		action,
+		session_id: "storybook-session",
+		desk_id: "storybook-desk",
+		expires_in_millis: 60_000,
+	}),
+	releaseFileInput: async () => undefined,
+};
+
+const attributeConfiguration: AttributeConfigurationSnapshot = {
+	show_id: "storybook-show",
+	show_revision: 8,
+	object_revision: 3,
+	configuration: {
+		version: 1,
+		custom_attributes: [],
+		placements: [
+			{
+				attribute: "intensity",
+				encoder_group: "intensity",
+				encoder_page: 1,
+				encoder_slot: 1,
+			},
+		],
+		activation_groups: [
+			{ id: "intensity", label: "Intensity", members: ["intensity"] },
+		],
+	},
+	recommended_configuration: {
+		version: 1,
+		custom_attributes: [],
+		placements: [
+			{
+				attribute: "intensity",
+				encoder_group: "intensity",
+				encoder_page: 1,
+				encoder_slot: 1,
+			},
+		],
+		activation_groups: [
+			{ id: "intensity", label: "Intensity", members: ["intensity"] },
+		],
+	},
+	descriptors: [
+		{
+			id: "intensity",
+			label: "Intensity",
+			encoder_group: "intensity",
+			encoder_page: 1,
+			encoder_slot: 1,
+			value_type: "continuous",
+			display_unit: "percent",
+			physical_unit: null,
+			normalized_min: 0,
+			normalized_max: 1,
+			domain_min: 0,
+			domain_max: 100,
+			cyclic: false,
+			recordable: true,
+			built_in: true,
+			retired: false,
+			activation_group_id: "intensity",
+		},
+	],
+	validation_error: null,
 };
 
 const configuration: DeskConfiguration = {
@@ -326,6 +426,9 @@ export function MarketingSetupWindow({
 		setRecordSettings: () => undefined,
 		updateSettings: defaultUpdateSettings,
 		setUpdateSettings: () => undefined,
+		attributeConfiguration,
+		attributeConfigurationError: null,
+		editAttributeConfiguration: () => undefined,
 		programmerSettingsError: null,
 		programmerSettingsLoaded: true,
 		serverUrl: "http://127.0.0.1:5000",
@@ -342,15 +445,19 @@ export function MarketingSetupWindow({
 	} as unknown as SetupWindowController;
 	return (
 		<ApplicationStateHarness>
-			<DmxDiagnosticsProvider diagnostics={marketingDmxDiagnostics}>
-				<FixtureLibraryProvider library={marketingFixtureLibrary}>
-					<div style={{ height: "100vh", minWidth: 820 }}>
-						<ScreensProvider source={screens}>
-							<SetupWindowView controller={controller} />
-						</ScreensProvider>
-					</div>
-				</FixtureLibraryProvider>
-			</DmxDiagnosticsProvider>
+			<StoryShowObjectsProvider>
+				<FilesProvider source={files}>
+					<DmxDiagnosticsProvider diagnostics={marketingDmxDiagnostics}>
+						<FixtureLibraryProvider library={marketingFixtureLibrary}>
+							<div style={{ height: "100vh", minWidth: 820 }}>
+								<ScreensProvider source={screens}>
+									<SetupWindowView controller={controller} />
+								</ScreensProvider>
+							</div>
+						</FixtureLibraryProvider>
+					</DmxDiagnosticsProvider>
+				</FilesProvider>
+			</StoryShowObjectsProvider>
 		</ApplicationStateHarness>
 	);
 }

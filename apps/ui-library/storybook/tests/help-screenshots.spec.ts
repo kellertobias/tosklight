@@ -20,7 +20,7 @@ const UPDATE = process.env.UPDATE_HELP_SCREENSHOTS === "1";
 const TARGET_FILE = process.env.HELP_SCREENSHOT_FILE;
 
 interface ScreenshotInteraction {
-	action: "click" | "fill" | "press";
+	action: "click" | "fill" | "press" | "scroll";
 	selector: string;
 	value?: string;
 }
@@ -139,6 +139,14 @@ test("captures the complete help screenshot manifest from truthful sources", asy
 		});
 		for (const interaction of entry.interactions)
 			await applyInteraction(page, interaction);
+		await page.evaluate(() => window.scrollTo(0, 0));
+		expect(
+			await page.evaluate(() => ({
+				x: window.scrollX,
+				y: window.scrollY,
+			})),
+			`${entry.file} viewport origin`,
+		).toEqual({ x: 0, y: 0 });
 
 		const actual = await page.screenshot({
 			animations: "disabled",
@@ -219,7 +227,12 @@ async function applyInteraction(
 	if (interaction.action === "click") await target.click();
 	else if (interaction.action === "fill")
 		await target.fill(interaction.value ?? "");
-	else await target.press(interaction.value ?? "Enter");
+	else if (interaction.action === "press")
+		await target.press(interaction.value ?? "Enter");
+	else
+		await target.evaluate((element) =>
+			element.scrollIntoView({ block: "center", inline: "nearest" }),
+		);
 }
 
 async function pngFiles(directory: string, prefix = ""): Promise<string[]> {

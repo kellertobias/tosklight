@@ -72,7 +72,7 @@
 	color: #fff;
 }
 
-@container (max-width: 620px) {
+@container (max-width: 700px) {
 	.ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-title {
 		max-width: 72px;
 		overflow: hidden;

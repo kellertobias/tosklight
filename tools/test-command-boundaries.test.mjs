@@ -49,8 +49,9 @@ test("Playwright exposes only UI and API-exception suites", () => {
 	assert.match(workflow, /npm run test:demo/u);
 	assert.match(
 		testScript,
-		/e2e_ui\(\)\{ e2e --grep '@ui' --grep-invert '@\(demo\|docs\)\\b'/u,
+		/e2e_ui\(\)\{ e2e --grep '@ui' --grep-invert '@\(demo\|docs\|performance\)\\b'/u,
 	);
+	assert.match(testScript, /e2e_performance\(\)\{ e2e --grep '@performance'/u);
 	assert.doesNotMatch(pairedScenario, /\btest\s*\(/u);
 });
 
@@ -69,10 +70,7 @@ test("Playwright shards reuse one exact-commit application build", () => {
 		/^ {2}e2e:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(workflow)?.[1] ?? "";
 
 	assert.match(buildJob, /bash tools\/test\.sh e2e-build/u);
-	assert.match(
-		testScript,
-		/cargo build[\s\S]*--features e2e-embedded-ui/u,
-	);
+	assert.match(testScript, /cargo build[\s\S]*--features e2e-embedded-ui/u);
 	assert.match(
 		buildJob,
 		/name: playwright-application-\$\{\{ github\.sha \}\}/u,
@@ -84,6 +82,35 @@ test("Playwright shards reuse one exact-commit application build", () => {
 		/name: playwright-application-\$\{\{ github\.sha \}\}/u,
 	);
 	assert.doesNotMatch(shardJob, /rust-toolchain|rust-cache/u);
+});
+
+test("documentation screenshots share one Storybook build", () => {
+	const workflow = fs.readFileSync(
+		path.join(repositoryRoot, ".github/workflows/release.yml"),
+		"utf8",
+	);
+	const testScript = fs.readFileSync(
+		path.join(repositoryRoot, "tools/test.sh"),
+		"utf8",
+	);
+	const screenshotJob =
+		/^ {2}documentation-screenshots:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(
+			workflow,
+		)?.[1] ?? "";
+
+	assert.match(
+		screenshotJob,
+		/UPDATE_MARKETING_SCREENSHOTS=1 bash tools\/test\.sh documentation-screenshots/u,
+	);
+	assert.doesNotMatch(workflow, /^ {2}(help|marketing)-screenshots:/mu);
+	assert.match(
+		testScript,
+		/documentation_screenshots\(\)\{[\s\S]*npm run storybook:build[\s\S]*run_documentation_screenshots/u,
+	);
+	assert.match(
+		testScript,
+		/run_documentation_screenshots\(\)\{[\s\S]*help-screenshots\.spec\.ts[\s\S]*marketing-screenshots\.spec\.ts/u,
+	);
 });
 
 test("scanner ignores the centralized sender's own envelope and family declarations", () => {
