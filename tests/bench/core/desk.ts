@@ -13,6 +13,7 @@ export class DeskDriver {
   private auditRevision = 0;
   private controllableDesktop?: ControllableDesktopDriver;
   private recordingClickPace: "normal" | "compact" = "normal";
+  private productIntroVisible = false;
   private readonly semanticStepObservers = new Set<(step: { title: string; description: string }) => void>();
 
   constructor(
@@ -108,23 +109,51 @@ export class DeskDriver {
     await this.updateDemoChapter(title, description);
     if (process.env.LIGHT_VISUAL_RECORDING !== "1") return;
     await this.installRecordingEffects();
-    await this.page.evaluate(({ title, description }) => {
+    const crossfadeFromProductIntro = this.productIntroVisible;
+    this.productIntroVisible = false;
+    const fadeMillis = Number(process.env.LIGHT_VISUAL_TITLE_CARD_FADE ?? 900);
+    await this.page.evaluate(async ({ title, description, crossfade, duration }) => {
       const card = document.querySelector<HTMLElement>("#light-recording-title-card");
       if (!card) return;
-	  card.classList.remove("brand");
-	  card.querySelector("img")?.setAttribute("hidden", "");
-      card.querySelector("strong")!.textContent = title;
-      card.querySelector("p")!.textContent = description;
+      const current = card.querySelector<HTMLElement>(":scope > div");
+      if (crossfade && current) {
+        const next = document.createElement("div");
+        next.innerHTML = "<img hidden alt=''><strong></strong><p></p>";
+        next.querySelector("strong")!.textContent = title;
+        next.querySelector("p")!.textContent = description;
+        current.style.gridArea = "1 / 1";
+        next.style.gridArea = "1 / 1";
+        next.style.opacity = "0";
+        card.append(next);
+        card.classList.remove("brand");
+        const timing = {
+          duration: Number.isFinite(duration) && duration > 0 ? duration : 0,
+          easing: "ease",
+          fill: "forwards" as const,
+        };
+        await Promise.all([
+          current.animate([{ opacity: 1 }, { opacity: 0 }], timing).finished,
+          next.animate([{ opacity: 0 }, { opacity: 1 }], timing).finished,
+        ]);
+        current.remove();
+        next.style.removeProperty("grid-area");
+        next.style.removeProperty("opacity");
+      } else if (current) {
+	    card.classList.remove("brand");
+        current.classList.remove("brand-content");
+	    current.querySelector("img")?.setAttribute("hidden", "");
+        current.querySelector("strong")!.textContent = title;
+        current.querySelector("p")!.textContent = description;
+      }
       card.setAttribute("aria-hidden", "false");
       card.classList.add("visible");
-    }, { title, description });
+    }, { title, description, crossfade: crossfadeFromProductIntro, duration: fadeMillis });
     if (Number.isFinite(stayMillis) && stayMillis > 0) await this.page.waitForTimeout(stayMillis);
     await this.page.evaluate(() => {
       const card = document.querySelector<HTMLElement>("#light-recording-title-card");
       card?.classList.remove("visible");
       card?.setAttribute("aria-hidden", "true");
     });
-    const fadeMillis = Number(process.env.LIGHT_VISUAL_TITLE_CARD_FADE ?? 900);
     if (Number.isFinite(fadeMillis) && fadeMillis > 0) await this.page.waitForTimeout(fadeMillis);
   }
 
@@ -136,6 +165,7 @@ export class DeskDriver {
 	  const source = document.querySelector<HTMLImageElement>("[data-demo-application-icon]")?.src;
 	  if (!card || !source) return;
 	  const icon = card.querySelector("img")!;
+	  card.querySelector(":scope > div")?.classList.add("brand-content");
 	  icon.setAttribute("src", source);
 	  icon.removeAttribute("hidden");
 	  card.querySelector("strong")!.textContent = "ToskLight";
@@ -144,13 +174,7 @@ export class DeskDriver {
 	  card.setAttribute("aria-hidden", "false");
 	});
 	if (Number.isFinite(stayMillis) && stayMillis > 0) await this.page.waitForTimeout(stayMillis);
-	await this.page.evaluate(() => {
-	  const card = document.querySelector<HTMLElement>("#light-recording-title-card");
-	  card?.classList.remove("visible");
-	  card?.setAttribute("aria-hidden", "true");
-	});
-	const fadeMillis = Number(process.env.LIGHT_VISUAL_TITLE_CARD_FADE ?? 900);
-	if (Number.isFinite(fadeMillis) && fadeMillis > 0) await this.page.waitForTimeout(fadeMillis);
+	this.productIntroVisible = true;
   }
 
   async prepareProductIntro(iconDataUrl: string): Promise<void> {
@@ -165,7 +189,7 @@ export class DeskDriver {
 		card.id = "light-recording-title-card";
 		card.className = "brand visible";
 		card.setAttribute("aria-hidden", "false");
-		card.innerHTML = `<div><img alt="" src="${icon}"><strong>ToskLight</strong><p>Product Demo</p></div>`;
+		card.innerHTML = `<div class="brand-content"><img alt="" src="${icon}"><strong>ToskLight</strong><p>Product Demo</p></div>`;
 		document.documentElement.append(card);
 	  };
 	  if (document.readyState === "loading")
@@ -345,8 +369,8 @@ export class DeskDriver {
           #light-recording-title-card img[hidden]{display:none}
           #light-recording-title-card strong{display:block;color:#79edf7;font-size:clamp(48px,5vw,86px);line-height:1.02;letter-spacing:.055em;text-transform:uppercase}
           #light-recording-title-card p{max-width:980px;margin:28px auto 0;color:#e9f2f6;font-size:clamp(22px,2vw,34px);line-height:1.35}
-          #light-recording-title-card.brand strong{text-transform:none;letter-spacing:.015em}
-          #light-recording-title-card.brand p{margin-top:12px;color:#a9bbc5;font-size:clamp(22px,1.65vw,30px)}
+          #light-recording-title-card .brand-content strong{text-transform:none;letter-spacing:.015em}
+          #light-recording-title-card .brand-content p{margin-top:12px;color:#a9bbc5;font-size:clamp(22px,1.65vw,30px)}
           #light-recording-fast-forward{position:fixed;z-index:2147483647;top:24px;left:50%;display:flex;align-items:center;gap:18px;max-width:min(900px,80vw);padding:18px 26px;border:2px solid #79edf7;border-radius:14px;color:#f4fcff;background:#07151eef;box-shadow:0 12px 40px #000b,0 0 30px #37d8e555;transform:translateX(-50%);font:600 20px/1.3 Inter,system-ui,sans-serif;pointer-events:none}
           #light-recording-fast-forward strong{color:#79edf7;font-size:42px;line-height:1;text-shadow:0 0 18px #37d8e5}
           #light-recording-fast-forward[data-placement="narrative"]{position:relative;z-index:1;top:auto;left:auto;align-self:center;width:min(900px,94%);max-width:none;min-height:54px;margin:0 auto 14px;padding:9px 16px;box-sizing:border-box;transform:none;font-size:16px}
