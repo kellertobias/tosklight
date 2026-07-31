@@ -1070,10 +1070,14 @@ async function buildPresetSetup(
 ) {
 	await desk.titleCard(
 		"PRESET SETUP · FIRST COLOR",
-		"Program and Record the first Color preset by hand through the simulated desk and touch pool.",
+		"Bring the Show Profiles on, program the first Color visibly, and Record it through the simulated desk and touch pool.",
 	);
 	await clearProgrammer(desk, keypad, api);
+	await desk.setDemoAction(
+		"Bring the Show Profiles to full intensity, set Red to 100%, and store Color preset 2.1: [GRP] [1] [3] [AT] [1] [0] [0] [ENTER]",
+	);
 	await keypadCommand(desk, keypad, ["GRP", "1", "3", "ENT"]);
+	await keypadCommand(desk, keypad, ["AT", "1", "0", "0", "ENT"]);
 	await setEncoderValue(desk, demo, "Color", "Red", ["1", "0", "0"]);
 	await openBuiltIn(desk, app, "Presets");
 	const presets = app.locator(".preset-pool-window");
@@ -1083,10 +1087,14 @@ async function buildPresetSetup(
 
 	await desk.titleCard(
 		"PRESET SETUP · FIRST POSITION",
-		"Program the first Position composition by hand and store it to the Position pool.",
+		"Bring the Show Profiles on, program the first Position visibly, and store it to the Position pool.",
 	);
 	await clearProgrammer(desk, keypad, api);
+	await desk.setDemoAction(
+		"Bring the Show Profiles to full intensity, aim Pan and Tilt, and store Position preset 3.1: [GRP] [1] [3] [AT] [1] [0] [0] [ENTER]",
+	);
 	await keypadCommand(desk, keypad, ["GRP", "1", "3", "ENT"]);
+	await keypadCommand(desk, keypad, ["AT", "1", "0", "0", "ENT"]);
 	await setEncoderValue(desk, demo, "Position", "Pan", ["5", "0"]);
 	await setEncoderValue(desk, demo, "Position", "Tilt", ["2", "5"]);
 	await openBuiltIn(desk, app, "Presets");
