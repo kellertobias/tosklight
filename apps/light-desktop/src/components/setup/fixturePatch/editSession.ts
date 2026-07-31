@@ -60,6 +60,13 @@ export function armEditFromContextMenu(
 	controller.ui.setEditError("");
 	controller.ui.setSelectedFixture(fixture.fixture_id);
 	controller.ui.setVector(fixture[kind] ?? { x: 0, y: 0, z: 0 });
+	controller.ui.setEditText(
+		String(
+			kind === "location"
+				? (fixture[kind]?.[axis] ?? 0) / 1_000
+				: (fixture[kind]?.[axis] ?? 0),
+		),
+	);
 	controller.ui.setEditAxis(axis);
 	controller.ui.setEdit(kind);
 }

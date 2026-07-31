@@ -900,6 +900,42 @@ describe("appReducer Fixture Sheet and preset pane migrations", () => {
 		expect(color.presetFamily).toBe("Mixed");
 	});
 
+	it("persists a bounded column count on a Group Pool pane", () => {
+		const hydrated = appReducer(initialState, {
+			type: "HYDRATE_LAYOUT",
+			desks: [
+				{
+					id: "groups",
+					name: "Groups",
+					panes: [
+						{
+							id: "group-pool",
+							kind: "groups",
+							title: "Group Pool",
+							x: 1,
+							y: 1,
+							width: 8,
+							height: 18,
+						},
+					],
+				},
+			],
+			activeDeskId: "groups",
+		});
+		const sevenColumns = appReducer(hydrated, {
+			type: "SET_PANE_POOL_COLUMNS",
+			id: "group-pool",
+			value: 7,
+		});
+		expect(sevenColumns.desks[0].panes[0].poolColumns).toBe(7);
+		const bounded = appReducer(sevenColumns, {
+			type: "SET_PANE_POOL_COLUMNS",
+			id: "group-pool",
+			value: 99,
+		});
+		expect(bounded.desks[0].panes[0].poolColumns).toBe(24);
+	});
+
 	it("migrates legacy Programming preset panes and All family state to Mixed", () => {
 		const desks = [
 			{

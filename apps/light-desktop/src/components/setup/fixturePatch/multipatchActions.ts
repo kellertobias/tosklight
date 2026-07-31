@@ -1,6 +1,10 @@
 import type { MultiPatchInstance, SplitPatch } from "../../../api/types";
 import { parsePatchAddress } from "../../input/ConsoleFields";
-import type { MultiPatchEdit, PatchController } from "./controller";
+import type {
+	MultiPatchEdit,
+	PatchController,
+	PatchRowMouseEvent,
+} from "./controller";
 import {
 	definitionSplits,
 	effectiveSplitPatches,
@@ -27,6 +31,33 @@ export async function addMultipatch(controller: PatchController) {
 	await controller.patch.updateFixture(selected.fixture_id, {
 		multipatch: [...(selected.multipatch ?? []), instance],
 	});
+}
+
+export const PRIMARY_PHYSICAL_PATCH = "primary";
+
+export function selectPhysicalPatchRow(
+	controller: PatchController,
+	fixture: PatchController["data"]["all"][number],
+	physicalId: string,
+	event: PatchRowMouseEvent,
+) {
+	const ordered = [
+		PRIMARY_PHYSICAL_PATCH,
+		...(fixture.multipatch ?? []).map((instance) => instance.id),
+	];
+	const sameFixture =
+		controller.ui.physicalSelectionFixture === fixture.fixture_id;
+	const anchor = controller.ui.physicalSelectionAnchor.current;
+	if (event.shiftKey && sameFixture && anchor) {
+		const from = ordered.indexOf(anchor);
+		const to = ordered.indexOf(physicalId);
+		if (from >= 0 && to >= 0)
+			controller.ui.setPhysicalSelectionIds(
+				ordered.slice(Math.min(from, to), Math.max(from, to) + 1),
+			);
+	} else controller.ui.setPhysicalSelectionIds([physicalId]);
+	controller.ui.setPhysicalSelectionFixture(fixture.fixture_id);
+	controller.ui.physicalSelectionAnchor.current = physicalId;
 }
 
 export function beginMultipatchEdit(
@@ -73,7 +104,111 @@ export function beginMultipatchEdit(
 		);
 	} else if (kind === "invert_pan" || kind === "invert_tilt")
 		ui.setEditText(String(instance[kind] ?? false));
-	else ui.setVector(instance[kind]);
+	else {
+		ui.setVector(instance[kind]);
+		if (axis)
+			ui.setEditText(
+				String(
+					kind === "location"
+						? instance[kind][axis] / 1_000
+						: instance[kind][axis],
+				),
+			);
+	}
+}
+
+export function beginMultipatchVectorEditFromContextMenu(
+	controller: PatchController,
+	fixture: PatchController["data"]["all"][number],
+	instance: MultiPatchInstance,
+	kind: "location" | "rotation",
+	axis: "x" | "y" | "z",
+) {
+	controller.dispatch({ type: "SET_PATCH_ARMED", value: true });
+	const selected =
+		controller.ui.physicalSelectionFixture === fixture.fixture_id &&
+		controller.ui.physicalSelectionIds.includes(instance.id)
+			? controller.ui.physicalSelectionIds
+			: [instance.id];
+	controller.ui.setEditError("");
+	controller.ui.setSelectedFixture(fixture.fixture_id);
+	controller.ui.setEditText(
+		String(
+			kind === "location" ? instance[kind][axis] / 1_000 : instance[kind][axis],
+		),
+	);
+	controller.ui.setMultipatchEdit({
+		fixtureId: fixture.fixture_id,
+		instanceId: instance.id,
+		kind,
+		axis,
+		physicalTargets: selected,
+	});
+}
+
+export async function saveMultipatchVectorInput(
+	controller: PatchController,
+	value: string,
+) {
+	const edit = controller.ui.multipatchEdit;
+	if (
+		!edit ||
+		(edit.kind !== "location" && edit.kind !== "rotation") ||
+		!edit.axis
+	)
+		return;
+	const fixture = controller.data.all.find(
+		(candidate) => candidate.fixture_id === edit.fixtureId,
+	);
+	if (!fixture) return;
+	const kind = edit.kind;
+	const axis = edit.axis;
+	const targets = edit.physicalTargets?.length
+		? edit.physicalTargets
+		: [edit.instanceId];
+	const endpoints = value
+		.split(/\s+THRU\s+/i)
+		.map((entry) => Number(entry.trim()));
+	if (
+		!endpoints.length ||
+		endpoints.length > 2 ||
+		endpoints.some((entry) => !Number.isFinite(entry))
+	) {
+		controller.ui.setEditError(
+			"Enter a number or two numeric values separated by THRU.",
+		);
+		return;
+	}
+	const values = Array.from({ length: targets.length }, (_, index) => {
+		const point =
+			endpoints.length === 1 || targets.length === 1
+				? endpoints[0]
+				: endpoints[0] +
+					((endpoints[1] - endpoints[0]) * index) / (targets.length - 1);
+		return kind === "location" ? Math.round(point * 1_000) : point;
+	});
+	let primary = fixture[kind] ?? { x: 0, y: 0, z: 0 };
+	const byTarget = new Map(
+		targets.map((target, index) => [target, values[index]]),
+	);
+	if (byTarget.has(PRIMARY_PHYSICAL_PATCH))
+		primary = { ...primary, [axis]: byTarget.get(PRIMARY_PHYSICAL_PATCH) };
+	const multipatch = (fixture.multipatch ?? []).map((instance) =>
+		byTarget.has(instance.id)
+			? {
+					...instance,
+					[kind]: {
+						...instance[kind],
+						[axis]: byTarget.get(instance.id),
+					},
+				}
+			: instance,
+	);
+	const changes = byTarget.has(PRIMARY_PHYSICAL_PATCH)
+		? { [kind]: primary, multipatch }
+		: { multipatch };
+	if (await controller.patch.updateFixture(fixture.fixture_id, changes))
+		controller.ui.setMultipatchEdit(null);
 }
 
 export async function saveMultipatchEdit(

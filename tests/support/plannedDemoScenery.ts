@@ -22,6 +22,7 @@ export async function installPlannedDemoScenery(
 	api: ApiDriver,
 	showId: string,
 	layers: Readonly<Record<string, string>>,
+	options: { progressive?: boolean; onItem?: () => Promise<void> } = {},
 ) {
 	await ensurePlannedDemoFixtureLibrary(api);
 	const profiles = (await api.fixtureProfilesSnapshot())
@@ -94,19 +95,30 @@ export async function installPlannedDemoScenery(
 			highlight_overrides: [],
 		};
 	});
-	await api.request(
-		"POST",
-		"/api/v2/patch/fixtures",
-		{
-			request_id: crypto.randomUUID(),
-			fixtures,
-			remove_fixture_ids: [],
-			placements: [],
-		},
-		true,
-		before.revision,
-		{ showId },
-	);
+	const batches = options.progressive
+		? fixtures
+				.filter(
+					(fixture) => !byVirtualNumber.has(fixture.virtual_fixture_number),
+				)
+				.map((fixture) => [fixture])
+		: [fixtures];
+	for (const batch of batches) {
+		const current = await api.patch();
+		await api.request(
+			"POST",
+			"/api/v2/patch/fixtures",
+			{
+				request_id: crypto.randomUUID(),
+				fixtures: batch,
+				remove_fixture_ids: [],
+				placements: [],
+			},
+			true,
+			current.revision,
+			{ showId },
+		);
+		await options.onItem?.();
+	}
 	return fixtures;
 }
 
@@ -120,7 +132,7 @@ function sceneryEntries(): SceneryEntry[] {
 		name: `${name} Truss Segment 1`,
 		profile: "Four-Point Truss",
 		mode: "2 m",
-			layer: "Trusses",
+		layer: "Trusses",
 		location: { x: -3, y: Number(y), z: 4.15 },
 		multipatches: [-1, 1, 3].map((x, index) => ({
 			name: `${name} Truss Segment ${index + 2}`,
@@ -145,7 +157,7 @@ function sceneryEntries(): SceneryEntry[] {
 		profile: "Curtain 5 m",
 		mode: "5 m",
 		layer: "Stage & Venue",
-		location: { x, y: 4.35, z: 2.5 },
+		location: { x, y: 4.35, z: 2.0 },
 	}));
 	const railings = [
 		...[-3, -1, 1, 3].map((x, index) => ({

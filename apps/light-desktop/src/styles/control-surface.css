@@ -1618,11 +1618,8 @@ button.large-danger:disabled {
 }
 .fixture-browser-modal {
 	display: grid;
-	grid-template-rows: auto auto minmax(0, 1fr);
+	grid-template-rows: auto minmax(0, 1fr);
 	gap: 8px;
-}
-.fixture-browser-modal > .console-search {
-	width: min(760px, 100%);
 }
 .fixture-picker-columns {
 	height: auto !important;

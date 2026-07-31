@@ -92,7 +92,8 @@
 
 .ui-modal-title-search > .console-search {
 	width: 100%;
-	height: 48px;
+	height: 100%;
+	align-self: stretch;
 }
 
 .ui-modal-title-tabs > .ui-button,

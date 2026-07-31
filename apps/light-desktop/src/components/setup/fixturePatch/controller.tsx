@@ -47,6 +47,7 @@ export type MultiPatchEdit = {
 	instanceId: string;
 	kind: "address" | "location" | "rotation" | "invert_pan" | "invert_tilt";
 	axis?: VectorAxis;
+	physicalTargets?: string[];
 } | null;
 
 export type PlacementBaseline = {
@@ -106,6 +107,12 @@ function usePatchUiState() {
 	const [pending, setPending] = useState<Partial<PatchedFixture> | null>(null);
 	const [blockedBy, setBlockedBy] = useState<PatchedFixture[]>([]);
 	const [multipatchEdit, setMultipatchEdit] = useState<MultiPatchEdit>(null);
+	const [physicalSelectionFixture, setPhysicalSelectionFixture] = useState<
+		string | null
+	>(null);
+	const [physicalSelectionIds, setPhysicalSelectionIds] = useState<string[]>(
+		[],
+	);
 	const [editCloseConfirm, setEditCloseConfirm] = useState<
 		"fixture" | "multipatch" | null
 	>(null);
@@ -115,6 +122,7 @@ function usePatchUiState() {
 	);
 	const [editingSplit, setEditingSplit] = useState<number | null>(null);
 	const selectionAnchor = useRef<string | null>(null);
+	const physicalSelectionAnchor = useRef<string | null>(null);
 	return {
 		activeLayer,
 		setActiveLayer,
@@ -176,6 +184,10 @@ function usePatchUiState() {
 		setBlockedBy,
 		multipatchEdit,
 		setMultipatchEdit,
+		physicalSelectionFixture,
+		setPhysicalSelectionFixture,
+		physicalSelectionIds,
+		setPhysicalSelectionIds,
 		editCloseConfirm,
 		setEditCloseConfirm,
 		deleteArmed,
@@ -185,6 +197,7 @@ function usePatchUiState() {
 		editingSplit,
 		setEditingSplit,
 		selectionAnchor,
+		physicalSelectionAnchor,
 	};
 }
 

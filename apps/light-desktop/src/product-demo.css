@@ -150,6 +150,41 @@ body:has(.product-demo-shell) > .stacked-modal-layer > .nested-modal {
 		transparent
 	);
 }
+.product-demo-section-status {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: end;
+	gap: 24px;
+	margin-bottom: 14px;
+}
+.product-demo-section-status > div {
+	min-width: 0;
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: baseline;
+	gap: 6px 12px;
+}
+.product-demo-section-status small {
+	color: #58d5e5;
+	font: 9px / 1 ui-monospace, monospace;
+	letter-spacing: 0.22em;
+}
+.product-demo-section-status strong {
+	color: #eafcff;
+	font: 700 16px / 1.2 ui-monospace, monospace;
+	letter-spacing: 0.08em;
+}
+.product-demo-section-status span {
+	grid-column: 2;
+	min-height: 16px;
+	color: #91a9b4;
+	font: 600 12px / 1.25 system-ui, sans-serif;
+}
+.product-demo-section-status time {
+	color: #79edf7;
+	font: 700 22px / 1 ui-monospace, monospace;
+	font-variant-numeric: tabular-nums;
+}
 .product-demo-current-action {
 	display: grid;
 	gap: 7px;

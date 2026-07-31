@@ -2,18 +2,18 @@ import type { ApiDriver } from "../bench/core/api";
 import { putPlannedDemoObject } from "./plannedDemoObjects";
 
 const FAMILY_GROUPS = [
-	["Show Profile", "13", "A"],
-	["Aux Show Profile", "14", "A"],
-	["Show Wash", "15", "B"],
-	["Aux Show Wash", "16", "B"],
-	["Show LED", "17", "C"],
-	["Aux Show LED", "18", "C"],
+	["Beam Show", "4", "A"],
+	["Beam Auxiliary Show", "5", "A"],
+	["Wash Show", "11", "B"],
+	["Wash Auxiliary Show", "12", "B"],
+	["LED Show", "18", "C"],
+	["LED Auxiliary Show", "19", "C"],
 ] as const;
 const MOVING_GROUPS = [
-	["Show Profile", "13"],
-	["Aux Show Profile", "14"],
-	["Show Wash", "15"],
-	["Aux Show Wash", "16"],
+	["Beam Show", "4"],
+	["Beam Auxiliary Show", "5"],
+	["Wash Show", "11"],
+	["Wash Auxiliary Show", "12"],
 ] as const;
 
 export function plannedDemoDynamicDefinitions() {
@@ -61,7 +61,7 @@ export function plannedDemoDynamicDefinitions() {
 		definition(
 			27,
 			"Wash Row Waterfall",
-			"5",
+			"8",
 			"E",
 			[
 				keyframeLane("tilt", [
@@ -82,7 +82,7 @@ export function plannedDemoDynamicDefinitions() {
 		definition(
 			28,
 			"Sunstrip Random Color",
-			"40",
+			"27",
 			"C",
 			[
 				lane("color.red", "random", "sinus", "color"),
@@ -94,7 +94,7 @@ export function plannedDemoDynamicDefinitions() {
 		definition(
 			29,
 			"Sunstrip Rain",
-			"40",
+			"27",
 			"C",
 			[
 				keyframeLane("intensity", [
@@ -120,8 +120,8 @@ export function plannedDemoDynamicDefinitions() {
 		),
 		definition(
 			30,
-			"Show LED Random Strobe",
-			"17",
+			"LED Show Random Strobe",
+			"18",
 			"C",
 			[lane("strobe", "random", "sinus", "strobe")],
 			[randomGroup("strobe")],

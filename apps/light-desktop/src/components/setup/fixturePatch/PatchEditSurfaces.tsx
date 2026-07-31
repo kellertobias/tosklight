@@ -6,15 +6,22 @@ import {
 	Select,
 	TextInput,
 } from "@tosklight/ui";
+import { ModalNumberEditor } from "@tosklight/ui/input";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { usePatchController } from "./controller";
-import { saveEdit, saveSplitEdit, saveVectorSpread } from "./editSave";
+import {
+	saveEdit,
+	saveSplitEdit,
+	saveVectorAxisInput,
+	saveVectorSpread,
+} from "./editSave";
 import { cancelEdit, requestFixtureEditClose } from "./editSession";
 import { FixtureAddressScreen } from "./FixtureAddressScreen";
 import {
 	closeMultipatchEdit,
 	requestMultipatchEditClose,
 	saveMultipatchEdit,
+	saveMultipatchVectorInput,
 } from "./multipatchActions";
 import { definitionSplits } from "./patchModel";
 
@@ -24,6 +31,27 @@ export function MultipatchVectorDialog() {
 	if (!edit || edit.kind === "address") return null;
 	const policy = edit.kind === "invert_pan" || edit.kind === "invert_tilt";
 	const close = () => requestMultipatchEditClose(controller);
+	if (!policy && edit.axis) {
+		const label = `${edit.kind === "location" ? "Location" : "Rotation"} ${edit.axis.toUpperCase()} (${edit.kind === "location" ? "meter" : "degree"})`;
+		return (
+			<ModalNumberEditor
+				ariaLabel={label}
+				title={label}
+				value={controller.ui.editText}
+				onChange={controller.ui.setEditText}
+				onSubmit={(value) =>
+					void saveMultipatchVectorInput(
+						controller,
+						value ?? controller.ui.editText,
+					)
+				}
+				onClose={close}
+				allowDecimal
+				allowThrough={(edit.physicalTargets?.length ?? 0) > 1}
+				unit={edit.kind === "location" ? "meter" : "degree"}
+			/>
+		);
+	}
 	return (
 		<ModalRegistration onClose={close}>
 			<div className="stacked-modal-layer">
@@ -106,6 +134,30 @@ export function FixtureEditDialog() {
 	const { edit } = controller.ui;
 	if (!edit || !controller.data.selected || edit === "address") return null;
 	const close = () => requestFixtureEditClose(controller);
+	if ((edit === "location" || edit === "rotation") && controller.ui.editAxis) {
+		const axis = controller.ui.editAxis;
+		const label = `${edit === "location" ? "Location" : "Rotation"} ${axis.toUpperCase()} (${edit === "location" ? "meter" : "degree"})`;
+		return (
+			<ModalNumberEditor
+				ariaLabel={label}
+				title={label}
+				value={controller.ui.editText}
+				onChange={controller.ui.setEditText}
+				onSubmit={(value) =>
+					void saveVectorAxisInput(
+						controller,
+						edit,
+						axis,
+						value ?? controller.ui.editText,
+					)
+				}
+				onClose={close}
+				allowDecimal
+				allowThrough={(controller.selection.orderedFixtureIds?.length ?? 0) > 1}
+				unit={edit === "location" ? "meter" : "degree"}
+			/>
+		);
+	}
 	return (
 		<ModalRegistration onClose={close}>
 			<div className="stacked-modal-layer">
@@ -174,7 +226,7 @@ function FixtureEditFields() {
 				label="MIB Delay (s)"
 				min={0}
 				step={0.1}
-					allowDecimal
+				allowDecimal
 				value={editText}
 				onChange={(event) => controller.ui.setEditText(event.target.value)}
 			/>
@@ -255,14 +307,14 @@ function VectorInputs({
 				<NumberField
 					key={entry}
 					autoFocus={Boolean(axis)}
-						label={`${entry.toUpperCase()} ${kind === "location" ? "(m)" : "(°)"}`}
-						allowDecimal
-						allowThrough={Boolean(
-							axis && (controller.selection.orderedFixtureIds?.length ?? 0) > 1,
-						)}
-						onRangeCommit={(points) =>
-							void saveVectorSpread(controller, kind, entry, points)
-						}
+					label={`${entry.toUpperCase()} ${kind === "location" ? "(m)" : "(°)"}`}
+					allowDecimal
+					allowThrough={Boolean(
+						axis && (controller.selection.orderedFixtureIds?.length ?? 0) > 1,
+					)}
+					onRangeCommit={(points) =>
+						void saveVectorSpread(controller, kind, entry, points)
+					}
 					value={
 						kind === "location"
 							? controller.ui.vector[entry] / 1000

@@ -34,6 +34,7 @@ export function GroupPoolGrid({
 	recordGroup,
 	runCommand,
 	paneId,
+	columns,
 }: Pick<FixtureMetadata, "capabilities" | "knownFixtureIds"> & {
 	active?: boolean;
 	cards: (Group | null)[];
@@ -44,6 +45,7 @@ export function GroupPoolGrid({
 	recordGroup: (target: GroupRecordingTarget) => Promise<unknown>;
 	runCommand: (command: string) => Promise<unknown>;
 	paneId?: string;
+	columns?: number;
 }) {
 	const groupSelection = useGroupSelectionActions(active);
 	const { state, dispatch } = useApp();
@@ -104,6 +106,7 @@ export function GroupPoolGrid({
 	return (
 		<WindowScrollArea>
 			<PoolGrid
+				columns={columns}
 				minimumCardWidth={DEFAULT_POOL_CARD_MINIMUM_WIDTH}
 				slots={slots}
 				slotCount={cards.length}

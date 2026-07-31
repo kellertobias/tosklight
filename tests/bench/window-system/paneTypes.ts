@@ -110,6 +110,10 @@ export interface PresetPaneConfiguration {
 	showGroupShortcuts?: boolean;
 }
 
+export interface GroupPoolPaneConfiguration {
+	columns?: number;
+}
+
 export interface CuesPaneConfiguration {
 	showCueSidebar?: boolean;
 }
@@ -128,6 +132,8 @@ export interface TextEditorPaneConfiguration {
 
 export type PaneConfiguration<T extends PaneType> = T extends PaneType.Stage
 	? StagePaneConfiguration
+	: T extends PaneType.Groups
+		? GroupPoolPaneConfiguration
 	: T extends PaneType.Fixtures
 		? FixtureSheetPaneConfiguration
 		: T extends PaneType.Layout

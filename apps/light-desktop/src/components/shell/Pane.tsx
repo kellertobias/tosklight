@@ -184,6 +184,7 @@ function PaneContent({
 				layoutGroupId={pane.layoutGroupId}
 				presetFamily={pane.presetFamily ?? state.presetFamily}
 				presetPoolColors={pane.presetPoolColors ?? true}
+				poolColumns={pane.poolColumns}
 				schedulerShowList={pane.schedulerShowList ?? true}
 				schedulerShowCalendar={pane.schedulerShowCalendar ?? true}
 				onSchedulerLayoutChange={({ showList, showCalendar }) =>

@@ -2,17 +2,17 @@ import type { ApiDriver } from "../bench/core/api";
 
 export const PLANNED_DEMO_BENCHMARK_ASSIGNMENTS = [
   { name: "ACL Chase", kind: "physical", playbackNumber: 17 },
-  { name: "Show Wash Waterfall", kind: "virtual", playbackNumber: 1024 },
-  { name: "Show Profile Circle", kind: "virtual", playbackNumber: 1019 },
-  { name: "Show Profile PWM", kind: "virtual", playbackNumber: 1001 },
-  { name: "Show LED Random", kind: "virtual", playbackNumber: 1014 },
-  { name: "Show LED Random Strobe", kind: "virtual", playbackNumber: 1030 },
+  { name: "Wash Show Waterfall", kind: "virtual", playbackNumber: 1024 },
+  { name: "Beam Show Circle", kind: "virtual", playbackNumber: 1019 },
+  { name: "Beam Show PWM", kind: "virtual", playbackNumber: 1001 },
+  { name: "LED Show Random", kind: "virtual", playbackNumber: 1014 },
+  { name: "LED Show Random Strobe", kind: "virtual", playbackNumber: 1030 },
   { name: "Sunstrip Rain", kind: "virtual", playbackNumber: 1029 },
-  { name: "Aux Show Profile Circle", kind: "virtual", playbackNumber: 1021 },
-  { name: "Aux Show Profile PWM", kind: "virtual", playbackNumber: 1004 },
-  { name: "Aux Show Wash Waterfall", kind: "virtual", playbackNumber: 1026 },
-  { name: "Aux Show Wash Random", kind: "virtual", playbackNumber: 1011 },
-  { name: "Aux Show LED Sinus", kind: "virtual", playbackNumber: 1018 },
+  { name: "Beam Auxiliary Show Circle", kind: "virtual", playbackNumber: 1021 },
+  { name: "Beam Auxiliary Show PWM", kind: "virtual", playbackNumber: 1004 },
+  { name: "Wash Auxiliary Show Waterfall", kind: "virtual", playbackNumber: 1026 },
+  { name: "Wash Auxiliary Show Random", kind: "virtual", playbackNumber: 1011 },
+  { name: "LED Auxiliary Show Sinus", kind: "virtual", playbackNumber: 1018 },
 ] as const;
 
 export const PLANNED_DEMO_BENCHMARK_SPEED_GROUPS = {

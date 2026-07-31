@@ -13,10 +13,10 @@ interface PatchedTargetFixture {
 }
 
 const GROUP_MASTER_PLAYBACKS: Readonly<Record<string, number>> = {
-	"Show Profile Odd": 1,
-	"Show Profile Even": 2,
-	"Show LED": 3,
-	"Show Wash": 4,
+	"Beam Show Odd": 1,
+	"Beam Show Even": 2,
+	"LED Show": 3,
+	"Wash Show": 4,
 	"All ACLs": 5,
 	Blinders: 6,
 };
@@ -29,80 +29,60 @@ export interface PlannedDemoGroupSpec {
 
 export function plannedDemoGroupSpecs(): PlannedDemoGroupSpec[] {
 	const specs: PlannedDemoGroupSpec[] = [];
-	let number = 1;
-	for (const [family, label] of [
-		["profile", "Profile"],
-		["wash", "Wash"],
-		["led", "LED"],
+	for (const [row, family, label] of [
+		[0, "profile", "Beam"],
+		[1, "wash", "Wash"],
+		[2, "led", "LED"],
 	] as const) {
+		const first = row * 7 + 1;
+		const show = showNumbers(family);
 		specs.push(
-			group(number++, `${label} All`, plannedDemoFamilyNumbers(family)),
+			group(first, `${label} Stage`, plannedDemoFamilyNumbers(family, "stage")),
 			group(
-				number++,
-				`${label} Stage`,
-				plannedDemoFamilyNumbers(family, "stage"),
-			),
-			group(
-				number++,
+				first + 1,
 				`${label} Audience`,
 				plannedDemoFamilyNumbers(family, "audience"),
 			),
-			group(number++, `${label} Aux`, plannedDemoFamilyNumbers(family, "aux")),
-		);
-	}
-	const showFamilies = [
-		["profile", "Profile"],
-		["wash", "Wash"],
-		["led", "LED"],
-	] as const;
-	for (const [family, label] of showFamilies) {
-		specs.push(
-			group(number++, `Show ${label}`, showNumbers(family)),
 			group(
-				number++,
-				`Aux Show ${label}`,
+				first + 2,
+				`${label} Auxiliary`,
 				plannedDemoFamilyNumbers(family, "aux"),
 			),
-		);
-	}
-	const show = showFamilies.flatMap(([family]) => showNumbers(family));
-	const auxShow = showFamilies.flatMap(([family]) =>
-		plannedDemoFamilyNumbers(family, "aux"),
-	);
-	specs.push(
-		group(number++, "Show", show),
-		group(number++, "Aux Show", auxShow),
-	);
-	for (const [family, label] of showFamilies) {
-		const members = showNumbers(family);
-		specs.push(
+			group(first + 3, `${label} Show`, show),
 			group(
-				number++,
-				`Show ${label} Odd`,
-				members.filter((_, index) => index % 2 === 0),
+				first + 4,
+				`${label} Auxiliary Show`,
+				plannedDemoFamilyNumbers(family, "aux"),
 			),
 			group(
-				number++,
-				`Show ${label} Even`,
-				members.filter((_, index) => index % 2 === 1),
+				first + 5,
+				`${label} Show Odd`,
+				show.filter((_, index) => index % 2 === 0),
+			),
+			group(
+				first + 6,
+				`${label} Show Even`,
+				show.filter((_, index) => index % 2 === 1),
 			),
 		);
 	}
-	specs.push(
-		group(31, "ACL 1", plannedDemoRoleNumbers("ACL 1")),
-		group(32, "ACL 2", plannedDemoRoleNumbers("ACL 2")),
-		group(33, "ACL 3", plannedDemoRoleNumbers("ACL 3")),
-		group(34, "ACL 4", plannedDemoRoleNumbers("ACL 4")),
-		group(35, "All ACLs", plannedDemoRoleNumbers("All ACLs")),
-		group(36, "Blinders", plannedDemoRoleNumbers("Blinders")),
-		group(37, "Front Lights", plannedDemoRoleNumbers("Front Lights")),
-		group(38, "Front Center", [11, 12, 13]),
-		group(39, "Follow Spots", plannedDemoRoleNumbers("Follow Spots")),
-		group(40, "Sunstrips", plannedDemoRoleNumbers("Sunstrips")),
-		group(41, "House Lights", plannedDemoRoleNumbers("House Lights")),
-		group(42, "Hazers", plannedDemoRoleNumbers("Hazers")),
-	);
-	return specs;
+	return [
+		...specs,
+		group(22, "ACL1", plannedDemoRoleNumbers("ACL 1")),
+		group(23, "ACL2", plannedDemoRoleNumbers("ACL 2")),
+		group(24, "ACL3", plannedDemoRoleNumbers("ACL 3")),
+		group(25, "ACL4", plannedDemoRoleNumbers("ACL 4")),
+		group(26, "Blinders", plannedDemoRoleNumbers("Blinders")),
+		group(27, "Sunstrip", plannedDemoRoleNumbers("Sunstrips")),
+		group(28, "Strobe", []),
+		group(29, "Front Lights", plannedDemoRoleNumbers("Front Lights")),
+		group(30, "Floor Spots", []),
+		group(31, "Hazer", plannedDemoRoleNumbers("Hazers")),
+		group(32, "All ACLs", plannedDemoRoleNumbers("All ACLs")),
+		group(33, "Front Profiles", [11, 12, 13, 14, 15]),
+		group(34, "House Lights", plannedDemoRoleNumbers("House Lights")),
+		group(35, "Follow Spots", plannedDemoRoleNumbers("Follow Spots")),
+	];
 }
 
 export async function installPlannedDemoGroups(

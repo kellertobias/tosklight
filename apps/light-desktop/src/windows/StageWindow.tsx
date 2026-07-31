@@ -37,8 +37,9 @@ export function StageWindow(props: StageWindowProps) {
 					? stage.visualization
 						? "stale"
 						: "unavailable"
-					: stage.visualizationStatus
+					: "ready"
 			}
+			data-live-visualization-state={stage.visualizationStatus}
 			data-visualization-lane={options.followPreload ? "preload" : "live"}
 			data-visualization-revision={stage.visualization?.revision}
 		>
@@ -79,20 +80,13 @@ export function StageWindow(props: StageWindowProps) {
 					interactive={!props.viewOnly}
 				/>
 			)}
-			{active &&
-				(!stage.visualization || stage.visualizationError) &&
-				(stage.visualizationError ? (
-					<div className="stage-visualization-state error" role="status">
-						{stage.visualization
-							? `${options.followPreload ? "Preload" : "Live"} visualization stale · reconnecting…`
-							: "Visualization unavailable · reconnecting…"}
-					</div>
-				) : (
-					<div className="stage-visualization-state" role="status">
-						Loading {options.followPreload ? "Preload" : "Live"} Stage
-						visualization…
-					</div>
-				))}
+			{active && stage.visualizationError && (
+				<div className="stage-visualization-state error" role="status">
+					{stage.visualization
+						? `${options.followPreload ? "Preload" : "Live"} visualization stale · reconnecting…`
+						: "Visualization unavailable · reconnecting…"}
+				</div>
+			)}
 			{options.groupsVisible && <GroupStrip active={active} />}
 		</div>
 	);

@@ -130,6 +130,38 @@ export async function saveVectorSpread(
 	else controller.ui.setEditError("The fixture spread could not be applied.");
 }
 
+export async function saveVectorAxisInput(
+	controller: PatchController,
+	kind: "location" | "rotation",
+	axis: "x" | "y" | "z",
+	value: string,
+) {
+	if (/\bTHRU\b/i.test(value)) {
+		const points = value
+			.split(/\s+THRU\s+/i)
+			.map((point) => Number(point.trim()));
+		if (points.length > 1 && points.every(Number.isFinite)) {
+			await saveVectorSpread(controller, kind, axis, points);
+			return;
+		}
+		controller.ui.setEditError("Enter numeric values separated by THRU.");
+		return;
+	}
+	const parsed = Number(value);
+	if (!Number.isFinite(parsed)) {
+		controller.ui.setEditError("Enter a numeric value.");
+		return;
+	}
+	const selected = controller.data.selected;
+	if (!selected) return;
+	await applyEdit(controller, {
+		[kind]: {
+			...(selected[kind] ?? { x: 0, y: 0, z: 0 }),
+			[axis]: kind === "location" ? Math.round(parsed * 1_000) : parsed,
+		},
+	});
+}
+
 async function savePolicy(
 	controller: PatchController,
 	action: Parameters<typeof controller.patch.updatePolicy>[1],

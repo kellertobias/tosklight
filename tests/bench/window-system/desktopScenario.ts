@@ -550,6 +550,11 @@ async function applyPaneConfiguration<T extends PaneType>(
 				})
 				.click();
 	}
+	if (type === "groups" && options.columns !== undefined) {
+		await dialog.getByRole("tab", { name: "Pool" }).click();
+		await dialog.getByLabel("Columns").fill(String(options.columns));
+		await dialog.getByLabel("Columns").blur();
+	}
 	if (type === "virtual_playbacks") {
 		await dialog.getByRole("tab", { name: "Virtual Playbacks" }).click();
 		if (options.rows !== undefined)

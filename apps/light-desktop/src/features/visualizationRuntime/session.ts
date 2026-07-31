@@ -75,7 +75,10 @@ export class VisualizationRuntimeSession {
 		if (first) {
 			runtime.generation++;
 			this.store.setLoading(lane, this.store.captureScope());
-			if (!this.transport.openStream) this.scheduleRefresh(lane);
+			// A stream may legally stay silent until the first authoritative change.
+			// Bootstrap every newly claimed lane once so consumers never wait forever
+			// for an initial snapshot, then let the stream own subsequent updates.
+			this.scheduleRefresh(lane);
 		}
 		if (this.transport.openStream) this.syncStream();
 		else this.restartTimer(lane);

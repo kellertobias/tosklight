@@ -148,8 +148,8 @@ export function PoolPaletteSettings() {
 		<section className="pool-palette-settings" aria-label="Pool color defaults">
 			<h3>Pool color defaults</h3>
 			<p>
-				These presentation colors stay on this desk and do not change portable
-				show objects.
+				These server-wide presentation colors apply to every desktop and do not
+				change portable show objects.
 			</p>
 			<FormLayout labelPlacement="side">
 				{(

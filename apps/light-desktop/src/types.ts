@@ -79,6 +79,7 @@ export interface PaneModel extends GridRect {
 	layoutGroupId?: string;
 	presetFamily?: AppState["presetFamily"];
 	presetPoolColors?: boolean;
+	poolColumns?: number;
 	schedulerShowList?: boolean;
 	schedulerShowCalendar?: boolean;
 	virtualPlaybackRows?: number;

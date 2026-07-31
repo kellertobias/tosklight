@@ -131,6 +131,14 @@ function DemoCard({
 }
 
 function DemoNarrative() {
+	const [playtimeSeconds, setPlaytimeSeconds] = useState(0);
+	useEffect(() => {
+		const startedAt = performance.now();
+		const update = () => setPlaytimeSeconds((performance.now() - startedAt) / 1_000);
+		update();
+		const timer = window.setInterval(update, 200);
+		return () => window.clearInterval(timer);
+	}, []);
 	return (
 		<section
 			className="product-demo-narrative"
@@ -157,12 +165,28 @@ function DemoNarrative() {
 				))}
 			</ol>
 			<div className="product-demo-narrative-line" />
+			<div className="product-demo-section-status">
+				<div>
+					<small>SECTION</small>
+					<strong data-demo-section-title>STARTING</strong>
+					<span data-demo-subsection />
+				</div>
+				<time data-demo-playtime dateTime={`PT${playtimeSeconds.toFixed(1)}S`}>
+					{formatDemoPlaytime(playtimeSeconds)}
+				</time>
+			</div>
 			<div className="product-demo-current-action">
 				<small>CURRENT ACTION</small>
 				<strong data-demo-current-action>Preparing the product demo.</strong>
 			</div>
 		</section>
 	);
+}
+
+function formatDemoPlaytime(seconds: number) {
+	const wholeSeconds = Math.max(0, Math.floor(seconds));
+	const minutes = Math.floor(wholeSeconds / 60);
+	return `${String(minutes).padStart(2, "0")}:${String(wholeSeconds % 60).padStart(2, "0")}`;
 }
 
 function DemoApplicationScreen() {

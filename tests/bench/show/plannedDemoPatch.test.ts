@@ -73,8 +73,18 @@ describe("Plan 76 patch builder", () => {
       fixture.split_patches[0].address,
     ])).toEqual(Array.from({ length: 8 }, (_, index) => [1, index + 1]));
     expect(fresnels.slice(0, 4).map((fixture) => fixture.location.x)).toEqual([
-      -4000, -3667, -3333, -3000,
+			-3800, -3367, -2933, -2500,
     ]);
+		expect(fresnels.every((fixture) => fixture.location.y === -3000)).toBe(true);
+		expect(fresnels.every((fixture) => fixture.location.z === 4150)).toBe(true);
+		const movers = built.fixtures.filter((fixture) =>
+			fixture.fixture_number >= 101 && fixture.fixture_number <= 107,
+		);
+		expect(movers.map((fixture) => fixture.split_patches[0].address)).toEqual([
+			257, 293, 329, 365, 401, 437, 473,
+		]);
+		expect(movers.every((fixture) => fixture.split_patches[0].universe === 1)).toBe(true);
+		expect(movers.every((fixture) => fixture.rotation.x === 0 && fixture.rotation.y === 0 && fixture.rotation.z === 0)).toBe(true);
   });
 
   it("places four eight-lamp ACL fans on their literal trusses", () => {

@@ -4,12 +4,20 @@ import { plannedDemoLayout } from "../../support/plannedDemoLayouts";
 describe("Plan 76 desktop layout", () => {
   it("persists literal Busking, Programming, and Theater pane composition", () => {
     const layout = plannedDemoLayout();
-    expect(layout.desks.map((desk) => desk.name)).toEqual(["Busking", "Programming", "Theater"]);
-    expect(layout.desks[0].panes.map((pane) => pane.kind)).toEqual([
+		expect(layout.desks.map((desk) => desk.name)).toEqual([
+			"Group Programming", "Busking", "Programming", "Theater",
+		]);
+		expect(layout.desks[0].panes.map((pane) => pane.kind)).toEqual(["fixtures", "groups"]);
+		expect(layout.desks[0].panes[1]).toMatchObject({ width: 8, poolColumns: 7 });
+		expect(layout.desks[1].panes.map((pane) => pane.kind)).toEqual([
       "groups", "presets", "presets", "presets", "virtual_playbacks",
     ]);
-    expect(layout.desks[1].panes.map((pane) => pane.kind)).toEqual(["fixtures", "stage", "dmx"]);
-    expect(layout.desks[2].panes.map((pane) => pane.kind)).toEqual(["cue_list", "text_editor"]);
+		expect(layout.desks[1].panes.at(-1)).toMatchObject({
+			virtualPlaybackRows: 5,
+			virtualPlaybackColumns: 10,
+		});
+		expect(layout.desks[2].panes.map((pane) => pane.kind)).toEqual(["fixtures", "stage", "dmx"]);
+		expect(layout.desks[3].panes.map((pane) => pane.kind)).toEqual(["cue_list", "text_editor"]);
     for (const desk of layout.desks)
       for (const pane of desk.panes) {
         expect(pane.x).toBeGreaterThanOrEqual(1);

@@ -19,6 +19,13 @@ interface PatchCursor {
 	address: number;
 }
 
+interface PatchAllocator {
+	occupied: Set<string>;
+	cursors: Record<PatchBand, PatchCursor>;
+}
+
+type PatchBand = "dimmer" | "led" | "moving" | "hazer" | "other";
+
 interface PlannedDemoPatchResult {
 	fixtures: any[];
 	fixtureRecords: number;
@@ -32,6 +39,7 @@ export async function installPlannedDemoPatch(
 	api: ApiDriver,
 	showId: string,
 	layers: Readonly<Record<string, string>>,
+	options: { progressive?: boolean; onItem?: () => Promise<void> } = {},
 ): Promise<PlannedDemoPatchResult> {
 	await ensurePlannedDemoFixtureLibrary(api);
 	const library = await api.fixtureProfilesSnapshot();
@@ -63,26 +71,37 @@ export async function installPlannedDemoPatch(
 					: fixture.fixture_id,
 		};
 	});
-	await api.request(
-		"POST",
-		"/api/v2/patch/fixtures",
-		{
-			request_id: crypto.randomUUID(),
-			fixtures: adopted,
-			remove_fixture_ids: before.fixtures.flatMap((fixture: any) => {
-				const expected = manifestByNumber.get(fixture.fixture_number);
-				return fixture.fixture_number != null &&
-					(!expectedNumbers.has(fixture.fixture_number) ||
-						(expected && !matchesManifestProfile(fixture, expected)))
-					? [fixture.fixture_id]
-					: [];
-			}),
-			placements: [],
-		},
-		true,
-		before.revision,
-		{ showId },
-	);
+	const batches = options.progressive
+		? adopted
+				.filter((fixture) => !existingByNumber.has(fixture.fixture_number))
+				.map((fixture) => [fixture])
+		: [adopted];
+	for (const batch of batches) {
+		const current = await api.patch();
+		await api.request(
+			"POST",
+			"/api/v2/patch/fixtures",
+			{
+				request_id: crypto.randomUUID(),
+				fixtures: batch,
+				remove_fixture_ids: options.progressive
+					? []
+					: before.fixtures.flatMap((fixture: any) => {
+							const expected = manifestByNumber.get(fixture.fixture_number);
+							return fixture.fixture_number != null &&
+								(!expectedNumbers.has(fixture.fixture_number) ||
+									(expected && !matchesManifestProfile(fixture, expected)))
+								? [fixture.fixture_id]
+								: [];
+						}),
+				placements: [],
+			},
+			true,
+			current.revision,
+			{ showId },
+		);
+		await options.onItem?.();
+	}
 	const after = await api.patch();
 	const lightingFixtures = after.fixtures.filter((fixture: any) =>
 		expectedNumbers.has(fixture.fixture_number),
@@ -123,59 +142,60 @@ export function createPlannedDemoPatchInputs(
 	profiles: FixtureProfile[],
 	layers: Readonly<Record<string, string>>,
 ): PlannedDemoPatchResult {
-	const cursor = { universe: 1, address: 1 };
+	const allocator = createPatchAllocator();
 	let occupiedSlots = 0;
 	const fixtures = [...PLANNED_DEMO_FIXTURES]
 		.sort((left, right) => patchPriority(left) - patchPriority(right))
 		.map((entry) => {
-		const profile = resolveProfile(profiles, entry);
-		const mode = profile.modes.find(
-			(candidate) => candidate.name === entry.profile.mode,
-		);
-		if (!mode)
-			throw new Error(
-				`Missing demo mode ${entry.profile.name} / ${entry.profile.mode}`,
+			const profile = resolveProfile(profiles, entry);
+			const mode = profile.modes.find(
+				(candidate) => candidate.name === entry.profile.mode,
 			);
-		const placement = placementFor(entry);
-		const primaryPatches = allocateSplits(mode.splits, cursor);
-		occupiedSlots += footprint(mode.splits);
-		const multipatch = Array.from(
-			{ length: entry.multipatches },
-			(_, index) => {
-				const instance = placement.multipatches[index];
-				if (!instance)
-					throw new Error(
-						`${entry.name} is missing physical placement ${index + 2}`,
-					);
-				const splitPatches = allocateSplits(mode.splits, cursor);
-				occupiedSlots += footprint(mode.splits);
-				return {
-					id: stableUuid(2, entry.number * 100 + index + 1),
-					name: `${entry.name} ${index + 2}`,
-					split_patches: splitPatches,
-					location: millimetres(instance.location),
-					rotation: instance.rotation,
-				};
-			},
-		);
-		return {
-			fixture_id: stableUuid(1, entry.number),
-			fixture_number: entry.number,
-			virtual_fixture_number: null,
-			name: entry.name,
-			profile_id: profile.id,
-			profile_revision: profile.revision,
-			mode_id: mode.id,
-			split_patches: primaryPatches,
-			layer_id: layerFor(entry, layers),
-			direct_control: null,
-			location: millimetres(placement.primary.location),
-			rotation: placement.primary.rotation,
-			multipatch,
-			move_in_black_enabled: true,
-			move_in_black_delay_millis: 0,
-			highlight_overrides: [],
-		};
+			if (!mode)
+				throw new Error(
+					`Missing demo mode ${entry.profile.name} / ${entry.profile.mode}`,
+				);
+			const placement = placementFor(entry);
+			const band = patchBand(entry);
+			const primaryPatches = allocateSplits(mode.splits, allocator, band);
+			occupiedSlots += footprint(mode.splits);
+			const multipatch = Array.from(
+				{ length: entry.multipatches },
+				(_, index) => {
+					const instance = placement.multipatches[index];
+					if (!instance)
+						throw new Error(
+							`${entry.name} is missing physical placement ${index + 2}`,
+						);
+					const splitPatches = allocateSplits(mode.splits, allocator, band);
+					occupiedSlots += footprint(mode.splits);
+					return {
+						id: stableUuid(2, entry.number * 100 + index + 1),
+						name: `${entry.name} ${index + 2}`,
+						split_patches: splitPatches,
+						location: millimetres(instance.location),
+						rotation: instance.rotation,
+					};
+				},
+			);
+			return {
+				fixture_id: stableUuid(1, entry.number),
+				fixture_number: entry.number,
+				virtual_fixture_number: null,
+				name: entry.name,
+				profile_id: profile.id,
+				profile_revision: profile.revision,
+				mode_id: mode.id,
+				split_patches: primaryPatches,
+				layer_id: layerFor(entry, layers),
+				direct_control: null,
+				location: millimetres(placement.primary.location),
+				rotation: placement.primary.rotation,
+				multipatch,
+				move_in_black_enabled: true,
+				move_in_black_delay_millis: 0,
+				highlight_overrides: [],
+			};
 		});
 	const physicalInstances = fixtures.reduce(
 		(count, fixture) => count + 1 + fixture.multipatch.length,
@@ -186,7 +206,9 @@ export function createPlannedDemoPatchInputs(
 		fixtureRecords: fixtures.length,
 		physicalInstances,
 		firstUniverse: 1,
-		lastUniverse: cursor.universe,
+		lastUniverse: Math.max(
+			...Array.from(allocator.occupied, (slot) => Number(slot.split(".")[0])),
+		),
 		occupiedSlots,
 	};
 }
@@ -209,23 +231,66 @@ function resolveProfile(
 
 function allocateSplits(
 	splits: readonly { number: number; footprint: number }[],
-	cursor: PatchCursor,
+	allocator: PatchAllocator,
+	band: PatchBand,
 ) {
 	return splits.map((split) => {
 		if (split.footprint === 0)
 			return { split: split.number, universe: null, address: null };
-		if (cursor.address + split.footprint - 1 > 512) {
-			cursor.universe++;
-			cursor.address = 1;
-		}
+		const cursor = allocator.cursors[band];
+		findAvailableRun(allocator.occupied, cursor, split.footprint, band);
 		const patch = {
 			split: split.number,
 			universe: cursor.universe,
 			address: cursor.address,
 		};
+		for (
+			let address = cursor.address;
+			address < cursor.address + split.footprint;
+			address++
+		)
+			allocator.occupied.add(`${cursor.universe}.${address}`);
 		cursor.address += split.footprint;
 		return patch;
 	});
+}
+
+function createPatchAllocator(): PatchAllocator {
+	return {
+		occupied: new Set(),
+		cursors: {
+			dimmer: { universe: 1, address: 1 },
+			led: { universe: 1, address: 65 },
+			moving: { universe: 1, address: 257 },
+			hazer: { universe: 1, address: 509 },
+			other: { universe: 2, address: 1 },
+		},
+	};
+}
+
+function findAvailableRun(
+	occupied: ReadonlySet<string>,
+	cursor: PatchCursor,
+	footprint: number,
+	band: PatchBand,
+) {
+	for (;;) {
+		const limit =
+			cursor.universe === 1
+				? { dimmer: 64, led: 256, moving: 508, hazer: 512, other: 512 }[band]
+				: 512;
+		if (cursor.address + footprint - 1 > limit) {
+			cursor.universe += 1;
+			cursor.address = 1;
+			continue;
+		}
+		const free = Array.from(
+			{ length: footprint },
+			(_, offset) => `${cursor.universe}.${cursor.address + offset}`,
+		).every((slot) => !occupied.has(slot));
+		if (free) return;
+		cursor.address += 1;
+	}
 }
 
 function footprint(splits: readonly { footprint: number }[]) {
@@ -265,7 +330,23 @@ function layerFor(
 }
 
 function patchPriority(entry: DemoFixtureManifestEntry) {
-	return entry.name.startsWith("Fresnel") ? 0 : 1;
+	if (entry.name.startsWith("Fresnel")) return -1;
+	return { dimmer: 0, led: 1, moving: 2, hazer: 3, other: 4 }[patchBand(entry)];
+}
+
+function patchBand(entry: DemoFixtureManifestEntry): PatchBand {
+	if (
+		entry.name.startsWith("Fresnel") ||
+		entry.name.startsWith("Static Profile") ||
+		entry.roles.includes("All ACLs") ||
+		entry.roles.includes("Blinders") ||
+		entry.roles.includes("House Lights")
+	)
+		return "dimmer";
+	if (entry.family === "led") return "led";
+	if (entry.family === "profile" || entry.family === "wash") return "moving";
+	if (entry.roles.includes("Hazers")) return "hazer";
+	return "other";
 }
 
 function placementFor(entry: DemoFixtureManifestEntry) {
@@ -317,10 +398,10 @@ function ordinaryLocation(entry: DemoFixtureManifestEntry): Point {
 		return {
 			x:
 				fresnelIndex < 4
-					? spread(fresnelIndex, 4, -4, -3)
-					: spread(fresnelIndex - 4, 4, 3, 4),
+					? spread(fresnelIndex, 4, -3.8, -2.5)
+					: spread(fresnelIndex - 4, 4, 2.5, 3.8),
 			y: -3,
-			z: 4,
+			z: 4.15,
 		};
 	}
 	return { x: spread(index, 7, -3, 3), y: entry.number < 14 ? 0 : -3, z: 4 };
@@ -330,6 +411,8 @@ function ordinaryRotation(
 	entry: DemoFixtureManifestEntry,
 	origin: Point,
 ): Point {
+	if (entry.family === "profile" || entry.family === "wash")
+		return { x: 0, y: 0, z: 0 };
 	if (entry.roles.includes("Sunstrips")) return { x: 0, y: 90, z: 0 };
 	if (entry.location === "audience")
 		return aimAt(origin, { x: origin.x, y: origin.y, z: 0 });
@@ -346,7 +429,7 @@ function aclPlacement(entry: DemoFixtureManifestEntry) {
 				...Array.from({ length: 4 }, (_, index) => -3.8 + index * 0.27),
 				...Array.from({ length: 4 }, (_, index) => 3 + index * 0.27),
 			]
-		: Array.from({ length: 8 }, (_, index) => spread(index, 8, -0.7, 0.7));
+		: Array.from({ length: 8 }, (_, index) => spread(index, 8, -1, 1));
 	const targets =
 		number === 1 || number === 3
 			? Array.from({ length: 8 }, (_, index) => spread(index, 8, -4, 4))
@@ -385,14 +468,6 @@ function familyIndex(entry: DemoFixtureManifestEntry) {
 			candidate.family === entry.family &&
 			candidate.location === entry.location,
 	).indexOf(entry);
-}
-
-function stageIndex(entry: DemoFixtureManifestEntry) {
-	return familyIndex(entry);
-}
-
-function stageBackCount(entry: DemoFixtureManifestEntry) {
-	return entry.family === "profile" ? 16 : entry.family === "wash" ? 15 : 0;
 }
 
 function trussLine(index: number, count: number, y: number): Point {

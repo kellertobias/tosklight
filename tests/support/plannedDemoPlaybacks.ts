@@ -54,16 +54,19 @@ export async function installPlannedDemoPlaybacks(
 	const cuelists = [
 		cueList(cueListIds.start, "Start", [
 			stateCue(1, "Start", [
-				...intensity(groups, "Profile All", 1),
-				...intensity(groups, "Wash All", 1),
-				...intensity(groups, "LED All", 1),
+				...intensity(groups, "Beam Show", 1),
+				...intensity(groups, "Beam Auxiliary", 1),
+				...intensity(groups, "Wash Show", 1),
+				...intensity(groups, "Wash Auxiliary", 1),
+				...intensity(groups, "LED Show", 1),
+				...intensity(groups, "LED Auxiliary", 1),
 				...intensity(groups, "Blinders", 1),
-				...attributes(groups, ["Profile All", "Wash All", "LED All"], {
+				...attributes(groups, ["Beam Show", "Beam Auxiliary", "Wash Show", "Wash Auxiliary", "LED Show", "LED Auxiliary"], {
 					"color.red": 1,
 					"color.green": 1,
 					"color.blue": 1,
 				}),
-				...attributes(groups, ["Profile All", "Wash All"], {
+				...attributes(groups, ["Beam Show", "Beam Auxiliary", "Wash Show", "Wash Auxiliary"], {
 					pan: 0.5,
 					tilt: 0.5,
 				}),
@@ -71,11 +74,11 @@ export async function installPlannedDemoPlaybacks(
 		]),
 		...[1, 2, 3, 4].map((number) =>
 			cueList(aclCueListIds[number - 1], `ACL ${number}`, [
-				stateCue(1, `ACL ${number}`, intensity(groups, `ACL ${number}`, 1)),
+				stateCue(1, `ACL ${number}`, intensity(groups, `ACL${number}`, 1)),
 			]),
 		),
 		cueList(cueListIds.hazer, "Hazer", [
-			stateCue(1, "Haze 20%", intensity(groups, "Hazers", 0.2)),
+			stateCue(1, "Haze 20%", intensity(groups, "Hazer", 0.2)),
 		]),
 		{
 			...cueList(
@@ -86,7 +89,7 @@ export async function installPlannedDemoPlaybacks(
 						active,
 						`ACL ${active}`,
 						[1, 2, 3, 4].flatMap((number) =>
-							intensity(groups, `ACL ${number}`, number === active ? 1 : 0),
+							intensity(groups, `ACL${number}`, number === active ? 1 : 0),
 						),
 					),
 				),
@@ -102,12 +105,12 @@ export async function installPlannedDemoPlaybacks(
 		await putPlannedDemoObject(api, showId, "cue_list", cuelist.id, cuelist);
 
 	const playbacks = [
-		playback(1, "Show Profile Odd", { type: "group", group_id: "21" }),
-		playback(2, "Show Profile Even", { type: "group", group_id: "22" }),
-		playback(3, "Show LED", { type: "group", group_id: "17" }),
-		playback(4, "Show Wash", { type: "group", group_id: "15" }),
-		playback(5, "All ACLs", { type: "group", group_id: "35" }),
-		playback(6, "Blinders", { type: "group", group_id: "36" }),
+		playback(1, "Beam Show Odd", { type: "group", group_id: "6" }),
+		playback(2, "Beam Show Even", { type: "group", group_id: "7" }),
+		playback(3, "LED Show", { type: "group", group_id: "18" }),
+		playback(4, "Wash Show", { type: "group", group_id: "11" }),
+		playback(5, "All ACLs", { type: "group", group_id: "32" }),
+		playback(6, "Blinders", { type: "group", group_id: "26" }),
 		playback(11, "Start", { type: "cue_list", cue_list_id: cueListIds.start }),
 		...[1, 2, 3, 4].map((number) =>
 			playback(11 + number, `ACL ${number}`, {
