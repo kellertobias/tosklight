@@ -355,22 +355,51 @@ function StagePaneSettings({ pane }: { pane: PaneModel }) {
 				checked={Boolean(pane.followPreload)}
 				onChange={(event) => setOption("followPreload", event.target.checked)}
 			/>
-			<SwitchField
-				label="Beam direction guidelines"
-				offLabel="Hidden"
-				onLabel="Visible"
-				checked={pane.showBeamGuides ?? true}
-				onChange={(event) => setOption("showBeamGuides", event.target.checked)}
-			/>
+			{(pane.stageView ?? "2d") === "3d" && (
+				<>
+					<SwitchField
+						label="Beam direction guidelines"
+						offLabel="Hidden"
+						onLabel="Visible"
+						checked={pane.showBeamGuides ?? true}
+						onChange={(event) =>
+							setOption("showBeamGuides", event.target.checked)
+						}
+					/>
+					<MultiValueToggleField
+						label="Render quality"
+						value={pane.stageRenderQuality ?? "lines_and_beams"}
+						onChange={(value) => setOption("stageRenderQuality", value)}
+						options={[
+							{ value: "lines_only", label: "Lines only" },
+							{ value: "lines_and_beams", label: "Lines + beams" },
+							{ value: "beams", label: "Beams" },
+							{ value: "improved_beams", label: "Improved beams" },
+						]}
+					/>
+				</>
+			)}
+		</FormLayout>
+	);
+}
+
+function ChannelPaneSettings({ pane }: { pane: PaneModel }) {
+	const { dispatch } = useApp();
+	return (
+		<FormLayout labelPlacement="side">
 			<MultiValueToggleField
-				label="Render quality"
-				value={pane.stageRenderQuality ?? "lines_and_beams"}
-				onChange={(value) => setOption("stageRenderQuality", value)}
+				label="Displayed channels"
+				value={pane.channelDisplayMode ?? "intensity"}
+				onChange={(mode) =>
+					dispatch({
+						type: "SET_PANE_CHANNEL_DISPLAY_MODE",
+						id: pane.id,
+						mode,
+					})
+				}
 				options={[
-					{ value: "lines_only", label: "Lines only" },
-					{ value: "lines_and_beams", label: "Lines + beams" },
-					{ value: "beams", label: "Beams" },
-					{ value: "improved_beams", label: "Improved beams" },
+					{ value: "intensity", label: "Intensity only" },
+					{ value: "all", label: "All channels" },
 				]}
 			/>
 		</FormLayout>
@@ -638,6 +667,12 @@ function paneSpecificTabs(
 			id: "stage",
 			label: "Stage",
 			content: <StagePaneSettings pane={pane} />,
+		});
+	if (pane.kind === "channels")
+		tabs.push({
+			id: "channels",
+			label: "Channels",
+			content: <ChannelPaneSettings pane={pane} />,
 		});
 	if (pane.kind === "layout")
 		tabs.push({

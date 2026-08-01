@@ -19,6 +19,14 @@ function normalizeStageRenderQuality(
 		: "lines_and_beams";
 }
 
+function normalizeChannelDisplayMode(
+	value: unknown,
+): NonNullable<
+	AppState["desks"][number]["panes"][number]["channelDisplayMode"]
+> {
+	return value === "all" ? "all" : "intensity";
+}
+
 export function nextDesktopId(desks: readonly { id: string }[]): string {
 	let suffix = desks.length + 1;
 	while (desks.some((desk) => desk.id === `desk-${suffix}`)) suffix += 1;
@@ -107,6 +115,13 @@ export function reduceHydration(
 										}
 									: {}),
 								...(kind === "scheduler" ? schedulerPaneLayout(pane) : {}),
+								...(kind === "channels"
+									? {
+											channelDisplayMode: normalizeChannelDisplayMode(
+												pane.channelDisplayMode,
+											),
+										}
+									: {}),
 							};
 							if (pane.kind !== "presets") return migrated;
 							const legacyDefault =

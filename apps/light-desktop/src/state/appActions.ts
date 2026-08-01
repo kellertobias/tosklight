@@ -48,6 +48,13 @@ export type Action =
 	  }
 	| { type: "SET_PANE_PRESET_COLORS"; id: string; value: boolean }
 	| {
+			type: "SET_PANE_CHANNEL_DISPLAY_MODE";
+			id: string;
+			mode: NonNullable<
+				AppState["desks"][number]["panes"][number]["channelDisplayMode"]
+			>;
+	  }
+	| {
 			type: "SET_PANE_SCHEDULER_LAYOUT";
 			id: string;
 			showList: boolean;

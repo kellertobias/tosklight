@@ -41,6 +41,7 @@ export type StageRenderQuality =
 	| "beams"
 	| "improved_beams";
 export type DmxDotSize = "small" | "large";
+export type ChannelDisplayMode = "intensity" | "all";
 export type TextEditorMode = "plain" | "markdown" | "split";
 export type VirtualPlaybackPageMode = "follow_main" | "pinned";
 
@@ -95,6 +96,7 @@ export interface PaneModel extends GridRect {
 	textFilePath?: string;
 	textEditorReadOnly?: boolean;
 	textEditorMode?: TextEditorMode;
+	channelDisplayMode?: ChannelDisplayMode;
 	textEditorView?: {
 		root: string;
 		path: string;

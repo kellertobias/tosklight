@@ -21,36 +21,60 @@ import {
 import { useVisualizationRuntimeSnapshot } from "../features/visualizationRuntime/VisualizationRuntimeView";
 import { fixtureValue } from "./fixtureVisualization";
 import type { WindowProps } from "./windowTypes";
+import {
+	compareFixtureIds,
+	fixtureDisplayId,
+} from "../components/setup/fixturePatch/fixtureIds";
+import { useAttributeRegistry } from "../features/deskSnapshot/DeskSnapshotState";
+import type { ChannelDisplayMode } from "../types";
 
 const DEFAULT_COLUMNS = 10;
 const ROWS = 2;
-const DEFAULT_PAGE_SIZE = DEFAULT_COLUMNS * ROWS;
 
 export interface Channel {
 	number: number;
 	fixture: PatchedFixture;
-	name: string;
+	fixtureLabel: string;
+	attribute: string;
+	attributeLabel: string;
 	level: number;
 }
 
-export function ChannelsWindow({ active = true, compact }: WindowProps) {
+export function ChannelsWindow({
+	active = true,
+	compact,
+	channelDisplayMode,
+}: WindowProps) {
 	const selection = useProgrammingSelectionView(active);
 	const selectionActions = useProgrammingSelectionActions(active);
 	const values = useProgrammerValuesMutationQueue(active);
 	const [page, setPage] = useState(0);
 	const [pagePickerOpen, setPagePickerOpen] = useState(false);
 	const [columns, setColumns] = useState(DEFAULT_COLUMNS);
+	const [standaloneDisplayMode, setStandaloneDisplayMode] =
+		useState<ChannelDisplayMode>("intensity");
+	const displayMode = channelDisplayMode ?? standaloneDisplayMode;
 	const visualization = useChannelVisualization(active);
+	const attributeRegistry = useAttributeRegistry();
 	const selectedFixtureIds = useMemo(
 		() => new Set(selection?.selected ?? []),
 		[selection?.selected],
 	);
 	const fixtures = usePatchedFixturesView(active);
-	const channels = channelProjection(fixtures, visualization);
-	const pages = Math.max(8, Math.ceil(channels.length / DEFAULT_PAGE_SIZE));
-	const setIntensity = (fixtureId: string, level: number) => {
+	const channels = channelProjection(
+		fixtures,
+		visualization,
+		displayMode,
+		attributeRegistry ?? [],
+	);
+	const pages = Math.max(8, Math.ceil(channels.length / (columns * ROWS)));
+	const setChannelValue = (
+		fixtureId: string,
+		attribute: string,
+		level: number,
+	) => {
 		const mutations = normalizedFixtureMutations(
-			[{ fixtureId, attribute: "intensity", value: level }],
+			[{ fixtureId, attribute, value: level }],
 			undefined,
 			true,
 		);
@@ -71,6 +95,15 @@ export function ChannelsWindow({ active = true, compact }: WindowProps) {
 			onPage={setPage}
 			onPagePickerOpen={setPagePickerOpen}
 			columns={columns}
+			displayMode={displayMode}
+			onDisplayModeChange={
+				channelDisplayMode == null
+					? (mode) => {
+							setStandaloneDisplayMode(mode);
+							setPage(0);
+						}
+					: undefined
+			}
 			onColumnsChange={(next) => {
 				setColumns(next);
 				setPage(0);
@@ -78,7 +111,9 @@ export function ChannelsWindow({ active = true, compact }: WindowProps) {
 			onSelect={(fixtureId) =>
 				void selectionActions?.replace({ resolvedFixtures: [fixtureId] })
 			}
-			onSetIntensity={(fixtureId, level) => void setIntensity(fixtureId, level)}
+			onSetValue={(fixtureId, attribute, level) =>
+				void setChannelValue(fixtureId, attribute, level)
+			}
 		/>
 	);
 }
@@ -94,9 +129,11 @@ export function ChannelsWindowView({
 	onPage,
 	onPagePickerOpen,
 	onSelect,
-	onSetIntensity,
+	onSetValue,
 	columns = DEFAULT_COLUMNS,
 	onColumnsChange,
+	displayMode = "intensity",
+	onDisplayModeChange,
 }: {
 	channels: readonly Channel[];
 	compact?: boolean;
@@ -108,9 +145,11 @@ export function ChannelsWindowView({
 	onPage(page: number): void;
 	onPagePickerOpen(open: boolean): void;
 	onSelect(fixtureId: string): void;
-	onSetIntensity(fixtureId: string, level: number): void;
+	onSetValue(fixtureId: string, attribute: string, level: number): void;
 	columns?: number;
 	onColumnsChange?(columns: number): void;
+	displayMode?: ChannelDisplayMode;
+	onDisplayModeChange?(mode: ChannelDisplayMode): void;
 }) {
 	usePagePickerDismissal(pagePickerOpen, onPagePickerOpen);
 	const pageSize = columns * ROWS;
@@ -120,6 +159,7 @@ export function ChannelsWindowView({
 			{!compact && (
 				<ChannelHeader
 					columns={columns}
+					displayMode={displayMode}
 					page={page}
 					pages={pages}
 					onPage={onPage}
@@ -141,6 +181,27 @@ export function ChannelsWindowView({
 							label: "Layout",
 							content: (
 								<>
+									{onDisplayModeChange && (
+										<>
+											<h3>Displayed channels</h3>
+											<div className="button-group">
+												<Button
+													className={
+														displayMode === "intensity" ? "active" : ""
+													}
+													onClick={() => onDisplayModeChange("intensity")}
+												>
+													Intensity only
+												</Button>
+												<Button
+													className={displayMode === "all" ? "active" : ""}
+													onClick={() => onDisplayModeChange("all")}
+												>
+													All channels
+												</Button>
+											</div>
+										</>
+									)}
 									<h3>Channels per row</h3>
 									<div className="button-group">
 										{[6, 8, 10].map((count) => (
@@ -166,7 +227,7 @@ export function ChannelsWindowView({
 				selectedFixtureIds={selectedFixtureIds}
 				valuesReady={valuesReady}
 				onSelect={onSelect}
-				onSetIntensity={onSetIntensity}
+				onSetValue={onSetValue}
 			/>
 			{pagePickerOpen && (
 				<ChannelPagePicker
@@ -189,20 +250,50 @@ function useChannelVisualization(active: boolean) {
 	});
 }
 
-function channelProjection(
+export function channelProjection(
 	fixtures: readonly PatchedFixture[],
 	visualization: VisualizationSnapshot | null,
+	displayMode: ChannelDisplayMode = "intensity",
+	attributeRegistry: readonly { id: string; label: string }[] = [],
 ): Channel[] {
-	return fixtures.map((fixture, index) => ({
-		number: index + 1,
-		fixture,
-		name: fixture.definition.name ?? fixture.definition.model,
-		level: Math.round(fixtureValue(visualization, fixture, "intensity") * 100),
-	}));
+	const labels = new Map(
+		attributeRegistry.map((descriptor) => [descriptor.id, descriptor.label]),
+	);
+	return [...fixtures]
+		.sort(compareFixtureIds)
+		.flatMap((fixture) => {
+			const allAttributes = fixture.definition.heads.flatMap((head) =>
+				head.parameters.map((parameter) => parameter.attribute),
+			);
+			const attributes =
+				displayMode === "intensity"
+					? ["intensity"]
+					: [...new Set(allAttributes.length ? allAttributes : ["intensity"])];
+			return attributes.map((attribute) => ({
+				number: 0,
+				fixture,
+				fixtureLabel: String(fixtureDisplayId(fixture)),
+				attribute,
+				attributeLabel: labels.get(attribute) ?? attributeFallbackLabel(attribute),
+				level: Math.round(
+					fixtureValue(visualization, fixture, attribute) * 100,
+				),
+			}));
+		})
+		.map((channel, index) => ({ ...channel, number: index + 1 }));
+}
+
+function attributeFallbackLabel(attribute: string) {
+	return attribute
+		.split(".")
+		.at(-1)!
+		.replaceAll("_", " ")
+		.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function ChannelHeader({
 	columns,
+	displayMode,
 	page,
 	pages,
 	onPage,
@@ -210,6 +301,7 @@ function ChannelHeader({
 	onSettings,
 }: {
 	columns: number;
+	displayMode: ChannelDisplayMode;
 	page: number;
 	pages: number;
 	onPage(page: number): void;
@@ -219,7 +311,10 @@ function ChannelHeader({
 	return (
 		<WindowHeader
 			title="Channels"
-			info={{ primary: "Intensity", secondary: "Two-row channel bank" }}
+			info={{
+				primary: displayMode === "intensity" ? "Intensity only" : "All channels",
+				secondary: "Fixture ID order · left to right, then down",
+			}}
 			actions={[
 				[
 					{
@@ -256,7 +351,7 @@ function ChannelFaderBank({
 	selectedFixtureIds,
 	valuesReady,
 	onSelect,
-	onSetIntensity,
+	onSetValue,
 }: {
 	channels: readonly Channel[];
 	columns: number;
@@ -264,7 +359,7 @@ function ChannelFaderBank({
 	selectedFixtureIds: ReadonlySet<string>;
 	valuesReady: boolean;
 	onSelect(fixtureId: string): void;
-	onSetIntensity(fixtureId: string, level: number): void;
+	onSetValue(fixtureId: string, attribute: string, level: number): void;
 }) {
 	const visible = Array.from(
 		{ length: columns * ROWS },
@@ -281,18 +376,26 @@ function ChannelFaderBank({
 				return (
 					<article
 						className={`channel-fader ${channel ? "" : "empty"} ${channel && selectedFixtureIds.has(channel.fixture.fixture_id) ? "selected" : ""}`}
-						key={channel?.fixture.fixture_id ?? `empty-${number}`}
+						key={
+							channel
+								? `${channel.fixture.fixture_id}:${channel.attribute}`
+								: `empty-${number}`
+						}
 						onClick={() => channel && onSelect(channel.fixture.fixture_id)}
 					>
 						<VerticalTouchFader
 							disabled={!channel || !valuesReady}
-							label={channel ? `CH ${number}` : `CH ${number} · Empty`}
-							mode={channel?.name ?? "Unpatched"}
+							label={channel ? `Fixture ${channel.fixtureLabel}` : "Empty"}
+							mode={channel?.attributeLabel ?? "Unpatched"}
 							value={channel?.level ?? 0}
 							display={channel ? `${channel.level}%` : "—"}
 							onChange={(value) =>
 								channel &&
-								onSetIntensity(channel.fixture.fixture_id, value / 100)
+								onSetValue(
+									channel.fixture.fixture_id,
+									channel.attribute,
+									value / 100,
+								)
 							}
 						/>
 					</article>

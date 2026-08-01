@@ -9,7 +9,9 @@ const channels = Array.from({ length: 14 }, (_, index) => ({
 		fixture_id: `fixture-${index + 1}`,
 		fixture_number: index + 1,
 	} as Channel["fixture"],
-	name: index < 6 ? "Fresnel" : "Moving Wash",
+	fixtureLabel: String(index + 1),
+	attribute: "intensity",
+	attributeLabel: "Intensity",
 	level: [70, 70, 45, 45, 30, 30, 85, 65, 50, 40, 25, 15, 0, 100][index],
 })) satisfies Channel[];
 
@@ -33,7 +35,7 @@ function ChannelsStory({ compact = false }: { compact?: boolean }) {
 					onPage={setPage}
 					onPagePickerOpen={setPicker}
 					onSelect={(fixtureId) => setSelected(new Set([fixtureId]))}
-					onSetIntensity={() => undefined}
+					onSetValue={() => undefined}
 				/>
 			</div>
 		</AppProvider>

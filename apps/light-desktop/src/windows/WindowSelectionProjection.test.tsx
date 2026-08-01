@@ -68,11 +68,13 @@ const mocks = vi.hoisted(() => {
 			fixtures: [
 				{
 					fixture_id: "22222222-2222-4222-8222-222222222222",
+					fixture_number: 1,
 					logical_heads: [],
 					definition: { name: "Fixture 1", model: "Fixture 1", heads: [] },
 				},
 				{
 					fixture_id: "33333333-3333-4333-8333-333333333333",
+					fixture_number: 2,
 					logical_heads: [],
 					definition: { name: "Fixture 2", model: "Fixture 2", heads: [] },
 				},
@@ -419,7 +421,7 @@ describe("window selection projections", () => {
 
 	it("writes one typed latest intensity mutation from Channels", async () => {
 		renderSelectionView(<ChannelsWindow compact />);
-		const channel = await screen.findByRole("button", { name: "CH 1" });
+		const channel = await screen.findByRole("button", { name: "Fixture 1" });
 
 		fireEvent.click(channel);
 
@@ -448,7 +450,9 @@ describe("window selection projections", () => {
 		mocks.mutationQueue.canWrite = false;
 		renderSelectionView(<ChannelsWindow compact />);
 
-		expect(await screen.findByRole("button", { name: "CH 1" })).toBeDisabled();
+		expect(
+			await screen.findByRole("button", { name: "Fixture 1" }),
+		).toBeDisabled();
 		expect(mocks.mutationQueue.submitLatest).not.toHaveBeenCalled();
 	});
 

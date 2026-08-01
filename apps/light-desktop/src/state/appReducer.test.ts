@@ -282,6 +282,52 @@ describe("appReducer playback, preset, and record workflows", () => {
 });
 
 describe("appReducer Stage and Development pane settings", () => {
+	it("stores the displayed Channel mode independently on its pane", () => {
+		const pane = {
+			id: "channels-a",
+			kind: "channels" as const,
+			title: "Channels",
+			x: 0,
+			y: 0,
+			width: 8,
+			height: 8,
+		};
+		const state = {
+			...initialState,
+			desks: initialState.desks.map((desk) =>
+				desk.id === initialState.activeDeskId
+					? { ...desk, panes: [...desk.panes, pane] }
+					: desk,
+			),
+		};
+		const updated = appReducer(state, {
+			type: "SET_PANE_CHANNEL_DISPLAY_MODE",
+			id: pane.id,
+			mode: "all",
+		});
+		expect(
+			updated.desks
+				.find((desk) => desk.id === updated.activeDeskId)
+				?.panes.find((candidate) => candidate.id === pane.id)
+				?.channelDisplayMode,
+		).toBe("all");
+
+		const hydrated = appReducer(initialState, {
+			type: "HYDRATE_LAYOUT",
+			desks: [
+				{
+					id: "channels-desk",
+					name: "Channels",
+					panes: [
+						{ ...pane, channelDisplayMode: "future-mode" as never },
+					],
+				},
+			],
+			activeDeskId: "channels-desk",
+		});
+		expect(hydrated.desks[0].panes[0].channelDisplayMode).toBe("intensity");
+	});
+
 	it("updates stage presentation options and clamps environment brightness", () => {
 		const hidden = appReducer(initialState, {
 			type: "SET_STAGE_OPTIONS",

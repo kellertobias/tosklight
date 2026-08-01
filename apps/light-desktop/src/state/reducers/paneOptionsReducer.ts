@@ -2,17 +2,34 @@ import {
 	MAX_PLAYBACK_PAGE,
 	VIRTUAL_PLAYBACKS_PER_PAGE,
 } from "../../api/virtualPlaybackAddress";
-import type { AppState } from "../../types";
+import type { AppState, PaneModel } from "../../types";
 import type { Action } from "../appActions";
 import { clamp } from "../reducerHelpers";
 
 export const MAX_VIRTUAL_PLAYBACK_CELLS = VIRTUAL_PLAYBACKS_PER_PAGE;
 export { MAX_PLAYBACK_PAGE };
 
-export function reducePaneOptions(
+function updateActivePane(
 	state: AppState,
-	action: Action,
-): AppState | undefined {
+	id: string,
+	update: (pane: PaneModel) => PaneModel,
+) {
+	return {
+		...state,
+		desks: state.desks.map((desk) =>
+			desk.id !== state.activeDeskId
+				? desk
+				: {
+						...desk,
+						panes: desk.panes.map((pane) =>
+							pane.id === id ? update(pane) : pane,
+						),
+					},
+		),
+	};
+}
+
+export function reducePaneOptions(state: AppState, action: Action): AppState | undefined {
 	switch (action.type) {
 		case "SET_PANE_LAYOUT_GROUP":
 			return {
@@ -82,6 +99,10 @@ export function reducePaneOptions(
 							},
 				),
 			};
+		case "SET_PANE_CHANNEL_DISPLAY_MODE":
+			return updateActivePane(state, action.id, (pane) =>
+				Object.assign({}, pane, { channelDisplayMode: action.mode }),
+			);
 		case "SET_PANE_SCHEDULER_LAYOUT":
 			return {
 				...state,

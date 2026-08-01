@@ -1,5 +1,9 @@
 import type { PresetFamily } from "../presetFamilies";
-import type { FixtureSheetColumn, StageView } from "../types";
+import type {
+	ChannelDisplayMode,
+	FixtureSheetColumn,
+	StageView,
+} from "../types";
 
 export interface WindowProps {
 	active?: boolean;
@@ -32,4 +36,5 @@ export interface WindowProps {
 		showList: boolean;
 		showCalendar: boolean;
 	}) => void;
+	channelDisplayMode?: ChannelDisplayMode;
 }
