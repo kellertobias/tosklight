@@ -97,23 +97,34 @@ pub(super) async fn create_session(
         connected: true,
         desk: desk.clone(),
     };
+    let role = input.role.unwrap_or_default();
     let _activation = state.active_show.acquire().await;
     state.sessions.bind_client(session.id, client_id);
-    let context = programming_context(&session, light_application::ActionSource::Http, None);
-    state
-        .programming
-        .run_lifecycle_transition(&context, user.id, || -> Result<(), ApiError> {
-            state.programming.start(session.id, user.id);
-            attach_session_command_context(&state, &session);
-            state.sessions.insert_session(session.clone());
-            persist_programmer(&state, &session)
-        })?;
+    state.sessions.set_role(session.id, role);
+    if role.is_read_only() {
+        // A read-only visualizer observes the desk. It must not start a programmer, claim the
+        // command line, or change desk selection merely by connecting.
+        state.sessions.insert_session(session.clone());
+    } else {
+        let context = programming_context(&session, light_application::ActionSource::Http, None);
+        state.programming.run_lifecycle_transition(
+            &context,
+            user.id,
+            || -> Result<(), ApiError> {
+                state.programming.start(session.id, user.id);
+                attach_session_command_context(&state, &session);
+                state.sessions.insert_session(session.clone());
+                persist_programmer(&state, &session)
+            },
+        )?;
+    }
     emit(
         &state,
         "session_started",
-        serde_json::json!({"session_id":session.id,"user":user.name}),
+        serde_json::json!({"session_id":session.id,"user":user.name,"role":role}),
     );
     Ok(Json(wire::RuntimeSessionResponse {
+        role,
         session_id: session.id.0,
         client_id,
         token: session.token,
@@ -155,9 +166,26 @@ pub(super) async fn close_session(
         return Err(ApiError::conflict("a session may only disconnect itself"));
     }
     let _activation = state.active_show.acquire().await;
+    let read_only = state.sessions.role(id).is_read_only();
     let Some(session) = state.sessions.remove_session(id) else {
         return Err(ApiError::not_found("session"));
     };
+    if read_only {
+        // Nothing was claimed, so nothing has to be released.
+        state.integrations.remove_session_suppression(id);
+        if let Some(client_id) = state.sessions.unbind_client(id) {
+            state
+                .installation
+                .touch_client(client_id)
+                .map_err(ApiError::store)?;
+        }
+        emit(
+            &state,
+            "session_disconnected",
+            serde_json::json!({"session_id":id}),
+        );
+        return Ok(StatusCode::NO_CONTENT);
+    }
     state.integrations.remove_session_suppression(id);
     if let Some(client_id) = state.sessions.unbind_client(id) {
         state

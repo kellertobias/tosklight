@@ -13,7 +13,10 @@ pub(super) fn authenticate_token(state: &AppState, token: &str) -> Result<Sessio
         .sessions
         .session_for_token(token)
         .ok_or_else(|| ApiError::unauthorized("invalid session token"))?;
-    attach_session_command_context(state, &session);
+    // A read-only visualizer never claims the desk command line, not even by reading.
+    if !state.sessions.role(session.id).is_read_only() {
+        attach_session_command_context(state, &session);
+    }
     Ok(session)
 }
 

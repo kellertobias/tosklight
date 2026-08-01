@@ -297,3 +297,41 @@ pub(super) async fn unlock_desk(
         Ok(Json(desk_lock_response(configuration)))
     })
 }
+
+/// A read-only visualizer session may only read.
+///
+/// Enforcing this once at the transport is what makes the role a guarantee rather than a
+/// convention: no handler has to remember to check it, and a future mutating route is covered the
+/// day it is added.
+pub(super) async fn read_only_session_boundary(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if matches!(
+        *request.method(),
+        Method::GET | Method::HEAD | Method::OPTIONS
+    ) {
+        return next.run(request).await;
+    }
+    let Some(session) = request_session(&state, &request) else {
+        return next.run(request).await;
+    };
+    if state.sessions.role(session.id).is_read_only() {
+        return ApiError::forbidden(
+            "a read-only visualizer session cannot change desk or show state",
+        )
+        .into_response();
+    }
+    next.run(request).await
+}
+
+/// Resolve the authenticated session for a request without consuming its body.
+fn request_session(state: &AppState, request: &Request) -> Option<Session> {
+    let token = request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))?;
+    state.sessions.session_for_token(token.trim())
+}

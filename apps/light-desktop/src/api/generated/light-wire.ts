@@ -666,12 +666,19 @@ replayed: boolean,
  */
 changed: boolean, };
 export type StageLayoutErrorResponse = { error: string, retryable: boolean, };
-export type RuntimeSessionCreateRequest = { username: string, desk_id: string | null, client_id: string | null, };
+export type RuntimeSessionCreateRequest = { username: string, desk_id: string | null, client_id: string | null,
+/**
+ * Absent means the historical operator session. A `visualizer` session is read-only: it
+ * never starts a programmer, claims the command line, or changes desk selection, and the
+ * transport rejects every mutating request it makes.
+ */
+role: RuntimeSessionRole | null, };
+export type RuntimeSessionRole = "operator" | "visualizer";
 export type RuntimeDeskUser = { id: string, name: string, enabled: boolean, };
 export type RuntimePlaybackSurfaceRow = { first_playback_slot: number, has_fader: boolean, button_count: number, };
 export type RuntimePlaybackSurfaceLayout = { playbacks_per_row: number, rows: Array<RuntimePlaybackSurfaceRow>, };
 export type RuntimeControlDesk = { id: string, name: string, osc_alias: string, columns: number, rows: number, buttons: number, playback_layout: RuntimePlaybackSurfaceLayout | null, };
-export type RuntimeSessionResponse = { session_id: string, client_id: string, token: string, user: RuntimeDeskUser, desk: RuntimeControlDesk, };
+export type RuntimeSessionResponse = { role: RuntimeSessionRole, session_id: string, client_id: string, token: string, user: RuntimeDeskUser, desk: RuntimeControlDesk, };
 export type RuntimeRevisionCopySource = { show_id: string, show_name: string, revision: number, revision_name: string, copied_at: string, };
 export type RuntimeShowEntry = { id: string, name: string, path: string, revision: number, updated_at: string, revision_copy: RuntimeRevisionCopySource | null, };
 export type RuntimeOutputHealth = { frames_sent: number, packets_sent: number, send_errors: number, deadline_misses: number, maximum_lateness_micros: number, frame_hz: number, last_tick_micros: number, maximum_tick_micros: number, tick_duration_bucket_bounds_micros: number[], tick_duration_bucket_counts: number[], scheduler_utilization: number, };

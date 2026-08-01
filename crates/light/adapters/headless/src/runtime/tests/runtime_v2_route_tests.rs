@@ -312,3 +312,69 @@ async fn visualization_snapshot_reports_authoritative_source_and_route_costs() {
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[tokio::test]
+async fn a_visualizer_session_is_read_only_and_claims_no_operator_state() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/sessions")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"username": "Operator", "role": "visualizer"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let session = json(response).await;
+    assert_eq!(session["role"], "visualizer");
+    let token = session["token"].as_str().unwrap().to_owned();
+    let session_id = session["session_id"].as_str().unwrap().to_owned();
+
+    let session_uuid: uuid::Uuid = session_id.parse().unwrap();
+
+    // Reads succeed.
+    let read = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v2/output/dmx")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(read.status(), StatusCode::OK);
+
+    // Connecting and reading must not have started a programmer for the visualizer, which is
+    // what owning a command-line context requires.
+    assert!(
+        !state
+            .programming
+            .attach_command_context(SessionId(session_uuid), SessionId(session_uuid)),
+        "a visualizer session must not own a programmer or a command-line context"
+    );
+
+    // Every mutation is refused at the transport.
+    let mutation = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/patch/fixtures")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"request_id": "viz-1", "fixtures": []}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(mutation.status(), StatusCode::FORBIDDEN);
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}

@@ -364,6 +364,7 @@ fn runtime(config: &Config) -> Vec<String> {
         RuntimeSessionCreateRequest::decl(config),
         RuntimeDeskUser::decl(config),
         RuntimePlaybackSurfaceRow::decl(config),
+        RuntimeSessionRole::decl(config),
         RuntimePlaybackSurfaceLayout::decl(config),
         RuntimeControlDesk::decl(config),
         RuntimeSessionResponse::decl(config),

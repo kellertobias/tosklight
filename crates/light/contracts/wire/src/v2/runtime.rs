@@ -12,6 +12,25 @@ pub struct RuntimeSessionCreateRequest {
     pub desk_id: Option<Uuid>,
     #[serde(default)]
     pub client_id: Option<Uuid>,
+    /// Absent means the historical operator session. A `visualizer` session is read-only: it
+    /// never starts a programmer, claims the command line, or changes desk selection, and the
+    /// transport rejects every mutating request it makes.
+    #[serde(default)]
+    pub role: Option<RuntimeSessionRole>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeSessionRole {
+    #[default]
+    Operator,
+    Visualizer,
+}
+
+impl RuntimeSessionRole {
+    pub fn is_read_only(self) -> bool {
+        matches!(self, Self::Visualizer)
+    }
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
@@ -48,6 +67,8 @@ pub struct RuntimeControlDesk {
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeSessionResponse {
+    #[serde(default)]
+    pub role: RuntimeSessionRole,
     pub session_id: Uuid,
     pub client_id: Uuid,
     pub token: String,

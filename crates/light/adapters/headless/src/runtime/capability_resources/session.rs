@@ -1,10 +1,14 @@
 use super::*;
+use light_wire::v2::runtime::RuntimeSessionRole;
 
 #[derive(Clone)]
 pub(in crate::runtime) struct SessionResource {
     sessions: Arc<RwLock<HashMap<SessionId, Session>>>,
     session_clients: Arc<RwLock<HashMap<SessionId, Uuid>>>,
     file_input_contexts: Arc<Mutex<HashMap<Uuid, file_manager::FileInputContext>>>,
+    /// Sessions that hold a non-default role. Kept beside the session record so the historical
+    /// operator session stays exactly as it was.
+    roles: Arc<RwLock<HashMap<SessionId, RuntimeSessionRole>>>,
 }
 
 pub(crate) enum SessionFileInputRoute {
@@ -19,7 +23,22 @@ impl SessionResource {
             sessions: Arc::default(),
             session_clients: Arc::default(),
             file_input_contexts: Arc::default(),
+            roles: Arc::default(),
         }
+    }
+
+    /// Record the role a session was created with.
+    pub(in crate::runtime) fn set_role(&self, id: SessionId, role: RuntimeSessionRole) {
+        if role == RuntimeSessionRole::Operator {
+            self.roles.write().remove(&id);
+            return;
+        }
+        self.roles.write().insert(id, role);
+    }
+
+    /// The session's role, defaulting to the historical operator session.
+    pub(in crate::runtime) fn role(&self, id: SessionId) -> RuntimeSessionRole {
+        self.roles.read().get(&id).copied().unwrap_or_default()
     }
 
     pub(in crate::runtime) fn session(&self, id: SessionId) -> Option<Session> {
@@ -50,6 +69,7 @@ impl SessionResource {
     }
 
     pub(in crate::runtime) fn remove_session(&self, id: SessionId) -> Option<Session> {
+        self.roles.write().remove(&id);
         self.sessions.write().remove(&id)
     }
 
