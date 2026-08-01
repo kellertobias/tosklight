@@ -460,3 +460,80 @@ fn legacy_head_split_migrates_to_channels_and_serializes_canonically() {
     assert!(canonical["modes"][0]["heads"][0].get("split").is_none());
     assert_eq!(canonical["modes"][0]["channels"][0]["split"], 1);
 }
+
+/// A library that has never been told anything about a lantern's optics has to keep working. The
+/// block is optional, absent means "ask the fixture type", and reading a file that predates it
+/// must not fail or invent numbers.
+#[test]
+fn a_profile_without_an_optics_block_reads_and_declares_nothing() {
+    let profile = FixtureProfile::blank();
+    let json = serde_json::to_value(&profile).expect("serialises");
+    let optics = json.get("optics").expect("the block is always written");
+    assert!(
+        optics.as_object().is_some_and(|block| block.is_empty()),
+        "an undeclared block stays empty rather than writing guesses: {optics}"
+    );
+    let round_tripped: FixtureProfile = serde_json::from_value(json).expect("reads back");
+    assert_eq!(round_tripped.optics, ProfileOptics::default());
+    assert_eq!(round_tripped.optics.sharpness, None);
+}
+
+/// What a profile does declare has to survive the archive, because this is the whole point: the
+/// library, not the renderer, decides what a fixture's light looks like.
+#[test]
+fn declared_optics_round_trip_through_the_package_format() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Generic".into();
+    profile.name = "Test".into();
+    profile.optics = ProfileOptics {
+        output: Some(1.8),
+        sharpness: Some(0.9),
+        uniformity: Some(0.25),
+        light_source: Some(ProfileLightSource {
+            form: LightSourceForm::Oval,
+            width_millimetres: 200.0,
+            height_millimetres: 160.0,
+        }),
+    };
+    profile.validate().expect("valid");
+    let json = serde_json::to_string(&profile).expect("serialises");
+    let round_tripped: FixtureProfile = serde_json::from_str(&json).expect("reads back");
+    assert_eq!(round_tripped.optics, profile.optics);
+}
+
+/// An out-of-range figure is a transcription error, and the package validator is where an author
+/// finds out — not the renderer, silently clamping it three layers away.
+#[test]
+fn optical_figures_outside_their_range_are_refused() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Generic".into();
+    profile.name = "Test".into();
+    for optics in [
+        ProfileOptics {
+            sharpness: Some(40.0),
+            ..ProfileOptics::default()
+        },
+        ProfileOptics {
+            uniformity: Some(-0.5),
+            ..ProfileOptics::default()
+        },
+        ProfileOptics {
+            output: Some(0.0),
+            ..ProfileOptics::default()
+        },
+        ProfileOptics {
+            light_source: Some(ProfileLightSource {
+                form: LightSourceForm::Round,
+                width_millimetres: 0.0,
+                height_millimetres: 120.0,
+            }),
+            ..ProfileOptics::default()
+        },
+    ] {
+        profile.optics = optics;
+        assert!(
+            profile.validate().is_err(),
+            "an impossible figure must be reported: {optics:?}"
+        );
+    }
+}

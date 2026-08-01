@@ -407,6 +407,136 @@ fn round_trips_profile_and_embedded_assets() {
     );
 }
 
+/// A gobo wheel is the only asset list in a package — every other asset is a single field — so
+/// each slot has to reach its own canonical file and come back as its own data URL, in the slot
+/// it was declared in.
+#[test]
+fn round_trips_a_gobo_wheel() {
+    let mut profile = profile();
+    profile.gobos = vec![
+        crate::ProfileGobo {
+            slot: 1,
+            name: Some("Breakup".into()),
+            artwork_asset: Some(format!("data:image/png;base64,{PNG_1X1}")),
+        },
+        crate::ProfileGobo {
+            slot: 4,
+            name: Some("Rings".into()),
+            artwork_asset: Some(format!("data:image/png;base64,{PNG_1X1}")),
+        },
+        // A slot the manual names but nothing is etched on: still part of the wheel.
+        crate::ProfileGobo {
+            slot: 5,
+            name: Some("Open".into()),
+            artwork_asset: None,
+        },
+    ];
+
+    let bytes = write_fixture_package(&profile).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes.clone())).unwrap();
+    let names = (0..zip.len())
+        .map(|index| zip.by_index(index).unwrap().name().to_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        names,
+        ["fixture.json", "assets/gobo-1.png", "assets/gobo-4.png"],
+        "each slot is filed under the slot it is in"
+    );
+
+    let restored = read_fixture_package(&bytes).unwrap();
+    assert_eq!(restored.gobos.len(), 3);
+    assert_eq!(restored.gobos[0].slot, 1);
+    assert_eq!(restored.gobos[1].slot, 4);
+    assert_eq!(restored.gobos[2].artwork_asset, None);
+    for gobo in restored.gobos.iter().take(2) {
+        assert!(
+            gobo.artwork_asset
+                .as_deref()
+                .is_some_and(|asset| asset.starts_with("data:image/png;base64,")),
+            "slot {} did not come back as a data URL",
+            gobo.slot
+        );
+    }
+}
+
+/// Two slots with the same number would silently lose one of them.
+#[test]
+fn rejects_a_wheel_with_a_slot_declared_twice() {
+    let mut profile = profile();
+    profile.gobos = vec![
+        crate::ProfileGobo {
+            slot: 2,
+            name: Some("Breakup".into()),
+            artwork_asset: None,
+        },
+        crate::ProfileGobo {
+            slot: 2,
+            name: Some("Rings".into()),
+            artwork_asset: None,
+        },
+    ];
+    let error = write_fixture_package(&profile).expect_err("a duplicated slot is invalid");
+    assert!(format!("{error}").contains("declared twice"), "{error}");
+}
+
+/// A laser's scan engine is the only asset in a package that is source text rather than binary
+/// media, and it is the only one whose loss would leave the fixture silently projecting nothing.
+/// It has to survive the trip out to a canonical `assets/scan.js` and back to a data URL exactly
+/// as the photograph and the model do.
+#[test]
+fn round_trips_a_laser_scan_script() {
+    const SCRIPT: &str = "export function scan() { return { points: [] }; }\n";
+    let mut profile = profile();
+    profile.laser = Some(crate::ProfileLaser {
+        scan_script_asset: Some(format!(
+            "data:text/javascript;base64,{}",
+            STANDARD.encode(SCRIPT)
+        )),
+        scan_angle_degrees: Some(50.0),
+        points_per_second: Some(30_000.0),
+        ..crate::ProfileLaser::default()
+    });
+
+    let bytes = write_fixture_package(&profile).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes.clone())).unwrap();
+    let names = (0..zip.len())
+        .map(|index| zip.by_index(index).unwrap().name().to_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(names, ["fixture.json", "assets/scan.js"]);
+
+    let restored = read_fixture_package(&bytes).unwrap();
+    let laser = restored.laser.expect("the laser block must survive");
+    assert_eq!(laser.scan_angle_degrees, Some(50.0));
+    assert_eq!(laser.points_per_second, Some(30_000.0));
+    let encoded = laser.scan_script_asset.expect("the script must survive");
+    let payload = encoded
+        .strip_prefix("data:text/javascript;base64,")
+        .expect("the runtime form is a self-contained data URL");
+    assert_eq!(
+        String::from_utf8(STANDARD.decode(payload).unwrap()).unwrap(),
+        SCRIPT
+    );
+}
+
+/// A script that is not text cannot be compiled, and the package is the last place that can say so
+/// before a laser fails in front of an audience.
+#[test]
+fn rejects_a_scan_script_that_is_not_text() {
+    let mut profile = profile();
+    profile.laser = Some(crate::ProfileLaser {
+        scan_script_asset: Some(format!(
+            "data:text/javascript;base64,{}",
+            STANDARD.encode([0xff, 0xfe, 0x00])
+        )),
+        ..crate::ProfileLaser::default()
+    });
+    let error = write_fixture_package(&profile).unwrap_err().to_string();
+    assert!(
+        error.contains("scan script is not valid UTF-8"),
+        "unexpected error: {error}"
+    );
+}
+
 #[test]
 fn shipped_fresnel_round_trips_without_identity_or_asset_loss() {
     let original = shipped_profile("generic--dimmer-fresnel.toskfixture");

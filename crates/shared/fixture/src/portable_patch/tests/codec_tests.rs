@@ -327,3 +327,45 @@ fn contains_key(value: &Value, key: &str) -> bool {
         _ => false,
     }
 }
+
+/// A show written before the desk knew about mechanical angles still loads.
+///
+/// The bracket and shaper angles are patch-owned fields like any other. A record that predates
+/// them has neither key, and reading it must mean "no bracket angle, no module fitted" rather
+/// than a refused show.
+#[test]
+fn a_record_without_the_mechanical_angles_reads_as_none_set() {
+    let profile = profile();
+    let fixture = fixture(&profile);
+    let record = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap();
+    let mut body = record.body().clone();
+    let object = body.as_object_mut().unwrap();
+    object.remove("bracket_angle");
+    object.remove("shaper_angle");
+    assert!(
+        body.get("bracket_angle").is_none(),
+        "the record under test has no such key"
+    );
+
+    let legacy = PortablePatchedFixtureRecord::decode(body).unwrap();
+    let patch = legacy.patch().unwrap();
+    assert_eq!(patch.bracket_angle, 0.0);
+    assert_eq!(patch.shaper_angle, None, "no module was ever fitted");
+}
+
+/// What an operator set at the rig survives being written and read back.
+#[test]
+fn the_mechanical_angles_survive_a_write_and_a_read() {
+    let profile = profile();
+    let mut fixture = fixture(&profile);
+    fixture.bracket_angle = -32.5;
+    fixture.shaper_angle = Some(45.0);
+    let record = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap();
+    assert_eq!(record.body()["bracket_angle"], json!(-32.5));
+    assert_eq!(record.body()["shaper_angle"], json!(45.0));
+
+    let read = PortablePatchedFixtureRecord::decode(record.body().clone()).unwrap();
+    let patch = read.patch().unwrap();
+    assert_eq!(patch.bracket_angle, -32.5);
+    assert_eq!(patch.shaper_angle, Some(45.0));
+}

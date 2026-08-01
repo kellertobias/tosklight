@@ -62,6 +62,17 @@ pub struct PatchedFixturePatch {
     pub invert_pan: bool,
     #[serde(default)]
     pub invert_tilt: bool,
+    /// Degrees the mounting bracket is set to: how far the fixture is angled in the clamp or yoke
+    /// it hangs from, positive nose-down. It is a mechanical setting nothing on the desk can
+    /// drive, so the show records it and the picture follows it.
+    #[serde(default)]
+    pub bracket_angle: f32,
+    /// Degrees the fitted shaper or barn-door module is turned to, or `None` when none is fitted.
+    ///
+    /// A framing module the desk can rotate over DMX starts from this angle; a barn door, which
+    /// nothing can rotate but a hand, only ever has this one.
+    #[serde(default)]
+    pub shaper_angle: Option<f32>,
     #[serde(default = "default_true")]
     pub move_in_black_enabled: bool,
     #[serde(default)]
@@ -90,6 +101,8 @@ impl PatchedFixturePatch {
             grand_master_enabled: fixture.grand_master_enabled,
             invert_pan: fixture.invert_pan,
             invert_tilt: fixture.invert_tilt,
+            bracket_angle: fixture.bracket_angle,
+            shaper_angle: fixture.shaper_angle,
             move_in_black_enabled: fixture.move_in_black_enabled,
             move_in_black_delay_millis: fixture.move_in_black_delay_millis,
             highlight_overrides: fixture.highlight_overrides.clone(),

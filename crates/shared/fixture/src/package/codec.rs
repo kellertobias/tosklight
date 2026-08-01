@@ -84,6 +84,16 @@ pub fn read_fixture_package(bytes: &[u8]) -> Result<FixtureProfile, FixturePacka
         AssetKind::Model,
         &mut files,
     )?;
+    if let Some(laser) = manifest.profile.laser.as_mut() {
+        resolve_asset_field(
+            &mut laser.scan_script_asset,
+            AssetKind::ScanScript,
+            &mut files,
+        )?;
+    }
+    for gobo in &mut manifest.profile.gobos {
+        resolve_asset_field(&mut gobo.artwork_asset, AssetKind::Gobo, &mut files)?;
+    }
     if let Some(path) = files.keys().next() {
         return Err(invalid(format!("unreferenced archive entry {path}")));
     }
@@ -117,6 +127,25 @@ pub fn write_fixture_package(profile: &FixtureProfile) -> Result<Vec<u8>, Fixtur
         "assets/model",
         &mut assets,
     )?;
+    if let Some(laser) = portable.laser.as_mut() {
+        extract_asset_field(
+            &mut laser.scan_script_asset,
+            AssetKind::ScanScript,
+            "assets/scan",
+            &mut assets,
+        )?;
+    }
+    // Every slot is its own file, named for the slot it is in: a wheel is read by a person as
+    // often as by the codec, and `assets/gobo-3.png` says which one it is without opening it.
+    for index in 0..portable.gobos.len() {
+        let stem = format!("assets/gobo-{}", portable.gobos[index].slot);
+        extract_asset_field(
+            &mut portable.gobos[index].artwork_asset,
+            AssetKind::Gobo,
+            &stem,
+            &mut assets,
+        )?;
+    }
     let manifest = serde_json::to_vec_pretty(&FixturePackageManifest::new(portable))?;
     if manifest.len() > MAX_FIXTURE_MANIFEST_BYTES {
         return Err(invalid("fixture.json exceeds 64 MiB"));

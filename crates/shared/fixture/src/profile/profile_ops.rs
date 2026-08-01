@@ -2,6 +2,7 @@ use super::{
     FIXTURE_PROFILE_SCHEMA_VERSION, FixtureHead, FixtureMode, FixtureProfile, FixtureSplit,
     GeometryGraph, GeometryTemplate, ModelUnits, PatchPolicy, ProfilePhysicalProperties,
 };
+use crate::ProfileOptics;
 use crate::SignalLossPolicy;
 use light_core::FixtureId;
 use uuid::Uuid;
@@ -26,6 +27,9 @@ impl FixtureProfile {
             model_asset: None,
             model_units: ModelUnits::Auto,
             physical: ProfilePhysicalProperties::default(),
+            optics: ProfileOptics::default(),
+            laser: None,
+            gobos: Vec::new(),
             modes: vec![FixtureMode {
                 id: mode_id,
                 name: "Default".into(),

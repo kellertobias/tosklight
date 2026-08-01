@@ -55,6 +55,17 @@ pub struct PatchedFixture {
     /// Reverse the normalized Tilt request for this physical fixture.
     #[serde(default)]
     pub invert_tilt: bool,
+    /// Degrees the mounting bracket is set to: how far the fixture is angled in the clamp or yoke
+    /// it hangs from, positive nose-down. Nothing on the desk can drive it, so the show records
+    /// what the rig was actually set to and the picture follows it.
+    #[serde(default)]
+    pub bracket_angle: f32,
+    /// Degrees the fitted shaper or barn-door module is turned to, or `None` when none is fitted.
+    ///
+    /// A framing module the desk can rotate over DMX starts from this angle; a barn door, which
+    /// nothing turns but a hand, only ever has this one.
+    #[serde(default)]
+    pub shaper_angle: Option<f32>,
     /// Preposition Position-family attributes for the next lit Cue while dark.
     #[serde(default = "default_true")]
     pub move_in_black_enabled: bool,
@@ -91,6 +102,13 @@ pub struct MultiPatchInstance {
     /// Reverse the normalized Tilt request for this physical instance.
     #[serde(default)]
     pub invert_tilt: bool,
+    /// Degrees the mounting bracket of this physical instance is set to.
+    #[serde(default)]
+    pub bracket_angle: f32,
+    /// Degrees the fitted shaper or barn-door module of this instance is turned to, or `None`
+    /// when none is fitted.
+    #[serde(default)]
+    pub shaper_angle: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

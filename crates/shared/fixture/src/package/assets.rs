@@ -1,5 +1,6 @@
 use super::manifest::{
-    AssetKind, FixturePackageError, MAX_ICON_DIMENSION, MAX_PHOTOGRAPH_DIMENSION, PackageAsset,
+    AssetKind, FixturePackageError, MAX_GOBO_DIMENSION, MAX_ICON_DIMENSION,
+    MAX_PHOTOGRAPH_DIMENSION, PackageAsset,
 };
 use super::{invalid, validate_glb};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -62,6 +63,23 @@ pub(super) fn extract_asset_field(
             }
             validate_glb(&bytes)?;
             "glb"
+        }
+        AssetKind::ScanScript => {
+            if !matches!(
+                declared_mime,
+                "text/javascript" | "application/javascript" | "application/ecmascript"
+            ) {
+                return Err(invalid(format!(
+                    "scan script has unsupported media type {declared_mime}"
+                )));
+            }
+            validate_scan_script(&bytes)?;
+            "js"
+        }
+        AssetKind::Gobo => {
+            let format = sniff_image(&bytes)?;
+            validate_image_dimensions(kind, &bytes, format)?;
+            image_extension(format)
         }
     };
     let path = format!("{stem}.{extension}");
@@ -149,7 +167,28 @@ fn validate_asset(
             validate_glb(bytes)?;
             Ok("model/gltf-binary")
         }
+        AssetKind::ScanScript => {
+            if !path.to_ascii_lowercase().ends_with(".js") {
+                return Err(invalid("scan script must use the .js extension"));
+            }
+            validate_scan_script(bytes)?;
+            Ok("text/javascript")
+        }
+        AssetKind::Gobo => {
+            let format = sniff_image(bytes)?;
+            validate_image_dimensions(kind, bytes, format)?;
+            Ok(image_mime(format))
+        }
     }
+}
+
+/// A scan script has to survive the trip to a scan engine as source text, so the only structural
+/// guarantee a package can make is that it is text at all. Whether it exports a usable `scan`
+/// function is settled where it is compiled, which is the one place that can say what went wrong.
+fn validate_scan_script(bytes: &[u8]) -> Result<(), FixturePackageError> {
+    std::str::from_utf8(bytes)
+        .map_err(|error| invalid(format!("scan script is not valid UTF-8: {error}")))?;
+    Ok(())
 }
 
 fn sniff_image(bytes: &[u8]) -> Result<ImageFormat, FixturePackageError> {
@@ -170,7 +209,8 @@ fn validate_image_dimensions(
     let limit = match kind {
         AssetKind::Photograph => MAX_PHOTOGRAPH_DIMENSION,
         AssetKind::Icon => MAX_ICON_DIMENSION,
-        AssetKind::Model => unreachable!(),
+        AssetKind::Gobo => MAX_GOBO_DIMENSION,
+        AssetKind::Model | AssetKind::ScanScript => unreachable!(),
     };
     if width == 0 || height == 0 || width > limit || height > limit {
         return Err(invalid(format!(

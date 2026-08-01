@@ -7,7 +7,7 @@ use super::{
     ChannelFunction, ChannelFunctionBehavior, ChannelResolution, ColorSystem, EmitterBinding,
     FIXTURE_PROFILE_SCHEMA_VERSION, FixtureChannel, FixtureHead, FixtureMode, FixtureProfile,
     FixtureSplit, GeometryGraph, GeometryTemplate, HeadColorSystem, ModelUnits, PatchPolicy,
-    ProfileError, ProfilePhysicalProperties,
+    ProfileError, ProfileOptics, ProfilePhysicalProperties,
 };
 use crate::{ChannelBehavior, FixtureDefinition};
 use light_core::AttributeKey;
@@ -62,6 +62,10 @@ impl FixtureProfile {
                 power_watts: first.physical.power_watts,
                 ..Default::default()
             },
+            // A legacy definition never described its optics; the fixture type supplies them.
+            optics: ProfileOptics::default(),
+            laser: None,
+            gobos: Vec::new(),
             modes,
             hazardous: first.hazardous,
             direct_control_protocols: first.direct_control_protocols.clone(),

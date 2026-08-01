@@ -328,6 +328,8 @@ fn into_runtime_fixture(
         grand_master_enabled: patch.grand_master_enabled,
         invert_pan: patch.invert_pan,
         invert_tilt: patch.invert_tilt,
+        bracket_angle: patch.bracket_angle,
+        shaper_angle: patch.shaper_angle,
         move_in_black_enabled: patch.move_in_black_enabled,
         move_in_black_delay_millis: patch.move_in_black_delay_millis,
         highlight_overrides: patch.highlight_overrides,

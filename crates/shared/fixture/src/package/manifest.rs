@@ -14,9 +14,19 @@ pub const MAX_FIXTURE_MANIFEST_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_FIXTURE_PHOTOGRAPH_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_FIXTURE_ICON_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_FIXTURE_MODEL_BYTES: usize = 64 * 1024 * 1024;
+/// A scan script is source text that has to be compiled every time a laser is loaded, and a
+/// quarter of a megabyte is already far more than a scan engine needs. The limit is here to keep
+/// an accidental bundle out of a fixture package rather than to constrain honest authoring.
+pub const MAX_FIXTURE_SCAN_SCRIPT_BYTES: usize = 256 * 1024;
+/// A gobo is a mask, and a wheel of them travels inside every patched show that uses the fixture.
+/// One megabyte is a generous greyscale image and mean enough to keep a photograph out.
+pub const MAX_FIXTURE_GOBO_BYTES: usize = 1024 * 1024;
 
 pub(super) const MAX_PHOTOGRAPH_DIMENSION: u32 = 8_192;
 pub(super) const MAX_ICON_DIMENSION: u32 = 2_048;
+/// The gate is a disc a few hundred pixels across on screen at most, and every slot is resampled
+/// to one size before it reaches the GPU anyway.
+pub(super) const MAX_GOBO_DIMENSION: u32 = 2_048;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -56,6 +66,10 @@ pub(super) enum AssetKind {
     Photograph,
     Icon,
     Model,
+    /// The JavaScript scan engine a laser fixture projects with.
+    ScanScript,
+    /// One slot's artwork on a gobo wheel.
+    Gobo,
 }
 
 impl AssetKind {
@@ -64,6 +78,8 @@ impl AssetKind {
             Self::Photograph => "photograph",
             Self::Icon => "stage icon",
             Self::Model => "3D model",
+            Self::ScanScript => "scan script",
+            Self::Gobo => "gobo artwork",
         }
     }
 
@@ -72,6 +88,8 @@ impl AssetKind {
             Self::Photograph => MAX_FIXTURE_PHOTOGRAPH_BYTES,
             Self::Icon => MAX_FIXTURE_ICON_BYTES,
             Self::Model => MAX_FIXTURE_MODEL_BYTES,
+            Self::ScanScript => MAX_FIXTURE_SCAN_SCRIPT_BYTES,
+            Self::Gobo => MAX_FIXTURE_GOBO_BYTES,
         }
     }
 }

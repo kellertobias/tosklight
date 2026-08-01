@@ -7,6 +7,12 @@ use super::{
 use std::collections::{BTreeMap, HashSet};
 use uuid::Uuid;
 
+/// The highest slot a gobo wheel may declare.
+///
+/// Wheels on real fixtures run to a dozen or so; this is only here so a mistyped slot cannot ask
+/// the visualizer to divide a channel into thousands of positions nobody can select.
+const MAX_GOBO_SLOT: u32 = 63;
+
 impl FixtureProfile {
     pub fn validate(&self) -> Result<(), ProfileError> {
         if self.schema_version != FIXTURE_PROFILE_SCHEMA_VERSION {
@@ -36,6 +42,30 @@ impl FixtureProfile {
             return Err(ProfileError::Invalid(
                 "color rendering index must be from 0 to 100".into(),
             ));
+        }
+        validate_positive("relative output", self.optics.output)?;
+        validate_fraction("sharpness", self.optics.sharpness)?;
+        validate_fraction("uniformity", self.optics.uniformity)?;
+        if let Some(source) = self.optics.light_source {
+            validate_positive("light source width", Some(source.width_millimetres))?;
+            validate_positive("light source height", Some(source.height_millimetres))?;
+        }
+        // A wheel is read by slot, so two slots with the same number is an authoring mistake that
+        // would otherwise silently drop one of them.
+        let mut gobo_slots = HashSet::new();
+        for gobo in &self.gobos {
+            if gobo.slot > MAX_GOBO_SLOT {
+                return Err(ProfileError::Invalid(format!(
+                    "gobo slot {} is beyond the {MAX_GOBO_SLOT} a wheel can hold",
+                    gobo.slot
+                )));
+            }
+            if !gobo_slots.insert(gobo.slot) {
+                return Err(ProfileError::Invalid(format!(
+                    "gobo slot {} is declared twice",
+                    gobo.slot
+                )));
+            }
         }
         let mut mode_ids = HashSet::new();
         for mode in &self.modes {
@@ -355,6 +385,16 @@ impl FixtureChannel {
                 _ => {}
             }
         }
+        Ok(())
+    }
+}
+
+/// A declared `0..=1` optical figure. Out of range is a mistake worth reporting rather than
+/// silently clamping: a sharpness of `40` is a transcription error, not a very hard edge.
+fn validate_fraction(name: &str, value: Option<f32>) -> Result<(), ProfileError> {
+    if value.is_some_and(|value| !value.is_finite() || !(0.0..=1.0).contains(&value)) {
+        Err(ProfileError::Invalid(format!("{name} must be from 0 to 1")))
+    } else {
         Ok(())
     }
 }
