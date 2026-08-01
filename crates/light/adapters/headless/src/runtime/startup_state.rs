@@ -5,6 +5,7 @@ use super::{
     active_playbacks_setting, compile_active_show_for_startup, fixed_test_time,
     output_runtime_setting, sibling_fixture_package_dir, startup_options,
 };
+use anyhow::Context;
 use light_control::speed::SpeedGroupController;
 use light_core::{ManualClock, SharedClock, SystemClock};
 use light_engine::{Engine, EnginePlaybackCommand};
@@ -135,6 +136,7 @@ impl PersistentState {
     fn open(options: startup_options::StartupOptions) -> anyhow::Result<Self> {
         let startup_options::StartupOptions {
             data_dir,
+            show_file,
             fixture_package_dir,
             bind,
             test_bench,
@@ -152,7 +154,10 @@ impl PersistentState {
             fixture_package_dir.as_deref(),
         )?;
         let configuration = load_configuration(&desk, osc_bind_override, output_bind_override)?;
-        let active_show = load_active_show(&desk, default_show)?;
+        let active_show = match &show_file {
+            Some(path) => Some(adopt_show_file(&desk, path)?),
+            None => load_active_show(&desk, default_show)?,
+        };
         tracing::info!(active_show=?active_show.as_ref().map(|show| &show.name), "desk state loaded");
         Ok(Self {
             data_dir,
@@ -196,6 +201,27 @@ fn load_configuration(
         .validate()
         .map_err(|error| anyhow::anyhow!(error.message))?;
     Ok(configuration)
+}
+
+/// Open the show file the operator named on the command line and make it the active show.
+///
+/// The file is registered in the desk library under its own file name so the rest of the desk
+/// treats it exactly like any other show; nothing about the file itself is rewritten.
+fn adopt_show_file(desk: &DeskStore, path: &std::path::Path) -> anyhow::Result<ShowEntry> {
+    let path = std::fs::canonicalize(path)
+        .with_context(|| format!("show file {} cannot be opened", path.display()))?;
+    super::validate_show_file(&path)
+        .map_err(|error| anyhow::anyhow!("show file {} is not usable: {error}", path.display()))?;
+    let name = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("show")
+        .to_owned();
+    let entry = desk.upsert_show(&name, &path.display().to_string(), true)?;
+    ActiveShowRepository::open(&path)?.set_identity(entry.id, &entry.name, None)?;
+    desk.set_active_show(Some(entry.id))?;
+    tracing::info!(path=%path.display(), show=%entry.name, "opened the show file named at startup");
+    Ok(entry)
 }
 
 fn load_active_show(

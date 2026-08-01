@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
 };
 
-pub(super) const HELP: &str = "light-headless [--data-dir PATH] [--fixture-package-dir PATH] [--bind ADDRESS] [--test-bench] [--osc-bind ADDRESS] [--output-bind-ip ADDRESS]";
+pub(super) const HELP: &str = "light-headless [--data-dir PATH] [--show PATH] [--fixture-package-dir PATH] [--bind ADDRESS] [--test-bench] [--osc-bind ADDRESS] [--output-bind-ip ADDRESS]";
 
 #[derive(Debug, Eq, PartialEq)]
 pub(super) enum StartupAction {
@@ -16,6 +16,8 @@ pub(super) enum StartupAction {
 #[derive(Debug, Eq, PartialEq)]
 pub(super) struct StartupOptions {
     pub(super) data_dir: PathBuf,
+    /// Show file to open and make active at startup, replacing whatever was active before.
+    pub(super) show_file: Option<PathBuf>,
     pub(super) fixture_package_dir: Option<PathBuf>,
     pub(super) bind: SocketAddr,
     pub(super) test_bench: bool,
@@ -52,6 +54,9 @@ fn apply_argument(
 ) -> anyhow::Result<bool> {
     match argument {
         "--data-dir" => options.data_dir = required(values, "--data-dir requires a path")?.into(),
+        "--show" => {
+            options.show_file = Some(required(values, "--show requires a show file path")?.into());
+        }
         "--fixture-package-dir" => {
             options.fixture_package_dir =
                 Some(required(values, "--fixture-package-dir requires a path")?.into());
@@ -90,6 +95,7 @@ impl StartupOptions {
     fn with_data_dir(environment_data_dir: Option<PathBuf>) -> Self {
         Self {
             data_dir: environment_data_dir.unwrap_or_else(|| PathBuf::from("light-data")),
+            show_file: None,
             fixture_package_dir: None,
             bind: SocketAddr::from((Ipv4Addr::LOCALHOST, 5000)),
             test_bench: false,
