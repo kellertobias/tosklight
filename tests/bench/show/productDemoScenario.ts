@@ -632,7 +632,12 @@ export class BrowserProductDemo {
 				count: 1,
 				address: fixtureAddress(acl),
 			});
-			await desk.click(fixtureRow(patchWindow, 601));
+			await desk.click(
+				fixtureRow(patchWindow, 601).getByRole("cell", {
+					name: "601",
+					exact: true,
+				}),
+			);
 			const multipatchesBeforeAcl = await patchWindow
 				.locator(".multipatch-row")
 				.count();
@@ -654,7 +659,9 @@ export class BrowserProductDemo {
 				'xpath=following-sibling::tr[contains(@class, "multipatch-row")][7]',
 			);
 			await expect(aclLastPhysicalRow).toHaveCount(1);
-			await desk.click(aclPrimaryRow);
+			await desk.click(
+				aclPrimaryRow.getByRole("cell", { name: "601", exact: true }),
+			);
 			await desk.click(aclLastPhysicalRow, { modifiers: ["Shift"] });
 			const aclPlacement = demoPatchPlacement("601 primary THRU multipatch 7");
 			const aclRotation =
