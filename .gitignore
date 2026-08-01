@@ -21,6 +21,8 @@
 *.sqlite-shm
 *.sqlite-wal
 *.show
+*.show-shm
+*.show-wal
 !/assets/demo.show
 *.log
 *.pid
