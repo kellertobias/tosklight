@@ -211,6 +211,71 @@ describe("FixtureProfileEditor generic profile fields", () => {
 			beam_angle_degrees: 36,
 		});
 	});
+
+	/**
+	 * The optics block is what makes one lantern look different from another in the visualizer.
+	 * An operator fitting a different lens, or correcting a type's guess, edits it here, and a
+	 * field left blank has to stay blank so the fixture type keeps answering for it.
+	 */
+	it("edits the optics of a fixture and leaves what was not filled in to its type", async () => {
+		const save = vi.fn(async (draft: FixtureProfile) => draft);
+		render(
+			<FixtureProfileEditor
+				initialProfile={validProfile()}
+				manufacturers={[]}
+				onSave={save}
+				onClose={vi.fn()}
+			/>,
+		);
+
+		fireEvent.change(screen.getByLabelText("Sharpness (%)"), {
+			target: { value: "85" },
+		});
+		fireEvent.change(screen.getByLabelText("Light source width (mm)"), {
+			target: { value: "200" },
+		});
+		fireEvent.change(screen.getByLabelText("Light source height (mm)"), {
+			target: { value: "160" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Save fixture" }));
+
+		await waitFor(() => expect(save).toHaveBeenCalledOnce());
+		expect(save.mock.calls[0][0].optics).toEqual({
+			sharpness: 0.85,
+			light_source: {
+				form: "round",
+				width_millimetres: 200,
+				height_millimetres: 160,
+			},
+		});
+	});
+
+	/** A lens needs both of its dimensions; clearing one hands the fixture back to its type. */
+	it("drops a light source that has lost one of its dimensions", async () => {
+		const save = vi.fn(async (draft: FixtureProfile) => draft);
+		render(
+			<FixtureProfileEditor
+				initialProfile={validProfile()}
+				manufacturers={[]}
+				onSave={save}
+				onClose={vi.fn()}
+			/>,
+		);
+
+		fireEvent.change(screen.getByLabelText("Light source width (mm)"), {
+			target: { value: "200" },
+		});
+		fireEvent.change(screen.getByLabelText("Light source height (mm)"), {
+			target: { value: "160" },
+		});
+		fireEvent.change(screen.getByLabelText("Light source height (mm)"), {
+			target: { value: "" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Save fixture" }));
+
+		await waitFor(() => expect(save).toHaveBeenCalledOnce());
+		expect(save.mock.calls[0][0].optics?.light_source).toBeNull();
+	});
 });
 
 describe("FixtureProfileEditor canonical attribute registry", () => {

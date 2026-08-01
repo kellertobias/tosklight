@@ -72,11 +72,35 @@ export interface FixtureProfile {
 	model_asset: string | null;
 	model_units?: "auto" | "metres";
 	physical: FixtureProfilePhysical;
+	optics?: FixtureProfileOptics;
 	modes: FixtureMode[];
 	hazardous: boolean;
 	direct_control_protocols: Array<"citp">;
 	signal_loss_policy: { type: string; duration_millis?: number };
 	reserved_source: string | null;
+}
+
+/**
+ * What this fixture's light looks like, as against how the fixture is built.
+ *
+ * Every figure is optional. What a profile leaves out is derived from its declared fixture type,
+ * so a library that has never been told any of this still renders sensibly.
+ */
+export interface FixtureProfileOptics {
+	/** Relative output, 1 being an ordinary fixture of its type. */
+	output?: number | null;
+	/** How hard the rim of the field is, 0 to 1. */
+	sharpness?: number | null;
+	/** How evenly the field is filled, 0 to 1. */
+	uniformity?: number | null;
+	/** The lit surface light leaves through. The same for every fixture of this type. */
+	light_source?: FixtureProfileLightSource | null;
+}
+
+export interface FixtureProfileLightSource {
+	form: "round" | "oval" | "rectangular";
+	width_millimetres: number;
+	height_millimetres: number;
 }
 
 export interface FixtureProfilePhysical {

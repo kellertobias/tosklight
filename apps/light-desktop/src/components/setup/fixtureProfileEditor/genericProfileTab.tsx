@@ -6,8 +6,13 @@ import {
 	TextAreaField,
 	TextField,
 } from "@tosklight/ui";
+import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { FixtureProfile } from "../../../api/types";
+import type {
+	FixtureProfile,
+	FixtureProfileLightSource,
+	FixtureProfileOptics,
+} from "../../../api/types";
 import { AssetField } from "./assets";
 
 const FIXTURE_TYPES = [
@@ -31,6 +36,18 @@ type GenericSectionProps = {
 
 function optionalNumber(value: string) {
 	return value === "" ? null : Number(value);
+}
+
+/** A stored `0..1` figure as the percentage an operator reads and types. */
+function percentOf(value: number | null | undefined) {
+	return value === null || value === undefined ? "" : Math.round(value * 100);
+}
+
+function fractionOf(value: string) {
+	if (value === "") {
+		return null;
+	}
+	return Math.min(Math.max(Number(value) / 100, 0), 1);
 }
 
 function IdentitySection({
@@ -231,6 +248,130 @@ function PhysicalSection({ draft, onChange }: GenericSectionProps) {
 	);
 }
 
+/**
+ * What this fixture's light looks like.
+ *
+ * Every field here is optional and blank means "whatever this fixture type normally does", which
+ * is how the whole shipped library behaves today. An operator fills these in when the type's own
+ * answer is not right for the lantern in front of them — a Fresnel fitted with a different lens,
+ * a 400 W engine where the type assumes 100 W.
+ */
+function OpticsSection({ draft, onChange }: GenericSectionProps) {
+	const optics = draft.optics ?? {};
+	const source = optics.light_source ?? null;
+	// The two dimensions are typed one at a time, and a lens with only one of them is not a lens.
+	// Holding what has been typed here — rather than in the profile — lets the first number stay
+	// on screen while the second is still being entered.
+	const [size, setSize] = useState({
+		width: source ? String(source.width_millimetres) : "",
+		height: source ? String(source.height_millimetres) : "",
+	});
+	const setOptics = (
+		patch: (current: FixtureProfileOptics) => FixtureProfileOptics,
+	) =>
+		onChange((current) => ({
+			...current,
+			optics: patch(current.optics ?? {}),
+		}));
+	const setDimension = (key: "width" | "height", typed: string) => {
+		const next = { ...size, [key]: typed };
+		setSize(next);
+		const width = Number(next.width);
+		const height = Number(next.height);
+		setOptics((current) => ({
+			...current,
+			light_source:
+				width > 0 && height > 0
+					? {
+							form: current.light_source?.form ?? "round",
+							width_millimetres: width,
+							height_millimetres: height,
+						}
+					: null,
+		}));
+	};
+	return (
+		<section>
+			<h3>Optics</h3>
+			<p className="field-hint">
+				Leave a field empty to use whatever this fixture type normally does.
+			</p>
+			<FormLayout columns={5} minColumnWidth={145}>
+				<NumberField
+					label="Relative output"
+					allowDecimal
+					min={0}
+					value={optics.output ?? ""}
+					onChange={(event) =>
+						setOptics((current) => ({
+							...current,
+							output: optionalNumber(event.target.value),
+						}))
+					}
+				/>
+				<NumberField
+					label="Sharpness (%)"
+					min={0}
+					max={100}
+					value={percentOf(optics.sharpness)}
+					onChange={(event) =>
+						setOptics((current) => ({
+							...current,
+							sharpness: fractionOf(event.target.value),
+						}))
+					}
+				/>
+				<NumberField
+					label="Uniformity (%)"
+					min={0}
+					max={100}
+					value={percentOf(optics.uniformity)}
+					onChange={(event) =>
+						setOptics((current) => ({
+							...current,
+							uniformity: fractionOf(event.target.value),
+						}))
+					}
+				/>
+				<SelectField
+					label="Light source shape"
+					value={source?.form ?? "round"}
+					onChange={(form) =>
+						setOptics((current) =>
+							current.light_source
+								? {
+										...current,
+										light_source: { ...current.light_source, form },
+									}
+								: current,
+						)
+					}
+					disabled={source === null}
+					options={[
+						{ value: "round", label: "Round" },
+						{ value: "oval", label: "Oval" },
+						{ value: "rectangular", label: "Rectangular" },
+					]}
+				/>
+				<NumberField
+					label="Light source width (mm)"
+					allowDecimal
+					min={0}
+					value={size.width}
+					onChange={(event) => setDimension("width", event.target.value)}
+				/>
+				<NumberField
+					label="Light source height (mm)"
+					allowDecimal
+					min={0}
+					value={size.height}
+					onChange={(event) => setDimension("height", event.target.value)}
+				/>
+			</FormLayout>
+		</section>
+	);
+}
+
 export function GenericProfileTab({
 	draft,
 	onChange,
@@ -241,6 +382,7 @@ export function GenericProfileTab({
 			<IdentitySection draft={draft} onChange={onChange} onLookup={onLookup} />
 			<NotesAssetsSection draft={draft} onChange={onChange} />
 			<PhysicalSection draft={draft} onChange={onChange} />
+			<OpticsSection draft={draft} onChange={onChange} />
 		</div>
 	);
 }

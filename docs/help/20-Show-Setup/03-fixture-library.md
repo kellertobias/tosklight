@@ -123,6 +123,31 @@ Changing a newly added channel's attribute, additive/subtractive calibration, or
 Each channel retains its fixture-facing attribute identity and explicitly maps it to one canonical Programmer attribute. The mapping is normally identity; subtractive Cyan, Magenta, and Yellow filtration map inversely to canonical Red, Green, and Blue. It also configures physical range/unit, fixture-channel inversion, snap, virtual-intensity reaction, sequence/group/grand-master reactions, and prioritized functions. Exact raw and typed control values are never reinterpreted by the canonical normalized mapping. **Static** channels normally output their default and use their Highlight value only while identified. Snap channels bypass programmer, Cue, Move in Black, and safety transitions.
 
 A physical channel may contain ordered continuous, fixed, indexed-color/gobo, or control functions. Each function keeps its stable ID, semantic attribute, name, exact raw range/value, priority, and action behavior in the portable profile. Fixed, indexed, and control are behaviors inside that semantic attribute, not separate Programmer attributes or encoder families. The encoder's **Set Value → Indexed Presets** tab projects those functions from the exact profile revision embedded in the active show.
+### Optics
+
+Optics decide what light out of this fixture looks like in the visualizer, as against how the
+fixture is built. Two lanterns at the same angle, at the same level, do not look alike: a profile
+lays down a flat disc with a rim you could cut paper on, a PAR is hot in the middle inside a soft
+halo, a flood has no rim at all.
+
+- **Relative output** is how much light the engine makes, `1` being an ordinary fixture of its
+  type. A 400 W head against a 100 W one, before anyone touches a dimmer.
+- **Sharpness** is how hard the rim of the field is. 100% cuts; 0% has no edge to speak of. A focus
+  or frost channel softens whatever is set here, so a profile out of focus still reads as a
+  profile.
+- **Uniformity** is how evenly the field is filled: 100% is flat to the rim, 0% a bright centre
+  that falls away quickly. It is separate from sharpness — a good LED wash has no rim at all and is
+  still even across the middle.
+- **Light source** is the lit surface itself: its shape, and its width and height in millimetres.
+  It belongs to the fixture rather than to one patched lamp, because every lantern of this type has
+  the same lens. A shaft leaves it at that width instead of springing from a point. A lens needs
+  both dimensions; clearing either one hands the fixture back to its type.
+
+Every field is optional, and an empty field means *whatever this fixture type normally does*. The
+shipped library leaves them empty, so a profile is treated as a profile, a Fresnel as a Fresnel,
+and a cyc flood as a flood, from the fixture type alone. Fill them in when the type's answer is not
+right for the lantern in front of you.
+
 
 Only an explicitly programmed function claims its channel; the highest configured priority wins, and releasing it reveals the next claim or channel default. Typed control actions can atomically set several channels and be latched, momentary, or timed. Assign their operator meaning explicitly as Lamp On, Lamp Off, Reset, Fan Auto, Fan Low, Fan High, Fan Max, or Custom. Lamp On is the fixture manufacturer's discharge-lamp ignition/strike command; it does not set intensity or color and fixtures without that authored action are skipped. Lamp On, Lamp Off, and Reset are normally momentary or timed runtime overrides and are never recorded or persisted as programmer values. Releasing them reveals the latest underlying value on a shared control channel, so a latched fan mode remains in force. Fan modes are normally latched. Highlight is a separate transient identification look and is toggled off with Highlight itself; it is not a control action or programmer value. All authored control actions appear by name in **Control → Special Dialog** and under their semantic encoder's **Indexed Presets** tab.
 

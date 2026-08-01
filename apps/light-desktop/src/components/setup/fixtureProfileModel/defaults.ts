@@ -58,6 +58,7 @@ export function blankFixtureProfile(): FixtureProfile {
 			lens: "",
 			beam_angle_degrees: null,
 		},
+		optics: {},
 		modes: [blankMode()],
 		hazardous: false,
 		direct_control_protocols: [],
