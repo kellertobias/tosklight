@@ -26,7 +26,7 @@ export interface ServerCoreContext
 		ScreenCapabilities {
 	dismissError: () => void;
 	simulateError: (message: string | null) => void;
-	readServerLogs: () => Promise<
+	readServerLogs: (after?: number) => Promise<
 		Array<{ revision: number; kind: string; payload: unknown }>
 	>;
 	bootstrap: BootstrapSnapshot | null;

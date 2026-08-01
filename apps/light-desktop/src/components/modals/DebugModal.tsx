@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "../../state/AppContext";
 import { useOutputHealth } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useShellStatusActions } from "../../features/shellStatus/ShellStatusActionsProvider";
@@ -7,18 +7,66 @@ import { ModalTitleBar } from "@tosklight/ui";
 
 type LogEntry = { revision: number; kind: string; payload: unknown };
 
+const MAJOR_DESK_EVENT_KINDS = new Set([
+  "session_started",
+  "session_disconnected",
+  "hardware_connection_changed",
+  "media_server_offline",
+  "preload_persistence_failed",
+]);
+
+export function isMajorDeskEvent(entry: LogEntry) {
+  const kind = entry.kind.toLowerCase();
+  if (MAJOR_DESK_EVENT_KINDS.has(kind)) return true;
+  return /(?:^|_)(?:error|failed|failure|rejected|disconnected|offline)(?:_|$)/.test(kind);
+}
+
 export function DebugModal() {
   const { state, dispatch } = useApp();
   const shellStatus = useShellStatusActions();
   const outputHealth = useOutputHealth();
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const lastRevision = useRef(0);
+  const reading = useRef(false);
   const [debugMenuOpen, setDebugMenuOpen] = useState(false);
   useEffect(() => {
-    if (!state.debugOpen) return;
-    const refresh = () => void shellStatus?.readServerLogs().then((entries) => setLogs(entries.slice(-200))).catch(() => undefined);
+    if (!state.debugOpen || !shellStatus) return;
+    let cancelled = false;
+    lastRevision.current = 0;
+    setLogs([]);
+    const refresh = async () => {
+      if (reading.current) return;
+      reading.current = true;
+      try {
+        const entries = await shellStatus.readServerLogs(lastRevision.current);
+        if (cancelled) return;
+        if (entries.length)
+          lastRevision.current = Math.max(
+            lastRevision.current,
+            ...entries.map((entry) => entry.revision),
+          );
+        const major = entries.filter(isMajorDeskEvent);
+        if (major.length)
+          setLogs((current) => {
+            const byRevision = new Map(
+              [...current, ...major].map((entry) => [entry.revision, entry]),
+            );
+            return [...byRevision.values()]
+              .sort((left, right) => left.revision - right.revision)
+              .slice(-50);
+          });
+      } catch {
+        // Desk Status remains useful even if one diagnostic refresh fails.
+      } finally {
+        reading.current = false;
+      }
+    };
     refresh();
-    const timer = window.setInterval(refresh, 1_000);
-    return () => window.clearInterval(timer);
+    const timer = window.setInterval(() => void refresh(), 5_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [state.debugOpen, shellStatus]);
   useEffect(() => {
     if (!debugMenuOpen) return;
@@ -49,5 +97,5 @@ export function DebugModal() {
       <Button role="menuitem" onClick={() => { shellStatus?.simulateError(null); closeDebugMenu(); }}>Clear Simulated Errors</Button>
     </div>}
   </div>;
-  return <ModalPortal onClose={close}><div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && close()}><section className="nested-modal debug-modal" role="dialog" aria-modal="true" aria-label="Desk Status"><ModalTitleBar title="Desk Status" actions={debugMenu} closeLabel="Close Desk Status" onClose={close}/><div className="debug-diagnostics"><section><b>{outputHealth?.frame_hz.toFixed(1) ?? "—"} Hz</b><small>Current frame rate</small></section><section><b>{outputHealth?.deadline_misses ?? 0}</b><small>Scheduler deadline misses</small></section><section><b>{outputHealth?.send_errors ?? 0}</b><small>Network output errors</small></section></div><h4>Server event log</h4><pre className="server-log">{logs.length ? logs.map((entry) => `${entry.revision.toString().padStart(6, "0")}  ${entry.kind}  ${JSON.stringify(entry.payload)}`).join("\n") : "No server events logged."}</pre></section></div></ModalPortal>;
+  return <ModalPortal onClose={close}><div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && close()}><section className="nested-modal debug-modal" role="dialog" aria-modal="true" aria-label="Desk Status"><ModalTitleBar title="Desk Status" actions={debugMenu} closeLabel="Close Desk Status" onClose={close}/><div className="debug-diagnostics"><section><b>{outputHealth?.frame_hz.toFixed(1) ?? "—"} Hz</b><small>Current frame rate</small></section><section><b>{outputHealth?.deadline_misses ?? 0}</b><small>Scheduler deadline misses</small></section><section><b>{outputHealth?.send_errors ?? 0}</b><small>Network output errors</small></section></div><h4>Major desk events</h4><pre className="server-log">{logs.length ? logs.map((entry) => `${entry.revision.toString().padStart(6, "0")}  ${entry.kind}  ${JSON.stringify(entry.payload)}`).join("\n") : "No major desk events logged."}</pre></section></div></ModalPortal>;
 }

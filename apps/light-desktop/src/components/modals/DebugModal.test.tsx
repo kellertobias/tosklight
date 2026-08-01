@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DebugModal } from "./DebugModal";
+import { DebugModal, isMajorDeskEvent } from "./DebugModal";
 
 const dispatch = vi.fn();
 const simulateError = vi.fn();
@@ -8,6 +8,12 @@ const readServerLogs = vi.fn().mockResolvedValue([]);
 
 vi.mock("../../state/AppContext", () => ({ useApp: () => ({ state: { debugOpen: true, midiProfile: false, touchScrollbars: false, showSectionNames: false }, dispatch }) }));
 vi.mock("../../api/ServerContext", () => ({ useServer: () => ({ bootstrap: { output_health: { frame_hz: 44, deadline_misses: 2, send_errors: 1 } }, readServerLogs, simulateError }) }));
+vi.mock("../../features/shellStatus/ShellStatusActionsProvider", () => ({
+  useShellStatusActions: () => ({ readServerLogs, simulateError }),
+}));
+vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
+  useOutputHealth: () => ({ frame_hz: 44, deadline_misses: 2, send_errors: 1 }),
+}));
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -34,4 +40,34 @@ describe("DebugModal", () => {
     expect(dispatch).toHaveBeenNthCalledWith(2, { type: "SET_MODAL", modal: "debugOpen", value: false });
     expect(dispatch).toHaveBeenNthCalledWith(3, { type: "SET_MODAL", modal: "setupOpen", value: false });
   });
+
+	it("shows only major desk events and starts its incremental cursor at zero", async () => {
+		readServerLogs.mockResolvedValueOnce([
+			{ revision: 1, kind: "command", payload: { text: "Fixture 1" } },
+			{ revision: 2, kind: "session_started", payload: { desk: "main" } },
+			{ revision: 3, kind: "playback_rejected", payload: { error: "busy" } },
+		]);
+		render(<DebugModal />);
+		await waitFor(() => expect(readServerLogs).toHaveBeenCalledWith(0));
+		expect(await screen.findByText(/session_started/)).toBeVisible();
+		expect(screen.getByText(/playback_rejected/)).toBeVisible();
+		expect(screen.queryByText(/Fixture 1/)).not.toBeInTheDocument();
+		expect(screen.getByRole("heading", { name: "Major desk events" })).toBeVisible();
+	});
+
+	it("classifies connection changes and errors as major, but not command traffic", () => {
+		expect(
+			isMajorDeskEvent({
+				revision: 1,
+				kind: "hardware_connection_changed",
+				payload: {},
+			}),
+		).toBe(true);
+		expect(
+			isMajorDeskEvent({ revision: 2, kind: "media_server_offline", payload: {} }),
+		).toBe(true);
+		expect(
+			isMajorDeskEvent({ revision: 3, kind: "command", payload: {} }),
+		).toBe(false);
+	});
 });

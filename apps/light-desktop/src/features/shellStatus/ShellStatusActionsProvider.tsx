@@ -8,7 +8,7 @@ import { createContext, type PropsWithChildren, useContext } from "react";
 export interface ShellStatusActions {
 	dismissError: () => void;
 	simulateError: (message: string | null) => void;
-	readServerLogs: () => Promise<
+	readServerLogs: (after?: number) => Promise<
 		Array<{ revision: number; kind: string; payload: unknown }>
 	>;
 }

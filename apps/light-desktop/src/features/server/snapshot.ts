@@ -69,7 +69,7 @@ export function createServerSnapshotValue(
 	return {
 		dismissError: () => setError(null),
 		simulateError: (message) => setError(message),
-		readServerLogs: () => api.desk.auditEvents(),
+		readServerLogs: (after = 0) => api.desk.auditEvents(after),
 		bootstrap,
 		session,
 		outputRoutes,
