@@ -310,7 +310,7 @@ export class DeskDriver {
 		const defaultPreview = hardwareTyping
 			? 45
 			: this.recordingClickPace === "typing"
-				? 20
+				? 10
 				: this.recordingClickPace === "rapid"
 					? 45
 					: this.recordingClickPace === "steady"
@@ -322,7 +322,7 @@ export class DeskDriver {
 			hardwareTyping
 				? 40
 				: this.recordingClickPace === "typing"
-					? 20
+					? 10
 					: this.recordingClickPace === "rapid"
 						? 40
 						: 120,
@@ -337,7 +337,7 @@ export class DeskDriver {
 		const defaultPause = hardwareTyping
 			? 45
 			: this.recordingClickPace === "typing"
-				? 20
+				? 10
 				: this.recordingClickPace === "rapid"
 					? 45
 					: this.recordingClickPace === "steady"
@@ -349,7 +349,7 @@ export class DeskDriver {
 			hardwareTyping
 				? 40
 				: this.recordingClickPace === "typing"
-					? 20
+					? 10
 					: this.recordingClickPace === "rapid"
 						? 40
 						: 120,

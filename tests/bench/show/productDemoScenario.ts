@@ -368,10 +368,12 @@ export class BrowserProductDemo {
 			);
 			desk.setRecordingClickPace("rapid");
 			await addPatchLayerThroughTouchUi(desk, page, "Trusses");
-			for (const layer of PRODUCT_DEMO_SCRIPT.patch.layers.slice(2))
+			for (const layer of PRODUCT_DEMO_SCRIPT.patch.layers.slice(2)) {
+				desk.setRecordingClickPace("typing");
 				await addPatchLayerThroughTouchUi(desk, page, layer, {
 					pauseBeforeConfirm: false,
 				});
+			}
 			desk.setRecordingClickPace("compact");
 			await demoPause(
 				page,
