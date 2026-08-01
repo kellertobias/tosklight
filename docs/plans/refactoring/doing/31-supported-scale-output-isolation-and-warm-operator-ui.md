@@ -51,6 +51,15 @@ benchmark and any repairs it proves necessary before
   only after a later production network-send boundary completes. Focused route and OSC/WebSocket
   classification tests pass. The packaged workload still has to exercise and gate the complete
   UI/OSC matrix before this requirement is proven.
+- The packaged supported-scale scene now records a production two-Cue Cuelist on one reserved
+  dimmer, assigns its Playback to page 1 slot 1, and retains a 1.5-second Cue fade beside the 20
+  running Dynamics. Its one Stage is paired with the real Fixture Sheet, command line, and bundled
+  Playback bank. The WebView exercises the visible Go, Flash press/release, and fader DOM paths and
+  records indication convergence against the 50 ms gate; the runner independently subscribes a
+  real UDP OSC controller and sends the same correlated action matrix. Unsupported show-switch
+  preparation was removed from this literal profile, shortening setup without weakening its
+  required surface. Static/type/format checks pass; the updated packaged workload has not yet been
+  rerun, so these gates remain unproven.
 
 Plan 31 therefore remains on the repair path. Do not interpret the sibling-window failures as a
 product acceptance failure: this plan requires one 3D Stage. The next slice must eliminate the

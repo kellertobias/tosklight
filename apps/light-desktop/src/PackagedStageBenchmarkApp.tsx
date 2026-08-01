@@ -1,5 +1,13 @@
-import { type MutableRefObject, useEffect, useRef, useState } from "react";
+import {
+	type MutableRefObject,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { ServerRuntime } from "./api/ServerRuntime";
+import { CommandLineBar } from "./components/control/CommandLineBar";
+import { PlaybackFaderBank } from "./components/control/PlaybackFaderBank";
 import { ConnectionState } from "./components/shell/ConnectionState";
 import { DeskLoadingOverlay } from "./components/shell/DeskLoadingOverlay";
 import { useActiveShowId } from "./features/deskSnapshot/DeskSnapshotState";
@@ -44,6 +52,16 @@ interface PackagedBenchmarkState {
 		finishedAt: string | null;
 	};
 	activeUiSurfaces: readonly string[];
+	playbackActions: PackagedPlaybackActionSample[];
+}
+
+interface PackagedPlaybackActionSample {
+	action: "go" | "flash_press" | "flash_release" | "master";
+	input: "dom_pointer" | "dom_range";
+	inputAt: number;
+	indicationAt: number | null;
+	indicationMillis: number | null;
+	changed: boolean;
 }
 
 function useAdditionalStageWindow(
@@ -165,7 +183,13 @@ function usePackagedStagePhases(
 	]);
 }
 
-function PackagedStageExercise() {
+function PackagedStageExercise({
+	profile,
+	onPlaybackAction,
+}: {
+	profile: string;
+	onPlaybackAction(sample: PackagedPlaybackActionSample): void;
+}) {
 	const exerciseFixtureNumber = 1;
 	const activeShowId = useActiveShowId();
 	const commandReady = useProgrammingCommandLineReady();
@@ -177,6 +201,7 @@ function PackagedStageExercise() {
 	preloadActionsRef.current = preload.actions;
 
 	useEffect(() => {
+		if (profile === "supported-scale") return;
 		if (!activeShowId || !commandReady || !preload.ready) return;
 		let cancelled = false;
 		const wait = (milliseconds: number) =>
@@ -211,8 +236,157 @@ function PackagedStageExercise() {
 		return () => {
 			cancelled = true;
 		};
-	}, [activeShowId, commandReady, preload.ready]);
+	}, [activeShowId, commandReady, preload.ready, profile]);
+	useEffect(() => {
+		if (profile !== "supported-scale") return;
+		let cancelled = false;
+		const run = async () => {
+			const card = await waitForPlaybackCard(() => cancelled);
+			if (!card || cancelled) return;
+			const go = playbackButton(card, "go");
+			const flash = playbackButton(card, "flash");
+			const fader = card.querySelector<HTMLInputElement>('input[type="range"]');
+			if (!go || !flash || !fader) return;
+			onPlaybackAction(await exercisePlaybackClick(card, go, "go"));
+			await waitMillis(500);
+			onPlaybackAction(
+				await exercisePlaybackPointer(
+					card,
+					flash,
+					"flash_press",
+					"pointerdown",
+				),
+			);
+			await waitMillis(250);
+			onPlaybackAction(
+				await exercisePlaybackPointer(
+					card,
+					flash,
+					"flash_release",
+					"pointerup",
+				),
+			);
+			await waitMillis(500);
+			onPlaybackAction(await exercisePlaybackFader(card, fader, 50));
+		};
+		void run().catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, [onPlaybackAction, profile]);
 	return null;
+}
+
+async function waitForPlaybackCard(cancelled: () => boolean) {
+	const deadline = performance.now() + 10_000;
+	while (!cancelled() && performance.now() < deadline) {
+		const card = document.querySelector<HTMLElement>(
+			'[data-playback-slot="1"]',
+		);
+		if (card && card.dataset.playbackKind !== "empty") return card;
+		await waitMillis(50);
+	}
+	return null;
+}
+
+function playbackButton(card: HTMLElement, label: string) {
+	return [...card.querySelectorAll<HTMLButtonElement>("button")].find(
+		(button) => button.textContent?.trim().toLowerCase() === label,
+	);
+}
+
+async function exercisePlaybackClick(
+	card: HTMLElement,
+	button: HTMLButtonElement,
+	action: "go",
+): Promise<PackagedPlaybackActionSample> {
+	const before = card.innerHTML;
+	const inputAt = performance.now();
+	button.dispatchEvent(pointerEvent("pointerdown"));
+	button.dispatchEvent(pointerEvent("pointerup"));
+	button.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
+	return playbackActionSample(card, before, inputAt, action, "dom_pointer");
+}
+
+async function exercisePlaybackPointer(
+	card: HTMLElement,
+	button: HTMLButtonElement,
+	action: "flash_press" | "flash_release",
+	type: "pointerdown" | "pointerup",
+): Promise<PackagedPlaybackActionSample> {
+	const before = card.innerHTML;
+	const inputAt = performance.now();
+	button.dispatchEvent(pointerEvent(type));
+	return playbackActionSample(card, before, inputAt, action, "dom_pointer");
+}
+
+async function exercisePlaybackFader(
+	card: HTMLElement,
+	fader: HTMLInputElement,
+	value: number,
+): Promise<PackagedPlaybackActionSample> {
+	const before = card.innerHTML;
+	const inputAt = performance.now();
+	const setter = Object.getOwnPropertyDescriptor(
+		HTMLInputElement.prototype,
+		"value",
+	)?.set;
+	setter?.call(fader, String(value));
+	fader.dispatchEvent(new InputEvent("input", { bubbles: true }));
+	return playbackActionSample(card, before, inputAt, "master", "dom_range");
+}
+
+async function playbackActionSample(
+	card: HTMLElement,
+	before: string,
+	inputAt: number,
+	action: PackagedPlaybackActionSample["action"],
+	input: PackagedPlaybackActionSample["input"],
+): Promise<PackagedPlaybackActionSample> {
+	const deadline = inputAt + 500;
+	while (performance.now() < deadline) {
+		if (card.innerHTML !== before) {
+			const indicationAt = performance.now();
+			return {
+				action,
+				input,
+				inputAt,
+				indicationAt,
+				indicationMillis: indicationAt - inputAt,
+				changed: true,
+			};
+		}
+		await nextAnimationFrame();
+	}
+	return {
+		action,
+		input,
+		inputAt,
+		indicationAt: null,
+		indicationMillis: null,
+		changed: false,
+	};
+}
+
+function pointerEvent(type: "pointerdown" | "pointerup") {
+	return new PointerEvent(type, {
+		bubbles: true,
+		button: 0,
+		buttons: type === "pointerdown" ? 1 : 0,
+		isPrimary: true,
+		pointerId: 1,
+		pointerType: "mouse",
+	});
+}
+
+function waitMillis(milliseconds: number) {
+	return new Promise<void>((resolve) =>
+		window.setTimeout(resolve, milliseconds),
+	);
+}
+
+function nextAnimationFrame() {
+	return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
 export function PackagedStageBenchmarkApp({
@@ -447,7 +621,7 @@ function PreparedPackagedStageBenchmark({
 	const supportedScale = profile === "supported-scale";
 	const activeUiSurfaces = fixtureSheet
 		? supportedScale
-			? ["stage-3d", "fixture-sheet"]
+			? ["stage-3d", "fixture-sheet", "command-line", "playback-bank"]
 			: ["stage-3d", "stage-3d-preload", "fixture-sheet"]
 		: ["stage-3d", "stage-3d-preload"];
 	const benchmarkState = useRef<PackagedBenchmarkState>({
@@ -458,6 +632,7 @@ function PreparedPackagedStageBenchmark({
 		contextRecoveryMethod: "not_attempted" as ContextRecoveryMethod,
 		contextRecovery: { startedAt: null, finishedAt: null },
 		activeUiSurfaces,
+		playbackActions: [],
 	});
 	benchmarkState.current = {
 		quality: qualities[qualityIndex] ?? "lines_and_beams",
@@ -467,7 +642,17 @@ function PreparedPackagedStageBenchmark({
 		contextRecoveryMethod: benchmarkState.current.contextRecoveryMethod,
 		contextRecovery: benchmarkState.current.contextRecovery,
 		activeUiSurfaces,
+		playbackActions: benchmarkState.current.playbackActions,
 	};
+	const recordPlaybackAction = useCallback(
+		(sample: PackagedPlaybackActionSample) => {
+			benchmarkState.current.playbackActions = [
+				...benchmarkState.current.playbackActions,
+				sample,
+			];
+		},
+		[],
+	);
 	useAdditionalStageWindow(
 		desktop,
 		stageEnabled && additionalStageWindowEnabled,
@@ -495,7 +680,12 @@ function PreparedPackagedStageBenchmark({
 	const quality = qualities[qualityIndex] ?? "lines_and_beams";
 	return (
 		<ServerRuntime sessionRole="primary">
-			{exerciseEnabled && <PackagedStageExercise />}
+			{exerciseEnabled && (
+				<PackagedStageExercise
+					profile={profile}
+					onPlaybackAction={recordPlaybackAction}
+				/>
+			)}
 			<AppProvider>
 				<PatchFeatureBoundary>
 					<PackagedStageBenchmarkSurface
@@ -579,8 +769,35 @@ function PackagedStageBenchmarkSurface({
 				/>
 			)}
 			{stageEnabled && fixtureSheet ? (
-				<div data-testid="packaged-stage-fixture-sheet">
-					<FixtureSheetWindow compact />
+				<div
+					style={{
+						display: "grid",
+						gridTemplateRows:
+							profile === "supported-scale"
+								? "minmax(0, 2fr) minmax(0, 1fr)"
+								: "1fr",
+						minHeight: 0,
+					}}
+				>
+					<div
+						data-testid="packaged-stage-fixture-sheet"
+						style={{ minHeight: 0 }}
+					>
+						<FixtureSheetWindow compact />
+					</div>
+					{profile === "supported-scale" && (
+						<section
+							data-testid="packaged-stage-operator-controls"
+							style={{
+								display: "grid",
+								gridTemplateRows: "auto minmax(0, 1fr)",
+								minHeight: 0,
+							}}
+						>
+							<CommandLineBar />
+							<PlaybackFaderBank count={4} rows={1} buttons={3} />
+						</section>
+					)}
 				</div>
 			) : (
 				<div

@@ -93,6 +93,7 @@ let benchmarkFailure;
 let benchmarkPhase = "startup";
 let slowClient;
 let networkCapture;
+let oscHardware;
 let showSwitchResult;
 let applicationSuspendResult;
 let memoryPhase = "startup";
@@ -131,6 +132,9 @@ try {
 			prepared.showId,
 			networkCapture,
 		);
+		oscHardware = await startPackagedOscHardware(
+			prepared.session.desk.osc_alias,
+		);
 	}
 	benchmarkPhase = "control-window";
 	const before = await runtimeDiagnostics(prepared.session);
@@ -138,6 +142,14 @@ try {
 	const programmerTimingExercise = await exercisePackagedProgrammerTiming(
 		prepared.session,
 	);
+	const controlPlaybackTimingExercise =
+		profile === "supported-scale"
+			? await exerciseSupportedScaleOscPlayback(
+					prepared.session,
+					prepared.showId,
+					oscHardware,
+				)
+			: null;
 	if (profile === "improved-beam-spike") {
 		memoryPhase = "improved-beam-spike";
 		await writeFile(preparedPath, `${JSON.stringify(scene)}\n`);
@@ -148,6 +160,7 @@ try {
 			afterNoStage: before,
 			after,
 			programmerTimingExercise,
+			controlPlaybackTimingExercise,
 		};
 	} else {
 		memoryPhase = "no-stage";
@@ -161,6 +174,14 @@ try {
 		benchmarkPhase = "stage-window";
 		const afterNoStage = await runtimeDiagnostics(prepared.session);
 		const networkAfterNoStage = networkCapture?.snapshot() ?? null;
+		const stagePlaybackTimingExercise =
+			profile === "supported-scale"
+				? await exerciseSupportedScaleOscPlayback(
+						prepared.session,
+						prepared.showId,
+						oscHardware,
+					)
+				: null;
 		memoryPhase = "stage";
 		if (isLargeOperatorProfile(profile))
 			slowClient = await startSlowVisualizationClient(
@@ -197,6 +218,8 @@ try {
 			showSwitch: showSwitchResult,
 			applicationSuspend: applicationSuspendResult,
 			programmerTimingExercise,
+			controlPlaybackTimingExercise,
+			stagePlaybackTimingExercise,
 			networkCapture: {
 				before: networkBefore,
 				afterNoStage: networkAfterNoStage,
@@ -211,6 +234,7 @@ try {
 	await collectMemory();
 	await slowClient?.close();
 	await networkCapture?.close();
+	await oscHardware?.close();
 	app.kill("SIGTERM");
 	await stopPackagedDesktop();
 }
@@ -349,6 +373,192 @@ async function startSupportedScaleNetworkCapture() {
 		close: async () => {
 			await Promise.all([artnet.close(), sacn.close()]);
 		},
+	};
+}
+
+async function startPackagedOscHardware(deskAlias) {
+	const command = dgram.createSocket("udp4");
+	const feedback = dgram.createSocket("udp4");
+	await Promise.all([bindUdp(command), bindUdp(feedback)]);
+	const messages = [];
+	feedback.on("message", (packet) => {
+		const message = parseOscMessage(packet);
+		if (message) messages.push({ ...message, receivedAt: Date.now() });
+	});
+	const send = (address, arguments_ = []) =>
+		new Promise((resolve, reject) => {
+			command.send(
+				encodeOscMessage(address, arguments_),
+				9000,
+				"127.0.0.1",
+				(error) => (error ? reject(error) : resolve()),
+			);
+		});
+	const clientId = `supported-scale-${crypto.randomUUID()}`;
+	const feedbackPort = feedback.address().port;
+	for (let attempt = 0; attempt < 5; attempt++) {
+		await send("/light/subscribe", [clientId, deskAlias, feedbackPort]);
+		const subscribed = await waitForOscMessage(
+			messages,
+			(message) => message.address === `/light/${deskAlias}/feedback/page`,
+			250,
+		).catch(() => null);
+		if (subscribed)
+			return {
+				deskAlias,
+				messages,
+				send,
+				close: async () => {
+					await send("/light/unsubscribe", [clientId]).catch(() => undefined);
+					await Promise.all([closeUdp(command), closeUdp(feedback)]);
+				},
+			};
+	}
+	await Promise.all([closeUdp(command), closeUdp(feedback)]);
+	throw new Error(`OSC hardware could not subscribe to desk ${deskAlias}`);
+}
+
+async function exerciseSupportedScaleOscPlayback(session, showId, hardware) {
+	if (!hardware) throw new Error("supported-scale OSC hardware is unavailable");
+	for (const action of [
+		{ type: "master", value: 1 },
+		{ type: "go_to", cue_number: 1 },
+	])
+		await requestJson(
+			"POST",
+			"/api/v2/playback-actions",
+			{
+				request_id: crypto.randomUUID(),
+				address: { kind: "playback", playback_number: 1 },
+				action,
+				surface: "physical",
+			},
+			{ session, showId, deskId: session.desk.id },
+		);
+	const actions = [
+		["go", true, `osc-go-${crypto.randomUUID()}`],
+		["flash", true, `osc-flash-press-${crypto.randomUUID()}`],
+		["flash", false, `osc-flash-release-${crypto.randomUUID()}`],
+		["master", 0.5, `osc-master-${crypto.randomUUID()}`],
+	];
+	const feedback = [];
+	for (const [action, value, requestId] of actions) {
+		const baseline = hardware.messages.length;
+		await hardware.send(`/light/playback/1/${action}`, [value, requestId]);
+		feedback.push(
+			await waitForOscMessage(
+				hardware.messages,
+				(message) =>
+					message.address === `/light/${hardware.deskAlias}/feedback/action` &&
+					message.arguments[0] === requestId,
+				2_000,
+				baseline,
+			),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+	return {
+		source: "osc",
+		actions: actions.map(([action]) => action),
+		feedback,
+	};
+}
+
+function bindUdp(socket) {
+	return new Promise((resolve, reject) => {
+		socket.once("error", reject);
+		socket.bind(0, "127.0.0.1", () => {
+			socket.off("error", reject);
+			resolve();
+		});
+	});
+}
+
+function closeUdp(socket) {
+	return new Promise((resolve) => socket.close(() => resolve()));
+}
+
+async function waitForOscMessage(
+	messages,
+	predicate,
+	timeoutMillis,
+	baseline = 0,
+) {
+	const deadline = Date.now() + timeoutMillis;
+	while (Date.now() < deadline) {
+		const message = messages.slice(baseline).find(predicate);
+		if (message) return message;
+		await new Promise((resolve) => setTimeout(resolve, 5));
+	}
+	throw new Error("Timed out waiting for packaged OSC feedback");
+}
+
+function encodeOscMessage(address, arguments_) {
+	const tags = `,${arguments_
+		.map((value) =>
+			typeof value === "string"
+				? "s"
+				: typeof value === "boolean"
+					? value
+						? "T"
+						: "F"
+					: Number.isInteger(value)
+						? "i"
+						: "f",
+		)
+		.join("")}`;
+	const parts = [oscString(address), oscString(tags)];
+	for (const value of arguments_) {
+		if (typeof value === "string") parts.push(oscString(value));
+		else if (typeof value === "number") {
+			const bytes = Buffer.alloc(4);
+			if (Number.isInteger(value)) bytes.writeInt32BE(value);
+			else bytes.writeFloatBE(value);
+			parts.push(bytes);
+		}
+	}
+	return Buffer.concat(parts);
+}
+
+function parseOscMessage(packet) {
+	try {
+		const address = readOscString(packet, 0);
+		const tags = readOscString(packet, address.next);
+		let offset = tags.next;
+		const arguments_ = [];
+		for (const tag of tags.value.slice(1)) {
+			if (tag === "s") {
+				const value = readOscString(packet, offset);
+				arguments_.push(value.value);
+				offset = value.next;
+			} else if (tag === "i") {
+				arguments_.push(packet.readInt32BE(offset));
+				offset += 4;
+			} else if (tag === "f") {
+				arguments_.push(packet.readFloatBE(offset));
+				offset += 4;
+			} else if (tag === "T" || tag === "F") arguments_.push(tag === "T");
+			else return null;
+		}
+		return { address: address.value, arguments: arguments_ };
+	} catch {
+		return null;
+	}
+}
+
+function oscString(value) {
+	const bytes = Buffer.from(`${value}\0`);
+	const result = Buffer.alloc(Math.ceil(bytes.length / 4) * 4);
+	bytes.copy(result);
+	return result;
+}
+
+function readOscString(packet, offset) {
+	const end = packet.indexOf(0, offset);
+	if (end < 0) throw new Error("unterminated OSC string");
+	return {
+		value: packet.subarray(offset, end).toString("utf8"),
+		next: Math.ceil((end + 1) / 4) * 4,
 	};
 }
 
@@ -545,20 +755,36 @@ async function prepareScene(profile) {
 		showId,
 		dynamicsPlan,
 	);
-	await setStaticControlIntensity(
-		session,
-		showId,
-		dynamicsPlan.staticControlFixtureIds,
+	const playbackFixtureId = dynamicsPlan.staticControlFixtureIds.at(-1);
+	const playbackFixture = after.fixtures.find(
+		(fixture) => fixture.fixture_id === playbackFixtureId,
 	);
+	if (!playbackFixtureId || !playbackFixture?.fixture_number)
+		throw new Error("Supported-scale Playback workload has no static fixture");
+	const playbackWorkload =
+		profile === "supported-scale"
+			? await installSupportedScalePlaybackWorkload(
+					session,
+					showId,
+					playbackFixtureId,
+					playbackFixture.fixture_number,
+				)
+			: null;
+	const staticControlFixtureIds = playbackWorkload
+		? dynamicsPlan.staticControlFixtureIds.filter(
+				(fixtureId) => fixtureId !== playbackFixtureId,
+			)
+		: dynamicsPlan.staticControlFixtureIds;
+	await setStaticControlIntensity(session, showId, staticControlFixtureIds);
 	const scene = {
 		...summarizeScene(profile, after.fixtures),
 		inventory: largeScene.inventory,
 		categoryCounts: largeScene.categoryCounts,
 		patch: largeScene.patch,
 		dynamics,
+		playbackWorkload,
 		staticControlFixtureCount:
-			dynamicsPlan.staticControlFixtureIds.length +
-			largeScene.addedMultipatchInstances,
+			staticControlFixtureIds.length + largeScene.addedMultipatchInstances,
 	};
 	if (
 		scene.fixtureRecords !== LARGE_STAGE_FIXTURE_RECORDS ||
@@ -567,6 +793,17 @@ async function prepareScene(profile) {
 		throw new Error(
 			`Large Stage resolved to ${scene.fixtureRecords} records and ${scene.fixtureInstances} instances`,
 		);
+	if (profile === "supported-scale")
+		return {
+			scene: {
+				...scene,
+				addedFixtureRecords: largeScene.addedFixtureRecords,
+				addedMultipatchInstances: largeScene.addedMultipatchInstances,
+			},
+			session,
+			showId,
+			showSwitch: null,
+		};
 	const showSwitch = await createShowSwitchTarget(session, showId, profile);
 	await requestJson(
 		"POST",
@@ -863,7 +1100,140 @@ async function requireLargeStageDynamicsRuntime(session, showId, expected) {
 	return runtime;
 }
 
-async function setStaticControlIntensity(session, showId, fixtureIds) {
+async function installSupportedScalePlaybackWorkload(
+	session,
+	showId,
+	fixtureId,
+	fixtureNumber,
+) {
+	await setProgrammerFixtureIntensity(session, showId, fixtureId, 0.2);
+	const first = await recordSupportedScaleCue(session, showId, 1, 1_000);
+	await setProgrammerFixtureIntensity(session, showId, fixtureId, 0.8);
+	const second = await recordSupportedScaleCue(
+		session,
+		showId,
+		2,
+		1_500,
+		first.show_revision,
+	);
+	const page = await requestJson(
+		"GET",
+		"/api/v2/objects/playback_page/1",
+		undefined,
+		{ session, showId },
+	);
+	const playback = second.projections?.playback;
+	if (!playback || playback.body?.number !== 1)
+		throw new Error("Supported-scale Cue recording returned no Playback 1");
+	await requestJson(
+		"POST",
+		"/api/v2/playback-topology/actions",
+		{
+			request_id: crypto.randomUUID(),
+			action: {
+				type: "map_existing_playback",
+				page: 1,
+				slot: 1,
+				playback_number: 1,
+				expected_page_revision: page.object?.revision ?? 0,
+				expected_page_object_id: page.object?.id ?? null,
+				expected_playback_revision: playback.revision,
+				expected_playback_object_id: playback.id,
+			},
+		},
+		{
+			session,
+			showId,
+			deskId: session.desk.id,
+			revision: second.show_revision,
+		},
+	);
+	await clearProgrammerValues(session, showId);
+	await requestJson(
+		"POST",
+		"/api/v2/playback-actions",
+		{
+			request_id: crypto.randomUUID(),
+			address: { kind: "playback", playback_number: 1 },
+			action: { type: "go_to", cue_number: 1 },
+			surface: "physical",
+		},
+		{ session, showId, deskId: session.desk.id },
+	);
+	return {
+		playbackNumber: 1,
+		page: 1,
+		slot: 1,
+		fixtureId,
+		fixtureNumber,
+		cueListId: second.projections.cue_list.id,
+		cueCount: 2,
+		cueFadeMillis: [1_000, 1_500],
+	};
+}
+
+async function recordSupportedScaleCue(
+	session,
+	showId,
+	cueNumber,
+	fadeMillis,
+	revision,
+) {
+	const currentRevision =
+		revision ??
+		(
+			await requestJson("GET", "/api/v2/objects/cue_list", undefined, {
+				session,
+				showId,
+			})
+		).show_revision;
+	return requestJson(
+		"POST",
+		"/api/v2/cues/record",
+		{
+			request_id: crypto.randomUUID(),
+			target: { kind: "pool", playback_number: 1 },
+			operation: "overwrite",
+			cue_number: cueNumber,
+			timing: { fade_millis: fadeMillis, delay_millis: 0 },
+			cue_only: false,
+			name: "Plan 31 Scale Playback",
+			capture_policy: "current_capture",
+			activation_policy: "hold",
+		},
+		{ session, showId, revision: currentRevision },
+	);
+}
+
+async function setProgrammerFixtureIntensity(
+	session,
+	showId,
+	fixtureId,
+	value,
+) {
+	return mutateProgrammerValues(session, showId, {
+		type: "batch",
+		mutations: [
+			{
+				type: "set_fixture",
+				fixture_id: fixtureId,
+				attribute: "intensity",
+				value: { kind: "normalized", value },
+				timing: {
+					fade: false,
+					fade_millis: null,
+					delay_millis: null,
+				},
+			},
+		],
+	});
+}
+
+async function clearProgrammerValues(session, showId) {
+	return mutateProgrammerValues(session, showId, { type: "clear" });
+}
+
+async function mutateProgrammerValues(session, showId, action) {
 	const userId = session.user.id;
 	const [values, capture] = await Promise.all([
 		requestJson(
@@ -879,30 +1249,34 @@ async function setStaticControlIntensity(session, showId, fixtureIds) {
 			{ session, showId, deskId: session.desk.id },
 		),
 	]);
-	await requestJson(
+	return requestJson(
 		"POST",
 		`/api/v2/users/${encodeURIComponent(userId)}/programmer-values/actions`,
 		{
 			request_id: crypto.randomUUID(),
 			expected_revision: values.projection.revision,
 			expected_capture_mode_revision: capture.projection.revision,
-			action: {
-				type: "batch",
-				mutations: fixtureIds.map((fixtureId) => ({
-					type: "set_fixture",
-					fixture_id: fixtureId,
-					attribute: "intensity",
-					value: { kind: "normalized", value: 0.35 },
-					timing: {
-						fade: false,
-						fade_millis: null,
-						delay_millis: null,
-					},
-				})),
-			},
+			action,
 		},
 		{ session, showId, deskId: session.desk.id },
 	);
+}
+
+async function setStaticControlIntensity(session, showId, fixtureIds) {
+	return mutateProgrammerValues(session, showId, {
+		type: "batch",
+		mutations: fixtureIds.map((fixtureId) => ({
+			type: "set_fixture",
+			fixture_id: fixtureId,
+			attribute: "intensity",
+			value: { kind: "normalized", value: 0.35 },
+			timing: {
+				fade: false,
+				fade_millis: null,
+				delay_millis: null,
+			},
+		})),
+	});
 }
 
 async function createShowSwitchTarget(session, originalShowId, profile) {
@@ -1343,6 +1717,9 @@ function evaluate(
 	);
 	const realTimeStageGateEnforced = !isLargeOperatorProfile(profile);
 	const lifecycleStressEnforced = profile !== "supported-scale";
+	const playbackIndication = summarizePackagedPlaybackIndication(
+		complete.playbackActions,
+	);
 	const failures = [];
 	if (realTimeStageGateEnforced && !settled.length)
 		failures.push("no changing frame reached a packaged canvas");
@@ -1387,6 +1764,13 @@ function evaluate(
 		failures.push(
 			"the interactive large tier did not expose both Stage 3D and Fixture Sheet surfaces",
 		);
+	if (profile === "supported-scale") {
+		for (const surface of ["command-line", "playback-bank"])
+			if (!complete.activeUiSurfaces?.includes(surface))
+				failures.push(`supported scale did not expose the bundled ${surface}`);
+		for (const failure of playbackIndication.failures)
+			failures.push(`Playback indication: ${failure}`);
+	}
 	assertPackagedQualityObjects(qualityObjects, failures);
 	const outstandingContexts =
 		(stage?.rendererContextsCreated ?? 0) -
@@ -1447,8 +1831,10 @@ function evaluate(
 		}
 	}
 	const visualization = summarizeVisualizationWindow(runtime);
-	const programmerActionTiming =
-		summarizePackagedProgrammerActionTiming(runtime);
+	const programmerActionTiming = summarizePackagedProgrammerActionTiming(
+		runtime,
+		profile,
+	);
 	for (const failure of programmerActionTiming.failures)
 		failures.push(`programmer action timing: ${failure}`);
 	const maximumSharedProjectionCount = duration * 25;
@@ -1498,9 +1884,18 @@ function evaluate(
 			failures.push(
 				"packaged large Stage did not prepare exactly 20 Dynamic instances",
 			);
-		if (scene.staticControlFixtureCount !== 440)
+		const expectedStaticControls = profile === "supported-scale" ? 439 : 440;
+		if (scene.staticControlFixtureCount !== expectedStaticControls)
 			failures.push(
-				"packaged large Stage did not retain 440 fixed-dimmer control instances",
+				`packaged large Stage did not retain ${expectedStaticControls} fixed-dimmer Programmer instances`,
+			);
+		if (
+			profile === "supported-scale" &&
+			(scene.playbackWorkload?.cueCount !== 2 ||
+				scene.playbackWorkload?.cueFadeMillis?.[1] !== 1_500)
+		)
+			failures.push(
+				"supported scale did not prepare the two-Cue fading Playback workload",
 			);
 	}
 	for (const failure of packagedStageSceneFailures(profile, scene))
@@ -1574,6 +1969,7 @@ function evaluate(
 			maxSourceCadenceGapMs: sourceCadenceGaps.length
 				? Math.max(...sourceCadenceGaps)
 				: null,
+			playbackIndication,
 		},
 		resources: {
 			initialBrowserMemoryBytes: complete.initialBrowserMemoryBytes ?? null,
@@ -1608,6 +2004,31 @@ function evaluate(
 			programmerActionTiming,
 		},
 		capabilities: complete.capabilities ?? null,
+	};
+}
+
+function summarizePackagedPlaybackIndication(samples) {
+	const actions = Array.isArray(samples) ? samples : [];
+	const failures = [];
+	for (const action of ["go", "flash_press", "flash_release", "master"]) {
+		const sample = actions.find((candidate) => candidate.action === action);
+		if (!sample) failures.push(`missing ${action} DOM input sample`);
+		else if (!sample.changed)
+			failures.push(`${action} produced no visible bundled indication`);
+		else if (sample.indicationMillis > 50)
+			failures.push(
+				`${action} indication took ${sample.indicationMillis.toFixed(2)} ms`,
+			);
+	}
+	return {
+		samples: actions.length,
+		maximumMillis: Math.max(
+			0,
+			...actions.map((sample) => sample.indicationMillis ?? 0),
+		),
+		measurements: actions,
+		passed: failures.length === 0,
+		failures,
 	};
 }
 
@@ -1654,18 +2075,34 @@ function evaluateImprovedBeamSpike(
 	};
 }
 
-function summarizePackagedProgrammerActionTiming(runtime) {
+function summarizePackagedProgrammerActionTiming(runtime, profile = null) {
 	const before = runtime?.before?.programmer_action_timing;
 	const after = runtime?.after?.programmer_action_timing;
+	const requirements =
+		profile === "supported-scale"
+			? {
+					minimumSamples: 10,
+					sources: ["http", "websocket", "osc"],
+					actions: [
+						"command_line_edit",
+						"command_execute",
+						"playback_go",
+						"playback_flash_press",
+						"playback_flash_release",
+						"playback_master",
+					],
+					frameRateBands: ["at-or-below-60"],
+				}
+			: {
+					minimumSamples: 2,
+					sources: ["http"],
+					actions: ["command_line_edit", "command_execute"],
+					frameRateBands: ["at-or-below-60"],
+				};
 	return summarizeProgrammerActionTiming(
 		after,
 		latestProgrammerActionId(before),
-		{
-			minimumSamples: 2,
-			sources: ["http"],
-			actions: ["command_line_edit", "command_execute"],
-			frameRateBands: ["at-or-below-60"],
-		},
+		requirements,
 	);
 }
 
