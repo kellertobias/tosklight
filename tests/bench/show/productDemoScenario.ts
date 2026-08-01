@@ -3233,7 +3233,19 @@ function emptyDemoCueList(id: string) {
 	return {
 		id,
 		name: "Empty",
-		cues: [],
+		cues: [
+			{
+				id: "00000000-0000-4003-8200-000000000001",
+				number: 1,
+				name: "Empty",
+				cue_only: false,
+				changes: [],
+				group_changes: [],
+				fade_millis: 0,
+				delay_millis: 0,
+				trigger: { type: "manual" },
+			},
+		],
 		mode: "sequence",
 		priority: 0,
 		looped: false,
