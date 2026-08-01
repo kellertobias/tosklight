@@ -2,9 +2,9 @@
 
 ## Status
 
-**IN PROGRESS — claimed 2026-08-01.** Its prerequisite Stage visualizer, operator-polish, and
-Attribute Registry plans are complete. This plan now owns the mandatory packaged 1,000-instance
-benchmark and any repairs it proves necessary before
+**FINISHED — 2026-08-01.** The repair path restored and proved the mandatory packaged
+1,000-instance benchmark, the regular performance and release E2E gates, and the authoritative
+desktop path before
 [Macros](../pending/32-macros-and-scheduled-macros.md).
 
 ## Retained baseline and repair progress
@@ -415,3 +415,49 @@ Before moving to `finished/`:
 5. if it failed, complete the applicable improvements here before continuing;
 6. verify regular benchmark registration from a clean invocation; and
 7. move this file only after the semantic commit exists.
+
+## Result
+
+Completed through the repair path in commits `08c97ef6`, `97175f9c`, and `851d3739`.
+
+The limiting production cost was not UDP transfer, Fixture Sheet DOM rendering, or Stage network
+delivery. A representative tracking Cuelist caused `active_cue_dynamic_values()` to rebuild 6,540
+Cue-Dynamic addresses with a linear search for every change on every output tick. The indexed,
+order-preserving fold removed that quadratic work without changing tracking, release, or
+append-after-release semantics. Per-pane Stage view state is now independent from the global
+built-in Stage state, and one transient active-show handoff is retried after 15 ms so one visible
+Programmer gesture remains one operator action rather than surfacing a spurious Busy error.
+
+The retained passing packaged report is
+`.artifacts/performance/stage/packaged-tauri-supported-scale-2026-08-01T18-03-38-637Z.json`.
+It contains the exact 970-control/1,000-physical-instance scene, one 3D Stage, one Fixture Sheet,
+the bundled Playback bank and command surface, a representative two-Cue fading Cuelist, and 20
+Dynamics. The Stage window sustained 60.97 measured frames/s, emitted 3,658 real Art-Net and sACN
+packets, recorded zero deadline misses and send errors, and retained the 12 ms output p99. Every
+UI and OSC Go, Flash press/release, and master action changed the exact reserved network slot on
+both protocols within two configured output ticks. Visible bundled indications converged in
+0–25 ms. Fixture Sheet newest-value convergence was 102 ms for one action and 120 ms for the
+five-action burst, with no loading overlay and 26 mounted virtual rows.
+
+Verification completed:
+
+- focused Playback engine, route, frontend diagnostics, Playback bank, reducer, and programming
+  client tests passed;
+- `LIGHT_REUSE_E2E_BUILD=1 npm run test:e2e-performance -- --workers=1`: 5/5 passed in 3.5 minutes;
+- `LIGHT_REUSE_E2E_BUILD=1 npm run test:e2e-api -- --workers=1`: 26/26 passed in 16.6 seconds;
+- the complete release UI run reached 155 passed, one intentionally skipped, and one SHOW-000
+  harness completion race in 6.9 minutes; after replacing its revision-only wait with full
+  metadata convergence, SHOW-000 passed three consecutive repetitions, while the earlier three
+  command/output reproductions passed together 3/3;
+- Stage-focused `STAGE-001` and `STAGE-PERF-001` passed together, and the complete run also passed
+  `STAGE-PERF-002` plus the exact 1,000-instance `PLAN76-LARGE-001` responsiveness tier;
+- `npm run open` built and opened the regular macOS application; readiness returned status
+  `ready` with the active show compiled and no recovery mode, and `/api/v2/bootstrap` returned
+  HTTP 200 in 1.8 ms. The current launch is recorded in
+  `.artifacts/runtime/light-data/light-headless.log`.
+
+All twelve acceptance items are proven for the supported profile. The 300-fixture show remains the
+recommended real-time built-in Stage tier. At 1,000 fixtures the desk, output, Playback feedback,
+and virtualized Fixture Sheet remain real-time while bounded Stage stutter is allowed. Larger and
+2,000-fixture shows remain non-gating breakpoint probes pending the planned native WGPU renderer;
+no additional pre-Macros repair plan is required.
