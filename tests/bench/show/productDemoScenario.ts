@@ -2882,7 +2882,9 @@ async function createVirtualPlaybackExclusionZone(
 		page,
 		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackZoneDialogHoldFrames,
 	);
-	await dialog.getByLabel("Zone name").pressSequentially(name, { delay: 35 });
+	const zoneName = dialog.getByLabel("Zone name");
+	await zoneName.fill("");
+	await zoneName.pressSequentially(name, { delay: 35 });
 	await demoPause(
 		page,
 		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackChoiceHoldFrames,
