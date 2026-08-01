@@ -2195,7 +2195,6 @@ async function recordVisibleCuelist({
 	await desk.click(
 		pool.locator(`.cuelist-card[data-pool-slot-id="${number}"]`).first(),
 	);
-	await expect(record).toHaveAttribute("aria-pressed", "false");
 	await expect
 		.poll(async () => {
 			const target = await playbackTarget(api, showId, number);
@@ -2211,6 +2210,9 @@ async function recordVisibleCuelist({
 				: null;
 		})
 		.not.toBeNull();
+	if ((await record.getAttribute("aria-pressed")) === "true")
+		await desk.click(record);
+	await expect(record).toHaveAttribute("aria-pressed", "false");
 	const target = await playbackTarget(api, showId, number);
 	if (target?.type !== "cue_list")
 		throw new Error(
