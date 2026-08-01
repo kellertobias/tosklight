@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use light_core::Universe;
 
@@ -73,7 +70,6 @@ impl Engine {
                     .ok_or_else(|| {
                         EngineError::Invalid("schema-v2 fixture projection plan is missing".into())
                     })?;
-                let footprints = fixture.definition.split_footprints();
                 let root_output = resolve_profile_fixture(
                     fixture,
                     mode,
@@ -95,8 +91,9 @@ impl Engine {
                     &root_output,
                 );
                 encode_profile_destination(
-                    fixture.effective_split_patches(),
-                    &footprints,
+                    &fixture.split_patches,
+                    fixture.universe,
+                    fixture.address,
                     encoding,
                     &root_output,
                     &mut universes,
@@ -120,8 +117,9 @@ impl Engine {
                         },
                     )?;
                     encode_profile_destination(
-                        instance.effective_split_patches(),
-                        &footprints,
+                        &instance.split_patches,
+                        instance.universe,
+                        instance.address,
                         encoding,
                         &instance_output,
                         &mut universes,
@@ -164,31 +162,64 @@ impl Engine {
 }
 
 fn encode_profile_destination(
-    patches: Vec<light_fixture::SplitPatch>,
-    footprints: &BTreeMap<u16, u16>,
+    patches: &[light_fixture::SplitPatch],
+    legacy_universe: Option<Universe>,
+    legacy_address: Option<light_core::DmxAddress>,
     encoding: &light_fixture::FixtureModeEncodingPlan,
     output: &crate::profile_projection::ResolvedProfileFixtureOutput,
     universes: &mut HashMap<Universe, light_output::DmxFrame>,
     patched_slots: &mut HashMap<Universe, u16>,
 ) -> Result<(), EngineError> {
-    for patch in patches {
-        let (Some(universe), Some(address)) = (patch.universe, patch.address) else {
-            continue;
-        };
-        let footprint = footprints.get(&patch.split).copied().ok_or_else(|| {
-            EngineError::Invalid(format!("fixture split {} has no footprint", patch.split))
-        })?;
-        let frame = universes.entry(universe).or_insert([0; 512]);
-        let last_slot = address
-            .saturating_sub(1)
-            .saturating_add(footprint)
-            .min(light_output::DMX_SLOTS as u16);
-        patched_slots
-            .entry(universe)
-            .and_modify(|current| *current = (*current).max(last_slot))
-            .or_insert(last_slot);
-        encode_profile_split(frame, encoding, patch.split, address, output)?;
+    if patches.is_empty() {
+        return encode_profile_patch(
+            1,
+            legacy_universe,
+            legacy_address,
+            encoding,
+            output,
+            universes,
+            patched_slots,
+        );
     }
+    for patch in patches {
+        encode_profile_patch(
+            patch.split,
+            patch.universe,
+            patch.address,
+            encoding,
+            output,
+            universes,
+            patched_slots,
+        )?;
+    }
+    Ok(())
+}
+
+fn encode_profile_patch(
+    split: u16,
+    universe: Option<Universe>,
+    address: Option<light_core::DmxAddress>,
+    encoding: &light_fixture::FixtureModeEncodingPlan,
+    output: &crate::profile_projection::ResolvedProfileFixtureOutput,
+    universes: &mut HashMap<Universe, light_output::DmxFrame>,
+    patched_slots: &mut HashMap<Universe, u16>,
+) -> Result<(), EngineError> {
+    let (Some(universe), Some(address)) = (universe, address) else {
+        return Ok(());
+    };
+    let footprint = encoding
+        .split_footprint(split)
+        .ok_or_else(|| EngineError::Invalid(format!("fixture split {split} has no footprint")))?;
+    let frame = universes.entry(universe).or_insert([0; 512]);
+    let last_slot = address
+        .saturating_sub(1)
+        .saturating_add(footprint)
+        .min(light_output::DMX_SLOTS as u16);
+    patched_slots
+        .entry(universe)
+        .and_modify(|current| *current = (*current).max(last_slot))
+        .or_insert(last_slot);
+    encode_profile_split(frame, encoding, split, address, output)?;
     Ok(())
 }
 

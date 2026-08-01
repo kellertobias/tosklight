@@ -35,10 +35,20 @@ benchmark and any repairs it proves necessary before
   its deadline. Production phase logging attributed 18.20 ms of that tick to engine evaluation,
   3.49 ms to Dynamic sampling, 112 µs to publication, and 71 µs to network send. This is the first
   genuine retained hard-gate failure from the corrected workload.
+- The first measured engine repair caches immutable split footprints in the compiled fixture-mode
+  encoding plan and renders directly from borrowed root and multipatch destinations instead of
+  allocating a footprint map and patch vector for every schema-v2 fixture on every output tick.
+  The same corrected workload retained
+  `.artifacts/performance/stage/packaged-tauri-supported-scale-2026-08-01T15-52-36-021Z.json`.
+  It sustained 60.8 measured frames/s and 3,648 real network packets in the Stage window, with
+  zero send errors and the same 12 ms p99. The worst tick fell from 22.03 ms to 17.32 ms, but one
+  Stage-window deadline miss remains; the exact zero-miss gate is therefore still failing. All
+  102 Programmer actions remained within two ticks. Focused fixture encoding and schema-v2 engine
+  tests pass.
 
 Plan 31 therefore remains on the repair path. Do not interpret the sibling-window failures as a
-product acceptance failure: this plan requires one 3D Stage. The next slice must retain and reduce
-the engine-evaluation outlier while completing the still-missing correlated Playback UI/OSC matrix,
+product acceptance failure: this plan requires one 3D Stage. The next slice must eliminate the
+remaining engine-evaluation outlier while completing the still-missing correlated Playback UI/OSC matrix,
 representative Cuelist/fade workload, and Fixture Sheet convergence evidence.
 
 This plan turns the root

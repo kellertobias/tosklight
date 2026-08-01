@@ -12,6 +12,7 @@ const MAX_CHANNEL_COMPONENTS: usize = 4;
 #[derive(Clone, Debug)]
 pub struct FixtureModeEncodingPlan {
     channels: HashMap<Uuid, CompiledChannelEncoding>,
+    split_footprints: HashMap<u16, u16>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -42,7 +43,14 @@ impl FixtureMode {
                 },
             );
         }
-        Ok(FixtureModeEncodingPlan { channels })
+        Ok(FixtureModeEncodingPlan {
+            channels,
+            split_footprints: self
+                .splits
+                .iter()
+                .map(|split| (split.number, split.footprint))
+                .collect(),
+        })
     }
 }
 
@@ -70,6 +78,10 @@ impl FixtureModeEncodingPlan {
             }
         }
         Ok(())
+    }
+
+    pub fn split_footprint(&self, split: u16) -> Option<u16> {
+        self.split_footprints.get(&split).copied()
     }
 
     fn validate_batch(

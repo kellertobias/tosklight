@@ -40,6 +40,9 @@ fn batch_encoding_matches_channel_encoding_for_mixed_resolutions_and_splits() {
         (fourth.id, 0x9abc_def0),
     ];
     let plan = mode.compile_encoding_plan().unwrap();
+    assert_eq!(plan.split_footprint(1), Some(3));
+    assert_eq!(plan.split_footprint(2), Some(7));
+    assert_eq!(plan.split_footprint(3), None);
 
     for split in [1, 2] {
         let mut expected = [0x55; 512];
