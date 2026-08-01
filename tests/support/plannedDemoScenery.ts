@@ -3,8 +3,8 @@ import type { ApiDriver } from "../bench/core/api";
 import { ensurePlannedDemoFixtureLibrary } from "./plannedDemoFixtureLibrary";
 
 export const PLANNED_DEMO_SCENERY_FIXTURES = 33;
-export const PLANNED_DEMO_TOTAL_FIXTURE_RECORDS = 295;
-export const PLANNED_DEMO_TOTAL_PHYSICAL_INSTANCES = 343;
+export const PLANNED_DEMO_TOTAL_FIXTURE_RECORDS = 264;
+export const PLANNED_DEMO_TOTAL_PHYSICAL_INSTANCES = 306;
 
 type Point = { x: number; y: number; z: number };
 type SceneryEntry = {

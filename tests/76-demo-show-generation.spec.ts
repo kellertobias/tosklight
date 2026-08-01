@@ -25,9 +25,7 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
 		"LED PAR Stage",
 		"LED PAR Audience",
 		"LED PAR Auxilliary",
-		"Front Lights",
-		"Front Profiles",
-		"ACLs & Blinder",
+		"Conventional Light",
 	];
 	const layers = Object.fromEntries(
 		layerNames.map((name, index) => [
@@ -47,12 +45,12 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
 	const generatedShow = await generatePlannedDemo(api, showId, layers);
 	const generated = generatedShow.patch;
 	expect(generated).toMatchObject({
-		fixtureRecords: 262,
-		physicalInstances: 301,
+		fixtureRecords: 231,
+		physicalInstances: 264,
 		firstUniverse: 1,
 	});
 	expect(generated.lastUniverse).toBeGreaterThan(1);
-	expect(generated.occupiedSlots).toBe(3_783);
+	expect(generated.occupiedSlots).toBe(2_988);
 	const frontLights = generated.fixtures.filter(
 		(fixture) => fixture.fixture_number >= 1 && fixture.fixture_number <= 8,
 	);
@@ -64,22 +62,22 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
 	).toEqual(Array.from({ length: 8 }, (_, index) => [1, index + 1]));
 	expect(generatedShow.scenery).toHaveLength(33);
 	const completePatch = await api.patch();
-	expect(completePatch.fixtures).toHaveLength(295);
+	expect(completePatch.fixtures).toHaveLength(264);
 	expect(
 		completePatch.fixtures.reduce(
 			(count, fixture) => count + 1 + fixture.multipatch.length,
 			0,
 		),
-	).toBe(343);
+	).toBe(306);
 
 	const acls = generated.fixtures.filter(
 		(fixture) => fixture.fixture_number >= 601 && fixture.fixture_number <= 604,
 	);
 	expect(acls.map((fixture) => fixture.name)).toEqual([
-		"Back Centre ACL",
-		"Back Split ACL",
-		"Mid Split ACL",
-		"Front Split ACL",
+		"ACL Back Center",
+		"ACL Back Outside",
+		"ACL Midtruss",
+		"ACL Side",
 	]);
 	expect(acls.every((fixture) => fixture.multipatch.length === 7)).toBe(true);
 	const frontInstances = [acls[3], ...acls[3].multipatch];
@@ -96,7 +94,7 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
 	expect(groups).toHaveLength(35);
 	expect(
 		groups.find((group) => group.body.name === "Beam Show")?.body.fixtures,
-	).toHaveLength(50);
+	).toHaveLength(34);
 	expect(
 		groups.find((group) => group.body.name === "Beam Auxiliary Show")?.body
 			.fixtures,

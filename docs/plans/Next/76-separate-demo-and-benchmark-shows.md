@@ -2,10 +2,10 @@
 
 ## Status
 
-**Specification only.** This plan records the requested split between the operator-facing demo
-show and the sustained benchmark workload, then defines the patch, Stage layout, Groups, presets,
-Playbacks, and desktops for the new demo show. It does not implement either show, alter the
-benchmark, generate a show file, program the pending Theater script, or add executable tests.
+**Implemented except for the pending Theater script.** The deterministic demo/benchmark split,
+canonical patch, Stage layout, Groups, presets, Dynamics, Playbacks, desktops, portable starter
+show, and executable acceptance are active. The royalty-free Theater source and its
+script-specific Cues remain pending user-provided content.
 
 ## Goal
 
@@ -28,7 +28,7 @@ must remain explicit.
 
 | Tier | Show and runtime | Performance contract |
 |---|---|---|
-| Realistic demo | The exact generated demo inventory below: **262 controllable fixtures plus 33 visual-only Venue records, 295 patch records and 343 physical Stage instances**, including multi-patches. Run in the packaged desktop with both a 3D Stage view and Fixture Sheet/list visible. | Release-blocking CI acceptance using the programmed benchmark look below. It must remain responsive and satisfy the established interactive Stage, control, output-isolation, and end-to-end gates. A visibly stalled or unusably laggy demo is a failed build and blocks release. |
+| Realistic demo | The exact generated demo inventory below: **231 controllable fixtures plus 33 visual-only Venue records, 264 patch records and 306 physical Stage instances**, including multi-patches. Run in the packaged desktop with both a 3D Stage view and Fixture Sheet/list visible. | Release-blocking CI acceptance using the programmed benchmark look below. It must remain responsive and satisfy the established interactive Stage, control, output-isolation, and end-to-end gates. A visibly stalled or unusably laggy demo is a failed build and blocks release. |
 | Interactive large show | Exactly 1,000 fixture instances, with the packaged desktop, 3D Stage, and Fixture Sheet/list open. | Report the achieved engine/output rate and operator-visible Stage metrics. The target is **100 Hz** for the measured engine/output workload while the UI remains responsive; retain the stricter safety and output-isolation gates from the Stage plan. |
 | Headless stress show | Begin with 2,000 fixtures and scale deterministically to 4,000 when the same generator and hardware can sustain it. Run with every Stage surface and other visualization UI disabled. | Report the achieved rate, deadline misses, work-time percentiles, and resource use in the build. The target is **60 Hz**. Missing 60 Hz is informative and non-blocking, but missing data or silently opening a Stage/UI surface invalidates the report. |
 
@@ -104,27 +104,51 @@ Use stable names, fixture numbers, layers, mounts, positions, and rotations. All
 non-overlapping DMX addresses across as many universes as the real modes require; do not distort
 the rig merely to minimize or fill universe count.
 
+### DMX organization
+
+Keep Stage, Audience, and Auxiliary lighting in separate address bands. Universe 1 contains no
+moving lights: conventional fixtures occupy `1.1` through `1.24`, Stage LED PARs follow from
+`1.25`, and the two hazers occupy `1.509`/`1.510` and `1.511`/`1.512`. Stage moving lights use
+universes 2–4, Audience fixtures use universes 5–6, universe 7 remains available, and all
+Auxiliary fixtures—including the Sunstrips—use universe 8.
+
+The conventional patch represents two 12-channel dimmer racks:
+
+| Address | Fixture | Physical patch |
+|---|---|---|
+| `1.1`–`1.3` | Front Truss Left 1–3 | One lamp per channel |
+| `1.4`–`1.6` | Front Truss Right 1–3 | One lamp per channel |
+| `1.7`, `1.8` | Side Light Left, Side Light Right | One lamp per channel |
+| `1.9` | Front Drums | Two physical lamps; second instance has no additional DMX address |
+| `1.10`, `1.11` | Profile Stage Left, Profile Stage Right | One lamp per channel |
+| `1.12` | Profile Stage Center | Two physical lamps; second instance has no additional DMX address |
+| `1.13`–`1.16` | ACL Back Center, ACL Back Outside, ACL Midtruss, ACL Side | Eight physical lamps per control; multi-patches have no additional DMX addresses |
+| `1.17`–`1.20` | House Lights | Primary plus three genuinely addressed multi-patches |
+| `1.21`–`1.22` | Fourblinder Left | Two-channel fixture |
+| `1.23`–`1.24` | Fourblinder Right | Two-channel fixture |
+
 ## Front, side, house, and atmospheric fixtures
 
 ### Front and side light
 
 Patch and position:
 
-- **8 Fresnels** on the Front Truss, arranged as four on the left and four on the right and aimed
+- **6 Fresnels** on the Front Truss, arranged as three on the left and three on the right and aimed
   across the stage as the primary front wash;
-- **2 static Profile lamps** on the Mid Truss, one left and one right, both aimed at the centre
-  position;
-- **1 static Profile lamp** at the front, aimed directly at the centre position;
-- **1 pair of static Profile lamps**, covering the stage-left and stage-right positions.
+- **2 side-light Fresnels**, one stage left and one stage right;
+- **1 back Fresnel** for the drums, with a second unaddressed physical multi-patch;
+- **3 static Profile lamps** for stage left, stage right, and stage centre; the centre Profile has
+  a second unaddressed physical multi-patch.
 
 These static Profile and Fresnel fixtures are front-lighting tools; do not silently include them
 in the moving-Profile family Groups defined below.
 
 ### House lights
 
-Represent the house lights as one controllable strip-light fixture with multi-patches for a
-**4-row by 3-column** physical layout: 12 visible house-light instances in total. All instances
-share the intended control values while retaining their own Stage positions.
+Represent the house lights as one controllable simple flood/PAR fixture at `1.17`, with three
+independently addressed multi-patches at `1.18`, `1.19`, and `1.20`: four visible house-light
+instances in total. All instances share the intended control values while retaining their own
+Stage positions.
 
 ### Blinders and hazers
 
@@ -166,9 +190,8 @@ demo show.
 
 Build the overhead audience rig as an interleaved grid:
 
-- **16 Wash moving lights** in four rows of four;
-- **20 Profile moving lights** in five rows of four, with the Profile rows placed between and
-  around the Wash rows;
+- **8 Wash moving lights** in two rows of four;
+- **4 Profile moving lights** in one row of four;
 - **100 regular LED PARs** in a 10-by-10 downward-facing grid over the audience.
 
 Add **2 Profile moving lights** at the back of the audience for use as follow spots. Name and aim
@@ -211,9 +234,9 @@ After removing every Beam fixture, the requested family totals are:
 
 | Family | Stage | Audience | Aux | All |
 |---|---:|---:|---:|---:|
-| Profile moving lights | 28 | 22, including 2 follow spots | 4 | 54 |
-| Wash moving lights | 26 | 16 | 4 | 46 |
-| Regular LED PARs | 16 | 100 | 16 | 132 |
+| Profile moving lights | 28 | 6, including 2 follow spots | 4 | 38 |
+| Wash moving lights | 26 | 8 | 4 | 38 |
+| Regular LED PARs | 16 | 100 | 10 | 126 |
 
 These totals exclude static Profile front lights, Fresnels, RGB Sunstrips, ACLs, blinders, house
 lights, and hazers. Fixture numbering must make family and placement membership easy to inspect,
@@ -221,28 +244,29 @@ but Groups—not number-range accidents—remain the authoritative membership de
 
 ## Exact demo fixture count
 
-The generated demo contains **262 independently controllable fixture objects**:
+The generated demo contains **231 independently controllable fixture objects**:
 
 | Inventory | Controllable fixtures |
 |---|---:|
-| Profile moving lights | 54 |
-| Wash moving lights | 46 |
-| Regular LED PARs | 132 |
-| Static Profile lamps | 5 |
-| Front Fresnels | 8 |
+| Profile moving lights | 38 |
+| Wash moving lights | 38 |
+| Regular LED PARs | 126 |
+| Static Profile lamps | 3 |
+| Conventional Fresnels | 9 |
 | RGB Sunstrips | 8 |
 | ACL control fixtures | 4 |
 | Four-light blinders | 2 |
 | Hazers | 2 |
 | House-light control fixture | 1 |
-| **Total** | **262** |
+| **Total** | **231** |
 
 The four ACL controls each render as eight physical lamps, adding 28 Stage instances beyond their
-four primaries. The house-light control renders as 12 physical instances, adding 11 beyond its
-primary. The lighting patch therefore contains exactly **301 physical lighting instances**.
+four primaries. Front Drums and Profile Stage Center each add one unaddressed physical instance,
+and the house-light control adds three addressed multi-patches. The lighting patch therefore
+contains exactly **264 physical lighting instances**.
 Logical heads inside the two four-light blinders remain heads of those two fixtures; they do not
 increase the fixture-instance count. The canonical Venue patch adds 33 visual-only records and
-nine truss multi-patches, bringing the complete Stage to **343 physical instances across 295 patch
+nine truss multi-patches, bringing the complete Stage to **306 physical instances across 264 patch
 records** without consuming DMX slots.
 
 ## Initial Groups
@@ -619,9 +643,9 @@ Implementation is complete only when:
    orientation; visual review confirms the rig reads as the described venue.
 7. The alternating Stage Profile/Wash lines contain 16/15 fixtures on the Back Truss and 12/11 on
    the Mid Truss.
-8. The audience contains the 10-by-10 LED grid, interleaved five Profile and four Wash rows, two
-   rear follow spots, and no Beam fixtures.
-9. The auxiliary area contains exactly 4 Profiles, 4 Washes, and 16 LED PARs in an intentional
+8. The audience contains the 10-by-10 LED grid, four Profiles, eight Washes, two rear follow
+   spots, and no Beam fixtures.
+9. The auxiliary area contains exactly 4 Profiles, 4 Washes, and 10 LED PARs in an intentional
    grid, with no Beam fixtures.
 10. The four ACL control fixtures each expose seven multi-patches. They render as the requested
     Back Centre fan out, Back Split fan in, Mid Split fan out, and Front Split fan in, with the
@@ -654,7 +678,7 @@ Implementation is complete only when:
 23. The maintained product-demo path, if connected to this generator, still performs visible
     state-changing work through normal operator interactions after its labelled generation
     boundary.
-24. The exact 262-control-fixture, 301-physical-instance demo passes its packaged desktop
+24. The exact 231-control-fixture, 264-physical-lighting-instance demo passes its packaged desktop
     end-to-end and responsiveness gates with 3D Stage and Fixture Sheet/list visible; failure
     blocks release.
 25. The 1,000-fixture packaged interactive report records the 100 Hz engine/output target and

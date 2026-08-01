@@ -40,9 +40,7 @@ const LAYER_NAMES = [
 	"LED PAR Stage",
 	"LED PAR Audience",
 	"LED PAR Auxilliary",
-	"Front Lights",
-	"Front Profiles",
-	"ACLs & Blinder",
+	"Conventional Light",
 ] as const;
 
 export async function ensurePlannedDemoLayers(

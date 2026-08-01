@@ -2346,6 +2346,18 @@ button:not(:disabled):active {
 	gap: 5px;
 	margin-top: 15px;
 }
+
+.fixture-mode-option-label {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 0.35em;
+}
+
+.fixture-mode-option-label small {
+	color: var(--muted);
+	font-size: 0.72em;
+	font-weight: 500;
+}
 .fixture-patch-form {
 	display: grid;
 	grid-template-columns: minmax(280px, 1fr) 250px 1.2fr;

@@ -203,7 +203,7 @@ test("the 1,024-fixture indicator uses 60 Hz green and 40 Hz yellow thresholds",
 	);
 });
 
-test("the canonical 343-instance product demo is retained as separate measured evidence", () => {
+test("the canonical 306-instance product demo is retained as separate measured evidence", () => {
 	const status = statusDocument(
 		options,
 		stage(report(), 0),

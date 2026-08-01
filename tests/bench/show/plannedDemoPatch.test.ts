@@ -8,11 +8,11 @@ const footprintByName: Record<string, number> = {
 	"RGBW LED": 5,
 	"Dimmer Profile": 1,
 	"Dimmer Fresnel": 1,
+	"Dimmer PAR Can": 1,
 	"Sunstrip LED RGB 42206": 30,
 	ACL: 1,
 	Blinder: 2,
 	Hazer: 2,
-	Dimmer: 1,
 };
 const uniqueProfiles = [
 	...new Map(
@@ -48,21 +48,19 @@ const layers = Object.fromEntries(
 		"LED PAR Stage",
 		"LED PAR Audience",
 		"LED PAR Auxilliary",
-		"Front Lights",
-		"Front Profiles",
-		"ACLs & Blinder",
+		"Conventional Light",
 	].map((name) => [name, `layer-${name}`]),
 );
 
 describe("Plan 76 patch builder", () => {
-	it("builds 262 stable controls and 301 physical instances with valid patches", () => {
+	it("builds 231 stable controls and 264 physical instances with valid patches", () => {
 		const built = createPlannedDemoPatchInputs(profiles, layers);
-		expect(built.fixtureRecords).toBe(262);
-		expect(built.physicalInstances).toBe(301);
+		expect(built.fixtureRecords).toBe(231);
+		expect(built.physicalInstances).toBe(264);
 		expect(built.lastUniverse).toBeGreaterThan(1);
 		expect(
 			new Set(built.fixtures.map((fixture) => fixture.fixture_id)).size,
-		).toBe(262);
+		).toBe(231);
 		const occupied = new Set<string>();
 		for (const fixture of built.fixtures) {
 			for (const instance of [fixture, ...fixture.multipatch]) {
@@ -83,9 +81,10 @@ describe("Plan 76 patch builder", () => {
 				}
 			}
 		}
+		expect(occupied.size).toBe(2_988);
 	});
 
-	it("reserves universe 1 addresses 1-8 for the eight Front Lights", () => {
+	it("keeps Conventional, Stage, Audience, and Auxiliary bands separate", () => {
 		const built = createPlannedDemoPatchInputs(profiles, layers);
 		const fresnels = built.fixtures.filter(
 			(fixture) => fixture.fixture_number >= 1 && fixture.fixture_number <= 8,
@@ -96,22 +95,35 @@ describe("Plan 76 patch builder", () => {
 				fixture.split_patches[0].address,
 			]),
 		).toEqual(Array.from({ length: 8 }, (_, index) => [1, index + 1]));
-		expect(fresnels.slice(0, 4).map((fixture) => fixture.location.x)).toEqual([
-			-3800, -3367, -2933, -2500,
-		]);
-		expect(fresnels.every((fixture) => fixture.location.y === -3000)).toBe(
-			true,
-		);
-		expect(fresnels.every((fixture) => fixture.location.z === 4150)).toBe(true);
 		const movers = built.fixtures.filter(
 			(fixture) =>
 				fixture.fixture_number >= 101 && fixture.fixture_number <= 107,
 		);
-		expect(movers.map((fixture) => fixture.split_patches[0].address)).toEqual([
-			257, 293, 329, 365, 401, 437, 473,
-		]);
 		expect(
-			movers.every((fixture) => fixture.split_patches[0].universe === 1),
+			movers.every((fixture) => fixture.split_patches[0].universe === 2),
+		).toBe(true);
+		const manifestByNumber = new Map(
+			PLANNED_DEMO_FIXTURES.map((fixture) => [fixture.number, fixture]),
+		);
+		expect(
+			built.fixtures
+				.filter(
+					(fixture) =>
+						manifestByNumber.get(fixture.fixture_number)?.location ===
+						"audience",
+				)
+				.every((fixture) => [5, 6].includes(fixture.split_patches[0].universe)),
+		).toBe(true);
+		expect(
+			built.fixtures
+				.filter((fixture) => {
+					const manifest = manifestByNumber.get(fixture.fixture_number);
+					return (
+						manifest?.location === "aux" ||
+						manifest?.roles.includes("Sunstrips")
+					);
+				})
+				.every((fixture) => fixture.split_patches[0].universe === 8),
 		).toBe(true);
 		expect(
 			movers.every(
@@ -123,6 +135,59 @@ describe("Plan 76 patch builder", () => {
 		).toBe(true);
 	});
 
+	it("uses the literal two-rack conventional patch and true multipatch policy", () => {
+		const built = createPlannedDemoPatchInputs(profiles, layers);
+		const byNumber = new Map(
+			built.fixtures.map((fixture) => [fixture.fixture_number, fixture]),
+		);
+		for (const [fixtureNumber, address] of [
+			[1, 1],
+			[2, 2],
+			[3, 3],
+			[4, 4],
+			[5, 5],
+			[6, 6],
+			[7, 7],
+			[8, 8],
+			[9, 9],
+			[11, 10],
+			[12, 11],
+			[13, 12],
+			[601, 13],
+			[602, 14],
+			[603, 15],
+			[604, 16],
+			[901, 17],
+			[701, 21],
+			[702, 23],
+		] as const)
+			expect(byNumber.get(fixtureNumber)?.split_patches[0]).toMatchObject({
+				universe: 1,
+				address,
+			});
+		expect(
+			byNumber
+				.get(901)
+				?.multipatch.map((instance) => instance.split_patches[0].address),
+		).toEqual([18, 19, 20]);
+		for (const fixtureNumber of [9, 13, 601, 602, 603, 604])
+			expect(
+				byNumber
+					.get(fixtureNumber)
+					?.multipatch.every((instance) =>
+						instance.split_patches.every((patch) => patch.universe == null),
+					),
+			).toBe(true);
+		expect(byNumber.get(801)?.split_patches[0]).toMatchObject({
+			universe: 1,
+			address: 509,
+		});
+		expect(byNumber.get(802)?.split_patches[0]).toMatchObject({
+			universe: 1,
+			address: 511,
+		});
+	});
+
 	it("places four eight-lamp ACL fans on their literal trusses", () => {
 		const built = createPlannedDemoPatchInputs(profiles, layers);
 		const acls = built.fixtures.filter(
@@ -131,8 +196,15 @@ describe("Plan 76 patch builder", () => {
 		);
 		expect(acls.every((fixture) => fixture.multipatch.length === 7)).toBe(true);
 		expect(acls.map((fixture) => fixture.layer_id)).toEqual(
-			Array.from({ length: 4 }, () => "layer-ACLs & Blinder"),
+			Array.from({ length: 4 }, () => "layer-Conventional Light"),
 		);
+		expect(
+			acls
+				.flatMap((fixture) => fixture.multipatch)
+				.every((instance) =>
+					instance.split_patches.every((patch) => patch.universe == null),
+				),
+		).toBe(true);
 		const front = [acls[3], ...acls[3].multipatch].map(
 			(fixture) => fixture.location.x,
 		);
@@ -144,8 +216,10 @@ describe("Plan 76 patch builder", () => {
 		const built = createPlannedDemoPatchInputs(profiles, layers, {
 			addressBands: {
 				dimmers: "2.10 THRU 2.64",
-				ledPars: "3.65 THRU 3.256",
-				movingLights: "4.257 THRU 4.508",
+				stageLedPars: "3.65 THRU 3.256",
+				stageMovingLights: "4.257 THRU 6.508",
+				audience: "7.1 THRU 8.512",
+				auxiliary: "9.1 THRU 9.512",
 				hazers: "5.509 THRU 5.512",
 			},
 			placements: [
@@ -168,8 +242,8 @@ describe("Plan 76 patch builder", () => {
 			-4000, -3000, -2000, -1000,
 		]);
 		expect(fresnels[0].split_patches[0]).toMatchObject({
-			universe: 2,
-			address: 10,
+			universe: 1,
+			address: 1,
 		});
 		const acl = built.fixtures.find(
 			(fixture) => fixture.fixture_number === 601,

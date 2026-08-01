@@ -1052,6 +1052,9 @@ describe("visual-only Venue placement", () => {
 
 		render(<FixturePatchSetup />);
 		fireEvent.click(screen.getByRole("button", { name: "+ Add fixture" }));
+		const noDmx = screen.getByText("No DMX");
+		expect(noDmx.tagName).toBe("SMALL");
+		expect(noDmx).toHaveClass("fixture-mode-no-dmx");
 		fireEvent.click(screen.getByRole("button", { name: /^Add fixture$/ }));
 
 		const placement = screen

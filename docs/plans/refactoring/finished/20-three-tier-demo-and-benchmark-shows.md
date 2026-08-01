@@ -202,3 +202,13 @@ refreshed the integrity-checked `assets/demo.show`. Visual inspection used:
   compatible `strobe` address; no unsupported channel is manufactured.
 - The royalty-free Theater source has not been supplied. The Theater desktop persists, while
   script-specific Theater content remains explicitly pending under Plan 76.
+
+### 2026-08-01 current canonical demo inventory
+
+The later product-demo patch refinement supersedes the historical 262-control/301-lighting-
+instance counts above. The current release-gated demo contains 231 controllable lighting
+fixtures, 264 physical lighting instances, 33 visual-only Venue records, 264 total patch records,
+306 physical Stage instances, and 2,988 occupied DMX slots. Its approximately 300-instance Stage
+acceptance role is unchanged; the reduction allows Stage, Audience, and Auxiliary lighting to
+remain in clear universe bands while universe 1 models the two conventional dimmer racks and
+contains no movers.

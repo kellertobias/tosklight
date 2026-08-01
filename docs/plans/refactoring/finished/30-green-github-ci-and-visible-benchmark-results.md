@@ -288,3 +288,25 @@ the generated-show acceptance test, and a complete non-recording product-demo re
 single final recording run passed in 16.6 minutes and produced 18,140 canonical frames at 25 fps.
 Both delivery files are 1920 by 1080 and 725.6 seconds long; the reviewed WebM uses VP9 and the
 reviewed MP4 uses H.265.
+
+### 2026-08-01 canonical dimmer-patch follow-up
+
+The starter show and non-recording product-demo path now model the conventional rig as two
+12-channel dimmer racks. Front, side, drums, stage Profiles, four ACL controls, House Lights, and
+both two-channel four-blinders occupy `1.1` through `1.24`; House Lights use real addressed
+multi-patches at `1.18`–`1.20`, while the second Front Drums lamp, second Profile Stage Center
+lamp, and ACL physical lamps deliberately add no extra DMX addresses. Stage LED PARs continue
+from `1.25`, hazers occupy `1.509` and `1.511`, Stage movers use universes 2–4, Audience lighting
+uses 5–6, and Auxiliary lighting uses universe 8. Universe 1 contains no movers.
+
+This revised capacity-balanced show contains 231 controllable lighting fixtures, 264 physical
+lighting instances, 33 visual-only Venue records, 264 total patch records, 306 physical Stage
+instances, and 2,988 occupied DMX slots. The Fixture Patch uses one `Conventional Light` layer for
+the dimmer-rack population. Repeated truss work runs at the accelerated interaction pace after
+the first complete truss, and the fixture-mode dropdown renders `No DMX` as a smaller muted
+annotation.
+
+Focused manifest, patch, Group, Playback, and Fixture Patch tests passed, as did the production
+frontend build, the generated-show acceptance, and a complete 2.8-minute non-recording product
+demo rehearsal that refreshed `assets/demo.show`. Per the recording-review instruction, this
+follow-up did not capture, assemble, encode, or replace the maintained video.

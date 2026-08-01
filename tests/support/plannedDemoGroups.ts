@@ -79,7 +79,7 @@ export function plannedDemoGroupSpecs(): PlannedDemoGroupSpec[] {
 		group(30, "Floor Spots", []),
 		group(31, "Hazer", plannedDemoRoleNumbers("Hazers")),
 		group(32, "All ACLs", plannedDemoRoleNumbers("All ACLs")),
-		group(33, "Front Profiles", [11, 12, 13, 14, 15]),
+		group(33, "Front Profiles", plannedDemoRoleNumbers("Front Profiles")),
 		group(34, "House Lights", plannedDemoRoleNumbers("House Lights")),
 		group(35, "Follow Spots", plannedDemoRoleNumbers("Follow Spots")),
 	];

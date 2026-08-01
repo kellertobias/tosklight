@@ -167,7 +167,7 @@ test("healthy and degraded measured statuses retain their public evidence", () =
 	assert.match(page, /Engine render and fixture projection/u);
 	assert.match(page, /Protocol encoding/u);
 	assert.match(page, /diagnostic only/u);
-	assert.match(page, /Canonical 343-instance demo show/u);
+	assert.match(page, /Canonical 306-instance demo show/u);
 	assert.match(page, /Physical Stage instances<\/th><td>343/u);
 	assert.match(page, /Stage source-to-canvas p95<\/th><td>61 ms/u);
 });

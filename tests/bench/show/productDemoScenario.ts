@@ -150,14 +150,14 @@ export const PRODUCT_DEMO_SCRIPT = {
 			"LED PAR Stage",
 			"LED PAR Audience",
 			"LED PAR Auxilliary",
-			"Front Lights",
-			"Front Profiles",
-			"ACLs & Blinder",
+			"Conventional Light",
 		],
 		addressBands: {
-			dimmers: "1.1 THRU 1.64",
-			ledPars: "1.65 THRU 1.256",
-			movingLights: "1.257 THRU 1.508",
+			dimmers: "1.1 THRU 1.24",
+			stageLedPars: "1.25 THRU 1.508",
+			stageMovingLights: "2.1 THRU 4.512",
+			audience: "5.1 THRU 6.512",
+			auxiliary: "8.1 THRU 8.512",
 			hazers: "1.509 THRU 1.512",
 		},
 		placements: [
@@ -174,17 +174,33 @@ export const PRODUCT_DEMO_SCRIPT = {
 				location: { x: "-3 THRU 3", y: "-3", z: "4.15" },
 			},
 			{
-				targets: "1 THRU 4",
-				location: { x: "-3.8 THRU -2", y: "-3", z: "4.15" },
+				targets: "1 THRU 3",
+				location: { x: "-3.8 THRU -2.5", y: "-3", z: "4.15" },
 			},
 			{
-				targets: "5 THRU 8",
-				location: { x: "2 THRU 3.8", y: "-3", z: "4.15" },
+				targets: "4 THRU 6",
+				location: { x: "2.5 THRU 3.8", y: "-3", z: "4.15" },
+			},
+			{
+				targets: "7 THRU 8",
+				location: { x: "-4 THRU 4", y: "1", z: "2.4" },
+			},
+			{
+				targets: "9 primary THRU multipatch 1",
+				location: { x: "-0.7 THRU 0.7", y: "4", z: "4.15" },
+			},
+			{
+				targets: "13 primary THRU multipatch 1",
+				location: { x: "-0.4 THRU 0.4", y: "-3", z: "4.15" },
 			},
 			{
 				targets: "601 primary THRU multipatch 7",
 				location: { x: "-1 THRU 1", y: "4", z: "4.4" },
 				rotation: { x: "0", y: "-18 THRU 18", z: "0" },
+			},
+			{
+				targets: "901 primary THRU multipatch 3",
+				location: { x: "-3 THRU 3", y: "-5", z: "5" },
 			},
 			{
 				targets: "101 THRU 107",
@@ -387,6 +403,7 @@ export class BrowserProductDemo {
 			);
 			await selectPatchLayer(desk, patchWindow, "Trusses");
 			for (let truss = 1; truss <= 3; truss++) {
+				if (truss > 1) desk.setRecordingClickPace("typing");
 				await demoPause(page, truss === 1 ? 25 : 0);
 				await addFixtureThroughTouchUi(desk, page, {
 					search: "4Point Truss",
@@ -405,6 +422,7 @@ export class BrowserProductDemo {
 					pauseForPlacement: truss === 1,
 				});
 				const trussPrimary = fixtureRow(patchWindow, `0.${truss}`);
+				if (truss > 1) desk.setRecordingClickPace("typing");
 				await desk.click(trussPrimary);
 				for (let segment = 1; segment <= 3; segment++) {
 					await desk.click(
@@ -420,6 +438,7 @@ export class BrowserProductDemo {
 				}
 				const allMultipatches = patchWindow.locator(".multipatch-row");
 				const lastPhysicalRow = allMultipatches.nth(truss * 3 - 1);
+				if (truss > 1) desk.setRecordingClickPace("typing");
 				await desk.click(trussPrimary);
 				await desk.click(lastPhysicalRow, { modifiers: ["Shift"] });
 				const placement = demoPatchPlacement(
@@ -465,12 +484,12 @@ export class BrowserProductDemo {
 				trussIdentities,
 			);
 			const firstFresnel = requiredFixture(desiredByNumber, 1);
-			await selectPatchLayer(desk, patchWindow, "Front Lights");
+			await selectPatchLayer(desk, patchWindow, "Conventional Light");
 			await addFixtureThroughTouchUi(desk, page, {
 				search: "Dimmer Fresnel",
 				family: "Dimmer Fresnel",
 				mode: "8-bit",
-				name: "Front Fresnel 1",
+				name: "Front Truss Left 1",
 				fixtureId: "1",
 				count: 8,
 				address: fixtureAddress(firstFresnel),
@@ -486,49 +505,12 @@ export class BrowserProductDemo {
 					return [fixture?.universe, fixture?.address];
 				})
 				.toEqual([1, 1]);
-			await spreadFixtureLocationThroughTouchUi(
-				desk,
-				patchWindow,
-				1,
-				4,
-				"X",
-				valuePadKeys(demoPatchPlacement("1 THRU 4").location.x),
-			);
-			await expect
-				.poll(async () => {
-					const fixtures = (await api.patch()).fixtures;
-					return [1, 2, 3, 4].map(
-						(number) =>
-							fixtures.find((fixture: any) => fixture.fixture_number === number)
-								?.location?.x,
-					);
-				})
-				.toEqual([-3_800, -3_200, -2_600, -2_000]);
-			await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.postSpreadHoldFrames);
-			await spreadFixtureLocationThroughTouchUi(
-				desk,
-				patchWindow,
-				1,
-				4,
-				"Y",
-				valuePadKeys(demoPatchPlacement("1 THRU 4").location.y),
-				false,
-			);
-			await spreadFixtureLocationThroughTouchUi(
-				desk,
-				patchWindow,
-				1,
-				4,
-				"Z",
-				valuePadKeys(demoPatchPlacement("1 THRU 4").location.z),
-				false,
-			);
-			await expectFixtureLocations(api, [1, 2, 3, 4], {
-				y: -3_000,
-				z: 4_150,
-			});
-			for (const [first, last] of [[5, 8]] as const) {
-				const placement = demoPatchPlacement("5 THRU 8");
+			for (const [first, last] of [
+				[1, 3],
+				[4, 6],
+				[7, 8],
+			] as const) {
+				const placement = demoPatchPlacement(`${first} THRU ${last}`);
 				for (const [axis, keys] of [
 					["X", valuePadKeys(placement.location.x)],
 					["Y", valuePadKeys(placement.location.y)],
@@ -543,18 +525,70 @@ export class BrowserProductDemo {
 						keys,
 						axis === "X",
 					);
+				if (first === 1)
+					await demoPause(
+						page,
+						PRODUCT_DEMO_SCRIPT.pacing.postSpreadHoldFrames,
+					);
 			}
-			await expectFixtureLocations(api, [5, 6, 7, 8], {
+			await expectFixtureLocations(api, [1, 2, 3, 4, 5, 6], {
 				y: -3_000,
 				z: 4_150,
 			});
+			await expectFixtureLocations(api, [7, 8], { y: 1_000, z: 2_400 });
+
+			const centerProfile = requiredFixture(desiredByNumber, 13);
+			await desk.setDemoAction(
+				"Patch Profile Stage Center at 1.12 and add its second, unaddressed physical lamp as a true multi-patch.",
+			);
+			await addFixtureThroughTouchUi(desk, page, {
+				search: "Dimmer Profile",
+				family: "Dimmer Profile",
+				mode: "8-bit",
+				name: "Profile Stage Center",
+				fixtureId: "13",
+				count: 1,
+				address: fixtureAddress(centerProfile),
+				visibleModeSelection: true,
+			});
+			await desk.click(fixtureRow(patchWindow, 13));
+			await addMultipatchesThroughTouchUi(desk, patchWindow, 13, 1);
+
+			const houseLights = requiredFixture(desiredByNumber, 901);
+			await desk.setDemoAction(
+				"Patch four independently addressed House Lights at 1.17 through 1.20 using one PAR control and three real multi-patches.",
+			);
+			await addFixtureThroughTouchUi(desk, page, {
+				search: "Dimmer PAR Can",
+				family: "Dimmer PAR Can",
+				mode: "8-bit",
+				name: "House Lights",
+				fixtureId: "901",
+				count: 1,
+				address: fixtureAddress(houseLights),
+				visibleModeSelection: true,
+			});
+			await desk.click(fixtureRow(patchWindow, 901));
+			const houseRows = await addMultipatchesThroughTouchUi(
+				desk,
+				patchWindow,
+				901,
+				3,
+			);
+			for (const [index, address] of [18, 19, 20].entries())
+				await setMultipatchAddressThroughTouchUi(
+					desk,
+					page,
+					houseRows[index],
+					`1.${address}`,
+				);
+
 			const acl = requiredFixture(desiredByNumber, 601);
-			await selectPatchLayer(desk, patchWindow, "ACLs & Blinder");
 			await addFixtureThroughTouchUi(desk, page, {
 				search: "ACL",
 				family: "ACL",
 				mode: "8-bit",
-				name: "Back Centre ACL",
+				name: "ACL Back Center",
 				fixtureId: "601",
 				count: 1,
 				address: fixtureAddress(acl),
@@ -577,12 +611,12 @@ export class BrowserProductDemo {
 			}
 			desk.setRecordingClickPace("compact");
 			const aclPrimaryRow = fixtureRow(patchWindow, 601);
-			const aclPhysicalRows = aclPrimaryRow.locator(
-				"xpath=following-sibling::tr[contains(@class,'multipatch-row')]",
+			const aclLastPhysicalRow = aclPrimaryRow.locator(
+				'xpath=following-sibling::tr[contains(@class, "multipatch-row")][7]',
 			);
-			await expect(aclPhysicalRows).toHaveCount(7);
+			await expect(aclLastPhysicalRow).toHaveCount(1);
 			await desk.click(aclPrimaryRow);
-			await desk.click(aclPhysicalRows.last(), { modifiers: ["Shift"] });
+			await desk.click(aclLastPhysicalRow, { modifiers: ["Shift"] });
 			const aclPlacement = demoPatchPlacement("601 primary THRU multipatch 7");
 			const aclRotation =
 				"rotation" in aclPlacement ? aclPlacement.rotation.y : "0";
@@ -594,7 +628,7 @@ export class BrowserProductDemo {
 			] as const)
 				await spreadPhysicalPatchVectorThroughTouchUi(
 					desk,
-					aclPhysicalRows.last(),
+					aclLastPhysicalRow,
 					kind,
 					axis,
 					keys,
@@ -632,7 +666,7 @@ export class BrowserProductDemo {
 				z: 4_000,
 			});
 			const visibleLightingNumbers = [
-				1, 2, 3, 4, 5, 6, 7, 8, 601, 101, 102, 103, 104, 105, 106, 107,
+				1, 2, 3, 4, 5, 6, 7, 8, 13, 601, 901, 101, 102, 103, 104, 105, 106, 107,
 			];
 			const visibleLightingIdentities = await fixtureIdentities(
 				api,
@@ -663,9 +697,9 @@ export class BrowserProductDemo {
 				visibleLightingIdentities,
 			);
 			expect(canonical.patch).toMatchObject({
-				fixtureRecords: 262,
-				physicalInstances: 301,
-				occupiedSlots: 3_783,
+				fixtureRecords: 231,
+				physicalInstances: 264,
+				occupiedSlots: 2_988,
 			});
 			await expect
 				.poll(async () => (await api.patch()).fixtures.length)
@@ -1274,7 +1308,7 @@ async function finishProductDemoPerformance(
 		acceptance_gate: "separate_packaged_tauri",
 		limitations: [
 			"The release CI measurement uses Chromium rather than the packaged Tauri WebView.",
-			"The separate packaged 343-instance acceptance remains authoritative for WebView Stage behavior.",
+			"The separate packaged 306-instance acceptance remains authoritative for WebView Stage behavior.",
 		],
 		scene: {
 			fixture_records: PLANNED_DEMO_TOTAL_FIXTURE_RECORDS,
@@ -2039,6 +2073,49 @@ function fixtureRow(patchWindow: Locator, fixtureNumber: number | string) {
 		.getByRole("cell", { name: String(fixtureNumber), exact: true })
 		.locator("..")
 		.first();
+}
+
+async function addMultipatchesThroughTouchUi(
+	desk: DeskDriver,
+	patchWindow: Locator,
+	fixtureNumber: number,
+	count: number,
+) {
+	const rows = patchWindow.locator(".multipatch-row");
+	const before = await rows.count();
+	await desk.click(fixtureRow(patchWindow, fixtureNumber));
+	for (let index = 1; index <= count; index++) {
+		await desk.click(
+			patchWindow.getByRole("button", {
+				name: "+ Add multi-patch",
+				exact: true,
+			}),
+		);
+		await expect(rows).toHaveCount(before + index);
+	}
+	return Array.from({ length: count }, (_, index) => rows.nth(before + index));
+}
+
+async function setMultipatchAddressThroughTouchUi(
+	desk: DeskDriver,
+	page: Page,
+	row: Locator,
+	address: string,
+) {
+	await desk.click(row.locator("button.patch-address"));
+	const dialog = page.getByRole("dialog", { name: "Multi-patch Address" });
+	await expect(dialog).toBeVisible();
+	for (const character of address)
+		await desk.click(
+			dialog.getByRole("button", {
+				name: character === "." ? "Universe separator" : `Address ${character}`,
+				exact: true,
+			}),
+		);
+	await desk.click(
+		dialog.getByRole("button", { name: "Set Address", exact: true }),
+	);
+	await expect(dialog).toBeHidden();
 }
 
 async function selectPatchLayer(

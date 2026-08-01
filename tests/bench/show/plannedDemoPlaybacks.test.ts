@@ -82,7 +82,7 @@ describe("Plan 76 initial Playback topology", () => {
 			go_activates: true,
 		});
 		const front = result.cuelists.find((item) => item.name === "Front Light")!;
-		expect(front.cues[0].changes).toHaveLength(13);
+		expect(front.cues[0].changes).toHaveLength(12);
 		expect(
 			result.playbacks.find((item) => item.name === "Front Light")?.number,
 		).toBe(11);

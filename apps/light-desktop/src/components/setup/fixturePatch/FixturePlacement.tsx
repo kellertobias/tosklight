@@ -1,4 +1,4 @@
-import { Button, ModalRegistration, Select } from "@tosklight/ui";
+import { Button, ModalRegistration } from "@tosklight/ui";
 import { Fragment } from "react";
 import {
 	ConsoleNumberField,
@@ -8,6 +8,7 @@ import {
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { incrementFixtureName, isDmxPatchable } from "../patchUtils";
 import { type PatchController, usePatchController } from "./controller";
+import { FixtureModeSelect } from "./fixtureDisplay";
 import {
 	batchPatchError,
 	parseFixtureNumber,
@@ -83,25 +84,11 @@ function PlacementFields({ controller }: { controller: PatchController }) {
 	if (!definition) return null;
 	return (
 		<div className="placement-fields">
-			{/* biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label. */}
-			<label>
-				Mode
-				<Select
-					aria-label="Mode"
-					value={fixtureDefinitionKey(definition)}
-					onChange={(event) => ui.setDefinitionKey(event.target.value)}
-				>
-					{family?.modes.map((mode) => (
-						<option
-							value={fixtureDefinitionKey(mode)}
-							key={fixtureDefinitionKey(mode)}
-						>
-							{mode.mode} ·{" "}
-							{isDmxPatchable(mode) ? `${mode.footprint}ch` : "No DMX"}
-						</option>
-					))}
-				</Select>
-			</label>
+			<FixtureModeSelect
+				modes={family?.modes ?? []}
+				value={fixtureDefinitionKey(definition)}
+				onChange={ui.setDefinitionKey}
+			/>
 			{/* biome-ignore lint/a11y/noLabelWithoutControl: ConsoleTextField renders its native control inside this label. */}
 			<label>
 				Fixture name
