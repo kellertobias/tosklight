@@ -97,7 +97,7 @@ export const PRODUCT_DEMO_SCRIPT = {
 			title: "Programming Cues & Cuelists",
 			frames: 2_500,
 		},
-		{ id: "dynamics", marker: "DYNAMICS", title: "Dynamics", frames: 1_625 },
+		{ id: "dynamics", marker: "DYNAMICS", title: "Dynamics", frames: 2_250 },
 		{
 			id: "virtual-playbacks",
 			marker: "VIRTUAL PLAYBACKS",
@@ -146,6 +146,11 @@ export const PRODUCT_DEMO_SCRIPT = {
 		cuelistSelectionHoldFrames: 50,
 		cuelistRecordHoldFrames: 50,
 		cuelistStoredHoldFrames: 75,
+		dynamicsSurfaceHoldFrames: 75,
+		dynamicsChoiceHoldFrames: 50,
+		dynamicsResultHoldFrames: 50,
+		dynamicsSettingsHoldFrames: 75,
+		dynamicsConfiguredHoldFrames: 75,
 		bpm: 120,
 		beatsPerBar: 4,
 		buskingBars: 16,
@@ -1718,14 +1723,20 @@ async function buildDynamicsSetup(
 		"DYNAMICS",
 		"ToskLight's Effect engine - Animate Parameters based on Keyframes or functions.",
 	);
+	await desk.setDemoAction(
+		"Select Beam Show, then build a two-axis Circle Dynamic from familiar Pan sine and Tilt cosine functions.",
+	);
 	await clearProgrammer(desk, keypad, api);
 	await openGroups(desk, keypad);
 	await desk.click(groupTile(app, 4));
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 	await openBuiltIn(desk, app, "Dynamics");
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsSurfaceHoldFrames);
 	await createDynamicThroughTouch(desk, page, app, 19, "Pan");
 	await desk.click(
 		app.getByRole("button", { name: "+ Add Lane", exact: true }),
 	);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 	await chooseDynamicAttribute(desk, page, "Tilt");
 	await desk.click(app.getByRole("button", { name: /^Select lane 2, Tilt$/ }));
 	await chooseDynamicCurve(desk, page, app, "Cosinus");
@@ -1733,6 +1744,7 @@ async function buildDynamicsSetup(
 	await desk.click(
 		app.getByRole("button", { name: "← Back to Pool", exact: true }),
 	);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 
 	await desk.setDemoAction(
 		"Create the Beam Show PWM chaser through the same production Dynamic editor.",
@@ -1740,13 +1752,16 @@ async function buildDynamicsSetup(
 	await clearSelection(desk, keypad, api);
 	await openGroups(desk, keypad);
 	await desk.click(groupTile(app, 4));
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 	await openBuiltIn(desk, app, "Dynamics");
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsSurfaceHoldFrames);
 	await createDynamicThroughTouch(desk, page, app, 1, "Intensity");
 	await chooseDynamicCurve(desk, page, app, "PWM");
 	await configureDynamicThroughTouch(desk, page, app, "Beam Show PWM");
 	await desk.click(
 		app.getByRole("button", { name: "← Back to Pool", exact: true }),
 	);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 	const visibleDynamicIds = await dynamicIdentities(api, showId, [1, 19]);
 	const definitions = await desk.fastForward(
 		"Creating the remaining 28 Dynamics and reconciling speed, phase, and curve details.",
@@ -2408,6 +2423,7 @@ async function createDynamicThroughTouch(
 	await desk.click(app.locator(".dynamic-pool-card").nth(poolNumber - 1));
 	await chooseDynamicAttribute(desk, page, attribute);
 	await expect(app.locator(".dynamics-editor")).toBeVisible();
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 }
 
 async function chooseDynamicAttribute(
@@ -2417,6 +2433,7 @@ async function chooseDynamicAttribute(
 ) {
 	const chooser = page.getByRole("dialog", { name: "Select lane attribute" });
 	await expect(chooser).toBeVisible();
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsChoiceHoldFrames);
 	await desk.click(
 		chooser.getByRole("button", {
 			name: attribute,
@@ -2433,11 +2450,14 @@ async function chooseDynamicCurve(
 ) {
 	await desk.click(app.getByRole("button", { name: /^Curve function:/ }));
 	const chooser = page.getByRole("dialog", { name: "Choose curve function" });
+	await expect(chooser).toBeVisible();
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsChoiceHoldFrames);
 	await desk.click(
 		chooser.getByRole("button", {
 			name: new RegExp(`^${escapeRegex(curve)}\\b`),
 		}),
 	);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 }
 
 async function configureDynamicThroughTouch(
@@ -2448,14 +2468,20 @@ async function configureDynamicThroughTouch(
 ) {
 	await desk.click(app.getByRole("button", { name: "Settings", exact: true }));
 	const settings = page.getByRole("dialog", { name: "Dynamic Settings" });
+	await expect(settings).toBeVisible();
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsSettingsHoldFrames);
 	await settings.getByLabel("Name").fill(name);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 	await desk.click(settings.getByRole("tab", { name: "Targets", exact: true }));
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsChoiceHoldFrames);
 	await desk.click(
 		settings.getByRole("button", { name: "Take Selection", exact: true }),
 	);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 	await desk.click(
 		settings.getByRole("button", { name: "Close settings", exact: true }),
 	);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsConfiguredHoldFrames);
 }
 
 async function dynamicIdentities(
