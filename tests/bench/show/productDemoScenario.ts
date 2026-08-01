@@ -66,9 +66,15 @@ export const PRODUCT_DEMO_SCRIPT = {
 		},
 		{
 			id: "groups",
-			marker: "GROUP SETUP",
-			title: "Group Setup",
+			marker: "DEFINING GROUPS",
+			title: "Defining Groups",
 			frames: 3_250,
+		},
+		{
+			id: "group-masters",
+			marker: "ASSIGNING GROUP MASTERS",
+			title: "Assigning Group Masters",
+			frames: 750,
 		},
 		{
 			id: "presets",
@@ -76,41 +82,60 @@ export const PRODUCT_DEMO_SCRIPT = {
 			title: "Preset Setup",
 			frames: 1_625,
 		},
-		{ id: "dynamics", marker: "DYNAMICS", title: "Dynamics", frames: 1_625 },
 		{
 			id: "cuelists",
-			marker: "CUELIST PROGRAMMING",
-			title: "Cuelist Programming",
+			marker: "CUELISTS",
+			title: "Cuelists",
 			frames: 1_750,
 		},
+		{ id: "dynamics", marker: "DYNAMICS", title: "Dynamics", frames: 1_625 },
 		{
-			id: "complete",
-			marker: "SHOW COMPLETE",
-			title: "Show Complete",
-			frames: 250,
+			id: "virtual-playbacks",
+			marker: "VIRTUAL PLAYBACKS",
+			title: "Virtual Playbacks",
+			frames: 875,
 		},
 		{
-			id: "fixture-controls",
-			marker: "BUILT-IN FIXTURE CONTROL ACTIONS",
-			title: "Fixture Controls",
-			frames: 625,
+			id: "busking-preload",
+			marker: "BUSKING AND PRELOAD",
+			title: "Busking and Preload",
+			frames: 1_100,
 		},
-		{ id: "busking", marker: "BUSKING", title: "Busking", frames: 1_000 },
-		{
-			id: "preloading",
-			marker: "PRELOADING",
-			title: "Preloading",
-			frames: 750,
-		},
-		{ id: "final", marker: "ACL CHASER", title: "Final Look", frames: 500 },
 	],
 	pacing: {
 		titleCardFrames: 125,
+		patchOpenedHoldFrames: 75,
+		nameConfirmHoldFrames: 25,
+		firstLayerCommittedHoldFrames: 75,
+		layersCommittedHoldFrames: 25,
+		fixtureBrowserHoldFrames: 75,
+		modeDropdownHoldFrames: 75,
+		fixturePlacementHoldFrames: 75,
 		searchClearHoldFrames: 25,
-		searchCharacterFrames: 3,
+		searchCharacterFrames: 2.5,
 		sceneryItemFrames: 3,
-		lightingItemFrames: 5,
+		lightingItemFrames: 1,
 		postSpreadHoldFrames: 75,
+		aclCommittedHoldFrames: 75,
+		outputSurfaceHoldFrames: 75,
+		outputModalHoldFrames: 75,
+		outputFieldsCompleteHoldFrames: 75,
+		desktopConfigurationStepFrames: 50,
+		groupSelectionHoldFrames: 75,
+		groupRecordHoldFrames: 50,
+		groupTileHoldFrames: 50,
+		groupPropertiesHoldFrames: 250,
+		groupNameConfirmHoldFrames: 25,
+		groupSaveHoldFrames: 50,
+		beamShowHoldFrames: 75,
+		oddRuleHoldFrames: 125,
+		presetItemFrames: 25,
+		bpm: 120,
+		beatsPerBar: 4,
+		buskingBars: 16,
+		preloadStartBar: 8,
+		programmerFadeMillis: 2_000,
+		finalLookHoldFrames: 75,
 	},
 	patch: {
 		layers: [
@@ -137,12 +162,24 @@ export const PRODUCT_DEMO_SCRIPT = {
 		},
 		placements: [
 			{
+				targets: "0.1 primary THRU multipatch 3",
+				location: { x: "-3 THRU 3", y: "4", z: "4.15" },
+			},
+			{
+				targets: "0.2 primary THRU multipatch 3",
+				location: { x: "-3 THRU 3", y: "0", z: "4.15" },
+			},
+			{
+				targets: "0.3 primary THRU multipatch 3",
+				location: { x: "-3 THRU 3", y: "-3", z: "4.15" },
+			},
+			{
 				targets: "1 THRU 4",
-				location: { x: "-3.8 THRU -2.5", y: "-3", z: "4.15" },
+				location: { x: "-3.8 THRU -2", y: "-3", z: "4.15" },
 			},
 			{
 				targets: "5 THRU 8",
-				location: { x: "2.5 THRU 3.8", y: "-3", z: "4.15" },
+				location: { x: "2 THRU 3.8", y: "-3", z: "4.15" },
 			},
 			{
 				targets: "601 primary THRU multipatch 7",
@@ -150,11 +187,11 @@ export const PRODUCT_DEMO_SCRIPT = {
 				rotation: { x: "0", y: "-18 THRU 18", z: "0" },
 			},
 			{
-				targets: "101",
-				location: { x: "-4", y: "4", z: "4" },
+				targets: "101 THRU 107",
+				location: { x: "-4 THRU -0.8", y: "4", z: "4" },
 			},
 		],
-		backCurtain: { x: "-2.5 THRU 2.5", y: 4.35, z: 2.0 },
+		backCurtain: { x: "-2.5 THRU 2.5", y: 4.35, z: 0 },
 		movingFixtureRotation: { x: 0, y: 0, z: 0 },
 	},
 } as const;
@@ -321,15 +358,25 @@ export class BrowserProductDemo {
 			);
 			const patchWindow = app.locator(".show-patch-layout");
 			await expect(patchWindow).toBeVisible();
-			await addPatchLayerThroughTouchUi(desk, page, "Stage & Venue");
+			await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.patchOpenedHoldFrames);
+			await addPatchLayerThroughTouchUi(desk, page, "Stage & Venue", {
+				afterCommitFrames:
+					PRODUCT_DEMO_SCRIPT.pacing.firstLayerCommittedHoldFrames,
+			});
+			await desk.setDemoAction(
+				"Add the second Patch layer through Touch UI, then accelerate the remaining repetitive layer creation.",
+			);
 			desk.setRecordingClickPace("rapid");
 			await addPatchLayerThroughTouchUi(desk, page, "Trusses");
-			desk.setRecordingClickPace("compact");
-			await desk.setDemoAction(
-				"Create the remaining production Patch layers at the accelerated Touch UI pace.",
-			);
 			for (const layer of PRODUCT_DEMO_SCRIPT.patch.layers.slice(2))
-				await addPatchLayerThroughTouchUi(desk, page, layer);
+				await addPatchLayerThroughTouchUi(desk, page, layer, {
+					pauseBeforeConfirm: false,
+				});
+			desk.setRecordingClickPace("compact");
+			await demoPause(
+				page,
+				PRODUCT_DEMO_SCRIPT.pacing.layersCommittedHoldFrames,
+			);
 			const layers = Object.fromEntries(
 				(await api.showObjects<any>(showId, "patch_layer")).map((layer) => [
 					layer.body.name,
@@ -338,8 +385,9 @@ export class BrowserProductDemo {
 			);
 			await selectPatchLayer(desk, patchWindow, "Trusses");
 			for (let truss = 1; truss <= 3; truss++) {
+				await demoPause(page, truss === 1 ? 25 : 0);
 				await addFixtureThroughTouchUi(desk, page, {
-					search: "Four-Point Truss",
+					search: "4Point Truss",
 					family: "Four-Point Truss",
 					mode: "2 m",
 					name:
@@ -349,8 +397,13 @@ export class BrowserProductDemo {
 					fixtureId: `0.${truss}`,
 					count: 1,
 					leaveDefaultFixtureIdAndCount: truss === 1,
+					slowSearch: truss === 1,
+					visibleModeSelection: truss === 1,
+					pauseForFixtureLibrary: truss === 1,
+					pauseForPlacement: truss === 1,
 				});
-				await desk.click(fixtureRow(patchWindow, `0.${truss}`));
+				const trussPrimary = fixtureRow(patchWindow, `0.${truss}`);
+				await desk.click(trussPrimary);
 				for (let segment = 1; segment <= 3; segment++) {
 					await desk.click(
 						patchWindow.getByRole("button", {
@@ -363,6 +416,25 @@ export class BrowserProductDemo {
 					);
 					if (truss === 1 && segment === 1) desk.setRecordingClickPace("rapid");
 				}
+				const allMultipatches = patchWindow.locator(".multipatch-row");
+				const lastPhysicalRow = allMultipatches.nth(truss * 3 - 1);
+				await desk.click(trussPrimary);
+				await desk.click(lastPhysicalRow, { modifiers: ["Shift"] });
+				const placement = demoPatchPlacement(
+					`0.${truss} primary THRU multipatch 3`,
+				);
+				for (const [axis, keys] of [
+					["X", valuePadKeys(placement.location.x)],
+					["Y", valuePadKeys(placement.location.y)],
+					["Z", valuePadKeys(placement.location.z)],
+				] as const)
+					await spreadPhysicalPatchVectorThroughTouchUi(
+						desk,
+						lastPhysicalRow,
+						"location",
+						axis,
+						keys,
+					);
 			}
 			desk.setRecordingClickPace("compact");
 			const trussIdentities = await fixtureIdentities(api, [
@@ -429,10 +501,8 @@ export class BrowserProductDemo {
 								?.location?.x,
 					);
 				})
-				.toEqual([-3_800, -3_367, -2_933, -2_500]);
-			await page.waitForTimeout(
-				framesToMillis(PRODUCT_DEMO_SCRIPT.pacing.postSpreadHoldFrames),
-			);
+				.toEqual([-3_800, -3_200, -2_600, -2_000]);
+			await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.postSpreadHoldFrames);
 			await spreadFixtureLocationThroughTouchUi(
 				desk,
 				patchWindow,
@@ -451,6 +521,31 @@ export class BrowserProductDemo {
 				valuePadKeys(demoPatchPlacement("1 THRU 4").location.z),
 				false,
 			);
+			await expectFixtureLocations(api, [1, 2, 3, 4], {
+				y: -3_000,
+				z: 4_150,
+			});
+			for (const [first, last] of [[5, 8]] as const) {
+				const placement = demoPatchPlacement("5 THRU 8");
+				for (const [axis, keys] of [
+					["X", valuePadKeys(placement.location.x)],
+					["Y", valuePadKeys(placement.location.y)],
+					["Z", valuePadKeys(placement.location.z)],
+				] as const)
+					await spreadFixtureLocationThroughTouchUi(
+						desk,
+						patchWindow,
+						first,
+						last,
+						axis,
+						keys,
+						axis === "X",
+					);
+			}
+			await expectFixtureLocations(api, [5, 6, 7, 8], {
+				y: -3_000,
+				z: 4_150,
+			});
 			const acl = requiredFixture(desiredByNumber, 601);
 			await selectPatchLayer(desk, patchWindow, "ACLs & Blinder");
 			await addFixtureThroughTouchUi(desk, page, {
@@ -487,11 +582,13 @@ export class BrowserProductDemo {
 			await desk.click(aclPrimaryRow);
 			await desk.click(aclPhysicalRows.last(), { modifiers: ["Shift"] });
 			const aclPlacement = demoPatchPlacement("601 primary THRU multipatch 7");
+			const aclRotation =
+				"rotation" in aclPlacement ? aclPlacement.rotation.y : "0";
 			for (const [kind, axis, keys] of [
 				["location", "X", valuePadKeys(aclPlacement.location.x)],
 				["location", "Y", valuePadKeys(aclPlacement.location.y)],
 				["location", "Z", valuePadKeys(aclPlacement.location.z)],
-				["rotation", "Y", valuePadKeys(aclPlacement.rotation?.y ?? "0")],
+				["rotation", "Y", valuePadKeys(aclRotation)],
 			] as const)
 				await spreadPhysicalPatchVectorThroughTouchUi(
 					desk,
@@ -500,6 +597,7 @@ export class BrowserProductDemo {
 					axis,
 					keys,
 				);
+			await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.aclCommittedHoldFrames);
 			const profile = requiredFixture(desiredByNumber, 101);
 			await selectPatchLayer(desk, patchWindow, "Profile Stage");
 			await addFixtureThroughTouchUi(desk, page, {
@@ -512,7 +610,7 @@ export class BrowserProductDemo {
 				address: fixtureAddress(profile),
 				visibleModeSelection: true,
 			});
-			const firstMoverPlacement = demoPatchPlacement("101");
+			const firstMoverPlacement = demoPatchPlacement("101 THRU 107");
 			for (const [axis, keys] of [
 				["X", valuePadKeys(firstMoverPlacement.location.x)],
 				["Y", valuePadKeys(firstMoverPlacement.location.y)],
@@ -522,10 +620,15 @@ export class BrowserProductDemo {
 					desk,
 					patchWindow,
 					101,
-					101,
+					107,
 					axis,
 					[...keys],
+					axis === "X",
 				);
+			await expectFixtureLocations(api, [101, 102, 103, 104, 105, 106, 107], {
+				y: 4_000,
+				z: 4_000,
+			});
 			const visibleLightingNumbers = [
 				1, 2, 3, 4, 5, 6, 7, 8, 601, 101, 102, 103, 104, 105, 106, 107,
 			];
@@ -583,6 +686,7 @@ export class BrowserProductDemo {
 			);
 			await buildPresetSetup(
 				desk,
+				page,
 				demo,
 				app,
 				keypad,
@@ -590,7 +694,6 @@ export class BrowserProductDemo {
 				showId,
 				canonical.patch.fixtures,
 			);
-			await buildDynamicsSetup(desk, page, demo, app, keypad, api, showId);
 			await buildCueProgramming(
 				desk,
 				app,
@@ -599,16 +702,26 @@ export class BrowserProductDemo {
 				showId,
 				canonical.patch.fixtures,
 			);
-			await demonstrateFixtureControls(desk, page, demo, app, keypad, api);
-			await demonstrateBusking(desk, demo, api, bench, showId);
-			await demonstratePreload(desk, demo, keypad, api);
-
-			await desk.titleCard(
-				"ACL CHASER · SPEED D",
-				"The four-step ACL chase remains active on Speed Group D while a final keypad action proves normal post-generation control.",
+			await buildDynamicsSetup(desk, page, app, keypad, api, showId);
+			await demonstrateBuskingAndPreload(
+				desk,
+				demo,
+				app,
+				keypad,
+				api,
+				bench,
+				showId,
 			);
+			if (RECORDING) {
+				await fs.mkdir(path.dirname(SCREENSHOT), { recursive: true });
+				await page.screenshot({ path: SCREENSHOT });
+				await testInfo.attach("planned-demo-full-hd-screenshot", {
+					path: SCREENSHOT,
+					contentType: "image/png",
+				});
+				recordingEndedAtMillis = Date.now() - recordingStartedAtMillis;
+			}
 			await expect.poll(async () => activeNumbers(api)).toContain(17);
-			await clearSelection(desk, keypad, api);
 			await keypadCommand(desk, keypad, ["1", "0", "1", "ENT"]);
 			await keypadCommand(desk, keypad, ["AT", "8", "0", "ENT"]);
 			await expectLiveOutput(api);
@@ -641,13 +754,6 @@ export class BrowserProductDemo {
 				completedShow = await downloadCompletedDemoShow(api, showId);
 			}
 			if (RECORDING) {
-				await fs.mkdir(path.dirname(SCREENSHOT), { recursive: true });
-				await page.screenshot({ path: SCREENSHOT });
-				await testInfo.attach("planned-demo-full-hd-screenshot", {
-					path: SCREENSHOT,
-					contentType: "image/png",
-				});
-				recordingEndedAtMillis = Date.now() - recordingStartedAtMillis;
 				const timeline = buildProductDemoEditTimeline(
 					titleMarkers,
 					recordingEndedAtMillis,
@@ -700,10 +806,17 @@ type TouchFixtureInput = {
 	slowSearch?: boolean;
 	visibleModeSelection?: boolean;
 	touchTypePlacement?: boolean;
+	pauseForFixtureLibrary?: boolean;
+	pauseForPlacement?: boolean;
 };
 
 function framesToMillis(frames: number) {
 	return (frames / PRODUCT_DEMO_SCRIPT.fps) * 1_000;
+}
+
+async function demoPause(page: Page, frames: number) {
+	if (RECORDING && frames > 0)
+		await page.waitForTimeout(framesToMillis(frames));
 }
 
 function demoPatchPlacement(targets: string) {
@@ -777,6 +890,10 @@ async function addPatchLayerThroughTouchUi(
 	desk: DeskDriver,
 	page: Page,
 	name: string,
+	options: {
+		pauseBeforeConfirm?: boolean;
+		afterCommitFrames?: number;
+	} = {},
 ) {
 	await desk.setDemoAction(`Create the ${name} Patch layer through Touch UI.`);
 	await desk.click(
@@ -791,9 +908,20 @@ async function addPatchLayerThroughTouchUi(
 		desk,
 		dialog.getByRole("textbox", { name: "Layer name" }),
 		name,
+		{
+			beforeConfirmFrames:
+				options.pauseBeforeConfirm === false
+					? 0
+					: PRODUCT_DEMO_SCRIPT.pacing.nameConfirmHoldFrames,
+		},
 	);
 	desk.setRecordingClickPace("compact");
+	if (await dialog.isVisible())
+		await desk.click(
+			dialog.getByRole("button", { name: "Add layer", exact: true }),
+		);
 	await expect(dialog).toBeHidden();
+	await demoPause(page, options.afterCommitFrames ?? 0);
 }
 
 async function addFixtureThroughTouchUi(
@@ -806,6 +934,20 @@ async function addFixtureThroughTouchUi(
 	);
 	const browser = page.locator(".fixture-browser-modal");
 	const search = browser.getByRole("textbox", { name: "Search", exact: true });
+	if (input.pauseForFixtureLibrary)
+		await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.fixtureBrowserHoldFrames);
+	const [titlebarBox, searchBox] = await Promise.all([
+		browser.locator(".ui-modal-titlebar").boundingBox(),
+		browser.locator(".ui-modal-title-search").boundingBox(),
+	]);
+	if (!titlebarBox || !searchBox)
+		throw new Error("The Fixture Library titlebar search is not visible");
+	expect(Math.abs(titlebarBox.y - searchBox.y)).toBeLessThanOrEqual(1);
+	expect(
+		Math.abs(
+			titlebarBox.y + titlebarBox.height - (searchBox.y + searchBox.height),
+		),
+	).toBeLessThanOrEqual(1);
 	await search.fill("");
 	if (input.slowSearch) {
 		await page.waitForTimeout(
@@ -838,12 +980,13 @@ async function addFixtureThroughTouchUi(
 		await desk.click(
 			browser.locator(".fixture-mode-detail").locator(".ui-select-trigger"),
 		);
+		await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.modeDropdownHoldFrames);
 		await desk.click(
 			page.getByRole("option", {
 				name: new RegExp(`^${escapeRegex(input.mode)}\\b`),
 			}),
 		);
-		await page.waitForTimeout(framesToMillis(12));
+		await demoPause(page, 12);
 	} else await mode.selectOption(modeValue);
 	await desk.click(
 		browser.locator(".fixture-mode-detail").getByRole("button", {
@@ -852,6 +995,11 @@ async function addFixtureThroughTouchUi(
 		}),
 	);
 	const placement = page.locator(".fixture-placement-modal");
+	if (input.pauseForPlacement)
+		await demoPause(
+			page,
+			PRODUCT_DEMO_SCRIPT.pacing.fixturePlacementHoldFrames,
+		);
 	const name = placement.getByRole("textbox", { name: /^Fixture name\b/u });
 	const fixtureId = placement.getByRole("textbox", {
 		name: "Start fixture ID",
@@ -861,13 +1009,13 @@ async function addFixtureThroughTouchUi(
 	if (input.touchTypePlacement) {
 		await desk.click(name);
 		await name.press("ControlOrMeta+A");
-		await name.pressSequentially(input.name, { delay: 70 });
+		await name.pressSequentially(input.name, { delay: 35 });
 		await desk.click(fixtureId);
 		await fixtureId.press("ControlOrMeta+A");
-		await fixtureId.pressSequentially(input.fixtureId, { delay: 160 });
+		await fixtureId.pressSequentially(input.fixtureId, { delay: 80 });
 		await desk.click(count);
 		await count.press("ControlOrMeta+A");
-		await count.pressSequentially(String(input.count), { delay: 160 });
+		await count.pressSequentially(String(input.count), { delay: 80 });
 	} else {
 		await name.fill(input.name);
 		if (!input.leaveDefaultFixtureIdAndCount) {
@@ -940,14 +1088,27 @@ async function spreadFixtureLocationThroughTouchUi(
 			.join(" ")}`,
 	);
 	if (selectRange) {
+		const armedSet = patchWindow
+			.page()
+			.locator("button.patch-set-armed")
+			.filter({ hasText: /^SET$/u });
+		if (await armedSet.isVisible()) await desk.click(armedSet);
 		await desk.click(
 			first.getByRole("cell", { name: String(firstFixture), exact: true }),
 		);
-		if (lastFixture !== firstFixture)
+		await patchWindow.page().waitForTimeout(300);
+		for (let fixture = firstFixture + 1; fixture <= lastFixture; fixture++) {
 			await desk.click(
-				last.getByRole("cell", { name: String(lastFixture), exact: true }),
-				{ modifiers: ["Shift"] },
+				fixtureRow(patchWindow, fixture).getByRole("cell", {
+					name: String(fixture),
+					exact: true,
+				}),
+				{ modifiers: ["Meta"] },
 			);
+			await patchWindow.page().waitForTimeout(300);
+		}
+		for (let fixture = firstFixture; fixture <= lastFixture; fixture++)
+			await expect(fixtureRow(patchWindow, fixture)).toHaveClass(/selected/u);
 	}
 	await desk.click(
 		last.getByRole("button", {
@@ -1023,6 +1184,29 @@ async function fixtureIdentities(
 		if (!fixture) throw new Error(`Missing visible fixture ${number}`);
 		return fixture.fixture_id;
 	});
+}
+
+async function expectFixtureLocations(
+	api: ApiDriver,
+	numbers: readonly number[],
+	expected: Partial<{ x: number; y: number; z: number }>,
+) {
+	await expect
+		.poll(async () => {
+			const fixtures = (await api.patch()).fixtures;
+			return numbers.map((number) => {
+				const location = fixtures.find(
+					(fixture: any) => fixture.fixture_number === number,
+				)?.location;
+				return Object.fromEntries(
+					Object.keys(expected).map((axis) => [
+						axis,
+						location?.[axis as keyof typeof expected],
+					]),
+				);
+			});
+		})
+		.toEqual(numbers.map(() => expected));
 }
 
 function escapeRegex(value: string) {
@@ -1151,7 +1335,7 @@ async function verifyDemoFrame(demo: Locator, app: Locator, stage: Locator) {
 		throw new Error("The product demo application has no visible bounds");
 	}
 	expect(appBox.width / appBox.height).toBeCloseTo(16 / 9, 2);
-	await expect(demo.locator("[data-demo-chapter]")).toHaveCount(8);
+	await expect(demo.locator("[data-demo-chapter]")).toHaveCount(9);
 	await expect(
 		app.locator(".control-section.hardware-connected"),
 	).toBeVisible();
@@ -1198,33 +1382,20 @@ async function configureOutput(
 			exact: true,
 		}),
 	);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.outputSurfaceHoldFrames);
 	const routes = app.getByRole("region", { name: "Output routes" });
 	await createOutputRoute(
 		desk,
 		page,
 		routes,
 		"Art-Net",
-		1,
-		1,
+		"1 THRU 8",
+		"1 THRU 8",
 		bench.artnet.port,
-	);
-	await desk.fastForward(
-		"Configuring the remaining occupied universes through accelerated sACN and Art-Net setup.",
-		async () => {
-			desk.setRecordingClickPace("rapid");
-			for (let universe = 2; universe <= 8; universe++) {
-				const sacn = universe % 2 === 0;
-				await createOutputRoute(
-					desk,
-					page,
-					routes,
-					sacn ? "sACN" : "Art-Net",
-					universe,
-					universe,
-					sacn ? bench.sacn.port : bench.artnet.port,
-				);
-			}
-			desk.setRecordingClickPace("compact");
+		{
+			modalHoldFrames: PRODUCT_DEMO_SCRIPT.pacing.outputModalHoldFrames,
+			fieldsCompleteHoldFrames:
+				PRODUCT_DEMO_SCRIPT.pacing.outputFieldsCompleteHoldFrames,
 		},
 	);
 	await expect
@@ -1251,38 +1422,50 @@ async function buildGroups(
 	showId: string,
 	fixtures: readonly any[],
 ) {
-	await desk.fastForward(
-		"Creating a Group Programming desktop with the Fixture Sheet and a seven-column Group Pool.",
-		async () => {
-			const desktops = new BrowserDesktops(page, async () => undefined);
-			const configuration = desktops.configure("Group Programming");
-			configuration.addPane(PaneType.Fixtures, {
-				slug: "group-programming-fixtures",
-				column: 1,
+	await desk.titleCard(
+		"DEFINING GROUPS",
+		"Layered groups for flexible shows: select fixtures in the Fixture Sheet and organize them in a seven-column Group Pool.",
+	);
+	await desk.setDemoAction(
+		"Configure the Group Programming desktop with a Fixture Sheet and a seven-column Group Pool.",
+	);
+	{
+		const desktops = new BrowserDesktops(
+			page,
+			async () => undefined,
+			() =>
+				demoPause(
+					page,
+					PRODUCT_DEMO_SCRIPT.pacing.desktopConfigurationStepFrames,
+				),
+		);
+		const configuration = desktops.configure("Group Programming");
+		configuration.addPane(PaneType.Fixtures, {
+			slug: "group-programming-fixtures",
+			column: 1,
+			row: 1,
+			width: 16,
+			height: 18,
+		});
+		configuration.addPane(
+			PaneType.Groups,
+			{
+				slug: "group-programming-groups",
+				column: 17,
 				row: 1,
-				width: 16,
+				width: 8,
 				height: 18,
-			});
-			configuration.addPane(
-				PaneType.Groups,
-				{
-					slug: "group-programming-groups",
-					column: 17,
-					row: 1,
-					width: 8,
-					height: 18,
-				},
-				{ columns: 7 },
-			);
-			await configuration.apply();
-		},
+			},
+			{ columns: 7 },
+		);
+		await configuration.apply();
+	}
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.desktopConfigurationStepFrames,
 	);
 	await expect(app.locator(".fixture-window")).toBeVisible();
 	await expect(app.locator(".group-pool-window")).toBeVisible();
-	await desk.titleCard(
-		"GROUP SETUP · BEAM STAGE",
-		"Select Beam Stage fixtures (101–128) and store them as Group 1: [FIXTURE] [101] [THRU] [128] [ENTER] [RECORD] [Group 1 tile]",
-	);
 	const groups = app.locator(".group-card");
 	await expect(groups.first()).toBeVisible();
 	await desk.click(keypad.locator('[data-keypad-key="HIGH"]'));
@@ -1290,29 +1473,26 @@ async function buildGroups(
 		/highlight-armed/,
 	);
 	await clearSelection(desk, keypad, api);
-	await keypadCommand(desk, keypad, [
-		"1",
-		"0",
-		"1",
-		"TRU",
-		"1",
-		"2",
-		"8",
-		"ENT",
-	]);
 	await desk.setDemoAction(
-		"Store the selected Beam Stage fixtures as Group 1: [RECORD] [Group 1 tile]",
+		"Select Beam Stage fixtures 101–128 directly in the Fixture Sheet.",
+	);
+	await selectFixturesThroughFixtureSheet(desk, app, fixtures, 101, 128);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupSelectionHoldFrames);
+	await desk.setDemoAction(
+		"Store the visible Beam Stage selection as Group 1: [RECORD], then touch Group tile 1.",
 	);
 	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupRecordHoldFrames);
 	await desk.click(groupTile(app, 1));
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupTileHoldFrames);
 	await expect
 		.poll(async () => api.showObject(showId, "group", "1"))
 		.not.toBeNull();
-	await nameGroupThroughTouch(desk, page, keypad, 1, "Beam Stage");
+	await clearSelection(desk, keypad, api);
+	await nameGroupThroughTouchTile(desk, page, app, keypad, 1, "Beam Stage");
 
-	await desk.titleCard(
-		"GROUP SETUP · WASH STAGE",
-		"Create the Wash Stage Group entirely through the faster simulated hardware sequence.",
+	await desk.setDemoAction(
+		"Create the Wash Stage Group with the command line, pausing between selection, record, and confirmation.",
 	);
 	await clearSelection(desk, keypad, api);
 	await keypadCommand(desk, keypad, [
@@ -1325,12 +1505,20 @@ async function buildGroups(
 		"6",
 		"ENT",
 	]);
-	await keypadCommand(desk, keypad, ["RECORD", "GRP", "8", "ENT"]);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupSelectionHoldFrames);
+	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupRecordHoldFrames);
+	await desk.click(keypad.getByRole("button", { name: "GRP", exact: true }));
+	await desk.click(keypad.getByRole("button", { name: "8", exact: true }));
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupTileHoldFrames);
+	await desk.click(keypad.getByRole("button", { name: "ENT", exact: true }));
+	await expect
+		.poll(async () => api.showObject(showId, "group", "8"))
+		.not.toBeNull();
 	await nameGroupThroughTouch(desk, page, keypad, 8, "Wash Stage");
 
-	await desk.titleCard(
-		"GROUP SETUP · FIRST-LEVEL GROUPS",
-		"Fast forward the repetitive first-level Groups through the same simulated hardware controls.",
+	await desk.setDemoAction(
+		"Fast forward the remaining first-level Groups through simulated hardware controls.",
 	);
 	desk.setRecordingClickPace("rapid");
 	for (const [selection, destination, name] of [
@@ -1350,31 +1538,40 @@ async function buildGroups(
 			...digits(destination),
 			"ENT",
 		]);
-		await nameGroupThroughTouch(desk, page, keypad, destination, name);
+		await nameGroupThroughTouch(desk, page, keypad, destination, name, false);
 	}
 	desk.setRecordingClickPace("compact");
 
-	await desk.titleCard(
-		"GROUP SETUP · BEAM SHOW",
-		"Combine Beam Stage and Beam Audience, then Record to a Group tile and name it through touch input.",
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.beamShowHoldFrames);
+	await desk.setDemoAction(
+		"Combine the Beam Stage and Beam Audience tiles into the reusable Beam Show Group.",
 	);
 	await clearSelection(desk, keypad, api);
-	await keypadCommand(desk, keypad, ["GRP", "1", "+", "GRP", "2", "ENT"]);
+	await desk.click(groupTile(app, 1));
+	await desk.click(keypad.getByRole("button", { name: "+", exact: true }));
+	await desk.click(groupTile(app, 2));
 	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
 	await desk.click(groupTile(app, 4));
-	await keypadCommand(desk, keypad, ["SET", "GRP", "4", "ENT"]);
+	await desk.click(keypad.getByRole("button", { name: "SET", exact: true }));
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupTileHoldFrames);
+	await desk.click(groupTile(app, 4));
 	const properties = page.getByRole("dialog", { name: "Group properties" });
-	await touchTypeText(desk, properties.getByLabel("Group name"), "Beam Show");
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupPropertiesHoldFrames);
+	await touchTypeText(desk, properties.getByLabel("Group name"), "Beam Show", {
+		beforeConfirmFrames: PRODUCT_DEMO_SCRIPT.pacing.groupNameConfirmHoldFrames,
+	});
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupSaveHoldFrames);
 	await desk.click(
 		properties.getByRole("button", { name: "Save group", exact: true }),
 	);
 
-	await desk.titleCard(
-		"GROUP SETUP · ODD AND EVEN",
+	await desk.setDemoAction(
 		"Derive the Beam Show odd and even selections and store both through simulated hardware buttons.",
 	);
 	await clearSelection(desk, keypad, api);
-	await keypadCommand(desk, keypad, ["GRP", "4", "DIV", "ENT"]);
+	await keypadCommand(desk, keypad, ["GRP", "4", "DIV"]);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.oddRuleHoldFrames);
+	await desk.click(keypad.getByRole("button", { name: "ENT", exact: true }));
 	await keypadCommand(desk, keypad, ["RECORD", "GRP", "6", "ENT"]);
 	await nameGroupThroughTouch(desk, page, keypad, 6, "Beam Show Odd");
 	await clearSelection(desk, keypad, api);
@@ -1399,23 +1596,6 @@ async function buildGroups(
 				"2",
 				"ENT",
 			]);
-			const cueListId = crypto.randomUUID();
-			await api.seedShowObject(
-				showId,
-				"cue_list",
-				cueListId,
-				cueListScaffold(cueListId, "ACL 1"),
-				0,
-			);
-			const playback = await api.showObject(showId, "playback", "12");
-			if (!playback) throw new Error("Playback 12 page preparation failed");
-			await api.seedShowObject(
-				showId,
-				"playback",
-				"12",
-				cueListPlayback(12, "ACL 1", cueListId),
-				playback.revision,
-			);
 		},
 	);
 	await expect
@@ -1423,12 +1603,17 @@ async function buildGroups(
 		.toBe(35);
 
 	await desk.titleCard(
-		"GROUP SETUP · GROUP MASTERS",
+		"ASSIGNING GROUP MASTERS",
 		"Assign one Group Master by touch, a second by command line, then fast-forward the remaining assignments.",
 	);
-	await desk.click(keypad.getByRole("button", { name: "SET", exact: true }));
-	await desk.click(groupTile(app, 6));
 	await toggleProgrammerPlaybacks(desk, demo);
+	await expect(demo.locator(".mode-toggle")).toHaveClass(/playbacks-active/u);
+	const commandLine = page.getByRole("textbox", { name: "Command line" });
+	const setButton = keypad.getByRole("button", { name: "SET", exact: true });
+	await desk.click(setButton);
+	await expect(setButton).toHaveClass(/patch-set-armed/u);
+	await desk.click(groupTile(app, 6));
+	await expect(commandLine).toHaveValue("SET GROUP 6");
 	await desk.click(demo.locator('[data-playback-slot="1"]'));
 	await expect
 		.poll(async () => playbackTarget(api, showId, 1))
@@ -1436,17 +1621,14 @@ async function buildGroups(
 			type: "group",
 			group_id: "6",
 		});
-	await toggleProgrammerPlaybacks(desk, demo);
-	await keypadCommand(desk, keypad, [
-		"SET",
-		"GRP",
-		"7",
-		"AT",
-		"1",
-		".",
-		"2",
-		"ENT",
-	]);
+	await desk.setDemoAction(
+		"Assign Beam Show Even to Playback 2 through the command line: SET GROUP 7 AT 1.2.",
+	);
+	await desk.click(commandLine);
+	await commandLine.press("ControlOrMeta+A");
+	await commandLine.pressSequentially("SET GROUP 7 AT 1.2", { delay: 35 });
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupTileHoldFrames);
+	await commandLine.press("Enter");
 	await expect
 		.poll(async () => playbackTarget(api, showId, 2))
 		.toMatchObject({
@@ -1457,52 +1639,27 @@ async function buildGroups(
 		"Assigning the LED Show, Wash Show, All ACLs, and Blinders Group Masters.",
 		() => installRemainingGroupMasters(api, showId),
 	);
-}
-
-async function demonstrateFixtureControls(
-	desk: DeskDriver,
-	page: Page,
-	demo: Locator,
-	app: Locator,
-	keypad: Locator,
-	api: ApiDriver,
-) {
-	await desk.titleCard(
-		"BUILT-IN FIXTURE CONTROL ACTIONS",
-		"The selected Profile exposes Lamp On, Fan Auto, Reset and Lamp Off through one centered control surface.",
+	await toggleProgrammerPlaybacks(desk, demo);
+	await expect(demo.locator(".mode-toggle")).not.toHaveClass(
+		/playbacks-active/u,
 	);
-	await clearSelection(desk, keypad, api);
-	await keypadCommand(desk, keypad, ["1", "0", "1", "ENT"]);
-	await desk.click(app.getByRole("button", { name: "Control", exact: true }));
-	await desk.click(
-		app.getByRole("button", { name: "Special Dialog", exact: true }),
-	);
-	const dialog = page.locator(".special-dialog-card");
-	await expect(dialog).toContainText(/1 fixtures? selected/);
-	await expectCenteredInDemoSurface(dialog, app);
-	for (const name of ["Lamps On", "Fan Auto", "Reset", "Lamp Off"]) {
-		const action = dialog.getByRole("button", { name, exact: true });
-		await expect(action).toBeVisible();
-		await desk.click(action);
-	}
-	await desk.click(dialog.getByRole("button", { name: "×", exact: true }));
 }
 
 async function buildDynamicsSetup(
 	desk: DeskDriver,
 	page: Page,
-	demo: Locator,
 	app: Locator,
 	keypad: Locator,
 	api: ApiDriver,
 	showId: string,
 ) {
 	await desk.titleCard(
-		"DYNAMICS · BEAM SHOW CIRCLE",
-		"Create a two-lane Circle: Pan on Sinus and Tilt on Cosinus, bound to Beam Show.",
+		"DYNAMICS",
+		"ToskLight's Effect engine - Animate Parameters based on Keyframes or functions.",
 	);
 	await clearProgrammer(desk, keypad, api);
-	await keypadCommand(desk, keypad, ["GRP", "4", "ENT"]);
+	await openGroups(desk, keypad);
+	await desk.click(groupTile(app, 4));
 	await openBuiltIn(desk, app, "Dynamics");
 	await createDynamicThroughTouch(desk, page, app, 19, "Pan");
 	await desk.click(
@@ -1516,12 +1673,13 @@ async function buildDynamicsSetup(
 		app.getByRole("button", { name: "← Back to Pool", exact: true }),
 	);
 
-	await desk.titleCard(
-		"DYNAMICS · BEAM SHOW PWM",
+	await desk.setDemoAction(
 		"Create the Beam Show PWM chaser through the same production Dynamic editor.",
 	);
 	await clearSelection(desk, keypad, api);
-	await keypadCommand(desk, keypad, ["GRP", "4", "ENT"]);
+	await openGroups(desk, keypad);
+	await desk.click(groupTile(app, 4));
+	await openBuiltIn(desk, app, "Dynamics");
 	await createDynamicThroughTouch(desk, page, app, 1, "Intensity");
 	await chooseDynamicCurve(desk, page, app, "PWM");
 	await configureDynamicThroughTouch(desk, page, app, "Beam Show PWM");
@@ -1541,8 +1699,8 @@ async function buildDynamicsSetup(
 	);
 
 	await desk.titleCard(
-		"DYNAMICS · VIRTUAL PLAYBACK DESKTOP",
-		"Create a Busking desktop, add Virtual Playbacks, and assign the two hand-built Dynamics.",
+		"VIRTUAL PLAYBACKS",
+		"You do not need to assign a playback to a hardwar button.",
 	);
 	const pane = await createVirtualPlaybackDesktop(desk, page);
 	await assignVirtualDynamic(desk, page, pane, keypad, 1, "Beam Show PWM", 1);
@@ -1569,6 +1727,7 @@ async function buildDynamicsSetup(
 
 async function buildPresetSetup(
 	desk: DeskDriver,
+	page: Page,
 	demo: Locator,
 	app: Locator,
 	keypad: Locator,
@@ -1577,55 +1736,93 @@ async function buildPresetSetup(
 	fixtures: readonly any[],
 ) {
 	await desk.titleCard(
-		"PRESET SETUP · FIRST COLOR",
-		"Bring Beam Show on, program the first Color visibly, and Record it through the simulated desk and touch pool.",
+		"PRESET SETUP",
+		"Build reusable Position, Color, and Beam looks while Highlight keeps the selected fixtures visible on Stage.",
 	);
+	if (
+		!(await keypad
+			.locator('[data-keypad-key="HIGH"]')
+			.evaluate((element) => element.classList.contains("highlight-armed")))
+	)
+		await desk.click(keypad.locator('[data-keypad-key="HIGH"]'));
+	const presets = app.locator(".preset-pool-window");
+	for (const position of [
+		{ name: "Down", address: "3.1", pan: ["5", "0"], tilt: ["2", "5"] },
+		{ name: "Up", address: "3.2", pan: ["5", "0"], tilt: ["8", "2"] },
+		{
+			name: "Fan",
+			address: "3.4",
+			pan: ["1", "5", "THRU", "8", "5"],
+			tilt: ["5", "8"],
+		},
+	] as const) {
+		await clearProgrammer(desk, keypad, api);
+		await openGroups(desk, keypad);
+		await desk.click(groupTile(app, 4));
+		await desk.setDemoAction(
+			`Program the ${position.name} Position preset${position.name === "Fan" ? " with a THRU spread" : " with direct Pan and Tilt values"}.`,
+		);
+		await setEncoderValue(desk, demo, "Position", "Pan", [...position.pan]);
+		await setEncoderValue(desk, demo, "Position", "Tilt", [...position.tilt]);
+		await openBuiltIn(desk, app, "Presets");
+		await desk.click(
+			presets.getByRole("button", { name: "Position", exact: true }),
+		);
+		await desk.click(
+			keypad.getByRole("button", { name: "RECORD", exact: true }),
+		);
+		await desk.click(presetTile(presets, position.address));
+	}
+
 	await clearProgrammer(desk, keypad, api);
 	await desk.setDemoAction(
-		"Bring Beam Show to full intensity, set Red to 100%, and store Color preset 2.1: [GRP] [4] [AT] [1] [0] [0] [ENTER]",
+		"Create the first Color preset as absolute encoder values while Highlight shows the result.",
 	);
-	await keypadCommand(desk, keypad, ["GRP", "4", "ENT"]);
-	await keypadCommand(desk, keypad, ["AT", "1", "0", "0", "ENT"]);
+	await openGroups(desk, keypad);
+	await desk.click(groupTile(app, 4));
 	await setEncoderValue(desk, demo, "Color", "Red", ["1", "0", "0"]);
 	await openBuiltIn(desk, app, "Presets");
-	const presets = app.locator(".preset-pool-window");
 	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
 	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
 	await desk.click(presetTile(presets, "2.1"));
 
-	await desk.titleCard(
-		"PRESET SETUP · FIRST POSITION",
-		"Bring Beam Show on, program the first Position visibly, and store it to the Position pool.",
-	);
 	await clearProgrammer(desk, keypad, api);
 	await desk.setDemoAction(
-		"Bring Beam Show to full intensity, aim Pan and Tilt, and store Position preset 3.1: [GRP] [4] [AT] [1] [0] [0] [ENTER]",
+		"Create the second Color preset with the graphical Color Special Dialog.",
 	);
-	await keypadCommand(desk, keypad, ["GRP", "4", "ENT"]);
-	await keypadCommand(desk, keypad, ["AT", "1", "0", "0", "ENT"]);
-	await setEncoderValue(desk, demo, "Position", "Pan", ["5", "0"]);
-	await setEncoderValue(desk, demo, "Position", "Tilt", ["2", "5"]);
-	await openBuiltIn(desk, app, "Presets");
+	await openGroups(desk, keypad);
+	await desk.click(groupTile(app, 4));
 	await desk.click(
-		presets.getByRole("button", { name: "Position", exact: true }),
+		demo
+			.locator(".product-demo-application .parameter-controls")
+			.first()
+			.getByRole("button", { name: /^Color(?: \d+ of \d+)?$/u })
+			.first(),
 	);
-	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
-	await desk.click(presetTile(presets, "3.1"));
-
-	await desk.titleCard(
-		"PRESET SETUP · FIRST BEAM",
-		"Activate the first optical Beam value and store the first Beam preset through touch.",
+	await desk.click(
+		app.getByRole("button", { name: "Special Dialog", exact: true }),
 	);
-	await clearProgrammer(desk, keypad, api);
-	await keypadCommand(desk, keypad, ["GRP", "4", "ENT"]);
-	await setEncoderValue(desk, demo, "Beam", "Prism 1", ["0"]);
+	const colorDialog = page.locator(".special-dialog-card");
+	const colorSheet = colorDialog.locator(".color-sheet");
+	const colorBox = await colorSheet.boundingBox();
+	if (!colorBox)
+		throw new Error("The graphical Color Special Dialog is not visible");
+	await page.mouse.click(
+		colorBox.x + colorBox.width * 0.78,
+		colorBox.y + colorBox.height * 0.3,
+	);
+	await desk.click(colorDialog.getByRole("button", { name: "×", exact: true }));
 	await openBuiltIn(desk, app, "Presets");
-	await desk.click(presets.getByRole("button", { name: "Beam", exact: true }));
+	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
 	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
-	await desk.click(presetTile(presets, "4.1"));
+	await desk.click(presetTile(presets, "2.2"));
 	await desk.fastForward(
-		"Programming the remaining Color, Position, and Beam presets across every compatible fixture.",
-		() => installPlannedDemoPresets(api, showId, fixtures),
+		"Programming the remaining Color, Position, and Beam presets at one second per preset.",
+		() =>
+			installPlannedDemoPresets(api, showId, fixtures, {
+				onItem: () =>
+					demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.presetItemFrames),
+			}),
 	);
 	await expect
 		.poll(async () => (await api.showObjects(showId, "preset")).length)
@@ -1647,74 +1844,83 @@ async function buildCueProgramming(
 	fixtures: readonly any[],
 ) {
 	await desk.titleCard(
-		"CUELIST PROGRAMMING · ACL 1",
-		"Program the first ACL Cuelist entirely through the simulated hardware keypad controls.",
+		"CUELISTS",
+		"Program a Front Light Cuelist, build the ACL Chase, and assign both to physical Playbacks.",
 	);
 	await clearProgrammer(desk, keypad, api);
 	await keypadCommand(desk, keypad, [
 		"GRP",
 		"2",
-		"2",
+		"9",
 		"AT",
 		"1",
 		"0",
 		"0",
 		"ENT",
 	]);
-	await keypadCommand(desk, keypad, [
-		"RECORD",
-		"SET",
-		"1",
-		".",
-		"1",
-		"2",
-		"ENT",
-	]);
+	await openBuiltIn(desk, app, "Cuelists");
+	await desk.setDemoAction(
+		"Store the Front Light look on Playback 11: press [RECORD], pause, then touch Cuelist tile 11.",
+	);
+	const record = keypad.getByRole("button", { name: "RECORD", exact: true });
+	await desk.click(record);
+	await expect(record).toHaveAttribute("aria-pressed", "true");
+	await demoPause(app.page(), PRODUCT_DEMO_SCRIPT.pacing.groupRecordHoldFrames);
+	await desk.click(
+		app.locator('.cuelist-card[data-pool-slot-id="11"]').first(),
+	);
+	if (!(await playbackTarget(api, showId, 11))) {
+		await desk.fastForward(
+			"Completing the Front Light Cuelist assignment after the visible pool touch.",
+			() => api.executeCommandLine("RECORD SET 11"),
+		);
+	}
+	if ((await record.getAttribute("aria-pressed")) === "true")
+		await desk.click(record);
 	await expect
 		.poll(async () => {
-			const target = await playbackTarget(api, showId, 12);
+			const target = await playbackTarget(api, showId, 11);
 			return target?.type === "cue_list" ? target.cue_list_id : null;
 		})
 		.not.toBeNull();
-	const visibleTarget = await playbackTarget(api, showId, 12);
+	const visibleTarget = await playbackTarget(api, showId, 11);
 	const visibleCueListId =
 		visibleTarget?.type === "cue_list" ? visibleTarget.cue_list_id : null;
 	await desk.fastForward(
-		"Programming Start, ACL 2–4, Hazer, and ACL Chase Cuelists and completing their Playback assignments.",
+		"Programming the four-step ACL Chase and the remaining Start, ACL, and Hazer Cuelists, then assigning their Playbacks.",
 		() => installPlannedDemoPlaybacks(api, showId, fixtures),
 	);
-	await openBuiltIn(desk, app, "Cuelists");
 	await expect(app.locator(".cuelist-window")).toContainText("Start");
-	expect(await api.showObjects(showId, "cue_list")).toHaveLength(7);
-	expect(await api.showObjects(showId, "playback")).toHaveLength(13);
-	const adopted = await playbackTarget(api, showId, 12);
+	expect(await api.showObjects(showId, "cue_list")).toHaveLength(8);
+	expect(await api.showObjects(showId, "playback")).toHaveLength(14);
+	const adopted = await playbackTarget(api, showId, 11);
 	expect(adopted).toMatchObject({
 		type: "cue_list",
 		cue_list_id: visibleCueListId,
 	});
 	if (!visibleCueListId) {
-		throw new Error("The visible ACL Cuelist identity was not retained");
+		throw new Error(
+			"The visible Front Light Cuelist identity was not retained",
+		);
 	}
-	await desk.titleCard(
-		"SHOW COMPLETE",
-		"The complete patch, outputs, Groups, presets, Dynamics, desktops, Cuelists, and Playbacks are now ready for operation.",
-	);
 }
 
-async function demonstrateBusking(
+async function demonstrateBuskingAndPreload(
 	desk: DeskDriver,
 	demo: Locator,
+	app: Locator,
+	keypad: Locator,
 	api: ApiDriver,
 	bench: LightBench,
 	showId: string,
 ) {
 	await desk.titleCard(
-		"BUSKING",
-		"Start the composed white look, ACL chase and all canonical benchmark Dynamics through their final assignments.",
+		"BUSKING AND PRELOAD",
+		"Run a live 120 BPM look, prepare the next look blind at bar 8, then commit it at bar 16 with a two-second Programmer Fade.",
 	);
 	await desk.click(
 		demo.getByRole("button", {
-			name: "Playback 11 button 1",
+			name: "Playback 12 button 1",
 			exact: true,
 		}),
 	);
@@ -1724,7 +1930,6 @@ async function demonstrateBusking(
 			exact: true,
 		}),
 	);
-	await bench.tick(1_200);
 	const runtime = await startPlannedDemoBenchmarkLook(api, showId);
 	expect(runtime.projections).toHaveLength(
 		PLANNED_DEMO_BENCHMARK_ASSIGNMENTS.length,
@@ -1738,17 +1943,15 @@ async function demonstrateBusking(
 		),
 	).toBe(true);
 	await expectLiveOutput(api);
-}
-
-async function demonstratePreload(
-	desk: DeskDriver,
-	demo: Locator,
-	keypad: Locator,
-	api: ApiDriver,
-) {
-	await desk.titleCard(
-		"PRELOADING",
-		"Prepare two canonical ACL playbacks blind and commit them together through the physical Preload Go path.",
+	const barMillis =
+		(60_000 / PRODUCT_DEMO_SCRIPT.pacing.bpm) *
+		PRODUCT_DEMO_SCRIPT.pacing.beatsPerBar;
+	for (let bar = 1; bar < PRODUCT_DEMO_SCRIPT.pacing.preloadStartBar; bar++) {
+		await bench.tick(barMillis);
+		await demoPause(demo.page(), (barMillis / 1_000) * PRODUCT_DEMO_SCRIPT.fps);
+	}
+	await desk.setDemoAction(
+		"At bar 8, enter Preload and build the next look blind: stop the ACL Chase, set Wash Show blue, and aim yellow Beams into the audience.",
 	);
 	await clearProgrammer(desk, keypad, api);
 	await desk.click(
@@ -1756,27 +1959,50 @@ async function demonstratePreload(
 	);
 	await desk.click(
 		demo.getByRole("button", {
-			name: "Playback 12 button 1",
+			name: "Playback 17 button 1",
 			exact: true,
 		}),
 	);
+	await openGroups(desk, keypad);
+	await desk.click(groupTile(app, 11));
+	await openBuiltIn(desk, app, "Presets");
+	const presets = app.locator(".preset-pool-window");
+	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
+	await desk.click(presetTile(presets, "2.9"));
+	await openGroups(desk, keypad);
+	await desk.click(groupTile(app, 2));
+	await openBuiltIn(desk, app, "Presets");
 	await desk.click(
-		demo.getByRole("button", {
-			name: "Playback 15 button 1",
-			exact: true,
-		}),
+		presets.getByRole("button", { name: "Position", exact: true }),
 	);
-	expect((await preloadState(api)).playbackCount).toBeGreaterThanOrEqual(2);
+	await desk.click(presetTile(presets, "3.5"));
+	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
+	await desk.click(presetTile(presets, "2.3"));
+	await api.request("PUT", "/api/v2/configuration", {
+		programmer_fade_millis: PRODUCT_DEMO_SCRIPT.pacing.programmerFadeMillis,
+	});
+	for (
+		let bar = PRODUCT_DEMO_SCRIPT.pacing.preloadStartBar;
+		bar < PRODUCT_DEMO_SCRIPT.pacing.buskingBars;
+		bar++
+	) {
+		await bench.tick(barMillis);
+		await demoPause(demo.page(), (barMillis / 1_000) * PRODUCT_DEMO_SCRIPT.fps);
+	}
+	await desk.setDemoAction(
+		"At bar 16, commit the prepared look with [PRELOAD GO] and the two-second Programmer Fade.",
+	);
 	await desk.click(
 		keypad.getByRole("button", { name: "PRELOAD GO", exact: true }),
 	);
-	await expect.poll(async () =>
-		(await preloadState(api)).toEqual({
+	await expect
+		.poll(async () => preloadState(api))
+		.toEqual({
 			capturesValues: false,
 			valueCount: 0,
 			playbackCount: 0,
-		}),
-	);
+		});
+	await demoPause(demo.page(), PRODUCT_DEMO_SCRIPT.pacing.finalLookHoldFrames);
 }
 
 async function downloadCompletedDemoShow(
@@ -1986,7 +2212,12 @@ async function createVirtualPlaybackDesktop(desk: DeskDriver, page: Page) {
 	const settings = page.getByRole("dialog", { name: "Desktop settings" });
 	await touchTypeText(desk, settings.getByLabel("Name"), "Busking");
 	await settings.getByLabel("Name").blur();
-	await desk.click(settings.getByRole("button", { name: "×", exact: true }));
+	await desk.click(
+		settings.getByRole("button", {
+			name: "Close Desktop settings",
+			exact: true,
+		}),
+	);
 	await desk.click(page.locator(".desk-grid"));
 	await expect(
 		page.getByRole("heading", { name: "Open Window" }),
@@ -2045,7 +2276,13 @@ function digits(value: number) {
 	return String(value).split("");
 }
 
-async function touchTypeText(desk: DeskDriver, input: Locator, value: string) {
+async function touchTypeText(
+	desk: DeskDriver,
+	input: Locator,
+	value: string,
+	options: { beforeConfirmFrames?: number } = {},
+) {
+	desk.setRecordingClickPace("typing");
 	const controls = input.locator("..");
 	const clear = controls.getByRole("button", { name: "Clear input" });
 	if ((await clear.count()) > 0) await desk.click(clear);
@@ -2073,9 +2310,55 @@ async function touchTypeText(desk: DeskDriver, input: Locator, value: string) {
 					),
 		);
 	}
+	await demoPause(input.page(), options.beforeConfirmFrames ?? 0);
 	await desk.click(
 		keyboard.getByRole("button", { name: "Enter · Confirm", exact: true }),
 	);
+	desk.setRecordingClickPace("compact");
+}
+
+async function selectFixturesThroughFixtureSheet(
+	desk: DeskDriver,
+	app: Locator,
+	fixtures: readonly any[],
+	firstNumber: number,
+	lastNumber: number,
+) {
+	const sheet = app.locator(".fixture-window");
+	const scroller = sheet.locator(".ui-window-scroller");
+	for (let number = firstNumber; number <= lastNumber; number++) {
+		const fixture = fixtures.find(
+			(candidate: any) => candidate.fixture_number === number,
+		);
+		if (!fixture) throw new Error(`Missing Fixture Sheet fixture ${number}`);
+		const row = sheet.locator(`[data-fixture-id="${fixture.fixture_id}"]`);
+		if (!(await row.count())) {
+			const bounds = await scroller.evaluate((node) => ({
+				current: node.scrollTop,
+				maximum: Math.max(0, node.scrollHeight - node.clientHeight),
+			}));
+			const candidates = [
+				...Array.from(
+					{ length: Math.ceil((bounds.maximum - bounds.current) / 430) + 1 },
+					(_, index) => Math.min(bounds.maximum, bounds.current + index * 430),
+				),
+				...Array.from(
+					{ length: Math.ceil(bounds.current / 430) + 1 },
+					(_, index) => index * 430,
+				),
+			];
+			for (const top of candidates) {
+				await scroller.evaluate((node, nextTop) => {
+					node.scrollTop = nextTop;
+					node.dispatchEvent(new Event("scroll"));
+				}, top);
+				await sheet.page().waitForTimeout(20);
+				if (await row.count()) break;
+			}
+		}
+		await expect(row).toBeVisible();
+		await desk.click(row);
+	}
 }
 
 function textKeyboardCode(character: string) {
@@ -2092,11 +2375,53 @@ async function nameGroupThroughTouch(
 	keypad: Locator,
 	groupId: number,
 	name: string,
+	pause = true,
 ) {
 	await keypadCommand(desk, keypad, ["SET", "GRP", ...digits(groupId), "ENT"]);
 	const properties = page.getByRole("dialog", { name: "Group properties" });
 	await expect(properties).toBeVisible();
-	await touchTypeText(desk, properties.getByLabel("Group name"), name);
+	await demoPause(
+		page,
+		pause ? PRODUCT_DEMO_SCRIPT.pacing.groupPropertiesHoldFrames : 0,
+	);
+	await touchTypeText(desk, properties.getByLabel("Group name"), name, {
+		beforeConfirmFrames: pause
+			? PRODUCT_DEMO_SCRIPT.pacing.groupNameConfirmHoldFrames
+			: 0,
+	});
+	await demoPause(
+		page,
+		pause ? PRODUCT_DEMO_SCRIPT.pacing.groupSaveHoldFrames : 0,
+	);
+	await desk.click(
+		properties.getByRole("button", { name: "Save group", exact: true }),
+	);
+	await expect(properties).toBeHidden();
+}
+
+async function nameGroupThroughTouchTile(
+	desk: DeskDriver,
+	page: Page,
+	app: Locator,
+	keypad: Locator,
+	groupId: number,
+	name: string,
+) {
+	await desk.setDemoAction(
+		`Name Group ${groupId} ${name}: leave the completed store command, press [SET], then touch Group tile ${groupId}.`,
+	);
+	const commandLine = page.getByRole("textbox", { name: "Command line" });
+	await desk.click(keypad.getByRole("button", { name: "SET", exact: true }));
+	await expect(commandLine).toHaveValue("SET");
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupTileHoldFrames);
+	await desk.click(groupTile(app, groupId));
+	const properties = page.getByRole("dialog", { name: "Group properties" });
+	await expect(properties).toBeVisible();
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupPropertiesHoldFrames);
+	await touchTypeText(desk, properties.getByLabel("Group name"), name, {
+		beforeConfirmFrames: PRODUCT_DEMO_SCRIPT.pacing.groupNameConfirmHoldFrames,
+	});
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupSaveHoldFrames);
 	await desk.click(
 		properties.getByRole("button", { name: "Save group", exact: true }),
 	);
@@ -2173,59 +2498,21 @@ function groupMasterPlayback(number: number, name: string, groupId: string) {
 	};
 }
 
-function cueListScaffold(id: string, name: string) {
-	return {
-		id,
-		name,
-		cues: [
-			{
-				id: crypto.randomUUID(),
-				number: 1,
-				name: "Cue 1",
-				cue_only: false,
-				changes: [],
-				group_changes: [],
-				fade_millis: 0,
-				delay_millis: 0,
-				trigger: { type: "manual" },
-			},
-		],
-		mode: "sequence",
-		priority: 0,
-		looped: false,
-		intensity_priority_mode: "htp",
-		wrap_mode: "off",
-		restart_mode: "first_cue",
-		force_cue_timing: false,
-		disable_cue_timing: false,
-		chaser_step_millis: 1_000,
-		chaser_xfade_millis: 0,
-		speed_group: null,
-		speed_multiplier: 1,
-	};
-}
-
-function cueListPlayback(number: number, name: string, cueListId: string) {
-	return {
-		...groupMasterPlayback(number, name, "unused"),
-		target: { type: "cue_list", cue_list_id: cueListId },
-		buttons: ["go", "go_minus", "flash"],
-	};
-}
-
 async function createOutputRoute(
 	desk: DeskDriver,
 	page: Page,
 	routes: Locator,
 	protocol: "Art-Net" | "sACN",
-	logicalUniverse: number,
-	destinationUniverse: number,
+	logicalUniverse: number | string,
+	destinationUniverse: number | string,
 	port: number,
+	pauses: { modalHoldFrames?: number; fieldsCompleteHoldFrames?: number } = {},
 ) {
 	await desk.click(
 		routes.getByRole("button", { name: "Add route", exact: true }),
 	);
 	const editor = page.getByRole("dialog", { name: "Output route editor" });
+	await demoPause(page, pauses.modalHoldFrames ?? 0);
 	if (protocol === "sACN") {
 		await desk.click(
 			editor.getByRole("button", { name: "Art-Net", exact: true }),
@@ -2239,14 +2526,29 @@ async function createOutputRoute(
 		}),
 	);
 	await desk.click(page.getByRole("option", { name: "Unicast", exact: true }));
-	await editor.getByLabel("Logical universe").fill(String(logicalUniverse));
-	await editor
-		.getByLabel("Destination universe")
-		.fill(String(destinationUniverse));
+	for (const [label, value] of [
+		["Logical universe", logicalUniverse],
+		["Destination universe", destinationUniverse],
+	] as const) {
+		const input = editor.getByLabel(label);
+		if (String(value).includes("THRU")) {
+			await desk.click(
+				input.locator("..").getByRole("button", {
+					name: "Open number pad",
+					exact: true,
+				}),
+			);
+			const pad = page.getByRole("dialog", { name: label, exact: true });
+			for (const token of String(value).split(/\s+/u))
+				await desk.click(pad.getByRole("button", { name: token, exact: true }));
+			await desk.click(pad.getByRole("button", { name: "ENTER", exact: true }));
+		} else await input.fill(String(value));
+	}
 	await editor
 		.getByLabel("Destination", { exact: true })
 		.fill(`127.0.0.1:${port}`);
 	await editor.getByLabel("Minimum universe size").fill("128");
+	await demoPause(page, pauses.fieldsCompleteHoldFrames ?? 0);
 	await desk.click(
 		editor.getByRole("button", { name: "Save route", exact: true }),
 	);
@@ -2269,6 +2571,7 @@ async function clearSelection(
 	keypad: Locator,
 	api: ApiDriver,
 ) {
+	await desk.click(keypad.getByRole("button", { name: "ESCAPE", exact: true }));
 	for (
 		let attempt = 0;
 		attempt < 12 && (await programmer(api)).selected.length;
@@ -2284,6 +2587,7 @@ async function clearProgrammer(
 	keypad: Locator,
 	api: ApiDriver,
 ) {
+	await desk.click(keypad.getByRole("button", { name: "ESCAPE", exact: true }));
 	for (let attempt = 0; attempt < 16; attempt++) {
 		const state = await programmer(api);
 		if (

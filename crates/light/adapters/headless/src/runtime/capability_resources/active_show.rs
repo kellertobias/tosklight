@@ -44,6 +44,15 @@ impl ActiveShowResource {
         self.service.mutate_output_route(action, ports)
     }
 
+    pub(in crate::runtime) fn create_output_route_range<P: light_application::ActiveShowPorts>(
+        &self,
+        action: light_application::ActionEnvelope<light_application::CreateOutputRouteRangeCommand>,
+        ports: &P,
+    ) -> Result<light_application::CreateOutputRouteRangeResult, light_application::ActionError>
+    {
+        self.service.create_output_route_range(action, ports)
+    }
+
     pub(in crate::runtime) fn commit_programming_cue<
         P: light_application::ProgrammingCueActiveShowPorts,
     >(

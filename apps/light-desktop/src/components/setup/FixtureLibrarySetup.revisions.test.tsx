@@ -87,6 +87,24 @@ describe("fixture profile revision editing", () => {
 		expect(screen.getByRole("button", { name: /^Dimmer/ })).toBeInTheDocument();
 	});
 
+	it("matches compact numeric searches against spelled and hyphenated fixture names", async () => {
+		const truss = blankFixtureProfile();
+		truss.manufacturer = "Venue";
+		truss.name = "Four-Point Truss";
+		truss.short_name = "4PT";
+		server.fixtureProfiles = [truss];
+
+		render(<FixtureLibrarySetup />);
+		fireEvent.change(
+			await screen.findByRole("textbox", { name: "Search fixture library" }),
+			{ target: { value: "4Point Truss" } },
+		);
+
+		expect(
+			screen.getByRole("button", { name: /Four-Point Truss/ }),
+		).toBeInTheDocument();
+	});
+
 	it("uses a retained revision as the draft but the latest revision as the optimistic save check", async () => {
 		const latest = blankFixtureProfile();
 		latest.manufacturer = "Acme";

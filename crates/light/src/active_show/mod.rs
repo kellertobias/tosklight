@@ -7,13 +7,13 @@ mod undo;
 
 pub use model::{
     ActiveShowObjectBody, ActiveShowObjectChange, ActiveShowObjectKind, ActiveShowObjectMutation,
-    ActiveShowObjectMutationKind, ActiveShowObjectsChange, MutateActiveShowObjectsCommand,
-    MutateActiveShowObjectsResult, MutateOutputRouteCommand, MutateOutputRouteResult,
-    OutputRouteChange, OutputRouteMutation, PatchLayer, StageCamera3d, StageLayout,
-    StagePosition2d, StagePosition3d, StagePositions2dConfig, StagePositions2dProvenance,
-    StageProjection2d, UndoActiveShowObjectCommand, UndoActiveShowObjectResult,
-    UndoActiveShowRecordingCommand, UndoActiveShowRecordingObject,
-    UndoActiveShowRecordingOperation, UserLayout,
+    ActiveShowObjectMutationKind, ActiveShowObjectsChange, CreateOutputRouteRangeCommand,
+    CreateOutputRouteRangeResult, MutateActiveShowObjectsCommand, MutateActiveShowObjectsResult,
+    MutateOutputRouteCommand, MutateOutputRouteResult, OutputRouteChange, OutputRouteMutation,
+    PatchLayer, StageCamera3d, StageLayout, StagePosition2d, StagePosition3d,
+    StagePositions2dConfig, StagePositions2dProvenance, StageProjection2d,
+    UndoActiveShowObjectCommand, UndoActiveShowObjectResult, UndoActiveShowRecordingCommand,
+    UndoActiveShowRecordingObject, UndoActiveShowRecordingOperation, UserLayout,
 };
 pub use ports::{ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity};
 pub use service::ActiveShowService;

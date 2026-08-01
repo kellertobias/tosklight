@@ -120,8 +120,8 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
 	).toBeDefined();
 
 	const topology = generatedShow.topology;
-	expect(topology.cuelists).toHaveLength(7);
-	expect(topology.playbacks).toHaveLength(13);
+	expect(topology.cuelists).toHaveLength(8);
+	expect(topology.playbacks).toHaveLength(14);
 	const cuelists = await api.showObjects<any>(showId, "cue_list");
 	expect(
 		cuelists.find((cuelist) => cuelist.body.name === "ACL Chase")?.body,
@@ -129,6 +129,9 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
 	expect(
 		cuelists.find((cuelist) => cuelist.body.name === "ACL Chase")?.body.cues,
 	).toHaveLength(4);
+	expect(
+		cuelists.find((cuelist) => cuelist.body.name === "Front Light")?.body.cues,
+	).toHaveLength(1);
 
 	const dynamics = generatedShow.dynamics;
 	expect(dynamics).toHaveLength(30);

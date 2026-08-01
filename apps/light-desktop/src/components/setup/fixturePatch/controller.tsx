@@ -13,6 +13,7 @@ import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibra
 import { usePatch, usePatchView } from "../../../features/patch/PatchContext";
 import { useApp } from "../../../state/AppContext";
 import { parsePatchAddress } from "../../input/ConsoleFields";
+import { normalizeFixtureSearch } from "../fixtureLibrary/model";
 import {
 	fixtureDefinitionKey,
 	mergeFixtureDefinitions,
@@ -307,15 +308,15 @@ function filterDefinitions(
 		"query" | "typeFilter" | "manufacturer"
 	>,
 ) {
-	const needle = ui.query.trim().toLowerCase();
+	const needle = normalizeFixtureSearch(ui.query);
 	return definitions.filter(
 		(item) =>
 			(!ui.typeFilter || item.device_type === ui.typeFilter) &&
 			(!ui.manufacturer || item.manufacturer === ui.manufacturer) &&
 			(!needle ||
-				`${item.manufacturer} ${item.name} ${item.model} ${item.mode} ${item.device_type}`
-					.toLowerCase()
-					.includes(needle)),
+				normalizeFixtureSearch(
+					`${item.manufacturer} ${item.name} ${item.model} ${item.mode} ${item.device_type}`,
+				).includes(needle)),
 	);
 }
 

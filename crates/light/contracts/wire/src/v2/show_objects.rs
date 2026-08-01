@@ -58,6 +58,12 @@ pub enum OutputRouteAction {
         route_id: String,
         route: OutputRoute,
     },
+    CreateRange {
+        range_id: Uuid,
+        route: OutputRoute,
+        logical_universe_end: u16,
+        destination_universe_end: u16,
+    },
     Update {
         route_id: String,
         #[ts(type = "number")]
@@ -100,7 +106,7 @@ pub struct OutputRoutePatch {
 pub struct OutputRouteActionOutcome {
     pub request_id: String,
     pub replayed: bool,
-    pub change: OutputRouteChange,
+    pub changes: Vec<OutputRouteChange>,
     #[ts(type = "number")]
     pub event_sequence: u64,
 }

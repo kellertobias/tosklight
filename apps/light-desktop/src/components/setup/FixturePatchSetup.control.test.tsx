@@ -1264,6 +1264,36 @@ describe("schema-v2 location and multi-patch editing", () => {
 		);
 	});
 
+	it("applies one location value to every fixture in the ordered selection", async () => {
+		const first = splitFixture();
+		const second = splitFixture();
+		second.fixture_id = "fixture-second";
+		second.fixture_number = 18;
+		second.name = "Split Wash 18";
+		server.patch.fixtures = [first, second];
+		programming.selection.selected = ["fixture-second", "fixture-split"];
+		render(<FixturePatchSetup />);
+		const fixtureRow = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+		fireEvent.contextMenu(within(fixtureRow.cells[13]).getByRole("button"));
+
+		const modal = screen.getByRole("dialog", {
+			name: "Location Y (meter)",
+		});
+		for (const key of ["3", "ENTER"])
+			fireEvent.click(within(modal).getByRole("button", { name: key }));
+
+		await waitFor(() =>
+			expect(patchFeature.spreadFixtureVector).toHaveBeenCalledWith({
+				fixtureIds: ["fixture-second", "fixture-split"],
+				kind: "location",
+				axis: "y",
+				points: [3000, 3000],
+			}),
+		);
+	});
+
 	it("opens the location value pad directly and confirms unsaved input", async () => {
 		const { current } = fixturesWithConflict();
 		server.patch.fixtures = [current];

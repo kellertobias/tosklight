@@ -16,6 +16,7 @@ const CUE_LIST_IDS = {
 	acl4: stableUuid(4, 5),
 	hazer: stableUuid(4, 6),
 	chase: stableUuid(4, 7),
+	front: stableUuid(4, 8),
 } as const;
 export async function installPlannedDemoPlaybacks(
 	api: ApiDriver,
@@ -26,11 +27,16 @@ export async function installPlannedDemoPlaybacks(
 	const existingPage = await api.showObject<any>(showId, "playback_page", "1");
 	const visibleAclOne = existingPlaybacks.find(
 		(playback) =>
-			playback.body.number === 12 && playback.body.target?.type === "cue_list",
+			playback.body.number === 18 && playback.body.target?.type === "cue_list",
+	);
+	const visibleFront = existingPlaybacks.find(
+		(playback) =>
+			playback.body.number === 11 && playback.body.target?.type === "cue_list",
 	);
 	const cueListIds = {
 		...CUE_LIST_IDS,
 		acl1: visibleAclOne?.body.target.cue_list_id ?? CUE_LIST_IDS.acl1,
+		front: visibleFront?.body.target.cue_list_id ?? CUE_LIST_IDS.front,
 	};
 	const aclCueListIds = [
 		cueListIds.acl1,
@@ -61,15 +67,30 @@ export async function installPlannedDemoPlaybacks(
 				...intensity(groups, "LED Show", 1),
 				...intensity(groups, "LED Auxiliary", 1),
 				...intensity(groups, "Blinders", 1),
-				...attributes(groups, ["Beam Show", "Beam Auxiliary", "Wash Show", "Wash Auxiliary", "LED Show", "LED Auxiliary"], {
-					"color.red": 1,
-					"color.green": 1,
-					"color.blue": 1,
-				}),
-				...attributes(groups, ["Beam Show", "Beam Auxiliary", "Wash Show", "Wash Auxiliary"], {
-					pan: 0.5,
-					tilt: 0.5,
-				}),
+				...attributes(
+					groups,
+					[
+						"Beam Show",
+						"Beam Auxiliary",
+						"Wash Show",
+						"Wash Auxiliary",
+						"LED Show",
+						"LED Auxiliary",
+					],
+					{
+						"color.red": 1,
+						"color.green": 1,
+						"color.blue": 1,
+					},
+				),
+				...attributes(
+					groups,
+					["Beam Show", "Beam Auxiliary", "Wash Show", "Wash Auxiliary"],
+					{
+						pan: 0.5,
+						tilt: 0.5,
+					},
+				),
 			]),
 		]),
 		...[1, 2, 3, 4].map((number) =>
@@ -79,6 +100,9 @@ export async function installPlannedDemoPlaybacks(
 		),
 		cueList(cueListIds.hazer, "Hazer", [
 			stateCue(1, "Haze 20%", intensity(groups, "Hazer", 0.2)),
+		]),
+		cueList(cueListIds.front, "Front Light", [
+			stateCue(1, "Front Light", intensity(groups, "Front Lights", 1)),
 		]),
 		{
 			...cueList(
@@ -111,17 +135,29 @@ export async function installPlannedDemoPlaybacks(
 		playback(4, "Wash Show", { type: "group", group_id: "11" }),
 		playback(5, "All ACLs", { type: "group", group_id: "32" }),
 		playback(6, "Blinders", { type: "group", group_id: "26" }),
-		playback(11, "Start", { type: "cue_list", cue_list_id: cueListIds.start }),
-		...[1, 2, 3, 4].map((number) =>
-			playback(11 + number, `ACL ${number}`, {
+		playback(12, "Start", { type: "cue_list", cue_list_id: cueListIds.start }),
+		...[
+			[1, 18],
+			[2, 13],
+			[3, 14],
+			[4, 15],
+		].map(([number, playbackNumber]) =>
+			playback(playbackNumber, `ACL ${number}`, {
 				type: "cue_list",
 				cue_list_id: aclCueListIds[number - 1],
 			}),
 		),
 		playback(16, "Hazer", { type: "cue_list", cue_list_id: cueListIds.hazer }),
-		playback(17, "ACL Chase", {
+		{
+			...playback(17, "ACL Chase", {
+				type: "cue_list",
+				cue_list_id: cueListIds.chase,
+			}),
+			buttons: ["toggle", "go_minus", "flash"],
+		},
+		playback(11, "Front Light", {
 			type: "cue_list",
-			cue_list_id: cueListIds.chase,
+			cue_list_id: cueListIds.front,
 		}),
 	];
 	for (const item of playbacks)

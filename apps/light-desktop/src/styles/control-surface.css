@@ -647,7 +647,12 @@
 .desk-settings-modal {
 	width: min(520px, calc(100vw - 36px)) !important;
 }
-.desk-settings-modal > label {
+.desk-settings-content {
+	display: grid;
+	gap: 14px;
+	padding: 14px;
+}
+.desk-settings-content > label {
 	display: grid;
 	gap: 6px;
 }
@@ -686,7 +691,7 @@
 	border-color: var(--cyan);
 	color: var(--cyan);
 }
-.large-danger {
+.large-action {
 	width: 100%;
 	min-height: 54px;
 }
@@ -1113,7 +1118,7 @@
 /* Shared modal action treatment; semantic states change color, not geometry. */
 :where(.modal-actions, .delete-confirm, .dialog-grid) > button,
 button.dialog-done,
-button.large-danger {
+button.large-action {
 	min-height: 52px;
 	padding: 0 16px;
 	border: 1px solid var(--line2);
@@ -1123,14 +1128,14 @@ button.large-danger {
 	font-weight: 700;
 }
 :where(.modal-actions, .delete-confirm, .dialog-grid) > button.danger,
-button.large-danger.danger {
+button.large-action.danger {
 	border-color: #743136;
 	background: var(--panel2);
 	color: var(--red);
 }
 :where(.modal-actions, .delete-confirm, .dialog-grid) > button:disabled,
 button.dialog-done:disabled,
-button.large-danger:disabled {
+button.large-action:disabled {
 	opacity: 0.38;
 }
 .dock-identity {
@@ -1485,7 +1490,6 @@ button.large-danger:disabled {
 }
 .gdtf-import-modal header,
 .fixture-editor-modal > header,
-.fixture-browser-modal > header,
 .fixture-placement-modal > header {
 	display: flex;
 	align-items: center;

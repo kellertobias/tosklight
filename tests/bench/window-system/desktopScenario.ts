@@ -134,6 +134,7 @@ export class BrowserDesktops {
 	constructor(
 		private readonly page: Page,
 		private readonly attach: (name: string, body: Buffer) => Promise<void>,
+		private readonly pause: () => Promise<void> = async () => undefined,
 	) {}
 
 	configure(name: string): DesktopConfiguration {
@@ -164,13 +165,19 @@ export class BrowserDesktops {
 		await this.page
 			.getByRole("button", { name: "New desktop", exact: true })
 			.click();
+		await this.pause();
 		const active = this.page.locator("[data-desktop-id][aria-current=page]");
 		await expect(active).toBeVisible();
 		await this.openSettings(active);
+		await this.pause();
 		const dialog = this.page.getByRole("dialog", { name: "Desktop settings" });
 		await dialog.getByLabel("Name").fill(name);
 		await dialog.getByLabel("Name").blur();
-		await dialog.getByRole("button", { name: "×" }).click();
+		await this.pause();
+		await dialog
+			.getByRole("button", { name: "Close Desktop settings" })
+			.click();
+		await this.pause();
 		await expect(this.desktopRoot(name)).toBeVisible();
 	}
 
@@ -189,7 +196,9 @@ export class BrowserDesktops {
 		const dialog = this.page.getByRole("dialog", { name: "Desktop settings" });
 		await dialog.getByLabel("Name").fill(nextName);
 		await dialog.getByLabel("Name").blur();
-		await dialog.getByRole("button", { name: "×" }).click();
+		await dialog
+			.getByRole("button", { name: "Close Desktop settings" })
+			.click();
 	}
 
 	async openSettingsFor(name: string): Promise<void> {
@@ -200,7 +209,9 @@ export class BrowserDesktops {
 	async closeSettings(): Promise<void> {
 		const dialog = this.page.getByRole("dialog", { name: "Desktop settings" });
 		if (await dialog.count())
-			await dialog.getByRole("button", { name: "×" }).click();
+			await dialog
+				.getByRole("button", { name: "Close Desktop settings" })
+				.click();
 	}
 
 	async clone(name: string, cloneName: string): Promise<void> {
@@ -215,7 +226,9 @@ export class BrowserDesktops {
 		const dialog = this.page.getByRole("dialog", { name: "Desktop settings" });
 		await dialog.getByLabel("Name").fill(cloneName);
 		await dialog.getByLabel("Name").blur();
-		await dialog.getByRole("button", { name: "×" }).click();
+		await dialog
+			.getByRole("button", { name: "Close Desktop settings" })
+			.click();
 	}
 
 	async delete(name: string): Promise<void> {
@@ -266,7 +279,9 @@ export class BrowserDesktops {
 		if (!(await pane.count()))
 			throw new Error(`Pane "${handle.slug}" is no longer present`);
 		await this.openPaneSettings(pane);
+		await this.pause();
 		await applyPaneConfiguration(this.page, handle.type, configuration);
+		await this.pause();
 		await this.closePaneSettings();
 	}
 
@@ -278,6 +293,7 @@ export class BrowserDesktops {
 		const next = { ...current, ...geometry };
 		validatePlacement({ slug: handle.slug, ...next }, []);
 		await this.openPaneSettings(this.locatorFor(handle));
+		await this.pause();
 		const dialog = this.page.getByRole("dialog", { name: "Pane Settings" });
 		for (const [label, value] of [
 			["Grid column", geometry.column],
@@ -289,6 +305,7 @@ export class BrowserDesktops {
 				await chooseOption(this.page, dialog, label, String(value));
 		}
 		await this.closePaneSettings();
+		await this.pause();
 	}
 
 	async focus<T extends PaneType>(handle: PaneHandle<T>): Promise<void> {
@@ -375,10 +392,12 @@ export class BrowserDesktops {
 		const y =
 			box.y + ((definition.placement.row - 0.5) * box.height) / GRID_ROWS;
 		await grid.click({ position: { x: x - box.x, y: y - box.y } });
+		await this.pause();
 		await this.page
 			.getByRole("dialog", { name: "Open Window" })
 			.getByRole("button", { name: paneLabels[definition.type], exact: true })
 			.click();
+		await this.pause();
 		await expect(this.page.locator("[data-pane-id]")).toHaveCount(
 			before.length + 1,
 		);
@@ -559,17 +578,17 @@ async function applyPaneConfiguration<T extends PaneType>(
 		await dialog.getByRole("tab", { name: "Virtual Playbacks" }).click();
 		if (options.rows !== undefined)
 			await dialog.getByLabel("Rows").fill(String(options.rows));
-			if (options.columns !== undefined)
-				await dialog.getByLabel("Columns").fill(String(options.columns));
-			if (options.pageMode !== undefined)
-				await dialog
-					.getByRole("radio", {
-						name: options.pageMode === "follow_main" ? "Follow Main" : "Pinned",
-					})
-					.click();
-			if (options.pageMode === "pinned" && options.pinnedPage !== undefined)
-				await dialog.getByLabel("Pinned page").fill(String(options.pinnedPage));
-		}
+		if (options.columns !== undefined)
+			await dialog.getByLabel("Columns").fill(String(options.columns));
+		if (options.pageMode !== undefined)
+			await dialog
+				.getByRole("radio", {
+					name: options.pageMode === "follow_main" ? "Follow Main" : "Pinned",
+				})
+				.click();
+		if (options.pageMode === "pinned" && options.pinnedPage !== undefined)
+			await dialog.getByLabel("Pinned page").fill(String(options.pinnedPage));
+	}
 	if (options.showGroupShortcuts !== undefined) {
 		await dialog.getByRole("tab", { name: "Shortcuts" }).click();
 		await setSwitch(dialog, "Group shortcuts", options.showGroupShortcuts);

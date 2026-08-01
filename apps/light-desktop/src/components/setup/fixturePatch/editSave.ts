@@ -152,6 +152,10 @@ export async function saveVectorAxisInput(
 		controller.ui.setEditError("Enter a numeric value.");
 		return;
 	}
+	if ((controller.selection.orderedFixtureIds?.length ?? 0) > 1) {
+		await saveVectorSpread(controller, kind, axis, [parsed, parsed]);
+		return;
+	}
 	const selected = controller.data.selected;
 	if (!selected) return;
 	await applyEdit(controller, {

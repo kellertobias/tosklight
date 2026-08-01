@@ -1,6 +1,6 @@
 import type { OutputRoute } from "../../api/types";
-import type { ServerController } from "./model";
 import type { ServerCapabilities } from "./capabilityContracts";
+import type { ServerController } from "./model";
 
 export function createOutputActions(
 	model: ServerController,
@@ -10,12 +10,14 @@ export function createOutputActions(
 	| "readVisualization"
 	| "setDmxOverride"
 	| "saveOutputRoute"
+	| "createOutputRouteRange"
 	| "deleteOutputRoute"
 > {
 	const { api, setError, bootstrap, setOutputRoutes } = model;
 	return {
 		readDmx: () => api.mediaOutput.dmx(),
-		readVisualization: (preload = false) => api.mediaOutput.visualization(preload),
+		readVisualization: (preload = false) =>
+			api.mediaOutput.visualization(preload),
 		setDmxOverride: async (universe, address, rawValue) => {
 			try {
 				await api.mediaOutput.setDmxOverride(universe, address, rawValue);
@@ -34,7 +36,30 @@ export function createOutputActions(
 					revision,
 				);
 				setOutputRoutes(
-					await api.showObjects.objects<OutputRoute>(bootstrap.active_show.id, "route"),
+					await api.showObjects.objects<OutputRoute>(
+						bootstrap.active_show.id,
+						"route",
+					),
+				);
+				setError(null);
+				return true;
+			} catch (reason) {
+				setError(reason instanceof Error ? reason.message : String(reason));
+				return false;
+			}
+		},
+		createOutputRouteRange: async (range) => {
+			if (!bootstrap?.active_show) return false;
+			try {
+				await api.showObjects.createOutputRouteRange(
+					bootstrap.active_show.id,
+					range,
+				);
+				setOutputRoutes(
+					await api.showObjects.objects<OutputRoute>(
+						bootstrap.active_show.id,
+						"route",
+					),
 				);
 				setError(null);
 				return true;
@@ -52,7 +77,10 @@ export function createOutputActions(
 					revision,
 				);
 				setOutputRoutes(
-					await api.showObjects.objects<OutputRoute>(bootstrap.active_show.id, "route"),
+					await api.showObjects.objects<OutputRoute>(
+						bootstrap.active_show.id,
+						"route",
+					),
 				);
 				setError(null);
 				return true;

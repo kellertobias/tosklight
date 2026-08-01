@@ -31,13 +31,13 @@ pub use action::{
 pub use active_show::{
     ActiveShowObjectBody, ActiveShowObjectChange, ActiveShowObjectKind, ActiveShowObjectMutation,
     ActiveShowObjectMutationKind, ActiveShowObjectsChange, ActiveShowPorts, ActiveShowService,
-    ActiveShowUnitOfWork, BackupIdentity, MutateActiveShowObjectsCommand,
-    MutateActiveShowObjectsResult, MutateOutputRouteCommand, MutateOutputRouteResult,
-    OutputRouteChange, OutputRouteMutation, PatchLayer, StageCamera3d, StageLayout,
-    StagePosition2d, StagePosition3d, StagePositions2dConfig, StagePositions2dProvenance,
-    StageProjection2d, UndoActiveShowObjectCommand, UndoActiveShowObjectResult,
-    UndoActiveShowRecordingCommand, UndoActiveShowRecordingObject,
-    UndoActiveShowRecordingOperation, UserLayout,
+    ActiveShowUnitOfWork, BackupIdentity, CreateOutputRouteRangeCommand,
+    CreateOutputRouteRangeResult, MutateActiveShowObjectsCommand, MutateActiveShowObjectsResult,
+    MutateOutputRouteCommand, MutateOutputRouteResult, OutputRouteChange, OutputRouteMutation,
+    PatchLayer, StageCamera3d, StageLayout, StagePosition2d, StagePosition3d,
+    StagePositions2dConfig, StagePositions2dProvenance, StageProjection2d,
+    UndoActiveShowObjectCommand, UndoActiveShowObjectResult, UndoActiveShowRecordingCommand,
+    UndoActiveShowRecordingObject, UndoActiveShowRecordingOperation, UserLayout,
 };
 pub use dynamics::{
     DynamicControllerUpdate, DynamicFixAtCommand, DynamicOffCommand, DynamicStartCommand,

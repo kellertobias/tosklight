@@ -368,6 +368,14 @@ export interface OutputRoute {
 	minimum_slots: number;
 }
 
+export interface OutputRouteRangeIntent {
+	logical_start: number;
+	logical_end: number;
+	destination_start: number;
+	destination_end: number;
+	route: Omit<OutputRoute, "logical_universe" | "destination_universe">;
+}
+
 export interface PatchSnapshot {
 	revision: number;
 	fixtures: PatchedFixture[];

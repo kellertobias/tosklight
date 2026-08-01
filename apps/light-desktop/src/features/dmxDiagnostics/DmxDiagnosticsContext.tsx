@@ -1,5 +1,10 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
-import type { DmxSnapshot, OutputRoute, VersionedObject } from "../../api/types";
+import type {
+	DmxSnapshot,
+	OutputRoute,
+	OutputRouteRangeIntent,
+	VersionedObject,
+} from "../../api/types";
 
 /**
  * Scoped raw-DMX diagnostics: one-shot snapshot reads, per-slot overrides, and the
@@ -18,6 +23,7 @@ export interface DmxDiagnostics {
 		route: OutputRoute,
 		revision: number,
 	) => Promise<boolean>;
+	createOutputRouteRange: (range: OutputRouteRangeIntent) => Promise<boolean>;
 	deleteOutputRoute: (id: string, revision: number) => Promise<boolean>;
 }
 

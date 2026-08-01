@@ -254,3 +254,37 @@ artifact path as CI. A local release-binary policy run measured 1,024 fixtures a
 and 2,048 fixtures at 84 Hz minimum; the limiting p95 phase was engine render and fixture
 projection in both runs. These local numbers validate the report shape and are not substituted
 for the next GitHub runner measurement.
+
+### 2026-08-01 product-demo and operator-workflow follow-up
+
+The canonical product demo now starts from an empty show and carries a JSON-shaped, 25 fps edit
+contract at the top of its scenario. Every chapter has an exact frame budget, the crossfades and
+narration holds are configurable, repetitive work is accelerated visibly, and the first decoded
+frame is already the complete ToskLight Product Demo card. The final 12:05.15 edit covers Show
+Setup, Output Configuration, Defining Groups, Assigning Group Masters, Preset Setup, Cuelists,
+Dynamics, Virtual Playbacks, and Busking and Preload. It ends after a 16-bar, 120 BPM busking
+sequence in which bar 8 prepares a preload look and bar 16 commits it with a two-second Programmer
+Fade.
+
+The production workflows exercised by the recording were tightened alongside the scenario:
+
+- Fixture Library search accepts human-readable digit and word variants such as `4Point Truss`,
+  and the titlebar search occupies the full modal-header height.
+- Fixture Sheet location edits apply a single value to every selected fixture, while THRU spreads
+  retain ordered selection semantics.
+- output configuration accepts paired logical and destination universe ranges such as
+  `1 THRU 8`; the server creates the full range atomically and replay-safely, with no partial
+  mutation on invalid input.
+- Desktop configuration keeps Delete beside Close and presents Clone Current Desktop as the main
+  body action.
+- Group tiles support the mode-aware SET touch paths used to name Groups in Programmer mode and
+  assign Group Masters in Playback mode.
+- the generated starter show now retains the revised patch, eight Cuelists, fourteen physical
+  Playbacks, thirty Dynamics, and the canonical 10 by 5 Virtual Playback layout.
+
+Verification passed with 60 focused desktop tests, four focused Rust output-range tests, the
+programmer action timing gate, the planned Playback topology test, the production desktop build,
+the generated-show acceptance test, and a complete non-recording product-demo rehearsal. The
+single final recording run passed in 16.6 minutes and produced 18,140 canonical frames at 25 fps.
+Both delivery files are 1920 by 1080 and 725.6 seconds long; the reviewed WebM uses VP9 and the
+reviewed MP4 uses H.265.

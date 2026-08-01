@@ -10,7 +10,8 @@ import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GroupsWindow } from "./GroupsWindow";
 
-const render = (ui: Parameters<typeof rtlRender>[0]) => rtlRender(ui, { wrapper: ModalProvider });
+const render = (ui: Parameters<typeof rtlRender>[0]) =>
+	rtlRender(ui, { wrapper: ModalProvider });
 
 const mocks = vi.hoisted(() => ({
 	dispatch: vi.fn(),
@@ -24,7 +25,12 @@ const mocks = vi.hoisted(() => ({
 	manageGroup: vi.fn(),
 	setGroupMaster: vi.fn(),
 	commandLine: "",
-	state: { storeArmed: false, groupsReturnToStage: false },
+	state: {
+		storeArmed: false,
+		groupsReturnToStage: false,
+		controlMode: "programmer" as "programmer" | "playbacks",
+		playbackSetArmed: false,
+	},
 	runtimeReady: true,
 	runtimeCanWrite: true,
 	groups: [
@@ -146,6 +152,8 @@ describe("GroupsWindow action routing", () => {
 		mocks.commandLine = "";
 		mocks.state.storeArmed = false;
 		mocks.state.groupsReturnToStage = false;
+		mocks.state.controlMode = "programmer";
+		mocks.state.playbackSetArmed = false;
 		mocks.runtimeReady = true;
 		mocks.runtimeCanWrite = true;
 		mocks.groups[0].body.color = undefined;
@@ -332,6 +340,22 @@ describe("GroupsWindow action routing", () => {
 				},
 			}),
 		);
+	});
+
+	it("routes SET plus a group tile into playback assignment in Playback mode", () => {
+		mocks.state.controlMode = "playbacks";
+		mocks.state.playbackSetArmed = true;
+		render(<GroupsWindow />);
+		fireEvent.click(buttonForText("Stored Empty"));
+
+		expect(mocks.replaceCommand).toHaveBeenCalledWith("SET GROUP 4", false);
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_PLAYBACK_SET_ARMED",
+			value: false,
+		});
+		expect(
+			screen.queryByRole("dialog", { name: "Group properties" }),
+		).not.toBeInTheDocument();
 	});
 
 	it("opens the same populated properties modal for a desk-routed SET command", () => {

@@ -85,7 +85,8 @@
 	min-width: min(260px, 38vw);
 	max-width: min(760px, 55vw);
 	display: flex;
-	align-items: center;
+	align-items: stretch;
+	align-self: stretch;
 	margin-left: auto;
 	padding: 0;
 }

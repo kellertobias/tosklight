@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 import type { SessionResponse } from "../../../apps/light-desktop/src/api/types";
-import { BrowserSessionHandoff } from "./sessionHandoff";
 import { ControllableDesktopDriver } from "../window-system/desktopBridge";
+import { BrowserSessionHandoff } from "./sessionHandoff";
 
 export class DeskDriver {
 	private recordingStep = {
@@ -15,8 +15,12 @@ export class DeskDriver {
 	private baseUrl = "";
 	private auditRevision = 0;
 	private controllableDesktop?: ControllableDesktopDriver;
-	private recordingClickPace: "normal" | "compact" | "steady" | "rapid" =
-		"normal";
+	private recordingClickPace:
+		| "normal"
+		| "compact"
+		| "steady"
+		| "rapid"
+		| "typing" = "normal";
 	private productIntroVisible = false;
 	private readonly semanticStepObservers = new Set<
 		(step: { title: string; description: string }) => void
@@ -39,7 +43,9 @@ export class DeskDriver {
 		);
 	}
 
-	setRecordingClickPace(pace: "normal" | "compact" | "steady" | "rapid"): void {
+	setRecordingClickPace(
+		pace: "normal" | "compact" | "steady" | "rapid" | "typing",
+	): void {
 		this.recordingClickPace = pace;
 	}
 
@@ -303,15 +309,23 @@ export class DeskDriver {
 		);
 		const defaultPreview = hardwareTyping
 			? 45
-			: this.recordingClickPace === "rapid"
-				? 45
-				: this.recordingClickPace === "steady"
-					? 180
-					: this.recordingClickPace === "compact"
-						? 120
-						: 280;
+			: this.recordingClickPace === "typing"
+				? 20
+				: this.recordingClickPace === "rapid"
+					? 45
+					: this.recordingClickPace === "steady"
+						? 180
+						: this.recordingClickPace === "compact"
+							? 120
+							: 280;
 		const previewMillis = Math.max(
-			hardwareTyping ? 40 : this.recordingClickPace === "rapid" ? 40 : 120,
+			hardwareTyping
+				? 40
+				: this.recordingClickPace === "typing"
+					? 20
+					: this.recordingClickPace === "rapid"
+						? 40
+						: 120,
 			Number(process.env.LIGHT_VISUAL_CLICK_PREVIEW ?? defaultPreview),
 		);
 		if (Number.isFinite(previewMillis))
@@ -322,15 +336,23 @@ export class DeskDriver {
 		});
 		const defaultPause = hardwareTyping
 			? 45
-			: this.recordingClickPace === "rapid"
-				? 45
-				: this.recordingClickPace === "steady"
-					? 180
-					: this.recordingClickPace === "compact"
-						? 120
-						: 280;
+			: this.recordingClickPace === "typing"
+				? 20
+				: this.recordingClickPace === "rapid"
+					? 45
+					: this.recordingClickPace === "steady"
+						? 180
+						: this.recordingClickPace === "compact"
+							? 120
+							: 280;
 		const settleMillis = Math.max(
-			hardwareTyping ? 40 : this.recordingClickPace === "rapid" ? 40 : 120,
+			hardwareTyping
+				? 40
+				: this.recordingClickPace === "typing"
+					? 20
+					: this.recordingClickPace === "rapid"
+						? 40
+						: 120,
 			Number(process.env.LIGHT_VISUAL_CLICK_PAUSE ?? defaultPause),
 		);
 		if (Number.isFinite(settleMillis))
@@ -338,9 +360,9 @@ export class DeskDriver {
 		await this.page.evaluate(() => {
 			document
 				.querySelectorAll(".light-recording-click-target")
-				.forEach((element) =>
-					element.classList.remove("light-recording-click-target"),
-				);
+				.forEach((element) => {
+					element.classList.remove("light-recording-click-target");
+				});
 		});
 	}
 

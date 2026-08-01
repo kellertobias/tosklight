@@ -29,12 +29,13 @@ const DEMO_APPLICATION_ICON = new URL(
 const DEMO_CHAPTERS = [
 	["SHOW SETUP", "Show Setup"],
 	["OUTPUT CONFIGURATION", "Outputs"],
-	["GROUP SETUP", "Groups"],
+	["DEFINING GROUPS", "Groups"],
+	["ASSIGNING GROUP MASTERS", "Masters"],
 	["PRESET SETUP", "Presets"],
+	["CUELISTS", "Cuelists"],
 	["DYNAMICS", "Dynamics"],
-	["CUELIST PROGRAMMING", "Cuelists"],
-	["SHOW COMPLETE", "Complete"],
-	["BUSKING", "Live Demo"],
+	["VIRTUAL PLAYBACKS", "Virtual Playbacks"],
+	["BUSKING AND PRELOAD", "Live Demo"],
 ] as const;
 
 function DemoDmxGrid({ universeNumber }: { universeNumber: number }) {
@@ -134,7 +135,8 @@ function DemoNarrative() {
 	const [playtimeSeconds, setPlaytimeSeconds] = useState(0);
 	useEffect(() => {
 		const startedAt = performance.now();
-		const update = () => setPlaytimeSeconds((performance.now() - startedAt) / 1_000);
+		const update = () =>
+			setPlaytimeSeconds((performance.now() - startedAt) / 1_000);
 		update();
 		const timer = window.setInterval(update, 200);
 		return () => window.clearInterval(timer);

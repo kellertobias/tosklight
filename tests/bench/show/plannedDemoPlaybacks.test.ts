@@ -33,8 +33,8 @@ describe("Plan 76 initial Playback topology", () => {
 			logical_heads: [],
 		}));
 		const result = await installPlannedDemoPlaybacks(api, "show", fixtures);
-		expect(result.cuelists).toHaveLength(7);
-		expect(result.playbacks).toHaveLength(13);
+		expect(result.cuelists).toHaveLength(8);
+		expect(result.playbacks).toHaveLength(14);
 		expect(
 			result.playbacks.filter((item) => item.target.type === "group"),
 		).toHaveLength(6);
@@ -81,6 +81,11 @@ describe("Plan 76 initial Playback topology", () => {
 			has_fader: true,
 			go_activates: true,
 		});
+		const front = result.cuelists.find((item) => item.name === "Front Light")!;
+		expect(front.cues[0].changes).toHaveLength(13);
+		expect(
+			result.playbacks.find((item) => item.name === "Front Light")?.number,
+		).toBe(11);
 		const chase = result.cuelists.find((item) => item.name === "ACL Chase")!;
 		expect(chase).toMatchObject({
 			mode: "chaser",
