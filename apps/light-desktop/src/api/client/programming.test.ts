@@ -79,6 +79,21 @@ function clientReturning(value: unknown) {
 }
 
 describe("ProgrammingApiClient v2 interaction boundary", () => {
+	it("retries one transient active-show handoff for the same operator gesture", async () => {
+		const { client, sendAction } = clientReturning({ accepted: true });
+		sendAction
+			.mockRejectedValueOnce(
+				new Error("the active show is changing; retry the Programmer action"),
+			)
+			.mockResolvedValueOnce({ accepted: true });
+
+		await expect(client.executeCommandLine("FIXTURE 1 AT 25")).resolves.toEqual({
+			accepted: true,
+		});
+		expect(sendAction).toHaveBeenCalledTimes(2);
+		expect(sendAction.mock.calls[1]?.[0]).toEqual(sendAction.mock.calls[0]?.[0]);
+	});
+
 	it("sends one correlated Programmer values command frame", async () => {
 		const response = {
 			request_id: "values-1",

@@ -367,6 +367,21 @@ describe("appReducer Stage and Development pane settings", () => {
 		expect(updated.stageShowBeamGuides).toBe(true);
 	});
 
+	it("stores the Stage view independently on each Stage pane", () => {
+		const updated = appReducer(initialState, {
+			type: "SET_PANE_STAGE_OPTION",
+			id: "stage",
+			option: "stageView",
+			value: "3d",
+		});
+		expect(
+			updated.desks
+				.find((desk) => desk.id === updated.activeDeskId)
+				?.panes.find((pane) => pane.id === "stage")?.stageView,
+		).toBe("3d");
+		expect(updated.stageView).toBe("2d");
+	});
+
 	it("stores Render quality independently on each Stage pane", () => {
 		const updated = appReducer(initialState, {
 			type: "SET_PANE_STAGE_OPTION",

@@ -307,8 +307,20 @@ export class ProgrammingApiClient {
 		return this.send({ type: "programmer_undo" });
 	}
 
-	private send(action: LiveAction) {
-		return this.transport.sendAction(action);
+	private async send(action: LiveAction) {
+		try {
+			return await this.transport.sendAction(action);
+		} catch (error) {
+			if (
+				!(error instanceof Error) ||
+				!error.message.includes("the active show is changing")
+			)
+				throw error;
+			// A show-object commit owns the activation boundary only briefly. Keep one
+			// operator gesture intact instead of surfacing a transient Busy response.
+			await new Promise((resolve) => globalThis.setTimeout(resolve, 15));
+			return this.transport.sendAction(action);
+		}
 	}
 }
 

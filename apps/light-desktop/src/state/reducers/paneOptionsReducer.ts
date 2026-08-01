@@ -50,10 +50,6 @@ export function reducePaneOptions(state: AppState, action: Action): AppState | u
 		case "SET_PANE_STAGE_OPTION":
 			return {
 				...state,
-				stageView:
-					action.option === "stageView"
-						? (action.value as AppState["stageView"])
-						: state.stageView,
 				desks: state.desks.map((desk) =>
 					desk.id !== state.activeDeskId
 						? desk
