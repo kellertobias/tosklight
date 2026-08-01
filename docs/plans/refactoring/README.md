@@ -54,16 +54,18 @@ files, contracts, runtime state, and verification surfaces do not overlap.
 | 28 | [Desk-wide Highlight look](finished/28-desk-wide-highlight-look.md) | Finished: one desk-owned semantic Highlight Look now resolves authored fixture capabilities while preserving explicit legacy compatibility. |
 | 29 | [Attribute registry, activation groups, and Indexed Presets](finished/29-attribute-registry-and-activation-groups.md) | Completed the canonical registry, coherent programmer activation, Indexed Presets, persistence, fixture-import mapping, and legacy compatibility contracts. |
 | 30 | [Green GitHub CI and visible benchmark results](finished/30-green-github-ci-and-visible-benchmark-results.md) | Completed exact-commit green CI, release publication, visible measured benchmark evidence and GitHub Pages deployment. |
-| 31 | [Supported scale, output isolation, and warm operator UI](doing/31-supported-scale-output-isolation-and-warm-operator-ui.md) | In progress: prove the packaged 1,000-fixture Stage, Fixture Sheet, output-isolation, and action-latency contract. |
-| 32 | [Macros](pending/32-macros-and-scheduled-macros.md) | Implement the settled TypeScript Macro package, runtime, permission, interaction, and persistence contract after supported-scale/output-isolation work. This is the final queued refactoring to start. |
+| 31 | [Supported scale, output isolation, and warm operator UI](finished/31-supported-scale-output-isolation-and-warm-operator-ui.md) | Completed supported-scale output isolation, responsive operator-state handling, and retained performance evidence. |
+| 32 | [Macros](pending/32-macros-and-scheduled-macros.md) | Specified but paused by an explicit operator hold; do not claim it until that hold is released. |
+| 33 | [Groups and Dynamics spatial mapping, settings, and SET routing](pending/33-group-spatial-selection-mapping-and-dynamics-projection.md) | Integrate Group-owned spatial mappings, explicit Dynamics inheritance/overrides, the three-tab Group settings modal, unambiguous SET routing, and Playback-owned Group Masters. |
+| 34 | [Show Patch table, fixture encoders, and light-source appearance](pending/34-show-patch-table-encoders-and-light-source-appearance.md) | Consolidate the patch table, add Location/Visualization encoder groups, and persist per-instance source, CCT, gel, bracket, and shaper appearance for visualizers. |
 
 Product-roadmap work under `docs/plans/Next` and `docs/plans/Later` remains separate unless a queue
 file explicitly links it as its behavior contract.
 
-The queue's filenames and table use the same execution order. Plans through green GitHub CI and
-visible benchmark evidence are complete. Supported-scale/output-isolation work is active; Macros
-remains next. The benchmark's measured result remains visibly degraded under Plan 30's temporary
-informational policy. Timecode remains outside this queue.
+The queue's filenames and table use the same execution order. Plans through supported scale are
+complete. Macros remains next by number but is paused by an explicit operator hold; do not skip or
+claim it without a deliberate queue decision. Plans 33 and 34 remain specification-only follow-up
+work. Timecode remains outside this queue.
 
 ## Completed Storybook lane
 
