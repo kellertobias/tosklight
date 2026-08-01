@@ -30,6 +30,7 @@ export interface WindowProps {
 	cueListTab?: "pool" | "cues";
 	presetFamily?: PresetFamily;
 	presetPoolColors?: boolean;
+	poolColumns?: number;
 	schedulerShowList?: boolean;
 	schedulerShowCalendar?: boolean;
 	onSchedulerLayoutChange?: (layout: {

@@ -34,6 +34,7 @@ export function GroupPoolGrid({
 	recordGroup,
 	runCommand,
 	paneId,
+	columns,
 }: Pick<FixtureMetadata, "capabilities" | "knownFixtureIds"> & {
 	active?: boolean;
 	cards: (Group | null)[];
@@ -44,6 +45,7 @@ export function GroupPoolGrid({
 	recordGroup: (target: GroupRecordingTarget) => Promise<unknown>;
 	runCommand: (command: string) => Promise<unknown>;
 	paneId?: string;
+	columns?: number;
 }) {
 	const groupSelection = useGroupSelectionActions(active);
 	const { state, dispatch } = useApp();
@@ -62,8 +64,13 @@ export function GroupPoolGrid({
 			return;
 		}
 		const commandText = command.read().text.trim();
-		if (group && /^SET$/i.test(commandText)) {
+		if (
+			group &&
+			state.controlMode === "playbacks" &&
+			(state.playbackSetArmed || /^SET$/i.test(commandText))
+		) {
 			void command.replace(`SET GROUP ${group.id}`, false);
+			dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
 			return;
 		}
 		if (group && /^SET\b/i.test(commandText)) {
@@ -104,6 +111,7 @@ export function GroupPoolGrid({
 	return (
 		<WindowScrollArea>
 			<PoolGrid
+				columns={columns}
 				minimumCardWidth={DEFAULT_POOL_CARD_MINIMUM_WIDTH}
 				slots={slots}
 				slotCount={cards.length}

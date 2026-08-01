@@ -94,6 +94,13 @@ export interface PatchPlacement {
 	splits: readonly PatchPlacementSplit[];
 }
 
+export interface PatchVectorSpread {
+	fixtureIds: readonly string[];
+	kind: "location" | "rotation";
+	axis: "x" | "y" | "z";
+	points: readonly number[];
+}
+
 export interface PatchLogicalHead {
 	profileHeadId: string | null;
 	headIndex: number;
@@ -149,6 +156,7 @@ export interface PatchMutation {
 	fixtures: readonly PatchFixtureWrite[];
 	removeFixtureIds: readonly string[];
 	placements?: readonly PatchPlacement[];
+	vectorSpreads?: readonly PatchVectorSpread[];
 }
 
 export type PatchFixturePolicyAction =

@@ -102,6 +102,84 @@ export function saveEdit(
 	void all;
 }
 
+export async function saveVectorSpread(
+	controller: PatchController,
+	kind: "location" | "rotation",
+	axis: "x" | "y" | "z",
+	points: number[],
+) {
+	const fixturesBySelectionId = new Map<string, string>();
+	for (const fixture of controller.data.visible) {
+		const logicalIds = fixture.logical_heads.length
+			? fixture.logical_heads.map((head) => head.fixture_id)
+			: [fixture.fixture_id];
+		for (const id of logicalIds)
+			fixturesBySelectionId.set(id, fixture.fixture_id);
+	}
+	const fixtureIds: string[] = [];
+	const seen = new Set<string>();
+	for (const selectedId of controller.selection.orderedFixtureIds ?? []) {
+		const fixtureId = fixturesBySelectionId.get(selectedId);
+		if (!fixtureId || seen.has(fixtureId)) continue;
+		seen.add(fixtureId);
+		fixtureIds.push(fixtureId);
+	}
+	if (fixtureIds.length < 2) {
+		controller.ui.setEditError(
+			"Select at least two fixtures to spread a value.",
+		);
+		return;
+	}
+	const scaledPoints =
+		kind === "location" ? points.map((point) => point * 1_000) : points;
+	if (
+		await controller.patch.spreadFixtureVector({
+			fixtureIds,
+			kind,
+			axis,
+			points: scaledPoints,
+		})
+	)
+		completeEdit(controller);
+	else controller.ui.setEditError("The fixture spread could not be applied.");
+}
+
+export async function saveVectorAxisInput(
+	controller: PatchController,
+	kind: "location" | "rotation",
+	axis: "x" | "y" | "z",
+	value: string,
+) {
+	if (/\bTHRU\b/i.test(value)) {
+		const points = value
+			.split(/\s+THRU\s+/i)
+			.map((point) => Number(point.trim()));
+		if (points.length > 1 && points.every(Number.isFinite)) {
+			await saveVectorSpread(controller, kind, axis, points);
+			return;
+		}
+		controller.ui.setEditError("Enter numeric values separated by THRU.");
+		return;
+	}
+	const parsed = Number(value);
+	if (!Number.isFinite(parsed)) {
+		controller.ui.setEditError("Enter a numeric value.");
+		return;
+	}
+	if ((controller.selection.orderedFixtureIds?.length ?? 0) > 1) {
+		await saveVectorSpread(controller, kind, axis, [parsed, parsed]);
+		return;
+	}
+	const selected = controller.data.selected;
+	if (!selected) return;
+	await applyEdit(controller, {
+		[kind]: {
+			...(selected[kind] ?? { x: 0, y: 0, z: 0 }),
+			[axis]: kind === "location" ? Math.round(parsed * 1_000) : parsed,
+		},
+	});
+}
+
 async function savePolicy(
 	controller: PatchController,
 	action: Parameters<typeof controller.patch.updatePolicy>[1],

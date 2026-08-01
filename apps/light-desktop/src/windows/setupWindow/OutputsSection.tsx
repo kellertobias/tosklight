@@ -58,6 +58,7 @@ export function OutputsSection({
 			<OutputRoutesSetup
 				routes={dmx?.outputRoutes ?? []}
 				onSave={dmx?.saveOutputRoute ?? (async () => false)}
+				onCreateRange={dmx?.createOutputRouteRange ?? (async () => false)}
 				onDelete={dmx?.deleteOutputRoute ?? (async () => false)}
 				outputBindIp={draft.output_bind_ip}
 			/>

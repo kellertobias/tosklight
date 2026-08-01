@@ -3,11 +3,20 @@ import { Fragment } from "react";
 import type { MultiPatchInstance, PatchedFixture } from "../../../api/types";
 import { isDmxPatchable } from "../patchUtils";
 import { usePatchController } from "./controller";
-import { armEdit, selectSplitAddress } from "./editSession";
+import {
+	armEdit,
+	armEditFromContextMenu,
+	selectSplitAddress,
+} from "./editSession";
 import { selectPatchFixture } from "./fixtureActions";
 import { FixtureTypeIcon, MultiPatchBranch } from "./fixtureDisplay";
 import { fixtureDisplayId } from "./fixtureIds";
-import { beginMultipatchEdit } from "./multipatchActions";
+import {
+	beginMultipatchEdit,
+	beginMultipatchVectorEditFromContextMenu,
+	PRIMARY_PHYSICAL_PATCH,
+	selectPhysicalPatchRow,
+} from "./multipatchActions";
 import {
 	definitionSplits,
 	effectiveSplitPatches,
@@ -102,7 +111,15 @@ function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 		<tr
 			className={`${selected ? "selected" : ""} ${pending ? "pending" : ""}`.trim()}
 			aria-busy={pending || undefined}
-			onClick={(event) => selectPatchFixture(controller, fixture, event)}
+			onClick={(event) => {
+				selectPhysicalPatchRow(
+					controller,
+					fixture,
+					PRIMARY_PHYSICAL_PATCH,
+					event,
+				);
+				selectPatchFixture(controller, fixture, event);
+			}}
 		>
 			<FixtureIdentityCells fixture={fixture} />
 			<FixturePatchCell fixture={fixture} />
@@ -306,7 +323,12 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 				<td className="patch-secondary" key={`location-${axis}`}>
 					<Button
 						className="patch-value"
+						aria-label={`Location ${axis.toUpperCase()} ${fixtureDisplayId(fixture)}`}
 						onClick={() => armEdit(controller, fixture, "location", axis)}
+						onContextMenu={(event) => {
+							event.preventDefault();
+							armEditFromContextMenu(controller, fixture, "location", axis);
+						}}
 					>
 						{((fixture.location?.[axis] ?? 0) / 1000).toFixed(3)} m
 					</Button>
@@ -316,7 +338,12 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 				<td className="patch-secondary" key={`rotation-${axis}`}>
 					<Button
 						className="patch-value"
+						aria-label={`Rotation ${axis.toUpperCase()} ${fixtureDisplayId(fixture)}`}
 						onClick={() => armEdit(controller, fixture, "rotation", axis)}
+						onContextMenu={(event) => {
+							event.preventDefault();
+							armEditFromContextMenu(controller, fixture, "rotation", axis);
+						}}
 					>
 						{Number((fixture.rotation?.[axis] ?? 0).toFixed(3))}°
 					</Button>
@@ -376,10 +403,16 @@ function MultiPatchRow({
 }) {
 	const controller = usePatchController();
 	const applicable = fixturePolicyApplicability(fixture.definition);
+	const selected =
+		controller.ui.physicalSelectionFixture === fixture.fixture_id &&
+		controller.ui.physicalSelectionIds.includes(instance.id);
 	return (
 		<tr
-			className="multipatch-row"
-			onClick={(event) => selectPatchFixture(controller, fixture, event)}
+			className={`multipatch-row${selected ? " selected" : ""}`}
+			onClick={(event) => {
+				selectPhysicalPatchRow(controller, fixture, instance.id, event);
+				selectPatchFixture(controller, fixture, event);
+			}}
 		>
 			<td className="patch-tree-cell">
 				<MultiPatchBranch last={last} />
@@ -442,6 +475,17 @@ function MultiPatchRow({
 								axis,
 							)
 						}
+						onContextMenu={(event) => {
+							event.preventDefault();
+							event.stopPropagation();
+							beginMultipatchVectorEditFromContextMenu(
+								controller,
+								fixture,
+								instance,
+								"location",
+								axis,
+							);
+						}}
 					>
 						{(instance.location[axis] / 1000).toFixed(3)} m
 					</Button>
@@ -460,6 +504,17 @@ function MultiPatchRow({
 								axis,
 							)
 						}
+						onContextMenu={(event) => {
+							event.preventDefault();
+							event.stopPropagation();
+							beginMultipatchVectorEditFromContextMenu(
+								controller,
+								fixture,
+								instance,
+								"rotation",
+								axis,
+							);
+						}}
 					>
 						{Number(instance.rotation[axis].toFixed(3))}°
 					</Button>

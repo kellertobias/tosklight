@@ -38,6 +38,7 @@ export function StaticCommandLine({
 				frequency: 44,
 				timecode: null,
 				blackout: false,
+				highlight: false,
 			}}
 			onReplace={() => undefined}
 			onExecute={() => undefined}

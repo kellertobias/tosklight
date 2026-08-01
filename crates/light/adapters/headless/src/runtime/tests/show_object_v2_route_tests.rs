@@ -117,15 +117,15 @@ async fn output_route_v2_actions_are_partial_tolerant_and_replay_safe() {
     let (status, created) = post_route_action(&app, &token, &show_id, create.clone()).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(created["replayed"], false);
-    assert_eq!(created["change"]["route_id"], "main");
-    assert_eq!(created["change"]["object_revision"], 1);
-    assert_eq!(created["change"]["deleted"], false);
+    assert_eq!(created["changes"][0]["route_id"], "main");
+    assert_eq!(created["changes"][0]["object_revision"], 1);
+    assert_eq!(created["changes"][0]["deleted"], false);
     assert_eq!(state.events.latest_sequence(), before_events + 1);
 
     let (status, replay) = post_route_action(&app, &token, &show_id, create).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(replay["replayed"], true);
-    assert_eq!(replay["change"], created["change"]);
+    assert_eq!(replay["changes"], created["changes"]);
     assert_eq!(state.events.latest_sequence(), before_events + 1);
 
     let update = serde_json::json!({
@@ -142,10 +142,10 @@ async fn output_route_v2_actions_are_partial_tolerant_and_replay_safe() {
     });
     let (status, updated) = post_route_action(&app, &token, &show_id, update).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(updated["change"]["object_revision"], 2);
-    assert_eq!(updated["change"]["route"]["enabled"], false);
-    assert_eq!(updated["change"]["route"]["destination_universe"], 2);
-    assert_eq!(updated["change"]["route"]["minimum_slots"], 128);
+    assert_eq!(updated["changes"][0]["object_revision"], 2);
+    assert_eq!(updated["changes"][0]["route"]["enabled"], false);
+    assert_eq!(updated["changes"][0]["route"]["destination_universe"], 2);
+    assert_eq!(updated["changes"][0]["route"]["minimum_slots"], 128);
 
     let exact = app
         .clone()
@@ -191,13 +191,88 @@ async fn output_route_v2_actions_are_partial_tolerant_and_replay_safe() {
     });
     let (status, deleted) = post_route_action(&app, &token, &show_id, delete.clone()).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(deleted["change"]["deleted"], true);
-    assert_eq!(deleted["change"]["route"], serde_json::Value::Null);
+    assert_eq!(deleted["changes"][0]["deleted"], true);
+    assert_eq!(deleted["changes"][0]["route"], serde_json::Value::Null);
     let (status, replayed_delete) = post_route_action(&app, &token, &show_id, delete).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(replayed_delete["replayed"], true);
-    assert_eq!(replayed_delete["change"], deleted["change"]);
+    assert_eq!(replayed_delete["changes"], deleted["changes"]);
     assert_eq!(state.events.latest_sequence(), before_events + 3);
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn output_route_range_is_atomic_paired_and_replay_safe() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show_id = open_show(&app, &token, "Output route range").await;
+    let before_events = state.events.latest_sequence();
+    let create = serde_json::json!({
+        "request_id": "create-eight-routes",
+        "action": {
+            "type": "create_range",
+            "range_id": Uuid::from_u128(80),
+            "route": {
+                "protocol": "art_net",
+                "logical_universe": 1,
+                "destination_universe": 101,
+                "delivery_mode": "broadcast",
+                "destination": null,
+                "enabled": true,
+                "minimum_slots": 128
+            },
+            "logical_universe_end": 8,
+            "destination_universe_end": 108
+        }
+    });
+
+    let (status, created) = post_route_action(&app, &token, &show_id, create.clone()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(created["replayed"], false);
+    assert_eq!(created["changes"].as_array().unwrap().len(), 8);
+    for (index, change) in created["changes"].as_array().unwrap().iter().enumerate() {
+        assert_eq!(change["route"]["logical_universe"], index as u64 + 1);
+        assert_eq!(change["route"]["destination_universe"], index as u64 + 101);
+    }
+    assert_eq!(state.output.snapshot().routes.len(), 8);
+    assert_eq!(state.events.latest_sequence(), before_events + 8);
+
+    let (status, replayed) = post_route_action(&app, &token, &show_id, create).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(replayed["replayed"], true);
+    assert_eq!(replayed["changes"], created["changes"]);
+    assert_eq!(state.output.snapshot().routes.len(), 8);
+    assert_eq!(state.events.latest_sequence(), before_events + 8);
+
+    let (status, error) = post_route_action(
+        &app,
+        &token,
+        &show_id,
+        serde_json::json!({
+            "request_id": "invalid-route-range",
+            "action": {
+                "type": "create_range",
+                "range_id": Uuid::from_u128(81),
+                "route": {
+                    "protocol": "art_net",
+                    "logical_universe": 20,
+                    "destination_universe": 201,
+                    "delivery_mode": "broadcast",
+                    "destination": null,
+                    "enabled": true,
+                    "minimum_slots": 128
+                },
+                "logical_universe_end": 27,
+                "destination_universe_end": 207
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(error["error"].as_str().unwrap().contains("equal lengths"));
+    assert_eq!(state.output.snapshot().routes.len(), 8);
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -260,7 +335,7 @@ async fn overlapping_output_route_replay_releases_cache_while_work_is_paused() {
     assert_eq!(replay_status, StatusCode::OK);
     assert_eq!(first_body["replayed"], false);
     assert_eq!(replay_body["replayed"], true);
-    assert_eq!(replay_body["change"], first_body["change"]);
+    assert_eq!(replay_body["changes"], first_body["changes"]);
     assert_eq!(
         state.events.latest_sequence(),
         before_events + 1,

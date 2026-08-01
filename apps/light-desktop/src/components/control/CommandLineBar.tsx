@@ -17,6 +17,7 @@ import {
 	useFrameRateHz,
 	useHardwareConnected,
 } from "../../features/deskSnapshot/DeskSnapshotState";
+import { useHighlightSnapshot } from "../../features/highlight/HighlightState";
 import { useOutputRuntimeBlackout } from "../../features/outputRuntime/OutputRuntimeView";
 import { useShellStatusActions } from "../../features/shellStatus/ShellStatusActionsProvider";
 import {
@@ -104,6 +105,7 @@ function useCommandLineBarModel() {
 	const frequency = useFrameRateHz();
 	const timecode = useActiveTimecode();
 	const blackout = useOutputRuntimeBlackout() === true;
+	const highlight = useHighlightSnapshot()?.active === true;
 	const serverError = useServerError();
 	const command = useCommandLineSurface({ selection: true });
 	const programmerActivity = useProgrammerValuesActivity();
@@ -215,6 +217,7 @@ function useCommandLineBarModel() {
 		frequency: typeof frequency === "number" ? frequency : "—",
 		timecode,
 		blackout,
+		highlight,
 	};
 	return {
 		state,

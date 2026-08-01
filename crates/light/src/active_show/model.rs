@@ -679,6 +679,24 @@ pub struct MutateOutputRouteCommand {
     pub mutation: OutputRouteMutation,
 }
 
+/// One server-expanded, atomic sequence of paired output-route creations.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CreateOutputRouteRangeCommand {
+    pub show_id: ShowId,
+    /// Stable operation identity used to derive collision-resistant route object ids.
+    pub range_id: uuid::Uuid,
+    /// The first logical and destination universes live in this route candidate.
+    pub first_route: LosslessBody<OutputRoute>,
+    pub logical_universe_end: u16,
+    pub destination_universe_end: u16,
+}
+
+impl ApplicationCommand for CreateOutputRouteRangeCommand {
+    type Value = CreateOutputRouteRangeResult;
+
+    const FAMILY: CommandFamily = CommandFamily::Output;
+}
+
 impl ApplicationCommand for MutateOutputRouteCommand {
     type Value = MutateOutputRouteResult;
 
@@ -712,6 +730,16 @@ pub struct MutateOutputRouteResult {
     /// Compatibility-migration write-backs of other routes committed alongside the request.
     pub migrated_routes: Vec<OutputRouteChange>,
     pub route_to_terminate: Option<OutputRoute>,
+    pub event_sequence: u64,
+}
+
+/// Result of one all-or-nothing output-route range creation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CreateOutputRouteRangeResult {
+    pub context: ActionContext,
+    pub changes: Vec<OutputRouteChange>,
+    pub migration_changes: Vec<ActiveShowObjectChange>,
+    pub migrated_routes: Vec<OutputRouteChange>,
     pub event_sequence: u64,
 }
 

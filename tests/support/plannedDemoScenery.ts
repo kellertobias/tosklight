@@ -3,8 +3,8 @@ import type { ApiDriver } from "../bench/core/api";
 import { ensurePlannedDemoFixtureLibrary } from "./plannedDemoFixtureLibrary";
 
 export const PLANNED_DEMO_SCENERY_FIXTURES = 33;
-export const PLANNED_DEMO_TOTAL_FIXTURE_RECORDS = 295;
-export const PLANNED_DEMO_TOTAL_PHYSICAL_INSTANCES = 343;
+export const PLANNED_DEMO_TOTAL_FIXTURE_RECORDS = 264;
+export const PLANNED_DEMO_TOTAL_PHYSICAL_INSTANCES = 306;
 
 type Point = { x: number; y: number; z: number };
 type SceneryEntry = {
@@ -22,6 +22,11 @@ export async function installPlannedDemoScenery(
 	api: ApiDriver,
 	showId: string,
 	layers: Readonly<Record<string, string>>,
+	options: {
+		progressive?: boolean;
+		onItem?: () => Promise<void>;
+		backCurtain?: { x: string; y: number; z: number };
+	} = {},
 ) {
 	await ensurePlannedDemoFixtureLibrary(api);
 	const profiles = (await api.fixtureProfilesSnapshot())
@@ -34,7 +39,7 @@ export async function installPlannedDemoScenery(
 				: [[fixture.virtual_fixture_number, fixture] as const],
 		),
 	);
-	const fixtures = sceneryEntries().map((entry) => {
+	const fixtures = sceneryEntries(options.backCurtain).map((entry) => {
 		const profile = profiles.find(
 			(candidate) =>
 				candidate.manufacturer === "Venue" && candidate.name === entry.profile,
@@ -82,7 +87,7 @@ export async function installPlannedDemoScenery(
 			})),
 			layer_id:
 				layers[entry.layer] ??
-				layers.Stage ??
+				layers["Stage & Venue"] ??
 				Object.values(layers)[0] ??
 				"default",
 			direct_control: null,
@@ -94,23 +99,38 @@ export async function installPlannedDemoScenery(
 			highlight_overrides: [],
 		};
 	});
-	await api.request(
-		"POST",
-		"/api/v2/patch/fixtures",
-		{
-			request_id: crypto.randomUUID(),
-			fixtures,
-			remove_fixture_ids: [],
-			placements: [],
-		},
-		true,
-		before.revision,
-		{ showId },
-	);
+	const batches = options.progressive
+		? fixtures
+				.filter(
+					(fixture) => !byVirtualNumber.has(fixture.virtual_fixture_number),
+				)
+				.map((fixture) => [fixture])
+		: [fixtures];
+	for (const batch of batches) {
+		const current = await api.patch();
+		await api.request(
+			"POST",
+			"/api/v2/patch/fixtures",
+			{
+				request_id: crypto.randomUUID(),
+				fixtures: batch,
+				remove_fixture_ids: [],
+				placements: [],
+			},
+			true,
+			current.revision,
+			{ showId },
+		);
+		await options.onItem?.();
+	}
 	return fixtures;
 }
 
-function sceneryEntries(): SceneryEntry[] {
+function sceneryEntries(backCurtain?: {
+	x: string;
+	y: number;
+	z: number;
+}): SceneryEntry[] {
 	const trusses = [
 		["Back", 4],
 		["Mid", 0],
@@ -120,7 +140,7 @@ function sceneryEntries(): SceneryEntry[] {
 		name: `${name} Truss Segment 1`,
 		profile: "Four-Point Truss",
 		mode: "2 m",
-		layer: `${name} Truss`,
+		layer: "Trusses",
 		location: { x: -3, y: Number(y), z: 4.15 },
 		multipatches: [-1, 1, 3].map((x, index) => ({
 			name: `${name} Truss Segment ${index + 2}`,
@@ -132,28 +152,33 @@ function sceneryEntries(): SceneryEntry[] {
 		name: `Stage Element ${index + 1}`,
 		profile: "Stage Element 2 × 1 m",
 		mode: "50 cm",
-		layer: "Stage",
+		layer: "Stage & Venue",
 		location: {
 			x: -3 + (index % 4) * 2,
 			y: 0.5 + Math.floor(index / 4),
 			z: 0,
 		},
 	}));
-	const curtains = [-2.5, 2.5].map((x, index) => ({
-		number: index + 20,
-		name: `Back Curtain ${index + 1}`,
-		profile: "Curtain 5 m",
-		mode: "5 m",
-		layer: "Stage",
-		location: { x, y: 4.35, z: 2.5 },
-	}));
+	const curtainRange = (backCurtain?.x ?? "-2.5 THRU 2.5")
+		.split(/\s+THRU\s+/u)
+		.map(Number);
+	const curtains = [curtainRange[0], curtainRange[1] ?? curtainRange[0]].map(
+		(x, index) => ({
+			number: index + 20,
+			name: `Back Curtain ${index + 1}`,
+			profile: "Curtain 5 m",
+			mode: "5 m",
+			layer: "Stage & Venue",
+			location: { x, y: backCurtain?.y ?? 4.35, z: backCurtain?.z ?? 2.0 },
+		}),
+	);
 	const railings = [
 		...[-3, -1, 1, 3].map((x, index) => ({
 			number: index + 22,
 			name: `Back Railing ${index + 1}`,
 			profile: "One-Point Truss / Pipe",
 			mode: "2 m",
-			layer: "Stage",
+			layer: "Stage & Venue",
 			location: { x, y: 4.05, z: 1.35 },
 		})),
 		...[-1, 1].flatMap((side, sideIndex) =>
@@ -162,7 +187,7 @@ function sceneryEntries(): SceneryEntry[] {
 				name: `${side < 0 ? "Left" : "Right"} Railing ${index + 1}`,
 				profile: "One-Point Truss / Pipe",
 				mode: "2 m",
-				layer: "Stage",
+				layer: "Stage & Venue",
 				location: { x: side * 4.05, y, z: 1.35 },
 				rotation: { x: 0, y: 0, z: 90 },
 			})),
@@ -173,7 +198,7 @@ function sceneryEntries(): SceneryEntry[] {
 		name: `Vertical Pipe ${index + 1}`,
 		profile: "One-Point Truss / Pipe",
 		mode: "2.5 m",
-		layer: "Back Truss",
+		layer: "Trusses",
 		location: { x, y: 4.15, z: 2.9 },
 		rotation: { x: 0, y: 90, z: 0 },
 	}));

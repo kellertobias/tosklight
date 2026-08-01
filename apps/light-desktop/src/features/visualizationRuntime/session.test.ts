@@ -82,7 +82,7 @@ describe("VisualizationRuntimeSession", () => {
 			| Parameters<NonNullable<VisualizationRuntimeTransport["openStream"]>>[1]
 			| undefined;
 		const transport: VisualizationRuntimeTransport = {
-			loadSnapshot: vi.fn(),
+			loadSnapshot: vi.fn(async (_scope, lane) => snapshot(lane)),
 			openStream: vi.fn((_scope, nextObserver) => {
 				observer = nextObserver;
 				return { updateClaims, close };
@@ -99,7 +99,7 @@ describe("VisualizationRuntimeSession", () => {
 		await vi.advanceTimersByTimeAsync(1_000);
 
 		expect(transport.openStream).toHaveBeenCalledOnce();
-		expect(transport.loadSnapshot).not.toHaveBeenCalled();
+		expect(transport.loadSnapshot).toHaveBeenCalledTimes(2);
 		expect(updateClaims).toHaveBeenLastCalledWith(
 			["normal", "preload"],
 			10,

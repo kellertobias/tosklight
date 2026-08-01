@@ -243,6 +243,7 @@ const marketingDmxDiagnostics: DmxDiagnostics = {
 	setDmxOverride: async () => undefined,
 	outputRoutes: marketingOutputRoutes,
 	saveOutputRoute: async () => true,
+	createOutputRouteRange: async () => true,
 	deleteOutputRoute: async () => true,
 };
 

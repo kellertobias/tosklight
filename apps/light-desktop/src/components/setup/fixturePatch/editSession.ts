@@ -59,6 +59,27 @@ export function armEdit(
 	ui.setEdit(kind);
 }
 
+export function armEditFromContextMenu(
+	controller: PatchController,
+	fixture: PatchedFixture,
+	kind: "location" | "rotation",
+	axis: VectorAxis,
+) {
+	controller.dispatch({ type: "SET_PATCH_ARMED", value: true });
+	controller.ui.setEditError("");
+	controller.ui.setSelectedFixture(fixture.fixture_id);
+	controller.ui.setVector(fixture[kind] ?? { x: 0, y: 0, z: 0 });
+	controller.ui.setEditText(
+		String(
+			kind === "location"
+				? (fixture[kind]?.[axis] ?? 0) / 1_000
+				: (fixture[kind]?.[axis] ?? 0),
+		),
+	);
+	controller.ui.setEditAxis(axis);
+	controller.ui.setEdit(kind);
+}
+
 export function selectSplitAddress(
 	controller: PatchController,
 	fixture: PatchedFixture,

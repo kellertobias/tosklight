@@ -520,6 +520,28 @@ function PresetPoolPaneSettings({ pane }: { pane: PaneModel }) {
 	);
 }
 
+function GroupPoolPaneSettings({ pane }: { pane: PaneModel }) {
+	const { dispatch } = useApp();
+	return (
+		<>
+			<NumberField
+				label="Columns"
+				min="1"
+				max="24"
+				value={pane.poolColumns ?? 4}
+				onChange={(event) =>
+					dispatch({
+						type: "SET_PANE_POOL_COLUMNS",
+						id: pane.id,
+						value: Number(event.target.value),
+					})
+				}
+			/>
+			<PoolColorSettings objectType="group" paneId={pane.id} />
+		</>
+	);
+}
+
 function paneLayoutTab(pane: PaneModel, maximized: boolean): WindowSettingsTab {
 	return {
 		id: "pane",
@@ -601,6 +623,25 @@ function PaneGroupShortcutsSettings({ pane }: { pane: PaneModel }) {
 	);
 }
 
+function FixtureSheetPaneSettings({ pane }: { pane: PaneModel }) {
+	const { dispatch } = useApp();
+	return (
+		<SwitchField
+			label="Show active fixtures only"
+			offLabel="All fixtures"
+			onLabel="Programmer only"
+			checked={Boolean(pane.fixtureSheetActiveOnly)}
+			onChange={(event) =>
+				dispatch({
+					type: "SET_PANE_FIXTURE_ACTIVE_ONLY",
+					id: pane.id,
+					value: event.target.checked,
+				})
+			}
+		/>
+	);
+}
+
 function VirtualPlaybackExclusionSettings({
 	pane,
 	close,
@@ -658,6 +699,8 @@ function paneSpecificTabs(
 			content:
 				poolType === "preset" ? (
 					<PresetPoolPaneSettings pane={pane} />
+				) : poolType === "group" ? (
+					<GroupPoolPaneSettings pane={pane} />
 				) : (
 					<PoolColorSettings objectType={poolType} paneId={pane.id} />
 				),
@@ -679,6 +722,12 @@ function paneSpecificTabs(
 			id: "layout-group",
 			label: "Layout",
 			content: <LayoutPaneSettings pane={pane} />,
+		});
+	if (pane.kind === "fixtures")
+		tabs.push({
+			id: "fixture-sheet",
+			label: "Fixture Sheet",
+			content: <FixtureSheetPaneSettings pane={pane} />,
 		});
 	if (pane.kind === "virtual_playbacks")
 		tabs.push(

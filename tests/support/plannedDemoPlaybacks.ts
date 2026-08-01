@@ -16,6 +16,7 @@ const CUE_LIST_IDS = {
 	acl4: stableUuid(4, 5),
 	hazer: stableUuid(4, 6),
 	chase: stableUuid(4, 7),
+	front: stableUuid(4, 8),
 } as const;
 export async function installPlannedDemoPlaybacks(
 	api: ApiDriver,
@@ -24,13 +25,21 @@ export async function installPlannedDemoPlaybacks(
 ) {
 	const existingPlaybacks = await api.showObjects<any>(showId, "playback");
 	const existingPage = await api.showObject<any>(showId, "playback_page", "1");
-	const visibleAclOne = existingPlaybacks.find(
-		(playback) =>
-			playback.body.number === 12 && playback.body.target?.type === "cue_list",
-	);
+	const visibleCueListId = (poolNumber: number) => {
+		const playback = existingPlaybacks.find(
+			(candidate) =>
+				candidate.body.number === poolNumber &&
+				candidate.body.target?.type === "cue_list",
+		);
+		return playback?.body.target.cue_list_id as string | undefined;
+	};
 	const cueListIds = {
 		...CUE_LIST_IDS,
-		acl1: visibleAclOne?.body.target.cue_list_id ?? CUE_LIST_IDS.acl1,
+		start: visibleCueListId(1) ?? CUE_LIST_IDS.start,
+		front: visibleCueListId(2) ?? CUE_LIST_IDS.front,
+		hazer: visibleCueListId(3) ?? CUE_LIST_IDS.hazer,
+		acl1: visibleCueListId(4) ?? CUE_LIST_IDS.acl1,
+		chase: visibleCueListId(8) ?? CUE_LIST_IDS.chase,
 	};
 	const aclCueListIds = [
 		cueListIds.acl1,
@@ -54,28 +63,49 @@ export async function installPlannedDemoPlaybacks(
 	const cuelists = [
 		cueList(cueListIds.start, "Start", [
 			stateCue(1, "Start", [
-				...intensity(groups, "Profile All", 1),
-				...intensity(groups, "Wash All", 1),
-				...intensity(groups, "LED All", 1),
+				...intensity(groups, "Beam Show", 1),
+				...intensity(groups, "Beam Auxiliary", 1),
+				...intensity(groups, "Wash Show", 1),
+				...intensity(groups, "Wash Auxiliary", 1),
+				...intensity(groups, "LED Show", 1),
+				...intensity(groups, "LED Auxiliary", 1),
 				...intensity(groups, "Blinders", 1),
-				...attributes(groups, ["Profile All", "Wash All", "LED All"], {
-					"color.red": 1,
-					"color.green": 1,
-					"color.blue": 1,
-				}),
-				...attributes(groups, ["Profile All", "Wash All"], {
-					pan: 0.5,
-					tilt: 0.5,
-				}),
+				...attributes(
+					groups,
+					[
+						"Beam Show",
+						"Beam Auxiliary",
+						"Wash Show",
+						"Wash Auxiliary",
+						"LED Show",
+						"LED Auxiliary",
+					],
+					{
+						"color.red": 1,
+						"color.green": 1,
+						"color.blue": 1,
+					},
+				),
+				...attributes(
+					groups,
+					["Beam Show", "Beam Auxiliary", "Wash Show", "Wash Auxiliary"],
+					{
+						pan: 0.5,
+						tilt: 0.5,
+					},
+				),
 			]),
 		]),
 		...[1, 2, 3, 4].map((number) =>
 			cueList(aclCueListIds[number - 1], `ACL ${number}`, [
-				stateCue(1, `ACL ${number}`, intensity(groups, `ACL ${number}`, 1)),
+				stateCue(1, `ACL ${number}`, intensity(groups, `ACL${number}`, 1)),
 			]),
 		),
 		cueList(cueListIds.hazer, "Hazer", [
-			stateCue(1, "Haze 20%", intensity(groups, "Hazers", 0.2)),
+			stateCue(1, "Haze 20%", intensity(groups, "Hazer", 0.2)),
+		]),
+		cueList(cueListIds.front, "Front Light", [
+			stateCue(1, "Front Light", intensity(groups, "Front Lights", 1)),
 		]),
 		{
 			...cueList(
@@ -86,7 +116,7 @@ export async function installPlannedDemoPlaybacks(
 						active,
 						`ACL ${active}`,
 						[1, 2, 3, 4].flatMap((number) =>
-							intensity(groups, `ACL ${number}`, number === active ? 1 : 0),
+							intensity(groups, `ACL${number}`, number === active ? 1 : 0),
 						),
 					),
 				),
@@ -102,24 +132,31 @@ export async function installPlannedDemoPlaybacks(
 		await putPlannedDemoObject(api, showId, "cue_list", cuelist.id, cuelist);
 
 	const playbacks = [
-		playback(1, "Show Profile Odd", { type: "group", group_id: "21" }),
-		playback(2, "Show Profile Even", { type: "group", group_id: "22" }),
-		playback(3, "Show LED", { type: "group", group_id: "17" }),
-		playback(4, "Show Wash", { type: "group", group_id: "15" }),
-		playback(5, "All ACLs", { type: "group", group_id: "35" }),
-		playback(6, "Blinders", { type: "group", group_id: "36" }),
-		playback(11, "Start", { type: "cue_list", cue_list_id: cueListIds.start }),
+		playback(101, "Beam Show Odd", { type: "group", group_id: "6" }),
+		playback(102, "Beam Show Even", { type: "group", group_id: "7" }),
+		playback(103, "LED Show", { type: "group", group_id: "18" }),
+		playback(104, "Wash Show", { type: "group", group_id: "11" }),
+		playback(105, "All ACLs", { type: "group", group_id: "32" }),
+		playback(106, "Blinders", { type: "group", group_id: "26" }),
+		playback(1, "Start", { type: "cue_list", cue_list_id: cueListIds.start }),
+		playback(2, "Front Light", {
+			type: "cue_list",
+			cue_list_id: cueListIds.front,
+		}),
+		playback(3, "Hazer", { type: "cue_list", cue_list_id: cueListIds.hazer }),
 		...[1, 2, 3, 4].map((number) =>
-			playback(11 + number, `ACL ${number}`, {
+			playback(number + 3, `ACL ${number}`, {
 				type: "cue_list",
 				cue_list_id: aclCueListIds[number - 1],
 			}),
 		),
-		playback(16, "Hazer", { type: "cue_list", cue_list_id: cueListIds.hazer }),
-		playback(17, "ACL Chase", {
-			type: "cue_list",
-			cue_list_id: cueListIds.chase,
-		}),
+		{
+			...playback(8, "ACL Chase", {
+				type: "cue_list",
+				cue_list_id: cueListIds.chase,
+			}),
+			buttons: ["toggle", "go_minus", "flash"],
+		},
 	];
 	for (const item of playbacks)
 		await putPlannedDemoObject(
@@ -132,11 +169,40 @@ export async function installPlannedDemoPlaybacks(
 	await putPlannedDemoObject(api, showId, "playback_page", "1", {
 		number: 1,
 		name: "Busking",
-		slots: Object.fromEntries(
-			playbacks.map((item) => [String(item.number), item.number]),
-		),
+		slots: {
+			1: 101,
+			2: 102,
+			3: 103,
+			4: 104,
+			5: 105,
+			6: 106,
+			11: 2,
+			12: 1,
+			13: 5,
+			14: 6,
+			15: 7,
+			16: 3,
+			17: 8,
+			18: 4,
+		},
 		virtual_playbacks: existingPage?.body.virtual_playbacks ?? {},
 	});
+	const groupPlaybackNumbers = new Map([
+		["6", 101],
+		["7", 102],
+		["18", 103],
+		["11", 104],
+		["32", 105],
+		["26", 106],
+	]);
+	for (const group of await api.showObjects<any>(showId, "group")) {
+		const playbackNumber = groupPlaybackNumbers.get(group.id);
+		if (playbackNumber == null) continue;
+		await putPlannedDemoObject(api, showId, "group", group.id, {
+			...group.body,
+			playback_fader: playbackNumber,
+		});
+	}
 	return { cuelists, playbacks };
 }
 

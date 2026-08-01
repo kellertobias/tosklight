@@ -5,6 +5,31 @@ export function plannedDemoLayout() {
 		activeDeskId: "busking",
 		desks: [
 			{
+				id: "group-programming",
+				name: "Group Programming",
+				panes: [
+					pane(
+						"group-programming-fixtures",
+						"fixtures",
+						"Fixture Sheet",
+						1,
+						1,
+						16,
+						18,
+					),
+					pane(
+						"group-programming-groups",
+						"groups",
+						"Group Pool",
+						17,
+						1,
+						8,
+						18,
+						{ poolColumns: 7 },
+					),
+				],
+			},
+			{
 				id: "busking",
 				name: "Busking",
 				panes: [
@@ -27,11 +52,46 @@ export function plannedDemoLayout() {
 						12,
 						18,
 						{
-							virtualPlaybackRows: 6,
-							virtualPlaybackColumns: 5,
+							virtualPlaybackRows: 5,
+							virtualPlaybackColumns: 10,
 							virtualPlaybackPageMode: "pinned",
 							virtualPlaybackPinnedPage: 1,
 						},
+					),
+				],
+			},
+			{
+				id: "cue-programming",
+				name: "Cue Programming",
+				panes: [
+					pane(
+						"cue-programming-fixtures",
+						"fixtures",
+						"Fixture Sheet",
+						1,
+						1,
+						14,
+						18,
+						{ fixtureSheetActiveOnly: true },
+					),
+					pane(
+						"cue-programming-pool",
+						"cuelist_pool",
+						"Cuelist Pool",
+						15,
+						1,
+						10,
+						9,
+					),
+					pane(
+						"cue-programming-detail",
+						"cues",
+						"Cues · Cuelist",
+						15,
+						10,
+						10,
+						9,
+						{ cueListSource: "follow-selection", showCueSidebar: true },
 					),
 				],
 			},
@@ -50,7 +110,7 @@ export function plannedDemoLayout() {
 					),
 					pane("programming-stage", "stage", "Stage", 13, 1, 12, 12, {
 						stageView: "3d",
-						followPreload: true,
+						followPreload: false,
 						showBeamGuides: true,
 						stageRenderQuality: "lines_and_beams",
 					}),
@@ -89,7 +149,8 @@ export async function installPlannedDemoLayout(api: ApiDriver, showId: string) {
 		(desk: any) => desk.name === "Busking",
 	);
 	if (visibleBusking) {
-		const busking = body.desks[0];
+		const busking = body.desks.find((desk) => desk.id === "busking");
+		if (!busking) throw new Error("Canonical Busking desktop is unavailable");
 		const visibleVirtualPlaybacks = visibleBusking.panes?.find(
 			(pane: any) => pane.kind === "virtual_playbacks",
 		);
@@ -103,6 +164,28 @@ export async function installPlannedDemoLayout(api: ApiDriver, showId: string) {
 		}
 		body.activeDeskId = visibleBusking.id;
 	}
+	await api.seedShowObject(
+		showId,
+		"user_layout",
+		userId,
+		body,
+		existing?.revision ?? 0,
+	);
+	return body;
+}
+
+export async function installPlannedDemoGroupProgrammingLayout(
+	api: ApiDriver,
+	showId: string,
+) {
+	const userId = api.session?.user.id;
+	if (!userId)
+		throw new Error("Group Programming desktop requires an authenticated user");
+	const existing = (await api.showObjects<any>(showId, "user_layout")).find(
+		(layout) => layout.id === userId,
+	);
+	const body = plannedDemoLayout();
+	body.activeDeskId = "group-programming";
 	await api.seedShowObject(
 		showId,
 		"user_layout",

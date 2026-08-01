@@ -239,8 +239,8 @@ states that this Linux release probe has no UI: the exact 1,000-instance Stage p
 usability proof remains the packaged/UI acceptance recorded in Plans 20 and 21.
 
 The already-required product-demo run now also emits current-release performance evidence for
-the exact canonical show: 262 controllable fixtures, 33 visual-only Venue records, 295 total
-patch records, 343 physical Stage instances, and the 3D Stage visible. Release Performance reports
+the exact canonical show: 231 controllable fixtures, 33 visual-only Venue records, 264 total
+patch records, 306 physical Stage instances, and the 3D Stage visible. Release Performance reports
 its Stage presentation cadence, source-to-canvas
 p95, render-duration p95, maximum draw calls, and maximum triangles. This reuses the existing
 recording window instead of adding another long CI run. The page labels the measurement as
@@ -254,3 +254,98 @@ artifact path as CI. A local release-binary policy run measured 1,024 fixtures a
 and 2,048 fixtures at 84 Hz minimum; the limiting p95 phase was engine render and fixture
 projection in both runs. These local numbers validate the report shape and are not substituted
 for the next GitHub runner measurement.
+
+### 2026-08-01 product-demo and operator-workflow follow-up
+
+The canonical product demo now starts from an empty show and carries a JSON-shaped, 25 fps edit
+contract at the top of its scenario. Every chapter has an exact frame budget, the crossfades and
+narration holds are configurable, repetitive work is accelerated visibly, and the first decoded
+frame is already the complete ToskLight Product Demo card. The final 12:05.15 edit covers Show
+Setup, Output Configuration, Defining Groups, Assigning Group Masters, Preset Setup, Cuelists,
+Dynamics, Virtual Playbacks, and Busking and Preload. It ends after a 16-bar, 120 BPM busking
+sequence in which bar 8 prepares a preload look and bar 16 commits it with a two-second Programmer
+Fade.
+
+The production workflows exercised by the recording were tightened alongside the scenario:
+
+- Fixture Library search accepts human-readable digit and word variants such as `4Point Truss`,
+  and the titlebar search occupies the full modal-header height.
+- Fixture Sheet location edits apply a single value to every selected fixture, while THRU spreads
+  retain ordered selection semantics.
+- output configuration accepts paired logical and destination universe ranges such as
+  `1 THRU 8`; the server creates the full range atomically and replay-safely, with no partial
+  mutation on invalid input.
+- Desktop configuration keeps Delete beside Close and presents Clone Current Desktop as the main
+  body action.
+- Group tiles support the mode-aware SET touch paths used to name Groups in Programmer mode and
+  assign Group Masters in Playback mode.
+- the generated starter show now retains the revised patch, eight Cuelists, fourteen physical
+  Playbacks, thirty Dynamics, and the canonical 10 by 5 Virtual Playback layout.
+
+Verification passed with 60 focused desktop tests, four focused Rust output-range tests, the
+programmer action timing gate, the planned Playback topology test, the production desktop build,
+the generated-show acceptance test, and a complete non-recording product-demo rehearsal. The
+single final recording run passed in 16.6 minutes and produced 18,140 canonical frames at 25 fps.
+Both delivery files are 1920 by 1080 and 725.6 seconds long; the reviewed WebM uses VP9 and the
+reviewed MP4 uses H.265.
+
+### 2026-08-01 canonical dimmer-patch follow-up
+
+The starter show and non-recording product-demo path now model the conventional rig as two
+12-channel dimmer racks. Front, side, drums, stage Profiles, four ACL controls, House Lights, and
+both two-channel four-blinders occupy `1.1` through `1.24`; House Lights use real addressed
+multi-patches at `1.18`–`1.20`, while the second Front Drums lamp, second Profile Stage Center
+lamp, and ACL physical lamps deliberately add no extra DMX addresses. Stage LED PARs continue
+from `1.25`, hazers occupy `1.509` and `1.511`, Stage movers use universes 2–4, Audience lighting
+uses 5–6, and Auxiliary lighting uses universe 8. Universe 1 contains no movers.
+
+This revised capacity-balanced show contains 231 controllable lighting fixtures, 264 physical
+lighting instances, 33 visual-only Venue records, 264 total patch records, 306 physical Stage
+instances, and 2,988 occupied DMX slots. The Fixture Patch uses one `Conventional Light` layer for
+the dimmer-rack population. Repeated truss work runs at the accelerated interaction pace after
+the first complete truss, and the fixture-mode dropdown renders `No DMX` as a smaller muted
+annotation. During the remaining lighting fast-forward, the Patch view selects each destination
+layer immediately before that fixture batch appears.
+
+The Group chapter now begins with a separate `Setting up the Basics` title card while the
+Fixture Sheet/Group Pool desktop is created. `Defining Groups` appears only after that setup is
+complete, immediately before the first fixture selection. Their configurable frame budgets split
+the previous Group chapter duration without changing the canonical total runtime.
+
+The first 28-fixture Beam Stage selection now uses a configurable 70 ms preview and 70 ms settle
+per Touch click, targeting roughly four seconds for the complete selection. Group-name keyboard
+clicks use a configurable 3 ms preview and settle—more than three times faster than the prior
+typing pace—while the first name retains its pre-confirm hold. Group properties now visibly choose
+a family-appropriate icon; the canonical Group generator supplies icons for accelerated/API-created
+Groups as well. The second naming pass skips the long modal, confirm, and save holds.
+
+After those two narrated examples, first-level Groups 3–9 use a configurable 12 ms preview and
+12 ms settle for accelerated simulated-hardware and modal actions, targeting roughly four to five
+seconds for the complete block. The next narration hold now begins only after the action text
+announces the Beam Stage plus Beam Audience selection. Beam Show and its first odd/even derivatives
+remain visible and narratable; only the later Group remainder returns to the existing API
+fast-forward.
+
+The preset-programming follow-up makes active Highlight unmistakable: the command bar replaces
+its normal `DMX 44Hz` output-rate text with a blue, blinking `Highlight` label. The built-in Stage
+also projects the authoritative Highlight output selection immediately as a local beam overlay,
+so selected fixtures remain visibly on while Position and Color values are programmed instead of
+waiting for the next visualization snapshot. Capture-only or safety-suppressed Highlight does not
+fake Stage output, and the canonical Programming desktop follows the live rather than Preload
+visualization lane.
+
+Preset programming now stays on the Preset surface. The scenario opens Presets once, holds its
+Groups control to reveal the in-place Group shortcuts, and selects Beam Show from that strip for
+each narrated Position and Color example. It no longer alternates between the Group and Preset
+built-ins while programming those looks.
+
+After the two narrated Color examples, the eleven remaining Color presets use an eight-frame
+per-item fast-forward budget at 25 fps, for a 3.52-second visual sequence before API overhead.
+Position and Beam retain their existing one-second-per-item pacing. Every canonical Color preset,
+including the first two once reconciled by the generator, stores a `●` swatch icon colored from
+its exact RGB preset value.
+
+Focused manifest, patch, Group, Playback, and Fixture Patch tests passed, as did the production
+frontend build, the generated-show acceptance, and a complete 2.8-minute non-recording product
+demo rehearsal that refreshed `assets/demo.show`. Per the recording-review instruction, this
+follow-up did not capture, assemble, encode, or replace the maintained video.

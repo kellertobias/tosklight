@@ -1,4 +1,4 @@
-use super::{MutateOutputRouteCommand, OutputRouteMutation};
+use super::{CreateOutputRouteRangeCommand, MutateOutputRouteCommand, OutputRouteMutation};
 use crate::{
     ActionError, ActionErrorKind, prepare_show_candidate,
     show_compiler::prepare_normalized_show_candidate_incremental,
@@ -15,6 +15,86 @@ pub(super) struct PreparedRouteMutation {
     pub(super) route_to_terminate: Option<OutputRoute>,
     pub(super) deleted: bool,
     pub(super) object_revision: Revision,
+}
+
+pub(super) struct PreparedRouteRange {
+    pub(super) transaction: PortableShowTransaction,
+    pub(super) snapshot: light_engine::EngineSnapshot,
+    pub(super) routes: Vec<(String, OutputRoute)>,
+}
+
+const MAX_OUTPUT_ROUTE_RANGE: usize = 128;
+
+pub(super) fn prepare_route_range(
+    document: &PortableShowDocument,
+    command: &CreateOutputRouteRangeCommand,
+    previous: Option<&light_engine::EngineSnapshot>,
+) -> Result<PreparedRouteRange, ActionError> {
+    if document.id() != command.show_id {
+        return Err(not_found("requested show is not active"));
+    }
+    let first = normalize_route(command.first_route.typed().clone())?;
+    if first.logical_universe == 0 {
+        return Err(invalid("logical universe must be from 1 to 65535"));
+    }
+    if command.logical_universe_end < first.logical_universe
+        || command.destination_universe_end < first.destination_universe
+    {
+        return Err(invalid("output route ranges must be ascending"));
+    }
+    let logical_count = usize::from(command.logical_universe_end - first.logical_universe) + 1;
+    let destination_count =
+        usize::from(command.destination_universe_end - first.destination_universe) + 1;
+    if logical_count != destination_count {
+        return Err(invalid(
+            "logical and destination output route ranges must have equal lengths",
+        ));
+    }
+    if logical_count > MAX_OUTPUT_ROUTE_RANGE {
+        return Err(invalid(format!(
+            "an output route range cannot create more than {MAX_OUTPUT_ROUTE_RANGE} routes"
+        )));
+    }
+
+    let request = command.first_route.encode();
+    let mut transaction = document.transaction();
+    let mut routes = Vec::with_capacity(logical_count);
+    for offset in 0..logical_count {
+        let route_id = format!("route-range-{}-{}", command.range_id, offset + 1);
+        if document.object("route", &route_id).is_some() {
+            return Err(ActionError::new(
+                ActionErrorKind::Conflict,
+                "output route range identity already exists",
+            ));
+        }
+        let mut route = first.clone();
+        route.logical_universe = first
+            .logical_universe
+            .checked_add(offset as u16)
+            .ok_or_else(|| invalid("logical output route range exceeds 65535"))?;
+        route.destination_universe = first
+            .destination_universe
+            .checked_add(offset as u16)
+            .ok_or_else(|| invalid("destination output route range exceeds 65535"))?;
+        let route = normalize_route(route)?;
+        let body = merge_route_fields(None, &request, &route)?;
+        transaction.put("route", route_id.clone(), body);
+        routes.push((route_id, route));
+    }
+
+    let prepared = if let Some(previous) =
+        previous.filter(|snapshot| snapshot.revision == document.revision().value())
+    {
+        prepare_normalized_show_candidate_incremental(document, transaction, previous)?
+    } else {
+        prepare_show_candidate(document, transaction)?
+    };
+    let (transaction, snapshot) = prepared.into_parts();
+    Ok(PreparedRouteRange {
+        transaction,
+        snapshot,
+        routes,
+    })
 }
 
 pub(super) fn prepare_route_mutation(

@@ -560,6 +560,9 @@ export type PatchOperatorAddressOverride = { fixture_id: string, universe: numbe
 export type PatchSplitPlacementMode = { "type": "consecutive" } | { "type": "operator_overrides", overrides: Array<PatchOperatorAddressOverride>, };
 export type PatchSplitPlacementIntent = { split: number, universe: number | null, address: number | null, mode: PatchSplitPlacementMode, };
 export type PatchPlacementIntent = { fixture_ids: Array<string>, splits: Array<PatchSplitPlacementIntent>, };
+export type PatchVectorKind = "location" | "rotation";
+export type PatchVectorAxis = "x" | "y" | "z";
+export type PatchVectorSpreadIntent = { fixture_ids: Array<string>, kind: PatchVectorKind, axis: PatchVectorAxis, points: Array<number>, };
 export type PatchFixturesRequest = {
 /**
  * Client-generated idempotency identity, scoped to the authenticated desk session.
@@ -578,7 +581,11 @@ remove_fixture_ids: Array<string>,
  * Server-resolved placement intents. Empty retains the generic desired-state Patch behavior
  * where fixture split assignments are already explicit.
  */
-placements: Array<PatchPlacementIntent>, };
+placements: Array<PatchPlacementIntent>,
+/**
+ * Server-resolved coordinate spreads over an explicitly ordered fixture selection.
+ */
+vector_spreads: Array<PatchVectorSpreadIntent>, };
 export type PatchFixtureAxis = "pan" | "tilt";
 export type PatchFixturePolicyAction = { "action": "set_group_masters", controlled: boolean, } | { "action": "set_grand_master", controlled: boolean, } | { "action": "set_axis_inversion", axis: PatchFixtureAxis, inverted: boolean,
 /**
@@ -920,9 +927,9 @@ export type ShowObjectRecord = { kind: string, id: string, revision: number, upd
 export type ShowObjectCollectionSnapshot = { show_id: string, show_revision: number, kind: string, objects: Array<ShowObjectRecord>, };
 export type ShowObjectExactSnapshot = { show_id: string, show_revision: number, kind: string, object_id: string, object: ShowObjectRecord | null, };
 export type OutputRouteActionRequest = { request_id: string, action: OutputRouteAction, };
-export type OutputRouteAction = { "type": "create", route_id: string, route: OutputRoute, } | { "type": "update", route_id: string, expected_revision: number, patch: OutputRoutePatch, } | { "type": "delete", route_id: string, expected_revision: number, };
+export type OutputRouteAction = { "type": "create", route_id: string, route: OutputRoute, } | { "type": "create_range", range_id: string, route: OutputRoute, logical_universe_end: number, destination_universe_end: number, } | { "type": "update", route_id: string, expected_revision: number, patch: OutputRoutePatch, } | { "type": "delete", route_id: string, expected_revision: number, };
 export type OutputRoutePatch = { protocol?: OutputProtocol | null, logical_universe?: number | null, destination_universe?: number | null, delivery_mode?: OutputDeliveryMode | null, destination?: string | null | null, enabled?: boolean | null, minimum_slots?: number | null, };
-export type OutputRouteActionOutcome = { request_id: string, replayed: boolean, change: OutputRouteChange, event_sequence: number, };
+export type OutputRouteActionOutcome = { request_id: string, replayed: boolean, changes: Array<OutputRouteChange>, event_sequence: number, };
 export type UserLayoutActionRequest = { request_id: string, action: UserLayoutAction, };
 export type UserLayoutAction = { "type": "update", expected_revision: number, patch: UserLayoutPatch, };
 export type UserLayoutPatch = { desks?: unknown[] | null, active_desk_id?: string | null, window_settings?: unknown | null, };

@@ -7,6 +7,7 @@ import { installPlannedDemoPatch } from "./plannedDemoPatch";
 import { installPlannedDemoPlaybacks } from "./plannedDemoPlaybacks";
 import { installPlannedDemoPresets } from "./plannedDemoPresets";
 import { installPlannedDemoScenery } from "./plannedDemoScenery";
+import { installPlannedDemoVirtualPlaybackExclusionZones } from "./plannedDemoVirtualPlaybackZones";
 
 export async function generatePlannedDemo(
 	api: ApiDriver,
@@ -24,19 +25,34 @@ export async function generatePlannedDemo(
 		patch.fixtures,
 	);
 	const dynamics = await installPlannedDemoDynamics(api, showId);
+	const virtualPlaybackExclusionZones =
+		await installPlannedDemoVirtualPlaybackExclusionZones(api, showId);
 	const layout = await installPlannedDemoLayout(api, showId);
-	return { patch, scenery, groups, presets, topology, dynamics, layout };
+	return {
+		patch,
+		scenery,
+		groups,
+		presets,
+		topology,
+		dynamics,
+		virtualPlaybackExclusionZones,
+		layout,
+	};
 }
 
 const LAYER_NAMES = [
-	"Back Truss",
-	"Mid Truss",
-	"Front Truss",
-	"Floor",
-	"Audience",
-	"Auxiliary",
-	"House Lights",
-	"Stage",
+	"Stage & Venue",
+	"Trusses",
+	"Profile Stage",
+	"Profile Audience",
+	"Profile Auxilliary",
+	"Wash Stage",
+	"Wash Audience",
+	"Wash Auxilliary",
+	"LED PAR Stage",
+	"LED PAR Audience",
+	"LED PAR Auxilliary",
+	"Conventional Light",
 ] as const;
 
 export async function ensurePlannedDemoLayers(

@@ -277,6 +277,7 @@ function useProviderActionSources(
 			setDmxOverride: value.setDmxOverride,
 			outputRoutes: value.outputRoutes,
 			saveOutputRoute: value.saveOutputRoute,
+			createOutputRouteRange: value.createOutputRouteRange,
 			deleteOutputRoute: value.deleteOutputRoute,
 		}),
 		[
@@ -284,6 +285,7 @@ function useProviderActionSources(
 			value.setDmxOverride,
 			value.outputRoutes,
 			value.saveOutputRoute,
+			value.createOutputRouteRange,
 			value.deleteOutputRoute,
 		],
 	);

@@ -132,6 +132,69 @@ fn invalid_route_stops_before_backup_commit_install_and_event() {
 }
 
 #[test]
+fn output_route_range_is_one_atomic_persist_and_runtime_install() {
+    let rig = TestRig::new();
+    let result = rig
+        .service
+        .create_output_route_range(rig.range_action(8, 108), &rig.ports)
+        .unwrap();
+
+    assert_eq!(
+        rig.steps(),
+        ["begin", "prepare", "backup", "commit", "install"]
+    );
+    assert_eq!(result.changes.len(), 8);
+    assert!(result.migration_changes.is_empty());
+    assert!(result.migrated_routes.is_empty());
+    assert_eq!(result.event_sequence, 8);
+    assert!(
+        result
+            .changes
+            .iter()
+            .all(|change| change.show_revision.value() == 1 && change.object_revision == 1)
+    );
+    assert_eq!(rig.document().objects_of_kind("route").count(), 8);
+    assert_eq!(rig.installed_routes(), 8);
+    for (offset, change) in result.changes.iter().enumerate() {
+        let route = change.route.as_ref().unwrap();
+        assert_eq!(route.logical_universe, offset as u16 + 1);
+        assert_eq!(route.destination_universe, offset as u16 + 101);
+    }
+}
+
+#[test]
+fn invalid_output_route_range_has_no_partial_side_effects() {
+    let rig = TestRig::new();
+    let error = rig
+        .service
+        .create_output_route_range(rig.range_action(8, 107), &rig.ports)
+        .unwrap_err();
+
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert_eq!(rig.steps(), ["begin"]);
+    assert_eq!(rig.document().objects_of_kind("route").count(), 0);
+    assert_eq!(rig.installed_routes(), 0);
+    assert_eq!(rig.service.events().latest_sequence(), 0);
+}
+
+#[test]
+fn output_route_range_rejects_descending_and_more_than_128_routes() {
+    for (logical_end, destination_end, message) in
+        [(0, 100, "ascending"), (129, 229, "more than 128")]
+    {
+        let rig = TestRig::new();
+        let error = rig
+            .service
+            .create_output_route_range(rig.range_action(logical_end, destination_end), &rig.ports)
+            .unwrap_err();
+        assert_eq!(error.kind, ActionErrorKind::Invalid);
+        assert!(error.message.contains(message));
+        assert_eq!(rig.steps(), ["begin"]);
+        assert_eq!(rig.document().objects_of_kind("route").count(), 0);
+    }
+}
+
+#[test]
 fn stale_object_revision_stops_before_candidate_preparation_or_side_effects() {
     let rig = TestRig::new();
     rig.seed_route(
@@ -904,6 +967,36 @@ impl TestRig {
                 route_id: route_id.into(),
                 expected_object_revision,
                 mutation,
+            },
+        }
+    }
+
+    fn range_action(
+        &self,
+        logical_universe_end: u16,
+        destination_universe_end: u16,
+    ) -> ActionEnvelope<CreateOutputRouteRangeCommand> {
+        ActionEnvelope {
+            context: ActionContext::operator(
+                Uuid::from_u128(1),
+                Uuid::from_u128(2),
+                Uuid::from_u128(3),
+                ActionSource::Http,
+            ),
+            command: CreateOutputRouteRangeCommand {
+                show_id: self.show_id,
+                range_id: Uuid::from_u128(4),
+                first_route: typed_route(json!({
+                    "protocol": "art_net",
+                    "logical_universe": 1,
+                    "destination_universe": 101,
+                    "delivery_mode": "broadcast",
+                    "destination": null,
+                    "enabled": true,
+                    "minimum_slots": 128
+                })),
+                logical_universe_end,
+                destination_universe_end,
             },
         }
     }

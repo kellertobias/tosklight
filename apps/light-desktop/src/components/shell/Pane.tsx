@@ -174,6 +174,7 @@ function PaneContent({
 				compact
 				paneId={pane.id}
 				showGroupShortcuts={Boolean(pane.showGroupShortcuts)}
+				fixtureSheetActiveOnly={Boolean(pane.fixtureSheetActiveOnly)}
 				showCueSidebar={pane.showCueSidebar ?? true}
 				cueListSource={pane.cueListSource ?? "fixed"}
 				fixedCueListNumber={pane.fixedCueListNumber}
@@ -185,6 +186,7 @@ function PaneContent({
 				layoutGroupId={pane.layoutGroupId}
 				presetFamily={pane.presetFamily ?? state.presetFamily}
 				presetPoolColors={pane.presetPoolColors ?? true}
+				poolColumns={pane.poolColumns}
 				schedulerShowList={pane.schedulerShowList ?? true}
 				schedulerShowCalendar={pane.schedulerShowCalendar ?? true}
 				onSchedulerLayoutChange={({ showList, showCalendar }) =>

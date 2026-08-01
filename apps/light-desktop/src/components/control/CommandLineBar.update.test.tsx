@@ -31,6 +31,8 @@ const activity = vi.hoisted(() => ({
 	},
 }));
 
+const highlight = vi.hoisted(() => ({ active: false }));
+
 const playbackQueue = vi.hoisted(() => ({
 	current: null as null | {
 		userId: string;
@@ -169,6 +171,9 @@ vi.mock("../../state/AppContext", () => ({
 vi.mock("../../features/outputRuntime/OutputRuntimeView", () => ({
 	useOutputRuntimeBlackout: () => false,
 }));
+vi.mock("../../features/highlight/HighlightState", () => ({
+	useHighlightSnapshot: () => ({ active: highlight.active }),
+}));
 vi.mock("../../features/programmerValues/useProgrammerValuesActivity", () => ({
 	useProgrammerValuesActivity: () => activity.current,
 }));
@@ -206,6 +211,7 @@ beforeEach(() => {
 		pendingValueCount: 0,
 	};
 	playbackQueue.current = null;
+	highlight.active = false;
 	vi.clearAllMocks();
 });
 
@@ -344,9 +350,7 @@ describe("Shift+Record Update gestures", () => {
 
 		const { rerender } = render(<CommandLineBar />);
 
-		expect(
-			screen.getByRole("button", { name: "PRELOAD GO" }),
-		).toHaveAttribute(
+		expect(screen.getByRole("button", { name: "PRELOAD GO" })).toHaveAttribute(
 			"title",
 			"Pending Preload: PROG 2 · GO 4 · GO MINUS 7 · TEMP ON 8 · TEMP OFF 9",
 		);
@@ -443,6 +447,14 @@ describe("Shift+Record Update gestures", () => {
 		server.bootstrap.active_timecode = "01:02:03:04";
 		rerender(<CommandLineBar />);
 		expect(screen.getByText("01:02:03:04")).toHaveClass("timecode-active");
+	});
+
+	it("replaces the DMX rate with the active Highlight indicator", () => {
+		highlight.active = true;
+		render(<CommandLineBar />);
+
+		expect(screen.getByText("Highlight")).toHaveClass("highlight-status");
+		expect(screen.queryByText("DMX 60Hz")).not.toBeInTheDocument();
 	});
 
 	it("keeps the command-to-REC/Preload space free of Highlight status panels in both layouts", () => {

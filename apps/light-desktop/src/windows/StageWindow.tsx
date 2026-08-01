@@ -1,4 +1,6 @@
+import type { HighlightState } from "../api/types";
 import { GroupStrip } from "../components/shared/GroupStrip";
+import { useHighlightSnapshot } from "../features/highlight/HighlightState";
 import { Stage2dView } from "./stageWindow/Stage2dView";
 import { Stage3dView } from "./stageWindow/Stage3dView";
 import { StageHeader } from "./stageWindow/StageHeader";
@@ -14,6 +16,7 @@ export function StageWindow(props: StageWindowProps) {
 	const options = useStageOptions(props);
 	const layout = useStageLayout();
 	const selection = useStageSelection(interactionActive);
+	const highlight = useHighlightSnapshot();
 	const patchSelectionPreview = props.patchSelectionPreview ?? false;
 	const stage = useStageVisualization(
 		active,
@@ -29,6 +32,9 @@ export function StageWindow(props: StageWindowProps) {
 				: `stage-window-${options.followPreload ? "preload" : "live"}`),
 		props.visualizationIntervalMillis,
 	);
+	const highlightFixtures = options.followPreload
+		? []
+		: stageHighlightFixtureIds(highlight);
 	return (
 		<div
 			className={`stage-window ${props.compact ? "compact" : ""}`}
@@ -37,8 +43,9 @@ export function StageWindow(props: StageWindowProps) {
 					? stage.visualization
 						? "stale"
 						: "unavailable"
-					: stage.visualizationStatus
+					: "ready"
 			}
+			data-live-visualization-state={stage.visualizationStatus}
 			data-visualization-lane={options.followPreload ? "preload" : "live"}
 			data-visualization-revision={stage.visualization?.revision}
 		>
@@ -57,6 +64,7 @@ export function StageWindow(props: StageWindowProps) {
 					options={options}
 					patchSelectionPreview={patchSelectionPreview}
 					patchPreviewFixtures={stage.patchPreviewFixtures}
+					highlightFixtures={highlightFixtures}
 					camera3d={props.camera3d}
 					pixelRatioCap={props.pixelRatioCap}
 					selection={selection}
@@ -79,21 +87,26 @@ export function StageWindow(props: StageWindowProps) {
 					interactive={!props.viewOnly}
 				/>
 			)}
-			{active &&
-				(!stage.visualization || stage.visualizationError) &&
-				(stage.visualizationError ? (
-					<div className="stage-visualization-state error" role="status">
-						{stage.visualization
-							? `${options.followPreload ? "Preload" : "Live"} visualization stale · reconnecting…`
-							: "Visualization unavailable · reconnecting…"}
-					</div>
-				) : (
-					<div className="stage-visualization-state" role="status">
-						Loading {options.followPreload ? "Preload" : "Live"} Stage
-						visualization…
-					</div>
-				))}
+			{active && stage.visualizationError && (
+				<div className="stage-visualization-state error" role="status">
+					{stage.visualization
+						? `${options.followPreload ? "Preload" : "Live"} visualization stale · reconnecting…`
+						: "Visualization unavailable · reconnecting…"}
+				</div>
+			)}
 			{options.groupsVisible && <GroupStrip active={active} />}
 		</div>
 	);
+}
+
+/** Immediate Stage-only projection of the authoritative Highlight selection. */
+export function stageHighlightFixtureIds(
+	highlight: HighlightState | null,
+): string[] {
+	if (!highlight?.active || !highlight.output_enabled) return [];
+	if (highlight.mode === "step")
+		return highlight.active_fixture
+			? [highlight.active_fixture.fixture_id]
+			: [];
+	return highlight.remembered.map((fixture) => fixture.fixture_id);
 }

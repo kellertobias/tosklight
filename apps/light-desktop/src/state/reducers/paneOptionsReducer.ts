@@ -31,6 +31,29 @@ function updateActivePane(
 
 export function reducePaneOptions(state: AppState, action: Action): AppState | undefined {
 	switch (action.type) {
+		case "SET_PANE_POOL_COLUMNS":
+			return {
+				...state,
+				desks: state.desks.map((desk) =>
+					desk.id !== state.activeDeskId
+						? desk
+						: {
+								...desk,
+								panes: desk.panes.map((pane) =>
+									pane.id === action.id
+										? {
+												...pane,
+												poolColumns: clamp(
+													Math.trunc(action.value) || 1,
+													1,
+													24,
+												),
+											}
+										: pane,
+								),
+							},
+				),
+			};
 		case "SET_PANE_LAYOUT_GROUP":
 			return {
 				...state,

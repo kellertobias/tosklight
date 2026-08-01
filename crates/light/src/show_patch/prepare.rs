@@ -4,6 +4,7 @@ use super::profiles::ResolvedProfiles;
 use super::projection::build_change;
 use super::record_index::StoredFixtureRecords;
 use super::records::{build_records, stage_records, stage_removals};
+use super::vector_spread::apply_vector_spreads;
 use super::{PatchChange, PatchFixturesCommand, PatchPerformancePhase, ShowPatchPorts};
 use crate::{ActionError, ActionErrorKind, PreparedShowCandidate, prepare_show_candidate};
 use light_show::{PortableShowCandidate, PortableShowDocument};
@@ -38,6 +39,7 @@ pub(super) fn plan_patch<P: ShowPatchPorts>(
     let materialized = materialize_touched_legacy_profiles(document, &stored, command)?;
     let profiles = ResolvedProfiles::resolve(document, command, materialized, ports)?;
     let fixtures = assign_placement_addresses(command, &profiles)?;
+    let fixtures = apply_vector_spreads(fixtures, &command.vector_spreads)?;
     Ok(PatchPlan { profiles, fixtures })
 }
 
@@ -54,6 +56,7 @@ pub(super) fn prepare_patch<P: ShowPatchPorts>(
         fixtures: plan.fixtures,
         remove_fixture_ids: command.remove_fixture_ids.clone(),
         placements: Vec::new(),
+        vector_spreads: Vec::new(),
     };
     let fixtures = build_records(&stored, &profiles, &assigned_command)?;
     let mut transaction = document.transaction();

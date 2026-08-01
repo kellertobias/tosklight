@@ -46,14 +46,14 @@ export function useFixtureLibraryModel({
 		[availableDefinitions],
 	);
 	const searchMatchedDefinitions = useMemo(() => {
-		const needle = query.toLowerCase().trim();
+		const needle = normalizeFixtureSearch(query);
 		return availableDefinitions.filter(
 			(item) =>
 				(!typeFilter || item.device_type === typeFilter) &&
 				(!needle ||
-					`${item.manufacturer} ${item.name} ${item.model} ${item.mode} ${item.device_type}`
-						.toLowerCase()
-						.includes(needle)),
+					normalizeFixtureSearch(
+						`${item.manufacturer} ${item.name} ${item.model} ${item.mode} ${item.device_type}`,
+					).includes(needle)),
 		);
 	}, [availableDefinitions, query, typeFilter]);
 	const manufacturers = useMemo(
@@ -92,4 +92,11 @@ export function useFixtureLibraryModel({
 		selectedFamily,
 		selectedMode,
 	};
+}
+
+export function normalizeFixtureSearch(value: string) {
+	return value
+		.toLowerCase()
+		.replace(/\bfour\b/gu, "4")
+		.replace(/[^a-z0-9]+/gu, "");
 }

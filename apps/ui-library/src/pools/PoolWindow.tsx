@@ -29,6 +29,7 @@ export interface PoolGridProps<SlotId extends string | number> {
 	fillEmptySlots?: boolean;
 	className?: string;
 	minimumCardWidth?: number;
+	columns?: number;
 	appearance?: Partial<PoolGridAppearance>;
 	onSlotClick?(id: SlotId, index: number): void;
 	onSlotPressHold?(id: SlotId, index: number): void;
@@ -68,6 +69,7 @@ export function PoolGrid<SlotId extends string | number>({
 	fillEmptySlots = true,
 	className = "",
 	minimumCardWidth = DEFAULT_POOL_CARD_MINIMUM_WIDTH,
+	columns,
 	appearance,
 	onSlotClick,
 	onSlotPressHold,
@@ -87,6 +89,9 @@ export function PoolGrid<SlotId extends string | number>({
 			minimum={minimumCardWidth}
 			style={
 				{
+					...(columns
+						? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }
+						: {}),
 					"--pool-card-uncolored-color": resolvedAppearance.uncoloredColor,
 					"--pool-record-color": resolvedAppearance.recordColor,
 					"--pool-update-color": resolvedAppearance.updateColor,

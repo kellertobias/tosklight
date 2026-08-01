@@ -45,7 +45,7 @@ afterEach(() => {
 });
 
 describe("PoolColorSettings", () => {
-	it("switches a pane mode and exposes both reset scopes", async () => {
+	it("switches a pane mode without exposing server-wide palette controls", async () => {
 		render(
 			<PoolColorSettings
 				objectType="preset"
@@ -59,21 +59,11 @@ describe("PoolColorSettings", () => {
 			poolSurfaceKey("show-a", "preset", "pane-a"),
 			"individual",
 		);
-		await waitFor(() =>
-			expect(
-				screen.getByRole("button", { name: "Reset this color" }),
-			).toBeEnabled(),
-		);
-
-		fireEvent.click(screen.getByRole("button", { name: "Reset this color" }));
-		expect(actions.resetColor).toHaveBeenCalledWith("preset", "position");
-		await waitFor(() =>
-			expect(
-				screen.getByRole("button", { name: "Reset all colors" }),
-			).toBeEnabled(),
-		);
-		fireEvent.click(screen.getByRole("button", { name: "Reset all colors" }));
-		expect(actions.resetAll).toHaveBeenCalledOnce();
+		await waitFor(() => expect(actions.setMode).toHaveBeenCalledOnce());
+		expect(screen.queryByText("Position default")).toBeNull();
+		expect(screen.queryByRole("button", { name: /Reset .*color/ })).toBeNull();
+		expect(actions.resetColor).not.toHaveBeenCalled();
+		expect(actions.resetAll).not.toHaveBeenCalled();
 	});
 
 	it("exposes every object and Preset-family default", () => {
@@ -90,10 +80,10 @@ describe("PoolColorSettings", () => {
 			"Position Presets",
 			"Beam Presets",
 		]) {
-			expect(screen.getByText(label)).toBeInTheDocument();
+			expect(screen.getByText(label)).toBeTruthy();
 		}
 		expect(
 			screen.getByRole("button", { name: "Reset all pool colors" }),
-		).toBeEnabled();
+		).toBeTruthy();
 	});
 });

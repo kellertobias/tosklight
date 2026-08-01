@@ -62,8 +62,8 @@ separate authoritative tiers.
 Replace the ambiguous single demo/benchmark workload with three deterministic, independently
 reported tiers:
 
-1. The exact Plan 76 demo show—262 controllable fixtures plus 33 visual-only Venue records, for
-   295 patch records and 343 physical Stage instances including multi-patches—exercised in the
+1. The exact Plan 76 demo show—231 controllable fixtures plus 33 visual-only Venue records, for
+   264 patch records and 306 physical Stage instances including multi-patches—exercised in the
    packaged desktop with 3D Stage and Fixture Sheet/list open. Its canonical Dynamic/Cuelist
    benchmark look, responsiveness, and end-to-end gates are release-blocking.
 2. An exactly 1,000-fixture interactive benchmark with the same UI surfaces open. Report its
@@ -121,7 +121,7 @@ acceptance to reach it.
 Post-completion policy revision (2026-07-31): the 100 Hz value remains a visible reference, while
 the public capacity indicator for the released 1,024-fixture engine/output proxy is green at
 60 Hz or above, yellow at 40–59.999 Hz, and red below 40 Hz. This does not change the canonical
-343-instance demo's 100 Hz packaged gate or the exact 1,000-instance UI requirement to keep Stage,
+306-instance demo's 100 Hz packaged gate or the exact 1,000-instance UI requirement to keep Stage,
 Fixture Sheet, and the rest of the desk responsive. The 2,000+ tier remains informational and now
 reports its measured limiting phase.
 
@@ -143,10 +143,10 @@ Completed on 2026-07-29 with 91% large-window usage remaining.
 
 ### Generated tiers and runtime evidence
 
-- The canonical demo generator produces exactly 262 controllable fixtures and adds 33 visual-only
-  Venue records for 295 total patch records and 343 physical Stage instances. It retains 3,783
-  occupied DMX slots, eight layers, 38 Groups, 30 presets, 30 Dynamics, seven
-  Cuelists, 13 Playbacks, Speed Groups A–E, and the reviewed four-set ACL layout. The focused
+- The canonical demo generator produces exactly 231 controllable fixtures and adds 33 visual-only
+  Venue records for 264 total patch records and 306 physical Stage instances. It retains 2,988
+  occupied DMX slots, 12 layers, 35 Groups, 30 presets, 30 Dynamics, eight
+  Cuelists, 14 Playbacks, Speed Groups A–E, and the reviewed four-set ACL layout. The focused
   `tests/76-demo-show-generation.spec.ts` runtime path passed with all 12 canonical benchmark
   assignments active.
 - `tests/76-interactive-large-tier.spec.ts` passed in 28.3 seconds. It proves the exact
@@ -202,3 +202,13 @@ refreshed the integrity-checked `assets/demo.show`. Visual inspection used:
   compatible `strobe` address; no unsupported channel is manufactured.
 - The royalty-free Theater source has not been supplied. The Theater desktop persists, while
   script-specific Theater content remains explicitly pending under Plan 76.
+
+### 2026-08-01 current canonical demo inventory
+
+The later product-demo patch refinement supersedes the historical 262-control/301-lighting-
+instance counts above. The current release-gated demo contains 231 controllable lighting
+fixtures, 264 physical lighting instances, 33 visual-only Venue records, 264 total patch records,
+306 physical Stage instances, and 2,988 occupied DMX slots. Its approximately 300-instance Stage
+acceptance role is unchanged; the reduction allows Stage, Audience, and Auxiliary lighting to
+remain in clear universe bands while universe 1 models the two conventional dimmer racks and
+contains no movers.

@@ -145,8 +145,8 @@ generation, packaged desktop checks, and release performance evidence.
 
 ## Scale and limits
 
-The canonical demo is a realistic, release-blocking packaged-desktop show with **262 controllable
-fixtures**, **301 physical Stage instances**, **3,783 occupied DMX slots**, 38 Groups, 30 Presets,
+The canonical demo is a realistic, release-blocking packaged-desktop show with **231 controllable
+fixtures**, **264 physical lighting instances**, **2,988 occupied DMX slots**, 38 Groups, 30 Presets,
 30 Dynamics, seven Cuelists, and 13 Playbacks.
 
 | Profile | Contract |

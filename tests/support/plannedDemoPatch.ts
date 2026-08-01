@@ -19,6 +19,37 @@ interface PatchCursor {
 	address: number;
 }
 
+interface PatchAllocator {
+	occupied: Set<string>;
+	cursors: Record<PatchBand, PatchCursor>;
+}
+
+type PatchBand =
+	| "dimmer"
+	| "stageLed"
+	| "stageMoving"
+	| "audience"
+	| "auxiliary"
+	| "hazer"
+	| "other";
+
+export interface PlannedDemoPatchConfiguration {
+	addressBands?: {
+		dimmers: string;
+		stageLedPars: string;
+		stageMovingLights: string;
+		audience: string;
+		auxiliary: string;
+		hazers: string;
+	};
+	placements?: readonly {
+		targets: string;
+		location: { x: string; y: string; z: string };
+		rotation?: { x: string; y: string; z: string };
+	}[];
+	movingFixtureRotation?: Point;
+}
+
 interface PlannedDemoPatchResult {
 	fixtures: any[];
 	fixtureRecords: number;
@@ -32,11 +63,24 @@ export async function installPlannedDemoPatch(
 	api: ApiDriver,
 	showId: string,
 	layers: Readonly<Record<string, string>>,
+	options: {
+		progressive?: boolean;
+		onBeforeItem?: (item: {
+			fixtureNumber: number;
+			layerId: string;
+		}) => Promise<void>;
+		onItem?: () => Promise<void>;
+		configuration?: PlannedDemoPatchConfiguration;
+	} = {},
 ): Promise<PlannedDemoPatchResult> {
 	await ensurePlannedDemoFixtureLibrary(api);
 	const library = await api.fixtureProfilesSnapshot();
 	const profiles = library.profiles as FixtureProfile[];
-	const built = createPlannedDemoPatchInputs(profiles, layers);
+	const built = createPlannedDemoPatchInputs(
+		profiles,
+		layers,
+		options.configuration,
+	);
 	const { fixtures } = built;
 	const before = await api.patch();
 	const expectedNumbers = new Set(
@@ -63,26 +107,64 @@ export async function installPlannedDemoPatch(
 					: fixture.fixture_id,
 		};
 	});
-	await api.request(
-		"POST",
-		"/api/v2/patch/fixtures",
-		{
-			request_id: crypto.randomUUID(),
-			fixtures: adopted,
-			remove_fixture_ids: before.fixtures.flatMap((fixture: any) => {
-				const expected = manifestByNumber.get(fixture.fixture_number);
-				return fixture.fixture_number != null &&
-					(!expectedNumbers.has(fixture.fixture_number) ||
-						(expected && !matchesManifestProfile(fixture, expected)))
-					? [fixture.fixture_id]
-					: [];
-			}),
-			placements: [],
-		},
-		true,
-		before.revision,
-		{ showId },
-	);
+	const batches = options.progressive
+		? adopted
+				.filter((fixture) => !existingByNumber.has(fixture.fixture_number))
+				.map((fixture) => [fixture])
+		: [adopted];
+	for (const batch of batches) {
+		const fixture = batch[0];
+		if (options.progressive && fixture)
+			await options.onBeforeItem?.({
+				fixtureNumber: fixture.fixture_number,
+				layerId: fixture.layer_id,
+			});
+		const current = await api.patch();
+		await api.request(
+			"POST",
+			"/api/v2/patch/fixtures",
+			{
+				request_id: crypto.randomUUID(),
+				fixtures: batch,
+				remove_fixture_ids: options.progressive
+					? []
+					: before.fixtures.flatMap((fixture: any) => {
+							const expected = manifestByNumber.get(fixture.fixture_number);
+							return fixture.fixture_number != null &&
+								(!expectedNumbers.has(fixture.fixture_number) ||
+									(expected && !matchesManifestProfile(fixture, expected)))
+								? [fixture.fixture_id]
+								: [];
+						}),
+				placements: [],
+			},
+			true,
+			current.revision,
+			{ showId },
+		);
+		await options.onItem?.();
+	}
+	if (options.progressive) {
+		const existingFixtures = adopted.filter((fixture) =>
+			existingByNumber.has(fixture.fixture_number),
+		);
+		if (existingFixtures.length > 0) {
+			const current = await api.patch();
+			await api.request(
+				"POST",
+				"/api/v2/patch/fixtures",
+				{
+					request_id: crypto.randomUUID(),
+					fixtures: existingFixtures,
+					remove_fixture_ids: [],
+					placements: [],
+				},
+				true,
+				current.revision,
+				{ showId },
+			);
+		}
+	}
 	const after = await api.patch();
 	const lightingFixtures = after.fixtures.filter((fixture: any) =>
 		expectedNumbers.has(fixture.fixture_number),
@@ -94,11 +176,11 @@ export async function installPlannedDemoPatch(
 	);
 	if (lightingFixtures.length !== PLANNED_DEMO_CONTROL_FIXTURES)
 		throw new Error(
-			`Plan 76 patch has ${lightingFixtures.length} controls; expected 262`,
+			`Plan 76 patch has ${lightingFixtures.length} controls; expected 231`,
 		);
 	if (physicalInstances !== PLANNED_DEMO_PHYSICAL_INSTANCES)
 		throw new Error(
-			`Plan 76 patch has ${physicalInstances} physical instances; expected 301`,
+			`Plan 76 patch has ${physicalInstances} physical instances; expected 264`,
 		);
 	return {
 		...built,
@@ -122,59 +204,78 @@ function matchesManifestProfile(
 export function createPlannedDemoPatchInputs(
 	profiles: FixtureProfile[],
 	layers: Readonly<Record<string, string>>,
+	configuration?: PlannedDemoPatchConfiguration,
 ): PlannedDemoPatchResult {
-	const cursor = { universe: 1, address: 1 };
+	const allocator = createPatchAllocator(configuration?.addressBands);
 	let occupiedSlots = 0;
-	const fixtures = PLANNED_DEMO_FIXTURES.map((entry) => {
-		const profile = resolveProfile(profiles, entry);
-		const mode = profile.modes.find(
-			(candidate) => candidate.name === entry.profile.mode,
-		);
-		if (!mode)
-			throw new Error(
-				`Missing demo mode ${entry.profile.name} / ${entry.profile.mode}`,
+	const fixtures = [...PLANNED_DEMO_FIXTURES]
+		.sort((left, right) => patchPriority(left) - patchPriority(right))
+		.map((entry) => {
+			const profile = resolveProfile(profiles, entry);
+			const mode = profile.modes.find(
+				(candidate) => candidate.name === entry.profile.mode,
 			);
-		const placement = placementFor(entry);
-		const primaryPatches = allocateSplits(mode.splits, cursor);
-		occupiedSlots += footprint(mode.splits);
-		const multipatch = Array.from(
-			{ length: entry.multipatches },
-			(_, index) => {
-				const instance = placement.multipatches[index];
-				if (!instance)
-					throw new Error(
-						`${entry.name} is missing physical placement ${index + 2}`,
-					);
-				const splitPatches = allocateSplits(mode.splits, cursor);
-				occupiedSlots += footprint(mode.splits);
-				return {
-					id: stableUuid(2, entry.number * 100 + index + 1),
-					name: `${entry.name} ${index + 2}`,
-					split_patches: splitPatches,
-					location: millimetres(instance.location),
-					rotation: instance.rotation,
-				};
-			},
-		);
-		return {
-			fixture_id: stableUuid(1, entry.number),
-			fixture_number: entry.number,
-			virtual_fixture_number: null,
-			name: entry.name,
-			profile_id: profile.id,
-			profile_revision: profile.revision,
-			mode_id: mode.id,
-			split_patches: primaryPatches,
-			layer_id: layerFor(entry, layers),
-			direct_control: null,
-			location: millimetres(placement.primary.location),
-			rotation: placement.primary.rotation,
-			multipatch,
-			move_in_black_enabled: true,
-			move_in_black_delay_millis: 0,
-			highlight_overrides: [],
-		};
-	});
+			if (!mode)
+				throw new Error(
+					`Missing demo mode ${entry.profile.name} / ${entry.profile.mode}`,
+				);
+			const placement = placementFor(entry, configuration);
+			const band = patchBand(entry);
+			const primaryPatches = entry.patch
+				? allocateSplitsAt(
+						mode.splits,
+						allocator,
+						entry.patch.universe,
+						entry.patch.address,
+					)
+				: allocateSplits(mode.splits, allocator, band);
+			occupiedSlots += footprint(mode.splits);
+			const multipatch = Array.from(
+				{ length: entry.multipatches },
+				(_, index) => {
+					const instance = placement.multipatches[index];
+					if (!instance)
+						throw new Error(
+							`${entry.name} is missing physical placement ${index + 2}`,
+						);
+					const multipatchAddress = entry.patch?.multipatchAddresses?.[index];
+					const splitPatches = multipatchAddress
+						? allocateSplitsAt(
+								mode.splits,
+								allocator,
+								entry.patch?.universe ?? 1,
+								multipatchAddress,
+							)
+						: unpatchedSplits(mode.splits);
+					if (multipatchAddress) occupiedSlots += footprint(mode.splits);
+					return {
+						id: stableUuid(2, entry.number * 100 + index + 1),
+						name: `${entry.name} ${index + 2}`,
+						split_patches: splitPatches,
+						location: millimetres(instance.location),
+						rotation: instance.rotation,
+					};
+				},
+			);
+			return {
+				fixture_id: stableUuid(1, entry.number),
+				fixture_number: entry.number,
+				virtual_fixture_number: null,
+				name: entry.name,
+				profile_id: profile.id,
+				profile_revision: profile.revision,
+				mode_id: mode.id,
+				split_patches: primaryPatches,
+				layer_id: layerFor(entry, layers),
+				direct_control: null,
+				location: millimetres(placement.primary.location),
+				rotation: placement.primary.rotation,
+				multipatch,
+				move_in_black_enabled: true,
+				move_in_black_delay_millis: 0,
+				highlight_overrides: [],
+			};
+		});
 	const physicalInstances = fixtures.reduce(
 		(count, fixture) => count + 1 + fixture.multipatch.length,
 		0,
@@ -184,7 +285,9 @@ export function createPlannedDemoPatchInputs(
 		fixtureRecords: fixtures.length,
 		physicalInstances,
 		firstUniverse: 1,
-		lastUniverse: cursor.universe,
+		lastUniverse: Math.max(
+			...Array.from(allocator.occupied, (slot) => Number(slot.split(".")[0])),
+		),
 		occupiedSlots,
 	};
 }
@@ -207,23 +310,123 @@ function resolveProfile(
 
 function allocateSplits(
 	splits: readonly { number: number; footprint: number }[],
-	cursor: PatchCursor,
+	allocator: PatchAllocator,
+	band: PatchBand,
 ) {
 	return splits.map((split) => {
 		if (split.footprint === 0)
 			return { split: split.number, universe: null, address: null };
-		if (cursor.address + split.footprint - 1 > 512) {
-			cursor.universe++;
-			cursor.address = 1;
-		}
+		const cursor = allocator.cursors[band];
+		findAvailableRun(allocator.occupied, cursor, split.footprint, band);
 		const patch = {
 			split: split.number,
 			universe: cursor.universe,
 			address: cursor.address,
 		};
+		for (
+			let address = cursor.address;
+			address < cursor.address + split.footprint;
+			address++
+		)
+			allocator.occupied.add(`${cursor.universe}.${address}`);
 		cursor.address += split.footprint;
 		return patch;
 	});
+}
+
+function allocateSplitsAt(
+	splits: readonly { number: number; footprint: number }[],
+	allocator: PatchAllocator,
+	universe: number,
+	startAddress: number,
+) {
+	let address = startAddress;
+	return splits.map((split) => {
+		if (split.footprint === 0)
+			return { split: split.number, universe: null, address: null };
+		const occupied = Array.from(
+			{ length: split.footprint },
+			(_, offset) => `${universe}.${address + offset}`,
+		);
+		const collision = occupied.find((slot) => allocator.occupied.has(slot));
+		if (collision)
+			throw new Error(`Demo patch address ${collision} is occupied`);
+		if (address + split.footprint - 1 > 512)
+			throw new Error(`Demo patch exceeds universe ${universe}`);
+		const patch = { split: split.number, universe, address };
+		for (const slot of occupied) allocator.occupied.add(slot);
+		address += split.footprint;
+		return patch;
+	});
+}
+
+function unpatchedSplits(
+	splits: readonly { number: number; footprint: number }[],
+) {
+	return splits.map((split) => ({
+		split: split.number,
+		universe: null,
+		address: null,
+	}));
+}
+
+function createPatchAllocator(
+	bands?: PlannedDemoPatchConfiguration["addressBands"],
+): PatchAllocator {
+	const start = (value: string | undefined, fallback: PatchCursor) => {
+		const match = value?.match(/^(\d+)\.(\d+)/u);
+		return match
+			? { universe: Number(match[1]), address: Number(match[2]) }
+			: fallback;
+	};
+	return {
+		occupied: new Set(),
+		cursors: {
+			dimmer: start(bands?.dimmers, { universe: 1, address: 1 }),
+			stageLed: start(bands?.stageLedPars, { universe: 1, address: 25 }),
+			stageMoving: start(bands?.stageMovingLights, {
+				universe: 2,
+				address: 1,
+			}),
+			audience: start(bands?.audience, { universe: 5, address: 1 }),
+			auxiliary: start(bands?.auxiliary, { universe: 8, address: 1 }),
+			hazer: start(bands?.hazers, { universe: 1, address: 509 }),
+			other: { universe: 9, address: 1 },
+		},
+	};
+}
+
+function findAvailableRun(
+	occupied: ReadonlySet<string>,
+	cursor: PatchCursor,
+	footprint: number,
+	band: PatchBand,
+) {
+	for (;;) {
+		const limit =
+			cursor.universe === 1
+				? {
+						dimmer: 24,
+						stageLed: 508,
+						stageMoving: 508,
+						audience: 508,
+						auxiliary: 508,
+						hazer: 512,
+						other: 512,
+					}[band]
+				: 512;
+		if (cursor.address + footprint - 1 > limit) {
+			cursor.universe += 1;
+			cursor.address = 1;
+			continue;
+		}
+		const free = Array.from(
+			{ length: footprint },
+			(_, offset) => `${cursor.universe}.${cursor.address + offset}`,
+		).every((slot) => !occupied.has(slot));
+		if (free) return;
+		cursor.address += 1;
+	}
 }
 
 function footprint(splits: readonly { footprint: number }[]) {
@@ -234,37 +437,163 @@ function layerFor(
 	entry: DemoFixtureManifestEntry,
 	layers: Readonly<Record<string, string>>,
 ) {
-	const name = entry.name;
-	const preferred =
-		name.startsWith("Back ") ||
-		(entry.location === "stage" && stageIndex(entry) < stageBackCount(entry))
-			? "Back Truss"
-			: name.startsWith("Mid ") || entry.location === "stage"
-				? "Mid Truss"
-				: name.startsWith("Front ") ||
-						name.startsWith("Fresnel") ||
-						name.startsWith("Static Profile")
-					? "Front Truss"
-					: entry.location === "audience"
-						? "Audience"
-						: entry.location === "aux"
-							? "Auxiliary"
-							: name.startsWith("House")
-								? "House Lights"
-								: "Floor";
+	const location =
+		entry.location === "stage"
+			? "Stage"
+			: entry.location === "audience"
+				? "Audience"
+				: "Auxilliary";
+	const conventional =
+		entry.patch?.universe === 1 &&
+		(entry.patch.address <= 24 || entry.roles.includes("Hazers"));
+	const preferred = conventional
+		? "Conventional Light"
+		: entry.family === "profile"
+			? `Profile ${location}`
+			: entry.family === "wash"
+				? `Wash ${location}`
+				: entry.family === "led" || entry.roles.includes("Sunstrips")
+					? `LED PAR ${location}`
+					: "Stage & Venue";
 	return (
-		layers[preferred] ?? layers.Stage ?? Object.values(layers)[0] ?? "default"
+		layers[preferred] ??
+		layers["Stage & Venue"] ??
+		Object.values(layers)[0] ??
+		"default"
 	);
 }
 
-function placementFor(entry: DemoFixtureManifestEntry) {
-	if (entry.roles.includes("All ACLs")) return aclPlacement(entry);
-	if (entry.roles.includes("House Lights")) return housePlacement();
-	const location = ordinaryLocation(entry);
+function patchPriority(entry: DemoFixtureManifestEntry) {
+	if (entry.patch) return -1;
 	return {
-		primary: { location, rotation: ordinaryRotation(entry, location) },
+		dimmer: 0,
+		stageLed: 1,
+		stageMoving: 2,
+		audience: 3,
+		auxiliary: 4,
+		hazer: 5,
+		other: 6,
+	}[patchBand(entry)];
+}
+
+function patchBand(entry: DemoFixtureManifestEntry): PatchBand {
+	if (
+		entry.name.startsWith("Fresnel") ||
+		entry.name.startsWith("Static Profile") ||
+		entry.roles.includes("All ACLs") ||
+		entry.roles.includes("Blinders") ||
+		entry.roles.includes("House Lights")
+	)
+		return "dimmer";
+	if (entry.roles.includes("Hazers")) return "hazer";
+	if (entry.location === "audience") return "audience";
+	if (entry.location === "aux" || entry.roles.includes("Sunstrips"))
+		return "auxiliary";
+	if (entry.family === "led") return "stageLed";
+	if (entry.family === "profile" || entry.family === "wash")
+		return "stageMoving";
+	return "other";
+}
+
+function placementFor(
+	entry: DemoFixtureManifestEntry,
+	configuration?: PlannedDemoPatchConfiguration,
+) {
+	const configured = configuration?.placements?.find((placement) =>
+		fixtureTargetIncludes(placement.targets, entry.number),
+	);
+	if (configured && entry.multipatches > 0)
+		return configuredPhysicalPlacement(configured, entry.multipatches + 1);
+	if (entry.roles.includes("All ACLs")) {
+		return aclPlacement(entry);
+	}
+	if (entry.roles.includes("House Lights"))
+		return housePlacement(entry.multipatches + 1);
+	if (entry.multipatches > 0) return conventionalMultipatchPlacement(entry);
+	const location = configured
+		? configuredPoint(configured.location, entry.number, configured.targets)
+		: ordinaryLocation(entry);
+	return {
+		primary: {
+			location,
+			rotation: configured?.rotation
+				? configuredPoint(configured.rotation, entry.number, configured.targets)
+				: entry.family === "profile" || entry.family === "wash"
+					? (configuration?.movingFixtureRotation ??
+						ordinaryRotation(entry, location))
+					: ordinaryRotation(entry, location),
+		},
 		multipatches: [] as Array<{ location: Point; rotation: Point }>,
 	};
+}
+
+function conventionalMultipatchPlacement(entry: DemoFixtureManifestEntry) {
+	const positions =
+		entry.number === 9
+			? [-0.7, 0.7].map((x) => ({ x, y: 4, z: 4.15 }))
+			: [-0.4, 0.4].map((x) => ({ x, y: -3, z: 4.15 }));
+	const instances = positions.map((location) => ({
+		location,
+		rotation: ordinaryRotation(entry, location),
+	}));
+	return { primary: instances[0], multipatches: instances.slice(1) };
+}
+
+function fixtureTargetIncludes(targets: string, fixtureNumber: number) {
+	const numbers = targets.match(/\d+/gu)?.map(Number) ?? [];
+	if (numbers.length === 0) return false;
+	const first = numbers[0];
+	if (/multipatch/iu.test(targets)) return fixtureNumber === first;
+	const last = /\bTHRU\b/u.test(targets) && numbers[1] ? numbers[1] : first;
+	return (
+		fixtureNumber >= Math.min(first, last) &&
+		fixtureNumber <= Math.max(first, last)
+	);
+}
+
+function configuredPoint(
+	point: { x: string; y: string; z: string },
+	fixtureNumber: number,
+	targets: string,
+): Point {
+	const numbers = targets.match(/\d+/gu)?.map(Number) ?? [fixtureNumber];
+	const first = numbers[0] ?? fixtureNumber;
+	const last = /\bTHRU\b/u.test(targets) && numbers[1] ? numbers[1] : first;
+	const index = fixtureNumber - Math.min(first, last);
+	const count = Math.abs(last - first) + 1;
+	return {
+		x: configuredSpread(point.x, index, count),
+		y: configuredSpread(point.y, index, count),
+		z: configuredSpread(point.z, index, count),
+	};
+}
+
+function configuredPhysicalPlacement(
+	placement: NonNullable<PlannedDemoPatchConfiguration["placements"]>[number],
+	count: number,
+) {
+	const instances = Array.from({ length: count }, (_, index) => ({
+		location: {
+			x: configuredSpread(placement.location.x, index, count),
+			y: configuredSpread(placement.location.y, index, count),
+			z: configuredSpread(placement.location.z, index, count),
+		},
+		rotation: {
+			x: configuredSpread(placement.rotation?.x ?? "0", index, count),
+			y: configuredSpread(placement.rotation?.y ?? "0", index, count),
+			z: configuredSpread(placement.rotation?.z ?? "0", index, count),
+		},
+	}));
+	return { primary: instances[0], multipatches: instances.slice(1) };
+}
+
+function configuredSpread(value: string, index: number, count: number) {
+	const [firstText, lastText] = value.split(/\s+THRU\s+/u);
+	const first = Number(firstText);
+	const last = lastText == null ? first : Number(lastText);
+	if (!Number.isFinite(first) || !Number.isFinite(last))
+		throw new Error(`Invalid demo placement value ${value}`);
+	return spread(index, count, first, last);
 }
 
 function ordinaryLocation(entry: DemoFixtureManifestEntry): Point {
@@ -302,10 +631,14 @@ function ordinaryLocation(entry: DemoFixtureManifestEntry): Point {
 	if (entry.roles.includes("Hazers"))
 		return { x: index ? 3.5 : -3.5, y: 3.5, z: 0.2 };
 	if (entry.name.startsWith("Fresnel")) {
+		const fresnelIndex = entry.number - 1;
 		return {
-			x: index < 4 ? spread(index, 4, -3.8, -3) : spread(index - 4, 4, 3, 3.8),
+			x:
+				fresnelIndex < 4
+					? spread(fresnelIndex, 4, -3.8, -2.5)
+					: spread(fresnelIndex - 4, 4, 2.5, 3.8),
 			y: -3,
-			z: 4,
+			z: 4.15,
 		};
 	}
 	return { x: spread(index, 7, -3, 3), y: entry.number < 14 ? 0 : -3, z: 4 };
@@ -315,6 +648,8 @@ function ordinaryRotation(
 	entry: DemoFixtureManifestEntry,
 	origin: Point,
 ): Point {
+	if (entry.family === "profile" || entry.family === "wash")
+		return { x: 0, y: 0, z: 0 };
 	if (entry.roles.includes("Sunstrips")) return { x: 0, y: 90, z: 0 };
 	if (entry.location === "audience")
 		return aimAt(origin, { x: origin.x, y: origin.y, z: 0 });
@@ -331,7 +666,7 @@ function aclPlacement(entry: DemoFixtureManifestEntry) {
 				...Array.from({ length: 4 }, (_, index) => -3.8 + index * 0.27),
 				...Array.from({ length: 4 }, (_, index) => 3 + index * 0.27),
 			]
-		: Array.from({ length: 8 }, (_, index) => spread(index, 8, -0.7, 0.7));
+		: Array.from({ length: 8 }, (_, index) => spread(index, 8, -1, 1));
 	const targets =
 		number === 1 || number === 3
 			? Array.from({ length: 8 }, (_, index) => spread(index, 8, -4, 4))
@@ -349,8 +684,8 @@ function aclPlacement(entry: DemoFixtureManifestEntry) {
 	return { primary: instances[0], multipatches: instances.slice(1) };
 }
 
-function housePlacement() {
-	const instances = Array.from({ length: 12 }, (_, index) => {
+function housePlacement(count: number) {
+	const instances = Array.from({ length: count }, (_, index) => {
 		const location = {
 			x: ((index % 3) - 1) * 2.2,
 			y: -5 - Math.floor(index / 3) * 1.2,
@@ -370,14 +705,6 @@ function familyIndex(entry: DemoFixtureManifestEntry) {
 			candidate.family === entry.family &&
 			candidate.location === entry.location,
 	).indexOf(entry);
-}
-
-function stageIndex(entry: DemoFixtureManifestEntry) {
-	return familyIndex(entry);
-}
-
-function stageBackCount(entry: DemoFixtureManifestEntry) {
-	return entry.family === "profile" ? 16 : entry.family === "wash" ? 15 : 0;
 }
 
 function trussLine(index: number, count: number, y: number): Point {

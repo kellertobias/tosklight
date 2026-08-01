@@ -1,4 +1,6 @@
+import { SelectField } from "@tosklight/ui";
 import type { FixtureDefinition } from "../../../api/types";
+import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { fixtureTypeIconAsset } from "../fixtureTypeIconAssets";
 import { isDmxPatchable } from "../patchUtils";
 
@@ -22,6 +24,38 @@ export function MultiPatchBranch({ last }: { last: boolean }) {
 				<path d={last ? "M7 0v20q0 6 6 6h12" : "M7 0v42M7 20q0 6 6 6h12"} />
 			</svg>
 		</span>
+	);
+}
+
+export function FixtureModeSelect({
+	modes,
+	value,
+	onChange,
+}: {
+	modes: FixtureDefinition[];
+	value: string;
+	onChange: (value: string) => void;
+}) {
+	return (
+		<SelectField
+			label="Mode"
+			ariaLabel="Mode"
+			value={value}
+			onChange={onChange}
+			options={modes.map((mode) => ({
+				value: fixtureDefinitionKey(mode),
+				label: (
+					<span className="fixture-mode-option-label">
+						<span>{mode.mode}</span>
+						{isDmxPatchable(mode) ? (
+							<span>{mode.footprint}ch</span>
+						) : (
+							<small className="fixture-mode-no-dmx">No DMX</small>
+						)}
+					</span>
+				),
+			}))}
+		/>
 	);
 }
 

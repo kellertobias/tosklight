@@ -24,6 +24,31 @@ pub(in crate::runtime) fn output_route_action(
     }
 }
 
+pub(in crate::runtime) fn output_route_range_action(
+    session: &Session,
+    show_id: light_core::ShowId,
+    range_id: uuid::Uuid,
+    first_route: light_show::LosslessBody<light_output::OutputRoute>,
+    logical_universe_end: u16,
+    destination_universe_end: u16,
+) -> light_application::ActionEnvelope<light_application::CreateOutputRouteRangeCommand> {
+    light_application::ActionEnvelope {
+        context: light_application::ActionContext::operator(
+            session.desk.id,
+            session.user.id.0,
+            session.id.0,
+            light_application::ActionSource::Http,
+        ),
+        command: light_application::CreateOutputRouteRangeCommand {
+            show_id,
+            range_id,
+            first_route,
+            logical_universe_end,
+            destination_universe_end,
+        },
+    }
+}
+
 pub(in crate::runtime) async fn run_output_route_action(
     state: &AppState,
     activation: ActiveShowPermit,
@@ -38,6 +63,37 @@ pub(in crate::runtime) async fn run_output_route_action(
         let ports = ServerActiveShowPorts::new(worker_state.clone());
         let result = active_show
             .mutate_output_route(action, &ports)
+            .inspect(|result| {
+                emit_migration_object_changes(&worker_state, show_id, &result.migration_changes);
+                emit_migrated_route_changes(&worker_state, show_id, &result.migrated_routes);
+            });
+        (result, activation)
+    })
+    .await
+    .map_err(|error| ApiError::internal(format!("active-show service task failed: {error}")))?;
+    Ok((result.map_err(active_show_api_error)?, activation))
+}
+
+pub(in crate::runtime) async fn run_output_route_range_action(
+    state: &AppState,
+    activation: ActiveShowPermit,
+    action: light_application::ActionEnvelope<light_application::CreateOutputRouteRangeCommand>,
+) -> Result<
+    (
+        light_application::CreateOutputRouteRangeResult,
+        ActiveShowPermit,
+    ),
+    ApiError,
+> {
+    let worker_state = state.clone();
+    let active_show = state.active_show.clone();
+    let show_id = action.command.show_id;
+    let (result, activation) = tokio::task::spawn_blocking(move || {
+        #[cfg(test)]
+        worker_state.active_show.pause_http_lifecycle_if_armed();
+        let ports = ServerActiveShowPorts::new(worker_state.clone());
+        let result = active_show
+            .create_output_route_range(action, &ports)
             .inspect(|result| {
                 emit_migration_object_changes(&worker_state, show_id, &result.migration_changes);
                 emit_migrated_route_changes(&worker_state, show_id, &result.migrated_routes);

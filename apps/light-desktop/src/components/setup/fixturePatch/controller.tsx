@@ -13,6 +13,7 @@ import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibra
 import { usePatch, usePatchView } from "../../../features/patch/PatchContext";
 import { useApp } from "../../../state/AppContext";
 import { parsePatchAddress } from "../../input/ConsoleFields";
+import { normalizeFixtureSearch } from "../fixtureLibrary/model";
 import {
 	fixtureDefinitionKey,
 	mergeFixtureDefinitions,
@@ -56,6 +57,7 @@ export type MultiPatchEdit = {
 		| "bracket_angle"
 		| "shaper_angle";
 	axis?: VectorAxis;
+	physicalTargets?: string[];
 } | null;
 
 export type PlacementBaseline = {
@@ -115,6 +117,12 @@ function usePatchUiState() {
 	const [pending, setPending] = useState<Partial<PatchedFixture> | null>(null);
 	const [blockedBy, setBlockedBy] = useState<PatchedFixture[]>([]);
 	const [multipatchEdit, setMultipatchEdit] = useState<MultiPatchEdit>(null);
+	const [physicalSelectionFixture, setPhysicalSelectionFixture] = useState<
+		string | null
+	>(null);
+	const [physicalSelectionIds, setPhysicalSelectionIds] = useState<string[]>(
+		[],
+	);
 	const [editCloseConfirm, setEditCloseConfirm] = useState<
 		"fixture" | "multipatch" | null
 	>(null);
@@ -124,6 +132,7 @@ function usePatchUiState() {
 	);
 	const [editingSplit, setEditingSplit] = useState<number | null>(null);
 	const selectionAnchor = useRef<string | null>(null);
+	const physicalSelectionAnchor = useRef<string | null>(null);
 	return {
 		activeLayer,
 		setActiveLayer,
@@ -185,6 +194,10 @@ function usePatchUiState() {
 		setBlockedBy,
 		multipatchEdit,
 		setMultipatchEdit,
+		physicalSelectionFixture,
+		setPhysicalSelectionFixture,
+		physicalSelectionIds,
+		setPhysicalSelectionIds,
 		editCloseConfirm,
 		setEditCloseConfirm,
 		deleteArmed,
@@ -194,6 +207,7 @@ function usePatchUiState() {
 		editingSplit,
 		setEditingSplit,
 		selectionAnchor,
+		physicalSelectionAnchor,
 	};
 }
 
@@ -303,15 +317,15 @@ function filterDefinitions(
 		"query" | "typeFilter" | "manufacturer"
 	>,
 ) {
-	const needle = ui.query.trim().toLowerCase();
+	const needle = normalizeFixtureSearch(ui.query);
 	return definitions.filter(
 		(item) =>
 			(!ui.typeFilter || item.device_type === ui.typeFilter) &&
 			(!ui.manufacturer || item.manufacturer === ui.manufacturer) &&
 			(!needle ||
-				`${item.manufacturer} ${item.name} ${item.model} ${item.mode} ${item.device_type}`
-					.toLowerCase()
-					.includes(needle)),
+				normalizeFixtureSearch(
+					`${item.manufacturer} ${item.name} ${item.model} ${item.mode} ${item.device_type}`,
+				).includes(needle)),
 	);
 }
 

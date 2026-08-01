@@ -175,10 +175,12 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(
 export interface NumberInputProps
 	extends Omit<InputHTMLAttributes<HTMLInputElement>, "type"> {
 	allowDecimal?: boolean;
+	allowThrough?: boolean;
 	showStepButtons?: boolean;
 	keyboardLabel?: string;
 	onValueChange?: (value: string) => void;
 	onKeyboardCommit?: (value: string) => void;
+	onRangeCommit?: (points: number[]) => void;
 	modalFader?: ModalNumberFaderConfig;
 	modalPresets?: ModalNumberPresetConfig;
 	onModalRelease?: () => void;
@@ -250,6 +252,7 @@ function NumberStepButton({
 
 function NumberInputModal({
 	allowDecimal,
+	allowThrough,
 	current,
 	fader,
 	keyboardLabel,
@@ -263,6 +266,7 @@ function NumberInputModal({
 	unit,
 }: {
 	allowDecimal: boolean;
+	allowThrough: boolean;
 	current: string;
 	fader?: ModalNumberFaderConfig;
 	keyboardLabel: string;
@@ -284,6 +288,7 @@ function NumberInputModal({
 			onSubmit={onCommit}
 			onClose={onClose}
 			allowDecimal={allowDecimal}
+			allowThrough={allowThrough}
 			fader={fader}
 			presets={
 				presets
@@ -332,11 +337,13 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
 			onChange,
 			onValueChange,
 			onKeyboardCommit,
+			onRangeCommit,
 			modalFader,
 			modalPresets,
 			onModalRelease,
 			modalReleaseLabel,
 			allowDecimal = false,
+			allowThrough = false,
 			showStepButtons = true,
 			keyboardLabel,
 			unit,
@@ -391,6 +398,16 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
 			setOpen(false);
 		};
 		const commitModal = (next: string) => {
+			if (allowThrough && /\bTHRU\b/i.test(next) && onRangeCommit) {
+				const points = next
+					.split(/\s+THRU\s+/i)
+					.map((point) => Number(point.trim()));
+				if (points.length > 1 && points.every(Number.isFinite)) {
+					onRangeCommit(points);
+					close();
+					return;
+				}
+			}
 			const committed = commit(next);
 			close();
 			onKeyboardCommit?.(committed);
@@ -448,6 +465,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
 				{open && (
 					<NumberInputModal
 						allowDecimal={allowDecimal}
+						allowThrough={allowThrough}
 						current={current}
 						fader={modalFader}
 						keyboardLabel={

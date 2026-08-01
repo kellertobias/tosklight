@@ -3,7 +3,8 @@
 use super::object_api::{
     exact_object_snapshot, materialize_derived_group_memberships,
     materialize_patched_fixture_definitions, materialize_preset_addresses, output_route_action,
-    run_output_route_action, terminate_changed_route,
+    output_route_range_action, run_output_route_action, run_output_route_range_action,
+    terminate_changed_route,
 };
 use super::*;
 use crate::tolerant_json::TolerantJson;
@@ -104,25 +105,55 @@ async fn output_route_action_v2(
     {
         return Ok(Json(outcome));
     }
-    let (route_id, expected, mutation) = route_mutation(&state, show_id, &request.action)?;
-    let action = output_route_action(&session, show_id, route_id, expected, mutation);
-    let (result, _activation) = run_output_route_action(&state, activation, action).await?;
-    terminate_changed_route(&state, result.route_to_terminate.as_ref()).await;
-    emit(
-        &state,
-        "show_object_changed",
-        serde_json::json!({
-            "show_id": result.change.show_id,
-            "kind": "route",
-            "id": result.change.route_id,
-            "revision": result.change.object_revision
-        }),
-    );
+    let (changes, event_sequence) = match &request.action {
+        wire::OutputRouteAction::CreateRange {
+            range_id,
+            route,
+            logical_universe_end,
+            destination_universe_end,
+        } => {
+            let first_route = light_show::LosslessBody::<light_output::OutputRoute>::decode(
+                serde_json::to_value(route)
+                    .map_err(|error| ApiError::internal(error.to_string()))?,
+            )
+            .map_err(|error| ApiError::bad_request(error.to_string()))?;
+            let action = output_route_range_action(
+                &session,
+                show_id,
+                *range_id,
+                first_route,
+                *logical_universe_end,
+                *destination_universe_end,
+            );
+            let (result, _activation) =
+                run_output_route_range_action(&state, activation, action).await?;
+            (result.changes, result.event_sequence)
+        }
+        _ => {
+            let (route_id, expected, mutation) = route_mutation(&state, show_id, &request.action)?;
+            let action = output_route_action(&session, show_id, route_id, expected, mutation);
+            let (result, _activation) = run_output_route_action(&state, activation, action).await?;
+            terminate_changed_route(&state, result.route_to_terminate.as_ref()).await;
+            (vec![result.change], result.event_sequence)
+        }
+    };
+    for change in &changes {
+        emit(
+            &state,
+            "show_object_changed",
+            serde_json::json!({
+                "show_id": change.show_id,
+                "kind": "route",
+                "id": change.route_id,
+                "revision": change.object_revision
+            }),
+        );
+    }
     let outcome = wire::OutputRouteActionOutcome {
         request_id: request.request_id,
         replayed: false,
-        change: wire_route_change(&result.change),
-        event_sequence: result.event_sequence,
+        changes: changes.iter().map(wire_route_change).collect(),
+        event_sequence,
     };
     state
         .replay
@@ -176,6 +207,9 @@ fn route_mutation(
             route_id.clone(),
             *expected_revision,
             light_application::OutputRouteMutation::Delete,
+        )),
+        wire::OutputRouteAction::CreateRange { .. } => Err(ApiError::internal(
+            "output route range action reached the single-route mutation path",
         )),
     }
 }

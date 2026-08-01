@@ -1,8 +1,7 @@
-import { Button, ModalRegistration, ModalTitleBar, Select } from "@tosklight/ui";
+import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
-import { isDmxPatchable } from "../patchUtils";
 import { usePatchController } from "./controller";
-import { FixtureDetails } from "./fixtureDisplay";
+import { FixtureDetails, FixtureModeSelect } from "./fixtureDisplay";
 import { beginPlacement, chooseFamily } from "./placementDraft";
 
 export function FixtureBrowser() {
@@ -12,38 +11,43 @@ export function FixtureBrowser() {
 	return (
 		<ModalRegistration onClose={close}>
 			<div className="stacked-modal-layer">
-			<section className="nested-modal fixture-browser-modal">
-				<ModalTitleBar
-					className="fixture-browser-header"
-					title="Add fixture"
-					search={{
-						value: controller.ui.query,
-						ariaLabel: "Search",
-						placeholder: "Search manufacturer, fixture, mode, or type",
-						settings: [{
-							kind: "select",
-							id: "type",
-							label: "Fixture type",
-							value: controller.ui.typeFilter,
-							options: [
-								{ value: "", label: "All" },
-								...controller.data.types.map((type) => ({ value: type, label: type })),
+				<section className="nested-modal fixture-browser-modal">
+					<ModalTitleBar
+						className="fixture-browser-header"
+						title="Add fixture"
+						search={{
+							value: controller.ui.query,
+							ariaLabel: "Search",
+							placeholder: "Search manufacturer, fixture, mode, or type",
+							settings: [
+								{
+									kind: "select",
+									id: "type",
+									label: "Fixture type",
+									value: controller.ui.typeFilter,
+									options: [
+										{ value: "", label: "All" },
+										...controller.data.types.map((type) => ({
+											value: type,
+											label: type,
+										})),
+									],
+								},
 							],
-						}],
-						onSettingChange: (_, value) =>
-							controller.ui.setTypeFilter(String(value)),
-						onClearSettings: () => controller.ui.setTypeFilter(""),
-					}}
-					onSearch={controller.ui.setQuery}
-					closeLabel="Close Add fixture"
-					onClose={close}
-				/>
-				<div className="fixture-picker-columns">
-					<ManufacturerColumn />
-					<FamilyColumn />
-					<ModeColumn />
-				</div>
-			</section>
+							onSettingChange: (_, value) =>
+								controller.ui.setTypeFilter(String(value)),
+							onClearSettings: () => controller.ui.setTypeFilter(""),
+						}}
+						onSearch={controller.ui.setQuery}
+						closeLabel="Close Add fixture"
+						onClose={close}
+					/>
+					<div className="fixture-picker-columns">
+						<ManufacturerColumn />
+						<FamilyColumn />
+						<ModeColumn />
+					</div>
+				</section>
 			</div>
 		</ModalRegistration>
 	);
@@ -108,27 +112,11 @@ function ModeColumn() {
 			<h3>
 				{family.manufacturer} {family.name}
 			</h3>
-			{/* biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label. */}
-			<label>
-				Mode
-				<Select
-					aria-label="Mode"
-					value={fixtureDefinitionKey(definition)}
-					onChange={(event) =>
-						controller.ui.setDefinitionKey(event.target.value)
-					}
-				>
-					{family.modes.map((mode) => (
-						<option
-							value={fixtureDefinitionKey(mode)}
-							key={fixtureDefinitionKey(mode)}
-						>
-							{mode.mode} ·{" "}
-							{isDmxPatchable(mode) ? `${mode.footprint}ch` : "No DMX"}
-						</option>
-					))}
-				</Select>
-			</label>
+			<FixtureModeSelect
+				modes={family.modes}
+				value={fixtureDefinitionKey(definition)}
+				onChange={controller.ui.setDefinitionKey}
+			/>
 			<FixtureDetails definition={definition} />
 			<Button className="primary" onClick={() => beginPlacement(controller)}>
 				Add fixture

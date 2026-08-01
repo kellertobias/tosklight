@@ -118,52 +118,56 @@ function useFixtures3d(
 	layout: StageLayoutModel,
 ) {
 	return useMemo(
-		() =>
-			stageFixtures.flatMap((fixture, fixtureIndex) =>
-				[
-					{
-						id: fixture.fixture_id,
-						location: fixture.location,
-						rotation: fixture.rotation,
-						invert_pan: fixture.invert_pan,
-						invert_tilt: fixture.invert_tilt,
-						bracket_angle: fixture.bracket_angle,
-					},
-					...(fixture.multipatch ?? []),
-				].map((instance, instanceIndex): Stage3dFixture => {
-					const index = fixtureIndex * 16 + instanceIndex;
-					const located =
-						instance.location &&
-						(instance.location.x || instance.location.y || instance.location.z)
-							? {
-									x: instance.location.x / 1000,
-									y: instance.location.y / 1000,
-									z: instance.location.z / 1000,
-									rotationX: instance.rotation?.x ?? 0,
-									rotationY: instance.rotation?.y ?? 0,
-									rotationZ: instance.rotation?.z ?? 0,
-								}
-							: null;
-					return {
-						fixture,
-						instanceId: instance.id,
-						invertPan: instance.invert_pan ?? false,
-						invertTilt: instance.invert_tilt ?? false,
-						bracketAngle: instance.bracket_angle ?? 0,
-						index,
-						position:
-							layout.positions3d[instance.id] ??
-							located ??
-							migrateStagePosition(
-								instanceIndex
-									? undefined
-									: layout.positions[fixture.fixture_id],
-								index,
-							),
-					};
-				}),
-			),
+		() => stageFixtures3d(stageFixtures, layout),
 		[layout.positions, layout.positions3d, stageFixtures],
+	);
+}
+
+export function stageFixtures3d(
+	stageFixtures: readonly PatchedFixture[],
+	layout: Pick<StageLayoutModel, "positions" | "positions3d">,
+) {
+	return stageFixtures.flatMap((fixture, fixtureIndex) =>
+		[
+			{
+				id: fixture.fixture_id,
+				location: fixture.location,
+				rotation: fixture.rotation,
+				invert_pan: fixture.invert_pan,
+				invert_tilt: fixture.invert_tilt,
+				bracket_angle: fixture.bracket_angle,
+			},
+			...(fixture.multipatch ?? []),
+		].map((instance, instanceIndex): Stage3dFixture => {
+			const index = fixtureIndex * 16 + instanceIndex;
+			const located =
+				instance.location &&
+				(instance.location.x || instance.location.y || instance.location.z)
+					? {
+							x: instance.location.x / 1000,
+							y: instance.location.y / 1000,
+							z: instance.location.z / 1000,
+							rotationX: instance.rotation?.x ?? 0,
+							rotationY: instance.rotation?.y ?? 0,
+							rotationZ: instance.rotation?.z ?? 0,
+						}
+					: null;
+			return {
+				fixture,
+				instanceId: instance.id,
+				invertPan: instance.invert_pan ?? false,
+				invertTilt: instance.invert_tilt ?? false,
+				bracketAngle: instance.bracket_angle ?? 0,
+				index,
+				position:
+					layout.positions3d[instance.id] ??
+					located ??
+					migrateStagePosition(
+						instanceIndex ? undefined : layout.positions[fixture.fixture_id],
+						index,
+					),
+			};
+		}),
 	);
 }
 

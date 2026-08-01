@@ -32,13 +32,13 @@ pub use action::{
 pub use active_show::{
     ActiveShowObjectBody, ActiveShowObjectChange, ActiveShowObjectKind, ActiveShowObjectMutation,
     ActiveShowObjectMutationKind, ActiveShowObjectsChange, ActiveShowPorts, ActiveShowService,
-    ActiveShowUnitOfWork, BackupIdentity, MutateActiveShowObjectsCommand,
-    MutateActiveShowObjectsResult, MutateOutputRouteCommand, MutateOutputRouteResult,
-    OutputRouteChange, OutputRouteMutation, PatchLayer, StageCamera3d, StageLayout,
-    StagePosition2d, StagePosition3d, StagePositions2dConfig, StagePositions2dProvenance,
-    StageProjection2d, UndoActiveShowObjectCommand, UndoActiveShowObjectResult,
-    UndoActiveShowRecordingCommand, UndoActiveShowRecordingObject,
-    UndoActiveShowRecordingOperation, UserLayout,
+    ActiveShowUnitOfWork, BackupIdentity, CreateOutputRouteRangeCommand,
+    CreateOutputRouteRangeResult, MutateActiveShowObjectsCommand, MutateActiveShowObjectsResult,
+    MutateOutputRouteCommand, MutateOutputRouteResult, OutputRouteChange, OutputRouteMutation,
+    PatchLayer, StageCamera3d, StageLayout, StagePosition2d, StagePosition3d,
+    StagePositions2dConfig, StagePositions2dProvenance, StageProjection2d,
+    UndoActiveShowObjectCommand, UndoActiveShowObjectResult, UndoActiveShowRecordingCommand,
+    UndoActiveShowRecordingObject, UndoActiveShowRecordingOperation, UserLayout,
 };
 pub use dynamics::{
     DynamicControllerUpdate, DynamicFixAtCommand, DynamicOffCommand, DynamicStartCommand,
@@ -205,7 +205,8 @@ pub use show_patch::{
     PatchChange, PatchFixtureCandidate, PatchFixtureProjection, PatchFixturesCommand,
     PatchFixturesResult, PatchModeProjection, PatchOperatorAddressOverride, PatchPerformancePhase,
     PatchPlacementIntent, PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
-    PatchSplitPlacementMode, ShowPatchPorts, ShowPatchService,
+    PatchSplitPlacementMode, PatchVectorAxis, PatchVectorKind, PatchVectorSpreadIntent,
+    ShowPatchPorts, ShowPatchService,
 };
 pub use speed_group::{
     SPEED_GROUP_COUNT, SpeedBpm, SpeedBpmDelta, SpeedGroupAction, SpeedGroupApplication,

@@ -23,13 +23,18 @@ test("PLAN-76-PACKAGED @api › shipped canonical demo retains its exact package
 		(total, fixture) => total + 1 + (fixture.multipatch?.length ?? 0),
 		0,
 	);
-	expect(patch.fixtures).toHaveLength(295);
-	expect(physicalInstances).toBe(343);
+	expect(patch.fixtures).toHaveLength(264);
+	expect(physicalInstances).toBe(306);
 
 	const runtime = await startPlannedDemoBenchmarkLook(api, show.id);
 	const projections = runtime.projections as Array<{
 		target: string;
-		runtime?: { enabled?: boolean; state?: string };
+		runtime?: {
+			enabled?: boolean;
+			state?: string;
+			master?: number;
+			size?: number;
+		};
 	}>;
 	expect(projections).toHaveLength(PLANNED_DEMO_BENCHMARK_ASSIGNMENTS.length);
 	expect(
@@ -37,7 +42,9 @@ test("PLAN-76-PACKAGED @api › shipped canonical demo retains its exact package
 			projection.target === "cue_list"
 				? projection.runtime?.enabled === true
 				: projection.target === "dynamic" &&
-					projection.runtime?.state === "active",
+					projection.runtime?.state === "active" &&
+					Number(projection.runtime?.master) > 0 &&
+					Number(projection.runtime?.size) > 0,
 		),
 	).toBe(true);
 });

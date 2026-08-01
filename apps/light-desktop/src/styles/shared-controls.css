@@ -124,6 +124,25 @@
 .command-status .timecode-status.timecode-active {
 	color: var(--blue);
 }
+.command-status .highlight-status {
+	color: var(--blue);
+	animation: highlight-status-blink 1s steps(1, end) infinite;
+}
+@keyframes highlight-status-blink {
+	0%,
+	49% {
+		opacity: 1;
+	}
+	50%,
+	100% {
+		opacity: 0.25;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.command-status .highlight-status {
+		animation: none;
+	}
+}
 .command-status span {
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -2382,6 +2401,18 @@ button:not(:disabled):active {
 	display: grid;
 	gap: 5px;
 	margin-top: 15px;
+}
+
+.fixture-mode-option-label {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 0.35em;
+}
+
+.fixture-mode-option-label small {
+	color: var(--muted);
+	font-size: 0.72em;
+	font-weight: 500;
 }
 .fixture-patch-form {
 	display: grid;

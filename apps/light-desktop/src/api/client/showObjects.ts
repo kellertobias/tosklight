@@ -15,7 +15,7 @@ import type {
 	ShowObjectExactSnapshot,
 	UserLayoutPatch,
 } from "../generated/light-wire";
-import type { VersionedObject } from "../types";
+import type { OutputRouteRangeIntent, VersionedObject } from "../types";
 import { type ClientTransport, jsonRequest } from "./transport";
 
 interface PreloadStoreInput {
@@ -167,6 +167,23 @@ export class ShowObjectsApiClient {
 						patch: route,
 					};
 		return this.outputRouteAction(showId, action);
+	}
+
+	createOutputRouteRange(
+		showId: string,
+		intent: OutputRouteRangeIntent,
+	): Promise<OutputRouteActionOutcome> {
+		return this.outputRouteAction(showId, {
+			type: "create_range",
+			range_id: crypto.randomUUID(),
+			route: {
+				...intent.route,
+				logical_universe: intent.logical_start,
+				destination_universe: intent.destination_start,
+			},
+			logical_universe_end: intent.logical_end,
+			destination_universe_end: intent.destination_end,
+		});
 	}
 
 	deleteOutputRoute(

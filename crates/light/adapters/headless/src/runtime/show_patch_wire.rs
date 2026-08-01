@@ -26,6 +26,11 @@ pub(crate) fn application_command(
             .into_iter()
             .map(application_placement)
             .collect(),
+        vector_spreads: request
+            .vector_spreads
+            .into_iter()
+            .map(application_vector_spread)
+            .collect(),
     })
 }
 
@@ -123,7 +128,26 @@ pub(crate) fn application_policy_command(
         fixtures: vec![candidate],
         remove_fixture_ids: Vec::new(),
         placements: Vec::new(),
+        vector_spreads: Vec::new(),
     })
+}
+
+fn application_vector_spread(
+    input: wire::PatchVectorSpreadIntent,
+) -> application::PatchVectorSpreadIntent {
+    application::PatchVectorSpreadIntent {
+        fixture_ids: input.fixture_ids.into_iter().map(FixtureId).collect(),
+        kind: match input.kind {
+            wire::PatchVectorKind::Location => application::PatchVectorKind::Location,
+            wire::PatchVectorKind::Rotation => application::PatchVectorKind::Rotation,
+        },
+        axis: match input.axis {
+            wire::PatchVectorAxis::X => application::PatchVectorAxis::X,
+            wire::PatchVectorAxis::Y => application::PatchVectorAxis::Y,
+            wire::PatchVectorAxis::Z => application::PatchVectorAxis::Z,
+        },
+        points: input.points,
+    }
 }
 
 fn application_placement(input: wire::PatchPlacementIntent) -> application::PatchPlacementIntent {

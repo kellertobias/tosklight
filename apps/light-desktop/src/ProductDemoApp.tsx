@@ -22,15 +22,21 @@ import { StageWindow } from "./windows/StageWindow";
 const DEMO_DMX_CHANNELS = 512;
 const DEMO_DMX_UNIVERSES = [1, 2, 3, 4] as const;
 const DEMO_APPLICATION_WIDTH = 1920;
+const DEMO_APPLICATION_ICON = new URL(
+	"../src-tauri/icons/icon.png",
+	import.meta.url,
+).href;
 const DEMO_CHAPTERS = [
 	["SHOW SETUP", "Show Setup"],
 	["OUTPUT CONFIGURATION", "Outputs"],
-	["GROUP SETUP", "Groups"],
+	["SETTING UP THE BASICS", "Basics"],
+	["DEFINING GROUPS", "Groups"],
+	["ASSIGNING GROUP MASTERS", "Masters"],
 	["PRESET SETUP", "Presets"],
+	["Programming Cues & Cuelists", "Cues & Cuelists"],
 	["DYNAMICS", "Dynamics"],
-	["CUELIST PROGRAMMING", "Cuelists"],
-	["SHOW COMPLETE", "Complete"],
-	["Busking", "Live Demo"],
+	["VIRTUAL PLAYBACKS", "Virtual Playbacks"],
+	["Busking", "Busking"],
 ] as const;
 
 function DemoDmxGrid({ universeNumber }: { universeNumber: number }) {
@@ -127,11 +133,26 @@ function DemoCard({
 }
 
 function DemoNarrative() {
+	const [playtimeSeconds, setPlaytimeSeconds] = useState(0);
+	useEffect(() => {
+		const startedAt = performance.now();
+		const update = () =>
+			setPlaytimeSeconds((performance.now() - startedAt) / 1_000);
+		update();
+		const timer = window.setInterval(update, 200);
+		return () => window.clearInterval(timer);
+	}, []);
 	return (
 		<section
 			className="product-demo-narrative"
 			aria-label="Product demo progress"
 		>
+			<img
+				src={DEMO_APPLICATION_ICON}
+				alt=""
+				data-demo-application-icon
+				hidden
+			/>
 			<ol className="product-demo-chapters" data-demo-chapter-strip>
 				{DEMO_CHAPTERS.map(([chapter, label], index) => (
 					<li key={chapter}>
@@ -147,12 +168,28 @@ function DemoNarrative() {
 				))}
 			</ol>
 			<div className="product-demo-narrative-line" />
+			<div className="product-demo-section-status">
+				<div>
+					<small>SECTION</small>
+					<strong data-demo-section-title>STARTING</strong>
+					<span data-demo-subsection />
+				</div>
+				<time data-demo-playtime dateTime={`PT${playtimeSeconds.toFixed(1)}S`}>
+					{formatDemoPlaytime(playtimeSeconds)}
+				</time>
+			</div>
 			<div className="product-demo-current-action">
 				<small>CURRENT ACTION</small>
 				<strong data-demo-current-action>Preparing the product demo.</strong>
 			</div>
 		</section>
 	);
+}
+
+function formatDemoPlaytime(seconds: number) {
+	const wholeSeconds = Math.max(0, Math.floor(seconds));
+	const minutes = Math.floor(wholeSeconds / 60);
+	return `${String(minutes).padStart(2, "0")}:${String(wholeSeconds % 60).padStart(2, "0")}`;
 }
 
 function DemoApplicationScreen() {
@@ -174,10 +211,41 @@ export function DemoApplicationScreenView({
 		const element = viewport.current;
 		if (!element) return;
 		const resize = () => setScale(element.clientWidth / DEMO_APPLICATION_WIDTH);
-		const observer = new ResizeObserver(resize);
+		const publishBounds = () => {
+			const bounds = element.getBoundingClientRect();
+			document.documentElement.style.setProperty(
+				"--product-demo-app-scale",
+				String(bounds.width / DEMO_APPLICATION_WIDTH),
+			);
+			document.documentElement.style.setProperty(
+				"--product-demo-app-left",
+				`${bounds.left}px`,
+			);
+			document.documentElement.style.setProperty(
+				"--product-demo-app-top",
+				`${bounds.top}px`,
+			);
+			document.documentElement.style.setProperty(
+				"--product-demo-app-width",
+				`${bounds.width}px`,
+			);
+			document.documentElement.style.setProperty(
+				"--product-demo-app-height",
+				`${bounds.height}px`,
+			);
+		};
+		const sync = () => {
+			resize();
+			publishBounds();
+		};
+		const observer = new ResizeObserver(sync);
 		observer.observe(element);
-		resize();
-		return () => observer.disconnect();
+		window.addEventListener("resize", sync);
+		sync();
+		return () => {
+			observer.disconnect();
+			window.removeEventListener("resize", sync);
+		};
 	}, []);
 	return (
 		<section
@@ -210,7 +278,7 @@ function ProductDemoSurface() {
 					showGroupShortcuts={false}
 					followPreload={false}
 					stageRenderQuality="lines_and_beams"
-					showSelection={false}
+					showSelection
 					showFloorGrid={false}
 					showBeamGuides={state.builtIn === "patch"}
 					environmentBrightness={1}
@@ -252,7 +320,7 @@ export function ProductDemoSurfaceView({
 				<DemoCard
 					className="product-demo-stage"
 					title="STAGE · 3D"
-					meta="SELECTION OFF · GROUPS OFF · ENV 100%"
+					meta="FOLLOW SELECTION · GROUPS OFF · ENV 100%"
 				>
 					{stage}
 				</DemoCard>

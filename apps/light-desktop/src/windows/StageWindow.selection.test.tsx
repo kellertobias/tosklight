@@ -345,13 +345,16 @@ describe("Stage selection projection", () => {
 		expect(rendered.transport.subscriptions).toHaveLength(1);
 	});
 
-	it("shows a lightweight connection state before the first frame", () => {
+	it("keeps the Stage scene usable while the first live-value frame is pending", () => {
 		visualizationState.current.visualizationStatus = "loading";
 		renderStage();
 
-		expect(screen.getByRole("status")).toHaveTextContent(
-			"Loading Live Stage visualization…",
-		);
+		const stage = screen
+			.getByTestId("stage-selection")
+			.closest(".stage-window");
+		expect(stage).toHaveAttribute("data-visualization-state", "ready");
+		expect(stage).toHaveAttribute("data-live-visualization-state", "loading");
+		expect(screen.queryByRole("status")).toBeNull();
 	});
 
 	it("marks a retained scene stale while reconnecting", () => {

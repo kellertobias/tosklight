@@ -1,4 +1,5 @@
 import { ServerErrorNotice } from "../../components/shell/ServerErrorNotice";
+import { PoolPaletteSettings } from "../../components/shared/PoolColorSettings";
 import { ScreensSetup } from "../../components/setup/ScreensSetup";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import type { SetupWindowController } from "./controller";
@@ -29,6 +30,13 @@ function ActiveSetupSection({
 			return <TimecodeSection controller={controller} />;
 		case 5:
 			return <NetworkSection controller={controller} />;
+		case 7:
+			return (
+				<section className="setup-section" aria-labelledby="preferences-title">
+					<h2 id="preferences-title">Preferences</h2>
+					<PoolPaletteSettings />
+				</section>
+			);
 		default:
 			return null;
 	}

@@ -10,6 +10,7 @@ export function Stage3dView({
 	options,
 	patchSelectionPreview,
 	patchPreviewFixtures,
+	highlightFixtures = [],
 	camera3d,
 	pixelRatioCap,
 	selection,
@@ -22,6 +23,7 @@ export function Stage3dView({
 	options: StageOptionsModel;
 	patchSelectionPreview: boolean;
 	patchPreviewFixtures: string[];
+	highlightFixtures?: string[];
 	camera3d: StageWindowProps["camera3d"];
 	pixelRatioCap?: number;
 	selection: StageSelectionModel;
@@ -38,7 +40,12 @@ export function Stage3dView({
 				fixtures={fixtures}
 				visualization={visualization}
 				selected={selection.fixtureIds}
-				virtualHighlight={patchSelectionPreview ? patchPreviewFixtures : []}
+				virtualHighlight={[
+					...new Set([
+						...highlightFixtures,
+						...(patchSelectionPreview ? patchPreviewFixtures : []),
+					]),
+				]}
 				showSelection={options.showSelection}
 				showFloorGrid={options.showFloorGrid}
 				showBeamGuides={options.showBeamGuides}

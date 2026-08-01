@@ -317,28 +317,36 @@
         <h2>Technical specifications</h2>
         <div class="specs">
           <div class="spec">
-            <strong>Demo show</strong>
-            <span>262 controllable fixtures, 33 Venue records, 343 physical Stage instances, 3,783 occupied slots.</span>
-          </div>
-          <div class="spec">
-            <strong>Interactive scale</strong>
-            <span>Real-time Stage around 300 fixtures; desk and output remain usable at 60 Hz at the supported 1,000-instance ceiling.</span>
-          </div>
-          <div class="spec">
             <strong>Show files</strong>
-            <span>Portable, versioned SQLite documents, kept separate from desk users and settings.</span>
+            <span>MVR import and export, GDTF fixture support, and portable show files in SQLite format.</span>
           </div>
           <div class="spec">
             <strong>Output</strong>
-            <span>Art-Net and sACN with a fixed-deadline render scheduler and isolated client publication.</span>
+            <span>Networked DMX via Art-Net and sACN at up to 60 Hz across as many as 128 sparsely populated universes. A realistic modern-hardware workload is 4,096 or more occupied addresses.</span>
           </div>
           <div class="spec">
-            <strong>Desktop platforms</strong>
-            <span>macOS Apple Silicon, Windows 64-bit, and Linux x86_64.</span>
+            <strong>Desktop and headless</strong>
+            <span>Native desktop builds support macOS on Apple Silicon, 64-bit Windows, and Linux x86_64. A headless Raspberry Pi ARM64 build serves its UI through a browser.</span>
           </div>
           <div class="spec">
-            <strong>Headless platforms</strong>
-            <span>macOS, Windows, Linux AMD64, and Raspberry Pi 4/5 ARM64 with a browser desk.</span>
+            <strong>Starter show</strong>
+            <span>The included demo show is built for live and club busking. Import your fixtures, assign them to the prepared Groups, update the Presets, and you are ready for doors open.</span>
+          </div>
+          <div class="spec">
+            <strong>Tracking sparse Cuelists</strong>
+            <span>Store only what changes while earlier values track forward automatically. Cue Only restores temporary changes, and per-value fades and delays keep complex Cuelists compact and readable.</span>
+          </div>
+          <div class="spec">
+            <strong>Dynamics editor</strong>
+            <span>Build effects visually from familiar sine, cosine, PWM, and random waveform lanes. Touch-friendly controls make size, speed, phase, wings, ordering, and fixture targeting approachable.</span>
+          </div>
+          <div class="spec">
+            <strong>Macro engine</strong>
+            <span>Work in progress toward full desk automation and custom user interfaces built from reusable operator actions.</span>
+          </div>
+          <div class="spec">
+            <strong>Timecode / timeline playback</strong>
+            <span>Work in progress toward repeatable automation arranged on a timeline and driven by show timecode.</span>
           </div>
         </div>
       </section>

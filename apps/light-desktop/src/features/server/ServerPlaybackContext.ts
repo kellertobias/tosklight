@@ -1,6 +1,7 @@
 import type {
 	DmxSnapshot,
 	OutputRoute,
+	OutputRouteRangeIntent,
 	VisualizationSnapshot,
 } from "../../api/types";
 
@@ -17,5 +18,6 @@ export interface ServerPlaybackContext {
 		route: OutputRoute,
 		revision: number,
 	) => Promise<boolean>;
+	createOutputRouteRange: (range: OutputRouteRangeIntent) => Promise<boolean>;
 	deleteOutputRoute: (id: string, revision: number) => Promise<boolean>;
 }

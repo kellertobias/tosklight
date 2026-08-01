@@ -472,16 +472,6 @@
 .fixture-browser-modal {
 	grid-template-rows: auto minmax(0, 1fr);
 }
-.fixture-browser-header > h2 {
-	flex: 0 0 auto !important;
-	margin-right: 12px !important;
-}
-.fixture-browser-header > .console-search {
-	flex: 1;
-	align-self: center;
-	width: auto;
-	max-width: 760px;
-}
 .console-search-input {
 	position: relative;
 	min-width: 0;

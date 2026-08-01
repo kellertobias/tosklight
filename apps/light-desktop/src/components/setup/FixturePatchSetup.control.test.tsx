@@ -50,6 +50,7 @@ const server = {
 };
 const patchFeature = {
 	patchFixtures: vi.fn(),
+	spreadFixtureVector: vi.fn().mockResolvedValue(true),
 	updateFixture: vi.fn().mockResolvedValue(true),
 	updatePolicy: vi.fn().mockResolvedValue(true),
 	deleteFixture: vi.fn().mockResolvedValue(true),
@@ -91,6 +92,7 @@ vi.mock("../../features/patch/PatchContext", async (importOriginal) => {
 			pendingFixtureIds: new Set<string>(),
 			error: null,
 			patchFixtures: patchFeature.patchFixtures,
+			spreadFixtureVector: patchFeature.spreadFixtureVector,
 			updateFixture: patchFeature.updateFixture,
 			updatePolicy: patchFeature.updatePolicy,
 			deleteFixture: patchFeature.deleteFixture,
@@ -304,6 +306,7 @@ beforeEach(() => {
 	programming.actions.replace.mockResolvedValue(null);
 	programming.actions.gesture.mockResolvedValue(null);
 	patchFeature.updateFixture.mockResolvedValue(true);
+	patchFeature.spreadFixtureVector.mockResolvedValue(true);
 	patchFeature.updatePolicy.mockResolvedValue(true);
 	patchFeature.deleteFixture.mockResolvedValue(true);
 	patchFeature.patchFixtures.mockImplementation(
@@ -1049,6 +1052,9 @@ describe("visual-only Venue placement", () => {
 
 		render(<FixturePatchSetup />);
 		fireEvent.click(screen.getByRole("button", { name: "+ Add fixture" }));
+		const noDmx = screen.getByText("No DMX");
+		expect(noDmx.tagName).toBe("SMALL");
+		expect(noDmx).toHaveClass("fixture-mode-no-dmx");
 		fireEvent.click(screen.getByRole("button", { name: /^Add fixture$/ }));
 
 		const placement = screen
@@ -1225,7 +1231,73 @@ describe("DMX address grid dragging", () => {
 });
 
 describe("schema-v2 location and multi-patch editing", () => {
-	it("keeps Set and Close in the location title bar and confirms discarding changed axes", async () => {
+	it("spreads a right-clicked location axis across the ordered selection", async () => {
+		const first = splitFixture();
+		const second = splitFixture();
+		second.fixture_id = "fixture-second";
+		second.fixture_number = 18;
+		second.name = "Split Wash 18";
+		second.address = 105;
+		second.split_patches = [
+			{ split: 1, universe: 1, address: 105 },
+			{ split: 3, universe: 2, address: 205 },
+		];
+		server.patch.fixtures = [first, second];
+		programming.selection.selected = ["fixture-second", "fixture-split"];
+		render(<FixturePatchSetup />);
+		const fixtureRow = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+		fireEvent.contextMenu(within(fixtureRow.cells[12]).getByRole("button"));
+
+		const modal = screen.getByRole("dialog", {
+			name: "Location X (meter)",
+		});
+		for (const key of ["−", "4", "THRU", "−", "3"])
+			fireEvent.click(within(modal).getByRole("button", { name: key }));
+		fireEvent.click(within(modal).getByRole("button", { name: "ENTER" }));
+
+		await waitFor(() =>
+			expect(patchFeature.spreadFixtureVector).toHaveBeenCalledWith({
+				fixtureIds: ["fixture-second", "fixture-split"],
+				kind: "location",
+				axis: "x",
+				points: [-4000, -3000],
+			}),
+		);
+	});
+
+	it("applies one location value to every fixture in the ordered selection", async () => {
+		const first = splitFixture();
+		const second = splitFixture();
+		second.fixture_id = "fixture-second";
+		second.fixture_number = 18;
+		second.name = "Split Wash 18";
+		server.patch.fixtures = [first, second];
+		programming.selection.selected = ["fixture-second", "fixture-split"];
+		render(<FixturePatchSetup />);
+		const fixtureRow = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+		fireEvent.contextMenu(within(fixtureRow.cells[13]).getByRole("button"));
+
+		const modal = screen.getByRole("dialog", {
+			name: "Location Y (meter)",
+		});
+		for (const key of ["3", "ENTER"])
+			fireEvent.click(within(modal).getByRole("button", { name: key }));
+
+		await waitFor(() =>
+			expect(patchFeature.spreadFixtureVector).toHaveBeenCalledWith({
+				fixtureIds: ["fixture-second", "fixture-split"],
+				kind: "location",
+				axis: "y",
+				points: [3000, 3000],
+			}),
+		);
+	});
+
+	it("opens the location value pad directly and confirms unsaved input", async () => {
 		const { current } = fixturesWithConflict();
 		server.patch.fixtures = [current];
 		state.patchSetArmed = true;
@@ -1235,30 +1307,22 @@ describe("schema-v2 location and multi-patch editing", () => {
 		}) as HTMLTableRowElement;
 		fireEvent.click(within(fixtureRow.cells[12]).getByRole("button"));
 
-		const modal = screen
-			.getByRole("heading", { name: "Set fixture location X" })
-			.closest("section") as HTMLElement;
-		const titleBar = modal.querySelector(".ui-modal-titlebar") as HTMLElement;
-		expect(
-			within(titleBar)
-				.getAllByRole("button")
-				.map(
-					(button) => button.getAttribute("aria-label") ?? button.textContent,
-				),
-		).toEqual(["Set", "Cancel fixture location"]);
-		fireEvent.change(within(modal).getByRole("textbox", { name: "X (m)" }), {
-			target: { value: "1" },
+		const modal = screen.getByRole("dialog", {
+			name: "Location X (meter)",
 		});
+		fireEvent.click(within(modal).getByRole("button", { name: "1" }));
 		fireEvent.click(
-			within(titleBar).getByRole("button", { name: "Cancel fixture location" }),
+			within(modal).getByRole("button", { name: "Close Location X (meter)" }),
 		);
 		const confirmation = screen.getByRole("dialog", {
-			name: "Discard fixture changes?",
+			name: "Unsaved Location X (meter) changes",
 		});
 		fireEvent.click(
-			within(confirmation).getByRole("button", { name: "Keep editing" }),
+			within(
+				confirmation.querySelector(".ui-input-unsaved-actions") as HTMLElement,
+			).getByRole("button", { name: "Stay in modal" }),
 		);
-		fireEvent.click(within(titleBar).getByRole("button", { name: "Set" }));
+		fireEvent.click(within(modal).getByRole("button", { name: "ENTER" }));
 		await waitFor(() =>
 			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
 				location: { x: 1000, y: 0, z: 0 },
@@ -1278,14 +1342,14 @@ describe("schema-v2 location and multi-patch editing", () => {
 		}) as HTMLTableRowElement;
 		fireEvent.click(within(fixtureRow.cells[16]).getByRole("button"));
 
-		const modal = screen
-			.getByRole("heading", { name: "Set fixture rotation Y" })
-			.closest("section") as HTMLElement;
-		expect(within(modal).queryByRole("textbox", { name: "X (°)" })).toBeNull();
-		fireEvent.change(within(modal).getByRole("textbox", { name: "Y (°)" }), {
-			target: { value: "45" },
+		const modal = screen.getByRole("dialog", {
+			name: "Rotation Y (degree)",
 		});
-		fireEvent.click(within(modal).getByRole("button", { name: "Set" }));
+		expect(
+			within(modal).queryByRole("dialog", { name: "Rotation X (degree)" }),
+		).toBeNull();
+		for (const key of ["4", "5", "ENTER"])
+			fireEvent.click(within(modal).getByRole("button", { name: key }));
 		await waitFor(() =>
 			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
 				rotation: { x: 10, y: 45, z: 30 },
@@ -1367,13 +1431,11 @@ describe("schema-v2 location and multi-patch editing", () => {
 		) as HTMLTableRowElement;
 		fireEvent.click(within(instanceRow.cells[16]).getByRole("button"));
 
-		const modal = screen
-			.getByRole("heading", { name: "Set multi-patch rotation Y" })
-			.closest("section") as HTMLElement;
-		fireEvent.change(within(modal).getByRole("textbox", { name: "Y (°)" }), {
-			target: { value: "45" },
+		const modal = screen.getByRole("dialog", {
+			name: "Rotation Y (degree)",
 		});
-		fireEvent.click(within(modal).getByRole("button", { name: "Set" }));
+		for (const key of ["4", "5", "ENTER"])
+			fireEvent.click(within(modal).getByRole("button", { name: key }));
 		await waitFor(() =>
 			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
 				multipatch: [
@@ -1381,6 +1443,56 @@ describe("schema-v2 location and multi-patch editing", () => {
 						id: "current-mp",
 						location: { x: 111, y: 222, z: 333 },
 						rotation: { x: 10, y: 45, z: 30 },
+					}),
+				],
+			}),
+		);
+	});
+
+	it("spreads a physical transform from the primary patch through selected multi-patches", async () => {
+		const { current } = fixturesWithConflict();
+		const first = current.multipatch?.[0] as MultiPatchInstance;
+		current.rotation = { x: 10, y: 20, z: 30 };
+		current.multipatch = [
+			{ ...first, rotation: { x: 1, y: 2, z: 3 } },
+			{
+				...first,
+				id: "second-mp",
+				name: "Second duplicate",
+				rotation: { x: 4, y: 5, z: 6 },
+			},
+		];
+		server.patch.fixtures = [current];
+		render(<FixturePatchSetup />);
+		const fixtureRow = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+		const instances = [...document.querySelectorAll("tr.multipatch-row")];
+		fireEvent.click(fixtureRow);
+		fireEvent.click(instances[1], { shiftKey: true });
+		fireEvent.contextMenu(
+			within((instances[1] as HTMLTableRowElement).cells[16]).getByRole(
+				"button",
+			),
+		);
+
+		const modal = screen.getByRole("dialog", {
+			name: "Rotation Y (degree)",
+		});
+		for (const key of ["−", "1", "8", "THRU", "1", "8", "ENTER"])
+			fireEvent.click(within(modal).getByRole("button", { name: key }));
+
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
+				rotation: { x: 10, y: -18, z: 30 },
+				multipatch: [
+					expect.objectContaining({
+						id: "current-mp",
+						rotation: { x: 1, y: 0, z: 3 },
+					}),
+					expect.objectContaining({
+						id: "second-mp",
+						rotation: { x: 4, y: 18, z: 6 },
 					}),
 				],
 			}),

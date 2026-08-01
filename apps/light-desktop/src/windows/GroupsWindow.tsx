@@ -60,7 +60,7 @@ export function GroupPoolHeader({
 	);
 }
 
-export function GroupsWindow({ active = true, compact, paneId }: WindowProps) {
+export function GroupsWindow({ active = true, compact, paneId, poolColumns }: WindowProps) {
 	const groupScope = useActiveShowId();
 	const groupRecording = useGroupRecording();
 	const command = useCommandLineSurface({
@@ -147,6 +147,7 @@ export function GroupsWindow({ active = true, compact, paneId }: WindowProps) {
 					recordGroup={recordGroupAction}
 					runCommand={runCommand}
 					paneId={paneId}
+					columns={poolColumns}
 				/>
 			) : (
 				<p className="pool-loading" role="status">

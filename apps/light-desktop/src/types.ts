@@ -70,6 +70,7 @@ export interface PaneModel extends GridRect {
 	kind: BuiltInWindow;
 	title: string;
 	showGroupShortcuts?: boolean;
+	fixtureSheetActiveOnly?: boolean;
 	showCueSidebar?: boolean;
 	cueListSource?: "fixed" | "follow-selection";
 	fixedCueListNumber?: number;
@@ -80,6 +81,7 @@ export interface PaneModel extends GridRect {
 	layoutGroupId?: string;
 	presetFamily?: AppState["presetFamily"];
 	presetPoolColors?: boolean;
+	poolColumns?: number;
 	schedulerShowList?: boolean;
 	schedulerShowCalendar?: boolean;
 	virtualPlaybackRows?: number;

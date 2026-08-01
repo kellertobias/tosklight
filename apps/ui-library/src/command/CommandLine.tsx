@@ -27,6 +27,7 @@ export interface CommandStatus {
 	frequency: number | "—";
 	timecode: string | null;
 	blackout: boolean;
+	highlight: boolean;
 }
 
 export interface CommandLineProps {
@@ -176,13 +177,23 @@ function CommandStatusButton({
 }) {
 	return (
 		<Button
-			aria-label={`DMX ${status.frequency}Hz; ${status.timecode ?? "No Timecode"}. Open running and output controls`}
+			aria-label={`${status.highlight ? "Highlight active" : `DMX ${status.frequency}Hz`}; ${status.timecode ?? "No Timecode"}. Open running and output controls`}
 			className={`command-status ${status.connection}`}
 			title="Open running and output controls"
 			onClick={onOpen}
 		>
-			<span className={status.blackout ? "blackout-status" : ""}>
-				{status.blackout ? (
+			<span
+				className={
+					status.highlight
+						? "highlight-status"
+						: status.blackout
+							? "blackout-status"
+							: ""
+				}
+			>
+				{status.highlight ? (
+					<>Highlight</>
+				) : status.blackout ? (
 					<>
 						<i>
 							<span className="status-label-full">DMX </span>

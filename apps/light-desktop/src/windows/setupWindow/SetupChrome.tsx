@@ -10,6 +10,7 @@ export const SETUP_SECTIONS = [
 	"Timecode",
 	"Network & Inputs",
 	"Screens & playback",
+	"Preferences",
 ];
 
 export function SetupHeader({
@@ -18,35 +19,37 @@ export function SetupHeader({
 	controller: SetupWindowController;
 }) {
 	const actions =
-		controller.section === 6
-			? [
-					[
-						{
-							id: "undo",
-							label: "Undo",
-							disabled: !controller.screenCanUndo,
-							onClick: () => controller.screenUndo.current?.(),
-						},
-						{
-							id: "desk-lock",
-							label: "Desk Lock",
-							onClick: () => controller.setDeskLockSettingsOpen(true),
-						},
-					],
-				]
-			: [
-					[
-						{
-							id: "save",
-							label: "Save changes",
-							disabled:
-								!controller.draft ||
-								(controller.section === 2 &&
-									!controller.programmerSettingsLoaded),
-							onClick: () => void controller.save(),
-						},
-					],
-				];
+		controller.section === 7
+			? []
+			: controller.section === 6
+				? [
+						[
+							{
+								id: "undo",
+								label: "Undo",
+								disabled: !controller.screenCanUndo,
+								onClick: () => controller.screenUndo.current?.(),
+							},
+							{
+								id: "desk-lock",
+								label: "Desk Lock",
+								onClick: () => controller.setDeskLockSettingsOpen(true),
+							},
+						],
+					]
+				: [
+						[
+							{
+								id: "save",
+								label: "Save changes",
+								disabled:
+									!controller.draft ||
+									(controller.section === 2 &&
+										!controller.programmerSettingsLoaded),
+								onClick: () => void controller.save(),
+							},
+						],
+					];
 	return (
 		<WindowHeader
 			title="Desk Setup"

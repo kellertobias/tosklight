@@ -1,10 +1,11 @@
 use super::{
     ActiveShowObjectsChange, ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity,
-    MutateActiveShowObjectsCommand, MutateActiveShowObjectsResult, MutateOutputRouteCommand,
-    MutateOutputRouteResult, OutputRouteChange, UndoActiveShowObjectCommand,
-    UndoActiveShowObjectResult, UndoActiveShowRecordingCommand, UndoActiveShowRecordingOperation,
+    CreateOutputRouteRangeCommand, CreateOutputRouteRangeResult, MutateActiveShowObjectsCommand,
+    MutateActiveShowObjectsResult, MutateOutputRouteCommand, MutateOutputRouteResult,
+    OutputRouteChange, UndoActiveShowObjectCommand, UndoActiveShowObjectResult,
+    UndoActiveShowRecordingCommand, UndoActiveShowRecordingOperation,
     objects::{PreparedObjectChanges, prepare_object_mutation},
-    route::prepare_route_mutation,
+    route::{prepare_route_mutation, prepare_route_range},
     undo::{prepare_object_undo, prepare_recording_undo, validate_object_undo},
 };
 use crate::{ActionContext, ActionEnvelope, ActionError, EventBus, EventDraft};
@@ -26,6 +27,74 @@ impl ActiveShowService {
             operation: Arc::new(Mutex::new(())),
             events,
         }
+    }
+
+    pub fn create_output_route_range<P: ActiveShowPorts>(
+        &self,
+        envelope: ActionEnvelope<CreateOutputRouteRangeCommand>,
+        ports: &P,
+    ) -> Result<CreateOutputRouteRangeResult, ActionError> {
+        ports.authorize_mutation(&envelope.context)?;
+        ports.run_active_show_lifecycle(&envelope.context, envelope.command.show_id, || {
+            let _ordered = self.operation.lock();
+            let mut unit = ports.begin_active_show(&envelope.context, envelope.command.show_id)?;
+            let previous = ports.normalized_active_snapshot();
+            let prepared =
+                prepare_route_range(unit.document(), &envelope.command, previous.as_deref())?;
+            let runtime = ports.prepare_runtime(prepared.snapshot)?;
+            unit.backup(&backup_identity(
+                &envelope.context,
+                envelope.command.show_id,
+                "route-range",
+            ))?;
+            let commit = unit.commit(prepared.transaction)?;
+            let changes = prepared
+                .routes
+                .into_iter()
+                .map(|(route_id, route)| OutputRouteChange {
+                    show_id: envelope.command.show_id,
+                    show_revision: commit.revision(),
+                    route_id,
+                    object_revision: 1,
+                    route: Some(route),
+                    deleted: false,
+                })
+                .collect::<Vec<_>>();
+            let migration_changes = migration_changes(&commit, &[]);
+            let migrated_routes = migrated_route_changes(envelope.command.show_id, &commit, None)
+                .into_iter()
+                .filter(|migrated| {
+                    !changes
+                        .iter()
+                        .any(|change| change.route_id == migrated.route_id)
+                })
+                .collect::<Vec<_>>();
+            ports.install_runtime(&envelope.context, runtime);
+            let mut event_sequence = 0;
+            for change in &changes {
+                event_sequence = self
+                    .events
+                    .publish(EventDraft::output_route_changed(
+                        &envelope.context,
+                        change.clone(),
+                    ))
+                    .sequence;
+            }
+            self.publish_migration_riders(
+                &envelope.context,
+                envelope.command.show_id,
+                commit.revision(),
+                &migration_changes,
+                &migrated_routes,
+            );
+            Ok(CreateOutputRouteRangeResult {
+                context: envelope.context.clone(),
+                changes,
+                migration_changes,
+                migrated_routes,
+                event_sequence,
+            })
+        })
     }
 
     pub fn mutate_output_route<P: ActiveShowPorts>(
