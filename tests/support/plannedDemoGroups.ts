@@ -24,7 +24,23 @@ const GROUP_MASTER_PLAYBACKS: Readonly<Record<string, number>> = {
 export interface PlannedDemoGroupSpec {
 	id: string;
 	name: string;
+	icon: string;
 	fixtureNumbers: readonly number[];
+}
+
+export function plannedDemoGroupIcon(name: string) {
+	if (name.startsWith("Beam")) return "◉";
+	if (name.startsWith("Wash")) return "●";
+	if (name.startsWith("LED")) return "◆";
+	if (name.includes("ACL")) return "✦";
+	if (name === "Blinders") return "☀";
+	if (name === "Sunstrip") return "▰";
+	if (name === "Strobe") return "★";
+	if (name === "House Lights") return "⌂";
+	if (name === "Hazer") return "◐";
+	if (name.includes("Profile") || name.includes("Spots")) return "⌖";
+	if (name.includes("Lights")) return "☀";
+	return "◇";
 }
 
 export function plannedDemoGroupSpecs(): PlannedDemoGroupSpec[] {
@@ -127,7 +143,10 @@ export async function installPlannedDemoGroups(
 			name: spec.name,
 			fixtures: targets,
 			color: current?.body.color ?? null,
-			icon: current?.body.icon ?? null,
+			icon:
+				current?.body.icon && current.body.icon !== "◇"
+					? current.body.icon
+					: spec.icon,
 			derived_from: current?.body.derived_from ?? null,
 			frozen_from: current?.body.frozen_from ?? null,
 			programming: current?.body.programming ?? {},
@@ -150,7 +169,12 @@ function group(
 	name: string,
 	fixtureNumbers: readonly number[],
 ): PlannedDemoGroupSpec {
-	return { id: String(id), name, fixtureNumbers };
+	return {
+		id: String(id),
+		name,
+		icon: plannedDemoGroupIcon(name),
+		fixtureNumbers,
+	};
 }
 
 function targetIds(fixture: PatchedTargetFixture) {

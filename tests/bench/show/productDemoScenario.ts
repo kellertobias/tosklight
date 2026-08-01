@@ -19,7 +19,10 @@ import {
 	installPlannedDemoDynamics,
 } from "../../support/plannedDemoDynamics";
 import { ensurePlannedDemoFixtureLibrary } from "../../support/plannedDemoFixtureLibrary";
-import { installPlannedDemoGroups } from "../../support/plannedDemoGroups";
+import {
+	installPlannedDemoGroups,
+	plannedDemoGroupIcon,
+} from "../../support/plannedDemoGroups";
 import { installPlannedDemoLayout } from "../../support/plannedDemoLayouts";
 import {
 	createPlannedDemoPatchInputs,
@@ -131,6 +134,8 @@ export const PRODUCT_DEMO_SCRIPT = {
 		groupRecordHoldFrames: 50,
 		groupTileHoldFrames: 50,
 		groupPropertiesHoldFrames: 250,
+		groupFixtureSelectionClickMillis: 70,
+		groupNameClickMillis: 3,
 		groupNameConfirmHoldFrames: 25,
 		groupSaveHoldFrames: 50,
 		beamShowHoldFrames: 75,
@@ -1565,7 +1570,7 @@ async function buildGroups(
 	await expect
 		.poll(async () => api.showObject(showId, "group", "8"))
 		.not.toBeNull();
-	await nameGroupThroughTouch(desk, page, keypad, 8, "Wash Stage");
+	await nameGroupThroughTouch(desk, page, keypad, 8, "Wash Stage", false);
 
 	await desk.setDemoAction(
 		"Fast forward the remaining first-level Groups through simulated hardware controls.",
@@ -1589,6 +1594,7 @@ async function buildGroups(
 			"ENT",
 		]);
 		await nameGroupThroughTouch(desk, page, keypad, destination, name, false);
+		desk.setRecordingClickPace("rapid");
 	}
 	desk.setRecordingClickPace("compact");
 
@@ -1609,7 +1615,9 @@ async function buildGroups(
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupPropertiesHoldFrames);
 	await touchTypeText(desk, properties.getByLabel("Group name"), "Beam Show", {
 		beforeConfirmFrames: PRODUCT_DEMO_SCRIPT.pacing.groupNameConfirmHoldFrames,
+		pace: "fastTyping",
 	});
+	await selectGroupIconThroughTouch(desk, page, properties, "Beam Show", true);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupSaveHoldFrames);
 	await desk.click(
 		properties.getByRole("button", { name: "Save group", exact: true }),
@@ -2375,9 +2383,17 @@ async function touchTypeText(
 	desk: DeskDriver,
 	input: Locator,
 	value: string,
-	options: { beforeConfirmFrames?: number } = {},
+	options: {
+		beforeConfirmFrames?: number;
+		pace?: "typing" | "fastTyping";
+	} = {},
 ) {
-	desk.setRecordingClickPace("typing");
+	desk.setRecordingClickPace(
+		options.pace ?? "typing",
+		options.pace === "fastTyping"
+			? PRODUCT_DEMO_SCRIPT.pacing.groupNameClickMillis
+			: undefined,
+	);
 	const controls = input.locator("..");
 	const clear = controls.getByRole("button", { name: "Clear input" });
 	if ((await clear.count()) > 0) await desk.click(clear);
@@ -2421,6 +2437,10 @@ async function selectFixturesThroughFixtureSheet(
 ) {
 	const sheet = app.locator(".fixture-window");
 	const scroller = sheet.locator(".ui-window-scroller");
+	desk.setRecordingClickPace(
+		"selection",
+		PRODUCT_DEMO_SCRIPT.pacing.groupFixtureSelectionClickMillis,
+	);
 	for (let number = firstNumber; number <= lastNumber; number++) {
 		const fixture = fixtures.find(
 			(candidate: any) => candidate.fixture_number === number,
@@ -2454,6 +2474,7 @@ async function selectFixturesThroughFixtureSheet(
 		await expect(row).toBeVisible();
 		await desk.click(row);
 	}
+	desk.setRecordingClickPace("compact");
 }
 
 function textKeyboardCode(character: string) {
@@ -2472,6 +2493,9 @@ async function nameGroupThroughTouch(
 	name: string,
 	pause = true,
 ) {
+	await desk.setDemoAction(
+		`Name Group ${groupId} ${name} and assign its ${plannedDemoGroupIcon(name)} family icon.`,
+	);
 	await keypadCommand(desk, keypad, ["SET", "GRP", ...digits(groupId), "ENT"]);
 	const properties = page.getByRole("dialog", { name: "Group properties" });
 	await expect(properties).toBeVisible();
@@ -2483,7 +2507,9 @@ async function nameGroupThroughTouch(
 		beforeConfirmFrames: pause
 			? PRODUCT_DEMO_SCRIPT.pacing.groupNameConfirmHoldFrames
 			: 0,
+		pace: "fastTyping",
 	});
+	await selectGroupIconThroughTouch(desk, page, properties, name, pause);
 	await demoPause(
 		page,
 		pause ? PRODUCT_DEMO_SCRIPT.pacing.groupSaveHoldFrames : 0,
@@ -2503,7 +2529,7 @@ async function nameGroupThroughTouchTile(
 	name: string,
 ) {
 	await desk.setDemoAction(
-		`Name Group ${groupId} ${name}: leave the completed store command, press [SET], then touch Group tile ${groupId}.`,
+		`Name Group ${groupId} ${name} and assign its ${plannedDemoGroupIcon(name)} family icon: press [SET], then touch Group tile ${groupId}.`,
 	);
 	const commandLine = page.getByRole("textbox", { name: "Command line" });
 	await desk.click(keypad.getByRole("button", { name: "SET", exact: true }));
@@ -2515,12 +2541,37 @@ async function nameGroupThroughTouchTile(
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupPropertiesHoldFrames);
 	await touchTypeText(desk, properties.getByLabel("Group name"), name, {
 		beforeConfirmFrames: PRODUCT_DEMO_SCRIPT.pacing.groupNameConfirmHoldFrames,
+		pace: "fastTyping",
 	});
+	await selectGroupIconThroughTouch(desk, page, properties, name, true);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupSaveHoldFrames);
 	await desk.click(
 		properties.getByRole("button", { name: "Save group", exact: true }),
 	);
 	await expect(properties).toBeHidden();
+}
+
+async function selectGroupIconThroughTouch(
+	desk: DeskDriver,
+	page: Page,
+	properties: Locator,
+	groupName: string,
+	visible: boolean,
+) {
+	desk.setRecordingClickPace(visible ? "compact" : "rapid");
+	await desk.click(
+		properties.getByRole("button", { name: "Choose icon", exact: true }),
+	);
+	const picker = page.getByRole("dialog", { name: "Choose icon" });
+	await expect(picker).toBeVisible();
+	await desk.click(
+		picker.getByRole("button", {
+			name: `Use ${plannedDemoGroupIcon(groupName)}`,
+			exact: true,
+		}),
+	);
+	await expect(picker).toBeHidden();
+	desk.setRecordingClickPace("compact");
 }
 
 async function playbackTarget(api: ApiDriver, showId: string, number: number) {

@@ -3,6 +3,39 @@ import type { SessionResponse } from "../../../apps/light-desktop/src/api/types"
 import { ControllableDesktopDriver } from "../window-system/desktopBridge";
 import { BrowserSessionHandoff } from "./sessionHandoff";
 
+type RecordingClickPace =
+	| "normal"
+	| "compact"
+	| "steady"
+	| "rapid"
+	| "typing"
+	| "fastTyping"
+	| "selection";
+
+function recordingClickDelay(pace: RecordingClickPace) {
+	return {
+		normal: 280,
+		compact: 120,
+		steady: 180,
+		rapid: 45,
+		typing: 10,
+		fastTyping: 3,
+		selection: 70,
+	}[pace];
+}
+
+function recordingClickMinimum(pace: RecordingClickPace) {
+	return pace === "fastTyping"
+		? 3
+		: pace === "typing"
+			? 10
+			: pace === "rapid"
+				? 40
+				: pace === "selection"
+					? 60
+					: 120;
+}
+
 export class DeskDriver {
 	private recordingStep = {
 		title: "STARTING",
@@ -15,12 +48,8 @@ export class DeskDriver {
 	private baseUrl = "";
 	private auditRevision = 0;
 	private controllableDesktop?: ControllableDesktopDriver;
-	private recordingClickPace:
-		| "normal"
-		| "compact"
-		| "steady"
-		| "rapid"
-		| "typing" = "normal";
+	private recordingClickPace: RecordingClickPace = "normal";
+	private recordingClickDelayOverride?: number;
 	private productIntroVisible = false;
 	private readonly semanticStepObservers = new Set<
 		(step: { title: string; description: string }) => void
@@ -44,9 +73,14 @@ export class DeskDriver {
 	}
 
 	setRecordingClickPace(
-		pace: "normal" | "compact" | "steady" | "rapid" | "typing",
+		pace: RecordingClickPace,
+		delayOverrideMillis?: number,
 	): void {
 		this.recordingClickPace = pace;
+		this.recordingClickDelayOverride =
+			delayOverrideMillis !== undefined && Number.isFinite(delayOverrideMillis)
+				? Math.max(0, delayOverrideMillis)
+				: undefined;
 	}
 
 	async dispose(): Promise<void> {
@@ -309,23 +343,10 @@ export class DeskDriver {
 		);
 		const defaultPreview = hardwareTyping
 			? 45
-			: this.recordingClickPace === "typing"
-				? 10
-				: this.recordingClickPace === "rapid"
-					? 45
-					: this.recordingClickPace === "steady"
-						? 180
-						: this.recordingClickPace === "compact"
-							? 120
-							: 280;
+			: (this.recordingClickDelayOverride ??
+				recordingClickDelay(this.recordingClickPace));
 		const previewMillis = Math.max(
-			hardwareTyping
-				? 40
-				: this.recordingClickPace === "typing"
-					? 10
-					: this.recordingClickPace === "rapid"
-						? 40
-						: 120,
+			hardwareTyping ? 40 : recordingClickMinimum(this.recordingClickPace),
 			Number(process.env.LIGHT_VISUAL_CLICK_PREVIEW ?? defaultPreview),
 		);
 		if (Number.isFinite(previewMillis))
@@ -336,23 +357,10 @@ export class DeskDriver {
 		});
 		const defaultPause = hardwareTyping
 			? 45
-			: this.recordingClickPace === "typing"
-				? 10
-				: this.recordingClickPace === "rapid"
-					? 45
-					: this.recordingClickPace === "steady"
-						? 180
-						: this.recordingClickPace === "compact"
-							? 120
-							: 280;
+			: (this.recordingClickDelayOverride ??
+				recordingClickDelay(this.recordingClickPace));
 		const settleMillis = Math.max(
-			hardwareTyping
-				? 40
-				: this.recordingClickPace === "typing"
-					? 10
-					: this.recordingClickPace === "rapid"
-						? 40
-						: 120,
+			hardwareTyping ? 40 : recordingClickMinimum(this.recordingClickPace),
 			Number(process.env.LIGHT_VISUAL_CLICK_PAUSE ?? defaultPause),
 		);
 		if (Number.isFinite(settleMillis))

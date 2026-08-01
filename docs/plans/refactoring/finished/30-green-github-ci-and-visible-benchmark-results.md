@@ -312,6 +312,13 @@ Fixture Sheet/Group Pool desktop is created. `Defining Groups` appears only afte
 complete, immediately before the first fixture selection. Their configurable frame budgets split
 the previous Group chapter duration without changing the canonical total runtime.
 
+The first 28-fixture Beam Stage selection now uses a configurable 70 ms preview and 70 ms settle
+per Touch click, targeting roughly four seconds for the complete selection. Group-name keyboard
+clicks use a configurable 3 ms preview and settle—more than three times faster than the prior
+typing pace—while the first name retains its pre-confirm hold. Group properties now visibly choose
+a family-appropriate icon; the canonical Group generator supplies icons for accelerated/API-created
+Groups as well. The second naming pass skips the long modal, confirm, and save holds.
+
 Focused manifest, patch, Group, Playback, and Fixture Patch tests passed, as did the production
 frontend build, the generated-show acceptance, and a complete 2.8-minute non-recording product
 demo rehearsal that refreshed `assets/demo.show`. Per the recording-review instruction, this

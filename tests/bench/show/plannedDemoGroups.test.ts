@@ -20,6 +20,12 @@ describe("Plan 76 Group manifest", () => {
 		expect(groups.map((group) => Number(group.id))).toEqual(
 			Array.from({ length: 35 }, (_, index) => index + 1),
 		);
+		expect(groups.every((group) => group.icon !== "◇")).toBe(true);
+		expect(groups.find((group) => group.name === "Beam Stage")?.icon).toBe("◉");
+		expect(groups.find((group) => group.name === "Wash Stage")?.icon).toBe("●");
+		expect(groups.find((group) => group.name === "House Lights")?.icon).toBe(
+			"⌂",
+		);
 	});
 
 	it("preserves ordered disjoint Show and Aux Show family memberships", () => {
