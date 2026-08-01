@@ -1998,7 +1998,7 @@ async function selectPresetGroupShortcut(
 	await desk.click(
 		presets
 			.locator(".group-strip .group-card")
-			.filter({ has: presets.getByText(name, { exact: true }) })
+			.getByText(name, { exact: true })
 			.first(),
 	);
 }
