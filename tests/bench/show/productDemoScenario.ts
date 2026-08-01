@@ -479,7 +479,9 @@ export class BrowserProductDemo {
 				const lastPhysicalRow = allMultipatches.nth(truss * 3 - 1);
 				if (truss > 1) desk.setRecordingClickPace("typing");
 				await desk.click(trussPrimary);
-				await desk.click(lastPhysicalRow, { modifiers: ["Shift"] });
+				await desk.click(lastPhysicalRow.locator("td").first(), {
+					modifiers: ["Shift"],
+				});
 				const placement = demoPatchPlacement(
 					`0.${truss} primary THRU multipatch 3`,
 				);
@@ -662,7 +664,9 @@ export class BrowserProductDemo {
 			await desk.click(
 				aclPrimaryRow.getByRole("cell", { name: "601", exact: true }),
 			);
-			await desk.click(aclLastPhysicalRow, { modifiers: ["Shift"] });
+			await desk.click(aclLastPhysicalRow.locator("td").first(), {
+				modifiers: ["Shift"],
+			});
 			const aclPlacement = demoPatchPlacement("601 primary THRU multipatch 7");
 			const aclRotation =
 				"rotation" in aclPlacement ? aclPlacement.rotation.y : "0";
