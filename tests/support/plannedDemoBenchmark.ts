@@ -1,7 +1,7 @@
 import type { ApiDriver } from "../bench/core/api";
 
 export const PLANNED_DEMO_BENCHMARK_ASSIGNMENTS = [
-  { name: "ACL Chase", kind: "physical", playbackNumber: 17 },
+  { name: "ACL Chase", kind: "physical", playbackNumber: 8 },
   { name: "Wash Show Waterfall", kind: "virtual", playbackNumber: 1024 },
   { name: "Beam Show Circle", kind: "virtual", playbackNumber: 1019 },
   { name: "Beam Show PWM", kind: "virtual", playbackNumber: 1001 },

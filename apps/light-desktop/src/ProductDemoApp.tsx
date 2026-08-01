@@ -33,7 +33,7 @@ const DEMO_CHAPTERS = [
 	["DEFINING GROUPS", "Groups"],
 	["ASSIGNING GROUP MASTERS", "Masters"],
 	["PRESET SETUP", "Presets"],
-	["CUELISTS", "Cuelists"],
+	["Programming Cues & Cuelists", "Cues & Cuelists"],
 	["DYNAMICS", "Dynamics"],
 	["VIRTUAL PLAYBACKS", "Virtual Playbacks"],
 	["BUSKING AND PRELOAD", "Live Demo"],

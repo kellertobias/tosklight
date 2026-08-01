@@ -85,7 +85,12 @@ describe("Plan 76 initial Playback topology", () => {
 		expect(front.cues[0].changes).toHaveLength(12);
 		expect(
 			result.playbacks.find((item) => item.name === "Front Light")?.number,
-		).toBe(11);
+		).toBe(2);
+		expect(
+			result.playbacks
+				.filter((item) => item.target.type === "cue_list")
+				.map((item) => item.number),
+		).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
 		const chase = result.cuelists.find((item) => item.name === "ACL Chase")!;
 		expect(chase).toMatchObject({
 			mode: "chaser",
@@ -101,6 +106,14 @@ describe("Plan 76 initial Playback topology", () => {
 		}
 		const page = writes.find((write) => write.kind === "playback_page")?.body;
 		expect(page?.name).toBe("Busking");
+		expect(page?.slots).toMatchObject({
+			1: 101,
+			6: 106,
+			11: 2,
+			12: 1,
+			17: 8,
+			18: 4,
+		});
 		expect(page?.virtual_playbacks).toEqual(retainedVirtualPlayback);
 	});
 });

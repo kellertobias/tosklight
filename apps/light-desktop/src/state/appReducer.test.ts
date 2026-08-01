@@ -520,6 +520,38 @@ describe("appReducer Cues pane settings", () => {
 	});
 });
 
+describe("appReducer Fixture Sheet pane settings", () => {
+	it("persists the pane-local Programmer-only fixture filter", () => {
+		const state = {
+			...initialState,
+			activeDeskId: "fixtures",
+			desks: [
+				{
+					id: "fixtures",
+					name: "Fixtures",
+					panes: [
+						{
+							id: "fixtures-1",
+							kind: "fixtures" as const,
+							title: "Fixture Sheet",
+							x: 1,
+							y: 1,
+							width: 12,
+							height: 18,
+						},
+					],
+				},
+			],
+		};
+		const filtered = appReducer(state, {
+			type: "SET_PANE_FIXTURE_ACTIVE_ONLY",
+			id: "fixtures-1",
+			value: true,
+		});
+		expect(filtered.desks[0].panes[0].fixtureSheetActiveOnly).toBe(true);
+	});
+});
+
 describe("appReducer Text Editor pane settings", () => {
 	it("persists only non-authoritative Text Editor view state in the pane layout", () => {
 		const desks = [

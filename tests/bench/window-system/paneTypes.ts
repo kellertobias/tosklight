@@ -98,6 +98,7 @@ export interface StagePaneConfiguration {
 
 export interface FixtureSheetPaneConfiguration {
 	showGroupShortcuts?: boolean;
+	activeOnly?: boolean;
 }
 
 export interface LayoutPaneConfiguration {
@@ -116,6 +117,8 @@ export interface GroupPoolPaneConfiguration {
 
 export interface CuesPaneConfiguration {
 	showCueSidebar?: boolean;
+	cueListSource?: "fixed" | "follow-selection";
+	fixedCueListNumber?: number;
 }
 
 export interface VirtualPlaybackPaneConfiguration {

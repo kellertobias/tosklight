@@ -594,6 +594,25 @@ function PaneGroupShortcutsSettings({ pane }: { pane: PaneModel }) {
 	);
 }
 
+function FixtureSheetPaneSettings({ pane }: { pane: PaneModel }) {
+	const { dispatch } = useApp();
+	return (
+		<SwitchField
+			label="Show active fixtures only"
+			offLabel="All fixtures"
+			onLabel="Programmer only"
+			checked={Boolean(pane.fixtureSheetActiveOnly)}
+			onChange={(event) =>
+				dispatch({
+					type: "SET_PANE_FIXTURE_ACTIVE_ONLY",
+					id: pane.id,
+					value: event.target.checked,
+				})
+			}
+		/>
+	);
+}
+
 function VirtualPlaybackExclusionSettings({
 	pane,
 	close,
@@ -668,6 +687,12 @@ function paneSpecificTabs(
 			id: "layout-group",
 			label: "Layout",
 			content: <LayoutPaneSettings pane={pane} />,
+		});
+	if (pane.kind === "fixtures")
+		tabs.push({
+			id: "fixture-sheet",
+			label: "Fixture Sheet",
+			content: <FixtureSheetPaneSettings pane={pane} />,
 		});
 	if (pane.kind === "virtual_playbacks")
 		tabs.push(

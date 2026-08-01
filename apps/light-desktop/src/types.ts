@@ -69,6 +69,7 @@ export interface PaneModel extends GridRect {
 	kind: BuiltInWindow;
 	title: string;
 	showGroupShortcuts?: boolean;
+	fixtureSheetActiveOnly?: boolean;
 	showCueSidebar?: boolean;
 	cueListSource?: "fixed" | "follow-selection";
 	fixedCueListNumber?: number;

@@ -589,6 +589,30 @@ async function applyPaneConfiguration<T extends PaneType>(
 		if (options.pageMode === "pinned" && options.pinnedPage !== undefined)
 			await dialog.getByLabel("Pinned page").fill(String(options.pinnedPage));
 	}
+	if (type === "fixtures" && options.activeOnly !== undefined) {
+		await dialog.getByRole("tab", { name: "Fixture Sheet" }).click();
+		await setSwitch(dialog, "Show active fixtures only", options.activeOnly);
+	}
+	if (type === "cues") {
+		await dialog.getByRole("tab", { name: "Cues" }).click();
+		if (options.cueListSource !== undefined)
+			await dialog
+				.getByRole("radio", {
+					name:
+						options.cueListSource === "follow-selection"
+							? "Follow selection"
+							: "Fixed",
+				})
+				.click();
+		if (
+			options.cueListSource !== "follow-selection" &&
+			options.fixedCueListNumber !== undefined
+		)
+			await dialog
+				.getByLabel("Cuelist")
+				.selectOption(String(options.fixedCueListNumber));
+		await setSwitch(dialog, "Cue sidebar", options.showCueSidebar);
+	}
 	if (options.showGroupShortcuts !== undefined) {
 		await dialog.getByRole("tab", { name: "Shortcuts" }).click();
 		await setSwitch(dialog, "Group shortcuts", options.showGroupShortcuts);

@@ -61,6 +61,41 @@ export function plannedDemoLayout() {
 				],
 			},
 			{
+				id: "cue-programming",
+				name: "Cue Programming",
+				panes: [
+					pane(
+						"cue-programming-fixtures",
+						"fixtures",
+						"Fixture Sheet",
+						1,
+						1,
+						14,
+						18,
+						{ fixtureSheetActiveOnly: true },
+					),
+					pane(
+						"cue-programming-pool",
+						"cuelist_pool",
+						"Cuelist Pool",
+						15,
+						1,
+						10,
+						9,
+					),
+					pane(
+						"cue-programming-detail",
+						"cues",
+						"Cues · Cuelist",
+						15,
+						10,
+						10,
+						9,
+						{ cueListSource: "follow-selection", showCueSidebar: true },
+					),
+				],
+			},
+			{
 				id: "programming",
 				name: "Programming",
 				panes: [

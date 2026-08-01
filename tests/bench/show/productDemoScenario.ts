@@ -93,9 +93,9 @@ export const PRODUCT_DEMO_SCRIPT = {
 		},
 		{
 			id: "cuelists",
-			marker: "CUELISTS",
-			title: "Cuelists",
-			frames: 1_750,
+			marker: "Programming Cues & Cuelists",
+			title: "Programming Cues & Cuelists",
+			frames: 2_500,
 		},
 		{ id: "dynamics", marker: "DYNAMICS", title: "Dynamics", frames: 1_625 },
 		{
@@ -143,6 +143,9 @@ export const PRODUCT_DEMO_SCRIPT = {
 		oddRuleHoldFrames: 125,
 		presetItemFrames: 25,
 		colorPresetFastForwardItemFrames: 8,
+		cuelistSelectionHoldFrames: 50,
+		cuelistRecordHoldFrames: 50,
+		cuelistStoredHoldFrames: 75,
 		bpm: 120,
 		beatsPerBar: 4,
 		buskingBars: 16,
@@ -739,8 +742,6 @@ export class BrowserProductDemo {
 			await buildGroups(
 				desk,
 				page,
-				demo,
-				app,
 				keypad,
 				api,
 				showId,
@@ -758,6 +759,8 @@ export class BrowserProductDemo {
 			);
 			await buildCueProgramming(
 				desk,
+				page,
+				demo,
 				app,
 				keypad,
 				api,
@@ -1468,8 +1471,6 @@ async function configureOutput(
 async function buildGroups(
 	desk: DeskDriver,
 	page: Page,
-	demo: Locator,
-	app: Locator,
 	keypad: Locator,
 	api: ApiDriver,
 	showId: string,
@@ -1928,6 +1929,8 @@ async function selectPresetGroupShortcut(
 
 async function buildCueProgramming(
 	desk: DeskDriver,
+	page: Page,
+	demo: Locator,
 	app: Locator,
 	keypad: Locator,
 	api: ApiDriver,
@@ -1935,65 +1938,205 @@ async function buildCueProgramming(
 	fixtures: readonly any[],
 ) {
 	await desk.titleCard(
-		"CUELISTS",
-		"Program a Front Light Cuelist, build the ACL Chase, and assign both to physical Playbacks.",
+		"Programming Cues & Cuelists",
+		"Build the core show Cuelists with the Programmer-only Fixture Sheet, Cuelist Pool, and live Cue detail visible together.",
 	);
-	await clearProgrammer(desk, keypad, api);
-	await keypadCommand(desk, keypad, [
-		"GRP",
-		"2",
-		"9",
-		"AT",
-		"1",
-		"0",
-		"0",
-		"ENT",
-	]);
-	await openBuiltIn(desk, app, "Cuelists");
 	await desk.setDemoAction(
-		"Store the Front Light look on Playback 11: press [RECORD], pause, then touch Cuelist tile 11.",
+		"Configure a Cue Programming desktop: Programmer-only Fixture Sheet on the left, Cuelist Pool above Cue detail on the right.",
 	);
+	const desktops = new BrowserDesktops(
+		page,
+		async () => undefined,
+		() =>
+			demoPause(
+				page,
+				PRODUCT_DEMO_SCRIPT.pacing.desktopConfigurationStepFrames,
+			),
+	);
+	const configuration = desktops.configure("Cue Programming");
+	const fixtureSheet = configuration.addPane(
+		PaneType.Fixtures,
+		{
+			slug: "cue-programming-fixtures",
+			column: 1,
+			row: 1,
+			width: 14,
+			height: 18,
+		},
+		{ activeOnly: true },
+	);
+	const cuelistPool = configuration.addPane(PaneType.CuelistPool, {
+		slug: "cue-programming-pool",
+		column: 15,
+		row: 1,
+		width: 10,
+		height: 9,
+	});
+	const cueDetail = configuration.addPane(
+		PaneType.Cues,
+		{
+			slug: "cue-programming-detail",
+			column: 15,
+			row: 10,
+			width: 10,
+			height: 9,
+		},
+		{ cueListSource: "follow-selection", showCueSidebar: true },
+	);
+	await configuration.apply();
+	await fixtureSheet.expect.visible();
+	await cuelistPool.expect.visible();
+	await cueDetail.expect.visible();
+
+	const visibleCueListIds = new Map<number, string>();
+	for (const item of [
+		{
+			number: 1,
+			name: "Start",
+			selection: [
+				"GRP",
+				"4",
+				"+",
+				"GRP",
+				"1",
+				"1",
+				"+",
+				"GRP",
+				"1",
+				"8",
+				"+",
+				"GRP",
+				"2",
+				"6",
+				"AT",
+				"1",
+				"0",
+				"0",
+				"ENT",
+			],
+			action:
+				"Build the opening show state and store it slowly as Cuelist 1 · Start.",
+		},
+		{
+			number: 2,
+			name: "Front Light",
+			selection: ["GRP", "2", "9", "AT", "1", "0", "0", "ENT"],
+			action:
+				"Select the Front Lights, set their intensity, and store Cuelist 2 · Front Light.",
+		},
+		{
+			number: 3,
+			name: "Hazer",
+			selection: ["GRP", "3", "1", "AT", "2", "0", "ENT"],
+			action:
+				"Set the Hazer to a restrained level and store Cuelist 3 · Hazer.",
+		},
+		{
+			number: 8,
+			name: "ACL Chase",
+			selection: ["GRP", "2", "2", "AT", "1", "0", "0", "ENT"],
+			action:
+				"Create the first ACL step and store it as Cuelist 8 · ACL Chase.",
+		},
+		{
+			number: 4,
+			name: "ACL 1",
+			selection: ["GRP", "2", "2", "AT", "1", "0", "0", "ENT"],
+			action: "Store the first individual ACL look as Cuelist 4 · ACL 1.",
+		},
+	] as const) {
+		const cueListId = await recordVisibleCuelist({
+			desk,
+			page,
+			keypad,
+			api,
+			showId,
+			pool: cuelistPool.root(),
+			detail: cueDetail.root(),
+			...item,
+		});
+		visibleCueListIds.set(item.number, cueListId);
+	}
+	await desk.fastForward(
+		"Completing ACL Chase steps two through four, the remaining ACL Cuelists, and their physical Playback assignments.",
+		() => installPlannedDemoPlaybacks(api, showId, fixtures),
+	);
+	await expect(cuelistPool.root()).toContainText("Start");
+	await expect(cuelistPool.root()).toContainText("ACL Chase");
+	expect(await api.showObjects(showId, "cue_list")).toHaveLength(8);
+	expect(await api.showObjects(showId, "playback")).toHaveLength(14);
+	for (const [number, cueListId] of visibleCueListIds) {
+		expect(await playbackTarget(api, showId, number)).toMatchObject({
+			type: "cue_list",
+			cue_list_id: cueListId,
+		});
+	}
+}
+
+async function recordVisibleCuelist({
+	desk,
+	page,
+	keypad,
+	api,
+	showId,
+	pool,
+	detail,
+	number,
+	name,
+	selection,
+	action,
+}: {
+	desk: DeskDriver;
+	page: Page;
+	keypad: Locator;
+	api: ApiDriver;
+	showId: string;
+	pool: Locator;
+	detail: Locator;
+	number: number;
+	name: string;
+	selection: readonly string[];
+	action: string;
+}) {
+	await clearProgrammer(desk, keypad, api);
+	await desk.setDemoAction(action);
+	await keypadCommand(desk, keypad, [...selection]);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.cuelistSelectionHoldFrames);
 	const record = keypad.getByRole("button", { name: "RECORD", exact: true });
 	await desk.click(record);
 	await expect(record).toHaveAttribute("aria-pressed", "true");
-	await demoPause(app.page(), PRODUCT_DEMO_SCRIPT.pacing.groupRecordHoldFrames);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.cuelistRecordHoldFrames);
 	await desk.click(
-		app.locator('.cuelist-card[data-pool-slot-id="11"]').first(),
+		pool.locator(`.cuelist-card[data-pool-slot-id="${number}"]`).first(),
 	);
-	if (!(await playbackTarget(api, showId, 11))) {
-		await desk.fastForward(
-			"Completing the Front Light Cuelist assignment after the visible pool touch.",
-			() => api.executeCommandLine("RECORD SET 11"),
-		);
-	}
-	if ((await record.getAttribute("aria-pressed")) === "true")
-		await desk.click(record);
 	await expect
 		.poll(async () => {
-			const target = await playbackTarget(api, showId, 11);
+			const target = await playbackTarget(api, showId, number);
 			return target?.type === "cue_list" ? target.cue_list_id : null;
 		})
 		.not.toBeNull();
-	const visibleTarget = await playbackTarget(api, showId, 11);
-	const visibleCueListId =
-		visibleTarget?.type === "cue_list" ? visibleTarget.cue_list_id : null;
-	await desk.fastForward(
-		"Programming the four-step ACL Chase and the remaining Start, ACL, and Hazer Cuelists, then assigning their Playbacks.",
-		() => installPlannedDemoPlaybacks(api, showId, fixtures),
-	);
-	await expect(app.locator(".cuelist-window")).toContainText("Start");
-	expect(await api.showObjects(showId, "cue_list")).toHaveLength(8);
-	expect(await api.showObjects(showId, "playback")).toHaveLength(14);
-	const adopted = await playbackTarget(api, showId, 11);
-	expect(adopted).toMatchObject({
-		type: "cue_list",
-		cue_list_id: visibleCueListId,
-	});
-	if (!visibleCueListId) {
+	const target = await playbackTarget(api, showId, number);
+	if (target?.type !== "cue_list")
 		throw new Error(
-			"The visible Front Light Cuelist identity was not retained",
+			`Cuelist ${number} was not created by the visible pool touch`,
 		);
-	}
+	const cueList = await api.showObject<any>(
+		showId,
+		"cue_list",
+		target.cue_list_id,
+	);
+	if (!cueList) throw new Error(`Cuelist ${number} has no stored object`);
+	await api.seedShowObject(
+		showId,
+		"cue_list",
+		target.cue_list_id,
+		{ ...cueList.body, name },
+		cueList.revision,
+	);
+	await api.playbackNumberAction(number, "select");
+	await expect(detail).toContainText(name);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.cuelistStoredHoldFrames);
+	return target.cue_list_id as string;
 }
 
 async function demonstrateBuskingAndPreload(
