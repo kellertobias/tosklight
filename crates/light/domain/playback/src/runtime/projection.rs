@@ -23,10 +23,18 @@ impl PlaybackEngine {
             let Some(current_index) = current_cue_index(playback, cue_list) else {
                 continue;
             };
-            let mut tracked = Vec::<(
-                (FixtureId, AttributeKey, Option<Uuid>),
-                light_dynamics::DynamicSemanticValue,
-            )>::new();
+            type DynamicAddress = (FixtureId, AttributeKey, Option<Uuid>);
+            let tracked_capacity = cue_list
+                .cues
+                .iter()
+                .take(current_index + 1)
+                .map(|cue| cue.dynamic_changes.len())
+                .sum();
+            let mut tracked = Vec::<
+                Option<(DynamicAddress, light_dynamics::DynamicSemanticValue)>,
+            >::with_capacity(tracked_capacity);
+            let mut tracked_indices =
+                HashMap::<DynamicAddress, usize>::with_capacity(tracked_capacity);
             for cue in cue_list.cues.iter().take(current_index + 1) {
                 for change in &cue.dynamic_changes {
                     let instance_link = match &change.value {
@@ -42,36 +50,36 @@ impl PlaybackEngine {
                     };
                     let address = (change.fixture_id, change.attribute.clone(), instance_link);
                     if matches!(change.value, light_dynamics::DynamicSemanticValue::Release) {
-                        tracked.retain(|(candidate, _)| candidate != &address);
-                    } else if let Some((_, value)) = tracked
-                        .iter_mut()
-                        .find(|(candidate, _)| candidate == &address)
-                    {
+                        if let Some(index) = tracked_indices.remove(&address) {
+                            tracked[index] = None;
+                        }
+                    } else if let Some(index) = tracked_indices.get(&address).copied() {
+                        let (_, value) = tracked[index]
+                            .as_mut()
+                            .expect("tracked Dynamic address index remains occupied");
                         *value = change.value.clone();
                     } else {
-                        tracked.push((address, change.value.clone()));
+                        let index = tracked.len();
+                        tracked_indices.insert(address.clone(), index);
+                        tracked.push(Some((address, change.value.clone())));
                     }
                 }
             }
             let current_cue = &cue_list.cues[current_index];
             let changed_at_millis =
                 u64::try_from(playback.activated_at.timestamp_millis()).unwrap_or_default();
-            projected.extend(
-                tracked
-                    .into_iter()
-                    .map(
-                        |((fixture_id, attribute, _), value)| ActiveCueDynamicValue {
-                            playback_number: playback.playback_number,
-                            cue_list_id: cue_list.id,
-                            current_cue_id: current_cue.id,
-                            priority: cue_list.priority,
-                            changed_at_millis,
-                            fixture_id,
-                            attribute,
-                            value,
-                        },
-                    ),
-            );
+            projected.extend(tracked.into_iter().flatten().map(
+                |((fixture_id, attribute, _), value)| ActiveCueDynamicValue {
+                    playback_number: playback.playback_number,
+                    cue_list_id: cue_list.id,
+                    current_cue_id: current_cue.id,
+                    priority: cue_list.priority,
+                    changed_at_millis,
+                    fixture_id,
+                    attribute,
+                    value,
+                },
+            ));
         }
         projected
     }

@@ -460,18 +460,24 @@ async function startPackagedOscHardware(deskAlias) {
 		});
 	const clientId = `supported-scale-${crypto.randomUUID()}`;
 	const feedbackPort = feedback.address().port;
-	for (let attempt = 0; attempt < 5; attempt++) {
+	const subscribe = async () => {
+		const baseline = messages.length;
 		await send("/light/subscribe", [clientId, deskAlias, feedbackPort]);
-		const subscribed = await waitForOscMessage(
+		return waitForOscMessage(
 			messages,
 			(message) => message.address === `/light/${deskAlias}/feedback/page`,
-			250,
-		).catch(() => null);
+			1_000,
+			baseline,
+		);
+	};
+	for (let attempt = 0; attempt < 5; attempt++) {
+		const subscribed = await subscribe().catch(() => null);
 		if (subscribed)
 			return {
 				deskAlias,
 				messages,
 				send,
+				subscribe,
 				close: async () => {
 					await send("/light/unsubscribe", [clientId]).catch(() => undefined);
 					await Promise.all([closeUdp(command), closeUdp(feedback)]);
@@ -491,9 +497,10 @@ async function exerciseSupportedScaleOscPlayback(
 	if (!hardware) throw new Error("supported-scale OSC hardware is unavailable");
 	if (!networkCapture)
 		throw new Error("supported-scale network capture is unavailable");
+	await hardware.subscribe();
 	for (const action of [
-		{ type: "master", value: 1 },
 		{ type: "go_to", cue_number: 1 },
+		{ type: "master", value: 0.5 },
 	])
 		await requestJson(
 			"POST",
@@ -511,7 +518,7 @@ async function exerciseSupportedScaleOscPlayback(
 		["go", true, `osc-go-${crypto.randomUUID()}`],
 		["flash", true, `osc-flash-press-${crypto.randomUUID()}`],
 		["flash", false, `osc-flash-release-${crypto.randomUUID()}`],
-		["master", 0.5, `osc-master-${crypto.randomUUID()}`],
+		["master", 0.75, `osc-master-${crypto.randomUUID()}`],
 	];
 	const measurements = [];
 	for (const [action, value, requestId] of actions) {
@@ -527,7 +534,11 @@ async function exerciseSupportedScaleOscPlayback(
 					message.arguments[0] === requestId,
 				2_000,
 				baseline,
-			),
+			).catch((error) => {
+				throw new Error(
+					`Timed out waiting for packaged OSC ${action} feedback (${requestId}): ${error.message}`,
+				);
+			}),
 			waitForNetworkDmxChange(networkCapture, networkBaseline, sentAt, 2_000),
 		]);
 		measurements.push({ action, value, requestId, sentAt, feedback, network });
@@ -535,6 +546,21 @@ async function exerciseSupportedScaleOscPlayback(
 			setTimeout(resolve, action === "go" ? 1_600 : 75),
 		);
 	}
+	for (const action of [
+		{ type: "go_to", cue_number: 1 },
+		{ type: "master", value: 0.5 },
+	])
+		await requestJson(
+			"POST",
+			"/api/v2/playback-actions",
+			{
+				request_id: crypto.randomUUID(),
+				address: { kind: "playback", playback_number: 1 },
+				action,
+				surface: "physical",
+			},
+			{ session, showId, deskId: session.desk.id },
+		);
 	return {
 		source: "osc",
 		measurements,
@@ -1293,6 +1319,15 @@ async function installSupportedScalePlaybackWorkload(
 			deskId: session.desk.id,
 			revision: second.show_revision,
 		},
+	);
+	await requestJson(
+		"POST",
+		`/api/v2/control-desks/${encodeURIComponent(session.desk.id)}/actions`,
+		{
+			request_id: crypto.randomUUID(),
+			action: { type: "set_page", page: 1, existing_only: true },
+		},
+		{ session, showId, deskId: session.desk.id },
 	);
 	await clearProgrammerValues(session, showId);
 	await requestJson(
@@ -2330,7 +2365,7 @@ function summarizePlaybackOutputCorrelation(
 			["go", true],
 			["flash", true],
 			["flash", false],
-			["master", 0.5],
+			["master", 0.75],
 		]) {
 			const measurement = measurements.find(
 				(candidate) =>

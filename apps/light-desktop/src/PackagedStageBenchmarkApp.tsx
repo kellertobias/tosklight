@@ -198,10 +198,12 @@ function usePackagedStagePhases(
 
 function PackagedStageExercise({
 	profile,
+	enabled,
 	onPlaybackAction,
 	onFixtureSheetAction,
 }: {
 	profile: string;
+	enabled: boolean;
 	onPlaybackAction(sample: PackagedPlaybackActionSample): void;
 	onFixtureSheetAction(sample: PackagedFixtureSheetSample): void;
 }) {
@@ -253,17 +255,28 @@ function PackagedStageExercise({
 		};
 	}, [activeShowId, commandReady, preload.ready, profile]);
 	useEffect(() => {
-		if (profile !== "supported-scale") return;
+		if (profile !== "supported-scale" || !enabled) return;
 		let cancelled = false;
 		const run = async () => {
-			const card = await waitForPlaybackCard(() => cancelled);
+			await waitMillis(8_000);
+			let card = await waitForPlaybackCard(() => cancelled);
 			if (!card || cancelled) return;
-			const go = playbackButton(card, "go");
-			const flash = playbackButton(card, "flash");
-			const fader = card.querySelector<HTMLInputElement>('input[type="range"]');
-			if (!go || !flash || !fader) return;
+			const goMinus = playbackButton(card, "go_minus");
+			if (!goMinus) return;
+			goMinus.dispatchEvent(pointerEvent("pointerdown"));
+			goMinus.dispatchEvent(pointerEvent("pointerup"));
+			goMinus.dispatchEvent(
+				new MouseEvent("click", { bubbles: true, button: 0 }),
+			);
+			await waitMillis(750);
+			card = await waitForPlaybackCard(() => cancelled);
+			const go = card && playbackButton(card, "go");
+			if (!card || !go) return;
 			onPlaybackAction(await exercisePlaybackClick(card, go, "go"));
 			await waitMillis(1_600);
+			card = await waitForPlaybackCard(() => cancelled);
+			const flash = card && playbackButton(card, "flash");
+			if (!card || !flash) return;
 			onPlaybackAction(
 				await exercisePlaybackPointer(
 					card,
@@ -273,26 +286,41 @@ function PackagedStageExercise({
 				),
 			);
 			await waitMillis(250);
+			card = await waitForPlaybackCard(() => cancelled);
+			const flashRelease = card && playbackButton(card, "flash");
+			if (!card || !flashRelease) return;
 			onPlaybackAction(
 				await exercisePlaybackPointer(
 					card,
-					flash,
+					flashRelease,
 					"flash_release",
 					"pointerup",
 				),
 			);
 			await waitMillis(500);
-			onPlaybackAction(await exercisePlaybackFader(card, fader, 50));
+			card = await waitForPlaybackCard(() => cancelled);
+			const fader = card?.querySelector<HTMLInputElement>(
+				'input[type="range"]',
+			);
+			if (!card || !fader) return;
+			onPlaybackAction(await exercisePlaybackFader(card, fader, 25));
 		};
 		void run().catch(() => undefined);
 		return () => {
 			cancelled = true;
 		};
-	}, [onPlaybackAction, profile]);
+	}, [enabled, onPlaybackAction, profile]);
 	useEffect(() => {
-		if (profile !== "supported-scale" || !activeShowId || !commandReady) return;
+		if (
+			profile !== "supported-scale" ||
+			!enabled ||
+			!activeShowId ||
+			!commandReady
+		)
+			return;
 		let cancelled = false;
 		const run = async () => {
+			await waitMillis(14_000);
 			const row = await waitForFixtureSheetRow(() => cancelled);
 			const actions = commandRef.current;
 			if (!row || !actions || cancelled) return;
@@ -313,17 +341,37 @@ function PackagedStageExercise({
 		return () => {
 			cancelled = true;
 		};
-	}, [activeShowId, commandReady, onFixtureSheetAction, profile]);
+	}, [activeShowId, commandReady, enabled, onFixtureSheetAction, profile]);
 	return null;
 }
 
 async function waitForFixtureSheetRow(cancelled: () => boolean) {
 	const deadline = performance.now() + 10_000;
 	while (!cancelled() && performance.now() < deadline) {
-		const row = document.querySelector<HTMLElement>(
-			'[data-testid="packaged-stage-fixture-sheet"] [data-fixture-id]',
+		const row = [
+			...document.querySelectorAll<HTMLElement>(
+				'[data-testid="packaged-stage-fixture-sheet"] [data-fixture-id]',
+			),
+		].find(
+			(candidate) =>
+				candidate.querySelector(".vertical-meter") &&
+				!candidate
+					.querySelector(".fixture-type")
+					?.textContent?.trim()
+					.startsWith("Venue"),
 		);
-		if (row?.querySelector(".vertical-meter")) return row;
+		if (row) return row;
+		const scroller = document.querySelector<HTMLElement>(
+			'[data-testid="packaged-stage-fixture-sheet"] .ui-window-scroller',
+		);
+		if (scroller) {
+			const next = Math.min(
+				scroller.scrollHeight - scroller.clientHeight,
+				scroller.scrollTop + Math.max(scroller.clientHeight * 0.8, 43),
+			);
+			scroller.scrollTop = next > scroller.scrollTop ? next : 0;
+			scroller.dispatchEvent(new Event("scroll"));
+		}
 		await waitMillis(50);
 	}
 	return null;
@@ -337,9 +385,15 @@ async function exerciseFixtureSheetCommand(
 ): Promise<PackagedFixtureSheetSample> {
 	const before = row.innerHTML;
 	const fixtureId = row.dataset.fixtureId;
+	const fixtureNumber = row
+		.querySelector<HTMLElement>(".fixture-sheet-id > span")
+		?.textContent?.trim();
 	let loadingOverlayObserved = false;
 	const inputAt = performance.now();
-	for (const value of values) await actions.execute(`FIXTURE 1 AT ${value}`);
+	if (!fixtureNumber)
+		return fixtureSheetSample(action, inputAt, null, false, false);
+	for (const value of values)
+		await actions.execute(`FIXTURE ${fixtureNumber} AT ${value}`);
 	const expected = `${values.at(-1)}%`;
 	const deadline = inputAt + 500;
 	while (performance.now() < deadline) {
@@ -417,7 +471,14 @@ async function waitForPlaybackCard(cancelled: () => boolean) {
 
 function playbackButton(card: HTMLElement, label: string) {
 	return [...card.querySelectorAll<HTMLButtonElement>("button")].find(
-		(button) => button.textContent?.trim().toLowerCase() === label,
+		(button) => {
+			const text = button.textContent?.trim().toLowerCase();
+			return label === "go"
+				? text === "go" || text?.startsWith("go +")
+				: label === "go_minus"
+					? text?.startsWith("go −")
+					: text === label;
+		},
 	);
 }
 
@@ -430,6 +491,9 @@ async function exercisePlaybackClick(
 	const diagnosticBaseline = playbackDiagnosticCount();
 	const inputAt = performance.now();
 	button.dispatchEvent(pointerEvent("pointerdown"));
+	const indicationAt = button.classList.contains("playback-button-active")
+		? performance.now()
+		: null;
 	button.dispatchEvent(pointerEvent("pointerup"));
 	button.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
 	return playbackActionSample(
@@ -439,6 +503,7 @@ async function exercisePlaybackClick(
 		action,
 		"dom_pointer",
 		diagnosticBaseline,
+		indicationAt,
 	);
 }
 
@@ -493,9 +558,10 @@ async function playbackActionSample(
 	action: PackagedPlaybackActionSample["action"],
 	input: PackagedPlaybackActionSample["input"],
 	diagnosticBaseline: number,
+	initialIndicationAt: number | null = null,
 ): Promise<PackagedPlaybackActionSample> {
 	const deadline = inputAt + 500;
-	let indicationAt: number | null = null;
+	let indicationAt = initialIndicationAt;
 	while (performance.now() < deadline) {
 		if (indicationAt === null && card.innerHTML !== before)
 			indicationAt = performance.now();
@@ -543,7 +609,7 @@ function playbackDiagnostic(baseline: number, action: string) {
 function playbackDiagnosticLabel(
 	action: PackagedPlaybackActionSample["action"],
 ) {
-	return action === "go" ? "playback_go" : `playback_${action}`;
+	return action === "go" ? "playback_configured_button" : `playback_${action}`;
 }
 
 function pointerEvent(type: "pointerdown" | "pointerup") {
@@ -872,6 +938,7 @@ function PreparedPackagedStageBenchmark({
 			{exerciseEnabled && (
 				<PackagedStageExercise
 					profile={profile}
+					enabled={stageEnabled}
 					onPlaybackAction={recordPlaybackAction}
 					onFixtureSheetAction={recordFixtureSheetAction}
 				/>
@@ -985,7 +1052,12 @@ function PackagedStageBenchmarkSurface({
 							}}
 						>
 							<CommandLineBar />
-							<PlaybackFaderBank count={4} rows={1} buttons={3} />
+							<PlaybackFaderBank
+								pageNumber={1}
+								count={4}
+								rows={1}
+								buttons={3}
+							/>
 						</section>
 					)}
 				</div>

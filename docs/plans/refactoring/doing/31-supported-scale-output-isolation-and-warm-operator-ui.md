@@ -74,12 +74,59 @@ benchmark and any repairs it proves necessary before
   fixture's exact DMX slot so unrelated Dynamics cannot create a false changed-output pass. Focused
   frontend diagnostics and Playback action-writer tests pass; the packaged correlation still awaits
   its retained runtime run.
+- The first full-matrix attempt retained
+  `.artifacts/performance/stage/packaged-tauri-supported-scale-2026-08-01T16-40-15-865Z.json`.
+  It prepared the exact scene and completed the first OSC exercise, then failed immediately after
+  the 30-second control window because the simulated OSC hardware subscription had expired before
+  the Stage-window matrix. The runner now renews that production subscription before each matrix;
+  this was a harness-lifecycle failure, not evidence that the Playback action missed its tick gate.
+- The renewed run retained
+  `.artifacts/performance/stage/packaged-tauri-supported-scale-2026-08-01T16-42-26-955Z.json`.
+  Both OSC matrices completed and every authenticated action was credited within two output ticks.
+  It exposed two remaining workload defects: UI exercises timed out before their controls were
+  mounted at the Stage boundary, and Flash could not change the reserved slot while both the main
+  and temporary Playback ran at full master. Those are repaired by Stage-scoped exercise timing and
+  a half-master baseline. More importantly, the representative fading Cuelist changed the measured
+  bottleneck: Dynamic reconciliation rose to roughly 27–31 ms, output fell to roughly 29–38 Hz, and
+  the control and Stage windows recorded 1,142 and 865 deadline misses respectively. Plan 31 now
+  has a repeatable production interaction failure to optimize after the repaired UI matrix is
+  retained.
+- The follow-up diagnostic runs retained
+  `.artifacts/performance/stage/packaged-tauri-supported-scale-2026-08-01T17-03-20-600Z.json`
+  and
+  `.artifacts/performance/stage/packaged-tauri-supported-scale-2026-08-01T17-07-13-674Z.json`.
+  Per-phase timing corrected the earlier broad attribution: reconciliation, sampling, candidate
+  collection, and contribution batching were each sub-millisecond. The actual 27–29 ms cost was
+  `active_cue_dynamic_values()`, which rebuilt 6,540 tracked Cue-Dynamic addresses every output
+  tick with a linear search for every change. That made the representative tracked Cue fold
+  quadratic.
+- The Cue-Dynamic fold now uses an address-to-slot index while preserving first-storage order,
+  in-place tracked updates, Release removal, and append-after-release behavior. The retained
+  post-repair run
+  `.artifacts/performance/stage/packaged-tauri-supported-scale-2026-08-01T17-13-24-218Z.json`
+  restored 60.33 measured output frames/s with zero scheduler deadline misses. All eight OSC Go,
+  Flash press/release, and master samples changed the exact reserved DMX slot on both Art-Net and
+  sACN in 6–13 ms and met the two-output-tick contract. The run still failed because the bundled UI
+  bank rendered its desk-selected page instead of prepared page 1 and the Fixture Sheet exercise
+  selected the first row even when it was an unpatched Venue fixture. The benchmark now pins its
+  visible bank to page 1 and chooses a patched visible row; those two browser-side repairs still
+  require a retained run.
+- The complete repaired matrix retained
+  `.artifacts/performance/stage/packaged-tauri-supported-scale-2026-08-01T18-03-38-637Z.json`
+  with no gate failures. The one-Stage/Fixture-Sheet packaged surface sustained 60.97 measured
+  output frames/s, sent 3,658 real Stage-window Art-Net and sACN packets, recorded zero Stage-window
+  deadline misses and send errors, and held output p99 at 12 ms with no Stage regression. Every UI
+  and OSC Go, Flash press/release, and master action reached changed network output inside the
+  two-tick budget; the four visible bundled controls indicated in 0–25 ms. Fixture Sheet newest-value
+  convergence was 102 ms for one action and 120 ms for the five-action burst, with no loading
+  overlay and only 26 virtualized rows mounted. The indexed fold now pre-sizes its address index
+  from the known Cue prefix, eliminating growth reallocations without changing tracking semantics.
 
-Plan 31 therefore remains on the repair path. Do not interpret the sibling-window failures as a
-product acceptance failure: this plan requires one 3D Stage. The next slice must run and repair the
-completed measurement matrix, then eliminate any retained engine-evaluation outlier. Until that
-run passes, the correlated Playback UI/OSC matrix, representative Cuelist/fade workload, and
-Fixture Sheet convergence remain implemented but unproven.
+Plan 31 remains on the repair path only for its completion gates: the representative Cuelist/fade/
+Dynamics server path, one 3D Stage, bundled Playback feedback, OSC and UI action-to-network timing,
+and virtualized Fixture Sheet convergence now pass their exact limits. The remaining work is to
+commit this repair, run the required regular performance and large end-to-end suites, verify the
+authoritative packaged desktop path, and record the final Result before moving the plan.
 
 This plan turns the root
 [`README.md`](../../../../README.md#supported-usage-profile) contract into measured packaged

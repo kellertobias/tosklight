@@ -2,13 +2,16 @@ use super::*;
 use std::sync::OnceLock;
 
 type DynamicProgrammerValues = Vec<(Uuid, i16, light_dynamics::DynamicAddressValue)>;
+type DynamicDefinitions = Vec<light_dynamics::DynamicDefinition>;
+type DynamicStagePositions = HashMap<FixtureId, light_dynamics::SpatialPosition>;
 
 #[derive(Default)]
 pub(in crate::runtime) struct ProgrammerReconciliationCache {
     signature: Mutex<
         Option<(
             Arc<DynamicProgrammerValues>,
-            Arc<light_engine::EngineSnapshot>,
+            Arc<DynamicDefinitions>,
+            Arc<DynamicStagePositions>,
         )>,
     >,
 }
@@ -20,13 +23,19 @@ impl ProgrammerReconciliationCache {
         snapshot: &Arc<light_engine::EngineSnapshot>,
     ) -> bool {
         let mut signature = self.signature.lock();
-        let changed = signature
-            .as_ref()
-            .is_none_or(|(previous_values, previous_snapshot)| {
-                !Arc::ptr_eq(previous_values, values) || !Arc::ptr_eq(previous_snapshot, snapshot)
-            });
+        let changed = signature.as_ref().is_none_or(
+            |(previous_values, previous_definitions, previous_positions)| {
+                !Arc::ptr_eq(previous_values, values)
+                    || !Arc::ptr_eq(previous_definitions, &snapshot.dynamics)
+                    || !Arc::ptr_eq(previous_positions, &snapshot.dynamic_stage_positions)
+            },
+        );
         if changed {
-            *signature = Some((Arc::clone(values), Arc::clone(snapshot)));
+            *signature = Some((
+                Arc::clone(values),
+                Arc::clone(&snapshot.dynamics),
+                Arc::clone(&snapshot.dynamic_stage_positions),
+            ));
         }
         changed
     }
@@ -1021,5 +1030,25 @@ mod tick_source_tests {
         assert!(dynamic_tick_is_idle_from_presence(
             true, true, true, false, false, false, false,
         ));
+    }
+
+    #[test]
+    fn programmer_reconciliation_ignores_unrelated_engine_snapshot_replacement() {
+        let cache = ProgrammerReconciliationCache::default();
+        let values = Arc::new(Vec::new());
+        let snapshot = Arc::new(light_engine::EngineSnapshot::default());
+
+        assert!(cache.changed(&values, &snapshot));
+        assert!(!cache.changed(&values, &Arc::new((*snapshot).clone())));
+
+        let mut changed_definitions = (*snapshot).clone();
+        changed_definitions.dynamics = Arc::new(Vec::new());
+        assert!(cache.changed(&values, &Arc::new(changed_definitions)));
+
+        let mut changed_positions = (*snapshot).clone();
+        changed_positions.dynamic_stage_positions = Arc::new(HashMap::new());
+        assert!(cache.changed(&values, &Arc::new(changed_positions)));
+
+        assert!(cache.changed(&Arc::new(Vec::new()), &snapshot));
     }
 }

@@ -106,6 +106,14 @@ export function buildPlaybackActions({
 						event.stopPropagation();
 						return;
 					}
+					if (action !== "none" && !isHeldAction(action)) {
+						const button = event.currentTarget;
+						button.classList.add("playback-button-active");
+						window.setTimeout(
+							() => button.classList.remove("playback-button-active"),
+							120,
+						);
+					}
 					if (!playback || !isHeldAction(action)) return;
 					event.currentTarget.setPointerCapture?.(event.pointerId);
 					controller.heldActions.press(

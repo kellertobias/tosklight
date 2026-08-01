@@ -48,6 +48,64 @@ fn active_cue_dynamic_projection_tracks_fat_and_honors_release() {
 }
 
 #[test]
+fn active_cue_dynamic_projection_preserves_tracking_order_after_indexed_updates() {
+    let first_fixture = FixtureId::new();
+    let second_fixture = FixtureId::new();
+    let value = |fixture_id, value| CueDynamicChange {
+        fixture_id,
+        attribute: AttributeKey::intensity(),
+        value: light_dynamics::DynamicSemanticValue::FixAt {
+            value,
+            timing: light_dynamics::DynamicValueTiming::default(),
+        },
+        automatic_restore: false,
+    };
+    let mut one = Cue::new(1.0);
+    one.dynamic_changes.push(value(first_fixture, 0.1));
+    one.dynamic_changes.push(value(second_fixture, 0.2));
+    one.dynamic_changes.push(value(first_fixture, 0.3));
+    let mut two = Cue::new(2.0);
+    two.dynamic_changes.push(CueDynamicChange {
+        fixture_id: first_fixture,
+        attribute: AttributeKey::intensity(),
+        value: light_dynamics::DynamicSemanticValue::Release,
+        automatic_restore: false,
+    });
+    two.dynamic_changes.push(value(first_fixture, 0.4));
+    let cue_list = list(vec![one, two]);
+    let id = cue_list.id;
+    let started = Utc::now();
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.go_at(id, started).unwrap();
+
+    let first = engine.active_cue_dynamic_values();
+    assert_eq!(
+        first
+            .iter()
+            .map(|candidate| candidate.fixture_id)
+            .collect::<Vec<_>>(),
+        vec![first_fixture, second_fixture]
+    );
+    assert!(matches!(
+        first[0].value,
+        light_dynamics::DynamicSemanticValue::FixAt { value: 0.3, .. }
+    ));
+
+    engine
+        .go_at(id, started + ChronoDuration::milliseconds(1))
+        .unwrap();
+    assert_eq!(
+        engine
+            .active_cue_dynamic_values()
+            .iter()
+            .map(|candidate| candidate.fixture_id)
+            .collect::<Vec<_>>(),
+        vec![second_fixture, first_fixture]
+    );
+}
+
+#[test]
 fn ltp_intensity_can_select_a_newer_lower_value() {
     let fixture = FixtureId::new();
     let mut high = Cue::new(1.0);

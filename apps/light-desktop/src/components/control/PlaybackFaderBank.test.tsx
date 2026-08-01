@@ -964,7 +964,10 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		expect(container.querySelector(".vertical-touch-fader-stack")).toHaveClass(
 			"action-count-3",
 		);
-		fireEvent.click(screen.getByRole("button", { name: "GO +" }));
+		const go = screen.getByRole("button", { name: "GO +" });
+		fireEvent.pointerDown(go, { pointerId: 3 });
+		expect(go).toHaveClass("playback-button-active");
+		fireEvent.click(go);
 		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "button", {
 			button: 1,
 			pressed: true,
