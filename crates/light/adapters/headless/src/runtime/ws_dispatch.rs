@@ -69,7 +69,7 @@ fn begin_live_action_timing(
     session: &Session,
     frame: &LiveActionFrame,
 ) -> Option<ActionTimingReceipt> {
-    let (action, may_change_output) = programmer_action_timing(&frame.action)?;
+    let (action, may_change_output) = live_action_timing(&frame.action)?;
     Some(state.action_timing.begin_or_resume(
         session.id.0.to_string(),
         "websocket",
@@ -100,7 +100,7 @@ fn acknowledge_live_action(
     response
 }
 
-fn programmer_action_timing(action: &LiveAction) -> Option<(&'static str, bool)> {
+fn live_action_timing(action: &LiveAction) -> Option<(&'static str, bool)> {
     match action {
         LiveAction::ProgrammingSelection(_) => Some(("selection", false)),
         LiveAction::ProgrammingValues(_) => Some(("values", true)),
@@ -124,12 +124,26 @@ fn programmer_action_timing(action: &LiveAction) -> Option<(&'static str, bool)>
         | LiveAction::DynamicSpeed(_)
         | LiveAction::DynamicPhase(_)
         | LiveAction::DynamicFixAt(_) => Some(("dynamic", true)),
-        LiveAction::Playback(_)
-        | LiveAction::SpeedGroup(_)
+        LiveAction::Playback(request) => Some((playback_action_timing(&request.action), true)),
+        LiveAction::SpeedGroup(_)
         | LiveAction::OutputRuntime(_)
         | LiveAction::DmxOverride(_)
         | LiveAction::Highlight(_)
         | LiveAction::PatchPreviewHighlight(_) => None,
+    }
+}
+
+fn playback_action_timing(action: &light_wire::v2::playback::PlaybackAction) -> &'static str {
+    use light_wire::v2::playback::PlaybackAction;
+    match action {
+        PlaybackAction::Go { .. } => "playback_go",
+        PlaybackAction::Flash { pressed: true } => "playback_flash_press",
+        PlaybackAction::Flash { pressed: false } => "playback_flash_release",
+        PlaybackAction::Master { .. } => "playback_master",
+        PlaybackAction::Back { .. } => "playback_back",
+        PlaybackAction::Pause { .. } => "playback_pause",
+        PlaybackAction::Release => "playback_release",
+        _ => "playback_action",
     }
 }
 
@@ -783,4 +797,30 @@ fn interaction_context(session: &Session, request_id: &str) -> light_application
         light_application::ActionSource::UserInterface,
     )
     .with_request_id(request_id)
+}
+
+#[cfg(test)]
+mod action_timing_tests {
+    use super::*;
+    use light_wire::v2::playback::PlaybackAction;
+
+    #[test]
+    fn playback_timing_distinguishes_the_required_action_matrix() {
+        assert_eq!(
+            playback_action_timing(&PlaybackAction::Go { pressed: true }),
+            "playback_go"
+        );
+        assert_eq!(
+            playback_action_timing(&PlaybackAction::Flash { pressed: true }),
+            "playback_flash_press"
+        );
+        assert_eq!(
+            playback_action_timing(&PlaybackAction::Flash { pressed: false }),
+            "playback_flash_release"
+        );
+        assert_eq!(
+            playback_action_timing(&PlaybackAction::Master { value: 0.5 }),
+            "playback_master"
+        );
+    }
 }

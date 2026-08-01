@@ -45,6 +45,12 @@ benchmark and any repairs it proves necessary before
   Stage-window deadline miss remains; the exact zero-miss gate is therefore still failing. All
   102 Programmer actions remained within two ticks. Focused fixture encoding and schema-v2 engine
   tests pass.
+- Playback actions now enter the same bounded causal timing resource at authenticated WebSocket,
+  HTTP, and OSC boundaries. Go, Flash press, Flash release, and master actions retain distinct
+  labels, wake the production scheduler after successful authoritative handling, and are credited
+  only after a later production network-send boundary completes. Focused route and OSC/WebSocket
+  classification tests pass. The packaged workload still has to exercise and gate the complete
+  UI/OSC matrix before this requirement is proven.
 
 Plan 31 therefore remains on the repair path. Do not interpret the sibling-window failures as a
 product acceptance failure: this plan requires one 3D Stage. The next slice must eliminate the

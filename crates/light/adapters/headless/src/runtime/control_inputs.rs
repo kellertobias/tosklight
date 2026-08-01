@@ -146,21 +146,22 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
     } = &event
     {
         let action_timing =
-            begin_authenticated_osc_programmer_timing(state, address, arguments, source.as_deref());
-        let mut programmer_action_succeeded = false;
+            begin_authenticated_osc_action_timing(state, address, arguments, source.as_deref());
+        let mut measured_action_succeeded = false;
         if !handle_subscription_osc(state, address, arguments, source.as_deref()) && !input_locked {
-            handle_playback_osc(state, address, arguments, source.as_deref());
+            measured_action_succeeded |=
+                handle_playback_osc(state, address, arguments, source.as_deref());
             handle_highlight_osc(state, address, arguments, source.as_deref());
-            programmer_action_succeeded |=
+            measured_action_succeeded |=
                 handle_dynamics_osc(state, address, arguments, source.as_deref());
-            programmer_action_succeeded |=
+            measured_action_succeeded |=
                 handle_programmer_osc(state, address, arguments, source.as_deref());
             handle_timing_osc(state, address, arguments);
             handle_encoder_osc(state, address, arguments, source.as_deref());
         }
         send_osc_feedback(state, false);
         if let Some(action_timing) = action_timing {
-            action_timing.acknowledge(state, programmer_action_succeeded);
+            action_timing.acknowledge(state, measured_action_succeeded);
         }
     }
     if input_locked {
@@ -204,38 +205,33 @@ impl AuthenticatedOscActionTiming {
     }
 }
 
-fn begin_authenticated_osc_programmer_timing(
+fn begin_authenticated_osc_action_timing(
     state: &AppState,
     address: &str,
     arguments: &[OscArgument],
     source: Option<&str>,
 ) -> Option<AuthenticatedOscActionTiming> {
     let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
-    let [light, desk_alias, capability, rest @ ..] = parts.as_slice() else {
+    let [light, ..] = parts.as_slice() else {
         return None;
     };
     if *light != "light" {
         return None;
     }
-    let (action, may_change_output) = match *capability {
-        "programmer" if !rest.is_empty() && osc_pressed(arguments) => (
-            "programmer_key",
-            rest.first().is_some_and(|action| {
-                matches!(*action, "at" | "clear" | "enter" | "preload" | "undo")
-            }),
-        ),
-        "dynamic" if !rest.is_empty() => ("dynamic", true),
-        "encode" if !rest.is_empty() => ("encoder", false),
-        "nav" => ("encoder", false),
-        _ => return None,
-    };
     let source = source?.parse::<SocketAddr>().ok()?;
     let subscriber = state.integrations.osc_subscriber_for_source(source)?;
-    if !subscriber.desk_alias.eq_ignore_ascii_case(desk_alias)
-        || state.sessions.session(subscriber.session_id).is_none()
-    {
+    if state.sessions.session(subscriber.session_id).is_none() {
         return None;
     }
+    let desk_alias = parts
+        .get(1)
+        .filter(|alias| !matches!(**alias, "playback" | "cuelist" | "qlist"))
+        .copied()
+        .unwrap_or(&subscriber.desk_alias);
+    if !subscriber.desk_alias.eq_ignore_ascii_case(desk_alias) {
+        return None;
+    }
+    let (action, may_change_output) = osc_action_timing(&parts, arguments)?;
     let request_id = arguments
         .get(1)
         .and_then(|argument| match argument {
@@ -250,7 +246,7 @@ fn begin_authenticated_osc_programmer_timing(
             request_id,
             state.output.frame_rate_hz(),
             OscActionFeedback {
-                desk_alias: (*desk_alias).to_owned(),
+                desk_alias: desk_alias.to_owned(),
                 target: subscriber.target,
             },
         );
@@ -264,7 +260,68 @@ fn begin_authenticated_osc_programmer_timing(
             state.output.frame_rate_hz(),
             may_change_output,
         ),
-        desk_alias: (*desk_alias).to_owned(),
+        desk_alias: desk_alias.to_owned(),
         feedback_target: subscriber.target,
     })
+}
+
+fn osc_action_timing(parts: &[&str], arguments: &[OscArgument]) -> Option<(String, bool)> {
+    if let ["light", _, capability, rest @ ..] = parts {
+        match *capability {
+            "programmer" if !rest.is_empty() && osc_pressed(arguments) => {
+                return Some((
+                    "programmer_key".into(),
+                    rest.first().is_some_and(|action| {
+                        matches!(*action, "at" | "clear" | "enter" | "preload" | "undo")
+                    }),
+                ));
+            }
+            "dynamic" if !rest.is_empty() => return Some(("dynamic".into(), true)),
+            "encode" if !rest.is_empty() => return Some(("encoder".into(), false)),
+            "nav" => return Some(("encoder".into(), false)),
+            _ => {}
+        }
+    }
+    let (_, action_index) = osc_playback_address(parts)?;
+    let action = match parts.get(action_index).copied()? {
+        "go" => "playback_go",
+        "flash" if osc_pressed(arguments) => "playback_flash_press",
+        "flash" => "playback_flash_release",
+        "fader" | "master" => "playback_master",
+        "back" | "go-minus" => "playback_back",
+        "pause" => "playback_pause",
+        "release" => "playback_release",
+        _ => "playback_action",
+    };
+    Some((action.into(), true))
+}
+
+#[cfg(test)]
+mod action_timing_tests {
+    use super::*;
+
+    #[test]
+    fn osc_playback_timing_distinguishes_press_release_and_fader() {
+        let press = [OscArgument::Bool(true)];
+        let release = [OscArgument::Bool(false)];
+        assert_eq!(
+            osc_action_timing(&["light", "playback", "1", "go"], &press),
+            Some(("playback_go".into(), true))
+        );
+        assert_eq!(
+            osc_action_timing(&["light", "playback", "1", "flash"], &press),
+            Some(("playback_flash_press".into(), true))
+        );
+        assert_eq!(
+            osc_action_timing(&["light", "playback", "1", "flash"], &release),
+            Some(("playback_flash_release".into(), true))
+        );
+        assert_eq!(
+            osc_action_timing(
+                &["light", "main", "page-playback", "1", "fader"],
+                &[OscArgument::Float(0.5)]
+            ),
+            Some(("playback_master".into(), true))
+        );
+    }
 }

@@ -170,7 +170,7 @@ async fn action_timing_boundary(
     next: Next,
 ) -> Response {
     let Some((action, may_change_output)) =
-        programmer_http_action(request.method(), request.uri().path())
+        timed_http_action(request.method(), request.uri().path())
     else {
         return next.run(request).await;
     };
@@ -226,9 +226,11 @@ async fn action_timing_boundary(
     response
 }
 
-fn programmer_http_action(method: &Method, path: &str) -> Option<(&'static str, bool)> {
+fn timed_http_action(method: &Method, path: &str) -> Option<(&'static str, bool)> {
     let mutation = matches!(*method, Method::POST | Method::PUT | Method::DELETE)
-        || (*method == Method::GET && path == "/api/v2/programmer-undo/actions");
+        || (*method == Method::GET
+            && (path == "/api/v2/programmer-undo/actions"
+                || path.starts_with("/api/v2/playbacks/")));
     if !mutation {
         return None;
     }
@@ -237,6 +239,7 @@ fn programmer_http_action(method: &Method, path: &str) -> Option<(&'static str, 
         "/api/v2/command-line/keys" => Some(("command_key", true)),
         "/api/v2/command-line/execute" => Some(("command_execute", true)),
         "/api/v2/programmer-undo/actions" => Some(("undo", true)),
+        "/api/v2/playback-actions" => Some(("playback_action", true)),
         "/api/v2/programmer-capture-mode/actions" => Some(("capture_mode", true)),
         "/api/v2/programming-align/actions" => Some(("align", true)),
         "/api/v2/fixture-controls/actions" => Some(("fixture_control", true)),
@@ -247,6 +250,7 @@ fn programmer_http_action(method: &Method, path: &str) -> Option<(&'static str, 
         _ if path.contains("programmer-preload") => Some(("preload_lifecycle", true)),
         _ if path.contains("programmer-priority") => Some(("priority", true)),
         _ if path.contains("/dynamics/") => Some(("dynamic", true)),
+        _ if path.starts_with("/api/v2/playbacks/") => Some(("playback_action", true)),
         _ => None,
     }
 }
@@ -258,18 +262,26 @@ mod action_timing_route_tests {
     #[test]
     fn typed_programmer_value_routes_match_their_actual_v2_paths() {
         assert_eq!(
-            programmer_http_action(
+            timed_http_action(
                 &Method::POST,
                 "/api/v2/users/operator/programmer-values/actions"
             ),
             Some(("values", true))
         );
         assert_eq!(
-            programmer_http_action(
+            timed_http_action(
                 &Method::POST,
                 "/api/v2/users/operator/programmer-preload-values/actions"
             ),
             Some(("preload_values", false))
+        );
+        assert_eq!(
+            timed_http_action(&Method::POST, "/api/v2/playback-actions"),
+            Some(("playback_action", true))
+        );
+        assert_eq!(
+            timed_http_action(&Method::GET, "/api/v2/playbacks/1/go"),
+            Some(("playback_action", true))
         );
     }
 }

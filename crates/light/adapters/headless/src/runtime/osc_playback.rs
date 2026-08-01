@@ -172,7 +172,7 @@ fn handle_osc_page(state: &AppState, parts: &[&str], arguments: &[OscArgument]) 
     true
 }
 
-fn osc_playback_address(parts: &[&str]) -> Option<(PlaybackAddress, usize)> {
+pub(super) fn osc_playback_address(parts: &[&str]) -> Option<(PlaybackAddress, usize)> {
     if parts.len() >= 6
         && parts.first() == Some(&"light")
         && parts.get(2) == Some(&"virtual-playback")
@@ -252,7 +252,7 @@ pub(super) fn handle_playback_osc(
     address: &str,
     arguments: &[OscArgument],
     source: Option<&str>,
-) {
+) -> bool {
     // Preserve the three established OSC address families as distinct typed intents:
     //
     // - `/light/playback/{page}/{slot}` always targets that explicit page.
@@ -270,13 +270,13 @@ pub(super) fn handle_playback_osc(
     let (pressed, value) = osc_playback_values(arguments);
     let source_socket = source.and_then(|source| source.parse::<SocketAddr>().ok());
     if handle_osc_page(state, &parts, arguments) {
-        return;
+        return false;
     }
     let Some((playback_address, action_index)) = osc_playback_address(&parts) else {
-        return;
+        return false;
     };
     let Ok(_activation) = state.active_show.try_acquire() else {
-        return;
+        return false;
     };
     let button = (parts[action_index] == "button")
         .then(|| parts.get(action_index + 1)?.parse::<u8>().ok())
@@ -315,7 +315,7 @@ pub(super) fn handle_playback_osc(
         .or_else(|| osc_control_desk(state, &action_alias));
     let Ok(session) = osc_playback_session(state, source, &action_alias, action_desk.as_ref())
     else {
-        return;
+        return false;
     };
     let action = if parts[action_index] == "fader" {
         "master"
@@ -337,7 +337,7 @@ pub(super) fn handle_playback_osc(
             .integrations
             .suppresses_osc_input(input, Instant::now())
     }) {
-        return;
+        return false;
     }
     if let Some(session) = session.as_ref()
         && command_http::intercept_armed_cue_playback(
@@ -352,7 +352,7 @@ pub(super) fn handle_playback_osc(
                 .integrations
                 .remember_osc_intercept(input, Instant::now());
         }
-        return;
+        return true;
     }
     let Ok(result) = playback_service::osc_action(
         state,
@@ -362,7 +362,7 @@ pub(super) fn handle_playback_osc(
         action,
         &input,
     ) else {
-        return;
+        return false;
     };
     let changed = matches!(
         result.execution,
@@ -375,6 +375,7 @@ pub(super) fn handle_playback_osc(
             serde_json::json!({"playback_number":number,"action":action,"source":"osc","session_id":session.map(|session|session.id)}),
         );
     }
+    true
 }
 
 #[cfg(test)]
