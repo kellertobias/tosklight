@@ -1,0 +1,12 @@
+[package]
+name = "viz-dmx"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[dependencies]
+socket2.workspace = true
+viz-scene.workspace = true
+
+[lints]
+workspace = true

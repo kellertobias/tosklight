@@ -4,6 +4,7 @@ members = [
   "apps/light-desktop/src-tauri",
   "apps/light-hardware-controls/src-tauri",
   "apps/light-headless",
+  "apps/viz-editor/src-tauri",
   "crates/light",
   "crates/light/adapters/headless",
   "crates/light/adapters/media",
@@ -15,9 +16,20 @@ members = [
   "crates/light/domain/playback",
   "crates/light/domain/programmer",
   "crates/shared/core",
+  "crates/shared/discovery",
   "crates/shared/fixture",
   "crates/shared/mvr",
   "crates/shared/show",
+  "crates/viz/scene",
+  "crates/viz/laser",
+  "crates/viz/dmx",
+  "crates/viz/project",
+  "crates/viz/desk",
+  "crates/viz/document",
+  "crates/viz/planning",
+  "crates/viz/render",
+  "crates/viz/snapshot",
+  "apps/viz-renderer",
 ]
 
 [workspace.package]
@@ -27,6 +39,9 @@ license-file = "LICENSE"
 authors = ["Light contributors"]
 
 [workspace.dependencies]
+png = "0.18"
+muda = "0.19"
+rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "async-std"] }
 anyhow = "1.0"
 arc-swap = "1.7"
 async-trait = "0.1"
@@ -59,6 +74,27 @@ quick-xml = "0.38"
 zip = { version = "4.6", default-features = false, features = ["deflate"] }
 light-application = { path = "crates/light" }
 light-wire = { path = "crates/light/contracts/wire" }
+# Viz visualizer stack. These belong to `apps/viz-renderer` and `crates/viz/*` only; the
+# ToskLight desk build must never require them.
+wgpu = "30"
+winit = "0.30"
+glam = { version = "0.30", features = ["bytemuck"] }
+bytemuck = { version = "1.23", features = ["derive"] }
+pollster = "0.4"
+socket2 = { version = "0.6", features = ["all"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "charset", "http2"] }
+tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect", "handshake"] }
+# QuickJS, which runs the scan engine a laser fixture package ships with. Compiled from vendored
+# C source, so `bindgen` (and the LLVM it wants) stays off; the crate carries generated bindings.
+rquickjs = { version = "0.12", default-features = false, features = ["classes", "properties"] }
+light-discovery = { path = "crates/shared/discovery" }
+viz-scene = { path = "crates/viz/scene" }
+viz-laser = { path = "crates/viz/laser" }
+viz-dmx = { path = "crates/viz/dmx" }
+viz-project = { path = "crates/viz/project" }
+viz-desk = { path = "crates/viz/desk" }
+viz-render = { path = "crates/viz/render" }
+viz-snapshot = { path = "crates/viz/snapshot" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

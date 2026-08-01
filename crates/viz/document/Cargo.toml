@@ -1,0 +1,23 @@
+[package]
+name = "viz-document"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[dependencies]
+light-application = { path = "../../light" }
+light-core = { path = "../../shared/core" }
+light-engine = { path = "../../light/domain/engine", default-features = false }
+light-fixture = { path = "../../shared/fixture" }
+light-mvr = { path = "../../shared/mvr" }
+light-show = { path = "../../shared/show" }
+parking_lot.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+
+
+[lints]
+workspace = true

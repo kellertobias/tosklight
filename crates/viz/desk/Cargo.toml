@@ -1,0 +1,25 @@
+[package]
+name = "viz-desk"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[dependencies]
+futures-util.workspace = true
+glam.workspace = true
+light-fixture = { path = "../../shared/fixture" }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+uuid.workspace = true
+viz-dmx.workspace = true
+viz-project.workspace = true
+viz-scene.workspace = true
+
+[dev-dependencies]
+zip.workspace = true
+
+[lints]
+workspace = true

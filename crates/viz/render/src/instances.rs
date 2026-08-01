@@ -1,0 +1,975 @@
+//! Per-frame translation from the semantic scene into GPU instance and light arrays.
+//!
+//! Structural instances (bodies, scenery) are rebuilt only when the scene revision changes.
+//! Live values rebuild the moving parts, emitter apertures, and lights, which is the only work a
+//! DMX frame is allowed to cause.
+
+use bytemuck::{Pod, Zeroable};
+use glam::{Mat3, Mat4, Quat, Vec2, Vec3};
+use viz_scene::{
+    BodyKind, EmitterInstance, EmitterKind, EmitterValues, FixtureInstance, Scene, SceneValues,
+    SourceForm, euler_degrees,
+};
+
+/// Which procedural mesh an instance draws.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum MeshKind {
+    Cube,
+    Cylinder,
+    Sphere,
+    /// The face light leaves through: a lamp's lens, drawn thin and domed rather than round.
+    Lens,
+    Plane,
+    /// One part of a fixture model read from the library: `(model index, part index)`.
+    ///
+    /// A part is its own mesh because pan and tilt move the yoke and the head but not the base,
+    /// so they cannot share one instance transform.
+    ModelPart(u32, u32),
+}
+
+impl MeshKind {
+    pub const PROCEDURAL: [Self; 5] = [
+        Self::Cube,
+        Self::Cylinder,
+        Self::Sphere,
+        Self::Lens,
+        Self::Plane,
+    ];
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+pub struct MeshInstance {
+    pub model: [[f32; 4]; 4],
+    pub normal0: [f32; 4],
+    pub normal1: [f32; 4],
+    pub normal2: [f32; 4],
+    /// `rgb` base colour, `w` roughness.
+    pub base_colour: [f32; 4],
+    /// `rgb` emissive radiance, `w` metallic.
+    pub emissive: [f32; 4],
+}
+
+impl MeshInstance {
+    pub const LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
+        array_stride: size_of::<Self>() as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Instance,
+        attributes: &wgpu::vertex_attr_array![
+            3 => Float32x4, 4 => Float32x4, 5 => Float32x4, 6 => Float32x4,
+            7 => Float32x4, 8 => Float32x4, 9 => Float32x4,
+            10 => Float32x4, 11 => Float32x4
+        ],
+    };
+
+    fn new(model: Mat4, base_colour: Vec3, roughness: f32, emissive: Vec3, metallic: f32) -> Self {
+        let normal = Mat3::from_mat4(model).inverse().transpose();
+        Self {
+            model: model.to_cols_array_2d(),
+            normal0: normal.x_axis.extend(0.0).to_array(),
+            normal1: normal.y_axis.extend(0.0).to_array(),
+            normal2: normal.z_axis.extend(0.0).to_array(),
+            base_colour: base_colour.extend(roughness).to_array(),
+            emissive: emissive.extend(metallic).to_array(),
+        }
+    }
+}
+
+/// One spot or point light consumed by the surface and beam passes.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+pub struct GpuLight {
+    /// `xyz` world position, `w` range in metres.
+    pub position_range: [f32; 4],
+    /// `xyz` normalised aim, `w` cosine of the outer (field) half-angle.
+    pub direction_cos_outer: [f32; 4],
+    /// `xyz` linear radiance, `w` scalar intensity.
+    pub colour_intensity: [f32; 4],
+    /// `x` cosine of the inner (beam) half-angle, `y` feather, `z` uniformity, `w` how far behind
+    /// the lens the cone's virtual apex sits.
+    pub params: [f32; 4],
+    /// `xyz` the beam's own right axis, which every pattern is oriented against; `w` frost.
+    pub tangent_frost: [f32; 4],
+    /// `x` gobo slot, `y` gobo rotation in radians, `z` prism facets, `w` prism rotation.
+    pub optics: [f32; 4],
+    /// `x` the artwork layer this slot projects, or `-1` for a slot with none — which is every
+    /// slot of a profile that declares no wheel, and is what selects the drawn patterns instead.
+    /// `yzw` spare.
+    pub gate: [f32; 4],
+    /// Framing-shutter blade insertions, `0` open, in the beam's own frame after its rotation.
+    pub shapers: [f32; 4],
+    /// `x` shadow-map index or `-1`, `yz` its tile origin in the atlas, `w` the tile size.
+    pub shadow: [f32; 4],
+}
+
+/// One beam volume drawn as an instanced cone.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+pub struct BeamInstance {
+    pub model: [[f32; 4]; 4],
+    /// `xyz` colour, `w` intensity.
+    pub colour: [f32; 4],
+    /// `x` light index, `y` cone length from the lens, `z` how far behind the lens the virtual
+    /// apex sits, `w` spare.
+    pub params: [f32; 4],
+}
+
+impl BeamInstance {
+    pub const LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
+        array_stride: size_of::<Self>() as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Instance,
+        attributes: &wgpu::vertex_attr_array![
+            3 => Float32x4, 4 => Float32x4, 5 => Float32x4, 6 => Float32x4,
+            7 => Float32x4, 8 => Float32x4
+        ],
+    };
+}
+
+/// One straight run of a laser's scan path, drawn as a camera-facing glowing ribbon.
+///
+/// A laser is not a cone and cannot be drawn as one. What is actually in the air is a beam a few
+/// millimetres across that has been somewhere else a thirty-thousandth of a second ago, and what
+/// an audience sees is the whole path at once because the eye cannot separate the parts. So the
+/// path is what gets drawn: one of these per straight run between two control points, added
+/// together in the haze.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+pub struct LaserInstance {
+    /// `xyz` where this run starts in world space, `w` the beam radius there in metres.
+    pub start_radius: [f32; 4],
+    /// `xyz` where it ends, `w` the beam radius there. Divergence widens the beam down its throw,
+    /// so the two differ over a long shot.
+    pub end_radius: [f32; 4],
+    /// `xyz` linear radiance already weighted by dwell, `w` whether this run is the figure lying
+    /// on the surface the beam landed on rather than the beam in the air on its way there. Haze is
+    /// what makes the second visible and has nothing to do with the first.
+    pub colour_landing: [f32; 4],
+}
+
+impl LaserInstance {
+    pub const LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
+        array_stride: size_of::<Self>() as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Instance,
+        attributes: &wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4, 2 => Float32x4],
+    };
+}
+
+/// One aim line drawn in the line and orthographic modes.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+pub struct LineVertex {
+    pub position: [f32; 3],
+    pub _pad: f32,
+    pub colour: [f32; 4],
+}
+
+impl LineVertex {
+    pub const LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
+        array_stride: size_of::<Self>() as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4],
+    };
+}
+
+/// Where one emitter ended up this frame, in world space.
+#[derive(Clone, Copy, Debug)]
+pub struct EmitterPose {
+    pub origin: Vec3,
+    pub direction: Vec3,
+    pub half_angle: f32,
+    pub orientation: Quat,
+}
+
+/// Everything one frame uploads.
+#[derive(Default)]
+pub struct FrameInstances {
+    pub meshes: Vec<(MeshKind, Vec<MeshInstance>)>,
+    pub lights: Vec<GpuLight>,
+    pub beams: Vec<BeamInstance>,
+    pub lasers: Vec<LaserInstance>,
+    pub lines: Vec<LineVertex>,
+    pub poses: Vec<EmitterPose>,
+}
+
+impl FrameInstances {
+    fn mesh(&mut self, kind: MeshKind) -> &mut Vec<MeshInstance> {
+        if let Some(index) = self
+            .meshes
+            .iter()
+            .position(|(existing, _)| *existing == kind)
+        {
+            return &mut self.meshes[index].1;
+        }
+        self.meshes.push((kind, Vec::new()));
+        &mut self.meshes.last_mut().expect("just pushed").1
+    }
+}
+
+/// Maximum beam throw used for the volumetric cone and the aim line.
+const BEAM_THROW_METRES: f32 = 20.0;
+
+/// How far behind a lens the cone's virtual apex is allowed to sit. A tight beam's apex is metres
+/// back by geometry alone, and a pencil beam's would be out of the building.
+const MAX_APEX_OFFSET: f32 = 12.0;
+
+/// How thick a lit face is drawn, as a fraction of its own smaller dimension. A lens has real
+/// glass in it and a panel has a real front, so neither is a flat sticker; neither is anywhere
+/// near as deep as it is wide.
+const SOURCE_THICKNESS: f32 = 0.16;
+
+/// The cone every fixture's intensity is measured against: a 40-degree field, which is an ordinary
+/// stage lantern. Narrower than this concentrates the same light and is brighter; wider spreads it
+/// and is dimmer.
+const REFERENCE_HALF_ANGLE: f32 = 0.349;
+
+/// How much of the true spread relation to apply. `1.0` is literal inverse solid angle, which puts
+/// several hundred to one between a beam light and a flood — true, and unwatchable on one screen.
+const SPREAD_COMPRESSION: f32 = 0.55;
+
+/// How one frame should be drawn.
+#[derive(Clone, Copy, Debug)]
+pub struct FrameStyle {
+    pub draw_beams: bool,
+    pub draw_aim_lines: bool,
+    /// Draw the scene as an outline plan instead of a shaded picture.
+    pub plot: bool,
+    /// Screen-plane axes used to billboard plot symbols so they read from any plan direction.
+    pub plot_right: Vec3,
+    pub plot_up: Vec3,
+    /// World size one plot symbol should occupy, chosen so a symbol keeps a constant on-screen
+    /// size however far the plan is zoomed out.
+    pub symbol_metres: f32,
+    /// Ink colour for a fixture that makes light.
+    pub ink: Vec3,
+    /// Ink colour for scenery and for a fixture that makes no light.
+    pub faint_ink: Vec3,
+    /// The one colour every beam is drawn in on a plan.
+    pub beam_ink: Vec3,
+}
+
+impl Default for FrameStyle {
+    fn default() -> Self {
+        Self {
+            draw_beams: true,
+            draw_aim_lines: false,
+            plot: false,
+            plot_right: Vec3::X,
+            plot_up: Vec3::Y,
+            symbol_metres: 0.3,
+            beam_ink: Vec3::new(1.0, 0.82, 0.25),
+            ink: Vec3::splat(0.85),
+            faint_ink: Vec3::splat(0.35),
+        }
+    }
+}
+
+/// Build every instance array for one frame.
+pub fn build(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> FrameInstances {
+    let mut frame = FrameInstances::default();
+    let head_angles = head_angles(scene, values);
+    if style.plot {
+        plot::push_plot(&mut frame, scene, values, &head_angles, style);
+        return frame;
+    }
+    scenery::push_scenery(&mut frame, scene);
+    push_bodies(&mut frame, scene, &head_angles);
+    push_emitters(
+        &mut frame,
+        scene,
+        values,
+        &head_angles,
+        style.draw_beams,
+        style.draw_aim_lines,
+    );
+    frame
+}
+
+/// Pan and tilt in degrees for every emitter, resolved once and reused by bodies and beams so the
+/// yoke and the beam can never disagree.
+fn head_angles(scene: &Scene, values: &SceneValues) -> Vec<(f32, f32)> {
+    scene
+        .emitters
+        .iter()
+        .enumerate()
+        .map(|(index, emitter)| {
+            let value = values.emitters.get(index);
+            let pan = value.map_or(0.5, |value| value.pan);
+            let tilt = value.map_or(0.5, |value| value.tilt);
+            (
+                emitter.pan.map_or(0.0, |axis| axis.degrees_at(pan)),
+                emitter.tilt.map_or(0.0, |axis| axis.degrees_at(tilt)),
+            )
+        })
+        .collect()
+}
+
+/// Draw one fixture from its library model, with pan and tilt applied to the parts that move.
+#[allow(clippy::too_many_arguments)]
+fn push_model(
+    frame: &mut FrameInstances,
+    scene: &Scene,
+    fixture: &FixtureInstance,
+    fixture_index: usize,
+    model_index: u32,
+    model: &viz_scene::FixtureModel,
+    head_angles: &[(f32, f32)],
+) {
+    let (pan, tilt) = scene
+        .emitters
+        .iter()
+        .position(|emitter| emitter.fixture_index == fixture_index as u32)
+        .and_then(|index| head_angles.get(index).copied())
+        .unwrap_or((0.0, 0.0));
+    let pan_rotation = Quat::from_rotation_y(pan.to_radians());
+    let tilt_rotation = Quat::from_rotation_x(tilt.to_radians());
+    // A model authored at another size is scaled to the profile's physical dimensions, so a rig
+    // never mixes lamps drawn at different scales. The scene plan puts the emitter through the
+    // same call, so the beam keeps leaving the lens whatever the profile says the lamp measures.
+    let scale = model.scale_to(fixture.body.size);
+    let base = Mat4::from_rotation_translation(fixture.orientation(), fixture.position)
+        * Mat4::from_scale(Vec3::splat(scale));
+
+    // The yoke turns about the axis the fixture hangs on; the head turns about its own
+    // trunnions. Tilting about the hanging point instead would swing the head through the air.
+    let pivot = model.head_pivot;
+    let tilt_about_trunnions = Mat4::from_translation(pivot)
+        * Mat4::from_quat(tilt_rotation)
+        * Mat4::from_translation(-pivot);
+    for (part_index, part) in model.parts.iter().enumerate() {
+        let transform = match part.kind {
+            viz_scene::ModelPartKind::Base => base,
+            viz_scene::ModelPartKind::Yoke => base * Mat4::from_quat(pan_rotation),
+            viz_scene::ModelPartKind::Head => {
+                base * Mat4::from_quat(pan_rotation) * tilt_about_trunnions
+            }
+        };
+        frame
+            .mesh(MeshKind::ModelPart(model_index, part_index as u32))
+            .push(MeshInstance::new(
+                transform,
+                Vec3::from(part.colour),
+                part.roughness,
+                Vec3::ZERO,
+                part.metallic,
+            ));
+    }
+}
+
+const BODY_COLOUR: Vec3 = Vec3::new(0.055, 0.06, 0.068);
+const YOKE_COLOUR: Vec3 = Vec3::new(0.08, 0.085, 0.095);
+
+fn push_bodies(frame: &mut FrameInstances, scene: &Scene, head_angles: &[(f32, f32)]) {
+    for (fixture_index, fixture) in scene.fixtures.iter().enumerate() {
+        let base = Mat4::from_rotation_translation(fixture.orientation(), fixture.position);
+        let size = fixture.body.size;
+        // A fixture whose profile carries a model is drawn as that model. The proxy shapes below
+        // are what a fixture gets when its library entry has no geometry to offer.
+        if let Some(model_index) = fixture.model
+            && let Some(model) = scene.models.get(model_index as usize)
+        {
+            push_model(
+                frame,
+                scene,
+                fixture,
+                fixture_index,
+                model_index,
+                model,
+                head_angles,
+            );
+            continue;
+        }
+        match fixture.body.kind {
+            BodyKind::MovingHead => {
+                let (pan, tilt) = scene
+                    .emitters
+                    .iter()
+                    .position(|emitter| emitter.fixture_index == fixture_index as u32)
+                    .and_then(|index| head_angles.get(index).copied())
+                    .unwrap_or((0.0, 0.0));
+                let pan_rotation = Quat::from_rotation_y(pan.to_radians());
+                let tilt_rotation = Quat::from_rotation_x(tilt.to_radians());
+                // Base plate hangs from the rig point.
+                frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+                    base * Mat4::from_scale_rotation_translation(
+                        Vec3::new(size.x, size.y * 0.28, size.z),
+                        Quat::IDENTITY,
+                        Vec3::new(0.0, size.y * 0.36, 0.0),
+                    ),
+                    BODY_COLOUR,
+                    0.55,
+                    Vec3::ZERO,
+                    0.35,
+                ));
+                let yoke = base * Mat4::from_quat(pan_rotation);
+                for side in [-1.0_f32, 1.0] {
+                    frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+                        yoke * Mat4::from_scale_rotation_translation(
+                            Vec3::new(size.x * 0.14, size.y * 0.5, size.z * 0.3),
+                            Quat::IDENTITY,
+                            Vec3::new(side * size.x * 0.42, 0.0, 0.0),
+                        ),
+                        YOKE_COLOUR,
+                        0.5,
+                        Vec3::ZERO,
+                        0.4,
+                    ));
+                }
+                frame.mesh(MeshKind::Cylinder).push(MeshInstance::new(
+                    yoke * Mat4::from_quat(tilt_rotation)
+                        * Mat4::from_scale_rotation_translation(
+                            Vec3::new(size.x * 0.66, size.y * 0.62, size.z * 0.66),
+                            Quat::IDENTITY,
+                            Vec3::ZERO,
+                        ),
+                    BODY_COLOUR,
+                    0.45,
+                    Vec3::ZERO,
+                    0.5,
+                ));
+            }
+            BodyKind::Bar | BodyKind::Matrix => {
+                frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+                    base * Mat4::from_scale(size),
+                    BODY_COLOUR,
+                    0.6,
+                    Vec3::ZERO,
+                    0.2,
+                ));
+            }
+            BodyKind::Lantern => {
+                frame.mesh(MeshKind::Cylinder).push(MeshInstance::new(
+                    base * Mat4::from_scale_rotation_translation(
+                        Vec3::new(size.x, size.z, size.y),
+                        Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+                        Vec3::ZERO,
+                    ),
+                    BODY_COLOUR,
+                    0.5,
+                    Vec3::ZERO,
+                    0.4,
+                ));
+            }
+            BodyKind::Machine | BodyKind::Generic => {
+                frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+                    base * Mat4::from_scale(size),
+                    BODY_COLOUR,
+                    0.65,
+                    Vec3::ZERO,
+                    0.15,
+                ));
+            }
+        }
+    }
+}
+
+/// Resolve one emitter's world pose from its fixture, pan, and tilt.
+/// How many slots the gobo wheel is divided into when the profile carries no slot table.
+pub const GOBO_SLOTS: u32 = 8;
+
+/// Rotate `vector` about `axis` by `angle` radians.
+fn rotate_about(vector: Vec3, axis: Vec3, angle: f32) -> Vec3 {
+    if angle.abs() < 1e-5 {
+        return vector;
+    }
+    Quat::from_axis_angle(axis, angle) * vector
+}
+
+pub fn emitter_pose(
+    fixture: &FixtureInstance,
+    emitter: &EmitterInstance,
+    pan_degrees: f32,
+    tilt_degrees: f32,
+    zoom: f32,
+) -> EmitterPose {
+    let mount = fixture.orientation();
+    let pan = Quat::from_rotation_y(pan_degrees.to_radians());
+    let tilt = Quat::from_rotation_x(tilt_degrees.to_radians());
+    let local = euler_degrees(emitter.local_orientation_degrees);
+    let orientation = mount * pan * tilt * local;
+    // Tilt turns the emitter about the head's own trunnions, the same point the head geometry
+    // turns about. A pivot of zero is a fixture that tilts about its hanging point, which is what
+    // an emitter with nothing better to go on gets.
+    let pivot = emitter.tilt_pivot;
+    let origin = fixture.position + mount * (pan * (pivot + tilt * (emitter.local_origin - pivot)));
+    // Emitters aim along local `-Y`, matching a lantern hung pointing down at rest.
+    let direction = (orientation * Vec3::NEG_Y).normalize_or(Vec3::NEG_Y);
+    EmitterPose {
+        origin,
+        direction,
+        half_angle: emitter.cone_half_angle(zoom),
+        orientation,
+    }
+}
+
+/// The optical state of one head, resolved from its values into what the shaders need.
+///
+/// Zoom, iris, focus and frost all change the same two things — the shape of the cone and how
+/// much light is in it — so they are resolved once here rather than four times per march step.
+struct BeamOptics {
+    /// Half-angle of the field edge after zoom, iris and frost.
+    half_angle: f32,
+    /// Edge softness `0..=1` after focus and frost.
+    feather: f32,
+    /// How evenly the field is filled after frost, `1.0` being flat to the rim.
+    uniformity: f32,
+    /// Radiance multiplier. Zooming in concentrates the same light; closing the iris does not.
+    gain: f32,
+}
+
+fn resolve_optics(emitter: &EmitterInstance, value: &EmitterValues) -> BeamOptics {
+    let zoomed = emitter.cone_half_angle(value.zoom);
+    // Light is flux spread over a cone, so the angle decides the intensity: the same lamp through
+    // a narrower gate is brighter, and a flood laying the same light across a wall is dimmer. One
+    // reference angle serves every fixture, so this holds between a beam and a flood as well as
+    // across one fixture's own zoom.
+    //
+    // Compressed rather than literal. The honest ratio between a 3-degree beam and a 90-degree
+    // flood is several hundred to one, and no display shows both ends of that at once; the curve
+    // below keeps the order and the feel without blowing one of them out.
+    let solid_angle = |half: f32| (1.0 - half.cos()).max(1e-6);
+    let spread = (solid_angle(REFERENCE_HALF_ANGLE) / solid_angle(zoomed))
+        .powf(SPREAD_COMPRESSION)
+        .clamp(0.15, 12.0);
+
+    // The iris masks the beam: the pool gets smaller and the light that is left is as bright as
+    // it was. That is the whole difference between an iris and a zoom.
+    let iris = value.iris.clamp(0.0, 1.0);
+    let after_iris = zoomed * (1.0 - iris * 0.92).max(0.02);
+
+    // Frost throws light outside the field edge and destroys the edge itself.
+    let frost = value.frost.clamp(0.0, 1.0);
+    let half_angle = (after_iris * (1.0 + frost * 0.35)).clamp(0.002, 1.55);
+
+    // Focus is sharp in the middle of its travel and soft at either end, which is how a lens
+    // moved either side of the gate behaves. The fixture's own rim is where that starts from: a
+    // profile out of focus is a soft profile, not a wash.
+    let defocus = ((value.focus.clamp(0.0, 1.0) - 0.5).abs() * 2.0).clamp(0.0, 1.0);
+    let softness = 1.0 - emitter.optics.sharpness.clamp(0.0, 1.0);
+    let feather = (softness + defocus * 0.55 + frost * 0.6).clamp(0.02, 0.98);
+    // A diffuser evens out what it softens: frost fills in a hot centre as it destroys the edge.
+    let uniformity = (emitter.optics.uniformity.clamp(0.0, 1.0) + frost * 0.5).clamp(0.0, 1.0);
+    BeamOptics {
+        half_angle,
+        feather,
+        uniformity,
+        // A brighter engine is a brighter fixture, whatever the desk asks of it.
+        gain: spread * emitter.optics.output.clamp(0.05, 8.0),
+    }
+}
+
+fn push_emitters(
+    frame: &mut FrameInstances,
+    scene: &Scene,
+    values: &SceneValues,
+    head_angles: &[(f32, f32)],
+    draw_beams: bool,
+    draw_lines: bool,
+) {
+    let fallback = EmitterValues::default();
+    for (index, emitter) in scene.emitters.iter().enumerate() {
+        let Some(fixture) = scene.fixtures.get(emitter.fixture_index as usize) else {
+            continue;
+        };
+        let value = values.emitters.get(index).unwrap_or(&fallback);
+        let (pan, tilt) = head_angles.get(index).copied().unwrap_or((0.0, 0.0));
+        let optics = resolve_optics(emitter, value);
+        let mut pose = emitter_pose(fixture, emitter, pan, tilt, value.zoom);
+        pose.half_angle = optics.half_angle;
+        // What an observer still has, not what the desk is sending this instant. For most heads
+        // the two agree; for a strobe or a laser they are the whole point of the difference.
+        let intensity = value.held_intensity.max(value.visible_intensity());
+        if emitter.kind == EmitterKind::Laser {
+            if let Some(scanner) = &emitter.laser
+                && let Some(scan) = values.laser_scans.get(index)
+            {
+                laser::push_laser(
+                    &mut frame.lasers,
+                    pose.origin,
+                    pose.orientation,
+                    scanner,
+                    scan,
+                    intensity,
+                );
+            }
+            // The window itself, lit. It is a few millimetres across and adds nothing to the room,
+            // but a firing projector has a bright spot where its beam leaves and an operator finds
+            // the fixture by it — the more so because a laser lights nothing else around itself.
+            // None of the cone or shadow machinery applies beyond that.
+            push_aperture(
+                frame,
+                pose.origin,
+                pose,
+                aperture_size(emitter),
+                emitter.optics.source.form,
+                intensity,
+                Vec3::from(value.colour),
+            );
+            frame.poses.push(pose);
+            continue;
+        }
+        let cells = cell_states(emitter, value);
+        let aperture = aperture_size(emitter);
+        // Where the cone would converge behind the lens. A wide lamp's apex sits just behind its
+        // face; a narrow one's is metres back, which is exactly why a beam holds together down its
+        // throw and a wash does not. Bounded so a pencil beam cannot push it out of the room.
+        // The shaft itself is round, so an oval or rectangular lens is taken at its mean radius.
+        let apex_offset = (aperture.element_sum() * 0.5 / optics.half_angle.tan().max(0.002))
+            .min(MAX_APEX_OFFSET);
+        for (cell_index, offset) in emitter.cells.offsets.iter().enumerate() {
+            let (cell_intensity, cell_colour) = cells
+                .get(cell_index)
+                .copied()
+                .unwrap_or((intensity, Vec3::from(value.colour)));
+            let origin = pose.origin + pose.orientation * *offset;
+            push_aperture(
+                frame,
+                origin,
+                pose,
+                aperture,
+                emitter.optics.source.form,
+                cell_intensity,
+                cell_colour,
+            );
+            if emitter.kind != EmitterKind::Beam || cell_intensity <= 0.002 {
+                continue;
+            }
+            let light_index = frame.lights.len() as u32;
+            // Which slot is in the beam, and what is etched on it. A profile that declares its own
+            // wheel is divided into the slots it actually has and projects its own glass; one that
+            // declares none keeps the drawn patterns, evenly divided.
+            let wheel = &emitter.optics.gobo_wheel;
+            let slots = if wheel.is_empty() {
+                GOBO_SLOTS
+            } else {
+                wheel.len() as u32
+            };
+            let slot = value.gobo_slot(slots);
+            let artwork = wheel
+                .get(slot as usize)
+                .and_then(|entry| entry.artwork)
+                .map_or(-1.0, |layer| layer as f32);
+            // The beam's own right axis: every pattern the head projects turns with the head.
+            let tangent = (pose.orientation * Vec3::X).normalize_or(Vec3::X);
+            // Where the blades sit is where somebody fitted the module, plus whatever the desk
+            // has turned it to since. A barn door has only the first of those; a framing module
+            // the desk can rotate starts from it.
+            let shaper_turn = value.shaper_rotation * std::f32::consts::TAU
+                + fixture.shaper_degrees.unwrap_or(0.0).to_radians();
+            frame.lights.push(GpuLight {
+                position_range: origin
+                    .extend(beam_reach(origin, pose.direction, pose.half_angle).max(2.0))
+                    .to_array(),
+                direction_cos_outer: pose.direction.extend(pose.half_angle.cos()).to_array(),
+                colour_intensity: (cell_colour * cell_intensity * optics.gain)
+                    .extend(cell_intensity)
+                    .to_array(),
+                params: [
+                    (pose.half_angle * (1.0 - optics.feather).clamp(0.05, 1.0)).cos(),
+                    optics.feather,
+                    optics.uniformity,
+                    apex_offset,
+                ],
+                tangent_frost: rotate_about(tangent, pose.direction, shaper_turn)
+                    .extend(value.frost.clamp(0.0, 1.0))
+                    .to_array(),
+                optics: [
+                    slot as f32,
+                    value.gobo_rotation * std::f32::consts::TAU,
+                    value.prism_facets() as f32,
+                    value.prism_rotation * std::f32::consts::TAU,
+                ],
+                shapers: value.shaper_blades,
+                gate: [artwork, 0.0, 0.0, 0.0],
+                // Filled in once the frame knows which lights are worth a map.
+                shadow: [-1.0, 0.0, 0.0, 0.0],
+            });
+            if draw_beams {
+                push_beam(
+                    frame,
+                    origin,
+                    pose,
+                    light_index,
+                    cell_intensity,
+                    cell_colour,
+                    apex_offset,
+                );
+            }
+            if draw_lines {
+                push_aim_line(frame, origin, pose, cell_intensity, cell_colour);
+            }
+        }
+        frame.poses.push(pose);
+    }
+}
+
+/// One of this frame's lights in the terms an optical instrument is described in, rather than the
+/// cosines and packed vectors [`GpuLight`] carries for the shaders.
+///
+/// Same lights, same order, same frame: [`semantic_lights`] walks the scene exactly as
+/// [`push_emitters`] does and resolves each head through the same [`resolve_optics`], so a
+/// consumer outside this renderer sees what the picture is made of.
+#[derive(Clone, Copy, Debug)]
+pub struct SemanticLight {
+    /// Index into [`Scene::emitters`].
+    pub emitter_index: u32,
+    /// Which cell of that emitter, `0` for a single-cell head.
+    pub cell_index: u32,
+    /// World position of the lit surface, metres.
+    pub origin: Vec3,
+    /// Normalised aim.
+    pub direction: Vec3,
+    /// Half-angle of the field edge, radians, after zoom, iris and frost.
+    pub outer_half_angle: f32,
+    /// Half-angle where the field is still full, radians. The two are equal for a hard edge.
+    pub inner_half_angle: f32,
+    /// Rim softness, `0` a cut edge and `1` no edge to speak of.
+    pub feather: f32,
+    /// How evenly the field is filled, `1` flat to the rim.
+    pub uniformity: f32,
+    /// Linear colour, each channel `0..=1`.
+    pub colour: Vec3,
+    /// Visible level after dimmer, shutter and strobe, `0..=1`.
+    pub intensity: f32,
+    /// Relative engine output; `1.0` is an ordinary fixture of its class, before any dimmer.
+    pub output: f32,
+    /// Radius of the lit surface, metres. A lamp is not a point.
+    pub source_radius: f32,
+    /// How far the light reaches before it meets the floor, metres.
+    pub reach: f32,
+}
+
+/// Every light this frame makes, in semantic form.
+///
+/// Only heads that are actually emitting appear, which is the same rule the frame's own light
+/// array follows: a fixture at zero is in the picture as a body, not as a light.
+pub fn semantic_lights(scene: &Scene, values: &SceneValues) -> Vec<SemanticLight> {
+    let head_angles = head_angles(scene, values);
+    let fallback = EmitterValues::default();
+    let mut lights = Vec::new();
+    for (index, emitter) in scene.emitters.iter().enumerate() {
+        let Some(fixture) = scene.fixtures.get(emitter.fixture_index as usize) else {
+            continue;
+        };
+        let value = values.emitters.get(index).unwrap_or(&fallback);
+        let (pan, tilt) = head_angles.get(index).copied().unwrap_or((0.0, 0.0));
+        let optics = resolve_optics(emitter, value);
+        let mut pose = emitter_pose(fixture, emitter, pan, tilt, value.zoom);
+        pose.half_angle = optics.half_angle;
+        let cells = cell_states(emitter, value);
+        let aperture = aperture_size(emitter);
+        for (cell_index, offset) in emitter.cells.offsets.iter().enumerate() {
+            let (intensity, colour) = cells
+                .get(cell_index)
+                .copied()
+                .unwrap_or((value.visible_intensity(), Vec3::from(value.colour)));
+            if emitter.kind != EmitterKind::Beam || intensity <= 0.002 {
+                continue;
+            }
+            let origin = pose.origin + pose.orientation * *offset;
+            lights.push(SemanticLight {
+                emitter_index: index as u32,
+                cell_index: cell_index as u32,
+                origin,
+                direction: pose.direction,
+                outer_half_angle: pose.half_angle,
+                inner_half_angle: pose.half_angle * (1.0 - optics.feather).clamp(0.05, 1.0),
+                feather: optics.feather,
+                uniformity: optics.uniformity,
+                colour,
+                intensity,
+                output: emitter.optics.output,
+                source_radius: aperture.element_sum() * 0.5,
+                reach: beam_reach(origin, pose.direction, pose.half_angle).max(2.0),
+            });
+        }
+    }
+    lights
+}
+
+/// The lit surface one cell of this emitter presents, in metres.
+///
+/// A lamp is not a point: a beam that springs from nothing out of a fixture half a metre across
+/// reads as wrong from anywhere near it. The size and shape come from the emitter's own light
+/// source, which belongs to the fixture rather than to one patched instance, bounded by how far
+/// apart its cells sit so a bar's cells stay separate instead of merging into one smear.
+fn aperture_size(emitter: &EmitterInstance) -> Vec2 {
+    let source = emitter.optics.source;
+    let mut half = Vec2::new(source.width.max(0.01), source.height.max(0.01)) * 0.5;
+    if let Some(spacing) = neighbouring_cell_spacing(emitter) {
+        half = half.min(Vec2::splat(spacing * 0.45));
+    }
+    half.clamp(Vec2::splat(0.008), Vec2::splat(0.4))
+}
+
+/// How far apart neighbouring cells sit, or `None` for a single-cell emitter.
+///
+/// Layouts are generated in order, so consecutive entries are neighbours: comparing those is
+/// enough to size a cell, and it stays linear on a matrix with a thousand of them.
+fn neighbouring_cell_spacing(emitter: &EmitterInstance) -> Option<f32> {
+    let mut closest = f32::INFINITY;
+    for pair in emitter.cells.offsets.windows(2) {
+        let spacing = (pair[1] - pair[0]).length();
+        if spacing > 1e-4 {
+            closest = closest.min(spacing);
+        }
+    }
+    closest.is_finite().then_some(closest)
+}
+
+fn cell_states(emitter: &EmitterInstance, value: &EmitterValues) -> Vec<(f32, Vec3)> {
+    let shutter = value.shutter.clamp(0.0, 1.0);
+    if value.cells.is_empty() {
+        let intensity = value.held_intensity.max(value.visible_intensity());
+        return vec![(intensity, Vec3::from(value.colour)); emitter.cells.len()];
+    }
+    emitter
+        .cells
+        .offsets
+        .iter()
+        .enumerate()
+        .map(|(index, _)| {
+            let cell = value.cells.get(index).copied().unwrap_or_default();
+            // A cell keeps its own tail: a chased pixel strip and a strobing blinder are both
+            // per-cell effects, and holding only the head's level would smear the whole panel to
+            // the brightness of its brightest pixel.
+            let gated = (cell.intensity * shutter).clamp(0.0, 1.0);
+            (
+                cell.held_intensity.max(gated).clamp(0.0, 1.0),
+                Vec3::from(cell.colour),
+            )
+        })
+        .collect()
+}
+
+fn push_aperture(
+    frame: &mut FrameInstances,
+    origin: Vec3,
+    pose: EmitterPose,
+    aperture: Vec2,
+    form: SourceForm,
+    intensity: f32,
+    colour: Vec3,
+) {
+    // The visible source stays present at zero intensity so a fixture never disappears.
+    let radiance = colour * (0.02 + intensity * 9.0);
+    // Light leaves a lamp through a face, and the face is what the operator recognises the lamp
+    // by: a moving head's lens, a Fresnel's glass, the round lens of one blinder lamp, the front
+    // of an LED strip. So the source is drawn as that face — round glass for a round or oval
+    // source, the lit panel front for a rectangular one — and only as thick as such a face is.
+    let face = aperture * 2.0;
+    let thickness = (face.min_element() * SOURCE_THICKNESS).max(0.004);
+    let mesh = match form {
+        SourceForm::Round | SourceForm::Oval => MeshKind::Lens,
+        SourceForm::Rectangular => MeshKind::Cube,
+    };
+    frame.mesh(mesh).push(MeshInstance::new(
+        Mat4::from_scale_rotation_translation(face.extend(thickness), source_facing(pose), origin),
+        colour * 0.05,
+        0.35,
+        radiance,
+        0.0,
+    ));
+}
+
+/// The frame a lit face is drawn in: `+Z` down the aim, `X` across the head's own width.
+///
+/// An emitter aims along its local `-Y`, which is the axis a lantern hangs pointing down. A face
+/// has to stand across that aim rather than along it, and it has to keep the head's own width axis
+/// so an oval PAR lens and a rectangular panel turn with the fixture instead of spinning in place.
+fn source_facing(pose: EmitterPose) -> Quat {
+    pose.orientation * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)
+}
+
+fn push_beam(
+    frame: &mut FrameInstances,
+    origin: Vec3,
+    pose: EmitterPose,
+    light_index: u32,
+    intensity: f32,
+    colour: Vec3,
+    apex_offset: f32,
+) {
+    // A beam stops where it lands. Without this the volumetric integral would keep scattering
+    // below the deck, because clipping the view ray against scene depth cannot tell that the
+    // light path itself is blocked.
+    // The volume is drawn to the same reach, so the edges of the beam land on the deck at the
+    // same time as its centre. Anything the cone drives through the floor is clipped by scene
+    // depth in the volumetric pass.
+    let length = beam_reach(origin, pose.direction, pose.half_angle);
+    let tangent = pose.half_angle.tan().max(0.002);
+    // The shaft leaves a lens, not a point, so the proxy is the cone this one is a frustum of:
+    // it starts at the virtual apex behind the lens and the shader drops everything in front of
+    // the lens itself.
+    let total = apex_offset + length;
+    // The unit cone points along `+Z` from its apex, so align `+Z` with the aim direction.
+    let rotation = Quat::from_rotation_arc(Vec3::Z, pose.direction);
+    let model = Mat4::from_scale_rotation_translation(
+        Vec3::new(tangent * total, tangent * total, total),
+        rotation,
+        origin - pose.direction * apex_offset,
+    );
+    frame.beams.push(BeamInstance {
+        model: model.to_cols_array_2d(),
+        colour: colour.extend(intensity).to_array(),
+        // The edge softness a beam is drawn with comes from its light, which the fragment shader
+        // reads anyway, so the fourth slot is spare.
+        params: [light_index as f32, length, apex_offset, 0.0],
+    });
+}
+
+/// Stage floor height in metres. Beams and aim lines stop here instead of running through the
+/// deck.
+pub(crate) const FLOOR_HEIGHT: f32 = 0.0;
+
+/// Throw length before the beam meets the stage floor, bounded by the maximum throw.
+/// How far the light actually reaches, which is further than the point straight below it.
+///
+/// A cone's rim lands further away than its axis does: a lamp four metres above the deck with a
+/// forty-degree field reaches its own centre at four metres and the edge of its pool at four and
+/// a half. Handing the axial distance to the shaders as the light's range culls every part of the
+/// pool except the exact centre, which is why a lamp pointing straight down showed a single dot
+/// instead of a pool.
+fn beam_reach(origin: Vec3, direction: Vec3, half_angle: f32) -> f32 {
+    let axial = beam_length(origin, direction);
+    (axial / half_angle.cos().clamp(0.2, 1.0)).min(BEAM_THROW_METRES * 1.6)
+}
+
+fn beam_length(origin: Vec3, direction: Vec3) -> f32 {
+    if direction.y >= -1e-3 {
+        return BEAM_THROW_METRES;
+    }
+    let to_floor = (FLOOR_HEIGHT - origin.y) / direction.y;
+    if to_floor <= 0.0 {
+        return BEAM_THROW_METRES;
+    }
+    to_floor.clamp(0.25, BEAM_THROW_METRES)
+}
+
+fn push_aim_line(
+    frame: &mut FrameInstances,
+    origin: Vec3,
+    pose: EmitterPose,
+    intensity: f32,
+    colour: Vec3,
+) {
+    let end =
+        origin + pose.direction * beam_length(origin, pose.direction).min(BEAM_THROW_METRES * 0.55);
+    let near = colour.extend(intensity.clamp(0.15, 1.0));
+    let far = colour.extend(0.0);
+    frame.lines.push(LineVertex {
+        position: origin.to_array(),
+        _pad: 0.0,
+        colour: near.to_array(),
+    });
+    frame.lines.push(LineVertex {
+        position: end.to_array(),
+        _pad: 0.0,
+        colour: far.to_array(),
+    });
+}
+
+mod laser;
+mod plot;
+mod scenery;
+
+#[cfg(test)]
+mod tests;

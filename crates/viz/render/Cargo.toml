@@ -1,0 +1,15 @@
+[package]
+name = "viz-render"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[dependencies]
+bytemuck.workspace = true
+glam.workspace = true
+pollster.workspace = true
+viz-scene.workspace = true
+wgpu.workspace = true
+
+[lints]
+workspace = true

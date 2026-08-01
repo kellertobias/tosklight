@@ -1,0 +1,27 @@
+[package]
+name = "viz-planning"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[dependencies]
+axum.workspace = true
+light-application = { path = "../../light" }
+light-core = { path = "../../shared/core" }
+light-fixture = { path = "../../shared/fixture" }
+light-show = { path = "../../shared/show" }
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+viz-document = { path = "../document" }
+
+[dev-dependencies]
+http-body-util.workspace = true
+tower.workspace = true
+viz-desk = { path = "../desk" }
+viz-scene = { path = "../scene" }
+
+[lints]
+workspace = true

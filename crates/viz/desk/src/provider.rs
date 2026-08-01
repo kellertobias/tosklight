@@ -1,0 +1,854 @@
+//! The lighting-desk scene provider.
+//!
+//! Two deliberately separate input planes meet here and nowhere else:
+//!
+//! - the desk API supplies scene and configuration over authenticated HTTP plus the existing
+//!   event WebSocket; and
+//! - the lighting network supplies every live output value as real Art-Net or sACN UDP.
+//!
+//! The API is never asked for live values, and the event connection is never used as a DMX
+//! transport.
+
+use crate::client::DeskClient;
+use crate::routes;
+use crate::scene_build::{self, DeskReadModels};
+use crate::wire::StageLayoutBody;
+use futures_util::StreamExt;
+use std::net::Ipv4Addr;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
+use std::time::{Duration, Instant};
+use viz_dmx::DmxReceiver;
+use viz_project::Decoder;
+use viz_scene::{
+    ConnectionState, ProviderCapabilities, ProviderDiagnostics, ProviderError, ProviderEvent,
+    ProviderKind, SceneProvider, SceneValues,
+};
+
+/// How the operator configured this connection.
+#[derive(Clone, Debug)]
+pub struct DeskConnection {
+    pub host: String,
+    pub port: u16,
+    pub user: String,
+    /// Interface the receivers bind to. `None` binds every interface.
+    pub bind_interface: Option<Ipv4Addr>,
+    /// Bounded reconnect backoff.
+    pub retry: Duration,
+    /// Operator statements about where a universe actually arrives, overriding the show's routes.
+    pub input_overrides: Vec<viz_dmx::UniverseInput>,
+    /// Which renderer this window is, for a desk driving more than one. The desk keeps a view per
+    /// target, so two renderers side by side can show two different things.
+    pub target: String,
+}
+
+impl Default for DeskConnection {
+    fn default() -> Self {
+        Self {
+            host: "127.0.0.1".into(),
+            port: 5000,
+            user: "Operator".into(),
+            bind_interface: None,
+            retry: Duration::from_secs(2),
+            input_overrides: Vec::new(),
+            target: "main".into(),
+        }
+    }
+}
+
+/// What the connection thread sends back to the render thread.
+enum Message {
+    Connection(ConnectionState),
+    /// A complete scene that replaces whatever is displayed, values and receivers included.
+    Scene {
+        plan: Box<viz_scene::Scene>,
+        bindings: Vec<viz_project::EmitterBinding>,
+        mappings: Vec<viz_dmx::InputMapping>,
+        diagnostics: Box<ProviderDiagnostics>,
+    },
+    /// The same show, re-read after a configuration change: applied in place, keeping the live
+    /// values and the sockets that are already delivering them.
+    Delta {
+        plan: Box<viz_scene::Scene>,
+        bindings: Vec<viz_project::EmitterBinding>,
+        mappings: Vec<viz_dmx::InputMapping>,
+        diagnostics: Box<ProviderDiagnostics>,
+    },
+    Diagnostics(Box<ProviderDiagnostics>),
+    /// The desk's own view for this target, as read. Converting it needs the scene, which lives
+    /// on the render thread, so the raw reading travels and the conversion happens there.
+    View(Box<DeskView>),
+    Resync(String),
+}
+
+/// The desk's view for one target, in the renderer's own vocabulary but without a camera yet.
+#[derive(Clone, Debug)]
+pub struct DeskView {
+    pub mode: viz_scene::ViewMode,
+    pub quality: viz_scene::RenderQuality,
+    /// Absent means the desk has no opinion about where the camera stands, and the renderer
+    /// frames the named view from the rig itself.
+    pub camera: Option<viz_scene::Camera>,
+    pub exposure: f32,
+    pub ambient: f32,
+    pub revision: u64,
+}
+
+/// Commands the render thread sends to the connection thread.
+///
+/// Stopping is a shared flag rather than a message: a message can only be consumed once, and the
+/// connection thread reads its inbox from more than one place, so a consumed stop would leave the
+/// worker reconnecting after shutdown.
+enum Command {
+    Resync,
+}
+
+pub struct DeskProvider {
+    connection: DeskConnection,
+    inbox: Receiver<Message>,
+    commands: Sender<Command>,
+    stop: Arc<AtomicBool>,
+    worker: Option<std::thread::JoinHandle<()>>,
+    receivers: Option<DmxReceiver>,
+    decoder: Option<Decoder>,
+    scene: Option<viz_scene::Scene>,
+    values: SceneValues,
+    diagnostics: ProviderDiagnostics,
+    epoch: Instant,
+    /// What the running receivers were started with, so a delta only rebinds them when the show
+    /// actually moved a universe somewhere else.
+    mappings: Vec<viz_dmx::InputMapping>,
+    /// Emitted once per scene so the host can display it before DMX arrives.
+    pending_snapshot: bool,
+    /// Emitted once per applied delta, after the scene has been replaced in place.
+    pending_delta: bool,
+    /// The desk's own view for this target, once it has said. `None` while the desk has no
+    /// opinion, which is also what a desk too old to have one leaves behind.
+    view: Option<DeskView>,
+    /// Emitted once per view the desk sends, so an operator's local selection is only replaced
+    /// when the desk actually says something.
+    pending_view: bool,
+    /// Newest accepted packet already reported to the host.
+    reported_input_micros: u64,
+    value_frame: u64,
+}
+
+impl DeskProvider {
+    pub fn start(connection: DeskConnection, epoch: Instant) -> Self {
+        let (outbox, inbox) = channel();
+        let (commands, orders) = channel();
+        let worker_connection = connection.clone();
+        let stop = Arc::new(AtomicBool::new(false));
+        let worker_stop = stop.clone();
+        let worker = std::thread::Builder::new()
+            .name("viz-desk".into())
+            .spawn(move || run(worker_connection, outbox, orders, worker_stop))
+            .ok();
+        Self {
+            connection,
+            inbox,
+            commands,
+            stop,
+            worker,
+            receivers: None,
+            decoder: None,
+            scene: None,
+            values: SceneValues::default(),
+            diagnostics: ProviderDiagnostics::default(),
+            epoch,
+            mappings: Vec::new(),
+            pending_snapshot: false,
+            pending_delta: false,
+            view: None,
+            pending_view: false,
+            reported_input_micros: 0,
+            value_frame: 0,
+        }
+    }
+
+    fn adopt_scene(
+        &mut self,
+        scene: viz_scene::Scene,
+        bindings: Vec<viz_project::EmitterBinding>,
+        mappings: Vec<viz_dmx::InputMapping>,
+        diagnostics: ProviderDiagnostics,
+    ) {
+        // Replace receivers first so no frame from the previous scene reaches the new bindings.
+        if let Some(mut receivers) = self.receivers.take() {
+            receivers.shutdown();
+        }
+        let decoder = Decoder::new(bindings);
+        let mappings = self.resolved_mappings(mappings, &decoder);
+        self.receivers = Some(DmxReceiver::start(mappings.clone(), self.epoch));
+        self.mappings = mappings;
+        self.decoder = Some(decoder);
+        self.values = SceneValues::default();
+        self.values.resize(scene.emitters.len());
+        self.reported_input_micros = 0;
+        self.scene = Some(scene);
+        self.diagnostics = diagnostics;
+        self.pending_snapshot = true;
+        self.pending_delta = false;
+    }
+
+    /// Apply a re-read of the same show without interrupting anything that is working.
+    ///
+    /// A fixture moved, renamed, repatched or added is a configuration change, not a new show.
+    /// The sockets stay open unless the show actually moved a universe somewhere else, and every
+    /// head that still exists keeps the level and colour it is being sent — a rig edited during a
+    /// running show must not blink.
+    fn apply_delta(
+        &mut self,
+        scene: viz_scene::Scene,
+        bindings: Vec<viz_project::EmitterBinding>,
+        mappings: Vec<viz_dmx::InputMapping>,
+        diagnostics: ProviderDiagnostics,
+    ) {
+        let Some(previous) = self.scene.take() else {
+            // Nothing is displayed yet, so there is nothing to preserve.
+            self.adopt_scene(scene, bindings, mappings, diagnostics);
+            return;
+        };
+        let decoder = Decoder::new(bindings);
+        let mappings = self.resolved_mappings(mappings, &decoder);
+        if mappings != self.mappings || self.receivers.is_none() {
+            if let Some(mut receivers) = self.receivers.take() {
+                receivers.shutdown();
+            }
+            self.receivers = Some(DmxReceiver::start(mappings.clone(), self.epoch));
+            self.mappings = mappings;
+            self.reported_input_micros = 0;
+        } else if let Some(receivers) = &self.receivers {
+            // The bindings are new; every held universe has to be decoded through them again.
+            receivers.refresh_all();
+        }
+        self.values.carry_over(&previous, &scene);
+        self.decoder = Some(decoder);
+        self.scene = Some(scene);
+        self.diagnostics = diagnostics;
+        self.pending_delta = true;
+    }
+
+    /// The desk's view as the renderer applies it.
+    ///
+    /// A desk that names a mode but no camera is asking for that view of this rig, so the camera
+    /// is framed from the scene rather than left wherever the last one stood.
+    fn effective_view(&self) -> Option<viz_scene::ViewConfiguration> {
+        let view = self.view.as_ref()?;
+        let bounds = self
+            .scene
+            .as_ref()
+            .map(viz_scene::Scene::framing_bounds)
+            .unwrap_or_default();
+        Some(viz_scene::ViewConfiguration {
+            mode: view.mode,
+            camera: view
+                .camera
+                .unwrap_or_else(|| viz_scene::Camera::framed(view.mode, bounds)),
+            quality: view.quality,
+            exposure: view.exposure,
+            ambient: view.ambient,
+            ..viz_scene::ViewConfiguration::default()
+        })
+    }
+
+    /// The mappings the receivers are actually started with: the show's own, the defaults when it
+    /// configures none, and the operator's overrides on top of either.
+    fn resolved_mappings(
+        &self,
+        mappings: Vec<viz_dmx::InputMapping>,
+        decoder: &Decoder,
+    ) -> Vec<viz_dmx::InputMapping> {
+        let mappings = if mappings.is_empty() {
+            routes::default_mappings(
+                &decoder.required_universes(),
+                self.connection.bind_interface,
+            )
+        } else {
+            mappings
+        };
+        viz_dmx::apply_overrides(
+            mappings,
+            &self.connection.input_overrides,
+            self.connection.bind_interface,
+        )
+    }
+}
+
+impl SceneProvider for DeskProvider {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            kind: ProviderKind::LightingDesk,
+            available: true,
+            unavailable_reason: None,
+            default_host: "127.0.0.1".into(),
+            default_port: 5000,
+            uses_network_input: true,
+        }
+    }
+
+    fn poll(&mut self) -> Vec<ProviderEvent> {
+        let mut events = Vec::new();
+        loop {
+            match self.inbox.try_recv() {
+                Ok(Message::Connection(state)) => {
+                    events.push(ProviderEvent::Connection(state));
+                }
+                Ok(Message::Scene {
+                    plan,
+                    bindings,
+                    mappings,
+                    diagnostics,
+                }) => {
+                    self.adopt_scene(*plan, bindings, mappings, *diagnostics);
+                }
+                Ok(Message::Delta {
+                    plan,
+                    bindings,
+                    mappings,
+                    diagnostics,
+                }) => {
+                    self.apply_delta(*plan, bindings, mappings, *diagnostics);
+                }
+                Ok(Message::Diagnostics(diagnostics)) => {
+                    self.diagnostics = *diagnostics;
+                }
+                Ok(Message::View(view)) => {
+                    let changed = self
+                        .view
+                        .as_ref()
+                        .is_none_or(|current| current.revision != view.revision);
+                    self.view = Some(*view);
+                    // A re-read that says what the renderer is already doing is not an
+                    // instruction, and must not take the camera back off the operator.
+                    self.pending_view = changed;
+                }
+                Ok(Message::Resync(reason)) => {
+                    events.push(ProviderEvent::ResyncRequired { reason });
+                }
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    events.push(ProviderEvent::Connection(ConnectionState::Failed {
+                        boundary: "desk connection".into(),
+                        detail: "the connection worker stopped".into(),
+                    }));
+                    break;
+                }
+            }
+        }
+
+        if self.pending_snapshot
+            && let Some(scene) = &self.scene
+        {
+            self.pending_snapshot = false;
+            let view = self.effective_view();
+            self.pending_view = false;
+            events.push(ProviderEvent::Snapshot {
+                scene: Box::new(scene.clone()),
+                view,
+            });
+        }
+
+        if self.pending_view {
+            self.pending_view = false;
+            if let Some(view) = self.effective_view() {
+                events.push(ProviderEvent::View(view));
+            }
+        }
+
+        if self.pending_delta
+            && let Some(scene) = &self.scene
+        {
+            self.pending_delta = false;
+            events.push(ProviderEvent::SceneDelta(Box::new(scene.clone())));
+        }
+
+        // Live values come only from the network.
+        if let (Some(receivers), Some(decoder), Some(scene)) =
+            (&self.receivers, &mut self.decoder, &self.scene)
+        {
+            let frames = receivers.drain_changed();
+            let elapsed = self.epoch.elapsed().as_secs_f32();
+            if !frames.is_empty() {
+                decoder.apply(scene, &frames, &mut self.values, elapsed);
+            }
+            // A held look still arrives at full rate, so the newest accepted packet — not the
+            // newest content change — is what the presented frame is measured against.
+            let newest = receivers.newest_accepted_micros();
+            if newest > self.reported_input_micros {
+                self.reported_input_micros = newest;
+                self.value_frame += 1;
+                self.values.newest_input_micros = newest;
+                self.values.frame = self.value_frame;
+                events.push(ProviderEvent::Values(Box::new(self.values.clone())));
+            }
+            let mut diagnostics = self.diagnostics.clone();
+            diagnostics.inputs = receivers.status();
+            diagnostics.universes = receivers.universes();
+            self.diagnostics = diagnostics.clone();
+            events.push(ProviderEvent::Diagnostics(Box::new(diagnostics)));
+        }
+        events
+    }
+
+    fn request_resync(&mut self) {
+        let _ = self.commands.send(Command::Resync);
+    }
+
+    fn shutdown(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(mut receivers) = self.receivers.take() {
+            receivers.shutdown();
+        }
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+    }
+}
+
+/// The connection thread: HTTP reads and the event subscription, never live values.
+fn run(
+    connection: DeskConnection,
+    outbox: Sender<Message>,
+    orders: Receiver<Command>,
+    stop: Arc<AtomicBool>,
+) {
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            let _ = outbox.send(Message::Connection(ConnectionState::Failed {
+                boundary: "connection runtime".into(),
+                detail: error.to_string(),
+            }));
+            return;
+        }
+    };
+    runtime.block_on(async move {
+        let mut backoff = connection.retry;
+        loop {
+            if stop.load(Ordering::Relaxed) {
+                return;
+            }
+            match orders.try_recv() {
+                Err(TryRecvError::Disconnected) => return,
+                Ok(Command::Resync) | Err(TryRecvError::Empty) => {}
+            }
+            match connect_once(&connection, &outbox, &orders, &stop).await {
+                Ok(()) => {
+                    backoff = connection.retry;
+                }
+                Err(error) => {
+                    let _ = outbox.send(Message::Connection(ConnectionState::Failed {
+                        boundary: error.boundary.into(),
+                        detail: error.detail.clone(),
+                    }));
+                    if !error.retryable {
+                        // Still retry, but slowly: the operator may fix the desk at any time.
+                        backoff = (backoff * 2).min(Duration::from_secs(15));
+                    }
+                }
+            }
+            // Sleep in short slices so shutdown is prompt even during a long backoff.
+            let deadline = std::time::Instant::now() + backoff;
+            while std::time::Instant::now() < deadline {
+                if stop.load(Ordering::Relaxed) {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            backoff = (backoff + connection.retry).min(Duration::from_secs(10));
+        }
+    });
+}
+
+async fn connect_once(
+    connection: &DeskConnection,
+    outbox: &Sender<Message>,
+    orders: &Receiver<Command>,
+    stop: &AtomicBool,
+) -> Result<(), ProviderError> {
+    let endpoint = format!("http://{}:{}", connection.host, connection.port);
+    let _ = outbox.send(Message::Connection(ConnectionState::Resolving {
+        endpoint: endpoint.clone(),
+    }));
+    let mut client = DeskClient::new(&connection.host, connection.port)?;
+    let readiness = client.readiness().await?;
+    if readiness.status != "ready" {
+        // A source with nothing loaded is not a broken source. An editor whose operator has not
+        // opened a document yet answers exactly like this, and saying "readiness failed" about it
+        // is both wrong and alarming — so it is reported as what it is and retried quietly.
+        if readiness.active_show.is_none() && readiness.active_show_error.is_none() {
+            let _ = outbox.send(Message::Connection(ConnectionState::WaitingForShow {
+                endpoint: endpoint.clone(),
+            }));
+            return Ok(());
+        }
+        return Err(ProviderError::new(
+            "server readiness",
+            format!(
+                "the desk reports {}{}",
+                readiness.status,
+                readiness
+                    .active_show_error
+                    .map(|error| format!(": {error}"))
+                    .unwrap_or_default()
+            ),
+            true,
+        ));
+    }
+
+    let _ = outbox.send(Message::Connection(ConnectionState::Authenticating {
+        endpoint: endpoint.clone(),
+    }));
+    let read_only = client.open_session(&connection.user).await?;
+
+    let _ = outbox.send(Message::Connection(ConnectionState::LoadingScene {
+        endpoint: endpoint.clone(),
+    }));
+    let (plan, mappings, mut diagnostics) = read_scene(&client, &endpoint, connection).await?;
+    if !read_only {
+        diagnostics.warnings.push(
+            "This desk does not support the read-only visualizer role; the renderer still never \
+             writes."
+                .into(),
+        );
+    }
+    if let Some(view) = read_view(&client, connection).await {
+        let _ = outbox.send(Message::View(Box::new(view)));
+    }
+    let revision = plan.scene.revision;
+    let _ = outbox.send(Message::Scene {
+        plan: Box::new(plan.scene),
+        bindings: plan.bindings,
+        mappings,
+        diagnostics: Box::new(diagnostics),
+    });
+    let _ = outbox.send(Message::Connection(ConnectionState::Connected {
+        endpoint: endpoint.clone(),
+        revision,
+    }));
+
+    watch(&client, &endpoint, connection, outbox, orders, stop).await;
+    client.close_session().await;
+    Ok(())
+}
+
+/// One coherent read of the show: the scene, where its universes arrive, and what to say about
+/// both. The first connection and every later re-read go through here, so a delta cannot drift
+/// from the snapshot it is amending.
+async fn read_scene(
+    client: &DeskClient,
+    endpoint: &str,
+    connection: &DeskConnection,
+) -> Result<
+    (
+        viz_project::ScenePlan,
+        Vec<viz_dmx::InputMapping>,
+        ProviderDiagnostics,
+    ),
+    ProviderError,
+> {
+    let models = read_models(client, endpoint).await?;
+    // Output routes are stored as show objects of kind `route`.
+    let route_objects = client.objects("route").await?.objects;
+    let plan = scene_build::build(&models);
+    let mappings = routes::mappings(&route_objects, connection.bind_interface);
+    let mut diagnostics = ProviderDiagnostics {
+        endpoint: endpoint.to_owned(),
+        resolved_address: endpoint.to_owned(),
+        authenticated: client.token().is_some(),
+        show_identity: format!("{} ({})", models.show_name, models.patch.show_id),
+        scene_revision: plan.scene.revision,
+        interface: connection
+            .bind_interface
+            .map(|address| address.to_string())
+            .unwrap_or_else(|| "all interfaces".into()),
+        inputs: Vec::new(),
+        universes: Vec::new(),
+        warnings: plan.warnings.clone(),
+    };
+    if mappings.is_empty() {
+        diagnostics.warnings.push(
+            "The show configures no output routes; listening on the Art-Net and sACN defaults."
+                .into(),
+        );
+    }
+    Ok((plan, mappings, diagnostics))
+}
+
+async fn read_models(client: &DeskClient, endpoint: &str) -> Result<DeskReadModels, ProviderError> {
+    let patch = client.patch().await?;
+    let stage_layout = client
+        .objects("stage_layout")
+        .await?
+        .objects
+        .into_iter()
+        .find(|object| object.id == "main")
+        .and_then(|object| serde_json::from_value::<StageLayoutBody>(object.body).ok())
+        .unwrap_or_default();
+    let venue_objects = client
+        .objects("venue")
+        .await
+        .map(|collection| collection.objects)
+        .unwrap_or_default();
+    Ok(DeskReadModels {
+        show_name: patch.show_id.to_string(),
+        server_identity: endpoint.to_owned(),
+        patch,
+        stage_layout,
+        venue_objects,
+    })
+}
+
+/// Subscribe to revisioned configuration changes and apply them to the running scene.
+///
+/// A configuration change is re-read over the connection that is already open and sent on as a
+/// delta: the socket stays up, the session stays open, the receivers keep delivering, and the
+/// values are carried across. Only a change of show — or a re-read that fails — goes back through
+/// the full reconnect, because then the values genuinely belong to something else.
+async fn watch(
+    client: &DeskClient,
+    endpoint: &str,
+    connection: &DeskConnection,
+    outbox: &Sender<Message>,
+    orders: &Receiver<Command>,
+    stop: &AtomicBool,
+) {
+    use futures_util::SinkExt;
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    use tokio_tungstenite::tungstenite::http::header::SEC_WEBSOCKET_PROTOCOL;
+
+    let Some(token) = client.token() else {
+        return;
+    };
+    let url = endpoint
+        .replacen("http://", "ws://", 1)
+        .replacen("https://", "wss://", 1);
+    let Ok(mut request) = format!("{url}/api/v2/events").into_client_request() else {
+        return;
+    };
+    let protocols = format!("light.events.v2, light.v2, light.token.{token}");
+    if let Ok(value) = protocols.parse() {
+        request.headers_mut().insert(SEC_WEBSOCKET_PROTOCOL, value);
+    }
+    let Ok((mut socket, _)) = tokio_tungstenite::connect_async(request).await else {
+        let _ = outbox.send(Message::Diagnostics(Box::new(ProviderDiagnostics {
+            endpoint: endpoint.to_owned(),
+            warnings: vec![
+                "The configuration event stream is unavailable; press R to resynchronise.".into(),
+            ],
+            ..ProviderDiagnostics::default()
+        })));
+        return;
+    };
+
+    // A desk delivers events to a subscriber, not to whoever opens the socket: the first frame
+    // has to say what this client wants, or the desk answers with an error and closes. Everything
+    // the renderer follows is a projection of the show or of the desk's own configuration.
+    let subscribe = serde_json::json!({
+        "type": "subscribe",
+        "filter": {"capabilities": ["show", "desk"], "classes": ["projection"]},
+        "capacity": 128,
+        "rate_limits": [],
+    });
+    if socket
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            subscribe.to_string().into(),
+        ))
+        .await
+        .is_err()
+    {
+        let _ = outbox.send(Message::Connection(ConnectionState::Stale {
+            endpoint: endpoint.to_owned(),
+            reason: "the configuration event stream would not take a subscription".into(),
+        }));
+        return;
+    }
+
+    loop {
+        if stop.load(Ordering::Relaxed) {
+            return;
+        }
+        match orders.try_recv() {
+            Err(TryRecvError::Disconnected) => return,
+            Ok(Command::Resync) => {
+                let _ = outbox.send(Message::Resync("operator requested".into()));
+                return;
+            }
+            Err(TryRecvError::Empty) => {}
+        }
+        let next = tokio::time::timeout(Duration::from_millis(500), socket.next()).await;
+        let Ok(Some(Ok(message))) = next else {
+            if next.is_err() {
+                continue;
+            }
+            let _ = outbox.send(Message::Connection(ConnectionState::Stale {
+                endpoint: endpoint.to_owned(),
+                reason: "the configuration event stream closed".into(),
+            }));
+            return;
+        };
+        let Ok(text) = message.into_text() else {
+            continue;
+        };
+        let Some(frame) = crate::wire::EventFrame::parse(&text) else {
+            continue;
+        };
+        // A different show is a different scene: its values, mappings and identity all change
+        // together, so it is staged as a whole rather than merged into what is displayed.
+        if replaces_the_show(&frame.kind) {
+            let _ = outbox.send(Message::Resync(format!("{} changed the scene", frame.kind)));
+            return;
+        }
+        // The desk moving a camera is not a change of rig: nothing is re-read but the view.
+        if view_affecting(&frame.kind) {
+            if let Some(view) = read_view(client, connection).await {
+                let _ = outbox.send(Message::View(Box::new(view)));
+            }
+            continue;
+        }
+        if !scene_affecting(&frame.kind) {
+            continue;
+        }
+        match read_scene(client, endpoint, connection).await {
+            Ok((plan, mappings, diagnostics)) => {
+                let _ = outbox.send(Message::Delta {
+                    plan: Box::new(plan.scene),
+                    bindings: plan.bindings,
+                    mappings,
+                    diagnostics: Box::new(diagnostics),
+                });
+            }
+            Err(error) => {
+                // The re-read is the only thing that failed; the displayed scene is still the
+                // last good one, so this asks for the full path rather than pretending.
+                let _ = outbox.send(Message::Resync(format!(
+                    "{} changed the scene, and re-reading it failed: {}",
+                    frame.kind, error.detail
+                )));
+                return;
+            }
+        }
+    }
+}
+/// Event kinds that may carry a new view for this renderer.
+///
+/// The desk publishes its view under its own configuration capability, so a renderer hears it on
+/// the stream it is already following. Re-reading one small object on any desk-configuration
+/// change is cheaper than a second subscription, and the view is only applied when its revision
+/// actually moved.
+fn view_affecting(kind: &str) -> bool {
+    matches!(
+        kind,
+        "server_configuration_changed" | "visualizer_view_changed"
+    )
+}
+
+/// The desk's view for this renderer's target.
+///
+/// A desk with nothing to say — including one too old to have a view at all — leaves the
+/// operator's own selection alone, so this answers `None` rather than a default that would take
+/// the camera away from them.
+async fn read_view(client: &DeskClient, connection: &DeskConnection) -> Option<DeskView> {
+    let snapshot = client.visualizer_views().await?;
+    let view = snapshot
+        .views
+        .into_iter()
+        .find(|view| view.target.eq_ignore_ascii_case(&connection.target))?;
+    Some(DeskView {
+        mode: viz_scene::ViewMode::from_wire(&view.mode)?,
+        quality: viz_scene::RenderQuality::from_wire(&view.quality)
+            .unwrap_or(viz_scene::RenderQuality::High),
+        camera: view.camera.map(|camera| viz_scene::Camera {
+            position: camera.position.into(),
+            target: camera.target.into(),
+            up: camera.up.into(),
+            fov_degrees: camera.fov_degrees,
+            orthographic_size: camera.orthographic_size,
+        }),
+        exposure: view.exposure,
+        ambient: view.ambient,
+        revision: view.revision,
+    })
+}
+
+/// Event kinds that change what the renderer must display.
+///
+/// A desk names the change in the payload of its typed envelope; the planning window names it on
+/// its own and uses the desk's older spellings. Both vocabularies are listed, because the renderer
+/// connects to both and neither is wrong.
+fn scene_affecting(kind: &str) -> bool {
+    matches!(
+        kind,
+        "show_patch_changed"
+            | "show_objects_changed"
+            | "show_object_changed"
+            | "output_route_changed"
+            | "fixture_library_changed"
+    ) || replaces_the_show(kind)
+}
+
+/// Event kinds that put a different show in front of the renderer.
+///
+/// These are the ones the values cannot survive: the fixtures they belonged to are gone, and the
+/// universes they arrived on may now mean something else. A library change that is not an open —
+/// a rename, a rollback — is rare enough that staging the show whole costs nothing worth saving.
+fn replaces_the_show(kind: &str) -> bool {
+    matches!(
+        kind,
+        "show_library_changed" | "active_show_changed" | "show_loaded"
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scene_affecting_events_are_the_configuration_ones_only() {
+        assert!(scene_affecting("show_patch_changed"));
+        assert!(scene_affecting("active_show_changed"));
+        // Live output must never arrive through the event subscription.
+        assert!(!scene_affecting("output_frame"));
+        assert!(!scene_affecting("programmer_changed"));
+        assert!(!scene_affecting("playback_changed"));
+    }
+
+    /// An edit to the loaded show is applied in place; a different show is staged whole.
+    #[test]
+    fn only_a_change_of_show_costs_the_displayed_values() {
+        assert!(replaces_the_show("show_library_changed"));
+        assert!(replaces_the_show("active_show_changed"));
+        assert!(!replaces_the_show("show_patch_changed"));
+        assert!(!replaces_the_show("show_objects_changed"));
+        assert!(!replaces_the_show("output_route_changed"));
+        assert!(!replaces_the_show("fixture_library_changed"));
+        for kind in [
+            "show_patch_changed",
+            // What a desk actually publishes when a show object is written.
+            "show_objects_changed",
+            // What the planning window publishes for the same thing.
+            "show_object_changed",
+            "output_route_changed",
+            "fixture_library_changed",
+        ] {
+            assert!(
+                scene_affecting(kind),
+                "{kind} must still reach the delta path"
+            );
+        }
+    }
+
+    /// The view arrives on the desk's own configuration capability, not on a stream of its own.
+    #[test]
+    fn the_view_follows_desk_configuration_and_nothing_else() {
+        assert!(view_affecting("server_configuration_changed"));
+        assert!(view_affecting("visualizer_view_changed"));
+        assert!(!view_affecting("show_patch_changed"));
+        assert!(!view_affecting("output_frame"));
+    }
+}
