@@ -304,7 +304,8 @@ lighting instances, 33 visual-only Venue records, 264 total patch records, 306 p
 instances, and 2,988 occupied DMX slots. The Fixture Patch uses one `Conventional Light` layer for
 the dimmer-rack population. Repeated truss work runs at the accelerated interaction pace after
 the first complete truss, and the fixture-mode dropdown renders `No DMX` as a smaller muted
-annotation.
+annotation. During the remaining lighting fast-forward, the Patch view selects each destination
+layer immediately before that fixture batch appears.
 
 Focused manifest, patch, Group, Playback, and Fixture Patch tests passed, as did the production
 frontend build, the generated-show acceptance, and a complete 2.8-minute non-recording product

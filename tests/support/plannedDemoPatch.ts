@@ -65,6 +65,10 @@ export async function installPlannedDemoPatch(
 	layers: Readonly<Record<string, string>>,
 	options: {
 		progressive?: boolean;
+		onBeforeItem?: (item: {
+			fixtureNumber: number;
+			layerId: string;
+		}) => Promise<void>;
 		onItem?: () => Promise<void>;
 		configuration?: PlannedDemoPatchConfiguration;
 	} = {},
@@ -109,6 +113,12 @@ export async function installPlannedDemoPatch(
 				.map((fixture) => [fixture])
 		: [adopted];
 	for (const batch of batches) {
+		const fixture = batch[0];
+		if (options.progressive && fixture)
+			await options.onBeforeItem?.({
+				fixtureNumber: fixture.fixture_number,
+				layerId: fixture.layer_id,
+			});
 		const current = await api.patch();
 		await api.request(
 			"POST",
@@ -427,7 +437,6 @@ function layerFor(
 	entry: DemoFixtureManifestEntry,
 	layers: Readonly<Record<string, string>>,
 ) {
-	const name = entry.name;
 	const location =
 		entry.location === "stage"
 			? "Stage"

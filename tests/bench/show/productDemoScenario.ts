@@ -675,12 +675,24 @@ export class BrowserProductDemo {
 			const canonical = await desk.fastForward(
 				"Patching the rest of the lighting show and reconciling the complete Stage layout.",
 				async () => {
+					let visibleLayerId: string | undefined;
+					const layerNameById = new Map(
+						Object.entries(layers).map(([name, id]) => [id, name]),
+					);
 					const scenery = await installPlannedDemoScenery(api, showId, layers, {
 						backCurtain: PRODUCT_DEMO_SCRIPT.patch.backCurtain,
 					});
 					const patch = await installPlannedDemoPatch(api, showId, layers, {
 						progressive: true,
 						configuration: PRODUCT_DEMO_SCRIPT.patch,
+						onBeforeItem: async ({ layerId }) => {
+							if (layerId === visibleLayerId) return;
+							const layerName = layerNameById.get(layerId);
+							if (!layerName)
+								throw new Error(`Missing visible Patch layer for ${layerId}`);
+							await selectPatchLayer(desk, patchWindow, layerName, false);
+							visibleLayerId = layerId;
+						},
 						onItem: () =>
 							RECORDING
 								? page.waitForTimeout(
@@ -707,7 +719,8 @@ export class BrowserProductDemo {
 			await expect(patchWindow.locator(".ui-window-info")).toContainText(
 				`${PLANNED_DEMO_TOTAL_FIXTURE_RECORDS} fixtures`,
 			);
-			await expect(fixtureRow(patchWindow, 101)).toBeVisible();
+			await expect(fixtureRow(patchWindow, 417)).toBeVisible();
+			await expect(fixtureRow(patchWindow, 101)).toHaveCount(0);
 			await configureOutput(desk, page, app, bench, api, showId);
 			performanceBaseline = await captureProductDemoPerformance(page);
 			await buildGroups(
@@ -2122,10 +2135,12 @@ async function selectPatchLayer(
 	desk: DeskDriver,
 	patchWindow: Locator,
 	name: string,
+	describe = true,
 ) {
-	await desk.setDemoAction(
-		`Select the ${name} layer before adding its fixtures.`,
-	);
+	if (describe)
+		await desk.setDemoAction(
+			`Select the ${name} layer before adding its fixtures.`,
+		);
 	await desk.click(
 		patchWindow
 			.locator(".patch-layers button")

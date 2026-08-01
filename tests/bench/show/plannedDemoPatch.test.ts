@@ -135,6 +135,31 @@ describe("Plan 76 patch builder", () => {
 		).toBe(true);
 	});
 
+	it("orders progressive patching in visible layer batches", () => {
+		const built = createPlannedDemoPatchInputs(profiles, layers);
+		const layerNameById = new Map(
+			Object.entries(layers).map(([name, id]) => [id, name]),
+		);
+		const visibleLayerSequence = built.fixtures
+			.map((fixture) => layerNameById.get(fixture.layer_id))
+			.filter(
+				(layer, index, sequence) =>
+					index === 0 || layer !== sequence[index - 1],
+			);
+		expect(visibleLayerSequence).toEqual([
+			"Conventional Light",
+			"LED PAR Stage",
+			"Profile Stage",
+			"Wash Stage",
+			"Profile Audience",
+			"Wash Audience",
+			"LED PAR Audience",
+			"Profile Auxilliary",
+			"Wash Auxilliary",
+			"LED PAR Auxilliary",
+		]);
+	});
+
 	it("uses the literal two-rack conventional patch and true multipatch policy", () => {
 		const built = createPlannedDemoPatchInputs(profiles, layers);
 		const byNumber = new Map(
