@@ -1091,6 +1091,41 @@ describe("CuelistWindow topology-backed Cuelist settings", () => {
 describe("CuelistWindow pool recording", () => {
 	beforeEach(resetCuelistWindowMocks);
 
+	it("renders only explicitly configured Cuelist presentation icons", async () => {
+		mocks.state.storeArmed = false;
+		mocks.playbacks.pool = [
+			{
+				number: 1,
+				name: "No icon",
+				target: { type: "cue_list", cue_list_id: "main" },
+				buttons: ["go", "go_minus", "flash"],
+				fader: "master",
+				go_activates: true,
+				auto_off: true,
+				xfade_millis: 0,
+			},
+			{
+				number: 2,
+				name: "Explicit icon",
+				target: { type: "cue_list", cue_list_id: "encore" },
+				buttons: ["go", "go_minus", "flash"],
+				fader: "master",
+				go_activates: true,
+				auto_off: true,
+				xfade_millis: 0,
+				presentation_icon: "★",
+			},
+		];
+		const authority = createCommandLineTestAuthority();
+		const { container } = render(
+			authority.wrap(<CuelistWindow compact cueListTab="pool" />),
+		);
+		await act(authority.settle);
+		const cards = container.querySelectorAll(".cuelist-card");
+		expect(cards[0].querySelector(".pool-card-icon")).toBeNull();
+		expect(cards[1].querySelector(".pool-card-icon")).toHaveTextContent("★");
+	});
+
 	it("renders empty numbered slots and records into the touched slot", async () => {
 		const authority = createCommandLineTestAuthority({ text: "STORE" });
 		render(authority.wrap(<CuelistWindow compact cueListTab="pool" />));

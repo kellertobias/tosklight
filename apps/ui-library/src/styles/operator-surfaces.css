@@ -1674,7 +1674,7 @@
 	border-style: dashed;
 	border-color: color-mix(
 		in srgb,
-		var(--pool-card-resolved-color) 48%,
+		var(--pool-card-resolved-color) 34%,
 		var(--line2)
 	);
 	background: color-mix(in srgb, var(--pool-card-resolved-color) 3%, var(--bg));

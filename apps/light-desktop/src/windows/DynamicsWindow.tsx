@@ -530,7 +530,7 @@ function DynamicPoolTile({
 						]
 					: [],
 				status: validationError || status?.warning ? "⚠" : undefined,
-				icon: dynamic?.body.icon ?? "∿",
+				icon: dynamic?.body.icon,
 				iconColor: dynamic?.body.color ?? "#4edcff",
 				color: dynamic?.body.color ?? "#4edcff",
 				kind: "generic",

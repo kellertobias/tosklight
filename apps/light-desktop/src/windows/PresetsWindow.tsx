@@ -81,7 +81,7 @@ function activatePreset(options: PresetActivationOptions) {
 		const saved = customizations[id] ?? {};
 		options.onConfigure(index, {
 			title: saved.title ?? preset?.body.name ?? `Preset ${index + 1}`,
-			icon: saved.icon ?? preset?.body.icon ?? "◇",
+			icon: saved.icon ?? preset?.body.icon,
 			color:
 				saved.color ?? preset?.body.color ?? INDIVIDUAL_POOL_COLOR_FALLBACK,
 		});

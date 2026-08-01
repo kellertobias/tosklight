@@ -121,6 +121,7 @@ describe("PresetsWindow normal recording boundary", () => {
 		expect(cards[4]).toHaveTextContent("Lavender");
 		expect(cards[4]).toHaveTextContent("5");
 		expect(cards[4]).toHaveAttribute("data-pool-slot-id", "2.5");
+		expect(cards[4].querySelector(".pool-card-icon")).toBeNull();
 		expect(cards[199]).toHaveAttribute("data-pool-slot-id", "2.200");
 	});
 

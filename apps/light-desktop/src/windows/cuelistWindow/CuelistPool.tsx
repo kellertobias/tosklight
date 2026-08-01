@@ -98,6 +98,13 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 						]
 					: undefined,
 				color: playback?.color,
+				icon: playback?.presentation_icon,
+				image: playback?.presentation_image
+					? {
+							src: playback.presentation_image,
+							alt: `${playback.name} presentation`,
+						}
+					: undefined,
 				kind: "cuelist",
 				status:
 					runtimeMaster != null

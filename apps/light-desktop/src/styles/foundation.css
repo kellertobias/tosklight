@@ -1317,6 +1317,48 @@ button {
 	display: block;
 	color: var(--muted);
 }
+.setup-show-summary {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+}
+.setup-show-summary > section {
+	display: grid;
+	align-content: start;
+	gap: 7px;
+	min-width: 0;
+	padding: 12px;
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	background: var(--panel2);
+}
+.setup-show-summary > section > span {
+	font-size: 17px;
+}
+.setup-show-summary small {
+	display: block;
+	color: var(--muted);
+}
+.setup-show-summary small.is-connected {
+	color: var(--green);
+}
+.network-settings-group {
+	margin-top: 10px;
+	padding: 12px;
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	background: var(--panel2);
+}
+.network-settings-group > h3 {
+	margin: 0 0 12px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--line);
+	color: var(--cyan);
+	font-size: 15px;
+}
+.network-settings-group .network-input-list {
+	margin-top: 0;
+}
 .modal-backdrop {
 	position: fixed;
 	z-index: 200;

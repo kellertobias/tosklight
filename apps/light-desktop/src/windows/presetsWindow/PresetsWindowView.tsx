@@ -312,7 +312,7 @@ export function PresetCustomizationDialog({
 						/>
 						<IconPickerField
 							label="Icon"
-							value={draft.icon ?? "◇"}
+							value={draft.icon ?? ""}
 							onChange={(icon) => onDraft({ ...draft, icon })}
 						/>
 						<ColorPickerField

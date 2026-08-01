@@ -290,7 +290,7 @@ function DynamicGeneralSettings({
 			/>
 			<IconPickerField
 				label="Icon"
-				value={dynamic.body.icon ?? "∿"}
+				value={dynamic.body.icon ?? ""}
 				onChange={(icon) => void onMutate(dynamic, { type: "set_icon", icon })}
 			/>
 			<ColorPickerField

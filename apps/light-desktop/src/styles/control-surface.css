@@ -909,6 +909,12 @@
 	align-content: start;
 	gap: 9px;
 }
+.screen-settings-note {
+	margin: 0;
+	color: var(--muted);
+	font-size: 12px;
+	line-height: 1.4;
+}
 .fixed-screen-pane-settings {
 	display: grid;
 	gap: 8px;

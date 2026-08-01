@@ -180,6 +180,27 @@ describe("DynamicsWindow", () => {
 		speedGroupAction.mockReset().mockResolvedValue({});
 	});
 
+	it("does not manufacture an icon for a new or iconless Dynamic", () => {
+		const body = createDefaultDynamicDefinition(7, "intensity", {
+			definition: "dynamic-7",
+			lane: "lane-7",
+		});
+		expect(body.icon).toBeUndefined();
+		dynamics = [
+			{
+				kind: "dynamic",
+				id: "dynamic-7",
+				revision: 1,
+				updated_at: "",
+				body,
+			},
+		];
+		const { container } = renderWindow();
+		expect(
+			container.querySelector(".dynamic-pool-card .pool-card-icon"),
+		).not.toBeInTheDocument();
+	});
+
 	it("uses the shared pool without pagination or implementation legend", () => {
 		renderWindow();
 

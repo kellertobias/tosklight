@@ -794,8 +794,7 @@ button:not(:disabled):active {
 .pane-content {
 	background: linear-gradient(180deg, #10151a, #0c1014);
 }
-.connection-cover,
-.show-loading-cover {
+.connection-cover {
 	position: fixed;
 	z-index: 1000;
 	inset: 0;
@@ -805,8 +804,34 @@ button:not(:disabled):active {
 	backdrop-filter: blur(18px);
 }
 .show-loading-cover {
+	position: fixed;
 	z-index: 950;
-	background: #07090ce8;
+	top: 54px;
+	left: 50%;
+	width: min(420px, calc(100vw - 32px));
+	transform: translateX(-50%);
+	pointer-events: none;
+}
+.show-loading-cover .desk-loading-card {
+	width: 100%;
+	grid-template-columns: 42px 1fr;
+	justify-items: start;
+	gap: 2px 12px;
+	padding: 12px 16px;
+	border-radius: 12px;
+	background: #0e151bf2;
+	text-align: left;
+}
+.show-loading-cover .app-mark {
+	grid-row: 1 / span 3;
+	width: 42px;
+}
+.show-loading-cover .status-pulse {
+	display: none;
+}
+.show-loading-cover h1 {
+	margin: 0;
+	font-size: 16px;
 }
 .desk-loading-card,
 .connection-card {
@@ -2184,6 +2209,18 @@ button:not(:disabled):active {
 	grid-template-rows: 48px minmax(0, 1fr);
 	gap: 8px;
 }
+/*
+ * The sheet's header spans the sheet.
+ *
+ * It is a shared `WindowHeader`, so the full-width rule below that names `.patch-toolbar` — the
+ * class this header had before it moved to the window kit — no longer reaches it. Without this the
+ * header takes one grid cell and every panel after it shifts one place: the layers land beside the
+ * header and the table drops under them into the narrow column.
+ */
+.show-patch-layout > .ui-window-header {
+	grid-column: 1 / -1;
+}
+
 .patch-toolbar {
 	grid-column: 1 / -1;
 	display: flex;

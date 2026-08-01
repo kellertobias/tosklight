@@ -598,7 +598,6 @@ export function createDefaultDynamicDefinition(
 		revision: 0,
 		name: `Dynamic ${poolNumber}`,
 		color: "#4edcff",
-		icon: "∿",
 		target_binding: { type: "targetless" },
 		lanes: [createDefaultDynamicLane(attribute, ids.lane)],
 		random_groups: [],

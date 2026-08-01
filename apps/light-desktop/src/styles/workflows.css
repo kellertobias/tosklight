@@ -171,6 +171,23 @@
 .playback-presentation-options {
 	margin: 0;
 }
+.playback-image-setting {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 8px;
+}
+.playback-image-setting > img {
+	grid-column: 1 / -1;
+	width: 100%;
+	max-height: 120px;
+	object-fit: cover;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+}
+.playback-image-setting > small {
+	color: var(--muted);
+}
 .playback-function-identity.inactive {
 	opacity: 0.65;
 }

@@ -303,6 +303,7 @@ fn startup_load_restores_persisted_dynamic_runtime_and_programmer_identity() {
 
     let startup = super::startup_state::StartupState::load(startup_options::StartupOptions {
         data_dir: data_dir.clone(),
+        show_file: None,
         fixture_package_dir: None,
         bind: "127.0.0.1:0".parse().unwrap(),
         test_bench: true,
@@ -388,6 +389,7 @@ fn startup_loads_legacy_dynamic_phase_spread_as_uniform() {
 
     let startup = super::startup_state::StartupState::load(startup_options::StartupOptions {
         data_dir: data_dir.clone(),
+        show_file: None,
         fixture_package_dir: None,
         bind: "127.0.0.1:0".parse().unwrap(),
         test_bench: true,
