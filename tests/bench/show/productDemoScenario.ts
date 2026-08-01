@@ -822,8 +822,8 @@ export class BrowserProductDemo {
 				});
 				recordingEndedAtMillis = Date.now() - recordingStartedAtMillis;
 			}
-			await expect.poll(async () => activeNumbers(api)).toContain(17);
 			await keypadCommand(desk, keypad, ["1", "0", "1", "ENT"]);
+			await expect.poll(async () => activeNumbers(api)).toContain(101);
 			await keypadCommand(desk, keypad, ["AT", "8", "0", "ENT"]);
 			await expectLiveOutput(api);
 			if (!performanceBaseline) {
