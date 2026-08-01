@@ -3,7 +3,7 @@
 ## Status and source contract
 
 Finished. Implemented the complete behavior contract in
-[`../../Next/00-programmer-relative-encoders-and-fade-time-scope.md`](../../Next/00-programmer-relative-encoders-and-fade-time-scope.md).
+[`../../Done/00-programmer-relative-encoders-and-fade-time-scope.DONE.md`](../../Done/00-programmer-relative-encoders-and-fade-time-scope.DONE.md).
 That specification is authoritative; this queue file records the execution boundary.
 
 Estimated effort: 1–2 Codex days.

@@ -20,12 +20,12 @@ renderer against them and owns the complete packaged performance sweep. Move thi
 [`../README.md`](../README.md).
 
 The complete behavior and inventory contract is
-[`docs/plans/Next/76-separate-demo-and-benchmark-shows.md`](../../Next/76-separate-demo-and-benchmark-shows.md).
+[`docs/plans/Done/76-separate-demo-and-benchmark-shows.DONE.md`](../../Done/76-separate-demo-and-benchmark-shows.DONE.md).
 This queue file makes that roadmap plan executable in the refactoring order; it does not itself
 implement, generate, or benchmark a show.
 
 This plan also owns completion of
-[`49-product-demo-video-revision.md`](../../Next/49-product-demo-video-revision.md).
+[`49-product-demo-video-revision.DONE.md`](../../Done/49-product-demo-video-revision.DONE.md).
 The generated Plan 76 demo and the maintained `DEMO-001` video must share one
 authoritative show contract; do not build a second demo-only patch to satisfy the
 recording.

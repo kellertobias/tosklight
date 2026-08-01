@@ -158,14 +158,14 @@ The Schedule must use the same authoritative Playback service as UI, keyboard, O
 
 Once Macros exist, a Schedule can start a Macro by stable Macro identity. Scheduled Macro execution must use the same Macro service as manual, Cue, Playback, Timecode, HTTP, OSC, or other supported Macro triggers.
 
-Until refactoring item 30 supplies that service and stable Macro identities, the persisted target
+Until refactoring item 32 supplies that service and stable Macro identities, the persisted target
 variant and execution port remain forward-compatible but Macro selection is visibly unavailable and
 cannot be activated. Item 23 is complete when that unavailable boundary is tested; the executable
-same-Macro-service acceptance belongs to item 30 and must not be claimed early.
+same-Macro-service acceptance belongs to item 32 and must not be claimed early.
 
 The Schedule feature must not define Macro language, package, permission, Programmer, dialog,
 duplicate-instance, or lifecycle behavior. Those semantics are owned exclusively by
-[Macros](../pending/30-macros-and-scheduled-macros.md). This plan supplies the wall-clock occurrence,
+[Macros](../pending/32-macros-and-scheduled-macros.md). This plan supplies the wall-clock occurrence,
 resolved desk-alias audience, and Schedule source context to that service. If a Macro target is
 unavailable, invalid, blocked by permissions, already running in a disallowed duplicate mode, or
 unable to start, the Schedule records a failed occurrence without blocking the desk.
@@ -267,7 +267,7 @@ later recurring occurrences remain eligible to run normally.
 15. Loading a different show stops evaluating Schedules from the previous show.
 16. A deleted, moved, or unsupported Playback target leaves the Schedule invalid rather than silently retargeted.
 17. Scheduled Playback execution reaches the same authoritative Playback service used by UI, keyboard, OSC, hardware, HTTP, and Cue paths.
-18. Until Macros exist, Macro targets are visibly unavailable and cannot activate; once item 30
+18. Until Macros exist, Macro targets are visibly unavailable and cannot activate; once item 32
     supplies the runtime, a Schedule starts a Macro through that same Macro service.
 19. Failed scheduled occurrences are recorded without blocking output, rendering, other Schedules, or normal desk operation.
 20. Command/API, WebSocket, UI, and future OSC or hardware surfaces use compatible Schedule vocabulary and state.
@@ -290,7 +290,7 @@ Implemented in `df74357d` (`feat(schedules): add authoritative show scheduling`)
 - Replaced the Storybook-only Scheduler mock with a production window/controller, authoritative
   server timezone and occurrence previews, stable Playback selection, event-driven reconciliation,
   a low-rate repair snapshot, persisted pane layout, actionable validation/results, and an explicit
-  unavailable Macro boundary until item 30 supplies the Macro service.
+  unavailable Macro boundary until item 32 supplies the Macro service.
 - Added operator help at `docs/help/40-Running-a-Show/06-schedules.md`.
 
 Verification completed:

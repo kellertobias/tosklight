@@ -11,7 +11,7 @@ The existing C++/openFrameworks Media application remains the behavior reference
 1. [Media Pane Dummy UI](01-media-pane-dummy-ui.md) - build the Light Desk Media pane with dummy data first.
 2. [Media Server Application Behavior](02-media-server-application-behavior.md) and [Media Server Rust Architecture](02b-media-server-rust-architecture.md) - rebuild the actual Media Server product.
 3. [Media Pane Live Data and Workflows](03-media-pane-live-data-and-workflows.md) - connect the pane to real server data, fixture selection, previews, and media folder/file workflows.
-4. [Media Pane ToskLight Server Page](04-media-pane-tosklight-headless-page.md) - add the ToskLight-specific Media pane page for connecting to and managing the native Media Server integration.
+4. [Media Pane ToskLight Server Page](04-media-pane-tosklight-server-page.md) - add the ToskLight-specific Media pane page for connecting to and managing the native Media Server integration.
 
 The chunks are ordered deliberately. The first chunk is UI-only with dummy data. It must not require the Media Server rebuild or real CITP/native protocol implementation. The third and fourth chunks must not fake server behavior once they are marked implementable.
 

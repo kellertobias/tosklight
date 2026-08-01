@@ -138,7 +138,7 @@ Dynamic behavior.
 
 ## Future Macro implementation seam
 
-The gate in [`docs/plans/Later/46-macros-and-scheduled-macros.md`](../plans/Later/46-macros-and-scheduled-macros.md)
+The gate in [`docs/plans/refactoring/pending/30-macros-and-scheduled-macros.md`](../plans/refactoring/pending/30-macros-and-scheduled-macros.md)
 currently forbids a Macro product. Once language, sandbox, capabilities, persistence, lifecycle,
 interaction, scheduling, and acceptance behavior are specified:
 

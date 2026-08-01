@@ -2,13 +2,58 @@
 
 ## Status
 
-**Specification only.** This plan records future Fixture Sheet filtering and view-density rules. It does not implement filtering, selection behavior, pane settings, row rendering, value summaries, persistence, responsive layout, show migration, help changes, screenshots, testing scenarios, or executable tests.
+**Specification only.** This plan records future Fixture Sheet filtering, attribute-group columns, value-display semantics, and view-density rules. It does not implement filtering, selection behavior, pane settings, row rendering, value summaries, persistence, responsive layout, show migration, help changes, screenshots, testing scenarios, or executable tests.
 
 ## Goal
 
-Keep venue scenery and other non-programmable Stage elements out of the regular Fixture Sheet. The Fixture Sheet is a live programming and output-inspection table, while the Stage and Show Patch remain the correct surfaces for visual-only venue objects.
+Keep venue scenery and other non-programmable Stage elements out of the regular Fixture Sheet. The Fixture Sheet is a programming-state inspection table: it shows the base value held on each attribute group and whether Dynamic content is running there. It is not a continuously changing DMX-output monitor. The DMX window remains the surface for inspecting the actual, continuously resolved DMX output, while the Stage and Show Patch remain the correct surfaces for visual-only venue objects.
 
 Let each Fixture Sheet surface also trade visual richness for row density so more fixtures remain visible on smaller screens.
+
+## Base values and Dynamic feedback
+
+Each Fixture Sheet attribute-group cell shows the winning ordinary static base value before Dynamic/FAT modulation. A running Dynamic does not replace that base with its sampled value and does not make the cell's percentage, text, swatch, position, or other value summary update on every Dynamic tick.
+
+When Dynamic content applies to an attribute in the group, the cell also shows a compact Dynamics indicator:
+
+- use the canonical Dynamics icon followed by the Dynamic pool number;
+- keep the indicator visible in **Off**, **Icon only**, and **Text only** compact modes;
+- associate the indicator with the particular member attribute/base value it affects when a group cell contains multiple values;
+- show each applicable Dynamic when more than one Dynamic contributes to attributes represented by the cell, without merging their identities;
+- retain a stable embedded-snapshot label only where recorded Dynamic content has no pool number; and
+- distinguish running, paused, pending, hidden, or non-winning content when those states are relevant, without substituting the sampled output value.
+
+The indicator answers “is a Dynamic running on this attribute, and which one?” The base summary answers “what value is the Dynamic operating around or alongside?” Neither is intended to answer “what is the output at this instant?”
+
+This Fixture Sheet-specific presentation narrows the more verbose sampled/resolved Fixture Sheet telemetry described by the completed Dynamics plan. Authoritative Dynamic identity and state still come from the shared runtime projection, but the Fixture Sheet projection must not subscribe or repaint merely to display every sampled Dynamic value. The DMX window must continue to show the actual changing DMX output, including the result of Dynamics.
+
+Preload follows the same separation: show the pending base value and pending Dynamic identity/state, not a continuously sampled pending Dynamic result. Source ownership, Group-master limiting, Highlight, unavailable values, and errors remain visible status information rather than reasons to replace the base with resolved DMX.
+
+## Attribute-group columns
+
+The Fixture Sheet provides one independently configurable value column for every authoritative attribute group:
+
+- **Intensity**;
+- **Color**;
+- **Position**;
+- **Beam**;
+- **Shapers**;
+- **Focus**;
+- **Control**; and
+- **Media**.
+
+The columns are driven by the authoritative attribute registry rather than a separate Fixture Sheet-only classification. Adding an authoritative attribute group therefore requires a corresponding Fixture Sheet column contract. Fixed, indexed, continuous, and control functions inside an attribute do not create extra columns.
+
+An attribute-group cell may summarize multiple member attributes. It shows their base values and any applicable Dynamic indicators without exposing raw DMX. Unsupported groups use the normal unavailable/empty presentation and must not invent placeholder live values.
+
+The **Media** column is a multi-value summary. Once Media attributes are fully implemented, it shows:
+
+- Media Folder plus Media File; and
+- Mask Folder plus Mask File.
+
+Folder/file pairs remain visibly associated and use their semantic names or identifiers. The column must not collapse the four fields into an ambiguous single number. A fixture without mask capability shows only Media Folder and Media File; missing or unavailable values remain distinguishable from valid zero-valued selections.
+
+The existing saved **Dimmer** column choice migrates to the **Intensity** attribute-group column. Existing layouts gain no newly visible columns merely because Shapers, Control, or Media becomes available; every group column remains independently selectable in **Columns**.
 
 ## Filtering rule
 
@@ -44,7 +89,7 @@ The setting is named **Compact mode** and has exactly three choices:
 - **Icon only**; and
 - **Text only**.
 
-Compact mode changes the presentation of live value cells and row density. It does not change fixture data, programmer values, selection, output, tracking, visible-column choices, or which fixtures are included. The programmable-fixture filter applies before density rendering.
+Compact mode changes the presentation of attribute-group base-value cells and row density. It does not change fixture data, programmer values, selection, output, tracking, visible-column choices, or which fixtures are included. The programmable-fixture filter applies before density rendering.
 
 ## Settings placement and ownership
 
@@ -63,10 +108,11 @@ The selected mode belongs to that Fixture Sheet surface's desk-local persisted c
 **Off** preserves the normal detailed Fixture Sheet:
 
 - the current standard row height and spacing;
-- the intensity meter plus percentage;
-- the color swatch plus text label;
-- the position glyph plus Pan/Tilt text;
-- Beam and Focus summaries with their normal visual and text presentation;
+- the Intensity base-value meter plus percentage;
+- the Color base-value swatch plus text label;
+- the Position base-value glyph plus Pan/Tilt text;
+- Beam, Shapers, Focus, Control, and Media base-value summaries with their normal visual and text presentation;
+- the Dynamics icon and number beside the affected base-value summary;
 - Preload target visuals and text; and
 - configured secondary details such as fixture type.
 
@@ -78,39 +124,43 @@ This remains the default and the reference presentation for existing layouts and
 
 | Column | Icon-only presentation |
 |---|---|
-| Dimmer | The compact intensity/level bar without the percentage text. |
-| Color | The resolved color swatch without the RGB/color text. |
-| Position | The position glyph without Pan/Tilt degree text. |
-| Beam | A compact semantic Beam glyph or state marker. |
-| Focus | A compact semantic Focus/edge/frost/zoom glyph or state marker. |
+| Intensity | The compact base intensity/level bar without the percentage text. |
+| Color | The base color swatch without the RGB/color text. |
+| Position | The base position glyph without Pan/Tilt degree text. |
+| Beam | A compact semantic base Beam glyph or state marker. |
+| Shapers | A compact semantic base Shapers glyph or state marker. |
+| Focus | A compact semantic base Focus/edge/frost/zoom glyph or state marker. |
+| Control | A compact semantic base Control state marker. |
+| Media | Compact, distinct Media and Mask source markers. |
 
 The fixture **Icon** column remains a separately configurable identity column. Choosing Icon only does not automatically enable that column or hide ID, Name, Patch, or another column selected under **Columns**.
 
-Beam and Focus icons must be derived from authoritative resolved attributes/functions. The implementation must not turn the current reserved placeholder summaries into invented live state merely to fill the compact cells.
+Beam, Shapers, Focus, Control, and Media icons must be derived from authoritative base attributes/functions. The implementation must not turn current reserved placeholder summaries into invented live state merely to fill the compact cells.
 
-Preload uses a clearly distinct secondary or overlaid icon/bar state with the same current-versus-pending meaning as the detailed view. Source ownership, Group-master limiting, selection, Highlight stepping, unavailable values, and errors retain non-text visual distinctions.
+Preload uses a clearly distinct secondary or overlaid icon/bar state with the same current-versus-pending meaning as the detailed view. Dynamics indicators remain the Dynamics icon plus number rather than disappearing with ordinary value text. Source ownership, Group-master limiting, selection, Highlight stepping, unavailable values, and errors retain non-text visual distinctions.
 
-Every icon-only value has an accessible name containing its full text value. Pointer hover may show the same value as a tooltip, but hover is supplemental and cannot be the only way a required touch-screen operator obtains the value.
+Every icon-only value has an accessible name containing its full base-value text and applicable Dynamic identity. Pointer hover may show the same information as a tooltip, but hover is supplemental and cannot be the only way a required touch-screen operator obtains it.
 
 ## Text only
 
 **Text only** uses the same reduced row height, padding, gaps, and narrower value columns but removes decorative value graphics. It presents concise authoritative text such as:
 
-- `100%` for Intensity;
-- `RGB 0, 0, 0`, a semantic color name, or the normal neutral/unsupported label for Color;
-- `50° / 50°` for Pan/Tilt;
-- `Open`, `Gobo 2`, or another resolved Beam summary; and
-- `Soft edge`, `Focus 45%`, `Frost open`, or another resolved Focus summary.
+- `100%` for the Intensity base;
+- `RGB 0, 0, 0`, a semantic color name, or the normal neutral/unsupported label for the Color base;
+- `50° / 50°` for the Pan/Tilt base;
+- `Open`, `Gobo 2`, or another Beam base summary;
+- concise Shapers, Focus, and Control base summaries; and
+- `Folder 2 / File 7` plus `Mask Folder 1 / Mask File 4`, using semantic media names when available.
 
 Text formatting uses the attribute's normal units and semantic names. It must not expose raw DMX merely because the visual icon is absent.
 
-Preload targets remain visible as compact arrow/value text. Source ownership and current/pending state retain a non-color-only distinction without reintroducing the removed gauges and glyphs.
+Preload targets remain visible as compact arrow/value text. The Dynamics icon and number remain beside affected text-only values because they communicate running content rather than decorative value graphics. Source ownership and current/pending state retain a non-color-only distinction without reintroducing the removed gauges and ordinary value glyphs.
 
 ## Identity, status, and row behavior
 
 Compact mode affects value presentation rather than silently changing the column model.
 
-- ID, fixture Icon, Name, Patch, Dimmer, Color, Position, Beam, and Focus remain independently controlled by **Columns**.
+- ID, fixture Icon, Name, Patch, Intensity, Color, Position, Beam, Shapers, Focus, Control, and Media remain independently controlled by **Columns**.
 - **Show fixture type**, Group-master status, unpatched state, source ownership, selection, remembered Highlight base, current Highlight step, and contained-head markers remain available.
 - Secondary name/type or status text may use a compact inline layout, but it cannot disappear merely to achieve a one-line row.
 - Rows remain selectable across their full rendered width.
@@ -142,13 +192,15 @@ Changing Compact mode is a view-only desk mutation. It must not:
 
 Implementation updates the existing Fixtures and Patch help text that currently says Venue `0.x` objects appear in the Fixture Sheet, plus the Fixture Sheet pane reference, settings screenshots, deterministic manual screenshots, human-readable Fixture Sheet testing scenario, coverage catalog, focused frontend tests, and root Playwright coverage.
 
-Tests use populated rows with Intensity, Color, Position, Beam, Focus, Preload, Group-master limiting, source ownership, multi-head IDs, unavailable values, and Highlight step/base state. Geometry assertions compare Off with both compact modes at a supported small viewport and prove that compact mode displays more rows without overlap.
+Tests use populated rows with every authoritative attribute group, base values, single and multiple Dynamics indicators, Media and Mask folder/file pairs, Preload, Group-master limiting, source ownership, multi-head IDs, unavailable values, and Highlight step/base state. A deterministic Dynamic clock proves that the actual DMX output changes while the Fixture Sheet base summary remains stable and continues to identify the running Dynamic. Geometry assertions compare Off with both compact modes at a supported small viewport and prove that compact mode displays more rows without overlap.
 
 Visual/text assertions must prove:
 
 - Off contains both graphics and text;
 - Icon only contains the required graphics and omits ordinary value text;
 - Text only contains authoritative text and omits the value graphics; and
+- every mode keeps the Dynamics icon and number without displaying sampled Dynamic values;
+- the Media column keeps Media Folder/File and Mask Folder/File distinguishable; and
 - changing one surface does not mutate another surface or the show.
 
 ## Acceptance coverage
@@ -165,14 +217,20 @@ Visual/text assertions must prove:
 10. Fixture Sheet **View** settings offer exactly Off, Icon only, and Text only.
 11. The setting is available for normal panes, the full built-in, and planned fixed external-screen configuration using the same terminology.
 12. Existing and new surfaces default to Off unless explicitly configured otherwise.
-13. Off preserves the detailed current presentation.
-14. Icon only shows compact intensity, color, position, Beam, and Focus graphics without their ordinary value text.
-15. Text only shows concise authoritative values and semantic names without value bars, swatches, or position/Beam/Focus glyphs.
+13. Off preserves the detailed presentation while showing base values rather than sampled Dynamic output.
+14. Icon only shows compact attribute-group base graphics without their ordinary value text.
+15. Text only shows concise authoritative base values and semantic names without ordinary value bars, swatches, or attribute-group glyphs.
 16. Fixture identity columns remain independently controlled and are not confused with the Icon-only value mode.
 17. Preload, source ownership, Group-master status, unavailable state, selection, and Highlight step/base remain distinguishable in every mode.
-18. Beam and Focus compact content comes from authoritative resolved data rather than placeholder strings.
+18. Beam, Shapers, Focus, Control, and Media compact content comes from authoritative base data rather than placeholder strings.
 19. Both compact modes use a stable reduced row height and narrower value columns, visibly fitting more rows on a supported small screen.
 20. Compact rendering does not silently hide columns, clip fixture IDs, overlap rows, or depend on hover.
 21. Each Fixture Sheet surface persists its own desk-local mode without changing portable show data or another surface.
 22. Pane, built-in, external-screen, screenshots, and tests share one rendering contract.
 23. Help, screenshot, human-readable scenario, focused tests, and Playwright coverage protect filtering, all three modes, and small-screen geometry.
+24. The Fixture Sheet offers independently configurable Intensity, Color, Position, Beam, Shapers, Focus, Control, and Media columns, one for every authoritative attribute group.
+25. Each attribute-group cell shows the ordinary static base and identifies applicable Dynamic content with the Dynamics icon and number beside the particular member attribute it affects; it does not repaint with every sampled Dynamic value.
+26. Multiple applicable Dynamics remain individually identifiable, and embedded snapshots without a pool number receive an unambiguous stable label.
+27. The DMX window shows the actual continuously changing output produced by Dynamics while the Fixture Sheet base value remains stable.
+28. The Media column shows Media Folder plus Media File and, when supported, Mask Folder plus Mask File as distinct associated pairs.
+29. Existing saved Dimmer visibility migrates to Intensity, while newly available attribute-group columns do not become visible automatically.

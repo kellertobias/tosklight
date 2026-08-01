@@ -2,7 +2,10 @@
 
 ## Status and ownership
 
-**IMPLEMENTABLE.** The language, package model, execution boundary, permissions, lifecycle,
+**Pending refactoring queue item 32 — IMPLEMENTABLE.** This starts after
+[Supported Scale, Output Isolation, and Warm Operator UI](31-supported-scale-output-isolation-and-warm-operator-ui.md).
+The language, package model, execution
+boundary, permissions, lifecycle,
 persistence, editor, interactions, panes, Programmer access, failure behavior, and acceptance
 requirements are settled below.
 
@@ -10,8 +13,8 @@ This is the sole plan that defines ToskLight Macro product semantics. Other plan
 their own feature refers to or starts a Macro, but must link here instead of redefining Macro
 language, packaging, permissions, execution, UI, or lifecycle behavior.
 
-Wall-clock trigger rules remain owned by [Schedules](../Next/53-schedules.md). Selective import
-workflow remains owned by [Partial Show Load](../Next/52-partial-show-load.md). Those plans consume
+Wall-clock trigger rules remain owned by [Schedules](../finished/23-schedules.md). Selective import
+workflow remains owned by [Partial Show Load](../doing/27-partial-show-load.md). Those plans consume
 the Macro contracts defined here.
 
 ## Goal and boundaries
@@ -21,7 +24,7 @@ used by the UI, command line, HTTP, OSC, attached hardware, Cues, and Playbacks.
 
 A Macro may query and change everything inside the active show, including fixtures, Patch, Stage
 positions, selection, Groups, Presets, Dynamics, Cues, Cuelists, Playbacks, Programmer/Preload,
-show-owned layouts, other Macro entrypoints, and future Schedules. Every operation must use the
+show-owned layouts, other Macros, and future Schedules. Every operation must use the
 ordinary typed service so revisions, validation, undo, events, audit, persistence, and live output
 semantics remain authoritative.
 
@@ -32,7 +35,7 @@ A Macro cannot:
 - edit its own or another Macro's source, manifest, permissions, or library entry;
 - access a database, engine lock, protocol socket, process, environment variable, arbitrary
   filesystem path, browser DOM, React component, or raw application state;
-- import code from npm, a URL, another Macro package, or the desk filesystem; or
+- import code from npm, a URL, an undeclared Macro package, or the desk filesystem; or
 - execute from Dynamics or the DMX render path.
 
 Macros may inspect, edit, start, and stop Dynamics. Dynamics never call Macro functions and no
@@ -59,22 +62,27 @@ x64, Linux arm64 and x64, and Windows. Do not enable an `rquickjs` allocator fea
 memory limit ineffective. If supported-target packaging or hard interruption fails, stop and
 report the blocker rather than silently selecting another engine.
 
-### Portable package
+### Portable folder package
 
-A `MacroPackage` has:
+A Macro is a folder. Its stable folder name is its identity for code, dependency resolution, and
+portable references. A package folder has:
 
-- a stable UUID and operator-facing name;
+- a stable folder name and operator-facing name;
 - a declarative manifest;
-- one entry module and a map of normalized relative `.ts` module paths to source;
+- one required `main.toskmacro.ts` entry module and a map of normalized relative TypeScript module
+  paths to source;
+- its package-owned assets, including one optional `shared-state.json`;
+- a portable last-changed timestamp updated in package metadata when the Macro changes;
 - a current editable revision and immutable revision ancestry/content digests;
 - a last valid revision, when one has compiled successfully;
 - validation diagnostics and compiler, Macro SDK, host API, and runtime versions; and
-- portable presentation metadata, including the default dark-red Macro pool treatment and
+- portable presentation metadata, including the default dark-red show-Macro treatment and
   optional item presentation.
 
-The manifest declares:
+The manifest declares or describes:
 
-- named entrypoints and one optional default Workflow entrypoint;
+- the default export's execution kind and schemas plus the named library export surface from
+  `main.toskmacro.ts`;
 - input and result schemas;
 - requested host capabilities;
 - allowed Programmer access: `isolated`, `shared`, or `both`;
@@ -86,17 +94,31 @@ The manifest declares:
 Metadata is declarative and cannot be registered or mutated by running TypeScript. In particular,
 pane types and permission requests remain inspectable when the Macro is not running.
 
+A show imports a Macro folder into its show-owned Macro collection. There are no Macro Pool numbers
+or separate Macro UUIDs: the stable folder name is the reference used by source, show data, command
+surfaces, and typed integrations. Exporting or transferring a Macro produces a ZIP archive of the
+complete folder, including source, manifest, metadata, and assets.
+
 ### Modules and imports
 
 Source may import only:
 
 - relative modules inside the same package; and
+- declared library-style Macro package dependencies; and
 - the generated `@tosklight/macro` SDK.
 
 Reject bare/npm imports, URL imports, absolute paths, parent traversal, native modules, and dynamic
 imports. The complete module graph is resolved and validated before a revision becomes executable.
-Calling another Macro is a supervised `MacroService` operation by stable package and entrypoint
-identity, not an import.
+An imported Macro dependency is addressed as `macro:<folder-name>`, executes inside the importing
+Macro's runtime, and is restricted by the
+importing Macro's capabilities, Programmer authority, resource limits, and HTTP grants. Importing
+a dependency never combines or escalates permissions. Starting another independently executable
+Macro remains a supervised `MacroService` operation addressed by folder name.
+
+Dependencies do not pin an exact revision. They resolve the selected local package with that folder
+name. When an imported/show copy has a newer last-changed timestamp than the local package, the
+operator chooses whether to import the newer folder or keep the local folder. A changed selected
+dependency invalidates and rechecks its importers before either can execute.
 
 ## Revisions, type checking, and executable state
 
@@ -120,7 +142,8 @@ The operator-visible states are:
   immutable revision; and
 - **Not executable**: neither the current source nor an earlier retained revision is valid.
 
-The editor and Macro Pool must show which source revision is open and which revision will execute.
+The editor, Macro Library, and show Macros pane must show which source revision is open and which
+revision will execute.
 There is no silent fallback indicator and no type check on the live start path.
 
 Existing instances keep the code revision they already loaded. A later valid or invalid save does
@@ -142,19 +165,27 @@ Adding a local Macro to a show immediately embeds its current editable revision 
 revision. The show copy is a transferable package snapshot, not a live execution dependency.
 ToskLight always executes the local valid revision.
 
-When a show is opened:
+When a show or Macro ZIP supplies a folder:
 
-- a missing local package always produces an install prompt before it can run;
-- any differing local/show package produces a comparison prompt;
-- the prompt shows manifest, entrypoint, permission, pane, and validation changes, added and
+- a missing local package may be imported only after validation and required local permission
+  approval succeed;
+- an incoming package with a newer last-changed timestamp produces a comparison prompt;
+- an equal or older incoming timestamp retains the local folder without replacing it;
+- the prompt shows manifest, default-export, permission, pane, and validation changes, added and
   removed files, and a Monaco side-by-side diff for every changed module;
 - accepting replaces the complete local package atomically;
-- declining retains the local package and continues to run its local valid revision; and
+- keeping local, denying permissions, or failing import retains the complete local package and
+  continues to run its local valid revision;
+- when no local folder exists and import does not succeed, the Macro remains unavailable; and
 - no file-by-file source merge is offered.
 
 An imported invalid current revision may retain the prior local last valid revision. A newly
 imported package with invalid current source is executable only when its included last valid source
 also validates locally.
+
+Macro-triggering actions never wait for import or permission resolution. If the referenced folder
+is unavailable, the action skips it as though no executable Macro were present and emits a visible
+**Macro Error**. It does not queue an execution to start after a later import decision.
 
 ### When the show copy updates
 
@@ -185,14 +216,24 @@ show save or load.
 
 ## Entrypoints and shared state
 
-One package may declare several named entrypoints of different kinds.
+The package entry module is always named `main.toskmacro.ts`. Its default export is the package's
+independently executable Macro entrypoint. Without a default export, the package is library-only:
+it cannot be started as an independent Macro, but its named exports may be
+imported by other Macro packages. Exports intended for Macro use must be exported from
+`main.toskmacro.ts`; internal modules do not become public merely by exporting symbols.
+
+Only the default export is independently triggerable. It uses the approved typed declaration form
+`defineFunction(...)`, `defineWorkflow(...)`, or `defineService(...)` to select its execution kind.
+Named exports are library functionality for static named imports from
+`macro:<folder-name>`; they are never independent Macro entrypoints.
 
 ### Function
 
 A Function is a headless async operation with typed input and result. Multiple calls may run
 concurrently. It cannot show dialogs or provide pane behavior.
 
-Functions may be called from another Macro or an application integration, but never from Dynamics.
+An independently executable Macro whose default export is a Function may be called from another
+Macro or an application integration, but never from Dynamics.
 
 ### Workflow
 
@@ -203,22 +244,35 @@ concurrently. It may:
 - use an isolated Macro Programmer;
 - show sequential dialogs;
 - wait for timers, events, or operator responses;
-- call other Macro entrypoints; and
+  - call other independently executable Macros; and
 - finish with a typed result or remain active until cancelled.
 
 ### Service
 
-A Service is a long-running entrypoint that may provide behavior for declared panes. At most one
-instance of a given Service may run per desk. All copies of its pane on that desk share that
-instance. Different desks have independent Service instances.
+A Service is a long-running default export that may provide behavior for declared panes. At most
+one instance of a given Macro Service may run per desk. All copies of its pane on that desk share
+that instance. Different desks have independent Service instances.
 
 ### Package-shared state
 
-All entrypoints in one package share one show-wide transient structured state store, including
-entrypoints running for different desks. This supports a game-show package where one Service owns a
-pane while Cue-triggered Functions or Workflows update the same game state.
+All executions of one package share one intentionally cross-desk, show-wide transient structured
+state store, including instances running for different desk aliases. This allows desk-facing Macro
+instances to act as interfaces while another Macro instance coordinates output from their shared
+state. Different Service instances and desk identities remain distinct even though this explicit
+Macro state channel is shared.
 
-The shared state API uses revisioned reads and compare-and-set updates so concurrent entrypoints
+If the package contains `shared-state.json`, its structured contents initialize that transient
+shared state. If the file is absent, no initial shared state is loaded. Runtime state remains
+transient: mutations do not rewrite the package asset and are still cleared on show change, server
+restart, package replacement, or explicit reset.
+
+Library code imported from another Macro continues to use the declaring package's shared-state and
+show-owned-storage namespaces, not the importing package's namespaces. For example, multiple
+desk-facing Macros may import a game-show logic package and coordinate through that logic package's
+one show-wide state. Callers may still pass any separately constructed structured object explicitly
+to a named export.
+
+The shared state API uses revisioned reads and compare-and-set updates so concurrent executions
 cannot silently overwrite one another. It accepts only structured Macro values, not JavaScript
 functions, handles, runtime objects, or application references.
 
@@ -254,13 +308,15 @@ TypeScript declarations and Rust/wire contracts must have a drift check.
 
 ## Programmer authority
 
-Each entrypoint declares `isolated`, `shared`, or `both`.
+The default export declares `isolated`, `shared`, or `both`.
 
 ### Shared
 
 Shared access means the real Programmer of the user who initiated the execution. Changes are
 visible immediately and use ordinary Programmer history and undo. The handle is unavailable when
-the execution has no initiating user.
+the execution has no initiating user. A `shared`-only default export fails before execution in that
+case. A default export allowing `both` still receives its isolated handle and an explicitly absent
+shared handle; it never borrows the current user of a desk.
 
 ### Isolated
 
@@ -346,6 +402,15 @@ show files.
 Direct sockets, arbitrary filesystem access, environment access, process execution, browser
 network APIs, and database access remain unavailable.
 
+When a local/show update requests permissions beyond the package's currently granted local
+permissions, ToskLight opens a permission-change modal showing the previous grants and newly
+requested grants. Its title actions include **Open Macro Code**, which opens the package in the
+dedicated Macro editor. The operator may **Accept** or **Deny**. Acceptance is part of the import or
+update transaction: either the complete Macro validates, receives its grants, and imports, or the
+import does not occur. **Deny** keeps the current local Macro; when none exists, the folder remains
+unavailable. No Macro execution waits on this modal, and portable show content never grants itself
+authority merely by being loaded.
+
 ## Execution and supervision
 
 The existing language-neutral `MacroRuntime`, `MacroHost`, and `MacroService` seams remain the
@@ -357,7 +422,7 @@ so a bad execution can be disposed without corrupting other instances.
 
 Every execution snapshot includes:
 
-- execution, package, revision, and entrypoint identity;
+- execution, package-folder, revision, and default-export identity;
 - kind and initiating source context;
 - desk and optional user/session context;
 - arguments and terminal result;
@@ -393,13 +458,24 @@ Installation policy may lower or deliberately raise these limits. Macro code can
 
 ## Operator surfaces and invocation
 
-### Macro Pool and editor
+### Macro Library, show Macros pane, and editor
 
-Add a dark-red Macro Pool with package name, validation/execution status, presentation, and running
-state. A card starts its default Workflow entrypoint. If required arguments are missing, the
-manifest's input schema opens the generated initial dialog.
+Desk Settings owns the installation-level **Macro Library**. It lists every local Macro folder and
+provides import, export, validation, permission review, and editor actions. An independently
+executable local Macro may also be test-run from the Macro Library without first being imported
+into the active show.
 
-The package editor provides:
+The active show's Macro collection is presented through a dark-red **Macros** pane with folder
+name, validation/execution status, presentation, and running state. From this pane the operator may
+import a local library Macro into the show and trigger its default export. A library-only folder
+without a default export cannot be triggered. If required arguments are missing, the manifest's
+input schema opens the generated initial dialog.
+
+There is no Macro Pool, no pool number, and no separate built-in Macro window. **Macros** is an
+optional pane kind and is not placed in the default sidebar or default show layout.
+
+The package editor opens as an additional dedicated ToskLight window rather than a pane or modal.
+It provides:
 
 - module tree and Monaco TypeScript editor;
 - manifest/settings editor;
@@ -412,29 +488,40 @@ The package editor provides:
 
 ### Command line, API, and OSC
 
-`MACRO <pool-number> [ENT]` starts the package's default Workflow through the authoritative command
+`MACRO <folder-name> [ENT]` starts the package's default export through the authoritative command
 line and records normal command history. No fixed software-keyboard or physical-key shortcut is
 assigned initially.
 
-OSC/custom control mappings may emit the Macro command token or start a named entrypoint directly.
+OSC/custom control mappings may emit the Macro command token or start a package's default export
+directly.
 HTTP, WebSocket, OSC, Cue, Playback, Timecode, and Macro-to-Macro starts reach the same
-`MacroService`.
+`MacroService`. Direct starts always invoke the default export; named exports remain available only
+through static `macro:<folder-name>` imports. Typed Macro-to-Macro starts address the target package
+by folder name.
 
 ### Running & Output
 
 Add a Macros section to **Running & Output** and include Macros in its active count. Each row shows
-package and entrypoint, executing revision, source, desk, phase or wait reason, elapsed time, and
+package folder and default-export kind, executing revision, source, desk, phase or wait reason,
+elapsed time, and
 recent failure/log status, with an authoritative **Cancel** action.
 
 Cancelling a Service returns its declared panes to idle. Cancelling a Workflow closes its dialogs.
 All cleanup is server-owned and idempotent.
+
+A current Macro failure also appears as red warning text in the command-line status control beside
+the existing DMX and Timecode status. That control continues to open **Running & Output**, where
+the authoritative Macro failure information is available. The warning text is **Macro Error**.
+**Running & Output** owns the **Show Status** action and error detail. It also shows the latest
+Macro error message directly at the bottom of the modal. The first implementation does not require
+Macro failure history to persist across a server restart.
 
 ## Transport and event contracts
 
 Add typed wire contracts for:
 
 - package/library snapshots, validation, revisions, imports, and diffs;
-- entrypoint definitions and schemas;
+- default-export definitions and schemas plus named library export metadata;
 - execution start, cancel, snapshots, results, logs, and history;
 - shared state;
 - interaction requests and responses;
@@ -452,19 +539,20 @@ actions or refreshing unrelated bootstrap data.
 
 ## Trigger integration and scheduling boundary
 
-Manual, Macro-to-Macro, Cue, Playback, Timecode, HTTP, OSC, and future Schedule starts use stable
-package plus entrypoint identity and the same execution service.
+Manual, Macro-to-Macro, Cue, Playback, Timecode, HTTP, OSC, and future Schedule starts use the
+stable package folder name, invoke its default export, and reach the same execution service.
 
 The first Macro implementation defines the runtime side of scheduled execution:
 
-- scheduled entrypoints must allow isolated Programmer access;
+- scheduled Macro default exports must allow isolated Programmer access;
 - the Schedule supplies source context and resolved dialog desk aliases;
 - starting a disallowed duplicate Service fails that occurrence without blocking other work;
 - scheduled failures and cancellation are terminal Macro outcomes returned to the Schedule; and
 - multi-desk interaction uses first-valid-response-wins.
 
-[Schedules](../Next/53-schedules.md) remains solely responsible for wall-clock triggers,
-timezones, missed-run policy, occurrence identity, catch-up, clock changes, and schedule history.
+[Schedules](../finished/23-schedules.md) remains solely responsible for wall-clock triggers, the authoritative
+server/desk timezone, occurrence identity, skip-only missed-run behavior, clock changes, and
+schedule history.
 
 ## Selective import
 
@@ -477,7 +565,7 @@ Preview must show:
 - its current and last valid revisions;
 - package storage;
 - references from Cues, Playbacks, Timecode, Schedules, or other Macros;
-- ID conflicts and planned rewrites; and
+- folder-name conflicts, last-changed timestamps, and planned reference rewrites; and
 - whether the local library comparison must be resolved.
 
 Apply the package, storage, dependencies, and rewritten references atomically. Import never creates
@@ -496,16 +584,20 @@ an invisible live dependency on another show.
 5. Imports recheck current and fallback source and cannot smuggle a compiled artifact.
 6. Startup or compiler/runtime upgrades rebuild stale caches before packages become available and
    never compile synchronously on start.
-7. Optional annotations, type errors, module errors, SDK drift, forbidden imports, and
-   QuickJS-compatible emission have focused tests.
+7. The required `main.toskmacro.ts`, `defineFunction`/`defineWorkflow`/`defineService` default
+   export, library-only named exports, static `macro:<folder-name>` imports, optional annotations,
+   type errors, module errors, SDK drift, forbidden imports, and QuickJS-compatible emission have
+   focused tests.
 8. Infinite loops, memory and stack exhaustion, panics, rejected promises, and cancellation during
    JavaScript, HTTP, timer, event, or interaction waits terminate safely.
 
 ### Persistence and portability
 
 9. Existing shows with no Macros load with no behavior change.
-10. Adding a local Macro embeds its current and last valid source revisions.
-11. Missing and differing local/show packages always produce the required preview and diff.
+10. Adding a local Macro folder to the show-owned Macro collection embeds its complete portable
+    package and current/last-valid source revisions under the stable folder-name identity.
+11. A newer incoming last-changed timestamp produces the required keep-local/import-newer preview
+    and diff; an equal or older incoming copy retains the local folder.
 12. Declining an update preserves and runs the local valid version.
 13. Normal autosave and named revisions do not refresh an embedded package.
 14. Save As and export embed the current local package only after conflicts are resolved.
@@ -518,11 +610,13 @@ an invisible live dependency on another show.
 
 17. Functions run concurrently with typed inputs/results and cannot open dialogs or panes.
 18. Multiple Workflow instances can run concurrently.
-19. One Service instance per package entrypoint and desk serves every copy of its panes on that
-    desk.
-20. Entry points across desks share the same show-wide package state with explicit conflict
-    behavior.
-21. Shared state clears on restart/show change/package replacement and durable storage does not.
+19. One Service instance per package folder and desk serves every copy of its panes on that desk.
+20. Instances across desk aliases intentionally share the same show-wide package state with
+    explicit conflict behavior, while Service instances and desk identities remain distinct.
+21. A valid `shared-state.json` initializes the declaring package's shared state when present;
+    runtime shared state clears on restart/show change/package replacement without rewriting that
+    asset, while durable storage does not clear. Imported library code uses the declaring package's
+    state and storage namespaces.
 22. `isolated`, `shared`, and `both` enforce exact Programmer authority.
 23. Scheduled execution cannot obtain a shared Programmer.
 24. Isolated changes remain private until one atomic active/gold Preload commit.
@@ -531,29 +625,39 @@ an invisible live dependency on another show.
 
 ### UI and control surfaces
 
-26. Macro Pool, Monaco editing, diagnostics, revision fallback, import diffs, and capability review
-    are visible in the real desktop.
+26. Desk Settings' Macro Library, the optional show-owned Macros pane, and the dedicated Macro
+    editor window expose test runs, show import, triggering, Monaco editing, diagnostics, revision
+    fallback, import diffs, and capability review in the real desktop.
 27. Structured dialogs render every supported form, Group/Preset picker, and ordered Fixture Sheet
     selection through the modal stack.
 28. A Workflow can show sequential dialogs.
 29. The first response to a multi-desk dialog wins and closes every other copy.
 30. Reconnect repairs pending interactions without duplicate responses or lost requests.
 31. Declared panes remain available and show **Start Macro** while their Service is idle.
-32. **Running & Output** lists and cancels Functions, Workflows, and Services with correct cleanup.
-33. Macro Pool, `MACRO <number>`, HTTP, WebSocket, OSC mappings, Cue/Playback, Timecode, and
-    Macro-to-Macro starts converge on the same execution identity and outcome.
+32. **Running & Output** lists and cancels Functions, Workflows, and Services with correct cleanup,
+    owns **Show Status**, shows the latest error at the bottom, and drives the red **Macro Error**
+    command-status warning.
+33. The show Macros pane, Macro Library test runs, `MACRO <folder-name>`, HTTP, WebSocket, OSC
+    mappings, Cue/Playback, Timecode, and
+    Macro-to-Macro starts invoke only the folder's default export and converge on the same
+    execution identity and outcome; named exports remain library-only.
 
 ### Security and performance
 
 34. Tests prove that Macro code cannot access desk settings, show management, arbitrary files,
-    processes, environment variables, raw databases/sockets, browser APIs, self-editing, or
-    unapproved HTTP origins.
-35. HTTP redirects, DNS changes, private-network origins, sizes, timeouts, rates, and cancellation
+    processes, environment variables, raw databases/sockets, browser APIs, self-editing,
+    undeclared Macro packages, or unapproved HTTP origins; library imports cannot broaden the
+    importing package's authority.
+35. Permission increases display old and newly requested grants and can open the dedicated editor.
+    The import/update succeeds completely after **Accept** or leaves the local package unchanged
+    after **Deny** or failure; triggering actions never wait and unavailable Macros skip with a
+    visible **Macro Error**.
+36. HTTP redirects, DNS changes, private-network origins, sizes, timeouts, rates, and cancellation
     cannot escape policy.
-36. Storage traversal, stale writes, and quota bypass are rejected atomically.
-37. Active Workflows and Services do not block server requests, OSC feedback, desktop lifecycle,
+37. Storage traversal, stale writes, and quota bypass are rejected atomically.
+38. Active Workflows and Services do not block server requests, OSC feedback, desktop lifecycle,
     or the output scheduler.
-38. The existing 32-universe/100 Hz acceptance benchmark still passes with Macros active, and
+39. The existing 32-universe/100 Hz acceptance benchmark still passes with Macros active, and
     instrumentation proves JavaScript never enters Dynamics or DMX sampling.
-39. Operator-facing behavior is verified through `npm run open`, not inferred only from unit or
+40. Operator-facing behavior is verified through `npm run open`, not inferred only from unit or
     static checks.

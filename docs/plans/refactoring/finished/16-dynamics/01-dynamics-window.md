@@ -160,7 +160,7 @@ Random controls are:
 - a local Random group selector; and
 - Generate Seed for the selected local group.
 
-Pulse durations are deterministically drawn, bounded to at least one evaluator/output interval, and may cross a Dynamic cycle boundary. Decision interval and pulse durations scale inversely with overall Dynamic speed, lane multiplier, and playback-local Double/Half/learned speed. Zero Attack and Decay are hard binary pulses. Random timing, Markov stay-on/stay-off controls, density/grouping/burst modes, and separate timing/gate modes remain later extensions. Macro functions are not a Dynamics extension: [Macros](../../../Later/46-macros-and-scheduled-macros.md) may edit and start Dynamics, but Dynamics never call Macros.
+Pulse durations are deterministically drawn, bounded to at least one evaluator/output interval, and may cross a Dynamic cycle boundary. Decision interval and pulse durations scale inversely with overall Dynamic speed, lane multiplier, and playback-local Double/Half/learned speed. Zero Attack and Decay are hard binary pulses. Random timing, Markov stay-on/stay-off controls, density/grouping/burst modes, and separate timing/gate modes remain later extensions. Macro functions are not a Dynamics extension: [Macros](../../pending/32-macros-and-scheduled-macros.md) may edit and start Dynamics, but Dynamics never call Macros.
 
 ## Phase Spread
 

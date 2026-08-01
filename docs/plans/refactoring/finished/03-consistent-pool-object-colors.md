@@ -3,7 +3,7 @@
 ## Status and source contract
 
 Finished after plan 02's accepted shared pool-card and pool-grid primitives. Implemented
-[`../../Next/55-consistent-pool-object-colors.md`](../../Next/55-consistent-pool-object-colors.md)
+[`../../Done/55-consistent-pool-object-colors.DONE.md`](../../Done/55-consistent-pool-object-colors.DONE.md)
 through the shared pool primitives.
 
 Do not run this plan concurrently with the active Storybook lane: it changes the same pool

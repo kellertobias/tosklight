@@ -8,7 +8,7 @@
 
 Add explicit behavior settings that can automatically turn a playback Off when the operator's own control gesture has ended, independent of the existing **Turn off when other playbacks take full control** rule.
 
-This plan is for Cuelist playbacks first. [Dynamics Playback Assignment](../Later/dynamics/04-playback-assignment.md) settles the corresponding Dynamic playback behavior.
+This plan is for Cuelist playbacks first. [Dynamics Playback Assignment](../refactoring/finished/16-dynamics/04-playback-assignment.md) settles the corresponding Dynamic playback behavior.
 
 ## Relationship to Existing Behavior
 

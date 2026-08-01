@@ -58,7 +58,7 @@ Ordinary Presets remain static-only in this release. Dynamic lanes may use live 
 The documents are grouped by operator subsystem; implementation follows this dependency order:
 
 1. Finish the active shared-frontend/Storybook refactor lane before changing its pool, window, modal, encoder, and playback primitives.
-2. Complete the canonical attribute-registry portion of `docs/plans/Next/71-attribute-registry-and-activation-groups.md`. Dynamics consumes stable continuous-scalar identity, units, bounds, and fixture mapping; it must not create a private attribute catalog. Activation-group product behavior is not part of Dynamics.
+2. Complete the canonical attribute-registry portion of `docs/plans/refactoring/pending/29-attribute-registry-and-activation-groups.md`. Dynamics consumes stable continuous-scalar identity, units, bounds, and fixture mapping; it must not create a private attribute catalog. Activation-group product behavior is not part of Dynamics.
 3. Remove the accidental legacy Cue Phaser model, evaluator, writer route, UI helpers, and Phaser-specific tests. Re-save the three canonical SQLite shows after the schema change; none contains a non-empty Phaser.
 4. Implement the portable Dynamic model, object intents, compiler projection, runtime service, contribution-batch integration, deterministic clocking, Stage/Fixture Sheet projections, Programmer values, Cue/Preload behavior, persistence, and backend tests.
 5. Implement the Dynamics pool and editor against the real server capabilities. The production editor has no embedded fixture preview or browser evaluator.

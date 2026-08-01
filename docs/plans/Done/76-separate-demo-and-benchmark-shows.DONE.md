@@ -2,10 +2,12 @@
 
 ## Status
 
-**Specification only.** This plan records the requested split between the operator-facing demo
-show and the sustained benchmark workload, then defines the patch, Stage layout, Groups, presets,
-Playbacks, and desktops for the new demo show. It does not implement either show, alter the
-benchmark, generate a show file, program the pending Theater script, or add executable tests.
+**Completed 2026-07-29.** The finished refactoring record
+[`20-three-tier-demo-and-benchmark-shows.md`](../refactoring/finished/20-three-tier-demo-and-benchmark-shows.md)
+documents the generated 262-fixture demo, 1,000-instance interactive tier, 2,000- and
+4,000-fixture headless tiers, maintained demo recording, focused acceptance, reports, and semantic
+commit. The royalty-free Theater source and script-specific Theater Cues remain intentionally
+deferred as allowed by this plan.
 
 ## Goal
 

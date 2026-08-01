@@ -62,7 +62,7 @@ Switching server or layer cancels or isolates the old draft explicitly. A discon
 
 Software and physical encoder operation remains immediate. Turning a Folder, File, Mask Folder, Mask File, or other Media encoder changes its live value as the encoder moves. The staged transaction is specifically the touch-library workflow, not a global delay applied to all controls.
 
-The default attribute-activation configuration links Folder with File and Mask Folder with Mask File as described in [Attribute Registry, Activation Groups, and Indexed Presets](../Next/71-attribute-registry-and-activation-groups.md). The atomic touch commit still requires one grouped server operation; frontend sequencing of two independent requests is not sufficient.
+The default attribute-activation configuration links Folder with File and Mask Folder with Mask File as described in [Attribute Registry, Activation Groups, and Indexed Presets](../../refactoring/pending/29-attribute-registry-and-activation-groups.md). The atomic touch commit still requires one grouped server operation; frontend sequencing of two independent requests is not sufficient.
 
 ## Layer controls
 
@@ -80,7 +80,7 @@ Mask selection reuses the staged folder/file workflow. Provide a visible **Media
 
 ## ToskLight Media Server extension
 
-When the selected server advertises the native ToskLight Media Server integration, a separate title-bar action may open the [Media Pane ToskLight Server Page](04-media-pane-tosklight-headless-page.md). The generic live-data pane only advertises and routes to that capability. Native generated-source, text-overlay, and connection-management behavior belongs to that later chunk.
+When the selected server advertises the native ToskLight Media Server integration, a separate title-bar action may open the [Media Pane ToskLight Server Page](04-media-pane-tosklight-server-page.md). The generic live-data pane only advertises and routes to that capability. Native generated-source, text-overlay, and connection-management behavior belongs to that later chunk.
 
 ## Non-goals
 

@@ -3,7 +3,7 @@
 ## Status and source contract
 
 Finished. Implemented the complete behavior contract in
-[`../../Next/51-unpatched-fixtures-on-add-fixture.md`](../../Next/51-unpatched-fixtures-on-add-fixture.md).
+[`../../Done/51-unpatched-fixtures-on-add-fixture.DONE.md`](../../Done/51-unpatched-fixtures-on-add-fixture.DONE.md).
 That specification is authoritative; this queue file records the execution boundary.
 
 Estimated effort: 0.5–1 Codex day.

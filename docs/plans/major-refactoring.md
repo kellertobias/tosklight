@@ -174,7 +174,7 @@ The flow enforces these rules:
 
 Every resolved value is addressed by fixture or logical head plus attribute. The internal value boundary must support static and animated values without changing transport, storage, fixture projection, or output adapters.
 
-The canonical [Dynamics plans](Later/dynamics/README.md) define static, Dynamic On, Dynamic Off, `FixAT`/FAT, release, pause, and hidden-running behavior. This refactor does not implement those product features; it ensures that the value and contribution interfaces are not restricted to stateless numeric producers.
+The canonical [Dynamics plans](refactoring/finished/16-dynamics/README.md) define static, Dynamic On, Dynamic Off, `FixAT`/FAT, release, pause, and hidden-running behavior. This refactor does not implement those product features; it ensures that the value and contribution interfaces are not restricted to stateless numeric producers.
 
 This is sufficient for the planned Dynamics behavior:
 
@@ -263,7 +263,7 @@ not define the Macro product.
 
 The sole current specification for language, packages, permissions, execution, persistence,
 interaction, panes, Programmer access, and scheduling integration is
-[Macros](Later/46-macros-and-scheduled-macros.md). This historical refactor plan must not be used
+[Macros](refactoring/pending/32-macros-and-scheduled-macros.md). This historical refactor plan must not be used
 as an alternate Macro definition.
 
 ## Timecode and managed assets
@@ -405,7 +405,7 @@ These are architectural tests using fakes, not production feature implementation
 - Dynamics, Timecode, Macros, Schedules, a `FAT` command, and bidirectional external fixtures are not implemented during this refactor.
 - The architecture supports future static and stateful animated attribute values, but does not choose the Dynamics schema or pause behavior.
 - Macro product decisions made after this refactor are owned exclusively by
-  [Macros](Later/46-macros-and-scheduled-macros.md).
+  [Macros](refactoring/pending/32-macros-and-scheduled-macros.md).
 - Device-observed versus desk-desired value authority remains a future fixture-feature decision.
 - Internal Rust and TypeScript APIs and REST/WebSocket v1 may break. Visible UI behavior, OSC, and persisted user data remain compatibility surfaces.
 - Existing unrelated working-tree changes must remain untouched and be excluded from refactor commits.
@@ -503,12 +503,12 @@ plan that remain incomplete or lack retained acceptance evidence:
 - A repository-wide dead-code and obsolete-compatibility audit is queued after the remaining Stage
   and Virtual Playback feature migrations. It covers the Rust backend first, followed by the UI,
   tests, tooling, dependencies, generated contracts, and documentation; see
-  [`refactoring/pending/19-repository-wide-dead-code-removal.md`](refactoring/pending/19-repository-wide-dead-code-removal.md).
+  [`refactoring/finished/19-repository-wide-dead-code-removal.md`](refactoring/finished/19-repository-wide-dead-code-removal.md).
 
 Dynamics, full Timecode, Macros, Schedules, `FAT`, and bidirectional external fixtures remain
 deliberately separate product work. Their absence is not an unfinished refactoring implementation.
 The later Macro product definition, including language and runtime selection, is owned exclusively
-by [`Later/46-macros-and-scheduled-macros.md`](Later/46-macros-and-scheduled-macros.md).
+by [`refactoring/pending/32-macros-and-scheduled-macros.md`](refactoring/pending/32-macros-and-scheduled-macros.md).
 
 ### Durable handoff documentation
 

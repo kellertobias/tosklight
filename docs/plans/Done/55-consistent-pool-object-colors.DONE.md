@@ -2,7 +2,10 @@
 
 ## Status
 
-**Specification only.** This plan records a future UI color-language feature. It does not implement runtime behavior, persistence, UI changes, command/API behavior, OSC behavior, or executable tests.
+**Completed.** The finished refactoring record
+[`03-consistent-pool-object-colors.md`](../refactoring/finished/03-consistent-pool-object-colors.md)
+documents the shared resolver, desk-persistent configuration, UI adoption, cross-surface tests,
+manual generation, runtime review, and semantic feature commit.
 
 ## Goal
 
@@ -12,7 +15,7 @@ Default object-type colors are:
 
 - Dynamics: light blue or cyan;
 - Cuelists and Sequences: lime green;
-- Macros: dark red once [Macros](../Later/46-macros-and-scheduled-macros.md) are implemented;
+- Macros: dark red once [Macros](../refactoring/pending/32-macros-and-scheduled-macros.md) are implemented;
 - Groups: pale yellow, leaning toward a soft orange-yellow; and
 - Presets: grey for now.
 

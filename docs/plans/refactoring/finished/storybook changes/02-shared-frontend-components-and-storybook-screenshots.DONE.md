@@ -5,7 +5,7 @@
 Completed in the Storybook lane. Component ownership, geometry, package boundaries, and
 Storybook-first sequencing
 are defined by
-[`../../../Next/58-shared-frontend-libraries.md`](../../../Next/58-shared-frontend-libraries.md).
+[`../../../Done/58-shared-frontend-libraries.DONE.md`](../../../Done/58-shared-frontend-libraries.DONE.md).
 This queue item adds the required documentation-screenshot migration after accepted stories exist.
 
 The current workspace and Storybook location decision is recorded in

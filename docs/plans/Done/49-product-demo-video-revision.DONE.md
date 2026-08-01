@@ -4,7 +4,7 @@
 
 **Implemented and reconciled — 2026-07-29.** Plan 20 of the refactoring queue implements this revision
 through the maintained `DEMO-001` scenario. The exact lighting-only inventory in
-[`76-separate-demo-and-benchmark-shows.md`](76-separate-demo-and-benchmark-shows.md) supersedes
+[`76-separate-demo-and-benchmark-shows.DONE.md`](76-separate-demo-and-benchmark-shows.DONE.md) supersedes
 the older scenery-specific patch, curtain, and ACL-location demonstrations below where they
 cannot coexist with the required 262 controllable fixtures and 301 physical Stage instances.
 
@@ -77,7 +77,7 @@ If the modal-centering defect is fixed before this plan is implemented, the demo
 
 Replace the current "Turn lights on" framing. The title should be **Built-in Fixture Control
 Actions** or a similarly clear operator label, not "Turn lights on". These actions are fixture
-profile controls, not operator-authored [Macros](../Later/46-macros-and-scheduled-macros.md).
+profile controls, not operator-authored [Macros](../refactoring/pending/32-macros-and-scheduled-macros.md).
 
 The supporting text should describe the purpose, for example:
 

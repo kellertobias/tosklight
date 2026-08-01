@@ -2,7 +2,10 @@
 
 ## Status
 
-**Specification only.** This plan records a future programmer-selection behavior. It does not implement runtime behavior, persistence changes, UI changes, command/API behavior, OSC behavior, or executable tests.
+**Completed.** The finished refactoring record
+[`04-empty-selection-object-target-selection.md`](../refactoring/finished/04-empty-selection-object-target-selection.md)
+documents the application action, typed transports, shared pool behavior, cross-surface tests,
+manual generation, and semantic feature commit.
 
 ## Goal
 
@@ -14,7 +17,7 @@ This makes reusable Presets discoverable as selection tools. If a Preset was bui
 
 "Entities" means every addressable fixture target stored by the object, including whole fixtures, fixture heads, split fixtures, logical heads, or other future selectable targets that the programmer can select directly.
 
-Dynamics are explicitly outside this plan. Their settled pool gesture is defined by [Dynamics Window](../Later/dynamics/01-dynamics-window.md): tapping a populated Dynamic starts or toggles its matching Programmer Dynamic instance even when the programmer selection is empty. A target-bound Dynamic uses its binding; a targetless Dynamic with no selection targets every compatible fixture. Shift-tapping a populated Dynamic edits it.
+Dynamics are explicitly outside this plan. Their settled pool gesture is defined by [Dynamics Window](../refactoring/finished/16-dynamics/01-dynamics-window.md): tapping a populated Dynamic starts or toggles its matching Programmer Dynamic instance even when the programmer selection is empty. A target-bound Dynamic uses its binding; a targetless Dynamic with no selection targets every compatible fixture. Shift-tapping a populated Dynamic edits it.
 
 ## Operator behavior
 

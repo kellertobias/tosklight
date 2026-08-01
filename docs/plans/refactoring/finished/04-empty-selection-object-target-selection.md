@@ -3,7 +3,7 @@
 ## Status and source contract
 
 Finished. Plan 02's application pool adapters and shared pool intent contracts are stable. Implemented
-[`../../Next/56-empty-selection-preset-and-effect-target-selection.md`](../../Next/56-empty-selection-preset-and-effect-target-selection.md).
+[`../../Done/56-empty-selection-preset-and-effect-target-selection.DONE.md`](../../Done/56-empty-selection-preset-and-effect-target-selection.DONE.md).
 
 Do not run this plan concurrently with the active Storybook lane: it changes the same production
 pool surfaces, adapters, interaction stories, and focused UI verification.
