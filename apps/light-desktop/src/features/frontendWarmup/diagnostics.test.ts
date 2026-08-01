@@ -70,6 +70,21 @@ describe("frontend performance diagnostics", () => {
 		expect(diagnostics.snapshot().eventLags[0].lagMs).toBeGreaterThanOrEqual(0);
 	});
 
+	it("retains Playback request identities for input-to-server correlation", async () => {
+		const { frontendPerformanceDiagnostics: diagnostics } = await import(
+			"./diagnostics"
+		);
+		diagnostics.recordPlaybackAction("request-1", "playback_go");
+
+		expect(diagnostics.snapshot().playbackActions).toEqual([
+			expect.objectContaining({
+				requestId: "request-1",
+				action: "playback_go",
+				startedAt: expect.any(Number),
+			}),
+		]);
+	});
+
 	it("records Patch action, authority, and visible-paint timing as informational evidence", async () => {
 		const { frontendPerformanceDiagnostics: diagnostics } = await import(
 			"./diagnostics"

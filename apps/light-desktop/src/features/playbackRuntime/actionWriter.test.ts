@@ -170,6 +170,26 @@ function deferred<T>() {
 }
 
 describe("PlaybackRuntimeActionWriter", () => {
+	it("reports the exact request before applying a Playback action", async () => {
+		const store = readyStore();
+		const onActionStarted = vi.fn();
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: async (_showId, _deskId, request) => outcome(request),
+			onActionStarted,
+		});
+
+		await writer.poolPlaybackAction(1, "go", { surface: "virtual" });
+
+		expect(onActionStarted).toHaveBeenCalledOnce();
+		expect(onActionStarted.mock.calls[0]?.[0]).toMatchObject({
+			request_id: expect.any(String),
+			action: { type: "go", pressed: true },
+		});
+	});
+
 	it("optimistically selects a page and deduplicates its later desk event", async () => {
 		const store = readyStore();
 		const pending = deferred<ReturnType<typeof pageOutcome>>();

@@ -39,6 +39,12 @@ export interface FrontendPatchMutationDiagnostic {
 	actionToVisibleMs: number | null;
 }
 
+export interface FrontendPlaybackActionDiagnostic {
+	requestId: string;
+	action: string;
+	startedAt: number;
+}
+
 export interface FrontendStageVisualizationDiagnostic {
 	lane: "normal" | "preload";
 	startedAt: number;
@@ -165,6 +171,7 @@ export interface FrontendPerformanceSnapshot {
 	longTasks: readonly FrontendLongTaskDiagnostic[];
 	eventLags: readonly FrontendEventLagDiagnostic[];
 	patchMutations: readonly FrontendPatchMutationDiagnostic[];
+	playbackActions: readonly FrontendPlaybackActionDiagnostic[];
 	patchActionToVisible: {
 		samples: number;
 		p50Ms: number | null;
@@ -187,6 +194,7 @@ class FrontendPerformanceDiagnostics {
 	private readonly longTasks: FrontendLongTaskDiagnostic[] = [];
 	private readonly eventLags: FrontendEventLagDiagnostic[] = [];
 	private readonly patchMutations: FrontendPatchMutationDiagnostic[] = [];
+	private readonly playbackActions: FrontendPlaybackActionDiagnostic[] = [];
 	private readonly stageVisualizationRequests: FrontendStageVisualizationDiagnostic[] =
 		[];
 	private readonly stageFrames: FrontendStageFrameDiagnostic[] = [];
@@ -258,6 +266,11 @@ class FrontendPerformanceDiagnostics {
 			"tosklight:frontend:start",
 			"tosklight:frontend:first-usable-paint",
 		);
+	}
+
+	recordPlaybackAction(requestId: string, action: string) {
+		this.playbackActions.push({ requestId, action, startedAt: now() });
+		if (this.playbackActions.length > 2_048) this.playbackActions.shift();
 	}
 
 	beginPhase(name: string) {
@@ -642,6 +655,7 @@ class FrontendPerformanceDiagnostics {
 			longTasks: this.longTasks.map((task) => ({ ...task })),
 			eventLags: this.eventLags.map((sample) => ({ ...sample })),
 			patchMutations: this.patchMutations.map((sample) => ({ ...sample })),
+			playbackActions: this.playbackActions.map((sample) => ({ ...sample })),
 			patchActionToVisible: {
 				samples: patchDurations.length,
 				p50Ms: percentile(patchDurations, 50),

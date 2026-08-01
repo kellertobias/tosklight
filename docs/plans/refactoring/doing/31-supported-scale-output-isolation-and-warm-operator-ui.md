@@ -68,6 +68,12 @@ benchmark and any repairs it proves necessary before
   Flash press/release, and master with the same OSC request IDs used by the authenticated server
   two-tick timing records. Static/type/format checks pass; no packaged rerun has yet proven these
   new measurements.
+- Bundled Playback actions now retain their generated request IDs in the bounded frontend
+  performance diagnostics. The packaged UI matrix carries that identity from its visible DOM input
+  to the authenticated WebSocket timing record, while the network receiver tracks only the reserved
+  fixture's exact DMX slot so unrelated Dynamics cannot create a false changed-output pass. Focused
+  frontend diagnostics and Playback action-writer tests pass; the packaged correlation still awaits
+  its retained runtime run.
 
 Plan 31 therefore remains on the repair path. Do not interpret the sibling-window failures as a
 product acceptance failure: this plan requires one 3D Stage. The next slice must run and repair the

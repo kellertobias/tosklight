@@ -85,6 +85,7 @@ interface PlaybackRuntimeActionWriterOptions {
 	applyDeskPage?: PlaybackDeskPageApply;
 	repair?: (error: Error) => Promise<void>;
 	onError?: (error: Error | null) => void;
+	onActionStarted?: (request: PlaybackActionRequest) => void;
 }
 
 export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
@@ -254,10 +255,9 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		const scope = this.options.store.captureScope();
 		if (!this.isCurrent(scope)) return null;
 		const optimistic = this.optimisticToken(identity, action, input);
-		const token =
-			optimistic ??
-			this.options.store.beginRequest(identity);
+		const token = optimistic ?? this.options.store.beginRequest(identity);
 		try {
+			this.options.onActionStarted?.(request);
 			const outcome = await this.options.applyAction(
 				this.options.showId,
 				this.options.deskId,

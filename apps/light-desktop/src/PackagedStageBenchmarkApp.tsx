@@ -63,6 +63,8 @@ interface PackagedPlaybackActionSample {
 	indicationAt: number | null;
 	indicationMillis: number | null;
 	changed: boolean;
+	requestId: string | null;
+	inputEpochMillis: number;
 }
 
 interface PackagedFixtureSheetSample {
@@ -261,7 +263,7 @@ function PackagedStageExercise({
 			const fader = card.querySelector<HTMLInputElement>('input[type="range"]');
 			if (!go || !flash || !fader) return;
 			onPlaybackAction(await exercisePlaybackClick(card, go, "go"));
-			await waitMillis(500);
+			await waitMillis(1_600);
 			onPlaybackAction(
 				await exercisePlaybackPointer(
 					card,
@@ -425,11 +427,19 @@ async function exercisePlaybackClick(
 	action: "go",
 ): Promise<PackagedPlaybackActionSample> {
 	const before = card.innerHTML;
+	const diagnosticBaseline = playbackDiagnosticCount();
 	const inputAt = performance.now();
 	button.dispatchEvent(pointerEvent("pointerdown"));
 	button.dispatchEvent(pointerEvent("pointerup"));
 	button.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
-	return playbackActionSample(card, before, inputAt, action, "dom_pointer");
+	return playbackActionSample(
+		card,
+		before,
+		inputAt,
+		action,
+		"dom_pointer",
+		diagnosticBaseline,
+	);
 }
 
 async function exercisePlaybackPointer(
@@ -439,9 +449,17 @@ async function exercisePlaybackPointer(
 	type: "pointerdown" | "pointerup",
 ): Promise<PackagedPlaybackActionSample> {
 	const before = card.innerHTML;
+	const diagnosticBaseline = playbackDiagnosticCount();
 	const inputAt = performance.now();
 	button.dispatchEvent(pointerEvent(type));
-	return playbackActionSample(card, before, inputAt, action, "dom_pointer");
+	return playbackActionSample(
+		card,
+		before,
+		inputAt,
+		action,
+		"dom_pointer",
+		diagnosticBaseline,
+	);
 }
 
 async function exercisePlaybackFader(
@@ -450,6 +468,7 @@ async function exercisePlaybackFader(
 	value: number,
 ): Promise<PackagedPlaybackActionSample> {
 	const before = card.innerHTML;
+	const diagnosticBaseline = playbackDiagnosticCount();
 	const inputAt = performance.now();
 	const setter = Object.getOwnPropertyDescriptor(
 		HTMLInputElement.prototype,
@@ -457,7 +476,14 @@ async function exercisePlaybackFader(
 	)?.set;
 	setter?.call(fader, String(value));
 	fader.dispatchEvent(new InputEvent("input", { bubbles: true }));
-	return playbackActionSample(card, before, inputAt, "master", "dom_range");
+	return playbackActionSample(
+		card,
+		before,
+		inputAt,
+		"master",
+		"dom_range",
+		diagnosticBaseline,
+	);
 }
 
 async function playbackActionSample(
@@ -466,11 +492,18 @@ async function playbackActionSample(
 	inputAt: number,
 	action: PackagedPlaybackActionSample["action"],
 	input: PackagedPlaybackActionSample["input"],
+	diagnosticBaseline: number,
 ): Promise<PackagedPlaybackActionSample> {
 	const deadline = inputAt + 500;
+	let indicationAt: number | null = null;
 	while (performance.now() < deadline) {
-		if (card.innerHTML !== before) {
-			const indicationAt = performance.now();
+		if (indicationAt === null && card.innerHTML !== before)
+			indicationAt = performance.now();
+		const diagnostic = playbackDiagnostic(
+			diagnosticBaseline,
+			playbackDiagnosticLabel(action),
+		);
+		if (indicationAt !== null && diagnostic) {
 			return {
 				action,
 				input,
@@ -478,6 +511,8 @@ async function playbackActionSample(
 				indicationAt,
 				indicationMillis: indicationAt - inputAt,
 				changed: true,
+				requestId: diagnostic.requestId,
+				inputEpochMillis: performance.timeOrigin + inputAt,
 			};
 		}
 		await nextAnimationFrame();
@@ -489,7 +524,26 @@ async function playbackActionSample(
 		indicationAt: null,
 		indicationMillis: null,
 		changed: false,
+		requestId: null,
+		inputEpochMillis: performance.timeOrigin + inputAt,
 	};
+}
+
+function playbackDiagnosticCount() {
+	return frontendPerformanceDiagnostics.snapshot().playbackActions.length;
+}
+
+function playbackDiagnostic(baseline: number, action: string) {
+	return frontendPerformanceDiagnostics
+		.snapshot()
+		.playbackActions.slice(baseline)
+		.find((sample) => sample.action === action);
+}
+
+function playbackDiagnosticLabel(
+	action: PackagedPlaybackActionSample["action"],
+) {
+	return action === "go" ? "playback_go" : `playback_${action}`;
 }
 
 function pointerEvent(type: "pointerdown" | "pointerup") {

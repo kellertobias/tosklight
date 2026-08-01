@@ -126,7 +126,9 @@ try {
 	if (profile === "supported-scale") {
 		benchmarkPhase = "scheduler-configuration";
 		await configureSupportedScaleScheduler(prepared.session);
-		networkCapture = await startSupportedScaleNetworkCapture();
+		networkCapture = await startSupportedScaleNetworkCapture(
+			prepared.scene.playbackWorkload.dmxAddress,
+		);
 		await configureSupportedScaleOutputRoutes(
 			prepared.session,
 			prepared.showId,
@@ -332,7 +334,11 @@ async function configureSupportedScaleScheduler(session) {
 		);
 }
 
-async function startSupportedScaleNetworkCapture() {
+async function startSupportedScaleNetworkCapture(trackedAddress) {
+	if (!Number.isSafeInteger(trackedAddress) || trackedAddress < 1)
+		throw new Error(
+			"supported-scale network capture has no tracked DMX address",
+		);
 	const openReceiver = async (protocol) => {
 		const socket = dgram.createSocket("udp4");
 		const state = {
@@ -345,6 +351,10 @@ async function startSupportedScaleNetworkCapture() {
 			lastDmxHex: null,
 			dmxChanges: 0,
 			lastDmxChangedAt: null,
+			trackedAddress,
+			lastTrackedValue: null,
+			trackedValueChanges: 0,
+			trackedValueHistory: [],
 		};
 		socket.on("message", (packet) => {
 			const receivedAt = new Date().toISOString();
@@ -361,6 +371,21 @@ async function startSupportedScaleNetworkCapture() {
 				state.lastDmxChangedAt = receivedAt;
 			}
 			state.lastDmxHex = dmxHex;
+			const trackedValue = dmx[trackedAddress - 1];
+			if (
+				trackedValue !== undefined &&
+				state.lastTrackedValue !== null &&
+				state.lastTrackedValue !== trackedValue
+			) {
+				state.trackedValueChanges++;
+				state.trackedValueHistory.push({
+					changedAt: receivedAt,
+					value: trackedValue,
+				});
+				if (state.trackedValueHistory.length > 2_048)
+					state.trackedValueHistory.shift();
+			}
+			if (trackedValue !== undefined) state.lastTrackedValue = trackedValue;
 		});
 		await new Promise((resolve, reject) => {
 			socket.once("error", reject);
@@ -371,7 +396,10 @@ async function startSupportedScaleNetworkCapture() {
 		});
 		return {
 			port: socket.address().port,
-			snapshot: () => ({ ...state }),
+			snapshot: () => ({
+				...state,
+				trackedValueHistory: [...state.trackedValueHistory],
+			}),
 			close: () =>
 				new Promise((resolve) => {
 					socket.close(() => resolve());
@@ -526,15 +554,18 @@ async function waitForNetworkDmxChange(
 		let complete = true;
 		for (const protocol of ["artnet", "sacn"]) {
 			const current = snapshot[protocol];
-			const changed = current.dmxChanges > baseline[protocol].dmxChanges;
+			const changed =
+				current.trackedValueChanges > baseline[protocol].trackedValueChanges;
+			const changedAt = changed
+				? current.trackedValueHistory.at(-1)?.changedAt
+				: null;
 			complete &&= changed;
 			protocols[protocol] = {
 				changed,
-				dmxChanges: current.dmxChanges - baseline[protocol].dmxChanges,
-				changedAt: changed ? current.lastDmxChangedAt : null,
-				elapsedMillis: changed
-					? Date.parse(current.lastDmxChangedAt) - sentAt
-					: null,
+				valueChanges:
+					current.trackedValueChanges - baseline[protocol].trackedValueChanges,
+				changedAt,
+				elapsedMillis: changedAt ? Date.parse(changedAt) - sentAt : null,
 			};
 		}
 		if (complete) return protocols;
@@ -545,10 +576,14 @@ async function waitForNetworkDmxChange(
 		["artnet", "sacn"].map((protocol) => [
 			protocol,
 			{
-				changed: snapshot[protocol].dmxChanges > baseline[protocol].dmxChanges,
-				dmxChanges:
-					snapshot[protocol].dmxChanges - baseline[protocol].dmxChanges,
-				changedAt: snapshot[protocol].lastDmxChangedAt,
+				changed:
+					snapshot[protocol].trackedValueChanges >
+					baseline[protocol].trackedValueChanges,
+				valueChanges:
+					snapshot[protocol].trackedValueChanges -
+					baseline[protocol].trackedValueChanges,
+				changedAt:
+					snapshot[protocol].trackedValueHistory.at(-1)?.changedAt ?? null,
 				elapsedMillis: null,
 			},
 		]),
@@ -1958,6 +1993,7 @@ function evaluate(
 	const playbackOutputCorrelation = summarizePlaybackOutputCorrelation(
 		runtime,
 		programmerActionTiming,
+		complete.playbackActions,
 	);
 	if (profile === "supported-scale")
 		for (const failure of playbackOutputCorrelation.failures)
@@ -2268,7 +2304,11 @@ function summarizePackagedProgrammerActionTiming(runtime, profile = null) {
 	);
 }
 
-function summarizePlaybackOutputCorrelation(runtime, programmerActionTiming) {
+function summarizePlaybackOutputCorrelation(
+	runtime,
+	programmerActionTiming,
+	uiActions,
+) {
 	const exercises = [
 		["control", runtime?.controlPlaybackTimingExercise],
 		["stage", runtime?.stagePlaybackTimingExercise],
@@ -2317,9 +2357,52 @@ function summarizePlaybackOutputCorrelation(runtime, programmerActionTiming) {
 			)
 				failures.push(`${label} exceeded its server output-tick budget`);
 		}
+	const uiMeasurements = (Array.isArray(uiActions) ? uiActions : []).map(
+		(sample) => {
+			const timing = actionTimingByRequestId.get(sample.requestId);
+			const network = Object.fromEntries(
+				["artnet", "sacn"].map((protocol) => {
+					const change = runtime?.networkCapture?.after?.[
+						protocol
+					]?.trackedValueHistory?.find((candidate) => {
+						const changedAt = Date.parse(candidate.changedAt);
+						return (
+							changedAt >= sample.inputEpochMillis &&
+							changedAt <= sample.inputEpochMillis + 500
+						);
+					});
+					return [protocol, change ?? null];
+				}),
+			);
+			return { ...sample, timing: timing ?? null, network };
+		},
+	);
+	for (const sample of uiMeasurements) {
+		if (!sample.requestId) {
+			failures.push(`UI ${sample.action} has no request ID`);
+			continue;
+		}
+		if (!sample.timing)
+			failures.push(
+				`UI ${sample.action} has no authenticated server timing record`,
+			);
+		else if (
+			sample.timing.acknowledgement_within_budget !== true ||
+			sample.timing.output_within_budget !== true
+		)
+			failures.push(
+				`UI ${sample.action} exceeded its server output-tick budget`,
+			);
+		for (const protocol of ["artnet", "sacn"])
+			if (!sample.network[protocol])
+				failures.push(
+					`UI ${sample.action} produced no changed ${protocol} DMX slot`,
+				);
+	}
 	return {
-		samples: measurements.length,
+		samples: measurements.length + uiMeasurements.length,
 		measurements,
+		uiMeasurements,
 		passed: failures.length === 0,
 		failures,
 	};

@@ -9,6 +9,7 @@ import {
 	useRef,
 	useSyncExternalStore,
 } from "react";
+import type { PlaybackAction } from "../../api/types";
 import { frontendPerformanceDiagnostics } from "../frontendWarmup/diagnostics";
 import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
 import {
@@ -131,6 +132,11 @@ export function PlaybackRuntimeViewProvider({
 						repair: session
 							? (error) => session.repairAuthority(error)
 							: undefined,
+						onActionStarted: (request) =>
+							frontendPerformanceDiagnostics.recordPlaybackAction(
+								request.request_id,
+								playbackActionDiagnosticLabel(request.action),
+							),
 						onError,
 					})
 				: null,
@@ -176,6 +182,14 @@ export function PlaybackRuntimeViewProvider({
 			</SessionContext.Provider>
 		</StoreContext.Provider>
 	);
+}
+
+function playbackActionDiagnosticLabel(action: PlaybackAction) {
+	return action.type === "flash"
+		? action.pressed
+			? "playback_flash_press"
+			: "playback_flash_release"
+		: `playback_${action.type}`;
 }
 
 export function usePlaybackRuntimeActions() {
@@ -346,8 +360,7 @@ export function useVirtualPlaybackProjectionMap(
 		).values(),
 	].sort(
 		(left, right) =>
-			left.page - right.page ||
-			left.playbackNumber - right.playbackNumber,
+			left.page - right.page || left.playbackNumber - right.playbackNumber,
 	);
 	const key = canonical
 		.map((address) => `${address.page}.${address.playbackNumber}`)
@@ -379,8 +392,7 @@ export function useVirtualPlaybackProjectionMap(
 									(item) =>
 										item.requested.kind === "virtual" &&
 										item.requested.page === address.page &&
-										item.requested.playback_number ===
-											address.playbackNumber,
+										item.requested.playback_number === address.playbackNumber,
 								),
 						] as const;
 					}),
