@@ -77,6 +77,7 @@
     "benchmark:sustained-output": "node tools/run-sustained-output-benchmark.mjs",
     "benchmark:headless-stress": "node tools/run-headless-stress-benchmark.mjs",
     "benchmark:packaged-stage": "node tools/run-packaged-stage-benchmark.mjs",
+    "benchmark:supported-scale": "node tools/run-packaged-stage-benchmark.mjs 30 supported-scale",
     "test:record": "bash tools/test.sh record",
     "test:demo": "bash tools/test.sh demo",
     "test:all": "bash tools/test.sh all",

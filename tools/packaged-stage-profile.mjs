@@ -6,7 +6,8 @@ export const PACKAGED_STAGE_PROFILES = Object.freeze({
 		blocking: true,
 	}),
 	"canonical-demo": Object.freeze({
-		label: "Canonical demo (262 controls / 295 records / 343 physical instances)",
+		label:
+			"Canonical demo (262 controls / 295 records / 343 physical instances)",
 		tier: "realistic-demo",
 		targetHz: null,
 		blocking: true,
@@ -20,6 +21,16 @@ export const PACKAGED_STAGE_PROFILES = Object.freeze({
 		tier: "interactive-large",
 		targetHz: 100,
 		blocking: false,
+	}),
+	"supported-scale": Object.freeze({
+		label: "Supported scale (970 controls / 1,000 physical instances at 60 Hz)",
+		tier: "supported-scale",
+		targetHz: 60,
+		blocking: true,
+		expectedScene: Object.freeze({
+			fixtureRecords: 970,
+			fixtureInstances: 1_000,
+		}),
 	}),
 	"improved-beam-spike": Object.freeze({
 		label: "Improved-beam capability spike",

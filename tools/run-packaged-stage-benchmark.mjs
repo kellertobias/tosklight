@@ -86,6 +86,8 @@ const app = launchPackagedApplication(application, benchmarkEnvironment);
 let records;
 let scene;
 let runtime;
+let benchmarkFailure;
+let benchmarkPhase = "startup";
 let slowClient;
 let showSwitchResult;
 let applicationSuspendResult;
@@ -113,8 +115,14 @@ const memorySampler = setInterval(() => void collectMemory(), 1_000);
 try {
 	await requireReadiness(app, dataPath);
 	await collectMemory();
+	benchmarkPhase = "scene-preparation";
 	const prepared = await prepareScene(profile);
 	scene = prepared.scene;
+	if (profile === "supported-scale") {
+		benchmarkPhase = "scheduler-configuration";
+		await configureSupportedScaleScheduler(prepared.session);
+	}
+	benchmarkPhase = "control-window";
 	const before = await runtimeDiagnostics(prepared.session);
 	const programmerTimingExercise = await exercisePackagedProgrammerTiming(
 		prepared.session,
@@ -139,9 +147,10 @@ try {
 			(controlDurationSeconds + 30) * 1_000,
 		);
 		await activatePackagedApplication(application);
+		benchmarkPhase = "stage-window";
 		const afterNoStage = await runtimeDiagnostics(prepared.session);
 		memoryPhase = "stage";
-		if (profile === "large-stage")
+		if (isLargeOperatorProfile(profile))
 			slowClient = await startSlowVisualizationClient(
 				"http://127.0.0.1:5000",
 				prepared.session.token,
@@ -175,6 +184,8 @@ try {
 			programmerTimingExercise,
 		};
 	}
+} catch (reason) {
+	benchmarkFailure = reason;
 } finally {
 	clearInterval(memorySampler);
 	await collectMemory();
@@ -183,32 +194,44 @@ try {
 	await stopPackagedDesktop();
 }
 
-const terminalError = records.findLast((record) => record.kind === "error");
-if (terminalError)
-	throw new Error(
-		`Packaged Stage shell failed: ${terminalError.message ?? "unknown error"}`,
+let result;
+if (benchmarkFailure) {
+	result = benchmarkFailureReport(
+		benchmarkFailure,
+		benchmarkPhase,
+		samplesPath,
+		profile,
+		scene,
+		processMemory,
 	);
-const complete = records.findLast((record) => record.kind === "complete");
-if (!complete)
-	throw new Error("Packaged Stage report has no completion record");
-const result =
-	profile === "improved-beam-spike"
-		? evaluateImprovedBeamSpike(
-				complete,
-				samplesPath,
-				scene,
-				runtime,
-				processMemory,
-			)
-		: evaluate(
-				complete,
-				durationSeconds,
-				samplesPath,
-				profile,
-				scene,
-				runtime,
-				processMemory,
-			);
+} else {
+	const terminalError = records.findLast((record) => record.kind === "error");
+	if (terminalError)
+		throw new Error(
+			`Packaged Stage shell failed: ${terminalError.message ?? "unknown error"}`,
+		);
+	const complete = records.findLast((record) => record.kind === "complete");
+	if (!complete)
+		throw new Error("Packaged Stage report has no completion record");
+	result =
+		profile === "improved-beam-spike"
+			? evaluateImprovedBeamSpike(
+					complete,
+					samplesPath,
+					scene,
+					runtime,
+					processMemory,
+				)
+			: evaluate(
+					complete,
+					durationSeconds,
+					samplesPath,
+					profile,
+					scene,
+					runtime,
+					processMemory,
+				);
+}
 await writeFile(reportPath, `${JSON.stringify(result, null, 2)}\n`);
 console.log(`Created ${reportPath}`);
 if (!result.acceptanceGateEnforced) {
@@ -233,6 +256,70 @@ async function requireReadiness(app, dataDirectory) {
 	throw new Error(
 		`Packaged ToskLight did not become ready; inspect ${path.join(dataDirectory, "light-headless.log")}`,
 	);
+}
+
+async function configureSupportedScaleScheduler(session) {
+	await requestJson(
+		"POST",
+		"/api/v2/configuration/update",
+		{
+			request_id: crypto.randomUUID(),
+			patch: { frame_rate_hz: 60 },
+		},
+		{ session },
+	);
+	const snapshot = await requestJson(
+		"GET",
+		"/api/v2/configuration",
+		undefined,
+		{
+			session,
+		},
+	);
+	const configuredHz =
+		snapshot.configuration?.frame_rate_hz ?? snapshot.frame_rate_hz ?? null;
+	if (configuredHz !== 60)
+		throw new Error(
+			`production output scheduler retained ${configuredHz ?? "no"} Hz after requesting 60 Hz`,
+		);
+}
+
+function benchmarkFailureReport(
+	reason,
+	phase,
+	samplesFile,
+	profile,
+	scene,
+	processMemory,
+) {
+	const message = reason instanceof Error ? reason.message : String(reason);
+	return {
+		schemaVersion: 1,
+		tier: packagedStageProfile(profile).tier,
+		measurementSurface: "packaged-tauri-webview",
+		profile,
+		profileLabel: packagedStageProfile(profile).label,
+		scene: scene ?? null,
+		host: hostHardware(),
+		durationSeconds: 0,
+		samplesFile,
+		acceptanceGateEnforced: false,
+		failures: [`packaged benchmark failed during ${phase}: ${message}`],
+		execution: {
+			phase,
+			requestedOutputHz: packagedStageProfile(profile).targetHz,
+			completed: false,
+			error: message,
+		},
+		processMemory: {
+			measurement: `${process.platform} light-desktop main-process resident set`,
+			samples: processMemory,
+		},
+	};
+}
+
+function isLargeOperatorProfile(candidate) {
+	return candidate === "large-stage" || candidate === "supported-scale";
 }
 
 async function prepareScene(profile) {
@@ -1138,7 +1225,7 @@ function evaluate(
 		runtime.showSwitch,
 		complete.contextRecovery,
 	);
-	const realTimeStageGateEnforced = profile !== "large-stage";
+	const realTimeStageGateEnforced = !isLargeOperatorProfile(profile);
 	const failures = [];
 	if (realTimeStageGateEnforced && !settled.length)
 		failures.push("no changing frame reached a packaged canvas");
@@ -1172,7 +1259,7 @@ function evaluate(
 	if (!timeline.some((sample) => sample.additionalStageWindow === "opened"))
 		failures.push("the representative additional Stage window did not open");
 	if (
-		profile === "large-stage" &&
+		isLargeOperatorProfile(profile) &&
 		!["stage-3d", "fixture-sheet"].every((surface) =>
 			complete.activeUiSurfaces?.includes(surface),
 		)
@@ -1243,13 +1330,13 @@ function evaluate(
 	if (visualization.finalStreamQueueDepth !== 0)
 		failures.push("packaged visualization stream retained a queued frame");
 	if (
-		profile === "large-stage" &&
+		isLargeOperatorProfile(profile) &&
 		visualization.streamQueueDrops + visualization.streamSendFailures === 0
 	)
 		failures.push(
 			"packaged paused visualization client caused no bounded queue replacement or send failure",
 		);
-	if (profile === "large-stage") {
+	if (isLargeOperatorProfile(profile)) {
 		if (
 			scene.fixtureRecords !== LARGE_STAGE_FIXTURE_RECORDS ||
 			scene.fixtureInstances !== LARGE_STAGE_FIXTURE_INSTANCES

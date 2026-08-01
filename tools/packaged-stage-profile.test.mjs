@@ -16,7 +16,8 @@ test("long resource runs retain a five-minute no-Stage control", () => {
 
 test("canonical-demo identifies the shipped realistic release workload", () => {
 	assert.deepEqual(PACKAGED_STAGE_PROFILES["canonical-demo"], {
-		label: "Canonical demo (262 controls / 295 records / 343 physical instances)",
+		label:
+			"Canonical demo (262 controls / 295 records / 343 physical instances)",
 		tier: "realistic-demo",
 		targetHz: null,
 		blocking: true,
@@ -47,6 +48,26 @@ test("canonical-demo rejects either wrong control or physical-instance count", (
 	);
 });
 
+test("supported-scale fixes the packaged operator contract at 1,000 instances and 60 Hz", () => {
+	assert.deepEqual(PACKAGED_STAGE_PROFILES["supported-scale"], {
+		label: "Supported scale (970 controls / 1,000 physical instances at 60 Hz)",
+		tier: "supported-scale",
+		targetHz: 60,
+		blocking: true,
+		expectedScene: {
+			fixtureRecords: 970,
+			fixtureInstances: 1_000,
+		},
+	});
+	assert.deepEqual(
+		packagedStageSceneFailures("supported-scale", {
+			fixtureRecords: 970,
+			fixtureInstances: 1_000,
+		}),
+		[],
+	);
+});
+
 test("canonical-demo benchmark look has one physical and eleven virtual assignments", () => {
 	assert.equal(CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.length, 12);
 	assert.equal(
@@ -68,6 +89,6 @@ test("canonical-demo benchmark look has one physical and eleven virtual assignme
 test("packaged profile errors enumerate canonical-demo with the other supported profiles", () => {
 	assert.throws(
 		() => packagedStageProfile("unknown"),
-		/error.*`default-stage`, `canonical-demo`, `large-stage`, `improved-beam-spike`/i,
+		/error.*`default-stage`, `canonical-demo`, `large-stage`, `supported-scale`, `improved-beam-spike`/i,
 	);
 });
