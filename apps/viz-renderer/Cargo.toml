@@ -1,0 +1,27 @@
+[package]
+name = "viz-renderer"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[[bin]]
+name = "viz-renderer"
+path = "src/main.rs"
+
+[dependencies]
+glam.workspace = true
+muda.workspace = true
+png.workspace = true
+rfd.workspace = true
+uuid.workspace = true
+viz-desk.workspace = true
+viz-dmx.workspace = true
+viz-laser.workspace = true
+viz-project.workspace = true
+viz-render.workspace = true
+viz-scene.workspace = true
+viz-snapshot.workspace = true
+winit.workspace = true
+
+[lints]
+workspace = true
