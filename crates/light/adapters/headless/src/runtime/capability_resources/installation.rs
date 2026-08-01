@@ -112,7 +112,6 @@ impl InstallationResource {
         self.desk.lock().add_show_revision(show_id, name, path)
     }
 
-    #[cfg(test)]
     pub(in crate::runtime) fn active_show(
         &self,
     ) -> Result<Option<ShowEntry>, light_show::StoreError> {

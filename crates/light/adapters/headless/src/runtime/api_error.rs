@@ -50,6 +50,14 @@ impl ApiError {
             message: message.into(),
         }
     }
+    /// Another ToskLight was asked for something and did not deliver. The failure is upstream, and
+    /// saying so keeps it off this desk's own error budget.
+    pub(super) fn bad_gateway(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::BAD_GATEWAY,
+            message: message.into(),
+        }
+    }
     pub(super) fn unavailable(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::SERVICE_UNAVAILABLE,
