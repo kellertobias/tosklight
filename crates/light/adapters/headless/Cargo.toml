@@ -29,6 +29,7 @@ light-output = { path = "../../domain/output" }
 light-playback = { path = "../../domain/playback" }
 light-programmer = { path = "../../domain/programmer" }
 light-dynamics = { path = "../../domain/dynamics" }
+light-discovery.workspace = true
 light-show = { path = "../../../shared/show" }
 light-wire.workspace = true
 parking_lot.workspace = true
@@ -53,6 +54,7 @@ embassy-time-queue-utils = { version = "0.3", features = ["generic-queue-64"] }
 futures-lite = "2"
 if-addrs = "0.15"
 rand = { version = "0.8", features = ["std", "std_rng"] }
+reqwest.workspace = true
 rs-matter = { version = "0.2.0", features = ["async-io", "max-groups-per-fabric-12", "max-group-keys-per-fabric-2", "max-group-endpoints-per-fabric-3", "max-sessions-32"] }
 socket2 = { version = "0.5", features = ["all"] }
 

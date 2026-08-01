@@ -124,6 +124,9 @@ fn test_state_with_programmers(
             media: MediaResource::default(),
             replay: ReplayResource::default(),
             lifecycle: LifecycleResource::new(CancellationToken::new()),
+            // A test desk announces nothing and looks for nothing: the network is not part of
+            // what is under test, and a responder per test would be.
+            discovery: crate::runtime::discovery_http::DiscoveryResource::default(),
         },
         data_dir,
     )

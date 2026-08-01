@@ -3,6 +3,7 @@
 use super::attribute_configuration::InstalledAttributeConfiguration;
 use super::capabilities::runtime::supervisor::CapabilitySupervisors;
 use super::capability_resources::*;
+use super::discovery_http;
 use super::{
     ActionTimingResource, AppState, HighlightRegistry, matter,
     normalize_restored_virtual_playback_exclusions, output_scheduler, playback_telemetry,
@@ -318,6 +319,7 @@ fn build_app_state(
 ) -> anyhow::Result<AppState> {
     let installed_attributes =
         InstalledAttributeConfiguration::for_entry(startup.persistent.active_show.as_ref());
+    let discovery = start_discovery(&startup);
     let output = resources.scheduler.network_output();
     let output_sequences = resources.scheduler.sequences();
     let output_control = resources.scheduler.control_capability();
@@ -385,7 +387,26 @@ fn build_app_state(
         media: MediaResource::new(MediaCache::default()),
         replay: ReplayResource::default(),
         lifecycle: LifecycleResource::new(resources.cancellation.clone()),
+        discovery,
     })
+}
+
+/// Announce this desk to the network, and start listening for the other ToskLights.
+///
+/// `LIGHT_DISCOVERY=off` is for the installation that does not want its desk answering on mDNS at
+/// all; everything else about the desk behaves the same either way.
+fn start_discovery(startup: &StartupState) -> discovery_http::DiscoveryResource {
+    if env::var("LIGHT_DISCOVERY").is_ok_and(|value| value.eq_ignore_ascii_case("off")) {
+        return discovery_http::DiscoveryResource::default();
+    }
+    discovery_http::DiscoveryResource::start(
+        startup.persistent.bind.port(),
+        startup
+            .persistent
+            .active_show
+            .as_ref()
+            .map(|entry| entry.name.clone()),
+    )
 }
 
 fn desk_token() -> Option<Arc<str>> {

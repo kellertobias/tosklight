@@ -122,6 +122,20 @@ export class ShowApiClient {
 		});
 	}
 
+	/**
+	 * Load the document a Viz editor on the network has open.
+	 *
+	 * The desk fetches it, imports it as an ordinary show, and opens it — a copy, so patching
+	 * either side afterwards leaves the other alone.
+	 */
+	importFromVisualizer(instance: string): Promise<ShowEntry> {
+		return this.showAction({
+			type: "import_from_visualizer",
+			instance,
+			open: true,
+		});
+	}
+
 	downloadShow(id: string): Promise<Blob> {
 		return this.transport.blob(`/api/v2/shows/${id}/download`);
 	}

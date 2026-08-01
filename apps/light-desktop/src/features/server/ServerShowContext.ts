@@ -1,3 +1,4 @@
+import type { DiscoveredPeer } from "../../api/client/discovery";
 import type { ShowEntry } from "../../api/types";
 import type { StoredDeskLayout } from "./contracts";
 
@@ -12,6 +13,10 @@ export interface ServerShowContext {
 		transition?: "hold_current" | "timed_fade" | "safe_blackout",
 	) => Promise<void>;
 	openCleanDefaultShow: () => Promise<boolean>;
+	/** The Viz editors on the network that currently hold a document worth loading. */
+	discoveredVisualizers: () => Promise<DiscoveredPeer[]>;
+	/** Import and open the document one of them has open. */
+	loadFromVisualizer: (instance: string) => Promise<boolean>;
 	openShowFile: (
 		rootId: string,
 		path: string,

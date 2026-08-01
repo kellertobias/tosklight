@@ -38,6 +38,12 @@ pub struct ShowLibraryActionRequest {
     pub action: ShowLibraryAction,
 }
 
+/// Loading from a visualizer is an operator asking for that rig now, so it opens unless the
+/// caller says otherwise.
+fn opens_by_default() -> bool {
+    true
+}
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ShowLibraryAction {
@@ -87,6 +93,17 @@ pub enum ShowLibraryAction {
         transition: ShowOpenTransition,
         #[serde(default)]
         transition_millis: Option<u64>,
+    },
+    /// Load the document a Viz editor on the network currently has open.
+    ///
+    /// The desk fetches it, imports it as an ordinary show, and opens it. It is a copy: the
+    /// editor keeps its own document, and patching either side afterwards does not reach the
+    /// other. The instance is the one discovery reported; a peer that has gone is a clear 404
+    /// rather than a silently different show.
+    ImportFromVisualizer {
+        instance: String,
+        #[serde(default = "crate::v2::show_library::opens_by_default")]
+        open: bool,
     },
     ApplyMvr {
         token: Uuid,

@@ -119,6 +119,9 @@ async fn execute_action(
             )
             .await
         }
+        Action::ImportFromVisualizer { instance, open } => {
+            execute_import_from_visualizer(state, headers, instance, open).await
+        }
         Action::ApplyMvr {
             token,
             destination,
@@ -145,6 +148,36 @@ async fn execute_create(
     )
     .await?;
     Ok(show_result(show))
+}
+
+/// Load what a Viz editor on the network has open.
+///
+/// The document arrives as an ordinary show file and is imported as one, so everything that
+/// follows — the library entry, the revision, opening it — is the path any other imported show
+/// takes. The editor keeps its own document; this desk has a copy of it.
+async fn execute_import_from_visualizer(
+    state: &AppState,
+    headers: &HeaderMap,
+    instance: String,
+    open: bool,
+) -> Result<wire::ShowLibraryActionResult, ApiError> {
+    let (name, data) = discovery_http::fetch_visualizer_document(state, &instance).await?;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&data);
+    let imported = execute_create(state, headers, name, Some(encoded), false).await?;
+    if !open {
+        return Ok(imported);
+    }
+    let wire::ShowLibraryActionResult::Show { show } = &imported else {
+        return Ok(imported);
+    };
+    execute_open(
+        state,
+        headers,
+        show.id,
+        wire::ShowOpenTransition::default(),
+        None,
+    )
+    .await
 }
 
 async fn execute_open(

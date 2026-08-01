@@ -12,6 +12,8 @@ type ShowLifecycleActions = Pick<
 	| "openShow"
 	| "openCleanDefaultShow"
 	| "openShowFile"
+	| "discoveredVisualizers"
+	| "loadFromVisualizer"
 >;
 
 type ShowCreationActions = Pick<
@@ -148,6 +150,35 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
+			}
+		},
+		/**
+		 * Only editors holding a document: a peer with nothing open is discoverable but has
+		 * nothing to offer, and offering it would be offering a failure.
+		 */
+		discoveredVisualizers: async () => {
+			try {
+				const found = await api.discovery.peers();
+				return found.peers.filter(
+					(peer) => peer.role === "editor" && peer.show !== null,
+				);
+			} catch {
+				// Discovery is a convenience: a desk that cannot look simply offers nothing.
+				return [];
+			}
+		},
+		loadFromVisualizer: async (instance) => {
+			try {
+				await whileLoadingShow(model, "Loading show from visualizer…", async () => {
+					await api.shows.importFromVisualizer(instance);
+					await refresh();
+				});
+				setShows(await api.shows.shows());
+				setError(null);
+				return true;
+			} catch (reason) {
+				setError(reason instanceof Error ? reason.message : String(reason));
+				return false;
 			}
 		},
 		openShow: async (id, transition = "safe_blackout") => {

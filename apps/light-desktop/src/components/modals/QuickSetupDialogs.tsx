@@ -6,6 +6,8 @@ import {
 	SelectField,
 	TextInput,
 } from "@tosklight/ui";
+import { useEffect, useState } from "react";
+import type { DiscoveredPeer } from "../../api/client/discovery";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
 import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import type { QuickSetupModel } from "./QuickSetupModal";
@@ -273,6 +275,46 @@ function NamedRevisionList({ model, showId }: ModelProps & { showId: string }) {
 	));
 }
 
+/**
+ * The Viz editors on the network, offered as somewhere to load a rig from.
+ *
+ * Nothing is rendered when there is nothing to load: an operator with no visualizer running
+ * should not be shown a button that can only fail. Two editors are two buttons, told apart by
+ * name and — in the tooltip — address, because that is what distinguishes them.
+ */
+function LoadFromVisualizerActions({ model }: ModelProps) {
+	const { lifecycle } = model.authorities;
+	const open = model.dialogs.loadOpen;
+	const [visualizers, setVisualizers] = useState<DiscoveredPeer[]>([]);
+	useEffect(() => {
+		if (!open || !lifecycle) {
+			setVisualizers([]);
+			return;
+		}
+		let current = true;
+		// Read once as the menu opens: a peer that leaves while it is open is caught by the
+		// load itself failing, which is honest, rather than by a list that flickers.
+		void lifecycle
+			.discoveredVisualizers()
+			.then((found) => current && setVisualizers(found));
+		return () => {
+			current = false;
+		};
+	}, [open, lifecycle]);
+	return visualizers.map((visualizer) => (
+		<Button
+			key={visualizer.instance}
+			title={`${visualizer.name} at ${visualizer.address}`}
+			onClick={async () => {
+				if (await lifecycle?.loadFromVisualizer(visualizer.instance))
+					model.dialogs.setLoadOpen(false);
+			}}
+		>
+			Load from Visualizer · {visualizer.name}: {visualizer.show}
+		</Button>
+	));
+}
+
 function LoadShowLibrary({ model }: ModelProps) {
 	const { lifecycle } = model.authorities;
 	const { activeShowId, revisionsByShow } = model.view;
@@ -352,6 +394,7 @@ function LoadDialog({ model }: ModelProps) {
 							>
 								Load from MVR
 							</Button>
+							<LoadFromVisualizerActions model={model} />
 							<Button onClick={() => dialogs.usbShowPickerTrigger.current?.()}>
 								Show from USB
 							</Button>

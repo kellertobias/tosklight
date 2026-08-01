@@ -1,5 +1,6 @@
 import { AttributeConfigurationApiClient } from "./attributeConfiguration";
 import { DeskManagementApiClient } from "./deskManagement";
+import { DiscoveryApiClient } from "./discovery";
 import { DynamicsApiClient } from "./dynamics";
 import { FileApiClient } from "./files";
 import { FixtureApiClient } from "./fixtures";
@@ -28,6 +29,7 @@ export function createLightApi(baseUrl?: string) {
 		runtime,
 		attributes: new AttributeConfigurationApiClient(transport),
 		desk: new DeskManagementApiClient(transport),
+		discovery: new DiscoveryApiClient(transport),
 		dynamics: new DynamicsApiClient(transport),
 		files: new FileApiClient(transport),
 		fixtures: new FixtureApiClient(transport),

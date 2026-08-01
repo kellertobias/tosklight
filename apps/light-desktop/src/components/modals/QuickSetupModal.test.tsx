@@ -43,6 +43,8 @@ const mocks = vi.hoisted(() => ({
     saveShowAs: vi.fn(),
     openShow: vi.fn(),
     uploadShow: vi.fn(),
+    discoveredVisualizers: vi.fn(),
+    loadFromVisualizer: vi.fn(),
     initializeEmptyShow: vi.fn(),
     saveScreen: vi.fn(),
     createUser: vi.fn(),
@@ -114,6 +116,8 @@ beforeEach(() => {
     mocks.server.openShowRevision.mockReset().mockResolvedValue(true);
     mocks.server.overwriteShow.mockReset().mockResolvedValue(true);
     mocks.server.saveShowAs.mockReset().mockResolvedValue(true);
+    mocks.server.discoveredVisualizers.mockReset().mockResolvedValue([]);
+    mocks.server.loadFromVisualizer.mockReset().mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -216,6 +220,37 @@ describe("QuickSetupModal show workflows", () => {
     fireEvent.change(input, { target: { files: [showFile] } });
 
     await waitFor(() => expect(mocks.server.uploadShow).toHaveBeenCalledWith(showFile));
+  });
+
+  it("offers every discovered visualizer that has a document, and loads the one chosen", async () => {
+    mocks.server.discoveredVisualizers.mockResolvedValue([
+      { instance: "editor-a", name: "Viz Editor on booth", show: "Summer Tour rig", address: "10.0.0.4:5310" },
+      { instance: "editor-b", name: "Viz Editor on studio", show: "Studio rig", address: "10.0.0.9:5310" },
+    ]);
+    render(<QuickSetupModal />);
+    fireEvent.click(screen.getByRole("button", { name: "Load" }));
+    const load = await screen.findByRole("dialog", { name: "Load show" });
+    const titleBar = load.querySelector(".ui-modal-titlebar") as HTMLElement;
+
+    const booth = await within(titleBar).findByRole("button", {
+      name: "Load from Visualizer · Viz Editor on booth: Summer Tour rig",
+    });
+    // Two editors are two offers, told apart by name and address rather than collapsed into one.
+    expect(booth).toHaveAttribute("title", "Viz Editor on booth at 10.0.0.4:5310");
+    expect(within(titleBar).getByRole("button", {
+      name: "Load from Visualizer · Viz Editor on studio: Studio rig",
+    })).toBeInTheDocument();
+
+    fireEvent.click(booth);
+    await waitFor(() => expect(mocks.server.loadFromVisualizer).toHaveBeenCalledWith("editor-a"));
+  });
+
+  it("offers no visualizer when none is on the network", async () => {
+    render(<QuickSetupModal />);
+    fireEvent.click(screen.getByRole("button", { name: "Load" }));
+    const load = await screen.findByRole("dialog", { name: "Load show" });
+    await waitFor(() => expect(mocks.server.discoveredVisualizers).toHaveBeenCalled());
+    expect(within(load).queryByText(/Load from Visualizer/)).not.toBeInTheDocument();
   });
 
 	it("opens Partial Show Load from the Load Show title bar", async () => {

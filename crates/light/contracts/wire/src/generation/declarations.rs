@@ -7,6 +7,7 @@ use crate::v2::cue_deletion::*;
 use crate::v2::cue_recording::*;
 use crate::v2::cue_transfer::*;
 use crate::v2::desk_management::*;
+use crate::v2::discovery::*;
 use crate::v2::dynamics::*;
 use crate::v2::events::*;
 use crate::v2::files::*;
@@ -45,6 +46,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(control_desk_configuration(config));
     declarations.extend(desk_management(config));
     declarations.extend(dynamics(config));
+    declarations.extend(discovery(config));
     declarations.extend(event_subscription(config));
     declarations.extend(files(config));
     declarations.extend(programming(config));
@@ -783,6 +785,14 @@ fn patch(config: &Config) -> Vec<String> {
 fn stage_layout(config: &Config) -> Vec<String> {
     vec![
         StagePositionAxis::decl(config),
+fn discovery(config: &Config) -> Vec<String> {
+    vec![
+        DiscoveredRole::decl(config),
+        DiscoveredPeer::decl(config),
+        DiscoverySnapshot::decl(config),
+    ]
+}
+
         StagePosition2d::decl(config),
         StageProjection2d::decl(config),
         StageLayoutAction::decl(config),

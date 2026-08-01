@@ -20,6 +20,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(screen_configuration_v2::router())
         .merge(schedules_v2::router())
         .merge(virtual_playback_zones_http::router())
+        .merge(discovery_http::router())
         .merge(programming_update_http::router())
         .merge(show_patch_http::router())
         .merge(stage_layout_http::router())

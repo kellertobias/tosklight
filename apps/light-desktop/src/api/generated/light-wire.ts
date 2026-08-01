@@ -67,6 +67,33 @@ export type DeskLockConfigurationUpdateRequest = { request_id: string, message: 
 export type DeskUnlockMode = "button" | "pin";
 export type DeskUnlockRequest = { pin?: string | null, };
 export type UserCreateRequest = { request_id: string, name: string, enabled: boolean, };
+export type DiscoveredRole = "desk" | "editor";
+export type DiscoveredPeer = { role: DiscoveredRole,
+/**
+ * What the peer calls itself, for a menu entry an operator recognises.
+ */
+name: string,
+/**
+ * The show or document it is holding. `null` means it has nothing to offer, which is worth
+ * listing and not worth offering to load from.
+ */
+show: string | null,
+/**
+ * `host:port` of the peer's API, resolved and ready to use.
+ */
+address: string,
+/**
+ * The service instance, which is what tells two peers with the same name apart and what a
+ * load action names.
+ */
+instance: string, };
+export type DiscoverySnapshot = {
+/**
+ * Whether this desk is looking at all. A desk on a network with no mDNS, or one that could
+ * not open the responder, answers an empty list — and says which of the two it is, so the UI
+ * does not present "nothing found" as if it had looked.
+ */
+browsing: boolean, peers: Array<DiscoveredPeer>, };
 export type DynamicDefinitionProjection = { id: string, pool_number: number, revision: number, name: string, color?: string | null, icon?: string | null, target_binding: DynamicTargetBindingProjection, lanes: Array<DynamicLaneProjection>, random_groups: Array<DynamicRandomGroupProjection>, phase_mode: DynamicPhaseSpreadModeProjection, phase: DynamicPhaseDistributionProjection, speed: DynamicSpeedProjection, overall_speed_multiplier: DynamicRationalProjection, run_mode: DynamicRunModeProjection, default_activation: DynamicActivationPolicyProjection, activation_boundary: DynamicActivationBoundaryProjection, };
 export type DynamicTargetBindingProjection = { "type": "live_group", group_id: string, } | { "type": "frozen_targets", targets: Array<string>, } | { "type": "targetless" };
 export type DynamicLaneProjection = { id: string, attribute: string, mode: DynamicLaneModeProjection, keyframes: DynamicKeyframeConfigurationProjection, max_min: DynamicMaxMinConfigurationProjection, middle_amplitude: DynamicMiddleAmplitudeConfigurationProjection, speed_multiplier: DynamicRationalProjection, width: number, random_group_id?: string | null, phase?: DynamicPhaseDistributionProjection | null, };
@@ -810,7 +837,7 @@ export type ShowLibrarySnapshot = { shows: Array<ShowLibraryEntry>, };
 export type ShowLibraryEntry = { revisions: Array<ShowLibraryRevision>, id: string, name: string, path: string, revision: number, updated_at: string, revision_copy: RuntimeRevisionCopySource | null, };
 export type ShowLibraryRevision = { show_id: string, revision: number, name: string, created_at: string, };
 export type ShowLibraryActionRequest = { request_id: string, action: ShowLibraryAction, };
-export type ShowLibraryAction = { "type": "create", name: string, data_base64: string | null, overwrite: boolean, } | { "type": "open", show_id: string, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "open_default", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rollback", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rename", show_id: string, name: string, } | { "type": "overwrite", source_show_id: string, destination_show_id: string, } | { "type": "save_revision", show_id: string, name: string, } | { "type": "open_revision", show_id: string, revision: number, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "apply_mvr", token: string, destination: MvrImportDestination, resolutions: Array<MvrImportResolution>, };
+export type ShowLibraryAction = { "type": "create", name: string, data_base64: string | null, overwrite: boolean, } | { "type": "open", show_id: string, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "open_default", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rollback", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rename", show_id: string, name: string, } | { "type": "overwrite", source_show_id: string, destination_show_id: string, } | { "type": "save_revision", show_id: string, name: string, } | { "type": "open_revision", show_id: string, revision: number, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "import_from_visualizer", instance: string, open: boolean, } | { "type": "apply_mvr", token: string, destination: MvrImportDestination, resolutions: Array<MvrImportResolution>, };
 export type ShowOpenTransition = "hold_current" | "timed_fade" | "safe_blackout";
 export type MvrImportDestination = { "type": "new_show", name: string, open_after_import: boolean, } | { "type": "existing_show", show_id: string, };
 export type MvrImportResolution = { fixture_id: string, action: MvrImportResolutionAction, };

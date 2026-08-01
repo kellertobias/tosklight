@@ -1,4 +1,5 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
+import type { DiscoveredPeer } from "../../api/client/discovery";
 import type {
 	DeskUser,
 	MvrApplyResult,
@@ -20,6 +21,8 @@ export interface ShowLifecycleActions {
 		transition?: "hold_current" | "timed_fade" | "safe_blackout",
 	) => Promise<void>;
 	openCleanDefaultShow: () => Promise<boolean>;
+	discoveredVisualizers: () => Promise<DiscoveredPeer[]>;
+	loadFromVisualizer: (instance: string) => Promise<boolean>;
 	initializeEmptyShow: () => Promise<boolean>;
 	saveShowAs: (name: string) => Promise<boolean>;
 	overwriteShow: (destinationId: string) => Promise<boolean>;

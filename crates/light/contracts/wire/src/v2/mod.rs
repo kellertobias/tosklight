@@ -7,6 +7,7 @@ pub mod cue_deletion;
 pub mod cue_recording;
 pub mod cue_transfer;
 pub mod desk_management;
+pub mod discovery;
 pub mod dynamics;
 pub mod events;
 pub mod files;

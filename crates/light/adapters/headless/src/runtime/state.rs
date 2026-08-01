@@ -17,6 +17,8 @@ pub(super) struct AppState {
     pub(super) media: MediaResource,
     pub(super) replay: ReplayResource,
     pub(super) lifecycle: LifecycleResource,
+    /// The other ToskLights on the network, and this desk's own announcement to them.
+    pub(super) discovery: discovery_http::DiscoveryResource,
 }
 
 #[cfg(test)]
