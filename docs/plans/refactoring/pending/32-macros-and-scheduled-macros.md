@@ -1,9 +1,12 @@
 # Macros
 
+**Operator hold: do not implement this plan until the operator explicitly releases the hold.**
+
 ## Status and ownership
 
-**Pending refactoring queue item 32 — IMPLEMENTABLE.** This starts after
-[Supported Scale, Output Isolation, and Warm Operator UI](31-supported-scale-output-isolation-and-warm-operator-ui.md).
+**Pending refactoring queue item 32 — specified but paused.** Its prerequisite,
+[Supported Scale, Output Isolation, and Warm Operator UI](../finished/31-supported-scale-output-isolation-and-warm-operator-ui.md),
+is complete, but the operator hold above takes precedence over queue order.
 The language, package model, execution
 boundary, permissions, lifecycle,
 persistence, editor, interactions, panes, Programmer access, failure behavior, and acceptance
@@ -14,7 +17,7 @@ their own feature refers to or starts a Macro, but must link here instead of red
 language, packaging, permissions, execution, UI, or lifecycle behavior.
 
 Wall-clock trigger rules remain owned by [Schedules](../finished/23-schedules.md). Selective import
-workflow remains owned by [Partial Show Load](../doing/27-partial-show-load.md). Those plans consume
+workflow remains owned by [Partial Show Load](../finished/27-partial-show-load.md). Those plans consume
 the Macro contracts defined here.
 
 ## Goal and boundaries
@@ -37,6 +40,11 @@ A Macro cannot:
   filesystem path, browser DOM, React component, or raw application state;
 - import code from npm, a URL, an undeclared Macro package, or the desk filesystem; or
 - execute from Dynamics or the DMX render path.
+
+Native hardware integration does not relax this boundary. Macros cannot launch helper binaries or
+open USB MIDI, HID, serial, USB, raw MQTT, or other sockets. Separately installed native extensions
+may publish typed telemetry through the application-owned boundary defined by
+[Native Hardware Extensions, USB DMX, and Telemetry](../../Later/81-native-hardware-extensions-usb-dmx-and-telemetry.md).
 
 Macros may inspect, edit, start, and stop Dynamics. Dynamics never call Macro functions and no
 JavaScript runs for a Dynamic or output sample.
@@ -295,7 +303,8 @@ The generated SDK exposes capability-scoped namespaces for:
 - child Macro calls;
 - logging and cancellation;
 - declarative operator interactions;
-- audited HTTP; and
+- audited HTTP;
+- audited MQTT bindings and typed hardware-telemetry subscriptions; and
 - show-owned package storage.
 
 `MacroValue` supports null, booleans, numbers, strings, arrays and records, colors, durations,
@@ -379,7 +388,7 @@ Stopping a Service empties its panes but does not remove their layout metadata. 
 show reload leaves them idle; Services never checkpoint or automatically resume in the first
 implementation.
 
-## HTTP and other permissions
+## HTTP, MQTT, telemetry, and other permissions
 
 All capabilities are requested by the portable manifest and granted in local Macro settings.
 Portable show content cannot grant itself authority.
@@ -399,8 +408,28 @@ The first implementation has no secret store. Operators may set literal headers 
 editor must warn that credentials written in source are visible in local/show diffs and portable
 show files.
 
+MQTT is a separate capability, never an HTTP convention or a raw socket. A package requests named
+MQTT bindings and explicit publish/subscribe topic filters. Desk Settings maps each opaque binding
+name to an installation-owned broker profile containing endpoint, transport/TLS policy,
+credentials or secret references, client policy, and topic grants. Portable source and show files
+receive the binding name and non-secret policy only. This is not a generic Macro secret store: the
+Macro can use an approved binding but cannot read its credentials.
+
+The application-owned MQTT port enforces topic filters, payload size and schema,
+publish/subscribe rate, QoS, retained-message permission, receive queue depth,
+reconnect/backoff, cancellation, and bounded audit events. Subscriptions use async iterators or
+cancellable waits integrated with normal Macro supervision; they cannot keep a cancelled execution
+alive.
+
+Hardware telemetry is also disabled by default. A package requests exact extension
+instance/channel patterns and receives only typed values, units, timestamps, sequences, and quality
+metadata published by the application telemetry service. It cannot enumerate or command arbitrary
+devices, receive raw reports/bytes, or infer every channel from access to one extension. Bounded
+latest-value delivery and explicit stale/disconnected states prevent a slow Macro from
+backpressuring a hardware reader.
+
 Direct sockets, arbitrary filesystem access, environment access, process execution, browser
-network APIs, and database access remain unavailable.
+network APIs, raw USB/MIDI/HID/serial access, and database access remain unavailable.
 
 When a local/show update requests permissions beyond the package's currently granted local
 permissions, ToskLight opens a permission-change modal showing the previous grants and newly
@@ -527,7 +556,7 @@ Add typed wire contracts for:
 - interaction requests and responses;
 - pane surfaces and pane actions;
 - show-owned storage; and
-- permissions and HTTP-origin grants.
+- permissions, HTTP-origin grants, MQTT bindings/topic grants, and telemetry channel grants.
 
 Library/source editing uses request-identified object intents. Live start, cancel, interaction, and
 pane actions use ordered WebSocket frames from the desk with plain HTTP equivalents for
@@ -645,15 +674,17 @@ an invisible live dependency on another show.
 ### Security and performance
 
 34. Tests prove that Macro code cannot access desk settings, show management, arbitrary files,
-    processes, environment variables, raw databases/sockets, browser APIs, self-editing,
-    undeclared Macro packages, or unapproved HTTP origins; library imports cannot broaden the
-    importing package's authority.
+    processes, environment variables, raw databases/sockets, USB, MIDI, HID, serial, browser APIs,
+    self-editing, undeclared Macro packages, unapproved HTTP origins, MQTT bindings/topics, or
+    telemetry channels; library imports cannot broaden the importing package's authority.
 35. Permission increases display old and newly requested grants and can open the dedicated editor.
     The import/update succeeds completely after **Accept** or leaves the local package unchanged
     after **Deny** or failure; triggering actions never wait and unavailable Macros skip with a
     visible **Macro Error**.
 36. HTTP redirects, DNS changes, private-network origins, sizes, timeouts, rates, and cancellation
-    cannot escape policy.
+    cannot escape policy. MQTT broker profiles, TLS/credentials, topic filters, QoS/retain,
+    payloads, queues, reconnects, rates, and cancellation likewise cannot escape policy;
+    telemetry cannot expose raw device data or backpressure the native extension host.
 37. Storage traversal, stale writes, and quota bypass are rejected atomically.
 38. Active Workflows and Services do not block server requests, OSC feedback, desktop lifecycle,
     or the output scheduler.
