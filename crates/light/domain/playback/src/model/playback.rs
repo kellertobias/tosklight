@@ -500,15 +500,19 @@ impl PlaybackDefinition {
                 "playback presentation accepts either an icon or an image, not both".into(),
             );
         }
-        for (name, value) in [
-            ("icon", self.presentation_icon.as_deref()),
-            ("image", self.presentation_image.as_deref()),
-        ] {
-            if value.is_some_and(|value| value.trim().is_empty() || value.len() > 1_024) {
-                return Err(format!(
-                    "playback presentation {name} must contain 1-1024 characters"
-                ));
-            }
+        if self
+            .presentation_icon
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty() || value.len() > 1_024)
+        {
+            return Err("playback presentation icon must contain 1-1024 characters".into());
+        }
+        if self
+            .presentation_image
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty() || value.len() > 600_000)
+        {
+            return Err("playback presentation image must contain 1-600000 characters".into());
         }
         Ok(())
     }

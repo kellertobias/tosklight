@@ -1,13 +1,13 @@
+import type { VerticalTouchFaderAction } from "@tosklight/ui/faders";
 import type {
 	CSSProperties,
 	MouseEvent as ReactMouseEvent,
 	PointerEvent as ReactPointerEvent,
 } from "react";
 import type { Cue, PlaybackDefinition } from "../../../api/types";
-import type { VerticalTouchFaderAction } from "@tosklight/ui/faders";
 import {
-	isPlaybackControlTarget,
 	assignDynamicPlayback,
+	isPlaybackControlTarget,
 	isPlaybackSetClickArmed,
 	openPlaybackConfiguration,
 	recordPlayback,

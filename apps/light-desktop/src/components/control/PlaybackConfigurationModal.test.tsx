@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaybackDefinition } from "../../api/types";
 import {
 	normalizePlaybackTopology,
+	playbackImageDataUrl,
 	PlaybackConfigurationDialog,
 	withFunctionDefaults,
 } from "./PlaybackConfigurationModal";
@@ -48,6 +49,26 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../features/server/useShowObjectsState", () => ({
 	useGroups: () => mocks.groups,
+}));
+vi.mock("../files/RootConfinedFilePickerButton", () => ({
+	RootConfinedFilePickerButton: ({
+		label,
+		onFiles,
+	}: {
+		label: string;
+		onFiles: (files: File[]) => void | Promise<void>;
+	}) => (
+		<button
+			type="button"
+			onClick={() =>
+				void onFiles([
+					new File(["image"], "blue-wash.png", { type: "image/png" }),
+				])
+			}
+		>
+			{label}
+		</button>
+	),
 }));
 vi.mock("../../features/showObjects/ShowObjectsState", () => ({
 	usePortableGroups: () => mocks.groups,
@@ -549,19 +570,27 @@ describe("PlaybackConfigurationModal topology defaults", () => {
 	it("persists mutually exclusive virtual presentation", async () => {
 		show({ ...base, button_count: 1, has_fader: false }, { virtual: true });
 		choose("Presentation", "Image background");
-		fireEvent.change(screen.getByLabelText("Image background"), {
-			target: { value: "show://images/blue-wash.png" },
-		});
+		fireEvent.click(screen.getByRole("button", { name: "Choose image" }));
+		await screen.findByAltText("Selected playback background");
 		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 		await waitFor(() =>
 			expect(mocks.savePlaybackSlot).toHaveBeenCalledWith(
 				2,
 				4,
 				expect.objectContaining({
-					presentation_image: "show://images/blue-wash.png",
+					presentation_image: "data:image/png;base64,aW1hZ2U=",
 					presentation_icon: undefined,
 				}),
 			),
+		);
+	});
+
+	it("rejects oversized playback images before storing them", async () => {
+		const file = new File([new Uint8Array(400 * 1024 + 1)], "large.png", {
+			type: "image/png",
+		});
+		await expect(playbackImageDataUrl(file)).rejects.toThrow(
+			"400 KB or smaller",
 		);
 	});
 

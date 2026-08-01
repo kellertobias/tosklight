@@ -82,7 +82,9 @@ export async function assignDynamicPlayback(
 	if (!command || !controller.dynamicAssignmentPending) return false;
 	const prefix = controller.commandLine?.text.trim();
 	if (!prefix) return false;
-	const outcome = await command.execute(`${prefix} PLAYBACK ${playback.number}`);
+	const outcome = await command.execute(
+		`${prefix} PLAYBACK ${playback.number}`,
+	);
 	return outcome.executed;
 }
 

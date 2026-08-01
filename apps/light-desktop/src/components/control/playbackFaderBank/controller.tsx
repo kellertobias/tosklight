@@ -6,11 +6,6 @@ import type {
 } from "../../../api/types";
 import { useCueRecording } from "../../../features/cueRecording/CueRecordingProvider";
 import {
-	useProgrammingCommandLineActions,
-	useProgrammingCommandLineView,
-	useProgrammingInteractionStatus,
-} from "../../../features/programmingInteraction/ProgrammingInteractionView";
-import {
 	usePlaybackDeskView,
 	usePlaybackProjectionMap,
 	usePlaybackRuntimeActions,
@@ -18,6 +13,11 @@ import {
 } from "../../../features/playbackRuntime/PlaybackRuntimeView";
 import { usePlaybackTopologyActions } from "../../../features/playbackTopology/PlaybackTopologyProvider";
 import { usePlaybackTopologyView } from "../../../features/playbackTopology/PlaybackTopologyView";
+import {
+	useProgrammingCommandLineActions,
+	useProgrammingCommandLineView,
+	useProgrammingInteractionStatus,
+} from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import {
 	usePortableGroups,
 	useShowObjectCollectionsReady,
@@ -154,14 +154,8 @@ interface ProjectedSlotsOptions {
 }
 
 function useProjectedSlots(options: ProjectedSlotsOptions) {
-	const {
-		topology,
-		pageObject,
-		playbackLayout,
-		columns,
-		firstSlot,
-		pageSize,
-	} = options;
+	const { topology, pageObject, playbackLayout, columns, firstSlot, pageSize } =
+		options;
 	const current = useMemo(
 		() => ({
 			topology,
@@ -224,10 +218,13 @@ function useVisiblePlaybackProjections(
 		[slots],
 	);
 	const projections = usePlaybackProjectionMap(enabled ? numbers : []);
-	const loaded = numbers.every((number) => projections.get(number) !== undefined);
+	const loaded = numbers.every(
+		(number) => projections.get(number) !== undefined,
+	);
 	const matches = slots.every(
 		({ playback }) =>
-			!playback || projectionMatches(playback, projections.get(playback.number)),
+			!playback ||
+			projectionMatches(playback, projections.get(playback.number)),
 	);
 	const error =
 		loaded && !matches
@@ -242,7 +239,8 @@ function projectionMatches(
 	playback: PlaybackDefinition,
 	projection: PlaybackRuntimeProjection | undefined,
 ) {
-	if (!projection || projection.playback_number !== playback.number) return false;
+	if (!projection || projection.playback_number !== playback.number)
+		return false;
 	const target = playback.target;
 	if (target.type === "cue_list")
 		return (

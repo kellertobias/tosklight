@@ -329,3 +329,16 @@ fn legacy_layout_defaults_are_target_specific_and_invalid_layouts_are_rejected()
     incompatible.presentation_image = Some("asset://background".into());
     assert!(incompatible.validate().is_err());
 }
+
+#[test]
+fn playback_presentation_accepts_bounded_embedded_images() {
+    let mut playback = definition(1, CueListId::new());
+    playback.presentation_image = Some(format!("data:image/png;base64,{}", "A".repeat(550_000)));
+    assert!(playback.validate().is_ok());
+
+    playback.presentation_image = Some("A".repeat(600_001));
+    assert_eq!(
+        playback.validate().unwrap_err(),
+        "playback presentation image must contain 1-600000 characters"
+    );
+}

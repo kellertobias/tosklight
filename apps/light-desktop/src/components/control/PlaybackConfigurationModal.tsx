@@ -6,6 +6,7 @@ import { ModalTitleBar } from "@tosklight/ui";
 import { SelectionTree, WindowScrollArea, type SelectionListOption } from "@tosklight/ui/window-kit";
 import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
 import { useCueLists, useDynamics, usePortableGroups } from "../../features/showObjects/ShowObjectsState";
+import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
 
 export const PLAYBACK_COLORS = DEFAULT_COLORS;
 
@@ -94,7 +95,9 @@ export function PlaybackConfigurationDialog({ playback, page, slot, empty = fals
   useEffect(() => {
     if (failure && error && failure !== error) setFailure(error);
   }, [error, failure]);
-  const presentation = draft.presentation_image ? "image" : draft.presentation_icon ? "icon" : "label";
+  const [presentation, setPresentation] = useState<"label" | "icon" | "image">(
+    () => draft.presentation_image ? "image" : draft.presentation_icon ? "icon" : "label",
+  );
   const selectedDynamicId = draft.target.type === "dynamic" ? draft.target.assignment.dynamic_id : undefined;
   const selectedDynamic = selectedDynamicId ? dynamics.find((dynamic) => dynamic.id === selectedDynamicId) : undefined;
   const dynamicScopeValid = draft.target.type !== "dynamic" || selectedDynamic?.body.target_binding.type !== "targetless"
@@ -139,7 +142,7 @@ export function PlaybackConfigurationDialog({ playback, page, slot, empty = fals
         <Button className={tab === "layout" ? "active" : ""} onClick={() => setTab("layout")}>Layout</Button>
       </nav>
       <div className="playback-configuration-body">
-        {tab === "function" && <PlaybackFunctionTab family={family} draft={draft} virtual={virtual} presentation={presentation} cueLists={cueLists} dynamics={dynamics} groups={groups} onFamilyChange={chooseFamily} onSpecialChange={chooseSpecial} onDraftChange={setDraft}/>}
+        {tab === "function" && <PlaybackFunctionTab family={family} draft={draft} virtual={virtual} presentation={presentation} cueLists={cueLists} dynamics={dynamics} groups={groups} onFamilyChange={chooseFamily} onSpecialChange={chooseSpecial} onPresentationChange={setPresentation} onDraftChange={setDraft}/>}
         {tab === "behavior" && <WindowScrollArea className="playback-tab-scroll"><div className="playback-tab-scroll-content">{family === "none" ? <InactivePlaybackDetail/> : <PlaybackBehaviorTab draft={draft} dynamics={dynamics} groups={groups} onDraftChange={setDraft}/>}</div></WindowScrollArea>}
         {tab === "layout" && <WindowScrollArea className="playback-tab-scroll"><div className="playback-tab-scroll-content">{family === "none" ? <InactivePlaybackDetail/> : <PlaybackLayoutTab draft={draft} options={options} onDraftChange={setDraft}/>}</div></WindowScrollArea>}
         {failure && <p role="alert" className="modal-error">{failure}</p>}
@@ -148,16 +151,17 @@ export function PlaybackConfigurationDialog({ playback, page, slot, empty = fals
   </div></ModalRegistration>, document.body);
 }
 
-function PlaybackFunctionTab({ family, draft, virtual, presentation, cueLists, dynamics, groups, onFamilyChange, onSpecialChange, onDraftChange }: {
+function PlaybackFunctionTab({ family, draft, virtual, presentation, cueLists, dynamics, groups, onFamilyChange, onSpecialChange, onPresentationChange, onDraftChange }: {
   family: PlaybackFamily;
   draft: PlaybackDefinition;
   virtual: boolean;
-  presentation: string;
+  presentation: "label" | "icon" | "image";
   cueLists: Array<{ id: string; name: string }>;
   dynamics: ReturnType<typeof useDynamics>;
   groups: ReadonlyArray<{ id: string; body: { name?: string } }>;
   onFamilyChange: (family: PlaybackFamily) => void;
   onSpecialChange: (type: "programmer_fade" | "cue_fade" | "grand_master") => void;
+  onPresentationChange: (presentation: "label" | "icon" | "image") => void;
   onDraftChange: (playback: PlaybackDefinition) => void;
 }) {
   const functionOptions: SelectionListOption[] = [{ value: "cue_list", label: "Cue List" }, ...(dynamics.length > 0 ? [{ value: "dynamic", label: "Dynamic" }] : []), { value: "group", label: "Group Master" }, { value: "speed_group", label: "Speed Master" }, { value: "special", label: "Special" }, { value: "none", label: "None", tone: "danger" }];
@@ -170,7 +174,15 @@ function PlaybackFunctionTab({ family, draft, virtual, presentation, cueLists, d
   else if (family === "group" && draft.target.type === "group") { optionValue = draft.target.group_id; targetOptions = groups.map((group) => ({ value: group.id, label: group.body.name ?? group.id })); chooseTarget = (group_id) => onDraftChange({ ...draft, target: { type: "group", group_id } }); }
   else if (family === "speed_group" && draft.target.type === "speed_group") { optionValue = draft.target.group; targetOptions = ["A", "B", "C", "D", "E"].map((value) => ({ value, label: `Speed Group ${value}` })); chooseTarget = (group) => onDraftChange({ ...draft, target: { type: "speed_group", group } }); }
   else if (family === "special") { optionValue = isSpecial(draft.target.type) ? draft.target.type : "programmer_fade"; targetOptions = [{ value: "programmer_fade", label: "Programmer Fade" }, { value: "cue_fade", label: "Cue Fade" }, { value: "grand_master", label: "Grand Master" }]; chooseTarget = (value) => onSpecialChange(value as "programmer_fade" | "cue_fade" | "grand_master"); }
-  const presentationOptions = virtual && family !== "none" ? <FormLayout className="playback-presentation-options"><SelectField label="Presentation" value={presentation} onChange={(value) => onDraftChange({ ...draft, presentation_icon: value === "icon" ? draft.presentation_icon ?? "▶" : undefined, presentation_image: value === "image" ? draft.presentation_image ?? "image://playback" : undefined })} options={[{ value: "label", label: "Label" }, { value: "icon", label: "Icon" }, { value: "image", label: "Image background" }]}/>{presentation === "icon" && <TextField label="Icon" value={draft.presentation_icon ?? ""} maxLength={1024} onChange={(event) => onDraftChange({ ...draft, presentation_icon: event.target.value, presentation_image: undefined })}/>} {presentation === "image" && <TextField label="Image background" value={draft.presentation_image ?? ""} maxLength={1024} onChange={(event) => onDraftChange({ ...draft, presentation_image: event.target.value, presentation_icon: undefined })}/>}</FormLayout> : undefined;
+  const presentationOptions = virtual && family !== "none" ? <FormLayout className="playback-presentation-options"><SelectField label="Presentation" value={presentation} onChange={(value) => {
+    onPresentationChange(value);
+    onDraftChange({ ...draft, presentation_icon: undefined, presentation_image: undefined });
+  }} options={[{ value: "label", label: "Label" }, { value: "icon", label: "Icon" }, { value: "image", label: "Image background" }]}/>{presentation === "icon" && <TextField label="Icon" value={draft.presentation_icon ?? ""} maxLength={1024} onChange={(event) => onDraftChange({ ...draft, presentation_icon: event.target.value, presentation_image: undefined })}/>} {presentation === "image" && <div className="playback-image-setting">{draft.presentation_image ? <img src={draft.presentation_image} alt="Selected playback background"/> : <small>No image selected.</small>}<RootConfinedFilePickerButton label={draft.presentation_image ? "Change image" : "Choose image"} allowedExtensions={["png", "jpg", "jpeg", "gif", "webp"]} onFiles={async (files) => {
+    const file = files[0];
+    if (!file) return;
+    const presentation_image = await playbackImageDataUrl(file);
+    onDraftChange({ ...draft, presentation_image, presentation_icon: undefined });
+  }}/>{draft.presentation_image && <Button onClick={() => onDraftChange({ ...draft, presentation_image: undefined })}>Remove image</Button>}</div>}</FormLayout> : undefined;
   return <div className="playback-function-screen">
     <SelectionTree className={`playback-function-tree ${family === "none" ? "has-inactive-detail" : ""}`} columns={[
       { id: "function", title: "Function", ariaLabel: "Playback function", value: family, options: functionOptions, onChange: (value) => onFamilyChange(value as PlaybackFamily) },
@@ -183,6 +195,24 @@ function PlaybackFunctionTab({ family, draft, virtual, presentation, cueLists, d
       </FormLayout>
     </section>
   </div>;
+}
+
+const MAX_PLAYBACK_IMAGE_BYTES = 400 * 1024;
+
+export function playbackImageDataUrl(file: File): Promise<string> {
+  if (!file.type.startsWith("image/"))
+    return Promise.reject(new Error("Choose a PNG, JPEG, GIF, or WebP image."));
+  if (file.size > MAX_PLAYBACK_IMAGE_BYTES)
+    return Promise.reject(new Error("Playback images must be 400 KB or smaller."));
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("The selected image could not be read."));
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("The selected image could not be read."));
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function PlaybackBehaviorTab({ draft, dynamics, groups, onDraftChange }: { draft: PlaybackDefinition; dynamics: ReturnType<typeof useDynamics>; groups: ReadonlyArray<{ id: string; body: { name?: string } }>; onDraftChange: (playback: PlaybackDefinition) => void }) {
