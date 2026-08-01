@@ -2192,24 +2192,26 @@ async function recordVisibleCuelist({
 	await desk.click(record);
 	await expect(record).toHaveAttribute("aria-pressed", "true");
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.cuelistRecordHoldFrames);
-	await desk.click(
-		pool.locator(`.cuelist-card[data-pool-slot-id="${number}"]`).first(),
-	);
-	await expect
-		.poll(async () => {
-			const target = await playbackTarget(api, showId, number);
-			if (target?.type !== "cue_list") return null;
-			const cueList = await api.showObject<any>(
-				showId,
-				"cue_list",
-				target.cue_list_id,
-			);
-			return target.cue_list_id !== previousTarget?.cue_list_id ||
-				(cueList?.revision ?? -1) > (previousCueList?.revision ?? -1)
-				? target.cue_list_id
-				: null;
-		})
-		.not.toBeNull();
+	const poolCard = pool
+		.locator(`.cuelist-card[data-pool-slot-id="${number}"]`)
+		.first();
+	await desk.click(poolCard);
+	const recordedCueListId = async () => {
+		const target = await playbackTarget(api, showId, number);
+		if (target?.type !== "cue_list") return null;
+		const cueList = await api.showObject<any>(
+			showId,
+			"cue_list",
+			target.cue_list_id,
+		);
+		return target.cue_list_id !== previousTarget?.cue_list_id ||
+			(cueList?.revision ?? -1) > (previousCueList?.revision ?? -1)
+			? target.cue_list_id
+			: null;
+	};
+	await page.waitForTimeout(500);
+	if ((await recordedCueListId()) === null) await poolCard.click();
+	await expect.poll(recordedCueListId).not.toBeNull();
 	if ((await record.getAttribute("aria-pressed")) === "true")
 		await desk.click(record);
 	await expect(record).toHaveAttribute("aria-pressed", "false");
