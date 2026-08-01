@@ -128,7 +128,9 @@ stored independently from every Layout pane.
 
 ## Channels
 
-The Channels pane is a direct intensity-programming bank. It assigns one fader to each fixture in patch order, 20 channels per page in two rows. Each fader shows its channel number, fixture name, and resolved percentage. Moving it writes an intensity value into the programmer; tapping its card selects the fixture. Empty positions are disabled.
+The Channels pane is a direct programming bank ordered by Fixture ID. In the default **Intensity only** mode, it assigns one fader to each fixture. Faders fill each page from left to right across the first row and then continue on the second row. Each fader is labelled **Fixture _ID_**, followed by **Intensity**, and shows the resolved percentage. Moving it writes an intensity value into the programmer; tapping its card selects the fixture. Empty positions are disabled.
+
+In **Pane Settings → Channels**, choose **Intensity only** or **All channels** for that pane. **All channels** keeps fixtures grouped in Fixture ID order and shows each fixture's attributes in profile-authored order. Each fader identifies the fixture and attribute it controls. The full Channels window offers the same display choice in **Channel Settings**, along with the number of faders per row.
 
 The full Channels window has previous/next controls and a page picker with at least eight channel pages. The compact pane hides that header, so it remains on channels 1-20 and cannot change pages from inside the pane. Use the full window when access beyond the first bank is required.
 

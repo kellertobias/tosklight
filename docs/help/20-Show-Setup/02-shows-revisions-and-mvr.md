@@ -20,6 +20,14 @@ For an established, named show, **Save As** can create another named show or sel
 
 ![Load the latest autosave or a named revision](../assets/screenshots/workflows/show-load-revisions.png)
 
+## Load from a Visualizer on the network
+
+The ToskLight Viz Editor plans a rig against the same patch sheet the desk uses, and a rig planned there is a show the desk can run. When a Viz Editor with a document open is on the same network, **Load Show** offers **Load from Visualizer** naming that editor and the document it is holding. Pressing it copies the document across, imports it into the show library like any other portable show, and opens it.
+
+What arrives is a copy. Patching in the editor afterwards does not reach this desk, and programming here does not reach the editor. Two editors on the network are two separate offers, named after the machines they are running on.
+
+The offer only appears when there is something to load: an editor with nothing open, a network without discovery, or a firewall that blocks it costs the button, not the desk. Nothing else about the desk depends on it. The other direction — the editor loading this desk's show — is described in [Planning a Rig in the Viz Editor](../45-Visualizer/06-planning-and-transfer.md).
+
 ## Import MVR
 
 Choose **New Show > Load from MVR** and review the preview before creating the show. The preview reports matched profiles, missing GDTF modes, address conflicts, and unsupported standalone scene geometry. Resolve each fixture conflict by choosing a safe address, importing unpatched, or skipping it. Standalone geometry is not imported; recreate required scenery with visual-only Venue fixtures in Show Patch. Apply only after checking the result. Merge-into-existing-show support exists internally but currently has no operator control and must not be relied on as an available workflow.
