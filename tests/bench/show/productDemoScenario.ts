@@ -1694,18 +1694,20 @@ async function buildGroups(
 			await installPlannedDemoGroups(api, showId, fixtures);
 			// Establish the physical page outside the visible assignment so the first
 			// touched Group Master still lands on a genuinely empty slot.
-			await keypadCommand(desk, keypad, [
-				"SET",
-				"GRP",
-				"2",
-				"6",
-				"AT",
-				"1",
-				".",
-				"1",
-				"2",
-				"ENT",
-			]);
+			const pages = await api.showObjects<any>(showId, "playback_page");
+			const page = pages.find((candidate) => candidate.body.number === 1);
+			await api.seedShowObject(
+				showId,
+				"playback_page",
+				page?.id ?? "1",
+				{
+					number: 1,
+					name: page?.body.name ?? "Busking",
+					slots: page?.body.slots ?? {},
+					virtual_playbacks: page?.body.virtual_playbacks ?? {},
+				},
+				page?.revision ?? 0,
+			);
 		},
 	);
 	await expect
@@ -3176,7 +3178,6 @@ async function installRemainingGroupMasters(api: ApiDriver, showId: string) {
 				4: 4,
 				5: 5,
 				6: 6,
-				12: 12,
 			},
 			virtual_playbacks: page?.body.virtual_playbacks ?? {},
 		},
