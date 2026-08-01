@@ -197,16 +197,18 @@ async fn run(
 // A scheduler tick advances timecode, renders authoritative engine state, maps universes into
 // frames, and sends configured routes. Network I/O starts only after rendering completes.
 async fn render_tick(runtime: Runtime) -> io::Result<u64> {
+    let tick_started = Instant::now();
     let action_timing = runtime.action_timing.begin_output_render();
     update_timecode(&runtime);
     let options = runtime.control.lock().render_options();
-    let (rendered, visualization_scope) = {
+    let (rendered, visualization_scope, dynamic, engine) = {
         let Ok(_activation) = runtime.activation.try_acquire() else {
             return send_retained_output(&runtime).await;
         };
         let visualization_scope = VisualizationScope {
             show_id: runtime.active_show.current().map(|show| show.id.0),
         };
+        let dynamic_started = Instant::now();
         let (sampled, auto_offs, dynamic_events, _, _) = dynamic_contributions_with_auto_off(
             &runtime.engine,
             &runtime.dynamics,
@@ -222,6 +224,8 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         for event in dynamic_events {
             runtime.playback.publish(event);
         }
+        let dynamic = dynamic_started.elapsed();
+        let engine_started = Instant::now();
         let rendered = render_with_playback_events(
             &runtime.engine,
             &runtime.active_show,
@@ -230,8 +234,14 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
             &sampled,
         )
         .map_err(io::Error::other)?;
-        (rendered, visualization_scope)
+        (
+            rendered,
+            visualization_scope,
+            dynamic,
+            engine_started.elapsed(),
+        )
     };
+    let publish_started = Instant::now();
     let (routes, frames, patched_slots) = {
         let mut control = runtime.control.lock();
         if !control.hold {
@@ -246,6 +256,8 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
             rendered.patched_slots,
         )
     };
+    let publish = publish_started.elapsed();
+    let send_started = Instant::now();
     let result = runtime
         .output
         .send_routes(
@@ -255,6 +267,8 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
             &mut *runtime.sequences.lock().await,
         )
         .await;
+    let send = send_started.elapsed();
+    trace_slow_output_phases(tick_started.elapsed(), dynamic, engine, publish, send);
     if result.is_ok() {
         runtime.action_timing.complete_output_render(action_timing);
     }
@@ -262,6 +276,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
 }
 
 async fn send_retained_output(runtime: &Runtime) -> io::Result<u64> {
+    let tick_started = Instant::now();
     let (routes, frames, patched_slots) = {
         let control = runtime.control.lock();
         (
@@ -270,7 +285,8 @@ async fn send_retained_output(runtime: &Runtime) -> io::Result<u64> {
             control.last_patched_slots.clone(),
         )
     };
-    runtime
+    let send_started = Instant::now();
+    let result = runtime
         .output
         .send_routes(
             &routes,
@@ -278,7 +294,15 @@ async fn send_retained_output(runtime: &Runtime) -> io::Result<u64> {
             &patched_slots,
             &mut *runtime.sequences.lock().await,
         )
-        .await
+        .await;
+    trace_slow_output_phases(
+        tick_started.elapsed(),
+        Duration::ZERO,
+        Duration::ZERO,
+        Duration::ZERO,
+        send_started.elapsed(),
+    );
+    result
 }
 
 /// Runs one test-bench frame through the same render, routing, sequence, health-facing output

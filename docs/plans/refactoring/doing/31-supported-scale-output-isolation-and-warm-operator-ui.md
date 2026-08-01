@@ -7,6 +7,40 @@ Attribute Registry plans are complete. This plan now owns the mandatory packaged
 benchmark and any repairs it proves necessary before
 [Macros](../pending/32-macros-and-scheduled-macros.md).
 
+## Retained baseline and repair progress
+
+- Commit `a338e93a` added the permanent `benchmark:supported-scale` packaged profile before
+  production changes. Its first run retained
+  `.artifacts/performance/stage/packaged-tauri-supported-scale-2026-08-01T14-50-06-480Z.json`.
+  The exact 970-control/1,000-physical-instance scene prepared successfully, then the production
+  configuration rejected 60 Hz because both validation and the scheduler were limited to 40–44
+  Hz.
+- Commit `a5f4d016` widened the production configuration, scheduler, Desk Setup field, and Help
+  contract to 40–60 Hz while retaining the 44 Hz default. Focused Rust, UI, type, formatting, and
+  boundary checks passed.
+- The post-repair run retained
+  `.artifacts/performance/stage/packaged-tauri-supported-scale-2026-08-01T15-08-23-965Z.json`.
+  It achieved 59.93 Hz and all 59 sampled Programmer actions met the two-tick rule. It also proved
+  that the current harness is not yet this plan's required workload: it sends zero network packets,
+  shows two in-window Stage surfaces, races its optional sibling Stage opening against the 30-second
+  Stage-window finish, and contains no correlated Playback UI/OSC matrix or Fixture Sheet value
+  convergence gate. The production scheduler recorded two no-Stage misses and one Stage-window
+  miss; the Stage-window p99 remained 12 ms in both windows.
+- The corrected literal surface/network run retained
+  `.artifacts/performance/stage/packaged-tauri-supported-scale-2026-08-01T15-40-30-479Z.json`.
+  It ran one 3D Stage beside one Fixture Sheet, removed unrelated sibling-window, context-loss,
+  active-show-switch, and application-suspend stress, and captured actual Art-Net plus sACN UDP
+  packets. The control window had zero deadline misses; the Stage window delivered 3,666 packets
+  at 61.1 measured frames/s with zero send errors and unchanged 12 ms p99. One 21.98 ms tick missed
+  its deadline. Production phase logging attributed 18.20 ms of that tick to engine evaluation,
+  3.49 ms to Dynamic sampling, 112 µs to publication, and 71 µs to network send. This is the first
+  genuine retained hard-gate failure from the corrected workload.
+
+Plan 31 therefore remains on the repair path. Do not interpret the sibling-window failures as a
+product acceptance failure: this plan requires one 3D Stage. The next slice must retain and reduce
+the engine-evaluation outlier while completing the still-missing correlated Playback UI/OSC matrix,
+representative Cuelist/fade workload, and Fixture Sheet convergence evidence.
+
 This plan turns the root
 [`README.md`](../../../../README.md#supported-usage-profile) contract into measured packaged
 behavior. All discussed efficiency and capacity improvements remain in this one issue until the

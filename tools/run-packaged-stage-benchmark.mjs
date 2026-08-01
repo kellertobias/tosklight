@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import dgram from "node:dgram";
 import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -78,6 +79,8 @@ const benchmarkEnvironment = {
 		controlDurationSeconds,
 	),
 	LIGHT_STAGE_PACKAGED_BENCH_PROFILE: profile,
+	LIGHT_STAGE_PACKAGED_BENCH_ADDITIONAL_STAGE_WINDOW:
+		profile === "supported-scale" ? "0" : "1",
 	LIGHT_STAGE_PACKAGED_BENCH_PREPARED: preparedPath,
 	LIGHT_DESKTOP_TEST_DATA_DIR: dataPath,
 };
@@ -89,6 +92,7 @@ let runtime;
 let benchmarkFailure;
 let benchmarkPhase = "startup";
 let slowClient;
+let networkCapture;
 let showSwitchResult;
 let applicationSuspendResult;
 let memoryPhase = "startup";
@@ -121,9 +125,16 @@ try {
 	if (profile === "supported-scale") {
 		benchmarkPhase = "scheduler-configuration";
 		await configureSupportedScaleScheduler(prepared.session);
+		networkCapture = await startSupportedScaleNetworkCapture();
+		await configureSupportedScaleOutputRoutes(
+			prepared.session,
+			prepared.showId,
+			networkCapture,
+		);
 	}
 	benchmarkPhase = "control-window";
 	const before = await runtimeDiagnostics(prepared.session);
+	const networkBefore = networkCapture?.snapshot() ?? null;
 	const programmerTimingExercise = await exercisePackagedProgrammerTiming(
 		prepared.session,
 	);
@@ -149,22 +160,25 @@ try {
 		await activatePackagedApplication(application);
 		benchmarkPhase = "stage-window";
 		const afterNoStage = await runtimeDiagnostics(prepared.session);
+		const networkAfterNoStage = networkCapture?.snapshot() ?? null;
 		memoryPhase = "stage";
 		if (isLargeOperatorProfile(profile))
 			slowClient = await startSlowVisualizationClient(
 				"http://127.0.0.1:5000",
 				prepared.session.token,
 			);
-		const showSwitch = exerciseShowSwitches(
-			prepared.session,
-			prepared.showSwitch,
-			durationSeconds,
-		);
-		const applicationSuspend = exerciseApplicationSuspend(
-			application,
-			app,
-			durationSeconds,
-		);
+		const showSwitch =
+			profile === "supported-scale"
+				? Promise.resolve({ attempted: false, completed: 0, intervals: [] })
+				: exerciseShowSwitches(
+						prepared.session,
+						prepared.showSwitch,
+						durationSeconds,
+					);
+		const applicationSuspend =
+			profile === "supported-scale"
+				? Promise.resolve({ attempted: false, completed: false })
+				: exerciseApplicationSuspend(application, app, durationSeconds);
 		records = await waitForComplete(
 			samplesPath,
 			(controlDurationSeconds + durationSeconds + 30) * 1_000,
@@ -175,6 +189,7 @@ try {
 		slowClient = undefined;
 		await new Promise((resolve) => setTimeout(resolve, 250));
 		const after = await runtimeDiagnostics(prepared.session);
+		const networkAfter = networkCapture?.snapshot() ?? null;
 		runtime = {
 			before,
 			afterNoStage,
@@ -182,6 +197,11 @@ try {
 			showSwitch: showSwitchResult,
 			applicationSuspend: applicationSuspendResult,
 			programmerTimingExercise,
+			networkCapture: {
+				before: networkBefore,
+				afterNoStage: networkAfterNoStage,
+				after: networkAfter,
+			},
 		};
 	}
 } catch (reason) {
@@ -190,6 +210,7 @@ try {
 	clearInterval(memorySampler);
 	await collectMemory();
 	await slowClient?.close();
+	await networkCapture?.close();
 	app.kill("SIGTERM");
 	await stopPackagedDesktop();
 }
@@ -282,6 +303,99 @@ async function configureSupportedScaleScheduler(session) {
 		throw new Error(
 			`production output scheduler retained ${configuredHz ?? "no"} Hz after requesting 60 Hz`,
 		);
+}
+
+async function startSupportedScaleNetworkCapture() {
+	const openReceiver = async (protocol) => {
+		const socket = dgram.createSocket("udp4");
+		const state = {
+			protocol,
+			packets: 0,
+			bytes: 0,
+			firstReceivedAt: null,
+			lastReceivedAt: null,
+			lastPacketPrefixHex: null,
+		};
+		socket.on("message", (packet) => {
+			const receivedAt = new Date().toISOString();
+			state.packets++;
+			state.bytes += packet.length;
+			state.firstReceivedAt ??= receivedAt;
+			state.lastReceivedAt = receivedAt;
+			state.lastPacketPrefixHex = packet.subarray(0, 24).toString("hex");
+		});
+		await new Promise((resolve, reject) => {
+			socket.once("error", reject);
+			socket.bind(0, "127.0.0.1", () => {
+				socket.off("error", reject);
+				resolve();
+			});
+		});
+		return {
+			port: socket.address().port,
+			snapshot: () => ({ ...state }),
+			close: () =>
+				new Promise((resolve) => {
+					socket.close(() => resolve());
+				}),
+		};
+	};
+	const artnet = await openReceiver("art_net");
+	const sacn = await openReceiver("sacn");
+	return {
+		artnet,
+		sacn,
+		snapshot: () => ({ artnet: artnet.snapshot(), sacn: sacn.snapshot() }),
+		close: async () => {
+			await Promise.all([artnet.close(), sacn.close()]);
+		},
+	};
+}
+
+async function configureSupportedScaleOutputRoutes(session, showId, capture) {
+	for (const [routeId, route] of [
+		[
+			"supported-scale-artnet",
+			{
+				protocol: "art_net",
+				logical_universe: 101,
+				destination_universe: 101,
+				delivery_mode: "unicast",
+				destination: `127.0.0.1:${capture.artnet.port}`,
+				enabled: true,
+				minimum_slots: 512,
+			},
+		],
+		[
+			"supported-scale-sacn",
+			{
+				protocol: "sacn",
+				logical_universe: 102,
+				destination_universe: 102,
+				delivery_mode: "unicast",
+				destination: `127.0.0.1:${capture.sacn.port}`,
+				enabled: true,
+				minimum_slots: 512,
+			},
+		],
+	]) {
+		await requestJson(
+			"POST",
+			"/api/v2/output-routes/actions",
+			{
+				request_id: crypto.randomUUID(),
+				action: { type: "create", route_id: routeId, route },
+			},
+			{ session, showId },
+		);
+	}
+	const deadline = Date.now() + 5_000;
+	while (Date.now() < deadline) {
+		const snapshot = capture.snapshot();
+		if (snapshot.artnet.packets > 0 && snapshot.sacn.packets > 0) return;
+		await new Promise((resolve) => setTimeout(resolve, 25));
+	}
+	throw new Error("configured Art-Net and sACN routes emitted no UDP packets");
 }
 
 function benchmarkFailureReport(
@@ -392,6 +506,7 @@ async function prepareScene(profile) {
 						: "development default show",
 			},
 			session,
+			showId,
 			showSwitch: {
 				...showSwitch,
 				canonicalDemo: profile === "canonical-demo",
@@ -507,6 +622,7 @@ async function prepareScene(profile) {
 			addedMultipatchInstances: largeScene.addedMultipatchInstances,
 		},
 		session,
+		showId,
 		showSwitch: { ...showSwitch, dynamics },
 	};
 }
@@ -1226,6 +1342,7 @@ function evaluate(
 		complete.contextRecovery,
 	);
 	const realTimeStageGateEnforced = !isLargeOperatorProfile(profile);
+	const lifecycleStressEnforced = profile !== "supported-scale";
 	const failures = [];
 	if (realTimeStageGateEnforced && !settled.length)
 		failures.push("no changing frame reached a packaged canvas");
@@ -1256,7 +1373,10 @@ function evaluate(
 		failures.push(
 			"the packaged run did not exercise all four render qualities",
 		);
-	if (!timeline.some((sample) => sample.additionalStageWindow === "opened"))
+	if (
+		lifecycleStressEnforced &&
+		!timeline.some((sample) => sample.additionalStageWindow === "opened")
+	)
 		failures.push("the representative additional Stage window did not open");
 	if (
 		isLargeOperatorProfile(profile) &&
@@ -1275,25 +1395,29 @@ function evaluate(
 		failures.push(
 			"renderer context ownership grew beyond the two visible surfaces",
 		);
-	if ((stage?.rendererContextLosses ?? 0) < 1)
+	if (lifecycleStressEnforced && (stage?.rendererContextLosses ?? 0) < 1)
 		failures.push("the Stage benchmark did not observe a WebGL context loss");
-	if ((stage?.rendererContextRestores ?? 0) < 1)
+	if (lifecycleStressEnforced && (stage?.rendererContextRestores ?? 0) < 1)
 		failures.push(
 			"the Stage benchmark did not observe WebGL context restoration",
 		);
-	if (complete.contextRecoveryMethod !== "webgl_lose_context")
+	if (
+		lifecycleStressEnforced &&
+		complete.contextRecoveryMethod !== "webgl_lose_context"
+	)
 		failures.push(
 			"the packaged context gate did not use the WEBGL_lose_context extension",
 		);
-	if ((stage?.desktopMirrorRenders ?? 0) < 1)
+	if (lifecycleStressEnforced && (stage?.desktopMirrorRenders ?? 0) < 1)
 		failures.push(
 			"the sibling Stage window did not acknowledge a mirrored canvas render",
 		);
-	if ((runtime.showSwitch?.completed ?? 0) !== 4)
+	if (lifecycleStressEnforced && (runtime.showSwitch?.completed ?? 0) !== 4)
 		failures.push(
 			"the packaged Stage run did not complete two active-show round trips",
 		);
 	if (
+		lifecycleStressEnforced &&
 		process.platform !== "win32" &&
 		runtime.applicationSuspend?.completed !== true
 	)
@@ -1310,6 +1434,18 @@ function evaluate(
 		failures.push("packaged Stage output window missed a scheduler deadline");
 	if (output.stageWindowSendErrors > 0)
 		failures.push("packaged Stage output window recorded a send error");
+	if (profile === "supported-scale") {
+		for (const protocol of ["artnet", "sacn"]) {
+			const beforePackets =
+				runtime.networkCapture?.afterNoStage?.[protocol]?.packets ?? 0;
+			const afterPackets =
+				runtime.networkCapture?.after?.[protocol]?.packets ?? 0;
+			if (afterPackets <= beforePackets)
+				failures.push(
+					`packaged Stage window dispatched no actual ${protocol} UDP packets`,
+				);
+		}
+	}
 	const visualization = summarizeVisualizationWindow(runtime);
 	const programmerActionTiming =
 		summarizePackagedProgrammerActionTiming(runtime);

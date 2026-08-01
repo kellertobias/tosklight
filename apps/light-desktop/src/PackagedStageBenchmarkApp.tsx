@@ -69,6 +69,7 @@ function useAdditionalStageWindow(
 function usePackagedStagePhases(
 	stageEnabled: boolean,
 	durationSeconds: number,
+	exerciseLifecycle: boolean,
 	setQualityIndex: (update: (current: number) => number) => void,
 	setLiveView: (view: "2d" | "3d") => void,
 	setLiveVisible: (visible: boolean) => void,
@@ -136,24 +137,27 @@ function usePackagedStagePhases(
 				};
 			}, 10_000);
 		};
-		const recovery = window.setTimeout(() => {
-			// Pin a committed 3D canvas before invoking WEBGL_lose_context. A
-			// delayed phase callback must not unmount the selected canvas between
-			// loseContext() and WebKit's asynchronous loss event.
-			recoveryPinned = true;
-			setLiveView("3d");
-			setLiveVisible(true);
-			recoveryRetry = window.setTimeout(recover, 100);
-		}, 16_000);
+		const recovery = exerciseLifecycle
+			? window.setTimeout(() => {
+					// Pin a committed 3D canvas before invoking WEBGL_lose_context. A
+					// delayed phase callback must not unmount the selected canvas between
+					// loseContext() and WebKit's asynchronous loss event.
+					recoveryPinned = true;
+					setLiveView("3d");
+					setLiveVisible(true);
+					recoveryRetry = window.setTimeout(recover, 100);
+				}, 16_000)
+			: null;
 		return () => {
 			window.clearInterval(phase);
-			window.clearTimeout(recovery);
+			if (recovery !== null) window.clearTimeout(recovery);
 			if (recoveryRetry !== null) window.clearTimeout(recoveryRetry);
 			if (recoveryRelease !== null) window.clearTimeout(recoveryRelease);
 		};
 	}, [
 		benchmarkState,
 		durationSeconds,
+		exerciseLifecycle,
 		setLiveView,
 		setLiveVisible,
 		setQualityIndex,
@@ -440,8 +444,11 @@ function PreparedPackagedStageBenchmark({
 		useState<AdditionalStageWindowState>(
 			additionalStageWindowEnabled ? "pending" : "disabled",
 		);
+	const supportedScale = profile === "supported-scale";
 	const activeUiSurfaces = fixtureSheet
-		? ["stage-3d", "stage-3d-preload", "fixture-sheet"]
+		? supportedScale
+			? ["stage-3d", "fixture-sheet"]
+			: ["stage-3d", "stage-3d-preload", "fixture-sheet"]
 		: ["stage-3d", "stage-3d-preload"];
 	const benchmarkState = useRef<PackagedBenchmarkState>({
 		quality: qualities[0],
@@ -469,6 +476,7 @@ function PreparedPackagedStageBenchmark({
 	usePackagedStagePhases(
 		stageEnabled,
 		durationSeconds,
+		!supportedScale,
 		setQualityIndex,
 		setLiveView,
 		setLiveVisible,
@@ -496,6 +504,7 @@ function PreparedPackagedStageBenchmark({
 						liveView={liveView}
 						quality={quality}
 						fixtureSheet={fixtureSheet}
+						profile={profile}
 						controlDurationSeconds={controlDurationSeconds}
 					/>
 					<ConnectionState />
@@ -512,6 +521,7 @@ function PackagedStageBenchmarkSurface({
 	liveView,
 	quality,
 	fixtureSheet,
+	profile,
 	controlDurationSeconds,
 }: {
 	stageEnabled: boolean;
@@ -519,6 +529,7 @@ function PackagedStageBenchmarkSurface({
 	liveView: "2d" | "3d";
 	quality: StageRenderQuality;
 	fixtureSheet: boolean;
+	profile: string;
 	controlDurationSeconds: number;
 }) {
 	return (
@@ -534,7 +545,7 @@ function PackagedStageBenchmarkSurface({
 				<div
 					style={{
 						display: "grid",
-						gridTemplateRows: "1fr 1fr",
+						gridTemplateRows: profile === "supported-scale" ? "1fr" : "1fr 1fr",
 						minHeight: 0,
 					}}
 				>
@@ -548,16 +559,18 @@ function PackagedStageBenchmarkSurface({
 						showFloorGrid
 						showBeamGuides
 					/>
-					<StageWindow
-						compact
-						stageView="3d"
-						showGroupShortcuts={false}
-						followPreload
-						stageRenderQuality="lines_only"
-						showSelection={false}
-						showFloorGrid
-						showBeamGuides
-					/>
+					{profile !== "supported-scale" && (
+						<StageWindow
+							compact
+							stageView="3d"
+							showGroupShortcuts={false}
+							followPreload
+							stageRenderQuality="lines_only"
+							showSelection={false}
+							showFloorGrid
+							showBeamGuides
+						/>
+					)}
 				</div>
 			) : (
 				<PackagedStageBaseline
