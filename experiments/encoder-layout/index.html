@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>ToskLight Encoder Layout Lab</title>
+		<link rel="stylesheet" href="./styles.css" />
+	</head>
+	<body>
+		<main class="encoder-lab" aria-labelledby="lab-title">
+			<aside class="group-panel" aria-label="Encoder groups">
+				<div class="brand-block">
+					<span class="eyebrow">ToskLight experiment</span>
+					<h1 id="lab-title">Encoder groups</h1>
+					<p>Select a group to inspect its generated pages.</p>
+				</div>
+				<nav id="group-list" class="group-list"></nav>
+			</aside>
+
+			<section class="workspace" aria-live="polite">
+				<header class="workspace-header">
+					<div>
+						<span id="group-kind" class="eyebrow"></span>
+						<h2 id="group-title"></h2>
+						<p id="group-description"></p>
+					</div>
+					<div class="width-control" aria-label="Hardware encoder count">
+						<span>Hardware</span>
+						<div id="width-options" class="segmented-control"></div>
+					</div>
+				</header>
+
+				<div class="page-toolbar">
+					<div>
+						<strong id="page-title"></strong>
+						<span id="page-summary"></span>
+					</div>
+					<nav id="page-options" class="page-options" aria-label="Encoder pages"></nav>
+				</div>
+
+				<div id="encoder-deck" class="encoder-deck"></div>
+			</section>
+		</main>
+		<script src="./encoder-layout-data.js"></script>
+		<script src="./app.js"></script>
+	</body>
+</html>
