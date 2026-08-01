@@ -2362,6 +2362,7 @@ async function demonstrateBuskingAndPreload(
 			valuesMatch(
 				await preloadProgrammerAttributeLook(
 					api,
+					showId,
 					preparedLook.washFixtureIds,
 					new Set(["color.red", "color.green", "color.blue"]),
 				),
@@ -2389,6 +2390,7 @@ async function demonstrateBuskingAndPreload(
 			valuesMatch(
 				await preloadProgrammerAttributeLook(
 					api,
+					showId,
 					preparedLook.beamFixtureIds,
 					new Set(["pan", "tilt"]),
 				),
@@ -2412,6 +2414,7 @@ async function demonstrateBuskingAndPreload(
 			valuesMatch(
 				await preloadProgrammerAttributeLook(
 					api,
+					showId,
 					preparedLook.beamFixtureIds,
 					new Set(["color.red", "color.green", "color.blue"]),
 				),
@@ -2548,6 +2551,7 @@ async function visualizationColorLook(
 
 async function preloadProgrammerAttributeLook(
 	api: ApiDriver,
+	showId: string,
 	fixtureIds: readonly string[],
 	attributes: ReadonlySet<string>,
 ) {
@@ -2559,7 +2563,7 @@ async function preloadProgrammerAttributeLook(
 		`/api/v2/users/${userId}/programmer-preload-values/snapshot`,
 	);
 	const targets = new Set(fixtureIds);
-	return Object.fromEntries(
+	const values = Object.fromEntries(
 		snapshot.projection.fixture_values.flatMap((entry: any) =>
 			targets.has(entry.fixture_id) &&
 			attributes.has(entry.attribute) &&
@@ -2568,6 +2572,16 @@ async function preloadProgrammerAttributeLook(
 				: [],
 		),
 	);
+	for (const entry of snapshot.projection.group_values) {
+		if (!attributes.has(entry.attribute) || entry.value.kind !== "normalized")
+			continue;
+		const group = await api.showObject<any>(showId, "group", entry.group_id);
+		for (const fixtureId of group?.body.fixtures ?? []) {
+			if (targets.has(fixtureId))
+				values[`${fixtureId}:${entry.attribute}`] = entry.value.value;
+		}
+	}
+	return values;
 }
 
 function canonicalDemoMillis(bars: number, bpm: number, beatsPerBar: number) {
