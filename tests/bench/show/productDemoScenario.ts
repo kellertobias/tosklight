@@ -2328,6 +2328,10 @@ async function demonstrateBuskingAndPreload(
 	await desk.click(
 		keypad.getByRole("button", { name: "PRELOAD GO", exact: true }),
 	);
+	await expect
+		.poll(async () => (await preloadState(api)).capturesValues)
+		.toBe(true);
+	const preparedLook = await expectedPreloadColorLook(api, showId);
 	await demoPause(
 		demo.page(),
 		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
@@ -2351,7 +2355,19 @@ async function demonstrateBuskingAndPreload(
 	await openBuiltIn(desk, app, "Presets");
 	const presets = app.locator(".preset-pool-window");
 	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
-	await desk.click(presetTile(presets, "2.9"));
+	await recallPresetThroughTouchWithRetry(
+		desk,
+		presetTile(presets, "2.9"),
+		async () =>
+			valuesMatch(
+				await preloadProgrammerAttributeLook(
+					api,
+					preparedLook.washFixtureIds,
+					new Set(["color.red", "color.green", "color.blue"]),
+				),
+				valuesForFixtures(preparedLook.values, preparedLook.washFixtureIds),
+			),
+	);
 	await demoPause(
 		demo.page(),
 		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
@@ -2366,14 +2382,42 @@ async function demonstrateBuskingAndPreload(
 	await desk.click(
 		presets.getByRole("button", { name: "Position", exact: true }),
 	);
-	await desk.click(presetTile(presets, "3.5"));
+	await recallPresetThroughTouchWithRetry(
+		desk,
+		presetTile(presets, "3.5"),
+		async () =>
+			valuesMatch(
+				await preloadProgrammerAttributeLook(
+					api,
+					preparedLook.beamFixtureIds,
+					new Set(["pan", "tilt"]),
+				),
+				Object.fromEntries(
+					preparedLook.beamFixtureIds.flatMap((fixtureId) => [
+						[`${fixtureId}:pan`, 0.5],
+						[`${fixtureId}:tilt`, 0.05],
+					]),
+				),
+			),
+	);
 	await demoPause(
 		demo.page(),
 		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
 	);
 	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
-	await desk.click(presetTile(presets, "2.3"));
-	const preparedLook = await expectedPreloadColorLook(api, showId);
+	await recallPresetThroughTouchWithRetry(
+		desk,
+		presetTile(presets, "2.3"),
+		async () =>
+			valuesMatch(
+				await preloadProgrammerAttributeLook(
+					api,
+					preparedLook.beamFixtureIds,
+					new Set(["color.red", "color.green", "color.blue"]),
+				),
+				valuesForFixtures(preparedLook.values, preparedLook.beamFixtureIds),
+			),
+	);
 	await expect
 		.poll(async () =>
 			visualizationColorLook(api, preparedLook.fixtureIds, true),
@@ -2429,6 +2473,8 @@ async function expectedPreloadColorLook(api: ApiDriver, showId: string) {
 	const washFixtures = washShow.body.fixtures as string[];
 	const beamFixtures = beamAudience.body.fixtures as string[];
 	return {
+		washFixtureIds: washFixtures,
+		beamFixtureIds: beamFixtures,
 		fixtureIds: [...washFixtures, ...beamFixtures],
 		values: Object.fromEntries([
 			...washFixtures.flatMap((fixtureId) => [
@@ -2445,6 +2491,40 @@ async function expectedPreloadColorLook(api: ApiDriver, showId: string) {
 	};
 }
 
+async function recallPresetThroughTouchWithRetry(
+	desk: DeskDriver,
+	tile: Locator,
+	applied: () => Promise<boolean>,
+) {
+	await desk.click(tile);
+	await desk.page.waitForTimeout(500);
+	if (!(await applied())) await tile.click();
+	await expect.poll(applied).toBe(true);
+}
+
+function valuesForFixtures(
+	values: Record<string, number>,
+	fixtureIds: readonly string[],
+) {
+	const targets = new Set(fixtureIds);
+	return Object.fromEntries(
+		Object.entries(values).filter(([key]) =>
+			targets.has(key.slice(0, key.indexOf(":"))),
+		),
+	);
+}
+
+function valuesMatch(
+	actual: Record<string, number>,
+	expected: Record<string, number>,
+) {
+	const keys = Object.keys(expected);
+	return (
+		Object.keys(actual).length === keys.length &&
+		keys.every((key) => actual[key] === expected[key])
+	);
+}
+
 async function visualizationColorLook(
 	api: ApiDriver,
 	fixtureIds: readonly string[],
@@ -2459,6 +2539,30 @@ async function visualizationColorLook(
 		snapshot.values.flatMap((entry: any) =>
 			targets.has(entry.fixture_id) &&
 			entry.attribute.startsWith("color.") &&
+			entry.value.kind === "normalized"
+				? [[`${entry.fixture_id}:${entry.attribute}`, entry.value.value]]
+				: [],
+		),
+	);
+}
+
+async function preloadProgrammerAttributeLook(
+	api: ApiDriver,
+	fixtureIds: readonly string[],
+	attributes: ReadonlySet<string>,
+) {
+	const userId = api.session?.user.id;
+	if (!userId)
+		throw new Error("The product demo requires an authenticated user");
+	const snapshot = await api.request<any>(
+		"GET",
+		`/api/v2/users/${userId}/programmer-preload-values/snapshot`,
+	);
+	const targets = new Set(fixtureIds);
+	return Object.fromEntries(
+		snapshot.projection.fixture_values.flatMap((entry: any) =>
+			targets.has(entry.fixture_id) &&
+			attributes.has(entry.attribute) &&
 			entry.value.kind === "normalized"
 				? [[`${entry.fixture_id}:${entry.attribute}`, entry.value.value]]
 				: [],
