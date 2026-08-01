@@ -2013,6 +2013,7 @@ async function buildCueProgramming(
 	showId: string,
 	fixtures: readonly any[],
 ) {
+	await migrateDemoGroupMastersToCanonicalPlaybacks(api, showId);
 	await desk.titleCard(
 		"Programming Cues & Cuelists",
 		"Build the core show Cuelists with the Programmer-only Fixture Sheet, Cuelist Pool, and live Cue detail visible together.",
@@ -3141,6 +3142,73 @@ async function installRemainingGroupMasters(api: ApiDriver, showId: string) {
 		},
 		page?.revision ?? 0,
 	);
+}
+
+async function migrateDemoGroupMastersToCanonicalPlaybacks(
+	api: ApiDriver,
+	showId: string,
+) {
+	const numberMap = new Map([
+		[1, 101],
+		[2, 102],
+		[3, 103],
+		[4, 104],
+		[5, 105],
+		[6, 106],
+	]);
+	const playbacks = await api.showObjects<any>(showId, "playback");
+	for (const playback of playbacks) {
+		const number = numberMap.get(playback.body.number);
+		if (number == null || playback.body.target?.type !== "group") continue;
+		const existing = playbacks.find(
+			(candidate) => candidate.body.number === number,
+		);
+		await api.seedShowObject(
+			showId,
+			"playback",
+			existing?.id ?? String(number),
+			{ ...playback.body, number },
+			existing?.revision ?? 0,
+		);
+	}
+	for (const group of await api.showObjects<any>(showId, "group")) {
+		const playbackFader = numberMap.get(group.body.playback_fader);
+		if (playbackFader == null) continue;
+		await api.seedShowObject(
+			showId,
+			"group",
+			group.id,
+			{ ...group.body, playback_fader: playbackFader },
+			group.revision,
+		);
+	}
+	for (const page of await api.showObjects<any>(showId, "playback_page")) {
+		const slots = Object.fromEntries(
+			Object.entries(page.body.slots ?? {}).map(([slot, playback]) => [
+				slot,
+				numberMap.get(Number(playback)) ?? playback,
+			]),
+		);
+		await api.seedShowObject(
+			showId,
+			"playback_page",
+			page.id,
+			{ ...page.body, slots },
+			page.revision,
+		);
+	}
+	for (const playback of playbacks) {
+		if (
+			numberMap.has(playback.body.number) &&
+			playback.body.target?.type === "group"
+		)
+			await api.deleteSeededShowObject(
+				showId,
+				"playback",
+				playback.id,
+				playback.revision,
+			);
+	}
 }
 
 function groupMasterPlayback(number: number, name: string, groupId: string) {
