@@ -212,6 +212,77 @@ fn set_group_requests_properties_only_for_the_originating_desk() {
 }
 
 #[test]
+fn set_group_at_page_slot_assigns_a_group_master() {
+    let (state, data_dir) = test_state();
+    let user = state.installation.users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "test".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programming.start(session.id, user.id);
+    let show_path = data_dir.join("shows/group-master-command.show");
+    let show_id = initialise_show(&show_path, "Group Master Command").unwrap();
+    let entry = ShowEntry {
+        id: show_id,
+        name: "Group Master Command".into(),
+        path: show_path.display().to_string(),
+        revision: 0,
+        updated_at: String::new(),
+        revision_copy: None,
+    };
+    let store = ShowStore::open(&show_path).unwrap();
+    store
+        .put_object(
+            "group",
+            "4",
+            &serde_json::to_value(light_programmer::GroupDefinition {
+                id: "4".into(),
+                name: "Center Spot".into(),
+                ..Default::default()
+            })
+            .unwrap(),
+            0,
+        )
+        .unwrap();
+    state.active_show.replace_current(Some(entry.clone()));
+    state
+        .output
+        .replace_snapshot(load_engine_snapshot(&entry).unwrap())
+        .unwrap();
+
+    assert_eq!(
+        execute_programmer_command(&state, &session, "SET GROUP 4 AT 1 . 2").unwrap(),
+        1
+    );
+
+    let store = ShowStore::open(&show_path).unwrap();
+    let playback = store
+        .objects("playback")
+        .unwrap()
+        .into_iter()
+        .find(|object| object.id == "2")
+        .unwrap();
+    let playback =
+        serde_json::from_value::<light_playback::PlaybackDefinition>(playback.body).unwrap();
+    assert!(matches!(
+        playback.target,
+        light_playback::PlaybackTarget::Group { ref group_id } if group_id == "4"
+    ));
+    let page = store
+        .objects("playback_page")
+        .unwrap()
+        .into_iter()
+        .find(|object| object.id == "1")
+        .unwrap();
+    let page = serde_json::from_value::<light_playback::PlaybackPage>(page.body).unwrap();
+    assert_eq!(page.slots.get(&2), Some(&2));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);

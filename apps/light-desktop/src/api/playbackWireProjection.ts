@@ -1,5 +1,6 @@
 import type {
 	CueListRuntimeProjection,
+	DynamicPlaybackRuntimeProjection,
 	PlaybackDeskProjection,
 	PlaybackRuntimeIdentity,
 	PlaybackRuntimeProjection,
@@ -34,12 +35,12 @@ export function decodePlaybackIdentity(
 	]);
 	if (kind === "playback")
 		return {
-				kind,
-				playback_number: positiveIntegerAt(
-					identity.playback_number,
-					`${path}.playback_number`,
-				),
-			};
+			kind,
+			playback_number: positiveIntegerAt(
+				identity.playback_number,
+				`${path}.playback_number`,
+			),
+		};
 	if (kind === "virtual")
 		return {
 			kind,
@@ -51,9 +52,9 @@ export function decodePlaybackIdentity(
 		};
 	if (kind === "cue_list")
 		return {
-				kind,
-				cue_list_id: stringAt(identity.cue_list_id, `${path}.cue_list_id`),
-			};
+			kind,
+			cue_list_id: stringAt(identity.cue_list_id, `${path}.cue_list_id`),
+		};
 	return {
 		kind,
 		group_id: opaqueStringAt(identity.group_id, `${path}.group_id`, 256),
@@ -240,6 +241,96 @@ function decodeSpeedRuntime(
 	};
 }
 
+function decodeDynamicRuntime(
+	value: unknown,
+	path: string,
+): DynamicPlaybackRuntimeProjection {
+	const runtime = recordAt(value, path);
+	return {
+		playback_number: positiveIntegerAt(
+			runtime.playback_number,
+			`${path}.playback_number`,
+		),
+		enabled: booleanAt(runtime.enabled, `${path}.enabled`),
+		paused: booleanAt(runtime.paused, `${path}.paused`),
+		flash: booleanAt(runtime.flash, `${path}.flash`),
+		activated_at: stringAt(runtime.activated_at, `${path}.activated_at`),
+		fader_value: numberAt(runtime.fader_value, `${path}.fader_value`),
+		size: numberAt(runtime.size, `${path}.size`),
+		master: numberAt(runtime.master, `${path}.master`),
+		local_speed_numerator: integerAt(
+			runtime.local_speed_numerator,
+			`${path}.local_speed_numerator`,
+		),
+		local_speed_denominator: integerAt(
+			runtime.local_speed_denominator,
+			`${path}.local_speed_denominator`,
+		),
+		learned_duration_millis: nullable(
+			runtime.learned_duration_millis,
+			`${path}.learned_duration_millis`,
+			integerAt,
+		),
+		state: enumAt(runtime.state, `${path}.state`, [
+			"off",
+			"zero",
+			"pending",
+			"active",
+			"paused",
+			"hidden",
+			"failed",
+		]),
+		instance_id: nullable(runtime.instance_id, `${path}.instance_id`, stringAt),
+		controller_id: stringAt(runtime.controller_id, `${path}.controller_id`),
+		winning_controller_id: nullable(
+			runtime.winning_controller_id,
+			`${path}.winning_controller_id`,
+			stringAt,
+		),
+		controller_status: enumAt(
+			runtime.controller_status,
+			`${path}.controller_status`,
+			["winning", "losing", "missing"],
+		),
+		target_count: integerAt(runtime.target_count, `${path}.target_count`),
+		compatible_target_count: integerAt(
+			runtime.compatible_target_count,
+			`${path}.compatible_target_count`,
+		),
+		missing_target_count: integerAt(
+			runtime.missing_target_count,
+			`${path}.missing_target_count`,
+		),
+		unpatched_target_count: integerAt(
+			runtime.unpatched_target_count,
+			`${path}.unpatched_target_count`,
+		),
+		lane_count: integerAt(runtime.lane_count, `${path}.lane_count`),
+		supported_address_count: integerAt(
+			runtime.supported_address_count,
+			`${path}.supported_address_count`,
+		),
+		skipped_address_count: integerAt(
+			runtime.skipped_address_count,
+			`${path}.skipped_address_count`,
+		),
+		speed_source: enumAt(runtime.speed_source, `${path}.speed_source`, [
+			"fixed",
+			"speed_group",
+		]),
+		effective_speed_multiplier: numberAt(
+			runtime.effective_speed_multiplier,
+			`${path}.effective_speed_multiplier`,
+		),
+		effective_duration_millis: nullable(
+			runtime.effective_duration_millis,
+			`${path}.effective_duration_millis`,
+			numberAt,
+		),
+		warning: nullable(runtime.warning, `${path}.warning`, stringAt),
+	};
+}
+
 function decodeTarget(
 	projection: Record<string, unknown>,
 	path: string,
@@ -247,6 +338,7 @@ function decodeTarget(
 	const target = enumAt(projection.target, `${path}.target`, [
 		"missing",
 		"cue_list",
+		"dynamic",
 		"group",
 		"speed_group",
 		"grand_master",
@@ -265,14 +357,30 @@ function decodeTarget(
 			),
 		};
 	}
+	if (target === "dynamic") {
+		return {
+			target,
+			dynamic_id: nullable(
+				projection.dynamic_id,
+				`${path}.dynamic_id`,
+				stringAt,
+			),
+			last_known_pool_number: positiveIntegerAt(
+				projection.last_known_pool_number,
+				`${path}.last_known_pool_number`,
+			),
+			embedded: booleanAt(projection.embedded, `${path}.embedded`),
+			runtime: nullable(
+				projection.runtime,
+				`${path}.runtime`,
+				decodeDynamicRuntime,
+			),
+		};
+	}
 	if (target === "group") {
 		return {
 			target,
-			group_id: opaqueStringAt(
-				projection.group_id,
-				`${path}.group_id`,
-				256,
-			),
+			group_id: opaqueStringAt(projection.group_id, `${path}.group_id`, 256),
 			master: numberAt(projection.master, `${path}.master`),
 			flash_level: numberAt(projection.flash_level, `${path}.flash_level`),
 		};

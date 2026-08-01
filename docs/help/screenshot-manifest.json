@@ -267,7 +267,12 @@
 			"viewport": { "width": 1496, "height": 756 },
 			"theme": "dark",
 			"mode": "software",
-      "interactions": []
+      "interactions": [
+        {
+          "action": "scroll",
+          "selector": "article:has-text(\"Update defaults\")"
+        }
+      ]
 		},
 		{
 			"file": "workflows/desk-setup-lock.png",

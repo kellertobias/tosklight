@@ -59,6 +59,7 @@
     "test:e2e": "bash tools/test.sh e2e",
     "test:e2e-api": "bash tools/test.sh e2e-api",
     "test:e2e-ui": "bash tools/test.sh e2e-ui",
+    "test:e2e-performance": "bash tools/test.sh e2e-performance",
     "test:app-icons": "bash tools/test.sh app-icons",
     "test:artifact-paths": "bash tools/test.sh artifact-paths",
     "test:ui-package": "npm run typecheck --workspace @tosklight/ui && npm run test --workspace @tosklight/ui",

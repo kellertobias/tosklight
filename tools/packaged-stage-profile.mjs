@@ -6,13 +6,13 @@ export const PACKAGED_STAGE_PROFILES = Object.freeze({
 		blocking: true,
 	}),
 	"canonical-demo": Object.freeze({
-		label: "Canonical demo (262 controls / 301 physical instances)",
+		label: "Canonical demo (262 controls / 295 records / 343 physical instances)",
 		tier: "realistic-demo",
 		targetHz: null,
 		blocking: true,
 		expectedScene: Object.freeze({
-			fixtureRecords: 262,
-			fixtureInstances: 301,
+			fixtureRecords: 295,
+			fixtureInstances: 343,
 		}),
 	}),
 	"large-stage": Object.freeze({

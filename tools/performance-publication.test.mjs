@@ -65,11 +65,37 @@ function measuredStatus(status = "healthy") {
 			fixtures_per_universe: 32,
 			fixture_count: 1024,
 			met: status === "healthy",
+			configured_target_met: status === "healthy",
+			green_threshold_hz: 60,
+			yellow_threshold_hz: 40,
 			achieved_ticks_per_second: status === "healthy" ? 100.2 : 87.5,
 			minimum_one_second_completed_hz: status === "healthy" ? 100 : 82,
 			deadline_misses: status === "healthy" ? 0 : 3,
 			dropped_ticks: 0,
 			deferred_ticks: 0,
+			limiting_phase: {
+				name: "Engine render and fixture projection",
+				p50_microseconds: 400,
+				p95_microseconds: 800,
+			},
+		},
+		canonical_demo: {
+			attempted: true,
+			reason: null,
+			measurement_surface: "browser_playwright_product_demo",
+			scene: {
+				fixture_records: 295,
+				physical_instances: 343,
+				stage_visible: true,
+			},
+			window: { elapsed_ms: 60_000 },
+			stage: {
+				presentation_rate_hz: 30,
+				source_to_settled_canvas_ms: { p95: 61 },
+				render_duration_ms: { p95: 3 },
+				max_draw_calls: 402,
+				max_triangles: 120_000,
+			},
 		},
 		show_mutation: {
 			gate_met: true,
@@ -107,11 +133,17 @@ function measuredStatus(status = "healthy") {
 			fixtures_per_universe: 64,
 			fixture_count: 2048,
 			met: false,
+			configured_target_met: false,
 			achieved_ticks_per_second: 72.25,
 			minimum_one_second_completed_hz: 69,
 			deadline_misses: 8,
 			dropped_ticks: 0,
 			deferred_ticks: 1,
+			limiting_phase: {
+				name: "Protocol encoding",
+				p50_microseconds: 900,
+				p95_microseconds: 1200,
+			},
 		},
 	};
 }
@@ -128,6 +160,25 @@ test("healthy and degraded measured statuses retain their public evidence", () =
 	assert.match(page, /required_floor/u);
 	assert.match(page, /1200 fixtures<\/th><td>130 µs<\/td><td>190 µs/u);
 	assert.match(page, /72\.25 Hz/u);
+	assert.match(
+		page,
+		/Green means at least 60 Hz; yellow means at least 40 Hz/u,
+	);
+	assert.match(page, /Engine render and fixture projection/u);
+	assert.match(page, /Protocol encoding/u);
+	assert.match(page, /diagnostic only/u);
+	assert.match(page, /Canonical 343-instance demo show/u);
+	assert.match(page, /Physical Stage instances<\/th><td>343/u);
+	assert.match(page, /Stage source-to-canvas p95<\/th><td>61 ms/u);
+});
+
+test("warning is a valid measured public state", () => {
+	const warning = measuredStatus("warning");
+	warning.summary = "The 1,024-fixture workload is between 40 and 60 Hz.";
+	assert.strictEqual(normalizePublicPerformanceStatus(warning), warning);
+	const page = renderPerformancePage(warning);
+	assert.match(page, /class="warning">WARNING/u);
+	assert.match(page, /<th>Acceptance tier<\/th><td>warning<\/td>/u);
 });
 
 test("unknown and invalid measured classifications cannot masquerade as evidence", () => {

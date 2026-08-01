@@ -60,8 +60,9 @@ export class BrowserCrossSurface {
 					mark,
 					`/light/${session.desk.osc_alias}/feedback/${address}`,
 				);
+			await waitForFeedbackToSettle(hardware.messages);
 			const quietMark = hardware.mark();
-			await new Promise((resolve) => setTimeout(resolve, 75));
+			await new Promise((resolve) => setTimeout(resolve, 100));
 			expect(hardware.messages.slice(quietMark)).toHaveLength(0);
 		} finally {
 			await this.close(hardware, clientId);
@@ -77,7 +78,12 @@ export class BrowserCrossSurface {
 			await this.desk.click(
 				this.page.getByRole("button", { name: key, exact: true }),
 			);
-		await expect(this.page.getByLabel("Command line")).toHaveClass(/error/);
+		await expect(
+			this.page.getByRole("textbox", {
+				name: "Command line",
+				exact: true,
+			}),
+		).toHaveClass(/error/);
 		const states = await this.api.request<any[]>("GET", "/api/v2/programmers");
 		expect(
 			states.every(
@@ -124,9 +130,7 @@ export class BrowserCrossSurface {
 				firstMark,
 				`/light/${first.desk.osc_alias}/feedback/command-line`,
 			);
-			expect(String(feedback.arguments[0])).toMatch(
-				/^(?:G ?1|GROUP 1) \+$/,
-			);
+			expect(String(feedback.arguments[0])).toMatch(/^(?:G ?1|GROUP 1) \+$/);
 			expect(
 				secondHardware.messages
 					.slice(secondMark)
@@ -405,4 +409,17 @@ export class BrowserCrossSurface {
 			})
 			.first();
 	}
+}
+
+async function waitForFeedbackToSettle(
+	messages: readonly unknown[],
+	timeoutMs = 2_000,
+): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		const count = messages.length;
+		await new Promise((resolve) => setTimeout(resolve, 75));
+		if (messages.length === count) return;
+	}
+	throw new Error("OSC feedback did not settle after the page change");
 }

@@ -16,19 +16,19 @@ test("long resource runs retain a five-minute no-Stage control", () => {
 
 test("canonical-demo identifies the shipped realistic release workload", () => {
 	assert.deepEqual(PACKAGED_STAGE_PROFILES["canonical-demo"], {
-		label: "Canonical demo (262 controls / 301 physical instances)",
+		label: "Canonical demo (262 controls / 295 records / 343 physical instances)",
 		tier: "realistic-demo",
 		targetHz: null,
 		blocking: true,
 		expectedScene: {
-			fixtureRecords: 262,
-			fixtureInstances: 301,
+			fixtureRecords: 295,
+			fixtureInstances: 343,
 		},
 	});
 	assert.deepEqual(
 		packagedStageSceneFailures("canonical-demo", {
-			fixtureRecords: 262,
-			fixtureInstances: 301,
+			fixtureRecords: 295,
+			fixtureInstances: 343,
 		}),
 		[],
 	);
@@ -37,12 +37,12 @@ test("canonical-demo identifies the shipped realistic release workload", () => {
 test("canonical-demo rejects either wrong control or physical-instance count", () => {
 	assert.deepEqual(
 		packagedStageSceneFailures("canonical-demo", {
-			fixtureRecords: 261,
-			fixtureInstances: 300,
+			fixtureRecords: 294,
+			fixtureInstances: 342,
 		}),
 		[
-			"canonical-demo resolved 261 fixture records; expected 262",
-			"canonical-demo resolved 300 physical instances; expected 301",
+			"canonical-demo resolved 294 fixture records; expected 295",
+			"canonical-demo resolved 342 physical instances; expected 343",
 		],
 	);
 });

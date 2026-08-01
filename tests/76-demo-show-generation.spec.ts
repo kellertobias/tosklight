@@ -33,6 +33,13 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
   });
   expect(generated.lastUniverse).toBeGreaterThan(1);
   expect(generated.occupiedSlots).toBe(3_783);
+  expect(generatedShow.scenery).toHaveLength(33);
+  const completePatch = await api.patch();
+  expect(completePatch.fixtures).toHaveLength(295);
+  expect(completePatch.fixtures.reduce(
+    (count, fixture) => count + 1 + fixture.multipatch.length,
+    0,
+  )).toBe(343);
 
   const acls = generated.fixtures
     .filter((fixture) => fixture.fixture_number >= 601 && fixture.fixture_number <= 604);

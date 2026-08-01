@@ -7,6 +7,7 @@ import type {
 import type { Cue, PlaybackDefinition } from "../../../api/types";
 import {
 	assignDynamicPlayback,
+	assignGroupPlayback,
 	isPlaybackControlTarget,
 	isPlaybackSetClickArmed,
 	openPlaybackConfiguration,
@@ -165,6 +166,12 @@ export function createSlotInterceptors(
 		openPlaybackConfiguration(controller, playback, slot);
 	};
 	const interceptClick = (event: ReactMouseEvent<HTMLElement>) => {
+		if (controller.groupAssignmentPending) {
+			event.preventDefault();
+			event.stopPropagation();
+			void assignGroupPlayback(controller, slot);
+			return;
+		}
 		if (controller.state.storeArmed) {
 			void recordPlayback(controller, event, playback, slot);
 			return;

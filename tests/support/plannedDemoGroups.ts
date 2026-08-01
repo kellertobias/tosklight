@@ -118,6 +118,11 @@ export async function installPlannedDemoGroups(
 		),
 	);
 	const specs = plannedDemoGroupSpecs();
+	const existing = new Map(
+		(await api.showObjects<any>(showId, "group")).map(
+			(item) => [item.id, item] as const,
+		),
+	);
 	for (const spec of specs) {
 		const targets = spec.fixtureNumbers.flatMap((fixtureNumber) => {
 			const found = targetsByNumber.get(fixtureNumber);
@@ -127,15 +132,25 @@ export async function installPlannedDemoGroups(
 				);
 			return found;
 		});
+		const current = existing.get(spec.id);
+		if (
+			current &&
+			JSON.stringify(current.body.fixtures) !== JSON.stringify(targets)
+		) {
+			throw new Error(
+				`Visible Group ${spec.id} does not match canonical ${spec.name} membership`,
+			);
+		}
 		await putPlannedDemoObject(api, showId, "group", spec.id, {
+			...(current?.body ?? {}),
 			id: spec.id,
 			name: spec.name,
 			fixtures: targets,
-			color: null,
-			icon: null,
-			derived_from: null,
-			frozen_from: null,
-			programming: {},
+			color: current?.body.color ?? null,
+			icon: current?.body.icon ?? null,
+			derived_from: current?.body.derived_from ?? null,
+			frozen_from: current?.body.frozen_from ?? null,
+			programming: current?.body.programming ?? {},
 			master: 1,
 			playback_fader: GROUP_MASTER_PLAYBACKS[spec.name] ?? null,
 		});

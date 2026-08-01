@@ -12,6 +12,7 @@ export class DeskDriver {
   private baseUrl = "";
   private auditRevision = 0;
   private controllableDesktop?: ControllableDesktopDriver;
+  private recordingClickPace: "normal" | "compact" = "normal";
   private readonly semanticStepObservers = new Set<(step: { title: string; description: string }) => void>();
 
   constructor(
@@ -20,6 +21,14 @@ export class DeskDriver {
     private readonly controlDeskId: string | null = null,
     private readonly externalOscSummary: () => string = () => "",
   ) {}
+
+  fork(page: Page): DeskDriver {
+    return new DeskDriver(page, this.testTitle, this.controlDeskId, this.externalOscSummary);
+  }
+
+  setRecordingClickPace(pace: "normal" | "compact"): void {
+    this.recordingClickPace = pace;
+  }
 
   async dispose(): Promise<void> {
     if (this.recordingNavigationHandler) this.page.off("domcontentloaded", this.recordingNavigationHandler);
@@ -139,10 +148,12 @@ export class DeskDriver {
         document.querySelector("#light-recording-click-layer")?.append(preview);
       }, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
     }
-    const previewMillis = Math.max(120, Number(process.env.LIGHT_VISUAL_CLICK_PREVIEW ?? 280));
+    const defaultPreview = this.recordingClickPace === "compact" ? 120 : 280;
+    const previewMillis = Math.max(120, Number(process.env.LIGHT_VISUAL_CLICK_PREVIEW ?? defaultPreview));
     if (Number.isFinite(previewMillis)) await this.page.waitForTimeout(previewMillis);
     await target.click();
-    const settleMillis = Math.max(120, Number(process.env.LIGHT_VISUAL_CLICK_PAUSE ?? 280));
+    const defaultPause = this.recordingClickPace === "compact" ? 120 : 280;
+    const settleMillis = Math.max(120, Number(process.env.LIGHT_VISUAL_CLICK_PAUSE ?? defaultPause));
     if (Number.isFinite(settleMillis)) await this.page.waitForTimeout(settleMillis);
     await this.page.evaluate(() => {
       document.querySelectorAll(".light-recording-click-target").forEach((element) => element.classList.remove("light-recording-click-target"));

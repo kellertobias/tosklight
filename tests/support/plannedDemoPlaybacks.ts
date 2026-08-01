@@ -17,18 +17,27 @@ const CUE_LIST_IDS = {
 	hazer: stableUuid(4, 6),
 	chase: stableUuid(4, 7),
 } as const;
-const ACL_CUE_LIST_IDS = [
-	CUE_LIST_IDS.acl1,
-	CUE_LIST_IDS.acl2,
-	CUE_LIST_IDS.acl3,
-	CUE_LIST_IDS.acl4,
-] as const;
-
 export async function installPlannedDemoPlaybacks(
 	api: ApiDriver,
 	showId: string,
 	fixtures: readonly PatchedTargetFixture[],
 ) {
+	const existingPlaybacks = await api.showObjects<any>(showId, "playback");
+	const existingPage = await api.showObject<any>(showId, "playback_page", "1");
+	const visibleAclOne = existingPlaybacks.find(
+		(playback) =>
+			playback.body.number === 12 && playback.body.target?.type === "cue_list",
+	);
+	const cueListIds = {
+		...CUE_LIST_IDS,
+		acl1: visibleAclOne?.body.target.cue_list_id ?? CUE_LIST_IDS.acl1,
+	};
+	const aclCueListIds = [
+		cueListIds.acl1,
+		cueListIds.acl2,
+		cueListIds.acl3,
+		cueListIds.acl4,
+	];
 	const targetMap = new Map(
 		fixtures.flatMap((fixture) =>
 			fixture.fixture_number == null
@@ -43,7 +52,7 @@ export async function installPlannedDemoPlaybacks(
 		]),
 	);
 	const cuelists = [
-		cueList(CUE_LIST_IDS.start, "Start", [
+		cueList(cueListIds.start, "Start", [
 			stateCue(1, "Start", [
 				...intensity(groups, "Profile All", 1),
 				...intensity(groups, "Wash All", 1),
@@ -61,16 +70,16 @@ export async function installPlannedDemoPlaybacks(
 			]),
 		]),
 		...[1, 2, 3, 4].map((number) =>
-			cueList(ACL_CUE_LIST_IDS[number - 1], `ACL ${number}`, [
+			cueList(aclCueListIds[number - 1], `ACL ${number}`, [
 				stateCue(1, `ACL ${number}`, intensity(groups, `ACL ${number}`, 1)),
 			]),
 		),
-		cueList(CUE_LIST_IDS.hazer, "Hazer", [
+		cueList(cueListIds.hazer, "Hazer", [
 			stateCue(1, "Haze 20%", intensity(groups, "Hazers", 0.2)),
 		]),
 		{
 			...cueList(
-				CUE_LIST_IDS.chase,
+				cueListIds.chase,
 				"ACL Chase",
 				[1, 2, 3, 4].map((active) =>
 					stateCue(
@@ -99,23 +108,17 @@ export async function installPlannedDemoPlaybacks(
 		playback(4, "Show Wash", { type: "group", group_id: "15" }),
 		playback(5, "All ACLs", { type: "group", group_id: "35" }),
 		playback(6, "Blinders", { type: "group", group_id: "36" }),
-		playback(11, "Start", {
-			type: "cue_list",
-			cue_list_id: CUE_LIST_IDS.start,
-		}),
+		playback(11, "Start", { type: "cue_list", cue_list_id: cueListIds.start }),
 		...[1, 2, 3, 4].map((number) =>
 			playback(11 + number, `ACL ${number}`, {
 				type: "cue_list",
-				cue_list_id: ACL_CUE_LIST_IDS[number - 1],
+				cue_list_id: aclCueListIds[number - 1],
 			}),
 		),
-		playback(16, "Hazer", {
-			type: "cue_list",
-			cue_list_id: CUE_LIST_IDS.hazer,
-		}),
+		playback(16, "Hazer", { type: "cue_list", cue_list_id: cueListIds.hazer }),
 		playback(17, "ACL Chase", {
 			type: "cue_list",
-			cue_list_id: CUE_LIST_IDS.chase,
+			cue_list_id: cueListIds.chase,
 		}),
 	];
 	for (const item of playbacks)
@@ -132,7 +135,7 @@ export async function installPlannedDemoPlaybacks(
 		slots: Object.fromEntries(
 			playbacks.map((item) => [String(item.number), item.number]),
 		),
-		virtual_playbacks: {},
+		virtual_playbacks: existingPage?.body.virtual_playbacks ?? {},
 	});
 	return { cuelists, playbacks };
 }

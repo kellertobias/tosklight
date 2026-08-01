@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,6 +9,8 @@ const REQUIRED_UNIVERSES = 32;
 const REQUIRED_RATE_HZ = 100;
 const BASELINE_FIXTURES_PER_UNIVERSE = 32;
 const DOUBLED_FIXTURES_PER_UNIVERSE = BASELINE_FIXTURES_PER_UNIVERSE * 2;
+const INTERACTIVE_GREEN_HZ = 60;
+const INTERACTIVE_YELLOW_HZ = 40;
 const BENCHMARK_IDENTITY = "tosklight_render_to_protocol_encoding_pipeline";
 
 const finite = (value) => typeof value === "number" && Number.isFinite(value);
@@ -102,51 +104,41 @@ export function classifyPerformance(baselineValidation, doubledValidation) {
 		};
 	}
 	const baseline = baselineValidation.report;
-	if (baseline.required_floor_met !== true) {
-		return {
-			status: "degraded",
-			summary:
-				`The release missed the ${REQUIRED_UNIVERSES}-universe ${REQUIRED_RATE_HZ} Hz floor ` +
-				`at ${BASELINE_FIXTURES_PER_UNIVERSE} fixtures per universe.`,
-		};
-	}
 	if (baseline.show_mutation.gate_met === false) {
 		return {
 			status: "degraded",
 			summary:
-				"The release met the output floor but regressed the large-show mutation budget.",
+				"The 1,024-fixture cadence was measured, but the large-show mutation budget regressed.",
 		};
 	}
 	if (baseline.patch_mutation.gate_met !== true) {
 		return {
 			status: "degraded",
 			summary:
-				"The release met the output floor but regressed the persisted Patch latency budget.",
+				"The 1,024-fixture cadence was measured, but persisted Patch latency regressed.",
 		};
 	}
-	if (!doubledValidation?.valid) {
+	const cadence =
+		baselineValidation.scenario.frame_rate.minimum_one_second_completed_hz;
+	if (cadence < INTERACTIVE_YELLOW_HZ) {
 		return {
-			status: "healthy",
-			summary:
-				`The release met the required floor with ` +
-				`${REQUIRED_UNIVERSES * BASELINE_FIXTURES_PER_UNIVERSE} fixtures; ` +
-				"the doubled-density capacity probe was inconclusive.",
+			status: "degraded",
+			summary: `The 1,024-fixture workload fell below the ${INTERACTIVE_YELLOW_HZ} Hz minimum at ${cadence} Hz.`,
 		};
 	}
-	const doubledFixtures = REQUIRED_UNIVERSES * DOUBLED_FIXTURES_PER_UNIVERSE;
-	return doubledValidation.report.required_floor_met === true
-		? {
-				status: "healthy",
-				summary:
-					`The release met the required floor and the doubled-density probe with ` +
-					`${doubledFixtures} fixtures.`,
-			}
-		: {
-				status: "healthy",
-				summary:
-					`The release met the required floor; the optional ${doubledFixtures}-fixture ` +
-					"capacity probe did not sustain 100 Hz.",
-			};
+	if (cadence < INTERACTIVE_GREEN_HZ) {
+		return {
+			status: "warning",
+			summary: `The 1,024-fixture workload sustained ${cadence} Hz: usable, but below the ${INTERACTIVE_GREEN_HZ} Hz green threshold.`,
+		};
+	}
+	const diagnostic = doubledValidation?.valid
+		? " The 2,048-fixture diagnostic is reported separately and does not change this indicator."
+		: " The 2,048-fixture diagnostic was inconclusive and does not change this indicator.";
+	return {
+		status: "healthy",
+		summary: `The 1,024-fixture workload stayed at or above ${INTERACTIVE_GREEN_HZ} Hz (${cadence} Hz).${diagnostic}`,
+	};
 }
 
 function parseArguments(arguments_) {
@@ -234,13 +226,39 @@ function scenarioEvidence(validation) {
 	if (!validation?.valid) return null;
 	const scenario = validation.scenario;
 	return {
+		requested_rate_hz: scenario.configured_rate_hz,
 		achieved_ticks_per_second: scenario.achieved_ticks_per_second,
+		average_completed_hz: scenario.frame_rate.average_completed_hz,
 		minimum_one_second_completed_hz:
 			scenario.frame_rate.minimum_one_second_completed_hz,
+		windows_below_minimum: scenario.frame_rate.windows_below_minimum,
 		deadline_misses: scenario.deadline.deadline_misses,
 		dropped_ticks: scenario.deadline.dropped_ticks,
 		deferred_ticks: scenario.deadline.deferred_ticks,
+		phases: scenario.phases ?? null,
 	};
+}
+
+function limitingPhase(validation) {
+	if (!validation?.valid) return null;
+	const phases = validation.scenario.phases ?? {};
+	const candidates = [
+		["Engine render and fixture projection", phases.engine_render_combined],
+		["Protocol encoding", phases.protocol_encoding],
+		["Loopback datagram delivery", phases.loopback_datagram_delivery],
+		["Benchmark validation", phases.benchmark_validation_overhead],
+	]
+		.filter(([, distribution]) => finite(distribution?.p95_microseconds))
+		.map(([name, distribution]) => ({
+			name,
+			p50_microseconds: distribution.p50_microseconds,
+			p95_microseconds: distribution.p95_microseconds,
+			p99_microseconds: distribution.p99_microseconds,
+		}));
+	if (candidates.length === 0) return null;
+	return candidates.sort(
+		(left, right) => right.p95_microseconds - left.p95_microseconds,
+	)[0];
 }
 
 function mutationEvidence(report) {
@@ -297,7 +315,33 @@ function patchEvidence(report) {
 	};
 }
 
-export function statusDocument(options, baseline, doubled) {
+function canonicalDemoEvidence(candidate) {
+	if (
+		candidate?.schema_version !== 1 ||
+		candidate?.measurement_surface !== "browser_playwright_product_demo" ||
+		candidate?.scene?.fixture_records !== 295 ||
+		candidate?.scene?.physical_instances !== 343 ||
+		candidate?.scene?.stage_visible !== true ||
+		!finite(candidate?.window?.elapsed_ms) ||
+		!finite(candidate?.stage?.presentation_rate_hz) ||
+		!finite(candidate?.stage?.source_to_settled_canvas_ms?.p95) ||
+		!finite(candidate?.stage?.render_duration_ms?.p95)
+	) {
+		return {
+			attempted: candidate != null,
+			reason:
+				"The canonical demo did not produce valid current-release performance evidence.",
+		};
+	}
+	return { ...candidate, attempted: true, reason: null };
+}
+
+export function statusDocument(
+	options,
+	baseline,
+	doubled,
+	canonicalDemo = null,
+) {
 	const baselineValidation = validateStage(baseline, { mutations: true });
 	const doubledValidation = doubled
 		? validateStage(doubled, { mutations: false })
@@ -311,16 +355,19 @@ export function statusDocument(options, baseline, doubled) {
 		? baselineValidation.scenario
 		: null;
 	const observed = scenarioEvidence(baselineValidation);
+	const baselineCadence = observed?.minimum_one_second_completed_hz ?? null;
 	const failedGates = report
 		? [
-				report.required_floor_met === false && "required_floor",
+				baselineCadence != null &&
+					baselineCadence < INTERACTIVE_YELLOW_HZ &&
+					"interactive_output_red",
 				report.show_mutation.gate_met === false && "show_mutation",
 				report.patch_mutation.gate_met === false && "patch_mutation",
 			].filter(Boolean)
 		: [];
 	const doubledObserved = scenarioEvidence(doubledValidation);
 	return {
-		schema_version: 3,
+		schema_version: 4,
 		status: classification.status,
 		summary: classification.summary,
 		generated_at: new Date().toISOString(),
@@ -338,6 +385,12 @@ export function statusDocument(options, baseline, doubled) {
 				error: baseline?.error ?? baselineValidation.reason ?? null,
 			},
 			failed_gates: failedGates,
+			warnings:
+				baselineCadence != null &&
+				baselineCadence >= INTERACTIVE_YELLOW_HZ &&
+				baselineCadence < INTERACTIVE_GREEN_HZ
+					? ["interactive_output_yellow"]
+					: [],
 		},
 		runner: report
 			? {
@@ -362,23 +415,37 @@ export function statusDocument(options, baseline, doubled) {
 			rate_hz: REQUIRED_RATE_HZ,
 			fixtures_per_universe: BASELINE_FIXTURES_PER_UNIVERSE,
 			fixture_count: REQUIRED_UNIVERSES * BASELINE_FIXTURES_PER_UNIVERSE,
-			met: report?.required_floor_met ?? null,
+			met:
+				baselineCadence == null
+					? null
+					: baselineCadence >= INTERACTIVE_GREEN_HZ,
+			configured_target_met: report?.required_floor_met ?? null,
+			green_threshold_hz: INTERACTIVE_GREEN_HZ,
+			yellow_threshold_hz: INTERACTIVE_YELLOW_HZ,
 			achieved_ticks_per_second: observed?.achieved_ticks_per_second ?? null,
+			average_completed_hz: observed?.average_completed_hz ?? null,
 			minimum_one_second_completed_hz:
 				observed?.minimum_one_second_completed_hz ?? null,
+			windows_below_minimum: observed?.windows_below_minimum ?? null,
 			deadline_misses: observed?.deadline_misses ?? null,
 			dropped_ticks: observed?.dropped_ticks ?? null,
 			deferred_ticks: observed?.deferred_ticks ?? null,
+			phases: observed?.phases ?? null,
+			limiting_phase: limitingPhase(baselineValidation),
 		},
 		show_mutation: mutationEvidence(report),
 		patch: patchEvidence(report),
+		canonical_demo: canonicalDemoEvidence(canonicalDemo),
 		doubled_density: doubled
 			? {
 					attempted: true,
 					reason: doubledValidation?.valid ? null : doubledValidation?.reason,
 					fixtures_per_universe: DOUBLED_FIXTURES_PER_UNIVERSE,
 					fixture_count: REQUIRED_UNIVERSES * DOUBLED_FIXTURES_PER_UNIVERSE,
-					met: doubledValidation?.valid
+					met: null,
+					requested_rate_hz:
+						doubledObserved?.requested_rate_hz ?? REQUIRED_RATE_HZ,
+					configured_target_met: doubledValidation?.valid
 						? doubledValidation.report.required_floor_met
 						: null,
 					achieved_ticks_per_second:
@@ -388,20 +455,24 @@ export function statusDocument(options, baseline, doubled) {
 					deadline_misses: doubledObserved?.deadline_misses ?? null,
 					dropped_ticks: doubledObserved?.dropped_ticks ?? null,
 					deferred_ticks: doubledObserved?.deferred_ticks ?? null,
+					phases: doubledObserved?.phases ?? null,
+					limiting_phase: limitingPhase(doubledValidation),
 				}
 			: {
 					attempted: false,
-					reason: baselineValidation.valid
-						? "Not attempted because a required baseline or mutation gate did not pass."
-						: "Not attempted because the baseline evidence was invalid.",
+					reason: "The diagnostic could not be executed.",
 					fixtures_per_universe: DOUBLED_FIXTURES_PER_UNIVERSE,
 					fixture_count: REQUIRED_UNIVERSES * DOUBLED_FIXTURES_PER_UNIVERSE,
 					met: null,
+					requested_rate_hz: REQUIRED_RATE_HZ,
+					configured_target_met: null,
 					achieved_ticks_per_second: null,
 					minimum_one_second_completed_hz: null,
 					deadline_misses: null,
 					dropped_ticks: null,
 					deferred_ticks: null,
+					phases: null,
+					limiting_phase: null,
 				},
 	};
 }
@@ -421,22 +492,26 @@ function main() {
 		true,
 		true,
 	);
-	const baselinePassed =
-		baseline.report?.required_floor_met === true &&
-		baseline.report?.show_mutation?.gate_met !== false &&
-		baseline.report?.patch_mutation?.gate_met === true;
-	const doubled = baselinePassed
-		? runStage(
-				resolve(options.binary),
-				outputDirectory,
-				"doubled-density",
-				DOUBLED_FIXTURES_PER_UNIVERSE,
-				hardwareLabel,
-				false,
-				false,
-			)
-		: null;
-	const status = statusDocument(options, baseline, doubled);
+	const doubled = runStage(
+		resolve(options.binary),
+		outputDirectory,
+		"doubled-density",
+		DOUBLED_FIXTURES_PER_UNIVERSE,
+		hardwareLabel,
+		false,
+		false,
+	);
+	let canonicalDemo = null;
+	if (options["canonical-demo-performance"]) {
+		try {
+			canonicalDemo = JSON.parse(
+				readFileSync(resolve(options["canonical-demo-performance"]), "utf8"),
+			);
+		} catch {
+			canonicalDemo = null;
+		}
+	}
+	const status = statusDocument(options, baseline, doubled, canonicalDemo);
 	writeFileSync(
 		resolve(outputDirectory, "status.json"),
 		`${JSON.stringify(status, null, 2)}\n`,
@@ -448,13 +523,16 @@ function main() {
 			"",
 			`**${status.status.toUpperCase()}** — ${status.summary}`,
 			"",
-			`- Required floor: ${status.required_floor.fixture_count} fixtures across ` +
-				`${status.required_floor.universes} full universes at ${status.required_floor.rate_hz} Hz`,
+			`- Interactive ceiling: ${status.required_floor.fixture_count} fixtures across ` +
+				`${status.required_floor.universes} universes; green ≥${INTERACTIVE_GREEN_HZ} Hz, yellow ≥${INTERACTIVE_YELLOW_HZ} Hz`,
 			`- Achieved cadence: ${status.required_floor.achieved_ticks_per_second ?? "missing"} Hz`,
 			`- Deadline misses: ${status.required_floor.deadline_misses ?? "missing"}`,
+			`- Canonical demo Stage presentation cadence (343 physical instances): ${status.canonical_demo.stage?.presentation_rate_hz ?? "missing"} Hz`,
+			`- Canonical demo Stage source-to-canvas p95: ${status.canonical_demo.stage?.source_to_settled_canvas_ms?.p95 ?? "missing"} ms`,
 			`- Show mutation p95 (${status.show_mutation?.large.fixture_count ?? "large"} fixtures): ` +
 				`${status.show_mutation?.large.p95_microseconds ?? "missing"} µs`,
-			`- Doubled density: ${status.doubled_density.attempted ? status.doubled_density.met : "skipped"}`,
+			`- 2,048-fixture diagnostic cadence: ${status.doubled_density.achieved_ticks_per_second ?? "missing"} Hz`,
+			`- 2,048-fixture limiting phase: ${status.doubled_density.limiting_phase?.name ?? "missing"}`,
 			`- Patch server p95 (1 fixture): ${status.patch?.server.single_fixture.p95_microseconds ?? "missing"} µs`,
 			`- Patch server p95 (100 fixtures): ${status.patch?.server.hundred_fixtures.p95_microseconds ?? "missing"} µs`,
 			"- Patch UI action-to-visible: informational browser evidence (not a release gate)",

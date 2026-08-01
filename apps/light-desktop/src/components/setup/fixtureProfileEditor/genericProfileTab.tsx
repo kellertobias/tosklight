@@ -65,12 +65,13 @@ function IdentitySection({
 						label="Manufacturer"
 						clearable
 						value={draft.manufacturer}
-						onChange={(event) =>
+						onChange={(event) => {
+							const manufacturer = event.target.value;
 							onChange((current) => ({
 								...current,
-								manufacturer: event.target.value,
-							}))
-						}
+								manufacturer,
+							}));
+						}}
 					/>
 					<Button
 						iconOnly
@@ -86,20 +87,22 @@ function IdentitySection({
 					label="Fixture name"
 					clearable
 					value={draft.name}
-					onChange={(event) =>
-						onChange((current) => ({ ...current, name: event.target.value }))
-					}
+					onChange={(event) => {
+						const name = event.target.value;
+						onChange((current) => ({ ...current, name }));
+					}}
 				/>
 				<TextField
 					label="Fixture short name"
 					clearable
 					value={draft.short_name}
-					onChange={(event) =>
+					onChange={(event) => {
+						const short_name = event.target.value;
 						onChange((current) => ({
 							...current,
-							short_name: event.target.value,
-						}))
-					}
+							short_name,
+						}));
+					}}
 				/>
 				<SelectField
 					label="Fixture type"
@@ -134,9 +137,10 @@ function NotesAssetsSection({ draft, onChange }: GenericSectionProps) {
 					label="Fixture notes"
 					rows={9}
 					value={draft.notes}
-					onChange={(event) =>
-						onChange((current) => ({ ...current, notes: event.target.value }))
-					}
+					onChange={(event) => {
+						const notes = event.target.value;
+						onChange((current) => ({ ...current, notes }));
+					}}
 				/>
 			</div>
 			<div>
@@ -187,15 +191,16 @@ function PhysicalSection({ draft, onChange }: GenericSectionProps) {
 						allowDecimal
 						min={0}
 						value={draft.physical[key] ?? ""}
-						onChange={(event) =>
+						onChange={(event) => {
+							const value = optionalNumber(event.target.value);
 							onChange((current) => ({
 								...current,
 								physical: {
 									...current.physical,
-									[key]: optionalNumber(event.target.value),
+									[key]: value,
 								},
-							}))
-						}
+							}));
+						}}
 					/>
 				))}
 				<NumberField
@@ -203,45 +208,48 @@ function PhysicalSection({ draft, onChange }: GenericSectionProps) {
 					allowDecimal
 					min={0}
 					value={draft.physical.color_temperature_kelvin ?? ""}
-					onChange={(event) =>
+					onChange={(event) => {
+						const color_temperature_kelvin = optionalNumber(event.target.value);
 						onChange((current) => ({
 							...current,
 							physical: {
 								...current.physical,
-								color_temperature_kelvin: optionalNumber(event.target.value),
+								color_temperature_kelvin,
 							},
-						}))
-					}
+						}));
+					}}
 				/>
 				<NumberField
 					label="Luminous output (lm)"
 					allowDecimal
 					min={0}
 					value={draft.physical.luminous_output_lumens ?? ""}
-					onChange={(event) =>
+					onChange={(event) => {
+						const luminous_output_lumens = optionalNumber(event.target.value);
 						onChange((current) => ({
 							...current,
 							physical: {
 								...current.physical,
-								luminous_output_lumens: optionalNumber(event.target.value),
+								luminous_output_lumens,
 							},
-						}))
-					}
+						}));
+					}}
 				/>
 				<NumberField
 					label="Beam angle (degrees)"
 					allowDecimal
 					min={0}
 					value={draft.physical.beam_angle_degrees ?? ""}
-					onChange={(event) =>
+					onChange={(event) => {
+						const beam_angle_degrees = optionalNumber(event.target.value);
 						onChange((current) => ({
 							...current,
 							physical: {
 								...current.physical,
-								beam_angle_degrees: optionalNumber(event.target.value),
+								beam_angle_degrees,
 							},
-						}))
-					}
+						}));
+					}}
 				/>
 			</FormLayout>
 		</section>

@@ -33,6 +33,7 @@ function report({
 	showMutation = true,
 	patchMutation = true,
 	achieved = 100,
+	minimum = achieved,
 	deadlineMisses = 0,
 } = {}) {
 	return {
@@ -55,11 +56,18 @@ function report({
 				fixtures_per_universe: 32,
 				configured_rate_hz: 100,
 				achieved_ticks_per_second: achieved,
-				frame_rate: { minimum_one_second_completed_hz: achieved },
+				frame_rate: { minimum_one_second_completed_hz: minimum },
 				deadline: {
 					deadline_misses: deadlineMisses,
 					dropped_ticks: 0,
 					deferred_ticks: 0,
+				},
+				phases: {
+					total_pipeline: distribution(500, 900),
+					engine_render_combined: distribution(400, 800),
+					protocol_encoding: distribution(50, 75),
+					loopback_datagram_delivery: null,
+					benchmark_validation_overhead: distribution(10, 20),
 				},
 			},
 		],
@@ -99,6 +107,24 @@ function stage(value, exitCode = 0) {
 	};
 }
 
+function canonicalDemo() {
+	return {
+		schema_version: 1,
+		measurement_surface: "browser_playwright_product_demo",
+		scene: {
+			fixture_records: 295,
+			physical_instances: 343,
+			stage_visible: true,
+		},
+		window: { elapsed_ms: 60_000 },
+		stage: {
+			presentation_rate_hz: 30,
+			source_to_settled_canvas_ms: { p95: 61 },
+			render_duration_ms: { p95: 3 },
+		},
+	};
+}
+
 test("invalid or inconsistent benchmark evidence is unknown", () => {
 	assert.equal(
 		classifyPerformance({ valid: false, reason: "invalid" }, null).status,
@@ -114,25 +140,84 @@ test("invalid or inconsistent benchmark evidence is unknown", () => {
 	assert.match(status.evidence.baseline.error, /missing required measured/u);
 });
 
-test("measured failures remain degraded with observed numbers and failed gates", () => {
+test("the 1,024-fixture indicator uses 60 Hz green and 40 Hz yellow thresholds", () => {
 	const status = statusDocument(
 		options,
-		stage(report({ floor: false, achieved: 91.25, deadlineMisses: 3 }), 1),
+		stage(
+			report({ floor: false, achieved: 63.25, minimum: 63, deadlineMisses: 3 }),
+			1,
+		),
 		null,
 	);
-	assert.equal(status.status, "degraded");
+	assert.equal(status.status, "healthy");
 	assert.equal(status.evidence.kind, "measured");
 	assert.equal(status.evidence.baseline.exit_code, 1);
-	assert.deepEqual(status.evidence.failed_gates, ["required_floor"]);
-	assert.equal(status.required_floor.achieved_ticks_per_second, 91.25);
+	assert.deepEqual(status.evidence.failed_gates, []);
+	assert.deepEqual(status.evidence.warnings, []);
+	assert.equal(status.required_floor.achieved_ticks_per_second, 63.25);
+	assert.equal(status.required_floor.met, true);
+	assert.equal(status.required_floor.configured_target_met, false);
 	assert.equal(status.required_floor.deadline_misses, 3);
+	assert.equal(
+		status.required_floor.limiting_phase.name,
+		"Engine render and fixture projection",
+	);
 	assert.equal(status.show_mutation.large.p95_microseconds, 40);
 	assert.equal(status.patch.server.single_fixture.p95_microseconds, 0);
 	assert.match(
 		status.report_url,
 		/tosklight-performance-report-1\.2\.3\.zip$/u,
 	);
-	assert.match(status.doubled_density.reason, /required baseline/u);
+
+	const yellow = statusDocument(
+		options,
+		stage(report({ floor: false, achieved: 52, minimum: 49 }), 1),
+		null,
+	);
+	assert.equal(yellow.status, "warning");
+	assert.deepEqual(yellow.evidence.warnings, ["interactive_output_yellow"]);
+
+	const red = statusDocument(
+		options,
+		stage(report({ floor: false, achieved: 39, minimum: 38 }), 1),
+		null,
+	);
+	assert.equal(red.status, "degraded");
+	assert.deepEqual(red.evidence.failed_gates, ["interactive_output_red"]);
+
+	assert.equal(
+		statusDocument(
+			options,
+			stage(report({ floor: false, achieved: 60, minimum: 60 }), 1),
+			null,
+		).status,
+		"healthy",
+	);
+	assert.equal(
+		statusDocument(
+			options,
+			stage(report({ floor: false, achieved: 40, minimum: 40 }), 1),
+			null,
+		).status,
+		"warning",
+	);
+});
+
+test("the canonical 343-instance product demo is retained as separate measured evidence", () => {
+	const status = statusDocument(
+		options,
+		stage(report(), 0),
+		null,
+		canonicalDemo(),
+	);
+	assert.equal(status.canonical_demo.attempted, true);
+	assert.equal(status.canonical_demo.scene.physical_instances, 343);
+	assert.equal(status.canonical_demo.stage.presentation_rate_hz, 30);
+	assert.equal(status.canonical_demo.stage.render_duration_ms.p95, 3);
+
+	const unavailable = statusDocument(options, stage(report(), 0), null, {});
+	assert.equal(unavailable.canonical_demo.attempted, true);
+	assert.match(unavailable.canonical_demo.reason, /did not produce valid/u);
 });
 
 test("passing baseline remains healthy when the optional density probe degrades", () => {
@@ -149,7 +234,8 @@ test("passing baseline remains healthy when the optional density probe degrades"
 	const status = statusDocument(options, baseline, stage(doubledReport, 1));
 	assert.equal(status.status, "healthy");
 	assert.equal(status.doubled_density.attempted, true);
-	assert.equal(status.doubled_density.met, false);
+	assert.equal(status.doubled_density.met, null);
+	assert.equal(status.doubled_density.configured_target_met, false);
 	assert.equal(status.doubled_density.achieved_ticks_per_second, 82);
 	assert.equal(status.doubled_density.deadline_misses, 2);
 });
@@ -159,6 +245,10 @@ test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
 		resolve(artifactPaths.tmp, "release-performance-test-"),
 	);
 	const executable = resolve(temporary, "fake-benchmark.mjs");
+	const canonicalDemoPath = resolve(
+		temporary,
+		"canonical-demo-performance.json",
+	);
 	const output = resolve(temporary, "output");
 	mkdirSync(output, { recursive: true });
 	writeFileSync(
@@ -168,6 +258,7 @@ test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
 		)}); process.exit(1);\n`,
 	);
 	chmodSync(executable, 0o755);
+	writeFileSync(canonicalDemoPath, JSON.stringify(canonicalDemo()));
 	const measured = spawnSync(
 		process.execPath,
 		[
@@ -182,13 +273,20 @@ test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
 			options.commit,
 			"--release-url",
 			options["release-url"],
+			"--canonical-demo-performance",
+			canonicalDemoPath,
 		],
 		{ encoding: "utf8" },
 	);
 	assert.equal(measured.status, 0, measured.stderr);
 	assert.equal(
 		JSON.parse(readFileSync(resolve(output, "status.json"))).status,
-		"degraded",
+		"healthy",
+	);
+	assert.equal(
+		JSON.parse(readFileSync(resolve(output, "status.json"))).canonical_demo
+			.scene.physical_instances,
+		343,
 	);
 	assert.equal(
 		JSON.parse(readFileSync(resolve(output, "hard-floor.json")))
@@ -241,11 +339,20 @@ test("release workflow separates measured degradation from infrastructure failur
 
 	assert.match(release, /needs:[\s\S]*?- build/u);
 	assert.doesNotMatch(release, /- benchmark|- pages-build/u);
-	assert.match(performance, /needs: \[metadata, release\]/u);
+	assert.match(performance, /needs: \[metadata, release, visual-assets\]/u);
+	assert.match(performance, /name: product-demo/u);
+	assert.match(performance, /--canonical-demo-performance/u);
+	assert.match(performance, /test -f "\$canonical_demo"/u);
 	assert.match(performance, /gh release download/u);
 	assert.match(performance, /tools\/run-release-performance\.mjs/u);
 	assert.doesNotMatch(performance, /continue-on-error: true/u);
 	assert.match(pages, /always\(\)/u);
 	assert.match(pages, /needs\['release-performance'\]\.result/u);
 	assert.match(pages, /LIGHT_PERFORMANCE_STATUS_FILE/u);
+	assert.match(pages, /name: storybook-static/u);
+	assert.match(pages, /\.artifacts\/build\/storybook\/ui/u);
+	assert.match(
+		workflow,
+		/name: storybook-static[\s\S]*?path: \.artifacts\/build\/storybook\/ui/u,
+	);
 });

@@ -6,6 +6,7 @@ import { putPlannedDemoObject } from "./plannedDemoObjects";
 import { installPlannedDemoPatch } from "./plannedDemoPatch";
 import { installPlannedDemoPlaybacks } from "./plannedDemoPlaybacks";
 import { installPlannedDemoPresets } from "./plannedDemoPresets";
+import { installPlannedDemoScenery } from "./plannedDemoScenery";
 
 export async function generatePlannedDemo(
 	api: ApiDriver,
@@ -13,6 +14,7 @@ export async function generatePlannedDemo(
 	layers: Readonly<Record<string, string>> = {},
 ) {
 	const resolvedLayers = await ensurePlannedDemoLayers(api, showId, layers);
+	const scenery = await installPlannedDemoScenery(api, showId, resolvedLayers);
 	const patch = await installPlannedDemoPatch(api, showId, resolvedLayers);
 	const groups = await installPlannedDemoGroups(api, showId, patch.fixtures);
 	const presets = await installPlannedDemoPresets(api, showId, patch.fixtures);
@@ -23,7 +25,7 @@ export async function generatePlannedDemo(
 	);
 	const dynamics = await installPlannedDemoDynamics(api, showId);
 	const layout = await installPlannedDemoLayout(api, showId);
-	return { patch, groups, presets, topology, dynamics, layout };
+	return { patch, scenery, groups, presets, topology, dynamics, layout };
 }
 
 const LAYER_NAMES = [
@@ -34,9 +36,10 @@ const LAYER_NAMES = [
 	"Audience",
 	"Auxiliary",
 	"House Lights",
+	"Stage",
 ] as const;
 
-async function ensurePlannedDemoLayers(
+export async function ensurePlannedDemoLayers(
 	api: ApiDriver,
 	showId: string,
 	provided: Readonly<Record<string, string>>,

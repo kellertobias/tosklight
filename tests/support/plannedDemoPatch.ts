@@ -39,15 +39,44 @@ export async function installPlannedDemoPatch(
 	const built = createPlannedDemoPatchInputs(profiles, layers);
 	const { fixtures } = built;
 	const before = await api.patch();
+	const expectedNumbers = new Set(
+		PLANNED_DEMO_FIXTURES.map((fixture) => fixture.number),
+	);
+	const existingByNumber = new Map(
+		before.fixtures.flatMap((fixture: any) =>
+			fixture.fixture_number == null
+				? []
+				: [[fixture.fixture_number, fixture] as const],
+		),
+	);
+	const manifestByNumber = new Map(
+		PLANNED_DEMO_FIXTURES.map((fixture) => [fixture.number, fixture]),
+	);
+	const adopted = fixtures.map((fixture) => {
+		const existing = existingByNumber.get(fixture.fixture_number);
+		const expected = manifestByNumber.get(fixture.fixture_number);
+		return {
+			...fixture,
+			fixture_id:
+				existing && expected && matchesManifestProfile(existing, expected)
+					? existing.fixture_id
+					: fixture.fixture_id,
+		};
+	});
 	await api.request(
 		"POST",
 		"/api/v2/patch/fixtures",
 		{
 			request_id: crypto.randomUUID(),
-			fixtures,
-			remove_fixture_ids: before.fixtures.map(
-				(fixture: any) => fixture.fixture_id,
-			),
+			fixtures: adopted,
+			remove_fixture_ids: before.fixtures.flatMap((fixture: any) => {
+				const expected = manifestByNumber.get(fixture.fixture_number);
+				return fixture.fixture_number != null &&
+					(!expectedNumbers.has(fixture.fixture_number) ||
+						(expected && !matchesManifestProfile(fixture, expected)))
+					? [fixture.fixture_id]
+					: [];
+			}),
 			placements: [],
 		},
 		true,
@@ -55,14 +84,17 @@ export async function installPlannedDemoPatch(
 		{ showId },
 	);
 	const after = await api.patch();
-	const physicalInstances = after.fixtures.reduce(
+	const lightingFixtures = after.fixtures.filter((fixture: any) =>
+		expectedNumbers.has(fixture.fixture_number),
+	);
+	const physicalInstances = lightingFixtures.reduce(
 		(count: number, fixture: any) =>
 			count + 1 + (fixture.multipatch?.length ?? 0),
 		0,
 	);
-	if (after.fixtures.length !== PLANNED_DEMO_CONTROL_FIXTURES)
+	if (lightingFixtures.length !== PLANNED_DEMO_CONTROL_FIXTURES)
 		throw new Error(
-			`Plan 76 patch has ${after.fixtures.length} controls; expected 262`,
+			`Plan 76 patch has ${lightingFixtures.length} controls; expected 262`,
 		);
 	if (physicalInstances !== PLANNED_DEMO_PHYSICAL_INSTANCES)
 		throw new Error(
@@ -70,10 +102,21 @@ export async function installPlannedDemoPatch(
 		);
 	return {
 		...built,
-		fixtures: after.fixtures,
-		fixtureRecords: after.fixtures.length,
+		fixtures: lightingFixtures,
+		fixtureRecords: lightingFixtures.length,
 		physicalInstances,
 	};
+}
+
+function matchesManifestProfile(
+	fixture: any,
+	expected: DemoFixtureManifestEntry,
+) {
+	return (
+		fixture.definition.manufacturer === expected.profile.manufacturer &&
+		fixture.definition.model === expected.profile.name &&
+		fixture.definition.mode === expected.profile.mode
+	);
 }
 
 export function createPlannedDemoPatchInputs(
@@ -259,8 +302,11 @@ function ordinaryLocation(entry: DemoFixtureManifestEntry): Point {
 	if (entry.roles.includes("Hazers"))
 		return { x: index ? 3.5 : -3.5, y: 3.5, z: 0.2 };
 	if (entry.name.startsWith("Fresnel")) {
-		if (index < 4) return { x: spread(index, 4, -3, 3), y: -3, z: 4 };
-		return { x: index === 4 ? -4 : 4, y: 1, z: 2.5 };
+		return {
+			x: index < 4 ? spread(index, 4, -3.8, -3) : spread(index - 4, 4, 3, 3.8),
+			y: -3,
+			z: 4,
+		};
 	}
 	return { x: spread(index, 7, -3, 3), y: entry.number < 14 ? 0 : -3, z: 4 };
 }

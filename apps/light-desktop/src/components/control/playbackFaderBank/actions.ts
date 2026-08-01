@@ -1,7 +1,10 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 import type { Cue, PlaybackDefinition } from "../../../api/types";
 import { loadRecordSettings } from "../../setup/ProgrammerDefaults";
-import { normalizePlaybackTopology } from "../PlaybackConfigurationModal";
+import {
+	normalizePlaybackTopology,
+	withFunctionDefaults,
+} from "../PlaybackConfigurationModal";
 import { cueUpdateTarget, requestUpdateTarget } from "../updateWorkflow";
 import type { PlaybackBankController } from "./controller";
 import { emptyConfiguration } from "./feedback";
@@ -88,6 +91,58 @@ export async function assignDynamicPlayback(
 	return outcome.executed;
 }
 
+export async function assignGroupPlayback(
+	controller: PlaybackBankController,
+	slot: number,
+) {
+	const match = controller.commandLine?.text
+		.trim()
+		.match(/^SET\s+GROUP\s+(\S+)$/i);
+	if (!match || controller.activePageNumber == null) return false;
+	const groupId = match[1];
+	const slotData = controller.slots.find(
+		(candidate) => candidate.slot === slot,
+	);
+	const existing = slotData?.playback ?? null;
+	const fallbackButtons = Math.max(
+		0,
+		Math.min(3, slotData?.row?.button_count ?? controller.buttons ?? 3),
+	);
+	const draft = withFunctionDefaults(
+		existing ??
+			emptyConfiguration(
+				controller.activePageNumber,
+				slot,
+				fallbackButtons,
+				slotData?.row?.has_fader ?? true,
+				"",
+			),
+		"group",
+		"",
+		groupId,
+	);
+	const outcome = await controller.topologyActions?.configureSlot(
+		controller.activePageNumber,
+		slot,
+		{ ...draft, name: `Group ${groupId}` },
+		{
+			expectedPageRevision: controller.pageObject?.revision ?? 0,
+			expectedPageObjectId: controller.pageObject?.id ?? null,
+			expectedPlaybackRevision:
+				controller.topology.playbacks.find(
+					(candidate) => candidate.body.number === existing?.number,
+				)?.revision ?? 0,
+			expectedPlaybackObjectId:
+				controller.topology.playbacks.find(
+					(candidate) => candidate.body.number === existing?.number,
+				)?.id ?? null,
+		},
+	);
+	if (!outcome) return false;
+	await controller.commandLineActions?.reset();
+	return true;
+}
+
 export async function recordPlayback(
 	controller: PlaybackBankController,
 	event: ReactMouseEvent,
@@ -122,6 +177,12 @@ export async function activateHardwareCard(
 	playback: PlaybackDefinition | null,
 	slot: number,
 ) {
+	if (controller.groupAssignmentPending) {
+		event.preventDefault();
+		event.stopPropagation();
+		await assignGroupPlayback(controller, slot);
+		return;
+	}
 	if (!playback || isPlaybackControlTarget(event.target)) return;
 	event.preventDefault();
 	event.stopPropagation();

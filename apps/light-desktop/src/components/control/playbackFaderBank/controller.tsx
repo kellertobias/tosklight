@@ -126,6 +126,9 @@ export function usePlaybackBankController({
 		dynamicAssignmentPending: /^SET\s+DYNAMIC\s+\d+\s*$/i.test(
 			commandLine?.text ?? "",
 		),
+		groupAssignmentPending: /^SET\s+GROUP\s+\S+\s*$/i.test(
+			commandLine?.text ?? "",
+		),
 		slots,
 		rowTracks,
 		heldActions,

@@ -37,10 +37,6 @@ const PLATFORMS = [
     assets: [
       { kind: "Desktop application", file: (v) => `tosklight-${v}-macos-arm64.zip` },
       {
-        kind: "Hardware Controls application",
-        file: (v) => `tosklight-hardware-controls-${v}-macos-arm64.zip`,
-      },
-      {
         kind: "Viz Editor application, with the 3D visualizer inside it",
         file: (v) => `tosklight-viz-${v}-macos-arm64.zip`,
       },
@@ -161,7 +157,8 @@ writeFileSync(
 );
 const performanceLabel = {
   healthy: "Performance healthy",
-  degraded: "Performance degraded",
+  warning: "Performance warning",
+  degraded: "Performance critical",
   unknown: "Performance unknown",
 }[performance.status];
 const performanceMarkup =

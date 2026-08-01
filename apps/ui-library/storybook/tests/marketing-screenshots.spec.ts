@@ -133,6 +133,7 @@ test("captures the complete reviewed marketing gallery from Storybook", async ({
 		});
 		for (const interaction of entry.interactions)
 			await applyInteraction(page, interaction);
+		await page.evaluate(() => window.scrollTo(0, 0));
 		await settleRenderedLayout(page);
 
 		const captureTarget = entry.captureSelector

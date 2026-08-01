@@ -81,10 +81,28 @@ export async function installPlannedDemoLayout(api: ApiDriver, showId: string) {
 		throw new Error(
 			"Plan 76 desktop generation requires an authenticated user",
 		);
-	const body = plannedDemoLayout();
 	const existing = (await api.showObjects<any>(showId, "user_layout")).find(
 		(layout) => layout.id === userId,
 	);
+	const body = plannedDemoLayout();
+	const visibleBusking = existing?.body.desks?.find(
+		(desk: any) => desk.name === "Busking",
+	);
+	if (visibleBusking) {
+		const busking = body.desks[0];
+		const visibleVirtualPlaybacks = visibleBusking.panes?.find(
+			(pane: any) => pane.kind === "virtual_playbacks",
+		);
+		busking.id = visibleBusking.id;
+		if (visibleVirtualPlaybacks) {
+			const plannedVirtualPlaybacks = busking.panes.find(
+				(pane) => pane.kind === "virtual_playbacks",
+			);
+			if (plannedVirtualPlaybacks)
+				plannedVirtualPlaybacks.id = visibleVirtualPlaybacks.id;
+		}
+		body.activeDeskId = visibleBusking.id;
+	}
 	await api.seedShowObject(
 		showId,
 		"user_layout",

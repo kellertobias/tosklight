@@ -1,4 +1,5 @@
 import type { ApiDriver } from "../bench/core/api";
+import { putPlannedDemoObject } from "./plannedDemoObjects";
 
 const FAMILY_GROUPS = [
 	["Show Profile", "13", "A"],
@@ -132,10 +133,32 @@ export function plannedDemoDynamicDefinitions() {
 export async function installPlannedDemoDynamics(
 	api: ApiDriver,
 	showId: string,
+	options: { assignVirtualPlaybacks?: boolean } = {},
 ) {
 	const requestedDefinitions = plannedDemoDynamicDefinitions();
+	const existing = await api.showObjects<any>(showId, "dynamic");
 	const definitions = [];
 	for (const dynamicDefinition of requestedDefinitions) {
+		const adopted = existing.find(
+			(candidate) =>
+				candidate.body.pool_number === dynamicDefinition.pool_number,
+		);
+		if (adopted) {
+			const definition = {
+				...dynamicDefinition,
+				id: adopted.id,
+				revision: adopted.body.revision,
+			};
+			await putPlannedDemoObject(
+				api,
+				showId,
+				"dynamic",
+				adopted.id,
+				definition,
+			);
+			definitions.push(definition);
+			continue;
+		}
 		const created = await api.request<{ object: { body: any } }>(
 			"POST",
 			"/api/v2/dynamics/create",
@@ -146,6 +169,16 @@ export async function installPlannedDemoDynamics(
 		);
 		definitions.push(created.object.body);
 	}
+	if (options.assignVirtualPlaybacks !== false)
+		await installPlannedDemoDynamicPlaybacks(api, showId, definitions);
+	return definitions;
+}
+
+export async function installPlannedDemoDynamicPlaybacks(
+	api: ApiDriver,
+	showId: string,
+	definitions: readonly any[],
+) {
 	const [page] = await api.showObjects<any>(showId, "playback_page");
 	if (!page) throw new Error("Plan 76 Busking Playback page is missing");
 	const virtual_playbacks = Object.fromEntries(
@@ -164,7 +197,7 @@ export async function installPlannedDemoDynamics(
 		},
 		page.revision,
 	);
-	return definitions;
+	return virtual_playbacks;
 }
 
 function definition(

@@ -10,7 +10,7 @@ HARDWARE_UI="$ROOT/apps/light-hardware-controls"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 
 # Backs the root package.json test scripts; invoke via `npm run test:<name>`.
-usage(){ echo "Usage: npm run test:{unit|architecture|ui-package|patch-package|viz-editor|storybook|e2e-build|e2e|e2e-api|e2e-ui|app-icons|artifact-paths|marketing-screenshots|help-screenshots|help-screenshots-live|record|demo|all}"; }
+usage(){ echo "Usage: npm run test:{unit|architecture|ui-package|patch-package|viz-editor|storybook|e2e-build|e2e|e2e-api|e2e-ui|e2e-performance|app-icons|artifact-paths|documentation-screenshots|marketing-screenshots|help-screenshots|help-screenshots-live|record|demo|all}"; }
 build_e2e(){
   if [[ "${LIGHT_REUSE_E2E_BUILD:-0}" == "1" ]]; then
     local server="${LIGHT_E2E_SERVER:-$LIGHT_CARGO_TARGET_DIR/debug/light-headless}"
@@ -45,7 +45,8 @@ architecture(){
 unit(){ architecture; (cd "$ROOT" && npm run test:bench-types); (cd "$ROOT" && npm run test:bench-unit); (cd "$ROOT" && npm run test:ui-package); (cd "$ROOT" && npm run test:patch-package); (cd "$ROOT" && npm run test:viz-editor); (cd "$UI" && npm run build); (cd "$HARDWARE_UI" && npm run build); cargo test --manifest-path "$ROOT/Cargo.toml" --workspace --exclude light-desktop --exclude light-hardware-controls --no-default-features; (cd "$UI" && npm test); (cd "$HARDWARE_UI" && npm test); }
 e2e(){ build_e2e; (cd "$UI" && npm run test:e2e -- "$@"); }
 e2e_api(){ e2e --grep '@api' "$@"; }
-e2e_ui(){ e2e --grep '@ui' --grep-invert '@(demo|docs)\b' "$@"; }
+e2e_ui(){ e2e --grep '@ui' --grep-invert '@(demo|docs|performance)\b' "$@"; }
+e2e_performance(){ e2e --grep '@performance' "$@"; }
 record(){
   build_e2e
   local status=0
@@ -59,13 +60,28 @@ demo(){
   (cd "$UI" && LIGHT_VISUAL_RECORDING=1 LIGHT_UPDATE_DEMO_SHOW=1 LIGHT_TEST_RESULTS_DIR="$LIGHT_ARTIFACTS_DIR/test/product-demo-results" npm run test:e2e -- --workers=1 product-demo.spec.ts "$@")
   node "$ROOT/tools/encode-product-demo.mjs"
 }
+run_help_screenshots(){
+  (cd "$ROOT" && npx playwright test --config apps/ui-library/storybook/playwright.config.ts apps/ui-library/storybook/tests/help-screenshots.spec.ts "$@")
+}
+run_marketing_screenshots(){
+  (cd "$ROOT" && npx playwright test --config apps/ui-library/storybook/playwright.config.ts apps/ui-library/storybook/tests/marketing-screenshots.spec.ts "$@")
+}
+run_documentation_screenshots(){
+  (cd "$ROOT" && npx playwright test --config apps/ui-library/storybook/playwright.config.ts \
+    apps/ui-library/storybook/tests/help-screenshots.spec.ts \
+    apps/ui-library/storybook/tests/marketing-screenshots.spec.ts "$@")
+}
 help_screenshots(){
   (cd "$ROOT" && npm run storybook:build)
-  (cd "$ROOT" && npx playwright test --config apps/ui-library/storybook/playwright.config.ts apps/ui-library/storybook/tests/help-screenshots.spec.ts "$@")
+  run_help_screenshots "$@"
 }
 marketing_screenshots(){
   (cd "$ROOT" && npm run storybook:build)
-  (cd "$ROOT" && npx playwright test --config apps/ui-library/storybook/playwright.config.ts apps/ui-library/storybook/tests/marketing-screenshots.spec.ts "$@")
+  run_marketing_screenshots "$@"
+}
+documentation_screenshots(){
+  (cd "$ROOT" && npm run storybook:build)
+  run_documentation_screenshots "$@"
 }
 help_screenshots_live(){ build_e2e; (cd "$UI" && LIGHT_HELP_SCREENSHOTS=1 LIGHT_HELP_SCREENSHOTS_LIVE=1 npm run test:e2e -- 02-help-screenshots.spec.ts --workers=1 "$@"); }
 ui_package(){ npm run test:ui-package --prefix "$ROOT"; }
@@ -82,6 +98,8 @@ case "$command" in
   e2e) e2e "$@" ;;
   e2e-api) e2e_api "$@" ;;
   e2e-ui) e2e_ui "$@" ;;
+  e2e-performance) e2e_performance "$@" ;;
+  documentation-screenshots) documentation_screenshots "$@" ;;
   marketing-screenshots) marketing_screenshots "$@" ;;
   help-screenshots) help_screenshots "$@" ;;
   help-screenshots-live) help_screenshots_live "$@" ;;

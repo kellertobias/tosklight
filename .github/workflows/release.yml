@@ -275,8 +275,8 @@ jobs:
           path: docs/help/assets/models
           if-no-files-found: error
 
-  help-screenshots:
-    name: Documentation / Deterministic help screenshots
+  documentation-screenshots:
+    name: Documentation / Generate reviewed screenshots
     needs: [metadata, unit]
     runs-on: ubuntu-22.04
     steps:
@@ -296,8 +296,16 @@ jobs:
       - name: Install Chrome for Playwright
         run: npx playwright install --with-deps chrome
 
-      - name: Build Storybook and verify reviewed help screenshots
-        run: npm run test:help-screenshots
+      - name: Build Storybook once and generate reviewed screenshots
+        run: >-
+          UPDATE_HELP_SCREENSHOTS=1 UPDATE_MARKETING_SCREENSHOTS=1
+          bash tools/test.sh documentation-screenshots
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: storybook-static
+          path: .artifacts/build/storybook/ui
+          if-no-files-found: error
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
@@ -307,37 +315,7 @@ jobs:
           if-no-files-found: error
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: failure()
-        with:
-          name: help-screenshot-diffs
-          path: .artifacts/test/help-screenshots
-          if-no-files-found: ignore
-
-  marketing-screenshots:
-    name: Documentation / Generate marketing screenshots
-    needs: [metadata, unit]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.sha }}
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install workspace dependencies
-        run: npm ci
-
-      - name: Install Chrome for Playwright
-        run: npx playwright install --with-deps chrome
-
-      - name: Build Storybook and generate marketing screenshots
-        run: npm run screenshots:marketing
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
         with:
           name: marketing-screenshots
           path: docs/marketing/assets/screenshots
@@ -346,13 +324,15 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
-          name: marketing-screenshot-diagnostics
-          path: .artifacts/test/marketing-screenshots
+          name: documentation-screenshot-diagnostics
+          path: |
+            .artifacts/test/playwright-report/storybook
+            .artifacts/test/results/storybook
           if-no-files-found: ignore
 
   manual:
     name: Documentation / Operator manual
-    needs: [metadata, help-screenshots]
+    needs: [metadata, documentation-screenshots]
     runs-on: ubuntu-22.04
     env:
       LIGHT_MANUAL_VERSION: ${{ needs.metadata.outputs.version }}
@@ -563,14 +543,6 @@ jobs:
             node tools/ci-smoke-built-desktop.mjs
           fi
 
-      - name: Build the Hardware Controls application
-        if: matrix.slug == 'macos-arm64'
-        shell: bash
-        run: |
-          config="$(npm run --silent artifact-path -- tmp)/tauri-hardware-release.json"
-          node tools/write-tauri-artifact-config.mjs hardware "$config"
-          npm run --prefix apps/light-hardware-controls tauri:build -- --target ${{ matrix.target }} --config "$config"
-
       - name: Stage release artifacts
         shell: bash
         env:
@@ -604,9 +576,6 @@ jobs:
             macos-arm64)
               ditto -c -k --sequesterRsrc --keepParent \
                 "$bundle/macos/ToskLight.app" "$out/tosklight-$version-macos-arm64.zip"
-              ditto -c -k --sequesterRsrc --keepParent \
-                "$bundle/macos/ToskLight Hardware Controls.app" \
-                "$out/tosklight-hardware-controls-$version-macos-arm64.zip"
               ;;
             linux-amd64)
               cp "$bundle"/appimage/*.AppImage "$out/tosklight-$version-linux-amd64.AppImage"
@@ -695,16 +664,14 @@ jobs:
       github.ref == 'refs/heads/main' &&
       needs.metadata.result == 'success' &&
       needs.manual.result == 'success' &&
-      needs.help-screenshots.result == 'success' &&
-      needs.marketing-screenshots.result == 'success' &&
+      needs.documentation-screenshots.result == 'success' &&
       needs.visual-assets.result == 'success' &&
       (needs['release-performance'].result == 'success' ||
        needs['release-performance'].result == 'failure')
     needs:
       - metadata
       - manual
-      - help-screenshots
-      - marketing-screenshots
+      - documentation-screenshots
       - visual-assets
       - release-performance
     runs-on: ubuntu-22.04
@@ -742,6 +709,11 @@ jobs:
         with:
           name: marketing-screenshots
           path: docs/marketing/assets/screenshots
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: storybook-static
+          path: .artifacts/build/storybook/ui
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -783,8 +755,7 @@ jobs:
       - unit
       - e2e
       - manual
-      - help-screenshots
-      - marketing-screenshots
+      - documentation-screenshots
       - visual-assets
       - build
     runs-on: ubuntu-22.04
@@ -822,7 +793,6 @@ jobs:
           for required in \
             "light-headless-$VERSION-macos-arm64.zip" \
             "tosklight-$VERSION-macos-arm64.zip" \
-            "tosklight-hardware-controls-$VERSION-macos-arm64.zip" \
             "light-headless-$VERSION-linux-amd64.zip" \
             "tosklight-$VERSION-linux-amd64.AppImage" \
             "tosklight-$VERSION-linux-amd64.deb" \
@@ -866,7 +836,7 @@ jobs:
   release-performance:
     name: Release / Measure published artifact
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [metadata, release]
+    needs: [metadata, release, visual-assets]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -883,6 +853,11 @@ jobs:
         with:
           node-version: 22
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: product-demo
+          path: .artifacts/test/visual-inspection/product-demo
+
       - name: Measure the published release or reuse its latest status
         shell: bash
         run: |
@@ -890,6 +865,8 @@ jobs:
           out=".artifacts/performance"
           mkdir -p "$out"
           release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${VERSION}"
+          canonical_demo=".artifacts/test/visual-inspection/product-demo/canonical-demo-performance.json"
+          test -f "$canonical_demo"
 
           if [[ "$RELEASE_CREATED" == "true" ]]; then
             archive="light-headless-${VERSION}-linux-amd64.zip"
@@ -920,7 +897,8 @@ jobs:
               --version "$VERSION" \
               --commit "$GITHUB_SHA" \
               --release-url "$release_url" \
-              --hardware-label "GitHub Actions ubuntu-22.04"
+              --hardware-label "GitHub Actions ubuntu-22.04" \
+              --canonical-demo-performance "$canonical_demo"
 
             if [[ ! -f "$out/status.json" ]]; then
               node -e '

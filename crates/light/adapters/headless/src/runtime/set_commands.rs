@@ -10,6 +10,13 @@ pub(super) fn execute_set_command(
         return assign_dynamic_playback(state, session, tokens, context);
     }
     if tokens.first().is_some_and(|token| token == "GROUP") {
+        if tokens.get(2).is_some_and(|token| token == "AT") {
+            if tokens.len() != 6 {
+                return Err("expected SET GROUP <group-number> AT <page> . <page-playback>".into());
+            }
+            let (page, slot) = parse_page_slot(&tokens[3..])?;
+            return assign_group_page_slot(state, context, &tokens[1], page, slot);
+        }
         if tokens.len() != 2 {
             return Err("expected SET GROUP <group-number>".into());
         }
@@ -32,19 +39,13 @@ pub(super) fn execute_set_command(
     }
     let at = tokens.iter().position(|token| token == "AT");
     if let Some(at) = at {
-        if tokens.first().is_some_and(|token| token == "GROUP") {
-            return Err(
-                "playback pages accept Cuelists only; store the group in a Cuelist first".into(),
-            );
-        } else {
-            let playback = tokens
-                .first()
-                .ok_or("playback number is required")?
-                .parse::<u16>()
-                .map_err(|_| "playback number is invalid")?;
-            let (page, slot) = parse_page_slot(&tokens[at + 1..])?;
-            assign_page_slot(state, context, page, slot, playback)?;
-        }
+        let playback = tokens
+            .first()
+            .ok_or("playback number is required")?
+            .parse::<u16>()
+            .map_err(|_| "playback number is invalid")?;
+        let (page, slot) = parse_page_slot(&tokens[at + 1..])?;
+        assign_page_slot(state, context, page, slot, playback)?;
         return Ok(1);
     }
     let snapshot = state.output.snapshot();
@@ -58,6 +59,119 @@ pub(super) fn execute_set_command(
         serde_json::json!({"playback":address.playback,"cue":address.cue}),
     );
     Ok(0)
+}
+
+fn assign_group_page_slot(
+    state: &AppState,
+    context: &light_application::ActionContext,
+    group_id: &str,
+    page: u8,
+    slot: u8,
+) -> Result<usize, String> {
+    let snapshot = state.output.snapshot();
+    let group = snapshot
+        .groups
+        .iter()
+        .find(|group| group.id == group_id)
+        .cloned()
+        .ok_or_else(|| format!("group {group_id} does not exist"))?;
+    let (entry, store) = active_show_store(state)?;
+    let page_object = store
+        .objects("playback_page")
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|object| object.id == page.to_string());
+    let mut page_definition = if let Some(object) = &page_object {
+        serde_json::from_value::<light_playback::PlaybackPage>(object.body.clone())
+            .map_err(|error| format!("invalid stored Playback page: {error}"))?
+    } else {
+        snapshot
+            .playback_pages
+            .iter()
+            .find(|candidate| candidate.number == page)
+            .cloned()
+            .unwrap_or(light_playback::PlaybackPage {
+                number: page,
+                name: format!("Page {page}"),
+                slots: HashMap::new(),
+                virtual_playbacks: HashMap::new(),
+            })
+    };
+    let playback_objects = store
+        .objects("playback")
+        .map_err(|error| error.to_string())?;
+    let used = playback_objects
+        .iter()
+        .filter_map(|object| object.id.parse::<u16>().ok())
+        .collect::<HashSet<_>>();
+    let playback_number = page_definition
+        .slots
+        .get(&slot)
+        .copied()
+        .or_else(|| (!used.contains(&u16::from(slot))).then_some(u16::from(slot)))
+        .or_else(|| (1..=light_playback::MAX_PLAYBACKS).find(|number| !used.contains(number)))
+        .ok_or("no physical Playback number is available")?;
+    let playback_object = playback_objects
+        .into_iter()
+        .find(|object| object.id == playback_number.to_string());
+    let target = light_playback::PlaybackTarget::Group {
+        group_id: group.id.clone(),
+    };
+    let mut playback = playback_object
+        .as_ref()
+        .map(|object| {
+            serde_json::from_value::<light_playback::PlaybackDefinition>(object.body.clone())
+                .map_err(|error| format!("invalid stored Playback: {error}"))
+        })
+        .transpose()?
+        .unwrap_or(light_playback::PlaybackDefinition {
+            number: playback_number,
+            name: group.name.clone(),
+            buttons: light_playback::PlaybackDefinition::default_buttons(&target),
+            button_count: 3,
+            fader: light_playback::PlaybackFaderMode::Master,
+            has_fader: true,
+            go_activates: true,
+            auto_off: true,
+            xfade_millis: 0,
+            color: group.color.clone().unwrap_or_else(|| "#20c997".into()),
+            flash_release: light_playback::FlashReleaseMode::default(),
+            protect_from_swap: false,
+            presentation_icon: group.icon.clone(),
+            presentation_image: None,
+            target: target.clone(),
+        });
+    playback.name = group.name;
+    playback.target = target;
+    playback.reset_incompatible_layout();
+    page_definition.slots.insert(slot, playback_number);
+    let mutations = vec![
+        put_active_show_object(
+            light_application::ActiveShowObjectKind::Playback,
+            playback_number.to_string(),
+            playback_object.as_ref().map_or(0, |object| object.revision),
+            serde_json::to_value(playback).map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.message)?,
+        playback_layout_mutations::put_page(
+            page_definition,
+            page_object.as_ref().map_or(0, |object| object.revision),
+        )
+        .map_err(|error| error.message)?,
+    ];
+    let action = active_show_object_action(context.clone(), entry.id, mutations);
+    let result = run_active_show_object_action_in_programming_interaction(state, action)
+        .map_err(|error| error.message)?;
+    for change in &result.changes {
+        emit_command_object_changed(
+            state,
+            &entry,
+            change.kind.as_str(),
+            &change.object_id,
+            change.object_revision,
+        );
+    }
+    Ok(1)
 }
 
 fn assign_dynamic_playback(

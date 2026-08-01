@@ -19,6 +19,7 @@
         --muted: #9aa5b8;
         --accent: #ffb020;
         --healthy: #39d98a;
+        --warning: #ffd166;
         --degraded: #ff6b6b;
       }
       * { box-sizing: border-box; }
@@ -197,6 +198,8 @@
       .performance-status a { font-size: 0.9rem; }
       .performance-healthy { border-left-color: var(--healthy); }
       .performance-healthy strong { color: var(--healthy); }
+      .performance-warning { border-left-color: var(--warning); }
+      .performance-warning strong { color: var(--warning); }
       .performance-degraded { border-left-color: var(--degraded); }
       .performance-degraded strong { color: var(--degraded); }
       .performance-unknown { border-left-color: var(--muted); }
@@ -315,7 +318,7 @@
         <div class="specs">
           <div class="spec">
             <strong>Demo show</strong>
-            <span>262 controllable fixtures, 301 physical Stage instances, 3,783 occupied slots.</span>
+            <span>262 controllable fixtures, 33 Venue records, 343 physical Stage instances, 3,783 occupied slots.</span>
           </div>
           <div class="spec">
             <strong>Interactive scale</strong>
@@ -357,8 +360,9 @@
       <section id="performance">
         <h2>Release performance</h2>
         <p class="section-lede">
-          Measured after publication using the released Linux benchmark artifact. A degraded
-          result is visible here but never retracts or blocks the release.
+          Measured after publication using the released Linux benchmark artifact. The 1,024-fixture
+          indicator is green at 60 Hz, yellow from 40 Hz, and red below 40 Hz. The 2,048-fixture
+          run diagnoses the current limit without blocking the release.
         </p>
         __PERFORMANCE__
       </section>
@@ -379,6 +383,10 @@
           Start the full desktop development path with <code>npm run open</code>.
         </p>
         <div class="cards">
+          <a class="card" href="storybook/">
+            <h2>Storybook →</h2>
+            <p>Browse the reviewed operator surfaces, control states, windows, and deterministic application stories built by CI.</p>
+          </a>
           <a class="card" href="safari/">
             <h2>Code Safari →</h2>
             <p>Guided routes through architecture, one operator action end to end, persistence, tests, and Rust/Tauri.</p>
@@ -402,6 +410,7 @@
         <p>
           <a href="manual/">Operator manual</a> ·
           <a href="tosklight-manual.pdf">PDF manual</a> ·
+          <a href="storybook/">Storybook</a> ·
           <a href="https://github.com/kellertobias/tosklight">Source on GitHub</a>
         </p>
         <p>

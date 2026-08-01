@@ -8,7 +8,7 @@ license-file.workspace = true
 schemars = { workspace = true, features = ["uuid1"] }
 serde.workspace = true
 serde_json.workspace = true
-ts-rs = { workspace = true, features = ["uuid-impl"] }
+ts-rs = { workspace = true, features = ["no-serde-warnings", "uuid-impl"] }
 uuid.workspace = true
 
 [lints]

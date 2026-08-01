@@ -616,6 +616,37 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		);
 	});
 
+	it("assigns the armed Group to an empty page slot as a Group Master", async () => {
+		Object.assign(mocks.state, {
+			cueListSetTarget: null,
+			cueListSetArmed: false,
+			playbackSetArmed: false,
+		});
+		mocks.commandLine = "SET GROUP 21";
+		render(<PlaybackFaderBank count={1} />);
+
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Playback representation page 1 playback 1",
+			}),
+		);
+
+		await waitFor(() => expect(mocks.savePlaybackSlot).toHaveBeenCalledOnce());
+		expect(mocks.savePlaybackSlot).toHaveBeenCalledWith(
+			1,
+			1,
+			expect.objectContaining({
+				name: "Group 21",
+				target: { type: "group", group_id: "21" },
+			}),
+			expect.objectContaining({
+				expectedPageRevision: 3,
+				expectedPageObjectId: "page-object-1",
+			}),
+		);
+		expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
+	});
+
 	it("uses the scoped Cuelist authority for an empty slot default", () => {
 		Object.assign(mocks.state, {
 			cueListSetTarget: null,

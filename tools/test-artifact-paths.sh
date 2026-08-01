@@ -179,6 +179,5 @@ grep -Fq 'cacheDir: `${artifactPaths.viteCache}/ui-library-vitest`' "$ROOT/apps/
 grep -Fq 'cacheDir: `${artifactPaths.viteCache}/ui-library-storybook`' "$ROOT/apps/ui-library/storybook/config/main.ts"
 grep -Fq 'cacheDir: `${artifactPaths.viteCache}/root`' "$ROOT/vitest.config.ts"
 grep -Fq 'config="$(npm run --silent artifact-path -- tmp)/tauri-control-release.json"' "$ROOT/.github/workflows/release.yml"
-grep -Fq 'config="$(npm run --silent artifact-path -- tmp)/tauri-hardware-release.json"' "$ROOT/.github/workflows/release.yml"
 
 echo "Artifact path, migration, override, and cleanup safety tests passed."

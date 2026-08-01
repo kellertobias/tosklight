@@ -118,6 +118,7 @@ function ParameterFamiliesExample({
 }) {
 	const { state, dispatch } = useApp();
 	const [family, setFamily] = useState<ParameterFamily>("Intensity");
+	const [encoderPage, setEncoderPage] = useState(1);
 	const attributes: Record<ParameterFamily, Array<string | null>> = {
 		Intensity: ["intensity", "shutter", "strobe", "master", null, null],
 		Color: [
@@ -170,16 +171,38 @@ function ParameterFamiliesExample({
 		dispatch,
 		family,
 		setFamily,
+		encoderGroups: Object.keys(attributes).map((name) => ({
+			id: name.toLowerCase(),
+			label: name,
+			pages: [{ number: 1, slots: [] }],
+		})),
+		encoderPage,
+		selectEncoderGroup: (next: ParameterFamily, page: number) => {
+			setFamily(next);
+			setEncoderPage(page);
+		},
 		alignMode: null,
 		setAlignMode: () => undefined,
 		dynamicsMode: false,
 		setDynamicsMode: () => undefined,
 		hardwareConnected: hardware,
 		selectedFixtureIds: ["front-left", "front-right"],
+		selectedFixtures: [],
+		selectionRevision: 1,
 		selectedGroupId: null,
+		programmerValuesRoute: "normal",
+		programmerValuesReady: true,
+		programmerValues: [],
+		groupProgrammerValues: [],
 		encoderSlots: attributes[family],
+		encoderPageCount: 1,
+		attributeLabels: new Map<string, string>(),
 		normalized,
+		normalizedByFixture: new Map<string, Map<string, number>>(),
+		discrete: new Map<string, string>(),
+		discreteByFixture: new Map<string, Map<string, string>>(),
 		programmerTarget: (attribute: string) => normalized.get(attribute),
+		programmerDiscreteTarget: () => undefined,
 		encoderNormalizedDisplay: (attribute: string) =>
 			normalized.has(attribute)
 				? `${Math.round((normalized.get(attribute) ?? 0) * 100)}%`
