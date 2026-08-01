@@ -307,6 +307,11 @@ the first complete truss, and the fixture-mode dropdown renders `No DMX` as a sm
 annotation. During the remaining lighting fast-forward, the Patch view selects each destination
 layer immediately before that fixture batch appears.
 
+The Group chapter now begins with a separate `Setting up the Basics` title card while the
+Fixture Sheet/Group Pool desktop is created. `Defining Groups` appears only after that setup is
+complete, immediately before the first fixture selection. Their configurable frame budgets split
+the previous Group chapter duration without changing the canonical total runtime.
+
 Focused manifest, patch, Group, Playback, and Fixture Patch tests passed, as did the production
 frontend build, the generated-show acceptance, and a complete 2.8-minute non-recording product
 demo rehearsal that refreshed `assets/demo.show`. Per the recording-review instruction, this

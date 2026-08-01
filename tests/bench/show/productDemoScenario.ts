@@ -65,10 +65,16 @@ export const PRODUCT_DEMO_SCRIPT = {
 			frames: 875,
 		},
 		{
+			id: "group-basics",
+			marker: "SETTING UP THE BASICS",
+			title: "Setting up the Basics",
+			frames: 500,
+		},
+		{
 			id: "groups",
 			marker: "DEFINING GROUPS",
 			title: "Defining Groups",
-			frames: 3_250,
+			frames: 2_750,
 		},
 		{
 			id: "group-masters",
@@ -1014,29 +1020,20 @@ async function addFixtureThroughTouchUi(
 			name: new RegExp(`^${escapeRegex(input.family)}\\b`),
 		}),
 	);
-	const mode = browser.locator(".fixture-mode-detail select");
-	const modeValue = await mode
-		.locator("option")
-		.evaluateAll(
-			(options, label) =>
-				options
-					.find((option) => option.textContent?.startsWith(`${label} ·`))
-					?.getAttribute("value") ?? null,
-			input.mode,
-		);
-	if (!modeValue) throw new Error(`Missing ${input.family} mode ${input.mode}`);
+	const modeTrigger = browser
+		.locator(".fixture-mode-detail")
+		.locator(".ui-select-trigger");
 	if (input.visibleModeSelection) {
-		await desk.click(
-			browser.locator(".fixture-mode-detail").locator(".ui-select-trigger"),
-		);
+		await desk.click(modeTrigger);
 		await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.modeDropdownHoldFrames);
-		await desk.click(
-			page.getByRole("option", {
-				name: new RegExp(`^${escapeRegex(input.mode)}\\b`),
-			}),
-		);
-		await demoPause(page, 12);
-	} else await mode.selectOption(modeValue);
+	} else await modeTrigger.click();
+	const modeOption = page.getByRole("option", {
+		name: new RegExp(`^${escapeRegex(input.mode)}\\b`),
+	});
+	await expect(modeOption).toBeVisible();
+	if (input.visibleModeSelection) await desk.click(modeOption);
+	else await modeOption.click();
+	if (input.visibleModeSelection) await demoPause(page, 12);
 	await desk.click(
 		browser.locator(".fixture-mode-detail").getByRole("button", {
 			name: "Add fixture",
@@ -1384,7 +1381,7 @@ async function verifyDemoFrame(demo: Locator, app: Locator, stage: Locator) {
 		throw new Error("The product demo application has no visible bounds");
 	}
 	expect(appBox.width / appBox.height).toBeCloseTo(16 / 9, 2);
-	await expect(demo.locator("[data-demo-chapter]")).toHaveCount(9);
+	await expect(demo.locator("[data-demo-chapter]")).toHaveCount(10);
 	await expect(
 		app.locator(".control-section.hardware-connected"),
 	).toBeVisible();
@@ -1472,8 +1469,8 @@ async function buildGroups(
 	fixtures: readonly any[],
 ) {
 	await desk.titleCard(
-		"DEFINING GROUPS",
-		"Layered groups for flexible shows: select fixtures in the Fixture Sheet and organize them in a seven-column Group Pool.",
+		"SETTING UP THE BASICS",
+		"Create a dedicated programming desktop with the Fixture Sheet and a seven-column Group Pool before defining the show’s fixture selections.",
 	);
 	await desk.setDemoAction(
 		"Configure the Group Programming desktop with a Fixture Sheet and a seven-column Group Pool.",
@@ -1522,6 +1519,10 @@ async function buildGroups(
 		/highlight-armed/,
 	);
 	await clearSelection(desk, keypad, api);
+	await desk.titleCard(
+		"DEFINING GROUPS",
+		"Layered groups for flexible shows: select fixtures in the Fixture Sheet and organize them in a seven-column Group Pool.",
+	);
 	await desk.setDemoAction(
 		"Select Beam Stage fixtures 101–128 directly in the Fixture Sheet.",
 	);

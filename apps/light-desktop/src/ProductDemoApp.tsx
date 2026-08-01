@@ -29,6 +29,7 @@ const DEMO_APPLICATION_ICON = new URL(
 const DEMO_CHAPTERS = [
 	["SHOW SETUP", "Show Setup"],
 	["OUTPUT CONFIGURATION", "Outputs"],
+	["SETTING UP THE BASICS", "Basics"],
 	["DEFINING GROUPS", "Groups"],
 	["ASSIGNING GROUP MASTERS", "Masters"],
 	["PRESET SETUP", "Presets"],
