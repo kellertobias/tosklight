@@ -129,11 +129,13 @@ async function openConfiguredProfileEditor(
 		["Luminous output (lm)", physical.luminous_output_lumens],
 		["Beam angle (degrees)", physical.beam_angle_degrees],
 	] as const)
-		await editor.getByLabel(label).fill(String(value));
-	await expect(editor.getByLabel("Connectors")).toHaveCount(0);
-	await expect(editor.getByLabel("Light source")).toHaveCount(0);
-	await expect(editor.getByLabel("Color rendering index (CRI)")).toHaveCount(0);
-	await expect(editor.getByLabel("Lens")).toHaveCount(0);
+		await editor.getByLabel(label, { exact: true }).fill(String(value));
+	await expect(editor.getByLabel("Connectors", { exact: true })).toHaveCount(0);
+	await expect(editor.getByLabel("Light source", { exact: true })).toHaveCount(0);
+	await expect(
+		editor.getByLabel("Color rendering index (CRI)", { exact: true }),
+	).toHaveCount(0);
+	await expect(editor.getByLabel("Lens", { exact: true })).toHaveCount(0);
 	const assetColumns = editor.locator(".fixture-notes-assets > div");
 	await expect(assetColumns).toHaveCount(3);
 	await expect(
@@ -269,7 +271,9 @@ async function createProfileRevision(
 	await page.getByRole("button", { name: new RegExp(name) }).click();
 	await page.getByRole("button", { name: "Edit fixture", exact: true }).click();
 	editor = page.getByRole("dialog", { name: "Edit fixture profile" });
-	await expect(editor.getByLabel("Width (mm)")).toHaveValue("420");
+	await expect(editor.getByLabel("Width (mm)", { exact: true })).toHaveValue(
+		"420",
+	);
 	await expect(editor.getByLabel("Color temperature (K)")).toHaveValue("6500");
 	await expect(editor.getByLabel("Luminous output (lm)")).toHaveValue("18500");
 	await expect(editor.getByLabel("Beam angle (degrees)")).toHaveValue("36");

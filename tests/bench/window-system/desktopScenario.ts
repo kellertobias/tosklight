@@ -511,21 +511,26 @@ async function applyPaneConfiguration<T extends PaneType>(
 	const options = configuration as Record<string, unknown>;
 	if (type === "stage") {
 		await dialog.getByRole("tab", { name: "Stage" }).click();
-		if (options.view)
-			await dialog
-				.getByRole("radio", {
-					name: options.view === StageView.ThreeDimensional ? "3D" : "2D",
-				})
-				.click();
+		if (options.view) {
+			const view = dialog.getByRole("radio", {
+				name: options.view === StageView.ThreeDimensional ? "3D" : "2D",
+			});
+			await view.click();
+			await expect(view).toBeChecked();
+		}
 		await setSwitch(dialog, "Preload source", options.followPreload);
 		await setSwitch(dialog, "Beam direction guidelines", options.beamGuides);
-		if (options.renderQuality)
-			await dialog
-				.getByRole("radio", {
-					name: String(options.renderQuality as StageRenderQuality),
-					exact: true,
-				})
-				.click();
+		if (
+			options.renderQuality &&
+			options.view !== StageView.TwoDimensional
+		) {
+			const quality = dialog.getByRole("radio", {
+				name: String(options.renderQuality as StageRenderQuality),
+				exact: true,
+			});
+			await expect(quality).toBeVisible();
+			await quality.click();
+		}
 	}
 	if (type === "layout" && options.groupId !== undefined) {
 		await dialog.getByRole("tab", { name: "Layout" }).click();

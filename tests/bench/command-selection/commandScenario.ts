@@ -168,6 +168,15 @@ export class CommandAdapter {
 
 	async execute(text: string): Promise<void> {
 		const command = requiredCommand(text);
+		const historyLength =
+			this.route === "ui"
+				? (
+						await this.api.request<CommandHistoryEntry[]>(
+							"GET",
+							"/api/v2/command-history",
+						)
+					).length
+				: null;
 		await this.desk.recordStep(
 			"COMMAND EXECUTE",
 			`Enter "${command}" and execute it through the ${this.route} command-line route.`,
@@ -179,6 +188,24 @@ export class CommandAdapter {
 		}
 		// Deliberately click the desk key: raw keyboard Enter is not the UI acceptance route.
 		await this.desk.click(keypadLocator(this.browser(), "ENT"));
+		await expect
+			.poll(
+				async () => {
+					const choice = this.browser().getByRole("dialog", { name: /choice/i });
+					if (await choice.isVisible().catch(() => false)) return "choice";
+					const length = (
+						await this.api.request<CommandHistoryEntry[]>(
+							"GET",
+							"/api/v2/command-history",
+						)
+					).length;
+					return length > (historyLength ?? -1) ? "history" : "pending";
+				},
+				{
+					message: `Command "${command}" should reach authoritative history or a typed choice`,
+				},
+			)
+			.toMatch(/^(?:choice|history)$/);
 	}
 
 	async type(text: string): Promise<void> {

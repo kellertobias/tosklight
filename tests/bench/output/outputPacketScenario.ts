@@ -35,23 +35,33 @@ export class BrowserOutputPackets {
 			);
 		const receiver =
 			protocol === "artnet" ? this.source.artnet : this.source.sacn;
-		const latest = [...receiver.packets]
-			.reverse()
-			.find(
-				(packet) =>
-					packet.protocol === protocol && packet.universe === universe,
-			);
-		const packet = latest ?? (await receiver.nextAfter(0, protocol, universe));
-		try {
-			const accepted = await assertion(packet);
-			if (accepted === false)
-				throw new Error("packet assertion returned false");
-		} catch (error) {
-			throw new Error(
-				`${protocol === "artnet" ? "Art-Net" : "sACN"} universe ${universe} packet assertion failed; sequence ${packet.sequence}, received ${new Date(packet.receivedAt).toISOString()}, ${packet.slots.length} slots, first 32 bytes ${JSON.stringify(Array.from(packet.slots.slice(0, 32)))}`,
-				{ cause: error },
-			);
-		}
+		const deadline = Date.now() + 2_000;
+		let packet: Readonly<DmxPacket> | undefined;
+		let assertionError: unknown;
+		do {
+			packet = [...receiver.packets]
+				.reverse()
+				.find(
+					(candidate) =>
+						candidate.protocol === protocol && candidate.universe === universe,
+				);
+			if (!packet) {
+				packet = await receiver.nextAfter(0, protocol, universe);
+			}
+			try {
+				const accepted = await assertion(packet);
+				if (accepted === false)
+					throw new Error("packet assertion returned false");
+				return;
+			} catch (error) {
+				assertionError = error;
+			}
+			await new Promise((resolve) => setTimeout(resolve, 5));
+		} while (Date.now() < deadline);
+		throw new Error(
+			`${protocol === "artnet" ? "Art-Net" : "sACN"} universe ${universe} packet assertion failed; sequence ${packet.sequence}, received ${new Date(packet.receivedAt).toISOString()}, ${packet.slots.length} slots, first 32 bytes ${JSON.stringify(Array.from(packet.slots.slice(0, 32)))}`,
+			{ cause: assertionError },
+		);
 	}
 }
 

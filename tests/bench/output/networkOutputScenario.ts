@@ -156,11 +156,45 @@ export class BrowserNetworkOutput {
 		},
 	): Promise<void> {
 		const route = this.requiredCapture(label);
-		const packet = await route.receiver.nextAfter(
-			route.mark,
-			wireProtocol(route.intent.protocol),
-			route.intent.destinationUniverse,
+		const protocol = wireProtocol(route.intent.protocol);
+		const deadline = Date.now() + 2_000;
+		let candidates = route.receiver
+			.packetsAfter(route.mark)
+			.filter(
+				(packet) =>
+					packet.protocol === protocol &&
+					packet.universe === route.intent.destinationUniverse,
+			);
+		let packet = candidates.find((candidate) =>
+			packetMatches(candidate, expected),
 		);
+		while (!packet && Date.now() < deadline) {
+			await new Promise((resolve) => setTimeout(resolve, 5));
+			candidates = route.receiver
+				.packetsAfter(route.mark)
+				.filter(
+					(candidate) =>
+						candidate.protocol === protocol &&
+						candidate.universe === route.intent.destinationUniverse,
+				);
+			packet = candidates.find((candidate) =>
+				packetMatches(candidate, expected),
+			);
+		}
+		if (!packet)
+			throw new Error(
+				`Output route "${label}" received no matching packet; observed ${JSON.stringify(
+					candidates.map((candidate) => ({
+						sequence: candidate.sequence,
+						slots: Object.fromEntries(
+							Object.keys(expected.slots ?? {}).map((address) => [
+								address,
+								candidate.slots[Number(address) - 1],
+							]),
+						),
+					})),
+				)}`,
+			);
 		for (const [address, value] of Object.entries(expected.slots ?? {}))
 			expect(packet.slots[Number(address) - 1]).toBe(value);
 		if (expected.sequenceNonZero) expect(packet.sequence).not.toBe(0);
@@ -301,6 +335,24 @@ export class BrowserNetworkOutput {
 		if (!bootstrap.active_show) throw new Error("No active show");
 		return bootstrap.active_show.id;
 	}
+}
+
+function packetMatches(
+	packet: Readonly<{
+		sequence: number;
+		slots: Uint8Array;
+	}>,
+	expected: {
+		slots?: Readonly<Record<number, number>>;
+		sequenceNonZero?: boolean;
+	},
+) {
+	return (
+		Object.entries(expected.slots ?? {}).every(
+			([address, value]) => packet.slots[Number(address) - 1] === value,
+		) &&
+		(!expected.sequenceNonZero || packet.sequence !== 0)
+	);
 }
 
 function normalizedIntent(

@@ -224,12 +224,17 @@ export class BrowserGroups {
 			});
 			await commandLine.fill("SET");
 			await expect(commandLine).toHaveValue("SET");
-			await this.desk.click(this.groupCard(number));
+			const card = this.groupCard(number);
+			await this.desk.click(card);
+			await expect(commandLine).toHaveValue(`SET GROUP ${number}`);
+			await this.desk.click(card);
 			const dialog = this.page.getByRole("dialog", {
 				name: "Group properties",
 				exact: true,
 			});
-			await dialog.getByLabel("Group name").fill(properties.name);
+			const name = dialog.getByLabel("Group name");
+			await name.fill(properties.name);
+			await expect(name).toHaveValue(properties.name);
 			if (properties.icon)
 				await choosePicker(dialog, this.page, "Icon", `Use ${properties.icon}`);
 			if (properties.color)
@@ -240,10 +245,17 @@ export class BrowserGroups {
 					`Use color ${properties.color.toLowerCase()}`,
 				);
 			await this.desk.click(dialog.getByRole("button", { name: "Save group" }));
+			await expect(dialog).toBeHidden();
 		} else {
 			throw new Error(`Group edit has no truthful ${route} route`);
 		}
-		await expect.poll(async () => (await this.requiredObject(number)).revision).toBeGreaterThan(group.revision);
+		await expect
+			.poll(async () => (await this.requiredObject(number)).body)
+			.toMatchObject({
+				name: properties.name,
+				color: properties.color ?? null,
+				icon: properties.icon ?? null,
+			});
 	}
 
 	async deleteVia(route: GroupRoute, number: number) {

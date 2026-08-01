@@ -1,12 +1,13 @@
 import { expect, type Page } from "@playwright/test";
-import {
-	openPatch,
-	patchFixtureRow,
-} from "../../support/foundational/ui";
+import type {
+	PatchFixtureInput,
+	PatchSnapshot,
+} from "../../../apps/light-desktop/src/api/generated/light-wire";
 import type {
 	CueList,
 	PlaybackDefinition,
 } from "../../../apps/light-desktop/src/api/types/playback";
+import { openPatch, patchFixtureRow } from "../../support/foundational/ui";
 import type { ApiDriver } from "../core/api";
 import { type ClockDuration, parseClockDuration } from "../core/clockScenario";
 import type { DeskDriver } from "../core/desk";
@@ -75,24 +76,32 @@ export class BrowserMoveInBlack {
 	async install(input: MoveInBlackInstallation): Promise<void> {
 		const delayMillis = parseClockDuration(input.delay);
 		const fixtureIds = new Map<number, string>();
+		const patch = await this.api.request<PatchSnapshot>("GET", "/api/v2/patch");
+		const fixtures: PatchFixtureInput[] = [];
 		for (const [number, enabled] of [
 			[input.enabledFixture, true],
 			[input.disabledFixture, false],
 		] as const) {
-			const fixture = await this.fixtureObject(number);
-			fixtureIds.set(number, fixture.id);
-			await this.api.seedShowObject(
-				this.showId(),
-				"patched_fixture",
-				fixture.id,
-				{
-					...fixture.body,
-					move_in_black_enabled: enabled,
-					move_in_black_delay_millis: delayMillis,
-				},
-				fixture.revision,
+			const fixture = patch.fixtures.find(
+				(candidate) => candidate.fixture_number === number,
 			);
+			if (!fixture) throw new Error(`Fixture ${number} is not patched`);
+			fixtureIds.set(number, fixture.fixture_id);
+			fixtures.push(patchFixtureInput(fixture, enabled, delayMillis));
 		}
+		await this.api.request(
+			"POST",
+			"/api/v2/patch/fixtures",
+			{
+				request_id: crypto.randomUUID(),
+				fixtures,
+				remove_fixture_ids: [],
+				placements: [],
+			},
+			true,
+			patch.patch_revision,
+			{ showId: this.showId() },
+		);
 		const cueListId = crypto.randomUUID();
 		await this.installCueList(cueListId, [...fixtureIds.values()]);
 		await this.installPlayback(input.playback, cueListId);
@@ -401,6 +410,23 @@ export class BrowserMoveInBlack {
 			throw new Error("Move in Black setup has not been installed");
 		return this.installation;
 	}
+}
+
+function patchFixtureInput(
+	fixture: PatchSnapshot["fixtures"][number],
+	enabled: boolean,
+	delayMillis: number,
+): PatchFixtureInput {
+	const {
+		fixture_revision: _fixtureRevision,
+		logical_heads: _logicalHeads,
+		...input
+	} = fixture;
+	return {
+		...input,
+		move_in_black_enabled: enabled,
+		move_in_black_delay_millis: delayMillis,
+	};
 }
 
 function formatDelay(millis: number): string {
