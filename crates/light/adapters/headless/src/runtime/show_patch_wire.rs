@@ -241,6 +241,8 @@ fn application_fixture(
             grand_master_enabled: input.grand_master_enabled,
             invert_pan: input.invert_pan,
             invert_tilt: input.invert_tilt,
+            bracket_angle: input.bracket_angle,
+            shaper_angle: input.shaper_angle,
             move_in_black_enabled: input.move_in_black_enabled,
             move_in_black_delay_millis: input.move_in_black_delay_millis,
             highlight_overrides: application_highlights(input.highlight_overrides)?,
@@ -302,6 +304,8 @@ fn application_multipatch(input: wire::PatchMultiPatchInput) -> fixture::MultiPa
         rotation: application_rotation(input.rotation),
         invert_pan: input.invert_pan,
         invert_tilt: input.invert_tilt,
+        bracket_angle: input.bracket_angle,
+        shaper_angle: input.shaper_angle,
     }
 }
 
@@ -350,6 +354,8 @@ fn wire_fixture(input: &application::PatchFixtureProjection) -> wire::PatchFixtu
         grand_master_enabled: patch.grand_master_enabled,
         invert_pan: patch.invert_pan,
         invert_tilt: patch.invert_tilt,
+        bracket_angle: patch.bracket_angle,
+        shaper_angle: patch.shaper_angle,
         move_in_black_enabled: patch.move_in_black_enabled,
         move_in_black_delay_millis: patch.move_in_black_delay_millis,
         highlight_overrides: patch
@@ -410,6 +416,8 @@ fn wire_multipatch(instance: &fixture::MultiPatchInstance) -> wire::PatchMultiPa
         rotation: wire_rotation(instance.rotation),
         invert_pan: instance.invert_pan,
         invert_tilt: instance.invert_tilt,
+        bracket_angle: instance.bracket_angle,
+        shaper_angle: instance.shaper_angle,
     }
 }
 

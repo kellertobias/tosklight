@@ -33,6 +33,8 @@ export interface PatchMultiPatch {
 	rotation: PatchFixtureRotation;
 	invertPan?: boolean;
 	invertTilt?: boolean;
+	bracketAngle?: number;
+	shaperAngle?: number | null;
 }
 
 export interface PatchHighlightOverride {
@@ -58,6 +60,10 @@ export interface PatchFixtureWrite {
 	grandMasterEnabled?: boolean;
 	invertPan?: boolean;
 	invertTilt?: boolean;
+	/** Degrees the mounting bracket is set to, positive nose-down. */
+	bracketAngle?: number;
+	/** Degrees a fitted shaper or barn-door module is turned to; `null` when none is fitted. */
+	shaperAngle?: number | null;
 	moveInBlackEnabled: boolean;
 	moveInBlackDelayMillis: number;
 	highlightOverrides: readonly PatchHighlightOverride[];

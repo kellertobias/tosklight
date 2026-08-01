@@ -14,6 +14,14 @@ export interface Stage3dFixture {
 	instanceId?: string;
 	invertPan?: boolean;
 	invertTilt?: boolean;
+	/**
+	 * Degrees the mounting bracket is set to, positive nose-down.
+	 *
+	 * It turns the fixture about its own transverse axis after the placement rotation, which is
+	 * what a clamp or a yoke does: the bar decides which way the lantern faces and the bracket
+	 * decides how far down it looks.
+	 */
+	bracketAngle?: number;
 }
 
 export type FixtureAttributeValues = Map<string, AttributeValue>;

@@ -536,7 +536,7 @@ export type PatchDirectControlEndpoint = { protocol: PatchDirectControlProtocol,
 ip_address: string, port: number, };
 export type PatchFixtureLocation = { x: number, y: number, z: number, };
 export type PatchFixtureRotation = { x: number, y: number, z: number, };
-export type PatchMultiPatchInput = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, };
+export type PatchMultiPatchInput = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, };
 export type PatchHighlightOverrideInput = { channel_id: string, raw_value: number, };
 export type PatchFixtureInput = {
 /**
@@ -546,7 +546,16 @@ fixture_id: string, fixture_number: number | null, virtual_fixture_number: numbe
 /**
  * Canonical split assignments. An unpatched split has two `null` address fields.
  */
-split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, location: PatchFixtureLocation, rotation: PatchFixtureRotation, multipatch: Array<PatchMultiPatchInput>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideInput>, };
+split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, location: PatchFixtureLocation, rotation: PatchFixtureRotation, multipatch: Array<PatchMultiPatchInput>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean,
+/**
+ * Degrees the mounting bracket is set to, positive nose-down. A mechanical setting the desk
+ * cannot drive, recorded so the visualizer draws the rig as it actually hangs.
+ */
+bracket_angle: number,
+/**
+ * Degrees a fitted shaper or barn-door module is turned to, or absent when none is fitted.
+ */
+shaper_angle: number | null, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideInput>, };
 export type PatchOperatorAddressOverride = { fixture_id: string, universe: number, address: number, };
 export type PatchSplitPlacementMode = { "type": "consecutive" } | { "type": "operator_overrides", overrides: Array<PatchOperatorAddressOverride>, };
 export type PatchSplitPlacementIntent = { split: number, universe: number | null, address: number | null, mode: PatchSplitPlacementMode, };
@@ -587,9 +596,9 @@ export type PatchLogicalHeadProjection = {
  * Stable semantic head identity from the selected immutable profile revision.
  */
 profile_head_id: string | null, head_index: number, fixture_id: string, };
-export type PatchMultiPatchProjection = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, };
+export type PatchMultiPatchProjection = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, };
 export type PatchHighlightOverrideProjection = { channel_id: string, raw_value: number, };
-export type PatchFixtureProjection = { fixture_id: string, fixture_revision: number, fixture_number: number | null, virtual_fixture_number: number | null, name: string, profile_id: string, profile_revision: number, mode_id: string, split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, location: PatchFixtureLocation, rotation: PatchFixtureRotation, logical_heads: Array<PatchLogicalHeadProjection>, multipatch: Array<PatchMultiPatchProjection>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideProjection>, };
+export type PatchFixtureProjection = { fixture_id: string, fixture_revision: number, fixture_number: number | null, virtual_fixture_number: number | null, name: string, profile_id: string, profile_revision: number, mode_id: string, split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, location: PatchFixtureLocation, rotation: PatchFixtureRotation, logical_heads: Array<PatchLogicalHeadProjection>, multipatch: Array<PatchMultiPatchProjection>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideProjection>, };
 export type PatchModeSplitProjection = { split: number, footprint: number, };
 export type PatchModeProjection = { mode_id: string, name: string, splits: Array<PatchModeSplitProjection>, };
 export type PatchProfileRevisionProjection = { profile_id: string, profile_revision: number, content_digest: string, manufacturer: string, name: string, fixture_type: string, patch_policy: PatchProfilePolicy,
@@ -812,15 +821,6 @@ export type VisualizationDynamicStackEntry = { fixture_id: string, attribute: st
 export type VisualizationLaneSnapshot = { scope: VisualizationScope, revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, dynamic_stack?: Array<VisualizationDynamicStackEntry>, profile_output_values: Array<VisualizationValue>, };
 export type VisualizationLaneDelta = { scope: VisualizationScope, revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, removed_values: Array<VisualizationValueKey>, dynamic_stack?: Array<VisualizationDynamicStackEntry> | null, profile_output_values: Array<VisualizationValue>, removed_profile_output_values: Array<VisualizationValueKey>, };
 export type VisualizationServerMessage = { "type": "hello", protocol_version: number, max_rate_hz: number, lanes: Array<VisualizationLane>, scope: VisualizationScope, } | { "type": "snapshot", lane: VisualizationLane, scope: VisualizationScope, sequence: number, source_frame: number, source_timestamp: string, published_at: string, snapshot: VisualizationLaneSnapshot, } | { "type": "delta", lane: VisualizationLane, scope: VisualizationScope, sequence: number, source_frame: number, source_timestamp: string, published_at: string, delta: VisualizationLaneDelta, } | { "type": "heartbeat", scope: VisualizationScope, sequence: number, published_at: string, } | { "type": "structural_invalidation", scope: VisualizationScope, revision: number, } | { "type": "error", code: string, message: string, };
-export type SelectiveImportObjectKey = { kind: string, id: string, };
-export type SelectiveImportLoadMode = "replace_by_position" | "add_to_end";
-export type SelectiveImportConflictResolution = "keep_destination" | "replace_destination" | "duplicate";
-export type SelectiveImportConflictChoice = { key: SelectiveImportObjectKey, resolution: SelectiveImportConflictResolution, };
-export type SelectiveImportProfileKey = { profile_id: string, revision: number, };
-export type SelectiveImportProfileConflictResolution = "keep_destination" | "duplicate";
-export type SelectiveImportProfileConflictChoice = { key: SelectiveImportProfileKey, resolution: SelectiveImportProfileConflictResolution, };
-export type SelectiveImportSelection = { mode: SelectiveImportLoadMode, selected_objects: Array<SelectiveImportObjectKey>, conflict_resolutions: Array<SelectiveImportConflictChoice>, profile_conflict_resolutions: Array<SelectiveImportProfileConflictChoice>, };
-export type SelectiveImportApplyRequest = { request_id: string, expected_source_revision: number, expected_target_revision: number, mode: SelectiveImportLoadMode, selected_objects: Array<SelectiveImportObjectKey>, conflict_resolutions: Array<SelectiveImportConflictChoice>, profile_conflict_resolutions: Array<SelectiveImportProfileConflictChoice>, };
 export type VisualizerViewMode = "top_down" | "left_to_right" | "right_to_left" | "front_to_back" | "back_to_front" | "lines_3d" | "simple_3d" | "full_3d";
 export type VisualizerRenderQuality = "draft" | "standard" | "high" | "ultra";
 export type VisualizerCamera = { position: [number, number, number], target: [number, number, number], up: [number, number, number],
@@ -873,6 +873,15 @@ replayed: boolean,
  * `false` when the patch asked for what was already stored.
  */
 changed: boolean, };
+export type SelectiveImportObjectKey = { kind: string, id: string, };
+export type SelectiveImportLoadMode = "replace_by_position" | "add_to_end";
+export type SelectiveImportConflictResolution = "keep_destination" | "replace_destination" | "duplicate";
+export type SelectiveImportConflictChoice = { key: SelectiveImportObjectKey, resolution: SelectiveImportConflictResolution, };
+export type SelectiveImportProfileKey = { profile_id: string, revision: number, };
+export type SelectiveImportProfileConflictResolution = "keep_destination" | "duplicate";
+export type SelectiveImportProfileConflictChoice = { key: SelectiveImportProfileKey, resolution: SelectiveImportProfileConflictResolution, };
+export type SelectiveImportSelection = { mode: SelectiveImportLoadMode, selected_objects: Array<SelectiveImportObjectKey>, conflict_resolutions: Array<SelectiveImportConflictChoice>, profile_conflict_resolutions: Array<SelectiveImportProfileConflictChoice>, };
+export type SelectiveImportApplyRequest = { request_id: string, expected_source_revision: number, expected_target_revision: number, mode: SelectiveImportLoadMode, selected_objects: Array<SelectiveImportObjectKey>, conflict_resolutions: Array<SelectiveImportConflictChoice>, profile_conflict_resolutions: Array<SelectiveImportProfileConflictChoice>, };
 export type SelectiveImportCatalogSection = "fixture_patch" | "groups" | "presets_mixed" | "presets_intensity" | "presets_color" | "presets_position" | "presets_beam" | "dynamics" | "cuelists" | "playbacks" | "schedules" | "stage" | "macros" | "other";
 export type SelectiveImportCatalogObject = { key: SelectiveImportObjectKey, object_revision: number, display_name: string, section: SelectiveImportCatalogSection, patch_layer_id: string | null, };
 export type SelectiveImportCatalog = { source_show_id: string, source_show_name: string, source_revision: number, objects: Array<SelectiveImportCatalogObject>, };

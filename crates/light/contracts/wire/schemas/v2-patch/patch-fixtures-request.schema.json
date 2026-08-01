@@ -73,6 +73,12 @@
       "description": "One fixture candidate containing only identities and state owned by the portable patch.",
       "type": "object",
       "properties": {
+        "bracket_angle": {
+          "description": "Degrees the mounting bracket is set to, positive nose-down. A mechanical setting the desk\ncannot drive, recorded so the visualizer draws the rig as it actually hangs.",
+          "type": "number",
+          "format": "float",
+          "default": 0.0
+        },
         "direct_control": {
           "anyOf": [
             {
@@ -156,6 +162,15 @@
         },
         "rotation": {
           "$ref": "#/$defs/PatchFixtureRotation"
+        },
+        "shaper_angle": {
+          "description": "Degrees a fitted shaper or barn-door module is turned to, or absent when none is fitted.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
         },
         "split_patches": {
           "description": "Canonical split assignments. An unpatched split has two `null` address fields.",
@@ -257,6 +272,11 @@
     "PatchMultiPatchInput": {
       "type": "object",
       "properties": {
+        "bracket_angle": {
+          "type": "number",
+          "format": "float",
+          "default": 0.0
+        },
         "id": {
           "type": "string",
           "format": "uuid"
@@ -277,6 +297,14 @@
         },
         "rotation": {
           "$ref": "#/$defs/PatchFixtureRotation"
+        },
+        "shaper_angle": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
         },
         "split_patches": {
           "type": "array",

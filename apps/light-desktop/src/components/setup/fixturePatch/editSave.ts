@@ -64,6 +64,20 @@ export function saveEdit(
 			},
 			{ invert_tilt: value === "true" },
 		);
+	if (edit === "bracket_angle") {
+		const degrees = Number(value);
+		if (Number.isFinite(degrees))
+			void applyEdit(controller, { bracket_angle: degrees });
+	}
+	// Clearing the field takes the module off the fixture again; any number fits one at that
+	// angle. Nothing else can say "there is no shaper here" as plainly.
+	if (edit === "shaper_angle") {
+		const trimmed = value.trim();
+		const degrees = Number(trimmed);
+		if (!trimmed) void applyEdit(controller, { shaper_angle: null });
+		else if (Number.isFinite(degrees))
+			void applyEdit(controller, { shaper_angle: degrees });
+	}
 	if (edit === "location" || edit === "rotation")
 		void applyEdit(controller, {
 			// A single-axis edit recomposes over the fixture's current siblings so it can

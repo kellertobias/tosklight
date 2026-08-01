@@ -153,6 +153,18 @@ function multipatchAt(value: unknown, path: string): void {
 		booleanAt(instance.invert_pan, path + ".invert_pan");
 	if (instance.invert_tilt !== undefined)
 		booleanAt(instance.invert_tilt, path + ".invert_tilt");
+	angleAt(instance.bracket_angle, path + ".bracket_angle");
+	nullableAngleAt(instance.shaper_angle, path + ".shaper_angle");
+}
+
+/** Degrees. Absent is the same as zero, so an older desk's payload still validates. */
+function angleAt(value: unknown, path: string): void {
+	if (value !== undefined) finiteNumberAt(value, path);
+}
+
+/** Degrees, or `null`/absent when no shaper or barn-door module is fitted. */
+function nullableAngleAt(value: unknown, path: string): void {
+	if (value !== undefined && value !== null) finiteNumberAt(value, path);
 }
 
 function logicalHeadAt(value: unknown, path: string): void {
@@ -211,6 +223,8 @@ function fixtureAt(
 		booleanAt(fixture.invert_pan, path + ".invert_pan");
 	if (fixture.invert_tilt !== undefined)
 		booleanAt(fixture.invert_tilt, path + ".invert_tilt");
+	angleAt(fixture.bracket_angle, path + ".bracket_angle");
+	nullableAngleAt(fixture.shaper_angle, path + ".shaper_angle");
 	booleanAt(fixture.move_in_black_enabled, path + ".move_in_black_enabled");
 	unsignedIntegerAt(
 		fixture.move_in_black_delay_millis,

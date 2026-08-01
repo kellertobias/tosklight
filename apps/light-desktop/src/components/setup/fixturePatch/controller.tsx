@@ -38,6 +38,8 @@ export type EditKind =
 	| "grand_master"
 	| "invert_pan"
 	| "invert_tilt"
+	| "bracket_angle"
+	| "shaper_angle"
 	| null;
 
 export type VectorAxis = "x" | "y" | "z";
@@ -45,7 +47,14 @@ export type VectorAxis = "x" | "y" | "z";
 export type MultiPatchEdit = {
 	fixtureId: string;
 	instanceId: string;
-	kind: "address" | "location" | "rotation" | "invert_pan" | "invert_tilt";
+	kind:
+		| "address"
+		| "location"
+		| "rotation"
+		| "invert_pan"
+		| "invert_tilt"
+		| "bracket_angle"
+		| "shaper_angle";
 	axis?: VectorAxis;
 } | null;
 

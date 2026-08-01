@@ -127,6 +127,13 @@ pub struct PatchFixtureInput {
     pub invert_pan: bool,
     #[serde(default)]
     pub invert_tilt: bool,
+    /// Degrees the mounting bracket is set to, positive nose-down. A mechanical setting the desk
+    /// cannot drive, recorded so the visualizer draws the rig as it actually hangs.
+    #[serde(default)]
+    pub bracket_angle: f32,
+    /// Degrees a fitted shaper or barn-door module is turned to, or absent when none is fitted.
+    #[serde(default)]
+    pub shaper_angle: Option<f32>,
     pub move_in_black_enabled: bool,
     #[ts(type = "number")]
     pub move_in_black_delay_millis: u64,
@@ -182,6 +189,10 @@ pub struct PatchMultiPatchInput {
     pub invert_pan: bool,
     #[serde(default)]
     pub invert_tilt: bool,
+    #[serde(default)]
+    pub bracket_angle: f32,
+    #[serde(default)]
+    pub shaper_angle: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -266,6 +277,8 @@ pub struct PatchFixtureProjection {
     pub grand_master_enabled: bool,
     pub invert_pan: bool,
     pub invert_tilt: bool,
+    pub bracket_angle: f32,
+    pub shaper_angle: Option<f32>,
     pub move_in_black_enabled: bool,
     #[ts(type = "number")]
     pub move_in_black_delay_millis: u64,
@@ -289,6 +302,8 @@ pub struct PatchMultiPatchProjection {
     pub rotation: PatchFixtureRotation,
     pub invert_pan: bool,
     pub invert_tilt: bool,
+    pub bracket_angle: f32,
+    pub shaper_angle: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

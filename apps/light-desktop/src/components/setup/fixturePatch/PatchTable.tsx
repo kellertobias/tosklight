@@ -35,6 +35,8 @@ const columns = [
 	"Rotation X",
 	"Rotation Y",
 	"Rotation Z",
+	"Bracket",
+	"Shaper",
 	"Layer",
 ];
 
@@ -320,6 +322,24 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 					</Button>
 				</td>
 			))}
+			<td className="patch-secondary">
+				<Button
+					className="patch-value"
+					onClick={() => armEdit(controller, fixture, "bracket_angle")}
+				>
+					{Number((fixture.bracket_angle ?? 0).toFixed(1))}°
+				</Button>
+			</td>
+			<td className="patch-secondary">
+				<Button
+					className="patch-value"
+					onClick={() => armEdit(controller, fixture, "shaper_angle")}
+				>
+					{fixture.shaper_angle === undefined || fixture.shaper_angle === null
+						? "\u2014"
+						: `${Number(fixture.shaper_angle.toFixed(1))}°`}
+				</Button>
+			</td>
 		</>
 	);
 }
@@ -445,6 +465,28 @@ function MultiPatchRow({
 					</Button>
 				</td>
 			))}
+			<td className="patch-secondary">
+				<Button
+					className="patch-value"
+					onClick={() =>
+						beginMultipatchEdit(controller, fixture, instance, "bracket_angle")
+					}
+				>
+					{Number((instance.bracket_angle ?? 0).toFixed(1))}°
+				</Button>
+			</td>
+			<td className="patch-secondary">
+				<Button
+					className="patch-value"
+					onClick={() =>
+						beginMultipatchEdit(controller, fixture, instance, "shaper_angle")
+					}
+				>
+					{instance.shaper_angle === undefined || instance.shaper_angle === null
+						? "\u2014"
+						: `${Number(instance.shaper_angle.toFixed(1))}°`}
+				</Button>
+			</td>
 			<td />
 		</tr>
 	);

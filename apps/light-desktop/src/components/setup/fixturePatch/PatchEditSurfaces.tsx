@@ -167,6 +167,32 @@ function FixtureEditFields() {
 				</Select>
 			</label>
 		);
+	if (edit === "bracket_angle")
+		return (
+			<NumberField
+				autoFocus
+				label="Bracket angle (°)"
+				min={-180}
+				max={180}
+				step={1}
+				allowDecimal
+				value={editText}
+				onChange={(event) => controller.ui.setEditText(event.target.value)}
+			/>
+		);
+	if (edit === "shaper_angle")
+		return (
+			<NumberField
+				autoFocus
+				label="Shaper / barn door angle (°), empty for none"
+				min={-180}
+				max={180}
+				step={1}
+				allowDecimal
+				value={editText}
+				onChange={(event) => controller.ui.setEditText(event.target.value)}
+			/>
+		);
 	if (edit === "mib_delay")
 		return (
 			<NumberField
@@ -358,5 +384,7 @@ function editTitle(
 	if (edit === "grand_master") return "Grand Master";
 	if (edit === "invert_pan") return "Invert Pan";
 	if (edit === "invert_tilt") return "Invert Tilt";
+	if (edit === "bracket_angle") return "Bracket angle";
+	if (edit === "shaper_angle") return "Shaper angle";
 	return edit;
 }

@@ -502,6 +502,8 @@ fn fixture_candidate(
             grand_master_enabled: true,
             invert_pan: false,
             invert_tilt: false,
+            bracket_angle: 0.0,
+            shaper_angle: None,
             move_in_black_enabled: true,
             move_in_black_delay_millis: 0,
             highlight_overrides: BTreeMap::new(),

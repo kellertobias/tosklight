@@ -57,6 +57,8 @@ fn physical_axis_inversion_is_independent_for_root_and_multipatch() {
         rotation: Default::default(),
         invert_pan: false,
         invert_tilt: true,
+        bracket_angle: 0.0,
+        shaper_angle: None,
     }];
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
@@ -157,6 +159,8 @@ fn patch_and_profile_axis_inversion_compose_exactly_once() {
         rotation: Default::default(),
         invert_pan: false,
         invert_tilt: false,
+        bracket_angle: 0.0,
+        shaper_angle: None,
     }];
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
@@ -396,11 +400,15 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
             rotation: Default::default(),
             invert_pan: false,
             invert_tilt: false,
+            bracket_angle: 0.0,
+            shaper_angle: None,
         }],
         group_masters_enabled: true,
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        bracket_angle: 0.0,
+        shaper_angle: None,
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),

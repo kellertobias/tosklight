@@ -127,6 +127,7 @@ function useFixtures3d(
 						rotation: fixture.rotation,
 						invert_pan: fixture.invert_pan,
 						invert_tilt: fixture.invert_tilt,
+						bracket_angle: fixture.bracket_angle,
 					},
 					...(fixture.multipatch ?? []),
 				].map((instance, instanceIndex): Stage3dFixture => {
@@ -148,6 +149,7 @@ function useFixtures3d(
 						instanceId: instance.id,
 						invertPan: instance.invert_pan ?? false,
 						invertTilt: instance.invert_tilt ?? false,
+						bracketAngle: instance.bracket_angle ?? 0,
 						index,
 						position:
 							layout.positions3d[instance.id] ??

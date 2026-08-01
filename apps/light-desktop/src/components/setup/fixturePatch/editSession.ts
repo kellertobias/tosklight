@@ -41,6 +41,15 @@ export function armEdit(
 		ui.setEditText(String(fixture.invert_pan ?? false));
 	else if (kind === "invert_tilt")
 		ui.setEditText(String(fixture.invert_tilt ?? false));
+	else if (kind === "bracket_angle")
+		ui.setEditText(String(fixture.bracket_angle ?? 0));
+	// An empty field is a fixture with no shaper or barn door fitted, which is most of them.
+	else if (kind === "shaper_angle")
+		ui.setEditText(
+			fixture.shaper_angle === undefined || fixture.shaper_angle === null
+				? ""
+				: String(fixture.shaper_angle),
+		);
 	else if (kind === "location" || kind === "rotation")
 		ui.setVector(fixture[kind] ?? { x: 0, y: 0, z: 0 });
 	else if (kind === "mode") selectFixtureFamily(controller, fixture);

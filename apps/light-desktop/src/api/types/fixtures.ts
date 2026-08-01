@@ -25,6 +25,10 @@ export interface PatchedFixture {
 	grand_master_enabled?: boolean;
 	invert_pan?: boolean;
 	invert_tilt?: boolean;
+	/** Degrees the mounting bracket is set to, positive nose-down. */
+	bracket_angle?: number;
+	/** Degrees a fitted shaper or barn-door module is turned to; absent when none is fitted. */
+	shaper_angle?: number | null;
 	/** Schema-v2 fixtures patch each independently addressable split separately. */
 	split_patches?: SplitPatch[];
 	/** Exact raw values captured with the embedded profile snapshot. */
@@ -43,6 +47,8 @@ export interface MultiPatchInstance {
 	split_patches?: SplitPatch[];
 	invert_pan?: boolean;
 	invert_tilt?: boolean;
+	bracket_angle?: number;
+	shaper_angle?: number | null;
 }
 
 export interface SplitPatch {

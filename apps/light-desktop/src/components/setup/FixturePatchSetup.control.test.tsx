@@ -1293,6 +1293,63 @@ describe("schema-v2 location and multi-patch editing", () => {
 		);
 	});
 
+	it("records the bracket angle the rig was actually set to", async () => {
+		const { current } = fixturesWithConflict();
+		current.bracket_angle = 0;
+		server.patch.fixtures = [current];
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+		const fixtureRow = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+		// The bracket column sits after the three rotation axes.
+		fireEvent.click(within(fixtureRow.cells[18]).getByRole("button"));
+
+		const modal = screen
+			.getByRole("heading", { name: "Set fixture Bracket angle" })
+			.closest("section") as HTMLElement;
+		fireEvent.change(
+			within(modal).getByRole("textbox", { name: "Bracket angle (°)" }),
+			{ target: { value: "-35" } },
+		);
+		fireEvent.click(within(modal).getByRole("button", { name: "Set" }));
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
+				bracket_angle: -35,
+			}),
+		);
+	});
+
+	it("fits and removes a shaper or barn-door module by its angle", async () => {
+		const { current } = fixturesWithConflict();
+		current.shaper_angle = 22.5;
+		server.patch.fixtures = [current];
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+		const fixtureRow = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+		expect(fixtureRow.cells[19].textContent).toContain("22.5°");
+		fireEvent.click(within(fixtureRow.cells[19]).getByRole("button"));
+
+		const modal = screen
+			.getByRole("heading", { name: "Set fixture Shaper angle" })
+			.closest("section") as HTMLElement;
+		// Clearing the field is how an operator says the module came off again.
+		fireEvent.change(
+			within(modal).getByRole("textbox", {
+				name: "Shaper / barn door angle (°), empty for none",
+			}),
+			{ target: { value: "" } },
+		);
+		fireEvent.click(within(modal).getByRole("button", { name: "Set" }));
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
+				shaper_angle: null,
+			}),
+		);
+	});
+
 	it("edits exactly one multi-patch instance axis without touching its siblings", async () => {
 		const { current } = fixturesWithConflict();
 		current.multipatch = [

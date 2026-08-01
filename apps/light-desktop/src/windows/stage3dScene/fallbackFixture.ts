@@ -126,6 +126,10 @@ export function applyFixtureRootTransform(
 		THREE.MathUtils.degToRad(item.position.rotationZ),
 		THREE.MathUtils.degToRad(item.position.rotationY),
 	);
+	// The bracket turns the fixture in its own frame, after the placement rotation: a lantern
+	// faced across the stage and then angled down in its clamp points where both of those say.
+	if (item.bracketAngle)
+		root.rotateX(THREE.MathUtils.degToRad(item.bracketAngle));
 }
 
 function createFallbackVolume(

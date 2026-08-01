@@ -114,6 +114,10 @@
       "description": "Portable, authoritative Patch representation of one fixture without an inline definition.",
       "type": "object",
       "properties": {
+        "bracket_angle": {
+          "type": "number",
+          "format": "float"
+        },
         "direct_control": {
           "anyOf": [
             {
@@ -204,6 +208,13 @@
         "rotation": {
           "$ref": "#/$defs/PatchFixtureRotation"
         },
+        "shaper_angle": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
         "split_patches": {
           "type": "array",
           "items": {
@@ -239,6 +250,8 @@
         "grand_master_enabled",
         "invert_pan",
         "invert_tilt",
+        "bracket_angle",
+        "shaper_angle",
         "move_in_black_enabled",
         "move_in_black_delay_millis",
         "highlight_overrides"
@@ -360,6 +373,10 @@
     "PatchMultiPatchProjection": {
       "type": "object",
       "properties": {
+        "bracket_angle": {
+          "type": "number",
+          "format": "float"
+        },
         "id": {
           "type": "string",
           "format": "uuid"
@@ -379,6 +396,13 @@
         "rotation": {
           "$ref": "#/$defs/PatchFixtureRotation"
         },
+        "shaper_angle": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
         "split_patches": {
           "type": "array",
           "items": {
@@ -393,7 +417,9 @@
         "location",
         "rotation",
         "invert_pan",
-        "invert_tilt"
+        "invert_tilt",
+        "bracket_angle",
+        "shaper_angle"
       ]
     },
     "PatchProfilePolicy": {

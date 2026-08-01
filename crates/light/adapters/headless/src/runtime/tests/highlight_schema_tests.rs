@@ -106,6 +106,8 @@ fn schema_v2_direct_fixture() -> (light_fixture::PatchedFixture, Uuid, [Uuid; 2]
             rotation: Default::default(),
             invert_pan: false,
             invert_tilt: false,
+            bracket_angle: 0.0,
+            shaper_angle: None,
             logical_heads: vec![],
             multipatch: vec![],
             group_masters_enabled: true,
@@ -224,6 +226,8 @@ fn highlight_participation_uses_logical_fixture_identities_independent_of_patch(
             rotation: Default::default(),
             invert_pan: false,
             invert_tilt: false,
+            bracket_angle: 0.0,
+            shaper_angle: None,
         },
         light_fixture::MultiPatchInstance {
             id: Uuid::new_v4(),
@@ -235,6 +239,8 @@ fn highlight_participation_uses_logical_fixture_identities_independent_of_patch(
             rotation: Default::default(),
             invert_pan: false,
             invert_tilt: false,
+            bracket_angle: 0.0,
+            shaper_angle: None,
         },
     ];
 

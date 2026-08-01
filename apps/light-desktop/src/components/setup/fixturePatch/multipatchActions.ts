@@ -73,6 +73,15 @@ export function beginMultipatchEdit(
 		);
 	} else if (kind === "invert_pan" || kind === "invert_tilt")
 		ui.setEditText(String(instance[kind] ?? false));
+	else if (kind === "bracket_angle")
+		ui.setEditText(String(instance.bracket_angle ?? 0));
+	// An empty field is an instance with no shaper or barn door fitted.
+	else if (kind === "shaper_angle")
+		ui.setEditText(
+			instance.shaper_angle === undefined || instance.shaper_angle === null
+				? ""
+				: String(instance.shaper_angle),
+		);
 	else ui.setVector(instance[kind]);
 }
 
@@ -139,6 +148,17 @@ function multipatchChanges(
 		return splitAddressChanges(controller, fixture);
 	if (edit.kind === "address")
 		return singleAddressChanges(controller, fixture, instance, value);
+	if (edit.kind === "bracket_angle") {
+		const degrees = Number(value);
+		return Number.isFinite(degrees) ? { bracket_angle: degrees } : null;
+	}
+	// Clearing the field takes the module off this instance again.
+	if (edit.kind === "shaper_angle") {
+		const trimmed = value.trim();
+		if (!trimmed) return { shaper_angle: null };
+		const degrees = Number(trimmed);
+		return Number.isFinite(degrees) ? { shaper_angle: degrees } : null;
+	}
 	if (edit.kind !== "location" && edit.kind !== "rotation") return null;
 	// A single-axis edit recomposes over the instance's current siblings so it can
 	// never resubmit a stale value for an axis it did not touch.
