@@ -40,6 +40,10 @@ const PLATFORMS = [
         kind: "Hardware Controls application",
         file: (v) => `tosklight-hardware-controls-${v}-macos-arm64.zip`,
       },
+      {
+        kind: "Viz Editor application, with the 3D visualizer inside it",
+        file: (v) => `tosklight-viz-${v}-macos-arm64.zip`,
+      },
       { kind: "Standalone server", file: (v) => `light-headless-${v}-macos-arm64.zip` },
     ],
   },
@@ -48,6 +52,8 @@ const PLATFORMS = [
     note: "64-bit. The installer is unsigned — SmartScreen will ask you to confirm.",
     assets: [
       { kind: "Desktop installer", file: (v) => `tosklight-${v}-windows-amd64-setup.exe` },
+      { kind: "Viz Editor installer", file: (v) => `tosklight-viz-${v}-windows-amd64-setup.exe` },
+      { kind: "3D visualizer", file: (v) => `tosklight-visualizer-${v}-windows-amd64.zip` },
       { kind: "Standalone server", file: (v) => `light-headless-${v}-windows-amd64.zip` },
     ],
   },

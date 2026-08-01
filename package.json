@@ -25,6 +25,7 @@
     "dev:app": "bash tools/dev.sh app",
     "codesafari": "bash tools/build.sh codesafari",
     "open": "bash tools/build.sh open",
+    "open:hardware-controls": "npm run tauri:dev --workspace @tosklight/light-hardware-controls",
     "open:viz": "bash tools/build.sh open-viz",
     "build:viz": "bash tools/build.sh build-viz",
     "open:viz-editor": "bash tools/build.sh open-viz-editor",

@@ -7,14 +7,14 @@ import { artifactPaths } from "./artifact-paths.mjs";
 const application = process.argv[2];
 const destination = process.argv[3];
 const releaseVersion = process.env.LIGHT_RELEASE_VERSION;
-const frontendDist = application === "control"
-  ? artifactPaths.controlFrontend
-  : application === "hardware"
-    ? artifactPaths.hardwareFrontend
-    : undefined;
+const frontendDist = {
+  control: artifactPaths.controlFrontend,
+  hardware: artifactPaths.hardwareFrontend,
+  "viz-editor": artifactPaths.vizEditorFrontend,
+}[application];
 
 if (!frontendDist || !destination) {
-  console.error("usage: write-tauri-artifact-config.mjs {control|hardware} OUTPUT");
+  console.error("usage: write-tauri-artifact-config.mjs {control|hardware|viz-editor} OUTPUT");
   process.exit(2);
 }
 if (
