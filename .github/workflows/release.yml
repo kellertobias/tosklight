@@ -219,6 +219,62 @@ jobs:
             .artifacts/test/results
           if-no-files-found: ignore
 
+  models:
+    name: Documentation / Fixture model renders
+    needs: [metadata]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      # The shipped .glb files are checked without Blender, which is the cheap gate: it
+      # reads them the way the visualizer does and fails on anything it could not draw.
+      - name: Verify the shipped models against the import contract
+        run: npm run models:verify
+
+      - name: Install Blender
+        run: |
+          sudo snap install blender --classic
+          blender --version
+
+      # Rebuilding proves the builders still produce what is committed, and rendering
+      # proves every committed .glb still imports. Both write into the working tree, so
+      # a drift check afterwards is what turns them into a gate.
+      - name: Rebuild the models and render one PNG each
+        run: |
+          npm run models
+          npm run models:render
+
+      # Compared on the manifest and the generated page rather than on the .glb and .png
+      # bytes: the glTF exporter stamps its own version into every file it writes, so a
+      # byte comparison would fail the day the runner's Blender is upgraded. The manifest
+      # holds the geometry the builders computed — sizes, triangle counts, node lists,
+      # swivels — which is what actually changes when a model changes.
+      - name: Fail if the committed models are out of date
+        run: |
+          if ! git diff --quiet -- assets/models/manifest.json docs/help/45-Visualizer/02-model-catalogue.md; then
+            echo "error: assets/models differs from what tools/stage_models produces; run 'npm run models && npm run models:render'" >&2
+            git --no-pager diff -- assets/models/manifest.json docs/help/45-Visualizer/02-model-catalogue.md >&2
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: fixture-model-renders
+          path: docs/help/assets/models
+          if-no-files-found: error
+
   help-screenshots:
     name: Documentation / Deterministic help screenshots
     needs: [metadata, unit]
@@ -399,6 +455,7 @@ jobs:
             slug: macos-arm64
             headless_binary: light-headless
             desktop: true
+            viz: true
           - label: Linux (x86_64)
             runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
@@ -419,6 +476,7 @@ jobs:
             slug: windows-amd64
             headless_binary: light-headless.exe
             desktop: true
+            viz: true
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -557,7 +615,68 @@ jobs:
             linux-arm64)
               ;;
             windows-amd64)
-              cp "$bundle"/nsis/*-setup.exe "$out/tosklight-$version-windows-amd64-setup.exe"
+              # Named rather than globbed: the Viz Editor writes its own installer into the same
+              # directory, and a bare *-setup.exe would pick up whichever one it found first.
+              cp "$bundle"/nsis/ToskLight_*-setup.exe "$out/tosklight-$version-windows-amd64-setup.exe"
+              ;;
+          esac
+          ls -la "$out"
+
+      # The Viz products are a separate deliverable: the editor is the window an operator opens,
+      # and the visualizer is the picture it drives. They ship for the two desktop platforms an
+      # operator plans a rig on; the Linux and Raspberry Pi legs stay headless-only.
+      - name: Build the standalone visualizer
+        if: matrix.viz
+        shell: bash
+        run: >-
+          cargo build --release --locked --target ${{ matrix.target }}
+          -p viz-renderer --bin viz-renderer
+
+      - name: Build the ToskLight Viz Editor application
+        if: matrix.viz
+        shell: bash
+        run: |
+          config="$(npm run --silent artifact-path -- tmp)/tauri-viz-editor-release.json"
+          node tools/write-tauri-artifact-config.mjs viz-editor "$config"
+          npm run --prefix apps/viz-editor tauri:build -- --target ${{ matrix.target }} --config "$config"
+
+      - name: Stage the Viz release artifacts
+        if: matrix.viz
+        shell: bash
+        env:
+          SLUG: ${{ matrix.slug }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          version="$LIGHT_RELEASE_VERSION"
+          out=".artifacts/release"
+          release=".artifacts/build/cargo/$TARGET/release"
+          bundle="$release/bundle"
+          mkdir -p "$out" ".artifacts/tmp"
+
+          case "$SLUG" in
+            macos-arm64)
+              bash tools/bundle-visualizer-macos.sh "$release/viz-renderer" "$bundle/macos"
+              # The editor owns the session and the visualizer is the picture it drives, so the
+              # visualizer travels inside the editor rather than as a second thing to install.
+              resources="$bundle/macos/ToskLight Viz Editor.app/Contents/Resources"
+              rm -rf -- "$resources/ToskLight Visualizer.app"
+              cp -R "$bundle/macos/ToskLight Visualizer.app" "$resources/"
+              ditto -c -k --sequesterRsrc --keepParent \
+                "$bundle/macos/ToskLight Viz Editor.app" "$out/tosklight-viz-$version-macos-arm64.zip"
+              ;;
+            windows-amd64)
+              cp "$bundle"/nsis/"ToskLight Viz Editor"_*-setup.exe \
+                "$out/tosklight-viz-$version-windows-amd64-setup.exe"
+              # The Windows installer does not carry the visualizer yet, so it ships beside it.
+              stage_root="$(mktemp -d ".artifacts/tmp/viz-stage.XXXXXX")"
+              trap 'rm -rf -- "$stage_root"' EXIT
+              stage="$stage_root/tosklight-visualizer-$version-windows-amd64"
+              mkdir -p "$stage"
+              cp "$release/viz-renderer.exe" "$stage/"
+              (cd "$stage_root" && 7z a -tzip \
+                "$OLDPWD/$out/tosklight-visualizer-$version-windows-amd64.zip" \
+                "$(basename "$stage")")
               ;;
           esac
           ls -la "$out"
@@ -709,12 +828,18 @@ jobs:
             "tosklight-$VERSION-linux-amd64.deb" \
             "light-headless-$VERSION-linux-arm64.zip" \
             "light-headless-$VERSION-windows-amd64.zip" \
-            "tosklight-$VERSION-windows-amd64-setup.exe"
+            "tosklight-$VERSION-windows-amd64-setup.exe" \
+            "tosklight-viz-$VERSION-macos-arm64.zip" \
+            "tosklight-viz-$VERSION-windows-amd64-setup.exe" \
+            "tosklight-visualizer-$VERSION-windows-amd64.zip"
           do
             test -f ".artifacts/release/$required"
           done
           unzip -Z1 ".artifacts/release/light-headless-$VERSION-linux-amd64.zip" |
             grep -Eq '/light-benchmark$'
+          # The macOS editor is only shippable if it carries the visualizer it drives.
+          unzip -Z1 ".artifacts/release/tosklight-viz-$VERSION-macos-arm64.zip" |
+            grep -Fq 'Contents/Resources/ToskLight Visualizer.app/Contents/MacOS/ToskLight Visualizer'
           (cd .artifacts/release && sha256sum * > SHA256SUMS)
 
       - name: Create the tag-only semantic release
