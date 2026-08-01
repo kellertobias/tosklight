@@ -114,8 +114,8 @@ If the app looks stale, verify the bundle opened by the current `build` script b
 
 - The Markdown files under `docs/help` remain the source of truth for both in-app help and the PDF manual.
 - Use `npm run manual` to generate and verify the manual.
-- Use `npm run test:help-screenshots` only when intentionally refreshing help screenshots.
-- Check screenshot diffs visually and keep them tied to stable, representative operator states.
+- Help and marketing screenshots are generated, not committed. CI captures both galleries every run; regenerate locally with `npm run screenshots:help` and `npm run screenshots:marketing`.
+- Keep screenshots tied to stable, representative operator states. Neither gallery is a visual-regression baseline; the captures fail on blank, mis-sized, or error-producing renders instead.
 
 ## Working tree and commits
 

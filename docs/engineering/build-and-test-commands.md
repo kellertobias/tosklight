@@ -21,7 +21,7 @@ the steps in the right order. Run `npm run` to list every script.
 npm run dev                        # Light headless + Tauri app with UI hot reload
 npm run storybook                  # shared operator components, no Light server
 npm run storybook:build            # deterministic static Storybook artifact
-npm run screenshots:marketing      # recreate the reviewed marketing screenshot gallery
+npm run screenshots:marketing      # regenerate the marketing screenshot gallery
 npm run open                 # debug builds, stop old instances, open the app
 npm run manual               # PDF and HTML manuals from docs/help
 npm run bundle [install]    # release artifacts for macOS, Windows, Linux
@@ -35,9 +35,9 @@ npm run test:unit                  # architecture + tsc/vite + cargo + vitest
 npm run test:e2e-api               # Playwright @api, no browser
 npm run test:e2e-ui                # Playwright @ui, real Chrome
 npm run test:e2e -- [spec]            # everything, or one focused spec
-npm run test:help-screenshots      # static Storybook screenshot manifest/diff gate
-npm run test:help-screenshots:update # update reviewed Storybook-owned help images
-npm run test:help-screenshots-live # remaining real-app visual acceptance images
+npm run screenshots:help          # regenerate the whole help gallery (both captures)
+npm run test:help-screenshots      # the Storybook half of the help gallery
+npm run test:help-screenshots-live # the live-desk half of the help gallery
 npm run test:all                   # unit then e2e
 
 cargo run -p light-wire --example generate-contracts   # regenerate wire TS + schemas
@@ -97,7 +97,7 @@ code.**
 | `npm run test:e2e-api` | Playwright `--grep '@api'`. API-only contracts and constructed failure, persistence, concurrency, and wire conditions that cannot be driven truthfully through UI. |
 | `npm run test:e2e-ui` | Playwright `--grep '@ui' --grep-invert '@(demo\|docs)\b'`. Real Chrome operator workflows, including OSC and attached-hardware surfaces. Generated visual documentation runs separately. |
 | `npm run test:help-screenshots` | Builds static Storybook and serially checks every entry in `docs/help/screenshot-manifest.json`. Story-owned captures require stable IDs/dimensions, no blank output, no browser errors or live REST/WebSocket requests, and no unreviewed pixel diff. It does not launch Light. |
-| `npm run test:help-screenshots:update` | Writes reviewed candidates for manifest entries whose source is `storybook`. Inspect every image diff, then rerun the non-update gate. |
+| `npm run screenshots:help` | Regenerates the whole help gallery: the Storybook capture and the live-desk capture. A fresh clone has no help images until this runs. |
 | `npm run test:help-screenshots-live` | Smaller, separately named production browser/server path for manifest entries still marked `live-app`; Storybook-owned captures cannot be overwritten by this command. |
 | `npm run test:record` | Serial narrated video of the whole catalog, assembled with ffmpeg into `.artifacts/test/visual-inspection/`. |
 | `npm run test:demo` | The product walkthrough; refreshes `assets/demo.show`. |
@@ -220,7 +220,7 @@ Start with the smallest relevant check, then widen by risk.
 | API-only failure construction, restart, migration, or wire behaviour | `npm run test:e2e-api` |
 | Desktop lifecycle, native windows, server supervision | Focused Rust/Tauri tests locally; the GitHub Actions release build probes the newly built desktop process on macOS, Linux, and Windows |
 | `docs/help/` content | `npm run dev` to check live help, then `npm run manual` |
-| Storybook-owned panes or help images | `npm run test:help-screenshots:update`, review diffs visually, then `npm run test:help-screenshots` |
+| Storybook-owned panes or help images | `npm run screenshots:help` (CI regenerates them on every run regardless) |
 | Manifest entries still marked live-app | `npm run test:help-screenshots-live`, then review only those image diffs |
 | Real operator behaviour, before handoff | `npm run open` |
 

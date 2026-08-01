@@ -15,32 +15,31 @@ The stable outputs are:
 ## Refresh screenshots
 
 `docs/help/screenshot-manifest.json` is the complete source contract for the PNG files under
-`docs/help/assets/screenshots`. Every tracked PNG has exactly one entry containing its stable
+`docs/help/assets/screenshots`. Every declared PNG has exactly one entry containing its stable
 filename, source, viewport, dark theme, software/hardware mode, and deterministic interaction list.
 Storybook-owned entries name an existing application story. A screenshot that cannot yet be
 represented truthfully has `source: "live-app"`, a null story ID, and an explicit reason.
 
-Run `npm run test:help-screenshots` to build static Storybook and check the reviewed screenshots
-serially without launching Light or opening a mutable show. The gate rejects incomplete manifests,
-missing story IDs, live REST/WebSocket traffic, console or page errors, blank captures, dimension
-drift, and pixel differences above the review threshold. Candidate images are always written below
-`.artifacts/test/help-screenshots/storybook`.
+The screenshots are generated, not reviewed, and `docs/help/assets/screenshots` is not in Git. CI
+captures the whole set on every run and the release build embeds it, so what ships is always the
+current interface. A screenshot cannot go stale, because none is ever kept.
 
-After inspecting those candidates, run `npm run test:help-screenshots:update` to replace only the
-Storybook-owned files in `docs/help/assets/screenshots`, inspect every Git image diff, and then rerun
-the check command. Filenames remain unchanged so in-app Help, PDF, HTML manual, and Pages all consume
-the same reviewed assets.
+Two captures fill the directory. `npm run test:help-screenshots` builds static Storybook and takes
+the entries a story can show, without launching Light or opening a mutable show.
+`npm run test:help-screenshots-live` drives the real desk and server for the entries marked
+`live-app` — pane settings and the setup, fixture-library and MVR workflows that have no honest
+deterministic story. `npm run screenshots:help` runs both, which is what you want locally: a fresh
+clone has no help images until you do.
 
-`npm run test:help-screenshots-live` is the separately named real-app path. It retains the smaller
-set of screenshots still marked `live-app` in the manifest, including pane-settings and
-setup/fixture-library/MVR workflow surfaces that do not yet have honest deterministic application
-stories. The command still drives the production browser desk and server; Storybook-owned captures
-from that run go only to `.artifacts/test/help-screenshots/live-app` and cannot overwrite their
-reviewed documentation files.
+Each capture rejects incomplete manifests, missing story IDs, live REST/WebSocket traffic, console
+or page errors, blank captures, and dimension drift. Those checks are what make an unreviewed
+capture safe to ship. Neither compares against a previous run: visual regression is a separate
+concern and deliberately not part of this. Because neither capture can see the other's output,
+`node tools/check-help-screenshot-set.mjs` verifies the assembled directory against the manifest,
+and CI runs it before anything consumes the set.
 
-Dynamics pool/editor screenshots are refreshed only after an explicit user review of the production
-UI. The reviewed full-application story now owns that deterministic screenshot; future interaction
-or layout changes require the same visual-review checkpoint before its baseline is refreshed.
+Filenames stay stable, so in-app Help, the PDF, the HTML manual and Pages all consume the same
+generated assets.
 
 ## Refresh icon contact sheets
 
@@ -53,19 +52,26 @@ The expanded derivative resolves strokes, transforms, repeated patterns, and bin
 - Put operator-facing source in a numbered file or folder below `docs/help`.
 - Give every page exactly one first-level `# Title`; it becomes the Help navigation title, contents entry, running header, and index entry.
 - Use ordinary relative Markdown links and images. The manual build fails for broken local links or images.
-- Keep screenshots under `docs/help/assets/screenshots`, add every PNG to
-  `docs/help/screenshot-manifest.json`, and use a real application story whenever one exists.
+- Declare every screenshot in `docs/help/screenshot-manifest.json` and use a real application
+  story whenever one exists. The manifest is the declaration; `docs/help/assets/screenshots` is
+  generated output and is not committed.
 - Never assign a convenient but inaccurate story ID. Keep unmatched workflow images on the
   explicitly documented live-app path until an equivalent application story exists.
-- Refresh Storybook-owned images with `npm run test:help-screenshots:update`; use
-  `npm run test:help-screenshots-live` only for the remaining live-app entries.
+- Regenerate locally with `npm run screenshots:help`, which runs both captures. CI does the same
+  on every run, so there is nothing to refresh by hand.
 - Keep generated expanded icons beside their editable sources. Contact sheets belong under `.artifacts/generated/icon-contact-sheets` with only an ignored Help mirror; regenerate both through `npm run icons:contact-sheets`.
 - Add or update the matching row in [Help Coverage](02-help-coverage.md) when introducing a built-in window or major operator workflow.
 
 ## Release publication
 
-The CI screenshot job builds static Storybook, checks the reviewed manifest, and uploads one
-`help-screenshots` artifact. The manual job downloads that exact artifact before rendering PDF and
-HTML, and the Pages job downloads the same artifact before assembling the public site. GitHub
-deploys the complete Pages site from mirrored `main`; pull-request code receives no release or
-deployment credentials.
+Two CI jobs capture the halves — `documentation-screenshots` from static Storybook and
+`help-screenshots-live` against the prebuilt Playwright server — and `help-screenshots` assembles
+them, verifies the set against the manifest, and publishes one `help-screenshots` artifact. The
+release build, the manual and the Pages job all download that artifact: the build because the
+images are embedded into the binary, the other two before rendering. GitHub deploys the complete
+Pages site from mirrored `main`; pull-request code receives no release or deployment credentials.
+
+The marketing gallery is published to the S3 preview prefix on every run, together with the product
+demo video, so both can be looked at without being shipped. Promoting the preview to the prefix the
+website serves is a manual `workflow_dispatch` with **Promote marketing** ticked, and nothing else
+does it.

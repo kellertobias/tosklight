@@ -9,6 +9,13 @@ on:
     branches: ["**"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      promote_marketing:
+        description: >-
+          Promote the previewed marketing gallery and demo video to the live prefix the website
+          serves. Look at the preview first; nothing else publishes it.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -296,10 +303,8 @@ jobs:
       - name: Install Chrome for Playwright
         run: npx playwright install --with-deps chrome
 
-      - name: Build Storybook once and generate reviewed screenshots
-        run: >-
-          UPDATE_HELP_SCREENSHOTS=1 UPDATE_MARKETING_SCREENSHOTS=1
-          bash tools/test.sh documentation-screenshots
+      - name: Build Storybook once and generate the screenshots a story can show
+        run: bash tools/test.sh documentation-screenshots
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -307,10 +312,12 @@ jobs:
           path: .artifacts/build/storybook/ui
           if-no-files-found: error
 
+      # Only the entries a story can render. The rest come from the live desk, and the two halves
+      # are assembled in the help-screenshots job.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
-          name: help-screenshots
+          name: help-screenshots-storybook
           path: docs/help/assets/screenshots
           if-no-files-found: error
 
@@ -330,9 +337,89 @@ jobs:
             .artifacts/test/results/storybook
           if-no-files-found: ignore
 
+  # Twenty-seven of the help screenshots show things no story can: a running desk with output,
+  # live pane settings, the real patch. They are captured by an ordinary Playwright spec against
+  # the same prebuilt server the e2e shards use, so this costs one runner rather than a build.
+  help-screenshots-live:
+    name: Documentation / Live-desk help screenshots
+    needs: e2e-build
+    runs-on: ubuntu-22.04
+    env:
+      LIGHT_REUSE_E2E_BUILD: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Install Chrome for Playwright
+        run: npx playwright install --with-deps chrome
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: playwright-application-${{ github.sha }}
+          path: .artifacts/build/cargo/debug
+
+      - name: Make the Playwright server executable
+        run: chmod +x .artifacts/build/cargo/debug/light-headless
+
+      - name: Capture the screenshots only a running desk can show
+        run: bash tools/test.sh help-screenshots-live
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: help-screenshots-live
+          path: docs/help/assets/screenshots
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: help-screenshots-live-diagnostics
+          path: .artifacts/test
+          if-no-files-found: ignore
+
+  # The set is only complete once both captures are in one directory, and neither capture can
+  # tell. Everything that ships help images depends on this job rather than on either half.
+  help-screenshots:
+    name: Documentation / Help screenshot set
+    needs: [documentation-screenshots, help-screenshots-live]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: help-screenshots-storybook
+          path: docs/help/assets/screenshots
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: help-screenshots-live
+          path: docs/help/assets/screenshots
+
+      - name: Fail if the assembled set is not what the manifest declares
+        run: node tools/check-help-screenshot-set.mjs
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: help-screenshots
+          path: docs/help/assets/screenshots
+          if-no-files-found: error
+
   manual:
     name: Documentation / Operator manual
-    needs: [metadata, documentation-screenshots]
+    needs: [metadata, help-screenshots]
     runs-on: ubuntu-22.04
     env:
       LIGHT_MANUAL_VERSION: ${{ needs.metadata.outputs.version }}
@@ -421,7 +508,10 @@ jobs:
   build:
     name: Build / Release archive / ${{ matrix.label }}
     if: github.event_name != 'pull_request'
-    needs: metadata
+    # The help screenshots are embedded into the binary, so they have to exist before anything is
+    # compiled. This is what makes what ships the current interface rather than whatever was last
+    # committed by hand.
+    needs: [metadata, help-screenshots]
     runs-on: ${{ matrix.runner }}
     env:
       LIGHT_RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
@@ -462,6 +552,13 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.sha }}
+
+      # Populates docs/help/assets/screenshots, which rust-embed compiles into the binary. The
+      # directory is not in git: it is generated every run, so the shipped help cannot go stale.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: help-screenshots
+          path: docs/help/assets/screenshots
 
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
@@ -664,14 +761,14 @@ jobs:
       github.ref == 'refs/heads/main' &&
       needs.metadata.result == 'success' &&
       needs.manual.result == 'success' &&
-      needs.documentation-screenshots.result == 'success' &&
+      needs.help-screenshots.result == 'success' &&
       needs.visual-assets.result == 'success' &&
       (needs['release-performance'].result == 'success' ||
        needs['release-performance'].result == 'failure')
     needs:
       - metadata
       - manual
-      - documentation-screenshots
+      - help-screenshots
       - visual-assets
       - release-performance
     runs-on: ubuntu-22.04
@@ -736,7 +833,9 @@ jobs:
         with:
           path: ${{ steps.site.outputs.path }}
 
-      - name: Upload marketing screenshots to S3
+      # Published on every run, to the preview prefix rather than the one the website serves.
+      # Looking at the current gallery should not require deciding to ship it.
+      - name: Publish the marketing gallery preview
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -744,7 +843,28 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION }}
           MARKETING_SCREENSHOTS_S3_BUCKET: ${{ secrets.MARKETING_SCREENSHOTS_S3_BUCKET }}
           MARKETING_SCREENSHOTS_S3_BASE_PATH: ${{ secrets.MARKETING_SCREENSHOTS_S3_BASE_PATH }}
-        run: bash tools/upload-marketing-screenshots.sh
+        run: bash tools/upload-marketing-screenshots.sh preview
+
+      # The demo video beside it, so there is somewhere to watch it that does not expire the way
+      # a workflow artifact does.
+      - name: Publish the product demo video preview
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          BUCKET: ${{ secrets.MARKETING_SCREENSHOTS_S3_BUCKET }}
+          BASE_PATH: ${{ secrets.MARKETING_SCREENSHOTS_S3_BASE_PATH }}
+        run: |
+          set -euo pipefail
+          source=".artifacts/test/visual-inspection/product-demo"
+          if [[ ! -d "$source" ]]; then
+            echo "no product-demo directory to publish" >&2
+            exit 0
+          fi
+          aws s3 cp "$source/" "s3://$BUCKET/${BASE_PATH#/}/preview/demo/" \
+            --recursive --only-show-errors
+          echo "Published the product demo to s3://$BUCKET/${BASE_PATH#/}/preview/demo/"
 
   release:
     name: Release / Tag and publish
@@ -755,7 +875,7 @@ jobs:
       - unit
       - e2e
       - manual
-      - documentation-screenshots
+      - help-screenshots
       - visual-assets
       - build
     runs-on: ubuntu-22.04
@@ -1005,3 +1125,28 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+
+  # The gallery the website serves only changes when you say so. Every run publishes a preview;
+  # this promotes that preview to the live prefix, and nothing else does. Run it from the Actions
+  # tab once you have looked at the preview and are happy with it.
+  publish-marketing:
+    name: Marketing / Promote the previewed gallery
+    if: github.event_name == 'workflow_dispatch' && inputs.promote_marketing
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Promote the previewed gallery and demo to the live prefix
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          BUCKET: ${{ secrets.MARKETING_SCREENSHOTS_S3_BUCKET }}
+          BASE_PATH: ${{ secrets.MARKETING_SCREENSHOTS_S3_BASE_PATH }}
+        run: |
+          set -euo pipefail
+          base="s3://$BUCKET/${BASE_PATH#/}"
+          # Copied rather than synced: the live prefix holds the demo video and anything else
+          # published beside the gallery, and a sync would delete what this preview does not
+          # happen to contain.
+          aws s3 cp "$base/preview/" "$base/" --recursive --only-show-errors
+          echo "Promoted $base/preview/ to $base/"

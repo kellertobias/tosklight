@@ -40,3 +40,10 @@ __pycache__
 !.env.example
 *.profraw
 *.profdata
+
+# Generated documentation images. Both galleries are captured in CI on every run — help
+# screenshots from Storybook and the live desk, marketing screenshots from Storybook — and the
+# help set is embedded into the binary at build time. Committing them only lets them go stale.
+# Regenerate locally with `npm run screenshots:help` and `npm run screenshots:marketing`.
+/docs/help/assets/screenshots/
+/docs/marketing/assets/screenshots/

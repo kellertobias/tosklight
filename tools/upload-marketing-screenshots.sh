@@ -4,6 +4,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE="$ROOT/docs/marketing/assets/screenshots"
 
+# A sub-prefix under the configured base path. Every CI run publishes to "preview", which is
+# what makes the current gallery something you can look at without it becoming the gallery the
+# website serves. Promoting is a separate, deliberate act: the caller passes an empty prefix.
+SUB_PREFIX="${1-preview}"
+
 required=(
   AWS_ACCESS_KEY_ID
   AWS_SECRET_ACCESS_KEY
@@ -48,7 +53,11 @@ command -v aws >/dev/null 2>&1 || {
   exit 1
 }
 
-destination="s3://$bucket/$base_path/"
+if [[ -n "$SUB_PREFIX" ]]; then
+  destination="s3://$bucket/$base_path/${SUB_PREFIX%/}/"
+else
+  destination="s3://$bucket/$base_path/"
+fi
 echo "Uploading ${#screenshots[@]} marketing screenshots to $destination"
 aws s3 cp "$SOURCE/" "$destination" \
   --recursive \

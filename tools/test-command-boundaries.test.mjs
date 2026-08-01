@@ -100,9 +100,20 @@ test("documentation screenshots share one Storybook build", () => {
 
 	assert.match(
 		screenshotJob,
-		/UPDATE_HELP_SCREENSHOTS=1 UPDATE_MARKETING_SCREENSHOTS=1\s+.*bash tools\/test\.sh documentation-screenshots/u,
+		/run: bash tools\/test\.sh documentation-screenshots/u,
 	);
-	assert.doesNotMatch(workflow, /^ {2}(help|marketing)-screenshots:/mu);
+	// The captures generate; nothing compares them to a previous run. An update switch reappearing
+	// here would mean the gallery had quietly become a baseline again.
+	assert.doesNotMatch(
+		workflow,
+		/UPDATE_HELP_SCREENSHOTS|UPDATE_MARKETING_SCREENSHOTS/u,
+	);
+	// The Storybook job owns only the entries a story can render; the live desk owns the rest, and
+	// only the assembly job may claim the whole set.
+	assert.match(screenshotJob, /name: help-screenshots-storybook/u);
+	assert.doesNotMatch(workflow, /^ {2}marketing-screenshots:/mu);
+	assert.match(workflow, /^ {2}help-screenshots-live:\n/mu);
+	assert.match(workflow, /^ {2}help-screenshots:\n/mu);
 	assert.match(
 		testScript,
 		/documentation_screenshots\(\)\{[\s\S]*npm run storybook:build[\s\S]*run_documentation_screenshots/u,
