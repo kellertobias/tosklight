@@ -3156,6 +3156,14 @@ async function migrateDemoGroupMastersToCanonicalPlaybacks(
 		[5, 105],
 		[6, 106],
 	]);
+	const cueListIds = new Map([
+		[1, "00000000-0000-4004-8200-000000000001"],
+		[2, "00000000-0000-4004-8200-000000000008"],
+		[3, "00000000-0000-4004-8200-000000000006"],
+		[4, "00000000-0000-4004-8200-000000000002"],
+		[5, "00000000-0000-4004-8200-000000000003"],
+		[6, "00000000-0000-4004-8200-000000000004"],
+	]);
 	const playbacks = await api.showObjects<any>(showId, "playback");
 	for (const playback of playbacks) {
 		const number = numberMap.get(playback.body.number);
@@ -3198,17 +3206,47 @@ async function migrateDemoGroupMastersToCanonicalPlaybacks(
 		);
 	}
 	for (const playback of playbacks) {
-		if (
-			numberMap.has(playback.body.number) &&
-			playback.body.target?.type === "group"
-		)
-			await api.deleteSeededShowObject(
-				showId,
-				"playback",
-				playback.id,
-				playback.revision,
-			);
+		const cueListId = cueListIds.get(playback.body.number);
+		if (cueListId == null || playback.body.target?.type !== "group") continue;
+		await api.seedShowObject(
+			showId,
+			"cue_list",
+			cueListId,
+			emptyDemoCueList(cueListId),
+		);
+		await api.seedShowObject(
+			showId,
+			"playback",
+			playback.id,
+			{
+				...playback.body,
+				name: "Empty",
+				target: { type: "cue_list", cue_list_id: cueListId },
+				buttons: ["go", "go_minus", "flash"],
+			},
+			playback.revision,
+		);
 	}
+}
+
+function emptyDemoCueList(id: string) {
+	return {
+		id,
+		name: "Empty",
+		cues: [],
+		mode: "sequence",
+		priority: 0,
+		looped: false,
+		intensity_priority_mode: "htp",
+		wrap_mode: "off",
+		restart_mode: "first_cue",
+		force_cue_timing: false,
+		disable_cue_timing: false,
+		chaser_step_millis: 1_000,
+		chaser_xfade_millis: 0,
+		speed_group: null,
+		speed_multiplier: 1,
+	};
 }
 
 function groupMasterPlayback(number: number, name: string, groupId: string) {
