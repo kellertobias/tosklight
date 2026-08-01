@@ -1,0 +1,783 @@
+/*
+ * Patch sheet layout and control styling.
+ *
+ * Structure and control geometry only: the surrounding window chrome belongs to whichever
+ * application hosts the sheet, and each one themes it with its own tokens. Rules scoped to the
+ * desk's own window shell and to its Stage preview overlay are deliberately not here.
+ */
+
+/* from apps/light-desktop/src/fixture-address.css */
+.fixture-address-layer {
+	z-index: 2700 !important;
+}
+
+.show-patch-layout:has(> .fixture-address-layer)
+	> .stacked-modal-layer:not(.fixture-address-layer) {
+	display: none;
+}
+
+.fixture-address-screen {
+	width: 100% !important;
+	height: 100%;
+	max-width: none !important;
+	max-height: none !important;
+	display: grid;
+	grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+	gap: 8px;
+	overflow: hidden;
+}
+
+.fixture-address-screen > header {
+	display: flex;
+	align-items: center;
+	padding-right: 58px;
+}
+
+.fixture-address-screen h2 {
+	margin: 0;
+}
+
+.fixture-address-screen header small {
+	display: block;
+	color: var(--muted);
+}
+
+.fixture-address-summary {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 6px;
+}
+
+.fixture-address-summary span {
+	display: grid;
+	gap: 3px;
+	padding: 8px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--panel2);
+	color: var(--muted);
+}
+
+.fixture-address-summary b {
+	color: var(--text);
+}
+
+.fixture-address-summary b.invalid {
+	color: var(--red);
+}
+
+.fixture-address-screen > nav {
+	display: flex;
+	gap: 5px;
+	overflow: auto;
+}
+
+.fixture-address-screen > nav button {
+	min-width: 150px;
+	min-height: 48px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--panel2);
+}
+
+.fixture-address-screen > nav button.active {
+	border-color: var(--cyan);
+	color: var(--cyan);
+}
+
+.fixture-address-screen > nav small {
+	display: block;
+}
+
+.fixture-address-content {
+	min-height: 0;
+	display: grid;
+	grid-template-columns: 260px minmax(0, 1fr);
+	gap: 10px;
+}
+
+.fixture-address-entry {
+	display: grid;
+	align-content: start;
+	gap: 8px;
+}
+
+.fixture-address-entry label {
+	display: grid;
+	gap: 5px;
+	color: var(--muted);
+}
+
+.fixture-address-entry label strong {
+	padding: 12px;
+	border: 1px solid var(--cyan);
+	border-radius: 6px;
+	background: #09171b;
+	color: var(--cyan);
+	font-size: 24px;
+	text-align: center;
+}
+
+.fixture-address-number-block {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 5px;
+}
+
+.fixture-address-number-block button {
+	min-height: 54px;
+	border: 1px solid var(--line2);
+	border-radius: 6px;
+	background: var(--panel2);
+	font-size: 20px;
+}
+
+.fixture-address-entry .unpatch {
+	min-height: 44px;
+	border-color: var(--red);
+	color: var(--red);
+}
+
+.fixture-address-entry [role="alert"] {
+	color: var(--red);
+}
+
+.fixture-address-screen > .fixture-address-content > .universe-visual {
+	min-height: 0;
+}
+
+.fixture-address-screen > footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 7px;
+}
+
+.fixture-address-screen > footer button {
+	min-width: 140px;
+	min-height: 48px;
+}
+
+@media (max-width: 900px) {
+
+	.fixture-address-summary {
+		grid-template-columns: 1fr 1fr;
+	}
+
+	.fixture-address-content {
+		grid-template-columns: 220px minmax(0, 1fr);
+	}
+}
+
+/* from apps/light-desktop/src/styles/shared-controls.css */
+.fixture-patch-setup {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(340px, 0.8fr);
+	gap: 12px;
+}
+
+.fixture-patch-setup > section {
+	padding: 12px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--panel);
+}
+
+.fixture-patch-setup .patch-attributes {
+	grid-column: 1 / -1;
+}
+
+.fixture-patch-setup > section > button {
+	min-height: 42px;
+	margin-top: 10px;
+	border: 1px solid var(--cyan);
+	border-radius: 6px;
+	background: #0a252b;
+	color: var(--cyan);
+}
+
+.configuration-form select,
+.fixture-browser-filters input,
+.fixture-browser-filters select {
+	min-width: 0;
+	height: 42px;
+	padding: 0 10px;
+	border: 1px solid var(--line2);
+	border-radius: 6px;
+	background: var(--panel2);
+	color: var(--text);
+}
+
+.fixture-browser-filters {
+	display: grid;
+	grid-template-columns: 1.5fr 1fr 1fr;
+	gap: 6px;
+}
+
+.fixture-browser-list {
+	display: grid;
+	max-height: 360px;
+	margin-top: 8px;
+	gap: 5px;
+	overflow: auto;
+}
+
+.fixture-browser-list > button {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	padding: 9px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--panel2);
+	color: var(--text);
+	text-align: left;
+}
+
+.fixture-browser-list > button.active {
+	border-color: var(--cyan);
+	background: #0a252b;
+}
+
+.fixture-browser-list small {
+	grid-column: 1 / -1;
+	color: var(--muted);
+}
+
+.patch-placement {
+	margin-top: 10px;
+}
+
+@media (max-width: 900px) {
+
+	.fixture-patch-setup,
+	.fixture-library-setup {
+		grid-template-columns: 1fr;
+	}
+
+	.fixture-browser-filters {
+		grid-template-columns: 1fr;
+	}
+}
+
+.show-patch-layout {
+	height: 100%;
+	min-height: 560px;
+	display: grid;
+	grid-template-columns: minmax(190px, 25%) minmax(0, 1fr);
+	grid-template-rows: 48px minmax(0, 1fr);
+	gap: 8px;
+}
+
+/*
+ * The sheet's header spans the sheet.
+ *
+ * It is a shared `WindowHeader`, so the full-width rule below that names `.patch-toolbar` — the
+ * class this header had before it moved to the window kit — no longer reaches it. Without this the
+ * header takes one grid cell and every panel after it shifts one place: the layers land beside the
+ * header and the table drops under them into the narrow column.
+ */
+.show-patch-layout > .ui-window-header {
+	grid-column: 1 / -1;
+}
+
+.patch-toolbar {
+	grid-column: 1 / -1;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 5px 8px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--panel);
+}
+
+.patch-toolbar button {
+	height: 36px;
+	padding: 0 12px;
+	border: 1px solid var(--line2);
+	border-radius: 6px;
+	background: var(--panel2);
+}
+
+.patch-toolbar button.active {
+	border-color: var(--cyan);
+	color: var(--cyan);
+}
+
+.patch-layers {
+	min-height: 0;
+	padding: 10px;
+	overflow: auto;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--panel);
+}
+
+.patch-layers h3 {
+	margin: 0 0 8px;
+}
+
+.patch-layers button {
+	width: 100%;
+	min-height: 48px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 5px;
+	padding: 0 10px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--panel2);
+}
+
+.patch-layers button.active {
+	border-color: var(--cyan);
+	background: #0a252b;
+	color: var(--cyan);
+}
+
+.patch-table-wrap {
+	min-width: 0;
+	min-height: 0;
+	overflow: auto;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--panel);
+}
+
+.patch-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+.patch-table th {
+	position: sticky;
+	z-index: 2;
+	top: 0;
+	background: #141a20;
+	color: var(--muted);
+	text-align: left;
+}
+
+.patch-table th,
+.patch-table td {
+	height: 43px;
+	padding: 0 9px;
+	border-bottom: 1px solid var(--line);
+}
+
+.patch-table tr.selected td {
+	background: #0a252b;
+}
+
+.patch-address {
+	border: 0;
+	background: transparent;
+	color: var(--cyan);
+}
+
+.patch-table select {
+	height: 32px;
+	background: var(--panel2);
+}
+
+.patch-empty {
+	padding: 30px;
+	color: var(--muted);
+	text-align: center;
+}
+
+.fixture-search,
+.patch-small-modal > input {
+	width: 100%;
+	height: 46px;
+	margin: 10px 0;
+	padding: 0 12px;
+	border: 1px solid var(--cyan);
+	border-radius: 7px;
+	background: #0a1014;
+}
+
+.fixture-patch-form {
+	display: grid;
+	grid-template-columns: minmax(280px, 1fr) 250px 1.2fr;
+	gap: 10px;
+	margin-top: 10px;
+}
+
+.fixture-patch-form > div:first-child {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 6px;
+}
+
+.fixture-patch-form label {
+	display: grid;
+	gap: 3px;
+	color: var(--muted);
+	font-size: 10px;
+}
+
+.fixture-patch-form label:first-child,
+.fixture-patch-form small {
+	grid-column: 1 / -1;
+}
+
+.fixture-patch-form input,
+.fixture-patch-form select {
+	height: 40px;
+	padding: 0 8px;
+	background: var(--panel2);
+}
+
+.patch-numpad {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 4px;
+}
+
+.patch-numpad button {
+	min-height: 35px;
+	background: var(--panel2);
+}
+
+.patch-numpad .enter {
+	grid-column: span 2;
+	color: var(--cyan);
+}
+
+.universe-map {
+	display: grid;
+	grid-template-columns: repeat(32, 1fr);
+	align-content: start;
+	gap: 2px;
+	padding: 6px;
+}
+
+.universe-map i {
+	aspect-ratio: 1;
+	background: #143524;
+}
+
+.universe-map i.used {
+	background: #7a2028;
+}
+
+.universe-map i.start {
+	outline: 2px solid var(--cyan);
+}
+
+.add-fixture-modal > footer,
+.patch-small-modal > footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 7px;
+	margin-top: 10px;
+}
+
+.add-fixture-modal > footer button,
+.patch-small-modal > footer button {
+	min-height: 42px;
+	padding: 0 16px;
+	background: var(--panel2);
+}
+
+@media (max-width: 900px) {
+
+	.fixture-patch-form {
+		grid-template-columns: 1fr 220px;
+	}
+
+	.universe-map {
+		grid-column: 1 / -1;
+	}
+
+	.show-patch-layout {
+		grid-template-columns: 180px minmax(0, 1fr);
+	}
+}
+
+/* from apps/light-desktop/src/styles/control-surface.css */
+.patch-toolbar h1 {
+	margin: 0;
+	font-size: 18px;
+}
+
+.patch-table-wrap {
+	height: 100%;
+}
+
+.patch-value {
+	min-height: 32px;
+	padding: 0 7px;
+	border: 1px solid transparent;
+	border-radius: 5px;
+	background: transparent;
+}
+
+.patch-toolbar .lamp-cycle {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	color: var(--muted);
+	font-size: 10px;
+}
+
+.patch-toolbar .lamp-cycle input {
+	width: 44px;
+	height: 34px;
+	text-align: center;
+	background: var(--panel2);
+}
+
+.patch-toolbar .lamp-cycle button {
+	width: 34px;
+	padding: 0;
+}
+
+.patch-small-modal label {
+	display: grid;
+	gap: 5px;
+	margin: 8px 0;
+	color: var(--muted);
+}
+
+.patch-small-modal input {
+	height: 46px;
+	padding: 0 9px;
+	border: 1px solid var(--line2);
+	border-radius: 7px;
+	background: var(--panel);
+}
+
+.numeric-pad button.patch-set-armed {
+	border-color: var(--cyan);
+	background: #0a252b;
+	color: var(--cyan);
+}
+
+.patch-parameter-controls .family-tabs > small {
+	align-self: center;
+	color: var(--amber);
+}
+
+.patch-vector-control {
+	min-width: 0;
+	min-height: 0;
+	display: grid;
+	grid-template-rows: auto 1fr auto;
+	padding: 8px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--panel2);
+}
+
+.patch-vector-control > span {
+	color: var(--muted);
+	font-size: 11px;
+}
+
+.patch-vector-control > strong {
+	align-self: end;
+	font-size: 25px;
+}
+
+.patch-vector-control > div {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 5px;
+}
+
+.patch-vector-control button {
+	min-height: 44px;
+	border: 1px solid var(--line2);
+	border-radius: 7px;
+	background: var(--panel);
+}
+
+.show-patch-layout {
+	min-height: 0;
+}
+
+.gdtf-import-modal header,
+.fixture-editor-modal > header,
+.fixture-browser-modal > header,
+.fixture-placement-modal > header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+}
+
+.fixture-browser-modal,
+.fixture-placement-modal {
+	width: calc(100vw - 24px) !important;
+	max-width: none !important;
+	height: calc(100vh - 24px);
+	max-height: none !important;
+	overflow: hidden;
+}
+
+.fixture-browser-modal {
+	display: grid;
+	grid-template-rows: auto auto minmax(0, 1fr);
+	gap: 8px;
+}
+
+.fixture-browser-modal > .console-search {
+	width: min(760px, 100%);
+}
+
+.fixture-placement-modal {
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+}
+
+.fixture-placement-modal > header > .ui-button {
+	align-self: stretch;
+	border-radius: 0;
+}
+
+.fixture-placement-modal > header > .modal-close {
+	margin-left: 0 !important;
+}
+
+.placement-grid {
+	min-height: 0;
+	display: grid;
+	grid-template-columns: minmax(320px, 0.8fr) minmax(360px, 1.2fr);
+	gap: 12px;
+}
+
+.placement-fields {
+	display: grid;
+	align-content: start;
+	gap: 8px;
+	padding: 12px;
+}
+
+.placement-fields label {
+	display: grid;
+	gap: 5px;
+}
+
+.placement-fields select {
+	height: 44px;
+	background: var(--panel2);
+}
+
+.patch-status {
+	padding: 10px;
+	border: 1px solid var(--amber);
+	border-radius: 7px;
+	color: var(--amber);
+}
+
+.layer-selecting .patch-table-wrap {
+	filter: blur(5px);
+	pointer-events: none;
+	opacity: 0.45;
+}
+
+.patch-edit-modal {
+	width: min(760px, calc(100vw - 30px)) !important;
+}
+
+.patch-edit-modal > input {
+	width: 100%;
+	height: 48px;
+}
+
+.fixture-placement-modal > header {
+	gap: 0;
+}
+
+/* Full-screen patch dialogs size against their padded overlay, not 100vw/100vh.
+   This prevents the overlay itself from becoming horizontally scrollable. */
+.stacked-modal-layer:has(> .fixture-browser-modal),
+.stacked-modal-layer:has(> .fixture-placement-modal),
+.fixture-address-layer {
+	padding: 12px;
+	overflow: hidden;
+}
+
+.stacked-modal-layer > .fixture-browser-modal,
+.stacked-modal-layer > .fixture-placement-modal {
+	width: 100% !important;
+	height: 100%;
+	max-width: none !important;
+	max-height: none !important;
+	margin: 0;
+}
+
+/* from apps/light-desktop/src/styles/forms-and-chrome.css */
+.patch-type-cell,
+.patch-tree-cell {
+	width: 48px;
+	text-align: center;
+}
+
+.fixture-type-icon {
+	display: inline-grid;
+	width: 25px;
+	height: 25px;
+	place-items: center;
+	color: #9eabb4;
+}
+
+.fixture-type-icon img {
+	width: 23px;
+	height: 23px;
+	object-fit: contain;
+	filter: invert(72%) sepia(8%) saturate(435%) hue-rotate(161deg)
+		brightness(91%);
+}
+
+.patch-secondary,
+.patch-secondary .ui-button {
+	color: color-mix(in srgb, var(--muted) 82%, transparent);
+}
+
+.multipatch-row td {
+	height: 38px;
+	background: color-mix(in srgb, var(--panel2) 46%, transparent);
+}
+
+.multipatch-row:hover td {
+	background: color-mix(in srgb, var(--panel2) 72%, transparent);
+}
+
+.multipatch-branch {
+	display: block;
+	width: 28px;
+	height: 38px;
+	margin: -1px auto;
+}
+
+.multipatch-branch svg {
+	display: block;
+	width: 28px;
+	height: 42px;
+	fill: none;
+	stroke: #53616b;
+	stroke-width: 1.4;
+}
+
+.multipatch-name {
+	min-width: 145px;
+	padding-left: 18px !important;
+	color: #a9b3ba;
+}
+
+.multipatch-name > span {
+	display: block;
+	font-size: 10px;
+	font-style: italic;
+}
+
+.multipatch-name > strong {
+	display: block;
+	color: var(--text);
+	font-size: 12px;
+}

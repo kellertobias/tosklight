@@ -1,0 +1,1 @@
+{"$schema":"../gen/schemas/desktop-schema.json","identifier":"default","description":"Viz rig planning window","windows":["main"],"permissions":["core:default","dialog:default"]}

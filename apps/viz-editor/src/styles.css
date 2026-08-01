@@ -1,0 +1,257 @@
+/*
+ * The planning window's own chrome.
+ *
+ * The patch sheet brings its own layout from @tosklight/patch; everything here is what surrounds
+ * it. There is deliberately no desk furniture: no encoder frame, no command line, no playback
+ * bars, no built-in renderer. The rig is the whole window, and the visualizer is the picture.
+ */
+:root {
+	color-scheme: dark;
+}
+
+body {
+	margin: 0;
+	background: var(--surface-base, #07090c);
+	color: var(--text-primary, #e8edf2);
+	font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/*
+ * The sheet is the window. Everything above it — the file bar, a status line, an error — takes
+ * the height it needs and no more; the sheet takes the rest.
+ *
+ * This is a column rather than a two-row grid because the things above the sheet come and go: a
+ * fixed row count put the sheet in an implicit row the moment an error appeared, which handed the
+ * flexible row to the error and squeezed the sheet down to its own minimum. The desk hosts the
+ * same sheet the same way.
+ */
+.viz-editor {
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+	overflow: hidden;
+}
+
+.viz-editor > .show-patch-layout,
+.viz-editor > .viz-editor-empty {
+	flex: 1;
+	/* Both axes: a grid child will otherwise refuse to be narrower than its content, and the
+	   patch table is wider than any window. */
+	min-height: 0;
+	min-width: 0;
+}
+
+/*
+ * The layer list is a fixed column and the sheet takes everything else.
+ *
+ * The sheet's own layout gives the layers a share of the width (`minmax(190px, 25%)`), which suits
+ * the desk's fixed-size window. This window is resized freely, and a percentage column spends the
+ * extra width on a list of short names while the patch table — the reason the window is open — stays
+ * scrolled. The list needs the same room whatever the window is doing, so it gets a fixed one.
+ *
+ * The padding is the window's own gutter: the layers stand off the left edge and the table off the
+ * right, on the same 16px as the file bar above them.
+ */
+.viz-editor > .show-patch-layout {
+	grid-template-columns: 220px minmax(0, 1fr);
+	padding-inline: 16px;
+}
+
+/* A fixed column no longer widens to fit a long layer name, so the name gives way instead of
+   pushing the fixture count out of the button. */
+.viz-editor > .show-patch-layout > .patch-layers button > b {
+	/* A flex item refuses to be narrower than its text without this. */
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.viz-editor > .show-patch-layout > .patch-layers button > span {
+	flex: none;
+}
+
+.viz-editor > .viz-editor-file-bar,
+.viz-editor > .viz-editor-error {
+	flex: none;
+}
+
+.viz-editor-file-bar {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	grid-template-areas: "title path actions" "status status actions";
+	align-items: center;
+	gap: 4px 16px;
+	padding: 10px 16px;
+	border-bottom: 1px solid var(--border-subtle, #1d2530);
+}
+
+.viz-editor-file-bar h1 {
+	grid-area: title;
+	margin: 0;
+	font-size: 15px;
+	font-weight: 600;
+}
+
+.viz-editor-path {
+	grid-area: path;
+	margin: 0;
+	font-size: 12px;
+	opacity: 0.6;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.viz-editor-file-actions {
+	grid-area: actions;
+	display: flex;
+	gap: 8px;
+}
+
+/* Desk-surface touch targets: this is used standing at a rig, not only at a desk. */
+.viz-editor-file-actions .ui-button {
+	min-height: 40px;
+	min-width: 88px;
+}
+
+.viz-editor-status {
+	grid-area: status;
+	font-size: 12px;
+	opacity: 0.75;
+	min-height: 16px;
+}
+
+.viz-editor-error {
+	/* However long the message, it is a line above the sheet rather than a panel that displaces
+	   it: an operator needs to read the error and carry on patching. */
+	max-height: 20vh;
+	overflow-y: auto;
+	padding: 8px 16px;
+	background: var(--status-error-surface, #3a1216);
+	color: var(--status-error-text, #ffd7d7);
+	font-size: 13px;
+}
+
+/*
+ * The MVR import decision panel.
+ *
+ * It sits over the sheet because nothing has been written yet and the operator's answer is what
+ * decides what will be: a rig half-imported behind a panel would be worse than either state.
+ */
+.viz-editor-mvr {
+	position: fixed;
+	inset: 10% 50% auto 50%;
+	transform: translateX(-50%);
+	width: min(720px, 92vw);
+	max-height: 76vh;
+	overflow-y: auto;
+	display: grid;
+	gap: 12px;
+	padding: 20px;
+	background: var(--surface-raised, #10151c);
+	border: 1px solid var(--border-strong, #2b3644);
+	border-radius: 10px;
+	box-shadow: 0 24px 64px rgb(0 0 0 / 55%);
+	z-index: 20;
+}
+
+.viz-editor-mvr h2 {
+	margin: 0;
+	font-size: 16px;
+}
+
+.viz-editor-mvr-summary,
+.viz-editor-mvr-clean {
+	margin: 0;
+	font-size: 13px;
+	opacity: 0.8;
+}
+
+.viz-editor-mvr-missing,
+.viz-editor-mvr-fixtures {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: grid;
+	gap: 8px;
+	font-size: 13px;
+}
+
+.viz-editor-mvr-missing {
+	opacity: 0.7;
+}
+
+.viz-editor-mvr-fixture {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	align-items: center;
+	gap: 8px 16px;
+	padding: 8px 10px;
+	background: var(--surface-base, #07090c);
+	border-radius: 6px;
+}
+
+.viz-editor-mvr-fixture small {
+	display: block;
+	opacity: 0.65;
+}
+
+/* The label is for the screen reader and the operator's own orientation; the row already says
+   which fixture this is. */
+.viz-editor-mvr-label {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+}
+
+.viz-editor-mvr-address {
+	grid-column: 1 / -1;
+	display: flex;
+	gap: 12px;
+	font-size: 12px;
+}
+
+/* Desk-surface touch targets, as everywhere else in this window. */
+.viz-editor-mvr select,
+.viz-editor-mvr input {
+	min-height: 36px;
+	background: var(--surface-base, #07090c);
+	color: inherit;
+	border: 1px solid var(--border-subtle, #1d2530);
+	border-radius: 4px;
+	padding: 4px 8px;
+}
+
+.viz-editor-mvr-actions {
+	display: flex;
+	gap: 8px;
+	justify-content: flex-end;
+}
+
+.viz-editor-mvr-actions .ui-button {
+	min-height: 40px;
+	min-width: 88px;
+}
+
+.viz-editor-empty {
+	display: grid;
+	align-content: center;
+	justify-items: center;
+	gap: 8px;
+	text-align: center;
+	padding: 48px;
+}
+
+.viz-editor-empty h1 {
+	margin: 0;
+	font-size: 20px;
+}
+
+.viz-editor-empty p {
+	margin: 0;
+	max-width: 46ch;
+	opacity: 0.7;
+}

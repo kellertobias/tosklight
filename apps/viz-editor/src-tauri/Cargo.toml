@@ -1,0 +1,38 @@
+[package]
+name = "viz-editor"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+light-application = { path = "../../../crates/light" }
+light-discovery.workspace = true
+light-core = { path = "../../../crates/shared/core" }
+light-fixture = { path = "../../../crates/shared/fixture" }
+light-mvr = { path = "../../../crates/shared/mvr" }
+parking_lot.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+viz-document = { path = "../../../crates/viz/document" }
+viz-planning = { path = "../../../crates/viz/planning" }
+tokio.workspace = true
+
+[features]
+# Tauri decides between a development build and a real one by this feature: without it the app
+# embeds no frontend and opens the dev-server URL instead, which is a white window on any machine
+# that is not running `npm run dev`. The Tauri CLI turns it on for `tauri build`, and
+# `tools/build.sh` turns it on for the plain cargo build it uses — so it is deliberately not a
+# default, because a build that embeds the frontend needs the frontend to have been built, and
+# `cargo clippy --workspace` on a fresh checkout has no reason to have done that.
+custom-protocol = ["tauri/custom-protocol"]
+
+[lints]
+workspace = true
