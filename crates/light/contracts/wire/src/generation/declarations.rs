@@ -39,14 +39,15 @@ use crate::v2::speed_group::*;
 use crate::v2::stage_layout::*;
 use crate::v2::virtual_playback_zones::*;
 use crate::v2::visualization::*;
+use crate::v2::visualizer_view::*;
 
 pub(super) fn all(config: &Config) -> Vec<String> {
     let mut declarations = attribute_configuration(config);
     declarations.extend(command_line(config));
     declarations.extend(control_desk_configuration(config));
     declarations.extend(desk_management(config));
-    declarations.extend(dynamics(config));
     declarations.extend(discovery(config));
+    declarations.extend(dynamics(config));
     declarations.extend(event_subscription(config));
     declarations.extend(files(config));
     declarations.extend(programming(config));
@@ -66,6 +67,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(screen_configuration(config));
     declarations.extend(virtual_playback_zones(config));
     declarations.extend(visualization(config));
+    declarations.extend(visualizer_view(config));
     declarations.extend(selective_import(config));
     declarations.extend(show_library(config));
     declarations.extend(interaction(config));
@@ -362,9 +364,9 @@ fn show_library(config: &Config) -> Vec<String> {
 fn runtime(config: &Config) -> Vec<String> {
     vec![
         RuntimeSessionCreateRequest::decl(config),
+        RuntimeSessionRole::decl(config),
         RuntimeDeskUser::decl(config),
         RuntimePlaybackSurfaceRow::decl(config),
-        RuntimeSessionRole::decl(config),
         RuntimePlaybackSurfaceLayout::decl(config),
         RuntimeControlDesk::decl(config),
         RuntimeSessionResponse::decl(config),
@@ -783,9 +785,6 @@ fn patch(config: &Config) -> Vec<String> {
     ]
 }
 
-fn stage_layout(config: &Config) -> Vec<String> {
-    vec![
-        StagePositionAxis::decl(config),
 fn discovery(config: &Config) -> Vec<String> {
     vec![
         DiscoveredRole::decl(config),
@@ -794,6 +793,22 @@ fn discovery(config: &Config) -> Vec<String> {
     ]
 }
 
+fn visualizer_view(config: &Config) -> Vec<String> {
+    vec![
+        VisualizerViewMode::decl(config),
+        VisualizerRenderQuality::decl(config),
+        VisualizerCamera::decl(config),
+        VisualizerViewProjection::decl(config),
+        VisualizerViewSnapshot::decl(config),
+        VisualizerViewPatch::decl(config),
+        VisualizerViewUpdateRequest::decl(config),
+        VisualizerViewUpdateOutcome::decl(config),
+    ]
+}
+
+fn stage_layout(config: &Config) -> Vec<String> {
+    vec![
+        StagePositionAxis::decl(config),
         StagePosition2d::decl(config),
         StageProjection2d::decl(config),
         StageLayoutAction::decl(config),

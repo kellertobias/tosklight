@@ -39,3 +39,4 @@ pub mod speed_group;
 pub mod stage_layout;
 pub mod virtual_playback_zones;
 pub mod visualization;
+pub mod visualizer_view;

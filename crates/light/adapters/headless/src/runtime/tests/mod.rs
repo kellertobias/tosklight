@@ -84,6 +84,8 @@ mod speed_group_v2_tests;
 mod stage_layout_route_tests;
 #[path = "virtual_playback_zones_route_tests.rs"]
 mod virtual_playback_zones_route_tests;
+#[path = "visualizer_view_route_tests.rs"]
+mod visualizer_view_route_tests;
 
 include!("preload_tests.rs");
 include!("command_input_tests.rs");

@@ -821,6 +821,58 @@ export type SelectiveImportProfileConflictResolution = "keep_destination" | "dup
 export type SelectiveImportProfileConflictChoice = { key: SelectiveImportProfileKey, resolution: SelectiveImportProfileConflictResolution, };
 export type SelectiveImportSelection = { mode: SelectiveImportLoadMode, selected_objects: Array<SelectiveImportObjectKey>, conflict_resolutions: Array<SelectiveImportConflictChoice>, profile_conflict_resolutions: Array<SelectiveImportProfileConflictChoice>, };
 export type SelectiveImportApplyRequest = { request_id: string, expected_source_revision: number, expected_target_revision: number, mode: SelectiveImportLoadMode, selected_objects: Array<SelectiveImportObjectKey>, conflict_resolutions: Array<SelectiveImportConflictChoice>, profile_conflict_resolutions: Array<SelectiveImportProfileConflictChoice>, };
+export type VisualizerViewMode = "top_down" | "left_to_right" | "right_to_left" | "front_to_back" | "back_to_front" | "lines_3d" | "simple_3d" | "full_3d";
+export type VisualizerRenderQuality = "draft" | "standard" | "high" | "ultra";
+export type VisualizerCamera = { position: [number, number, number], target: [number, number, number], up: [number, number, number],
+/**
+ * Vertical field of view in degrees, for the perspective modes.
+ */
+fov_degrees: number,
+/**
+ * Half-height in metres, for the orthographic modes.
+ */
+orthographic_size: number, };
+export type VisualizerViewProjection = {
+/**
+ * Which renderer this addresses. `main` is what a renderer follows unless it was started
+ * for another target, so one desk can drive one renderer without moving every camera in
+ * the building.
+ */
+target: string, mode: VisualizerViewMode, quality: VisualizerRenderQuality,
+/**
+ * Absent means the renderer frames the named view from the scene itself, which is what an
+ * operator selecting **Top Down** almost always wants.
+ */
+camera?: VisualizerCamera | null,
+/**
+ * Operator-safe exposure multiplier on top of the renderer's automatic adaptation.
+ */
+exposure: number,
+/**
+ * How brightly everything that is not a light source is lit, `0..=1`.
+ */
+ambient: number,
+/**
+ * Increments on every accepted change, so a renderer can tell a genuine instruction from a
+ * re-read of the same state.
+ */
+revision: number, };
+export type VisualizerViewSnapshot = { views: Array<VisualizerViewProjection>, };
+export type VisualizerViewPatch = { mode?: VisualizerViewMode | null, quality?: VisualizerRenderQuality | null, camera?: VisualizerCamera | null, exposure?: number | null, ambient?: number | null, };
+export type VisualizerViewUpdateRequest = {
+/**
+ * Client-generated idempotency identity, scoped to the authenticated desk session.
+ */
+request_id: string, patch: VisualizerViewPatch, };
+export type VisualizerViewUpdateOutcome = { request_id: string, view: VisualizerViewProjection,
+/**
+ * `true` when idempotency replay returned the already committed authoritative result.
+ */
+replayed: boolean,
+/**
+ * `false` when the patch asked for what was already stored.
+ */
+changed: boolean, };
 export type SelectiveImportCatalogSection = "fixture_patch" | "groups" | "presets_mixed" | "presets_intensity" | "presets_color" | "presets_position" | "presets_beam" | "dynamics" | "cuelists" | "playbacks" | "schedules" | "stage" | "macros" | "other";
 export type SelectiveImportCatalogObject = { key: SelectiveImportObjectKey, object_revision: number, display_name: string, section: SelectiveImportCatalogSection, patch_layer_id: string | null, };
 export type SelectiveImportCatalog = { source_show_id: string, source_show_name: string, source_revision: number, objects: Array<SelectiveImportCatalogObject>, };

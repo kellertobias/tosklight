@@ -216,7 +216,10 @@ fn typed_capability_event(
     };
     let signal = NotificationRevision { revision };
     Some(match kind {
-        "server_configuration_changed" => EventDraft::configuration_changed(signal),
+        // Desk configuration, both of them: the second is what a connected visualizer follows.
+        "server_configuration_changed" | "visualizer_view_changed" => {
+            EventDraft::configuration_changed(signal)
+        }
         "screen_configuration_changed" => EventDraft::screens_changed(ScreenNotification {
             revision,
             kind: ScreenNotificationKind::Configuration,

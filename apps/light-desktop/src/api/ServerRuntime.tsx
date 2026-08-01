@@ -37,6 +37,8 @@ import type { SessionRole } from "../features/session/ownership";
 import { useSessionHandoff } from "../features/session/SessionHandoffContext";
 import { ShellStatusActionsProvider } from "../features/shellStatus/ShellStatusActionsProvider";
 import { ShowLifecycleProvider } from "../features/showLifecycle/ShowLifecycleContext";
+import { VisualizerViewProvider } from "../features/visualizerView/VisualizerViewContext";
+import type { VisualizerViewPatch } from "./client/visualizerView";
 import { ShowObjectsViewProvider } from "../features/showObjects/ShowObjectsView";
 import { SoundToLightProvider } from "../features/soundToLight/SoundToLightContext";
 import { VirtualPlaybackZonesProvider } from "../features/virtualPlaybackZones/VirtualPlaybackZonesContext";
@@ -106,50 +108,7 @@ function useProviderDataSources(
 		selectControlDesk: value.selectControlDesk,
 		removeClient: value.removeClient,
 	};
-	const showLifecycle = useMemo(
-		() => ({
-			shows: value.shows,
-			openShow: value.openShow,
-			openCleanDefaultShow: value.openCleanDefaultShow,
-			initializeEmptyShow: value.initializeEmptyShow,
-			saveShowAs: value.saveShowAs,
-			overwriteShow: value.overwriteShow,
-			uploadShow: value.uploadShow,
-			downloadShow: value.downloadShow,
-			listShowRevisions: value.listShowRevisions,
-			saveShowRevision: value.saveShowRevision,
-			openShowRevision: value.openShowRevision,
-			previewMvr: value.previewMvr,
-			applyMvr: value.applyMvr,
-			previewMvrExport: value.previewMvrExport,
-			downloadMvr: value.downloadMvr,
-			createUser: value.createUser,
-			changeUser: value.changeUser,
-			switchUser: value.switchUser,
-			shutdownServer: value.shutdownServer,
-		}),
-		[
-			value.shows,
-			value.openShow,
-			value.openCleanDefaultShow,
-			value.initializeEmptyShow,
-			value.saveShowAs,
-			value.overwriteShow,
-			value.uploadShow,
-			value.downloadShow,
-			value.listShowRevisions,
-			value.saveShowRevision,
-			value.openShowRevision,
-			value.previewMvr,
-			value.applyMvr,
-			value.previewMvrExport,
-			value.downloadMvr,
-			value.createUser,
-			value.changeUser,
-			value.switchUser,
-			value.shutdownServer,
-		],
-	);
+	const showLifecycle = useShowLifecycleSource(value);
 	const deskConnection = useMemo(
 		() => ({
 			setServerUrl: value.setServerUrl,
@@ -220,6 +179,60 @@ function useProviderDataSources(
 		fixtureLibraryState,
 		mediaServersState,
 	};
+}
+
+/** The show library and its lifecycle, extracted from the data sources for size. */
+function useShowLifecycleSource(
+	value: ReturnType<typeof createServerCapabilities>,
+) {
+	return useMemo(
+		() => ({
+			shows: value.shows,
+			openShow: value.openShow,
+			openCleanDefaultShow: value.openCleanDefaultShow,
+			discoveredVisualizers: value.discoveredVisualizers,
+			loadFromVisualizer: value.loadFromVisualizer,
+			initializeEmptyShow: value.initializeEmptyShow,
+			saveShowAs: value.saveShowAs,
+			overwriteShow: value.overwriteShow,
+			uploadShow: value.uploadShow,
+			downloadShow: value.downloadShow,
+			listShowRevisions: value.listShowRevisions,
+			saveShowRevision: value.saveShowRevision,
+			openShowRevision: value.openShowRevision,
+			previewMvr: value.previewMvr,
+			applyMvr: value.applyMvr,
+			previewMvrExport: value.previewMvrExport,
+			downloadMvr: value.downloadMvr,
+			createUser: value.createUser,
+			changeUser: value.changeUser,
+			switchUser: value.switchUser,
+			shutdownServer: value.shutdownServer,
+		}),
+		[
+			value.shows,
+			value.openShow,
+			value.openCleanDefaultShow,
+			value.discoveredVisualizers,
+			value.loadFromVisualizer,
+			value.initializeEmptyShow,
+			value.saveShowAs,
+			value.overwriteShow,
+			value.uploadShow,
+			value.downloadShow,
+			value.listShowRevisions,
+			value.saveShowRevision,
+			value.openShowRevision,
+			value.previewMvr,
+			value.applyMvr,
+			value.previewMvrExport,
+			value.downloadMvr,
+			value.createUser,
+			value.changeUser,
+			value.switchUser,
+			value.shutdownServer,
+		],
+	);
 }
 
 /** Action-shaped provider sources, extracted from ServerRuntime for size. */
@@ -309,7 +322,20 @@ function useDynamicsActionSource(state: ReturnType<typeof useServerState>) {
 	return useMemo(
 		() => ({
 			dynamics: state.api.dynamics,
+			events: state.api.runtime,
 			showObjects: state.api.showObjects,
+		}),
+		[state.api],
+	);
+}
+
+/// What the desk sends its connected visualizers, bound to the one desk connection.
+function useVisualizerViewActionSource(state: ReturnType<typeof useServerState>) {
+	return useMemo(
+		() => ({
+			views: () => state.api.visualizerView.views(),
+			update: (target: string, patch: VisualizerViewPatch) =>
+				state.api.visualizerView.update(target, patch),
 		}),
 		[state.api],
 	);
@@ -321,11 +347,13 @@ function ServerActionProviderStack({
 	data,
 	actions,
 	dynamicsActions,
+	visualizerViewActions,
 }: PropsWithChildren<{
 	state: ReturnType<typeof useServerState>;
 	data: ReturnType<typeof useProviderDataSources>;
 	actions: ReturnType<typeof useProviderActionSources>;
 	dynamicsActions: ReturnType<typeof useDynamicsActionSource>;
+	visualizerViewActions: ReturnType<typeof useVisualizerViewActionSource>;
 }>) {
 	return (
 		<HighlightStateProvider store={state.highlightStore}>
@@ -334,6 +362,7 @@ function ServerActionProviderStack({
 					<DynamicsActionsProvider actions={dynamicsActions}>
 						<ShellStatusActionsProvider actions={actions.shellStatusActions}>
 							<DmxDiagnosticsProvider diagnostics={actions.dmxDiagnostics}>
+								<VisualizerViewProvider actions={visualizerViewActions}>
 								<ShowLifecycleProvider lifecycle={data.showLifecycle}>
 									<DeskConnectionProvider connection={data.deskConnection}>
 										<FixtureLibraryProvider library={data.fixtureLibraryState}>
@@ -347,6 +376,7 @@ function ServerActionProviderStack({
 										</FixtureLibraryProvider>
 									</DeskConnectionProvider>
 								</ShowLifecycleProvider>
+								</VisualizerViewProvider>
 							</DmxDiagnosticsProvider>
 						</ShellStatusActionsProvider>
 					</DynamicsActionsProvider>
@@ -496,6 +526,7 @@ export function ServerRuntime({
 		shellStatusActions,
 	} = useProviderActionSources(value);
 	const dynamicsActions = useDynamicsActionSource(state);
+	const visualizerViewActions = useVisualizerViewActionSource(state);
 	const refreshAttributeRegistry = useCallback(async () => {
 		const next = await state.api.runtime.bootstrap();
 		state.setBootstrap((current) =>
@@ -543,6 +574,7 @@ export function ServerRuntime({
 							shellStatusActions,
 						}}
 						dynamicsActions={dynamicsActions}
+						visualizerViewActions={visualizerViewActions}
 					>
 						<ServerShowProviderStack
 							state={state}

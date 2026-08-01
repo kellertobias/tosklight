@@ -11,6 +11,11 @@ pub(super) async fn update_configuration(
     let _session = authenticate(&state, &headers)?;
     configuration.validate()?;
     let previous = state.installation.configuration();
+    // This is the desk-settings surface, and it does not own the visualizer view: a client that
+    // saves settings from a form it wrote before the view existed would otherwise send the whole
+    // object back without it and take every renderer's camera with it. The view is changed
+    // through its own intent route or not at all.
+    configuration.visualizer_views = previous.visualizer_views.clone();
     if configuration.highlight_look.compatibility
         == light_fixture::HighlightLookCompatibility::Semantic
     {

@@ -211,6 +211,7 @@ mod update_api;
 pub(crate) use capabilities::active_show::repository::ActiveShowRepository;
 mod update_plans;
 mod virtual_playback_zones_http;
+mod visualizer_view_http;
 mod ws_dispatch;
 mod ws_output_handlers;
 mod ws_playback_handlers;

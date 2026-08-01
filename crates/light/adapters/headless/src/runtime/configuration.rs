@@ -15,6 +15,114 @@ pub(super) fn default_speed_group_sources() -> [SpeedGroupSource; 5] {
     std::array::from_fn(|_| SpeedGroupSource::Manual)
 }
 
+/// Which way a connected visualizer is pointing, and how hard it is working.
+///
+/// Desk-level presentation state, like the pool colours beside it: it describes a renderer this
+/// installation drives, not anything the show file should carry to another building. A target
+/// nobody has configured is simply the default view, so nothing needs migrating.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+pub(super) struct VisualizerView {
+    pub(super) mode: VisualizerViewMode,
+    pub(super) quality: VisualizerRenderQuality,
+    pub(super) camera: Option<VisualizerCamera>,
+    pub(super) exposure: f32,
+    pub(super) ambient: f32,
+    pub(super) revision: u64,
+}
+
+impl Default for VisualizerView {
+    fn default() -> Self {
+        Self {
+            mode: VisualizerViewMode::Full3d,
+            quality: VisualizerRenderQuality::High,
+            camera: None,
+            exposure: 1.0,
+            ambient: 0.06,
+            revision: 0,
+        }
+    }
+}
+
+impl VisualizerView {
+    pub(super) fn validate(&self) -> Result<(), ApiError> {
+        if !self.exposure.is_finite() || !(0.05..=4.0).contains(&self.exposure) {
+            return Err(ApiError::bad_request("exposure must be within 0.05-4.0"));
+        }
+        if !self.ambient.is_finite() || !(0.0..=1.0).contains(&self.ambient) {
+            return Err(ApiError::bad_request("ambient must be within 0-1"));
+        }
+        if let Some(camera) = &self.camera {
+            camera.validate()?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum VisualizerViewMode {
+    TopDown,
+    LeftToRight,
+    RightToLeft,
+    FrontToBack,
+    BackToFront,
+    #[serde(rename = "lines_3d")]
+    Lines3d,
+    #[serde(rename = "simple_3d")]
+    Simple3d,
+    #[default]
+    #[serde(rename = "full_3d")]
+    Full3d,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum VisualizerRenderQuality {
+    Draft,
+    Standard,
+    #[default]
+    High,
+    Ultra,
+}
+
+/// Position, aim and up in stage metres, with no Euler order to disagree about.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub(super) struct VisualizerCamera {
+    pub(super) position: [f32; 3],
+    pub(super) target: [f32; 3],
+    pub(super) up: [f32; 3],
+    pub(super) fov_degrees: f32,
+    pub(super) orthographic_size: f32,
+}
+
+impl VisualizerCamera {
+    fn validate(&self) -> Result<(), ApiError> {
+        let finite = |values: &[f32; 3]| values.iter().all(|value| value.is_finite());
+        if !finite(&self.position) || !finite(&self.target) || !finite(&self.up) {
+            return Err(ApiError::bad_request(
+                "camera position, target and up must be finite",
+            ));
+        }
+        if self.up == [0.0; 3] {
+            return Err(ApiError::bad_request("camera up must not be zero"));
+        }
+        if !self.fov_degrees.is_finite() || !(1.0..=170.0).contains(&self.fov_degrees) {
+            return Err(ApiError::bad_request(
+                "camera fov_degrees must be within 1-170",
+            ));
+        }
+        if !self.orthographic_size.is_finite()
+            || !(0.01..=10_000.0).contains(&self.orthographic_size)
+        {
+            return Err(ApiError::bad_request(
+                "camera orthographic_size must be within 0.01-10000",
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum PoolColorMode {
@@ -170,6 +278,10 @@ pub(super) struct DeskConfiguration {
     pub(super) update_settings_by_desk: HashMap<Uuid, update::UpdateSettings>,
     pub(super) file_manager_system_picker_fallback: bool,
     pub(super) file_manager_roots: Vec<file_manager::ConfiguredRoot>,
+    /// What each connected visualizer is being told to look at, by target name. An installation
+    /// that has never driven one carries nothing here.
+    #[serde(default)]
+    pub(super) visualizer_views: BTreeMap<String, VisualizerView>,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(super) struct OscTimecodeConfig {
@@ -231,6 +343,7 @@ impl Default for DeskConfiguration {
             update_settings_by_desk: HashMap::new(),
             file_manager_system_picker_fallback: false,
             file_manager_roots: Vec::new(),
+            visualizer_views: BTreeMap::new(),
         }
     }
 }
@@ -297,6 +410,9 @@ impl DeskConfiguration {
             }
         }
         self.pool_presentation.validate()?;
+        for view in self.visualizer_views.values() {
+            view.validate()?;
+        }
         Ok(())
     }
 }

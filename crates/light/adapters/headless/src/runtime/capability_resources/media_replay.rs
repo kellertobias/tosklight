@@ -322,6 +322,24 @@ impl ReplayResource {
         self.stage_layout.lock().insert(key, action, outcome);
     }
 
+    pub(in crate::runtime) async fn lookup_visualizer_view(
+        &self,
+        key: &visualizer_view_http::ReplayKey,
+        action: &visualizer_view_http::ReplayAction,
+    ) -> Result<Option<light_wire::v2::visualizer_view::VisualizerViewUpdateOutcome>, ApiError>
+    {
+        self.visualizer_view.lock().get(key, action)
+    }
+
+    pub(in crate::runtime) async fn insert_visualizer_view(
+        &self,
+        key: visualizer_view_http::ReplayKey,
+        action: visualizer_view_http::ReplayAction,
+        outcome: light_wire::v2::visualizer_view::VisualizerViewUpdateOutcome,
+    ) {
+        self.visualizer_view.lock().insert(key, action, outcome);
+    }
+
     pub(in crate::runtime) async fn lookup_virtual_playback_zones(
         &self,
         key: &virtual_playback_zones_http::ReplayKey,

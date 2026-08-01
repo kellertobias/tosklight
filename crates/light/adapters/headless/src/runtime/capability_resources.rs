@@ -366,6 +366,7 @@ pub(in crate::runtime) struct ReplayResource {
     stage_layout: Arc<Mutex<stage_layout_http::StageLayoutReplayCache>>,
     virtual_playback_zones:
         Arc<Mutex<virtual_playback_zones_http::VirtualPlaybackZonesReplayCache>>,
+    visualizer_view: Arc<Mutex<visualizer_view_http::VisualizerViewReplayCache>>,
 }
 
 impl Default for ReplayResource {
@@ -382,6 +383,7 @@ impl Default for ReplayResource {
             desk_management: Arc::default(),
             stage_layout: Arc::default(),
             virtual_playback_zones: Arc::default(),
+            visualizer_view: Arc::default(),
         }
     }
 }

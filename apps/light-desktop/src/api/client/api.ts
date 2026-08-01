@@ -14,6 +14,7 @@ import { SelectiveImportApiClient } from "./selectiveImport";
 import { ShowObjectsApiClient } from "./showObjects";
 import { ShowApiClient } from "./shows";
 import { StageLayoutApiClient } from "./stageLayout";
+import { VisualizerViewApiClient } from "./visualizerView";
 
 /**
  * Capability registry for one desk connection.
@@ -42,6 +43,7 @@ export function createLightApi(baseUrl?: string) {
 		showObjects: new ShowObjectsApiClient(transport),
 		shows: new ShowApiClient(transport),
 		stageLayout: new StageLayoutApiClient(transport),
+		visualizerView: new VisualizerViewApiClient(transport),
 	};
 }
 

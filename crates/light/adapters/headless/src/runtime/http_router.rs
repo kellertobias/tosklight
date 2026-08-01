@@ -20,6 +20,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(screen_configuration_v2::router())
         .merge(schedules_v2::router())
         .merge(virtual_playback_zones_http::router())
+        .merge(visualizer_view_http::router())
         .merge(discovery_http::router())
         .merge(programming_update_http::router())
         .merge(show_patch_http::router())
@@ -124,11 +125,11 @@ fn with_transport_layers(router: Router<AppState>, state: AppState) -> Router {
             state.clone(),
             desk_lock_boundary,
         ))
-        .layer(middleware::from_fn_with_state(state.clone(), desk_boundary))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             read_only_session_boundary,
         ))
+        .layer(middleware::from_fn_with_state(state.clone(), desk_boundary))
         .with_state(state)
         .layer(DefaultBodyLimit::max(256 * 1024 * 1024))
         .layer(cors_layer())
