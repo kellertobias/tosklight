@@ -60,11 +60,20 @@ benchmark and any repairs it proves necessary before
   preparation was removed from this literal profile, shortening setup without weakening its
   required surface. Static/type/format checks pass; the updated packaged workload has not yet been
   rerun, so these gates remain unproven.
+- The packaged Fixture Sheet now drives one visible-row Programmer change and a five-command burst,
+  records newest-value convergence against the 500 ms limit, rejects any loading overlay, and
+  records the rendered virtual-row count so a 970-row DOM regression fails the gate. The two
+  production output routes now both source the reserved Playback fixture's actual logical universe.
+  The UDP receivers decode ArtDMX and sACN slot payloads and correlate changed payloads for Go,
+  Flash press/release, and master with the same OSC request IDs used by the authenticated server
+  two-tick timing records. Static/type/format checks pass; no packaged rerun has yet proven these
+  new measurements.
 
 Plan 31 therefore remains on the repair path. Do not interpret the sibling-window failures as a
-product acceptance failure: this plan requires one 3D Stage. The next slice must eliminate the
-remaining engine-evaluation outlier while completing the still-missing correlated Playback UI/OSC matrix,
-representative Cuelist/fade workload, and Fixture Sheet convergence evidence.
+product acceptance failure: this plan requires one 3D Stage. The next slice must run and repair the
+completed measurement matrix, then eliminate any retained engine-evaluation outlier. Until that
+run passes, the correlated Playback UI/OSC matrix, representative Cuelist/fade workload, and
+Fixture Sheet convergence remain implemented but unproven.
 
 This plan turns the root
 [`README.md`](../../../../README.md#supported-usage-profile) contract into measured packaged

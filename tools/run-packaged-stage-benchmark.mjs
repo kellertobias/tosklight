@@ -131,6 +131,7 @@ try {
 			prepared.session,
 			prepared.showId,
 			networkCapture,
+			prepared.scene.playbackWorkload.logicalUniverse,
 		);
 		oscHardware = await startPackagedOscHardware(
 			prepared.session.desk.osc_alias,
@@ -148,6 +149,7 @@ try {
 					prepared.session,
 					prepared.showId,
 					oscHardware,
+					networkCapture,
 				)
 			: null;
 	if (profile === "improved-beam-spike") {
@@ -180,6 +182,7 @@ try {
 						prepared.session,
 						prepared.showId,
 						oscHardware,
+						networkCapture,
 					)
 				: null;
 		memoryPhase = "stage";
@@ -339,6 +342,9 @@ async function startSupportedScaleNetworkCapture() {
 			firstReceivedAt: null,
 			lastReceivedAt: null,
 			lastPacketPrefixHex: null,
+			lastDmxHex: null,
+			dmxChanges: 0,
+			lastDmxChangedAt: null,
 		};
 		socket.on("message", (packet) => {
 			const receivedAt = new Date().toISOString();
@@ -347,6 +353,14 @@ async function startSupportedScaleNetworkCapture() {
 			state.firstReceivedAt ??= receivedAt;
 			state.lastReceivedAt = receivedAt;
 			state.lastPacketPrefixHex = packet.subarray(0, 24).toString("hex");
+			const dmx = decodeNetworkDmxPayload(protocol, packet);
+			if (!dmx) return;
+			const dmxHex = dmx.toString("hex");
+			if (state.lastDmxHex !== null && state.lastDmxHex !== dmxHex) {
+				state.dmxChanges++;
+				state.lastDmxChangedAt = receivedAt;
+			}
+			state.lastDmxHex = dmxHex;
 		});
 		await new Promise((resolve, reject) => {
 			socket.once("error", reject);
@@ -374,6 +388,28 @@ async function startSupportedScaleNetworkCapture() {
 			await Promise.all([artnet.close(), sacn.close()]);
 		},
 	};
+}
+
+function decodeNetworkDmxPayload(protocol, packet) {
+	if (
+		protocol === "art_net" &&
+		packet.length >= 18 &&
+		packet.subarray(0, 8).equals(Buffer.from("Art-Net\0")) &&
+		packet.readUInt16LE(8) === 0x5000
+	) {
+		const length = packet.readUInt16BE(16);
+		return packet.length >= 18 + length
+			? packet.subarray(18, 18 + length)
+			: null;
+	}
+	if (protocol === "sacn" && packet.length >= 126) {
+		const propertyValueCount = packet.readUInt16BE(123);
+		const dmxLength = Math.max(0, propertyValueCount - 1);
+		return packet.length >= 126 + dmxLength
+			? packet.subarray(126, 126 + dmxLength)
+			: null;
+	}
+	return null;
 }
 
 async function startPackagedOscHardware(deskAlias) {
@@ -418,8 +454,15 @@ async function startPackagedOscHardware(deskAlias) {
 	throw new Error(`OSC hardware could not subscribe to desk ${deskAlias}`);
 }
 
-async function exerciseSupportedScaleOscPlayback(session, showId, hardware) {
+async function exerciseSupportedScaleOscPlayback(
+	session,
+	showId,
+	hardware,
+	networkCapture,
+) {
 	if (!hardware) throw new Error("supported-scale OSC hardware is unavailable");
+	if (!networkCapture)
+		throw new Error("supported-scale network capture is unavailable");
 	for (const action of [
 		{ type: "master", value: 1 },
 		{ type: "go_to", cue_number: 1 },
@@ -435,18 +478,21 @@ async function exerciseSupportedScaleOscPlayback(session, showId, hardware) {
 			},
 			{ session, showId, deskId: session.desk.id },
 		);
+	await new Promise((resolve) => setTimeout(resolve, 100));
 	const actions = [
 		["go", true, `osc-go-${crypto.randomUUID()}`],
 		["flash", true, `osc-flash-press-${crypto.randomUUID()}`],
 		["flash", false, `osc-flash-release-${crypto.randomUUID()}`],
 		["master", 0.5, `osc-master-${crypto.randomUUID()}`],
 	];
-	const feedback = [];
+	const measurements = [];
 	for (const [action, value, requestId] of actions) {
 		const baseline = hardware.messages.length;
+		const networkBaseline = networkCapture.snapshot();
+		const sentAt = Date.now();
 		await hardware.send(`/light/playback/1/${action}`, [value, requestId]);
-		feedback.push(
-			await waitForOscMessage(
+		const [feedback, network] = await Promise.all([
+			waitForOscMessage(
 				hardware.messages,
 				(message) =>
 					message.address === `/light/${hardware.deskAlias}/feedback/action` &&
@@ -454,14 +500,59 @@ async function exerciseSupportedScaleOscPlayback(session, showId, hardware) {
 				2_000,
 				baseline,
 			),
+			waitForNetworkDmxChange(networkCapture, networkBaseline, sentAt, 2_000),
+		]);
+		measurements.push({ action, value, requestId, sentAt, feedback, network });
+		await new Promise((resolve) =>
+			setTimeout(resolve, action === "go" ? 1_600 : 75),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 50));
 	}
 	return {
 		source: "osc",
-		actions: actions.map(([action]) => action),
-		feedback,
+		measurements,
 	};
+}
+
+async function waitForNetworkDmxChange(
+	capture,
+	baseline,
+	sentAt,
+	timeoutMillis,
+) {
+	const deadline = Date.now() + timeoutMillis;
+	while (Date.now() < deadline) {
+		const snapshot = capture.snapshot();
+		const protocols = {};
+		let complete = true;
+		for (const protocol of ["artnet", "sacn"]) {
+			const current = snapshot[protocol];
+			const changed = current.dmxChanges > baseline[protocol].dmxChanges;
+			complete &&= changed;
+			protocols[protocol] = {
+				changed,
+				dmxChanges: current.dmxChanges - baseline[protocol].dmxChanges,
+				changedAt: changed ? current.lastDmxChangedAt : null,
+				elapsedMillis: changed
+					? Date.parse(current.lastDmxChangedAt) - sentAt
+					: null,
+			};
+		}
+		if (complete) return protocols;
+		await new Promise((resolve) => setTimeout(resolve, 2));
+	}
+	const snapshot = capture.snapshot();
+	return Object.fromEntries(
+		["artnet", "sacn"].map((protocol) => [
+			protocol,
+			{
+				changed: snapshot[protocol].dmxChanges > baseline[protocol].dmxChanges,
+				dmxChanges:
+					snapshot[protocol].dmxChanges - baseline[protocol].dmxChanges,
+				changedAt: snapshot[protocol].lastDmxChangedAt,
+				elapsedMillis: null,
+			},
+		]),
+	);
 }
 
 function bindUdp(socket) {
@@ -562,13 +653,20 @@ function readOscString(packet, offset) {
 	};
 }
 
-async function configureSupportedScaleOutputRoutes(session, showId, capture) {
+async function configureSupportedScaleOutputRoutes(
+	session,
+	showId,
+	capture,
+	logicalUniverse,
+) {
+	if (!Number.isSafeInteger(logicalUniverse))
+		throw new Error("supported-scale Playback fixture has no logical universe");
 	for (const [routeId, route] of [
 		[
 			"supported-scale-artnet",
 			{
 				protocol: "art_net",
-				logical_universe: 101,
+				logical_universe: logicalUniverse,
 				destination_universe: 101,
 				delivery_mode: "unicast",
 				destination: `127.0.0.1:${capture.artnet.port}`,
@@ -580,7 +678,7 @@ async function configureSupportedScaleOutputRoutes(session, showId, capture) {
 			"supported-scale-sacn",
 			{
 				protocol: "sacn",
-				logical_universe: 102,
+				logical_universe: logicalUniverse,
 				destination_universe: 102,
 				delivery_mode: "unicast",
 				destination: `127.0.0.1:${capture.sacn.port}`,
@@ -761,6 +859,15 @@ async function prepareScene(profile) {
 	);
 	if (!playbackFixtureId || !playbackFixture?.fixture_number)
 		throw new Error("Supported-scale Playback workload has no static fixture");
+	const playbackPatch =
+		playbackFixture.split_patches?.find(
+			(patch) => patch.universe != null && patch.address != null,
+		) ?? playbackFixture;
+	if (
+		!Number.isSafeInteger(playbackPatch.universe) ||
+		!Number.isSafeInteger(playbackPatch.address)
+	)
+		throw new Error("Supported-scale Playback fixture has no DMX patch");
 	const playbackWorkload =
 		profile === "supported-scale"
 			? await installSupportedScalePlaybackWorkload(
@@ -768,6 +875,8 @@ async function prepareScene(profile) {
 					showId,
 					playbackFixtureId,
 					playbackFixture.fixture_number,
+					playbackPatch.universe,
+					playbackPatch.address,
 				)
 			: null;
 	const staticControlFixtureIds = playbackWorkload
@@ -1105,6 +1214,8 @@ async function installSupportedScalePlaybackWorkload(
 	showId,
 	fixtureId,
 	fixtureNumber,
+	logicalUniverse,
+	dmxAddress,
 ) {
 	await setProgrammerFixtureIntensity(session, showId, fixtureId, 0.2);
 	const first = await recordSupportedScaleCue(session, showId, 1, 1_000);
@@ -1166,6 +1277,8 @@ async function installSupportedScalePlaybackWorkload(
 		slot: 1,
 		fixtureId,
 		fixtureNumber,
+		logicalUniverse,
+		dmxAddress,
 		cueListId: second.projections.cue_list.id,
 		cueCount: 2,
 		cueFadeMillis: [1_000, 1_500],
@@ -1720,6 +1833,9 @@ function evaluate(
 	const playbackIndication = summarizePackagedPlaybackIndication(
 		complete.playbackActions,
 	);
+	const fixtureSheetConvergence = summarizeFixtureSheetConvergence(
+		complete.fixtureSheetActions,
+	);
 	const failures = [];
 	if (realTimeStageGateEnforced && !settled.length)
 		failures.push("no changing frame reached a packaged canvas");
@@ -1770,6 +1886,8 @@ function evaluate(
 				failures.push(`supported scale did not expose the bundled ${surface}`);
 		for (const failure of playbackIndication.failures)
 			failures.push(`Playback indication: ${failure}`);
+		for (const failure of fixtureSheetConvergence.failures)
+			failures.push(`Fixture Sheet: ${failure}`);
 	}
 	assertPackagedQualityObjects(qualityObjects, failures);
 	const outstandingContexts =
@@ -1837,6 +1955,13 @@ function evaluate(
 	);
 	for (const failure of programmerActionTiming.failures)
 		failures.push(`programmer action timing: ${failure}`);
+	const playbackOutputCorrelation = summarizePlaybackOutputCorrelation(
+		runtime,
+		programmerActionTiming,
+	);
+	if (profile === "supported-scale")
+		for (const failure of playbackOutputCorrelation.failures)
+			failures.push(`Playback output correlation: ${failure}`);
 	const maximumSharedProjectionCount = duration * 25;
 	if (
 		(runtime.after.visualization?.projections ?? 0) >
@@ -1970,6 +2095,7 @@ function evaluate(
 				? Math.max(...sourceCadenceGaps)
 				: null,
 			playbackIndication,
+			fixtureSheetConvergence,
 		},
 		resources: {
 			initialBrowserMemoryBytes: complete.initialBrowserMemoryBytes ?? null,
@@ -2002,6 +2128,7 @@ function evaluate(
 			outputComparison: output,
 			visualizationWindow: visualization,
 			programmerActionTiming,
+			playbackOutputCorrelation,
 		},
 		capabilities: complete.capabilities ?? null,
 	};
@@ -2025,6 +2152,41 @@ function summarizePackagedPlaybackIndication(samples) {
 		maximumMillis: Math.max(
 			0,
 			...actions.map((sample) => sample.indicationMillis ?? 0),
+		),
+		measurements: actions,
+		passed: failures.length === 0,
+		failures,
+	};
+}
+
+function summarizeFixtureSheetConvergence(samples) {
+	const actions = Array.isArray(samples) ? samples : [];
+	const failures = [];
+	for (const action of ["single", "burst"]) {
+		const sample = actions.find((candidate) => candidate.action === action);
+		if (!sample) failures.push(`missing ${action} convergence sample`);
+		else if (!sample.changed)
+			failures.push(`${action} update did not reach a visible row`);
+		else if (sample.convergenceMillis > 500)
+			failures.push(
+				`${action} convergence took ${sample.convergenceMillis.toFixed(2)} ms`,
+			);
+	}
+	if (actions.some((sample) => sample.loadingOverlayVisible))
+		failures.push("a measured update displayed a loading overlay");
+	if (
+		actions.some((sample) => sample.visibleRows >= LARGE_STAGE_FIXTURE_RECORDS)
+	)
+		failures.push(
+			"the DOM retained every fixture instead of visible virtual rows",
+		);
+	if (actions.some((sample) => sample.visibleRows === 0))
+		failures.push("a measured update had no visible virtual rows");
+	return {
+		samples: actions.length,
+		maximumMillis: Math.max(
+			0,
+			...actions.map((sample) => sample.convergenceMillis ?? 0),
 		),
 		measurements: actions,
 		passed: failures.length === 0,
@@ -2104,6 +2266,63 @@ function summarizePackagedProgrammerActionTiming(runtime, profile = null) {
 		latestProgrammerActionId(before),
 		requirements,
 	);
+}
+
+function summarizePlaybackOutputCorrelation(runtime, programmerActionTiming) {
+	const exercises = [
+		["control", runtime?.controlPlaybackTimingExercise],
+		["stage", runtime?.stagePlaybackTimingExercise],
+	];
+	const measurements = exercises.flatMap(([phase, exercise]) =>
+		(Array.isArray(exercise?.measurements) ? exercise.measurements : []).map(
+			(measurement) => ({ ...measurement, phase }),
+		),
+	);
+	const actionTimingByRequestId = new Map(
+		(programmerActionTiming?.measurements ?? []).map((measurement) => [
+			measurement.request_id,
+			measurement,
+		]),
+	);
+	const failures = [];
+	for (const phase of ["control", "stage"])
+		for (const [action, value] of [
+			["go", true],
+			["flash", true],
+			["flash", false],
+			["master", 0.5],
+		]) {
+			const measurement = measurements.find(
+				(candidate) =>
+					candidate.phase === phase &&
+					candidate.action === action &&
+					candidate.value === value,
+			);
+			const label = `${phase} ${action}${action === "flash" ? (value ? " press" : " release") : ""}`;
+			if (!measurement) {
+				failures.push(`missing ${label} measurement`);
+				continue;
+			}
+			if (measurement.feedback?.arguments?.[0] !== measurement.requestId)
+				failures.push(`${label} feedback did not retain its request ID`);
+			for (const protocol of ["artnet", "sacn"])
+				if (measurement.network?.[protocol]?.changed !== true)
+					failures.push(`${label} produced no changed ${protocol} DMX payload`);
+			const timing = actionTimingByRequestId.get(measurement.requestId);
+			if (!timing)
+				failures.push(`${label} has no authenticated server timing record`);
+			else if (
+				timing.acknowledgement_within_budget !== true ||
+				timing.output_within_budget !== true
+			)
+				failures.push(`${label} exceeded its server output-tick budget`);
+		}
+	return {
+		samples: measurements.length,
+		measurements,
+		passed: failures.length === 0,
+		failures,
+	};
 }
 
 function summarizeVisualizationWindow(runtime) {

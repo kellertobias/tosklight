@@ -53,6 +53,7 @@ interface PackagedBenchmarkState {
 	};
 	activeUiSurfaces: readonly string[];
 	playbackActions: PackagedPlaybackActionSample[];
+	fixtureSheetActions: PackagedFixtureSheetSample[];
 }
 
 interface PackagedPlaybackActionSample {
@@ -62,6 +63,16 @@ interface PackagedPlaybackActionSample {
 	indicationAt: number | null;
 	indicationMillis: number | null;
 	changed: boolean;
+}
+
+interface PackagedFixtureSheetSample {
+	action: "single" | "burst";
+	inputAt: number;
+	settledAt: number | null;
+	convergenceMillis: number | null;
+	changed: boolean;
+	visibleRows: number;
+	loadingOverlayVisible: boolean;
 }
 
 function useAdditionalStageWindow(
@@ -186,9 +197,11 @@ function usePackagedStagePhases(
 function PackagedStageExercise({
 	profile,
 	onPlaybackAction,
+	onFixtureSheetAction,
 }: {
 	profile: string;
 	onPlaybackAction(sample: PackagedPlaybackActionSample): void;
+	onFixtureSheetAction(sample: PackagedFixtureSheetSample): void;
 }) {
 	const exerciseFixtureNumber = 1;
 	const activeShowId = useActiveShowId();
@@ -274,7 +287,118 @@ function PackagedStageExercise({
 			cancelled = true;
 		};
 	}, [onPlaybackAction, profile]);
+	useEffect(() => {
+		if (profile !== "supported-scale" || !activeShowId || !commandReady) return;
+		let cancelled = false;
+		const run = async () => {
+			const row = await waitForFixtureSheetRow(() => cancelled);
+			const actions = commandRef.current;
+			if (!row || !actions || cancelled) return;
+			onFixtureSheetAction(
+				await exerciseFixtureSheetCommand(row, actions, [25], "single"),
+			);
+			await waitMillis(250);
+			onFixtureSheetAction(
+				await exerciseFixtureSheetCommand(
+					row,
+					actions,
+					[35, 45, 55, 65, 75],
+					"burst",
+				),
+			);
+		};
+		void run().catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, [activeShowId, commandReady, onFixtureSheetAction, profile]);
 	return null;
+}
+
+async function waitForFixtureSheetRow(cancelled: () => boolean) {
+	const deadline = performance.now() + 10_000;
+	while (!cancelled() && performance.now() < deadline) {
+		const row = document.querySelector<HTMLElement>(
+			'[data-testid="packaged-stage-fixture-sheet"] [data-fixture-id]',
+		);
+		if (row?.querySelector(".vertical-meter")) return row;
+		await waitMillis(50);
+	}
+	return null;
+}
+
+async function exerciseFixtureSheetCommand(
+	row: HTMLElement,
+	actions: NonNullable<ReturnType<typeof useProgrammingCommandLineActions>>,
+	values: readonly number[],
+	action: PackagedFixtureSheetSample["action"],
+): Promise<PackagedFixtureSheetSample> {
+	const before = row.innerHTML;
+	const fixtureId = row.dataset.fixtureId;
+	let loadingOverlayObserved = false;
+	const inputAt = performance.now();
+	for (const value of values) await actions.execute(`FIXTURE 1 AT ${value}`);
+	const expected = `${values.at(-1)}%`;
+	const deadline = inputAt + 500;
+	while (performance.now() < deadline) {
+		loadingOverlayObserved ||= fixtureSheetLoadingOverlayVisible();
+		const currentRow = fixtureId
+			? document.querySelector<HTMLElement>(
+					`[data-testid="packaged-stage-fixture-sheet"] [data-fixture-id="${CSS.escape(fixtureId)}"]`,
+				)
+			: row;
+		if (
+			currentRow &&
+			currentRow.innerHTML !== before &&
+			currentRow.textContent?.includes(expected)
+		) {
+			const settledAt = performance.now();
+			return fixtureSheetSample(
+				action,
+				inputAt,
+				settledAt,
+				true,
+				loadingOverlayObserved,
+			);
+		}
+		await nextAnimationFrame();
+	}
+	return fixtureSheetSample(
+		action,
+		inputAt,
+		null,
+		false,
+		loadingOverlayObserved,
+	);
+}
+
+function fixtureSheetSample(
+	action: PackagedFixtureSheetSample["action"],
+	inputAt: number,
+	settledAt: number | null,
+	changed: boolean,
+	loadingOverlayObserved: boolean,
+): PackagedFixtureSheetSample {
+	return {
+		action,
+		inputAt,
+		settledAt,
+		convergenceMillis: settledAt === null ? null : settledAt - inputAt,
+		changed,
+		visibleRows: document.querySelectorAll(
+			'[data-testid="packaged-stage-fixture-sheet"] [data-fixture-id]',
+		).length,
+		loadingOverlayVisible:
+			loadingOverlayObserved || fixtureSheetLoadingOverlayVisible(),
+	};
+}
+
+function fixtureSheetLoadingOverlayVisible() {
+	return Boolean(
+		document.querySelector(
+			'[data-testid="packaged-stage-fixture-sheet"] .fixture-sheet-loading',
+		),
+	);
 }
 
 async function waitForPlaybackCard(cancelled: () => boolean) {
@@ -633,6 +757,7 @@ function PreparedPackagedStageBenchmark({
 		contextRecovery: { startedAt: null, finishedAt: null },
 		activeUiSurfaces,
 		playbackActions: [],
+		fixtureSheetActions: [],
 	});
 	benchmarkState.current = {
 		quality: qualities[qualityIndex] ?? "lines_and_beams",
@@ -643,11 +768,21 @@ function PreparedPackagedStageBenchmark({
 		contextRecovery: benchmarkState.current.contextRecovery,
 		activeUiSurfaces,
 		playbackActions: benchmarkState.current.playbackActions,
+		fixtureSheetActions: benchmarkState.current.fixtureSheetActions,
 	};
 	const recordPlaybackAction = useCallback(
 		(sample: PackagedPlaybackActionSample) => {
 			benchmarkState.current.playbackActions = [
 				...benchmarkState.current.playbackActions,
+				sample,
+			];
+		},
+		[],
+	);
+	const recordFixtureSheetAction = useCallback(
+		(sample: PackagedFixtureSheetSample) => {
+			benchmarkState.current.fixtureSheetActions = [
+				...benchmarkState.current.fixtureSheetActions,
 				sample,
 			];
 		},
@@ -684,6 +819,7 @@ function PreparedPackagedStageBenchmark({
 				<PackagedStageExercise
 					profile={profile}
 					onPlaybackAction={recordPlaybackAction}
+					onFixtureSheetAction={recordFixtureSheetAction}
 				/>
 			)}
 			<AppProvider>
