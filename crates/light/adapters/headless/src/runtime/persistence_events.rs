@@ -178,7 +178,29 @@ pub(super) fn emit(state: &AppState, kind: &str, payload: serde_json::Value) -> 
     if let Some(event) = typed_capability_event(revision, kind, &payload) {
         state.events.publish(event);
     }
+    announce_show_to_the_network(state, kind);
     revision
+}
+
+/// Keep what this desk advertises equal to what it is running.
+///
+/// Every path that changes the active show ends in one of these events, so this is the one place
+/// that has to know rather than seven. A peer decides from the record, and a record naming the
+/// show that was loaded at startup is worse than none.
+fn announce_show_to_the_network(state: &AppState, kind: &str) {
+    if !matches!(
+        kind,
+        "show_opened" | "show_created" | "show_uploaded" | "show_renamed" | "show_rolled_back"
+    ) {
+        return;
+    }
+    let show = state
+        .installation
+        .active_show()
+        .ok()
+        .flatten()
+        .map(|entry| entry.name);
+    state.discovery.announce_show(show);
 }
 
 fn typed_capability_event(
