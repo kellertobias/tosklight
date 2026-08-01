@@ -1,0 +1,336 @@
+/*
+ * Future Grid Dynamics Storybook prototype. This is intentionally not wired
+ * into the production window registry or runtime.
+ */
+.grid-dynamics-window {
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	display: grid;
+	grid-template-rows: auto auto minmax(0, 1fr) auto;
+	background:
+		radial-gradient(
+			circle at 76% -20%,
+			rgba(35, 205, 234, 0.08),
+			transparent 34rem
+		),
+		var(--bg);
+	color: var(--text);
+}
+
+.grid-dynamic-ruler-shell {
+	display: grid;
+	grid-template-columns: 10.8rem minmax(0, 1fr);
+	gap: 0.45rem;
+	padding: 0.55rem 0.7rem 0.45rem;
+	border-bottom: 1px solid var(--border);
+	background: rgba(11, 15, 21, 0.96);
+}
+
+.grid-dynamic-ruler-label,
+.grid-dynamic-lane-name {
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	min-width: 0;
+}
+
+.grid-dynamic-ruler-label {
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: center;
+}
+
+.grid-dynamic-ruler-label small,
+.grid-dynamic-lane-name small,
+.grid-dynamic-group-heading small {
+	color: var(--text-muted);
+}
+
+.grid-dynamic-ruler {
+	display: grid;
+	gap: 0.25rem;
+	min-width: max-content;
+}
+
+.grid-dynamic-ruler button {
+	min-height: 2.75rem;
+	display: grid;
+	place-content: center;
+	gap: 0.05rem;
+	border: 1px solid #2b3440;
+	border-radius: 0.28rem;
+	background: #111820;
+	color: #8994a3;
+}
+
+.grid-dynamic-ruler button.is-beat {
+	border-left: 2px solid #5f7186;
+	color: #dbe4ef;
+}
+
+.grid-dynamic-ruler button.is-playhead {
+	border-color: #ff5d6d;
+	background: rgba(255, 80, 99, 0.13);
+	color: #fff;
+	box-shadow: inset 0 -2px #ff5d6d;
+}
+
+.grid-dynamic-ruler button small {
+	font-size: 0.56rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.grid-dynamic-workspace {
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.grid-dynamic-workspace .ui-window-scroll-area {
+	overflow: auto;
+}
+
+.grid-dynamic-groups {
+	display: grid;
+	gap: 0.65rem;
+	min-width: max-content;
+	padding: 0.65rem 0.7rem 0.85rem;
+}
+
+.grid-dynamic-group {
+	display: grid;
+	grid-template-columns: 10.8rem minmax(0, 1fr);
+	gap: 0.45rem;
+	border: 1px solid color-mix(in srgb, var(--group-color) 28%, #29323d);
+	border-left: 3px solid var(--group-color);
+	border-radius: 0.4rem;
+	background: rgba(15, 20, 27, 0.82);
+	overflow: hidden;
+}
+
+.grid-dynamic-group-heading {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: space-between;
+	gap: 0.5rem;
+	padding: 0.65rem;
+	background: color-mix(in srgb, var(--group-color) 8%, #10161e);
+}
+
+.grid-dynamic-group-heading > span {
+	display: grid;
+	gap: 0.15rem;
+}
+
+.grid-dynamic-group-heading strong,
+.grid-dynamic-group-heading small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.grid-dynamic-group-lanes {
+	display: grid;
+	gap: 0.35rem;
+	padding: 0.4rem;
+}
+
+.grid-dynamic-lane {
+	display: grid;
+	grid-template-columns: 7.5rem minmax(0, 1fr);
+	gap: 0.4rem;
+	min-height: 3.45rem;
+}
+
+.grid-dynamic-lane-name {
+	padding: 0.35rem 0.45rem;
+	border: 1px solid #28323e;
+	border-radius: 0.3rem;
+	background: #111820;
+}
+
+.grid-dynamic-lane-name i {
+	width: 0.36rem;
+	height: 1.8rem;
+	flex: 0 0 auto;
+	border-radius: 1rem;
+}
+
+.grid-dynamic-lane-name span {
+	display: grid;
+	min-width: 0;
+	text-transform: capitalize;
+}
+
+.grid-dynamic-tiles {
+	display: grid;
+	gap: 0.25rem;
+	min-width: max-content;
+}
+
+.grid-dynamic-tile {
+	position: relative;
+	min-height: 3.45rem;
+	padding: 0.25rem;
+	display: grid;
+	place-content: center;
+	gap: 0.1rem;
+	border: 1px solid #303a46;
+	border-radius: 0.28rem;
+	background: #141b24;
+	color: #718091;
+	user-select: none;
+	touch-action: none;
+	overflow: hidden;
+}
+
+.grid-dynamic-tile:nth-child(4n + 1) {
+	border-left-width: 2px;
+	border-left-color: #59687a;
+}
+
+.grid-dynamic-tile::before {
+	content: "";
+	position: absolute;
+	inset: auto 0 0;
+	height: 0.18rem;
+	background: transparent;
+}
+
+.grid-dynamic-tile.has-preset {
+	border-color: color-mix(in srgb, var(--tile-accent) 55%, #374250);
+	background: linear-gradient(
+		160deg,
+		color-mix(in srgb, var(--tile-accent) 20%, #151b24),
+		#111820 72%
+	);
+	color: #f4f7fa;
+}
+
+.grid-dynamic-tile.has-preset::before {
+	background: var(--tile-accent);
+}
+
+.grid-dynamic-tile.is-playhead {
+	box-shadow: inset 0 0 0 1px #ff5d6d;
+}
+
+.grid-dynamic-tile.is-selected {
+	outline: 2px solid #fff;
+	outline-offset: -2px;
+}
+
+.grid-dynamic-tile span {
+	font-size: 0.7rem;
+	line-height: 1.05;
+}
+
+.grid-dynamic-tile small {
+	font-size: 0.56rem;
+	color: #c1cad4;
+}
+
+.grid-dynamic-status {
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 1.15rem;
+	padding: 0.5rem 0.75rem;
+	border-top: 1px solid var(--border);
+	background: #0d1218;
+	color: var(--text-muted);
+	font-size: 0.75rem;
+}
+
+.grid-dynamic-status span:first-child {
+	margin-right: auto;
+}
+
+.grid-dynamic-status i {
+	display: inline-block;
+	width: 0.55rem;
+	height: 0.55rem;
+	margin-right: 0.25rem;
+	border-radius: 50%;
+	background: #606b79;
+}
+
+.grid-dynamic-status .is-running i {
+	background: #53d88a;
+	box-shadow: 0 0 0.6rem rgba(83, 216, 138, 0.55);
+}
+
+.grid-dynamic-status b {
+	color: var(--text);
+}
+
+.grid-dynamic-modal-list,
+.grid-dynamic-modal-form,
+.grid-dynamic-preset-grid {
+	padding: 1rem;
+	display: grid;
+	gap: 0.7rem;
+	min-width: min(28rem, 70vw);
+}
+
+.grid-dynamic-preset-grid {
+	grid-template-columns: repeat(2, minmax(9rem, 1fr));
+}
+
+.grid-dynamic-preset-button {
+	justify-content: flex-start;
+	gap: 0.6rem;
+}
+
+.grid-dynamic-preset-button i {
+	width: 1.1rem;
+	height: 1.1rem;
+	border-radius: 0.24rem;
+	background: var(--preset-color);
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+.grid-dynamic-grid-summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0.7rem;
+	border: 1px solid var(--border);
+	border-radius: 0.35rem;
+	background: #111820;
+}
+
+.grid-dynamic-grid-summary span {
+	color: #57d5ef;
+}
+
+.grid-dynamics-encoder-tabs {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+}
+
+.grid-dynamics-encoder-tabs > span {
+	margin-left: auto;
+	color: var(--text-muted);
+	font-size: 0.72rem;
+}
+
+.grid-dynamics-encoder-section {
+	height: 100%;
+}
+
+.parameter-surfaces > .grid-dynamics-encoder-section {
+	grid-column: 1 / -1;
+}
+
+@media (max-width: 1050px) {
+	.grid-dynamic-status span:nth-child(3),
+	.grid-dynamic-status span:nth-child(4) {
+		display: none;
+	}
+}

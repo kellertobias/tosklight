@@ -4284,3 +4284,49 @@ test("marketing pools use catalog assets and keep vacant slots uncolored", async
 		)
 		.toEqual(emptyGroupStyle);
 });
+
+test("Grid Dynamics paints presets, toggles history, and queues Preload transport", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 1600, height: 920 });
+	await page.goto(
+		"/iframe.html?id=tosklight-windows-grid-dynamics--full-application-discussion&viewMode=story",
+	);
+	const positionStep = page.getByRole("button", {
+		name: "Position, step 2: Current",
+		exact: true,
+	});
+	await expect(positionStep).toBeVisible();
+	await positionStep.click({ button: "right" });
+	const presetDialog = page.getByRole("dialog", {
+		name: "Choose position preset",
+	});
+	await expect(presetDialog).toBeVisible();
+	await presetDialog
+		.getByRole("button", { name: "Cross", exact: true })
+		.click();
+	const paintedStep = page.getByRole("button", {
+		name: "Position, step 2: Cross",
+		exact: true,
+	});
+	await expect(paintedStep).toBeVisible();
+	await paintedStep.click();
+	await expect(positionStep).toBeVisible();
+	await page.getByRole("button", { name: "Stop", exact: true }).click();
+	await expect(
+		page.getByRole("button", { name: "Play", exact: true }),
+	).toBeVisible();
+
+	await page.goto(
+		"/iframe.html?id=tosklight-windows-grid-dynamics--preload-play-queued&viewMode=story",
+	);
+	await expect(
+		page.getByRole("button", { name: "PRELOAD GO", exact: true }),
+	).toBeVisible();
+	await page.getByRole("button", { name: "Stop", exact: true }).click();
+	await page.getByRole("button", { name: "Play", exact: true }).click();
+	await expect(
+		page.getByText("Preloaded · Play queued", { exact: true }),
+	).toBeVisible();
+	await expect(page.getByText("Playing live", { exact: true })).toHaveCount(0);
+});

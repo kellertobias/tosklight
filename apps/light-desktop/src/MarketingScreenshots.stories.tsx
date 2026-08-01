@@ -20,11 +20,11 @@ import {
 	marketingStageVisualization,
 } from "../../ui-library/storybook/fixtures/marketingApplication";
 import { ApplicationStateHarness } from "../../ui-library/storybook/providers/ApplicationStateHarness";
+import { SourceLegend } from "./components/shared/SourceLegend";
 import { AppShellView } from "./components/shell/AppShell";
 import { Clock } from "./components/shell/Clock";
 import { LeftDock } from "./components/shell/LeftDock";
 import { NativeDragStrip } from "./components/shell/NativeDragStrip";
-import { SourceLegend } from "./components/shared/SourceLegend";
 import { type Channel, ChannelsWindowView } from "./windows/ChannelsWindow";
 import { MarketingCuesWindow } from "./windows/CuelistWindow.stories";
 import { DmxWindowView } from "./windows/DmxWindow";
@@ -32,6 +32,7 @@ import { MarketingDynamicsApplication } from "./windows/DynamicsWindow.stories";
 import { DEFAULT_FIXTURE_SHEET_COLUMNS } from "./windows/FixtureSheetSettings";
 import { FixtureSheetWindowView } from "./windows/FixtureSheetWindow";
 import { fixtureSheetColumns } from "./windows/fixtureSheetColumns";
+import { MarketingGridDynamicsApplication } from "./windows/GridDynamicsWindow.stories";
 import {
 	MarketingColorPresetsWindow,
 	MarketingGroupsWindow,
@@ -45,6 +46,7 @@ import {
 import { DEFAULT_STAGE_CAMERA_3D } from "./windows/Stage3dCanvas";
 import { MarketingStage3DWindow } from "./windows/StageWindow.stories";
 import { Stage3dView } from "./windows/stageWindow/Stage3dView";
+import { MarketingTimecodeApplication } from "./windows/TimecodeWindow.stories";
 
 const meta = {
 	title: "ToskLight/Marketing",
@@ -247,12 +249,9 @@ const channels = Array.from({ length: 14 }, (_, index) => ({
 		fixture_id: `fixture-${index + 1}`,
 		fixture_number: index + 1,
 	} as Channel["fixture"],
-	name:
-		index < 4
-			? "Front Profile"
-			: index < 10
-				? "Moving Wash"
-				: "Audience Blinder",
+	fixtureLabel: String(index + 1),
+	attribute: "intensity",
+	attributeLabel: "Intensity",
 	level: [72, 68, 54, 54, 86, 78, 56, 56, 42, 38, 24, 24, 0, 100][index],
 })) satisfies Channel[];
 
@@ -277,7 +276,7 @@ function MarketingChannelsWindow() {
 				onPagePickerOpen={setPicker}
 				onColumnsChange={setColumns}
 				onSelect={(fixtureId) => setSelected(new Set([fixtureId]))}
-				onSetIntensity={() => undefined}
+				onSetValue={() => undefined}
 			/>
 		</MarketingViewport>
 	);
@@ -378,4 +377,12 @@ export const DmxWindow: Story = {
 
 export const DynamicsView: Story = {
 	render: () => <MarketingDynamicsApplication />,
+};
+
+export const GridDynamicsView: Story = {
+	render: () => <MarketingGridDynamicsApplication />,
+};
+
+export const TimecodeView: Story = {
+	render: () => <MarketingTimecodeApplication />,
 };

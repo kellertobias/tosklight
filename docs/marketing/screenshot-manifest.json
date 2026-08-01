@@ -155,6 +155,16 @@
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
+		},
+		{
+			"file": "grid-dynamics.png",
+			"title": "Grid Dynamics",
+			"caption": "A drum-machine-style Dynamic combines group-owned intensity, position, and color preset lanes with live tile timing and encoder editing.",
+			"storyId": "tosklight-marketing--grid-dynamics-view",
+			"viewport": { "width": 1600, "height": 920 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
 		}
 	]
 }
