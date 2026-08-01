@@ -772,6 +772,7 @@ export class BrowserProductDemo {
 			await buildGroups(
 				desk,
 				page,
+				app,
 				keypad,
 				api,
 				showId,
@@ -1512,6 +1513,7 @@ async function configureOutput(
 async function buildGroups(
 	desk: DeskDriver,
 	page: Page,
+	app: Locator,
 	keypad: Locator,
 	api: ApiDriver,
 	showId: string,
