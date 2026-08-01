@@ -1,6 +1,7 @@
 import {
 	act,
 	cleanup,
+	fireEvent,
 	render,
 	screen,
 	waitFor,
@@ -106,6 +107,17 @@ vi.mock("./systemControls/runningPlaybackAuthority", () => ({
 		return mocks.runningAuthority;
 	},
 }));
+vi.mock("./systemControls/runningDynamicsAuthority", () => ({
+	useRunningDynamicsAuthority: () => ({
+		ready: true,
+		loading: false,
+		error: null,
+		rows: [],
+		stoppingControllerIds: new Set(),
+		canStop: true,
+		off: vi.fn(),
+	}),
+}));
 vi.mock("../control/VerticalTouchFader", () => ({
 	VerticalTouchFader: ({
 		label,
@@ -184,14 +196,11 @@ describe("modal selection projections", () => {
 		expect(mocks.selectionAccess).not.toHaveBeenCalled();
 	});
 
-	it("updates System Controls lamp availability from streamed selection", async () => {
+	it("updates System Controls fixture-action scope from streamed selection", async () => {
 		mocks.appState.systemControlsOpen = true;
 		const { transport } = renderSelectionView(<SystemControlsModal />);
-		const lampButton = await screen.findByRole("button", {
-			name: "All Lamps On",
-		});
-
-		await waitFor(() => expect(lampButton).toBeEnabled());
+		fireEvent.click(await screen.findByRole("button", { name: "Actions" }));
+		await screen.findByRole("button", { name: "Selected Lamps On" });
 		act(() =>
 			transport.emit({
 				type: "event",
@@ -200,7 +209,7 @@ describe("modal selection projections", () => {
 				change: selectionChange({ revision: 2, selected: [] }),
 			}),
 		);
-		await waitFor(() => expect(lampButton).toBeDisabled());
+		await screen.findByRole("button", { name: "All Lamps On" });
 
 		act(() =>
 			transport.emit({
@@ -210,7 +219,7 @@ describe("modal selection projections", () => {
 				change: selectionChange({ revision: 3, selected: [FIXTURE_2] }),
 			}),
 		);
-		await waitFor(() => expect(lampButton).toBeEnabled());
+		await screen.findByRole("button", { name: "Selected Lamps On" });
 		expect(mocks.selectionAccess).not.toHaveBeenCalled();
 	});
 

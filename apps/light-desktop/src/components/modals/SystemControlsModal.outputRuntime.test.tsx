@@ -87,6 +87,17 @@ vi.mock("./systemControls/runningPlaybackAuthority", () => ({
 		release: vi.fn(),
 	}),
 }));
+vi.mock("./systemControls/runningDynamicsAuthority", () => ({
+	useRunningDynamicsAuthority: () => ({
+		ready: true,
+		loading: false,
+		error: null,
+		rows: [],
+		stoppingControllerIds: new Set(),
+		canStop: true,
+		off: vi.fn(),
+	}),
+}));
 
 afterEach(() => {
 	cleanup();
@@ -117,7 +128,7 @@ function harness(
 
 function outputControls() {
 	return {
-		slider: screen.getByRole("slider", { name: "Grand master" }),
+		slider: screen.getByRole("slider", { name: "Grand Master" }),
 		blackout: screen.getByRole("button", {
 			name: /^(?:RELEASE )?BLACKOUT$/u,
 		}),
@@ -155,7 +166,7 @@ describe("SystemControlsModal scoped Output runtime", () => {
 
 		fireEvent.input(outputControls().slider, { target: { value: "40" } });
 		await waitFor(() => expect(screen.getByText("40%")).toBeInTheDocument());
-		expect(transport.applyAction).toHaveBeenCalledOnce();
+		await waitFor(() => expect(transport.applyAction).toHaveBeenCalledOnce());
 		expect(transport.applyAction.mock.calls[0]?.[1]).toMatchObject({
 			expectedShowId: SHOW_ID,
 			expectedRevision: 1,

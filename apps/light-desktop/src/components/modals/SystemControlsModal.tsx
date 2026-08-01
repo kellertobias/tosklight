@@ -1,19 +1,28 @@
 import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
 import { useMemo, useState } from "react";
+import type { ControlActionSemantic } from "../../api/types";
 import { useSessionSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
+import { useDynamicsActions } from "../../features/dynamics/DynamicsActionsContext";
 import {
 	useOutputRuntimeActions,
 	useOutputRuntimeView,
 } from "../../features/outputRuntime/OutputRuntimeView";
-import { useSelectedPatchedFixtures } from "../../features/patch/PatchState";
+import {
+	usePatchedFixturesView,
+	useSelectedPatchedFixtures,
+} from "../../features/patch/PatchState";
 import { useProgrammerActions } from "../../features/programmerActions/ProgrammerActionsContext";
 import { useProgrammerLifecycleView } from "../../features/programmerLifecycle/ProgrammerLifecycleView";
 import { useProgrammerPreloadLifecycleView } from "../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../../state/AppContext";
 import { compatibleSpecialDialogActions } from "./SpecialDialogsModal";
+import { ActiveProgrammersModal } from "./systemControls/ActiveProgrammersModal";
 import { OutputControls } from "./systemControls/OutputControls";
+import { VisualizerControls } from "./systemControls/VisualizerControls";
 import { RunningSections } from "./systemControls/RunningSections";
+import { useRunningDynamicsAuthority } from "./systemControls/runningDynamicsAuthority";
+import { useVisualizerViewControls } from "./systemControls/useVisualizerViewControls";
 import { useRunningPlaybackAuthority } from "./systemControls/runningPlaybackAuthority";
 
 const EMPTY_FIXTURE_IDS: readonly string[] = [];
@@ -22,8 +31,11 @@ const EMPTY_PROGRAMMERS = [] as const;
 function useSystemControlsModel() {
 	const { state, dispatch } = useApp();
 	const programmerActions = useProgrammerActions();
+	const dynamicsActions = useDynamicsActions();
 	const session = useSessionSnapshot();
-	const [lampResult, setLampResult] = useState("");
+	const [fixtureActionResult, setFixtureActionResult] = useState("");
+	const [activeLatchedFixtureActions, setActiveLatchedFixtureActions] =
+		useState<Set<string>>(() => new Set());
 	const [stoppingAll, setStoppingAll] = useState(false);
 	const output = useOutputRuntimeView(state.systemControlsOpen);
 	const outputActions = useOutputRuntimeActions(state.systemControlsOpen);
@@ -33,7 +45,14 @@ function useSystemControlsModel() {
 	const playbackAuthority = useRunningPlaybackAuthority(
 		state.systemControlsOpen,
 	);
+	const dynamicsAuthority = useRunningDynamicsAuthority(
+		state.systemControlsOpen,
+		output.projection?.showId ?? null,
+		dynamicsActions?.dynamics ?? null,
+		dynamicsActions?.events ?? null,
+	);
 	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
+	const fixturesSelected = selectedFixtureIds.length > 0;
 	const outputReady = output.ready && outputActions !== null;
 	const master = output.projection
 		? Math.round(output.projection.grandMaster * 100)
@@ -43,64 +62,105 @@ function useSystemControlsModel() {
 		selectedFixtureIds,
 		state.systemControlsOpen,
 	);
-	const lampActions = useMemo(
-		() =>
-			compatibleSpecialDialogActions(
-				selectedFixtures,
-				"lamp_on",
-				selectedFixtureIds,
-			),
-		[selectedFixtures, selectedFixtureIds],
+	const allFixtures = usePatchedFixturesView(
+		state.systemControlsOpen && !fixturesSelected,
 	);
+	const targetFixtures = fixturesSelected ? selectedFixtures : allFixtures;
+	const fixtureActions = useMemo(() => {
+		const actions = new Map<
+			ControlActionSemantic,
+			ReturnType<typeof compatibleSpecialDialogActions>
+		>();
+		for (const semantic of [
+			"lamp_on",
+			"lamp_off",
+			"reset",
+			"fan_auto",
+			"fan_low",
+			"fan_high",
+			"fan_max",
+		] as const) {
+			actions.set(
+				semantic,
+				compatibleSpecialDialogActions(
+					targetFixtures,
+					semantic,
+					selectedFixtureIds,
+				),
+			);
+		}
+		return actions;
+	}, [selectedFixtureIds, targetFixtures]);
 	const programmers = lifecycle?.programmers ?? EMPTY_PROGRAMMERS;
-	const triggerLamps = async (phase: "click" | "press" | "release") => {
-		const actions = lampActions.filter((action) =>
+	const runningSources = useMemo(
+		() => [
+			...new Map(
+				playbackAuthority.sources.map((source) => [source.key, source]),
+			).values(),
+		],
+		[playbackAuthority.sources],
+	);
+	const triggerFixtureAction = async (
+		semantic: ControlActionSemantic,
+		phase: "click" | "press" | "release",
+	) => {
+		const compatible = fixtureActions.get(semantic) ?? [];
+		const actions = compatible.filter((action) =>
 			phase === "click"
 				? action.kind !== "momentary"
 				: action.kind === "momentary",
 		);
+		const nextLatchedActions = new Set(activeLatchedFixtureActions);
 		await Promise.all(
-			actions.map((action) =>
-				programmerActions?.controlFixtureAction(
+			actions.map((action) => {
+				const key = `${action.fixtureId}:${action.actionId}`;
+				const active =
+					action.kind === "latched"
+						? !activeLatchedFixtureActions.has(key)
+						: phase !== "release";
+				if (action.kind === "latched") {
+					if (active) nextLatchedActions.add(key);
+					else nextLatchedActions.delete(key);
+				}
+				return programmerActions?.controlFixtureAction(
 					action.fixtureId,
 					action.actionId,
-					phase !== "release",
-				),
-			),
+					active,
+				);
+			}),
 		);
-		const supported = new Set(lampActions.map((item) => item.fixtureId));
-		const skipped = Math.max(0, selectedFixtureIds.length - supported.size);
-		setLampResult(
-			`${supported.size} discharge lamp${supported.size === 1 ? "" : "s"} triggered${skipped ? ` · ${skipped} without Lamp On skipped` : ""}`,
+		if (actions.some((action) => action.kind === "latched")) {
+			setActiveLatchedFixtureActions(nextLatchedActions);
+		}
+		const supported = new Set(compatible.map((item) => item.fixtureId));
+		const actionName = semantic
+			.split("_")
+			.map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
+			.join(" ");
+		setFixtureActionResult(
+			`${actionName} sent to ${supported.size} fixture${supported.size === 1 ? "" : "s"}`,
 		);
 	};
-	const stopEverything = async () => {
+	const stopAllRunning = async () => {
 		if (
 			!playbackAuthority.ready ||
+			!dynamicsAuthority.ready ||
 			!preload.ready ||
 			!preload.actions ||
-			(playbackAuthority.sources.length > 0 && !playbackAuthority.canRelease)
+			(playbackAuthority.sources.length > 0 && !playbackAuthority.canRelease) ||
+			(dynamicsAuthority.rows.length > 0 && !dynamicsAuthority.canStop)
 		)
 			return;
 		setStoppingAll(true);
 		try {
-			const sources = new Map(
-				playbackAuthority.sources.map((source) => [source.key, source]),
-			);
 			await Promise.all([
-				...[...sources.values()].map((source) =>
+				...runningSources.map((source) =>
 					playbackAuthority.release(source),
 				),
-				...programmers.flatMap((programmer) =>
-					programmer.sessions[0]
-						? [
-								programmerActions?.clearProgrammer(
-									programmer.sessions[0].sessionId,
-								),
-							]
-						: [],
+				...dynamicsAuthority.rows.map((dynamic) =>
+					dynamicsAuthority.off(dynamic),
 				),
-				preload.actions.release(),
+				...(preload.active ? [preload.actions.release()] : []),
 			]);
 		} finally {
 			setStoppingAll(false);
@@ -113,12 +173,20 @@ function useSystemControlsModel() {
 		master,
 		blackout,
 		outputReady,
-		lampResult,
+		fixtureActionResult,
 		stoppingAll,
 		selectedFixtureIds,
+		fixturesSelected,
+		availableFixtureActions: new Set(
+			[...fixtureActions.entries()]
+				.filter(([, actions]) => actions.length > 0)
+				.map(([semantic]) => semantic),
+		),
 		lifecycle,
 		programmers,
+		runningSources,
 		playbackAuthority,
+		dynamicsAuthority,
 		preload,
 		close: () =>
 			dispatch({
@@ -126,8 +194,8 @@ function useSystemControlsModel() {
 				modal: "systemControlsOpen",
 				value: false,
 			}),
-		stopEverything,
-		triggerLamps,
+		stopAllRunning,
+		triggerFixtureAction,
 		setMaster: (value: number) => {
 			if (!outputReady || !outputActions) return;
 			void outputActions.setOutput({ grandMaster: value / 100 });
@@ -142,12 +210,12 @@ function useSystemControlsModel() {
 
 export function SystemControlsModal() {
 	const model = useSystemControlsModel();
+	const visualizer = useVisualizerViewControls(model.open);
+	const [programmersOpen, setProgrammersOpen] = useState(false);
 	if (!model.open) return null;
 	const activeItems =
-		model.playbackAuthority.mappedSources.length +
-		model.playbackAuthority.virtualSources.length +
-		model.programmers.length +
-		model.playbackAuthority.dynamics.length +
+		model.runningSources.length +
+		model.dynamicsAuthority.rows.length +
 		(model.preload.active ? 1 : 0);
 	return (
 		<ModalPortal onClose={model.close}>
@@ -164,6 +232,7 @@ export function SystemControlsModal() {
 					aria-label="Running and output"
 				>
 					<ModalTitleBar
+						className="system-controls-titlebar"
 						title="Running & Output"
 						details={
 							<span className="system-controls-active-items">
@@ -171,54 +240,93 @@ export function SystemControlsModal() {
 							</span>
 						}
 						actions={
-							<Button
-								className="danger"
-								disabled={
-									model.stoppingAll ||
-									!model.playbackAuthority.ready ||
-									!model.preload.ready ||
-									(model.playbackAuthority.sources.length > 0 &&
-										!model.playbackAuthority.canRelease) ||
-									(!model.playbackAuthority.sources.length &&
-										!model.programmers.length &&
-										!model.preload.active)
-								}
-								onClick={() => void model.stopEverything()}
-							>
-								{model.stoppingAll ? "Stopping…" : "Stop everything"}
-							</Button>
+							<>
+								<Button onClick={() => setProgrammersOpen(true)}>
+									Active Programmers ({model.programmers.length})
+								</Button>
+								<Button
+									className="danger system-controls-all-off"
+									disabled={
+										model.stoppingAll ||
+										!model.playbackAuthority.ready ||
+										!model.dynamicsAuthority.ready ||
+										!model.preload.ready ||
+										(model.playbackAuthority.sources.length > 0 &&
+											!model.playbackAuthority.canRelease) ||
+										(model.dynamicsAuthority.rows.length > 0 &&
+											!model.dynamicsAuthority.canStop) ||
+										(!model.playbackAuthority.sources.length &&
+											!model.dynamicsAuthority.rows.length &&
+											!model.preload.active)
+									}
+									onClick={() => void model.stopAllRunning()}
+								>
+									{model.stoppingAll ? "Turning off…" : "All Off"}
+								</Button>
+							</>
 						}
 						closeLabel="Close Running & Output"
 						onClose={model.close}
 					/>
-					<RunningSections
-						pagePlaybacks={model.playbackAuthority.mappedSources}
-						virtualPlaybacks={model.playbackAuthority.virtualSources}
-						dynamics={model.playbackAuthority.dynamics}
-						playbacksLoading={model.playbackAuthority.loading}
-						releaseAvailable={model.playbackAuthority.canRelease}
-						programmers={model.programmers}
-						programmersLoading={model.lifecycle === null}
-						currentUserId={model.session?.user.id ?? null}
-						currentUserName={model.session?.user.name ?? null}
-						onReleasePlayback={(source) =>
-							void model.playbackAuthority.release(source)
-						}
-						onClearProgrammer={(sessionId) =>
-							void model.programmerActions?.clearProgrammer(sessionId)
-						}
-					/>
-					<OutputControls
-						master={model.master}
-						blackout={model.blackout}
-						ready={model.outputReady}
-						lampResult={model.lampResult}
-						lampActionsAvailable={model.selectedFixtureIds.length > 0}
-						onMaster={model.setMaster}
-						onBlackout={model.toggleBlackout}
-						onLamp={(phase) => void model.triggerLamps(phase)}
-					/>
+					<div className="system-controls-body">
+						<OutputControls
+							master={model.master}
+							blackout={model.blackout}
+							ready={model.outputReady}
+							fixtureActionResult={model.fixtureActionResult}
+							fixturesSelected={model.fixturesSelected}
+							availableFixtureActions={model.availableFixtureActions}
+							onMaster={model.setMaster}
+							onBlackout={model.toggleBlackout}
+							onFixtureAction={(semantic, phase) =>
+								void model.triggerFixtureAction(semantic, phase)
+							}
+						/>
+						{visualizer.available && (
+							<VisualizerControls
+								view={visualizer.view}
+								targets={visualizer.targets}
+								target={visualizer.target}
+								busy={visualizer.busy}
+								error={visualizer.error}
+								onSelectTarget={visualizer.selectTarget}
+								onSelectMode={visualizer.selectMode}
+								onSelectQuality={visualizer.selectQuality}
+							/>
+						)}
+						<RunningSections
+							playbacks={model.runningSources}
+							dynamics={model.dynamicsAuthority.rows}
+							dynamicsLoading={model.dynamicsAuthority.loading}
+							dynamicsError={model.dynamicsAuthority.error}
+							dynamicsCanStop={model.dynamicsAuthority.canStop}
+							stoppingDynamicControllerIds={
+								model.dynamicsAuthority.stoppingControllerIds
+							}
+							preloadActive={model.preload.active}
+							playbacksLoading={model.playbackAuthority.loading}
+							releaseAvailable={model.playbackAuthority.canRelease}
+							onReleasePlayback={(source) =>
+								void model.playbackAuthority.release(source)
+							}
+							onReleasePreload={() => void model.preload.actions?.release()}
+							onTurnOffDynamic={(dynamic) =>
+								void model.dynamicsAuthority.off(dynamic)
+							}
+						/>
+					</div>
 				</section>
+				<ActiveProgrammersModal
+					open={programmersOpen}
+					programmers={model.programmers}
+					loading={model.lifecycle === null}
+					currentUserId={model.session?.user.id ?? null}
+					currentUserName={model.session?.user.name ?? null}
+					onClear={(sessionId) =>
+						void model.programmerActions?.clearProgrammer(sessionId)
+					}
+					onClose={() => setProgrammersOpen(false)}
+				/>
 			</div>
 		</ModalPortal>
 	);

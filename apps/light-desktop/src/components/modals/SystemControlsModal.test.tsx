@@ -29,6 +29,41 @@ const lifecycle = vi.hoisted(() => ({
 		],
 	} as ProgrammerProjection | null,
 }));
+const dynamicsRuntime = vi.hoisted(() => ({
+	off: vi.fn().mockResolvedValue(true),
+	authority: {
+		ready: true,
+		loading: false,
+		error: null,
+		rows: [
+			{
+				key: "dynamic-instance:dynamic-controller",
+				instanceId: "dynamic-instance",
+				dynamicId: "dynamic-7",
+				poolNumber: 7,
+				name: "Circle",
+				targets: ["fixture-1"],
+				pending: false,
+				instancePaused: false,
+				speedSource: "Speed Group A",
+				controllerId: "dynamic-controller",
+				source: "Playback 12",
+				priority: 1,
+				size: 1,
+				speedMultiplier: 1,
+				phaseOffsetDegrees: 0,
+				paused: false,
+				winning: true,
+				releasing: false,
+				activationMix: 1,
+			},
+		],
+		stoppingControllerIds: new Set<string>(),
+		canStop: true,
+		off: vi.fn(),
+	},
+}));
+dynamicsRuntime.authority.off = dynamicsRuntime.off;
 
 interface ProgrammerProjection {
 	revision: number;
@@ -205,6 +240,9 @@ vi.mock("./systemControls/runningPlaybackAuthority", () => ({
 		return playbackAuthority;
 	},
 }));
+vi.mock("./systemControls/runningDynamicsAuthority", () => ({
+	useRunningDynamicsAuthority: () => dynamicsRuntime.authority,
+}));
 
 afterEach(() => {
 	cleanup();
@@ -228,6 +266,12 @@ afterEach(() => {
 	});
 	preloadLifecycle.ready = true;
 	preloadLifecycle.active = false;
+	Object.assign(dynamicsRuntime.authority, {
+		ready: true,
+		loading: false,
+		rows: [dynamicsRuntime.authority.rows[0]],
+		canStop: true,
+	});
 	appState.systemControlsOpen = true;
 	Object.assign(playbackAuthority, {
 		ready: true,
@@ -262,17 +306,30 @@ describe("SystemControlsModal", () => {
 				name: "Running & Output",
 			})
 			.closest(".ui-modal-titlebar");
-		expect(titleBar).toHaveTextContent("4 active items");
+		expect(titleBar).toHaveTextContent("3 active items");
 		expect(titleBar).toContainElement(
-			screen.getByRole("button", { name: "Stop everything" }),
+			screen.getByRole("button", { name: "All Off" }),
+		);
+		expect(screen.getByRole("button", { name: "All Off" })).toHaveClass(
+			"system-controls-all-off",
+		);
+		expect(titleBar).toContainElement(
+			screen.getByRole("button", { name: "Active Programmers (1)" }),
 		);
 		expect(
 			screen.queryByText("Shift + Clear / Shift + Delete"),
 		).not.toBeInTheDocument();
 		expect(screen.getByText("Main playback")).toBeInTheDocument();
 		expect(screen.getByText("Virtual Cuelist")).toBeInTheDocument();
+		expect(screen.getByText("Circle · Dynamic 7")).toBeInTheDocument();
+		expect(screen.queryByText("Operator · Current user")).not.toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Active Programmers (1)" }),
+		);
 		expect(screen.getByText("Operator · Current user")).toBeInTheDocument();
-		expect(screen.getByText("Main Cuelist · Dynamic 1")).toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Close" }),
+		).not.toBeInTheDocument();
 		expect(
 			screen.getByText("1 fixtures · 3 values · 1 session · Connected"),
 		).toBeInTheDocument();
@@ -283,15 +340,20 @@ describe("SystemControlsModal", () => {
 		render(<SystemControlsModal />);
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "Stop Playback Main playback" }),
+			screen.getByRole("button", { name: "Turn off Playback Main playback" }),
 		);
 		fireEvent.click(
 			screen.getByRole("button", {
-				name: "Stop Virtual playback Virtual Cuelist",
+				name: "Turn off Virtual playback Virtual Cuelist",
 			}),
 		);
 		fireEvent.click(
-			screen.getByRole("button", { name: "Stop Dynamic 1 from Main Cuelist" }),
+			screen.getByRole("button", {
+				name: "Turn off Dynamic 7 Circle from Playback 12",
+			}),
+		);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Active Programmers (1)" }),
 		);
 		fireEvent.click(
 			screen.getByRole("button", { name: "Clear programmer operator" }),
@@ -299,7 +361,9 @@ describe("SystemControlsModal", () => {
 
 		expect(release).toHaveBeenNthCalledWith(1, mapped);
 		expect(release).toHaveBeenNthCalledWith(2, direct);
-		expect(release).toHaveBeenNthCalledWith(3, mapped);
+		expect(dynamicsRuntime.off).toHaveBeenCalledWith(
+			dynamicsRuntime.authority.rows[0],
+		);
 		expect(clearProgrammer).toHaveBeenCalledWith("session-1");
 	});
 
@@ -317,6 +381,9 @@ describe("SystemControlsModal", () => {
 		});
 
 		render(<SystemControlsModal />);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Active Programmers (2)" }),
+		);
 
 		expect(screen.getAllByText(/3 values/)).toHaveLength(2);
 		expect(
@@ -334,26 +401,31 @@ describe("SystemControlsModal", () => {
 	it("never falls back to stale bootstrap Programmers while loading", () => {
 		lifecycle.projection = null;
 		render(<SystemControlsModal />);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Active Programmers (0)" }),
+		);
 
 		expect(screen.getByText("Programmers loading…")).toBeInTheDocument();
 		expect(screen.queryByText(/2 values/)).not.toBeInTheDocument();
 		expect(legacyReads).toBe(0);
 	});
 
-	it("stops every distinct source, each Programmer, and Preload in one action", async () => {
+	it("turns every distinct running source off without clearing Programmers", async () => {
 		playbackAuthority.sources = [mapped, mapped, direct];
+		preloadLifecycle.active = true;
 		render(<SystemControlsModal />);
-		fireEvent.click(screen.getByRole("button", { name: "Stop everything" }));
+		fireEvent.click(screen.getByRole("button", { name: "All Off" }));
 
 		await waitFor(() => expect(release).toHaveBeenCalledTimes(2));
 		expect(release).toHaveBeenCalledWith(mapped);
 		expect(release).toHaveBeenCalledWith(direct);
-		expect(clearProgrammer).toHaveBeenCalledWith("session-1");
+		expect(dynamicsRuntime.off).toHaveBeenCalledOnce();
+		expect(clearProgrammer).not.toHaveBeenCalled();
 		expect(preloadLifecycle.actions.release).toHaveBeenCalledOnce();
 		expect(dispatch).not.toHaveBeenCalledWith({ type: "RELEASE_PRELOAD" });
 	});
 
-	it("refuses Stop everything while Playback authority is loading", () => {
+	it("refuses All Off while Playback authority is loading", () => {
 		Object.assign(playbackAuthority, {
 			ready: false,
 			loading: true,
@@ -365,22 +437,26 @@ describe("SystemControlsModal", () => {
 		});
 		render(<SystemControlsModal />);
 
-		expect(screen.getByText("Playbacks loading…")).toBeInTheDocument();
-		expect(screen.getByText("Virtual playbacks loading…")).toBeInTheDocument();
+		expect(screen.getByText("Running Playbacks loading…")).toBeInTheDocument();
 		expect(
-			screen.getByRole("button", { name: "Stop everything" }),
+			screen.getByRole("button", { name: "All Off" }),
 		).toBeDisabled();
 		expect(release).not.toHaveBeenCalled();
 		expect(clearProgrammer).not.toHaveBeenCalled();
 		expect(preloadLifecycle.actions.release).not.toHaveBeenCalled();
 	});
 
-	it("routes Grand Master and blackout only through scoped Output actions", () => {
+	it("routes Grand Master and blackout only through scoped Output actions", async () => {
 		render(<SystemControlsModal />);
 
-		fireEvent.input(screen.getByRole("slider", { name: "Grand master" }), {
+		fireEvent.input(screen.getByRole("slider", { name: "Grand Master" }), {
 			target: { value: "42" },
 		});
+		await waitFor(() =>
+			expect(outputAuthority.actions?.setOutput).toHaveBeenCalledWith({
+				grandMaster: 0.42,
+			}),
+		);
 		fireEvent.click(screen.getByRole("button", { name: "BLACKOUT" }));
 
 		expect(outputAuthority.actions?.setOutput).toHaveBeenNthCalledWith(1, {
@@ -396,7 +472,7 @@ describe("SystemControlsModal", () => {
 		outputAuthority.actions = null;
 		render(<SystemControlsModal />);
 
-		const slider = screen.getByRole("slider", { name: "Grand master" });
+		const slider = screen.getByRole("slider", { name: "Grand Master" });
 		const blackout = screen.getByRole("button", { name: "BLACKOUT" });
 		expect(slider).toBeDisabled();
 		expect(blackout).toBeDisabled();

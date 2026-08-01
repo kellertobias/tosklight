@@ -1,58 +1,42 @@
-import type { ProgrammerLifecycleRow } from "../../../features/programmerLifecycle/contracts";
 import { Button } from "@tosklight/ui";
-import { ProgrammerList } from "./ProgrammerList";
-import type {
-	RunningCueListSource,
-	RunningDynamic,
-} from "./runningPlaybackAuthority";
+import type { RunningCueListSource } from "./runningPlaybackAuthority";
+import type { RunningDynamicController } from "./runningDynamicsAuthority";
 
 interface RunningSectionsProps {
-	pagePlaybacks: readonly RunningCueListSource[];
-	virtualPlaybacks: readonly RunningCueListSource[];
-	dynamics: readonly RunningDynamic[];
+	playbacks: readonly RunningCueListSource[];
+	dynamics: readonly RunningDynamicController[];
+	dynamicsLoading: boolean;
+	dynamicsError: string | null;
+	dynamicsCanStop: boolean;
+	stoppingDynamicControllerIds: ReadonlySet<string>;
+	preloadActive: boolean;
 	playbacksLoading: boolean;
 	releaseAvailable: boolean;
-	programmers: readonly ProgrammerLifecycleRow[];
-	programmersLoading: boolean;
-	currentUserId: string | null;
-	currentUserName: string | null;
 	onReleasePlayback(source: RunningCueListSource): void;
-	onClearProgrammer(sessionId: string): void;
+	onReleasePreload(): void;
+	onTurnOffDynamic(dynamic: RunningDynamicController): void;
 }
 
 export function RunningSections(props: RunningSectionsProps) {
 	return (
 		<div className="running-sections">
 			<PlaybackSection
-				title="Virtual playbacks"
-				empty="No virtual playbacks are running."
-				source="Virtual playback"
-				playbacks={props.virtualPlaybacks}
-				loading={props.playbacksLoading}
-				releaseAvailable={props.releaseAvailable}
-				onRelease={props.onReleasePlayback}
-			/>
-			<PlaybackSection
-				title="Playbacks"
+				title="Running Playbacks"
 				empty="No playbacks are running."
-				source="Playback"
-				playbacks={props.pagePlaybacks}
+				playbacks={props.playbacks}
+				preloadActive={props.preloadActive}
 				loading={props.playbacksLoading}
 				releaseAvailable={props.releaseAvailable}
 				onRelease={props.onReleasePlayback}
-			/>
-			<ProgrammerList
-				programmers={props.programmers}
-				loading={props.programmersLoading}
-				currentUserId={props.currentUserId}
-				currentUserName={props.currentUserName}
-				onClear={props.onClearProgrammer}
+				onReleasePreload={props.onReleasePreload}
 			/>
 			<DynamicsSection
 				dynamics={props.dynamics}
-				loading={props.playbacksLoading}
-				releaseAvailable={props.releaseAvailable}
-				onRelease={props.onReleasePlayback}
+				loading={props.dynamicsLoading}
+				error={props.dynamicsError}
+				canStop={props.dynamicsCanStop}
+				stoppingControllerIds={props.stoppingDynamicControllerIds}
+				onTurnOff={props.onTurnOffDynamic}
 			/>
 		</div>
 	);
@@ -61,11 +45,12 @@ export function RunningSections(props: RunningSectionsProps) {
 interface PlaybackSectionProps {
 	title: string;
 	empty: string;
-	source: "Playback" | "Virtual playback";
 	playbacks: readonly RunningCueListSource[];
+	preloadActive: boolean;
 	loading: boolean;
 	releaseAvailable: boolean;
 	onRelease(source: RunningCueListSource): void;
+	onReleasePreload(): void;
 }
 
 function PlaybackSection(props: PlaybackSectionProps) {
@@ -79,12 +64,26 @@ function PlaybackSection(props: PlaybackSectionProps) {
 					<PlaybackRow
 						key={playback.key}
 						playback={playback}
-						source={props.source}
 						releaseAvailable={props.releaseAvailable}
 						onRelease={props.onRelease}
 					/>
 				))}
-				{!props.playbacks.length && (
+				{props.preloadActive && (
+					<article>
+						<span>
+							<b>Preload</b>
+							<small>Programmer Preload · Running</small>
+						</span>
+						<Button
+							className="danger"
+							aria-label="Turn off Preload"
+							onClick={props.onReleasePreload}
+						>
+							Off
+						</Button>
+					</article>
+				)}
+				{!props.playbacks.length && !props.preloadActive && (
 					<p className="empty-window-message">
 						{props.loading ? `${props.title} loading…` : props.empty}
 					</p>
@@ -96,12 +95,10 @@ function PlaybackSection(props: PlaybackSectionProps) {
 
 function PlaybackRow({
 	playback,
-	source,
 	releaseAvailable,
 	onRelease,
 }: {
 	playback: RunningCueListSource;
-	source: "Playback" | "Virtual playback";
 	releaseAvailable: boolean;
 	onRelease(source: RunningCueListSource): void;
 }) {
@@ -115,7 +112,7 @@ function PlaybackRow({
 				<b>{playback.label}</b>
 				<small>
 					{playback.playbackNumber == null
-						? source
+						? "Virtual playback"
 						: `Playback ${playback.playbackNumber}`} {" "}
 					· Cue {cueNumber} · {Math.round(playback.runtime.master * 100)}% ·{" "}
 					{playback.runtime.paused ? "Paused" : "Running"}
@@ -123,11 +120,13 @@ function PlaybackRow({
 			</span>
 			<Button
 				className="danger"
-				aria-label={`Stop ${source} ${playback.label}`}
+				aria-label={`Turn off ${
+					playback.playbackNumber == null ? "Virtual playback" : "Playback"
+				} ${playback.label}`}
 				disabled={!releaseAvailable}
 				onClick={() => onRelease(playback)}
 			>
-				Stop
+				Off
 			</Button>
 		</article>
 	);
@@ -136,31 +135,45 @@ function PlaybackRow({
 function DynamicsSection({
 	dynamics,
 	loading,
-	releaseAvailable,
-	onRelease,
+	error,
+	canStop,
+	stoppingControllerIds,
+	onTurnOff,
 }: {
-	dynamics: readonly RunningDynamic[];
+	dynamics: readonly RunningDynamicController[];
 	loading: boolean;
-	releaseAvailable: boolean;
-	onRelease(source: RunningCueListSource): void;
+	error: string | null;
+	canStop: boolean;
+	stoppingControllerIds: ReadonlySet<string>;
+	onTurnOff(dynamic: RunningDynamicController): void;
 }) {
 	return (
 		<section>
 			<h3>
-				Dynamics <small>{dynamics.length}</small>
+				Running Dynamics <small>{dynamics.length}</small>
 			</h3>
 			<div className="programmer-list">
 				{dynamics.map((dynamic) => (
 					<DynamicRow
-						key={`${dynamic.source.key}-${dynamic.index}`}
+						key={dynamic.key}
 						dynamic={dynamic}
-						releaseAvailable={releaseAvailable}
-						onRelease={onRelease}
+						canStop={canStop}
+						stopping={stoppingControllerIds.has(dynamic.controllerId)}
+						onTurnOff={onTurnOff}
 					/>
 				))}
 				{!dynamics.length && (
 					<p className="empty-window-message">
-						{loading ? "Dynamics loading…" : "No dynamics are running."}
+						{loading
+							? "Dynamics loading…"
+							: error
+								? `Dynamics unavailable: ${error}`
+								: "No dynamics are running."}
+					</p>
+				)}
+				{dynamics.length > 0 && error && (
+					<p className="modal-status" role="alert">
+						{error}
 					</p>
 				)}
 			</div>
@@ -170,37 +183,34 @@ function DynamicsSection({
 
 function DynamicRow({
 	dynamic,
-	releaseAvailable,
-	onRelease,
+	canStop,
+	stopping,
+	onTurnOff,
 }: {
-	dynamic: RunningDynamic;
-	releaseAvailable: boolean;
-	onRelease(source: RunningCueListSource): void;
+	dynamic: RunningDynamicController;
+	canStop: boolean;
+	stopping: boolean;
+	onTurnOff(dynamic: RunningDynamicController): void;
 }) {
-	const { source, index } = dynamic;
-	const sourceLabel = source.cueList?.name ?? "Cuelist";
-	const cueNumber =
-		source.cue?.number ??
-		source.runtime.current?.number ??
-		source.runtime.cue_index + 1;
 	return (
 		<article>
 			<span>
 				<b>
-					{sourceLabel} · Dynamic {index + 1}
+					{dynamic.name} · Dynamic {dynamic.poolNumber}
 				</b>
 				<small>
-					Cue {cueNumber} · Stop releases its source playback
+					{dynamic.source} · {dynamic.targets.length} target
+					{dynamic.targets.length === 1 ? "" : "s"} ·{" "}
+					{dynamic.paused || dynamic.instancePaused ? "Paused" : "Running"}
 				</small>
 			</span>
 			<Button
 				className="danger"
-				title="Stops this Dynamic by releasing its source playback"
-				aria-label={`Stop Dynamic ${index + 1} from ${sourceLabel}`}
-				disabled={!releaseAvailable}
-				onClick={() => onRelease(source)}
+				aria-label={`Turn off Dynamic ${dynamic.poolNumber} ${dynamic.name} from ${dynamic.source}`}
+				disabled={!canStop || stopping || dynamic.releasing}
+				onClick={() => onTurnOff(dynamic)}
 			>
-				Stop
+				{stopping ? "Turning off…" : "Off"}
 			</Button>
 		</article>
 	);

@@ -1,9 +1,11 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
 import type { DynamicsApiClient } from "../../api/client/dynamics";
+import type { LightClientRuntime } from "../../api/client/runtime";
 import type { ShowObjectsApiClient } from "../../api/client/showObjects";
 
 export interface DynamicsActions {
 	dynamics: DynamicsApiClient;
+	events?: Pick<LightClientRuntime, "onEvent">;
 	showObjects: Pick<
 		ShowObjectsApiClient,
 		| "object"
