@@ -24,8 +24,16 @@ usage() {
   cat <<'EOF'
 tools/build.sh is invoked by the root package.json scripts:
   npm run open                 Build debug server and app, stop old instances, and open ToskLight
+  npm run open:viz [ARGS...]   Build the visualizer and the Viz editor, and open the visualizer with it
+  npm run build:viz            Build the standalone visualizer only
+  npm run open:viz-editor      Build the Viz rig-planning editor and open it
+  npm run build:viz-editor     Build the Viz rig-planning editor only
   npm run manual               Build PDF and deployable HTML manuals from docs/help Markdown
   npm run icons:contact-sheets Refresh Help contact-sheet PNGs from assets/icons SVGs
+  npm run models               Rebuild assets/models GLBs with Blender and check the import contract
+  npm run models:verify        Check the shipped assets/models GLBs without rebuilding them
+  npm run models:render        Render one PNG per model and regenerate the help catalogue
+  npm run models:open          Rebuild the models and open the whole set as one .blend in Blender
   npm run pages:generate       Assemble the public site: landing page, manual, and code safari
   npm run pages:serve [PORT]   Serve the assembled public site locally
   npm run codesafari           Run the CodeSafari code tour locally
@@ -36,7 +44,7 @@ tools/build.sh is invoked by the root package.json scripts:
   npm run clean:artifacts      Remove generated artifacts while preserving runtime and root-cleanup recovery
   npm run artifact-path NAME   Print a resolved artifact path (for CI and tooling)
 
-Direct subcommands: open | manual | icon-contact-sheets | safari | pages | pages-serve [PORT] | codesafari |
+Direct subcommands: open | open-viz [ARGS...] | build-viz | open-viz-editor [ARGS...] | build-viz-editor | manual | icon-contact-sheets | models [verify|render|open] | safari | pages | pages-serve [PORT] | codesafari |
   archive [install] | migrate-artifacts | clean-root | clean-artifacts [runtime PATH] | path NAME
 EOF
 }
@@ -57,6 +65,50 @@ build_manual() {
 build_icon_contact_sheets() {
   ensure_manual_dependencies
   "$MANUAL_PYTHON" "$ROOT/tools/generate_icon_contact_sheets.py"
+}
+
+# The fixture, truss and stage GLBs of docs/engineering/fixture-and-stage-model-brief.md.
+# The models are tracked assets, so this only runs when they are being changed.
+build_stage_models() {
+  require blender
+  require python3
+  blender --background --factory-startup --python "$ROOT/tools/build_stage_models.py" -- \
+    --output "$ROOT/assets/models"
+  verify_stage_models
+}
+
+verify_stage_models() {
+  require python3
+  python3 "$ROOT/tools/verify_stage_models.py" --models "$ROOT/assets/models" --quiet
+}
+
+# One PNG per shipped model, plus the generated help catalogue that shows them. The renders
+# come from importing the .glb, so this doubles as a round-trip check of what actually ships.
+render_stage_models() {
+  require blender
+  ensure_manual_dependencies
+  blender --background --factory-startup --python "$ROOT/tools/render_stage_models.py" -- \
+    --models "$ROOT/assets/models" \
+    --images "$ROOT/docs/help/assets/models" \
+    --page "$ROOT/docs/help/45-Visualizer/02-model-catalogue.md"
+  "$MANUAL_PYTHON" "$ROOT/tools/optimise_model_images.py" "$ROOT/docs/help/assets/models"
+}
+
+# A .blend of the whole set laid out, to look at the geometry the builders produce. It is a
+# scratch review file, not a source of truth: tools/stage_models/ is where the models are edited.
+open_stage_models() {
+  require blender
+  local review="$LIGHT_TMP_DIR/stage-models-review.blend"
+  rm -f "$review"
+  blender --background --factory-startup --python "$ROOT/tools/build_stage_models.py" -- \
+    --output "$ROOT/assets/models" --blend "$review"
+  [[ -f "$review" ]] || {
+    echo "error: the review file was not written; see the Blender output above" >&2
+    exit 1
+  }
+  verify_stage_models
+  echo "Opening $review"
+  blender "$review" >/dev/null 2>&1 &
 }
 
 build_safari() {
@@ -419,7 +471,136 @@ print_artifact_path() {
   esac
 }
 
+# The Viz editor is the planning window for a standalone visualizer session: the desk's patch
+# sheet over a show file, with no desk running. Like the visualizer, it is a separate product and
+# opening ToskLight never builds it.
+build_viz_editor() {
+  require cargo
+  require npm
+  echo "Building the Viz editor..."
+  (cd "$ROOT/apps/viz-editor" && npm run build)
+  # `custom-protocol` is what makes this a real application rather than a development one: without
+  # it Tauri embeds no frontend and the window opens on the dev-server URL, which is a white page
+  # unless `npm run dev` happens to be running. The Tauri CLI passes it for `tauri build`; this is
+  # a plain cargo build, so it passes it here.
+  cargo build --release --manifest-path "$ROOT/Cargo.toml" -p viz-editor \
+    --features custom-protocol
+  echo "Viz editor built: $TARGET_DIR/release/viz-editor"
+}
+
+open_viz_editor() {
+  build_viz_editor
+  echo "Opening the Viz editor."
+  "$TARGET_DIR/release/viz-editor" "$@"
+}
+
+# The visualizer is a separate product with its own build. Building or opening ToskLight never
+# builds it, and it never has to be present for the desk to run.
+build_visualizer() {
+  require cargo
+  echo "Building the standalone visualizer..."
+  cargo build --release --manifest-path "$ROOT/Cargo.toml" -p viz-renderer
+  echo "Visualizer built: $TARGET_DIR/release/viz-renderer"
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    bash "$ROOT/tools/bundle-visualizer-macos.sh" \
+      "$TARGET_DIR/release/viz-renderer" "$TARGET_DIR/release/bundle/macos"
+  fi
+}
+
+# On macOS the executable has to be launched from inside the bundle to inherit its icon, name and
+# menu; everywhere else the bare binary is the product.
+visualizer_executable() {
+  local bundled="$TARGET_DIR/release/bundle/macos/ToskLight Visualizer.app/Contents/MacOS/ToskLight Visualizer"
+  if [[ "$(uname -s)" == "Darwin" && -x "$bundled" ]]; then
+    printf '%s\n' "$bundled"
+  else
+    printf '%s\n' "$TARGET_DIR/release/viz-renderer"
+  fi
+}
+
+# The visualizer is a client of the desk, so it starts the development server only when nothing is
+# already answering, and never stops a desk the operator is using.
+ensure_desk_server_for_visualizer() {
+  if curl -fsS http://127.0.0.1:5000/api/v2/readiness >/dev/null 2>&1; then
+    echo "Using the desk already answering on http://127.0.0.1:5000"
+    return 0
+  fi
+  echo "No desk is answering on http://127.0.0.1:5000; starting the development server..."
+  light_check_runtime_migration
+  if [[ ! -f "$LIGHT_CONTROL_FRONTEND_DIR/index.html" ]]; then
+    require npm
+    echo "Building control UI assets the headless server embeds..."
+    (cd "$UI_DIR" && npm run build)
+  fi
+  cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --bin light-headless
+  launchctl submit -l "$DEV_SERVER_LABEL" -o "$DATA_DIR/light-headless.log" -e "$DATA_DIR/light-headless.log" -- "$TARGET_DIR/debug/light-headless" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR"
+  wait_for_launchd_server
+  echo "Server log: $DATA_DIR/light-headless.log"
+}
+
+# Whether this launch was told to look at a desk, a show file or the built-in scene. With none of
+# them the visualizer opens its planning window, and the rig comes from there rather than a desk.
+visualizer_names_a_source() {
+  local argument
+  for argument in "$@"; do
+    case "$argument" in
+      --server|--port|--show|--demo) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+open_visualizer() {
+  require cargo
+  require curl
+  # Build the visualizer first: a compile error should not leave a freshly started desk behind.
+  build_visualizer
+  # The planning window is the patch sheet the visualizer opens when nothing else was named, so it
+  # is part of opening the visualizer rather than a separate thing to remember to build.
+  build_viz_editor
+  if visualizer_names_a_source "$@"; then
+    # A named show file is served by a private server the visualizer starts itself, so that binary
+    # has to exist; a named desk is the running one.
+    if printf '%s\n' "$@" | grep -qx -- "--show"; then
+      cargo build --release --manifest-path "$ROOT/Cargo.toml" -p light-headless --bin light-headless
+    else
+      ensure_desk_server_for_visualizer
+    fi
+  else
+    echo "No desk named: the visualizer will open the Viz editor and draw its document."
+  fi
+  echo "Opening the visualizer. Press Command+, for Quick Settings."
+  # In a development tree the two binaries sit beside each other in the target directory rather
+  # than inside one installed bundle, so the visualizer is told where the editor is. The editor
+  # patches from this checkout's own fixture library, which the development desk installs the
+  # shipped packages into; without one the fixture browser is simply empty.
+  local library="${LIGHT_FIXTURE_LIBRARY:-$DATA_DIR/fixtures.sqlite}"
+  if [[ ! -f "$library" ]]; then
+    echo "No fixture library at $library yet; the editor's fixture browser will be empty until the desk has run once."
+  fi
+  TOSKLIGHT_VIZ_EDITOR="$TARGET_DIR/release/viz-editor" \
+  TOSKLIGHT_VIZ_HEADLESS="$TARGET_DIR/release/light-headless" \
+  LIGHT_FIXTURE_LIBRARY="$library" \
+    "$(visualizer_executable)" "$@"
+}
+
 case "${1:-}" in
+  open-viz)
+    shift
+    open_visualizer "$@"
+    ;;
+  open-viz-editor)
+    shift
+    open_viz_editor "$@"
+    ;;
+  build-viz-editor)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    build_viz_editor
+    ;;
+  build-viz)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    build_visualizer
+    ;;
   icon-contact-sheets)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
     build_icon_contact_sheets
@@ -427,6 +608,15 @@ case "${1:-}" in
   manual)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
     build_manual
+    ;;
+  models)
+    case "${2:-}" in
+      "") build_stage_models ;;
+      verify) [[ $# -eq 2 ]] || { usage >&2; exit 2; }; verify_stage_models ;;
+      render) [[ $# -eq 2 ]] || { usage >&2; exit 2; }; render_stage_models ;;
+      open) [[ $# -eq 2 ]] || { usage >&2; exit 2; }; open_stage_models ;;
+      *) usage >&2; exit 2 ;;
+    esac
     ;;
   safari)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
