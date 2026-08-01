@@ -26,6 +26,21 @@ interface PatchAllocator {
 
 type PatchBand = "dimmer" | "led" | "moving" | "hazer" | "other";
 
+export interface PlannedDemoPatchConfiguration {
+	addressBands?: {
+		dimmers: string;
+		ledPars: string;
+		movingLights: string;
+		hazers: string;
+	};
+	placements?: readonly {
+		targets: string;
+		location: { x: string; y: string; z: string };
+		rotation?: { x: string; y: string; z: string };
+	}[];
+	movingFixtureRotation?: Point;
+}
+
 interface PlannedDemoPatchResult {
 	fixtures: any[];
 	fixtureRecords: number;
@@ -39,12 +54,20 @@ export async function installPlannedDemoPatch(
 	api: ApiDriver,
 	showId: string,
 	layers: Readonly<Record<string, string>>,
-	options: { progressive?: boolean; onItem?: () => Promise<void> } = {},
+	options: {
+		progressive?: boolean;
+		onItem?: () => Promise<void>;
+		configuration?: PlannedDemoPatchConfiguration;
+	} = {},
 ): Promise<PlannedDemoPatchResult> {
 	await ensurePlannedDemoFixtureLibrary(api);
 	const library = await api.fixtureProfilesSnapshot();
 	const profiles = library.profiles as FixtureProfile[];
-	const built = createPlannedDemoPatchInputs(profiles, layers);
+	const built = createPlannedDemoPatchInputs(
+		profiles,
+		layers,
+		options.configuration,
+	);
 	const { fixtures } = built;
 	const before = await api.patch();
 	const expectedNumbers = new Set(
@@ -102,6 +125,27 @@ export async function installPlannedDemoPatch(
 		);
 		await options.onItem?.();
 	}
+	if (options.progressive) {
+		const existingFixtures = adopted.filter((fixture) =>
+			existingByNumber.has(fixture.fixture_number),
+		);
+		if (existingFixtures.length > 0) {
+			const current = await api.patch();
+			await api.request(
+				"POST",
+				"/api/v2/patch/fixtures",
+				{
+					request_id: crypto.randomUUID(),
+					fixtures: existingFixtures,
+					remove_fixture_ids: [],
+					placements: [],
+				},
+				true,
+				current.revision,
+				{ showId },
+			);
+		}
+	}
 	const after = await api.patch();
 	const lightingFixtures = after.fixtures.filter((fixture: any) =>
 		expectedNumbers.has(fixture.fixture_number),
@@ -141,8 +185,9 @@ function matchesManifestProfile(
 export function createPlannedDemoPatchInputs(
 	profiles: FixtureProfile[],
 	layers: Readonly<Record<string, string>>,
+	configuration?: PlannedDemoPatchConfiguration,
 ): PlannedDemoPatchResult {
-	const allocator = createPatchAllocator();
+	const allocator = createPatchAllocator(configuration?.addressBands);
 	let occupiedSlots = 0;
 	const fixtures = [...PLANNED_DEMO_FIXTURES]
 		.sort((left, right) => patchPriority(left) - patchPriority(right))
@@ -155,7 +200,7 @@ export function createPlannedDemoPatchInputs(
 				throw new Error(
 					`Missing demo mode ${entry.profile.name} / ${entry.profile.mode}`,
 				);
-			const placement = placementFor(entry);
+			const placement = placementFor(entry, configuration);
 			const band = patchBand(entry);
 			const primaryPatches = allocateSplits(mode.splits, allocator, band);
 			occupiedSlots += footprint(mode.splits);
@@ -255,14 +300,22 @@ function allocateSplits(
 	});
 }
 
-function createPatchAllocator(): PatchAllocator {
+function createPatchAllocator(
+	bands?: PlannedDemoPatchConfiguration["addressBands"],
+): PatchAllocator {
+	const start = (value: string | undefined, fallback: PatchCursor) => {
+		const match = value?.match(/^(\d+)\.(\d+)/u);
+		return match
+			? { universe: Number(match[1]), address: Number(match[2]) }
+			: fallback;
+	};
 	return {
 		occupied: new Set(),
 		cursors: {
-			dimmer: { universe: 1, address: 1 },
-			led: { universe: 1, address: 65 },
-			moving: { universe: 1, address: 257 },
-			hazer: { universe: 1, address: 509 },
+			dimmer: start(bands?.dimmers, { universe: 1, address: 1 }),
+			led: start(bands?.ledPars, { universe: 1, address: 65 }),
+			moving: start(bands?.movingLights, { universe: 1, address: 257 }),
+			hazer: start(bands?.hazers, { universe: 1, address: 509 }),
 			other: { universe: 2, address: 1 },
 		},
 	};
@@ -349,14 +402,91 @@ function patchBand(entry: DemoFixtureManifestEntry): PatchBand {
 	return "other";
 }
 
-function placementFor(entry: DemoFixtureManifestEntry) {
-	if (entry.roles.includes("All ACLs")) return aclPlacement(entry);
+function placementFor(
+	entry: DemoFixtureManifestEntry,
+	configuration?: PlannedDemoPatchConfiguration,
+) {
+	const configured = configuration?.placements?.find((placement) =>
+		fixtureTargetIncludes(placement.targets, entry.number),
+	);
+	if (entry.roles.includes("All ACLs")) {
+		if (configured && entry.number === 601)
+			return configuredPhysicalPlacement(configured, entry.multipatches + 1);
+		return aclPlacement(entry);
+	}
 	if (entry.roles.includes("House Lights")) return housePlacement();
-	const location = ordinaryLocation(entry);
+	const location = configured
+		? configuredPoint(configured.location, entry.number, configured.targets)
+		: ordinaryLocation(entry);
 	return {
-		primary: { location, rotation: ordinaryRotation(entry, location) },
+		primary: {
+			location,
+			rotation: configured?.rotation
+				? configuredPoint(configured.rotation, entry.number, configured.targets)
+				: entry.family === "profile" || entry.family === "wash"
+					? (configuration?.movingFixtureRotation ??
+						ordinaryRotation(entry, location))
+					: ordinaryRotation(entry, location),
+		},
 		multipatches: [] as Array<{ location: Point; rotation: Point }>,
 	};
+}
+
+function fixtureTargetIncludes(targets: string, fixtureNumber: number) {
+	const numbers = targets.match(/\d+/gu)?.map(Number) ?? [];
+	if (numbers.length === 0) return false;
+	const first = numbers[0];
+	if (/multipatch/iu.test(targets)) return fixtureNumber === first;
+	const last = /\bTHRU\b/u.test(targets) && numbers[1] ? numbers[1] : first;
+	return (
+		fixtureNumber >= Math.min(first, last) &&
+		fixtureNumber <= Math.max(first, last)
+	);
+}
+
+function configuredPoint(
+	point: { x: string; y: string; z: string },
+	fixtureNumber: number,
+	targets: string,
+): Point {
+	const numbers = targets.match(/\d+/gu)?.map(Number) ?? [fixtureNumber];
+	const first = numbers[0] ?? fixtureNumber;
+	const last = /\bTHRU\b/u.test(targets) && numbers[1] ? numbers[1] : first;
+	const index = fixtureNumber - Math.min(first, last);
+	const count = Math.abs(last - first) + 1;
+	return {
+		x: configuredSpread(point.x, index, count),
+		y: configuredSpread(point.y, index, count),
+		z: configuredSpread(point.z, index, count),
+	};
+}
+
+function configuredPhysicalPlacement(
+	placement: NonNullable<PlannedDemoPatchConfiguration["placements"]>[number],
+	count: number,
+) {
+	const instances = Array.from({ length: count }, (_, index) => ({
+		location: {
+			x: configuredSpread(placement.location.x, index, count),
+			y: configuredSpread(placement.location.y, index, count),
+			z: configuredSpread(placement.location.z, index, count),
+		},
+		rotation: {
+			x: configuredSpread(placement.rotation?.x ?? "0", index, count),
+			y: configuredSpread(placement.rotation?.y ?? "0", index, count),
+			z: configuredSpread(placement.rotation?.z ?? "0", index, count),
+		},
+	}));
+	return { primary: instances[0], multipatches: instances.slice(1) };
+}
+
+function configuredSpread(value: string, index: number, count: number) {
+	const [firstText, lastText] = value.split(/\s+THRU\s+/u);
+	const first = Number(firstText);
+	const last = lastText == null ? first : Number(lastText);
+	if (!Number.isFinite(first) || !Number.isFinite(last))
+		throw new Error(`Invalid demo placement value ${value}`);
+	return spread(index, count, first, last);
 }
 
 function ordinaryLocation(entry: DemoFixtureManifestEntry): Point {

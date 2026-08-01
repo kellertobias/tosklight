@@ -22,7 +22,11 @@ export async function installPlannedDemoScenery(
 	api: ApiDriver,
 	showId: string,
 	layers: Readonly<Record<string, string>>,
-	options: { progressive?: boolean; onItem?: () => Promise<void> } = {},
+	options: {
+		progressive?: boolean;
+		onItem?: () => Promise<void>;
+		backCurtain?: { x: string; y: number; z: number };
+	} = {},
 ) {
 	await ensurePlannedDemoFixtureLibrary(api);
 	const profiles = (await api.fixtureProfilesSnapshot())
@@ -35,7 +39,7 @@ export async function installPlannedDemoScenery(
 				: [[fixture.virtual_fixture_number, fixture] as const],
 		),
 	);
-	const fixtures = sceneryEntries().map((entry) => {
+	const fixtures = sceneryEntries(options.backCurtain).map((entry) => {
 		const profile = profiles.find(
 			(candidate) =>
 				candidate.manufacturer === "Venue" && candidate.name === entry.profile,
@@ -122,7 +126,11 @@ export async function installPlannedDemoScenery(
 	return fixtures;
 }
 
-function sceneryEntries(): SceneryEntry[] {
+function sceneryEntries(backCurtain?: {
+	x: string;
+	y: number;
+	z: number;
+}): SceneryEntry[] {
 	const trusses = [
 		["Back", 4],
 		["Mid", 0],
@@ -151,14 +159,19 @@ function sceneryEntries(): SceneryEntry[] {
 			z: 0,
 		},
 	}));
-	const curtains = [-2.5, 2.5].map((x, index) => ({
-		number: index + 20,
-		name: `Back Curtain ${index + 1}`,
-		profile: "Curtain 5 m",
-		mode: "5 m",
-		layer: "Stage & Venue",
-		location: { x, y: 4.35, z: 2.0 },
-	}));
+	const curtainRange = (backCurtain?.x ?? "-2.5 THRU 2.5")
+		.split(/\s+THRU\s+/u)
+		.map(Number);
+	const curtains = [curtainRange[0], curtainRange[1] ?? curtainRange[0]].map(
+		(x, index) => ({
+			number: index + 20,
+			name: `Back Curtain ${index + 1}`,
+			profile: "Curtain 5 m",
+			mode: "5 m",
+			layer: "Stage & Venue",
+			location: { x, y: backCurtain?.y ?? 4.35, z: backCurtain?.z ?? 2.0 },
+		}),
+	);
 	const railings = [
 		...[-3, -1, 1, 3].map((x, index) => ({
 			number: index + 22,

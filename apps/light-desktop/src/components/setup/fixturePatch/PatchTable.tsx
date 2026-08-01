@@ -321,6 +321,7 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 				<td className="patch-secondary" key={`location-${axis}`}>
 					<Button
 						className="patch-value"
+						aria-label={`Location ${axis.toUpperCase()} ${fixtureDisplayId(fixture)}`}
 						onClick={() => armEdit(controller, fixture, "location", axis)}
 						onContextMenu={(event) => {
 							event.preventDefault();
@@ -335,6 +336,7 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 				<td className="patch-secondary" key={`rotation-${axis}`}>
 					<Button
 						className="patch-value"
+						aria-label={`Rotation ${axis.toUpperCase()} ${fixtureDisplayId(fixture)}`}
 						onClick={() => armEdit(controller, fixture, "rotation", axis)}
 						onContextMenu={(event) => {
 							event.preventDefault();

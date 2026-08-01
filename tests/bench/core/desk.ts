@@ -15,7 +15,8 @@ export class DeskDriver {
 	private baseUrl = "";
 	private auditRevision = 0;
 	private controllableDesktop?: ControllableDesktopDriver;
-	private recordingClickPace: "normal" | "compact" | "rapid" = "normal";
+	private recordingClickPace: "normal" | "compact" | "steady" | "rapid" =
+		"normal";
 	private productIntroVisible = false;
 	private readonly semanticStepObservers = new Set<
 		(step: { title: string; description: string }) => void
@@ -38,7 +39,7 @@ export class DeskDriver {
 		);
 	}
 
-	setRecordingClickPace(pace: "normal" | "compact" | "rapid"): void {
+	setRecordingClickPace(pace: "normal" | "compact" | "steady" | "rapid"): void {
 		this.recordingClickPace = pace;
 	}
 
@@ -304,9 +305,11 @@ export class DeskDriver {
 			? 45
 			: this.recordingClickPace === "rapid"
 				? 45
-				: this.recordingClickPace === "compact"
-					? 120
-					: 280;
+				: this.recordingClickPace === "steady"
+					? 180
+					: this.recordingClickPace === "compact"
+						? 120
+						: 280;
 		const previewMillis = Math.max(
 			hardwareTyping ? 40 : this.recordingClickPace === "rapid" ? 40 : 120,
 			Number(process.env.LIGHT_VISUAL_CLICK_PREVIEW ?? defaultPreview),
@@ -321,9 +324,11 @@ export class DeskDriver {
 			? 45
 			: this.recordingClickPace === "rapid"
 				? 45
-				: this.recordingClickPace === "compact"
-					? 120
-					: 280;
+				: this.recordingClickPace === "steady"
+					? 180
+					: this.recordingClickPace === "compact"
+						? 120
+						: 280;
 		const settleMillis = Math.max(
 			hardwareTyping ? 40 : this.recordingClickPace === "rapid" ? 40 : 120,
 			Number(process.env.LIGHT_VISUAL_CLICK_PAUSE ?? defaultPause),

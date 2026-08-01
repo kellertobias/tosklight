@@ -30,7 +30,6 @@ const PRESET_LABELS: Record<PoolPresetFamily, string> = {
 export function PoolColorSettings({
 	objectType,
 	paneId,
-	presetFamily = "mixed",
 	legacyPresetColors,
 }: {
 	objectType: PoolObjectType;
@@ -47,12 +46,6 @@ export function PoolColorSettings({
 	const mode =
 		settings.configuration.modes[surfaceKey] ??
 		(legacyPresetColors === false ? "individual" : "type");
-	const color =
-		objectType === "preset"
-			? settings.configuration.palette.preset[presetFamily]
-			: settings.configuration.palette[
-					objectType === "macro" ? "macro_color" : objectType
-				];
 	const [saving, setSaving] = useState(false);
 	const persist = async (operation: () => Promise<void>) => {
 		setSaving(true);
@@ -64,12 +57,6 @@ export function PoolColorSettings({
 	};
 	const setMode = (value: PoolColorMode) =>
 		void persist(() => settings.setMode(surfaceKey, value));
-	const setColor = (value: string) =>
-		void persist(() =>
-			objectType === "preset"
-				? settings.setPresetColor(presetFamily, value)
-				: settings.setTypeColor(objectType, value),
-		);
 	return (
 		<section
 			className="pool-color-settings"
@@ -99,34 +86,6 @@ export function PoolColorSettings({
 				Individual colors show only explicit item colors; uncolored items remain
 				grey.
 			</p>
-			<FormLayout labelPlacement="side">
-				<ColorPickerField
-					label={
-						objectType === "preset"
-							? `${presetFamily} default`
-							: `${LABELS[objectType]} default`
-					}
-					value={color}
-					disabled={saving}
-					onChange={setColor}
-				/>
-			</FormLayout>
-			<div className="button-group">
-				<Button
-					disabled={saving}
-					onClick={() =>
-						void persist(() => settings.resetColor(objectType, presetFamily))
-					}
-				>
-					Reset this color
-				</Button>
-				<Button
-					disabled={saving}
-					onClick={() => void persist(settings.resetAll)}
-				>
-					Reset all colors
-				</Button>
-			</div>
 			{saving && <p role="status">Saving pool colors…</p>}
 		</section>
 	);

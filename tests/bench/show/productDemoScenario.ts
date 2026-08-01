@@ -20,9 +20,7 @@ import {
 } from "../../support/plannedDemoDynamics";
 import { ensurePlannedDemoFixtureLibrary } from "../../support/plannedDemoFixtureLibrary";
 import { installPlannedDemoGroups } from "../../support/plannedDemoGroups";
-import {
-	installPlannedDemoLayout,
-} from "../../support/plannedDemoLayouts";
+import { installPlannedDemoLayout } from "../../support/plannedDemoLayouts";
 import {
 	createPlannedDemoPatchInputs,
 	installPlannedDemoPatch,
@@ -54,16 +52,56 @@ export const PRODUCT_DEMO_SCRIPT = {
 	transitionFrames: 15,
 	sections: [
 		{ id: "intro", marker: "ToskLight", title: "ToskLight", frames: 175 },
-		{ id: "show-setup", marker: "SHOW SETUP", title: "Show Setup", frames: 6_250 },
-		{ id: "outputs", marker: "OUTPUT CONFIGURATION", title: "Output Configuration", frames: 875 },
-		{ id: "groups", marker: "GROUP SETUP", title: "Group Setup", frames: 3_250 },
-		{ id: "presets", marker: "PRESET SETUP", title: "Preset Setup", frames: 1_625 },
+		{
+			id: "show-setup",
+			marker: "SHOW SETUP",
+			title: "Show Setup",
+			frames: 6_250,
+		},
+		{
+			id: "outputs",
+			marker: "OUTPUT CONFIGURATION",
+			title: "Output Configuration",
+			frames: 875,
+		},
+		{
+			id: "groups",
+			marker: "GROUP SETUP",
+			title: "Group Setup",
+			frames: 3_250,
+		},
+		{
+			id: "presets",
+			marker: "PRESET SETUP",
+			title: "Preset Setup",
+			frames: 1_625,
+		},
 		{ id: "dynamics", marker: "DYNAMICS", title: "Dynamics", frames: 1_625 },
-		{ id: "cuelists", marker: "CUELIST PROGRAMMING", title: "Cuelist Programming", frames: 1_750 },
-		{ id: "complete", marker: "SHOW COMPLETE", title: "Show Complete", frames: 250 },
-		{ id: "fixture-controls", marker: "BUILT-IN FIXTURE CONTROL ACTIONS", title: "Fixture Controls", frames: 625 },
+		{
+			id: "cuelists",
+			marker: "CUELIST PROGRAMMING",
+			title: "Cuelist Programming",
+			frames: 1_750,
+		},
+		{
+			id: "complete",
+			marker: "SHOW COMPLETE",
+			title: "Show Complete",
+			frames: 250,
+		},
+		{
+			id: "fixture-controls",
+			marker: "BUILT-IN FIXTURE CONTROL ACTIONS",
+			title: "Fixture Controls",
+			frames: 625,
+		},
 		{ id: "busking", marker: "BUSKING", title: "Busking", frames: 1_000 },
-		{ id: "preloading", marker: "PRELOADING", title: "Preloading", frames: 750 },
+		{
+			id: "preloading",
+			marker: "PRELOADING",
+			title: "Preloading",
+			frames: 750,
+		},
 		{ id: "final", marker: "ACL CHASER", title: "Final Look", frames: 500 },
 	],
 	pacing: {
@@ -111,6 +149,10 @@ export const PRODUCT_DEMO_SCRIPT = {
 				location: { x: "-1 THRU 1", y: "4", z: "4.4" },
 				rotation: { x: "0", y: "-18 THRU 18", z: "0" },
 			},
+			{
+				targets: "101",
+				location: { x: "-4", y: "4", z: "4" },
+			},
 		],
 		backCurtain: { x: "-2.5 THRU 2.5", y: 4.35, z: 2.0 },
 		movingFixtureRotation: { x: 0, y: 0, z: 0 },
@@ -142,7 +184,10 @@ const DEMO_SHOW = fileURLToPath(
 	new URL("../../../assets/demo.show", import.meta.url),
 );
 const APPLICATION_ICON = fileURLToPath(
-	new URL("../../../apps/light-desktop/src-tauri/icons/icon.png", import.meta.url),
+	new URL(
+		"../../../apps/light-desktop/src-tauri/icons/icon.png",
+		import.meta.url,
+	),
 );
 const RECORDING = process.env.LIGHT_VISUAL_RECORDING === "1";
 const UPDATE_DEMO_SHOW = process.env.LIGHT_UPDATE_DEMO_SHOW === "1";
@@ -214,7 +259,8 @@ export class BrowserProductDemo {
 				stopObservingTitleCards = desk.observeTitleCards((title) => {
 					const section = PRODUCT_DEMO_SCRIPT.sections.find(
 						(candidate) =>
-							title === candidate.marker || title.startsWith(`${candidate.marker} ·`),
+							title === candidate.marker ||
+							title.startsWith(`${candidate.marker} ·`),
 					);
 					if (section && !titleMarkers.has(section.id))
 						titleMarkers.set(section.id, Date.now() - recordingStartedAtMillis);
@@ -232,8 +278,18 @@ export class BrowserProductDemo {
 			const keypad = demo.locator(".demo-number-block");
 			const stage = demo.locator(".stage-3d-canvas");
 			await verifyDemoFrame(demo, app, stage);
-			await expect(stage.locator("xpath=ancestor::*[contains(@class,'stage-window')][1]"))
-				.toHaveAttribute("data-visualization-state", "ready", { timeout: 20_000 });
+			const stageWindow = stage.locator(
+				"xpath=ancestor::*[contains(@class,'stage-window')][1]",
+			);
+			await expect(stageWindow).toHaveAttribute(
+				"data-live-visualization-state",
+				"ready",
+				{ timeout: 20_000 },
+			);
+			await expect(stageWindow).not.toHaveAttribute(
+				"data-visualization-revision",
+				"",
+			);
 			await desk.productIntro();
 			await desk.titleCard(
 				"SHOW SETUP",
@@ -243,7 +299,11 @@ export class BrowserProductDemo {
 			await ensurePlannedDemoFixtureLibrary(api);
 			const profiles = (await api.fixtureProfilesSnapshot())
 				.profiles as FixtureProfile[];
-			const desiredPatch = createPlannedDemoPatchInputs(profiles, {});
+			const desiredPatch = createPlannedDemoPatchInputs(
+				profiles,
+				{},
+				PRODUCT_DEMO_SCRIPT.patch,
+			);
 			const desiredByNumber = new Map(
 				desiredPatch.fixtures.map((fixture) => [
 					fixture.fixture_number,
@@ -301,8 +361,7 @@ export class BrowserProductDemo {
 					await expect(patchWindow.locator(".multipatch-row")).toHaveCount(
 						(truss - 1) * 3 + segment,
 					);
-					if (truss === 1 && segment === 1)
-						desk.setRecordingClickPace("rapid");
+					if (truss === 1 && segment === 1) desk.setRecordingClickPace("rapid");
 				}
 			}
 			desk.setRecordingClickPace("compact");
@@ -316,6 +375,7 @@ export class BrowserProductDemo {
 				"Adding the stage elements, curtain, back and side railings, and vertical pipes.",
 				() =>
 					installPlannedDemoScenery(api, showId, layers, {
+						backCurtain: PRODUCT_DEMO_SCRIPT.patch.backCurtain,
 						progressive: true,
 						onItem: () =>
 							RECORDING
@@ -358,15 +418,15 @@ export class BrowserProductDemo {
 				1,
 				4,
 				"X",
-				["−", "3", ".", "8", "THRU", "−", "2", ".", "5", "ENTER"],
+				valuePadKeys(demoPatchPlacement("1 THRU 4").location.x),
 			);
 			await expect
 				.poll(async () => {
 					const fixtures = (await api.patch()).fixtures;
 					return [1, 2, 3, 4].map(
 						(number) =>
-						fixtures.find((fixture: any) => fixture.fixture_number === number)
-							?.location?.x,
+							fixtures.find((fixture: any) => fixture.fixture_number === number)
+								?.location?.x,
 					);
 				})
 				.toEqual([-3_800, -3_367, -2_933, -2_500]);
@@ -379,7 +439,8 @@ export class BrowserProductDemo {
 				1,
 				4,
 				"Y",
-				["−", "3", "ENTER"],
+				valuePadKeys(demoPatchPlacement("1 THRU 4").location.y),
+				false,
 			);
 			await spreadFixtureLocationThroughTouchUi(
 				desk,
@@ -387,7 +448,8 @@ export class BrowserProductDemo {
 				1,
 				4,
 				"Z",
-				["4", ".", "1", "5", "ENTER"],
+				valuePadKeys(demoPatchPlacement("1 THRU 4").location.z),
+				false,
 			);
 			const acl = requiredFixture(desiredByNumber, 601);
 			await selectPatchLayer(desk, patchWindow, "ACLs & Blinder");
@@ -414,7 +476,7 @@ export class BrowserProductDemo {
 				await expect(patchWindow.locator(".multipatch-row")).toHaveCount(
 					multipatchesBeforeAcl + instance,
 				);
-				if (instance === 1) desk.setRecordingClickPace("rapid");
+				if (instance === 1) desk.setRecordingClickPace("steady");
 			}
 			desk.setRecordingClickPace("compact");
 			const aclPrimaryRow = fixtureRow(patchWindow, 601);
@@ -424,11 +486,12 @@ export class BrowserProductDemo {
 			await expect(aclPhysicalRows).toHaveCount(7);
 			await desk.click(aclPrimaryRow);
 			await desk.click(aclPhysicalRows.last(), { modifiers: ["Shift"] });
+			const aclPlacement = demoPatchPlacement("601 primary THRU multipatch 7");
 			for (const [kind, axis, keys] of [
-				["location", "X", ["−", "1", "THRU", "1", "ENTER"]],
-				["location", "Y", ["4", "ENTER"]],
-				["location", "Z", ["4", ".", "4", "ENTER"]],
-				["rotation", "Y", ["−", "1", "8", "THRU", "1", "8", "ENTER"]],
+				["location", "X", valuePadKeys(aclPlacement.location.x)],
+				["location", "Y", valuePadKeys(aclPlacement.location.y)],
+				["location", "Z", valuePadKeys(aclPlacement.location.z)],
+				["rotation", "Y", valuePadKeys(aclPlacement.rotation?.y ?? "0")],
 			] as const)
 				await spreadPhysicalPatchVectorThroughTouchUi(
 					desk,
@@ -449,23 +512,22 @@ export class BrowserProductDemo {
 				address: fixtureAddress(profile),
 				visibleModeSelection: true,
 			});
+			const firstMoverPlacement = demoPatchPlacement("101");
+			for (const [axis, keys] of [
+				["X", valuePadKeys(firstMoverPlacement.location.x)],
+				["Y", valuePadKeys(firstMoverPlacement.location.y)],
+				["Z", valuePadKeys(firstMoverPlacement.location.z)],
+			] as const)
+				await spreadFixtureLocationThroughTouchUi(
+					desk,
+					patchWindow,
+					101,
+					101,
+					axis,
+					[...keys],
+				);
 			const visibleLightingNumbers = [
-				1,
-				2,
-				3,
-				4,
-				5,
-				6,
-				7,
-				8,
-				601,
-				101,
-				102,
-				103,
-				104,
-				105,
-				106,
-				107,
+				1, 2, 3, 4, 5, 6, 7, 8, 601, 101, 102, 103, 104, 105, 106, 107,
 			];
 			const visibleLightingIdentities = await fixtureIdentities(
 				api,
@@ -474,9 +536,12 @@ export class BrowserProductDemo {
 			const canonical = await desk.fastForward(
 				"Patching the rest of the lighting show and reconciling the complete Stage layout.",
 				async () => {
-					const scenery = await installPlannedDemoScenery(api, showId, layers);
+					const scenery = await installPlannedDemoScenery(api, showId, layers, {
+						backCurtain: PRODUCT_DEMO_SCRIPT.patch.backCurtain,
+					});
 					const patch = await installPlannedDemoPatch(api, showId, layers, {
 						progressive: true,
+						configuration: PRODUCT_DEMO_SCRIPT.patch,
 						onItem: () =>
 							RECORDING
 								? page.waitForTimeout(
@@ -538,7 +603,7 @@ export class BrowserProductDemo {
 			await demonstrateBusking(desk, demo, api, bench, showId);
 			await demonstratePreload(desk, demo, keypad, api);
 
-	await desk.titleCard(
+			await desk.titleCard(
 				"ACL CHASER · SPEED D",
 				"The four-step ACL chase remains active on Speed Group D while a final keypad action proves normal post-generation control.",
 			);
@@ -566,6 +631,13 @@ export class BrowserProductDemo {
 				contentType: "application/json",
 			});
 			if (UPDATE_DEMO_SHOW) {
+				const expectedLayout = await installPlannedDemoLayout(api, showId);
+				await expect
+					.poll(async () => {
+						const [stored] = await api.showObjects<any>(showId, "user_layout");
+						return stored?.body;
+					})
+					.toMatchObject(expectedLayout);
 				completedShow = await downloadCompletedDemoShow(api, showId);
 			}
 			if (RECORDING) {
@@ -634,6 +706,20 @@ function framesToMillis(frames: number) {
 	return (frames / PRODUCT_DEMO_SCRIPT.fps) * 1_000;
 }
 
+function demoPatchPlacement(targets: string) {
+	const placement = PRODUCT_DEMO_SCRIPT.patch.placements.find(
+		(candidate) => candidate.targets === targets,
+	);
+	if (!placement) throw new Error(`Missing product-demo placement ${targets}`);
+	return placement;
+}
+
+function valuePadKeys(value: string) {
+	const tokens = value.match(/THRU|-|\d|\./gu);
+	if (!tokens) throw new Error(`Invalid product-demo value ${value}`);
+	return [...tokens.map((token) => (token === "-" ? "−" : token)), "ENTER"];
+}
+
 function buildProductDemoEditTimeline(
 	markers: ReadonlyMap<string, number>,
 	recordingEndMillis: number,
@@ -642,13 +728,15 @@ function buildProductDemoEditTimeline(
 	const sections = PRODUCT_DEMO_SCRIPT.sections.map((section, index) => {
 		const sourceStartMillis = markers.get(section.id);
 		const next = PRODUCT_DEMO_SCRIPT.sections[index + 1];
-		const sourceEndMillis = next
-			? markers.get(next.id)
-			: recordingEndMillis;
+		const sourceEndMillis = next ? markers.get(next.id) : recordingEndMillis;
 		if (sourceStartMillis == null || sourceEndMillis == null)
-			throw new Error(`Missing recording marker for product-demo section ${section.id}`);
+			throw new Error(
+				`Missing recording marker for product-demo section ${section.id}`,
+			);
 		if (sourceEndMillis <= sourceStartMillis)
-			throw new Error(`Invalid recording marker order for product-demo section ${section.id}`);
+			throw new Error(
+				`Invalid recording marker order for product-demo section ${section.id}`,
+			);
 		const timelineSection = {
 			...section,
 			sourceStartMillis,
@@ -691,12 +779,19 @@ async function addPatchLayerThroughTouchUi(
 	name: string,
 ) {
 	await desk.setDemoAction(`Create the ${name} Patch layer through Touch UI.`);
-	await desk.click(page.getByRole("button", { name: "+ Add layer", exact: true }));
-	const dialog = page.getByRole("heading", { name: "Add layer", exact: true })
+	await desk.click(
+		page.getByRole("button", { name: "+ Add layer", exact: true }),
+	);
+	const dialog = page
+		.getByRole("heading", { name: "Add layer", exact: true })
 		.locator("xpath=ancestor::section[1]");
 	await expect(dialog).toBeVisible();
 	desk.setRecordingClickPace("rapid");
-	await touchTypeText(desk, dialog.getByRole("textbox", { name: "Layer name" }), name);
+	await touchTypeText(
+		desk,
+		dialog.getByRole("textbox", { name: "Layer name" }),
+		name,
+	);
 	desk.setRecordingClickPace("compact");
 	await expect(dialog).toBeHidden();
 }
@@ -717,9 +812,7 @@ async function addFixtureThroughTouchUi(
 			framesToMillis(PRODUCT_DEMO_SCRIPT.pacing.searchClearHoldFrames),
 		);
 		await search.pressSequentially(input.search, {
-			delay: framesToMillis(
-				PRODUCT_DEMO_SCRIPT.pacing.searchCharacterFrames,
-			),
+			delay: framesToMillis(PRODUCT_DEMO_SCRIPT.pacing.searchCharacterFrames),
 		});
 	} else await search.fill(input.search);
 	const fixtureColumn = browser
@@ -743,9 +836,7 @@ async function addFixtureThroughTouchUi(
 	if (!modeValue) throw new Error(`Missing ${input.family} mode ${input.mode}`);
 	if (input.visibleModeSelection) {
 		await desk.click(
-			browser
-				.locator(".fixture-mode-detail")
-				.locator(".ui-select-trigger"),
+			browser.locator(".fixture-mode-detail").locator(".ui-select-trigger"),
 		);
 		await desk.click(
 			page.getByRole("option", {
@@ -822,7 +913,8 @@ async function demonstrateDmxAddressDrag(
 async function dragPointer(page: Page, source: Locator, target: Locator) {
 	const from = await source.boundingBox();
 	const to = await target.boundingBox();
-	if (!from || !to) throw new Error("The DMX address drag target is not visible");
+	if (!from || !to)
+		throw new Error("The DMX address drag target is not visible");
 	await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
 	await page.mouse.down();
 	await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, {
@@ -838,20 +930,32 @@ async function spreadFixtureLocationThroughTouchUi(
 	lastFixture: number,
 	axis: "X" | "Y" | "Z",
 	keys: string[],
+	selectRange = true,
 ) {
 	const first = fixtureRow(patchWindow, firstFixture);
 	const last = fixtureRow(patchWindow, lastFixture);
 	await desk.setDemoAction(
-		`Spread Front Lights ${firstFixture}–${lastFixture} across Location ${axis}: ${keys
+		`Set fixtures ${firstFixture}–${lastFixture} across Location ${axis}: ${keys
 			.map((key) => `[${key}]`)
 			.join(" ")}`,
 	);
-	await desk.click(first);
-	await desk.click(last, { modifiers: ["Shift"] });
-	const cell = { X: 12, Y: 13, Z: 14 }[axis];
-	await desk.click(last.locator("td").nth(cell).getByRole("button"), {
-		button: "right",
-	});
+	if (selectRange) {
+		await desk.click(
+			first.getByRole("cell", { name: String(firstFixture), exact: true }),
+		);
+		if (lastFixture !== firstFixture)
+			await desk.click(
+				last.getByRole("cell", { name: String(lastFixture), exact: true }),
+				{ modifiers: ["Shift"] },
+			);
+	}
+	await desk.click(
+		last.getByRole("button", {
+			name: `Location ${axis} ${lastFixture}`,
+			exact: true,
+		}),
+		{ button: "right" },
+	);
 	const application = patchWindow.page().locator(".product-demo-application");
 	const pad = patchWindow.page().getByRole("dialog", {
 		name: `Location ${axis} (meter)`,
@@ -876,9 +980,12 @@ async function spreadPhysicalPatchVectorThroughTouchUi(
 			.map((key) => `[${key}]`)
 			.join(" ")}`,
 	);
-	await desk.click(lastPhysicalRow.locator("td").nth(cell).getByRole("button"), {
-		button: "right",
-	});
+	await desk.click(
+		lastPhysicalRow.locator("td").nth(cell).getByRole("button"),
+		{
+			button: "right",
+		},
+	);
 	const pad = lastPhysicalRow.page().getByRole("dialog", {
 		name: `${kind === "location" ? "Location" : "Rotation"} ${axis} (${kind === "location" ? "meter" : "degree"})`,
 	});
@@ -1126,7 +1233,10 @@ async function configureOutput(
 	await expect(routes.locator(".output-route-list > article")).toHaveCount(8);
 	for (let universe = 1; universe <= 8; universe++)
 		await expect(routes).toContainText(`Logical ${universe} →`);
-	await routes.locator(".output-route-list > article").last().scrollIntoViewIfNeeded();
+	await routes
+		.locator(".output-route-list > article")
+		.last()
+		.scrollIntoViewIfNeeded();
 	await page.waitForTimeout(framesToMillis(25));
 	await page.locator("body").click({ position: { x: 2, y: 2 } });
 }
@@ -1176,7 +1286,9 @@ async function buildGroups(
 	const groups = app.locator(".group-card");
 	await expect(groups.first()).toBeVisible();
 	await desk.click(keypad.locator('[data-keypad-key="HIGH"]'));
-	await expect(keypad.locator('[data-keypad-key="HIGH"]')).toHaveClass(/highlight-armed/);
+	await expect(keypad.locator('[data-keypad-key="HIGH"]')).toHaveClass(
+		/highlight-armed/,
+	);
 	await clearSelection(desk, keypad, api);
 	await keypadCommand(desk, keypad, [
 		"1",
@@ -1252,11 +1364,7 @@ async function buildGroups(
 	await desk.click(groupTile(app, 4));
 	await keypadCommand(desk, keypad, ["SET", "GRP", "4", "ENT"]);
 	const properties = page.getByRole("dialog", { name: "Group properties" });
-	await touchTypeText(
-		desk,
-		properties.getByLabel("Group name"),
-		"Beam Show",
-	);
+	await touchTypeText(desk, properties.getByLabel("Group name"), "Beam Show");
 	await desk.click(
 		properties.getByRole("button", { name: "Save group", exact: true }),
 	);
@@ -1346,7 +1454,7 @@ async function buildGroups(
 			group_id: "7",
 		});
 	await desk.fastForward(
-		"Assigning the Show LED, Show Wash, All ACLs, and Blinders Group Masters.",
+		"Assigning the LED Show, Wash Show, All ACLs, and Blinders Group Masters.",
 		() => installRemainingGroupMasters(api, showId),
 	);
 }
@@ -1437,15 +1545,7 @@ async function buildDynamicsSetup(
 		"Create a Busking desktop, add Virtual Playbacks, and assign the two hand-built Dynamics.",
 	);
 	const pane = await createVirtualPlaybackDesktop(desk, page);
-	await assignVirtualDynamic(
-		desk,
-		page,
-		pane,
-		keypad,
-		1,
-		"Beam Show PWM",
-		1,
-	);
+	await assignVirtualDynamic(desk, page, pane, keypad, 1, "Beam Show PWM", 1);
 	await assignVirtualDynamic(
 		desk,
 		page,
@@ -1718,7 +1818,9 @@ async function selectPatchLayer(
 	patchWindow: Locator,
 	name: string,
 ) {
-	await desk.setDemoAction(`Select the ${name} layer before adding its fixtures.`);
+	await desk.setDemoAction(
+		`Select the ${name} layer before adding its fixtures.`,
+	);
 	await desk.click(
 		patchWindow
 			.locator(".patch-layers button")
@@ -1883,6 +1985,7 @@ async function createVirtualPlaybackDesktop(desk: DeskDriver, page: Page) {
 	await page.mouse.up();
 	const settings = page.getByRole("dialog", { name: "Desktop settings" });
 	await touchTypeText(desk, settings.getByLabel("Name"), "Busking");
+	await settings.getByLabel("Name").blur();
 	await desk.click(settings.getByRole("button", { name: "×", exact: true }));
 	await desk.click(page.locator(".desk-grid"));
 	await expect(

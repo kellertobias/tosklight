@@ -2,10 +2,11 @@
 
 ## Status
 
-**Implemented and reconciled — 2026-07-31.** Plan 20 of the refactoring queue implements this
-revision through the maintained `DEMO-001` scenario. The release workload now distinguishes its
-262 controllable lighting fixtures from 33 visual-only Venue records, so the requested scenery and
-visible patch workflow remain part of the same canonical show without changing its DMX workload.
+**Finished and reverified — 2026-08-01.** The maintained `DEMO-001` scenario, deterministic edit
+timeline, canonical video, and exported starter show implement this revision. The release workload
+distinguishes its 262 controllable lighting fixtures from 33 visual-only Venue records, so the
+requested scenery and visible Patch workflow remain part of one canonical show without changing
+its DMX workload.
 
 ## Goal
 
@@ -152,26 +153,44 @@ The older encoder-modal through-syntax concern is no longer a dependency of this
 
 ## Result
 
-`DEMO-001` now creates its retained recording page only after the empty show is active, performs
-the requested visible Touch UI patch sequence with two explicit fast-forward boundaries, and
-continues through production Show Patch, output routing, Fixture Sheet, fixture-control, preset,
-Cuelist, playback, preload, Programmer, Stage, and live DMX paths. The maintained recording passed
-with `LIGHT_VISUAL_RECORDING=1 LIGHT_UPDATE_DEMO_SHOW=1 npm run test:demo`.
+`DEMO-001` creates its retained recording page only after the empty show is active, performs the
+requested visible Touch UI Patch sequence with explicit progressive fast-forward boundaries, and
+continues through production Show Patch, output routing, Fixture Sheet, Group, preset, Dynamic,
+Cuelist, playback, preload, Programmer, Stage, and live DMX paths. The JSON-shaped
+`PRODUCT_DEMO_SCRIPT` at the top of the scenario owns exact 25 fps chapter lengths, the 15-frame
+crossfade, action pacing, all 14 layers, universe-one address bands, THRU placement strings, curtain
+height, and moving-fixture rotation. Those Patch values now drive both the visible value pads and
+the canonical generated starter show.
 
 Generated visual evidence:
 
 - `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo-h265.mp4` — 1920×1080,
-  HEVC, 25 fps, 793.8 seconds;
-- `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo-1920x1080.png`; and
-- `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo-contact-sheet.png`.
+  HEVC, 25 fps, exactly 18,510 frames / 740.4 seconds;
+- `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo.webm` — 1920×1080, VP9,
+  25 fps, exactly 18,510 frames / 740.4 seconds; and
+- `.artifacts/test/visual-inspection/product-demo/product-demo-edit-timeline.json` — canonical
+  source markers, target frames, and chapter timecodes for voice-over editing.
 
-The run refreshed `assets/demo.show`; its SQLite integrity check passes and it contains the exact
-295 patch records (262 controllable and 33 visual-only), 343 physical Stage instances, eight
-layers, 38 Groups, 30 presets, 30 Dynamics, seven Cuelists, and 13 Playbacks. The
-fixture-control dialog has executable centering coverage against the complete recorded desk
-surface. The royalty-free Theater script and script-specific Theater Cues remain pending exactly
-as allowed by Plan 76.
+The final non-recording export refreshed `assets/demo.show`; its SQLite integrity check passes and
+it contains exactly 295 Patch records (262 controllable and 33 visual-only), 343 physical Stage
+instances, 14 layers, 35 Groups, 30 presets, 30 Dynamics, seven Cuelists, 13 Playbacks, and eight
+output routes. The saved user layout is exactly Group Programming, Busking, Programming, and
+Theater; Group Programming uses a 16/24 Fixture Sheet plus an 8/24 seven-column Group Pool, and
+Busking uses a 10×5 Virtual Playback pane. Export verification also proves all eight Fresnels and
+the seven visibly patched Profile movers retain their canonical non-origin positions.
 
-The authoritative recorded Playwright pass completed in 13.4 minutes including page teardown and
-video saving. The equivalent non-recording `DEMO-001` development regression completed in 1.2
-minutes, so choreography changes can be checked without repeating the full transcode cycle.
+Verification after the final reconciliation changes:
+
+- `LIGHT_UPDATE_DEMO_SHOW=1 npm run test:e2e -- tests/product-demo.spec.ts --workers=1` — passed
+  in 2.5 minutes without recording or transcoding;
+- `npm run test:e2e -- tests/76-demo-show-generation.spec.ts --workers=1` — passed;
+- focused Patch, Group, layout, Dynamic, pool-preference, reducer, and Stage tests — passed;
+- desktop TypeScript and bench type checks — passed; and
+- the recorded Playwright run used for the canonical video passed in 14.4 minutes before the final
+  deterministic encode.
+
+The top-left modal constraint, full-height fixture search, direct numeric value pad, live Stage
+readiness, progressive scenery/lighting appearance, globally owned pool palette, and pane-local
+pool layout/mode settings all have implementation or executable regression coverage. Intermediate
+choreography changes use the non-recording regression; the maintained video is generated only for
+the final deliverable.
