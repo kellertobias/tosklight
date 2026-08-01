@@ -2179,6 +2179,15 @@ async function recordVisibleCuelist({
 	await desk.setDemoAction(action);
 	await keypadCommand(desk, keypad, [...selection]);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.cuelistSelectionHoldFrames);
+	const previousTarget = await playbackTarget(api, showId, number);
+	const previousCueList =
+		previousTarget?.type === "cue_list"
+			? await api.showObject<any>(
+					showId,
+					"cue_list",
+					previousTarget.cue_list_id,
+				)
+			: null;
 	const record = keypad.getByRole("button", { name: "RECORD", exact: true });
 	await desk.click(record);
 	await expect(record).toHaveAttribute("aria-pressed", "true");
@@ -2186,10 +2195,20 @@ async function recordVisibleCuelist({
 	await desk.click(
 		pool.locator(`.cuelist-card[data-pool-slot-id="${number}"]`).first(),
 	);
+	await expect(record).toHaveAttribute("aria-pressed", "false");
 	await expect
 		.poll(async () => {
 			const target = await playbackTarget(api, showId, number);
-			return target?.type === "cue_list" ? target.cue_list_id : null;
+			if (target?.type !== "cue_list") return null;
+			const cueList = await api.showObject<any>(
+				showId,
+				"cue_list",
+				target.cue_list_id,
+			);
+			return target.cue_list_id !== previousTarget?.cue_list_id ||
+				(cueList?.revision ?? -1) > (previousCueList?.revision ?? -1)
+				? target.cue_list_id
+				: null;
 		})
 		.not.toBeNull();
 	const target = await playbackTarget(api, showId, number);
