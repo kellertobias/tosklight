@@ -36,7 +36,7 @@ const DEMO_CHAPTERS = [
 	["Programming Cues & Cuelists", "Cues & Cuelists"],
 	["DYNAMICS", "Dynamics"],
 	["VIRTUAL PLAYBACKS", "Virtual Playbacks"],
-	["BUSKING AND PRELOAD", "Live Demo"],
+	["Busking", "Busking"],
 ] as const;
 
 function DemoDmxGrid({ universeNumber }: { universeNumber: number }) {

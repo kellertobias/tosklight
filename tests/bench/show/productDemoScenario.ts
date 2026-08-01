@@ -30,12 +30,12 @@ import {
 } from "../../support/plannedDemoPatch";
 import { installPlannedDemoPlaybacks } from "../../support/plannedDemoPlaybacks";
 import { installPlannedDemoPresets } from "../../support/plannedDemoPresets";
-import { PLANNED_DEMO_VIRTUAL_PLAYBACK_EXCLUSION_ZONES } from "../../support/plannedDemoVirtualPlaybackZones";
 import {
 	installPlannedDemoScenery,
 	PLANNED_DEMO_TOTAL_FIXTURE_RECORDS,
 	PLANNED_DEMO_TOTAL_PHYSICAL_INSTANCES,
 } from "../../support/plannedDemoScenery";
+import { PLANNED_DEMO_VIRTUAL_PLAYBACK_EXCLUSION_ZONES } from "../../support/plannedDemoVirtualPlaybackZones";
 import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
 import { expect } from "../core/fixtures";
@@ -107,9 +107,9 @@ export const PRODUCT_DEMO_SCRIPT = {
 		},
 		{
 			id: "busking-preload",
-			marker: "BUSKING AND PRELOAD",
-			title: "Busking and Preload",
-			frames: 1_100,
+			marker: "Busking",
+			title: "Busking",
+			frames: 1_400,
 		},
 	],
 	pacing: {
@@ -162,6 +162,8 @@ export const PRODUCT_DEMO_SCRIPT = {
 		beatsPerBar: 4,
 		buskingBars: 16,
 		preloadStartBar: 8,
+		buskingDynamicRevealFrames: 100,
+		preloadProgrammingStepFrames: 25,
 		programmerFadeMillis: 2_000,
 		finalLookHoldFrames: 75,
 	},
@@ -2188,8 +2190,8 @@ async function demonstrateBuskingAndPreload(
 	showId: string,
 ) {
 	await desk.titleCard(
-		"BUSKING AND PRELOAD",
-		"Run a live 120 BPM look, prepare the next look blind at bar 8, then commit it at bar 16 with a two-second Programmer Fade.",
+		"Busking",
+		"Combine Playbacks, Dynamics and Presets to build your look. Use Preload to do multiple changes at once",
 	);
 	await desk.click(
 		demo.getByRole("button", {
@@ -2203,6 +2205,9 @@ async function demonstrateBuskingAndPreload(
 			exact: true,
 		}),
 	);
+	await desk.setDemoAction(
+		"Run the ACL chase and multiple Beam, Wash, LED, and auxiliary Dynamics together at 120 BPM.",
+	);
 	const runtime = await startPlannedDemoBenchmarkLook(api, showId);
 	expect(runtime.projections).toHaveLength(
 		PLANNED_DEMO_BENCHMARK_ASSIGNMENTS.length,
@@ -2212,10 +2217,16 @@ async function demonstrateBuskingAndPreload(
 			projection.target === "cue_list"
 				? projection.runtime?.enabled === true
 				: projection.target === "dynamic" &&
-					projection.runtime?.state === "active",
+					projection.runtime?.state === "active" &&
+					projection.runtime?.master > 0 &&
+					projection.runtime?.size > 0,
 		),
 	).toBe(true);
 	await expectLiveOutput(api);
+	await demoPause(
+		demo.page(),
+		PRODUCT_DEMO_SCRIPT.pacing.buskingDynamicRevealFrames,
+	);
 	const barMillis =
 		(60_000 / PRODUCT_DEMO_SCRIPT.pacing.bpm) *
 		PRODUCT_DEMO_SCRIPT.pacing.beatsPerBar;
@@ -2230,27 +2241,57 @@ async function demonstrateBuskingAndPreload(
 	await desk.click(
 		keypad.getByRole("button", { name: "PRELOAD GO", exact: true }),
 	);
+	await demoPause(
+		demo.page(),
+		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
+	);
 	await desk.click(
 		demo.getByRole("button", {
 			name: "Playback 17 button 1",
 			exact: true,
 		}),
 	);
+	await demoPause(
+		demo.page(),
+		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
+	);
 	await openGroups(desk, keypad);
 	await desk.click(groupTile(app, 11));
+	await demoPause(
+		demo.page(),
+		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
+	);
 	await openBuiltIn(desk, app, "Presets");
 	const presets = app.locator(".preset-pool-window");
 	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
 	await desk.click(presetTile(presets, "2.9"));
+	await demoPause(
+		demo.page(),
+		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
+	);
 	await openGroups(desk, keypad);
 	await desk.click(groupTile(app, 2));
+	await demoPause(
+		demo.page(),
+		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
+	);
 	await openBuiltIn(desk, app, "Presets");
 	await desk.click(
 		presets.getByRole("button", { name: "Position", exact: true }),
 	);
 	await desk.click(presetTile(presets, "3.5"));
+	await demoPause(
+		demo.page(),
+		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
+	);
 	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
 	await desk.click(presetTile(presets, "2.3"));
+	const preparedLook = await expectedPreloadColorLook(api, showId);
+	await expect
+		.poll(async () =>
+			visualizationColorLook(api, preparedLook.fixtureIds, true),
+		)
+		.toEqual(preparedLook.values);
 	await api.request("PUT", "/api/v2/configuration", {
 		programmer_fade_millis: PRODUCT_DEMO_SCRIPT.pacing.programmerFadeMillis,
 	});
@@ -2268,6 +2309,14 @@ async function demonstrateBuskingAndPreload(
 	await desk.click(
 		keypad.getByRole("button", { name: "PRELOAD GO", exact: true }),
 	);
+	for (let step = 0; step < 8; step++) {
+		const fadeStepMillis = PRODUCT_DEMO_SCRIPT.pacing.programmerFadeMillis / 8;
+		await bench.tick(fadeStepMillis);
+		await demoPause(
+			demo.page(),
+			(fadeStepMillis / 1_000) * PRODUCT_DEMO_SCRIPT.fps,
+		);
+	}
 	await expect
 		.poll(async () => preloadState(api))
 		.toEqual({
@@ -2275,7 +2324,59 @@ async function demonstrateBuskingAndPreload(
 			valueCount: 0,
 			playbackCount: 0,
 		});
+	await expect
+		.poll(async () =>
+			visualizationColorLook(api, preparedLook.fixtureIds, false),
+		)
+		.toEqual(preparedLook.values);
 	await demoPause(demo.page(), PRODUCT_DEMO_SCRIPT.pacing.finalLookHoldFrames);
+}
+
+async function expectedPreloadColorLook(api: ApiDriver, showId: string) {
+	const [washShow, beamAudience] = await Promise.all([
+		api.showObject<any>(showId, "group", "11"),
+		api.showObject<any>(showId, "group", "2"),
+	]);
+	if (!washShow || !beamAudience)
+		throw new Error("The Busking Preload look requires Groups 11 and 2");
+	const washFixtures = washShow.body.fixtures as string[];
+	const beamFixtures = beamAudience.body.fixtures as string[];
+	return {
+		fixtureIds: [...washFixtures, ...beamFixtures],
+		values: Object.fromEntries([
+			...washFixtures.flatMap((fixtureId) => [
+				[`${fixtureId}:color.red`, 0],
+				[`${fixtureId}:color.green`, 0],
+				[`${fixtureId}:color.blue`, 1],
+			]),
+			...beamFixtures.flatMap((fixtureId) => [
+				[`${fixtureId}:color.red`, 1],
+				[`${fixtureId}:color.green`, 1],
+				[`${fixtureId}:color.blue`, 0],
+			]),
+		]),
+	};
+}
+
+async function visualizationColorLook(
+	api: ApiDriver,
+	fixtureIds: readonly string[],
+	preload: boolean,
+) {
+	const snapshot = await api.request<any>(
+		"GET",
+		`/api/v2/output/visualization${preload ? "?preload=true" : ""}`,
+	);
+	const targets = new Set(fixtureIds);
+	return Object.fromEntries(
+		snapshot.values.flatMap((entry: any) =>
+			targets.has(entry.fixture_id) &&
+			entry.attribute.startsWith("color.") &&
+			entry.value.kind === "normalized"
+				? [[`${entry.fixture_id}:${entry.attribute}`, entry.value.value]]
+				: [],
+		),
+	);
 }
 
 async function downloadCompletedDemoShow(

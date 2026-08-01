@@ -29,7 +29,12 @@ test("PLAN-76-PACKAGED @api › shipped canonical demo retains its exact package
 	const runtime = await startPlannedDemoBenchmarkLook(api, show.id);
 	const projections = runtime.projections as Array<{
 		target: string;
-		runtime?: { enabled?: boolean; state?: string };
+		runtime?: {
+			enabled?: boolean;
+			state?: string;
+			master?: number;
+			size?: number;
+		};
 	}>;
 	expect(projections).toHaveLength(PLANNED_DEMO_BENCHMARK_ASSIGNMENTS.length);
 	expect(
@@ -37,7 +42,9 @@ test("PLAN-76-PACKAGED @api › shipped canonical demo retains its exact package
 			projection.target === "cue_list"
 				? projection.runtime?.enabled === true
 				: projection.target === "dynamic" &&
-					projection.runtime?.state === "active",
+					projection.runtime?.state === "active" &&
+					Number(projection.runtime?.master) > 0 &&
+					Number(projection.runtime?.size) > 0,
 		),
 	).toBe(true);
 });

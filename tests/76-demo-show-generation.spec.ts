@@ -208,7 +208,9 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
 			projection.target === "cue_list"
 				? projection.runtime?.enabled === true
 				: projection.target === "dynamic" &&
-					projection.runtime?.state === "active",
+					projection.runtime?.state === "active" &&
+					projection.runtime?.master > 0 &&
+					projection.runtime?.size > 0,
 		),
 		JSON.stringify(runtimeSummary, null, 2),
 	).toBe(true);
