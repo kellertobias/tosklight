@@ -12,6 +12,7 @@ pub mod highlight;
 pub mod lossless_json;
 pub mod macro_runtime;
 pub mod managed_assets;
+pub mod mvr_export;
 pub mod mvr_import;
 pub mod output_runtime;
 pub mod playback;
