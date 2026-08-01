@@ -58,6 +58,17 @@ impl ActiveShowRepository {
         self.store.apply_portable_transaction(transaction)
     }
 
+    /// Resolves one immutable profile revision the show retains, which is what turns a stored
+    /// patch reference back into a describable fixture.
+    pub(crate) fn resolve_fixture_profile_revision(
+        &self,
+        profile_id: light_core::FixtureId,
+        revision: Revision,
+    ) -> Result<Option<light_show::FixtureProfileRevision>, StoreError> {
+        self.store
+            .resolve_fixture_profile_revision(profile_id, revision)
+    }
+
     pub(crate) fn prepare_object_undo(
         &self,
         kind: &str,

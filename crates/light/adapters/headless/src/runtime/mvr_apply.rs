@@ -91,6 +91,24 @@ fn import_destination(
     }
 }
 
+/// Reads retained source GDTF from the desk installation for the shared MVR export builder.
+struct InstallationGdtf<'a>(&'a AppState);
+
+impl light_application::mvr_export::GdtfSource for InstallationGdtf<'_> {
+    type Error = ApiError;
+
+    fn source_gdtf(
+        &self,
+        profile: light_core::FixtureId,
+        revision: u32,
+    ) -> Result<Option<Vec<u8>>, Self::Error> {
+        self.0
+            .installation
+            .fixture_source_gdtf(profile, revision)
+            .map_err(ApiError::fixture)
+    }
+}
+
 pub(super) fn build_mvr_export(
     state: &AppState,
     id: Uuid,
@@ -110,97 +128,44 @@ pub(super) fn build_mvr_export(
             Some((id, o.body))
         })
         .collect();
-    let fixtures = store
+    // A stored patch references an immutable profile revision; the reference must be resolved
+    // before the export has a manufacturer, model or mode to write.
+    let objects = store
         .objects("patched_fixture")
         .map_err(ApiError::store)?
         .into_iter()
-        .filter_map(|o| {
-            serde_json::from_value::<light_fixture::PatchedFixture>(o.body)
-                .ok()
-                .map(|f| (o.id, f))
-        })
-        .collect::<Vec<_>>();
-    let mut doc = light_mvr::MvrDocument::default();
-    let mut missing = Vec::new();
-    let mut embedded = 0;
-    for (id, f) in &fixtures {
-        let meta = metas.get(id);
-        let gdtf = meta
-            .and_then(|m| m.get("gdtf_spec"))
-            .and_then(|v| v.as_str())
-            .map(str::to_owned)
-            .unwrap_or_else(|| {
-                format!("{}@{}.gdtf", f.definition.manufacturer, f.definition.model)
-            });
-        if let Some(source) = state
-            .installation
-            .fixture_source_gdtf(f.definition.id, f.definition.revision)
-            .map_err(ApiError::fixture)?
-        {
-            doc.files.entry(gdtf.to_ascii_lowercase()).or_insert(source);
-            embedded += 1;
-        } else {
-            missing.push(format!(
-                "{} · {}",
-                f.definition.manufacturer, f.definition.model
-            ));
-        }
-        let uuid = metas
-            .iter()
-            .find(|(_, m)| m.get("fixture_id").and_then(|v| v.as_str()) == Some(id))
-            .and_then(|(uuid, _)| Uuid::parse_str(uuid).ok())
-            .unwrap_or(f.fixture_id.0);
-        let rx = f64::from(f.rotation.x).to_radians();
-        let ry = f64::from(f.rotation.y).to_radians();
-        let rz = f64::from(f.rotation.z).to_radians();
-        let (sx, cx) = rx.sin_cos();
-        let (sy, cy) = ry.sin_cos();
-        let (sz, cz) = rz.sin_cos();
-        doc.fixtures.push(light_mvr::MvrFixture {
-            uuid,
-            name: if f.name.is_empty() {
-                f.definition.name.clone()
-            } else {
-                f.name.clone()
-            },
-            fixture_id: Some(id.clone()),
-            gdtf_spec: gdtf,
-            gdtf_mode: f.definition.mode.clone(),
-            universe: f.universe,
-            address: f.address,
-            matrix: [
-                cy * cz,
-                cz * sx * sy - cx * sz,
-                sx * sz + cx * cz * sy,
-                cy * sz,
-                cx * cz + sx * sy * sz,
-                cx * sy * sz - cz * sx,
-                -sy,
-                cy * sx,
-                cx * cy,
-                f64::from(f.location.x),
-                f64::from(f.location.y),
-                f64::from(f.location.z),
-            ],
-            layer: Some(f.layer_id.clone()),
-            class: None,
-        });
-    }
-    let warnings = if missing.is_empty() {
-        vec![]
-    } else {
-        vec!["Some fixture profiles have no retained source GDTF and are referenced but not embedded".into()]
-    };
+        .map(|o| (o.id, o.body));
+    let fixtures = light_application::mvr_export::compile_export_fixtures(objects, |reference| {
+        store
+            .resolve_fixture_profile_revision(reference.profile_id, reference.profile_revision)
+            .ok()
+            .flatten()
+            .map(|profile| {
+                light_fixture::ResolvedFixtureProfileRevision::new(
+                    profile.id().profile_id(),
+                    profile.id().revision(),
+                    profile.digest().as_str(),
+                    profile.profile().clone(),
+                )
+            })
+    })
+    .map_err(|error| ApiError::internal(error.to_string()))?;
+    let (doc, summary) = light_application::mvr_export::build_mvr_document(
+        &fixtures,
+        &metas,
+        &InstallationGdtf(state),
+    )?;
     let preview = MvrExportPreview {
-        fixtures: doc.fixtures.len(),
-        scenery: doc.geometry.len(),
-        embedded_profiles: embedded,
-        missing_profiles: missing,
+        fixtures: summary.fixtures,
+        scenery: summary.scenery,
+        embedded_profiles: summary.embedded_profiles,
+        missing_profiles: summary.missing_profiles,
         omitted: vec!["cues, presets, playbacks, users, and desk layouts".into()],
-        warnings,
+        warnings: summary.warnings,
     };
     Ok((entry, doc, preview))
 }
+
 pub(super) async fn preview_mvr_export(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
