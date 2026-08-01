@@ -334,6 +334,11 @@ waiting for the next visualization snapshot. Capture-only or safety-suppressed H
 fake Stage output, and the canonical Programming desktop follows the live rather than Preload
 visualization lane.
 
+Preset programming now stays on the Preset surface. The scenario opens Presets once, holds its
+Groups control to reveal the in-place Group shortcuts, and selects Beam Show from that strip for
+each narrated Position and Color example. It no longer alternates between the Group and Preset
+built-ins while programming those looks.
+
 Focused manifest, patch, Group, Playback, and Fixture Patch tests passed, as did the production
 frontend build, the generated-show acceptance, and a complete 2.8-minute non-recording product
 demo rehearsal that refreshed `assets/demo.show`. Per the recording-review instruction, this

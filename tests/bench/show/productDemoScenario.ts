@@ -1807,7 +1807,12 @@ async function buildPresetSetup(
 	await expect(demo.locator(".command-status .highlight-status")).toHaveText(
 		"Highlight",
 	);
+	await openBuiltIn(desk, app, "Presets");
 	const presets = app.locator(".preset-pool-window");
+	await showPresetGroupShortcuts(page, presets);
+	await desk.click(
+		presets.getByRole("button", { name: "Position", exact: true }),
+	);
 	for (const position of [
 		{ name: "Down", address: "3.1", pan: ["5", "0"], tilt: ["2", "5"] },
 		{ name: "Up", address: "3.2", pan: ["5", "0"], tilt: ["8", "2"] },
@@ -1819,17 +1824,12 @@ async function buildPresetSetup(
 		},
 	] as const) {
 		await clearProgrammer(desk, keypad, api);
-		await openGroups(desk, keypad);
-		await desk.click(groupTile(app, 4));
+		await selectPresetGroupShortcut(desk, presets, "Beam Show");
 		await desk.setDemoAction(
 			`Program the ${position.name} Position preset${position.name === "Fan" ? " with a THRU spread" : " with direct Pan and Tilt values"}.`,
 		);
 		await setEncoderValue(desk, demo, "Position", "Pan", [...position.pan]);
 		await setEncoderValue(desk, demo, "Position", "Tilt", [...position.tilt]);
-		await openBuiltIn(desk, app, "Presets");
-		await desk.click(
-			presets.getByRole("button", { name: "Position", exact: true }),
-		);
 		await desk.click(
 			keypad.getByRole("button", { name: "RECORD", exact: true }),
 		);
@@ -1840,11 +1840,9 @@ async function buildPresetSetup(
 	await desk.setDemoAction(
 		"Create the first Color preset as absolute encoder values while Highlight shows the result.",
 	);
-	await openGroups(desk, keypad);
-	await desk.click(groupTile(app, 4));
-	await setEncoderValue(desk, demo, "Color", "Red", ["1", "0", "0"]);
-	await openBuiltIn(desk, app, "Presets");
 	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
+	await selectPresetGroupShortcut(desk, presets, "Beam Show");
+	await setEncoderValue(desk, demo, "Color", "Red", ["1", "0", "0"]);
 	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
 	await desk.click(presetTile(presets, "2.1"));
 
@@ -1852,8 +1850,7 @@ async function buildPresetSetup(
 	await desk.setDemoAction(
 		"Create the second Color preset with the graphical Color Special Dialog.",
 	);
-	await openGroups(desk, keypad);
-	await desk.click(groupTile(app, 4));
+	await selectPresetGroupShortcut(desk, presets, "Beam Show");
 	await desk.click(
 		demo
 			.locator(".product-demo-application .parameter-controls")
@@ -1874,8 +1871,6 @@ async function buildPresetSetup(
 		colorBox.y + colorBox.height * 0.3,
 	);
 	await desk.click(colorDialog.getByRole("button", { name: "×", exact: true }));
-	await openBuiltIn(desk, app, "Presets");
-	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
 	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
 	await desk.click(presetTile(presets, "2.2"));
 	await desk.fastForward(
@@ -1895,6 +1890,32 @@ async function buildPresetSetup(
 			.evaluate((element) => element.classList.contains("highlight-armed"))
 	)
 		await desk.click(keypad.locator('[data-keypad-key="HIGH"]'));
+}
+
+async function showPresetGroupShortcuts(page: Page, presets: Locator) {
+	const shortcuts = presets.locator(".group-strip");
+	if (await shortcuts.isVisible()) return;
+	const toggle = presets.getByRole("button", { name: "Groups", exact: true });
+	const box = await toggle.boundingBox();
+	if (!box) throw new Error("The Preset Group-shortcut toggle is not visible");
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	await page.mouse.down();
+	await page.waitForTimeout(700);
+	await page.mouse.up();
+	await expect(shortcuts).toBeVisible();
+}
+
+async function selectPresetGroupShortcut(
+	desk: DeskDriver,
+	presets: Locator,
+	name: string,
+) {
+	await desk.click(
+		presets
+			.locator(".group-strip .group-card")
+			.filter({ has: presets.getByText(name, { exact: true }) })
+			.first(),
+	);
 }
 
 async function buildCueProgramming(
