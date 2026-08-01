@@ -140,18 +140,16 @@ export function stageFixtures3d(
 			...(fixture.multipatch ?? []),
 		].map((instance, instanceIndex): Stage3dFixture => {
 			const index = fixtureIndex * 16 + instanceIndex;
-			const located =
-				instance.location &&
-				(instance.location.x || instance.location.y || instance.location.z)
-					? {
-							x: instance.location.x / 1000,
-							y: instance.location.y / 1000,
-							z: instance.location.z / 1000,
-							rotationX: instance.rotation?.x ?? 0,
-							rotationY: instance.rotation?.y ?? 0,
-							rotationZ: instance.rotation?.z ?? 0,
-						}
-					: null;
+			const located = instance.location
+				? {
+						x: instance.location.x / 1000,
+						y: instance.location.y / 1000,
+						z: instance.location.z / 1000,
+						rotationX: instance.rotation?.x ?? 0,
+						rotationY: instance.rotation?.y ?? 0,
+						rotationZ: instance.rotation?.z ?? 0,
+					}
+				: null;
 			return {
 				fixture,
 				instanceId: instance.id,
