@@ -2207,8 +2207,25 @@ async function recordVisibleCuelist({
 		showId,
 		"cue_list",
 		target.cue_list_id,
-		{ ...cueList.body, name },
+		{
+			...cueList.body,
+			name,
+			cues: cueList.body.cues.map((cue: any, index: number) =>
+				index === 0 ? { ...cue, name } : cue,
+			),
+		},
 		cueList.revision,
+	);
+	const playback = (await api.showObjects<any>(showId, "playback")).find(
+		(candidate) => candidate.body.number === number,
+	);
+	if (!playback) throw new Error(`Cuelist ${number} has no Playback object`);
+	await api.seedShowObject(
+		showId,
+		"playback",
+		playback.id,
+		{ ...playback.body, name },
+		playback.revision,
 	);
 	await api.playbackNumberAction(number, "select");
 	await expect(detail).toContainText(name);
