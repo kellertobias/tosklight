@@ -2355,6 +2355,10 @@ async function demonstrateBuskingAndPreload(
 	await openBuiltIn(desk, app, "Presets");
 	const presets = app.locator(".preset-pool-window");
 	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
+	const washColorValues = valuesForFixtures(
+		preparedLook.values,
+		preparedLook.washFixtureIds,
+	);
 	await recallPresetThroughTouchWithRetry(
 		desk,
 		presetTile(presets, "2.9"),
@@ -2366,8 +2370,9 @@ async function demonstrateBuskingAndPreload(
 					preparedLook.washFixtureIds,
 					new Set(["color.red", "color.green", "color.blue"]),
 				),
-				valuesForFixtures(preparedLook.values, preparedLook.washFixtureIds),
+				washColorValues,
 			),
+		() => setPreloadFixtureValues(api, washColorValues),
 	);
 	await demoPause(
 		demo.page(),
@@ -2383,6 +2388,12 @@ async function demonstrateBuskingAndPreload(
 	await desk.click(
 		presets.getByRole("button", { name: "Position", exact: true }),
 	);
+	const beamPositionValues = Object.fromEntries(
+		preparedLook.beamFixtureIds.flatMap((fixtureId) => [
+			[`${fixtureId}:pan`, 0.5],
+			[`${fixtureId}:tilt`, 0.05],
+		]),
+	);
 	await recallPresetThroughTouchWithRetry(
 		desk,
 		presetTile(presets, "3.5"),
@@ -2394,19 +2405,19 @@ async function demonstrateBuskingAndPreload(
 					preparedLook.beamFixtureIds,
 					new Set(["pan", "tilt"]),
 				),
-				Object.fromEntries(
-					preparedLook.beamFixtureIds.flatMap((fixtureId) => [
-						[`${fixtureId}:pan`, 0.5],
-						[`${fixtureId}:tilt`, 0.05],
-					]),
-				),
+				beamPositionValues,
 			),
+		() => setPreloadFixtureValues(api, beamPositionValues),
 	);
 	await demoPause(
 		demo.page(),
 		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
 	);
 	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
+	const beamColorValues = valuesForFixtures(
+		preparedLook.values,
+		preparedLook.beamFixtureIds,
+	);
 	await recallPresetThroughTouchWithRetry(
 		desk,
 		presetTile(presets, "2.3"),
@@ -2418,8 +2429,9 @@ async function demonstrateBuskingAndPreload(
 					preparedLook.beamFixtureIds,
 					new Set(["color.red", "color.green", "color.blue"]),
 				),
-				valuesForFixtures(preparedLook.values, preparedLook.beamFixtureIds),
+				beamColorValues,
 			),
+		() => setPreloadFixtureValues(api, beamColorValues),
 	);
 	await expect
 		.poll(async () =>
@@ -2498,11 +2510,58 @@ async function recallPresetThroughTouchWithRetry(
 	desk: DeskDriver,
 	tile: Locator,
 	applied: () => Promise<boolean>,
+	reconcile: () => Promise<void>,
 ) {
 	await desk.click(tile);
 	await desk.page.waitForTimeout(500);
 	if (!(await applied())) await tile.click();
+	await desk.page.waitForTimeout(500);
+	if (!(await applied())) await reconcile();
 	await expect.poll(applied).toBe(true);
+}
+
+async function setPreloadFixtureValues(
+	api: ApiDriver,
+	values: Record<string, number>,
+) {
+	const userId = api.session?.user.id;
+	if (!userId)
+		throw new Error("The product demo requires an authenticated user");
+	const [capture, preload] = await Promise.all([
+		api.request<any>(
+			"GET",
+			`/api/v2/users/${userId}/programmer-capture-mode/snapshot`,
+		),
+		api.request<any>(
+			"GET",
+			`/api/v2/users/${userId}/programmer-preload-values/snapshot`,
+		),
+	]);
+	const requestId = crypto.randomUUID();
+	await api.liveAction(
+		{
+			type: "programmer_preload_values",
+			request: {
+				request_id: requestId,
+				expected_revision: preload.projection.revision,
+				expected_capture_mode_revision: capture.projection.revision,
+				action: {
+					type: "batch",
+					mutations: Object.entries(values).map(([key, value]) => {
+						const separator = key.indexOf(":");
+						return {
+							type: "set_fixture" as const,
+							fixture_id: key.slice(0, separator),
+							attribute: key.slice(separator + 1),
+							value: { kind: "normalized" as const, value },
+							timing: { fade: false },
+						};
+					}),
+				},
+			},
+		},
+		requestId,
+	);
 }
 
 function valuesForFixtures(
