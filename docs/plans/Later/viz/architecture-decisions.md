@@ -53,13 +53,19 @@ Reasoning: the planning view needs fast interaction with many objects, consisten
 
 Consequence: the editor renderer favors clear geometry, selection, snapping, wireframe, hidden-line and flat-shaded views. It is not required to reproduce the high-quality lighting simulation.
 
-## ADR-005 — Implement the high-quality visualizer in Rust
+## ADR-005 — Implement the high-quality visualizer in Rust and evaluate `wgpu` first
 
 Status: Accepted
 
 The native high-quality renderer is implemented in Rust. Phase 0 must select and
 prove the Rust graphics stack against fixture counts, moving shadowed lights,
 fog, volumetric beams, and cross-platform packaging.
+
+`wgpu` is the preferred first candidate because it can target Metal, Direct3D
+12 and Vulkan while keeping the renderer and its shaders behind one Rust-owned
+surface abstraction. Selection of `wgpu` is provisional until the Phase 0
+benchmark proves the required image quality, GPU timing, resource lifetime,
+packaging and native-window integration on all three platforms.
 
 Reasoning: Rust keeps renderer lifecycle, shared types, fixture behavior, and
 packaging in one language while retaining a dedicated process boundary. The
@@ -84,6 +90,11 @@ Reasoning:
 - The boundary makes later renderer replacement possible.
 
 Consequence: the renderer never writes the SQLite show file and never becomes the authoritative scene model.
+
+The reusable render core must not assume that its only presentation target is a
+standalone top-level window. It should accept a presentation-surface adapter so
+the dedicated Viz process can own a native window while a future desk adapter
+can present the same core in an embedded native viewport.
 
 ## ADR-007 — Keep one canonical semantic scene
 
@@ -146,16 +157,20 @@ Consequence: code review and CI enforce dependency direction, shared-component b
 Status: Accepted
 
 The high-quality Viz renderer and the Stage visualizer embedded in ToskLight
-are separate runtime products. The embedded Stage remains a retained,
+are separate runtime products. The embedded Stage currently remains a retained,
 lightweight WebGL renderer inside `apps/light-desktop`; it consumes a dedicated,
 bounded visualization feed and prioritizes Live/Preload latency and engine/DMX
-isolation. The Viz renderer remains a supervised Rust process with its own
-native rendering surface and quality budget.
+isolation. A later implementation may replace only that viewport's pixels with
+an in-process native `wgpu` surface while leaving the surrounding React pane and
+window system intact. The Viz renderer remains a supervised Rust process with
+its own native rendering surface and quality budget.
 
 The built-in Stage does not stream video from `apps/viz-renderer`, and Viz is
 not required for ToskLight to visualize a show. The two renderers may share
 fixture definitions, model assets, semantic resolved-value contracts, and
-benchmark scenes, but they do not share runtime renderer ownership.
+benchmark scenes. They may also share a renderer-core crate if the desk owns
+its own renderer instance and lifecycle; they do not share a running renderer
+process or make one application depend on the other.
 
 Reasoning: a rendered video path adds process startup, GPU readback,
 encoding/decoding, and presentation latency to the desk's operational surface,
@@ -164,10 +179,46 @@ Conversely, forcing high-quality rendering into the Tauri WebView would weaken
 the dedicated renderer's quality and isolation goals.
 
 Consequence: high-quality materials, shadows, haze, volumetric occlusion,
-recording, and advanced optics belong to Viz. The embedded Stage deliberately
-keeps schematic fixture bodies, additive beams, and low-cost navigation while
-meeting the performance contract in
-[`../../refactoring/doing/14-efficient-built-in-stage-visualizer.md`](../../refactoring/doing/14-efficient-built-in-stage-visualizer.md).
+recording, and advanced optics belong to Viz. The embedded Stage may use a
+lower-cost quality profile of the shared render core, but it must still meet
+the independent performance contract in
+[`../../refactoring/doing/21-efficient-built-in-stage-visualizer.md`](../../refactoring/doing/21-efficient-built-in-stage-visualizer.md).
+
+## ADR-014 — Evaluate an embedded native `wgpu` Stage viewport
+
+Status: Provisional
+
+Keep the existing ToskLight React component hierarchy and window-management
+behavior. The Stage React component reserves and reports the rectangular
+viewport. A platform adapter places a native GPU child surface at that physical
+rectangle and follows moves, docking, resize, visibility and display-scale
+changes. React continues to own the Stage toolbar, surrounding controls and
+pane lifecycle; `wgpu` owns only the pixels and direct interaction inside the
+viewport.
+
+This is not a frameset, nested WebView or image/video stream. The native surface
+is a sibling of the WebView inside the same operating-system window and only
+appears to occupy the React placeholder. The renderer receives bounded,
+latest-state typed snapshots in process and must never wait on or backpressure
+the output engine.
+
+Phase 0 must test:
+
+- native child-surface creation, movement, clipping, DPI and resize on macOS,
+  Windows and supported Linux window systems;
+- mouse, touch, wheel, focus, selection and camera-input routing;
+- z-order behavior for dialogs, menus, tooltips and panes crossing the viewport;
+- hiding or detaching the surface while the pane is dragged or moved to another
+  Tauri window;
+- renderer failure containment and resource recreation; and
+- Stage load with the maintained fixture-count benchmarks while DMX output and
+  the rest of the desk remain within their independent latency budgets.
+
+If native child-surface integration is not robust on a supported platform, keep
+the current retained WebGL Stage there until a proven adapter exists. Do not
+fall back to streaming rendered frames into the WebView as the primary desktop
+architecture because GPU readback, copying, encoding and presentation would
+reintroduce avoidable latency.
 
 ## Open decisions
 

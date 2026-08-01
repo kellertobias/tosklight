@@ -1,0 +1,18 @@
+[package]
+name = "wgpu-moving-lights"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+bytemuck = { version = "1.24", features = ["derive"] }
+pollster = "0.4"
+tauri = { version = "2.11.5", features = ["unstable"] }
+wgpu = "30"
+
+# Keep this proof of concept independent from ToskLight's production workspace.
+[workspace]
+

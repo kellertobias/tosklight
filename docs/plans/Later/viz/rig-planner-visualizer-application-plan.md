@@ -5,7 +5,7 @@ Repository: `/Users/keller/repos/light`
 Target platforms: Windows, macOS, Linux  
 Primary UI: Tauri, React, TypeScript  
 Planning viewport: WebGL2, managed by the React application  
-High-quality visualizer: Rust renderer, running as a separate process
+High-quality visualizer: Rust renderer, running as a separate process, with `wgpu` as the preferred Phase 0 candidate
 Canonical persistence: SQLite-based show document  
 Primary interchange: MVR, GDTF, GLB/glTF  
 
@@ -57,10 +57,19 @@ The planning model is authoritative. Neither the WebGL viewport nor the Rust ren
 The Viz application is not the Stage visualizer embedded in ToskLight. The
 embedded Stage remains an independently runnable, efficient Live/Preload
 surface under
-[`../../refactoring/doing/14-efficient-built-in-stage-visualizer.md`](../../refactoring/doing/14-efficient-built-in-stage-visualizer.md).
+[`../../refactoring/doing/21-efficient-built-in-stage-visualizer.md`](../../refactoring/doing/21-efficient-built-in-stage-visualizer.md).
 It does not launch Viz or consume a rendered video stream from Viz. Shared
 fixture definitions, model assets, resolved-value contracts, and benchmark
-scenes are encouraged, but either renderer must run without the other.
+scenes are encouraged. A Rust renderer-core crate may also be shared, provided
+the desk creates and owns its own renderer instance and either application can
+run without the other.
+
+The built-in Stage may later replace its WebGL viewport with an embedded native
+`wgpu` surface. That option does not replace the surrounding React components or
+Tauri window-management behavior. React still owns the Stage pane and reports
+the viewport rectangle; a native surface follows that rectangle and renders
+only its contents. No frameset, nested WebView, renderer-process dependency or
+rendered-video stream is part of this direction.
 
 ### 3.1 Version 1 scope
 
@@ -842,14 +851,24 @@ MVR will not represent every cable, inventory or calculation concept. Store comp
 
 ### 12.1 Selected baseline
 
-- A Rust-native rendering stack selected by the Phase 0 benchmark.
+- A Rust-native rendering stack selected by the Phase 0 benchmark, with `wgpu`
+  evaluated first.
 - Vulkan, Direct3D 12, or Metal backend as appropriate.
 - Separate packaged executable/process.
 - Open-source, license-compatible graphics dependencies.
 - Rust for scene orchestration and renderer lifecycle.
 - Custom shaders for fixture optics, beams and post-processing.
+- A presentation-surface adapter that does not couple the renderer core to one
+  top-level-window implementation.
 
 Pin the selected graphics dependencies. Major upgrades are deliberate projects with benchmark and screenshot comparison.
+
+The dedicated Viz application still runs the renderer as a supervised process
+with its own native window. Separately, Phase 0 evaluates whether the same
+renderer core can be instantiated in `apps/light-desktop` and presented in a
+native child surface aligned with the existing React Stage viewport. The two
+hosts have independent instances, quality profiles, update rates, failure
+handling and performance budgets.
 
 ### 12.2 Renderer scene
 
@@ -1348,6 +1367,9 @@ Deliver:
 - Confirm existing patch, MVR, resolved-value and CITP seams.
 - Minimal Tauri shell on Windows, macOS and Linux.
 - Minimal Rust renderer launch and heartbeat on all platforms.
+- A `wgpu`-first rendering spike using the same renderer-core API with a
+  standalone native window and, where supported, a native child surface aligned
+  with the existing React Stage viewport.
 - A bounded renderer benchmark proving the intended shadowed-beam/fog direction before deeper renderer work.
 
 Gate:
@@ -1359,6 +1381,12 @@ Gate:
 - One built-in fixture and one manually imported GDTF load through the shared path.
 - No second fixture schema or copied library is introduced.
 - The Rust renderer shows no early cross-platform blocker for the target visual direction.
+- The embedded-surface spike records macOS, Windows and supported Linux results
+  for resize, DPI, clipping, input, focus, z-order, pane movement, resource
+  recreation and detaching or recreating the surface in another Tauri window.
+- The embedded spike does not alter the Stage acceptance contract or permit the
+  renderer to block engine ticks, DMX output, Programmer actions or the rest of
+  the desk UI.
 
 ### Phase 1 — fixture list, placement and patch prototype
 
@@ -1571,7 +1599,8 @@ The repository decision is settled: the application lives in `/Users/keller/repo
 1. Is the license permissive (MIT/Apache-2.0) or reciprocal (GPL-3.0)?
 2. What is the portable show-package extension and internal structure?
 3. Which Linux distributions and packaging formats are supported initially?
-4. Which exact Rust graphics stack and versions are pinned?
+4. Does the Phase 0 evidence select `wgpu`, and which exact versions and backend
+   requirements are pinned?
 5. Which fixture/venue benchmark scene defines the visual target?
 6. Which preliminary rigging cases are in v1 and which are rejected?
 7. Which manufacturer data may legally ship in the default library?
@@ -1603,8 +1632,11 @@ Build the first prototype in this order:
 16. Animate one gobo change through the physical wheel transition.
 17. Render one shadowed volumetric beam.
 18. Crash the renderer deliberately and prove automatic restart/resynchronization.
-19. Pass architecture, formatting, lint, type-check, test and Storybook gates.
-20. Build and run the slice on Windows, macOS and Linux.
+19. Host the same render-core prototype in a native child surface aligned with a
+    movable React placeholder, or record the concrete platform blocker without
+    weakening the standalone renderer.
+20. Pass architecture, formatting, lint, type-check, test and Storybook gates.
+21. Build and run the slice on Windows, macOS and Linux.
 
 Do not implement warehouse stock, routed cables, rack internals, load reports or polished paperwork in this first prototype. Their future data boundaries remain documented, but they must not delay proof of the shared fixture library, quad planning views or visualizer.
 
