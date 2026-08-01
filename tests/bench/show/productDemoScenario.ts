@@ -135,6 +135,7 @@ export const PRODUCT_DEMO_SCRIPT = {
 		groupTileHoldFrames: 50,
 		groupPropertiesHoldFrames: 250,
 		groupFixtureSelectionClickMillis: 70,
+		groupBulkHardwareClickMillis: 12,
 		groupNameClickMillis: 3,
 		groupNameConfirmHoldFrames: 25,
 		groupSaveHoldFrames: 50,
@@ -1575,7 +1576,7 @@ async function buildGroups(
 	await desk.setDemoAction(
 		"Fast forward the remaining first-level Groups through simulated hardware controls.",
 	);
-	desk.setRecordingClickPace("rapid");
+	setBulkGroupCreationPace(desk);
 	for (const [selection, destination, name] of [
 		[["1", "2", "9", "TRU", "1", "5", "0", "ENT"], 2, "Beam Audience"],
 		[["1", "5", "1", "TRU", "1", "5", "4", "ENT"], 3, "Beam Auxiliary"],
@@ -1594,14 +1595,14 @@ async function buildGroups(
 			"ENT",
 		]);
 		await nameGroupThroughTouch(desk, page, keypad, destination, name, false);
-		desk.setRecordingClickPace("rapid");
+		setBulkGroupCreationPace(desk);
 	}
 	desk.setRecordingClickPace("compact");
 
-	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.beamShowHoldFrames);
 	await desk.setDemoAction(
-		"Combine the Beam Stage and Beam Audience tiles into the reusable Beam Show Group.",
+		"Select Beam Stage plus Beam Audience and combine them into the reusable Beam Show Group.",
 	);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.beamShowHoldFrames);
 	await clearSelection(desk, keypad, api);
 	await desk.click(groupTile(app, 1));
 	await desk.click(keypad.getByRole("button", { name: "+", exact: true }));
@@ -2379,6 +2380,13 @@ function digits(value: number) {
 	return String(value).split("");
 }
 
+function setBulkGroupCreationPace(desk: DeskDriver) {
+	desk.setRecordingClickPace(
+		"rapid",
+		PRODUCT_DEMO_SCRIPT.pacing.groupBulkHardwareClickMillis,
+	);
+}
+
 async function touchTypeText(
 	desk: DeskDriver,
 	input: Locator,
@@ -2558,7 +2566,12 @@ async function selectGroupIconThroughTouch(
 	groupName: string,
 	visible: boolean,
 ) {
-	desk.setRecordingClickPace(visible ? "compact" : "rapid");
+	desk.setRecordingClickPace(
+		visible ? "compact" : "fastTyping",
+		visible
+			? undefined
+			: PRODUCT_DEMO_SCRIPT.pacing.groupBulkHardwareClickMillis,
+	);
 	await desk.click(
 		properties.getByRole("button", { name: "Choose icon", exact: true }),
 	);
@@ -2571,7 +2584,12 @@ async function selectGroupIconThroughTouch(
 		}),
 	);
 	await expect(picker).toBeHidden();
-	desk.setRecordingClickPace("compact");
+	desk.setRecordingClickPace(
+		visible ? "compact" : "fastTyping",
+		visible
+			? undefined
+			: PRODUCT_DEMO_SCRIPT.pacing.groupBulkHardwareClickMillis,
+	);
 }
 
 async function playbackTarget(api: ApiDriver, showId: string, number: number) {

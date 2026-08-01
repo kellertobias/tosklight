@@ -319,6 +319,13 @@ typing pace—while the first name retains its pre-confirm hold. Group propertie
 a family-appropriate icon; the canonical Group generator supplies icons for accelerated/API-created
 Groups as well. The second naming pass skips the long modal, confirm, and save holds.
 
+After those two narrated examples, first-level Groups 3–9 use a configurable 12 ms preview and
+12 ms settle for accelerated simulated-hardware and modal actions, targeting roughly four to five
+seconds for the complete block. The next narration hold now begins only after the action text
+announces the Beam Stage plus Beam Audience selection. Beam Show and its first odd/even derivatives
+remain visible and narratable; only the later Group remainder returns to the existing API
+fast-forward.
+
 Focused manifest, patch, Group, Playback, and Fixture Patch tests passed, as did the production
 frontend build, the generated-show acceptance, and a complete 2.8-minute non-recording product
 demo rehearsal that refreshed `assets/demo.show`. Per the recording-review instruction, this

@@ -342,11 +342,15 @@ export class DeskDriver {
 			Boolean(element.closest(".demo-number-block")),
 		);
 		const defaultPreview = hardwareTyping
-			? 45
+			? (this.recordingClickDelayOverride ?? 45)
 			: (this.recordingClickDelayOverride ??
 				recordingClickDelay(this.recordingClickPace));
 		const previewMillis = Math.max(
-			hardwareTyping ? 40 : recordingClickMinimum(this.recordingClickPace),
+			hardwareTyping
+				? this.recordingClickDelayOverride !== undefined
+					? 0
+					: 40
+				: recordingClickMinimum(this.recordingClickPace),
 			Number(process.env.LIGHT_VISUAL_CLICK_PREVIEW ?? defaultPreview),
 		);
 		if (Number.isFinite(previewMillis))
@@ -356,11 +360,15 @@ export class DeskDriver {
 			modifiers: options.modifiers,
 		});
 		const defaultPause = hardwareTyping
-			? 45
+			? (this.recordingClickDelayOverride ?? 45)
 			: (this.recordingClickDelayOverride ??
 				recordingClickDelay(this.recordingClickPace));
 		const settleMillis = Math.max(
-			hardwareTyping ? 40 : recordingClickMinimum(this.recordingClickPace),
+			hardwareTyping
+				? this.recordingClickDelayOverride !== undefined
+					? 0
+					: 40
+				: recordingClickMinimum(this.recordingClickPace),
 			Number(process.env.LIGHT_VISUAL_CLICK_PAUSE ?? defaultPause),
 		);
 		if (Number.isFinite(settleMillis))
