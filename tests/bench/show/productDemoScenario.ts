@@ -59,6 +59,15 @@ const DEMO_SHOW = fileURLToPath(
 );
 const RECORDING = process.env.LIGHT_VISUAL_RECORDING === "1";
 const UPDATE_DEMO_SHOW = process.env.LIGHT_UPDATE_DEMO_SHOW === "1";
+const PRODUCT_DEMO_TIMING = {
+	busking: {
+		bpm: 120,
+		beatsPerBar: 4,
+		liveBars: 8,
+		preloadBars: 8,
+		commitFadeMillis: 2_000,
+	},
+} as const;
 
 export class BrowserProductDemo {
 	constructor(
@@ -300,8 +309,8 @@ export class BrowserProductDemo {
 				canonical.patch.fixtures,
 			);
 			await demonstrateFixtureControls(desk, page, demo, app, keypad, api);
-			await demonstrateBusking(desk, demo, api, bench, showId);
-			await demonstratePreload(desk, demo, keypad, api);
+			await demonstrateBusking(desk, demo, stage, api, bench, showId);
+			await demonstratePreload(desk, demo, stage, keypad, api, bench);
 
 			await desk.titleCard(
 				"ACL CHASER · SPEED D",
@@ -1152,13 +1161,14 @@ async function buildCueProgramming(
 async function demonstrateBusking(
 	desk: DeskDriver,
 	demo: Locator,
+	stage: Locator,
 	api: ApiDriver,
 	bench: LightBench,
 	showId: string,
 ) {
 	await desk.titleCard(
-		"BUSKING",
-		"Start the composed white look, ACL chase and all canonical benchmark Dynamics through their final assignments.",
+		"Busking",
+		"Combine Playbacks, Dynamics and Presets to build your look. Use Preload to do multiple changes at once",
 	);
 	await desk.click(
 		demo.getByRole("button", {
@@ -1186,38 +1196,66 @@ async function demonstrateBusking(
 		),
 	).toBe(true);
 	await expectLiveOutput(api);
+	const movingLook = await stage.locator("canvas").screenshot({
+		animations: "disabled",
+	});
+	await bench.freeRunClock(
+		canonicalDemoMillis(
+			PRODUCT_DEMO_TIMING.busking.liveBars,
+			PRODUCT_DEMO_TIMING.busking.bpm,
+			PRODUCT_DEMO_TIMING.busking.beatsPerBar,
+		),
+	);
+	const movedLook = await stage.locator("canvas").screenshot({
+		animations: "disabled",
+	});
+	expect(movedLook.equals(movingLook)).toBe(false);
 }
 
 async function demonstratePreload(
 	desk: DeskDriver,
 	demo: Locator,
+	stage: Locator,
 	keypad: Locator,
 	api: ApiDriver,
+	bench: LightBench,
 ) {
-	await desk.titleCard(
-		"PRELOADING",
-		"Prepare two canonical ACL playbacks blind and commit them together through the physical Preload Go path.",
-	);
 	await clearProgrammer(desk, keypad, api);
+	const liveBeforePreload = await liveDmxSlots(api);
+	const stageBeforePreloadGo = await stage.locator("canvas").screenshot({
+		animations: "disabled",
+	});
 	await desk.click(
 		keypad.getByRole("button", { name: "PRELOAD GO", exact: true }),
 	);
+	const preloadStepMillis = Math.floor(
+		canonicalDemoMillis(
+			PRODUCT_DEMO_TIMING.busking.preloadBars,
+			PRODUCT_DEMO_TIMING.busking.bpm,
+			PRODUCT_DEMO_TIMING.busking.beatsPerBar,
+		) / 3,
+	);
+	await desk.page.waitForTimeout(preloadStepMillis);
 	await desk.click(
 		demo.getByRole("button", {
 			name: "Playback 12 button 1",
 			exact: true,
 		}),
 	);
+	await desk.page.waitForTimeout(preloadStepMillis);
 	await desk.click(
 		demo.getByRole("button", {
 			name: "Playback 15 button 1",
 			exact: true,
 		}),
 	);
+	await desk.page.waitForTimeout(preloadStepMillis);
 	expect((await preloadState(api)).playbackCount).toBeGreaterThanOrEqual(2);
+	expect(await liveDmxSlots(api)).toEqual(liveBeforePreload);
 	await desk.click(
 		keypad.getByRole("button", { name: "PRELOAD GO", exact: true }),
 	);
+	await bench.freeRunClock(PRODUCT_DEMO_TIMING.busking.commitFadeMillis);
 	await expect.poll(async () =>
 		(await preloadState(api)).toEqual({
 			capturesValues: false,
@@ -1225,6 +1263,17 @@ async function demonstratePreload(
 			playbackCount: 0,
 		}),
 	);
+	await expect
+		.poll(async () => await liveDmxSlots(api))
+		.not.toEqual(liveBeforePreload);
+	const stageAfterPreloadGo = await stage.locator("canvas").screenshot({
+		animations: "disabled",
+	});
+	expect(stageAfterPreloadGo.equals(stageBeforePreloadGo)).toBe(false);
+}
+
+function canonicalDemoMillis(bars: number, bpm: number, beatsPerBar: number) {
+	return Math.round(bars * beatsPerBar * (60_000 / bpm));
 }
 
 async function downloadCompletedDemoShow(
@@ -1733,6 +1782,16 @@ async function expectLiveOutput(api: ApiDriver) {
 			),
 		)
 		.toBe(true);
+}
+
+async function liveDmxSlots(api: ApiDriver): Promise<number[]> {
+	const snapshot = await api.request<any>(
+		"GET",
+		"/api/v2/output/dmx",
+		undefined,
+		false,
+	);
+	return snapshot.universes.flatMap((frame: any) => frame.slots);
 }
 
 async function expectCenteredInDemoSurface(dialog: Locator, surface: Locator) {

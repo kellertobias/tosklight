@@ -30,7 +30,7 @@ const DEMO_CHAPTERS = [
 	["DYNAMICS", "Dynamics"],
 	["CUELIST PROGRAMMING", "Cuelists"],
 	["SHOW COMPLETE", "Complete"],
-	["BUSKING", "Live Demo"],
+	["Busking", "Live Demo"],
 ] as const;
 
 function DemoDmxGrid({ universeNumber }: { universeNumber: number }) {
