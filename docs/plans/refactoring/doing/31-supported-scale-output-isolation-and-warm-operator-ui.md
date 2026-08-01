@@ -2,11 +2,10 @@
 
 ## Status
 
-**Pending refactoring queue item 31 — verify before implementing.** Its prerequisite Stage
-visualizer and operator-polish plans are complete. Start this plan after
-[Attribute Registry, Activation Groups, and Indexed Presets](29-attribute-registry-and-activation-groups.md)
-and before [Macros](32-macros-and-scheduled-macros.md). Move this file to `doing/` before adding
-the executable benchmark or changing implementation code.
+**IN PROGRESS — claimed 2026-08-01.** Its prerequisite Stage visualizer, operator-polish, and
+Attribute Registry plans are complete. This plan now owns the mandatory packaged 1,000-instance
+benchmark and any repairs it proves necessary before
+[Macros](../pending/32-macros-and-scheduled-macros.md).
 
 This plan turns the root
 [`README.md`](../../../../README.md#supported-usage-profile) contract into measured packaged
