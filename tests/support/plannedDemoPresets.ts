@@ -54,7 +54,13 @@ export async function installPlannedDemoPresets(
 	api: ApiDriver,
 	showId: string,
 	fixtures: readonly PatchedTargetFixture[],
-	options: { onItem?: () => Promise<void> } = {},
+	options: {
+		onItem?: (item: {
+			family: "Color" | "Position" | "Beam";
+			index: number;
+			name: string;
+		}) => Promise<void>;
+	} = {},
 ) {
 	const byNumber = new Map(
 		fixtures.flatMap((fixture) =>
@@ -75,18 +81,16 @@ export async function installPlannedDemoPresets(
 	]);
 	const profileTargets = targets(byNumber, plannedDemoFamilyNumbers("profile"));
 	for (const [index, [name, red, green, blue]] of COLORS.entries()) {
-		await putPlannedDemoObject(
-			api,
-			showId,
-			"preset",
-			`2.${index + 1}`,
-			preset(index + 1, name, "Color", colorTargets, {
+		await putPlannedDemoObject(api, showId, "preset", `2.${index + 1}`, {
+			...preset(index + 1, name, "Color", colorTargets, {
 				"color.red": red,
 				"color.green": green,
 				"color.blue": blue,
 			}),
-		);
-		await options.onItem?.();
+			icon: "●",
+			color: rgbHex(red, green, blue),
+		});
+		await options.onItem?.({ family: "Color", index, name });
 	}
 	for (const [index, [name, pan, tilt]] of POSITIONS.entries()) {
 		await putPlannedDemoObject(
@@ -96,7 +100,7 @@ export async function installPlannedDemoPresets(
 			`3.${index + 1}`,
 			preset(index + 1, name, "Position", movingTargets, { pan, tilt }),
 		);
-		await options.onItem?.();
+		await options.onItem?.({ family: "Position", index, name });
 	}
 	for (const [index, [name, attribute, value]] of BEAM.entries()) {
 		await putPlannedDemoObject(
@@ -106,13 +110,23 @@ export async function installPlannedDemoPresets(
 			`4.${index + 1}`,
 			preset(index + 1, name, "Beam", profileTargets, { [attribute]: value }),
 		);
-		await options.onItem?.();
+		await options.onItem?.({ family: "Beam", index, name });
 	}
 	return {
 		colors: COLORS.length,
 		positions: POSITIONS.length,
 		beam: BEAM.length,
 	};
+}
+
+function rgbHex(red: number, green: number, blue: number) {
+	return `#${[red, green, blue]
+		.map((component) =>
+			Math.round(component * 255)
+				.toString(16)
+				.padStart(2, "0"),
+		)
+		.join("")}`;
 }
 
 function targets(byNumber: Map<number, string[]>, numbers: readonly number[]) {

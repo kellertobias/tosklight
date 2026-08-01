@@ -339,6 +339,12 @@ Groups control to reveal the in-place Group shortcuts, and selects Beam Show fro
 each narrated Position and Color example. It no longer alternates between the Group and Preset
 built-ins while programming those looks.
 
+After the two narrated Color examples, the eleven remaining Color presets use an eight-frame
+per-item fast-forward budget at 25 fps, for a 3.52-second visual sequence before API overhead.
+Position and Beam retain their existing one-second-per-item pacing. Every canonical Color preset,
+including the first two once reconciled by the generator, stores a `●` swatch icon colored from
+its exact RGB preset value.
+
 Focused manifest, patch, Group, Playback, and Fixture Patch tests passed, as did the production
 frontend build, the generated-show acceptance, and a complete 2.8-minute non-recording product
 demo rehearsal that refreshed `assets/demo.show`. Per the recording-review instruction, this

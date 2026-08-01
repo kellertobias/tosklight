@@ -142,6 +142,7 @@ export const PRODUCT_DEMO_SCRIPT = {
 		beamShowHoldFrames: 75,
 		oddRuleHoldFrames: 125,
 		presetItemFrames: 25,
+		colorPresetFastForwardItemFrames: 8,
 		bpm: 120,
 		beatsPerBar: 4,
 		buskingBars: 16,
@@ -1874,11 +1875,18 @@ async function buildPresetSetup(
 	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
 	await desk.click(presetTile(presets, "2.2"));
 	await desk.fastForward(
-		"Programming the remaining Color, Position, and Beam presets at one second per preset.",
+		"Completing the remaining Color presets in three to four seconds, then programming Position and Beam presets at one second each.",
 		() =>
 			installPlannedDemoPresets(api, showId, fixtures, {
-				onItem: () =>
-					demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.presetItemFrames),
+				onItem: ({ family, index }) =>
+					family === "Color" && index < 2
+						? Promise.resolve()
+						: demoPause(
+								page,
+								family === "Color"
+									? PRODUCT_DEMO_SCRIPT.pacing.colorPresetFastForwardItemFrames
+									: PRODUCT_DEMO_SCRIPT.pacing.presetItemFrames,
+							),
 			}),
 	);
 	await expect
