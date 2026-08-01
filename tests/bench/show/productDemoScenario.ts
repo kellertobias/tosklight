@@ -30,6 +30,7 @@ import {
 } from "../../support/plannedDemoPatch";
 import { installPlannedDemoPlaybacks } from "../../support/plannedDemoPlaybacks";
 import { installPlannedDemoPresets } from "../../support/plannedDemoPresets";
+import { PLANNED_DEMO_VIRTUAL_PLAYBACK_EXCLUSION_ZONES } from "../../support/plannedDemoVirtualPlaybackZones";
 import {
 	installPlannedDemoScenery,
 	PLANNED_DEMO_TOTAL_FIXTURE_RECORDS,
@@ -102,7 +103,7 @@ export const PRODUCT_DEMO_SCRIPT = {
 			id: "virtual-playbacks",
 			marker: "VIRTUAL PLAYBACKS",
 			title: "Virtual Playbacks",
-			frames: 875,
+			frames: 2_500,
 		},
 		{
 			id: "busking-preload",
@@ -151,6 +152,12 @@ export const PRODUCT_DEMO_SCRIPT = {
 		dynamicsResultHoldFrames: 50,
 		dynamicsSettingsHoldFrames: 75,
 		dynamicsConfiguredHoldFrames: 75,
+		virtualPlaybackSurfaceHoldFrames: 75,
+		virtualPlaybackChoiceHoldFrames: 50,
+		virtualPlaybackResultHoldFrames: 75,
+		virtualPlaybackZoneSelectionHoldFrames: 50,
+		virtualPlaybackZoneDialogHoldFrames: 75,
+		virtualPlaybackZoneCreatedHoldFrames: 75,
 		bpm: 120,
 		beatsPerBar: 4,
 		buskingBars: 16,
@@ -1776,7 +1783,7 @@ async function buildDynamicsSetup(
 
 	await desk.titleCard(
 		"VIRTUAL PLAYBACKS",
-		"You do not need to assign a playback to a hardwar button.",
+		"You do not need to assign a playback to a hardware button.",
 	);
 	const pane = await createVirtualPlaybackDesktop(desk, page);
 	await assignVirtualDynamic(desk, page, pane, keypad, 1, "Beam Show PWM", 1);
@@ -1785,17 +1792,34 @@ async function buildDynamicsSetup(
 		page,
 		pane,
 		keypad,
-		2,
+		19,
 		"Beam Show Circle",
 		19,
 	);
 	await desk.fastForward(
-		"Assigning every remaining Dynamic to its stable Virtual Playback and completing the Programming and Theater desktops.",
+		"Assigning every remaining Dynamic to its stable Virtual Playback and completing the Programming and Theater desktops before grouping related effects.",
 		async () => {
 			await installPlannedDemoDynamicPlaybacks(api, showId, definitions);
 			await installPlannedDemoLayout(api, showId);
 		},
 	);
+	for (const zone of PLANNED_DEMO_VIRTUAL_PLAYBACK_EXCLUSION_ZONES) {
+		await createVirtualPlaybackExclusionZone(
+			desk,
+			page,
+			pane,
+			zone.name,
+			zone.playback_numbers.map((number) => number - 1000),
+		);
+	}
+	await expect
+		.poll(async () => virtualPlaybackExclusionZones(api, showId))
+		.toEqual(
+			PLANNED_DEMO_VIRTUAL_PLAYBACK_EXCLUSION_ZONES.map((zone) => ({
+				name: zone.name,
+				playback_numbers: [...zone.playback_numbers],
+			})),
+		);
 	await expect
 		.poll(async () => (await api.showObjects(showId, "dynamic")).length)
 		.toBe(30);
@@ -2481,7 +2505,10 @@ async function configureDynamicThroughTouch(
 	await desk.click(
 		settings.getByRole("button", { name: "Close settings", exact: true }),
 	);
-	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsConfiguredHoldFrames);
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.dynamicsConfiguredHoldFrames,
+	);
 }
 
 async function dynamicIdentities(
@@ -2509,13 +2536,25 @@ async function createVirtualPlaybackDesktop(desk: DeskDriver, page: Page) {
 	await desk.click(
 		page.getByRole("button", { name: "New desktop", exact: true }),
 	);
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackSurfaceHoldFrames,
+	);
 	const active = page.locator("[data-desktop-id][aria-current=page]");
 	await active.hover();
 	await page.mouse.down();
 	await page.waitForTimeout(700);
 	await page.mouse.up();
 	const settings = page.getByRole("dialog", { name: "Desktop settings" });
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackSurfaceHoldFrames,
+	);
 	await touchTypeText(desk, settings.getByLabel("Name"), "Busking");
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackChoiceHoldFrames,
+	);
 	await settings.getByLabel("Name").blur();
 	await desk.click(
 		settings.getByRole("button", {
@@ -2527,6 +2566,10 @@ async function createVirtualPlaybackDesktop(desk: DeskDriver, page: Page) {
 	await expect(
 		page.getByRole("heading", { name: "Open Window" }),
 	).toBeVisible();
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackSurfaceHoldFrames,
+	);
 	await desk.click(
 		page.getByRole("button", { name: "Virtual Playbacks", exact: true }),
 	);
@@ -2534,16 +2577,32 @@ async function createVirtualPlaybackDesktop(desk: DeskDriver, page: Page) {
 		.locator(".desk-pane")
 		.filter({ hasText: "Virtual Playbacks" });
 	await expect(pane).toBeVisible();
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackResultHoldFrames,
+	);
 	await desk.click(pane.getByRole("button", { name: "Settings", exact: true }));
 	const paneSettings = page.getByRole("dialog", { name: "Pane Settings" });
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackSurfaceHoldFrames,
+	);
 	await desk.click(
 		paneSettings.getByRole("tab", { name: "Virtual Playbacks", exact: true }),
 	);
 	await paneSettings.getByLabel("Rows").fill("5");
 	await paneSettings.getByLabel("Columns").fill("10");
 	await paneSettings.getByLabel("Columns").blur();
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackResultHoldFrames,
+	);
 	await desk.click(
 		paneSettings.getByRole("button", { name: "Close settings", exact: true }),
+	);
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackResultHoldFrames,
 	);
 	return pane;
 }
@@ -2557,6 +2616,9 @@ async function assignVirtualDynamic(
 	name: string,
 	poolNumber: number,
 ) {
+	await desk.setDemoAction(
+		`Assign ${name} to stable Virtual Playback ${1000 + cell} through Playback Configuration.`,
+	);
 	await desk.click(keypad.getByRole("button", { name: "SET", exact: true }));
 	await desk.click(
 		pane.getByRole("button", {
@@ -2566,15 +2628,102 @@ async function assignVirtualDynamic(
 		}),
 	);
 	const modal = page.getByRole("dialog", { name: "Playback Configuration" });
+	await expect(modal).toBeVisible();
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackSurfaceHoldFrames,
+	);
 	await desk.click(modal.getByRole("radio", { name: "Dynamic", exact: true }));
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackChoiceHoldFrames,
+	);
 	await desk.click(
 		modal.getByRole("radio", {
 			name: new RegExp(`^Dynamic ${poolNumber} · ${escapeRegex(name)}`),
 		}),
 	);
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackChoiceHoldFrames,
+	);
 	await modal.getByLabel("Playback name").fill(name);
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackResultHoldFrames,
+	);
 	await desk.click(modal.getByRole("button", { name: "Apply", exact: true }));
 	await expect(modal).toBeHidden();
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackResultHoldFrames,
+	);
+}
+
+async function createVirtualPlaybackExclusionZone(
+	desk: DeskDriver,
+	page: Page,
+	pane: Locator,
+	name: string,
+	cells: readonly number[],
+) {
+	await desk.setDemoAction(
+		`Group ${name.replace("Beam Show ", "")} so activating one related effect releases the previous one.`,
+	);
+	await page.keyboard.down("Shift");
+	try {
+		for (const cell of cells)
+			await desk.click(pane.locator(`[data-virtual-playback-slot="${cell}"]`));
+	} finally {
+		await page.keyboard.up("Shift");
+	}
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackZoneSelectionHoldFrames,
+	);
+	await desk.click(
+		pane.getByRole("button", { name: "Create Exclusion Zone", exact: true }),
+	);
+	const dialog = page.getByRole("dialog", { name: "Create Exclusion Zone" });
+	await expect(dialog).toBeVisible();
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackZoneDialogHoldFrames,
+	);
+	await dialog.getByLabel("Zone name").pressSequentially(name, { delay: 35 });
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackChoiceHoldFrames,
+	);
+	await desk.click(
+		dialog.getByRole("button", { name: "Create zone", exact: true }),
+	);
+	await expect(dialog).toBeHidden();
+	for (const cell of cells)
+		await expect(
+			pane.locator(`[data-virtual-playback-slot="${cell}"]`),
+		).not.toHaveAttribute("data-exclusion-fence", "");
+	await demoPause(
+		page,
+		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackZoneCreatedHoldFrames,
+	);
+}
+
+async function virtualPlaybackExclusionZones(api: ApiDriver, showId: string) {
+	const snapshot = await api.request<{
+		zones: Array<{ name: string; playback_numbers: number[] }>;
+	}>(
+		"GET",
+		"/api/v2/virtual-playback-exclusion-zones",
+		undefined,
+		true,
+		undefined,
+		{ showId },
+	);
+	return snapshot.zones.map(({ name, playback_numbers }) => ({
+		name,
+		playback_numbers,
+	}));
 }
 
 function digits(value: number) {

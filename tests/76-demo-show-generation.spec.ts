@@ -6,6 +6,7 @@ import {
 	startPlannedDemoBenchmarkLook,
 } from "./support/plannedDemoBenchmark";
 import { generatePlannedDemo } from "./support/plannedDemoGenerator";
+import { PLANNED_DEMO_VIRTUAL_PLAYBACK_EXCLUSION_ZONES } from "./support/plannedDemoVirtualPlaybackZones";
 
 test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from one manifest", async ({
 	api,
@@ -141,11 +142,23 @@ test("DEMO-GENERATOR-001 @api › installs the exact Plan 76 lighting patch from
 	).toEqual({ type: "grid_linear", angle_degrees: 90 });
 	const [page] = await api.showObjects<any>(showId, "playback_page");
 	expect(Object.keys(page.body.virtual_playbacks)).toHaveLength(30);
+	const exclusionZones = await api.request<{ zones: unknown[] }>(
+		"GET",
+		"/api/v2/virtual-playback-exclusion-zones",
+		undefined,
+		true,
+		undefined,
+		{ showId },
+	);
+	expect(exclusionZones.zones).toEqual(
+		PLANNED_DEMO_VIRTUAL_PLAYBACK_EXCLUSION_ZONES,
+	);
 
 	const layout = generatedShow.layout;
 	expect(layout.desks.map((desk) => desk.name)).toEqual([
 		"Group Programming",
 		"Busking",
+		"Cue Programming",
 		"Programming",
 		"Theater",
 	]);
