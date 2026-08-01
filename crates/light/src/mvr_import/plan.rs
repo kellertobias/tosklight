@@ -287,6 +287,10 @@ fn patched_fixture(
                 fixture.grand_master_enabled,
                 fixture.invert_pan,
                 fixture.invert_tilt,
+                // Mechanical settings somebody made at the rig: an archive from another
+                // application knows nothing about them, so a re-import must not reset them.
+                fixture.bracket_angle,
+                fixture.shaper_angle,
             )
         });
     PatchedFixture {
@@ -321,6 +325,8 @@ fn patched_fixture(
         grand_master_enabled: existing_mib.is_none_or(|settings| settings.3),
         invert_pan: existing_mib.is_some_and(|settings| settings.4),
         invert_tilt: existing_mib.is_some_and(|settings| settings.5),
+        bracket_angle: existing_mib.map_or(0.0, |settings| settings.6),
+        shaper_angle: existing_mib.and_then(|settings| settings.7),
         highlight_overrides: Default::default(),
         multipatch: Vec::new(),
     }
