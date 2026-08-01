@@ -6,7 +6,9 @@ import { ShowsRecoverySection } from "./GeneralSections";
 import { OutputsSection } from "./OutputsSection";
 
 vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
-	useBootstrapSnapshot: () => null,
+	useBootstrapSnapshot: () => ({
+		active_show: { name: "Tour", updated_at: "Now" },
+	}),
 	useSessionSnapshot: () => null,
 }));
 
@@ -15,11 +17,16 @@ vi.mock("../../features/dmxDiagnostics/DmxDiagnosticsContext", () => ({
 }));
 
 vi.mock("../../features/shellStatus/ShellStatusState", () => ({
-	useConnectionStatus: () => "Connected",
+	useConnectionStatus: () => "connected",
 }));
 
 vi.mock("../../features/showLifecycle/ShowLifecycleContext", () => ({
-	useShowLifecycle: () => ({ shows: [] }),
+	useShowLifecycle: () => ({ shows: [{ id: "tour" }, { id: "festival" }] }),
+}));
+
+const dispatch = vi.fn();
+vi.mock("../../state/AppContext", () => ({
+	useApp: () => ({ dispatch }),
 }));
 
 vi.mock("../../components/setup/OutputRoutesSetup", () => ({
@@ -47,6 +54,17 @@ describe("autosave interval setup placement", () => {
 		} as unknown as SetupWindowController;
 
 		render(<ShowsRecoverySection controller={controller} />);
+		expect(screen.getByText("Current show")).toBeVisible();
+		expect(screen.getByText("Tour")).toBeVisible();
+		expect(screen.getByText("2 library shows")).toBeVisible();
+		expect(screen.getByText("Connected, autosave active")).toHaveClass(
+			"is-connected",
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Open show" }));
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "OPEN_BUILTIN",
+			kind: "file_manager",
+		});
 		const interval = screen.getByLabelText("Autosave interval");
 		expect(interval).toHaveValue("30");
 		fireEvent.change(interval, { target: { value: "45" } });

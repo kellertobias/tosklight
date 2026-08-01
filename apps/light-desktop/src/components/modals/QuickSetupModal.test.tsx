@@ -297,4 +297,28 @@ describe("QuickSetupModal operator actions", () => {
     expect(mocks.dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN", kind: "dmx" });
     expect(mocks.dispatch).toHaveBeenCalledWith({ type: "SET_MODAL", modal: "setupOpen", value: false });
   });
+
+	it("keeps show navigation ordered as Patch, DMX, Scheduler, then Setup", () => {
+		render(<QuickSetupModal />);
+		const navigation = screen
+			.getByRole("button", { name: "Show Patch" })
+			.closest(".show-navigation-primary");
+		expect(navigation).not.toBeNull();
+		expect(
+			within(navigation as HTMLElement)
+				.getAllByRole("button")
+				.map((button) => button.textContent?.trim()),
+		).toEqual(["▦Show Patch", "◉DMX", "▣Scheduler", "⚙Enter Setup"]);
+
+		fireEvent.click(screen.getByRole("button", { name: "Scheduler" }));
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "OPEN_BUILTIN",
+			kind: "scheduler",
+		});
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_MODAL",
+			modal: "setupOpen",
+			value: false,
+		});
+	});
 });

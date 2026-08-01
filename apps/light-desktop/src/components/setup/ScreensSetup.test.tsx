@@ -46,11 +46,14 @@ describe("additional screen settings", () => {
 
 		expect(screen.getByRole("heading", { name: "Layout" })).toBeInTheDocument();
 		expect(
+			screen.getByRole("heading", { name: "Settings" }),
+		).toBeInTheDocument();
+		expect(
 			screen.getByRole("heading", { name: "Placement" }),
 		).toBeInTheDocument();
 		expect(
-			screen.getByRole("heading", { name: "Playbacks" }),
-		).toBeInTheDocument();
+			screen.queryByRole("heading", { name: "Playbacks" }),
+		).not.toBeInTheDocument();
 		expect(
 			screen.getByRole("button", { name: "Configure Playbacks" }),
 		).toBeInTheDocument();

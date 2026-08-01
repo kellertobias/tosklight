@@ -595,7 +595,9 @@ function QuickSetupShowDetails({ model }: { model: QuickSetupModel }) {
 function QuickSetupNavigation({ model }: { model: QuickSetupModel }) {
 	const { close, lockDesk } = model.actions;
 	const { dispatch } = model.app;
-	const openBuiltIn = (kind: "patch" | "setup" | "dmx" | "help") => {
+	const openBuiltIn = (
+		kind: "patch" | "setup" | "scheduler" | "dmx" | "help",
+	) => {
 		dispatch({ type: "OPEN_BUILTIN", kind });
 		close();
 	};
@@ -608,17 +610,23 @@ function QuickSetupNavigation({ model }: { model: QuickSetupModel }) {
 					</span>
 					<span>Show Patch</span>
 				</Button>
-				<Button onClick={() => openBuiltIn("setup")}>
-					<span className="show-navigation-icon" aria-hidden="true">
-						⚙
-					</span>
-					<span>Enter Setup</span>
-				</Button>
 				<Button onClick={() => openBuiltIn("dmx")}>
 					<span className="show-navigation-icon" aria-hidden="true">
 						◉
 					</span>
 					<span>DMX</span>
+				</Button>
+				<Button onClick={() => openBuiltIn("scheduler")}>
+					<span className="show-navigation-icon" aria-hidden="true">
+						▣
+					</span>
+					<span>Scheduler</span>
+				</Button>
+				<Button onClick={() => openBuiltIn("setup")}>
+					<span className="show-navigation-icon" aria-hidden="true">
+						⚙
+					</span>
+					<span>Enter Setup</span>
 				</Button>
 			</div>
 			<div className="modal-actions show-secondary-actions">

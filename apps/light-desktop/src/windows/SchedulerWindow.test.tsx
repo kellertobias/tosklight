@@ -113,6 +113,15 @@ afterEach(() => {
 });
 
 describe("SchedulerWindow production presentation", () => {
+	it("keeps scheduler controls but suppresses its duplicate title in a pane", () => {
+		const { container } = render(
+			<SchedulerWindow compact controller={controller()} />,
+		);
+		expect(container.querySelector(".ui-window-title")).toHaveTextContent("");
+		expect(screen.getByRole("button", { name: "+ Schedule" })).toBeVisible();
+		expect(screen.getByRole("button", { name: "Today" })).toBeVisible();
+	});
+
 	it("renders deliberate loading, error, and unfiltered empty states", () => {
 		const loading = controller({
 			snapshot: snapshot({ status: "loading", schedules: [] }),

@@ -12,8 +12,8 @@ import type { SetupWindowController } from "./controller";
 function NetworkInputs({ controller }: { controller: SetupWindowController }) {
 	const { draft } = controller;
 	return (
-		<>
-			<h3 className="setup-subsection-title">Inputs</h3>
+		<section className="network-settings-group" aria-labelledby="network-inputs">
+			<h3 id="network-inputs">Inputs</h3>
 			<div className="setup-list network-input-list">
 				<article>
 					<b>MIDI inputs</b>
@@ -33,7 +33,7 @@ function NetworkInputs({ controller }: { controller: SetupWindowController }) {
 				</article>
 			</div>
 			<SoundInputSettings />
-		</>
+		</section>
 	);
 }
 
@@ -45,38 +45,49 @@ export function NetworkSection({
 	return (
 		<>
 			<h2>Network</h2>
-			<FormLayout className="configuration-form" labelPlacement="side">
-				<TextField
-					label="Light server URL"
-					value={controller.serverUrl}
-					onChange={(event) => controller.setServerUrl(event.target.value)}
-					description="Tauri can use this desk or a remote Light server."
-				/>
-				<FormField label="">
-					<Button
-						onClick={() => controller.applyServerUrl(controller.serverUrl)}
-					>
-						Connect to server
-					</Button>
-				</FormField>
-			</FormLayout>
-			<div className="setup-cards">
-				<section>
-					<b>{configuredServerUrl()}</b>
-					<small>Active REST and WebSocket server</small>
-				</section>
-				<section>
-					<b>REST /api/v2</b>
-					<small>Initial and coarse-grained state</small>
-				</section>
-				<section>
-					<b>WebSocket connected</b>
-					<small>Live events and control</small>
-				</section>
-			</div>
+			<section
+				className="network-settings-group"
+				aria-labelledby="network-connection"
+			>
+				<h3 id="network-connection">Connection</h3>
+				<FormLayout className="configuration-form" labelPlacement="side">
+					<TextField
+						label="Light server URL"
+						value={controller.serverUrl}
+						onChange={(event) => controller.setServerUrl(event.target.value)}
+						description="Tauri can use this desk or a remote Light server."
+					/>
+					<FormField label="">
+						<Button
+							onClick={() => controller.applyServerUrl(controller.serverUrl)}
+						>
+							Connect to server
+						</Button>
+					</FormField>
+				</FormLayout>
+				<div className="setup-cards">
+					<section>
+						<b>{configuredServerUrl()}</b>
+						<small>Active REST and WebSocket server</small>
+					</section>
+					<section>
+						<b>REST /api/v2</b>
+						<small>Initial and coarse-grained state</small>
+					</section>
+					<section>
+						<b>WebSocket connected</b>
+						<small>Live events and control</small>
+					</section>
+				</div>
+			</section>
 			<NetworkInputs controller={controller} />
-			<h3 className="setup-subsection-title">Services</h3>
-			<MatterBridgeSettings />
+			<section
+				className="network-settings-group"
+				aria-labelledby="network-services"
+			>
+				<h3 id="network-services">Services</h3>
+				<MatterBridgeSettings />
+			</section>
 		</>
 	);
 }

@@ -185,6 +185,7 @@ function shiftPeriod(
 
 export function SchedulerWindow({
 	active = true,
+	compact = false,
 	controller: providedController,
 	schedulerShowList = true,
 	schedulerShowCalendar = true,
@@ -238,6 +239,7 @@ export function SchedulerWindow({
 	return (
 		<section className="scheduler-window">
 			<SchedulerHeader
+				compact={compact}
 				controller={controller}
 				onCreate={() => setEditing("new")}
 				onPeriod={period}
@@ -343,6 +345,7 @@ function unavailableSchedulerSnapshot(): SchedulerController["snapshot"] {
 }
 
 function SchedulerHeader({
+	compact,
 	controller,
 	onCreate,
 	onPeriod,
@@ -353,6 +356,7 @@ function SchedulerHeader({
 	snapshot,
 	view,
 }: {
+	compact: boolean;
 	controller: SchedulerController | null | undefined;
 	onCreate(): void;
 	onPeriod(direction: -1 | 1): void;
@@ -365,14 +369,20 @@ function SchedulerHeader({
 }) {
 	return (
 		<WindowHeader
-			title="Scheduler"
-			info={{
-				primary:
-					snapshot.status === "ready"
-						? `${snapshot.schedules.length} schedules · ${snapshot.timezone}`
-						: "Schedule authority unavailable",
-				secondary: selectedDate ? `Day filter · ${selectedDate}` : undefined,
-			}}
+			title={compact ? null : "Scheduler"}
+			info={
+				compact
+					? undefined
+					: {
+							primary:
+								snapshot.status === "ready"
+									? `${snapshot.schedules.length} schedules · ${snapshot.timezone}`
+									: "Schedule authority unavailable",
+							secondary: selectedDate
+								? `Day filter · ${selectedDate}`
+								: undefined,
+						}
+			}
 			actions={[
 				[
 					{

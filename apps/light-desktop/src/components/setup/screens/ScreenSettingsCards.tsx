@@ -193,15 +193,6 @@ function Stage2dFixedSettings({
 					update({ ...pane, follow_preload: event.target.checked })
 				}
 			/>
-			<SwitchField
-				label="Floor grid"
-				offLabel="Hidden"
-				onLabel="Visible"
-				checked={pane.show_floor_grid}
-				onChange={(event) =>
-					update({ ...pane, show_floor_grid: event.target.checked })
-				}
-			/>
 		</div>
 	);
 }
@@ -399,10 +390,8 @@ interface ScreenSettingsFieldsProps {
 function ScreenLayoutFields({
 	draft,
 	desks,
-	cueLists,
-	textFiles,
 	update,
-}: Omit<ScreenSettingsFieldsProps, "displays">) {
+}: Pick<ScreenSettingsFieldsProps, "draft" | "desks" | "update">) {
 	const fixedPane =
 		draft.content.type === "fixed_pane" ? draft.content.pane : null;
 	return (
@@ -425,36 +414,7 @@ function ScreenLayoutFields({
 						{ value: "fixed_pane", label: "Fixed full-screen pane" },
 					]}
 				/>
-				{fixedPane ? (
-					<>
-						<SelectField
-							label="Pane"
-							value={fixedPane.type}
-							onChange={(type) =>
-								update({
-									content: {
-										type: "fixed_pane",
-										pane: defaultFixedPane(type),
-									},
-								})
-							}
-							options={Object.entries(fixedPaneLabels).map(
-								([value, label]) => ({
-									value: value as FixedScreenPane["type"],
-									label,
-								}),
-							)}
-						/>
-						<FixedPaneSettings
-							pane={fixedPane}
-							cueLists={cueLists}
-							textFiles={textFiles}
-							update={(pane) =>
-								update({ content: { type: "fixed_pane", pane } })
-							}
-						/>
-					</>
-				) : (
+				{!fixedPane && (
 					<SelectField
 						label="Desktop"
 						value={draft.layout.activeDeskId}
@@ -496,6 +456,60 @@ function ScreenLayoutFields({
 						update({ show_page_controls: event.target.checked })
 					}
 				/>
+			</div>
+		</section>
+	);
+}
+
+function ScreenPaneSettings({
+	draft,
+	cueLists,
+	textFiles,
+	update,
+}: Pick<
+	ScreenSettingsFieldsProps,
+	"draft" | "cueLists" | "textFiles" | "update"
+>) {
+	const fixedPane =
+		draft.content.type === "fixed_pane" ? draft.content.pane : null;
+	return (
+		<section>
+			<h3>Settings</h3>
+			<div className="screen-settings-fields">
+				{fixedPane ? (
+					<>
+						<SelectField
+							label="Pane"
+							value={fixedPane.type}
+							onChange={(type) =>
+								update({
+									content: {
+										type: "fixed_pane",
+										pane: defaultFixedPane(type),
+									},
+								})
+							}
+							options={Object.entries(fixedPaneLabels).map(
+								([value, label]) => ({
+									value: value as FixedScreenPane["type"],
+									label,
+								}),
+							)}
+						/>
+						<FixedPaneSettings
+							pane={fixedPane}
+							cueLists={cueLists}
+							textFiles={textFiles}
+							update={(pane) =>
+								update({ content: { type: "fixed_pane", pane } })
+							}
+						/>
+					</>
+				) : (
+					<p className="screen-settings-note">
+						This screen follows the selected Desktop layout.
+					</p>
+				)}
 			</div>
 		</section>
 	);
@@ -579,27 +593,16 @@ function ScreenPlacementFields({
 	);
 }
 
-function ScreenPlaybackSummary({ draft }: { draft: ScreenConfiguration }) {
-	return (
-		<section>
-			<h3>Playbacks</h3>
-			<div className="screen-settings-fields">
-				<p className="playback-layout-summary">
-					{screenPlaybackLayout(draft).rows.length} rows ·{" "}
-					{screenPlaybackLayout(draft).playbacks_per_row} playbacks per row ·{" "}
-					{draft.page_mode === "follow_main" ? "Follow Main" : "Dedicated Page"}
-				</p>
-			</div>
-		</section>
-	);
-}
-
 function ScreenSettingsFields(props: ScreenSettingsFieldsProps) {
 	return (
 		<div className="screen-settings-columns">
 			<ScreenLayoutFields
 				draft={props.draft}
 				desks={props.desks}
+				update={props.update}
+			/>
+			<ScreenPaneSettings
+				draft={props.draft}
 				cueLists={props.cueLists}
 				textFiles={props.textFiles}
 				update={props.update}
@@ -609,7 +612,6 @@ function ScreenSettingsFields(props: ScreenSettingsFieldsProps) {
 				displays={props.displays}
 				update={props.update}
 			/>
-			<ScreenPlaybackSummary draft={props.draft} />
 		</div>
 	);
 }
