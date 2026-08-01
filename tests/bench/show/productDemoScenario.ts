@@ -1220,6 +1220,17 @@ async function spreadPhysicalPatchVectorThroughTouchUi(
 	axis: "X" | "Y" | "Z",
 	keys: readonly string[],
 ) {
+	const addressLayer = lastPhysicalRow
+		.page()
+		.locator('.fixture-address-layer[data-modal-top="true"]');
+	if (await addressLayer.isVisible()) {
+		await desk.click(
+			addressLayer.getByRole("button", {
+				name: /^(?:Cancel (?:Fixture|Multi-patch) Address|Close fixture addresses)$/u,
+			}),
+		);
+		await expect(addressLayer).toBeHidden();
+	}
 	const offset = kind === "location" ? 12 : 15;
 	const cell = offset + { X: 0, Y: 1, Z: 2 }[axis];
 	await desk.setDemoAction(
