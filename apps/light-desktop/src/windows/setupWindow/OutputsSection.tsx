@@ -22,7 +22,7 @@ export function OutputsSection({
 				<NumberField
 					label="Frame rate"
 					min="40"
-					max="44"
+					max="60"
 					value={draft.frame_rate_hz}
 					onChange={(event) =>
 						controller.editDraft({
@@ -30,7 +30,7 @@ export function OutputsSection({
 							frame_rate_hz: Number(event.target.value),
 						})
 					}
-					description="40–44 Hz"
+					description="40–60 Hz"
 				/>
 				<TextField
 					label="Output bind address"

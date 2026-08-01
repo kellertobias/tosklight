@@ -361,8 +361,8 @@ impl DeskConfiguration {
     }
 
     pub(super) fn validate(&self) -> Result<(), ApiError> {
-        if !(40..=44).contains(&self.frame_rate_hz) {
-            return Err(ApiError::bad_request("frame_rate_hz must be 40-44"));
+        if !(40..=60).contains(&self.frame_rate_hz) {
+            return Err(ApiError::bad_request("frame_rate_hz must be 40-60"));
         }
         if self.backup_retention == 0 || self.backup_retention > 1_000 {
             return Err(ApiError::bad_request("backup_retention must be 1-1000"));
@@ -500,6 +500,19 @@ mod highlight_look_tests {
         let wire = wire_configuration_value(&configuration).unwrap();
         assert_eq!(wire["highlight_look"]["color"], "blue");
         assert!(wire["highlight_look"].get("shutter").is_none());
+    }
+
+    #[test]
+    fn production_output_rate_accepts_sixty_hertz_and_rejects_rates_above_it() {
+        let mut configuration = DeskConfiguration {
+            frame_rate_hz: 60,
+            ..DeskConfiguration::default()
+        };
+        configuration.validate().unwrap();
+
+        configuration.frame_rate_hz = 61;
+        let error = configuration.validate().unwrap_err();
+        assert_eq!(error.message, "frame_rate_hz must be 40-60");
     }
 }
 

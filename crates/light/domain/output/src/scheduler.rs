@@ -60,6 +60,21 @@ mod tests {
             "a programmer wake requests an immediate extra output tick"
         );
     }
+
+    #[tokio::test]
+    async fn production_scheduler_retains_sixty_hertz() {
+        let health = Arc::new(Mutex::new(OutputHealth::default()));
+        let cancel = CancellationToken::new();
+        let cancel_after_tick = cancel.clone();
+
+        run_scheduler(60, cancel, health.clone(), move || {
+            cancel_after_tick.cancel();
+            async { Ok(0) }
+        })
+        .await;
+
+        assert_eq!(health.lock().unwrap().frame_hz, 60.0);
+    }
 }
 
 pub async fn run_scheduler_dynamic_wakeable<F, Fut>(
@@ -88,7 +103,7 @@ async fn run_scheduler_dynamic_inner<F, Fut>(
     let mut deadline = Instant::now();
     let mut scheduled_tick = true;
     while !cancel.is_cancelled() {
-        let current_rate = rate_hz.load(Ordering::Relaxed).clamp(40, 44);
+        let current_rate = rate_hz.load(Ordering::Relaxed).clamp(40, 60);
         let interval = Duration::from_secs_f64(1.0 / f64::from(current_rate));
         let tick_started = Instant::now();
         record_tick_result(&health, current_rate, tick().await);

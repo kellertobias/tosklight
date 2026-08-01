@@ -78,6 +78,8 @@ describe("autosave interval setup placement", () => {
 		expect(
 			screen.queryByLabelText("Autosave interval"),
 		).not.toBeInTheDocument();
-		expect(screen.getByLabelText("Frame rate")).toBeVisible();
+		const frameRate = screen.getByLabelText("Frame rate");
+		expect(frameRate).toBeVisible();
+		expect(screen.getByText("40–60 Hz")).toBeVisible();
 	});
 });
