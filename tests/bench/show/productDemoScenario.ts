@@ -1804,6 +1804,9 @@ async function buildPresetSetup(
 			.evaluate((element) => element.classList.contains("highlight-armed")))
 	)
 		await desk.click(keypad.locator('[data-keypad-key="HIGH"]'));
+	await expect(demo.locator(".command-status .highlight-status")).toHaveText(
+		"Highlight",
+	);
 	const presets = app.locator(".preset-pool-window");
 	for (const position of [
 		{ name: "Down", address: "3.1", pan: ["5", "0"], tilt: ["2", "5"] },

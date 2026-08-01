@@ -45,7 +45,7 @@ The first selected fixture receives the start color, the last receives the end c
 
 The complete range lands once on release as one normal Programmer Fade and Undo gesture. Leaving or cancelling the pointer gesture applies nothing. Blind, Preview, Preload, Record, and Update use the same programmer behavior as other Color edits.
 
-The Fixture Sheet is also the on-desk step-state view: remembered-base rows remain subtly selected while the actual step is prominent, including on multi-head rows and master rows shown while subheads are hidden. The indication remains with HIGH off. The command bar and hardware simulator do not add separate Highlight status panels.
+The Fixture Sheet is also the on-desk step-state view: remembered-base rows remain subtly selected while the actual step is prominent, including on multi-head rows and master rows shown while subheads are hidden. The indication remains with HIGH off. The command bar replaces its DMX-rate text with `Highlight` while HIGH is active but adds no separate status panel; neither does the hardware simulator.
 
 Pane settings are local to that pane. A Stage pane can follow Preload while another shows live output; a Preset pane can remain on Position while another shows Color.
 

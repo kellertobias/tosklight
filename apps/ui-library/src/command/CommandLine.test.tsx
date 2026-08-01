@@ -30,6 +30,7 @@ function props(overrides: Partial<CommandLineProps> = {}): CommandLineProps {
 			frequency: 44,
 			timecode: null,
 			blackout: false,
+			highlight: false,
 		},
 		onReplace: vi.fn(),
 		onExecute: vi.fn(),
@@ -93,6 +94,7 @@ describe("CommandLine", () => {
 				frequency: "—",
 				timecode: "01:02:03:12",
 				blackout: true,
+				highlight: false,
 			},
 		});
 		const { container } = render(<CommandLine {...view} />);
@@ -104,9 +106,7 @@ describe("CommandLine", () => {
 		expect(screen.getByText("BLACKOUT")).toBeVisible();
 		expect(screen.getByRole("alert")).toHaveTextContent("Command rejected");
 		expect(
-			screen
-				.getByRole("alert")
-				.closest(".command-history-panel")
+			screen.getByRole("alert").closest(".command-history-panel")
 				?.parentElement,
 		).toHaveClass("command-field", "command-history-open");
 		expect(screen.getByRole("alertdialog")).toHaveTextContent(
@@ -118,6 +118,29 @@ describe("CommandLine", () => {
 		expect(
 			screen.getByRole("button", { name: "UPDATE ARMED" }),
 		).toHaveAttribute("aria-pressed", "true");
+	});
+
+	it("replaces the DMX rate with active Highlight feedback", () => {
+		const { container } = render(
+			<CommandLine
+				{...props({
+					status: {
+						connection: "connected",
+						frequency: 44,
+						timecode: null,
+						blackout: false,
+						highlight: true,
+					},
+				})}
+			/>,
+		);
+
+		expect(screen.getByText("Highlight")).toBeVisible();
+		expect(screen.queryByText("DMX 44Hz")).not.toBeInTheDocument();
+		expect(container.querySelector(".highlight-status")).toBeVisible();
+		expect(
+			screen.getByRole("button", { name: /Highlight active/u }),
+		).toBeVisible();
 	});
 
 	it("keeps pending preload details in the title without adding them beside PRELOAD GO", () => {
@@ -171,8 +194,7 @@ describe("CommandLine", () => {
 			screen.getByRole("dialog", { name: "Command line history" }),
 		).toBeVisible();
 		expect(
-			screen
-				.getByRole("dialog", { name: "Command line history" })
+			screen.getByRole("dialog", { name: "Command line history" })
 				.parentElement,
 		).toHaveClass("command-field", "command-history-open");
 		fireEvent.click(screen.getByRole("button", { name: "Reuse" }));

@@ -48,6 +48,7 @@ const meta = {
 			frequency: 44,
 			timecode: null,
 			blackout: false,
+			highlight: false,
 		},
 		onReplace: () => undefined,
 		onExecute: () => undefined,
@@ -213,6 +214,7 @@ export const HardwarePlaybackWithPickupQueue: Story = {
 				frequency: 44,
 				timecode: "01:02:03:12",
 				blackout: false,
+				highlight: false,
 			}}
 		/>
 	),

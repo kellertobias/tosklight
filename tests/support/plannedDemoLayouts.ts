@@ -75,7 +75,7 @@ export function plannedDemoLayout() {
 					),
 					pane("programming-stage", "stage", "Stage", 13, 1, 12, 12, {
 						stageView: "3d",
-						followPreload: true,
+						followPreload: false,
 						showBeamGuides: true,
 						stageRenderQuality: "lines_and_beams",
 					}),

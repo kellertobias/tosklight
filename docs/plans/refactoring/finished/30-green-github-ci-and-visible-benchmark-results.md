@@ -326,6 +326,14 @@ announces the Beam Stage plus Beam Audience selection. Beam Show and its first o
 remain visible and narratable; only the later Group remainder returns to the existing API
 fast-forward.
 
+The preset-programming follow-up makes active Highlight unmistakable: the command bar replaces
+its normal `DMX 44Hz` output-rate text with a blue, blinking `Highlight` label. The built-in Stage
+also projects the authoritative Highlight output selection immediately as a local beam overlay,
+so selected fixtures remain visibly on while Position and Color values are programmed instead of
+waiting for the next visualization snapshot. Capture-only or safety-suppressed Highlight does not
+fake Stage output, and the canonical Programming desktop follows the live rather than Preload
+visualization lane.
+
 Focused manifest, patch, Group, Playback, and Fixture Patch tests passed, as did the production
 frontend build, the generated-show acceptance, and a complete 2.8-minute non-recording product
 demo rehearsal that refreshed `assets/demo.show`. Per the recording-review instruction, this

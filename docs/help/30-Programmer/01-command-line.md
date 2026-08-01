@@ -73,7 +73,7 @@ The remaining `[PRE]` and `[ESC]` buttons are in or next to the command-line dis
 
 The num block places `[HIGH]`, `[PREV]`, `[NEXT]`, and `[ALL]` in one horizontal row directly above `[GRP]`, `[CUE]`, `[TIME]`, and `[DIV]` respectively. HIGH contains only the centered text `HIGH`: it uses the ordinary neutral key treatment while inactive and the same visibly lit armed/active treatment as SHIFT or SET while Highlight is active, including with an empty selection or safety-suppressed output. There is no Capture key and `Alt+C` has no Highlight action.
 
-The command-bar space between the command line and the REC/Preload controls contains no Highlight status menu, selection summary, or suppression panel. Normal state is visible through the HIGH key's lit/unlit state and the Fixture Sheet's complete-versus-stepped selection treatment. An actionable Highlight error opens a dedicated dismissible alert above panes and modal surfaces without changing the num-block grid or the HIGH key's size.
+The command-bar space between the command line and the REC/Preload controls contains no separate Highlight menu, selection summary, or suppression panel. While Highlight is active, its existing output-rate field replaces `DMX 44Hz` with a blue, blinking `Highlight` label; HIGH remains lit and the Fixture Sheet retains its complete-versus-stepped selection treatment. An actionable Highlight error opens a dedicated dismissible alert above panes and modal surfaces without changing the num-block grid or the HIGH key's size.
 
 The shifted Highlight-row keys operate on the current selection grid. A short `[SHIFT] [ALL]`
 cycles to the next grid method; holding the combination for 650 ms opens **Grid Settings** without
