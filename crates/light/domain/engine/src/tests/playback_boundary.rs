@@ -632,7 +632,7 @@ fn virtual_exclusions_release_only_their_global_playback_number_peers() {
         runtime
             .iter()
             .any(|playback| playback.playback_number == Some(1)
-                && playback.playback_identity == PlaybackIdentity::physical(1).ok()
+                && playback.playback_identity.is_none()
                 && playback.enabled)
     );
     let recorded = by_identity(PlaybackIdentity::Virtual(activated))
