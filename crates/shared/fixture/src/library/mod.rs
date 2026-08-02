@@ -58,6 +58,7 @@ impl FixtureLibrary {
         let library = Self { conn };
         library.remove_legacy_code_owned_catalogs()?;
         library.migrate_legacy_profiles()?;
+        library.seed_generic_gel_catalog()?;
         Ok(library)
     }
 
