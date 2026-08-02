@@ -183,6 +183,12 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   the same typed owner. Physical page/slot Group Master assignment now carries Group, Page, and
   Playback identity/revision guards to the typed topology action. Eleven focused desktop test files
   passed all 176 tests, desktop typecheck passed, and the staged diff check was clean.
+- Commit `f2483d7e` connects the Group settings modal to revision- and show-guarded mapping writes and
+  the authoritative settings snapshot. The modal now renders effective mapping provenance, resolved
+  source order, ranks, rank count, and missing-position warnings from the server instead of treating
+  its local draft as authority; set and remove remain atomic. Six focused desktop files passed all
+  45 tests, desktop typecheck passed, focused Biome completed with only existing warnings in shared
+  files, and the staged diff check was clean.
 
 ## Remaining work
 
