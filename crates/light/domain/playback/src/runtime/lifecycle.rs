@@ -78,7 +78,8 @@ impl PlaybackEngine {
                 } else {
                     continue;
                 };
-                playback.playback_identity = Some(identity);
+                playback.playback_identity =
+                    identity.virtual_address().map(PlaybackIdentity::Virtual);
                 playback.playback_number = Some(identity.number());
             }
             let key = PlaybackKey::CueList(playback.cue_list_id);

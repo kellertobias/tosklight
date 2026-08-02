@@ -100,6 +100,26 @@ fn off_requires_zero_pickup_without_moving_the_recorded_fader() {
 }
 
 #[test]
+fn physical_shared_runtime_keeps_legacy_serializable_number_provenance() {
+    let mut cue = Cue::new(1.0);
+    cue.changes.push(value(FixtureId::new(), "intensity", 1.0));
+    let cue_list = list(vec![cue]);
+    let cue_list_id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine
+        .register_definition(definition(1, cue_list_id))
+        .unwrap();
+
+    engine.on(1).unwrap();
+    let runtime = engine.runtime_status();
+
+    assert_eq!(runtime[0].playback.playback_number, Some(1));
+    assert_eq!(runtime[0].playback.playback_identity, None);
+    serde_json::to_value(runtime).unwrap();
+}
+
+#[test]
 fn physical_faders_take_over_one_shared_master_independently() {
     let fixture = FixtureId::new();
     let mut cue = Cue::new(1.0);

@@ -164,7 +164,8 @@ impl PlaybackEngine {
             .into_iter()
             .find(|status| status.playback.cue_list_id == cue_list_id)?;
         status.playback.playback_number = Some(identity.number());
-        status.playback.playback_identity = Some(identity);
+        status.playback.playback_identity =
+            identity.virtual_address().map(PlaybackIdentity::Virtual);
         let (temporary_active, temporary_master, swap_active) =
             self.apply_assignment_feedback(&mut status.playback, Some(identity));
         status.temporary_active = temporary_active;

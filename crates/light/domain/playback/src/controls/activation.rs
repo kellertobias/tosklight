@@ -64,7 +64,7 @@ impl PlaybackEngine {
         }
         changed |= self.restart_first_cue_if_needed(key, id);
         let active = self.active.get_mut(&key).unwrap();
-        active.playback_identity = Some(PlaybackIdentity::physical(number)?);
+        active.playback_identity = None;
         changed |= activate_normal(active, number);
         let control_changed = self.retarget_physical_controls(id, 1.0, None);
         let addressed_effect = durable_effect(changed);
