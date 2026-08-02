@@ -131,24 +131,14 @@ impl Engine {
         prepared: PreparedEngineSnapshot,
         preserve_playback: bool,
     ) {
-        let PreparedEngineSnapshot {
-            mut snapshot,
-            mut runtime,
-        } = prepared;
+        let PreparedEngineSnapshot { snapshot, runtime } = prepared;
         let current = self.generation.load_full();
         let detached_group_masters = if preserve_playback {
             detached_group_targets(current.snapshot(), &snapshot)
         } else {
             assigned_group_targets(current.snapshot())
         };
-        let groups_changed = !Arc::ptr_eq(&snapshot.groups, &current.snapshot().groups);
-        if groups_changed {
-            self.preserve_group_master_state(
-                &current,
-                &mut snapshot,
-                Arc::make_mut(&mut runtime.groups),
-                preserve_playback,
-            );
+        if !Arc::ptr_eq(&snapshot.groups, &current.snapshot().groups) {
             self.programmers.refresh_live_selections(&runtime.groups);
         }
         let current_playback = current.playback_arc();
@@ -175,28 +165,8 @@ impl Engine {
             runtime.groups,
             runtime.profile_encodings,
             runtime.profile_projections,
+            preserve_playback,
         )));
-    }
-
-    fn preserve_group_master_state(
-        &self,
-        generation: &Arc<RuntimeGeneration>,
-        snapshot: &mut EngineSnapshot,
-        groups: &mut HashMap<String, GroupDefinition>,
-        preserve: bool,
-    ) {
-        if !preserve {
-            return;
-        }
-        for group in Arc::make_mut(&mut snapshot.groups) {
-            let Some(current) = generation.groups().get(&group.id) else {
-                continue;
-            };
-            group.master = current.master;
-            if let Some(runtime) = groups.get_mut(&group.id) {
-                runtime.master = current.master;
-            }
-        }
     }
 
     fn preserve_playback_state(

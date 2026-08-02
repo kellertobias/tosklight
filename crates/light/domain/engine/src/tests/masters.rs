@@ -242,13 +242,21 @@ fn group_master_runtime_update_is_targeted_idempotent_and_revision_neutral() {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             playbacks: vec![test_group_playback(1, "front")].into(),
-            groups: vec![GroupDefinition {
-                id: "front".into(),
-                fixtures: vec![logical],
-                master: 0.25,
-                playback_fader: Some(1),
-                ..Default::default()
-            }]
+            groups: vec![
+                GroupDefinition {
+                    id: "front".into(),
+                    fixtures: vec![logical],
+                    master: 0.25,
+                    playback_fader: Some(1),
+                    ..Default::default()
+                },
+                GroupDefinition {
+                    id: "unassigned".into(),
+                    fixtures: vec![logical],
+                    master: 0.4,
+                    ..Default::default()
+                },
+            ]
             .into(),
             revision: 7,
             ..Default::default()
@@ -257,7 +265,8 @@ fn group_master_runtime_update_is_targeted_idempotent_and_revision_neutral() {
 
     assert!(engine.set_group_master("front", 0.75).unwrap());
     assert_eq!(engine.snapshot().revision, 7);
-    assert_eq!(engine.snapshot().groups[0].master, 0.75);
+    assert_eq!(engine.snapshot().groups[0].master, 0.25);
+    assert_eq!(engine.group_master("front"), Some(0.75));
     assert_eq!(
         engine.render(RenderOptions::default()).unwrap().universes[&1][0],
         153
@@ -267,7 +276,9 @@ fn group_master_runtime_update_is_targeted_idempotent_and_revision_neutral() {
     Arc::make_mut(&mut replacement.groups)[0].master = 1.0;
     replacement.revision += 1;
     engine.replace_snapshot(replacement).unwrap();
-    assert_eq!(engine.snapshot().groups[0].master, 0.75);
+    assert_eq!(engine.snapshot().groups[0].master, 1.0);
+    assert_eq!(engine.group_master("front"), Some(0.75));
+    assert!(engine.set_group_master("unassigned", 0.5).is_err());
     assert!(engine.set_group_master("missing", 0.5).is_err());
     assert!(engine.set_group_master("front", f32::NAN).is_err());
 }

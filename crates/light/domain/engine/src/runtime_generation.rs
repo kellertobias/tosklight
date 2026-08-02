@@ -44,7 +44,7 @@ impl RuntimeGeneration {
         let routes = Arc::from(snapshot.routes.as_slice());
         let snap_attributes = compile_snap_attributes(&snapshot);
         let group_rankings = compile_group_rankings(&groups, &snapshot);
-        let group_masters = GroupMasterIndex::compile(&groups, &snapshot);
+        let group_masters = GroupMasterIndex::compile(&groups, &snapshot, None);
         Self {
             snapshot: Arc::new(snapshot),
             playback,
@@ -65,6 +65,7 @@ impl RuntimeGeneration {
         groups: Arc<HashMap<String, GroupDefinition>>,
         profile_encodings: Arc<ProfileEncodingIndex>,
         profile_projections: Arc<ProfileProjectionIndex>,
+        preserve_group_master_levels: bool,
     ) -> Self {
         let fixtures_changed = !Arc::ptr_eq(&snapshot.fixtures, &current.snapshot.fixtures);
         let playbacks_changed = !Arc::ptr_eq(&snapshot.playbacks, &current.snapshot.playbacks);
@@ -85,8 +86,16 @@ impl RuntimeGeneration {
         } else {
             Arc::clone(&current.snap_attributes)
         };
-        let group_masters = if playbacks_changed || playback_pages_changed || groups_changed {
-            Arc::new(GroupMasterIndex::compile(&groups, &snapshot))
+        let group_masters = if !preserve_group_master_levels
+            || playbacks_changed
+            || playback_pages_changed
+            || groups_changed
+        {
+            Arc::new(GroupMasterIndex::compile(
+                &groups,
+                &snapshot,
+                preserve_group_master_levels.then_some(current.group_masters.as_ref()),
+            ))
         } else {
             Arc::clone(&current.group_masters)
         };
@@ -113,30 +122,17 @@ impl RuntimeGeneration {
         group_id: &str,
         value: f32,
     ) -> (Arc<Self>, GroupMasterGenerationUpdate) {
-        let Some(group) = current.groups.get(group_id) else {
+        let Some(group_masters) = current.group_masters.with_master(group_id, value) else {
             return (Arc::clone(current), GroupMasterGenerationUpdate::Missing);
         };
-        if group.master == value {
+        if current.group_masters.master(group_id) == Some(value) {
             return (Arc::clone(current), GroupMasterGenerationUpdate::Unchanged);
         }
-
-        let mut snapshot = (*current.snapshot).clone();
-        Arc::make_mut(&mut snapshot.groups)
-            .iter_mut()
-            .find(|group| group.id == group_id)
-            .expect("runtime groups and snapshot groups must stay aligned")
-            .master = value;
-        let mut groups = (*current.groups).clone();
-        groups
-            .get_mut(group_id)
-            .expect("runtime groups and snapshot groups must stay aligned")
-            .master = value;
-        let group_masters = GroupMasterIndex::compile(&groups, &current.snapshot);
         (
             Arc::new(Self {
-                snapshot: Arc::new(snapshot),
+                snapshot: Arc::clone(&current.snapshot),
                 playback: Arc::clone(&current.playback),
-                groups: Arc::new(groups),
+                groups: Arc::clone(&current.groups),
                 routes: Arc::clone(&current.routes),
                 snap_attributes: Arc::clone(&current.snap_attributes),
                 group_rankings: Arc::clone(&current.group_rankings),
@@ -251,19 +247,24 @@ pub(crate) fn group_stage_positions(
         .collect()
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct GroupMasterIndex {
     masters: Vec<GroupMasterBinding>,
     fixtures: HashMap<FixtureId, Vec<usize>>,
 }
 
+#[derive(Clone)]
 struct GroupMasterBinding {
     group_id: String,
     master: f32,
 }
 
 impl GroupMasterIndex {
-    fn compile(groups: &HashMap<String, GroupDefinition>, snapshot: &EngineSnapshot) -> Self {
+    fn compile(
+        groups: &HashMap<String, GroupDefinition>,
+        snapshot: &EngineSnapshot,
+        preserved: Option<&Self>,
+    ) -> Self {
         let assigned_groups = snapshot
             .playbacks
             .iter()
@@ -291,7 +292,9 @@ impl GroupMasterIndex {
             let master_index = index.masters.len();
             index.masters.push(GroupMasterBinding {
                 group_id: definition.id.clone(),
-                master: definition.master,
+                master: preserved
+                    .and_then(|current| current.master(&definition.id))
+                    .unwrap_or(definition.master),
             });
             for fixture_id in fixtures {
                 index
@@ -325,6 +328,16 @@ impl GroupMasterIndex {
             .iter()
             .find(|binding| binding.group_id == group_id)
             .map(|binding| binding.master)
+    }
+
+    fn with_master(&self, group_id: &str, value: f32) -> Option<Self> {
+        let mut updated = self.clone();
+        updated
+            .masters
+            .iter_mut()
+            .find(|binding| binding.group_id == group_id)?
+            .master = value;
+        Some(updated)
     }
 }
 
