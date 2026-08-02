@@ -48,6 +48,34 @@ pub(super) fn application_command(
             expected_playback_object_id: expected_playback_object_id.into_option(),
             playback: application_playback(playback)?,
         },
+        wire::PlaybackTopologyAction::AssignGroupMaster {
+            group_object_id,
+            expected_group_revision,
+            page,
+            slot,
+            expected_page_revision,
+            expected_page_object_id,
+            expected_playback_revision,
+            expected_playback_object_id,
+        } => application::PlaybackTopologyAction::AssignGroupMaster {
+            group_object_id,
+            expected_group_revision: input_revision(
+                expected_group_revision,
+                "expected_group_revision",
+            )?,
+            page,
+            slot,
+            expected_page_revision: input_revision(
+                expected_page_revision,
+                "expected_page_revision",
+            )?,
+            expected_page_object_id: expected_page_object_id.into_option(),
+            expected_playback_revision: input_revision(
+                expected_playback_revision,
+                "expected_playback_revision",
+            )?,
+            expected_playback_object_id: expected_playback_object_id.into_option(),
+        },
         wire::PlaybackTopologyAction::ConfigureVirtual {
             page,
             playback_number,
@@ -493,6 +521,67 @@ fn output_revision(value: u64, name: &str) -> Result<u64, application::ActionErr
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assign_group_request(revision: u64) -> wire::PlaybackTopologyActionRequest {
+        wire::PlaybackTopologyActionRequest {
+            request_id: "assign-front".into(),
+            action: wire::PlaybackTopologyAction::AssignGroupMaster {
+                group_object_id: "front".into(),
+                expected_group_revision: revision,
+                page: 2,
+                slot: 4,
+                expected_page_revision: 5,
+                expected_page_object_id: wire::PlaybackTopologyObjectIdentity::Present(
+                    "page-two".into(),
+                ),
+                expected_playback_revision: 6,
+                expected_playback_object_id: wire::PlaybackTopologyObjectIdentity::Present(
+                    "playback-six".into(),
+                ),
+            },
+        }
+    }
+
+    #[test]
+    fn group_master_assignment_maps_every_authority_field() {
+        let show_id = ShowId(uuid::Uuid::from_u128(1));
+        let (request_id, command) = application_command(show_id, assign_group_request(3)).unwrap();
+
+        assert_eq!(request_id, "assign-front");
+        assert_eq!(command.show_id, show_id);
+        let application::PlaybackTopologyAction::AssignGroupMaster {
+            group_object_id,
+            expected_group_revision,
+            page,
+            slot,
+            expected_page_revision,
+            expected_page_object_id,
+            expected_playback_revision,
+            expected_playback_object_id,
+        } = command.action
+        else {
+            panic!("expected AssignGroupMaster action");
+        };
+        assert_eq!(group_object_id, "front");
+        assert_eq!(expected_group_revision, 3);
+        assert_eq!((page, slot), (2, 4));
+        assert_eq!(expected_page_revision, 5);
+        assert_eq!(expected_page_object_id.as_deref(), Some("page-two"));
+        assert_eq!(expected_playback_revision, 6);
+        assert_eq!(expected_playback_object_id.as_deref(), Some("playback-six"));
+    }
+
+    #[test]
+    fn group_master_assignment_rejects_unsafe_javascript_revisions() {
+        let error = application_command(
+            ShowId(uuid::Uuid::from_u128(1)),
+            assign_group_request(JAVASCRIPT_MAX_SAFE_INTEGER + 1),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("expected_group_revision"));
+        assert!(error.contains("maximum safe integer"));
+    }
 
     #[test]
     fn legacy_speed_group_fader_uses_the_domain_migration() {

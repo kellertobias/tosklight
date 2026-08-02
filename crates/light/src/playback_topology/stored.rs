@@ -1,6 +1,7 @@
 use crate::{ActionError, ActionErrorKind, ActiveShowObjectKind, PlaybackTopologyObjectProjection};
 use light_core::{CueListId, Revision};
 use light_playback::{CueList, MAX_PLAYBACKS, PlaybackDefinition, PlaybackPage};
+use light_programmer::GroupDefinition;
 use light_show::{PortableShowCandidate, PortableShowDocument, PortableShowObject};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -36,6 +37,18 @@ pub(super) fn find_page(
     find_unique(document, "playback_page", |value: &PlaybackPage| {
         value.number == number
     })
+}
+
+pub(super) fn find_group(
+    document: &PortableShowDocument,
+    object_id: &str,
+) -> Result<Option<Stored<GroupDefinition>>, ActionError> {
+    let Some(object) = document.object("group", object_id) else {
+        return Ok(None);
+    };
+    let mut stored = decode_stored::<GroupDefinition>(object)?;
+    stored.typed.id = stored.object_id.clone();
+    Ok(Some(stored))
 }
 
 pub(super) fn pages(

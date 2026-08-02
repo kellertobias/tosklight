@@ -38,6 +38,16 @@ pub enum PlaybackTopologyAction {
         expected_playback_object_id: Option<String>,
         playback: PlaybackDefinition,
     },
+    AssignGroupMaster {
+        group_object_id: String,
+        expected_group_revision: Revision,
+        page: u8,
+        slot: u8,
+        expected_page_revision: Revision,
+        expected_page_object_id: Option<String>,
+        expected_playback_revision: Revision,
+        expected_playback_object_id: Option<String>,
+    },
     ConfigureVirtual {
         page: u8,
         number: u16,

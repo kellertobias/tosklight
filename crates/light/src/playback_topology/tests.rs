@@ -19,6 +19,8 @@ use serde_json::{Value, json};
 use std::{path::PathBuf, sync::Arc};
 use uuid::Uuid;
 
+#[path = "tests/group_master_assignment.rs"]
+mod group_master_assignment;
 #[path = "tests/map_existing.rs"]
 mod map_existing;
 #[path = "tests/page_actions.rs"]

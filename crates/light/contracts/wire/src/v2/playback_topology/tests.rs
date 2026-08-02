@@ -17,6 +17,7 @@ fn all_semantic_actions_have_strict_readable_discriminants() {
                 "expected_playback_revision":6,"expected_playback_object_id":null,
                 "playback":playback_json()}
         }),
+        assign_group_request(),
         json!({
             "request_id":"clear",
             "action":{"type":"clear_mapped_playback","page":2,"slot":4,
@@ -60,6 +61,16 @@ fn unknown_fields_are_tolerated_while_required_authority_stays_typed() {
         missing["action"].as_object_mut().unwrap().remove(field);
         assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(missing).is_err());
     }
+    for field in [
+        "group_object_id",
+        "expected_group_revision",
+        "expected_page_object_id",
+        "expected_playback_object_id",
+    ] {
+        let mut missing = assign_group_request();
+        missing["action"].as_object_mut().unwrap().remove(field);
+        assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(missing).is_err());
+    }
     for mut request in [create_page_request(), rename_page_request()] {
         request["action"]
             .as_object_mut()
@@ -85,6 +96,38 @@ fn unknown_fields_are_tolerated_while_required_authority_stays_typed() {
         let mut missing = map_existing_request();
         missing["action"].as_object_mut().unwrap().remove(field);
         assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(missing).is_err());
+    }
+}
+
+#[test]
+fn assign_group_master_round_trips_without_a_client_authored_playback() {
+    let request = assign_group_request();
+    let decoded = serde_json::from_value::<PlaybackTopologyActionRequest>(request.clone()).unwrap();
+    let encoded = serde_json::to_value(decoded).unwrap();
+    assert_eq!(encoded, request);
+    assert!(encoded["action"].get("playback").is_none());
+    assert!(encoded["action"].get("selection").is_none());
+}
+
+#[test]
+fn assign_group_master_schema_bounds_identity_address_and_revisions() {
+    let schema =
+        serde_json::to_value(schemars::schema_for!(PlaybackTopologyActionRequest)).unwrap();
+    let variant = find_schema_variant(&schema, "assign_group_master")
+        .expect("assign_group_master schema variant");
+    let properties = &variant["properties"];
+    assert_eq!(properties["group_object_id"]["minLength"], 1);
+    assert_eq!(properties["group_object_id"]["maxLength"], 128);
+    assert_eq!(properties["page"]["minimum"], 1);
+    assert_eq!(properties["page"]["maximum"], 127);
+    assert_eq!(properties["slot"]["minimum"], 1);
+    assert_eq!(properties["slot"]["maximum"], 127);
+    for field in [
+        "expected_group_revision",
+        "expected_page_revision",
+        "expected_playback_revision",
+    ] {
+        assert_eq!(properties[field]["maximum"], 9_007_199_254_740_991_u64);
     }
 }
 
@@ -122,6 +165,35 @@ fn configure_request() -> Value {
         "expected_page_revision":5,"expected_page_object_id":"legacy-page-two",
         "expected_playback_revision":6,"expected_playback_object_id":"legacy-six",
         "playback":playback_json()}})
+}
+
+fn assign_group_request() -> Value {
+    json!({"request_id":"assign-group","action":{"type":"assign_group_master",
+        "group_object_id":"front","expected_group_revision":3,"page":2,"slot":4,
+        "expected_page_revision":5,"expected_page_object_id":"legacy-page-two",
+        "expected_playback_revision":6,"expected_playback_object_id":"legacy-six"}})
+}
+
+fn find_schema_variant<'a>(value: &'a Value, discriminant: &str) -> Option<&'a Value> {
+    match value {
+        Value::Object(object) => {
+            if object
+                .get("properties")
+                .and_then(|properties| properties.get("type"))
+                .and_then(|kind| kind.get("const"))
+                == Some(&Value::String(discriminant.into()))
+            {
+                return Some(value);
+            }
+            object
+                .values()
+                .find_map(|child| find_schema_variant(child, discriminant))
+        }
+        Value::Array(values) => values
+            .iter()
+            .find_map(|child| find_schema_variant(child, discriminant)),
+        _ => None,
+    }
 }
 
 fn map_existing_request() -> Value {

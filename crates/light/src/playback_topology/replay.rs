@@ -160,6 +160,24 @@ pub(super) fn fingerprint(
             hash_json(&mut hasher, expected_playback_object_id)?;
             hash_json(&mut hasher, playback)?;
         }
+        PlaybackTopologyAction::AssignGroupMaster {
+            group_object_id,
+            expected_group_revision,
+            page,
+            slot,
+            expected_page_revision,
+            expected_page_object_id,
+            expected_playback_revision,
+            expected_playback_object_id,
+        } => {
+            hasher.update([8, *page, *slot]);
+            hash_json(&mut hasher, group_object_id)?;
+            hasher.update(expected_group_revision.to_le_bytes());
+            hasher.update(expected_page_revision.to_le_bytes());
+            hash_json(&mut hasher, expected_page_object_id)?;
+            hasher.update(expected_playback_revision.to_le_bytes());
+            hash_json(&mut hasher, expected_playback_object_id)?;
+        }
         PlaybackTopologyAction::ConfigureVirtual {
             page,
             number,
