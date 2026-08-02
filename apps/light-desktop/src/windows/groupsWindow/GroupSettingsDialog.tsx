@@ -31,44 +31,24 @@ export function GroupSettingsDialog({
 	groups: readonly Group[];
 	onClose: () => void;
 }) {
-	const groupManagement = useGroupManagement();
 	const [name, setName] = useState(group.body.name ?? `Group ${group.id}`);
 	const [color, setColor] = useState(group.body.color ?? "#718596");
 	const [icon, setIcon] = useState(group.body.icon ?? "◇");
-	const [expectedRevision, setExpectedRevision] = useState(group.revision);
-	const [expectedShowRevision, setExpectedShowRevision] = useState<
-		number | null
-	>(null);
-	const [mappingPresentation, setMappingPresentation] = useState(() =>
-		resolveMappingPresentation(group, groups),
-	);
-	const [mapping, setMapping] = useState<SpatialSelectionMapping | null>(() =>
-		mappingPresentation.type === "local" ? mappingPresentation.mapping : null,
-	);
 	const [status, setStatus] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
-	const [resolvedSpatial, setResolvedSpatial] =
-		useState<ResolvedSpatialMapping | null>(null);
-	const refreshSettings = useCallback(async () => {
-		if (!groupManagement) return null;
-		const snapshot = await groupManagement.settings(group.id);
-		if (!snapshot) return null;
-		setExpectedRevision(snapshot.group.revision);
-		setExpectedShowRevision(snapshot.showRevision);
-		setResolvedSpatial(snapshot.resolvedSpatial);
-		setMappingPresentation(
-			resolvedMappingPresentation(snapshot.resolvedSpatial),
-		);
-		setMapping(
-			snapshot.resolvedSpatial.mapping_provenance.type === "local"
-				? storedMapping(snapshot.group.object.body)
-				: null,
-		);
-		return snapshot;
-	}, [group.id, groupManagement]);
-	useEffect(() => {
-		void refreshSettings();
-	}, [refreshSettings]);
+	const {
+		groupManagement,
+		expectedRevision,
+		setExpectedRevision,
+		expectedShowRevision,
+		setExpectedShowRevision,
+		mappingPresentation,
+		setMappingPresentation,
+		mapping,
+		setMapping,
+		resolvedSpatial,
+		refreshSettings,
+	} = useGroupSettingsAuthority(group, groups);
 
 	const saveProperties = async (next: {
 		name: string;
@@ -191,6 +171,55 @@ export function GroupSettingsDialog({
 			hasManagement={Boolean(groupManagement)}
 		/>
 	);
+}
+
+function useGroupSettingsAuthority(group: Group, groups: readonly Group[]) {
+	const groupManagement = useGroupManagement();
+	const [expectedRevision, setExpectedRevision] = useState(group.revision);
+	const [expectedShowRevision, setExpectedShowRevision] = useState<
+		number | null
+	>(null);
+	const [mappingPresentation, setMappingPresentation] = useState(() =>
+		resolveMappingPresentation(group, groups),
+	);
+	const [mapping, setMapping] = useState<SpatialSelectionMapping | null>(() =>
+		mappingPresentation.type === "local" ? mappingPresentation.mapping : null,
+	);
+	const [resolvedSpatial, setResolvedSpatial] =
+		useState<ResolvedSpatialMapping | null>(null);
+	const refreshSettings = useCallback(async () => {
+		if (!groupManagement) return null;
+		const snapshot = await groupManagement.settings(group.id);
+		if (!snapshot) return null;
+		setExpectedRevision(snapshot.group.revision);
+		setExpectedShowRevision(snapshot.showRevision);
+		setResolvedSpatial(snapshot.resolvedSpatial);
+		setMappingPresentation(
+			resolvedMappingPresentation(snapshot.resolvedSpatial),
+		);
+		setMapping(
+			snapshot.resolvedSpatial.mapping_provenance.type === "local"
+				? storedMapping(snapshot.group.object.body)
+				: null,
+		);
+		return snapshot;
+	}, [group.id, groupManagement]);
+	useEffect(() => {
+		void refreshSettings();
+	}, [refreshSettings]);
+	return {
+		groupManagement,
+		expectedRevision,
+		setExpectedRevision,
+		expectedShowRevision,
+		setExpectedShowRevision,
+		mappingPresentation,
+		setMappingPresentation,
+		mapping,
+		setMapping,
+		resolvedSpatial,
+		refreshSettings,
+	};
 }
 
 function GroupSettingsWindow({
