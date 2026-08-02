@@ -44,6 +44,24 @@ video time and visible click/type pacing, not to weakening assertions or racing 
   canonical layout object is installed. The final operator path therefore opens that desktop and,
   when necessary, visibly switches the Stage pane's accessible **Stage view** control from 2D to
   3D before the final hold. The canonical stored Programming pane remains explicitly 3D.
+- The benchmark assignments used to demonstrate playback controls remain active after the final
+  PRELOAD GO and can wash out the concluding programmer look. The retained final proof therefore
+  stops those explicit benchmark sources through their supported physical/virtual control paths,
+  explicitly zeros every projected intensity owner, then raises one blue Wash and the two
+  non-uniform yellow Beam endpoints to a controlled 2% intensity. This isolates the reviewed
+  canonical Color/Fan Out values without inventing a duplicate demo-only color state or retaining
+  hidden logical-head/default output.
+- The already-open live Stage pane also retained its stale **Improved beams** quality even though
+  the installed Programming desktop specifies **Lines + beams**. Improved beams turns the eight
+  largest contributors into surface SpotLights at `intensity * 500`, which kept the retained frame
+  overexposed at the otherwise controlled 28% target intensity. The concluding visible settings
+  path now applies both the stored 3D view and **Lines + beams** quality and asserts the live canvas
+  reports that exact quality.
+- Patch placement leaves non-default Stage navigation in persisted desk state, and the former low
+  default camera looked through the venue deck instead of over the rig. The product now exposes a
+  literal **Reset 3D view** action in both full Stage settings and compact Stage pane settings. Its
+  canonical overview reuses the existing Stage-thumbnail camera, and the demo visibly invokes that
+  action before asserting the live canvas camera position and target.
 
 ## Verification
 
@@ -93,6 +111,30 @@ video time and visible click/type pacing, not to weakening assertions or racing 
   benchmark sources, however, so visual blue/yellow separation is not yet accepted despite the
   authoritative XYZ proof. Closeout remains pending while the concluding look is isolated to the
   colored targets at controlled intensity and re-recorded.
+- After isolating the concluding look, the complete focused
+  `npm run test:e2e -- tests/product-demo.spec.ts --workers=1` workflow passed in 3.7 minutes. The
+  scenario now proves the explicit benchmark assignments are stopped and every target reaches the
+  controlled final intensity before checking non-uniform Pan/Tilt, profile-calibrated blue/yellow
+  XYZ values, the visible 3D Stage canvas, and the live-ready Stage state. Retained-video proof is
+  still pending the canonical re-recording.
+- The first canonical re-record after source isolation passed DEMO-001 in 21.7 minutes and encoded
+  21,425 frames at 1920x1080, 25 fps, and 857.0 seconds to VP9 WebM and HEVC MP4. Direct inspection
+  of `14:15` and `14:16` still showed white surface blowout. Source inspection and the canvas state
+  identified the stale live **Improved beams** mode as the remaining cause, not color-value drift.
+- A subsequent focused run exposed a pre-existing intermittent physical PRELOAD GO miss before the
+  Stage step: capture mode, all 132 values, and the queued playback remained wholly armed. The demo
+  now retries the visible commit only while that complete uncommitted state remains intact and
+  rejects any partial ambiguity. Bench types, the 4 focused timeline/layout/preset assertions, and
+  `git diff --check` passed after this hardening. The next focused DEMO-001 run passed in 3.6 minutes,
+  including the exact live `lines_and_beams` canvas assertion.
+- Final Stage isolation then identified all remaining profile-output intensity owners, including
+  logical heads and visual-only profiles, and explicitly reduced them to the three visible proof
+  fixtures. The refreshed embedded desktop bundle passed the full focused DEMO-001 scenario in 3.5
+  minutes. The captured 1280×720 focused frame visibly shows the complete elevated rig, differently aimed
+  Beam endpoints, saturated blue Wash volumes, and a separate yellow contribution. Desktop
+  typechecking, 51 focused pane/reducer/Stage tests, the 176-test UI package, bench typechecking,
+  focused timeline/layout/preset tests, the production desktop build, and `git diff --check` passed.
+  Canonical retained-video re-recording remains required before accepting the Stage item.
 
 ## Remaining work
 
