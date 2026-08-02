@@ -53,13 +53,18 @@ impl PlaybackEngine {
     }
 
     fn advance_master_transitions(&mut self, now: DateTime<Utc>) {
-        let releases = self
+        let updates = self
             .active
             .iter_mut()
-            .filter_map(|(key, playback)| update_master_transition(playback, now).then_some(*key))
+            .filter_map(|(key, playback)| {
+                playback.master_transition.as_ref()?;
+                let release = update_master_transition(playback, now);
+                Some((*key, playback.cue_list_id, playback.master, release))
+            })
             .collect::<Vec<_>>();
-        for key in releases {
-            if let Some(playback) = self.active.get_mut(&key) {
+        for (key, cue_list_id, master, release) in updates {
+            self.retarget_physical_controls(cue_list_id, master, None);
+            if release && let Some(playback) = self.active.get_mut(&key) {
                 playback.enabled = false;
                 playback.activation = None;
             }

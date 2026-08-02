@@ -173,6 +173,24 @@ impl PlaybackEngine {
         Some(status)
     }
 
+    pub fn runtime_status_for_cue_list(
+        &self,
+        cue_list_id: CueListId,
+    ) -> Option<PlaybackRuntimeStatus> {
+        let mut status = self
+            .runtime_status()
+            .into_iter()
+            .find(|status| status.playback.cue_list_id == cue_list_id)?;
+        status.playback.playback_number = None;
+        status.playback.playback_identity = None;
+        let (temporary_active, temporary_master, swap_active) =
+            self.apply_assignment_feedback(&mut status.playback, None);
+        status.temporary_active = temporary_active;
+        status.temporary_master = temporary_master;
+        status.swap_active = swap_active;
+        Some(status)
+    }
+
     fn apply_assignment_feedback(
         &self,
         playback: &mut ActivePlayback,

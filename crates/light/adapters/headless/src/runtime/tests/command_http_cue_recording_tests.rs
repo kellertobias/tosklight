@@ -637,7 +637,7 @@ async fn selected_playback_and_exact_cue_list_targets_do_not_readdress_the_recor
 }
 
 #[tokio::test]
-async fn explicit_cue_address_ignores_divergent_active_cues_but_implicit_merge_rejects_them() {
+async fn explicit_and_implicit_cue_merges_use_the_one_shared_active_cue() {
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario.create_and_open_show("Divergent active Cues").await;
     let fixture = set_cue_record_value(&scenario);
@@ -734,15 +734,12 @@ async fn explicit_cue_address_ignores_divergent_active_cues_but_implicit_merge_r
             implicit,
         )
         .await;
-    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(response.status(), StatusCode::OK);
     let body = json(response).await;
-    assert_eq!(body["kind"], "conflict");
-    assert_eq!(
-        body["error"],
-        "the Cuelist is active on multiple different Cues; supply an explicit Cue number"
-    );
-    assert_eq!(active_show_revision(&scenario), revision + 1);
-    assert_eq!(scenario.state.events.latest_sequence(), baseline + 1);
+    assert_eq!(body["status"], "changed");
+    assert_eq!(body["show_revision"], revision + 2);
+    assert_eq!(active_show_revision(&scenario), revision + 2);
+    assert_eq!(scenario.state.events.latest_sequence(), baseline + 2);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

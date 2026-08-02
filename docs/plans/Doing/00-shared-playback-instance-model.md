@@ -14,9 +14,13 @@ to Playbacks depends on it.
 - [ ] Implement shared runtime identity and assignment lifecycle in coherent compatibility-safe steps.
   Cuelist actions now use one target-keyed domain runtime across physical, Virtual, and direct-Cuelist
   addresses. Physical Master faders now retain independent observed positions and pickup latches, including
-  crossing takeover and peer retargeting after authoritative software updates; projection/event reconciliation
-  and topology lifecycle remain.
-- [ ] Add focused migration, runtime, cross-surface, and operator acceptance coverage.
+  crossing takeover and peer retargeting after authoritative software updates. Physical, Virtual, and direct
+  projections now compose the same target state with assignment-local pickup feedback; actions publish every
+  affected assignment projection, software and Matter faders bypass pickup, and automated/restored masters
+  retarget physical controls. Assignment topology lifecycle remains.
+- [ ] Add focused migration, runtime, cross-surface, and operator acceptance coverage. Shared Cuelist,
+  physical-pickup, Matter/software, peer-event, Preload, restart, and legacy duplicate-row coverage is in place;
+  assignment removal/reassignment, Group Master topology, and legacy targetless-Dynamic migration remain.
 - [ ] Run the required major suites and verify the real desktop path.
 
 ## Decisions
@@ -37,14 +41,20 @@ to Playbacks depends on it.
   duplicate-runtime precedence.
 - `cargo test -p light-playback --lib --quiet` passed after assignment-local pickup separation: 101 tests,
   including two physical faders taking over one target independently and software pickup bypass.
+- `cargo test -p light-playback --lib --quiet` passed after restore and automated-transition pickup coverage:
+  102 tests.
+- Focused `light-headless-runtime` tests passed for shared assignment projection, Matter software control,
+  restored exclusion provenance, timed Preload restart ordering, and persistence-domain ownership.
+- `cargo test -p light-headless-runtime --lib --quiet -- --test-threads=1 --skip
+  citp_thumbnail_api_uses_patched_parent_endpoint_and_cache` passed: 623 passed, 1 ignored, 1 filtered.
+  The excluded CITP test fails only because its cache filesystem operation returns macOS `Operation not
+  permitted` in the managed sandbox; it remains required in the final unsandboxed/desktop verification.
 
 ## Remaining work
 
-- Compose authoritative projections/events for every assignment and update generated wire/frontend state.
-- Route input by actual surface so desktop/software faders bypass pickup while physical and attached OSC
-  faders participate; retarget pickup across automated master transitions and restored runtime.
-- Reconcile assignment removal/reassignment, migrate persistence and legacy Dynamics, then synchronize
-  selection and cross-surface feedback.
+- Reconcile assignment removal/reassignment and final-reference release, including Group Master topology.
+- Migrate legacy targetless Dynamic assignments without losing their stored target scope or output.
+- Confirm generated wire/frontend selection and reconnect state consume the authoritative peer projections.
 - Run full plan closeout verification and record the truthful result.
 
 ## Goal

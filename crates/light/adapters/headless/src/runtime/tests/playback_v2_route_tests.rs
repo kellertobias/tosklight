@@ -2314,8 +2314,12 @@ fn active_show_id(state: &AppState) -> Uuid {
 
 fn install_virtual_playback_test_state(state: &AppState) {
     install_playback_test_state(state);
-    let cue_list_id = state.output.snapshot().cue_lists[0].id;
     let mut snapshot = (*state.output.snapshot()).clone();
+    let first = playback_test_cue_list();
+    let first_id = first.id;
+    let second = playback_test_cue_list();
+    let second_id = second.id;
+    std::sync::Arc::make_mut(&mut snapshot.cue_lists).extend([first, second]);
     snapshot.playback_pages = vec![light_playback::PlaybackPage {
         number: 1,
         name: "Virtual".into(),
@@ -2325,14 +2329,18 @@ fn install_virtual_playback_test_state(state: &AppState) {
                 1_001,
                 playback_test_definition(
                     1_001,
-                    light_playback::PlaybackTarget::CueList { cue_list_id },
+                    light_playback::PlaybackTarget::CueList {
+                        cue_list_id: first_id,
+                    },
                 ),
             ),
             (
                 1_002,
                 playback_test_definition(
                     1_002,
-                    light_playback::PlaybackTarget::CueList { cue_list_id },
+                    light_playback::PlaybackTarget::CueList {
+                        cue_list_id: second_id,
+                    },
                 ),
             ),
         ]),
@@ -2498,22 +2506,30 @@ fn install_pool_cuelist_test_state(state: &AppState) {
 }
 
 fn install_virtual_exclusion_test_state(state: &AppState) {
-    let cue_list = playback_test_cue_list();
-    let cue_list_id = cue_list.id;
-    let virtual_playbacks = (1_001..=1_004)
-        .map(|number| {
+    let cue_lists = (1_001..=1_004)
+        .map(|number| (number, playback_test_cue_list()))
+        .collect::<Vec<_>>();
+    let virtual_playbacks = cue_lists
+        .iter()
+        .map(|(number, cue_list)| {
             let mut definition = playback_test_definition(
-                number,
-                light_playback::PlaybackTarget::CueList { cue_list_id },
+                *number,
+                light_playback::PlaybackTarget::CueList {
+                    cue_list_id: cue_list.id,
+                },
             );
             definition.auto_off = false;
-            (number, definition)
+            (*number, definition)
         })
         .collect::<HashMap<_, _>>();
     state
         .output
         .replace_snapshot(EngineSnapshot {
-            cue_lists: vec![cue_list].into(),
+            cue_lists: cue_lists
+                .into_iter()
+                .map(|(_, cue_list)| cue_list)
+                .collect::<Vec<_>>()
+                .into(),
             playback_pages: vec![light_playback::PlaybackPage {
                 number: 1,
                 name: "Main".into(),
@@ -2599,7 +2615,9 @@ fn update_dedicated_virtual_definition(
 
 fn add_explicit_virtual_page(state: &AppState) {
     let mut snapshot = (*state.output.snapshot()).clone();
-    let cue_list_id = snapshot.cue_lists[0].id;
+    let cue_list = playback_test_cue_list();
+    let cue_list_id = cue_list.id;
+    std::sync::Arc::make_mut(&mut snapshot.cue_lists).push(cue_list);
     std::sync::Arc::make_mut(&mut snapshot.playback_pages).push(light_playback::PlaybackPage {
         number: 2,
         name: "Explicit".into(),

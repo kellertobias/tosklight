@@ -7,62 +7,34 @@ use light_playback::{
 };
 
 #[test]
-fn direct_cuelist_action_projection_is_not_replaced_by_assigned_playbacks() {
+fn every_assignment_projects_one_shared_cuelist_runtime() {
     let cue_list = cue_list();
     let cue_list_id = cue_list.id;
     let first = definition(1, cue_list_id);
     let second = definition(2, cue_list_id);
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.go(cue_list_id).unwrap();
-    let direct_runtime = engine.active().pop().unwrap();
     engine.register_definition(first.clone()).unwrap();
     engine.register_definition(second.clone()).unwrap();
     engine.goto_playback(1, 2.0).unwrap();
     engine.goto_playback(2, 3.0).unwrap();
-    engine.restore_active([direct_runtime]);
-    let runtime = engine.runtime_status();
-    let requested = PlaybackRuntimeIdentity::CueList(cue_list_id);
     let scope = test_scope();
-
-    let direct = cue_list_projection(
-        scope,
-        requested.clone(),
-        None,
-        cue_list_id,
-        direct_cue_list_runtime(&runtime, cue_list_id),
-    );
-    assert_eq!(direct.playback_number, None);
-    assert_eq!(direct.current_cue().map(|cue| cue.number), Some(1.0));
-
-    let snapshot = EngineSnapshot {
-        playbacks: vec![first, second].into(),
-        ..EngineSnapshot::default()
-    };
-    let mut repair = Vec::new();
-    project_cue_list(
-        scope,
-        &snapshot,
-        &runtime,
-        requested,
-        cue_list_id,
-        &mut repair,
-    );
-    assert_eq!(repair.len(), 3);
-    assert_eq!(
-        repair
-            .iter()
-            .map(|projection| (
-                projection.playback_number,
-                projection.current_cue().map(|cue| cue.number)
-            ))
-            .collect::<Vec<_>>(),
-        vec![
-            (Some(1), Some(2.0)),
-            (Some(2), Some(3.0)),
-            (None, Some(1.0))
-        ]
-    );
+    let first = engine
+        .runtime_status_at(PlaybackIdentity::physical(1).unwrap())
+        .unwrap();
+    let second = engine
+        .runtime_status_at(PlaybackIdentity::physical(2).unwrap())
+        .unwrap();
+    let direct = engine.runtime_status_for_cue_list(cue_list_id).unwrap();
+    for (requested, number, status) in [
+        (PlaybackRuntimeIdentity::Playback(1), Some(1), &first),
+        (PlaybackRuntimeIdentity::Playback(2), Some(2), &second),
+        (PlaybackRuntimeIdentity::CueList(cue_list_id), None, &direct),
+    ] {
+        let projection = cue_list_projection(scope, requested, number, cue_list_id, Some(status));
+        assert_eq!(projection.playback_number, number);
+        assert_eq!(projection.current_cue().map(|cue| cue.number), Some(3.0));
+    }
 }
 
 #[test]

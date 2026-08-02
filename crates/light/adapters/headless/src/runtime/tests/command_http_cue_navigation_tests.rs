@@ -119,9 +119,9 @@ fn active_playback(
 ) -> Option<light_playback::ActivePlayback> {
     scenario
         .state
-        .output.playback_runtime()
-        .into_iter()
-        .find(|runtime| runtime.playback_number == Some(playback))
+        .output
+        .playback_runtime_status_at(light_playback::PlaybackIdentity::physical(playback).ok()?)
+        .map(|status| status.playback)
 }
 
 fn current_cue(scenario: &CommandHttpScenario, playback: u16) -> Option<f64> {
@@ -202,7 +202,7 @@ async fn selected_and_explicit_go_to_and_load_use_the_typed_playback_action() {
     let body = json(response).await;
     assert_eq!(body["outcome"], "accepted");
     assert_eq!(current_cue(&scenario, 2), Some(3.0));
-    assert_eq!(playback_events(&scenario, baseline), 1);
+    assert_eq!(playback_events(&scenario, baseline), 2);
     // A successful action clears the shared command line exactly once.
     assert_eq!(body["command_line"]["text"], "FIXTURE");
     assert_command_line_reset(&scenario).await;
@@ -216,7 +216,7 @@ async fn selected_and_explicit_go_to_and_load_use_the_typed_playback_action() {
     assert_eq!(json(response).await["outcome"], "accepted");
     assert_eq!(current_cue(&scenario, 2), Some(3.0));
     assert_eq!(loaded_cue(&scenario, 2), Some(2.0));
-    assert_eq!(playback_events(&scenario, baseline), 1);
+    assert_eq!(playback_events(&scenario, baseline), 2);
 
     // Explicit pool Go To addresses the other Playback without changing the selection.
     let response = scenario
@@ -319,7 +319,7 @@ async fn replay_and_semantic_no_change_publish_no_second_transition() {
     let response = scenario.execute("go-to-once", Some("CUE 3")).await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
-    assert_eq!(playback_events(&scenario, baseline), 1);
+    assert_eq!(playback_events(&scenario, baseline), 2);
     let after_first = scenario.state.events.latest_sequence();
     let history_after_first = history_len(&scenario);
     assert_eq!(history_after_first, history + 1);
@@ -372,7 +372,7 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
     assert_eq!(current_cue(&scenario, 2), Some(3.0));
-    assert_eq!(current_cue(&scenario, 1), None);
+    assert_eq!(current_cue(&scenario, 1), Some(3.0));
 
     let response = scenario
         .app
@@ -393,7 +393,7 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
     assert_eq!(current_cue(&scenario, 1), Some(2.0));
-    assert_eq!(current_cue(&scenario, 2), Some(3.0));
+    assert_eq!(current_cue(&scenario, 2), Some(2.0));
 
     // The first desk's token cannot drive the second desk's command line.
     let response = scenario
@@ -443,7 +443,7 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
     let response = scenario.execute("locked-desk", Some("CUE 1")).await;
     assert_eq!(response.status(), StatusCode::CONFLICT);
     assert_eq!(playback_events(&scenario, baseline), 0);
-    assert_eq!(current_cue(&scenario, 2), Some(3.0));
+    assert_eq!(current_cue(&scenario, 2), Some(2.0));
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -468,7 +468,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     let ws = dispatch_live_action(&scenario.state, &scenario.session, ws_command());
     assert!(ws.ok, "{:?}", ws.error);
     assert_eq!(current_cue(&scenario, 2), Some(3.0));
-    assert_eq!(playback_events(&scenario, baseline), 1);
+    assert_eq!(playback_events(&scenario, baseline), 2);
     assert_eq!(compatibility_notifications(&scenario), 1);
 
     // A delayed replay must not erase a newer command the operator has already started.
@@ -525,7 +525,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     }
     assert_eq!(loaded_cue(&scenario, 2), Some(2.0));
     assert_eq!(current_cue(&scenario, 2), Some(3.0));
-    assert_eq!(playback_events(&scenario, baseline), 1);
+    assert_eq!(playback_events(&scenario, baseline), 2);
     assert_command_line_reset(&scenario).await;
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

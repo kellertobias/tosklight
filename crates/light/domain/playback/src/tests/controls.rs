@@ -144,6 +144,51 @@ fn physical_faders_take_over_one_shared_master_independently() {
 }
 
 #[test]
+fn restored_shared_master_requires_each_physical_fader_to_reacquire() {
+    let cue_list = list(vec![Cue::new(1.0)]);
+    let cue_list_id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list.clone()).unwrap();
+    engine
+        .register_definition(definition(1, cue_list_id))
+        .unwrap();
+    engine
+        .register_definition(definition(2, cue_list_id))
+        .unwrap();
+    engine.set_virtual_master(1, 0.6).unwrap();
+    let persisted = engine.runtime();
+
+    let mut restored = PlaybackEngine::default();
+    restored.register(cue_list).unwrap();
+    restored
+        .register_definition(definition(1, cue_list_id))
+        .unwrap();
+    restored
+        .register_definition(definition(2, cue_list_id))
+        .unwrap();
+    restored.restore_active(persisted);
+    for number in [1, 2] {
+        let status = restored
+            .runtime_status_at(PlaybackIdentity::physical(number).unwrap())
+            .unwrap();
+        assert!(status.playback.fader_pickup_required);
+        assert_eq!(status.playback.fader_pickup_target, Some(0.6));
+    }
+
+    restored.set_master(1, 0.7).unwrap();
+    assert_eq!(restored.runtime()[0].master, 0.6);
+    restored.set_master(1, 0.5).unwrap();
+    assert_eq!(restored.runtime()[0].master, 0.5);
+    assert!(
+        restored
+            .runtime_status_at(PlaybackIdentity::physical(2).unwrap())
+            .unwrap()
+            .playback
+            .fader_pickup_required
+    );
+}
+
+#[test]
 fn temp_is_a_separate_entry_and_never_auto_offs_the_underlying_playback() {
     let started = Utc::now();
     let clock = Arc::new(light_core::ManualClock::new(started));
@@ -532,7 +577,11 @@ fn scheduled_master_transitions_are_advanced_by_the_playback_tick() {
     engine
         .register_definition(definition(1, cue_list_id))
         .unwrap();
+    engine
+        .register_definition(definition(2, cue_list_id))
+        .unwrap();
     engine.set_master(1, 0.2).unwrap();
+    engine.set_master(2, 0.2).unwrap();
 
     engine
         .set_master_transition_mutation(1, 0.8, 1_000)
@@ -541,9 +590,25 @@ fn scheduled_master_transitions_are_advanced_by_the_playback_tick() {
     clock.advance_millis(500);
     engine.tick(started + chrono::Duration::milliseconds(500), None);
     assert!((engine.runtime()[0].master - 0.5).abs() < 0.001);
+    assert_eq!(
+        engine
+            .runtime_status_at(PlaybackIdentity::physical(2).unwrap())
+            .unwrap()
+            .playback
+            .fader_pickup_target,
+        Some(0.5)
+    );
     clock.advance_millis(500);
     engine.tick(started + chrono::Duration::milliseconds(1_000), None);
     assert_eq!(engine.runtime()[0].master, 0.8);
+    assert_eq!(
+        engine
+            .runtime_status_at(PlaybackIdentity::physical(2).unwrap())
+            .unwrap()
+            .playback
+            .fader_pickup_target,
+        Some(0.8)
+    );
     assert!(engine.runtime()[0].master_transition.is_none());
 }
 

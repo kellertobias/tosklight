@@ -61,6 +61,7 @@ impl PlaybackEngine {
         changed
     }
     pub fn restore_active(&mut self, playbacks: impl IntoIterator<Item = ActivePlayback>) {
+        self.control_states.clear();
         for mut playback in playbacks {
             match playback.playback_identity {
                 Some(PlaybackIdentity::Virtual(address)) => {
@@ -159,6 +160,14 @@ impl PlaybackEngine {
                     }
                 }
             }
+        }
+        let restored_targets = self
+            .active
+            .values()
+            .map(|playback| (playback.cue_list_id, playback.master))
+            .collect::<Vec<_>>();
+        for (cue_list_id, master) in restored_targets {
+            self.retarget_physical_controls(cue_list_id, master, None);
         }
     }
 

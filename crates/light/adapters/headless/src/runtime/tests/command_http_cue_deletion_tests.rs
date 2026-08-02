@@ -105,7 +105,7 @@ async fn atomic_command_deletes_once_preserves_runtime_hold_and_replays_without_
         .await;
     assert_eq!(active.status(), StatusCode::OK);
     assert_eq!(current_cue(&scenario, 1), Some(2.0));
-    assert!(active_playback(&scenario, 2).is_none());
+    assert_eq!(current_cue(&scenario, 2), Some(2.0));
     let baseline = scenario.state.events.latest_sequence();
     let compatibility = cue_delete_compatibility_events(&scenario).len();
     let history = history_len(&scenario);
@@ -125,7 +125,14 @@ async fn atomic_command_deletes_once_preserves_runtime_hold_and_replays_without_
     let runtime = active_playback(&scenario, 1).unwrap();
     assert_eq!(runtime.current_cue_number, Some(2.0));
     assert_eq!(runtime.deleted_cue_hold.unwrap().deleted_number, 2.0);
-    assert!(active_playback(&scenario, 2).is_none());
+    assert_eq!(
+        active_playback(&scenario, 2)
+            .unwrap()
+            .deleted_cue_hold
+            .unwrap()
+            .deleted_number,
+        2.0
+    );
 
     let replay = scenario
         .execute("typed-cue-delete", Some("DELETE SET 1 CUE 2"))

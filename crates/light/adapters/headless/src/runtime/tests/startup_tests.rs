@@ -447,6 +447,9 @@ fn restored_exclusions_replay_each_activation_against_show_owned_zones() {
             .unwrap()
             .unwrap();
         assert!(persisted.contains("\"activation\""));
+        assert!(!persisted.contains("\"fader_position\""));
+        assert!(!persisted.contains("\"fader_pickup_required\""));
+        assert!(!persisted.contains("\"fader_pickup_target\""));
         assert!(
             !serde_json::to_string(&state.output.playback_runtime())
                 .unwrap()
@@ -572,27 +575,29 @@ fn restored_exclusion_active_with_origin(
 }
 
 fn restored_exclusion_snapshot(cue_list_id: light_core::CueListId) -> EngineSnapshot {
-    let cue_list = light_playback::CueList {
-        id: cue_list_id,
-        name: "Restored exclusion look".into(),
-        priority: 0,
-        mode: light_playback::CueListMode::Sequence,
-        looped: false,
-        chaser_step_millis: 1_000,
-        speed_group: None,
-        intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
-        wrap_mode: Some(light_playback::WrapMode::Off),
-        restart_mode: light_playback::RestartMode::FirstCue,
-        force_cue_timing: false,
-        disable_cue_timing: false,
-        chaser_xfade_millis: 0,
-        chaser_xfade_percent: Some(0),
-        speed_multiplier: 1.0,
-        cues: vec![light_playback::Cue::new(1.0)],
-    };
     EngineSnapshot {
         revision: 7,
-        cue_lists: vec![cue_list].into(),
+        cue_lists: (1..=4)
+            .map(|cell| light_playback::CueList {
+                id: restored_exclusion_cue_list_id(cue_list_id, cell),
+                name: format!("Restored exclusion look {cell}"),
+                priority: 0,
+                mode: light_playback::CueListMode::Sequence,
+                looped: false,
+                chaser_step_millis: 1_000,
+                speed_group: None,
+                intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+                wrap_mode: Some(light_playback::WrapMode::Off),
+                restart_mode: light_playback::RestartMode::FirstCue,
+                force_cue_timing: false,
+                disable_cue_timing: false,
+                chaser_xfade_millis: 0,
+                chaser_xfade_percent: Some(0),
+                speed_multiplier: 1.0,
+                cues: vec![light_playback::Cue::new(1.0)],
+            })
+            .collect::<Vec<_>>()
+            .into(),
         playbacks: Vec::new().into(),
         playback_pages: vec![light_playback::PlaybackPage {
             number: 1,
@@ -601,12 +606,25 @@ fn restored_exclusion_snapshot(cue_list_id: light_core::CueListId) -> EngineSnap
             virtual_playbacks: (1..=4)
                 .map(|cell| {
                     let number = 1_000 + cell;
-                    (number, restored_exclusion_playback(number, cue_list_id))
+                    (
+                        number,
+                        restored_exclusion_playback(
+                            number,
+                            restored_exclusion_cue_list_id(cue_list_id, cell),
+                        ),
+                    )
                 })
                 .collect(),
         }].into(),
         ..EngineSnapshot::default()
     }
+}
+
+fn restored_exclusion_cue_list_id(
+    base: light_core::CueListId,
+    cell: u16,
+) -> light_core::CueListId {
+    light_core::CueListId(Uuid::from_u128(base.0.as_u128() ^ u128::from(cell)))
 }
 
 fn restored_exclusion_playback(
@@ -634,11 +652,12 @@ fn restored_exclusion_playback(
 }
 
 fn restored_exclusion_active(
-    number: u16,
+    cell: u16,
     cue_list_id: light_core::CueListId,
     activated_at: &str,
 ) -> light_playback::ActivePlayback {
-    let number = 1_000 + number;
+    let cue_list_id = restored_exclusion_cue_list_id(cue_list_id, cell);
+    let number = 1_000 + cell;
     serde_json::from_value(serde_json::json!({
         "playback_number": number,
         "playback_identity": {"kind":"virtual","page":1,"number":number},

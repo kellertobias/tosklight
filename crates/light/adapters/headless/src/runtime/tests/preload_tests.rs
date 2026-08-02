@@ -444,7 +444,7 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
     );
     assert_eq!(
         response["playback_event_sequences"],
-        serde_json::json!([1, 2])
+        serde_json::json!([1, 2, 3, 4])
     );
     let light_application::EventReplay::Events(events) = state.events.replay(
         0,
@@ -452,41 +452,39 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
     ) else {
         panic!("committed Preload should retain its semantic event");
     };
-    assert_eq!(events.len(), 2);
-    assert_eq!(
-        events[0].source,
-        light_application::EventSource::Action(light_application::ActionSource::UserInterface)
-    );
-    let light_application::ApplicationEvent::Playback(
-        light_application::PlaybackEvent::RuntimeChanged(change),
-    ) = &events[0].payload
-    else {
-        panic!("expected a typed Playback runtime change");
-    };
-    assert_eq!(
-        change.projection.requested,
+    assert_eq!(events.len(), 4);
+    let virtual_identity = |number| {
         light_application::PlaybackRuntimeIdentity::Virtual(
-            light_playback::VirtualPlaybackAddress::new(1, 1_002).unwrap()
+            light_playback::VirtualPlaybackAddress::new(1, number).unwrap(),
         )
-    );
-    assert_eq!(change.projection.playback_number, Some(1_002));
-    assert!(!change.projection.cue_list_runtime().unwrap().enabled);
-    let light_application::ApplicationEvent::Playback(
-        light_application::PlaybackEvent::RuntimeChanged(peer),
-    ) = &events[1].payload
-    else {
-        panic!("expected the released peer Playback event");
     };
-    assert_eq!(
-        peer.projection.requested,
-        light_application::PlaybackRuntimeIdentity::Virtual(
-            light_playback::VirtualPlaybackAddress::new(1, 1_001).unwrap()
-        )
-    );
-    assert_eq!(peer.projection.playback_number, Some(1_001));
-    assert!(peer.projection.cue_list_runtime().unwrap().enabled);
-    assert!(peer.transition.is_none());
-    assert_eq!(events[0].correlation_id, events[1].correlation_id);
+    for (event, (expected_identity, expected_enabled)) in events.iter().zip([
+        (light_application::PlaybackRuntimeIdentity::Playback(2), false),
+        (virtual_identity(1_002), false),
+        (light_application::PlaybackRuntimeIdentity::Playback(1), true),
+        (virtual_identity(1_001), true),
+    ]) {
+        assert_eq!(
+            event.source,
+            light_application::EventSource::Action(
+                light_application::ActionSource::UserInterface
+            )
+        );
+        let light_application::ApplicationEvent::Playback(
+            light_application::PlaybackEvent::RuntimeChanged(change),
+        ) = &event.payload
+        else {
+            panic!("expected a typed Playback runtime change");
+        };
+        assert_eq!(change.projection.requested, expected_identity);
+        assert_eq!(
+            change.projection.cue_list_runtime().unwrap().enabled,
+            expected_enabled
+        );
+    }
+    assert!(events
+        .iter()
+        .all(|event| event.correlation_id == events[0].correlation_id));
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

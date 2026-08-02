@@ -158,23 +158,47 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
         _surface: PlaybackSurface,
     ) -> Result<Vec<PlaybackRuntimeIdentity>, ActionError> {
         let definition = match address {
+            ResolvedPlaybackAddress::CueList(_) => None,
             ResolvedPlaybackAddress::Virtual(address) => {
-                virtual_playback_definition(self.state, address)?
+                Some(virtual_playback_definition(self.state, address)?)
             }
             _ => {
                 let Some(number) = address.playback_number() else {
                     return Ok(Vec::new());
                 };
-                playback_definition(self.state, number)?
+                Some(playback_definition(self.state, number)?)
             }
         };
-        if !matches!(
-            definition.target,
-            light_playback::PlaybackTarget::CueList { .. }
-        ) {
-            return Ok(Vec::new());
-        }
+        let cue_list_id = match (&address, definition.as_ref()) {
+            (ResolvedPlaybackAddress::CueList(cue_list_id), _) => *cue_list_id,
+            (_, Some(definition)) => match &definition.target {
+                light_playback::PlaybackTarget::CueList { cue_list_id } => *cue_list_id,
+                _ => return Ok(Vec::new()),
+            },
+            (_, None) => return Ok(Vec::new()),
+        };
         let mut related = Vec::new();
+        let snapshot = self.state.output.snapshot();
+        related.extend(
+            snapshot
+                .playbacks
+                .iter()
+                .filter(|candidate| {
+                    matches!(candidate.target, light_playback::PlaybackTarget::CueList { cue_list_id: candidate_id } if candidate_id == cue_list_id)
+                })
+                .map(|candidate| PlaybackRuntimeIdentity::Playback(candidate.number)),
+        );
+        for page in snapshot.playback_pages.iter() {
+            related.extend(page.virtual_playbacks.iter().filter_map(|(number, candidate)| {
+                if !matches!(candidate.target, light_playback::PlaybackTarget::CueList { cue_list_id: candidate_id } if candidate_id == cue_list_id)
+                {
+                    return None;
+                }
+                light_playback::VirtualPlaybackAddress::new(page.number, *number)
+                    .ok()
+                    .map(PlaybackRuntimeIdentity::Virtual)
+            }));
+        }
         if semantics::may_activate_playback(action) {
             if let ResolvedPlaybackAddress::Virtual(activated) = address {
                 related.extend(
@@ -189,7 +213,10 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
                 );
             }
         }
-        if semantics::may_trigger_auto_off(action, &definition) {
+        if definition
+            .as_ref()
+            .is_some_and(|definition| semantics::may_trigger_auto_off(action, definition))
+        {
             related.extend(
                 self.state
                     .output

@@ -145,10 +145,39 @@ pub(super) fn persist_active_playbacks(state: &AppState) -> Result<(), ApiError>
         return Ok(());
     };
     let runtime = state.output.playback_runtime();
-    let persisted = runtime
+    let persisted_runtime = runtime
         .iter()
-        .map(PersistedActivePlayback::from)
+        .cloned()
+        .map(|mut runtime| {
+            runtime.playback_number = None;
+            runtime.playback_identity = None;
+            runtime
+        })
         .collect::<Vec<_>>();
+    let persisted = persisted_runtime
+        .iter()
+        .zip(runtime.iter())
+        .map(|(runtime, source)| PersistedActivePlayback {
+            runtime,
+            playback_number: source.playback_number,
+            playback_identity: source.playback_identity.as_ref().filter(|identity| {
+                matches!(identity, light_playback::PlaybackIdentity::Virtual(_))
+            }),
+            activation: source.activation.as_ref(),
+        })
+        .collect::<Vec<_>>();
+    let serialized =
+        serde_json::to_string(&persisted).map_err(|error| ApiError::internal(error.to_string()))?;
+    let mut persisted = serde_json::from_str::<Vec<serde_json::Value>>(&serialized)
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    for value in &mut persisted {
+        let Some(object) = value.as_object_mut() else {
+            continue;
+        };
+        object.remove("fader_position");
+        object.remove("fader_pickup_required");
+        object.remove("fader_pickup_target");
+    }
     let serialized =
         serde_json::to_string(&persisted).map_err(|error| ApiError::internal(error.to_string()))?;
     state
@@ -162,16 +191,11 @@ struct PersistedActivePlayback<'a> {
     #[serde(flatten)]
     runtime: &'a light_playback::ActivePlayback,
     #[serde(skip_serializing_if = "Option::is_none")]
+    playback_number: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    playback_identity: Option<&'a light_playback::PlaybackIdentity>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     activation: Option<&'a light_playback::PlaybackActivationProvenance>,
-}
-
-impl<'a> From<&'a light_playback::ActivePlayback> for PersistedActivePlayback<'a> {
-    fn from(runtime: &'a light_playback::ActivePlayback) -> Self {
-        Self {
-            runtime,
-            activation: runtime.activation.as_ref(),
-        }
-    }
 }
 pub(super) fn emit(state: &AppState, kind: &str, payload: serde_json::Value) -> u64 {
     let revision = state.events.record_audit(kind, payload.clone());

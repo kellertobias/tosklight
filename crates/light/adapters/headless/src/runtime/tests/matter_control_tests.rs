@@ -39,6 +39,42 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
         vec![(1, 7, 26), (4, 7, 25)]
     );
 
+    let physical = state
+        .output
+        .snapshot()
+        .playbacks
+        .iter()
+        .find(|definition| definition.number == 25)
+        .cloned()
+        .unwrap();
+    dispatch_playback_action(
+        &state,
+        &physical,
+        "fader",
+        &PoolPlaybackInput {
+            value: Some(0.2),
+            ..PoolPlaybackInput::default()
+        },
+        PlaybackDispatchContext {
+            action: &light_application::ActionContext::system(
+                Uuid::nil(),
+                light_application::ActionSource::Osc,
+            ),
+            session: None,
+            desk: None,
+            source: "osc",
+            exclusion_zones: &[],
+            activation_origin: Some(light_playback::PlaybackActivationOrigin {
+                at: state.output.application_time(),
+                desk_id: None,
+                surface: light_playback::PlaybackActivationSurface::Osc,
+                exclusion_scope: light_playback::PlaybackExclusionScope::None,
+            }),
+        },
+    )
+    .unwrap();
+    assert_eq!(state.output.playback_runtime()[0].master, 0.2);
+
     let status = apply_matter_playback_write(
         &state,
         matter::endpoint_id(4, 7).unwrap(),
@@ -55,6 +91,17 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
         .unwrap();
     assert!(addressed.enabled);
     assert!((addressed.master - 0.5).abs() < 0.001);
+    assert!(
+        (state
+            .output
+            .playback_runtime_status_at(light_playback::PlaybackIdentity::physical(26).unwrap())
+            .unwrap()
+            .playback
+            .master
+            - 0.5)
+            .abs()
+            < 0.001
+    );
     assert!(
         runtime
             .iter()
@@ -105,8 +152,10 @@ fn matter_activation_checkpoint_keeps_desk_independent_restart_scope() {
     state.active_show.replace_current(Some(show.clone()));
     let cue_list_id = light_core::CueListId::new();
     let mut snapshot = restored_exclusion_snapshot(cue_list_id);
-    std::sync::Arc::make_mut(&mut snapshot.playbacks)
-        .push(restored_exclusion_playback(2, cue_list_id));
+    std::sync::Arc::make_mut(&mut snapshot.playbacks).push(restored_exclusion_playback(
+        2,
+        restored_exclusion_cue_list_id(cue_list_id, 2),
+    ));
     std::sync::Arc::make_mut(&mut snapshot.playback_pages)[0]
         .slots
         .insert(2, 2);
@@ -247,7 +296,17 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
         .unwrap();
     assert!(active.enabled);
     assert!((active.master - 0.5).abs() < 0.001);
-    assert!((active.fader_position - 0.5).abs() < 0.001);
+    assert!(
+        (state
+            .output
+            .playback_runtime_status_at(light_playback::PlaybackIdentity::physical(26).unwrap())
+            .unwrap()
+            .playback
+            .fader_position
+            - 0.5)
+            .abs()
+            < 0.001
+    );
     let light = status
         .lights
         .iter()

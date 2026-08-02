@@ -224,6 +224,28 @@ impl Engine {
         self.generation.load().playback().read().runtime_status()
     }
 
+    pub fn playback_runtime_status_at(
+        &self,
+        identity: light_playback::PlaybackIdentity,
+    ) -> Option<PlaybackRuntimeStatus> {
+        self.generation
+            .load()
+            .playback()
+            .read()
+            .runtime_status_at(identity)
+    }
+
+    pub fn playback_runtime_status_for_cue_list(
+        &self,
+        cue_list_id: light_core::CueListId,
+    ) -> Option<PlaybackRuntimeStatus> {
+        self.generation
+            .load()
+            .playback()
+            .read()
+            .runtime_status_for_cue_list(cue_list_id)
+    }
+
     pub fn active_dynamic_playbacks(&self) -> Vec<ActiveDynamicPlayback> {
         self.generation
             .load()

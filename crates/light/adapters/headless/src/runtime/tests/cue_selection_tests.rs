@@ -133,46 +133,37 @@ fn cue_commands_use_the_desk_selected_concrete_playback() {
         "CUE CUE 1",
         light_application::ActionSource::Osc,
         1,
-        Some(2.0),
+        Some(3.0),
         Some(1.0),
     );
-    let runtime = state.output.playback_runtime();
-    let first_runtime = runtime
-        .iter()
-        .find(|item| item.playback_number == Some(1))
-        .unwrap();
-    let second_runtime = runtime
-        .iter()
-        .find(|item| item.playback_number == Some(2))
-        .unwrap();
-    assert_eq!(
-        (
-            first_runtime.current_cue_number,
-            first_runtime.loaded_cue_number
-        ),
-        (Some(2.0), Some(1.0))
-    );
-    assert_eq!(
-        (
-            second_runtime.current_cue_number,
-            second_runtime.loaded_cue_number
-        ),
-        (Some(3.0), None)
-    );
+    for number in [1, 2] {
+        let runtime = state
+            .output
+            .playback_runtime_status_at(light_playback::PlaybackIdentity::physical(number).unwrap())
+            .unwrap();
+        assert_eq!(
+            (
+                runtime.playback.current_cue_number,
+                runtime.playback.loaded_cue_number
+            ),
+            (Some(3.0), Some(1.0))
+        );
+    }
     execute_programmer_command(&state, &first, "CUE SET 2 CUE 1").unwrap();
     execute_programmer_command(&state, &first, "CUE CUE SET 4 . 7 CUE 2").unwrap();
-    let second_runtime = state
-        .output.playback_runtime()
-        .into_iter()
-        .find(|item| item.playback_number == Some(2))
-        .unwrap();
-    assert_eq!(
-        (
-            second_runtime.current_cue_number,
-            second_runtime.loaded_cue_number
-        ),
-        (Some(1.0), Some(2.0))
-    );
+    for number in [1, 2] {
+        let runtime = state
+            .output
+            .playback_runtime_status_at(light_playback::PlaybackIdentity::physical(number).unwrap())
+            .unwrap();
+        assert_eq!(
+            (
+                runtime.playback.current_cue_number,
+                runtime.playback.loaded_cue_number
+            ),
+            (Some(1.0), Some(2.0))
+        );
+    }
     assert_eq!(
         state
             .installation.selected_playback(first.desk.id, show_id)
@@ -194,7 +185,7 @@ fn execute_cue_and_assert_typed_event(
     let context = operator_action_context(session, source);
     let before = state.events.latest_sequence();
     execute_programmer_command_from(state, session, command, &context).unwrap();
-    assert_eq!(state.events.latest_sequence(), before + 1);
+    assert_eq!(state.events.latest_sequence(), before + 2);
 
     let light_application::EventReplay::Events(events) = state
         .events
@@ -202,8 +193,18 @@ fn execute_cue_and_assert_typed_event(
     else {
         panic!("expected retained Playback event");
     };
-    assert_eq!(events.len(), 1);
-    let event = &events[0];
+    assert_eq!(events.len(), 2);
+    let event = events
+        .iter()
+        .find(|event| {
+            matches!(
+                &event.payload,
+                light_application::ApplicationEvent::Playback(
+                    light_application::PlaybackEvent::RuntimeChanged(change)
+                ) if change.projection.playback_number == Some(playback)
+            )
+        })
+        .expect("the addressed Playback projection must be published");
     assert_eq!(event.source, light_application::EventSource::Action(source));
     assert_eq!(event.correlation_id, Some(context.correlation_id));
     let light_application::ApplicationEvent::Playback(
