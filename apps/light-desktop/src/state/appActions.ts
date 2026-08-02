@@ -23,6 +23,11 @@ export type Action =
 	| { type: "SET_PANE_RECT"; id: string; rect: Partial<GridRect> }
 	| { type: "SET_PANE_GROUP_SHORTCUTS"; id: string; value: boolean }
 	| { type: "SET_PANE_FIXTURE_ACTIVE_ONLY"; id: string; value: boolean }
+	| {
+			type: "SET_PANE_FIXTURE_COMPACT_MODE";
+			id: string;
+			mode: AppState["fixtureSheetCompactMode"];
+	  }
 	| { type: "SET_PANE_POOL_COLUMNS"; id: string; value: number }
 	| { type: "DISMISS_LAYOUT_MIGRATION_NOTICE" }
 	| { type: "SET_PANE_CUE_SIDEBAR"; id: string; value: boolean }
@@ -127,6 +132,7 @@ export type Action =
 			type: "SET_FIXTURE_SHEET_OPTIONS";
 			order?: AppState["fixtureSheetOrder"];
 			activeOnly?: boolean;
+			compactMode?: AppState["fixtureSheetCompactMode"];
 			cueListId?: string;
 			columns?: FixtureSheetColumn[];
 			showType?: boolean;

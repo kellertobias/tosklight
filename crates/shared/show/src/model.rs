@@ -24,11 +24,24 @@ pub enum FixedScreenFixtureColumn {
     Icon,
     Name,
     Patch,
-    Dimmer,
+    #[serde(alias = "dimmer")]
+    Intensity,
     Color,
     Position,
     Beam,
+    Shapers,
     Focus,
+    Control,
+    Media,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FixedScreenFixtureCompactMode {
+    #[default]
+    Off,
+    IconOnly,
+    TextOnly,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -53,6 +66,8 @@ pub enum FixedScreenPane {
         included_heads: FixedScreenFixtureIncludedHeads,
         order: FixedScreenFixtureOrder,
         active_only: bool,
+        #[serde(default)]
+        compact_mode: FixedScreenFixtureCompactMode,
         cue_list_id: Option<Uuid>,
         columns: Vec<FixedScreenFixtureColumn>,
         show_type: bool,

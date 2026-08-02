@@ -106,7 +106,7 @@ function patchColumn(): Column {
 
 function dimmerColumn(): Column {
 	return {
-		id: "dimmer",
+		id: "intensity",
 		header: "Intensity",
 		width: "minmax(95px,.7fr)",
 		render: (fixture) => {

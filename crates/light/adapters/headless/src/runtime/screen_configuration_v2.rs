@@ -335,6 +335,7 @@ fn domain_fixed_pane(pane: wire::FixedScreenPane) -> light_show::FixedScreenPane
             included_heads,
             order,
             active_only,
+            compact_mode,
             cue_list_id,
             columns,
             show_type,
@@ -360,6 +361,17 @@ fn domain_fixed_pane(pane: wire::FixedScreenPane) -> light_show::FixedScreenPane
                 }
             },
             active_only,
+            compact_mode: match compact_mode {
+                wire::FixedScreenFixtureCompactMode::Off => {
+                    light_show::FixedScreenFixtureCompactMode::Off
+                }
+                wire::FixedScreenFixtureCompactMode::IconOnly => {
+                    light_show::FixedScreenFixtureCompactMode::IconOnly
+                }
+                wire::FixedScreenFixtureCompactMode::TextOnly => {
+                    light_show::FixedScreenFixtureCompactMode::TextOnly
+                }
+            },
             cue_list_id,
             columns: columns.into_iter().map(domain_fixture_column).collect(),
             show_type,
@@ -417,11 +429,16 @@ fn domain_fixture_column(
         wire::FixedScreenFixtureColumn::Icon => light_show::FixedScreenFixtureColumn::Icon,
         wire::FixedScreenFixtureColumn::Name => light_show::FixedScreenFixtureColumn::Name,
         wire::FixedScreenFixtureColumn::Patch => light_show::FixedScreenFixtureColumn::Patch,
-        wire::FixedScreenFixtureColumn::Dimmer => light_show::FixedScreenFixtureColumn::Dimmer,
+        wire::FixedScreenFixtureColumn::Intensity => {
+            light_show::FixedScreenFixtureColumn::Intensity
+        }
         wire::FixedScreenFixtureColumn::Color => light_show::FixedScreenFixtureColumn::Color,
         wire::FixedScreenFixtureColumn::Position => light_show::FixedScreenFixtureColumn::Position,
         wire::FixedScreenFixtureColumn::Beam => light_show::FixedScreenFixtureColumn::Beam,
+        wire::FixedScreenFixtureColumn::Shapers => light_show::FixedScreenFixtureColumn::Shapers,
         wire::FixedScreenFixtureColumn::Focus => light_show::FixedScreenFixtureColumn::Focus,
+        wire::FixedScreenFixtureColumn::Control => light_show::FixedScreenFixtureColumn::Control,
+        wire::FixedScreenFixtureColumn::Media => light_show::FixedScreenFixtureColumn::Media,
     }
 }
 
@@ -440,6 +457,7 @@ fn wire_fixed_pane(pane: light_show::FixedScreenPane) -> wire::FixedScreenPane {
             included_heads,
             order,
             active_only,
+            compact_mode,
             cue_list_id,
             columns,
             show_type,
@@ -465,6 +483,17 @@ fn wire_fixed_pane(pane: light_show::FixedScreenPane) -> wire::FixedScreenPane {
                 }
             },
             active_only,
+            compact_mode: match compact_mode {
+                light_show::FixedScreenFixtureCompactMode::Off => {
+                    wire::FixedScreenFixtureCompactMode::Off
+                }
+                light_show::FixedScreenFixtureCompactMode::IconOnly => {
+                    wire::FixedScreenFixtureCompactMode::IconOnly
+                }
+                light_show::FixedScreenFixtureCompactMode::TextOnly => {
+                    wire::FixedScreenFixtureCompactMode::TextOnly
+                }
+            },
             cue_list_id,
             columns: columns.into_iter().map(wire_fixture_column).collect(),
             show_type,
@@ -522,11 +551,16 @@ fn wire_fixture_column(
         light_show::FixedScreenFixtureColumn::Icon => wire::FixedScreenFixtureColumn::Icon,
         light_show::FixedScreenFixtureColumn::Name => wire::FixedScreenFixtureColumn::Name,
         light_show::FixedScreenFixtureColumn::Patch => wire::FixedScreenFixtureColumn::Patch,
-        light_show::FixedScreenFixtureColumn::Dimmer => wire::FixedScreenFixtureColumn::Dimmer,
+        light_show::FixedScreenFixtureColumn::Intensity => {
+            wire::FixedScreenFixtureColumn::Intensity
+        }
         light_show::FixedScreenFixtureColumn::Color => wire::FixedScreenFixtureColumn::Color,
         light_show::FixedScreenFixtureColumn::Position => wire::FixedScreenFixtureColumn::Position,
         light_show::FixedScreenFixtureColumn::Beam => wire::FixedScreenFixtureColumn::Beam,
+        light_show::FixedScreenFixtureColumn::Shapers => wire::FixedScreenFixtureColumn::Shapers,
         light_show::FixedScreenFixtureColumn::Focus => wire::FixedScreenFixtureColumn::Focus,
+        light_show::FixedScreenFixtureColumn::Control => wire::FixedScreenFixtureColumn::Control,
+        light_show::FixedScreenFixtureColumn::Media => wire::FixedScreenFixtureColumn::Media,
     }
 }
 

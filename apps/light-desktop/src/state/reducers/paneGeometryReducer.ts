@@ -77,6 +77,22 @@ export function reducePaneGeometry(
 							},
 				),
 			};
+		case "SET_PANE_FIXTURE_COMPACT_MODE":
+			return {
+				...state,
+				desks: state.desks.map((desk) =>
+					desk.id !== state.activeDeskId
+						? desk
+						: {
+								...desk,
+								panes: desk.panes.map((pane) =>
+									pane.id === action.id
+										? { ...pane, fixtureSheetCompactMode: action.mode }
+										: pane,
+								),
+							},
+				),
+			};
 		case "SET_PANE_CUE_SIDEBAR":
 			return {
 				...state,

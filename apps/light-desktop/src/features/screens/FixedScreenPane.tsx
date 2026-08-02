@@ -134,6 +134,13 @@ export function FixedScreenPane({
 						pane.order === "fixture_id" ? "fixture-id" : "active"
 					}
 					fixtureSheetActiveOnly={pane.active_only}
+					fixtureSheetCompactMode={
+						pane.compact_mode === "icon_only"
+							? "icon-only"
+							: pane.compact_mode === "text_only"
+								? "text-only"
+								: "off"
+					}
 					fixtureSheetCueListId={pane.cue_list_id}
 					fixtureSheetColumns={pane.columns}
 					fixtureSheetShowType={pane.show_type}

@@ -66,11 +66,18 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
   and state separately, and omit sampled values. Poll responses publish React state only when the
   semantic bases or identities change; timestamps, revisions, and sampled-only fields do not cause
   repainting. Desktop typecheck, focused Biome, and 25 focused Fixture Sheet tests pass.
+- Built-in, pane, and fixed-screen configuration now share `Off`, `Icon only`, and `Text only`
+  persistence with independent desk-local ownership and `Off` migration defaults. The saved
+  `dimmer` column alias migrates to `intensity`; Shapers, Control, and Media are selectable without
+  becoming visible in existing layouts. Fixed-screen wire/domain contracts support all 12 identity
+  and value columns, migrate old JSON, and generated TypeScript is current. Fifty-nine focused
+  frontend persistence/surface tests, the focused show-store tests, fixed-screen route test,
+  generated-contract test, desktop typecheck, Rust package checks, and focused Biome pass.
 
 ## Remaining work
 
-- Migrate the saved Dimmer column to Intensity, expose the three new group columns, and render every
-  group through Off/Icon only/Text only from the shared member-value model.
+- Render every group through Off/Icon only/Text only from the shared member-value model, including
+  stable shared row metrics and narrower value-column widths.
 - Add accurate base-source ownership, Group-master flash/Highlight-bypass presentation, and the
   deterministic base-versus-changing-DMX acceptance proof in a later coherent slice.
 - Implement compact rendering and per-surface persistence only after the shared value model no

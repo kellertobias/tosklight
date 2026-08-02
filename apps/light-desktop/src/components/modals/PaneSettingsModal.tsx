@@ -603,19 +603,37 @@ function PaneGroupShortcutsSettings({ pane }: { pane: PaneModel }) {
 function FixtureSheetPaneSettings({ pane }: { pane: PaneModel }) {
 	const { dispatch } = useApp();
 	return (
-		<SwitchField
-			label="Show active fixtures only"
-			offLabel="All fixtures"
-			onLabel="Programmer only"
-			checked={Boolean(pane.fixtureSheetActiveOnly)}
-			onChange={(event) =>
-				dispatch({
-					type: "SET_PANE_FIXTURE_ACTIVE_ONLY",
-					id: pane.id,
-					value: event.target.checked,
-				})
-			}
-		/>
+		<FormLayout>
+			<SelectField
+				label="Compact mode"
+				value={pane.fixtureSheetCompactMode ?? "off"}
+				onChange={(mode) =>
+					dispatch({
+						type: "SET_PANE_FIXTURE_COMPACT_MODE",
+						id: pane.id,
+						mode,
+					})
+				}
+				options={[
+					{ value: "off", label: "Off" },
+					{ value: "icon-only", label: "Icon only" },
+					{ value: "text-only", label: "Text only" },
+				]}
+			/>
+			<SwitchField
+				label="Show active fixtures only"
+				offLabel="All fixtures"
+				onLabel="Programmer only"
+				checked={Boolean(pane.fixtureSheetActiveOnly)}
+				onChange={(event) =>
+					dispatch({
+						type: "SET_PANE_FIXTURE_ACTIVE_ONLY",
+						id: pane.id,
+						value: event.target.checked,
+					})
+				}
+			/>
+		</FormLayout>
 	);
 }
 

@@ -72,6 +72,7 @@ export interface PaneModel extends GridRect {
 	title: string;
 	showGroupShortcuts?: boolean;
 	fixtureSheetActiveOnly?: boolean;
+	fixtureSheetCompactMode?: FixtureSheetCompactMode;
 	showCueSidebar?: boolean;
 	cueListSource?: "fixed" | "follow-selection";
 	fixedCueListNumber?: number;
@@ -220,6 +221,7 @@ export interface AppState {
 	dmxDotSize: DmxDotSize;
 	fixtureSheetOrder: FixtureSheetOrder;
 	fixtureSheetActiveOnly: boolean;
+	fixtureSheetCompactMode: FixtureSheetCompactMode;
 	fixtureSheetCueListId: string;
 	fixtureSheetColumns: FixtureSheetColumn[];
 	fixtureSheetShowType: boolean;
@@ -234,16 +236,20 @@ export type FixtureSheetIncludedHeads =
 	| "all"
 	| "no-sub-heads"
 	| "no-master-heads";
+export type FixtureSheetCompactMode = "off" | "icon-only" | "text-only";
 export type FixtureSheetColumn =
 	| "id"
 	| "icon"
 	| "name"
 	| "patch"
-	| "dimmer"
+	| "intensity"
 	| "color"
 	| "position"
 	| "beam"
-	| "focus";
+	| "shapers"
+	| "focus"
+	| "control"
+	| "media";
 
 export interface WindowSettings {
 	dockMode: DockMode;
@@ -272,8 +278,9 @@ export interface WindowSettings {
 	dmxDotSize: DmxDotSize;
 	fixtureSheetOrder: FixtureSheetOrder;
 	fixtureSheetActiveOnly: boolean;
+	fixtureSheetCompactMode: FixtureSheetCompactMode;
 	fixtureSheetCueListId: string;
-	fixtureSheetColumns: FixtureSheetColumn[];
+	fixtureSheetColumns: Array<FixtureSheetColumn | "dimmer">;
 	fixtureSheetShowType: boolean;
 	fixtureSheetIncludedHeads: FixtureSheetIncludedHeads;
 	/** Legacy layout field retained only for migration to the Patch column. */

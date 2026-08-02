@@ -236,11 +236,14 @@ export type FixedScreenFixtureSheetColumn =
 	| "icon"
 	| "name"
 	| "patch"
-	| "dimmer"
+	| "intensity"
 	| "color"
 	| "position"
 	| "beam"
-	| "focus";
+	| "shapers"
+	| "focus"
+	| "control"
+	| "media";
 
 export type FixedScreenPane =
 	| {
@@ -248,6 +251,7 @@ export type FixedScreenPane =
 			included_heads: "all" | "no_sub_heads" | "no_master_heads";
 			order: "fixture_id" | "active";
 			active_only: boolean;
+			compact_mode: "off" | "icon_only" | "text_only";
 			cue_list_id: string | null;
 			columns: FixedScreenFixtureSheetColumn[];
 			show_type: boolean;

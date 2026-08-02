@@ -73,14 +73,27 @@ function FixtureSheetFixedSettings({
 		["icon", "Icon"],
 		["name", "Name"],
 		["patch", "Patch address"],
-		["dimmer", "Dimmer"],
+		["intensity", "Intensity"],
 		["color", "Color"],
 		["position", "Position"],
 		["beam", "Beam"],
+		["shapers", "Shapers"],
 		["focus", "Focus"],
+		["control", "Control"],
+		["media", "Media"],
 	] as const;
 	return (
 		<div className="fixed-screen-pane-settings">
+			<SelectField
+				label="Compact mode"
+				value={pane.compact_mode}
+				onChange={(compact_mode) => update({ ...pane, compact_mode })}
+				options={[
+					{ value: "off", label: "Off" },
+					{ value: "icon_only", label: "Icon only" },
+					{ value: "text_only", label: "Text only" },
+				]}
+			/>
 			<SelectField
 				label="Fixture heads"
 				value={pane.included_heads}

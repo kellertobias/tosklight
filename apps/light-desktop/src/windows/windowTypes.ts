@@ -2,6 +2,7 @@ import type { PresetFamily } from "../presetFamilies";
 import type {
 	ChannelDisplayMode,
 	FixtureSheetColumn,
+	FixtureSheetCompactMode,
 	StageView,
 } from "../types";
 
@@ -15,6 +16,7 @@ export interface WindowProps {
 	fixtureSheetIncludedHeads?: "all" | "no-sub-heads" | "no-master-heads";
 	fixtureSheetOrder?: "fixture-id" | "active";
 	fixtureSheetActiveOnly?: boolean;
+	fixtureSheetCompactMode?: FixtureSheetCompactMode;
 	fixtureSheetCueListId?: string | null;
 	fixtureSheetColumns?: FixtureSheetColumn[];
 	fixtureSheetShowType?: boolean;

@@ -3,6 +3,7 @@ import { WindowSettings } from "@tosklight/ui/window-kit";
 import { useApp } from "../state/AppContext";
 import type {
 	FixtureSheetColumn,
+	FixtureSheetCompactMode,
 	FixtureSheetIncludedHeads,
 	FixtureSheetOrder,
 } from "../types";
@@ -13,11 +14,14 @@ const columnOrder: FixtureSheetColumn[] = [
 	"icon",
 	"name",
 	"patch",
-	"dimmer",
+	"intensity",
 	"color",
 	"position",
 	"beam",
+	"shapers",
 	"focus",
+	"control",
+	"media",
 ];
 
 export const DEFAULT_FIXTURE_SHEET_COLUMNS = columnOrder.filter(
@@ -29,21 +33,26 @@ const columnLabels: Record<FixtureSheetColumn, string> = {
 	icon: "Icon",
 	name: "Name",
 	patch: "Patch address",
-	dimmer: "Dimmer",
+	intensity: "Intensity",
 	color: "Color",
 	position: "Position",
 	beam: "Beam",
+	shapers: "Shapers",
 	focus: "Focus",
+	control: "Control",
+	media: "Media",
 };
 
 function FixtureSheetViewSettings({
 	activeOnly,
+	compactMode,
 	cueLists,
 	cueListId,
 	fixtureOrder,
 	includedHeads,
 }: {
 	activeOnly: boolean;
+	compactMode: FixtureSheetCompactMode;
 	cueLists: readonly FixtureSheetCuelistOption[];
 	cueListId: string;
 	fixtureOrder: FixtureSheetOrder;
@@ -52,6 +61,23 @@ function FixtureSheetViewSettings({
 	const { dispatch } = useApp();
 	return (
 		<div className="fixture-sheet-settings-sections">
+			<section>
+				<h3>Presentation</h3>
+				<Select
+					aria-label="Compact mode"
+					value={compactMode}
+					onChange={(event) =>
+						dispatch({
+							type: "SET_FIXTURE_SHEET_OPTIONS",
+							compactMode: event.target.value as FixtureSheetCompactMode,
+						})
+					}
+				>
+					<option value="off">Off</option>
+					<option value="icon-only">Icon only</option>
+					<option value="text-only">Text only</option>
+				</Select>
+			</section>
 			<section>
 				<h3>Fixture heads</h3>
 				<Select
@@ -198,6 +224,7 @@ function FixtureSheetGroupSettings({ visible }: { visible: boolean }) {
 
 export function FixtureSheetSettings({
 	activeOnly,
+	compactMode,
 	anchor,
 	cueLists,
 	cueListId,
@@ -207,6 +234,7 @@ export function FixtureSheetSettings({
 	onClose,
 }: {
 	activeOnly: boolean;
+	compactMode: FixtureSheetCompactMode;
 	anchor: DOMRect;
 	cueLists: readonly FixtureSheetCuelistOption[];
 	cueListId: string;
@@ -228,6 +256,7 @@ export function FixtureSheetSettings({
 					content: (
 						<FixtureSheetViewSettings
 							activeOnly={activeOnly}
+							compactMode={compactMode}
 							cueLists={cueLists}
 							cueListId={cueListId}
 							fixtureOrder={fixtureOrder}

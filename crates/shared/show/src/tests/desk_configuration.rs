@@ -1,8 +1,9 @@
 use super::temporary;
 use crate::{
-    DeskStore, FixedScreenFixtureColumn, FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder,
-    FixedScreenPane, FixedScreenStageRenderQuality, PlaybackSurfaceLayout, PlaybackSurfaceRow,
-    ScreenConfiguration, ScreenContent,
+    DeskStore, FixedScreenFixtureColumn, FixedScreenFixtureCompactMode,
+    FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder, FixedScreenPane,
+    FixedScreenStageRenderQuality, PlaybackSurfaceLayout, PlaybackSurfaceRow, ScreenConfiguration,
+    ScreenContent,
 };
 use light_core::ShowId;
 use rusqlite::Connection;
@@ -329,11 +330,12 @@ fn fixed_screen_content_round_trips_and_forces_dock_off() {
                     included_heads: FixedScreenFixtureIncludedHeads::NoSubHeads,
                     order: FixedScreenFixtureOrder::Active,
                     active_only: true,
+                    compact_mode: FixedScreenFixtureCompactMode::TextOnly,
                     cue_list_id: Some(cue_list_id),
                     columns: vec![
                         FixedScreenFixtureColumn::Id,
                         FixedScreenFixtureColumn::Name,
-                        FixedScreenFixtureColumn::Dimmer,
+                        FixedScreenFixtureColumn::Intensity,
                     ],
                     show_type: false,
                     show_group_shortcuts: true,
@@ -349,11 +351,12 @@ fn fixed_screen_content_round_trips_and_forces_dock_off() {
                 included_heads: FixedScreenFixtureIncludedHeads::NoSubHeads,
                 order: FixedScreenFixtureOrder::Active,
                 active_only: true,
+                compact_mode: FixedScreenFixtureCompactMode::TextOnly,
                 cue_list_id: Some(cue_list_id),
                 columns: vec![
                     FixedScreenFixtureColumn::Id,
                     FixedScreenFixtureColumn::Name,
-                    FixedScreenFixtureColumn::Dimmer,
+                    FixedScreenFixtureColumn::Intensity,
                 ],
                 show_type: false,
                 show_group_shortcuts: true,
@@ -398,6 +401,7 @@ fn fixed_screen_content_rejects_invalid_display_settings_without_resolving_refer
                         included_heads: FixedScreenFixtureIncludedHeads::All,
                         order: FixedScreenFixtureOrder::FixtureId,
                         active_only: false,
+                        compact_mode: FixedScreenFixtureCompactMode::Off,
                         cue_list_id: Some(Uuid::new_v4()),
                         columns: vec![],
                         show_type: true,

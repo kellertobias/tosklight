@@ -53,21 +53,31 @@ export const fixtureSheetColumnIds = new Set<FixtureSheetColumn>([
 	"icon",
 	"name",
 	"patch",
-	"dimmer",
+	"intensity",
 	"color",
 	"position",
 	"beam",
+	"shapers",
 	"focus",
+	"control",
+	"media",
 ]);
 export const normalizeFixtureSheetColumns = (
-	columns: FixtureSheetColumn[] | undefined,
+	columns: readonly unknown[] | undefined,
 	fallback: FixtureSheetColumn[],
 	legacyShowPatch?: boolean,
 ) => {
-	const normalized = columns?.filter(
-		(column, index) =>
-			fixtureSheetColumnIds.has(column) && columns.indexOf(column) === index,
-	);
+	const normalized = columns
+		?.map((column) => (column === "dimmer" ? "intensity" : column))
+		.filter(
+			(column, index): column is FixtureSheetColumn =>
+				typeof column === "string" &&
+				fixtureSheetColumnIds.has(column as FixtureSheetColumn) &&
+				columns.findIndex(
+					(candidate) =>
+						(candidate === "dimmer" ? "intensity" : candidate) === column,
+				) === index,
+		);
 	if (normalized?.length && legacyShowPatch && !normalized.includes("patch")) {
 		const nameIndex = normalized.indexOf("name");
 		normalized.splice(
@@ -78,3 +88,8 @@ export const normalizeFixtureSheetColumns = (
 	}
 	return normalized?.length ? normalized : fallback;
 };
+
+export const normalizeFixtureSheetCompactMode = (
+	value: unknown,
+): AppState["fixtureSheetCompactMode"] =>
+	value === "icon-only" || value === "text-only" ? value : "off";

@@ -171,6 +171,7 @@ function PaneContent({
 				paneId={pane.id}
 				showGroupShortcuts={Boolean(pane.showGroupShortcuts)}
 				fixtureSheetActiveOnly={Boolean(pane.fixtureSheetActiveOnly)}
+				fixtureSheetCompactMode={pane.fixtureSheetCompactMode ?? "off"}
 				showCueSidebar={pane.showCueSidebar ?? true}
 				cueListSource={pane.cueListSource ?? "fixed"}
 				fixedCueListNumber={pane.fixedCueListNumber}

@@ -129,7 +129,7 @@ const state = {
 		"id",
 		"icon",
 		"name",
-		"dimmer",
+		"intensity",
 		"color",
 		"position",
 		"beam",
@@ -139,7 +139,7 @@ const state = {
 		| "icon"
 		| "name"
 		| "patch"
-		| "dimmer"
+		| "intensity"
 		| "color"
 		| "position"
 		| "beam"
@@ -216,7 +216,7 @@ beforeEach(() => {
 		"id",
 		"icon",
 		"name",
-		"dimmer",
+		"intensity",
 		"color",
 		"position",
 		"beam",
@@ -398,7 +398,7 @@ describe("Fixture Sheet Highlight stepping visualization", () => {
 	});
 
 	it("uses a compact View tab, exposes column controls, and hides optional name details", async () => {
-		state.fixtureSheetColumns = ["id", "name", "dimmer"];
+		state.fixtureSheetColumns = ["id", "name", "intensity"];
 		state.fixtureSheetShowType = false;
 		render(<FixtureSheetWindow />);
 
@@ -446,7 +446,7 @@ describe("Fixture Sheet Highlight stepping visualization", () => {
 		fireEvent.click(screen.getByRole("switch", { name: "Patch address" }));
 		expect(dispatch).toHaveBeenCalledWith({
 			type: "SET_FIXTURE_SHEET_OPTIONS",
-			columns: ["id", "name", "dimmer", "patch"],
+			columns: ["id", "name", "intensity", "patch"],
 		});
 	});
 

@@ -244,6 +244,11 @@ async fn screen_configuration_intent_routes_persist_fixed_content_and_keep_dock_
         created["screen"]["content"]["pane"]["cue_list_id"],
         missing_cue_list_id.to_string()
     );
+    assert_eq!(created["screen"]["content"]["pane"]["compact_mode"], "off");
+    assert_eq!(
+        created["screen"]["content"]["pane"]["columns"],
+        serde_json::json!(["id", "name", "intensity"])
+    );
 
     let update_body = serde_json::json!({
         "request_id":"fixed-screen-update",

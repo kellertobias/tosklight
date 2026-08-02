@@ -318,9 +318,7 @@ describe("appReducer Stage and Development pane settings", () => {
 				{
 					id: "channels-desk",
 					name: "Channels",
-					panes: [
-						{ ...pane, channelDisplayMode: "future-mode" as never },
-					],
+					panes: [{ ...pane, channelDisplayMode: "future-mode" as never }],
 				},
 			],
 			activeDeskId: "channels-desk",
@@ -563,7 +561,7 @@ describe("appReducer Cues pane settings", () => {
 });
 
 describe("appReducer Fixture Sheet pane settings", () => {
-	it("persists the pane-local Programmer-only fixture filter", () => {
+	it("persists pane-local filter and Compact mode independently", () => {
 		const state = {
 			...initialState,
 			activeDeskId: "fixtures",
@@ -581,6 +579,15 @@ describe("appReducer Fixture Sheet pane settings", () => {
 							width: 12,
 							height: 18,
 						},
+						{
+							id: "fixtures-2",
+							kind: "fixtures" as const,
+							title: "Fixture Sheet 2",
+							x: 13,
+							y: 1,
+							width: 12,
+							height: 18,
+						},
 					],
 				},
 			],
@@ -591,6 +598,13 @@ describe("appReducer Fixture Sheet pane settings", () => {
 			value: true,
 		});
 		expect(filtered.desks[0].panes[0].fixtureSheetActiveOnly).toBe(true);
+		const compact = appReducer(filtered, {
+			type: "SET_PANE_FIXTURE_COMPACT_MODE",
+			id: "fixtures-1",
+			mode: "icon-only",
+		});
+		expect(compact.desks[0].panes[0].fixtureSheetCompactMode).toBe("icon-only");
+		expect(compact.desks[0].panes[1].fixtureSheetCompactMode).toBeUndefined();
 	});
 });
 
@@ -861,7 +875,8 @@ describe("appReducer built-in window settings hydration", () => {
 		expect(hydrated.dockMode).toBe("builtins");
 		expect(hydrated.stageView).toBe("3d");
 		expect(hydrated.dmxDotSize).toBe("large");
-		expect(hydrated.fixtureSheetColumns).toEqual(["id", "name", "dimmer"]);
+		expect(hydrated.fixtureSheetColumns).toEqual(["id", "name", "intensity"]);
+		expect(hydrated.fixtureSheetCompactMode).toBe("off");
 		expect(hydrated.fixtureSheetShowType).toBe(false);
 		expect(hydrated.fixtureSheetIncludedHeads).toBe("no-sub-heads");
 		expect(hydrated.fixtureGroupsVisible).toBe(false);
@@ -885,9 +900,13 @@ describe("appReducer built-in window settings hydration", () => {
 			type: "HYDRATE_LAYOUT",
 			desks: initialState.desks,
 			activeDeskId: initialState.activeDeskId,
-			windowSettings: { fixtureSheetIncludedHeads: "no-master-heads" },
+			windowSettings: {
+				fixtureSheetIncludedHeads: "no-master-heads",
+				fixtureSheetCompactMode: "text-only",
+			},
 		});
 		expect(current.fixtureSheetIncludedHeads).toBe("no-master-heads");
+		expect(current.fixtureSheetCompactMode).toBe("text-only");
 
 		const futureQuality = appReducer(initialState, {
 			type: "HYDRATE_LAYOUT",
@@ -912,7 +931,7 @@ describe("appReducer built-in window settings hydration", () => {
 			"id",
 			"name",
 			"patch",
-			"dimmer",
+			"intensity",
 		]);
 	});
 });

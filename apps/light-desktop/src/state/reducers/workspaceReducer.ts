@@ -101,6 +101,8 @@ export function reduceWorkspace(
 				fixtureSheetOrder: action.order ?? state.fixtureSheetOrder,
 				fixtureSheetActiveOnly:
 					action.activeOnly ?? state.fixtureSheetActiveOnly,
+				fixtureSheetCompactMode:
+					action.compactMode ?? state.fixtureSheetCompactMode,
 				fixtureSheetCueListId: action.cueListId ?? state.fixtureSheetCueListId,
 				fixtureSheetColumns: normalizeFixtureSheetColumns(
 					action.columns,

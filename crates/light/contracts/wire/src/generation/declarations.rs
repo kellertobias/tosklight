@@ -314,6 +314,7 @@ fn screen_configuration(config: &Config) -> Vec<String> {
         FixedScreenFixtureIncludedHeads::decl(config),
         FixedScreenFixtureOrder::decl(config),
         FixedScreenFixtureColumn::decl(config),
+        FixedScreenFixtureCompactMode::decl(config),
         FixedScreenStageRenderQuality::decl(config),
         FixedScreenTextMode::decl(config),
         FixedScreenPane::decl(config),

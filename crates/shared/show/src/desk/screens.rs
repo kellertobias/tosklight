@@ -144,7 +144,7 @@ fn normalize_screen(screen: &mut ScreenConfiguration) -> Result<(), StoreError> 
     screen.show_dock = false;
     match pane {
         FixedScreenPane::FixtureSheet { columns, .. } => {
-            if columns.is_empty() || columns.len() > 9 {
+            if columns.is_empty() || columns.len() > 12 {
                 return Err(StoreError::Invalid(
                     "fixed Fixture Sheet requires at least one valid column".into(),
                 ));

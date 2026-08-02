@@ -40,6 +40,7 @@ export function FixtureSheetWindow({
 	fixtureSheetIncludedHeads,
 	fixtureSheetOrder,
 	fixtureSheetActiveOnly,
+	fixtureSheetCompactMode,
 	fixtureSheetCueListId,
 	fixtureSheetColumns: forcedColumns,
 	fixtureSheetShowType,
@@ -62,6 +63,9 @@ export function FixtureSheetWindow({
 	const activeOnly = compact
 		? (fixtureSheetActiveOnly ?? false)
 		: state.fixtureSheetActiveOnly;
+	const compactMode = compact
+		? (fixtureSheetCompactMode ?? "off")
+		: state.fixtureSheetCompactMode;
 	const cuelistFilter = useFixtureSheetCuelistAuthority({
 		enabled: active && (!compact || fixtureSheetCueListId != null),
 		savedCueListId: compact
@@ -125,6 +129,7 @@ export function FixtureSheetWindow({
 	return (
 		<FixtureSheetWindowView
 			compact={compact}
+			compactMode={compactMode}
 			selectionCount={selection ? selection.selected.length : null}
 			selectionActionStatus={selectionActionStatus}
 			info={<SourceLegend />}
@@ -160,6 +165,7 @@ export function FixtureSheetWindow({
 				settingsAnchor ? (
 					<FixtureSheetSettings
 						activeOnly={activeOnly}
+						compactMode={compactMode}
 						anchor={settingsAnchor}
 						cueLists={cuelistFilter.cueLists}
 						cueListId={cueListId}
@@ -196,6 +202,7 @@ function resolveSelectionActionStatus(
 
 export function FixtureSheetWindowView({
 	compact,
+	compactMode = "off",
 	selectionCount,
 	selectionActionStatus,
 	info,
@@ -207,6 +214,7 @@ export function FixtureSheetWindowView({
 	settings,
 }: {
 	compact?: boolean;
+	compactMode?: import("../types").FixtureSheetCompactMode;
 	selectionCount: number | null;
 	selectionActionStatus?: "ready" | "loading" | "scope-mismatch" | "stopped";
 	info?: ReactNode;
@@ -219,7 +227,8 @@ export function FixtureSheetWindowView({
 }) {
 	return (
 		<div
-			className="fixture-window"
+			className={`fixture-window fixture-sheet-mode-${compactMode}`}
+			data-fixture-sheet-compact-mode={compactMode}
 			data-selection-action-status={selectionActionStatus}
 		>
 			{!compact && (

@@ -5,6 +5,7 @@ import {
 	cueListWindowKind,
 	cueListWindowTitle,
 	normalizeFixtureSheetColumns,
+	normalizeFixtureSheetCompactMode,
 	normalizeFixtureSheetIncludedHeads,
 } from "../reducerHelpers";
 
@@ -83,6 +84,9 @@ export function reduceHydration(
 					state.fixtureSheetColumns,
 					action.windowSettings?.fixtureSheetShowPatch,
 				),
+				fixtureSheetCompactMode: normalizeFixtureSheetCompactMode(
+					action.windowSettings?.fixtureSheetCompactMode,
+				),
 				presetFamily: normalizePresetFamily(
 					action.windowSettings?.presetFamily,
 					state.presetFamily,
@@ -102,9 +106,7 @@ export function reduceHydration(
 						: isRetiredWindow(action.windowSettings.builtIn)
 							? null
 							: cueListWindowKind(action.windowSettings.builtIn),
-				lastBuiltIn: isRetiredWindow(
-					action.windowSettings?.lastBuiltIn,
-				)
+				lastBuiltIn: isRetiredWindow(action.windowSettings?.lastBuiltIn)
 					? state.lastBuiltIn
 					: cueListWindowKind(
 							action.windowSettings?.lastBuiltIn ?? state.lastBuiltIn,
@@ -133,6 +135,13 @@ export function reduceHydration(
 									? {
 											channelDisplayMode: normalizeChannelDisplayMode(
 												pane.channelDisplayMode,
+											),
+										}
+									: {}),
+								...(kind === "fixtures"
+									? {
+											fixtureSheetCompactMode: normalizeFixtureSheetCompactMode(
+												pane.fixtureSheetCompactMode,
 											),
 										}
 									: {}),

@@ -16,6 +16,7 @@ vi.mock("../../windows/FixtureSheetWindow", () => ({
 			data-testid="fixture-sheet"
 			data-view-only={String(props.viewOnly)}
 			data-heads={String(props.fixtureSheetIncludedHeads)}
+			data-compact-mode={String(props.fixtureSheetCompactMode)}
 		/>
 	),
 }));
@@ -45,8 +46,9 @@ function fixtureSheet(): FixedScreenPaneConfiguration {
 		included_heads: "no_sub_heads",
 		order: "active",
 		active_only: true,
+		compact_mode: "text_only",
 		cue_list_id: null,
-		columns: ["id", "name", "dimmer"],
+		columns: ["id", "name", "intensity"],
 		show_type: true,
 		show_group_shortcuts: true,
 	};
@@ -67,6 +69,10 @@ describe("FixedScreenPane", () => {
 		expect(screen.getByTestId("fixture-sheet")).toHaveAttribute(
 			"data-heads",
 			"no-sub-heads",
+		);
+		expect(screen.getByTestId("fixture-sheet")).toHaveAttribute(
+			"data-compact-mode",
+			"text-only",
 		);
 
 		view.rerender(

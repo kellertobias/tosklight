@@ -11,10 +11,11 @@ mod show_store;
 pub use desk::DeskStore;
 pub use error::StoreError;
 pub use model::{
-    ClientDesk, ControlDesk, DeskUser, FixedScreenFixtureColumn, FixedScreenFixtureIncludedHeads,
-    FixedScreenFixtureOrder, FixedScreenPane, FixedScreenStageRenderQuality, FixedScreenTextMode,
-    PersistedSession, PlaybackSurfaceLayout, PlaybackSurfaceRow, RevisionCopySource,
-    ScreenConfiguration, ScreenContent, ShowEntry, ShowRevision, VersionedObject,
+    ClientDesk, ControlDesk, DeskUser, FixedScreenFixtureColumn, FixedScreenFixtureCompactMode,
+    FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder, FixedScreenPane,
+    FixedScreenStageRenderQuality, FixedScreenTextMode, PersistedSession, PlaybackSurfaceLayout,
+    PlaybackSurfaceRow, RevisionCopySource, ScreenConfiguration, ScreenContent, ShowEntry,
+    ShowRevision, VersionedObject,
 };
 pub use portable::{
     FixtureProfileDigest, FixtureProfileRevision, FixtureProfileRevisionId,
