@@ -1,5 +1,6 @@
 use super::prepare::{PreparedPatch, plan_patch, prepare_patch};
 use super::query::build_snapshot;
+use super::record_index::StoredFixtureRecords;
 use super::replay::{ReplayCache, ReplayKey};
 use super::validation::validate_action;
 use super::{
@@ -232,6 +233,31 @@ fn validate_active_document(
     envelope: &ActionEnvelope<PatchFixturesCommand>,
 ) -> Result<(), ActionError> {
     validate_active_show_id(document, envelope.command.show_id)?;
+    let stored = if envelope.command.fixture_updates.is_empty() {
+        None
+    } else {
+        Some(StoredFixtureRecords::load(document)?)
+    };
+    for update in &envelope.command.fixture_updates {
+        if document.revision() != update.expected_show_revision {
+            return Err(
+                ActionError::new(ActionErrorKind::Conflict, "stale show revision")
+                    .at_revision(document.revision().value()),
+            );
+        }
+        let current = stored
+            .as_ref()
+            .and_then(|stored| stored.get(update.fixture_id))
+            .ok_or_else(|| {
+                ActionError::new(ActionErrorKind::NotFound, "patched fixture does not exist")
+            })?;
+        if current.revision != update.expected_fixture_revision {
+            return Err(
+                ActionError::new(ActionErrorKind::Conflict, "stale fixture revision")
+                    .at_revision(current.revision),
+            );
+        }
+    }
     let Some(expected) = envelope.context.expected_revision else {
         return Err(ActionError::new(
             ActionErrorKind::Invalid,

@@ -1,4 +1,4 @@
-use super::{PatchFixturesCommand, PatchFixturesResult};
+use super::{PatchFixtureUpdateAction, PatchFixturesCommand, PatchFixturesResult};
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use light_fixture::{MultiPatchInstance, PatchedFixturePatch};
 use std::{
@@ -144,6 +144,54 @@ fn command_bytes(command: &PatchFixturesCommand) -> usize {
     fixtures
         .saturating_add(command.remove_fixture_ids.capacity() * size_of::<light_core::FixtureId>())
         .saturating_add(placements)
+        .saturating_add(
+            command.fixture_updates.capacity() * size_of::<super::PatchFixtureUpdateIntent>(),
+        )
+        .saturating_add(
+            command
+                .fixture_updates
+                .iter()
+                .map(update_bytes)
+                .sum::<usize>(),
+        )
+}
+
+fn update_bytes(update: &super::PatchFixtureUpdateIntent) -> usize {
+    let PatchFixtureUpdateAction::SetInstalledAppearance { appearance } = &update.action else {
+        return 0;
+    };
+    appearance_bytes(appearance)
+}
+
+fn appearance_bytes(appearance: &light_fixture::InstalledFixtureAppearance) -> usize {
+    use light_fixture::{GelAssignment, InstalledLightSource};
+
+    let source = match &appearance.light_source {
+        InstalledLightSource::Other { label } => label.capacity(),
+        _ => 0,
+    };
+    source.saturating_add(match &appearance.gel {
+        GelAssignment::OpenWhite => 0,
+        GelAssignment::BuiltIn {
+            catalog_id,
+            entry_id,
+            embedded_fallback,
+        } => catalog_id
+            .capacity()
+            .saturating_add(entry_id.capacity())
+            .saturating_add(embedded_fallback.number.capacity())
+            .saturating_add(embedded_fallback.name.capacity())
+            .saturating_add(embedded_fallback.display_srgb.capacity())
+            .saturating_add(embedded_fallback.visualizer_srgb.capacity()),
+        GelAssignment::Custom {
+            name,
+            color_srgb,
+            note,
+        } => name
+            .capacity()
+            .saturating_add(color_srgb.capacity())
+            .saturating_add(note.as_ref().map_or(0, String::capacity)),
+    })
 }
 
 fn result_bytes(result: &PatchFixturesResult) -> usize {

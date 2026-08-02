@@ -10,12 +10,14 @@ mod record_index;
 mod records;
 mod replay;
 mod service;
+mod update;
 mod validation;
 mod vector_spread;
 
 pub use model::{
-    PatchChange, PatchFixtureCandidate, PatchFixtureProjection, PatchFixturesCommand,
-    PatchFixturesResult, PatchModeProjection, PatchOperatorAddressOverride, PatchPlacementIntent,
+    PatchChange, PatchFixtureAxis, PatchFixtureCandidate, PatchFixtureProjection,
+    PatchFixtureUpdateAction, PatchFixtureUpdateIntent, PatchFixturesCommand, PatchFixturesResult,
+    PatchModeProjection, PatchOperatorAddressOverride, PatchPlacementIntent,
     PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
     PatchSplitPlacementMode, PatchVectorAxis, PatchVectorKind, PatchVectorSpreadIntent,
 };

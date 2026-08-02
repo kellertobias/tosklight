@@ -1,7 +1,8 @@
 use crate::{ActionContext, ApplicationCommand, CommandFamily};
 use light_core::{FixtureId, Revision, ShowId};
 use light_fixture::{
-    FixtureSplit, PatchPolicy, PatchedFixturePatch, PatchedFixtureProfileReference,
+    FixtureSplit, InstalledFixtureAppearance, PatchPolicy, PatchedFixturePatch,
+    PatchedFixtureProfileReference,
 };
 use light_show::{PortablePatchRevision, PortableShowRevision};
 use uuid::Uuid;
@@ -30,12 +31,70 @@ pub struct PatchFixturesCommand {
     pub placements: Vec<PatchPlacementIntent>,
     /// Ordered coordinate spreads resolved against authoritative candidates on the server.
     pub vector_spreads: Vec<PatchVectorSpreadIntent>,
+    /// Sparse, revision-guarded edits resolved from the authoritative stored fixture on the
+    /// server. Keeping the raw intent in the command makes request replay independent of any
+    /// read-modify-write projection.
+    pub fixture_updates: Vec<PatchFixtureUpdateIntent>,
 }
 
 impl ApplicationCommand for PatchFixturesCommand {
     type Value = PatchFixturesResult;
 
     const FAMILY: CommandFamily = CommandFamily::Show;
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PatchFixtureUpdateIntent {
+    pub fixture_id: FixtureId,
+    pub expected_fixture_revision: Revision,
+    pub expected_show_revision: PortableShowRevision,
+    /// Absent targets the root physical fixture. Present must resolve to that exact copy.
+    pub multipatch_instance_id: Option<Uuid>,
+    pub action: PatchFixtureUpdateAction,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum PatchFixtureUpdateAction {
+    SetMasters {
+        group_masters_enabled: bool,
+        grand_master_enabled: bool,
+    },
+    SetPanTilt {
+        invert_pan: bool,
+        invert_tilt: bool,
+    },
+    SetMoveInBlack {
+        enabled: bool,
+        delay_millis: u64,
+    },
+    SetLocationAxis {
+        axis: PatchFixtureAxis,
+        millimetres: i32,
+    },
+    SetRotationAxis {
+        axis: PatchFixtureAxis,
+        degrees: f32,
+    },
+    SetBracketAngle {
+        degrees: f32,
+    },
+    SetShaperModuleAngle {
+        degrees: Option<f32>,
+    },
+    SetStaticShaperAngle {
+        element: u8,
+        degrees: f32,
+    },
+    SetInstalledAppearance {
+        appearance: InstalledFixtureAppearance,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PatchFixtureAxis {
+    X,
+    Y,
+    Z,
 }
 
 #[derive(Clone, Debug, PartialEq)]

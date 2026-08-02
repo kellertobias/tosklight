@@ -202,9 +202,10 @@ pub use selective_import::{
 };
 pub use show_compiler::{PreparedShowCandidate, prepare_show_candidate};
 pub use show_patch::{
-    PatchChange, PatchFixtureCandidate, PatchFixtureProjection, PatchFixturesCommand,
-    PatchFixturesResult, PatchModeProjection, PatchOperatorAddressOverride, PatchPerformancePhase,
-    PatchPlacementIntent, PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
+    PatchChange, PatchFixtureAxis, PatchFixtureCandidate, PatchFixtureProjection,
+    PatchFixtureUpdateAction, PatchFixtureUpdateIntent, PatchFixturesCommand, PatchFixturesResult,
+    PatchModeProjection, PatchOperatorAddressOverride, PatchPerformancePhase, PatchPlacementIntent,
+    PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
     PatchSplitPlacementMode, PatchVectorAxis, PatchVectorKind, PatchVectorSpreadIntent,
     ShowPatchPorts, ShowPatchService,
 };

@@ -1,5 +1,6 @@
 use super::{
-    PatchFixtureCandidate, PatchFixturesCommand, PatchPlacementIntent, PatchSplitPlacementMode,
+    PatchFixtureCandidate, PatchFixtureUpdateAction, PatchFixturesCommand, PatchPlacementIntent,
+    PatchSplitPlacementMode,
 };
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use std::collections::HashSet;
@@ -21,6 +22,7 @@ pub(super) fn validate_action(
         .fixtures
         .len()
         .checked_add(command.remove_fixture_ids.len())
+        .and_then(|count| count.checked_add(command.fixture_updates.len()))
         .ok_or_else(|| invalid("patch batch is too large"))?;
     if change_count == 0 || change_count > MAX_PATCH_FIXTURES {
         return Err(invalid(format!(
@@ -41,6 +43,21 @@ pub(super) fn validate_action(
         if !fixture_ids.insert(fixture.patch.fixture_id) {
             return Err(invalid("patch batch contains a duplicate fixture identity"));
         }
+    }
+    let mut update_ids = HashSet::with_capacity(command.fixture_updates.len());
+    for update in &command.fixture_updates {
+        if !update_ids.insert(update.fixture_id) {
+            return Err(invalid(
+                "patch batch contains more than one sparse update for a fixture",
+            ));
+        }
+        if fixture_ids.contains(&update.fixture_id) {
+            return Err(invalid(
+                "patch batch cannot replace and sparsely update the same fixture",
+            ));
+        }
+        validate_fixture_update(&update.action)?;
+        elements = elements.saturating_add(1);
     }
     let mut placed_fixture_ids = HashSet::new();
     for placement in &command.placements {
@@ -103,8 +120,55 @@ pub(super) fn validate_action(
                 "patch batch cannot update and remove the same fixture identity",
             ));
         }
+        if update_ids.contains(fixture_id) {
+            return Err(invalid(
+                "patch batch cannot update and remove the same fixture identity",
+            ));
+        }
     }
     Ok(())
+}
+
+fn validate_fixture_update(action: &PatchFixtureUpdateAction) -> Result<(), ActionError> {
+    match action {
+        PatchFixtureUpdateAction::SetRotationAxis { degrees, .. } => {
+            if !degrees.is_finite() {
+                return Err(invalid("fixture rotation must be finite"));
+            }
+        }
+        PatchFixtureUpdateAction::SetBracketAngle { degrees } => {
+            validate_normalized_angle(*degrees)?;
+        }
+        PatchFixtureUpdateAction::SetStaticShaperAngle { element, degrees } => {
+            if !(1..=4).contains(element) {
+                return Err(invalid("static shaper element must be within 1-4"));
+            }
+            validate_normalized_angle(*degrees)?;
+        }
+        PatchFixtureUpdateAction::SetShaperModuleAngle { degrees } => {
+            if let Some(degrees) = degrees {
+                validate_normalized_angle(*degrees)?;
+            }
+        }
+        PatchFixtureUpdateAction::SetInstalledAppearance { appearance } => {
+            appearance.validate().map_err(invalid)?;
+        }
+        PatchFixtureUpdateAction::SetMasters { .. }
+        | PatchFixtureUpdateAction::SetPanTilt { .. }
+        | PatchFixtureUpdateAction::SetMoveInBlack { .. }
+        | PatchFixtureUpdateAction::SetLocationAxis { .. } => {}
+    }
+    Ok(())
+}
+
+fn validate_normalized_angle(degrees: f32) -> Result<(), ActionError> {
+    if degrees.is_finite() && (-180.0..180.0).contains(&degrees) {
+        Ok(())
+    } else {
+        Err(invalid(
+            "installed visualization angle must be finite within [-180, 180)",
+        ))
+    }
 }
 
 fn validate_placement(

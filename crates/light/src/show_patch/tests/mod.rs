@@ -1,12 +1,15 @@
 mod support;
 
+use super::{PatchFixtureUpdateAction, PatchFixtureUpdateIntent};
 use crate::ActionErrorKind;
 use crate::active_show::PreparedActiveShowTransaction;
 use crate::{
     PatchOperatorAddressOverride, PatchPlacementIntent, PatchSplitPlacementIntent,
     PatchSplitPlacementMode, PatchVectorAxis, PatchVectorKind, PatchVectorSpreadIntent,
 };
+use light_core::Revision;
 use light_show::FixtureProfileRevision;
+use light_show::PortableShowRevision;
 use serde_json::json;
 use support::{CounterSnapshot, FailurePoint, TestRig, envelope, patch_batch, profile_with_modes};
 use uuid::Uuid;
@@ -343,6 +346,198 @@ fn stale_patch_revision_stops_before_profile_resolution_or_side_effects() {
 }
 
 #[test]
+fn sparse_updates_apply_paired_fields_to_the_exact_root_or_copy() {
+    let (profile, reference) = profile_with_modes(1);
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let mut add = patch_batch(rig.ports.show_id(), reference, 1);
+    let fixture_id = add.fixtures[0].patch.fixture_id;
+    let copy_id = Uuid::from_u128(700_001);
+    add.fixtures[0]
+        .patch
+        .multipatch
+        .push(light_fixture::MultiPatchInstance {
+            id: copy_id,
+            name: "Copy".into(),
+            universe: None,
+            address: None,
+            split_patches: vec![light_fixture::SplitPatch {
+                split: 1,
+                universe: None,
+                address: None,
+            }],
+            location: Default::default(),
+            rotation: Default::default(),
+            invert_pan: false,
+            invert_tilt: false,
+            bracket_angle: 0.0,
+            shaper_angle: None,
+            installed_appearance: Default::default(),
+        });
+    rig.service
+        .handle(envelope(add, "sparse-seed", 0), &rig.ports)
+        .unwrap();
+
+    let masters = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        1,
+        1,
+        None,
+        PatchFixtureUpdateAction::SetMasters {
+            group_masters_enabled: false,
+            grand_master_enabled: true,
+        },
+    );
+    let masters = rig
+        .service
+        .handle(envelope(masters, "paired-masters", 1), &rig.ports)
+        .unwrap();
+    assert_eq!(masters.change.fixtures.len(), 1);
+    assert!(!masters.change.fixtures[0].patch.group_masters_enabled);
+    assert!(masters.change.fixtures[0].patch.grand_master_enabled);
+
+    let copy_pan_tilt = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        2,
+        2,
+        Some(copy_id),
+        PatchFixtureUpdateAction::SetPanTilt {
+            invert_pan: true,
+            invert_tilt: true,
+        },
+    );
+    let changed = rig
+        .service
+        .handle(envelope(copy_pan_tilt, "paired-copy-axis", 2), &rig.ports)
+        .unwrap();
+    let patch = &changed.change.fixtures[0].patch;
+    assert!(!patch.invert_pan && !patch.invert_tilt);
+    assert!(patch.multipatch[0].invert_pan && patch.multipatch[0].invert_tilt);
+    assert_eq!(changed.change.show_revision.value(), 3);
+    assert_eq!(changed.change.patch_revision.value(), 3);
+    assert_eq!(changed.event_sequence, Some(3));
+
+    let root_only = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        3,
+        3,
+        Some(copy_id),
+        PatchFixtureUpdateAction::SetMoveInBlack {
+            enabled: false,
+            delay_millis: 250,
+        },
+    );
+    let error = rig
+        .service
+        .handle(envelope(root_only, "copy-mib", 3), &rig.ports)
+        .unwrap_err();
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert!(error.message.contains("owned by the root fixture"));
+    assert_eq!(rig.service.events().latest_sequence(), 3);
+}
+
+#[test]
+fn sparse_update_replay_collision_noop_and_revision_guards_are_exact() {
+    let (profile, reference) = profile_with_modes(1);
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let add = patch_batch(rig.ports.show_id(), reference, 1);
+    let fixture_id = add.fixtures[0].patch.fixture_id;
+    rig.service
+        .handle(envelope(add, "guard-seed", 0), &rig.ports)
+        .unwrap();
+
+    let command = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        1,
+        1,
+        None,
+        PatchFixtureUpdateAction::SetMoveInBlack {
+            enabled: false,
+            delay_millis: 125,
+        },
+    );
+    let first = rig
+        .service
+        .handle(envelope(command.clone(), "sparse-replay", 1), &rig.ports)
+        .unwrap();
+    let replay = rig
+        .service
+        .handle(envelope(command.clone(), "sparse-replay", 1), &rig.ports)
+        .unwrap();
+    assert!(replay.replayed);
+    assert_eq!(replay.event_sequence, first.event_sequence);
+    assert_eq!(rig.service.events().latest_sequence(), 2);
+
+    let mut collision = command;
+    collision.fixture_updates[0].action = PatchFixtureUpdateAction::SetMoveInBlack {
+        enabled: true,
+        delay_millis: 125,
+    };
+    let error = rig
+        .service
+        .handle(envelope(collision, "sparse-replay", 1), &rig.ports)
+        .unwrap_err();
+    assert_eq!(error.kind, ActionErrorKind::Conflict);
+    assert!(error.message.contains("request_id was already used"));
+
+    let noop = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        2,
+        2,
+        None,
+        PatchFixtureUpdateAction::SetMoveInBlack {
+            enabled: false,
+            delay_millis: 125,
+        },
+    );
+    let noop = rig
+        .service
+        .handle(envelope(noop, "sparse-noop", 2), &rig.ports)
+        .unwrap();
+    assert!(!noop.changed);
+    assert_eq!(noop.event_sequence, None);
+    assert_eq!(rig.service.events().latest_sequence(), 2);
+
+    let stale_show = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        2,
+        1,
+        None,
+        PatchFixtureUpdateAction::SetBracketAngle { degrees: 10.0 },
+    );
+    let error = rig
+        .service
+        .handle(envelope(stale_show, "stale-show-update", 2), &rig.ports)
+        .unwrap_err();
+    assert_eq!(error.kind, ActionErrorKind::Conflict);
+    assert_eq!(error.message, "stale show revision");
+
+    let stale_fixture = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        1,
+        2,
+        None,
+        PatchFixtureUpdateAction::SetBracketAngle { degrees: 10.0 },
+    );
+    let error = rig
+        .service
+        .handle(
+            envelope(stale_fixture, "stale-fixture-update", 2),
+            &rig.ports,
+        )
+        .unwrap_err();
+    assert_eq!(error.kind, ActionErrorKind::Conflict);
+    assert_eq!(error.message, "stale fixture revision");
+    assert_eq!(rig.service.events().latest_sequence(), 2);
+}
+
+#[test]
 fn unrelated_show_mutation_does_not_stale_the_patch_revision() {
     let (profile, reference) = profile_with_modes(1);
     let rig = TestRig::new(profile, FailurePoint::None);
@@ -659,6 +854,7 @@ fn removal_uses_the_same_atomic_compile_and_event_path() {
         remove_fixture_ids: vec![fixture_id],
         placements: Vec::new(),
         vector_spreads: Vec::new(),
+        fixture_updates: Vec::new(),
     };
 
     let result = rig
@@ -701,6 +897,7 @@ fn removing_an_already_absent_fixture_is_an_idempotent_noop() {
         remove_fixture_ids: vec![light_core::FixtureId::new()],
         placements: Vec::new(),
         vector_spreads: Vec::new(),
+        fixture_updates: Vec::new(),
     };
 
     let result = rig
@@ -1014,6 +1211,30 @@ fn planned_no_effect_counts() -> CounterSnapshot {
     CounterSnapshot {
         active_show_begins: 2,
         ..CounterSnapshot::default()
+    }
+}
+
+fn sparse_update(
+    show_id: light_core::ShowId,
+    fixture_id: light_core::FixtureId,
+    expected_fixture_revision: u64,
+    expected_show_revision: u64,
+    multipatch_instance_id: Option<Uuid>,
+    action: PatchFixtureUpdateAction,
+) -> crate::PatchFixturesCommand {
+    crate::PatchFixturesCommand {
+        show_id,
+        fixtures: Vec::new(),
+        remove_fixture_ids: Vec::new(),
+        placements: Vec::new(),
+        vector_spreads: Vec::new(),
+        fixture_updates: vec![PatchFixtureUpdateIntent {
+            fixture_id,
+            expected_fixture_revision: Revision::from(expected_fixture_revision),
+            expected_show_revision: PortableShowRevision::from_value(expected_show_revision),
+            multipatch_instance_id,
+            action,
+        }],
     }
 }
 

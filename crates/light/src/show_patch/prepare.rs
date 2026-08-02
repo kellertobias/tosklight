@@ -4,6 +4,7 @@ use super::profiles::ResolvedProfiles;
 use super::projection::build_change;
 use super::record_index::StoredFixtureRecords;
 use super::records::{build_records, stage_records, stage_removals};
+use super::update::resolve_fixture_updates;
 use super::vector_spread::apply_vector_spreads;
 use super::{PatchChange, PatchFixturesCommand, PatchPerformancePhase, ShowPatchPorts};
 use crate::{ActionError, ActionErrorKind, PreparedShowCandidate, prepare_show_candidate};
@@ -36,9 +37,14 @@ pub(super) fn plan_patch<P: ShowPatchPorts>(
     ports: &P,
 ) -> Result<PatchPlan, ActionError> {
     let stored = StoredFixtureRecords::load(document)?;
-    let materialized = materialize_touched_legacy_profiles(document, &stored, command)?;
-    let profiles = ResolvedProfiles::resolve(document, command, materialized, ports)?;
-    let fixtures = assign_placement_addresses(command, &profiles)?;
+    let mut expanded = command.clone();
+    expanded
+        .fixtures
+        .extend(resolve_fixture_updates(&stored, &command.fixture_updates)?);
+    expanded.fixture_updates.clear();
+    let materialized = materialize_touched_legacy_profiles(document, &stored, &expanded)?;
+    let profiles = ResolvedProfiles::resolve(document, &expanded, materialized, ports)?;
+    let fixtures = assign_placement_addresses(&expanded, &profiles)?;
     let fixtures = apply_vector_spreads(fixtures, &command.vector_spreads)?;
     Ok(PatchPlan { profiles, fixtures })
 }
@@ -57,6 +63,7 @@ pub(super) fn prepare_patch<P: ShowPatchPorts>(
         remove_fixture_ids: command.remove_fixture_ids.clone(),
         placements: Vec::new(),
         vector_spreads: Vec::new(),
+        fixture_updates: Vec::new(),
     };
     let fixtures = build_records(&stored, &profiles, &assigned_command)?;
     let mut transaction = document.transaction();
@@ -75,7 +82,7 @@ pub(super) fn prepare_patch<P: ShowPatchPorts>(
     let projection = document
         .candidate(candidate.transaction())
         .map_err(candidate_error)?;
-    ensure_patch_scoped_candidate(document, projection, command)?;
+    ensure_patch_scoped_candidate(document, projection, &assigned_command)?;
     let change = build_change(projection, &fixtures, &removed, &modes)?;
     Ok(PreparedPatch::Mutation(Box::new(PreparedMutation {
         candidate,
