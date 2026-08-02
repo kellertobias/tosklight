@@ -136,6 +136,17 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   independent Group, Page, and Playback identity/revision guards, server-side Group resolution and
   Playback allocation, atomic writes, and replay identity. Five focused application tests, six wire
   contract/schema tests, two headless conversion/bounds tests, formatting, and diff checks passed.
+- Commit `57bcc861` gives legacy uniform and lane-consistent spatial phase ordering one centralized
+  typed migration boundary, losslessly writes inferred local mappings through pool, Cue, Playback,
+  PlaybackPage, and touched Dynamic objects, and preserves divergent PerLane output on the explicit
+  compatibility shim. Running instances now atomically re-resolve live Group membership, mapping,
+  Dynamic definitions, and Stage positions without restarting clocks or controllers. All 57
+  Dynamics tests, 17 show-compiler tests, strict Dynamics Clippy, the headless package check, and a
+  real Programmer scheduler reconciliation test passed.
+- Commit `e56052d0` removes `playback_fader` from Group-to-Playback resolution, chooses the lowest
+  authoritative `PlaybackTarget::Group` assignment deterministically, and normalizes the retained
+  legacy `SET GROUP … AT …` input alias into the typed, identity/revision-guarded assignment command.
+  Focused alias, snapshot, and unassigned/stale-pointer tests passed, as did the headless check.
 
 ## Remaining work
 
@@ -145,12 +156,14 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   recovery paths have been audited. Recording, mutation, validation, selective import, startup
   migration, structural lossless identity, and idempotence proof are integrated; tolerant legacy
   reads remain deliberately available until the final compatibility pass.
-- Re-evaluate live-bound Dynamic membership, mapping, and Stage positions when those inputs change,
-  and migrate every persisted legacy `PhaseOrdering` surface without changing existing output.
+- Keep the deliberate divergent PerLane compatibility shim until a future representation can encode
+  multiple legacy lane mappings without changing output; uniform and lane-consistent definitions now
+  write through a local mapping while retaining their legacy ordering as the runtime compatibility
+  marker.
 - Finish moving Group Master pointer resolution, legacy assignment aliases, and portable writes away
   from `GroupDefinition.master`/`playback_fader`; runtime readers and typed assignment are integrated,
-  while write-first portable migration, field retirement, generated contracts, and desktop
-  consumption remain.
+  while initial-level migration, field retirement, generated contracts, and desktop consumption
+  remain.
 - Connect the typed SET state machine to the command line, Group tiles, Playback controls, and
   revision-guarded application commands; its committed pure model is not runtime proof.
 
