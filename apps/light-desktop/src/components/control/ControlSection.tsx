@@ -24,7 +24,7 @@ export function ControlSection() {
 			commandLine={<CommandLineBar />}
 			programmer={
 				state.builtIn === "patch" ? (
-					<PatchParameterControls />
+					<PatchParameterControls hardwareConnected={hardware} />
 				) : (
 					<ParameterControls />
 				)

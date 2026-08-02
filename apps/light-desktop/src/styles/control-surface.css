@@ -1510,35 +1510,6 @@ button.large-action:disabled {
 	align-self: center;
 	color: var(--amber);
 }
-.patch-vector-control {
-	min-width: 0;
-	min-height: 0;
-	display: grid;
-	grid-template-rows: auto 1fr auto;
-	padding: 8px;
-	border: 1px solid var(--line);
-	border-radius: 8px;
-	background: var(--panel2);
-}
-.patch-vector-control > span {
-	color: var(--muted);
-	font-size: 11px;
-}
-.patch-vector-control > strong {
-	align-self: end;
-	font-size: 25px;
-}
-.patch-vector-control > div {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 5px;
-}
-.patch-vector-control button {
-	min-height: 44px;
-	border: 1px solid var(--line2);
-	border-radius: 7px;
-	background: var(--panel);
-}
 .fixture-window .fixture-table {
 	flex: 1;
 	min-height: 0;

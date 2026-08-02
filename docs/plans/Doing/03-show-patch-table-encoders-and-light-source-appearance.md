@@ -70,6 +70,13 @@ before moving it to `Done` in a semantic commit.
   `0` remains enabled at zero delay, fractional values use millisecond rounding, and invalid,
   non-finite, non-decimal, or unsafe-overflow input is rejected visibly. Desktop typecheck and 50
   focused table/editor/parser tests pass.
+- The patch parameter deck now has explicit Location and Visualization tabs and uses the shared
+  six-slot touch/hardware encoder components instead of the retired plus/minus cards. Location is
+  exactly X/Y/Z then Rotation X/Y/Z, displays metres/degrees, persists integer millimetres for
+  location, routes fine/coarse software and attached-hardware turns to the exact root/copy, and
+  opens the same absolute Set Value surface from touch or hardware press. Visualization currently
+  preserves all six disabled slots until the appearance projection and profile-role availability
+  are integrated. Desktop typecheck and all 9 focused patch-encoder tests pass.
 
 ## Current behavior and problem
 
