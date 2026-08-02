@@ -1,6 +1,9 @@
+mod gel_catalog;
 mod migration;
 mod package_io;
 mod profiles;
+
+pub use gel_catalog::*;
 
 use crate::FixtureError;
 use rusqlite::{Connection, params};
@@ -39,7 +42,9 @@ impl FixtureLibrary {
              CREATE TABLE IF NOT EXISTS fixture_profile_migration_failures(legacy_id TEXT NOT NULL,legacy_revision INTEGER NOT NULL,error TEXT NOT NULL,PRIMARY KEY(legacy_id,legacy_revision));
              CREATE TABLE IF NOT EXISTS fixture_library_warnings(id INTEGER PRIMARY KEY AUTOINCREMENT,message TEXT NOT NULL UNIQUE);
              CREATE TABLE IF NOT EXISTS library_metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-             CREATE TABLE IF NOT EXISTS fixture_package_installations(package_path TEXT PRIMARY KEY,package_digest TEXT NOT NULL,profile_id TEXT NOT NULL,installed_revision INTEGER NOT NULL);",
+             CREATE TABLE IF NOT EXISTS fixture_package_installations(package_path TEXT PRIMARY KEY,package_digest TEXT NOT NULL,profile_id TEXT NOT NULL,installed_revision INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS gel_catalogs(id TEXT PRIMARY KEY,name TEXT NOT NULL,revision INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS gel_catalog_entries(catalog_id TEXT NOT NULL,entry_id TEXT NOT NULL,number TEXT NOT NULL,name TEXT NOT NULL,display_srgb TEXT NOT NULL,visualizer_srgb TEXT NOT NULL,sort_order INTEGER NOT NULL,PRIMARY KEY(catalog_id,entry_id),UNIQUE(catalog_id,number),FOREIGN KEY(catalog_id) REFERENCES gel_catalogs(id) ON DELETE CASCADE);",
         )?;
         if conn
             .prepare("SELECT source_gdtf FROM fixture_definitions LIMIT 0")
