@@ -137,8 +137,6 @@ export const dimmerApiBoundaries: FoundationalCase = {
 				derived_from: { source_group_id: "3", rule: { type: "all" } },
 				frozen_from: null,
 				programming: {},
-				master: 1,
-				playback_fader: null,
 			});
 			const before = JSON.stringify(await objects(api, "group"));
 			await select(api, []);

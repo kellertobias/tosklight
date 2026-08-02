@@ -130,7 +130,6 @@ function projectRuntimeGroups(
 			return [existing.group];
 		const projected: RuntimeGroup = {
 			...group,
-			body: { ...group.body, master: projection.master },
 			runtime: {
 				master: projection.master,
 				flashLevel: projection.flash_level,

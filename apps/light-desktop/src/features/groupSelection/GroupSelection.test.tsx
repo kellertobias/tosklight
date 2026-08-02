@@ -89,7 +89,7 @@ function group(
 		id,
 		revision: 3,
 		updated_at: "",
-		body: { name, fixtures: [...fixtures], master: 1 },
+		body: { name, fixtures: [...fixtures] },
 	};
 }
 

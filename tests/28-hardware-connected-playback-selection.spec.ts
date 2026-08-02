@@ -130,8 +130,6 @@ async function prepare(
 			derived_from: null,
 			frozen_from: null,
 			programming: {},
-			master: 1,
-			playback_fader: 1,
 		},
 		existingGroup?.revision ?? 0,
 	);

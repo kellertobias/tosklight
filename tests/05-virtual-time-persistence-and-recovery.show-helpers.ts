@@ -328,9 +328,9 @@ export function assertMigrationSnapshot(
 			derived_from: null,
 			frozen_from: null,
 			programming: {},
-			master: 1,
-			playback_fader: null,
 		});
+		expect(snapshot.body).not.toHaveProperty("master");
+		expect(snapshot.body).not.toHaveProperty("playback_fader");
 	} else if (migration === "playback-defaults") {
 		expect(snapshot.body).toMatchObject({
 			buttons: ["go_minus", "go", "flash"],

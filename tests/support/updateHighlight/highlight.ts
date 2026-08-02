@@ -106,9 +106,7 @@ export function groupBody(name: string, fixtures: string[]) {
 		derived_from: null,
 		fixtures,
 		frozen_from: null,
-		master: 1,
 		name,
-		playback_fader: null,
 		programming: {},
 	};
 }

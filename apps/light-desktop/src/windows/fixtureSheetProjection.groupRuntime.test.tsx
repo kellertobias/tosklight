@@ -1,5 +1,6 @@
-import { cleanup, renderHook } from "@testing-library/react";
+import { cleanup, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fixtureSheetColumns } from "./fixtureSheetColumns";
 import { useFixtureSheetRows } from "./fixtureSheetProjection";
 
 vi.mock("../features/patch/PatchState", async (importOriginal) => ({
@@ -22,8 +23,6 @@ const mocks = vi.hoisted(() => {
 		body: {
 			name: "Front",
 			fixtures: ["fixture-1"],
-			master: 1,
-			playback_fader: null,
 			programming: {},
 		},
 		runtime,
@@ -141,8 +140,20 @@ describe("Fixture Sheet scoped Group runtime", () => {
 
 		expect(view.result.current.rows).toHaveLength(1);
 		expect(view.result.current.rows[0].limitingGroups).toEqual([mocks.group]);
-		expect(mocks.group.body.playback_fader).toBeNull();
-		expect(mocks.group.body.master).toBe(1);
+		expect(view.result.current.rows[0].limitingGroups[0].runtime.master).toBe(
+			0.4,
+		);
+		const nameColumn = fixtureSheetColumns(false, () => ({
+			base: false,
+			containedBase: false,
+			containedCurrent: false,
+			current: false,
+		})).find(({ id }) => id === "name");
+		render(nameColumn?.render(view.result.current.rows[0]) ?? null);
+		expect(screen.getByText("◒ Group master 40%")).toHaveAttribute(
+			"title",
+			"Front: 40%",
+		);
 
 		mocks.runtime.playbackNumber = null;
 		view.rerender();

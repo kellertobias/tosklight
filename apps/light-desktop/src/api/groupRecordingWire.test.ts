@@ -35,8 +35,6 @@ function storedOutcome(overrides: Record<string, unknown> = {}) {
 				derived_from: null,
 				frozen_from: null,
 				programming: {},
-				master: 1,
-				playback_fader: null,
 				future: { kept: true },
 			},
 		},
@@ -73,6 +71,20 @@ describe("Group recording wire", () => {
 				},
 			},
 		});
+	});
+
+	it("tolerates and strips retired Group master fields", () => {
+		const legacy = storedOutcome();
+		const legacyBody = legacy.group.body as Record<string, unknown>;
+		legacyBody.master = "malformed legacy value";
+		legacyBody.playback_fader = { stale: true };
+
+		const body = decodeGroupRecordingOutcome(legacy, REQUEST).group.object
+			?.body;
+
+		expect(body).not.toHaveProperty("master");
+		expect(body).not.toHaveProperty("playback_fader");
+		expect(body).toHaveProperty("future", { kept: true });
 	});
 
 	it("validates and preserves portable selection-grid configuration", () => {
@@ -202,8 +214,6 @@ describe("Group recording wire", () => {
 					derived_from: null,
 					frozen_from: null,
 					programming: {},
-					master: 1,
-					playback_fader: null,
 				},
 			},
 		});
@@ -259,7 +269,6 @@ describe("Group recording wire", () => {
 		const malformed = [
 			{ ...valid, fixtures: "fixture-1" },
 			{ ...valid, id: "another-group" },
-			{ ...valid, playback_fader: 256 },
 			{
 				...valid,
 				derived_from: {

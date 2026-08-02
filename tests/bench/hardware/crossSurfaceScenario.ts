@@ -193,8 +193,6 @@ export class BrowserCrossSurface {
 				derived_from: null,
 				frozen_from: null,
 				programming: {},
-				master: 1,
-				playback_fader: null,
 			},
 			existing?.revision ?? 0,
 		);

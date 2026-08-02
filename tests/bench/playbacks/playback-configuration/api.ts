@@ -102,8 +102,6 @@ export async function prepareShow(
 			derived_from: null,
 			frozen_from: null,
 			programming: {},
-			master: 1,
-			playback_fader: Number(id),
 		});
 	}
 	const cueListId = await createCueList(

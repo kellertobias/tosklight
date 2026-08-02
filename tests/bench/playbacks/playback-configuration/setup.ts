@@ -226,8 +226,6 @@ export class PlaybackConfigurationSetup {
 				derived_from: null,
 				frozen_from: null,
 				programming: {},
-				master: 1,
-				playback_fader: Number(id),
 			});
 		}
 	}

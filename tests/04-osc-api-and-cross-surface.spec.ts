@@ -1071,8 +1071,6 @@ async function ensureGroupSeven(api: ApiDriver): Promise<void> {
     derived_from: null,
     frozen_from: null,
     programming: existing?.body.programming ?? {},
-    master: 1,
-    playback_fader: null,
   }, existing?.revision ?? 0);
 }
 

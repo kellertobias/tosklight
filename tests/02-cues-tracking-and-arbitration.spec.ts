@@ -213,8 +213,6 @@ async function installCueTransferScenario(
 				derived_from: null,
 				frozen_from: null,
 				programming: existing?.body.programming ?? {},
-				master: 1,
-				playback_fader: existing?.body.playback_fader ?? null,
 			},
 			existing?.revision ?? 0,
 		);

@@ -128,15 +128,15 @@ export class LightBench {
     await Promise.all(fixtureIds.map((fixtureId, index) => api.seedShowObject(show.id, "patched_fixture", fixtureId, dimmer(fixtureId, index + 1))));
     await api.seedShowObject(show.id, "group", "1", {
       id: "1", name: "All Dimmers", fixtures: fixtureIds, derived_from: null, frozen_from: null,
-      programming: {}, master: 1, playback_fader: 1,
+      programming: {},
     });
     await api.seedShowObject(show.id, "group", "2", {
       id: "2", name: "Odd Dimmers", fixtures: fixtureIds.filter((_, index) => index % 2 === 0),
-      derived_from: null, frozen_from: null, programming: {}, master: 1, playback_fader: 2,
+      derived_from: null, frozen_from: null, programming: {},
     });
     await api.seedShowObject(show.id, "group", "3", {
       id: "3", name: "Front Dimmers", fixtures: fixtureIds.slice(0, 4),
-      derived_from: null, frozen_from: null, programming: {}, master: 1, playback_fader: 3,
+      derived_from: null, frozen_from: null, programming: {},
     });
     await api.seedShowObject(show.id, "route", "artnet", {
       protocol: "art_net", logical_universe: 1, destination_universe: 1,

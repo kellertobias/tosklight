@@ -186,7 +186,7 @@ function versioned<T>(id: string, body: T) {
 }
 
 function group(name: string): StoredGroup {
-	return { name, fixtures: [], master: 1 };
+	return { name, fixtures: [] };
 }
 
 function preset(

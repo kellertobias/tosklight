@@ -35,8 +35,6 @@ export async function loadCompactRig(
 			derived_from: null,
 			frozen_from: null,
 			programming: {},
-			master: 1,
-			playback_fader: null,
 		},
 		group4?.revision ?? 0,
 	);

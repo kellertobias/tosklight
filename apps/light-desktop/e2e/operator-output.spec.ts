@@ -139,7 +139,7 @@ test("touch programmer path is audited and reaches the rendered DMX output", asy
       color_calibration: null, hazardous: false, signal_loss_policy: { type: "hold_last" }, safe_values: {},
     }, universe: 1, address: index + 1, logical_heads: [],
   });
-  await seedObject(request, setupSession, show.id, "group", "1", { name: "All Dimmers", fixtures: fixtureIds, master: 1, playback_fader: 1 });
+  await seedObject(request, setupSession, show.id, "group", "1", { name: "All Dimmers", fixtures: fixtureIds });
   await showAction(request, setupSession, { type: "open", show_id: show.id, transition: "hold_current", transition_millis: null });
 
   await page.addInitScript((deskId) => {

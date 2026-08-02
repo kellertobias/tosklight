@@ -89,8 +89,6 @@ test("BENCH-SHOW-003 @bench @api › concurrent catalogs isolate data, mutation,
 			derived_from: null,
 			frozen_from: null,
 			programming: {},
-			master: 1,
-			playback_fader: 100,
 		});
 		expect(
 			(await peerApi.showObjects(secondIdentity.workingId, "group")).some(

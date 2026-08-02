@@ -193,7 +193,7 @@ export function registerCorruptActiveShowRecoveryTests(): void {
 			} else if (corruption === "schema-invalid") {
 				await runSql(
 					entry.path,
-					"UPDATE objects SET body_json=json_set(body_json, '$.master', 'not-a-number') WHERE kind='group' AND id='1'",
+					"UPDATE objects SET body_json=json_set(body_json, '$.fixtures', 'not-an-array') WHERE kind='group' AND id='1'",
 				);
 			} else {
 				await runSql(

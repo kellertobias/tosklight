@@ -106,8 +106,6 @@ async function emitReconciliationEvent(api: ApiDriver) {
 		{
 			name: "Performance event reconciliation",
 			fixtures: [],
-			master: 1,
-			playback_fader: null,
 			programming: {},
 		},
 	);
@@ -148,8 +146,6 @@ async function seedLargeShow(api: ApiDriver) {
 			seedShowObject(api, showId, "group", groupId, {
 				name: `Performance Group ${number}`,
 				fixtures: [],
-				master: 1,
-				playback_fader: null,
 				programming: {},
 			}),
 		);

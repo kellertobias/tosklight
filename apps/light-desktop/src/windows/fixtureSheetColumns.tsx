@@ -75,14 +75,14 @@ function groupMasterTitle(fixture: FixtureSheetRow) {
 	return fixture.limitingGroups
 		.map(
 			(group) =>
-				`${group.body.name}: ${Math.round((group.body.master ?? 1) * 100)}%`,
+				`${group.body.name}: ${Math.round(group.runtime.master * 100)}%`,
 		)
 		.join(", ");
 }
 
 function limitingGroupPercentage(fixture: FixtureSheetRow) {
 	return Math.round(
-		Math.max(...fixture.limitingGroups.map((group) => group.body.master ?? 1)) *
+		Math.max(...fixture.limitingGroups.map((group) => group.runtime.master)) *
 			100,
 	);
 }

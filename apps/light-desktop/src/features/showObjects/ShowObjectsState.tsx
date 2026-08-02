@@ -207,8 +207,6 @@ function equalGroup(left: GroupObject, right: GroupObject | undefined) {
 		leftBody.name === rightBody.name &&
 		leftBody.color === rightBody.color &&
 		leftBody.icon === rightBody.icon &&
-		leftBody.master === rightBody.master &&
-		leftBody.playback_fader === rightBody.playback_fader &&
 		leftBody.grid?.method === rightBody.grid?.method &&
 		leftBody.grid?.axis_origin?.x === rightBody.grid?.axis_origin?.x &&
 		leftBody.grid?.axis_origin?.y === rightBody.grid?.axis_origin?.y &&

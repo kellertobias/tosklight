@@ -339,8 +339,6 @@ export interface StoredGroup {
 	icon?: string;
 	fixtures: string[];
 	grid?: SelectionGridConfiguration;
-	master?: number;
-	playback_fader?: number | null;
 	programming?: Record<string, unknown>;
 	derived_from?: {
 		source_group_id: string;

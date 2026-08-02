@@ -265,8 +265,6 @@ function storedGroup(id: string, fixtures: string[]) {
 		body: {
 			name: `Group ${id}`,
 			fixtures,
-			master: 1,
-			playback_fader: null,
 			programming: {},
 			derived_from: null,
 			frozen_from: null,

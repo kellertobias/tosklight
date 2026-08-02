@@ -36,16 +36,14 @@ export function decodeRecordedGroupBody(
 	if ("frozen_from" in body)
 		frozenGroupAt(body.frozen_from, "$.group.body.frozen_from");
 	const grid =
-		"grid" in body
-			? safeGridAt(body.grid, "$.group.body.grid")
-			: undefined;
+		"grid" in body ? safeGridAt(body.grid, "$.group.body.grid") : undefined;
 	if ("programming" in body)
 		programmingAt(body.programming, "$.group.body.programming");
-	if ("master" in body) numberAt(body.master, "$.group.body.master");
-	if ("playback_fader" in body)
-		playbackFaderAt(body.playback_fader, "$.group.body.playback_fader");
+	const canonicalBody = { ...body };
+	delete canonicalBody.master;
+	delete canonicalBody.playback_fader;
 	return {
-		...body,
+		...canonicalBody,
 		fixtures,
 		...(grid === undefined ? {} : { grid }),
 	} as ShowObject<"group">["body"];
@@ -162,11 +160,6 @@ function xyzAt(value: unknown, path: string) {
 	const xyz = recordAt(value, path);
 	for (const coordinate of ["x", "y", "z"])
 		numberAt(xyz[coordinate], `${path}.${coordinate}`);
-}
-
-function playbackFaderAt(value: unknown, path: string) {
-	if (value == null) return;
-	boundedIntegerAt(value, path, 255);
 }
 
 function boundedIntegerAt(value: unknown, path: string, maximum: number) {

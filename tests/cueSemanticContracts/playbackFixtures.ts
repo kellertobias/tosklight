@@ -51,8 +51,6 @@ export async function installCompactGroups(api: ApiDriver) {
 				derived_from: null,
 				frozen_from: null,
 				programming: current?.body.programming ?? {},
-				master: 1,
-				playback_fader: current?.body.playback_fader ?? null,
 			},
 			current?.revision ?? 0,
 		);

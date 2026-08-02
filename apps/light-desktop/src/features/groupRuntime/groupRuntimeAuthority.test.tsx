@@ -33,20 +33,12 @@ const SHOW_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const DESK_ID = "22222222-2222-4222-8222-222222222222";
 
 const GROUPS: Record<string, ShowObject<"group">[]> = {
-	[SHOW_A]: [
-		group("1", [], 0.9, null),
-		group("2", ["fixture-b", "fixture-a"], 0.8, 17),
-	],
-	[SHOW_B]: [group("9", ["fixture-z"], 1, null)],
-	[SHOW_C]: [group("a|b", [], 1, null)],
+	[SHOW_A]: [group("1", []), group("2", ["fixture-b", "fixture-a"])],
+	[SHOW_B]: [group("9", ["fixture-z"])],
+	[SHOW_C]: [group("a|b", [])],
 };
 
-function group(
-	id: string,
-	fixtures: string[],
-	master: number,
-	playbackFader: number | null,
-): ShowObject<"group"> {
+function group(id: string, fixtures: string[]): ShowObject<"group"> {
 	return {
 		kind: "group",
 		id,
@@ -55,8 +47,6 @@ function group(
 		body: {
 			name: `Group ${id}`,
 			fixtures,
-			master,
-			playback_fader: playbackFader,
 			programming: {},
 		},
 	};
@@ -312,6 +302,8 @@ describe("Group runtime authority", () => {
 		);
 		expect(latestGroups[0].body.fixtures).toEqual([]);
 		expect(latestGroups[1].body.fixtures).toEqual(["fixture-b", "fixture-a"]);
+		expect(latestGroups[0].body).not.toHaveProperty("master");
+		expect(latestGroups[1].body).not.toHaveProperty("playback_fader");
 		expect(screen.getByTestId("can-write")).toHaveTextContent("false");
 	});
 
@@ -451,7 +443,7 @@ describe("Group runtime authority", () => {
 			model.showStore.setCollection(
 				SHOW_C,
 				"group",
-				[group("a", [], 1, null), group("b", [], 1, null)],
+				[group("a", []), group("b", [])],
 				5,
 			);
 		});

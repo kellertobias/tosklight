@@ -43,8 +43,6 @@ function group(
 		body: {
 			name,
 			fixtures,
-			master: 1,
-			playback_fader: null,
 			programming: {},
 			derived_from: null,
 			frozen_from: null,

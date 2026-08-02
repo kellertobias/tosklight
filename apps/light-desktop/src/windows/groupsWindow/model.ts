@@ -31,8 +31,6 @@ function fallbackGroupPool(): Group[] {
 			fixtures: Array.from({ length: group.fixtures }, (_, index) =>
 				String(index),
 			),
-			master: 1,
-			playback_fader: group.id <= 8 ? group.id : null,
 			programming: {},
 			derived_from: null,
 			frozen_from: null,
