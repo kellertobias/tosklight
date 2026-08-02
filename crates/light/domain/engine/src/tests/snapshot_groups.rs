@@ -144,3 +144,65 @@ fn unpatched_group_member_keeps_programming_but_outputs_no_dmx() {
     assert_eq!(repatched.universes[&1][0], 128);
     assert_eq!(repatched.universes[&1][1], 128);
 }
+
+#[test]
+fn canonical_group_rules_and_spatial_mappings_are_validated() {
+    let source = GroupDefinition {
+        id: "source".into(),
+        name: "Source".into(),
+        source: Some(GroupFixtureSource::Explicit {
+            fixture_ids: Vec::new(),
+        }),
+        ..Default::default()
+    };
+    let mut derived = GroupDefinition {
+        id: "derived".into(),
+        name: "Derived".into(),
+        source: Some(GroupFixtureSource::References {
+            references: vec![GroupReference {
+                group_id: "source".into(),
+                rule: SelectionRule::EveryNth { n: 0, offset: 0 },
+            }],
+        }),
+        ..Default::default()
+    };
+    let snapshot = |derived: GroupDefinition| EngineSnapshot {
+        groups: vec![source.clone(), derived].into(),
+        ..Default::default()
+    };
+
+    assert!(
+        snapshot(derived.clone())
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("at least 1")
+    );
+
+    derived.source = Some(GroupFixtureSource::References {
+        references: vec![GroupReference {
+            group_id: "source".into(),
+            rule: SelectionRule::All,
+        }],
+    });
+    derived.mapping = Some(light_dynamics::SpatialSelectionMapping {
+        projection: light_dynamics::SpatialProjection {
+            anchor: light_dynamics::Position3d::default(),
+            view_direction: light_dynamics::Vector3::default(),
+            rotation_degrees: 0.0,
+            preset: None,
+        },
+        shape: light_dynamics::SpatialSelectionShape::Grid {
+            angle_degrees: 0.0,
+            direction: light_dynamics::RankDirection::Ascending,
+        },
+    });
+
+    assert!(
+        snapshot(derived)
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("view direction")
+    );
+}

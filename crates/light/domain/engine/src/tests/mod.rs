@@ -15,8 +15,8 @@ use light_playback::{
     PlaybackDefinition, PlaybackFaderMode, PlaybackTarget, RestartMode, WrapMode,
 };
 use light_programmer::{
-    DerivedGroup, DynamicProgrammerValueMutation, FrozenGroup, GroupDefinition, ProgrammerRegistry,
-    SelectionRule,
+    DerivedGroup, DynamicProgrammerValueMutation, FrozenGroup, GroupDefinition, GroupFixtureSource,
+    GroupReference, ProgrammerRegistry, SelectionRule,
 };
 use std::{
     collections::{BTreeMap, HashMap},

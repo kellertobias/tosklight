@@ -5,7 +5,7 @@ use light_output::{DmxFrame, OutputRoute};
 use light_playback::{
     AutomaticPlaybackTransition, CueList, PlaybackDefinition, PlaybackPage, PlaybackTarget,
 };
-use light_programmer::{GroupDefinition, resolve_group};
+use light_programmer::{GroupDefinition, GroupFixtureSource, resolve_group};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
@@ -57,8 +57,22 @@ impl EngineSnapshot {
             .map(|group| (group.id.clone(), group.clone()))
             .collect::<HashMap<_, _>>();
         for group in self.groups.iter().filter(|_| groups_changed) {
-            if let Some(derived) = &group.derived_from {
-                derived.rule.validate().map_err(EngineError::Invalid)?;
+            match group.source.as_ref() {
+                Some(GroupFixtureSource::References { references }) => {
+                    for reference in references {
+                        reference.rule.validate().map_err(EngineError::Invalid)?;
+                    }
+                }
+                Some(GroupFixtureSource::Explicit { .. }) => {}
+                None => {
+                    if let Some(derived) = &group.derived_from {
+                        derived.rule.validate().map_err(EngineError::Invalid)?;
+                    }
+                }
+            }
+            if let Some(mapping) = group.mapping.as_ref() {
+                light_dynamics::evaluate_spatial_mapping(mapping, &[])
+                    .map_err(|error| EngineError::Invalid(error.to_string()))?;
             }
             if !group.master.is_finite() || !(0.0..=1.0).contains(&group.master) {
                 return Err(EngineError::Invalid(format!(
