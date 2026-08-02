@@ -16,7 +16,7 @@ video time and visible click/type pacing, not to weakening assertions or racing 
 - [x] Audit the maintained DEMO-001 workflow, deterministic edit timeline, current generated-video
   path, and the previously observed Show Patch navigation blocker.
 - [x] Implement the exact Patch, Group-selection, and icon-picker pacing contract.
-- [ ] Trace and correct the authoritative Pan/Tilt and color path into the final Stage rendering.
+- [x] Trace and correct the authoritative Pan/Tilt and color path into the final Stage rendering.
 - [ ] Run focused checks, canonical demo inventory verification, retained-video review, major suites,
   and the real desktop path.
 
@@ -135,6 +135,13 @@ video time and visible click/type pacing, not to weakening assertions or racing 
   typechecking, 51 focused pane/reducer/Stage tests, the 176-test UI package, bench typechecking,
   focused timeline/layout/preset tests, the production desktop build, and `git diff --check` passed.
   Canonical retained-video re-recording remains required before accepting the Stage item.
+- The final canonical `npm run test:demo` path rebuilt the embedded desktop, passed DEMO-001 in
+  21.7 minutes, edited exactly 21,425 frames at 25 fps, and produced 1920×1080 VP9 WebM plus H.265
+  MP4 outputs of exactly 857.0 seconds. This run used `hevc_videotoolbox` successfully. Direct
+  inspection of retained `14:15` and `14:16` frames shows the complete elevated rig, visibly
+  different Beam orientations, saturated blue Wash beams, and a separate yellow Beam contribution;
+  the concluding Stage is no longer all white. The canonical show still contains 264 fixture
+  records, matching the required inventory.
 
 ## Remaining work
 
