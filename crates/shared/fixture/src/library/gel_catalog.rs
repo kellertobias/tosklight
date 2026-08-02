@@ -646,203 +646,171 @@ enum CsvFieldState {
 }
 
 fn parse_csv_records(source: &str) -> Vec<CsvRecord> {
-    let bytes = source.as_bytes();
-    let mut records = Vec::new();
-    let mut fields = Vec::new();
-    let mut field = Vec::new();
-    let mut state = CsvFieldState::Start;
-    let mut row = 1;
-    let mut record_row = 1;
-    let mut record_started = false;
-    let mut error = None;
-    let mut index = 0;
+    CsvParser::new(source).parse()
+}
 
-    while index < bytes.len() {
-        let byte = bytes[index];
-        match state {
-            CsvFieldState::Start => match byte {
-                b',' => {
-                    record_started = true;
-                    fields.push(String::new());
-                }
-                b'"' => {
-                    record_started = true;
-                    state = CsvFieldState::Quoted;
-                }
-                b'\n' => {
-                    finish_csv_record(
-                        &mut records,
-                        &mut fields,
-                        &mut field,
-                        record_row,
-                        &mut error,
-                    );
-                    row += 1;
-                    record_row = row;
-                    record_started = false;
-                }
-                b'\r' if bytes.get(index + 1) == Some(&b'\n') => {
-                    finish_csv_record(
-                        &mut records,
-                        &mut fields,
-                        &mut field,
-                        record_row,
-                        &mut error,
-                    );
-                    index += 1;
-                    row += 1;
-                    record_row = row;
-                    record_started = false;
-                }
-                b'\r' => {
-                    error.get_or_insert_with(|| {
-                        "CSV uses a carriage return without a following newline".into()
-                    });
-                    finish_csv_record(
-                        &mut records,
-                        &mut fields,
-                        &mut field,
-                        record_row,
-                        &mut error,
-                    );
-                    row += 1;
-                    record_row = row;
-                    record_started = false;
-                }
-                _ => {
-                    record_started = true;
-                    field.push(byte);
-                    state = CsvFieldState::Unquoted;
-                }
-            },
-            CsvFieldState::Unquoted => match byte {
-                b',' => {
-                    push_csv_field(&mut fields, &mut field);
-                    state = CsvFieldState::Start;
-                }
-                b'"' => {
-                    error.get_or_insert_with(|| "unescaped quote in an unquoted CSV field".into());
-                    field.push(byte);
-                }
-                b'\n' => {
-                    finish_csv_record(
-                        &mut records,
-                        &mut fields,
-                        &mut field,
-                        record_row,
-                        &mut error,
-                    );
-                    state = CsvFieldState::Start;
-                    row += 1;
-                    record_row = row;
-                    record_started = false;
-                }
-                b'\r' if bytes.get(index + 1) == Some(&b'\n') => {
-                    finish_csv_record(
-                        &mut records,
-                        &mut fields,
-                        &mut field,
-                        record_row,
-                        &mut error,
-                    );
-                    state = CsvFieldState::Start;
-                    index += 1;
-                    row += 1;
-                    record_row = row;
-                    record_started = false;
-                }
-                b'\r' => {
-                    error.get_or_insert_with(|| {
-                        "CSV uses a carriage return without a following newline".into()
-                    });
-                    finish_csv_record(
-                        &mut records,
-                        &mut fields,
-                        &mut field,
-                        record_row,
-                        &mut error,
-                    );
-                    state = CsvFieldState::Start;
-                    row += 1;
-                    record_row = row;
-                    record_started = false;
-                }
-                _ => field.push(byte),
-            },
-            CsvFieldState::Quoted => match byte {
-                b'"' if bytes.get(index + 1) == Some(&b'"') => {
-                    field.push(b'"');
-                    index += 1;
-                }
-                b'"' => state = CsvFieldState::QuoteClosed,
-                b'\n' => {
-                    field.push(byte);
-                    row += 1;
-                }
-                b'\r' if bytes.get(index + 1) == Some(&b'\n') => {
-                    field.extend_from_slice(b"\r\n");
-                    index += 1;
-                    row += 1;
-                }
-                _ => field.push(byte),
-            },
-            CsvFieldState::QuoteClosed => match byte {
-                b',' => {
-                    push_csv_field(&mut fields, &mut field);
-                    state = CsvFieldState::Start;
-                }
-                b'\n' => {
-                    finish_csv_record(
-                        &mut records,
-                        &mut fields,
-                        &mut field,
-                        record_row,
-                        &mut error,
-                    );
-                    state = CsvFieldState::Start;
-                    row += 1;
-                    record_row = row;
-                    record_started = false;
-                }
-                b'\r' if bytes.get(index + 1) == Some(&b'\n') => {
-                    finish_csv_record(
-                        &mut records,
-                        &mut fields,
-                        &mut field,
-                        record_row,
-                        &mut error,
-                    );
-                    state = CsvFieldState::Start;
-                    index += 1;
-                    row += 1;
-                    record_row = row;
-                    record_started = false;
-                }
-                _ => {
-                    error.get_or_insert_with(|| {
-                        "unexpected character after a closing quote in CSV field".into()
-                    });
-                    field.push(byte);
-                    state = CsvFieldState::Unquoted;
-                }
-            },
+struct CsvParser<'a> {
+    bytes: &'a [u8],
+    records: Vec<CsvRecord>,
+    fields: Vec<String>,
+    field: Vec<u8>,
+    state: CsvFieldState,
+    row: usize,
+    record_row: usize,
+    record_started: bool,
+    error: Option<String>,
+    index: usize,
+}
+
+impl<'a> CsvParser<'a> {
+    fn new(source: &'a str) -> Self {
+        Self {
+            bytes: source.as_bytes(),
+            records: Vec::new(),
+            fields: Vec::new(),
+            field: Vec::new(),
+            state: CsvFieldState::Start,
+            row: 1,
+            record_row: 1,
+            record_started: false,
+            error: None,
+            index: 0,
         }
-        index += 1;
     }
 
-    if matches!(state, CsvFieldState::Quoted) {
-        error.get_or_insert_with(|| "unterminated quoted CSV field".into());
+    fn parse(mut self) -> Vec<CsvRecord> {
+        while self.index < self.bytes.len() {
+            let byte = self.bytes[self.index];
+            match self.state {
+                CsvFieldState::Start => self.consume_start(byte),
+                CsvFieldState::Unquoted => self.consume_unquoted(byte),
+                CsvFieldState::Quoted => self.consume_quoted(byte),
+                CsvFieldState::QuoteClosed => self.consume_quote_closed(byte),
+            }
+            self.index += 1;
+        }
+        if matches!(self.state, CsvFieldState::Quoted) {
+            self.error
+                .get_or_insert_with(|| "unterminated quoted CSV field".into());
+        }
+        if self.record_started || !self.fields.is_empty() || !self.field.is_empty() {
+            self.finish_record();
+        }
+        self.records
     }
-    if record_started || !fields.is_empty() || !field.is_empty() {
+
+    fn consume_start(&mut self, byte: u8) {
+        match byte {
+            b',' => {
+                self.record_started = true;
+                self.fields.push(String::new());
+            }
+            b'"' => {
+                self.record_started = true;
+                self.state = CsvFieldState::Quoted;
+            }
+            b'\n' => self.finish_line(false),
+            b'\r' if self.next_is_newline() => self.finish_line(true),
+            b'\r' => {
+                self.carriage_return_error();
+                self.finish_line(false);
+            }
+            _ => {
+                self.record_started = true;
+                self.field.push(byte);
+                self.state = CsvFieldState::Unquoted;
+            }
+        }
+    }
+
+    fn consume_unquoted(&mut self, byte: u8) {
+        match byte {
+            b',' => {
+                push_csv_field(&mut self.fields, &mut self.field);
+                self.state = CsvFieldState::Start;
+            }
+            b'"' => {
+                self.error
+                    .get_or_insert_with(|| "unescaped quote in an unquoted CSV field".into());
+                self.field.push(byte);
+            }
+            b'\n' => self.finish_line(false),
+            b'\r' if self.next_is_newline() => self.finish_line(true),
+            b'\r' => {
+                self.carriage_return_error();
+                self.finish_line(false);
+            }
+            _ => self.field.push(byte),
+        }
+    }
+
+    fn consume_quoted(&mut self, byte: u8) {
+        match byte {
+            b'"' if self.bytes.get(self.index + 1) == Some(&b'"') => {
+                self.field.push(b'"');
+                self.index += 1;
+            }
+            b'"' => self.state = CsvFieldState::QuoteClosed,
+            b'\n' => {
+                self.field.push(byte);
+                self.row += 1;
+            }
+            b'\r' if self.next_is_newline() => {
+                self.field.extend_from_slice(b"\r\n");
+                self.index += 1;
+                self.row += 1;
+            }
+            _ => self.field.push(byte),
+        }
+    }
+
+    fn consume_quote_closed(&mut self, byte: u8) {
+        match byte {
+            b',' => {
+                push_csv_field(&mut self.fields, &mut self.field);
+                self.state = CsvFieldState::Start;
+            }
+            b'\n' => self.finish_line(false),
+            b'\r' if self.next_is_newline() => self.finish_line(true),
+            _ => {
+                self.error.get_or_insert_with(|| {
+                    "unexpected character after a closing quote in CSV field".into()
+                });
+                self.field.push(byte);
+                self.state = CsvFieldState::Unquoted;
+            }
+        }
+    }
+
+    fn finish_line(&mut self, consume_newline: bool) {
+        self.finish_record();
+        self.state = CsvFieldState::Start;
+        if consume_newline {
+            self.index += 1;
+        }
+        self.row += 1;
+        self.record_row = self.row;
+        self.record_started = false;
+    }
+
+    fn finish_record(&mut self) {
         finish_csv_record(
-            &mut records,
-            &mut fields,
-            &mut field,
-            record_row,
-            &mut error,
+            &mut self.records,
+            &mut self.fields,
+            &mut self.field,
+            self.record_row,
+            &mut self.error,
         );
     }
-    records
+
+    fn next_is_newline(&self) -> bool {
+        self.bytes.get(self.index + 1) == Some(&b'\n')
+    }
+
+    fn carriage_return_error(&mut self) {
+        self.error
+            .get_or_insert_with(|| "CSV uses a carriage return without a following newline".into());
+    }
 }
 
 fn push_csv_field(fields: &mut Vec<String>, field: &mut Vec<u8>) {
