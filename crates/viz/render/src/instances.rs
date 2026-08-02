@@ -581,33 +581,15 @@ fn push_emitters(
         // the two agree; for a strobe or a laser they are the whole point of the difference.
         let intensity = value.held_intensity.max(value.visible_intensity());
         if emitter.kind == EmitterKind::Laser {
-            if let Some(scanner) = &emitter.laser
-                && let Some(scan) = values.laser_scans.get(index)
-            {
-                laser::push_laser(
-                    &mut frame.lasers,
-                    pose.origin,
-                    pose.orientation,
-                    scanner,
-                    scan,
-                    intensity,
-                    installed_colour,
-                );
-            }
-            // The window itself, lit. It is a few millimetres across and adds nothing to the room,
-            // but a firing projector has a bright spot where its beam leaves and an operator finds
-            // the fixture by it — the more so because a laser lights nothing else around itself.
-            // None of the cone or shadow machinery applies beyond that.
-            push_aperture(
+            push_laser_emitter(
                 frame,
-                pose.origin,
+                emitter,
+                value,
+                values.laser_scans.get(index),
                 pose,
-                aperture_size(emitter),
-                emitter.optics.source.form,
                 intensity,
-                Vec3::from(value.colour) * installed_colour,
+                installed_colour,
             );
-            frame.poses.push(pose);
             continue;
         }
         let cells = cell_states(emitter, value, installed_colour);
@@ -718,6 +700,45 @@ fn push_emitters(
         }
         frame.poses.push(pose);
     }
+}
+
+/// Add one laser's scan path and visible exit window without involving cone-light machinery.
+fn push_laser_emitter(
+    frame: &mut FrameInstances,
+    emitter: &EmitterInstance,
+    value: &EmitterValues,
+    scan: Option<&viz_scene::LaserScan>,
+    pose: EmitterPose,
+    intensity: f32,
+    installed_colour: Vec3,
+) {
+    if let Some(scanner) = &emitter.laser
+        && let Some(scan) = scan
+    {
+        laser::push_laser(
+            &mut frame.lasers,
+            pose.origin,
+            pose.orientation,
+            scanner,
+            scan,
+            intensity,
+            installed_colour,
+        );
+    }
+    // The window itself, lit. It is a few millimetres across and adds nothing to the room, but a
+    // firing projector has a bright spot where its beam leaves and an operator finds the fixture
+    // by it — the more so because a laser lights nothing else around itself. None of the cone or
+    // shadow machinery applies beyond that.
+    push_aperture(
+        frame,
+        pose.origin,
+        pose,
+        aperture_size(emitter),
+        emitter.optics.source.form,
+        intensity,
+        Vec3::from(value.colour) * installed_colour,
+    );
+    frame.poses.push(pose);
 }
 
 /// One of this frame's lights in the terms an optical instrument is described in, rather than the

@@ -277,24 +277,8 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
         std::collections::HashMap::new();
 
     for fixture in fixtures {
-        let Some(mode) = fixture
-            .profile
-            .modes
-            .iter()
-            .find(|mode| mode.id == fixture.mode_id)
-        else {
-            warnings.push(format!(
-                "{}: selected mode is missing from profile revision {}",
-                fixture.name, fixture.profile.revision
-            ));
+        let Some((mode, primary_slots)) = selected_mode(fixture, &mut warnings) else {
             continue;
-        };
-        let primary_slots = match mode.primary_slots() {
-            Ok(slots) => slots,
-            Err(error) => {
-                warnings.push(format!("{}: {error}", fixture.name));
-                continue;
-            }
         };
         let class = fallback::classify(&fixture.profile.fixture_type);
         let motion = motion_axes(mode);
@@ -420,6 +404,33 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
     }
 }
 
+/// Resolve the selected mode and its primary-slot map, recording a fixture-scoped warning when
+/// either half of that immutable profile revision cannot be compiled.
+fn selected_mode<'a>(
+    fixture: &'a PatchedFixture,
+    warnings: &mut Vec<String>,
+) -> Option<(&'a FixtureMode, HashMap<Uuid, u16>)> {
+    let Some(mode) = fixture
+        .profile
+        .modes
+        .iter()
+        .find(|mode| mode.id == fixture.mode_id)
+    else {
+        warnings.push(format!(
+            "{}: selected mode is missing from profile revision {}",
+            fixture.name, fixture.profile.revision
+        ));
+        return None;
+    };
+    match mode.primary_slots() {
+        Ok(slots) => Some((mode, slots)),
+        Err(error) => {
+            warnings.push(format!("{}: {error}", fixture.name));
+            None
+        }
+    }
+}
+
 /// Split number to `(logical universe, base address)` for one physical instance.
 fn address_map(instance: &PhysicalInstance) -> HashMap<u16, (u16, u16)> {
     instance
@@ -542,7 +553,6 @@ fn build_emitters(
     mount: EmitterMount,
     laser: Option<LaserOptics>,
 ) {
-    let head_channels = group_by_head(mode, channels);
     // Resolved once for the fixture: every head of a laser reads the same footprint, because the
     // script is given the whole fixture rather than one head's channels.
     let laser_window = laser.as_ref().and_then(|_| laser_window(channels));
@@ -552,67 +562,26 @@ fn build_emitters(
     // range a scanner does not have: a laser is aimed by the bracket it hangs in, not by the desk.
     let steered = !class.is_laser();
     if mode.geometry.emitters.is_empty() {
-        // The layout below is invented, so the faces it places have to be trimmed to it: a row of
-        // lamp lenses wider than the pitch they are spread at would merge into one smear.
-        let head_optics = fitted_to_head_pitch(&optics, mode, class);
-        // Fallback: one emitter per logical head, aimed along the head's rest direction.
-        for (head_index, head) in mode.heads.iter().enumerate() {
-            // An unpatched head has no channels. It stays in the scene and stays visible; only
-            // its DMX is suppressed until the fixture is patched again.
-            let owned = head_channels
-                .get(&head.id)
-                .map(Vec::as_slice)
-                .unwrap_or(&[]);
-            let mut binding = build_binding(owned, instance, mode, head.id, channels);
-            let kind = emitter_kind(class, &binding);
-            let (narrow, wide) = cone_angles(class, &binding);
-            scene.emitters.push(EmitterInstance {
-                fixture_index,
-                head_index: head_index as u16,
-                label: head.name.clone(),
-                local_origin: mount.origin + head_offset(mode, head_index, class),
-                tilt_pivot: mount.pivot,
-                local_orientation_degrees: mount.rest_orientation(),
-                pan: steered.then(|| pan_axis(motion, &binding)).flatten(),
-                tilt: steered.then(|| tilt_axis(motion, &binding)).flatten(),
-                beam_angle_degrees: narrow,
-                field_angle_degrees: wide,
-                optics: head_optics.clone(),
-                kind,
-                cells: EmitterLayoutCells::single(),
-                laser: (kind == EmitterKind::Laser)
-                    .then(|| laser.clone())
-                    .flatten(),
-                live_shaper_angle_roles: std::array::from_fn(|index| {
-                    binding.shaper_blade_angles[index].is_some()
-                }),
-                shaper_roles: std::array::from_fn(|index| {
-                    binding.shaper_blades[index].is_some()
-                        || binding.shaper_blade_angles[index].is_some()
-                }),
-                live_shaper_rotation_role: binding.shaper_rotation.is_some(),
-            });
-            binding.laser_window = laser_window.clone();
-            bindings.push(binding);
-        }
-        if mode.heads.is_empty() {
-            // A profile with no heads at all still gets one generic emitter so it is visible.
-            headless_emitter(
-                scene,
-                bindings,
-                fixture,
-                class,
-                instance,
-                fixture_index,
-                optics,
-                mount,
-                laser,
-                &laser_window,
-            );
-        }
+        build_fallback_emitters(
+            scene,
+            bindings,
+            fixture,
+            mode,
+            class,
+            motion,
+            instance,
+            fixture_index,
+            channels,
+            optics,
+            mount,
+            laser,
+            &laser_window,
+            steered,
+        );
         return;
     }
 
+    let head_channels = group_by_head(mode, channels);
     for emitter in &mode.geometry.emitters {
         let owned = head_channels
             .get(&emitter.head_id)
@@ -681,6 +650,85 @@ fn build_emitters(
         });
         binding.laser_window = laser_window.clone();
         bindings.push(binding);
+    }
+}
+
+/// Build the deliberately invented emitter layout used when a profile has no emitter geometry.
+#[allow(clippy::too_many_arguments)]
+fn build_fallback_emitters(
+    scene: &mut Scene,
+    bindings: &mut Vec<EmitterBinding>,
+    fixture: &PatchedFixture,
+    mode: &FixtureMode,
+    class: OpticalClass,
+    motion: &MotionAxes,
+    instance: &PhysicalInstance,
+    fixture_index: u32,
+    channels: &HashMap<Uuid, ChannelRef>,
+    optics: EmitterOptics,
+    mount: EmitterMount,
+    laser: Option<LaserOptics>,
+    laser_window: &Option<LaserWindow>,
+    steered: bool,
+) {
+    let head_channels = group_by_head(mode, channels);
+    // The layout below is invented, so the faces it places have to be trimmed to it: a row of
+    // lamp lenses wider than the pitch they are spread at would merge into one smear.
+    let head_optics = fitted_to_head_pitch(&optics, mode, class);
+    // Fallback: one emitter per logical head, aimed along the head's rest direction.
+    for (head_index, head) in mode.heads.iter().enumerate() {
+        // An unpatched head has no channels. It stays in the scene and stays visible; only
+        // its DMX is suppressed until the fixture is patched again.
+        let owned = head_channels
+            .get(&head.id)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        let mut binding = build_binding(owned, instance, mode, head.id, channels);
+        let kind = emitter_kind(class, &binding);
+        let (narrow, wide) = cone_angles(class, &binding);
+        scene.emitters.push(EmitterInstance {
+            fixture_index,
+            head_index: head_index as u16,
+            label: head.name.clone(),
+            local_origin: mount.origin + head_offset(mode, head_index, class),
+            tilt_pivot: mount.pivot,
+            local_orientation_degrees: mount.rest_orientation(),
+            pan: steered.then(|| pan_axis(motion, &binding)).flatten(),
+            tilt: steered.then(|| tilt_axis(motion, &binding)).flatten(),
+            beam_angle_degrees: narrow,
+            field_angle_degrees: wide,
+            optics: head_optics.clone(),
+            kind,
+            cells: EmitterLayoutCells::single(),
+            laser: (kind == EmitterKind::Laser)
+                .then(|| laser.clone())
+                .flatten(),
+            live_shaper_angle_roles: std::array::from_fn(|index| {
+                binding.shaper_blade_angles[index].is_some()
+            }),
+            shaper_roles: std::array::from_fn(|index| {
+                binding.shaper_blades[index].is_some()
+                    || binding.shaper_blade_angles[index].is_some()
+            }),
+            live_shaper_rotation_role: binding.shaper_rotation.is_some(),
+        });
+        binding.laser_window = laser_window.clone();
+        bindings.push(binding);
+    }
+    if mode.heads.is_empty() {
+        // A profile with no heads at all still gets one generic emitter so it is visible.
+        headless_emitter(
+            scene,
+            bindings,
+            fixture,
+            class,
+            instance,
+            fixture_index,
+            optics,
+            mount,
+            laser,
+            laser_window,
+        );
     }
 }
 
