@@ -30,6 +30,11 @@ export function applyDynamicUpdateIntent(
 				target_binding:
 					intent.target_binding as DynamicTargetBindingProjection,
 			};
+		case "set_spatial_mapping":
+			return {
+				...definition,
+				spatial_mapping: intent.spatial_mapping,
+			};
 		case "add_lane": {
 			const lanes = [...definition.lanes];
 			const index = intent.index ?? lanes.length;

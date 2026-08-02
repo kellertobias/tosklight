@@ -1,0 +1,679 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DynamicUpdateActionRequest",
+  "type": "object",
+  "properties": {
+    "expected_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "intent": {
+      "$ref": "#/$defs/DynamicUpdateIntent"
+    },
+    "mutation_group": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "request_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id",
+    "expected_revision",
+    "intent"
+  ],
+  "$defs": {
+    "DynamicActivationBoundaryProjection": {
+      "type": "string",
+      "enum": [
+        "beat",
+        "bar"
+      ]
+    },
+    "DynamicPhaseSpreadModeProjection": {
+      "type": "string",
+      "enum": [
+        "uniform",
+        "per_lane"
+      ]
+    },
+    "DynamicRationalProjection": {
+      "type": "object",
+      "properties": {
+        "denominator": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "numerator": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "numerator",
+        "denominator"
+      ]
+    },
+    "DynamicRunModeProjection": {
+      "type": "string",
+      "enum": [
+        "loop",
+        "one_shot"
+      ]
+    },
+    "DynamicSelectionShapeProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "angle_degrees": {
+              "type": "number",
+              "format": "double"
+            },
+            "direction": {
+              "$ref": "#/$defs/GroupMappingRankDirection"
+            },
+            "type": {
+              "type": "string",
+              "const": "grid"
+            }
+          },
+          "required": [
+            "type",
+            "angle_degrees",
+            "direction"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "center_u": {
+              "type": "number",
+              "format": "double"
+            },
+            "center_v": {
+              "type": "number",
+              "format": "double"
+            },
+            "direction": {
+              "$ref": "#/$defs/GroupMappingRadialDirection"
+            },
+            "type": {
+              "type": "string",
+              "const": "radial"
+            }
+          },
+          "required": [
+            "type",
+            "center_u",
+            "center_v",
+            "direction"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "center_u": {
+              "type": "number",
+              "format": "double"
+            },
+            "center_v": {
+              "type": "number",
+              "format": "double"
+            },
+            "start_angle_degrees": {
+              "type": "number",
+              "format": "double"
+            },
+            "sweep": {
+              "$ref": "#/$defs/GroupMappingRadarSweep"
+            },
+            "type": {
+              "type": "string",
+              "const": "radar"
+            }
+          },
+          "required": [
+            "type",
+            "center_u",
+            "center_v",
+            "start_angle_degrees",
+            "sweep"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seed": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "random"
+            }
+          },
+          "required": [
+            "type",
+            "seed"
+          ]
+        }
+      ]
+    },
+    "DynamicSpatialMappingOverrideProjection": {
+      "type": "object",
+      "properties": {
+        "projection": {
+          "$ref": "#/$defs/DynamicSpatialProjectionStageProjection"
+        },
+        "shape": {
+          "$ref": "#/$defs/DynamicSpatialShapeStageProjection"
+        }
+      },
+      "required": [
+        "projection",
+        "shape"
+      ]
+    },
+    "DynamicSpatialPosition3dProjection": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        },
+        "z": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "DynamicSpatialProjectionProjection": {
+      "type": "object",
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/DynamicSpatialPosition3dProjection"
+        },
+        "preset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupMappingProjectionPreset"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rotation_degrees": {
+          "type": "number",
+          "format": "double"
+        },
+        "view_direction": {
+          "$ref": "#/$defs/DynamicSpatialVector3Projection"
+        }
+      },
+      "required": [
+        "anchor",
+        "view_direction",
+        "rotation_degrees"
+      ]
+    },
+    "DynamicSpatialProjectionStageProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "inherit"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "replace"
+            },
+            "value": {
+              "$ref": "#/$defs/DynamicSpatialProjectionProjection"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        }
+      ]
+    },
+    "DynamicSpatialShapeStageProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "inherit"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "replace"
+            },
+            "value": {
+              "$ref": "#/$defs/DynamicSelectionShapeProjection"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        }
+      ]
+    },
+    "DynamicSpatialVector3Projection": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        },
+        "z": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "DynamicUpdateIntent": {
+      "description": "One deliberate editor mutation. Domain-shaped payloads remain JSON at the transport package\nboundary and are decoded and validated into `light-dynamics` types by the server adapter.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "set_name"
+            }
+          },
+          "required": [
+            "type",
+            "name"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "set_color"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "icon": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "set_icon"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target_binding": true,
+            "type": {
+              "type": "string",
+              "const": "set_target_binding"
+            }
+          },
+          "required": [
+            "type",
+            "target_binding"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "spatial_mapping": {
+              "$ref": "#/$defs/DynamicSpatialMappingOverrideProjection"
+            },
+            "type": {
+              "type": "string",
+              "const": "set_spatial_mapping"
+            }
+          },
+          "required": [
+            "type",
+            "spatial_mapping"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint",
+              "minimum": 0
+            },
+            "lane": true,
+            "type": {
+              "type": "string",
+              "const": "add_lane"
+            }
+          },
+          "required": [
+            "type",
+            "lane"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "lane": true,
+            "lane_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "replace_lane"
+            }
+          },
+          "required": [
+            "type",
+            "lane_id",
+            "lane"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "lane_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "delete_lane"
+            }
+          },
+          "required": [
+            "type",
+            "lane_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "lane_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "move_lane"
+            }
+          },
+          "required": [
+            "type",
+            "lane_id",
+            "index"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "phase": true,
+            "type": {
+              "type": "string",
+              "const": "set_phase"
+            }
+          },
+          "required": [
+            "type",
+            "phase"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "phase_mode": {
+              "$ref": "#/$defs/DynamicPhaseSpreadModeProjection"
+            },
+            "type": {
+              "type": "string",
+              "const": "set_phase_mode"
+            }
+          },
+          "required": [
+            "type",
+            "phase_mode"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "speed": true,
+            "type": {
+              "type": "string",
+              "const": "set_speed"
+            }
+          },
+          "required": [
+            "type",
+            "speed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "multiplier": {
+              "$ref": "#/$defs/DynamicRationalProjection"
+            },
+            "type": {
+              "type": "string",
+              "const": "set_overall_speed_multiplier"
+            }
+          },
+          "required": [
+            "type",
+            "multiplier"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "run_mode": {
+              "$ref": "#/$defs/DynamicRunModeProjection"
+            },
+            "type": {
+              "type": "string",
+              "const": "set_run_mode"
+            }
+          },
+          "required": [
+            "type",
+            "run_mode"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "activation": true,
+            "type": {
+              "type": "string",
+              "const": "set_activation"
+            }
+          },
+          "required": [
+            "type",
+            "activation"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "boundary": {
+              "$ref": "#/$defs/DynamicActivationBoundaryProjection"
+            },
+            "type": {
+              "type": "string",
+              "const": "set_activation_boundary"
+            }
+          },
+          "required": [
+            "type",
+            "boundary"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group": true,
+            "type": {
+              "type": "string",
+              "const": "add_random_group"
+            }
+          },
+          "required": [
+            "type",
+            "group"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group": true,
+            "group_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "replace_random_group"
+            }
+          },
+          "required": [
+            "type",
+            "group_id",
+            "group"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "delete_random_group"
+            }
+          },
+          "required": [
+            "type",
+            "group_id"
+          ]
+        }
+      ]
+    },
+    "GroupMappingProjectionPreset": {
+      "type": "string",
+      "enum": [
+        "top",
+        "front",
+        "back",
+        "left",
+        "right"
+      ]
+    },
+    "GroupMappingRadarSweep": {
+      "type": "string",
+      "enum": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    "GroupMappingRadialDirection": {
+      "type": "string",
+      "enum": [
+        "outward",
+        "inward"
+      ]
+    },
+    "GroupMappingRankDirection": {
+      "type": "string",
+      "enum": [
+        "ascending",
+        "descending"
+      ]
+    }
+  }
+}

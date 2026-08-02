@@ -1,0 +1,761 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DynamicSpatialPreviewResponse",
+  "type": "object",
+  "properties": {
+    "base": {
+      "$ref": "#/$defs/DynamicSpatialPreviewBaseProjection"
+    },
+    "draft": {
+      "$ref": "#/$defs/DynamicSpatialMappingOverrideProjection"
+    },
+    "dynamic_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "dynamic_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "inherited_mapping": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/GroupSpatialSelectionMapping"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ordered_fixture_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    },
+    "rank_count": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "ranks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/GroupSpatialRankProjection"
+      }
+    },
+    "show_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "show_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "source_order": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    },
+    "target_binding": {
+      "$ref": "#/$defs/DynamicTargetBindingProjection"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/GroupSpatialWarningProjection"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "show_id",
+    "show_revision",
+    "dynamic_id",
+    "dynamic_revision",
+    "target_binding",
+    "base",
+    "inherited_mapping",
+    "draft",
+    "source_order",
+    "ordered_fixture_ids",
+    "ranks",
+    "rank_count",
+    "warnings"
+  ],
+  "$defs": {
+    "DynamicSelectionShapeProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "angle_degrees": {
+              "type": "number",
+              "format": "double"
+            },
+            "direction": {
+              "$ref": "#/$defs/GroupMappingRankDirection"
+            },
+            "type": {
+              "type": "string",
+              "const": "grid"
+            }
+          },
+          "required": [
+            "type",
+            "angle_degrees",
+            "direction"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "center_u": {
+              "type": "number",
+              "format": "double"
+            },
+            "center_v": {
+              "type": "number",
+              "format": "double"
+            },
+            "direction": {
+              "$ref": "#/$defs/GroupMappingRadialDirection"
+            },
+            "type": {
+              "type": "string",
+              "const": "radial"
+            }
+          },
+          "required": [
+            "type",
+            "center_u",
+            "center_v",
+            "direction"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "center_u": {
+              "type": "number",
+              "format": "double"
+            },
+            "center_v": {
+              "type": "number",
+              "format": "double"
+            },
+            "start_angle_degrees": {
+              "type": "number",
+              "format": "double"
+            },
+            "sweep": {
+              "$ref": "#/$defs/GroupMappingRadarSweep"
+            },
+            "type": {
+              "type": "string",
+              "const": "radar"
+            }
+          },
+          "required": [
+            "type",
+            "center_u",
+            "center_v",
+            "start_angle_degrees",
+            "sweep"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seed": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "random"
+            }
+          },
+          "required": [
+            "type",
+            "seed"
+          ]
+        }
+      ]
+    },
+    "DynamicSpatialMappingOverrideProjection": {
+      "type": "object",
+      "properties": {
+        "projection": {
+          "$ref": "#/$defs/DynamicSpatialProjectionStageProjection"
+        },
+        "shape": {
+          "$ref": "#/$defs/DynamicSpatialShapeStageProjection"
+        }
+      },
+      "required": [
+        "projection",
+        "shape"
+      ]
+    },
+    "DynamicSpatialPosition3dProjection": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        },
+        "z": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "DynamicSpatialPreviewBaseProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string"
+            },
+            "mapping_provenance": {
+              "$ref": "#/$defs/GroupMappingProvenanceProjection"
+            },
+            "type": {
+              "type": "string",
+              "const": "live_group"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "group_id",
+            "mapping_provenance"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "frozen_targets"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "targetless"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "DynamicSpatialProjectionProjection": {
+      "type": "object",
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/DynamicSpatialPosition3dProjection"
+        },
+        "preset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupMappingProjectionPreset"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rotation_degrees": {
+          "type": "number",
+          "format": "double"
+        },
+        "view_direction": {
+          "$ref": "#/$defs/DynamicSpatialVector3Projection"
+        }
+      },
+      "required": [
+        "anchor",
+        "view_direction",
+        "rotation_degrees",
+        "preset"
+      ]
+    },
+    "DynamicSpatialProjectionStageProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "inherit"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "replace"
+            },
+            "value": {
+              "$ref": "#/$defs/DynamicSpatialProjectionProjection"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        }
+      ]
+    },
+    "DynamicSpatialShapeStageProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "inherit"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "replace"
+            },
+            "value": {
+              "$ref": "#/$defs/DynamicSelectionShapeProjection"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        }
+      ]
+    },
+    "DynamicSpatialVector3Projection": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        },
+        "z": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "DynamicTargetBindingProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "live_group"
+            }
+          },
+          "required": [
+            "type",
+            "group_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "targets": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "frozen_targets"
+            }
+          },
+          "required": [
+            "type",
+            "targets"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "targetless"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "GroupMappingPosition3d": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        },
+        "z": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "GroupMappingProjection": {
+      "type": "object",
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/GroupMappingPosition3d"
+        },
+        "preset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupMappingProjectionPreset"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rotation_degrees": {
+          "type": "number",
+          "format": "double"
+        },
+        "view_direction": {
+          "$ref": "#/$defs/GroupMappingVector3"
+        }
+      },
+      "required": [
+        "anchor",
+        "view_direction",
+        "rotation_degrees",
+        "preset"
+      ]
+    },
+    "GroupMappingProjectionPreset": {
+      "type": "string",
+      "enum": [
+        "top",
+        "front",
+        "back",
+        "left",
+        "right"
+      ]
+    },
+    "GroupMappingProvenanceProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "none"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "local"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "group_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source_group_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "inherited"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "source_group_ids"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "mixed_source_mappings"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "GroupMappingRadarSweep": {
+      "type": "string",
+      "enum": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    "GroupMappingRadialDirection": {
+      "type": "string",
+      "enum": [
+        "outward",
+        "inward"
+      ]
+    },
+    "GroupMappingRankDirection": {
+      "type": "string",
+      "enum": [
+        "ascending",
+        "descending"
+      ]
+    },
+    "GroupMappingShape": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "angle_degrees": {
+              "type": "number",
+              "format": "double"
+            },
+            "direction": {
+              "$ref": "#/$defs/GroupMappingRankDirection"
+            },
+            "type": {
+              "type": "string",
+              "const": "grid"
+            }
+          },
+          "required": [
+            "type",
+            "angle_degrees",
+            "direction"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "center_u": {
+              "type": "number",
+              "format": "double"
+            },
+            "center_v": {
+              "type": "number",
+              "format": "double"
+            },
+            "direction": {
+              "$ref": "#/$defs/GroupMappingRadialDirection"
+            },
+            "type": {
+              "type": "string",
+              "const": "radial"
+            }
+          },
+          "required": [
+            "type",
+            "center_u",
+            "center_v",
+            "direction"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "center_u": {
+              "type": "number",
+              "format": "double"
+            },
+            "center_v": {
+              "type": "number",
+              "format": "double"
+            },
+            "start_angle_degrees": {
+              "type": "number",
+              "format": "double"
+            },
+            "sweep": {
+              "$ref": "#/$defs/GroupMappingRadarSweep"
+            },
+            "type": {
+              "type": "string",
+              "const": "radar"
+            }
+          },
+          "required": [
+            "type",
+            "center_u",
+            "center_v",
+            "start_angle_degrees",
+            "sweep"
+          ]
+        }
+      ]
+    },
+    "GroupMappingVector3": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        },
+        "z": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "GroupSpatialRankProjection": {
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "rank": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "fixture_id",
+        "rank"
+      ]
+    },
+    "GroupSpatialSelectionMapping": {
+      "type": "object",
+      "properties": {
+        "projection": {
+          "$ref": "#/$defs/GroupMappingProjection"
+        },
+        "shape": {
+          "$ref": "#/$defs/GroupMappingShape"
+        }
+      },
+      "required": [
+        "projection",
+        "shape"
+      ]
+    },
+    "GroupSpatialWarningProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "fixture_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "missing_position"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "fixture_id"
+          ]
+        }
+      ]
+    }
+  }
+}

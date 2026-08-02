@@ -4,6 +4,7 @@ use super::{
     dynamics::{
         DynamicActivationBoundaryProjection, DynamicPhaseSpreadModeProjection,
         DynamicRationalProjection, DynamicRunModeProjection,
+        DynamicSpatialMappingOverrideProjection,
     },
     events::{OutputDeliveryMode, OutputProtocol, OutputRoute, OutputRouteChange},
 };
@@ -271,6 +272,9 @@ pub enum DynamicUpdateIntent {
     SetTargetBinding {
         #[ts(type = "unknown")]
         target_binding: serde_json::Value,
+    },
+    SetSpatialMapping {
+        spatial_mapping: DynamicSpatialMappingOverrideProjection,
     },
     AddLane {
         #[ts(type = "unknown")]

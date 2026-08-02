@@ -1,5 +1,10 @@
 //! Portable Dynamic definitions and transport-safe reference projections.
 
+use super::group_management::{
+    GroupMappingProjectionPreset, GroupMappingProvenanceProjection, GroupMappingRadarSweep,
+    GroupMappingRadialDirection, GroupMappingRankDirection, GroupSpatialRankProjection,
+    GroupSpatialSelectionMapping, GroupSpatialWarningProjection,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -22,12 +27,127 @@ pub struct DynamicDefinitionProjection {
     pub lanes: Vec<DynamicLaneProjection>,
     pub random_groups: Vec<DynamicRandomGroupProjection>,
     pub phase_mode: DynamicPhaseSpreadModeProjection,
+    pub spatial_mapping: DynamicSpatialMappingOverrideProjection,
     pub phase: DynamicPhaseDistributionProjection,
     pub speed: DynamicSpeedProjection,
     pub overall_speed_multiplier: DynamicRationalProjection,
     pub run_mode: DynamicRunModeProjection,
     pub default_activation: DynamicActivationPolicyProjection,
     pub activation_boundary: DynamicActivationBoundaryProjection,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DynamicSpatialProjectionStageProjection {
+    Inherit {},
+    Replace {
+        value: DynamicSpatialProjectionProjection,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicSpatialPosition3dProjection {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicSpatialVector3Projection {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicSpatialProjectionProjection {
+    pub anchor: DynamicSpatialPosition3dProjection,
+    pub view_direction: DynamicSpatialVector3Projection,
+    pub rotation_degrees: f64,
+    #[ts(optional = nullable)]
+    pub preset: Option<GroupMappingProjectionPreset>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DynamicSelectionShapeProjection {
+    Grid {
+        angle_degrees: f64,
+        direction: GroupMappingRankDirection,
+    },
+    Radial {
+        center_u: f64,
+        center_v: f64,
+        direction: GroupMappingRadialDirection,
+    },
+    Radar {
+        center_u: f64,
+        center_v: f64,
+        start_angle_degrees: f64,
+        sweep: GroupMappingRadarSweep,
+    },
+    Random {
+        #[ts(type = "number")]
+        seed: u64,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DynamicSpatialShapeStageProjection {
+    Inherit {},
+    Replace {
+        value: DynamicSelectionShapeProjection,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicSpatialMappingOverrideProjection {
+    pub projection: DynamicSpatialProjectionStageProjection,
+    pub shape: DynamicSpatialShapeStageProjection,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum DynamicSpatialPreviewBaseProjection {
+    LiveGroup {
+        group_id: String,
+        mapping_provenance: GroupMappingProvenanceProjection,
+    },
+    FrozenTargets {},
+    Targetless {},
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicSpatialPreviewRequest {
+    #[schemars(range(max = 9007199254740991_u64))]
+    #[ts(type = "number")]
+    pub expected_dynamic_revision: u64,
+    #[schemars(range(max = 9007199254740991_u64))]
+    #[ts(type = "number")]
+    pub expected_show_revision: u64,
+    pub spatial_mapping: DynamicSpatialMappingOverrideProjection,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct DynamicSpatialPreviewResponse {
+    pub show_id: Uuid,
+    #[ts(type = "number")]
+    pub show_revision: u64,
+    pub dynamic_id: Uuid,
+    #[ts(type = "number")]
+    pub dynamic_revision: u64,
+    pub target_binding: DynamicTargetBindingProjection,
+    pub base: DynamicSpatialPreviewBaseProjection,
+    #[ts(optional = nullable)]
+    pub inherited_mapping: Option<GroupSpatialSelectionMapping>,
+    pub draft: DynamicSpatialMappingOverrideProjection,
+    pub source_order: Vec<Uuid>,
+    pub ordered_fixture_ids: Vec<Uuid>,
+    pub ranks: Vec<GroupSpatialRankProjection>,
+    pub rank_count: usize,
+    pub warnings: Vec<GroupSpatialWarningProjection>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -437,4 +557,57 @@ pub struct DynamicOffLiveActionRequest {
 pub struct DynamicControllerLiveActionRequest {
     pub controller_id: Uuid,
     pub request: DynamicControllerValueActionRequest,
+}
+
+#[cfg(test)]
+mod spatial_mapping_tests {
+    use super::*;
+
+    #[test]
+    fn override_stages_are_explicit_typed_and_random_is_dynamic_only() {
+        let value = serde_json::json!({
+            "projection":{"type":"inherit"},
+            "shape":{"type":"replace","value":{"type":"random","seed":42}}
+        });
+        let decoded: DynamicSpatialMappingOverrideProjection =
+            serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap(), value);
+        assert!(
+            serde_json::from_value::<DynamicSpatialMappingOverrideProjection>(serde_json::json!({
+                "projection":null,
+                "shape":{"type":"inherit"}
+            }))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<DynamicSpatialMappingOverrideProjection>(serde_json::json!({
+                "projection":{"type":"inherit","future_stage":true},
+                "shape":{"type":"replace","value":{"type":"random","seed":1,"future_shape":true}},
+                "future_mapping":true
+            }))
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn preview_request_requires_both_observed_revisions() {
+        let request = serde_json::json!({
+            "expected_dynamic_revision":3,
+            "expected_show_revision":8,
+            "spatial_mapping":{
+                "projection":{"type":"inherit"},
+                "shape":{"type":"inherit"}
+            }
+        });
+        assert!(serde_json::from_value::<DynamicSpatialPreviewRequest>(request.clone()).is_ok());
+        let mut tolerant = request.clone();
+        tolerant["future_request"] = serde_json::json!({"not_logged":"secret"});
+        tolerant["spatial_mapping"]["future_mapping"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<DynamicSpatialPreviewRequest>(tolerant).is_ok());
+        for field in ["expected_dynamic_revision", "expected_show_revision"] {
+            let mut missing = request.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert!(serde_json::from_value::<DynamicSpatialPreviewRequest>(missing).is_err());
+        }
+    }
 }

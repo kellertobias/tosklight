@@ -602,6 +602,10 @@ export function createDefaultDynamicDefinition(
 		lanes: [createDefaultDynamicLane(attribute, ids.lane)],
 		random_groups: [],
 		phase_mode: "uniform",
+		spatial_mapping: {
+			projection: { type: "inherit" },
+			shape: { type: "inherit" },
+		},
 		phase: {
 			ordering: { type: "selection" },
 			offset_degrees: 0,

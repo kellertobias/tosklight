@@ -17,6 +17,7 @@ use crate::v2::command_line::{
 use crate::v2::cue_deletion::{CueDeletionErrorResponse, CueDeletionOutcome, CueDeletionRequest};
 use crate::v2::cue_recording::{CueRecordErrorResponse, CueRecordOutcome, CueRecordRequest};
 use crate::v2::cue_transfer::{CueTransferErrorResponse, CueTransferOutcome, CueTransferRequest};
+use crate::v2::dynamics::{DynamicSpatialPreviewRequest, DynamicSpatialPreviewResponse};
 use crate::v2::events::{EventClientMessage, EventServerMessage, OutputRuntimeSnapshot};
 use crate::v2::group_management::{
     GroupManagementErrorResponse, GroupManagementOutcome, GroupManagementRequest,
@@ -75,6 +76,7 @@ use crate::v2::selective_import::{
     SelectiveImportApplyRequest, SelectiveImportCatalog, SelectiveImportErrorResponse,
     SelectiveImportOutcome, SelectiveImportPreview, SelectiveImportSelection,
 };
+use crate::v2::show_objects::DynamicUpdateActionRequest;
 use crate::v2::speed_group::{
     SpeedGroupActionOutcome, SpeedGroupActionRequest, SpeedGroupErrorResponse, SpeedGroupSnapshot,
 };
@@ -219,6 +221,13 @@ fn programming_artifacts() -> Vec<GeneratedArtifact> {
             "group-management-error-response",
         ),
         programming_response_schema::<GroupSettingsSnapshot>("group-settings-snapshot"),
+        programming_request_schema::<DynamicUpdateActionRequest>("dynamic-update-action-request"),
+        programming_request_schema::<DynamicSpatialPreviewRequest>(
+            "dynamic-spatial-preview-request",
+        ),
+        programming_response_schema::<DynamicSpatialPreviewResponse>(
+            "dynamic-spatial-preview-response",
+        ),
         programming_request_schema::<GroupRecordRequest>("group-record-request"),
         programming_response_schema::<GroupRecordOutcome>("group-record-outcome"),
         programming_response_schema::<GroupRecordErrorResponse>("group-record-error-response"),

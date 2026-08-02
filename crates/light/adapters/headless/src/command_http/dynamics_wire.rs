@@ -69,6 +69,7 @@ pub(super) fn definition(value: &domain::DynamicDefinition) -> wire::DynamicDefi
                 wire::DynamicPhaseSpreadModeProjection::PerLane
             }
         },
+        spatial_mapping: spatial_mapping(&value.spatial_mapping),
         phase: phase(&value.phase),
         speed: speed(&value.speed),
         overall_speed_multiplier: rational(value.overall_speed_multiplier),
@@ -81,6 +82,108 @@ pub(super) fn definition(value: &domain::DynamicDefinition) -> wire::DynamicDefi
             domain::ActivationBoundary::Beat => wire::DynamicActivationBoundaryProjection::Beat,
             domain::ActivationBoundary::Bar => wire::DynamicActivationBoundaryProjection::Bar,
         },
+    }
+}
+
+pub(super) fn spatial_mapping(
+    value: &domain::DynamicSpatialMappingOverride,
+) -> wire::DynamicSpatialMappingOverrideProjection {
+    wire::DynamicSpatialMappingOverrideProjection {
+        projection: match &value.projection {
+            domain::OverrideStage::Inherit => {
+                wire::DynamicSpatialProjectionStageProjection::Inherit {}
+            }
+            domain::OverrideStage::Replace(value) => {
+                wire::DynamicSpatialProjectionStageProjection::Replace {
+                    value: wire_projection(value),
+                }
+            }
+        },
+        shape: match &value.shape {
+            domain::OverrideStage::Inherit => wire::DynamicSpatialShapeStageProjection::Inherit {},
+            domain::OverrideStage::Replace(value) => {
+                wire::DynamicSpatialShapeStageProjection::Replace {
+                    value: wire_shape(value),
+                }
+            }
+        },
+    }
+}
+
+fn wire_projection(value: &domain::SpatialProjection) -> wire::DynamicSpatialProjectionProjection {
+    use light_wire::v2::group_management as group_wire;
+    wire::DynamicSpatialProjectionProjection {
+        anchor: wire::DynamicSpatialPosition3dProjection {
+            x: value.anchor.x,
+            y: value.anchor.y,
+            z: value.anchor.z,
+        },
+        view_direction: wire::DynamicSpatialVector3Projection {
+            x: value.view_direction.x,
+            y: value.view_direction.y,
+            z: value.view_direction.z,
+        },
+        rotation_degrees: value.rotation_degrees,
+        preset: value.preset.map(|preset| match preset {
+            domain::ProjectionPreset::Top => group_wire::GroupMappingProjectionPreset::Top,
+            domain::ProjectionPreset::Front => group_wire::GroupMappingProjectionPreset::Front,
+            domain::ProjectionPreset::Back => group_wire::GroupMappingProjectionPreset::Back,
+            domain::ProjectionPreset::Left => group_wire::GroupMappingProjectionPreset::Left,
+            domain::ProjectionPreset::Right => group_wire::GroupMappingProjectionPreset::Right,
+        }),
+    }
+}
+
+fn wire_shape(value: &domain::DynamicSelectionShape) -> wire::DynamicSelectionShapeProjection {
+    use light_wire::v2::group_management as group_wire;
+    match value {
+        domain::DynamicSelectionShape::Grid {
+            angle_degrees,
+            direction,
+        } => wire::DynamicSelectionShapeProjection::Grid {
+            angle_degrees: *angle_degrees,
+            direction: match direction {
+                domain::RankDirection::Ascending => {
+                    group_wire::GroupMappingRankDirection::Ascending
+                }
+                domain::RankDirection::Descending => {
+                    group_wire::GroupMappingRankDirection::Descending
+                }
+            },
+        },
+        domain::DynamicSelectionShape::Radial {
+            center_u,
+            center_v,
+            direction,
+        } => wire::DynamicSelectionShapeProjection::Radial {
+            center_u: *center_u,
+            center_v: *center_v,
+            direction: match direction {
+                domain::RadialDirection::Outward => {
+                    group_wire::GroupMappingRadialDirection::Outward
+                }
+                domain::RadialDirection::Inward => group_wire::GroupMappingRadialDirection::Inward,
+            },
+        },
+        domain::DynamicSelectionShape::Radar {
+            center_u,
+            center_v,
+            start_angle_degrees,
+            sweep,
+        } => wire::DynamicSelectionShapeProjection::Radar {
+            center_u: *center_u,
+            center_v: *center_v,
+            start_angle_degrees: *start_angle_degrees,
+            sweep: match sweep {
+                domain::RadarSweep::Clockwise => group_wire::GroupMappingRadarSweep::Clockwise,
+                domain::RadarSweep::CounterClockwise => {
+                    group_wire::GroupMappingRadarSweep::CounterClockwise
+                }
+            },
+        },
+        domain::DynamicSelectionShape::Random { seed } => {
+            wire::DynamicSelectionShapeProjection::Random { seed: *seed }
+        }
     }
 }
 

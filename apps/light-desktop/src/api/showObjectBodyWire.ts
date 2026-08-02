@@ -76,6 +76,13 @@ function decodeDynamic(
 		return {
 			...body,
 			phase_mode: body.phase_mode === "per_lane" ? "per_lane" : "uniform",
+			spatial_mapping:
+				body.spatial_mapping && typeof body.spatial_mapping === "object"
+					? body.spatial_mapping
+					: {
+							projection: { type: "inherit" },
+							shape: { type: "inherit" },
+						},
 		} as unknown as ShowObjectBodies["dynamic"];
 	} catch (cause) {
 		const raw =
@@ -106,6 +113,10 @@ function decodeDynamic(
 			lanes: [],
 			random_groups: [],
 			phase_mode: "uniform",
+			spatial_mapping: {
+				projection: { type: "inherit" },
+				shape: { type: "inherit" },
+			},
 			phase: {
 				ordering: { type: "selection" },
 				offset_degrees: 0,

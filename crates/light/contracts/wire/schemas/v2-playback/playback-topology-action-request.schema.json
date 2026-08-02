@@ -95,6 +95,9 @@
         "run_mode": {
           "$ref": "#/$defs/DynamicRunModeProjection"
         },
+        "spatial_mapping": {
+          "$ref": "#/$defs/DynamicSpatialMappingOverrideProjection"
+        },
         "speed": {
           "$ref": "#/$defs/DynamicSpeedProjection"
         },
@@ -111,6 +114,7 @@
         "lanes",
         "random_groups",
         "phase_mode",
+        "spatial_mapping",
         "phase",
         "speed",
         "overall_speed_multiplier",
@@ -654,6 +658,259 @@
         }
       ]
     },
+    "DynamicSelectionShapeProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "angle_degrees": {
+              "type": "number",
+              "format": "double"
+            },
+            "direction": {
+              "$ref": "#/$defs/GroupMappingRankDirection"
+            },
+            "type": {
+              "type": "string",
+              "const": "grid"
+            }
+          },
+          "required": [
+            "type",
+            "angle_degrees",
+            "direction"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "center_u": {
+              "type": "number",
+              "format": "double"
+            },
+            "center_v": {
+              "type": "number",
+              "format": "double"
+            },
+            "direction": {
+              "$ref": "#/$defs/GroupMappingRadialDirection"
+            },
+            "type": {
+              "type": "string",
+              "const": "radial"
+            }
+          },
+          "required": [
+            "type",
+            "center_u",
+            "center_v",
+            "direction"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "center_u": {
+              "type": "number",
+              "format": "double"
+            },
+            "center_v": {
+              "type": "number",
+              "format": "double"
+            },
+            "start_angle_degrees": {
+              "type": "number",
+              "format": "double"
+            },
+            "sweep": {
+              "$ref": "#/$defs/GroupMappingRadarSweep"
+            },
+            "type": {
+              "type": "string",
+              "const": "radar"
+            }
+          },
+          "required": [
+            "type",
+            "center_u",
+            "center_v",
+            "start_angle_degrees",
+            "sweep"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seed": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "random"
+            }
+          },
+          "required": [
+            "type",
+            "seed"
+          ]
+        }
+      ]
+    },
+    "DynamicSpatialMappingOverrideProjection": {
+      "type": "object",
+      "properties": {
+        "projection": {
+          "$ref": "#/$defs/DynamicSpatialProjectionStageProjection"
+        },
+        "shape": {
+          "$ref": "#/$defs/DynamicSpatialShapeStageProjection"
+        }
+      },
+      "required": [
+        "projection",
+        "shape"
+      ]
+    },
+    "DynamicSpatialPosition3dProjection": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        },
+        "z": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "DynamicSpatialProjectionProjection": {
+      "type": "object",
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/DynamicSpatialPosition3dProjection"
+        },
+        "preset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupMappingProjectionPreset"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rotation_degrees": {
+          "type": "number",
+          "format": "double"
+        },
+        "view_direction": {
+          "$ref": "#/$defs/DynamicSpatialVector3Projection"
+        }
+      },
+      "required": [
+        "anchor",
+        "view_direction",
+        "rotation_degrees"
+      ]
+    },
+    "DynamicSpatialProjectionStageProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "inherit"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "replace"
+            },
+            "value": {
+              "$ref": "#/$defs/DynamicSpatialProjectionProjection"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        }
+      ]
+    },
+    "DynamicSpatialShapeStageProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "inherit"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "replace"
+            },
+            "value": {
+              "$ref": "#/$defs/DynamicSelectionShapeProjection"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        }
+      ]
+    },
+    "DynamicSpatialVector3Projection": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        },
+        "z": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
     "DynamicSpeedGroupProjection": {
       "type": "string",
       "enum": [
@@ -775,6 +1032,37 @@
         "value"
       ]
     },
+    "GroupMappingProjectionPreset": {
+      "type": "string",
+      "enum": [
+        "top",
+        "front",
+        "back",
+        "left",
+        "right"
+      ]
+    },
+    "GroupMappingRadarSweep": {
+      "type": "string",
+      "enum": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    "GroupMappingRadialDirection": {
+      "type": "string",
+      "enum": [
+        "outward",
+        "inward"
+      ]
+    },
+    "GroupMappingRankDirection": {
+      "type": "string",
+      "enum": [
+        "ascending",
+        "descending"
+      ]
+    },
     "PlaybackTopologyAction": {
       "oneOf": [
         {
@@ -859,6 +1147,67 @@
             "expected_playback_revision",
             "expected_playback_object_id",
             "playback"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expected_group_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "maximum": 9007199254740991,
+              "minimum": 0
+            },
+            "expected_page_object_id": {
+              "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
+            },
+            "expected_page_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "maximum": 9007199254740991,
+              "minimum": 0
+            },
+            "expected_playback_object_id": {
+              "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
+            },
+            "expected_playback_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "maximum": 9007199254740991,
+              "minimum": 0
+            },
+            "group_object_id": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            },
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 127,
+              "minimum": 1
+            },
+            "slot": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 127,
+              "minimum": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "assign_group_master"
+            }
+          },
+          "required": [
+            "type",
+            "group_object_id",
+            "expected_group_revision",
+            "page",
+            "slot",
+            "expected_page_revision",
+            "expected_page_object_id",
+            "expected_playback_revision",
+            "expected_playback_object_id"
           ]
         },
         {

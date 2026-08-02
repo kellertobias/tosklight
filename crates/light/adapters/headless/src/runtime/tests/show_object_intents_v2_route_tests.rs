@@ -282,6 +282,271 @@ async fn dynamic_phase_mode_seeds_per_lane_phase_without_discarding_it_in_unifor
 }
 
 #[tokio::test]
+async fn dynamic_spatial_mapping_update_and_draft_preview_use_saved_live_group_authority() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let first = light_core::FixtureId::new();
+    let second = light_core::FixtureId::new();
+    let inherited = light_dynamics::SpatialSelectionMapping {
+        projection: light_dynamics::SpatialProjection::from_preset(
+            light_dynamics::ProjectionPreset::Top,
+            light_dynamics::Position3d::default(),
+        ),
+        shape: light_dynamics::SpatialSelectionShape::Grid {
+            angle_degrees: 0.0,
+            direction: light_dynamics::RankDirection::Ascending,
+        },
+    };
+    let group = serde_json::json!({
+        "id":"front",
+        "name":"Front",
+        "fixtures":[first.0, second.0],
+        "source":{"type":"explicit","fixture_ids":[first.0, second.0]},
+        "mapping":inherited,
+        "programming":{}
+    });
+    let show_id = create_seeded_show(
+        &state,
+        &app,
+        &token,
+        "Dynamic spatial mapping",
+        &[("group", "front", group)],
+    )
+    .await;
+    let mut definition = dynamic_definition_json(31);
+    definition["target_binding"] = serde_json::json!({"type":"live_group","group_id":"front"});
+    let (status, created) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        "/api/v2/dynamics/create",
+        serde_json::json!({"request_id":"spatial-create","definition":definition}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    let dynamic_id = created["object"]["id"].as_str().unwrap();
+    let show_revision = created["show_revision"].as_u64().unwrap();
+    let spatial_snapshot =
+        |mapping: Option<light_dynamics::SpatialSelectionMapping>| light_engine::EngineSnapshot {
+            groups: vec![light_programmer::GroupDefinition {
+                id: "front".into(),
+                fixtures: vec![first, second],
+                source: Some(light_programmer::GroupFixtureSource::Explicit {
+                    fixture_ids: vec![first, second],
+                }),
+                mapping,
+                ..Default::default()
+            }]
+            .into(),
+            dynamic_stage_positions: std::collections::HashMap::from([
+                (
+                    first,
+                    light_dynamics::SpatialPosition {
+                        x: 2.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ),
+                (
+                    second,
+                    light_dynamics::SpatialPosition {
+                        x: -2.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ),
+            ])
+            .into(),
+            revision: 20,
+            ..Default::default()
+        };
+    state
+        .output
+        .replace_snapshot(spatial_snapshot(Some(inherited.clone())))
+        .unwrap();
+
+    let draft = serde_json::json!({
+        "projection":{"type":"inherit"},
+        "shape":{"type":"replace","value":{"type":"radial","center_u":0.0,"center_v":0.0,"direction":"outward"}}
+    });
+    let (status, preview) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/spatial-preview"),
+        serde_json::json!({
+            "expected_dynamic_revision":1,
+            "expected_show_revision":show_revision,
+            "spatial_mapping":draft,
+            "future_preview_request":{"must_not_break":true}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{preview}");
+    assert_eq!(
+        preview["target_binding"],
+        serde_json::json!({"type":"live_group","group_id":"front"})
+    );
+    assert_eq!(
+        preview["base"],
+        serde_json::json!({
+            "type":"live_group","group_id":"front",
+            "mapping_provenance":{"type":"local","group_id":"front"}
+        })
+    );
+    assert_eq!(
+        preview["source_order"],
+        serde_json::json!([first.0, second.0])
+    );
+    assert_eq!(
+        preview["rank_count"], 1,
+        "equal radii share one authoritative rank"
+    );
+
+    let (status, stale) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/spatial-preview"),
+        serde_json::json!({
+            "expected_dynamic_revision":1,
+            "expected_show_revision":show_revision - 1,
+            "spatial_mapping":draft
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{stale}");
+
+    let (status, stale_dynamic) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/spatial-preview"),
+        serde_json::json!({
+            "expected_dynamic_revision":99,
+            "expected_show_revision":show_revision,
+            "spatial_mapping":draft
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{stale_dynamic}");
+
+    state
+        .output
+        .replace_snapshot(light_engine::EngineSnapshot {
+            revision: 21,
+            ..Default::default()
+        })
+        .unwrap();
+    let (status, missing_group) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/spatial-preview"),
+        serde_json::json!({
+            "expected_dynamic_revision":1,
+            "expected_show_revision":show_revision,
+            "spatial_mapping":draft
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{missing_group}");
+
+    state
+        .output
+        .replace_snapshot(spatial_snapshot(None))
+        .unwrap();
+    let (status, incomplete) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/update"),
+        serde_json::json!({
+            "request_id":"spatial-incomplete",
+            "expected_revision":1,
+            "intent":{
+                "type":"set_spatial_mapping",
+                "spatial_mapping":{
+                    "projection":{"type":"inherit"},
+                    "shape":{"type":"replace","value":{"type":"grid","angle_degrees":0.0,"direction":"ascending"}}
+                }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{incomplete}");
+
+    state
+        .output
+        .replace_snapshot(spatial_snapshot(Some(inherited)))
+        .unwrap();
+    let (status, updated) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/update"),
+        serde_json::json!({
+            "request_id":"spatial-random",
+            "expected_revision":1,
+            "intent":{
+                "type":"set_spatial_mapping",
+                "spatial_mapping":{
+                    "projection":{"type":"inherit"},
+                    "shape":{"type":"replace","value":{"type":"random","seed":99}}
+                }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    assert_eq!(
+        updated["object"]["body"]["target_binding"],
+        serde_json::json!({"type":"live_group","group_id":"front"})
+    );
+    assert_eq!(
+        updated["object"]["body"]["spatial_mapping"]["shape"],
+        serde_json::json!({"type":"replace","value":{"type":"random","seed":99}})
+    );
+
+    let (status, targetless) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        "/api/v2/dynamics/create",
+        serde_json::json!({
+            "request_id":"spatial-targetless-create",
+            "definition":dynamic_definition_json(32)
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{targetless}");
+    let targetless_id = targetless["object"]["id"].as_str().unwrap();
+    let (status, targetless_preview) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{targetless_id}/spatial-preview"),
+        serde_json::json!({
+            "expected_dynamic_revision":1,
+            "expected_show_revision":targetless["show_revision"],
+            "spatial_mapping":{
+                "projection":{"type":"inherit"},
+                "shape":{"type":"inherit"}
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{targetless_preview}");
+    assert_eq!(
+        targetless_preview["base"],
+        serde_json::json!({"type":"targetless"})
+    );
+    assert_eq!(targetless_preview["rank_count"], 0);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn dynamic_live_http_is_fire_and_forget_without_request_identity() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

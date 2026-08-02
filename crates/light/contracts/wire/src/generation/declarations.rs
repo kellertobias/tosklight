@@ -139,6 +139,16 @@ fn visualization(config: &Config) -> Vec<String> {
 fn dynamics(config: &Config) -> Vec<String> {
     vec![
         DynamicDefinitionProjection::decl(config),
+        DynamicSpatialProjectionStageProjection::decl(config),
+        DynamicSpatialPosition3dProjection::decl(config),
+        DynamicSpatialVector3Projection::decl(config),
+        DynamicSpatialProjectionProjection::decl(config),
+        DynamicSelectionShapeProjection::decl(config),
+        DynamicSpatialShapeStageProjection::decl(config),
+        DynamicSpatialMappingOverrideProjection::decl(config),
+        DynamicSpatialPreviewBaseProjection::decl(config),
+        DynamicSpatialPreviewRequest::decl(config),
+        DynamicSpatialPreviewResponse::decl(config),
         DynamicTargetBindingProjection::decl(config),
         DynamicLaneProjection::decl(config),
         DynamicLaneModeProjection::decl(config),
