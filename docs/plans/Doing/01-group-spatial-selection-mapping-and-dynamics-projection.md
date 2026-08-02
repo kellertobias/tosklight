@@ -256,6 +256,21 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   embedded Dynamic definition now accepts its generated `spatial_mapping` field instead of
   rejecting the authoritative payload as undeclared. The focused decoder suite passed all 22 tests
   and includes a regression payload with a Radial Stage mapping; owned Biome and diff checks passed.
+- Commits `24069d66` and `90929760` split the Plan-owned oversized desktop spatial views and Rust
+  spatial services into adjacent modules without changing their contracts. Desktop typecheck, 33
+  focused UI tests, Dynamics 58/58, active-show 40/40, the affected application and headless Cargo
+  checks, formatting, and focused Biome passed. The source-size gate now reports no Plan-owned
+  violation; its remaining nine findings are pre-existing files outside this plan.
+- Commit `b64a8277` fixes real Group-settings writes racing the lagging collection projection by
+  carrying the authoritative settings snapshot's show revision through the revision-guarded write.
+  Conflicts reload settings authority while retaining the draft. Twenty unit tests, desktop
+  typecheck, and the real `SHOW-000` plus `GROUP-005` scenarios passed.
+- Commit `e939b5b9` reconciles the semantic bench with the retired Layout authority, immediate-save
+  settings modal, canonical Group sources, and live-selection revision behavior. The 16 affected
+  semantic UI scenarios passed together in 19.1 seconds, and `CROSS-002` passed separately.
+- Commit `093f7498` registers typed Group API range selection in the semantic narration catalog and
+  refreshes both generated catalogs. All eight documentation tests and the generated-catalog
+  freshness check passed with 112 scenarios covered.
 - `npm run manual` passed and generated the 176-page PDF plus 48-page offline HTML manual. The
   complete API E2E suite passed all 27 tests, including the Plan 01 API scenario, against isolated
   artifacts. The first complete UI E2E run reached 137 passed, 20 failed, and 1 skipped; its one
