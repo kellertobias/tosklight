@@ -136,6 +136,8 @@ export function stageFixtures3d(
 				invert_pan: fixture.invert_pan,
 				invert_tilt: fixture.invert_tilt,
 				bracket_angle: fixture.bracket_angle,
+				shaper_angle: fixture.shaper_angle,
+				installed_appearance: fixture.installed_appearance,
 			},
 			...(fixture.multipatch ?? []),
 		].map((instance, instanceIndex): Stage3dFixture => {
@@ -156,6 +158,8 @@ export function stageFixtures3d(
 				invertPan: instance.invert_pan ?? false,
 				invertTilt: instance.invert_tilt ?? false,
 				bracketAngle: instance.bracket_angle ?? 0,
+				shaperAngle: instance.shaper_angle ?? null,
+				installedAppearance: instance.installed_appearance,
 				index,
 				position:
 					layout.positions3d[instance.id] ??

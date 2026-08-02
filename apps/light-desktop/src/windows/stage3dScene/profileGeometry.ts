@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type {
 	FixtureMode,
 	GeometryEmitter,
+	InstalledFixtureAppearance,
 	PatchedFixture,
 	VisualizationSnapshot,
 } from "../../api/types";
@@ -14,8 +15,10 @@ import {
 	resolvedColor,
 } from "./attributeValues";
 import { buildGeometryBeam, updateGeometryBeam } from "./emitterGeometry";
+import { applyInstalledAppearance } from "./installedAppearance";
 import type { StageProceduralResourceCache } from "./resources";
 import { addSelectionOutline, millimetres } from "./sceneObjects";
+import { resolveStageShaper } from "./shaperAppearance";
 import type { FixtureAttributeValues, FixtureValuesById } from "./types";
 
 type GeometryGraph = FixtureMode["geometry"];
@@ -38,6 +41,8 @@ export type ProfileGeometryOptions = {
 	renderQuality: StageRenderQuality;
 	virtualHighlight?: boolean;
 	resources?: StageProceduralResourceCache;
+	installedAppearance?: InstalledFixtureAppearance;
+	shaperAngle?: number | null;
 };
 
 function relatedHeadsByNode(graph: GeometryGraph) {
@@ -242,10 +247,22 @@ function mountEmitter(
 		emitter,
 		attributes,
 		emitterIntensity(options, emitter, attributes),
-		resolvedColor(attributes.get("color"), attributes),
+		applyInstalledAppearance(
+			resolvedColor(attributes.get("color"), attributes),
+			options.fixture,
+			options.installedAppearance,
+		),
 		options.showBeamGuides,
 		options.renderQuality,
 		options.resources,
+		resolveStageShaper(
+			options.fixture,
+			options.mode,
+			attributes,
+			options.installedAppearance,
+			options.shaperAngle,
+			emitter.head_id,
+		),
 	);
 	(nodes.get(emitter.node_id)?.anchor ?? root).add(beam);
 }
@@ -328,10 +345,22 @@ export function updateFixtureProfileGeometry(
 			emitter,
 			attributes,
 			emitterIntensity(options, emitter, attributes),
-			resolvedColor(attributes.get("color"), attributes),
+			applyInstalledAppearance(
+				resolvedColor(attributes.get("color"), attributes),
+				options.fixture,
+				options.installedAppearance,
+			),
 			options.showBeamGuides,
 			options.renderQuality,
 			options.resources,
+			resolveStageShaper(
+				options.fixture,
+				options.mode,
+				attributes,
+				options.installedAppearance,
+				options.shaperAngle,
+				emitter.head_id,
+			),
 		);
 	}
 }

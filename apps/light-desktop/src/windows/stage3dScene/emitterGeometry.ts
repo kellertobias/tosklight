@@ -4,7 +4,8 @@ import type { StageRenderQuality } from "../../types";
 import { normalized } from "./attributeValues";
 import type { StageProceduralResourceCache } from "./resources";
 import { emitterSurfaceMaterial, millimetres } from "./sceneObjects";
-import type { FixtureAttributeValues } from "./types";
+import { applyStageShaper } from "./shaperAppearance";
+import type { FixtureAttributeValues, StageShaperState } from "./types";
 
 type BeamMetrics = {
 	distance: number;
@@ -23,6 +24,7 @@ type EmitterSourceContext = {
 	showBeamGuides: boolean;
 	renderQuality: StageRenderQuality;
 	resources?: StageProceduralResourceCache;
+	shaper: StageShaperState;
 };
 
 function matrixOffsets(
@@ -221,6 +223,7 @@ function createEmitterSource(
 	beam.userData.stageBeamRadius = metrics.radius;
 	beam.userData.stageBeamDistance = metrics.distance;
 	beam.userData.stageRenderQuality = context.renderQuality;
+	applyStageShaper(beam, context.shaper);
 	const cone = createConeGeometry(context.resources);
 	const volumeOpacity =
 		intensity * (0.025 + (1 - emitter.feather) * 0.035 + metrics.focus * 0.04);
@@ -328,6 +331,7 @@ function updateSourceBeam(
 	context: EmitterSourceContext,
 ) {
 	const { intensity, color, metrics, renderQuality } = context;
+	applyStageShaper(source, context.shaper);
 	const active = intensity > 0.001;
 	source.userData.stageBeamActive = active;
 	source.userData.stageBeamIntensity = intensity;
@@ -419,6 +423,12 @@ export function updateGeometryBeam(
 	showBeamGuides: boolean,
 	renderQuality: StageRenderQuality,
 	resources?: StageProceduralResourceCache,
+	shaper: StageShaperState = {
+		supported: [false, false, false, false],
+		insertions: [0, 0, 0, 0],
+		anglesDegrees: [0, 0, 0, 0],
+		moduleRotationDegrees: 0,
+	},
 ) {
 	const metrics = resolveBeamMetrics(emitter, attributes);
 	group.userData.beamAngleDegrees = metrics.beamAngle;
@@ -434,6 +444,7 @@ export function updateGeometryBeam(
 		showBeamGuides,
 		renderQuality,
 		resources,
+		shaper,
 	};
 	for (const source of group.children) updateSourceBeam(source, context);
 }
@@ -491,6 +502,12 @@ export function buildGeometryBeam(
 	showBeamGuides: boolean,
 	renderQuality: StageRenderQuality,
 	resources?: StageProceduralResourceCache,
+	shaper: StageShaperState = {
+		supported: [false, false, false, false],
+		insertions: [0, 0, 0, 0],
+		anglesDegrees: [0, 0, 0, 0],
+		moduleRotationDegrees: 0,
+	},
 ) {
 	const metrics = resolveBeamMetrics(emitter, attributes);
 	const offsets = layoutOffsets(emitter.layout);
@@ -503,6 +520,7 @@ export function buildGeometryBeam(
 		showBeamGuides,
 		renderQuality,
 		resources,
+		shaper,
 	};
 	offsets.forEach((offset, index) => {
 		group.add(createEmitterSource(offset, index, context));

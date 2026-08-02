@@ -1,5 +1,6 @@
 import type {
 	AttributeValue,
+	InstalledFixtureAppearance,
 	PatchedFixture,
 	VisualizationSnapshot,
 } from "../../api/types";
@@ -22,10 +23,21 @@ export interface Stage3dFixture {
 	 * decides how far down it looks.
 	 */
 	bracketAngle?: number;
+	/** Installed source, gel, and static shaper settings for this exact physical copy. */
+	installedAppearance?: InstalledFixtureAppearance;
+	/** Installed rotation of a fitted shaper module, in degrees. */
+	shaperAngle?: number | null;
 }
 
 export type FixtureAttributeValues = Map<string, AttributeValue>;
 export type FixtureValuesById = Map<string, FixtureAttributeValues>;
+
+export type StageShaperState = {
+	supported: [boolean, boolean, boolean, boolean];
+	insertions: [number, number, number, number];
+	anglesDegrees: [number, number, number, number];
+	moduleRotationDegrees: number;
+};
 
 export interface StageSceneContext {
 	snapshot: VisualizationSnapshot | null;

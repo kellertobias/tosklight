@@ -39,11 +39,13 @@ function fixtureStructureKey(item: Stage3dFixture) {
 		definition.profile_id ?? "",
 		definition.mode_id ?? "",
 		item.instanceId ?? item.fixture.fixture_id,
+		JSON.stringify(item.installedAppearance ?? null),
+		item.shaperAngle ?? "",
 	].join("\u0000");
 }
 
 function fixtureTransformKey(item: Stage3dFixture) {
-	return JSON.stringify(item.position);
+	return JSON.stringify([item.position, item.bracketAngle ?? 0]);
 }
 
 function usesProfileGeometry(
@@ -78,6 +80,8 @@ function buildStageFixture(item: Stage3dFixture, context: StageSceneContext) {
 					renderQuality: context.renderQuality,
 					virtualHighlight: context.virtualHighlight.has(fixtureId),
 					resources: context.resources,
+					installedAppearance: item.installedAppearance,
+					shaperAngle: item.shaperAngle,
 				})
 			: null;
 	if (profileGeometry) {
@@ -527,6 +531,8 @@ export function applyStageVisualization(
 				renderQuality,
 				virtualHighlight: virtualHighlight.has(fixtureId),
 				resources: context.resources,
+				installedAppearance: item.installedAppearance,
+				shaperAngle: item.shaperAngle,
 			});
 		} else {
 			updateFallbackFixture(

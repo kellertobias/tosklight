@@ -13,16 +13,23 @@ import {
 	capabilityName,
 	normalized,
 	parameterDefault,
+	profileMode,
 	resolvedColor,
 } from "./attributeValues";
 import { createImprovedBeamMesh } from "./emitterGeometry";
+import { applyInstalledAppearance } from "./installedAppearance";
 import type { StageProceduralResourceCache } from "./resources";
 import {
 	addSelectionOutline,
 	emitterSurfaceMaterial,
 	fixtureBody,
 } from "./sceneObjects";
-import type { FixtureAttributeValues, Stage3dFixture } from "./types";
+import { applyStageShaper, resolveStageShaper } from "./shaperAppearance";
+import type {
+	FixtureAttributeValues,
+	Stage3dFixture,
+	StageShaperState,
+} from "./types";
 
 type FallbackRenderState = {
 	intensity: number;
@@ -32,6 +39,7 @@ type FallbackRenderState = {
 	color: THREE.Color;
 	distance: number;
 	radius: number;
+	shaper: StageShaperState;
 };
 
 const directionalFixtures = new WeakMap<PatchedFixture, boolean>();
@@ -98,9 +106,20 @@ export function fallbackRenderState(
 		pan,
 		tilt,
 		focus: fixtureParameter(item, attributes, "focus", 0.65),
-		color: resolvedColor(attributes.get("color"), attributes),
+		color: applyInstalledAppearance(
+			resolvedColor(attributes.get("color"), attributes),
+			item.fixture,
+			item.installedAppearance,
+		),
 		distance,
 		radius: Math.tan(THREE.MathUtils.degToRad(4 + zoom * 23)) * distance,
+		shaper: resolveStageShaper(
+			item.fixture,
+			profileMode(item.fixture),
+			attributes,
+			item.installedAppearance,
+			item.shaperAngle,
+		),
 	};
 }
 
@@ -251,6 +270,7 @@ function addFallbackBeamVisuals(
 	beam.userData.stageBeamColor = `#${state.color.getHexString()}`;
 	beam.userData.stageBeamRadius = state.radius;
 	beam.userData.stageBeamDistance = state.distance;
+	applyStageShaper(beam, state.shaper);
 	if (!directional) return;
 	const drawBeams = active && renderQuality !== "lines_only";
 	const drawLines =
@@ -418,6 +438,7 @@ export function updateFallbackFixture(
 	const beam = runtime.beam;
 	if (!beam) return;
 	if (beam.parent === root) orientRootBeam(beam, state);
+	applyStageShaper(beam, state.shaper);
 	const previousRadius = Number(beam.userData.stageBeamRadius) || state.radius;
 	const radiusScale = state.radius / Math.max(previousRadius, 1e-6);
 	beam.userData.stageBeamActive = state.intensity > 0.001;
