@@ -74,6 +74,26 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   current-page/explicit-page Playback identities. The six explicit routing intents do not inspect
   selection or other incidental UI state. Its two focused Vitest files passed all 16 tests, desktop
   TypeScript typecheck passed, Biome passed, and `git diff --check` passed.
+- Commit `25ac7991` adds a serde-defaulted definition-wide Dynamic spatial override while retaining
+  legacy uniform and per-lane `PhaseOrdering` unchanged as a compatibility-only read/runtime path.
+  Absent and explicit inherit/inherit states canonicalize to omission; explicit projection and
+  Random replacement round-trip. All 43 `light-dynamics` tests and warning-clean Clippy passed.
+  Commit `8fbf25c9` updates the remaining Rust/benchmark definition fixtures for the new field.
+- Commit `852afbac` makes Group recording write canonical explicit/reference sources, materialize
+  merge/subtract in first-occurrence order, preserve empty Groups, block deletion through canonical
+  references, and stop copying the retired selection grid. Its nine focused tests passed, and the
+  agent's full `light-programmer` run passed all 121 tests.
+- Commit `85c5d1f2` accepts canonical source-only Group bodies, preserves canonical-over-legacy and
+  unknown-field losslessly, and imports/remaps explicit fixture IDs plus every live Group reference.
+  The active-show object suite passed 19 tests and selective import passed 44 tests.
+- Commit `8b7ec32e` validates canonical reference rules, reference resolution, and spatial mapping at
+  the engine snapshot boundary. All 94 `light-engine` tests passed. Strict Clippy exposed six
+  existing lints in untouched Playback, Programmer, profile-projection, and test files; rerunning
+  with only those lints allowed passed with warnings otherwise denied.
+- Commit `591a3266` propagates canonical sources through Update, frozen refresh, detach/materialize,
+  and the legacy headless record-command path without authoring new legacy derivation authority.
+  Thirteen Group-management tests, the focused Update test, and the real headless record-command
+  test passed; package formatting and diff checks passed.
 
 ## Remaining work
 
@@ -81,6 +101,8 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   moving this plan to `docs/plans/Done`.
 - Wire the canonical Group source into recording, mutation, validation, selective import, portable
   lossless persistence, and migration before treating the domain representation as authoritative.
+  Recording, mutation, validation, and selective import are now integrated; startup migration,
+  structural lossless-array identity, legacy field retirement, and recovery/idempotence proof remain.
 - Connect the typed SET state machine to the command line, Group tiles, Playback controls, and
   revision-guarded application commands; its committed pure model is not runtime proof.
 
