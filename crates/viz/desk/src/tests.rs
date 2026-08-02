@@ -119,6 +119,29 @@ fn the_stage_layout_position_overrides_the_patch_location() {
     assert!((fixture.position.z + 3.0).abs() < 1e-4);
 }
 
+#[test]
+fn installed_appearance_from_the_patch_tints_the_compiled_scene() {
+    let profile = shipped_profile("claypaky--sharpy");
+    let mut models = models(profile.clone(), StageLayoutBody::default());
+    models.patch.fixtures[0]
+        .installed_appearance
+        .color_temperature_kelvin = Some(3_200);
+    models.patch.fixtures[0].installed_appearance.gel = light_fixture::GelAssignment::Custom {
+        name: "Red".into(),
+        color_srgb: "#FF0000".into(),
+        note: None,
+    };
+    let expected = viz_project::installed_appearance_linear_rgb(
+        &serde_json::from_value(profile).expect("fixture profile"),
+        &models.patch.fixtures[0].installed_appearance,
+    );
+
+    let plan = scene_build::build(&models);
+    assert_eq!(plan.scene.fixtures[0].installed_colour, expected);
+    assert_eq!(expected[1], 0.0);
+    assert_eq!(expected[2], 0.0);
+}
+
 /// A profile that ships a wheel projects its own glass, in the number of slots it actually has.
 #[test]
 fn a_shipped_gobo_wheel_reaches_the_scene_as_artwork() {

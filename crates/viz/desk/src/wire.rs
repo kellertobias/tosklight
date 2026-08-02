@@ -3,6 +3,7 @@
 //! Unknown fields are tolerated and never fatal: the desk may add fields at any time and the
 //! renderer must keep working (api-rules §5).
 
+use light_fixture::InstalledFixtureAppearance;
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -117,6 +118,8 @@ pub struct PatchFixture {
     /// Degrees a fitted shaper or barn-door module is turned to.
     #[serde(default)]
     pub shaper_angle: Option<f32>,
+    #[serde(default)]
+    pub installed_appearance: InstalledFixtureAppearance,
 }
 
 #[derive(Debug, Deserialize)]
@@ -167,6 +170,8 @@ pub struct MultiPatch {
     pub bracket_angle: f32,
     #[serde(default)]
     pub shaper_angle: Option<f32>,
+    #[serde(default)]
+    pub installed_appearance: InstalledFixtureAppearance,
 }
 
 #[derive(Debug, Deserialize)]

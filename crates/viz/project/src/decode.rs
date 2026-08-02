@@ -163,7 +163,22 @@ impl Decoder {
         {
             *slot = read(blade).unwrap_or(0.0);
         }
+        for (slot, blade) in value
+            .shaper_blade_angles_degrees
+            .iter_mut()
+            .zip(binding.shaper_blade_angles.iter())
+        {
+            *slot = blade
+                .as_ref()
+                .map(|channel| channel.physical(&self.slots(channel.logical_universe)))
+                .unwrap_or(0.0);
+        }
         value.shaper_rotation = read(&binding.shaper_rotation).unwrap_or(0.0);
+        value.shaper_rotation_degrees = binding
+            .shaper_rotation
+            .as_ref()
+            .map(|channel| channel.physical(&self.slots(channel.logical_universe)))
+            .unwrap_or(0.0);
 
         let (shutter, strobe_hz) = self.decode_shutter(binding);
         value.strobe_hz = strobe_hz;
@@ -357,6 +372,9 @@ mod tests {
             kind,
             cells: EmitterLayoutCells::single(),
             laser: None,
+            live_shaper_angle_roles: [false; 4],
+            shaper_roles: [false; 4],
+            live_shaper_rotation_role: false,
         }
     }
 
@@ -371,6 +389,8 @@ mod tests {
             rotation_degrees: Vec3::ZERO,
             bracket_degrees: 0.0,
             shaper_degrees: None,
+            installed_colour: [1.0; 3],
+            installed_shaper_angles_degrees: [0.0; 4],
             body: FixtureBody::default(),
             patched: true,
             address: None,
@@ -452,6 +472,28 @@ mod tests {
         decoder.apply(&scene, &[frame(&[(0, 255), (1, 255)])], &mut values, 0.0);
         assert_eq!(values.emitters[0].pan, 0.0);
         assert_eq!(values.emitters[0].tilt, 1.0);
+    }
+
+    #[test]
+    fn shaper_angles_decode_in_physical_degrees() {
+        let mut blade = channel(1);
+        blade.physical_min = -90.0;
+        blade.physical_max = 90.0;
+        let mut rotation = channel(2);
+        rotation.physical_min = -180.0;
+        rotation.physical_max = 180.0;
+        let binding = EmitterBinding {
+            shaper_blade_angles: [Some(blade), None, None, None],
+            shaper_rotation: Some(rotation),
+            universes: vec![1],
+            ..EmitterBinding::default()
+        };
+        let mut decoder = Decoder::new(vec![binding]);
+        let scene = scene(&[EmitterKind::Beam]);
+        let mut values = SceneValues::default();
+        decoder.apply(&scene, &[frame(&[(0, 255), (1, 0)])], &mut values, 0.0);
+        assert_eq!(values.emitters[0].shaper_blade_angles_degrees[0], 90.0);
+        assert_eq!(values.emitters[0].shaper_rotation_degrees, -180.0);
     }
 
     #[test]

@@ -116,6 +116,11 @@ pub struct FixtureInstance {
     pub bracket_degrees: f32,
     /// Degrees a fitted shaper or barn-door module is turned to, or `None` when none is fitted.
     pub shaper_degrees: Option<f32>,
+    /// Installed source/CCT/gel multiplier in linear RGB for this exact physical instance.
+    pub installed_colour: [f32; 3],
+    /// Installed blade angles, used only where the fixture profile exposes the corresponding
+    /// canonical shaper role. A renderer must not infer support from arbitrary model node names.
+    pub installed_shaper_angles_degrees: [f32; 4],
     pub body: FixtureBody,
     /// `false` while the fixture is part of the show but has no DMX address.
     pub patched: bool,
@@ -211,6 +216,14 @@ pub struct EmitterInstance {
     pub cells: EmitterLayoutCells,
     /// Scanner geometry, present exactly when `kind` is [`EmitterKind::Laser`].
     pub laser: Option<LaserOptics>,
+    /// Whether the profile carries a live canonical angle attribute for each blade. Live values
+    /// override the corresponding installed angle rather than being added to it.
+    pub live_shaper_angle_roles: [bool; 4],
+    /// Whether the profile carries any canonical role for each blade. Installed angles are only
+    /// meaningful for those explicitly supported components.
+    pub shaper_roles: [bool; 4],
+    /// Whether live `shaper.rotation` owns the module pose for this emitter.
+    pub live_shaper_rotation_role: bool,
 }
 
 /// What a laser projector's scanner can physically reach, resolved from the profile.
@@ -540,6 +553,8 @@ mod tests {
             rotation_degrees: Vec3::new(0.0, 90.0, 0.0),
             bracket_degrees: 0.0,
             shaper_degrees: None,
+            installed_colour: [1.0; 3],
+            installed_shaper_angles_degrees: [0.0; 4],
             body: FixtureBody {
                 size: Vec3::splat(0.3),
                 kind: BodyKind::Lantern,
@@ -574,6 +589,8 @@ mod tests {
             rotation_degrees: Vec3::new(12.0, 34.0, 56.0),
             bracket_degrees: 0.0,
             shaper_degrees: None,
+            installed_colour: [1.0; 3],
+            installed_shaper_angles_degrees: [0.0; 4],
             body: FixtureBody {
                 size: Vec3::splat(0.3),
                 kind: BodyKind::Lantern,
@@ -599,6 +616,8 @@ mod tests {
             rotation_degrees: Vec3::ZERO,
             bracket_degrees: 0.0,
             shaper_degrees: None,
+            installed_colour: [1.0; 3],
+            installed_shaper_angles_degrees: [0.0; 4],
             body: FixtureBody::default(),
             patched: true,
             address: None,
@@ -643,6 +662,9 @@ mod tests {
             kind: EmitterKind::Beam,
             cells: EmitterLayoutCells::single(),
             laser: None,
+            live_shaper_angle_roles: [false; 4],
+            shaper_roles: [false; 4],
+            live_shaper_rotation_role: false,
         };
         assert!((emitter.cone_half_angle(0.0) - 5.0_f32.to_radians()).abs() < 1e-6);
         assert!((emitter.cone_half_angle(1.0) - 15.0_f32.to_radians()).abs() < 1e-6);

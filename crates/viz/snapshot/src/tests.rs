@@ -19,6 +19,8 @@ fn rig() -> (Scene, SceneValues) {
         rotation_degrees: Vec3::ZERO,
         bracket_degrees: 0.0,
         shaper_degrees: None,
+        installed_colour: [1.0; 3],
+        installed_shaper_angles_degrees: [0.0; 4],
         body: FixtureBody {
             size: Vec3::new(0.3, 0.5, 0.3),
             kind: BodyKind::MovingHead,
@@ -51,6 +53,9 @@ fn rig() -> (Scene, SceneValues) {
         kind: EmitterKind::Beam,
         cells: EmitterLayoutCells::single(),
         laser: None,
+        live_shaper_angle_roles: [false; 4],
+        shaper_roles: [false; 4],
+        live_shaper_rotation_role: false,
     });
     scene.scenery.push(SceneryObject {
         id: Uuid::nil(),

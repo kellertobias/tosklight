@@ -153,6 +153,8 @@ mod tests {
             rotation_degrees: Vec3::ZERO,
             bracket_degrees: 0.0,
             shaper_degrees: None,
+            installed_colour: [1.0; 3],
+            installed_shaper_angles_degrees: [0.0; 4],
             body: FixtureBody {
                 size: Vec3::new(0.3, 0.4, 0.3),
                 kind: BodyKind::MovingHead,

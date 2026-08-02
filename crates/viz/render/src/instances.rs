@@ -91,12 +91,14 @@ pub struct GpuLight {
     pub tangent_frost: [f32; 4],
     /// `x` gobo slot, `y` gobo rotation in radians, `z` prism facets, `w` prism rotation.
     pub optics: [f32; 4],
+    /// Framing-shutter blade insertions, `0` open, in the beam's own frame after its rotation.
+    pub shapers: [f32; 4],
+    /// Framing-shutter blade angles in radians, one per explicitly supported canonical role.
+    pub shaper_angles: [f32; 4],
     /// `x` the artwork layer this slot projects, or `-1` for a slot with none — which is every
     /// slot of a profile that declares no wheel, and is what selects the drawn patterns instead.
     /// `yzw` spare.
     pub gate: [f32; 4],
-    /// Framing-shutter blade insertions, `0` open, in the beam's own frame after its rotation.
-    pub shapers: [f32; 4],
     /// `x` shadow-map index or `-1`, `yz` its tile origin in the atlas, `w` the tile size.
     pub shadow: [f32; 4],
 }
@@ -570,6 +572,7 @@ fn push_emitters(
             continue;
         };
         let value = values.emitters.get(index).unwrap_or(&fallback);
+        let installed_colour = Vec3::from(fixture.installed_colour);
         let (pan, tilt) = head_angles.get(index).copied().unwrap_or((0.0, 0.0));
         let optics = resolve_optics(emitter, value);
         let mut pose = emitter_pose(fixture, emitter, pan, tilt, value.zoom);
@@ -588,6 +591,7 @@ fn push_emitters(
                     scanner,
                     scan,
                     intensity,
+                    installed_colour,
                 );
             }
             // The window itself, lit. It is a few millimetres across and adds nothing to the room,
@@ -601,12 +605,12 @@ fn push_emitters(
                 aperture_size(emitter),
                 emitter.optics.source.form,
                 intensity,
-                Vec3::from(value.colour),
+                Vec3::from(value.colour) * installed_colour,
             );
             frame.poses.push(pose);
             continue;
         }
-        let cells = cell_states(emitter, value);
+        let cells = cell_states(emitter, value, installed_colour);
         let aperture = aperture_size(emitter);
         // Where the cone would converge behind the lens. A wide lamp's apex sits just behind its
         // face; a narrow one's is metres back, which is exactly why a beam holds together down its
@@ -649,11 +653,25 @@ fn push_emitters(
                 .map_or(-1.0, |layer| layer as f32);
             // The beam's own right axis: every pattern the head projects turns with the head.
             let tangent = (pose.orientation * Vec3::X).normalize_or(Vec3::X);
-            // Where the blades sit is where somebody fitted the module, plus whatever the desk
-            // has turned it to since. A barn door has only the first of those; a framing module
-            // the desk can rotate starts from it.
-            let shaper_turn = value.shaper_rotation * std::f32::consts::TAU
-                + fixture.shaper_degrees.unwrap_or(0.0).to_radians();
+            // Where the blades sit is either the installed module pose or the desk's live pose.
+            // A live canonical role owns that physical component completely; the two values are
+            // never added into a competing second authority.
+            let shaper_turn = if emitter.live_shaper_rotation_role {
+                value.shaper_rotation_degrees.to_radians()
+            } else if emitter.shaper_roles.iter().any(|supported| *supported) {
+                fixture.shaper_degrees.unwrap_or(0.0).to_radians()
+            } else {
+                0.0
+            };
+            let shaper_angles = std::array::from_fn(|index| {
+                if emitter.live_shaper_angle_roles[index] {
+                    value.shaper_blade_angles_degrees[index].to_radians()
+                } else if emitter.shaper_roles[index] {
+                    fixture.installed_shaper_angles_degrees[index].to_radians()
+                } else {
+                    0.0
+                }
+            });
             frame.lights.push(GpuLight {
                 position_range: origin
                     .extend(beam_reach(origin, pose.direction, pose.half_angle).max(2.0))
@@ -678,6 +696,7 @@ fn push_emitters(
                     value.prism_rotation * std::f32::consts::TAU,
                 ],
                 shapers: value.shaper_blades,
+                shaper_angles,
                 gate: [artwork, 0.0, 0.0, 0.0],
                 // Filled in once the frame knows which lights are worth a map.
                 shadow: [-1.0, 0.0, 0.0, 0.0],
@@ -750,11 +769,12 @@ pub fn semantic_lights(scene: &Scene, values: &SceneValues) -> Vec<SemanticLight
             continue;
         };
         let value = values.emitters.get(index).unwrap_or(&fallback);
+        let installed_colour = Vec3::from(fixture.installed_colour);
         let (pan, tilt) = head_angles.get(index).copied().unwrap_or((0.0, 0.0));
         let optics = resolve_optics(emitter, value);
         let mut pose = emitter_pose(fixture, emitter, pan, tilt, value.zoom);
         pose.half_angle = optics.half_angle;
-        let cells = cell_states(emitter, value);
+        let cells = cell_states(emitter, value, installed_colour);
         let aperture = aperture_size(emitter);
         for (cell_index, offset) in emitter.cells.offsets.iter().enumerate() {
             let (intensity, colour) = cells
@@ -815,11 +835,18 @@ fn neighbouring_cell_spacing(emitter: &EmitterInstance) -> Option<f32> {
     closest.is_finite().then_some(closest)
 }
 
-fn cell_states(emitter: &EmitterInstance, value: &EmitterValues) -> Vec<(f32, Vec3)> {
+fn cell_states(
+    emitter: &EmitterInstance,
+    value: &EmitterValues,
+    installed_colour: Vec3,
+) -> Vec<(f32, Vec3)> {
     let shutter = value.shutter.clamp(0.0, 1.0);
     if value.cells.is_empty() {
         let intensity = value.held_intensity.max(value.visible_intensity());
-        return vec![(intensity, Vec3::from(value.colour)); emitter.cells.len()];
+        return vec![
+            (intensity, Vec3::from(value.colour) * installed_colour,);
+            emitter.cells.len()
+        ];
     }
     emitter
         .cells
@@ -834,7 +861,7 @@ fn cell_states(emitter: &EmitterInstance, value: &EmitterValues) -> Vec<(f32, Ve
             let gated = (cell.intensity * shutter).clamp(0.0, 1.0);
             (
                 cell.held_intensity.max(gated).clamp(0.0, 1.0),
-                Vec3::from(cell.colour),
+                Vec3::from(cell.colour) * installed_colour,
             )
         })
         .collect()

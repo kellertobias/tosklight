@@ -114,9 +114,13 @@ fn assign(binding: &mut EmitterBinding, attribute: &AttributeKey, reference: &Ch
         "prism.1" => slot(&mut binding.prism),
         "prism.1.rotation" => slot(&mut binding.prism_rotation),
         "shaper.blade.1.position" => slot(&mut binding.shaper_blades[0]),
+        "shaper.blade.1.angle" => slot(&mut binding.shaper_blade_angles[0]),
         "shaper.blade.2.position" => slot(&mut binding.shaper_blades[1]),
+        "shaper.blade.2.angle" => slot(&mut binding.shaper_blade_angles[1]),
         "shaper.blade.3.position" => slot(&mut binding.shaper_blades[2]),
+        "shaper.blade.3.angle" => slot(&mut binding.shaper_blade_angles[2]),
         "shaper.blade.4.position" => slot(&mut binding.shaper_blades[3]),
+        "shaper.blade.4.angle" => slot(&mut binding.shaper_blade_angles[3]),
         "shaper.rotation" => slot(&mut binding.shaper_rotation),
         "fog" | "haze" | "smoke" => slot(&mut binding.fog),
         _ => {}

@@ -1,5 +1,7 @@
 //! Deterministic installed-source and gel colour transforms for the visualizer.
 
+use light_fixture::{FixtureProfile, GelAssignment, InstalledFixtureAppearance};
+
 /// Lowest installed colour temperature accepted by the patch contract.
 pub const MIN_COLOUR_TEMPERATURE_KELVIN: u32 = 1_000;
 /// Highest installed colour temperature accepted by the patch contract.
@@ -69,6 +71,39 @@ pub fn apply_installed_appearance(
         .unwrap_or(NEUTRAL);
     let gel = gel_visualizer_linear_rgb.unwrap_or(NEUTRAL);
     std::array::from_fn(|index| live_linear_rgb[index] * temperature[index] * gel[index])
+}
+
+/// Resolve the portable installed appearance into the one linear multiplier every renderer uses.
+///
+/// An explicit installed temperature wins. Otherwise the selected immutable profile revision is
+/// the fallback, including for an explicitly named source: the patch validator only requires a
+/// separate CCT when neither place can supply one. Gel assignments use their embedded portable
+/// visualizer colour, never a renderer-local catalog lookup.
+pub fn installed_appearance_linear_rgb(
+    profile: &FixtureProfile,
+    appearance: &InstalledFixtureAppearance,
+) -> [f32; 3] {
+    let colour_temperature_kelvin = appearance.color_temperature_kelvin.or_else(|| {
+        profile
+            .physical
+            .color_temperature_kelvin
+            .filter(|kelvin| kelvin.is_finite())
+            .map(|kelvin| kelvin.round())
+            .filter(|kelvin| *kelvin >= 0.0 && *kelvin <= u32::MAX as f32)
+            .map(|kelvin| kelvin as u32)
+    });
+    let gel_visualizer_linear_rgb = match &appearance.gel {
+        GelAssignment::OpenWhite => None,
+        GelAssignment::BuiltIn {
+            embedded_fallback, ..
+        } => parse_srgb_hex_linear(&embedded_fallback.visualizer_srgb),
+        GelAssignment::Custom { color_srgb, .. } => parse_srgb_hex_linear(color_srgb),
+    };
+    apply_installed_appearance(
+        NEUTRAL,
+        colour_temperature_kelvin,
+        gel_visualizer_linear_rgb,
+    )
 }
 
 fn srgb_channel_to_linear(channel: f32) -> f32 {
@@ -164,6 +199,43 @@ mod tests {
         assert_eq!(
             apply_installed_appearance([0.0; 3], Some(25_000), Some(red_gel)),
             [0.0; 3]
+        );
+    }
+
+    #[test]
+    fn portable_appearance_uses_profile_cct_and_embedded_gel_fallback() {
+        let mut profile = FixtureProfile::blank();
+        profile.physical.color_temperature_kelvin = Some(3_200.0);
+        let appearance = InstalledFixtureAppearance {
+            gel: GelAssignment::BuiltIn {
+                catalog_id: "generic".into(),
+                entry_id: "red".into(),
+                embedded_fallback: light_fixture::GelDefinitionSnapshot {
+                    number: "R".into(),
+                    name: "Red".into(),
+                    display_srgb: "#FF0000".into(),
+                    visualizer_srgb: "#C01020".into(),
+                },
+            },
+            ..InstalledFixtureAppearance::default()
+        };
+        assert_rgb(
+            installed_appearance_linear_rgb(&profile, &appearance),
+            apply_installed_appearance(NEUTRAL, Some(3_200), parse_srgb_hex_linear("#C01020")),
+        );
+    }
+
+    #[test]
+    fn explicit_temperature_overrides_the_profile_default() {
+        let mut profile = FixtureProfile::blank();
+        profile.physical.color_temperature_kelvin = Some(3_200.0);
+        let appearance = InstalledFixtureAppearance {
+            color_temperature_kelvin: Some(10_000),
+            ..InstalledFixtureAppearance::default()
+        };
+        assert_rgb(
+            installed_appearance_linear_rgb(&profile, &appearance),
+            colour_temperature_linear_rgb(10_000),
         );
     }
 }

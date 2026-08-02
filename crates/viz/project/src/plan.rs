@@ -7,8 +7,8 @@ use crate::default_model::{self, FixtureTraits};
 use crate::fallback::{self, OpticalClass};
 use glam::{Quat, Vec3};
 use light_fixture::{
-    ChannelBehavior, FixtureMode, FixtureProfile, GeometryMotionKind, LightSourceForm, PatchPolicy,
-    ProfileLaser, ProfileOptics, Vector3,
+    ChannelBehavior, FixtureMode, FixtureProfile, GeometryMotionKind, InstalledFixtureAppearance,
+    LightSourceForm, PatchPolicy, ProfileLaser, ProfileOptics, Vector3,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -37,6 +37,8 @@ pub struct PhysicalInstance {
     /// Degrees a fitted shaper or barn-door module is turned to, or `None` when none is fitted.
     /// A framing module the desk can rotate starts from here.
     pub shaper_angle: Option<f32>,
+    /// Portable source/filter and static blade settings for this exact physical instance.
+    pub installed_appearance: InstalledFixtureAppearance,
 }
 
 /// One logical fixture with its selected immutable profile revision.
@@ -69,6 +71,8 @@ pub struct EmitterBinding {
     pub prism_rotation: Option<ChannelRef>,
     /// Framing-shutter blade insertions, in the order the attribute registry numbers them.
     pub shaper_blades: [Option<ChannelRef>; 4],
+    /// Framing-shutter blade angles, in physical degrees.
+    pub shaper_blade_angles: [Option<ChannelRef>; 4],
     pub shaper_rotation: Option<ChannelRef>,
     pub fog: Option<ChannelRef>,
     pub colour: ColourBinding,
@@ -360,6 +364,13 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
                 rotation_degrees: instance.rotation_degrees,
                 bracket_degrees: instance.bracket_angle,
                 shaper_degrees: instance.shaper_angle,
+                installed_colour: crate::installed_appearance_linear_rgb(
+                    &fixture.profile,
+                    &instance.installed_appearance,
+                ),
+                installed_shaper_angles_degrees: instance
+                    .installed_appearance
+                    .shaper_angles_degrees,
                 body: FixtureBody {
                     size: body_size,
                     kind: class.body_kind(moving),
@@ -572,6 +583,14 @@ fn build_emitters(
                 laser: (kind == EmitterKind::Laser)
                     .then(|| laser.clone())
                     .flatten(),
+                live_shaper_angle_roles: std::array::from_fn(|index| {
+                    binding.shaper_blade_angles[index].is_some()
+                }),
+                shaper_roles: std::array::from_fn(|index| {
+                    binding.shaper_blades[index].is_some()
+                        || binding.shaper_blade_angles[index].is_some()
+                }),
+                live_shaper_rotation_role: binding.shaper_rotation.is_some(),
             });
             binding.laser_window = laser_window.clone();
             bindings.push(binding);
@@ -651,6 +670,14 @@ fn build_emitters(
             laser: (kind == EmitterKind::Laser)
                 .then(|| laser.clone())
                 .flatten(),
+            live_shaper_angle_roles: std::array::from_fn(|index| {
+                binding.shaper_blade_angles[index].is_some()
+            }),
+            shaper_roles: std::array::from_fn(|index| {
+                binding.shaper_blades[index].is_some()
+                    || binding.shaper_blade_angles[index].is_some()
+            }),
+            live_shaper_rotation_role: binding.shaper_rotation.is_some(),
         });
         binding.laser_window = laser_window.clone();
         bindings.push(binding);
@@ -693,6 +720,9 @@ fn headless_emitter(
         kind: emitter_kind(class, &binding),
         cells: EmitterLayoutCells::single(),
         laser: laser.clone(),
+        live_shaper_angle_roles: [false; 4],
+        shaper_roles: [false; 4],
+        live_shaper_rotation_role: false,
     });
     binding.laser_window = laser_window.clone();
     bindings.push(binding);
@@ -910,7 +940,7 @@ use bindings::{build_binding, cell_bindings, group_by_head, layout_cells};
 #[cfg(test)]
 mod model_tests {
     use super::*;
-    use light_fixture::ProfileLightSource;
+    use light_fixture::{GelAssignment, ProfileLightSource};
 
     /// One patched fixture of a named type, for the optics questions below.
     fn patched(fixture_type: &str, optics: ProfileOptics) -> PatchedFixture {
@@ -936,6 +966,7 @@ mod model_tests {
                 invert_tilt: false,
                 bracket_angle: 0.0,
                 shaper_angle: None,
+                installed_appearance: InstalledFixtureAppearance::default(),
             }],
         }
     }
@@ -953,6 +984,32 @@ mod model_tests {
         let instance = plan.scene.fixtures.first().expect("one instance");
         assert_eq!(instance.bracket_degrees, -35.0);
         assert_eq!(instance.shaper_degrees, Some(22.5));
+    }
+
+    #[test]
+    fn root_and_multipatch_keep_independent_installed_colours() {
+        let mut fixture = patched("profile", ProfileOptics::default());
+        fixture.instances[0]
+            .installed_appearance
+            .color_temperature_kelvin = Some(3_200);
+        let mut copy = fixture.instances[0].clone();
+        copy.instance_id = Uuid::new_v4();
+        copy.installed_appearance.color_temperature_kelvin = Some(10_000);
+        copy.installed_appearance.gel = GelAssignment::Custom {
+            name: "Red".into(),
+            color_srgb: "#FF0000".into(),
+            note: None,
+        };
+        fixture.instances.push(copy);
+
+        let plan = compile(&[fixture]);
+        assert_eq!(plan.scene.fixtures.len(), 2);
+        assert_ne!(
+            plan.scene.fixtures[0].installed_colour,
+            plan.scene.fixtures[1].installed_colour
+        );
+        assert_eq!(plan.scene.fixtures[1].installed_colour[1], 0.0);
+        assert_eq!(plan.scene.fixtures[1].installed_colour[2], 0.0);
     }
 
     fn optics_of(fixture: PatchedFixture) -> viz_scene::EmitterOptics {

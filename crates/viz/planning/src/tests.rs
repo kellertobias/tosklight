@@ -11,8 +11,8 @@ use http_body_util::BodyExt;
 use light_application::{PatchFixtureCandidate, PatchFixturesCommand};
 use light_core::FixtureId;
 use light_fixture::{
-    FixtureLocation, FixtureProfile, FixtureVector, PatchedFixturePatch,
-    PatchedFixtureProfileReference, SplitPatch,
+    FixtureLocation, FixtureProfile, FixtureVector, GelAssignment, InstalledLightSource,
+    PatchedFixturePatch, PatchedFixtureProfileReference, SplitPatch,
 };
 use light_show::{FixtureProfileRevision, ShowStore};
 use serde::de::DeserializeOwned;
@@ -99,6 +99,7 @@ fn document(name: &str) -> (PlanningDocument, PathBuf) {
             remove_fixture_ids: Vec::new(),
             placements: Vec::new(),
             vector_spreads: Vec::new(),
+            fixture_updates: Vec::new(),
         })
         .expect("patch one fixture");
     (document, path)
@@ -364,6 +365,15 @@ async fn the_renderer_reads_the_bracket_and_shaper_angles() {
     let mut fixture = snapshot.fixtures[0].clone();
     fixture.patch.bracket_angle = -35.0;
     fixture.patch.shaper_angle = Some(22.5);
+    fixture.patch.installed_appearance.light_source = InstalledLightSource::Tungsten;
+    fixture.patch.installed_appearance.color_temperature_kelvin = Some(3_200);
+    fixture.patch.installed_appearance.gel = GelAssignment::Custom {
+        name: "Warm red".into(),
+        color_srgb: "#C01020".into(),
+        note: None,
+    };
+    fixture.patch.installed_appearance.shaper_angles_degrees = [10.0, 20.0, 30.0, 40.0];
+    let expected_appearance = fixture.patch.installed_appearance.clone();
     document
         .patch_fixtures(PatchFixturesCommand {
             show_id: document.show_id(),
@@ -374,6 +384,7 @@ async fn the_renderer_reads_the_bracket_and_shaper_angles() {
             remove_fixture_ids: Vec::new(),
             placements: Vec::new(),
             vector_spreads: Vec::new(),
+            fixture_updates: Vec::new(),
         })
         .expect("set the angles");
 
@@ -381,6 +392,7 @@ async fn the_renderer_reads_the_bracket_and_shaper_angles() {
     let patch: viz_desk::wire::PatchSnapshot = get(&source, "/api/v2/patch").await;
     assert_eq!(patch.fixtures[0].bracket_angle, -35.0);
     assert_eq!(patch.fixtures[0].shaper_angle, Some(22.5));
+    assert_eq!(patch.fixtures[0].installed_appearance, expected_appearance);
 
     let _ = std::fs::remove_file(&path);
 }

@@ -146,6 +146,8 @@ mod tests {
             rotation_degrees: viz_scene::glam::Vec3::ZERO,
             bracket_degrees: 0.0,
             shaper_degrees: None,
+            installed_colour: [1.0; 3],
+            installed_shaper_angles_degrees: [0.0; 4],
             body: viz_scene::FixtureBody {
                 size: viz_scene::glam::Vec3::new(0.3, 0.5, 0.3),
                 kind: viz_scene::BodyKind::MovingHead,
@@ -169,6 +171,9 @@ mod tests {
             optics: viz_scene::EmitterOptics::default(),
             kind: viz_scene::EmitterKind::Beam,
             laser: None,
+            live_shaper_angle_roles: [false; 4],
+            shaper_roles: [false; 4],
+            live_shaper_rotation_role: false,
             cells: viz_scene::EmitterLayoutCells::single(),
         });
         scene.recompute_bounds();

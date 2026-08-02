@@ -19,6 +19,7 @@ struct Light {
     tangent_frost: vec4<f32>,     // beam right axis, frost
     optics: vec4<f32>,            // gobo slot, gobo rotation, prism facets, prism rotation
     shapers: vec4<f32>,           // blade insertions: +u, -u, +v, -v
+    shaper_angles: vec4<f32>,     // per-blade rotation in radians
     gate: vec4<f32>,              // gobo artwork layer or -1, spare
     shadow: vec4<f32>,            // atlas tile index or -1, tile origin u, v, tile size
 };
@@ -181,11 +182,29 @@ fn shaper_transmission(light: Light, position: vec2<f32>, softness: f32) -> f32 
     }
     // A blade at `0` is fully open and at `1` has crossed the whole gate.
     let edge = max(softness, 0.02);
+    let rotated = array<vec2<f32>, 4>(
+        vec2<f32>(
+            position.x * cos(light.shaper_angles.x) - position.y * sin(light.shaper_angles.x),
+            position.x * sin(light.shaper_angles.x) + position.y * cos(light.shaper_angles.x),
+        ),
+        vec2<f32>(
+            position.x * cos(light.shaper_angles.y) - position.y * sin(light.shaper_angles.y),
+            position.x * sin(light.shaper_angles.y) + position.y * cos(light.shaper_angles.y),
+        ),
+        vec2<f32>(
+            position.x * cos(light.shaper_angles.z) - position.y * sin(light.shaper_angles.z),
+            position.x * sin(light.shaper_angles.z) + position.y * cos(light.shaper_angles.z),
+        ),
+        vec2<f32>(
+            position.x * cos(light.shaper_angles.w) - position.y * sin(light.shaper_angles.w),
+            position.x * sin(light.shaper_angles.w) + position.y * cos(light.shaper_angles.w),
+        ),
+    );
     var transmission = 1.0;
-    transmission *= smoothstep(1.0 - blades.x + edge, 1.0 - blades.x - edge, position.x);
-    transmission *= smoothstep(1.0 - blades.y + edge, 1.0 - blades.y - edge, -position.x);
-    transmission *= smoothstep(1.0 - blades.z + edge, 1.0 - blades.z - edge, position.y);
-    transmission *= smoothstep(1.0 - blades.w + edge, 1.0 - blades.w - edge, -position.y);
+    transmission *= smoothstep(1.0 - blades.x + edge, 1.0 - blades.x - edge, rotated[0].x);
+    transmission *= smoothstep(1.0 - blades.y + edge, 1.0 - blades.y - edge, -rotated[1].x);
+    transmission *= smoothstep(1.0 - blades.z + edge, 1.0 - blades.z - edge, rotated[2].y);
+    transmission *= smoothstep(1.0 - blades.w + edge, 1.0 - blades.w - edge, -rotated[3].y);
     return transmission;
 }
 

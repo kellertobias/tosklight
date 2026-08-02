@@ -16,7 +16,7 @@ mod plan;
 
 pub use appearance::{
     MAX_COLOUR_TEMPERATURE_KELVIN, MIN_COLOUR_TEMPERATURE_KELVIN, apply_installed_appearance,
-    colour_temperature_linear_rgb, parse_srgb_hex_linear,
+    colour_temperature_linear_rgb, installed_appearance_linear_rgb, parse_srgb_hex_linear,
 };
 pub use binding::ChannelRef;
 pub use colour::{ResolvedColour, named_colour};

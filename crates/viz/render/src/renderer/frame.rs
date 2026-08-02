@@ -725,6 +725,7 @@ mod tests {
             tangent_frost: [1.0, 0.0, 0.0, 0.0],
             optics: [0.0; 4],
             shapers: [0.0; 4],
+            shaper_angles: [0.0; 4],
             gate: [-1.0, 0.0, 0.0, 0.0],
             shadow: [-1.0, 0.0, 0.0, 0.0],
         }

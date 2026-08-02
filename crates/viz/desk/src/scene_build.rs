@@ -63,6 +63,7 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
             invert_tilt: fixture.invert_tilt,
             bracket_angle: fixture.bracket_angle,
             shaper_angle: fixture.shaper_angle,
+            installed_appearance: fixture.installed_appearance.clone(),
         });
         for multipatch in &fixture.multipatch {
             // A multi-patch instance shares the logical fixture's values but keeps its own
@@ -93,6 +94,7 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
                 invert_tilt: multipatch.invert_tilt,
                 bracket_angle: multipatch.bracket_angle,
                 shaper_angle: multipatch.shaper_angle,
+                installed_appearance: multipatch.installed_appearance.clone(),
             });
         }
         fixtures.push(PatchedFixture {

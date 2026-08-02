@@ -85,6 +85,7 @@ pub(super) fn push_laser(
     optics: &LaserOptics,
     scan: &LaserScan,
     intensity: f32,
+    colour_multiplier: Vec3,
 ) {
     if scan.points.len() < 2 || intensity <= 0.002 {
         return;
@@ -127,7 +128,7 @@ pub(super) fn push_laser(
     for (index, point) in scan.points.iter().enumerate().skip(1) {
         let (from, from_distance) = landings[index - 1];
         let (to, to_distance) = landings[index];
-        let colour = Vec3::from(point.colour).clamp(Vec3::ZERO, Vec3::ONE);
+        let colour = Vec3::from(point.colour).clamp(Vec3::ZERO, Vec3::ONE) * colour_multiplier;
         // A control point carries the colour and the dwell of the run that *arrives* at it, not of
         // the one that leaves it. That is the ILDA convention every scan engine is written
         // against, and it is what makes blanking expressible at all: a black point means the
@@ -311,6 +312,7 @@ mod tests {
             &optics(),
             &scan(points),
             1.0,
+            Vec3::ONE,
         );
         out
     }
@@ -462,6 +464,7 @@ mod tests {
             &optics(),
             &scan(vec![lit(-1.0, 0.0, 0.5), lit(1.0, 0.0, 0.5)]),
             0.0,
+            Vec3::ONE,
         );
         assert!(out.is_empty(), "a laser at zero drew something");
         assert!(run(vec![lit(0.0, 0.0, 1.0)]).is_empty());
@@ -482,6 +485,7 @@ mod tests {
                 &optics(),
                 &scan(points.clone()),
                 1.0,
+                Vec3::ONE,
             );
             out.retain(|instance| instance.colour_landing[3] > 0.5);
             out
@@ -510,6 +514,7 @@ mod tests {
             &wide,
             &scan(vec![lit(0.0, 0.0, 0.5), lit(0.0, 0.0, 0.5)]),
             1.0,
+            Vec3::ONE,
         );
         assert!(wide.radius_at(20.0) > wide.radius_at(1.0));
     }

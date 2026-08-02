@@ -6,7 +6,9 @@
 //! of a document, not a general-purpose API.
 
 use light_application::{PatchProfileRevisionProjection, PatchSnapshot};
-use light_fixture::{MultiPatchInstance, PatchedFixturePatch, SplitPatch};
+use light_fixture::{
+    InstalledFixtureAppearance, MultiPatchInstance, PatchedFixturePatch, SplitPatch,
+};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -52,6 +54,7 @@ pub struct FixtureDto {
     pub invert_tilt: bool,
     pub bracket_angle: f32,
     pub shaper_angle: Option<f32>,
+    pub installed_appearance: InstalledFixtureAppearance,
 }
 
 #[derive(Debug, Serialize)]
@@ -86,6 +89,7 @@ pub struct MultiPatchDto {
     pub invert_tilt: bool,
     pub bracket_angle: f32,
     pub shaper_angle: Option<f32>,
+    pub installed_appearance: InstalledFixtureAppearance,
 }
 
 #[derive(Debug, Serialize)]
@@ -157,6 +161,7 @@ fn fixture(
         invert_tilt: patch.invert_tilt,
         bracket_angle: patch.bracket_angle,
         shaper_angle: patch.shaper_angle,
+        installed_appearance: patch.installed_appearance.clone(),
     }
 }
 
@@ -179,6 +184,7 @@ fn multipatch(instance: &MultiPatchInstance) -> MultiPatchDto {
         invert_tilt: instance.invert_tilt,
         bracket_angle: instance.bracket_angle,
         shaper_angle: instance.shaper_angle,
+        installed_appearance: instance.installed_appearance.clone(),
     }
 }
 

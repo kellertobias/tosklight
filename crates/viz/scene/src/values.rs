@@ -113,8 +113,13 @@ pub struct EmitterValues {
     pub prism_rotation: f32,
     /// Framing-shutter blade insertions `0..=1`, `0` fully open.
     pub shaper_blades: [f32; 4],
+    /// Blade rotations in physical degrees. Only values backed by a live profile attribute are
+    /// read; installed/static fallbacks stay in the structural scene.
+    pub shaper_blade_angles_degrees: [f32; 4],
     /// Rotation of the whole shutter module, `0..=1` of a full turn.
     pub shaper_rotation: f32,
+    /// Rotation of the whole shutter module in physical degrees.
+    pub shaper_rotation_degrees: f32,
     /// Strobe rate in hertz. `0` means no strobe.
     pub strobe_hz: f32,
     /// Shutter gate after strobe evaluation, `0..=1`.
@@ -148,7 +153,9 @@ impl Default for EmitterValues {
             prism: 0.0,
             prism_rotation: 0.0,
             shaper_blades: [0.0; 4],
+            shaper_blade_angles_degrees: [0.0; 4],
             shaper_rotation: 0.0,
+            shaper_rotation_degrees: 0.0,
             strobe_hz: 0.0,
             shutter: 1.0,
             held_intensity: 0.0,
@@ -209,6 +216,8 @@ mod tests {
             rotation_degrees: Vec3::ZERO,
             bracket_degrees: 0.0,
             shaper_degrees: None,
+            installed_colour: [1.0; 3],
+            installed_shaper_angles_degrees: [0.0; 4],
             body: FixtureBody {
                 size: Vec3::splat(0.3),
                 kind: BodyKind::Lantern,
@@ -236,6 +245,9 @@ mod tests {
             kind: EmitterKind::Beam,
             cells: EmitterLayoutCells::single(),
             laser: None,
+            live_shaper_angle_roles: [false; 4],
+            shaper_roles: [false; 4],
+            live_shaper_rotation_role: false,
         }
     }
 

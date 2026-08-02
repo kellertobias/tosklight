@@ -17,6 +17,9 @@ fn head() -> EmitterInstance {
         kind: EmitterKind::Beam,
         cells: viz_scene::EmitterLayoutCells::single(),
         laser: None,
+        live_shaper_angle_roles: [false; 4],
+        shaper_roles: [false; 4],
+        live_shaper_rotation_role: false,
     }
 }
 
@@ -100,6 +103,9 @@ fn tilt_turns_the_head_about_its_trunnions_and_leaves_the_base_alone() {
         kind: EmitterKind::Beam,
         cells: viz_scene::EmitterLayoutCells::single(),
         laser: None,
+        live_shaper_angle_roles: [false; 4],
+        shaper_roles: [false; 4],
+        live_shaper_rotation_role: false,
     });
 
     let transforms = |pan: f32, tilt: f32| {
@@ -232,6 +238,8 @@ fn fixture() -> FixtureInstance {
         rotation_degrees: Vec3::ZERO,
         bracket_degrees: 0.0,
         shaper_degrees: None,
+        installed_colour: [1.0; 3],
+        installed_shaper_angles_degrees: [0.0; 4],
         body: FixtureBody::default(),
         patched: true,
         address: None,
@@ -264,6 +272,9 @@ fn emitter() -> EmitterInstance {
         kind: EmitterKind::Beam,
         cells: EmitterLayoutCells::single(),
         laser: None,
+        live_shaper_angle_roles: [false; 4],
+        shaper_roles: [false; 4],
+        live_shaper_rotation_role: false,
     }
 }
 
@@ -357,6 +368,81 @@ fn a_lit_beam_emitter_produces_one_light_and_one_cone() {
     assert_eq!(frame.lights.len(), 1);
     assert_eq!(frame.beams.len(), 1);
     assert_eq!(frame.lines.len(), 2);
+}
+
+#[test]
+fn installed_colour_tints_aperture_beam_light_and_semantic_export_once() {
+    let mut scene = Scene::default();
+    let mut fixture = fixture();
+    fixture.installed_colour = [0.5, 0.25, 1.0];
+    scene.fixtures.push(fixture);
+    scene.emitters.push(emitter());
+    let mut values = SceneValues::default();
+    values.resize(1);
+    values.emitters[0].intensity = 1.0;
+    values.emitters[0].colour = [0.8, 0.4, 0.2];
+
+    let frame = build(&scene, &values, &FrameStyle::default());
+    let expected = Vec3::new(0.4, 0.1, 0.2);
+    let beam = Vec3::from_slice(&frame.beams[0].colour[..3]);
+    assert!((beam - expected).length() < 1e-6, "beam colour {beam:?}");
+    let light = Vec3::from_slice(&frame.lights[0].colour_intensity[..3]);
+    let gain = resolve_optics(&scene.emitters[0], &values.emitters[0]).gain;
+    assert!(
+        (light - expected * gain).length() < 1e-6,
+        "light colour {light:?}"
+    );
+    let semantic = semantic_lights(&scene, &values);
+    assert!((semantic[0].colour - expected).length() < 1e-6);
+    let aperture = frame
+        .meshes
+        .iter()
+        .find(|(kind, _)| *kind == MeshKind::Lens)
+        .and_then(|(_, entries)| entries.first())
+        .expect("lit aperture");
+    let aperture_colour = Vec3::from_slice(&aperture.emissive[..3]);
+    assert!(
+        (aperture_colour - expected * 9.02).length() < 1e-5,
+        "aperture colour {aperture_colour:?}"
+    );
+}
+
+#[test]
+fn typed_shaper_roles_use_static_angles_until_live_values_take_ownership() {
+    let mut scene = Scene::default();
+    let mut fixture = fixture();
+    fixture.shaper_degrees = Some(30.0);
+    fixture.installed_shaper_angles_degrees = [10.0, 20.0, 30.0, 40.0];
+    scene.fixtures.push(fixture);
+    let mut head = emitter();
+    head.shaper_roles = [true, true, false, true];
+    head.live_shaper_angle_roles = [false, true, false, false];
+    scene.emitters.push(head);
+    let mut values = SceneValues::default();
+    values.resize(1);
+    values.emitters[0].intensity = 1.0;
+    values.emitters[0].shaper_blades = [0.5; 4];
+    values.emitters[0].shaper_blade_angles_degrees[1] = -75.0;
+
+    let static_module = build(&scene, &values, &FrameStyle::default()).lights[0];
+    let expected = [10.0_f32, -75.0, 0.0, 40.0].map(f32::to_radians);
+    for (actual, expected) in static_module.shaper_angles.into_iter().zip(expected) {
+        assert!((actual - expected).abs() < 1e-6);
+    }
+    let tangent = Vec3::from_slice(&static_module.tangent_frost[..3]);
+    assert!(
+        (tangent - Vec3::new(30_f32.to_radians().cos(), 0.0, 30_f32.to_radians().sin())).length()
+            < 1e-5
+    );
+
+    scene.emitters[0].live_shaper_rotation_role = true;
+    values.emitters[0].shaper_rotation_degrees = -45.0;
+    let live_module = build(&scene, &values, &FrameStyle::default()).lights[0];
+    let tangent = Vec3::from_slice(&live_module.tangent_frost[..3]);
+    assert!(
+        (tangent - Vec3::new(45_f32.to_radians().cos(), 0.0, -45_f32.to_radians().sin())).length()
+            < 1e-5
+    );
 }
 
 /// The lens a shaft leaves through, read off the proxy the renderer actually draws: the cone
