@@ -1,7 +1,7 @@
 use crate::{
-    DerivedGroup, GridMethodConfiguration, GroupDefinition, ProgrammerRegistry,
-    ProgrammerSelection, SelectionExpression, SelectionReference, SelectionRule,
-    merge_ordered_group_membership, resolve_group,
+    GroupDefinition, GroupFixtureSource, GroupReference, ProgrammerRegistry, ProgrammerSelection,
+    SelectionExpression, SelectionReference, SelectionRule, merge_ordered_group_membership,
+    resolve_group,
 };
 use light_core::{FixtureId, SessionId};
 use std::collections::{HashMap, HashSet};
@@ -15,7 +15,6 @@ use std::collections::{HashMap, HashSet};
 pub struct GroupRecordingCapture {
     fixtures: Vec<FixtureId>,
     relationship: GroupRecordingRelationship,
-    grid: GridMethodConfiguration,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -45,7 +44,7 @@ impl GroupRecordingCapture {
         let mut group = existing.cloned().unwrap_or_else(|| new_group(group_id));
         group.id = group_id.to_owned();
         group.fixtures.clone_from(&self.fixtures);
-        group.grid = self.grid;
+        group.source = Some(explicit_source(&self.fixtures));
         group.derived_from = None;
         group.frozen_from = None;
         self.apply_relationship(&mut group, groups);
@@ -62,8 +61,8 @@ impl GroupRecordingCapture {
         let membership = resolve_group(group_id, groups)?;
         let mut group = existing.clone();
         group.id = group_id.to_owned();
-        group.fixtures = merge_ordered_group_membership(&membership, &self.fixtures);
-        materialize(&mut group);
+        let membership = merge_ordered_group_membership(&membership, &self.fixtures);
+        materialize(&mut group, membership);
         Ok(group)
     }
 
@@ -79,8 +78,7 @@ impl GroupRecordingCapture {
         membership.retain(|fixture_id| !removed.contains(fixture_id));
         let mut group = existing.clone();
         group.id = group_id.to_owned();
-        group.fixtures = membership;
-        materialize(&mut group);
+        materialize(&mut group, membership);
         Ok(group)
     }
 
@@ -88,7 +86,6 @@ impl GroupRecordingCapture {
         Self {
             fixtures: ordered_unique(selection.selected),
             relationship: relationship(selection.expression),
-            grid: selection.grid.configuration,
         }
     }
 
@@ -137,12 +134,7 @@ pub fn group_delete_blocker<'a>(
 ) -> Option<&'a str> {
     groups
         .values()
-        .filter(|group| {
-            group
-                .derived_from
-                .as_ref()
-                .is_some_and(|derived| derived.source_group_id == group_id)
-        })
+        .filter(|group| group_references(group, group_id))
         .map(|group| group.id.as_str())
         .min()
 }
@@ -155,9 +147,32 @@ fn new_group(group_id: &str) -> GroupDefinition {
     }
 }
 
-fn materialize(group: &mut GroupDefinition) {
+fn materialize(group: &mut GroupDefinition, fixtures: Vec<FixtureId>) {
+    group.fixtures.clone_from(&fixtures);
+    group.source = Some(GroupFixtureSource::Explicit {
+        fixture_ids: fixtures,
+    });
     group.derived_from = None;
     group.frozen_from = None;
+}
+
+fn explicit_source(fixtures: &[FixtureId]) -> GroupFixtureSource {
+    GroupFixtureSource::Explicit {
+        fixture_ids: fixtures.to_vec(),
+    }
+}
+
+fn group_references(group: &GroupDefinition, source_group_id: &str) -> bool {
+    match &group.source {
+        Some(GroupFixtureSource::References { references }) => references
+            .iter()
+            .any(|reference| reference.group_id == source_group_id),
+        Some(GroupFixtureSource::Explicit { .. }) => false,
+        None => group
+            .derived_from
+            .as_ref()
+            .is_some_and(|derived| derived.source_group_id == source_group_id),
+    }
 }
 
 fn ordered_unique(fixtures: Vec<FixtureId>) -> Vec<FixtureId> {
@@ -197,13 +212,15 @@ fn preserve_live_relationship(
     rule: &SelectionRule,
     groups: &HashMap<String, GroupDefinition>,
 ) {
-    group.derived_from = Some(DerivedGroup {
-        source_group_id: source_group_id.to_owned(),
-        rule: rule.clone(),
+    group.source = Some(GroupFixtureSource::References {
+        references: vec![GroupReference {
+            group_id: source_group_id.to_owned(),
+            rule: rule.clone(),
+        }],
     });
     let mut candidate = groups.clone();
     candidate.insert(group.id.clone(), group.clone());
     if resolve_group(&group.id, &candidate).is_err() {
-        group.derived_from = None;
+        group.source = Some(explicit_source(&group.fixtures));
     }
 }

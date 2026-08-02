@@ -51,6 +51,11 @@ fn overwrite_preserves_existing_presentation_and_portable_programming() {
             AttributeKey("future.portable".into()),
             AttributeValue::Normalized(0.3),
         )]),
+        frozen_from: Some(FrozenGroup {
+            source_group_id: "former-source".into(),
+            source_revision: 4,
+            captured_at: Utc::now(),
+        }),
         master: 0.4,
         playback_fader: Some(7),
         ..Default::default()
@@ -71,6 +76,12 @@ fn overwrite_preserves_existing_presentation_and_portable_programming() {
         recorded.fixtures,
         vec![scenario.fixtures[2], scenario.fixtures[0]]
     );
+    assert_eq!(
+        recorded.source,
+        Some(GroupFixtureSource::Explicit {
+            fixture_ids: vec![scenario.fixtures[2], scenario.fixtures[0]],
+        })
+    );
     assert!(recorded.derived_from.is_none());
     assert!(recorded.frozen_from.is_none());
 }
@@ -84,9 +95,45 @@ fn new_empty_group_uses_defaults_and_remains_distinct_from_absence() {
     assert_eq!(recorded.id, "A.01");
     assert_eq!(recorded.name, "Group A.01");
     assert!(recorded.fixtures.is_empty());
+    assert_eq!(
+        recorded.source,
+        Some(GroupFixtureSource::Explicit {
+            fixture_ids: Vec::new(),
+        })
+    );
     assert!(recorded.programming.is_empty());
     assert_eq!(recorded.master, 1.0);
     assert_eq!(recorded.playback_fader, None);
+}
+
+#[test]
+fn materialized_overwrite_keeps_first_fixture_occurrence_in_operator_order() {
+    let scenario = CaptureScenario::new();
+    scenario.registry.select_expression(
+        scenario.session,
+        vec![
+            scenario.fixtures[2],
+            scenario.fixtures[0],
+            scenario.fixtures[2],
+            scenario.fixtures[1],
+        ],
+        SelectionExpression::Static,
+    );
+
+    let recorded = scenario
+        .capture()
+        .overwrite("ordered", None, &HashMap::new());
+
+    assert_eq!(
+        recorded.source,
+        Some(GroupFixtureSource::Explicit {
+            fixture_ids: vec![
+                scenario.fixtures[2],
+                scenario.fixtures[0],
+                scenario.fixtures[1],
+            ],
+        })
+    );
 }
 
 #[test]
@@ -95,6 +142,9 @@ fn live_and_single_gesture_sources_retain_relationships_and_div_rule() {
     let source = GroupDefinition {
         id: "source".into(),
         fixtures: scenario.fixtures.clone(),
+        source: Some(GroupFixtureSource::Explicit {
+            fixture_ids: scenario.fixtures.clone(),
+        }),
         ..Default::default()
     };
     let groups = HashMap::from([("source".into(), source)]);
@@ -108,9 +158,16 @@ fn live_and_single_gesture_sources_retain_relationships_and_div_rule() {
         },
     );
     let divided = scenario.capture().overwrite("derived", None, &groups);
-    let relationship = divided.derived_from.unwrap();
-    assert_eq!(relationship.source_group_id, "source");
-    assert_eq!(relationship.rule, rule);
+    assert_eq!(
+        divided.source,
+        Some(GroupFixtureSource::References {
+            references: vec![GroupReference {
+                group_id: "source".into(),
+                rule,
+            }],
+        })
+    );
+    assert!(divided.derived_from.is_none());
 
     scenario.registry.select_expression(
         scenario.session,
@@ -122,7 +179,15 @@ fn live_and_single_gesture_sources_retain_relationships_and_div_rule() {
         },
     );
     let normalized = scenario.capture().overwrite("gesture", None, &groups);
-    assert_eq!(normalized.derived_from.unwrap().rule, SelectionRule::All);
+    assert_eq!(
+        normalized.source,
+        Some(GroupFixtureSource::References {
+            references: vec![GroupReference {
+                group_id: "source".into(),
+                rule: SelectionRule::All,
+            }],
+        })
+    );
 }
 
 #[test]
@@ -147,6 +212,12 @@ fn dereferenced_selection_records_concrete_fixtures_without_source_reference() {
     assert!(recorded.frozen_from.is_none());
     assert!(recorded.derived_from.is_none());
     assert_eq!(recorded.fixtures, scenario.fixtures[..2]);
+    assert_eq!(
+        recorded.source,
+        Some(GroupFixtureSource::Explicit {
+            fixture_ids: scenario.fixtures[..2].to_vec(),
+        })
+    );
 }
 
 #[test]
@@ -159,17 +230,21 @@ fn mixed_remove_dereferenced_self_and_transitive_cycles_materialize() {
     };
     let target = GroupDefinition {
         id: "target".into(),
-        derived_from: Some(DerivedGroup {
-            source_group_id: "middle".into(),
-            rule: SelectionRule::All,
+        source: Some(GroupFixtureSource::References {
+            references: vec![GroupReference {
+                group_id: "middle".into(),
+                rule: SelectionRule::All,
+            }],
         }),
         ..Default::default()
     };
     let middle = GroupDefinition {
         id: "middle".into(),
-        derived_from: Some(DerivedGroup {
-            source_group_id: "target".into(),
-            rule: SelectionRule::All,
+        source: Some(GroupFixtureSource::References {
+            references: vec![GroupReference {
+                group_id: "target".into(),
+                rule: SelectionRule::All,
+            }],
         }),
         ..Default::default()
     };
@@ -205,6 +280,10 @@ fn mixed_remove_dereferenced_self_and_transitive_cycles_materialize() {
         let recorded = scenario.capture().overwrite("plain", None, &groups);
         assert!(recorded.derived_from.is_none());
         assert!(recorded.frozen_from.is_none());
+        assert!(matches!(
+            recorded.source,
+            Some(GroupFixtureSource::Explicit { .. })
+        ));
     }
 
     scenario.registry.select_expression(
@@ -215,13 +294,13 @@ fn mixed_remove_dereferenced_self_and_transitive_cycles_materialize() {
             rule: SelectionRule::All,
         },
     );
-    assert!(
+    assert!(matches!(
         scenario
             .capture()
             .overwrite("target", Some(&target), &groups)
-            .derived_from
-            .is_none()
-    );
+            .source,
+        Some(GroupFixtureSource::Explicit { .. })
+    ));
 
     scenario.registry.select_expression(
         scenario.session,
@@ -231,13 +310,13 @@ fn mixed_remove_dereferenced_self_and_transitive_cycles_materialize() {
             rule: SelectionRule::All,
         },
     );
-    assert!(
+    assert!(matches!(
         scenario
             .capture()
             .overwrite("target", Some(&target), &groups)
-            .derived_from
-            .is_none()
-    );
+            .source,
+        Some(GroupFixtureSource::Explicit { .. })
+    ));
 }
 
 #[test]
@@ -245,15 +324,24 @@ fn merge_and_subtract_materialize_resolved_order_without_touching_metadata() {
     let scenario = CaptureScenario::new();
     let source = GroupDefinition {
         id: "source".into(),
-        fixtures: scenario.fixtures[..3].to_vec(),
+        source: Some(GroupFixtureSource::Explicit {
+            fixture_ids: vec![
+                scenario.fixtures[0],
+                scenario.fixtures[1],
+                scenario.fixtures[0],
+                scenario.fixtures[2],
+            ],
+        }),
         ..Default::default()
     };
     let derived = GroupDefinition {
         id: "derived".into(),
         name: "Derived".into(),
-        derived_from: Some(DerivedGroup {
-            source_group_id: "source".into(),
-            rule: SelectionRule::Odd,
+        source: Some(GroupFixtureSource::References {
+            references: vec![GroupReference {
+                group_id: "source".into(),
+                rule: SelectionRule::Odd,
+            }],
         }),
         master: 0.6,
         ..Default::default()
@@ -280,6 +368,16 @@ fn merge_and_subtract_materialize_resolved_order_without_touching_metadata() {
         ]
     );
     assert!(merged.derived_from.is_none());
+    assert_eq!(
+        merged.source,
+        Some(GroupFixtureSource::Explicit {
+            fixture_ids: vec![
+                scenario.fixtures[0],
+                scenario.fixtures[2],
+                scenario.fixtures[3],
+            ],
+        })
+    );
     assert_eq!(merged.name, "Derived");
     assert_eq!(merged.master, 0.6);
 
@@ -294,10 +392,16 @@ fn merge_and_subtract_materialize_resolved_order_without_touching_metadata() {
         .unwrap();
     assert_eq!(subtracted.fixtures, vec![scenario.fixtures[2]]);
     assert!(subtracted.derived_from.is_none());
+    assert_eq!(
+        subtracted.source,
+        Some(GroupFixtureSource::Explicit {
+            fixture_ids: vec![scenario.fixtures[2]],
+        })
+    );
 }
 
 #[test]
-fn overwrite_copies_selection_grid_while_merge_and_subtract_keep_target_grid() {
+fn recording_never_copies_selection_grid_and_preserves_existing_target_grid() {
     let scenario = CaptureScenario::new();
     scenario
         .registry
@@ -339,7 +443,11 @@ fn overwrite_copies_selection_grid_while_merge_and_subtract_keep_target_grid() {
 
     assert_eq!(
         capture.overwrite("target", Some(&target), &groups).grid,
-        selection_configuration
+        target_configuration
+    );
+    assert_eq!(
+        capture.overwrite("new", None, &groups).grid,
+        GridMethodConfiguration::default()
     );
     assert_eq!(
         capture.merge("target", &target, &groups).unwrap().grid,
@@ -359,9 +467,11 @@ fn direct_derived_dependency_blocks_deletion_but_frozen_provenance_does_not() {
             "derived".into(),
             GroupDefinition {
                 id: "derived".into(),
-                derived_from: Some(DerivedGroup {
-                    source_group_id: "source".into(),
-                    rule: SelectionRule::All,
+                source: Some(GroupFixtureSource::References {
+                    references: vec![GroupReference {
+                        group_id: "source".into(),
+                        rule: SelectionRule::All,
+                    }],
                 }),
                 ..Default::default()
             },
@@ -370,9 +480,11 @@ fn direct_derived_dependency_blocks_deletion_but_frozen_provenance_does_not() {
             "a-dependent".into(),
             GroupDefinition {
                 id: "a-dependent".into(),
-                derived_from: Some(DerivedGroup {
-                    source_group_id: "source".into(),
-                    rule: SelectionRule::Even,
+                source: Some(GroupFixtureSource::References {
+                    references: vec![GroupReference {
+                        group_id: "source".into(),
+                        rule: SelectionRule::Even,
+                    }],
                 }),
                 ..Default::default()
             },
