@@ -16,7 +16,7 @@ video time and visible click/type pacing, not to weakening assertions or racing 
 - [x] Audit the maintained DEMO-001 workflow, deterministic edit timeline, current generated-video
   path, and the previously observed Show Patch navigation blocker.
 - [x] Implement the exact Patch, Group-selection, and icon-picker pacing contract.
-- [x] Trace and correct the authoritative Pan/Tilt and color path into the final Stage rendering.
+- [ ] Trace and correct the authoritative Pan/Tilt and color path into the final Stage rendering.
 - [ ] Run focused checks, canonical demo inventory verification, retained-video review, major suites,
   and the real desktop path.
 
@@ -81,6 +81,18 @@ video time and visible click/type pacing, not to weakening assertions or racing 
   3D canvas visible. Intermediate diagnostic runs correctly exposed and then removed an invalid
   expectation that Pan/Tilt must also appear in profile output, and corrected the 3D toggle locator
   to its real `radio` semantics.
+- The canonical `npm run test:demo` source capture passed in 21.6 minutes and refreshed
+  `assets/demo.show`, the screenshot, raw WebM, and version-2 timeline. The first editor pass exposed
+  mixed concat/crossfade timebases; normalizing every source and intermediate node to `1/25` fixed
+  the graph. A focused Node graph test passed, and standalone re-encoding then produced exact
+  1920x1080, 25 fps, 21,425-frame, 857.0-second WebM and H.265 outputs. VideoToolbox HEVC was
+  unavailable (`-12908`), so the repository's successful `libx265` fallback was used.
+- Retained review confirms the icon modal, Fixture type grid, and saved tile are readable at
+  `05:26`, `05:27`, and `05:29`, and the remaining Patch-layer window is exactly
+  `00:30:00`–`00:35:00`. The `14:15` retained Stage frame remains overexposed by unrelated active
+  benchmark sources, however, so visual blue/yellow separation is not yet accepted despite the
+  authoritative XYZ proof. Closeout remains pending while the concluding look is isolated to the
+  colored targets at controlled intensity and re-recorded.
 
 ## Remaining work
 
