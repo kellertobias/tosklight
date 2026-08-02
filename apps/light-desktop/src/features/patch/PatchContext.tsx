@@ -5,27 +5,52 @@ import {
 	useEffect,
 	useMemo,
 	useRef,
+	useState,
 	useSyncExternalStore,
 } from "react";
 import type { FixtureDefinition, PatchedFixture } from "../../api/types";
+import type {
+	PatchFixturePolicyAction,
+	PatchFixtureProjection,
+	PatchPlacement,
+	PatchVectorSpread,
+} from "./contracts";
+import { PATCH_OBJECT_CHANGED_EVENT } from "./externalRepair";
 import {
 	createPatchDefinitionResolver,
 	type PatchFixtureCandidate,
 } from "./model";
-import type {
-	PatchFixturePolicyAction,
-	PatchFixtureProjection,
-	PatchVectorSpread,
-} from "./contracts";
-import type { PatchPlacement } from "./contracts";
 import { PatchSession } from "./session";
 import type { PatchStore, PatchStoreSnapshot } from "./store";
 import type { PatchTransport } from "./transport";
-import { PATCH_OBJECT_CHANGED_EVENT } from "./externalRepair";
 
 export interface PatchedFixtureResult {
 	fixtureId: string;
 	selectionFixtureIds: readonly string[];
+}
+
+export interface SelectedPatchInstance {
+	fixtureId: string;
+	multipatchInstanceId: string | null;
+}
+
+export function reconcileSelectedPatchInstance(
+	selection: SelectedPatchInstance | null,
+	fixtures: readonly PatchedFixture[],
+): SelectedPatchInstance | null {
+	if (!selection) return null;
+	const fixture = fixtures.find(
+		(candidate) => candidate.fixture_id === selection.fixtureId,
+	);
+	if (!fixture) return null;
+	if (
+		selection.multipatchInstanceId &&
+		!fixture.multipatch?.some(
+			(instance) => instance.id === selection.multipatchInstanceId,
+		)
+	)
+		return null;
+	return selection;
 }
 
 export function patchedFixtureResults(
@@ -48,6 +73,8 @@ export function patchedFixtureResults(
 }
 
 export interface PatchContextValue extends PatchStoreSnapshot {
+	selectedPatchInstance: SelectedPatchInstance | null;
+	selectPatchInstance(selection: SelectedPatchInstance | null): void;
 	patchFixtures(
 		candidates: readonly PatchFixtureCandidate[],
 		placements?: readonly PatchPlacement[],
@@ -121,10 +148,20 @@ export function PatchViewProvider({
 		session?.store.getSnapshot ?? (() => emptySnapshot),
 		session?.store.getSnapshot ?? (() => emptySnapshot),
 	);
+	const [selectedPatchInstance, selectPatchInstance] =
+		useState<SelectedPatchInstance | null>(null);
 	useEffect(() => () => session?.stop(), [session]);
+	useEffect(() => selectPatchInstance(null), [showId]);
+	useEffect(() => {
+		selectPatchInstance((current) =>
+			reconcileSelectedPatchInstance(current, snapshot.fixtures),
+		);
+	}, [snapshot.fixtures]);
 	const value = useMemo<PatchContextValue>(
 		() => ({
 			...snapshot,
+			selectedPatchInstance,
+			selectPatchInstance,
 			patchFixtures: async (candidates, placements = []) => {
 				if (!session || snapshot.status !== "ready") return null;
 				try {
@@ -175,7 +212,7 @@ export function PatchViewProvider({
 				}
 			},
 		}),
-		[session, snapshot],
+		[selectedPatchInstance, session, snapshot],
 	);
 	return (
 		<PatchSessionContext.Provider value={session}>

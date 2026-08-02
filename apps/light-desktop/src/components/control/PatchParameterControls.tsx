@@ -1,7 +1,6 @@
-import type { PatchedFixture } from "../../api/types";
-import { usePatch, usePatchView } from "../../features/patch/PatchContext";
-import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { Button } from "@tosklight/ui";
+import type { MultiPatchInstance, PatchedFixture } from "../../api/types";
+import { usePatch, usePatchView } from "../../features/patch/PatchContext";
 
 const slots = (["x", "y", "z"] as const)
 	.flatMap((axis) => [
@@ -13,29 +12,39 @@ const slots = (["x", "y", "z"] as const)
 export function PatchParameterControls() {
 	const patch = usePatch();
 	usePatchView();
-	const selection = useProgrammingSelectionView();
-	const fixture = selection
-		? selectedPatchedFixture(patch.fixtures, selection.selected)
-		: null;
+	const target = selectedPhysicalTarget(
+		patch.fixtures,
+		patch.selectedPatchInstance,
+	);
+	const fixture = target?.fixture ?? null;
 	const updateVector = (
 		kind: "location" | "rotation",
 		axis: "x" | "y" | "z",
 		delta: number,
 	) => {
-		if (!fixture) return;
-		const current = fixture[kind] ?? { x: 0, y: 0, z: 0 };
-		void patch.updateFixture(fixture.fixture_id, {
-			[kind]: { ...current, [axis]: current[axis] + delta },
+		if (!target) return;
+		const current = target.instance[kind] ?? { x: 0, y: 0, z: 0 };
+		const updated = { ...current, [axis]: current[axis] + delta };
+		if (!target.multipatch) {
+			void patch.updateFixture(target.fixture.fixture_id, { [kind]: updated });
+			return;
+		}
+		void patch.updateFixture(target.fixture.fixture_id, {
+			multipatch: (target.fixture.multipatch ?? []).map((instance) =>
+				instance.id === target.multipatch?.id
+					? { ...instance, [kind]: updated }
+					: instance,
+			),
 		});
 	};
 	const label =
 		patch.status !== "ready"
 			? "Patch loading…"
-			: selection
-				? fixture
-					? fixture.name || fixture.definition.name
-					: "Select a patched fixture"
-				: "Programmer selection loading…";
+			: target
+				? target.multipatch?.name ||
+					target.fixture.name ||
+					target.fixture.definition.name
+				: "Select a physical patch row";
 	const disabled = patch.status !== "ready" || !fixture;
 	return (
 		<div className="parameter-controls patch-parameter-controls">
@@ -50,7 +59,7 @@ export function PatchParameterControls() {
 						key={`${kind}-${axis}`}
 						kind={kind}
 						axis={axis}
-						stored={fixture?.[kind]?.[axis] ?? 0}
+						stored={target?.instance[kind]?.[axis] ?? 0}
 						disabled={disabled}
 						onChange={updateVector}
 					/>
@@ -60,19 +69,28 @@ export function PatchParameterControls() {
 	);
 }
 
-function selectedPatchedFixture(
+function selectedPhysicalTarget(
 	fixtures: readonly PatchedFixture[],
-	selectedIds: readonly string[],
+	selection: {
+		fixtureId: string;
+		multipatchInstanceId: string | null;
+	} | null,
 ) {
-	for (const selectedId of selectedIds) {
-		const fixture = fixtures.find(
-			(item) =>
-				item.fixture_id === selectedId ||
-				item.logical_heads.some((head) => head.fixture_id === selectedId),
-		);
-		if (fixture) return fixture;
-	}
-	return null;
+	if (!selection) return null;
+	const fixture = fixtures.find(
+		(candidate) => candidate.fixture_id === selection.fixtureId,
+	);
+	if (!fixture) return null;
+	if (!selection.multipatchInstanceId)
+		return {
+			fixture,
+			instance: fixture,
+			multipatch: null as MultiPatchInstance | null,
+		};
+	const multipatch = fixture.multipatch?.find(
+		(instance) => instance.id === selection.multipatchInstanceId,
+	);
+	return multipatch ? { fixture, instance: multipatch, multipatch } : null;
 }
 
 function PatchVectorControl({

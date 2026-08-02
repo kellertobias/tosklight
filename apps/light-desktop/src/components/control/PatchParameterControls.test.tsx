@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PatchParameterControls } from "./PatchParameterControls";
 
 const mocks = vi.hoisted(() => ({
-	selection: null as null | { selected: readonly string[] },
+	selection: null as null | {
+		fixtureId: string;
+		multipatchInstanceId: string | null;
+	},
 	patchStatus: "ready" as "loading" | "ready",
 	update: vi.fn(),
 }));
@@ -15,6 +18,16 @@ const fixture = {
 	logical_heads: [],
 	location: { x: 100, y: 0, z: 0 },
 	rotation: { x: 5, y: 0, z: 0 },
+	multipatch: [
+		{
+			id: "copy-1",
+			name: "Balcony copy",
+			universe: 2,
+			address: 1,
+			location: { x: 300, y: 0, z: 0 },
+			rotation: { x: 15, y: 0, z: 0 },
+		},
+	],
 };
 const secondFixture = {
 	...fixture,
@@ -28,17 +41,11 @@ vi.mock("../../features/patch/PatchContext", () => ({
 	usePatch: () => ({
 		status: mocks.patchStatus,
 		fixtures: mocks.patchStatus === "ready" ? [fixture, secondFixture] : [],
+		selectedPatchInstance: mocks.selection,
 		updateFixture: mocks.update,
 	}),
 	usePatchView: vi.fn(),
 }));
-
-vi.mock(
-	"../../features/programmingInteraction/ProgrammingInteractionView",
-	() => ({
-		useProgrammingSelectionView: () => mocks.selection,
-	}),
-);
 
 beforeEach(() => {
 	mocks.selection = null;
@@ -49,19 +56,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Patch parameter selection", () => {
-	it("shows selection loading and keeps every edit inert without scoped authority", () => {
+	it("asks for a physical patch row and keeps every edit inert without one", () => {
 		render(<PatchParameterControls />);
 
-		expect(
-			screen.getByText("Programmer selection loading…"),
-		).toBeInTheDocument();
+		expect(screen.getByText("Select a physical patch row")).toBeInTheDocument();
 		for (const button of screen.getAllByRole("button"))
 			expect(button).toBeDisabled();
 	});
 
 	it("does not expose stale fixtures or write while Patch authority loads", () => {
 		mocks.patchStatus = "loading";
-		mocks.selection = { selected: ["fixture-1"] };
+		mocks.selection = { fixtureId: "fixture-1", multipatchInstanceId: null };
 		render(<PatchParameterControls />);
 
 		expect(screen.getByText("Patch loading…")).toBeInTheDocument();
@@ -70,8 +75,8 @@ describe("Patch parameter selection", () => {
 		expect(mocks.update).not.toHaveBeenCalled();
 	});
 
-	it("edits the first fixture selected by the scoped projection", () => {
-		mocks.selection = { selected: ["fixture-1"] };
+	it("edits the selected primary physical instance", () => {
+		mocks.selection = { fixtureId: "fixture-1", multipatchInstanceId: null };
 		render(<PatchParameterControls />);
 
 		expect(screen.getByText("Front Truss")).toBeInTheDocument();
@@ -83,15 +88,36 @@ describe("Patch parameter selection", () => {
 		});
 	});
 
-	it("respects ordered logical-head selection when choosing a patched fixture", () => {
-		mocks.selection = { selected: ["head-2", "fixture-1"] };
+	it("edits only the exact selected multi-patch instance", () => {
+		mocks.selection = {
+			fixtureId: "fixture-1",
+			multipatchInstanceId: "copy-1",
+		};
 		render(<PatchParameterControls />);
 
-		expect(screen.getByText("Rear Truss")).toBeInTheDocument();
+		expect(screen.getByText("Balcony copy")).toBeInTheDocument();
 		const locationX = screen.getByText("Location X").closest("div")!;
 		fireEvent.click(locationX.querySelectorAll("button")[1]);
-		expect(mocks.update).toHaveBeenCalledWith("fixture-2", {
-			location: { x: 210, y: 0, z: 0 },
+		expect(mocks.update).toHaveBeenCalledWith("fixture-1", {
+			multipatch: [
+				expect.objectContaining({
+					id: "copy-1",
+					location: { x: 310, y: 0, z: 0 },
+				}),
+			],
 		});
+	});
+
+	it("does not retarget a stale multi-patch selection to its parent", () => {
+		mocks.selection = {
+			fixtureId: "fixture-1",
+			multipatchInstanceId: "removed-copy",
+		};
+		render(<PatchParameterControls />);
+
+		expect(screen.getByText("Select a physical patch row")).toBeInTheDocument();
+		for (const button of screen.getAllByRole("button"))
+			expect(button).toBeDisabled();
+		expect(mocks.update).not.toHaveBeenCalled();
 	});
 });

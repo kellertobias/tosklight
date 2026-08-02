@@ -106,13 +106,19 @@ function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 		fixture.logical_heads.some((head) =>
 			selectedFixtureIds?.has(head.fixture_id),
 		) ||
-		controller.ui.selectedFixture === fixture.fixture_id;
+		controller.ui.selectedFixture === fixture.fixture_id ||
+		(controller.patch.selectedPatchInstance?.fixtureId === fixture.fixture_id &&
+			controller.patch.selectedPatchInstance.multipatchInstanceId === null);
 	const pending = controller.patch.pendingFixtureIds.has(fixture.fixture_id);
 	return (
 		<tr
 			className={`${selected ? "selected" : ""} ${pending ? "pending" : ""}`.trim()}
 			aria-busy={pending || undefined}
 			onClick={(event) => {
+				controller.patch.selectPatchInstance({
+					fixtureId: fixture.fixture_id,
+					multipatchInstanceId: null,
+				});
 				selectPhysicalPatchRow(
 					controller,
 					fixture,
@@ -282,13 +288,17 @@ function MultiPatchRow({
 }) {
 	const controller = usePatchController();
 	const selected =
-		controller.ui.physicalSelectionFixture === fixture.fixture_id &&
-		controller.ui.physicalSelectionIds.includes(instance.id);
+		controller.patch.selectedPatchInstance?.fixtureId === fixture.fixture_id &&
+		controller.patch.selectedPatchInstance.multipatchInstanceId === instance.id;
 	return (
 		<tr
 			className={`multipatch-row${selected ? " selected" : ""}`}
 			aria-label={`Multi-patch ${instance.name || instance.id}`}
 			onClick={(event) => {
+				controller.patch.selectPatchInstance({
+					fixtureId: fixture.fixture_id,
+					multipatchInstanceId: instance.id,
+				});
 				selectPhysicalPatchRow(controller, fixture, instance.id, event);
 				selectPatchFixture(controller, fixture, event);
 			}}

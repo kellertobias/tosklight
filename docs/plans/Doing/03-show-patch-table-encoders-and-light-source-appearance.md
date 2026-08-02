@@ -55,6 +55,13 @@ before moving it to `Done` in a semantic commit.
   in the Patch cell, and shared logical values remain visibly identified. Desktop typecheck and all
   35 focused Show Patch control tests pass, including an exact header/cell-count regression; the
   production desktop frontend build also passes.
+- Patch now owns a separate exact physical-instance selection keyed by fixture ID plus optional
+  multi-patch instance ID. Primary and multi-patch row clicks set that identity independently of
+  logical Programmer selection; the patch parameter surface resolves only that exact instance.
+  Authoritative fixture reconciliation retains existing roots/copies, clears removed fixtures or
+  copies, and never falls back from a stale copy to its parent. Desktop typecheck and 44 focused
+  tests pass across the Show Patch table, exact root/copy mutations, loading/stale behavior, and
+  selection reconciliation.
 
 ## Current behavior and problem
 

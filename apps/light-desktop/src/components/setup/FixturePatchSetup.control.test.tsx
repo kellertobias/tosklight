@@ -49,6 +49,11 @@ const server = {
 	savePatchLayer: vi.fn(),
 };
 const patchFeature = {
+	selectedPatchInstance: null as null | {
+		fixtureId: string;
+		multipatchInstanceId: string | null;
+	},
+	selectPatchInstance: vi.fn(),
 	patchFixtures: vi.fn(),
 	spreadFixtureVector: vi.fn().mockResolvedValue(true),
 	updateFixture: vi.fn().mockResolvedValue(true),
@@ -89,6 +94,8 @@ vi.mock("../../features/patch/PatchContext", async (importOriginal) => {
 			patchRevision: 1,
 			cursor: 1,
 			fixtures: server.patch.fixtures,
+			selectedPatchInstance: patchFeature.selectedPatchInstance,
+			selectPatchInstance: patchFeature.selectPatchInstance,
 			pendingFixtureIds: new Set<string>(),
 			error: null,
 			patchFixtures: patchFeature.patchFixtures,
@@ -296,6 +303,8 @@ async function requestConflictingSplitPatch() {
 }
 
 beforeEach(() => {
+	patchFeature.selectedPatchInstance = null;
+	patchFeature.selectPatchInstance.mockReset();
 	state.patchSetArmed = false;
 	server.patch.fixtures = [splitFixture()];
 	server.fixtureProfiles = [];
@@ -1396,6 +1405,16 @@ describe("schema-v2 location and multi-patch editing", () => {
 		expect(multi.cells[1]).toHaveTextContent(/^—$/);
 		expect(multi.cells[2]).toHaveTextContent(/^—$/);
 		expect(multi.cells[4]).toHaveTextContent("S1 3.1 · S3 4.1");
+		fireEvent.click(primary);
+		expect(patchFeature.selectPatchInstance).toHaveBeenLastCalledWith({
+			fixtureId: "fixture-split",
+			multipatchInstanceId: null,
+		});
+		fireEvent.click(multi);
+		expect(patchFeature.selectPatchInstance).toHaveBeenLastCalledWith({
+			fixtureId: "fixture-split",
+			multipatchInstanceId: "physical-copy",
+		});
 		for (const retired of [
 			"Manufacturer",
 			"Product / mode",
