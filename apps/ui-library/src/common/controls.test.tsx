@@ -569,6 +569,16 @@ describe("shared controls", () => {
 			group.icons.map((icon) => icon.value),
 		);
 		expect(new Set(values).size).toBe(values.length);
+		expect(
+			ICON_CATALOG_GROUPS.flatMap((group) => group.icons)
+				.filter((icon) => icon.source === "catalog")
+				.every(
+					(icon) =>
+						icon.value.startsWith("icon:") &&
+						new TextEncoder().encode(icon.value).length <= 64 &&
+						Boolean(icon.url),
+				),
+		).toBe(true);
 		expect(ICON_CATALOG_GROUPS.map((group) => group.label)).toEqual([
 			"Built-in / General",
 			"Beam size",

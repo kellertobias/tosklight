@@ -77,7 +77,7 @@ export function IconPickerField({
       aria-label="Choose icon"
       onClick={() => { setGroupId(fallback); setOpen(true); }}>
       <span className="ui-picker-preview">{current?.source === "catalog"
-        ? <img src={current.value} alt=""/>
+        ? <img src={current.url} alt=""/>
         : value || "◇"}</span>
       <span>{current?.label ?? "Choose icon"}</span>
     </Button>
@@ -99,7 +99,7 @@ export function IconPickerField({
           active={icon.value === value}
           aria-label={icon.source === "built-in" ? `Use ${icon.value}` : icon.label}
           title={icon.label} onClick={() => choose(icon.value)}>
-          {icon.source === "catalog" ? <img src={icon.value} alt=""/> : icon.value}
+          {icon.source === "catalog" ? <img src={icon.url} alt=""/> : icon.value}
         </Button>)}
       </div>
     </PickerDialog>}

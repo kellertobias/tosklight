@@ -131,7 +131,7 @@ describe("PoolCard", () => {
 			screen
 				.getByRole("button", { name: /Profiles/u })
 				.querySelector(".pool-card-icon-image"),
-		).toHaveAttribute("src", icon?.value);
+		).toHaveAttribute("src", icon?.url);
 	});
 
 	it("separates a press-and-hold callback from the following click", () => {

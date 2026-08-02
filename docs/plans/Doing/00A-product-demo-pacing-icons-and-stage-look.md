@@ -31,6 +31,10 @@ video time and visible click/type pacing, not to weakening assertions or racing 
   The closeout defect is in demo state and proof: the final position values are uniform, the color
   assertion stops before profile-calibrated output, and the final Busking desktop has no Stage pane.
   Renderer changes require contrary retained-frame evidence rather than assumption.
+- Catalog icon choices must persist a stable short identifier, not a Vite-generated asset URL.
+  The generated URL exceeded the Group wire contract's 64-byte icon limit in the real workflow
+  and would not be a portable show value across builds. Rendering retains the bundled URL as
+  separate catalog metadata and recognizes the current-build URL as a compatibility alias.
 
 ## Verification
 
@@ -45,6 +49,10 @@ video time and visible click/type pacing, not to weakening assertions or racing 
   the single desktop visualization provider, Stage attribute ownership, authored pan/yoke/head
   hierarchy, and emitter/beam color updates. Existing renderer tests cover those seams, but the demo
   currently proves neither non-uniform final motion nor calibrated multi-color Stage output.
+- `npm run test:ui-package` passed typecheck and all 176 UI-library tests after separating stable
+  catalog icon identifiers from their bundled rendering URLs. A raw root Vitest invocation was
+  also attempted but lacked the UI package's jsdom configuration, so its 36 `document is not
+  defined` failures are invocation/configuration failures rather than product results.
 
 ## Remaining work
 

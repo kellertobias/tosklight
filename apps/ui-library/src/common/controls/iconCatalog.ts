@@ -4,6 +4,7 @@ export interface IconCatalogItem {
   value: string;
   label: string;
   source: "catalog" | "built-in";
+  url?: string;
 }
 
 export interface IconCatalogGroup {
@@ -47,7 +48,12 @@ for (const [path, url] of Object.entries(modules).sort(([left], [right]) => left
   if (!match) continue;
   const [, group, name] = match;
   const icons = catalogGroups.get(group) ?? [];
-  icons.push({ value: url, label: title(name), source: "catalog" });
+  icons.push({
+    value: `icon:${group}/${name}`,
+    label: title(name),
+    source: "catalog",
+    url,
+  });
   catalogGroups.set(group, icons);
 }
 
@@ -71,5 +77,7 @@ export function resolveIconGroup(requested?: string) {
 }
 
 export function iconCatalogItem(value: string) {
-  return ICON_CATALOG_GROUPS.flatMap((group) => group.icons).find((icon) => icon.value === value);
+  return ICON_CATALOG_GROUPS.flatMap((group) => group.icons).find(
+    (icon) => icon.value === value || icon.url === value,
+  );
 }

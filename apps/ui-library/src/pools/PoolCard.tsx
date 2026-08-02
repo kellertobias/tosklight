@@ -279,7 +279,7 @@ function PoolCardContents({
 					) : catalogIcon?.source === "catalog" ? (
 						<img
 							className="pool-card-icon-image"
-							src={catalogIcon.value}
+								src={catalogIcon.url}
 							alt=""
 						/>
 					) : model.icon != null ? (
