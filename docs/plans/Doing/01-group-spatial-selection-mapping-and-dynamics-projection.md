@@ -15,8 +15,10 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
 ## Progress
 
 - [x] Claimed from `docs/plans/Next` in numeric order.
-- [ ] Audit existing Group, Dynamic, Layout, SET-routing, Playback Group Master, persistence, wire,
+- [x] Audit existing Group, Dynamic, Layout, SET-routing, Playback Group Master, persistence, wire,
   help, and acceptance-test seams.
+- [x] Add the portable projection, shape, override, and ranked-selection model with deterministic
+  pure-domain evaluation and validation.
 - [ ] Implement the authoritative source, projection, shape, ranking, inheritance, and migration
   domain model with focused tests.
 - [ ] Implement rank-aware programming and Dynamic evaluation plus explicit SET/Playback routing.
@@ -33,10 +35,34 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
 - Treat the literal operator grammar, three-tab modal, absence of Layout authority, shared Group
   Master ownership, and backward-compatible migration as acceptance requirements rather than
   design suggestions.
+- Keep Stage-authored 2D positions, projections, and regeneration intact. The retired authority is
+  specifically the Layout built-in/pane, Group `grid`, Programmer selection-grid configuration and
+  gestures, and their desk-layout identities.
+- Preserve legacy per-lane Dynamic spatial ordering through a backward-compatible read/runtime
+  shim until it can be normalized deliberately. Existing PerLane definitions can contain different
+  lane orderings, so silently choosing one definition-level override would violate the required
+  output-preserving migration; new authoring will expose only the definition-level mapping.
+- Treat portable Dynamic decoding as the compatibility boundary, not only show compilation. Dynamic
+  definitions also occur in Cue fallbacks, physical and virtual Playbacks, persisted output-runtime
+  instances, Programmer/Preload values, and Undo/session snapshots.
 
 ## Implementation verification
 
-- Pending the initial seam and compatibility audit.
+- The audit found current legacy authority in `GroupDefinition.fixtures`, `derived_from`, `grid`,
+  `master`, and `playback_fader`; spatial `PhaseOrdering` on both definition and lanes; the registered
+  Layout built-in/pane plus persisted `layoutGroupId`; the Programmer selection-grid actions; two
+  obsolete Group management surfaces; text/regex-derived SET assignment; and frontend-only Dynamic
+  preview based on incidental current selection.
+- Existing reusable seams include revisioned Group management, Playback `configureSlot` with
+  concrete page/object revision guards, explicit Playback Configuration targets, Group live/frozen
+  selection actions, and independent overlapping Group-Master HTP coverage.
+- Commit `3d6fff28` adds portable `f64` 3D projection and Grid/Radial/Radar rank evaluation, named
+  Top/Front/Back/Left/Right presets, preset-hint reconciliation, exact shared ranks, missing-position
+  warnings with individual fallback ranks, Dynamic-only Random configuration, explicit inherit/
+  replace stages, finite-field validation, zero-vector rejection, degree normalization, and negative
+  zero canonicalization.
+- `cargo test -p light-dynamics --lib` passed all 40 tests; `cargo clippy -p light-dynamics
+  --all-targets -- -D warnings` and `git diff --check` passed.
 
 ## Remaining work
 
