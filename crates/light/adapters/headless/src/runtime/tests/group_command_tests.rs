@@ -222,6 +222,7 @@ fn set_group_at_page_slot_assigns_a_group_master() {
         connected: true,
         desk: test_control_desk(),
     };
+    state.sessions.insert_session(session.clone());
     state.programming.start(session.id, user.id);
     let show_path = data_dir.join("shows/group-master-command.show");
     let show_id = initialise_show(&show_path, "Group Master Command").unwrap();
@@ -247,6 +248,13 @@ fn set_group_at_page_slot_assigns_a_group_master() {
             0,
         )
         .unwrap();
+    let group_revision = store
+        .objects("group")
+        .unwrap()
+        .into_iter()
+        .find(|object| object.id == "4")
+        .unwrap()
+        .revision;
     state.active_show.replace_current(Some(entry.clone()));
     state
         .output
@@ -259,18 +267,6 @@ fn set_group_at_page_slot_assigns_a_group_master() {
     );
 
     let store = ShowStore::open(&show_path).unwrap();
-    let playback = store
-        .objects("playback")
-        .unwrap()
-        .into_iter()
-        .find(|object| object.id == "2")
-        .unwrap();
-    let playback =
-        serde_json::from_value::<light_playback::PlaybackDefinition>(playback.body).unwrap();
-    assert!(matches!(
-        playback.target,
-        light_playback::PlaybackTarget::Group { ref group_id } if group_id == "4"
-    ));
     let page = store
         .objects("playback_page")
         .unwrap()
@@ -278,7 +274,31 @@ fn set_group_at_page_slot_assigns_a_group_master() {
         .find(|object| object.id == "1")
         .unwrap();
     let page = serde_json::from_value::<light_playback::PlaybackPage>(page.body).unwrap();
-    assert_eq!(page.slots.get(&2), Some(&2));
+    let playback_number = *page.slots.get(&2).unwrap();
+    let playback = store
+        .objects("playback")
+        .unwrap()
+        .into_iter()
+        .find(|object| object.id == playback_number.to_string())
+        .unwrap();
+    let playback =
+        serde_json::from_value::<light_playback::PlaybackDefinition>(playback.body).unwrap();
+    assert!(matches!(
+        playback.target,
+        light_playback::PlaybackTarget::Group { ref group_id } if group_id == "4"
+    ));
+    assert_eq!(
+        store
+            .objects("group")
+            .unwrap()
+            .into_iter()
+            .find(|object| object.id == "4")
+            .unwrap()
+            .revision,
+        group_revision,
+        "Group Master assignment must not mutate Group data",
+    );
+    assert_eq!(page.slots.get(&2), Some(&playback_number));
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

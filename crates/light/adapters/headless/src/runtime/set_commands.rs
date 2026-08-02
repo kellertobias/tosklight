@@ -15,7 +15,7 @@ pub(super) fn execute_set_command(
                 return Err("expected SET GROUP <group-number> AT <page> . <page-playback>".into());
             }
             let (page, slot) = parse_page_slot(&tokens[3..])?;
-            return assign_group_page_slot(state, context, &tokens[1], page, slot);
+            return assign_group_page_slot(state, session, context, &tokens[1], page, slot);
         }
         if tokens.len() != 2 {
             return Err("expected SET GROUP <group-number>".into());
@@ -63,114 +63,86 @@ pub(super) fn execute_set_command(
 
 fn assign_group_page_slot(
     state: &AppState,
+    session: &Session,
     context: &light_application::ActionContext,
     group_id: &str,
     page: u8,
     slot: u8,
 ) -> Result<usize, String> {
-    let snapshot = state.output.snapshot();
-    let group = snapshot
-        .groups
-        .iter()
-        .find(|group| group.id == group_id)
-        .cloned()
-        .ok_or_else(|| format!("group {group_id} does not exist"))?;
     let (entry, store) = active_show_store(state)?;
-    let page_object = store
-        .objects("playback_page")
+    let show_revision = store
+        .portable_revision()
+        .map_err(|error| error.to_string())?
+        .value();
+    let group_object = store
+        .objects("group")
         .map_err(|error| error.to_string())?
         .into_iter()
-        .find(|object| object.id == page.to_string());
-    let mut page_definition = if let Some(object) = &page_object {
-        serde_json::from_value::<light_playback::PlaybackPage>(object.body.clone())
-            .map_err(|error| format!("invalid stored Playback page: {error}"))?
-    } else {
-        snapshot
-            .playback_pages
-            .iter()
-            .find(|candidate| candidate.number == page)
-            .cloned()
-            .unwrap_or(light_playback::PlaybackPage {
-                number: page,
-                name: format!("Page {page}"),
-                slots: HashMap::new(),
-                virtual_playbacks: HashMap::new(),
-            })
-    };
-    let playback_objects = store
-        .objects("playback")
-        .map_err(|error| error.to_string())?;
-    let used = playback_objects
-        .iter()
-        .filter_map(|object| object.id.parse::<u16>().ok())
-        .collect::<HashSet<_>>();
-    let playback_number = page_definition
-        .slots
-        .get(&slot)
-        .copied()
-        .or_else(|| (!used.contains(&u16::from(slot))).then_some(u16::from(slot)))
-        .or_else(|| (1..=light_playback::MAX_PLAYBACKS).find(|number| !used.contains(number)))
-        .ok_or("no physical Playback number is available")?;
-    let playback_object = playback_objects
-        .into_iter()
-        .find(|object| object.id == playback_number.to_string());
-    let target = light_playback::PlaybackTarget::Group {
-        group_id: group.id.clone(),
-    };
-    let mut playback = playback_object
-        .as_ref()
-        .map(|object| {
-            serde_json::from_value::<light_playback::PlaybackDefinition>(object.body.clone())
-                .map_err(|error| format!("invalid stored Playback: {error}"))
-        })
-        .transpose()?
-        .unwrap_or(light_playback::PlaybackDefinition {
-            number: playback_number,
-            name: group.name.clone(),
-            buttons: light_playback::PlaybackDefinition::default_buttons(&target),
-            button_count: 3,
-            fader: light_playback::PlaybackFaderMode::Master,
-            has_fader: true,
-            go_activates: true,
-            auto_off: true,
-            xfade_millis: 0,
-            color: group.color.clone().unwrap_or_else(|| "#20c997".into()),
-            flash_release: light_playback::FlashReleaseMode::default(),
-            protect_from_swap: false,
-            presentation_icon: group.icon.clone(),
-            presentation_image: None,
-            target: target.clone(),
-        });
-    playback.name = group.name;
-    playback.target = target;
-    playback.reset_incompatible_layout();
-    page_definition.slots.insert(slot, playback_number);
-    let mutations = vec![
-        put_active_show_object(
-            light_application::ActiveShowObjectKind::Playback,
-            playback_number.to_string(),
-            playback_object.as_ref().map_or(0, |object| object.revision),
-            serde_json::to_value(playback).map_err(|error| error.to_string())?,
-        )
-        .map_err(|error| error.message)?,
-        playback_layout_mutations::put_page(
-            page_definition,
-            page_object.as_ref().map_or(0, |object| object.revision),
-        )
-        .map_err(|error| error.message)?,
-    ];
-    let action = active_show_object_action(context.clone(), entry.id, mutations);
-    let result = run_active_show_object_action_in_programming_interaction(state, action)
-        .map_err(|error| error.message)?;
-    for change in &result.changes {
-        emit_command_object_changed(
-            state,
-            &entry,
-            change.kind.as_str(),
-            &change.object_id,
-            change.object_revision,
-        );
+        .find(|object| object.id == group_id)
+        .ok_or_else(|| format!("group {group_id} does not exist"))?;
+    let mut page_object = None;
+    for object in store
+        .objects("playback_page")
+        .map_err(|error| error.to_string())?
+    {
+        let definition =
+            serde_json::from_value::<light_playback::PlaybackPage>(object.body.clone())
+                .map_err(|error| format!("invalid stored Playback page: {error}"))?;
+        if definition.number == page {
+            page_object = Some((object, definition));
+            break;
+        }
     }
+    let playback_number = page_object
+        .as_ref()
+        .and_then(|(_, definition)| definition.slots.get(&slot).copied());
+    let mut playback_object = None;
+    if let Some(playback_number) = playback_number {
+        for object in store
+            .objects("playback")
+            .map_err(|error| error.to_string())?
+        {
+            let definition =
+                serde_json::from_value::<light_playback::PlaybackDefinition>(object.body.clone())
+                    .map_err(|error| format!("invalid stored Playback: {error}"))?;
+            if definition.number == playback_number {
+                playback_object = Some(object);
+                break;
+            }
+        }
+    }
+    let request_id = context
+        .request_id
+        .clone()
+        .unwrap_or_else(|| format!("legacy-set-group-master-{}", context.correlation_id));
+    let action = light_application::ActionEnvelope {
+        context: context
+            .clone()
+            .with_request_id(request_id)
+            .with_expected_revision(show_revision),
+        command: light_application::PlaybackTopologyCommand {
+            show_id: entry.id,
+            action: light_application::PlaybackTopologyAction::AssignGroupMaster {
+                group_object_id: group_object.id,
+                expected_group_revision: group_object.revision,
+                page,
+                slot,
+                expected_page_revision: page_object
+                    .as_ref()
+                    .map_or(0, |(object, _)| object.revision),
+                expected_page_object_id: page_object.as_ref().map(|(object, _)| object.id.clone()),
+                expected_playback_revision: playback_object
+                    .as_ref()
+                    .map_or(0, |object| object.revision),
+                expected_playback_object_id: playback_object.map(|object| object.id),
+            },
+        },
+    };
+    let ports = ServerPlaybackTopologyPorts::new(state.clone(), session.clone(), entry.id);
+    state
+        .playback
+        .handle_topology(action, &ports)
+        .map_err(|error| error.message)?;
     Ok(1)
 }
 

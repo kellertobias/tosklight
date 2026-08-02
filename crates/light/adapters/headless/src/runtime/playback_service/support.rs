@@ -37,33 +37,24 @@ pub(super) fn resolve_group_playback(
     snapshot: &light_engine::EngineSnapshot,
     group_id: &str,
 ) -> Result<Option<u16>, ActionError> {
-    let group = snapshot
+    snapshot
         .groups
         .iter()
         .find(|group| group.id == group_id)
         .ok_or_else(|| ActionError::new(ActionErrorKind::NotFound, "Group not found"))?;
-    let Some(number) = group.playback_fader.map(u16::from) else {
-        return Ok(None);
-    };
-    let definition = snapshot
+    Ok(snapshot
         .playbacks
         .iter()
-        .find(|playback| playback.number == number)
-        .ok_or_else(|| {
-            ActionError::new(
-                ActionErrorKind::Conflict,
-                "Group references a missing assigned Playback",
+        .filter(|playback| {
+            matches!(
+                &playback.target,
+                light_playback::PlaybackTarget::Group {
+                    group_id: assigned_id,
+                } if assigned_id == group_id
             )
-        })?;
-    match &definition.target {
-        light_playback::PlaybackTarget::Group {
-            group_id: assigned_id,
-        } if assigned_id == group_id => Ok(Some(number)),
-        _ => Err(ActionError::new(
-            ActionErrorKind::Conflict,
-            "Group assigned Playback targets a different object",
-        )),
-    }
+        })
+        .map(|playback| playback.number)
+        .min())
 }
 
 pub(super) fn operator_context(

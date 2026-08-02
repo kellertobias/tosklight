@@ -1242,7 +1242,7 @@ async fn v2_group_snapshot_is_exact_and_rejects_foreign_or_invalid_identity() {
 }
 
 #[tokio::test]
-async fn v2_group_actions_reject_unsupported_missing_and_wrong_assignments() {
+async fn v2_group_actions_reject_unsupported_missing_and_unassigned_groups() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -1286,7 +1286,7 @@ async fn v2_group_actions_reject_unsupported_missing_and_wrong_assignments() {
         ),
     )
     .await;
-    assert_eq!(missing_assignment.status(), StatusCode::CONFLICT);
+    assert_eq!(missing_assignment.status(), StatusCode::BAD_REQUEST);
 
     set_group_playback_assignment(&state, "side", Some(1));
     let wrong_assignment = post_action(
@@ -1300,7 +1300,7 @@ async fn v2_group_actions_reject_unsupported_missing_and_wrong_assignments() {
         ),
     )
     .await;
-    assert_eq!(wrong_assignment.status(), StatusCode::CONFLICT);
+    assert_eq!(wrong_assignment.status(), StatusCode::BAD_REQUEST);
     assert_eq!(state.events.latest_sequence(), cursor);
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -2441,7 +2441,7 @@ fn install_group_runtime_test_state(state: &AppState) {
         .iter_mut()
         .find(|group| group.id == "front")
         .unwrap()
-        .playback_fader = Some(2);
+        .playback_fader = Some(1);
     groups.push(light_programmer::GroupDefinition {
         id: "side".into(),
         name: "Side".into(),
