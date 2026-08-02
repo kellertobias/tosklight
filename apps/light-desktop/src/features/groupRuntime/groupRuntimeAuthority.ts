@@ -10,12 +10,14 @@ import {
 } from "../playbackRuntime/PlaybackRuntimeView";
 import type { ShowObject } from "../showObjects/contracts";
 import {
+	usePlaybackDefinitions,
+	usePlaybackPages,
 	usePortableGroups,
 	useShowObjectCollectionsReady,
 } from "../showObjects/ShowObjectsState";
 import { useShowObjectView } from "../showObjects/ShowObjectsView";
 
-const GROUP_KINDS = ["group"] as const;
+const GROUP_KINDS = ["group", "playback", "playback_page"] as const;
 const NO_GROUPS: readonly RuntimeGroup[] = [];
 
 export interface GroupRuntimeState {
@@ -25,7 +27,7 @@ export interface GroupRuntimeState {
 }
 
 export type RuntimeGroup = ShowObject<"group"> & {
-	runtime: GroupRuntimeState;
+	runtime: GroupRuntimeState | null;
 };
 
 export interface GroupRuntimeAuthority {
@@ -48,11 +50,16 @@ export function useGroupRuntimeAuthority(
 	enabled = true,
 ): GroupRuntimeAuthority {
 	useShowObjectView("group", enabled);
+	useShowObjectView("playback", enabled);
+	useShowObjectView("playback_page", enabled);
 	const collectionReady = useShowObjectCollectionsReady(GROUP_KINDS, enabled);
 	const portable = usePortableGroups(enabled);
+	const playbacks = usePlaybackDefinitions(enabled);
+	const pages = usePlaybackPages(enabled);
 	const groupIds = useMemo(
-		() => (enabled && collectionReady ? portable.map(({ id }) => id) : []),
-		[collectionReady, enabled, portable],
+		() =>
+			enabled && collectionReady ? assignedGroupIds(playbacks, pages) : [],
+		[collectionReady, enabled, pages, playbacks],
 	);
 	const needsRuntime = groupIds.length > 0;
 	const runtimeEnabled = enabled && collectionReady && needsRuntime;
@@ -109,7 +116,7 @@ export function useGroupRuntimeAuthority(
 
 interface ProjectedGroupCache {
 	portable: ShowObject<"group">;
-	projection: PlaybackProjection;
+	projection: PlaybackProjection | undefined;
 	group: RuntimeGroup;
 }
 
@@ -123,20 +130,41 @@ function projectRuntimeGroups(
 		if (!present.has(groupId)) cache.delete(groupId);
 	return portable.flatMap((group) => {
 		const projection = projections.get(group.id);
-		if (projection?.target !== "group" || projection.group_id !== group.id)
-			return [];
+		const groupProjection =
+			projection?.target === "group" && projection.group_id === group.id
+				? projection
+				: undefined;
 		const existing = cache.get(group.id);
-		if (existing?.portable === group && existing.projection === projection)
+		if (existing?.portable === group && existing.projection === groupProjection)
 			return [existing.group];
 		const projected: RuntimeGroup = {
 			...group,
-			runtime: {
-				master: projection.master,
-				flashLevel: projection.flash_level,
-				playbackNumber: projection.playback_number,
-			},
+			runtime: groupProjection
+				? {
+						master: groupProjection.master,
+						flashLevel: groupProjection.flash_level,
+						playbackNumber: groupProjection.playback_number,
+					}
+				: null,
 		};
-		cache.set(group.id, { portable: group, projection, group: projected });
+		cache.set(group.id, {
+			portable: group,
+			projection: groupProjection,
+			group: projected,
+		});
 		return [projected];
 	});
+}
+
+function assignedGroupIds(
+	playbacks: readonly ShowObject<"playback">[],
+	pages: readonly ShowObject<"playback_page">[],
+) {
+	const ids = new Set<string>();
+	for (const { body } of playbacks)
+		if (body.target.type === "group") ids.add(body.target.group_id);
+	for (const { body } of pages)
+		for (const playback of Object.values(body.virtual_playbacks))
+			if (playback.target.type === "group") ids.add(playback.target.group_id);
+	return [...ids].sort((left, right) => left.localeCompare(right));
 }

@@ -33,9 +33,25 @@ const SHOW_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const DESK_ID = "22222222-2222-4222-8222-222222222222";
 
 const GROUPS: Record<string, ShowObject<"group">[]> = {
-	[SHOW_A]: [group("1", []), group("2", ["fixture-b", "fixture-a"])],
+	[SHOW_A]: [
+		group("1", []),
+		group("2", ["fixture-b", "fixture-a"]),
+		group("3", ["fixture-c"]),
+	],
 	[SHOW_B]: [group("9", ["fixture-z"])],
 	[SHOW_C]: [group("a|b", [])],
+};
+
+const PLAYBACKS: Record<string, ShowObject<"playback">[]> = {
+	[SHOW_A]: [playback(1, "1")],
+	[SHOW_B]: [playback(9, "9")],
+	[SHOW_C]: [playback(1, "a|b")],
+};
+
+const PAGES: Record<string, ShowObject<"playback_page">[]> = {
+	[SHOW_A]: [playbackPage(1, playbackDefinition(1001, "2"))],
+	[SHOW_B]: [],
+	[SHOW_C]: [],
 };
 
 function group(id: string, fixtures: string[]): ShowObject<"group"> {
@@ -48,6 +64,52 @@ function group(id: string, fixtures: string[]): ShowObject<"group"> {
 			name: `Group ${id}`,
 			fixtures,
 			programming: {},
+		},
+	};
+}
+
+function playback(number: number, groupId: string): ShowObject<"playback"> {
+	return {
+		kind: "playback",
+		id: String(number),
+		revision: 1,
+		updated_at: "",
+		body: playbackDefinition(number, groupId),
+	};
+}
+
+function playbackDefinition(
+	number: number,
+	groupId: string,
+): ShowObject<"playback">["body"] {
+	return {
+		number,
+		name: `Group ${groupId}`,
+		target: { type: "group" as const, group_id: groupId },
+		buttons: ["select", "flash", "none"],
+		button_count: 2 as const,
+		fader: "master" as const,
+		has_fader: true,
+		go_activates: false,
+		auto_off: false,
+		xfade_millis: 0,
+	};
+}
+
+function playbackPage(
+	number: number,
+	virtualPlayback: ReturnType<typeof playbackDefinition>,
+): ShowObject<"playback_page"> {
+	return {
+		kind: "playback_page",
+		id: String(number),
+		revision: 1,
+		updated_at: "",
+		body: {
+			number,
+			name: `Page ${number}`,
+			slots: {},
+			virtual_playbacks: { [String(virtualPlayback.number)]: virtualPlayback },
 		},
 	};
 }
@@ -186,10 +248,12 @@ function Probe({
 			<span data-testid="can-write">{String(authority.canWrite)}</span>
 			<span data-testid="groups">
 				{authority.groups
-					.map(
-						(group) =>
-							`${group.id}:${group.body.fixtures.join(",")}:${group.runtime.master}:${group.runtime.flashLevel}:${group.runtime.playbackNumber ?? "direct"}`,
-					)
+					.map((group) => {
+						const runtime = group.runtime;
+						return runtime
+							? `${group.id}:${group.body.fixtures.join(",")}:${runtime.master}:${runtime.flashLevel}:${runtime.playbackNumber ?? "direct"}`
+							: `${group.id}:${group.body.fixtures.join(",")}:unassigned`;
+					})
 					.join("|")}
 			</span>
 		</div>
@@ -212,7 +276,14 @@ function harness(
 	const onRender = vi.fn();
 	const loadCollection = vi.fn(
 		async (showId: string, kind: ShowObjectKind) => ({
-			objects: kind === "group" ? GROUPS[showId] : [],
+			objects:
+				kind === "group"
+					? GROUPS[showId]
+					: kind === "playback"
+						? PLAYBACKS[showId]
+						: kind === "playback_page"
+							? PAGES[showId]
+							: [],
 			showRevision: 4,
 		}),
 	);
@@ -281,7 +352,7 @@ describe("Group runtime authority", () => {
 
 		expect(model.loadCollection).toHaveBeenCalledWith(SHOW_A, "group");
 		expect(model.showTransport.scopes.at(-1)).toEqual({
-			kinds: ["group"],
+			kinds: ["group", "playback", "playback_page"],
 			objects: [],
 		});
 		const requested = new Set(
@@ -298,10 +369,11 @@ describe("Group runtime authority", () => {
 			desk: false,
 		});
 		expect(screen.getByTestId("groups")).toHaveTextContent(
-			"1::0.25:0.1:direct|2:fixture-b,fixture-a:0.6:0:17",
+			"1::0.25:0.1:direct|2:fixture-b,fixture-a:0.6:0:17|3:fixture-c:unassigned",
 		);
 		expect(latestGroups[0].body.fixtures).toEqual([]);
 		expect(latestGroups[1].body.fixtures).toEqual(["fixture-b", "fixture-a"]);
+		expect(latestGroups[2].runtime).toBeNull();
 		expect(latestGroups[0].body).not.toHaveProperty("master");
 		expect(latestGroups[1].body).not.toHaveProperty("playback_fader");
 		expect(screen.getByTestId("can-write")).toHaveTextContent("false");
@@ -444,6 +516,12 @@ describe("Group runtime authority", () => {
 				SHOW_C,
 				"group",
 				[group("a", []), group("b", [])],
+				5,
+			);
+			model.showStore.setCollection(
+				SHOW_C,
+				"playback",
+				[playback(1, "a"), playback(2, "b")],
 				5,
 			);
 		});

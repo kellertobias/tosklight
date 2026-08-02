@@ -11,6 +11,7 @@ import {
 	useBootstrapReady,
 } from "../features/deskSnapshot/DeskSnapshotState";
 import {
+	type GroupRuntimeState,
 	type RuntimeGroup,
 	useGroupRuntimeAuthority,
 } from "../features/groupRuntime/groupRuntimeAuthority";
@@ -34,6 +35,7 @@ import {
 
 type FixtureSheetTarget = ReturnType<typeof fixtureSheetTargets>[number];
 type FixtureGroup = RuntimeGroup;
+type LimitingGroup = FixtureGroup & { runtime: GroupRuntimeState };
 type ProgrammingValue = {
 	value: AttributeValue;
 	programmerOrder: number;
@@ -105,7 +107,7 @@ function fixtureSheetRow({
 	programmerValues: ProgrammingValueIndex;
 	preloadValues: ProgrammingValueIndex;
 	dynamicStack: readonly DynamicStackEntry[];
-	limitingGroups: readonly FixtureGroup[];
+	limitingGroups: readonly LimitingGroup[];
 }) {
 	const patched = target.fixture;
 	const targetValues = programmerValues.get(target.fixtureId);
@@ -293,8 +295,8 @@ function indexDynamicStack(
 function indexLimitingGroups(
 	groups: readonly FixtureGroup[],
 	fixtures: readonly PatchedFixture[],
-): Map<string, FixtureGroup[]> {
-	const result = new Map<string, FixtureGroup[]>();
+): Map<string, LimitingGroup[]> {
+	const result = new Map<string, LimitingGroup[]>();
 	const membership = resolveGroupMembership(groups);
 	const participates = new Map<string, boolean>();
 	for (const fixture of fixtures) {
@@ -315,13 +317,18 @@ function indexLimitingGroups(
 			participates.set(head.fixture_id, active);
 	}
 	for (const group of groups) {
-		if (group.runtime.playbackNumber == null || group.runtime.master >= 1)
+		if (
+			group.runtime == null ||
+			group.runtime.playbackNumber == null ||
+			group.runtime.master >= 1
+		)
 			continue;
+		const limitingGroup = group as LimitingGroup;
 		for (const fixtureId of membership.get(group.id) ?? []) {
 			if (!participates.get(fixtureId)) continue;
 			const fixtureGroups = result.get(fixtureId);
-			if (fixtureGroups) fixtureGroups.push(group);
-			else result.set(fixtureId, [group]);
+			if (fixtureGroups) fixtureGroups.push(limitingGroup);
+			else result.set(fixtureId, [limitingGroup]);
 		}
 	}
 	return result;
@@ -351,7 +358,7 @@ function demoFixtureSheetRows() {
 		parentFixtureId: "",
 		childFixtureIds: [] as string[],
 		indented: false,
-		limitingGroups: [] as FixtureGroup[],
+		limitingGroups: [] as LimitingGroup[],
 		preloadDimmer: null,
 		preloadColor: null,
 		preloadPan: null,
