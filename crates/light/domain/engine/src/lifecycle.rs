@@ -1,9 +1,9 @@
 use crate::{
     Engine, EngineError, EngineSnapshot, ProfileEncodingIndex, ProfileProjectionIndex,
-    RuntimeGeneration, value_for_ordered_position,
+    RuntimeGeneration, group_stage_positions, value_for_ordered_position,
 };
 use light_playback::{Cue, CueChange, CueList, GroupCueChange, PlaybackEngine};
-use light_programmer::{GroupDefinition, resolve_group};
+use light_programmer::{GroupDefinition, resolve_group_spatial};
 use parking_lot::RwLock;
 use std::{
     collections::{HashMap, HashSet},
@@ -96,7 +96,11 @@ impl Engine {
         let playback_changed = !Arc::ptr_eq(&snapshot.cue_lists, &previous.cue_lists)
             || !Arc::ptr_eq(&snapshot.playbacks, &previous.playbacks)
             || !Arc::ptr_eq(&snapshot.playback_pages, &previous.playback_pages)
-            || !Arc::ptr_eq(&snapshot.groups, &previous.groups);
+            || !Arc::ptr_eq(&snapshot.groups, &previous.groups)
+            || !Arc::ptr_eq(
+                &snapshot.dynamic_stage_positions,
+                &previous.dynamic_stage_positions,
+            );
         let (profile_encodings, profile_projections) = if fixtures_changed {
             (
                 Arc::new(ProfileEncodingIndex::compile(snapshot)?),
@@ -225,9 +229,10 @@ impl Engine {
         snapshot: &EngineSnapshot,
     ) -> Result<(PlaybackEngine, HashMap<String, GroupDefinition>), EngineError> {
         let groups = snapshot_groups(snapshot);
+        let stage_positions = group_stage_positions(snapshot);
         let mut playback = self.playback_for_current_controls();
         for source in snapshot.cue_lists.iter() {
-            let cue_list = expand_group_references(source, &groups);
+            let cue_list = expand_group_references(source, &groups, &stage_positions);
             playback.register(cue_list).map_err(EngineError::Invalid)?;
         }
         register_playback_definitions(&mut playback, snapshot)?;
@@ -333,22 +338,30 @@ fn snapshot_groups(snapshot: &EngineSnapshot) -> HashMap<String, GroupDefinition
         .collect()
 }
 
-fn expand_group_references(source: &CueList, groups: &HashMap<String, GroupDefinition>) -> CueList {
+fn expand_group_references(
+    source: &CueList,
+    groups: &HashMap<String, GroupDefinition>,
+    stage_positions: &HashMap<light_core::FixtureId, light_dynamics::Position3d>,
+) -> CueList {
     let mut cue_list = source.clone();
     for cue in &mut cue_list.cues {
-        expand_group_changes(cue, groups);
+        expand_group_changes(cue, groups, stage_positions);
     }
     cue_list
 }
 
-fn expand_group_changes(cue: &mut Cue, groups: &HashMap<String, GroupDefinition>) {
+fn expand_group_changes(
+    cue: &mut Cue,
+    groups: &HashMap<String, GroupDefinition>,
+    stage_positions: &HashMap<light_core::FixtureId, light_dynamics::Position3d>,
+) {
     let mut addresses = cue
         .changes
         .iter()
         .map(|change| (change.fixture_id, change.attribute.clone()))
         .collect::<HashSet<_>>();
     for change in &cue.group_changes {
-        for expanded in resolved_group_changes(change, groups) {
+        for expanded in resolved_group_changes(change, groups, stage_positions) {
             let address = (expanded.fixture_id, expanded.attribute.clone());
             if addresses.insert(address) {
                 cue.changes.push(expanded);
@@ -357,23 +370,29 @@ fn expand_group_changes(cue: &mut Cue, groups: &HashMap<String, GroupDefinition>
     }
 }
 
-fn resolved_group_changes<'a>(
-    change: &'a GroupCueChange,
-    groups: &'a HashMap<String, GroupDefinition>,
-) -> impl Iterator<Item = CueChange> + 'a {
-    let fixtures = resolve_group(&change.group_id, groups).unwrap_or_default();
-    let count = fixtures.len();
-    fixtures
+fn resolved_group_changes(
+    change: &GroupCueChange,
+    groups: &HashMap<String, GroupDefinition>,
+    stage_positions: &HashMap<light_core::FixtureId, light_dynamics::Position3d>,
+) -> Vec<CueChange> {
+    let Ok(resolved) = resolve_group_spatial(&change.group_id, groups, stage_positions) else {
+        return Vec::new();
+    };
+    let ranking = resolved.ranked_selection;
+    let count = ranking.rank_count;
+    let rank_by_fixture = ranking.rank_by_fixture;
+    ranking
+        .ordered_fixture_ids
         .into_iter()
-        .enumerate()
-        .map(move |(index, fixture_id)| CueChange {
+        .map(|fixture_id| CueChange {
             fixture_id,
             attribute: change.attribute.clone(),
-            value: spread_group_value(change, index, count),
+            value: spread_group_value(change, rank_by_fixture[&fixture_id], count),
             automatic_restore: false,
             fade_millis: change.fade_millis,
             delay_millis: change.delay_millis,
         })
+        .collect()
 }
 
 fn spread_group_value(

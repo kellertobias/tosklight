@@ -66,7 +66,7 @@ pub(crate) use programmer_fade::{
     ProgrammerTransition, ProgrammerTransitionKey, ProgrammerTransitionSource,
 };
 pub(crate) use runtime_generation::{
-    GroupMasterGenerationUpdate, GroupMasterIndex, RuntimeGeneration,
+    GroupMasterGenerationUpdate, GroupMasterIndex, RuntimeGeneration, group_stage_positions,
 };
 pub(crate) use safety::{apply_safe_values, apply_safe_values_with_snap};
 

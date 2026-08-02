@@ -63,14 +63,7 @@ impl Engine {
                     }
                     underlay
                 });
-            self.programmer_contributions(
-                programmers,
-                generation,
-                now,
-                groups,
-                underlay.as_ref(),
-                sampled,
-            )
+            self.programmer_contributions(programmers, generation, now, underlay.as_ref(), sampled)
         };
         playback.contributions.extend(programmer);
         let mut resolver = EngineContributionResolver::new(playback.contributions);

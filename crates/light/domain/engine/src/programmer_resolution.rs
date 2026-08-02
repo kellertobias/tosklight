@@ -5,9 +5,7 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, MergeMode, ProgrammerId, TimedValue};
-use light_programmer::{
-    GroupDefinition, GroupProgrammerValue, ProgrammerOutputState, resolve_group,
-};
+use light_programmer::{GroupProgrammerValue, ProgrammerOutputState};
 use std::{collections::HashMap, sync::Arc};
 
 type GroupValues = HashMap<String, HashMap<AttributeKey, GroupProgrammerValue>>;
@@ -31,7 +29,6 @@ struct ProgrammerValueResolver<'a> {
     engine: &'a Engine,
     generation: &'a RuntimeGeneration,
     now: DateTime<Utc>,
-    groups: &'a HashMap<String, GroupDefinition>,
     underlay: Option<&'a ResolvedContributionIndex<'a>>,
     sampled: &'a [ContributionBatch],
     programmer_id: ProgrammerId,
@@ -67,7 +64,6 @@ impl Engine {
         programmers: Vec<ProgrammerOutputState>,
         generation: &RuntimeGeneration,
         now: DateTime<Utc>,
-        groups: &HashMap<String, GroupDefinition>,
         underlay: Option<&ResolvedContributionIndex<'_>>,
         sampled: &[ContributionBatch],
     ) -> Vec<EngineContribution> {
@@ -79,7 +75,6 @@ impl Engine {
                     programmer,
                     generation,
                     now,
-                    groups,
                     underlay,
                     sampled,
                     has_replacements,
@@ -89,13 +84,11 @@ impl Engine {
             .collect()
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn resolve_programmer(
         &self,
         programmer: ProgrammerOutputState,
         generation: &RuntimeGeneration,
         now: DateTime<Utc>,
-        groups: &HashMap<String, GroupDefinition>,
         underlay: Option<&ResolvedContributionIndex<'_>>,
         sampled: &[ContributionBatch],
         has_replacements: bool,
@@ -114,7 +107,6 @@ impl Engine {
             engine: self,
             generation,
             now,
-            groups,
             underlay,
             sampled,
             programmer_id: id,
@@ -192,23 +184,25 @@ impl ProgrammerValueResolver<'_> {
         attributes: GroupAttributes,
         source: ProgrammerValueSource<'_>,
     ) -> Vec<TimedValue> {
-        let Ok(fixtures) = resolve_group(group_id, self.groups) else {
+        let Some(ranking) = self.generation.group_ranking(group_id) else {
             return Vec::new();
         };
         let context =
             self.source_context(source, attributes.values().any(|attribute| attribute.fade));
-        let count = fixtures.len();
-        fixtures
-            .into_iter()
-            .enumerate()
-            .flat_map(|(index, fixture_id)| {
+        let count = ranking.rank_count;
+        ranking
+            .ordered_fixture_ids
+            .iter()
+            .copied()
+            .flat_map(|fixture_id| {
+                let rank = ranking.rank_by_fixture[&fixture_id];
                 attributes.iter().filter_map({
                     let context = &context;
                     move |(attribute, scoped)| {
                         let value = TimedValue {
                             fixture_id,
                             attribute: attribute.clone(),
-                            value: value_for_ordered_position(&scoped.value, index, count),
+                            value: value_for_ordered_position(&scoped.value, rank, count),
                             priority: self.priority,
                             changed_at: scoped.changed_at,
                             programmer_order: scoped.programmer_order,

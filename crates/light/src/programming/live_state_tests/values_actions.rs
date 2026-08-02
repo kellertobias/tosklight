@@ -713,8 +713,8 @@ fn values_replay_precedes_revision_checks_and_failures_do_not_mutate() {
 }
 
 #[test]
-fn group_spread_with_more_control_points_than_members_is_rejected_without_mutation() {
-    let setup = ValuesSetup::new();
+fn group_spread_with_more_control_points_than_ranks_is_rejected_without_mutation() {
+    let mut setup = ValuesSetup::new();
     let rejected = setup
         .service
         .handle_values(
@@ -743,13 +743,36 @@ fn group_spread_with_more_control_points_than_members_is_rejected_without_mutati
     );
     assert!(setup.ports.persisted.lock().is_empty());
 
+    setup
+        .ports
+        .environment
+        .group_rank_counts
+        .insert("front".into(), 2);
+    let tied_ranks = setup
+        .service
+        .handle_values(
+            setup.action(
+                "tied-ranks",
+                0,
+                ProgrammingValuesCommand::SetGroup {
+                    group_id: "front".into(),
+                    attribute: AttributeKey::intensity(),
+                    value: AttributeValue::Spread(vec![1.0, 0.0, 1.0]),
+                    timing: Default::default(),
+                },
+            ),
+            &setup.ports,
+        )
+        .unwrap_err();
+    assert!(tied_ranks.message.contains("only 2 ranks"));
+
     let accepted = setup.handle(
-        "fits",
+        "two-point",
         0,
         ProgrammingValuesCommand::SetGroup {
             group_id: "front".into(),
             attribute: AttributeKey::intensity(),
-            value: AttributeValue::Spread(vec![1.0, 0.0, 1.0]),
+            value: AttributeValue::Spread(vec![1.0, 0.0]),
             timing: Default::default(),
         },
     );

@@ -2,7 +2,7 @@ use crate::{EngineSnapshot, ProfileEncodingIndex, ProfileProjectionIndex, profil
 use light_core::{AttributeKey, FixtureId};
 use light_output::OutputRoute;
 use light_playback::{PlaybackEngine, PlaybackTarget};
-use light_programmer::{GroupDefinition, resolve_group};
+use light_programmer::{GroupDefinition, resolve_group, resolve_group_spatial};
 use parking_lot::RwLock;
 use std::{
     collections::{HashMap, HashSet},
@@ -20,6 +20,7 @@ pub(crate) struct RuntimeGeneration {
     groups: Arc<HashMap<String, GroupDefinition>>,
     routes: Arc<[OutputRoute]>,
     snap_attributes: Arc<HashMap<FixtureId, HashSet<AttributeKey>>>,
+    group_rankings: Arc<HashMap<String, light_dynamics::RankedSelection>>,
     group_masters: Arc<GroupMasterIndex>,
     profile_encodings: Arc<ProfileEncodingIndex>,
     profile_projections: Arc<ProfileProjectionIndex>,
@@ -42,6 +43,7 @@ impl RuntimeGeneration {
     ) -> Self {
         let routes = Arc::from(snapshot.routes.as_slice());
         let snap_attributes = compile_snap_attributes(&snapshot);
+        let group_rankings = compile_group_rankings(&groups, &snapshot);
         let group_masters = GroupMasterIndex::compile(&groups, &snapshot);
         Self {
             snapshot: Arc::new(snapshot),
@@ -49,6 +51,7 @@ impl RuntimeGeneration {
             groups,
             routes,
             snap_attributes: Arc::new(snap_attributes),
+            group_rankings: Arc::new(group_rankings),
             group_masters: Arc::new(group_masters),
             profile_encodings,
             profile_projections,
@@ -68,6 +71,10 @@ impl RuntimeGeneration {
         let playback_pages_changed =
             !Arc::ptr_eq(&snapshot.playback_pages, &current.snapshot.playback_pages);
         let groups_changed = !Arc::ptr_eq(&snapshot.groups, &current.snapshot.groups);
+        let stage_positions_changed = !Arc::ptr_eq(
+            &snapshot.dynamic_stage_positions,
+            &current.snapshot.dynamic_stage_positions,
+        );
         let routes = if Arc::ptr_eq(&snapshot.routes, &current.snapshot.routes) {
             Arc::clone(&current.routes)
         } else {
@@ -83,12 +90,18 @@ impl RuntimeGeneration {
         } else {
             Arc::clone(&current.group_masters)
         };
+        let group_rankings = if groups_changed || stage_positions_changed {
+            Arc::new(compile_group_rankings(&groups, &snapshot))
+        } else {
+            Arc::clone(&current.group_rankings)
+        };
         Self {
             snapshot: Arc::new(snapshot),
             playback,
             groups,
             routes,
             snap_attributes,
+            group_rankings,
             group_masters,
             profile_encodings,
             profile_projections,
@@ -126,6 +139,7 @@ impl RuntimeGeneration {
                 groups: Arc::new(groups),
                 routes: Arc::clone(&current.routes),
                 snap_attributes: Arc::clone(&current.snap_attributes),
+                group_rankings: Arc::clone(&current.group_rankings),
                 group_masters: Arc::new(group_masters),
                 profile_encodings: Arc::clone(&current.profile_encodings),
                 profile_projections: Arc::clone(&current.profile_projections),
@@ -184,6 +198,10 @@ impl RuntimeGeneration {
         &self.group_masters
     }
 
+    pub(crate) fn group_ranking(&self, group_id: &str) -> Option<&light_dynamics::RankedSelection> {
+        self.group_rankings.get(group_id)
+    }
+
     pub(crate) fn profile_encoding(
         &self,
         fixture_id: FixtureId,
@@ -197,6 +215,40 @@ impl RuntimeGeneration {
     ) -> Option<&crate::FixtureProjectionPlan> {
         self.profile_projections.fixture(fixture_id)
     }
+}
+
+fn compile_group_rankings(
+    groups: &HashMap<String, GroupDefinition>,
+    snapshot: &EngineSnapshot,
+) -> HashMap<String, light_dynamics::RankedSelection> {
+    let positions = group_stage_positions(snapshot);
+    groups
+        .keys()
+        .map(|group_id| {
+            let resolved = resolve_group_spatial(group_id, groups, &positions)
+                .expect("validated Group spatial mapping must resolve");
+            (group_id.clone(), resolved.ranked_selection)
+        })
+        .collect()
+}
+
+pub(crate) fn group_stage_positions(
+    snapshot: &EngineSnapshot,
+) -> HashMap<FixtureId, light_dynamics::Position3d> {
+    snapshot
+        .dynamic_stage_positions
+        .iter()
+        .map(|(fixture_id, position)| {
+            (
+                *fixture_id,
+                light_dynamics::Position3d {
+                    x: f64::from(position.x),
+                    y: f64::from(position.y),
+                    z: f64::from(position.z),
+                },
+            )
+        })
+        .collect()
 }
 
 #[derive(Default)]

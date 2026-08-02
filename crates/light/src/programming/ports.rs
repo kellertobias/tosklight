@@ -24,6 +24,9 @@ pub struct ProgrammingValuesEnvironment {
     /// Group id → resolved ordered-membership size, so value validation can reject
     /// multi-point spreads with more control points than the Group has members.
     pub group_memberships: HashMap<String, usize>,
+    /// Group id → evaluated spatial-rank count. Equal spatial keys share one rank and therefore
+    /// one spread value. Missing entries retain legacy membership-count validation.
+    pub group_rank_counts: HashMap<String, usize>,
     /// Group id → resolved ordered membership. Relative Group intents use this frozen membership
     /// and the same current-value view as fixture intents.
     pub group_members: HashMap<String, Vec<FixtureId>>,

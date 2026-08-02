@@ -94,6 +94,65 @@ fn live_group_spread_re_resolves_after_membership_add_remove_and_reorder() {
 }
 
 #[test]
+fn mapped_group_spread_uses_shared_ranks_and_reacts_to_stage_moves() {
+    let programmers = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    programmers.start(session, UserId::new());
+    programmers.set_group(
+        session,
+        "mapped".into(),
+        AttributeKey::intensity(),
+        AttributeValue::Spread(vec![1.0, 0.0, 1.0]),
+    );
+    let (patched, logical) = dimmer_rig(4);
+    let group = GroupDefinition {
+        id: "mapped".into(),
+        name: "Mapped".into(),
+        fixtures: logical.clone(),
+        source: Some(light_programmer::GroupFixtureSource::Explicit {
+            fixture_ids: logical.clone(),
+        }),
+        mapping: Some(light_dynamics::SpatialSelectionMapping {
+            projection: light_dynamics::SpatialProjection::from_preset(
+                light_dynamics::ProjectionPreset::Top,
+                light_dynamics::Position3d::default(),
+            ),
+            shape: light_dynamics::SpatialSelectionShape::Grid {
+                angle_degrees: 0.0,
+                direction: light_dynamics::RankDirection::Ascending,
+            },
+        }),
+        ..Default::default()
+    };
+    let groups: Arc<Vec<GroupDefinition>> = vec![group].into();
+    let snapshot = |second_x: f32, revision| EngineSnapshot {
+        fixtures: patched.clone().into(),
+        groups: Arc::clone(&groups),
+        dynamic_stage_positions: logical
+            .iter()
+            .copied()
+            .zip([0.0, second_x, 1.0, 2.0])
+            .map(|(fixture_id, x)| {
+                (
+                    fixture_id,
+                    light_dynamics::SpatialPosition { x, y: 0.0, z: 0.0 },
+                )
+            })
+            .collect::<HashMap<_, _>>()
+            .into(),
+        revision,
+        ..Default::default()
+    };
+    let engine = Engine::new(programmers);
+
+    engine.replace_snapshot(snapshot(0.0, 1)).unwrap();
+    assert_resolved_intensities(&engine, &logical, &[1.0, 1.0, 0.0, 1.0]);
+
+    engine.replace_snapshot(snapshot(1.0, 2)).unwrap();
+    assert_resolved_intensities(&engine, &logical, &[1.0, 0.0, 0.0, 1.0]);
+}
+
+#[test]
 fn cue_group_spread_re_resolves_against_current_membership_on_recall() {
     let programmers = ProgrammerRegistry::default();
     let (patched, logical) = dimmer_rig(6);
@@ -160,4 +219,89 @@ fn cue_group_spread_re_resolves_against_current_membership_on_recall() {
     assert_resolved_intensities(&engine, &logical, &[1.0, 0.5, 0.0, 0.0, 0.5, 1.0]);
     let after = engine.render(RenderOptions::default()).unwrap();
     assert_eq!(after.universes[&1][..6], [255, 128, 0, 0, 128, 255]);
+}
+
+#[test]
+fn cue_group_spread_uses_shared_spatial_ranks() {
+    let (patched, logical) = dimmer_rig(4);
+    let list_id = light_core::CueListId::new();
+    let mut cue = light_playback::Cue::new(1.0);
+    cue.group_changes.push(light_playback::GroupCueChange {
+        group_id: "mapped".into(),
+        attribute: AttributeKey::intensity(),
+        value: Some(AttributeValue::Spread(vec![1.0, 0.0, 1.0])),
+        fade_millis: None,
+        delay_millis: None,
+        automatic_restore: false,
+    });
+    let list = light_playback::CueList {
+        id: list_id,
+        name: "Mapped".into(),
+        priority: 10,
+        mode: light_playback::CueListMode::Sequence,
+        looped: false,
+        intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+        wrap_mode: Some(light_playback::WrapMode::Off),
+        restart_mode: light_playback::RestartMode::FirstCue,
+        force_cue_timing: false,
+        disable_cue_timing: false,
+        chaser_step_millis: 1_000,
+        chaser_xfade_millis: 0,
+        chaser_xfade_percent: Some(0),
+        speed_group: None,
+        speed_multiplier: 1.0,
+        cues: vec![cue],
+    };
+    let group = GroupDefinition {
+        id: "mapped".into(),
+        name: "Mapped".into(),
+        source: Some(light_programmer::GroupFixtureSource::Explicit {
+            fixture_ids: logical.clone(),
+        }),
+        mapping: Some(light_dynamics::SpatialSelectionMapping {
+            projection: light_dynamics::SpatialProjection::from_preset(
+                light_dynamics::ProjectionPreset::Top,
+                light_dynamics::Position3d::default(),
+            ),
+            shape: light_dynamics::SpatialSelectionShape::Grid {
+                angle_degrees: 0.0,
+                direction: light_dynamics::RankDirection::Ascending,
+            },
+        }),
+        ..Default::default()
+    };
+    let cue_lists: Arc<Vec<light_playback::CueList>> = vec![list].into();
+    let groups: Arc<Vec<GroupDefinition>> = vec![group].into();
+    let snapshot = |second_x: f32, revision| EngineSnapshot {
+        fixtures: patched.clone().into(),
+        cue_lists: Arc::clone(&cue_lists),
+        groups: Arc::clone(&groups),
+        dynamic_stage_positions: logical
+            .iter()
+            .copied()
+            .zip([0.0, second_x, 1.0, 2.0])
+            .map(|(fixture_id, x)| {
+                (
+                    fixture_id,
+                    light_dynamics::SpatialPosition { x, y: 0.0, z: 0.0 },
+                )
+            })
+            .collect::<HashMap<_, _>>()
+            .into(),
+        revision,
+        ..Default::default()
+    };
+    let engine = Engine::new(ProgrammerRegistry::default());
+
+    engine.replace_snapshot(snapshot(0.0, 1)).unwrap();
+    execute_cue_list(
+        &engine,
+        list_id,
+        CueListPlaybackAction::GoAt(Utc::now() - ChronoDuration::milliseconds(1)),
+    );
+
+    assert_resolved_intensities(&engine, &logical, &[1.0, 1.0, 0.0, 1.0]);
+
+    engine.replace_snapshot(snapshot(1.0, 2)).unwrap();
+    assert_resolved_intensities(&engine, &logical, &[1.0, 0.0, 0.0, 1.0]);
 }

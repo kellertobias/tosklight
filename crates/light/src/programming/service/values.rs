@@ -326,7 +326,7 @@ fn validate_value_intent(
         ));
     }
     let targets_group = intent.group_id.is_some();
-    if targets_group == !intent.fixture_ids.is_empty() {
+    if targets_group != intent.fixture_ids.is_empty() {
         return Err(ActionError::new(
             ActionErrorKind::Invalid,
             "Programmer value intent requires either ordered fixture_ids or one group_id",
@@ -335,7 +335,13 @@ fn validate_value_intent(
     let count = intent
         .group_id
         .as_ref()
-        .and_then(|group_id| environment.group_memberships.get(group_id).copied())
+        .and_then(|group_id| {
+            environment
+                .group_rank_counts
+                .get(group_id)
+                .or_else(|| environment.group_memberships.get(group_id))
+                .copied()
+        })
         .unwrap_or(intent.fixture_ids.len());
     if let ProgrammingValueOperation::AbsoluteSet(AttributeValue::Spread(points)) =
         &intent.operation
@@ -345,12 +351,14 @@ fn validate_value_intent(
                 .any(|value| !value.is_finite() || !(0.0..=1.0).contains(value))
             || (points.len() > 2 && points.len() > count))
     {
+        let capacity = if targets_group {
+            format!("the Group has only {count} ranks")
+        } else {
+            format!("there are only {count} selected items")
+        };
         return Err(ActionError::new(
             ActionErrorKind::Invalid,
-            format!(
-                "spread has {} control points but only {count} selected items",
-                points.len()
-            ),
+            format!("spread has {} control points but {capacity}", points.len(),),
         ));
     }
     Ok(count)

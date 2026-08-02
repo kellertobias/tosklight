@@ -234,14 +234,15 @@ fn validate_group_value(
         if values.len() < 2 || values.iter().any(|value| !unit_value(*value)) {
             return Err(invalid("spread requires at least two values within 0-1"));
         }
-        let members = environment
-            .group_memberships
+        let ranks = environment
+            .group_rank_counts
             .get(group_id)
+            .or_else(|| environment.group_memberships.get(group_id))
             .copied()
             .unwrap_or(0);
-        if values.len() > 2 && values.len() > members {
+        if values.len() > 2 && values.len() > ranks {
             return Err(invalid(format!(
-                "spread has {} control points but the Group has only {members} members",
+                "spread has {} control points but the Group has only {ranks} ranks",
                 values.len()
             )));
         }
