@@ -8,6 +8,7 @@ mod evaluate;
 mod model;
 mod phase;
 mod runtime;
+mod spatial;
 mod validation;
 
 #[cfg(test)]
@@ -21,6 +22,12 @@ pub use runtime::{
     DynamicInstanceSnapshot, DynamicRandomPulseSnapshot, DynamicRandomStreamSnapshot,
     DynamicRuntime, DynamicRuntimeError, DynamicRuntimeSample, DynamicRuntimeSnapshot,
     DynamicSpeedTransport, DynamicStartRequest, DynamicTargetScope,
+};
+pub use spatial::{
+    DynamicSelectionShape, DynamicSpatialMappingOverride, OverrideStage, Position3d,
+    ProjectionPreset, RadarSweep, RadialDirection, RankDirection, RankedSelection,
+    SpatialMappingError, SpatialMappingWarning, SpatialProjection, SpatialSelectionMapping,
+    SpatialSelectionShape, SpatialTarget, Vector3, evaluate_spatial_mapping,
 };
 pub use validation::{
     DynamicAliasingWarning, DynamicValidationError, aliasing_warning, validate_definition,
