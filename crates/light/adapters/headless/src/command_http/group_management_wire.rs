@@ -26,6 +26,254 @@ pub(super) fn operation(
                 expected_source: expected_source.map(source_expectation),
             }
         }
+        wire::GroupManagementOperation::SetSpatialMapping { mapping } => {
+            application::GroupManagementOperation::SetSpatialMapping(spatial_mapping(mapping))
+        }
+        wire::GroupManagementOperation::RemoveSpatialMapping {} => {
+            application::GroupManagementOperation::RemoveSpatialMapping
+        }
+    }
+}
+
+fn spatial_mapping(
+    value: wire::GroupSpatialSelectionMapping,
+) -> light_dynamics::SpatialSelectionMapping {
+    light_dynamics::SpatialSelectionMapping {
+        projection: light_dynamics::SpatialProjection {
+            anchor: light_dynamics::Position3d {
+                x: value.projection.anchor.x,
+                y: value.projection.anchor.y,
+                z: value.projection.anchor.z,
+            },
+            view_direction: light_dynamics::Vector3 {
+                x: value.projection.view_direction.x,
+                y: value.projection.view_direction.y,
+                z: value.projection.view_direction.z,
+            },
+            rotation_degrees: value.projection.rotation_degrees,
+            preset: value.projection.preset.map(|preset| match preset {
+                wire::GroupMappingProjectionPreset::Top => light_dynamics::ProjectionPreset::Top,
+                wire::GroupMappingProjectionPreset::Front => {
+                    light_dynamics::ProjectionPreset::Front
+                }
+                wire::GroupMappingProjectionPreset::Back => light_dynamics::ProjectionPreset::Back,
+                wire::GroupMappingProjectionPreset::Left => light_dynamics::ProjectionPreset::Left,
+                wire::GroupMappingProjectionPreset::Right => {
+                    light_dynamics::ProjectionPreset::Right
+                }
+            }),
+        },
+        shape: match value.shape {
+            wire::GroupMappingShape::Grid {
+                angle_degrees,
+                direction,
+            } => light_dynamics::SpatialSelectionShape::Grid {
+                angle_degrees,
+                direction: match direction {
+                    wire::GroupMappingRankDirection::Ascending => {
+                        light_dynamics::RankDirection::Ascending
+                    }
+                    wire::GroupMappingRankDirection::Descending => {
+                        light_dynamics::RankDirection::Descending
+                    }
+                },
+            },
+            wire::GroupMappingShape::Radial {
+                center_u,
+                center_v,
+                direction,
+            } => light_dynamics::SpatialSelectionShape::Radial {
+                center_u,
+                center_v,
+                direction: match direction {
+                    wire::GroupMappingRadialDirection::Outward => {
+                        light_dynamics::RadialDirection::Outward
+                    }
+                    wire::GroupMappingRadialDirection::Inward => {
+                        light_dynamics::RadialDirection::Inward
+                    }
+                },
+            },
+            wire::GroupMappingShape::Radar {
+                center_u,
+                center_v,
+                start_angle_degrees,
+                sweep,
+            } => light_dynamics::SpatialSelectionShape::Radar {
+                center_u,
+                center_v,
+                start_angle_degrees,
+                sweep: match sweep {
+                    wire::GroupMappingRadarSweep::Clockwise => {
+                        light_dynamics::RadarSweep::Clockwise
+                    }
+                    wire::GroupMappingRadarSweep::CounterClockwise => {
+                        light_dynamics::RadarSweep::CounterClockwise
+                    }
+                },
+            },
+        },
+    }
+}
+
+pub(super) fn resolved_spatial(
+    snapshot: &light_engine::EngineSnapshot,
+    group_id: &str,
+) -> Result<wire::GroupResolvedSpatialProjection, application::ActionError> {
+    let groups = snapshot
+        .groups
+        .iter()
+        .cloned()
+        .map(|group| (group.id.clone(), group))
+        .collect();
+    let positions = snapshot
+        .dynamic_stage_positions
+        .iter()
+        .map(|(fixture_id, position)| {
+            (
+                *fixture_id,
+                light_dynamics::Position3d {
+                    x: f64::from(position.x),
+                    y: f64::from(position.y),
+                    z: f64::from(position.z),
+                },
+            )
+        })
+        .collect();
+    let resolved = light_programmer::resolve_group_spatial(group_id, &groups, &positions).map_err(
+        |error| application::ActionError::new(application::ActionErrorKind::Invalid, error),
+    )?;
+    let ranks = resolved
+        .ranked_selection
+        .ordered_fixture_ids
+        .iter()
+        .map(|fixture_id| wire::GroupSpatialRankProjection {
+            fixture_id: fixture_id.0,
+            rank: resolved.ranked_selection.rank_by_fixture[fixture_id],
+        })
+        .collect();
+    Ok(wire::GroupResolvedSpatialProjection {
+        source_order: resolved
+            .source_order
+            .iter()
+            .map(|fixture_id| fixture_id.0)
+            .collect(),
+        effective_mapping: resolved.effective_mapping.map(wire_spatial_mapping),
+        mapping_provenance: match resolved.mapping_provenance {
+            light_programmer::GroupMappingProvenance::None => {
+                wire::GroupMappingProvenanceProjection::None {}
+            }
+            light_programmer::GroupMappingProvenance::Local { group_id } => {
+                wire::GroupMappingProvenanceProjection::Local { group_id }
+            }
+            light_programmer::GroupMappingProvenance::Inherited { source_group_ids } => {
+                wire::GroupMappingProvenanceProjection::Inherited { source_group_ids }
+            }
+            light_programmer::GroupMappingProvenance::MixedSourceMappings => {
+                wire::GroupMappingProvenanceProjection::MixedSourceMappings {}
+            }
+        },
+        ordered_fixture_ids: resolved
+            .ranked_selection
+            .ordered_fixture_ids
+            .iter()
+            .map(|fixture_id| fixture_id.0)
+            .collect(),
+        ranks,
+        rank_count: resolved.ranked_selection.rank_count,
+        warnings: resolved
+            .ranked_selection
+            .warnings
+            .into_iter()
+            .map(|warning| match warning {
+                light_dynamics::SpatialMappingWarning::MissingPosition { fixture_id } => {
+                    wire::GroupSpatialWarningProjection::MissingPosition {
+                        fixture_id: fixture_id.0,
+                    }
+                }
+            })
+            .collect(),
+    })
+}
+
+fn wire_spatial_mapping(
+    value: light_dynamics::SpatialSelectionMapping,
+) -> wire::GroupSpatialSelectionMapping {
+    wire::GroupSpatialSelectionMapping {
+        projection: wire::GroupMappingProjection {
+            anchor: wire::GroupMappingPosition3d {
+                x: value.projection.anchor.x,
+                y: value.projection.anchor.y,
+                z: value.projection.anchor.z,
+            },
+            view_direction: wire::GroupMappingVector3 {
+                x: value.projection.view_direction.x,
+                y: value.projection.view_direction.y,
+                z: value.projection.view_direction.z,
+            },
+            rotation_degrees: value.projection.rotation_degrees,
+            preset: value.projection.preset.map(|preset| match preset {
+                light_dynamics::ProjectionPreset::Top => wire::GroupMappingProjectionPreset::Top,
+                light_dynamics::ProjectionPreset::Front => {
+                    wire::GroupMappingProjectionPreset::Front
+                }
+                light_dynamics::ProjectionPreset::Back => wire::GroupMappingProjectionPreset::Back,
+                light_dynamics::ProjectionPreset::Left => wire::GroupMappingProjectionPreset::Left,
+                light_dynamics::ProjectionPreset::Right => {
+                    wire::GroupMappingProjectionPreset::Right
+                }
+            }),
+        },
+        shape: match value.shape {
+            light_dynamics::SpatialSelectionShape::Grid {
+                angle_degrees,
+                direction,
+            } => wire::GroupMappingShape::Grid {
+                angle_degrees,
+                direction: match direction {
+                    light_dynamics::RankDirection::Ascending => {
+                        wire::GroupMappingRankDirection::Ascending
+                    }
+                    light_dynamics::RankDirection::Descending => {
+                        wire::GroupMappingRankDirection::Descending
+                    }
+                },
+            },
+            light_dynamics::SpatialSelectionShape::Radial {
+                center_u,
+                center_v,
+                direction,
+            } => wire::GroupMappingShape::Radial {
+                center_u,
+                center_v,
+                direction: match direction {
+                    light_dynamics::RadialDirection::Outward => {
+                        wire::GroupMappingRadialDirection::Outward
+                    }
+                    light_dynamics::RadialDirection::Inward => {
+                        wire::GroupMappingRadialDirection::Inward
+                    }
+                },
+            },
+            light_dynamics::SpatialSelectionShape::Radar {
+                center_u,
+                center_v,
+                start_angle_degrees,
+                sweep,
+            } => wire::GroupMappingShape::Radar {
+                center_u,
+                center_v,
+                start_angle_degrees,
+                sweep: match sweep {
+                    light_dynamics::RadarSweep::Clockwise => {
+                        wire::GroupMappingRadarSweep::Clockwise
+                    }
+                    light_dynamics::RadarSweep::CounterClockwise => {
+                        wire::GroupMappingRadarSweep::CounterClockwise
+                    }
+                },
+            },
+        },
     }
 }
 

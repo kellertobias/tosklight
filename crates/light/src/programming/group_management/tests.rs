@@ -67,6 +67,92 @@ fn identical_properties_are_a_no_change_without_an_event() {
 }
 
 #[test]
+fn spatial_mapping_update_preserves_source_membership_and_unknown_fields() {
+    let members = [FixtureId::new(), FixtureId::new()];
+    let mut body = group_body("house", "House", &members);
+    body["source"] = json!({"type":"explicit", "fixture_ids":members});
+    body["future_extension"] = json!({"untouched": [1, 2, 3]});
+    let rig = TestRig::new([("house", body)]);
+    let mapping = top_grid_mapping();
+    let commit = commit_for(
+        &rig,
+        "house",
+        GroupManagementOperation::SetSpatialMapping(mapping.clone()),
+    );
+
+    let result = changed(&rig, &commit);
+
+    assert_eq!(result.projection.raw_body["mapping"], json!(mapping));
+    assert_eq!(
+        result.projection.raw_body["source"],
+        json!({"type":"explicit", "fixture_ids":members})
+    );
+    assert_eq!(result.projection.raw_body["fixtures"], json!(members));
+    assert_eq!(
+        result.projection.raw_body["future_extension"],
+        json!({"untouched": [1, 2, 3]})
+    );
+}
+
+#[test]
+fn removing_local_mapping_reveals_inheritance_without_touching_the_reference() {
+    let source_member = FixtureId::new();
+    let mut derived = group_body("derived", "Derived", &[]);
+    derived["source"] = json!({
+        "type":"references",
+        "references":[{"group_id":"source", "rule":{"type":"all"}}]
+    });
+    derived["mapping"] = json!(top_grid_mapping());
+    let rig = TestRig::new([
+        ("source", group_body("source", "Source", &[source_member])),
+        ("derived", derived),
+    ]);
+    let commit = commit_for(
+        &rig,
+        "derived",
+        GroupManagementOperation::RemoveSpatialMapping,
+    );
+
+    let result = changed(&rig, &commit);
+
+    assert!(result.projection.raw_body.get("mapping").is_none());
+    assert_eq!(
+        result.projection.raw_body["source"],
+        json!({
+            "type":"references",
+            "references":[{"group_id":"source", "rule":{"type":"all"}}]
+        })
+    );
+    assert_eq!(result.projection.raw_body["fixtures"], json!([]));
+}
+
+#[test]
+fn invalid_spatial_mapping_is_rejected_before_preparing_any_mutation() {
+    let rig = TestRig::new([("house", group_body("house", "House", &[]))]);
+    let mut mapping = top_grid_mapping();
+    mapping.projection.view_direction = light_dynamics::Vector3::default();
+    let commit = commit_for(
+        &rig,
+        "house",
+        GroupManagementOperation::SetSpatialMapping(mapping),
+    );
+
+    let error = error_for(&rig, &commit);
+
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert!(error.message.contains("view direction"));
+    assert_eq!(rig.document.object("group", "house").unwrap().revision(), 1);
+    assert!(
+        rig.document
+            .object("group", "house")
+            .unwrap()
+            .body()
+            .get("mapping")
+            .is_none()
+    );
+}
+
+#[test]
 fn a_stored_empty_group_stays_stored_and_empty() {
     let rig = TestRig::new([("blackout", group_body("blackout", "Blackout", &[]))]);
     let commit = commit_for(
@@ -327,6 +413,19 @@ fn rename(name: &str) -> GroupManagementOperation {
         color: None,
         icon: None,
     })
+}
+
+fn top_grid_mapping() -> light_dynamics::SpatialSelectionMapping {
+    light_dynamics::SpatialSelectionMapping {
+        projection: light_dynamics::SpatialProjection::from_preset(
+            light_dynamics::ProjectionPreset::Top,
+            light_dynamics::Position3d::default(),
+        ),
+        shape: light_dynamics::SpatialSelectionShape::Grid {
+            angle_degrees: 0.0,
+            direction: light_dynamics::RankDirection::Ascending,
+        },
+    }
 }
 
 fn group_body(id: &str, name: &str, fixtures: &[FixtureId]) -> Value {

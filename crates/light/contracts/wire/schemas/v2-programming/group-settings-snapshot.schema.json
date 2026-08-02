@@ -1,145 +1,53 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "GroupManagementRequest",
+  "title": "GroupSettingsSnapshot",
   "type": "object",
   "properties": {
-    "expected_object_revision": {
+    "group": {
+      "$ref": "#/$defs/GroupManagementObjectProjection"
+    },
+    "resolved_spatial": {
+      "$ref": "#/$defs/GroupResolvedSpatialProjection"
+    },
+    "show_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "show_revision": {
       "type": "integer",
       "format": "uint64",
-      "maximum": 9007199254740991,
       "minimum": 0
-    },
-    "expected_show_revision": {
-      "type": "integer",
-      "format": "uint64",
-      "maximum": 9007199254740991,
-      "minimum": 0
-    },
-    "group_id": {
-      "type": "string",
-      "maxLength": 256,
-      "minLength": 1
-    },
-    "operation": {
-      "$ref": "#/$defs/GroupManagementOperation"
-    },
-    "request_id": {
-      "type": "string",
-      "maxLength": 128,
-      "minLength": 1
     }
   },
+  "additionalProperties": false,
   "required": [
-    "request_id",
-    "group_id",
-    "operation",
-    "expected_object_revision",
-    "expected_show_revision"
+    "show_id",
+    "show_revision",
+    "group",
+    "resolved_spatial"
   ],
   "$defs": {
-    "GroupManagementOperation": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "properties": {
-              "$ref": "#/$defs/GroupPropertiesUpdate"
-            },
-            "type": {
-              "type": "string",
-              "const": "update_properties"
-            }
-          },
-          "required": [
-            "type",
-            "properties"
-          ]
+    "GroupManagementObjectProjection": {
+      "description": "Authoritative lossless Group projection. These operations never delete their target.",
+      "type": "object",
+      "properties": {
+        "body": true,
+        "object_id": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
         },
-        {
-          "description": "Declared as an empty struct variant so `deny_unknown_fields` still applies; serde does not\nenforce it for an internally tagged unit variant.",
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "undo"
-            }
-          },
-          "required": [
-            "type"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "expected_source": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/GroupSourceExpectation"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "type": {
-              "type": "string",
-              "const": "refresh_frozen"
-            }
-          },
-          "required": [
-            "type"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "expected_source": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/GroupSourceExpectation"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "type": {
-              "type": "string",
-              "const": "detach_derived"
-            }
-          },
-          "required": [
-            "type"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "mapping": {
-              "$ref": "#/$defs/GroupSpatialSelectionMapping"
-            },
-            "type": {
-              "type": "string",
-              "const": "set_spatial_mapping"
-            }
-          },
-          "required": [
-            "type",
-            "mapping"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "remove_spatial_mapping"
-            }
-          },
-          "required": [
-            "type"
-          ]
+        "object_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
         }
+      },
+      "additionalProperties": false,
+      "required": [
+        "object_id",
+        "object_revision",
+        "body"
       ]
     },
     "GroupMappingPosition3d": {
@@ -191,7 +99,8 @@
       "required": [
         "anchor",
         "view_direction",
-        "rotation_degrees"
+        "rotation_degrees",
+        "preset"
       ]
     },
     "GroupMappingProjectionPreset": {
@@ -202,6 +111,73 @@
         "back",
         "left",
         "right"
+      ]
+    },
+    "GroupMappingProvenanceProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "none"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "local"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "group_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source_group_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "inherited"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "source_group_ids"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "mixed_source_mappings"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        }
       ]
     },
     "GroupMappingRadarSweep": {
@@ -329,54 +305,82 @@
         "z"
       ]
     },
-    "GroupPropertiesUpdate": {
+    "GroupResolvedSpatialProjection": {
       "type": "object",
       "properties": {
-        "color": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "maxLength": 64
+        "effective_mapping": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupSpatialSelectionMapping"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
-        "icon": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "maxLength": 64
+        "mapping_provenance": {
+          "$ref": "#/$defs/GroupMappingProvenanceProjection"
         },
-        "name": {
-          "type": "string",
-          "maxLength": 256,
-          "minLength": 1
-        }
-      },
-      "required": [
-        "name"
-      ]
-    },
-    "GroupSourceExpectation": {
-      "description": "Exact source authority a client observed. A mismatch fails before anything mutates.",
-      "type": "object",
-      "properties": {
-        "expected_source_revision": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "maximum": 9007199254740991,
+        "ordered_fixture_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "rank_count": {
+          "type": "integer",
+          "format": "uint",
           "minimum": 0
         },
-        "source_group_id": {
-          "type": "string",
-          "maxLength": 256,
-          "minLength": 1
+        "ranks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GroupSpatialRankProjection"
+          }
+        },
+        "source_order": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GroupSpatialWarningProjection"
+          }
         }
       },
+      "additionalProperties": false,
       "required": [
-        "source_group_id"
+        "source_order",
+        "effective_mapping",
+        "mapping_provenance",
+        "ordered_fixture_ids",
+        "ranks",
+        "rank_count",
+        "warnings"
+      ]
+    },
+    "GroupSpatialRankProjection": {
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "rank": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "fixture_id",
+        "rank"
       ]
     },
     "GroupSpatialSelectionMapping": {
@@ -392,6 +396,28 @@
       "required": [
         "projection",
         "shape"
+      ]
+    },
+    "GroupSpatialWarningProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "fixture_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "missing_position"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "fixture_id"
+          ]
+        }
       ]
     }
   }

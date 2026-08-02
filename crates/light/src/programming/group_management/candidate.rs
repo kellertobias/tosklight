@@ -58,11 +58,30 @@ fn apply_operation(
             detach_derived(commit, current, groups, expected_source.as_ref())
                 .map(|group| (group, None))
         }
+        GroupManagementOperation::SetSpatialMapping(mapping) => {
+            validate_spatial_mapping(mapping)?;
+            let mut group = current.clone();
+            group.mapping = Some(mapping.clone());
+            Ok((group, None))
+        }
+        GroupManagementOperation::RemoveSpatialMapping => {
+            let mut group = current.clone();
+            group.mapping = None;
+            Ok((group, None))
+        }
         GroupManagementOperation::Undo => Err(ActionError::new(
             ActionErrorKind::Internal,
             "Undo is prepared from adapter-owned object history",
         )),
     }
+}
+
+fn validate_spatial_mapping(
+    mapping: &light_dynamics::SpatialSelectionMapping,
+) -> Result<(), ActionError> {
+    light_dynamics::evaluate_spatial_mapping(mapping, &[])
+        .map(|_| ())
+        .map_err(|error| invalid(format!("invalid Group spatial mapping: {error}")))
 }
 
 fn updated_properties(

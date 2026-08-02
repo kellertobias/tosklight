@@ -5,19 +5,86 @@ fn group_management_request(
     group_id: &str,
     operation: serde_json::Value,
     expected_object_revision: u64,
+    expected_show_revision: u64,
 ) -> serde_json::Value {
     serde_json::json!({
         "request_id": request_id,
         "group_id": group_id,
         "operation": operation,
         "expected_object_revision": expected_object_revision,
+        "expected_show_revision": expected_show_revision,
     })
+}
+
+async fn group_authority(
+    scenario: &CommandHttpScenario,
+    show_id: &str,
+    group_id: &str,
+) -> (u64, u64) {
+    let response = scenario
+        .app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v2/objects/group/{group_id}"))
+                .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                .header("x-tosk-show", show_id)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let snapshot = json(response).await;
+    (
+        snapshot["show_revision"].as_u64().unwrap(),
+        snapshot["object"]["revision"].as_u64().unwrap(),
+    )
+}
+
+async fn group_settings_snapshot(
+    scenario: &CommandHttpScenario,
+    show_id: &str,
+    group_id: &str,
+) -> serde_json::Value {
+    let response = scenario
+        .app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v2/groups/{group_id}"))
+                .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                .header("x-tosk-show", show_id)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    json(response).await
+}
+
+fn management_show_revision(outcome: &GroupManagementOutcome) -> u64 {
+    match outcome {
+        GroupManagementOutcome::Changed { show_revision, .. }
+        | GroupManagementOutcome::NoChange { show_revision, .. } => *show_revision,
+    }
 }
 
 fn rename(name: &str) -> serde_json::Value {
     serde_json::json!({
         "type": "update_properties",
         "properties": {"name": name, "color": "#204060", "icon": "◆"}
+    })
+}
+
+fn top_grid_mapping() -> serde_json::Value {
+    serde_json::json!({
+        "projection": {
+            "anchor":{"x":0.0,"y":0.0,"z":0.0},
+            "view_direction":{"x":0.0,"y":0.0,"z":-1.0},
+            "rotation_degrees":0.0,
+            "preset":"top"
+        },
+        "shape":{"type":"grid","angle_degrees":0.0,"direction":"ascending"}
     })
 }
 
@@ -73,7 +140,14 @@ async fn property_update_is_authoritative_replay_safe_and_sparse_on_no_change() 
     scenario.state.programming.select(scenario.session.id, [fixture]);
     seed_group(&scenario, &show_id, "house").await;
     let baseline = scenario.state.events.latest_sequence();
-    let request = group_management_request("manage-rename", "house", rename("Front wash"), 1);
+    let (show_revision, object_revision) = group_authority(&scenario, &show_id, "house").await;
+    let request = group_management_request(
+        "manage-rename",
+        "house",
+        rename("Front wash"),
+        object_revision,
+        show_revision,
+    );
 
     let response = scenario
         .group_management_action(&show_id, Some(&scenario.token), request.clone())
@@ -92,6 +166,7 @@ async fn property_update_is_authoritative_replay_safe_and_sparse_on_no_change() 
         "a property update must not disturb ordered membership"
     );
     let event_sequence = management_event_sequence(&changed).unwrap();
+    let changed_show_revision = management_show_revision(&changed);
     assert_eq!(event_sequence, baseline + 1);
     assert_eq!(
         scenario.state.events.latest_sequence(),
@@ -115,7 +190,13 @@ async fn property_update_is_authoritative_replay_safe_and_sparse_on_no_change() 
         .group_management_action(
             &show_id,
             Some(&scenario.token),
-            group_management_request("manage-no-change", "house", rename("Front wash"), 2),
+            group_management_request(
+                "manage-no-change",
+                "house",
+                rename("Front wash"),
+                2,
+                changed_show_revision,
+            ),
         )
         .await;
     let no_change = management_outcome(no_change).await;
@@ -130,26 +211,168 @@ async fn property_update_is_authoritative_replay_safe_and_sparse_on_no_change() 
 }
 
 #[tokio::test]
+async fn spatial_mapping_set_validate_and_remove_are_atomic_revisioned_object_intents() {
+    let scenario = CommandHttpScenario::new().await;
+    let show_id = scenario.create_and_open_show("Group spatial mapping").await;
+    let fixture = scenario.install_direct_fixture();
+    scenario.state.programming.select(scenario.session.id, [fixture]);
+    seed_group(&scenario, &show_id, "house").await;
+    let stored = scenario
+        .put_active_object(
+            &show_id,
+            "group",
+            "house",
+            1,
+            serde_json::json!({
+                "id":"house",
+                "name":"House",
+                "fixtures":[fixture.0],
+                "source":{"type":"explicit","fixture_ids":[fixture.0]},
+                "programming":{},
+                "master":1.0,
+                "future_extension":{"retain":true}
+            }),
+        )
+        .await;
+    assert_eq!(stored.status(), StatusCode::OK);
+    let (show_revision, object_revision) = group_authority(&scenario, &show_id, "house").await;
+    let set = scenario
+        .group_management_action(
+            &show_id,
+            Some(&scenario.token),
+            group_management_request(
+                "mapping-set",
+                "house",
+                serde_json::json!({"type":"set_spatial_mapping","mapping":top_grid_mapping()}),
+                object_revision,
+                show_revision,
+            ),
+        )
+        .await;
+    assert_eq!(set.status(), StatusCode::OK);
+    let set = management_outcome(set).await;
+    let body = management_group_body(&set);
+    assert_eq!(body["mapping"], top_grid_mapping());
+    assert_eq!(body["source"]["fixture_ids"], serde_json::json!([fixture.0]));
+    assert_eq!(body["fixtures"], serde_json::json!([fixture.0]));
+    assert_eq!(body["future_extension"], serde_json::json!({"retain":true}));
+    let set_show_revision = management_show_revision(&set);
+    let settings = group_settings_snapshot(&scenario, &show_id, "house").await;
+    assert_eq!(settings["show_id"], show_id);
+    assert_eq!(settings["show_revision"], set_show_revision);
+    assert_eq!(settings["group"]["object_revision"], object_revision + 1);
+    assert_eq!(
+        settings["resolved_spatial"]["mapping_provenance"],
+        serde_json::json!({"type":"local","group_id":"house"})
+    );
+    assert_eq!(
+        settings["resolved_spatial"]["source_order"],
+        serde_json::json!([fixture.0])
+    );
+    assert_eq!(settings["resolved_spatial"]["rank_count"], 1);
+    assert_eq!(settings["resolved_spatial"]["ranks"][0]["fixture_id"], fixture.0);
+    assert_eq!(settings["resolved_spatial"]["ranks"][0]["rank"], 0);
+    let baseline = scenario.state.events.latest_sequence();
+
+    let stale_show = scenario
+        .group_management_action(
+            &show_id,
+            Some(&scenario.token),
+            group_management_request(
+                "mapping-stale-show",
+                "house",
+                serde_json::json!({"type":"remove_spatial_mapping"}),
+                object_revision + 1,
+                show_revision,
+            ),
+        )
+        .await;
+    assert_eq!(stale_show.status(), StatusCode::CONFLICT);
+    assert_eq!(json(stale_show).await["current_related_revision"], set_show_revision);
+    assert_eq!(scenario.state.events.latest_sequence(), baseline);
+
+    let mut invalid_mapping = top_grid_mapping();
+    invalid_mapping["projection"]["view_direction"] =
+        serde_json::json!({"x":0.0,"y":0.0,"z":0.0});
+    let invalid = scenario
+        .group_management_action(
+            &show_id,
+            Some(&scenario.token),
+            group_management_request(
+                "mapping-invalid",
+                "house",
+                serde_json::json!({"type":"set_spatial_mapping","mapping":invalid_mapping}),
+                object_revision + 1,
+                set_show_revision,
+            ),
+        )
+        .await;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(scenario.state.events.latest_sequence(), baseline);
+    let (unchanged_show_revision, unchanged_object_revision) =
+        group_authority(&scenario, &show_id, "house").await;
+    assert_eq!(unchanged_show_revision, set_show_revision);
+    assert_eq!(unchanged_object_revision, object_revision + 1);
+
+    let removed = scenario
+        .group_management_action(
+            &show_id,
+            Some(&scenario.token),
+            group_management_request(
+                "mapping-remove",
+                "house",
+                serde_json::json!({"type":"remove_spatial_mapping"}),
+                unchanged_object_revision,
+                unchanged_show_revision,
+            ),
+        )
+        .await;
+    assert_eq!(removed.status(), StatusCode::OK);
+    let removed = management_outcome(removed).await;
+    assert!(management_group_body(&removed).get("mapping").is_none());
+    assert_eq!(
+        management_group_body(&removed)["future_extension"],
+        serde_json::json!({"retain":true})
+    );
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
 async fn undo_restores_the_previous_body_and_a_stale_revision_conflicts() {
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario.create_and_open_show("Group undo").await;
     let fixture = scenario.install_direct_fixture();
     scenario.state.programming.select(scenario.session.id, [fixture]);
     seed_group(&scenario, &show_id, "house").await;
+    let (show_revision, object_revision) = group_authority(&scenario, &show_id, "house").await;
     let renamed = scenario
         .group_management_action(
             &show_id,
             Some(&scenario.token),
-            group_management_request("manage-rename", "house", rename("Renamed"), 1),
+            group_management_request(
+                "manage-rename",
+                "house",
+                rename("Renamed"),
+                object_revision,
+                show_revision,
+            ),
         )
         .await;
     assert_eq!(renamed.status(), StatusCode::OK);
+    let renamed = management_outcome(renamed).await;
+    let renamed_show_revision = management_show_revision(&renamed);
 
     let stale = scenario
         .group_management_action(
             &show_id,
             Some(&scenario.token),
-            group_management_request("manage-stale-undo", "house", serde_json::json!({"type":"undo"}), 1),
+            group_management_request(
+                "manage-stale-undo",
+                "house",
+                serde_json::json!({"type":"undo"}),
+                1,
+                renamed_show_revision,
+            ),
         )
         .await;
     assert_eq!(stale.status(), StatusCode::CONFLICT);
@@ -160,7 +383,13 @@ async fn undo_restores_the_previous_body_and_a_stale_revision_conflicts() {
         .group_management_action(
             &show_id,
             Some(&scenario.token),
-            group_management_request("manage-undo", "house", serde_json::json!({"type":"undo"}), 2),
+            group_management_request(
+                "manage-undo",
+                "house",
+                serde_json::json!({"type":"undo"}),
+                2,
+                renamed_show_revision,
+            ),
         )
         .await;
     assert_eq!(undo.status(), StatusCode::OK);
@@ -222,6 +451,7 @@ async fn frozen_refresh_publishes_its_selection_before_the_owning_show_event() {
         )
         .await;
     let baseline = scenario.state.events.latest_sequence();
+    let (show_revision, object_revision) = group_authority(&scenario, &show_id, "frozen").await;
 
     let refreshed = scenario
         .group_management_action(
@@ -231,7 +461,8 @@ async fn frozen_refresh_publishes_its_selection_before_the_owning_show_event() {
                 "manage-refresh",
                 "frozen",
                 serde_json::json!({"type":"refresh_frozen"}),
-                2,
+                object_revision,
+                show_revision,
             ),
         )
         .await;
@@ -307,6 +538,7 @@ async fn detach_derived_freezes_membership_and_an_invalid_source_mutates_nothing
         .await;
     assert_eq!(stored.status(), StatusCode::OK);
     let baseline = scenario.state.events.latest_sequence();
+    let (show_revision, object_revision) = group_authority(&scenario, &show_id, "derived").await;
 
     let mismatched = scenario
         .group_management_action(
@@ -319,7 +551,8 @@ async fn detach_derived_freezes_membership_and_an_invalid_source_mutates_nothing
                     "type":"detach_derived",
                     "expected_source":{"source_group_id":"other"}
                 }),
-                2,
+                object_revision,
+                show_revision,
             ),
         )
         .await;
@@ -338,7 +571,8 @@ async fn detach_derived_freezes_membership_and_an_invalid_source_mutates_nothing
                 "manage-detach",
                 "derived",
                 serde_json::json!({"type":"detach_derived"}),
-                2,
+                object_revision,
+                show_revision,
             ),
         )
         .await;
@@ -351,13 +585,20 @@ async fn detach_derived_freezes_membership_and_an_invalid_source_mutates_nothing
 }
 
 #[tokio::test]
-async fn group_management_rejects_missing_auth_forged_scope_and_a_foreign_show() {
+async fn group_management_ignores_forged_scope_but_rejects_missing_auth_and_a_foreign_show() {
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario.create_and_open_show("Group management security").await;
     let fixture = scenario.install_direct_fixture();
     scenario.state.programming.select(scenario.session.id, [fixture]);
     seed_group(&scenario, &show_id, "house").await;
-    let request = group_management_request("manage-secure", "house", rename("Secured"), 1);
+    let (show_revision, object_revision) = group_authority(&scenario, &show_id, "house").await;
+    let request = group_management_request(
+        "manage-secure",
+        "house",
+        rename("Secured"),
+        object_revision,
+        show_revision,
+    );
 
     assert_eq!(
         scenario
@@ -366,7 +607,7 @@ async fn group_management_rejects_missing_auth_forged_scope_and_a_foreign_show()
             .status(),
         StatusCode::UNAUTHORIZED
     );
-    for field in ["desk_id", "user_id", "session_id", "expected_show_revision"] {
+    for field in ["desk_id", "user_id", "session_id"] {
         let mut forged = request.clone();
         forged[field] = serde_json::json!("forged");
         assert_eq!(
@@ -374,10 +615,19 @@ async fn group_management_rejects_missing_auth_forged_scope_and_a_foreign_show()
                 .group_management_action(&show_id, Some(&scenario.token), forged)
                 .await
                 .status(),
-            StatusCode::BAD_REQUEST,
-            "{field} must stay server-authored"
+            StatusCode::OK,
+            "{field} must be ignored so scope stays server-authored"
         );
     }
+    let mut malformed_revision = request.clone();
+    malformed_revision["expected_show_revision"] = serde_json::json!("forged");
+    assert_eq!(
+        scenario
+            .group_management_action(&show_id, Some(&scenario.token), malformed_revision)
+            .await
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
     assert_eq!(
         scenario
             .group_management_action(&Uuid::new_v4().to_string(), Some(&scenario.token), request)

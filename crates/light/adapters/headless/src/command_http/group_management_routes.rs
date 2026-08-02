@@ -1,16 +1,16 @@
+use crate::tolerant_json::TolerantJson;
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, State, rejection::JsonRejection},
+    extract::{DefaultBodyLimit, Path, State, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
 };
 use light_application::{ActionEnvelope, ActionError, ActionErrorKind};
 use light_wire::v2::group_management::{
     GroupManagementErrorKind, GroupManagementErrorResponse, GroupManagementRequest,
 };
-
-use super::super::{ApiError, AppState, Session, ShowContext};
+use super::super::{ActiveShowRepository, ApiError, AppState, Session, ShowContext};
 use super::{
     group_management_wire, programming_ports::ServerProgrammingPorts, routes::http_context,
 };
@@ -21,20 +21,70 @@ const GROUP_ID_LIMIT: usize = 256;
 pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v2/groups/manage", post(manage_group))
+        .route("/api/v2/groups/{group_id}", get(group_settings))
         .layer(DefaultBodyLimit::max(BODY_LIMIT))
+}
+
+async fn group_settings(
+    State(state): State<AppState>,
+    Path(group_id): Path<String>,
+    show: ShowContext,
+    headers: HeaderMap,
+) -> Result<Json<light_wire::v2::group_management::GroupSettingsSnapshot>, GroupManagementHttpError>
+{
+    let _session =
+        super::super::authenticate(&state, &headers).map_err(GroupManagementHttpError::api)?;
+    validate_group_id(&group_id)?;
+    let show_id = show
+        .resolve(&state)
+        .map_err(GroupManagementHttpError::api)?;
+    let _activation = state.active_show.acquire().await;
+    let entry = super::super::show_objects_v2::active_entry(&state, show_id)
+        .map_err(GroupManagementHttpError::api)?;
+    let store = ActiveShowRepository::open(&entry.path)
+        .map_err(ApiError::store)
+        .map_err(GroupManagementHttpError::api)?;
+    let (show_revision, object) =
+        super::super::object_api::exact_object_snapshot(&store, "group", &group_id)
+            .map_err(GroupManagementHttpError::api)?;
+    let object = object.ok_or_else(|| {
+        GroupManagementHttpError::new(
+            StatusCode::NOT_FOUND,
+            GroupManagementErrorKind::NotFound,
+            format!("Group {group_id} does not exist"),
+            None,
+            None,
+            false,
+        )
+    })?;
+    let resolved_spatial =
+        group_management_wire::resolved_spatial(&state.output.snapshot(), &group_id)
+            .map_err(GroupManagementHttpError::application)?;
+    Ok(Json(
+        light_wire::v2::group_management::GroupSettingsSnapshot {
+            show_id: show_id.0,
+            show_revision: show_revision.value(),
+            group: light_wire::v2::group_management::GroupManagementObjectProjection {
+                object_id: object.id,
+                object_revision: object.revision,
+                body: std::sync::Arc::new(object.body),
+            },
+            resolved_spatial,
+        },
+    ))
 }
 
 async fn manage_group(
     State(state): State<AppState>,
     show: ShowContext,
     headers: HeaderMap,
-    request: Result<Json<GroupManagementRequest>, JsonRejection>,
+    request: Result<TolerantJson<GroupManagementRequest>, JsonRejection>,
 ) -> Result<Response, GroupManagementHttpError> {
     let session = authenticated_mutation(&state, &headers)?;
     let show_id = show
         .resolve(&state)
         .map_err(GroupManagementHttpError::api)?;
-    let Json(request) = request.map_err(GroupManagementHttpError::json)?;
+    let TolerantJson(request) = request.map_err(GroupManagementHttpError::json)?;
     super::routes::validate_request_id(&request.request_id)
         .map_err(GroupManagementHttpError::api)?;
     validate_group_id(&request.group_id)?;
@@ -44,7 +94,9 @@ async fn manage_group(
         group_id: request.group_id,
         operation: group_management_wire::operation(request.operation),
         expected_object_revision: request.expected_object_revision,
-        expected_show_revision: None,
+        expected_show_revision: Some(light_show::PortableShowRevision::from_value(
+            request.expected_show_revision,
+        )),
     };
     let result = run_action(state, session, ActionEnvelope { context, command }).await?;
     let response = group_management_wire::outcome(result);

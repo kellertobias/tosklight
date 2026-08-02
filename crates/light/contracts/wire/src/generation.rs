@@ -20,6 +20,7 @@ use crate::v2::cue_transfer::{CueTransferErrorResponse, CueTransferOutcome, CueT
 use crate::v2::events::{EventClientMessage, EventServerMessage, OutputRuntimeSnapshot};
 use crate::v2::group_management::{
     GroupManagementErrorResponse, GroupManagementOutcome, GroupManagementRequest,
+    GroupSettingsSnapshot,
 };
 use crate::v2::group_recording::{
     GroupRecordErrorResponse, GroupRecordOutcome, GroupRecordRequest,
@@ -217,6 +218,7 @@ fn programming_artifacts() -> Vec<GeneratedArtifact> {
         programming_response_schema::<GroupManagementErrorResponse>(
             "group-management-error-response",
         ),
+        programming_response_schema::<GroupSettingsSnapshot>("group-settings-snapshot"),
         programming_request_schema::<GroupRecordRequest>("group-record-request"),
         programming_response_schema::<GroupRecordOutcome>("group-record-outcome"),
         programming_response_schema::<GroupRecordErrorResponse>("group-record-error-response"),

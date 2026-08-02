@@ -2,6 +2,7 @@ use crate::{
     ActionContext, ActionError, ActionErrorKind, ActiveShowPorts, ApplicationCommand, CommandFamily,
 };
 use light_core::{FixtureId, Revision, ShowId};
+use light_dynamics::SpatialSelectionMapping;
 use light_show::PortableShowRevision;
 use std::sync::Arc;
 
@@ -33,6 +34,10 @@ pub enum GroupManagementOperation {
     DetachDerived {
         expected_source: Option<GroupSourceExpectation>,
     },
+    /// Creates or replaces the complete Group-local projection-plus-shape mapping.
+    SetSpatialMapping(SpatialSelectionMapping),
+    /// Removes only the Group-local mapping, revealing current inheritance/source order.
+    RemoveSpatialMapping,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -61,7 +66,10 @@ impl GroupManagementOperation {
             Self::RefreshFrozen { expected_source } | Self::DetachDerived { expected_source } => {
                 expected_source.as_ref()
             }
-            Self::UpdateProperties(_) | Self::Undo => None,
+            Self::UpdateProperties(_)
+            | Self::Undo
+            | Self::SetSpatialMapping(_)
+            | Self::RemoveSpatialMapping => None,
         }
     }
 
@@ -76,6 +84,8 @@ impl GroupManagementOperation {
             Self::Undo => "undo-group",
             Self::RefreshFrozen { .. } => "refresh-frozen-group",
             Self::DetachDerived { .. } => "detach-derived-group",
+            Self::SetSpatialMapping(_) => "set-group-spatial-mapping",
+            Self::RemoveSpatialMapping => "remove-group-spatial-mapping",
         }
     }
 }
