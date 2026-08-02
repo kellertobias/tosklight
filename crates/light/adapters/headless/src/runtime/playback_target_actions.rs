@@ -107,13 +107,14 @@ pub(super) fn apply_playback_master(
     exclusion_zones: &[Vec<u16>],
     activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
-    let software_fader = activation_origin.as_ref().is_some_and(|origin| {
-        matches!(
-            origin.surface,
-            light_playback::PlaybackActivationSurface::Virtual
-                | light_playback::PlaybackActivationSurface::Matter
-        )
-    });
+    let software_fader = source == "ui"
+        || activation_origin.as_ref().is_some_and(|origin| {
+            matches!(
+                origin.surface,
+                light_playback::PlaybackActivationSurface::Virtual
+                    | light_playback::PlaybackActivationSurface::Matter
+            )
+        });
     let virtual_fader = software_fader || (source == "matter" && !definition.has_fader);
     if !definition.has_fader && !virtual_fader {
         return Err(ApiError::bad_request("playback does not have a fader"));

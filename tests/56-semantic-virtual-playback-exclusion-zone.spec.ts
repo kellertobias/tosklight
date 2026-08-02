@@ -120,7 +120,7 @@ scenario(
 		});
 		await t.virtualPlayback.expect.runtime(thirdPlayback, {
 			target: "cue_list",
-			runtime: null,
+			runtime: { enabled: false },
 		});
 		for (const source of [firstSource, secondSource, thirdSource])
 			await t.virtualPlayback.expect.physicalRuntimeAbsent(source);
