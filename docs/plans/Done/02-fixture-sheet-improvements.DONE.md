@@ -2,9 +2,11 @@
 
 ## Status
 
-**Doing.** Claimed on 2026-08-02 after completing Plan 01. This is the sole active implementation
-contract for Fixture Sheet invariant filtering, attribute-group base-value presentation, Dynamic
-identity feedback, per-surface Compact mode, and shared dense rendering.
+**Complete.** Claimed on 2026-08-02 after completing Plan 01 and accepted on 2026-08-02 after
+focused, major-suite, migration/recovery, small-screen, and real desktop verification. This was the
+sole active implementation contract for Fixture Sheet invariant filtering, attribute-group
+base-value presentation, Dynamic identity feedback, per-surface Compact mode, and shared dense
+rendering.
 
 This follows Group and Dynamics spatial mapping in the current [Next plan order](../Next/README.md).
 The Group-master and Dynamics indicators implemented here must consume the authoritative contracts
@@ -21,7 +23,7 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
 - [x] Implement per-surface Off/Icon only/Text only configuration, migration, and shared rendering.
 - [x] Update help, deterministic screenshot contracts, human scenarios, and focused root Playwright
   coverage.
-- [ ] Run focused checks, required major suites, migration/recovery proof, small-screen geometry, and
+- [x] Run focused checks, required major suites, migration/recovery proof, small-screen geometry, and
   the real desktop path.
 
 ## Implementation decisions
@@ -127,11 +129,31 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
   the repository source-size gate; extracting shared DataTable keyboard/style helpers removes the
   Plan 02-owned violation and its 14 focused component tests pass, while the gate still reports ten
   unrelated existing oversized functions outside this plan.
+- Focused final migration/recovery verification passes 44 desktop reducer/fixed-screen tests and
+  four headless fixed-screen configuration tests. This proves legacy `dimmer` visibility migrates
+  to `intensity`, absent compact settings recover to `Off`, existing desk-store rows remain readable
+  without destructive migration, fixed-screen configuration persists the three-mode wire contract,
+  sparse replay remains tolerant, and retired v1 configuration is handled by the existing recovery
+  boundary.
+- `npm run open` completed a clean native build and bundle of both ToskLight and the Hardware
+  Controls sibling application. Readiness returned `status: ready`, the active show loaded without
+  recovery mode, and the app-owned log records fixture-library readiness, restored programmers, a
+  compiled engine snapshot, and the server bound on `127.0.0.1:5000`. The repository deliberately
+  has no `test:desktop-smoke` script; its command-boundary test requires that script to remain
+  undefined, so `npm run open` is the applicable native gate.
+- Real desktop inspection of the connected built-in Fixture Sheet verified the eight configured
+  attribute-group headers, independent Shapers/Control/Media choices without automatic enablement,
+  no reserved `0.*` scenery rows, exact View choices `Off`, `Icon only`, and `Text only`, 43 px Off
+  rows, deterministic 32 px compact rows, graphical summaries without ordinary text in Icon only,
+  concise text without meters in Text only, and persistence across a full page reload. The mode was
+  restored to `Off` after verification. Together with the focused populated-row tests, shared-story
+  screenshots, deterministic Dynamic/DMX Playwright proof, and 1,890-row production projection
+  benchmark, the final acceptance audit covers all 29 numbered items below.
 
 ## Remaining work
 
-- Run the required major suites, migration/recovery proof, desktop smoke, and real desktop path.
-- Audit every acceptance item below against the final combined verification before closeout.
+- None for this plan. The two unrelated full-UI failures and the unrelated repository source-size
+  violations remain outside this plan and are recorded above without being represented as green.
 
 ## Goal
 
@@ -363,3 +385,25 @@ Visual/text assertions must prove:
 27. The DMX window shows the actual continuously changing output produced by Dynamics while the Fixture Sheet base value remains stable.
 28. The Media column shows Media Folder plus Media File and, when supported, Mask Folder plus Mask File as distinct associated pairs.
 29. Existing saved Dimmer visibility migrates to Intensity, while newly available attribute-group columns do not become visible automatically.
+
+## Result
+
+Completed on 2026-08-02. The regular Fixture Sheet now excludes scenery through three independent
+invariants while leaving those objects intact in show, selection, patch, and Stage authority. Its
+shared projection presents authoritative ordinary and Preload bases for every attribute group,
+keeps exact stable Dynamic identities and states without sampled-value repainting, and leaves
+continuously resolved output to the DMX surface.
+
+Pane, built-in, and fixed-screen configurations now share independently persisted `Off`, `Icon
+only`, and `Text only` modes. The shared renderer provides deterministic 43 px detailed rows and
+32 px compact rows, retains configured columns and status semantics, exposes horizontal overflow,
+and renders graphical-only or text-only base summaries as selected. Legacy layouts recover to
+`Off`, migrate `dimmer` to `intensity`, and do not enable newly available columns.
+
+Focused unit, component, route, migration, screenshot, manual, Storybook, production-build,
+Playwright, large-tier, and native desktop checks prove the plan-specific behavior. The full API
+suite passes all 27 cases. The full UI suite passes 157 cases with one skip and two reproduced
+unrelated failures (`TELEMETRY-001` hydration and `PATCH-PLACEMENT-001` baseline fixture data); the
+global unit command likewise reaches only unrelated pre-existing source-size violations after the
+Plan 02-owned DataTable violation was removed. These unrelated failures do not contradict the
+passing plan-specific coverage and are intentionally not described as a fully green repository.
