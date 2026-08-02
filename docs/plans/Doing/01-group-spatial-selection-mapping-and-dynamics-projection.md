@@ -195,6 +195,11 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   ranked output, inheritance, Dynamic drafts, edge cases, migrated Desktops, exact modal/gesture
   behavior, physical and virtual SET assignment, shared Group Masters, and legacy recovery. The
   semantic-documentation suite passed all eight tests and the focused diff check was clean.
+- Commit `a069ab37` updates the generated-show workflow and semantic Group helper to use the
+  X-only, immediate-save Group settings modal. Each name, color, and icon edit now waits for its
+  authoritative persisted value rather than clicking the retired Save footer. The Playwright test
+  catalog loaded the affected Group scenarios, the semantic-documentation suite passed all eight
+  tests, and the focused diff check was clean.
 
 ## Remaining work
 
