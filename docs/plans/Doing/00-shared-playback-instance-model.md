@@ -2,10 +2,35 @@
 
 ## Status
 
-**Implementable.** The shared-instance identity, Group Master participation, control arbitration,
+**Doing.** Claimed on 2026-08-02. The shared-instance identity, Group Master participation, control arbitration,
 assignment removal, persistence, and operator feedback decisions are settled below. This contract
 must be implemented before work that assigns Groups, Cuelists, target-bound Dynamics, or Timecodes
 to Playbacks depends on it.
+
+## Progress
+
+- [x] Claimed from `docs/plans/Next` and began the implementation audit.
+- [ ] Map current assignment, runtime, persistence, feedback, and pickup ownership.
+- [ ] Implement shared runtime identity and assignment lifecycle in coherent compatibility-safe steps.
+- [ ] Add focused migration, runtime, cross-surface, and operator acceptance coverage.
+- [ ] Run the required major suites and verify the real desktop path.
+
+## Decisions
+
+- The plan contract below is authoritative; implementation will preserve assignment-local presentation,
+  temporary gestures, and physical pickup while moving logical runtime ownership to stable target identity.
+- Existing valid persisted shows remain supported unless a later recorded decision explicitly declares a
+  pre-v1 break and regenerates every repository-owned show.
+
+## Verification
+
+- Not started. The initial repository and dirty-worktree inventory was completed before claiming the plan.
+
+## Remaining work
+
+- Complete the implementation-seam and compatibility audit.
+- Implement, verify, and commit each coherent behavior slice.
+- Run full plan closeout verification and record the truthful result.
 
 ## Goal
 
