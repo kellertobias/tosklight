@@ -177,6 +177,12 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   TypeScript and JSON Schemas now include Dynamic mapping plus the earlier typed Group Master
   assignment. All 103 wire tests and generated-contract freshness passed, the focused real headless
   update/preview route passed, desktop typecheck passed, and the staged diff check was clean.
+- Commit `8d81f945` connects the desk/show/surface-scoped SET state machine to the visible command
+  line, Group pool and strip, F1–F8 shortcuts, numeric pad, and touch/mouse/hardware Playback faders.
+  `SET GROUP N` remains visible until a terminal action, while Clear, Cancel, and Enter route through
+  the same typed owner. Physical page/slot Group Master assignment now carries Group, Page, and
+  Playback identity/revision guards to the typed topology action. Eleven focused desktop test files
+  passed all 176 tests, desktop typecheck passed, and the staged diff check was clean.
 
 ## Remaining work
 
@@ -193,8 +199,8 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
 - Finish the desktop compatibility audit for retired Group master/pointer fields. Runtime readers,
   typed assignment, initial-level migration, canonical field retirement, generated contracts,
   recovery, and portable fixture generation are integrated.
-- Connect the typed SET state machine to the command line, Group tiles, Playback controls, and
-  revision-guarded application commands; its committed pure model is not runtime proof.
+- Extend typed SET assignment to virtual Playbacks; the current connected path intentionally covers
+  physical page/slot Playbacks only because the server action has no virtual address variant yet.
 
 ## Decision and superseded behavior
 
