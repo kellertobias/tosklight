@@ -16,7 +16,7 @@ mod tests;
 
 pub use evaluate::{DynamicEvaluationContext, DynamicEvaluator, ScalarSourceResolver};
 pub use model::*;
-pub use phase::{PhasePosition, SpatialPosition, project_phase};
+pub use phase::{PhasePosition, SpatialPosition, project_phase, project_ranked_phase};
 pub use runtime::{
     DynamicController, DynamicControllerSource, DynamicControllerTransitionSnapshot,
     DynamicInstanceSnapshot, DynamicRandomPulseSnapshot, DynamicRandomStreamSnapshot,

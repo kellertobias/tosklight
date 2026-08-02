@@ -450,6 +450,7 @@ fn malformed_show_runtime_is_cleared_without_discarding_valid_dynamic_definition
                 ordered_targets: vec![fixture],
             },
             stage_positions: HashMap::new(),
+            inherited_spatial_mapping: None,
             now_millis: 1_000,
             activation_delay_millis: 0,
             activation_duration_millis: 0,

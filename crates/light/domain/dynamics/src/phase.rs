@@ -1,4 +1,4 @@
-use crate::{PhaseDistribution, PhaseOrdering};
+use crate::{PhaseDistribution, PhaseOrdering, RankedSelection};
 use light_core::FixtureId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -97,6 +97,49 @@ pub fn project_phase(
                 target,
                 degrees: distribution.offset_degrees + distributed,
             }
+        })
+        .collect()
+}
+
+/// Projects an authoritative spatial ranking into phase degrees.
+///
+/// Equal spatial ranks receive identical phase. Blocks, repeats, wings, and anchors operate on
+/// `ranked.rank_count`, not on the number of fixtures in the selection.
+pub fn project_ranked_phase(
+    distribution: &PhaseDistribution,
+    ranked: &RankedSelection,
+) -> Vec<PhasePosition> {
+    let block = usize::from(distribution.block_size.max(1));
+    let rank_count = ranked.rank_count.div_ceil(block);
+    let repeats = usize::from(distribution.repeats.max(1)).min(rank_count.max(1));
+    ranked
+        .ordered_fixture_ids
+        .iter()
+        .filter_map(|target| {
+            let spatial_rank = ranked.rank_by_fixture.get(target).copied()?;
+            let rank = spatial_rank / block;
+            let (_, local, length) = balanced_repeat(rank, rank_count, repeats);
+            let local = if distribution.wings {
+                local.min(length.saturating_sub(1).saturating_sub(local))
+            } else {
+                local
+            };
+            let effective_length = if distribution.wings {
+                length.div_ceil(2)
+            } else {
+                length
+            };
+            let distributed = if distribution.anchors_degrees.len() >= 2 {
+                anchor_phase(&distribution.anchors_degrees, local, effective_length)
+            } else if effective_length <= 1 {
+                0.0
+            } else {
+                local as f32 / effective_length as f32 * distribution.span_degrees
+            };
+            Some(PhasePosition {
+                target: *target,
+                degrees: distribution.offset_degrees + distributed,
+            })
         })
         .collect()
 }

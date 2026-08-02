@@ -8,10 +8,11 @@ use light_core::{AttributeKey, FixtureId, SessionId, UserId};
 use light_dynamics::{
     DynamicController, DynamicControllerSource, DynamicDefinition, DynamicDefinitionSnapshot,
     DynamicInstanceOverrides, DynamicReference, DynamicRuntimeError, DynamicSemanticValue,
-    DynamicStartRequest, DynamicTargetBinding, DynamicTargetScope, DynamicValueTiming,
+    DynamicStartRequest, DynamicTargetBinding, DynamicTargetScope, DynamicValueTiming, Position3d,
+    SpatialSelectionMapping,
 };
 use light_engine::EngineSnapshot;
-use light_programmer::{DynamicProgrammerValueMutation, ProgrammerRegistry, resolve_group};
+use light_programmer::{DynamicProgrammerValueMutation, ProgrammerRegistry, resolve_group_spatial};
 use parking_lot::Mutex;
 use std::{
     collections::{HashMap, VecDeque},
@@ -151,7 +152,7 @@ impl DynamicsService {
             return Ok(outcome);
         }
         let snapshot = ports.snapshot();
-        let (definition, targets) = definition_and_targets(
+        let (definition, targets, inherited_spatial_mapping) = definition_and_targets(
             context,
             ports,
             &self.programmers,
@@ -216,6 +217,7 @@ impl DynamicsService {
             definition,
             targets,
             stage_positions,
+            inherited_spatial_mapping,
             command,
             ports,
         )?;
@@ -243,7 +245,7 @@ impl DynamicsService {
             return Ok(outcome);
         }
         let snapshot = ports.snapshot();
-        let (definition, targets) = definition_and_targets(
+        let (definition, targets, inherited_spatial_mapping) = definition_and_targets(
             context,
             ports,
             &self.programmers,
@@ -259,6 +261,7 @@ impl DynamicsService {
             definition,
             targets,
             stage_positions,
+            inherited_spatial_mapping,
             command,
             ports,
         )?;
@@ -290,7 +293,7 @@ impl DynamicsService {
             return Ok(outcome);
         }
         let snapshot = ports.snapshot();
-        let (definition, targets) = definition_and_targets(
+        let (definition, targets, _) = definition_and_targets(
             context,
             ports,
             &self.programmers,
@@ -365,6 +368,7 @@ impl DynamicsService {
         definition: &DynamicDefinition,
         targets: Vec<FixtureId>,
         stage_positions: HashMap<FixtureId, light_dynamics::SpatialPosition>,
+        inherited_spatial_mapping: Option<SpatialSelectionMapping>,
         command: DynamicStartCommand,
         ports: &dyn DynamicsPorts,
     ) -> Result<DynamicStartOutcome, ActionError> {
@@ -404,6 +408,7 @@ impl DynamicsService {
                     ordered_targets: targets.clone(),
                 },
                 stage_positions,
+                inherited_spatial_mapping,
                 now_millis,
                 activation_delay_millis: command.timing.delay_millis.unwrap_or_default(),
                 activation_duration_millis: command.timing.fade_millis.unwrap_or_default(),
@@ -905,10 +910,17 @@ fn definition_and_targets<'a>(
     snapshot: &'a EngineSnapshot,
     dynamic_id: Uuid,
     explicit: &[FixtureId],
-) -> Result<(&'a DynamicDefinition, Vec<FixtureId>), ActionError> {
+) -> Result<
+    (
+        &'a DynamicDefinition,
+        Vec<FixtureId>,
+        Option<SpatialSelectionMapping>,
+    ),
+    ActionError,
+> {
     let result = definition(snapshot, dynamic_id).and_then(|definition| {
         resolve_targets(programmers, session, snapshot, definition, explicit)
-            .map(|targets| (definition, targets))
+            .map(|(targets, mapping)| (definition, targets, mapping))
     });
     if let Err(error) = &result {
         ports.publish_runtime_change(
@@ -933,26 +945,49 @@ fn resolve_targets(
     snapshot: &EngineSnapshot,
     definition: &DynamicDefinition,
     explicit: &[FixtureId],
-) -> Result<Vec<FixtureId>, ActionError> {
+) -> Result<(Vec<FixtureId>, Option<SpatialSelectionMapping>), ActionError> {
     let groups = snapshot
         .groups
         .iter()
         .map(|group| (group.id.clone(), group.clone()))
         .collect::<HashMap<_, _>>();
     let bound = match &definition.target_binding {
-        DynamicTargetBinding::LiveGroup { group_id } => resolve_group(group_id, &groups)
-            .map_err(|message| ActionError::new(ActionErrorKind::Invalid, message))?,
-        DynamicTargetBinding::FrozenTargets { targets } => targets.clone(),
-        DynamicTargetBinding::Targetless => Vec::new(),
+        DynamicTargetBinding::LiveGroup { group_id } => {
+            let positions = snapshot
+                .dynamic_stage_positions
+                .iter()
+                .map(|(fixture_id, position)| {
+                    (
+                        *fixture_id,
+                        Position3d {
+                            x: f64::from(position.x),
+                            y: f64::from(position.y),
+                            z: f64::from(position.z),
+                        },
+                    )
+                })
+                .collect();
+            let resolved = resolve_group_spatial(group_id, &groups, &positions)
+                .map_err(|message| ActionError::new(ActionErrorKind::Invalid, message))?;
+            Some((resolved.source_order, resolved.effective_mapping))
+        }
+        DynamicTargetBinding::FrozenTargets { targets } => Some((targets.clone(), None)),
+        DynamicTargetBinding::Targetless => None,
     };
-    if !bound.is_empty() {
-        if !explicit.is_empty() && explicit != bound {
+    if let Some((targets, inherited_spatial_mapping)) = bound {
+        if !explicit.is_empty() && explicit != targets {
             return Err(ActionError::new(
                 ActionErrorKind::Invalid,
                 "explicit selection does not match the Dynamic target scope",
             ));
         }
-        return Ok(bound);
+        if targets.is_empty() {
+            return Err(ActionError::new(
+                ActionErrorKind::Invalid,
+                "Dynamic target scope is empty",
+            ));
+        }
+        return Ok((targets, inherited_spatial_mapping));
     }
     let targets = if !explicit.is_empty() {
         explicit.to_vec()
@@ -973,7 +1008,7 @@ fn resolve_targets(
             "Dynamic target scope is empty",
         ));
     }
-    Ok(targets)
+    Ok((targets, None))
 }
 
 fn matching_programmer_controller(

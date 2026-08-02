@@ -511,6 +511,54 @@ fn phase_span_is_endpoint_exclusive_and_balanced_repeats_restart_the_wave() {
 }
 
 #[test]
+fn ranked_phase_counts_spatial_ranks_and_keeps_equal_ranks_parallel() {
+    let targets = (1..=8)
+        .map(|value| FixtureId(Uuid::from_u128(value)))
+        .collect::<Vec<_>>();
+    let spatial_ranks = [0, 0, 1, 2, 2, 3, 4, 5];
+    let ranked = RankedSelection {
+        ordered_fixture_ids: targets.clone(),
+        rank_by_fixture: targets.iter().copied().zip(spatial_ranks).collect(),
+        rank_count: 6,
+        warnings: Vec::new(),
+    };
+    let mut distribution = selection_phase(10.0);
+    distribution.block_size = 2;
+
+    let phases = project_ranked_phase(&distribution, &ranked);
+    assert_eq!(
+        phases.iter().map(|phase| phase.degrees).collect::<Vec<_>>(),
+        [10.0, 10.0, 10.0, 130.0, 130.0, 130.0, 250.0, 250.0],
+        "two spatial ranks per block are counted independently of tied fixture cardinality"
+    );
+
+    distribution.block_size = 1;
+    distribution.repeats = 2;
+    distribution.wings = true;
+    distribution.anchors_degrees = vec![20.0, 80.0];
+    let complex = project_ranked_phase(&distribution, &ranked);
+    assert_eq!(
+        complex
+            .iter()
+            .map(|phase| phase.degrees)
+            .collect::<Vec<_>>(),
+        [60.0, 60.0, 90.0, 60.0, 60.0, 60.0, 90.0, 60.0],
+        "repeat, wing, and anchor lengths count six ranks rather than eight fixtures"
+    );
+    let degrees_by_rank = complex
+        .iter()
+        .map(|phase| (ranked.rank_by_fixture[&phase.target], phase.degrees))
+        .collect::<HashMap<_, _>>();
+    assert_eq!(degrees_by_rank.len(), ranked.rank_count);
+    for phase in complex {
+        assert_eq!(
+            phase.degrees, degrees_by_rank[&ranked.rank_by_fixture[&phase.target]],
+            "repeat, wing, and anchor projection stays a function of rank"
+        );
+    }
+}
+
+#[test]
 fn uniform_and_per_lane_phase_modes_sample_the_expected_lane_phase() {
     let first = lane();
     let first_id = first.id;
@@ -599,6 +647,7 @@ fn per_lane_phase_snapshot_captures_stage_order_and_legacy_snapshots_expand_unif
                     },
                 ),
             ]),
+            inherited_spatial_mapping: None,
             now_millis: 0,
             activation_policy_override: None,
             activation_delay_millis: 0,
@@ -654,6 +703,146 @@ fn per_lane_phase_snapshot_captures_stage_order_and_legacy_snapshots_expand_unif
 }
 
 #[test]
+fn runtime_selection_phase_uses_inherited_spatial_ranks_once_for_all_parallel_targets() {
+    let targets = (1..=3)
+        .map(|value| FixtureId(Uuid::from_u128(value)))
+        .collect::<Vec<_>>();
+    let dynamic = definition(lane());
+    let definition_id = dynamic.id;
+    let lane_id = dynamic.lanes[0].id;
+    let mut runtime = DynamicRuntime::default();
+    runtime.install_definitions([dynamic]).unwrap();
+
+    let instance = runtime
+        .start(DynamicStartRequest {
+            definition_id,
+            controller: controller(0, 1, false),
+            target_scope: DynamicTargetScope {
+                ordered_targets: targets.clone(),
+            },
+            stage_positions: HashMap::from([
+                (
+                    targets[0],
+                    SpatialPosition {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ),
+                (
+                    targets[1],
+                    SpatialPosition {
+                        x: 0.0,
+                        y: 4.0,
+                        z: 0.0,
+                    },
+                ),
+                (
+                    targets[2],
+                    SpatialPosition {
+                        x: 10.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ),
+            ]),
+            inherited_spatial_mapping: Some(SpatialSelectionMapping {
+                projection: SpatialProjection::from_preset(
+                    ProjectionPreset::Top,
+                    Position3d::default(),
+                ),
+                shape: SpatialSelectionShape::Grid {
+                    angle_degrees: 0.0,
+                    direction: RankDirection::Ascending,
+                },
+            }),
+            now_millis: 0,
+            activation_delay_millis: 0,
+            activation_duration_millis: 0,
+            activation_policy_override: None,
+            reuse_matching_targetless: false,
+        })
+        .unwrap();
+
+    let snapshot = runtime.snapshot();
+    let phases = snapshot
+        .instances
+        .iter()
+        .find(|candidate| candidate.id == instance)
+        .unwrap()
+        .phase_by_lane_target
+        .iter()
+        .filter(|(candidate_lane, _, _)| *candidate_lane == lane_id)
+        .map(|(_, target, phase)| (*target, *phase))
+        .collect::<HashMap<_, _>>();
+    assert_eq!(phases[&targets[0]], 0.0);
+    assert_eq!(phases[&targets[1]], 0.0);
+    assert_eq!(phases[&targets[2]], 180.0);
+}
+
+#[test]
+fn runtime_non_selection_lane_preserves_legacy_projection_without_resolving_new_mapping() {
+    let targets = [FixtureId::new(), FixtureId::new()];
+    let mut dynamic = definition(lane());
+    dynamic.phase.ordering = PhaseOrdering::GridLinear { angle_degrees: 0.0 };
+    dynamic.spatial_mapping = DynamicSpatialMappingOverride {
+        projection: OverrideStage::Inherit,
+        shape: OverrideStage::Replace(DynamicSelectionShape::Grid {
+            angle_degrees: 90.0,
+            direction: RankDirection::Descending,
+        }),
+    };
+    let definition_id = dynamic.id;
+    let lane_id = dynamic.lanes[0].id;
+    let mut runtime = DynamicRuntime::default();
+    runtime.install_definitions([dynamic]).unwrap();
+
+    let instance = runtime
+        .start(DynamicStartRequest {
+            definition_id,
+            controller: controller(0, 1, false),
+            target_scope: DynamicTargetScope {
+                ordered_targets: targets.to_vec(),
+            },
+            stage_positions: HashMap::from([
+                (
+                    targets[0],
+                    SpatialPosition {
+                        x: 2.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ),
+                (
+                    targets[1],
+                    SpatialPosition {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ),
+            ]),
+            inherited_spatial_mapping: None,
+            now_millis: 0,
+            activation_delay_millis: 0,
+            activation_duration_millis: 0,
+            activation_policy_override: None,
+            reuse_matching_targetless: false,
+        })
+        .unwrap();
+
+    let phases = runtime.snapshot().instances[0]
+        .phase_by_lane_target
+        .iter()
+        .filter(|(candidate_lane, _, _)| *candidate_lane == lane_id)
+        .map(|(_, target, phase)| (*target, *phase))
+        .collect::<HashMap<_, _>>();
+    assert_eq!(phases[&targets[1]], 0.0);
+    assert_eq!(phases[&targets[0]], 180.0);
+    assert_eq!(runtime.snapshot().instances[0].id, instance);
+}
+
+#[test]
 fn random_each_loop_is_recomputed_per_lane_without_reordering_uniform_lanes() {
     let stable = lane();
     let stable_id = stable.id;
@@ -679,6 +868,7 @@ fn random_each_loop_is_recomputed_per_lane_without_reordering_uniform_lanes() {
                 ordered_targets: targets,
             },
             stage_positions: HashMap::new(),
+            inherited_spatial_mapping: None,
             now_millis: 0,
             activation_policy_override: None,
             activation_delay_millis: 0,
@@ -731,6 +921,7 @@ fn uniform_random_each_loop_shares_one_permutation_across_different_lane_speeds(
                 ordered_targets: targets,
             },
             stage_positions: HashMap::new(),
+            inherited_spatial_mapping: None,
             now_millis: 0,
             activation_policy_override: None,
             activation_delay_millis: 0,
@@ -928,6 +1119,7 @@ fn random_each_loop_reorders_targets_at_runtime_loop_boundaries() {
                 ordered_targets: targets.clone(),
             },
             stage_positions: HashMap::new(),
+            inherited_spatial_mapping: None,
             now_millis: 0,
             activation_policy_override: None,
             activation_delay_millis: 0,
@@ -1332,6 +1524,7 @@ fn start_request(
             ordered_targets: vec![target],
         },
         stage_positions: HashMap::new(),
+        inherited_spatial_mapping: None,
         now_millis,
         activation_delay_millis: 0,
         activation_duration_millis: 0,

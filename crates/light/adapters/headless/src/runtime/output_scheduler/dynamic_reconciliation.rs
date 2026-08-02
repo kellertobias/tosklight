@@ -90,19 +90,24 @@ pub(super) fn reconcile_dynamic_playbacks(
         {
             continue;
         }
-        let targets = match &definition.target_binding {
+        let (targets, inherited_spatial_mapping) = match &definition.target_binding {
             light_dynamics::DynamicTargetBinding::LiveGroup { group_id } => {
-                light_programmer::resolve_group(group_id, &groups).unwrap_or_default()
+                resolve_dynamic_group(group_id, &groups, snapshot).unwrap_or_default()
             }
-            light_dynamics::DynamicTargetBinding::FrozenTargets { targets } => targets.clone(),
+            light_dynamics::DynamicTargetBinding::FrozenTargets { targets } => {
+                (targets.clone(), None)
+            }
             light_dynamics::DynamicTargetBinding::Targetless => match &assignment.target_scope {
                 Some(light_playback::DynamicPlaybackTargetScope::LiveGroup { group_id }) => {
-                    light_programmer::resolve_group(group_id, &groups).unwrap_or_default()
+                    let targets = resolve_dynamic_group(group_id, &groups, snapshot)
+                        .map(|(targets, _)| targets)
+                        .unwrap_or_default();
+                    (targets, None)
                 }
                 Some(light_playback::DynamicPlaybackTargetScope::FrozenTargets { targets }) => {
-                    targets.clone()
+                    (targets.clone(), None)
                 }
-                None => Vec::new(),
+                None => (Vec::new(), None),
             },
         };
         let activated_at_millis =
@@ -126,6 +131,7 @@ pub(super) fn reconcile_dynamic_playbacks(
                     ordered_targets: targets,
                 },
                 stage_positions: (*snapshot.dynamic_stage_positions).clone(),
+                inherited_spatial_mapping,
                 now_millis: activated_at_millis.min(now_millis),
                 activation_delay_millis: 0,
                 activation_duration_millis: playback.xfade_millis,
@@ -303,6 +309,11 @@ pub(super) fn reconcile_programmer_dynamics(
         .iter()
         .map(|definition| (definition.id, definition))
         .collect::<HashMap<_, _>>();
+    let groups = snapshot
+        .groups
+        .iter()
+        .map(|group| (group.id.clone(), group.clone()))
+        .collect::<HashMap<_, _>>();
     for (controller_id, desired) in desired {
         if dynamics.controller(controller_id).is_some() {
             let _ = dynamics.update_controller(
@@ -326,6 +337,13 @@ pub(super) fn reconcile_programmer_dynamics(
         {
             continue;
         }
+        let inherited_spatial_mapping = match &definition.target_binding {
+            light_dynamics::DynamicTargetBinding::LiveGroup { group_id } => {
+                resolve_dynamic_group(group_id, &groups, snapshot).and_then(|(_, mapping)| mapping)
+            }
+            light_dynamics::DynamicTargetBinding::FrozenTargets { .. }
+            | light_dynamics::DynamicTargetBinding::Targetless => None,
+        };
         let _ = dynamics.start(light_dynamics::DynamicStartRequest {
             definition_id: definition.id,
             controller: light_dynamics::DynamicController {
@@ -344,6 +362,7 @@ pub(super) fn reconcile_programmer_dynamics(
                 ordered_targets: desired.targets,
             },
             stage_positions: (*snapshot.dynamic_stage_positions).clone(),
+            inherited_spatial_mapping,
             now_millis: desired.activated_at_millis.min(now_millis),
             activation_delay_millis: desired.timing.delay_millis.unwrap_or_default(),
             activation_duration_millis: desired.timing.fade_millis.unwrap_or_default(),
@@ -462,12 +481,14 @@ pub(super) fn reconcile_cue_dynamics(
         {
             continue;
         }
-        let targets = match &definition.target_binding {
+        let (targets, inherited_spatial_mapping) = match &definition.target_binding {
             light_dynamics::DynamicTargetBinding::LiveGroup { group_id } => {
-                light_programmer::resolve_group(group_id, &groups).unwrap_or_default()
+                resolve_dynamic_group(group_id, &groups, snapshot).unwrap_or_default()
             }
-            light_dynamics::DynamicTargetBinding::FrozenTargets { targets } => targets.clone(),
-            light_dynamics::DynamicTargetBinding::Targetless => desired.targets,
+            light_dynamics::DynamicTargetBinding::FrozenTargets { targets } => {
+                (targets.clone(), None)
+            }
+            light_dynamics::DynamicTargetBinding::Targetless => (desired.targets, None),
         };
         let _ = dynamics.start(light_dynamics::DynamicStartRequest {
             definition_id: definition.id,
@@ -488,6 +509,7 @@ pub(super) fn reconcile_cue_dynamics(
                 ordered_targets: targets,
             },
             stage_positions: (*snapshot.dynamic_stage_positions).clone(),
+            inherited_spatial_mapping,
             now_millis: desired.activated_at_millis.min(now_millis),
             activation_delay_millis: desired.timing.delay_millis.unwrap_or_default(),
             activation_duration_millis: desired.timing.fade_millis.unwrap_or_default(),
@@ -495,6 +517,33 @@ pub(super) fn reconcile_cue_dynamics(
             reuse_matching_targetless: false,
         });
     }
+}
+
+fn resolve_dynamic_group(
+    group_id: &str,
+    groups: &HashMap<String, light_programmer::GroupDefinition>,
+    snapshot: &light_engine::EngineSnapshot,
+) -> Option<(
+    Vec<light_core::FixtureId>,
+    Option<light_dynamics::SpatialSelectionMapping>,
+)> {
+    let positions = snapshot
+        .dynamic_stage_positions
+        .iter()
+        .map(|(fixture_id, position)| {
+            (
+                *fixture_id,
+                light_dynamics::Position3d {
+                    x: f64::from(position.x),
+                    y: f64::from(position.y),
+                    z: f64::from(position.z),
+                },
+            )
+        })
+        .collect();
+    light_programmer::resolve_group_spatial(group_id, groups, &positions)
+        .ok()
+        .map(|resolved| (resolved.source_order, resolved.effective_mapping))
 }
 
 fn release_inactive_cue_controllers(

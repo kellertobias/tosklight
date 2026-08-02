@@ -1,6 +1,7 @@
 use crate::{
-    DynamicDefinition, DynamicTargetBinding, ScalarSourceResolver, SpatialPosition, project_phase,
-    validate_definition,
+    DynamicDefinition, DynamicTargetBinding, PhaseOrdering, Position3d, ScalarSourceResolver,
+    SpatialPosition, SpatialSelectionMapping, SpatialTarget, evaluate_dynamic_spatial_mapping,
+    project_phase, project_ranked_phase, validate_definition,
 };
 use light_core::{AttributeKey, FixtureId};
 use serde::{Deserialize, Serialize};
@@ -48,6 +49,7 @@ pub struct DynamicStartRequest {
     pub controller: DynamicController,
     pub target_scope: DynamicTargetScope,
     pub stage_positions: HashMap<FixtureId, SpatialPosition>,
+    pub inherited_spatial_mapping: Option<SpatialSelectionMapping>,
     pub now_millis: u64,
     pub activation_delay_millis: u64,
     pub activation_duration_millis: u64,
@@ -88,6 +90,8 @@ pub enum DynamicRuntimeError {
     EmptyTargets,
     #[error("Dynamic controller values are invalid")]
     InvalidController,
+    #[error("Dynamic spatial mapping is invalid: {0}")]
+    InvalidSpatialMapping(String),
     #[error("Dynamic instance is missing")]
     MissingInstance,
     #[error("Dynamic controller is missing")]
@@ -642,19 +646,66 @@ impl DynamicRuntime {
             return Ok(instance_id);
         }
 
+        let ranked_selection = definition
+            .lanes
+            .iter()
+            .any(|lane| {
+                matches!(
+                    definition.phase_for_lane(lane).ordering,
+                    PhaseOrdering::Selection
+                )
+            })
+            .then(|| {
+                let spatial_targets = request
+                    .target_scope
+                    .ordered_targets
+                    .iter()
+                    .copied()
+                    .map(|fixture_id| SpatialTarget {
+                        fixture_id,
+                        position: request.stage_positions.get(&fixture_id).map(|position| {
+                            Position3d {
+                                x: f64::from(position.x),
+                                y: f64::from(position.y),
+                                z: f64::from(position.z),
+                            }
+                        }),
+                    })
+                    .collect::<Vec<_>>();
+                evaluate_dynamic_spatial_mapping(
+                    request.inherited_spatial_mapping.as_ref(),
+                    &definition.spatial_mapping,
+                    &spatial_targets,
+                    None,
+                )
+                .map_err(|error| DynamicRuntimeError::InvalidSpatialMapping(error.to_string()))
+            })
+            .transpose()?;
+
         let instance_id = Uuid::new_v4();
         let phase_by_lane_target = definition
             .lanes
             .iter()
             .flat_map(|lane| {
-                project_phase(
-                    definition.phase_for_lane(lane),
-                    &request.target_scope.ordered_targets,
-                    &request.stage_positions,
-                    0,
-                )
-                .into_iter()
-                .map(move |phase| ((lane.id, phase.target), phase.degrees))
+                let phase = definition.phase_for_lane(lane);
+                let projected = if matches!(phase.ordering, PhaseOrdering::Selection) {
+                    project_ranked_phase(
+                        phase,
+                        ranked_selection
+                            .as_ref()
+                            .expect("Selection lanes resolve one shared spatial ranking"),
+                    )
+                } else {
+                    project_phase(
+                        phase,
+                        &request.target_scope.ordered_targets,
+                        &request.stage_positions,
+                        0,
+                    )
+                };
+                projected
+                    .into_iter()
+                    .map(move |phase| ((lane.id, phase.target), phase.degrees))
             })
             .collect();
         let mut controllers = HashMap::new();

@@ -179,6 +179,25 @@ fn restore_programmer_dynamics(
         activated_at_millis: u64,
     }
 
+    let groups = snapshot
+        .groups
+        .iter()
+        .map(|group| (group.id.clone(), group.clone()))
+        .collect::<HashMap<_, _>>();
+    let stage_positions = snapshot
+        .dynamic_stage_positions
+        .iter()
+        .map(|(fixture_id, position)| {
+            (
+                *fixture_id,
+                light_dynamics::Position3d {
+                    x: f64::from(position.x),
+                    y: f64::from(position.y),
+                    z: f64::from(position.z),
+                },
+            )
+        })
+        .collect::<HashMap<_, _>>();
     let mut runtime = runtime.lock();
     for programmer in programmers.active_for_sessions() {
         let mut controllers = HashMap::<Uuid, RestoredController>::new();
@@ -210,6 +229,19 @@ fn restore_programmer_dynamics(
             if restored.targets.is_empty() {
                 continue;
             }
+            let live_group = match &restored.definition.target_binding {
+                light_dynamics::DynamicTargetBinding::LiveGroup { group_id } => {
+                    light_programmer::resolve_group_spatial(group_id, &groups, &stage_positions)
+                        .ok()
+                }
+                light_dynamics::DynamicTargetBinding::FrozenTargets { .. }
+                | light_dynamics::DynamicTargetBinding::Targetless => None,
+            };
+            let targets = live_group
+                .as_ref()
+                .map_or(restored.targets, |resolved| resolved.source_order.clone());
+            let inherited_spatial_mapping =
+                live_group.and_then(|resolved| resolved.effective_mapping);
             if let Err(error) = runtime.install_fallback_definition(restored.definition.clone()) {
                 tracing::warn!(
                     %controller_id,
@@ -233,9 +265,10 @@ fn restore_programmer_dynamics(
                     paused: false,
                 },
                 target_scope: light_dynamics::DynamicTargetScope {
-                    ordered_targets: restored.targets,
+                    ordered_targets: targets,
                 },
                 stage_positions: snapshot.dynamic_stage_positions.as_ref().clone(),
+                inherited_spatial_mapping,
                 now_millis: restored.activated_at_millis,
                 activation_delay_millis: 0,
                 activation_duration_millis: 0,

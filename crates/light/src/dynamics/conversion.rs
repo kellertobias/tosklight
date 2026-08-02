@@ -35,6 +35,7 @@ pub(super) fn runtime_error(error: DynamicRuntimeError) -> ActionError {
         | DynamicRuntimeError::MissingController => ActionErrorKind::NotFound,
         DynamicRuntimeError::EmptyTargets
         | DynamicRuntimeError::InvalidController
+        | DynamicRuntimeError::InvalidSpatialMapping(_)
         | DynamicRuntimeError::InvalidDefinition(_)
         | DynamicRuntimeError::InvalidSnapshot(_) => ActionErrorKind::Invalid,
     };
