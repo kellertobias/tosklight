@@ -22,7 +22,7 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
 - [x] Implement the authoritative source, projection, shape, ranking, inheritance, and migration
   domain model with focused tests.
 - [ ] Implement rank-aware programming and Dynamic evaluation plus explicit SET/Playback routing.
-- [ ] Replace the retired Layout and Group context-menu surfaces with the specified Group and
+- [x] Replace the retired Layout and Group context-menu surfaces with the specified Group and
   Dynamics settings workflows.
 - [ ] Update generated contracts, help/manual, human acceptance scenarios, and focused Playwright
   coverage through repository workflows.
@@ -206,6 +206,13 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   value. Recovery tests now corrupt an authoritative field rather than relying on a retired field to
   fail. Eight focused desktop files passed all 68 tests, the root selection bench passed all 10
   tests, modified Playwright scenarios registered successfully, and the staged diff check was clean.
+- Commit `d78c5838` adds a dedicated Dynamic **Projection** tab alongside **Phaser**, using only the
+  saved target binding plus the unsaved draft for authoritative preview. Projection and Shape can
+  inherit or override independently; canonical presets, Grid/Radial/Radar/Random, no-Group labels,
+  provenance, ranks, warnings, incomplete-state disabling, and Random's position-independent
+  explanation are visible. Apply sends one typed update; a 409 reloads authority while retaining
+  the draft without replay. Three focused files passed all eight API/draft/component tests, owned
+  Biome and diff checks passed, and the slice introduced no desktop type errors.
 
 ## Remaining work
 
