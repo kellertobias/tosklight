@@ -1,6 +1,6 @@
 use super::*;
 use light_core::{AttributeKey, FixtureId};
-use std::{cell::Cell, collections::HashMap};
+use std::{cell::Cell, collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
 mod runtime_control;
@@ -241,7 +241,69 @@ fn explicit_projection_and_random_shape_replacements_round_trip() {
 }
 
 #[test]
-fn legacy_per_lane_phase_ordering_json_decodes_and_round_trips_unchanged() {
+fn legacy_uniform_phase_orderings_infer_definition_local_spatial_mappings() {
+    let cases = [
+        PhaseOrdering::GridLinear {
+            angle_degrees: 37.5,
+        },
+        PhaseOrdering::RadialOut {
+            center_x: 0.25,
+            center_z: 0.75,
+        },
+        PhaseOrdering::RadialIn {
+            center_x: -1.25,
+            center_z: 3.5,
+        },
+        PhaseOrdering::Axial {
+            center_x: 2.0,
+            center_z: -4.0,
+        },
+        PhaseOrdering::RandomEachLoop { seed: 42 },
+    ];
+
+    for ordering in cases {
+        let mut legacy = definition(lane());
+        legacy.phase.ordering = ordering.clone();
+        let stored = serde_json::to_value(&legacy).unwrap();
+        assert!(stored.get("spatial_mapping").is_none());
+
+        let restored: DynamicDefinition = serde_json::from_value(stored).unwrap();
+        assert_eq!(restored.phase.ordering, ordering);
+        assert!(
+            !restored.spatial_mapping.is_inherit(),
+            "legacy ordering must infer a local mapping"
+        );
+        assert!(
+            serde_json::to_value(restored).unwrap()["spatial_mapping"].is_object(),
+            "the first typed write must persist the inferred mapping"
+        );
+    }
+}
+
+#[test]
+fn explicit_spatial_mapping_is_never_replaced_by_legacy_ordering_inference() {
+    let mut legacy = definition(lane());
+    legacy.phase.ordering = PhaseOrdering::GridLinear {
+        angle_degrees: 37.5,
+    };
+    let mut stored = serde_json::to_value(legacy).unwrap();
+    stored["spatial_mapping"] = serde_json::json!({
+        "projection": {"type": "inherit"},
+        "shape": {"type": "replace", "value": {"type": "random", "seed": 99}}
+    });
+
+    let restored: DynamicDefinition = serde_json::from_value(stored).unwrap();
+    assert_eq!(
+        restored.spatial_mapping,
+        DynamicSpatialMappingOverride {
+            projection: OverrideStage::Inherit,
+            shape: OverrideStage::Replace(DynamicSelectionShape::Random { seed: 99 }),
+        }
+    );
+}
+
+#[test]
+fn legacy_lane_consistent_phase_ordering_infers_mapping_without_rewriting_ordering() {
     let mut configured_lane = lane();
     configured_lane.phase = Some(PhaseDistribution {
         ordering: PhaseOrdering::Axial {
@@ -269,7 +331,72 @@ fn legacy_per_lane_phase_ordering_json_decodes_and_round_trips_unchanged() {
         }
     );
     assert_eq!(restored.phase_spread_mode, DynamicPhaseSpreadMode::PerLane);
+    assert!(matches!(
+        restored.spatial_mapping.shape,
+        OverrideStage::Replace(DynamicSelectionShape::Radar { .. })
+    ));
+    let migrated = serde_json::to_value(restored).unwrap();
+    assert_eq!(migrated["lanes"], stored["lanes"]);
+    assert!(migrated["spatial_mapping"].is_object());
+}
+
+#[test]
+fn legacy_different_per_lane_orderings_remain_on_the_compatibility_runtime_path() {
+    let mut axial = lane();
+    axial.phase = Some(PhaseDistribution {
+        ordering: PhaseOrdering::Axial {
+            center_x: 0.25,
+            center_z: 0.75,
+        },
+        ..definition(lane()).phase
+    });
+    let mut radial = lane();
+    radial.phase = Some(PhaseDistribution {
+        ordering: PhaseOrdering::RadialOut {
+            center_x: 0.5,
+            center_z: 0.5,
+        },
+        ..definition(lane()).phase
+    });
+    let mut legacy = definition(axial);
+    legacy.lanes.push(radial);
+    legacy.phase_spread_mode = DynamicPhaseSpreadMode::PerLane;
+    let stored = serde_json::to_value(legacy).unwrap();
+
+    let restored: DynamicDefinition = serde_json::from_value(stored.clone()).unwrap();
+    assert_eq!(
+        restored.spatial_mapping,
+        DynamicSpatialMappingOverride::default()
+    );
     assert_eq!(serde_json::to_value(restored).unwrap(), stored);
+}
+
+#[test]
+fn embedded_fallback_uses_the_same_legacy_phase_migration_boundary() {
+    let mut legacy = definition(lane());
+    legacy.phase.ordering = PhaseOrdering::RandomEachLoop { seed: 0x5eed };
+    let reference = DynamicReference {
+        dynamic_id: None,
+        last_known_pool_number: legacy.pool_number,
+        embedded_fallback: DynamicDefinitionSnapshot {
+            definition: Arc::new(legacy),
+        },
+    };
+    let mut stored = serde_json::to_value(reference).unwrap();
+    stored["embedded_fallback"]["definition"]
+        .as_object_mut()
+        .unwrap()
+        .remove("spatial_mapping");
+
+    let restored: DynamicReference = serde_json::from_value(stored).unwrap();
+    assert_eq!(
+        restored.embedded_fallback.definition.phase.ordering,
+        PhaseOrdering::RandomEachLoop { seed: 0x5eed }
+    );
+    assert!(matches!(
+        restored.embedded_fallback.definition.spatial_mapping.shape,
+        OverrideStage::Replace(DynamicSelectionShape::Random { seed: 0x5eed })
+    ));
 }
 
 #[test]
@@ -286,6 +413,10 @@ fn per_lane_phase_configuration_round_trips_and_is_validated() {
     });
     let mut configured = definition(configured_lane);
     configured.phase_spread_mode = DynamicPhaseSpreadMode::PerLane;
+    configured.spatial_mapping = DynamicSpatialMappingOverride {
+        projection: OverrideStage::Inherit,
+        shape: OverrideStage::Replace(DynamicSelectionShape::Random { seed: 42 }),
+    };
 
     let restored: DynamicDefinition =
         serde_json::from_value(serde_json::to_value(&configured).unwrap()).unwrap();
@@ -778,6 +909,158 @@ fn runtime_selection_phase_uses_inherited_spatial_ranks_once_for_all_parallel_ta
     assert_eq!(phases[&targets[0]], 0.0);
     assert_eq!(phases[&targets[1]], 0.0);
     assert_eq!(phases[&targets[2]], 180.0);
+}
+
+#[test]
+fn runtime_reconciles_live_targets_positions_and_mapping_without_restarting() {
+    let targets = (1..=3)
+        .map(|value| FixtureId(Uuid::from_u128(value)))
+        .collect::<Vec<_>>();
+    let dynamic = definition(lane());
+    let definition_id = dynamic.id;
+    let lane_id = dynamic.lanes[0].id;
+    let mapping = SpatialSelectionMapping {
+        projection: SpatialProjection::from_preset(ProjectionPreset::Top, Position3d::default()),
+        shape: SpatialSelectionShape::Grid {
+            angle_degrees: 0.0,
+            direction: RankDirection::Ascending,
+        },
+    };
+    let mut runtime = DynamicRuntime::default();
+    runtime.install_definitions([dynamic]).unwrap();
+    let controller = controller(42, 1, false);
+    let controller_id = controller.id;
+    let instance = runtime
+        .start(DynamicStartRequest {
+            definition_id,
+            controller,
+            target_scope: DynamicTargetScope {
+                ordered_targets: targets[..2].to_vec(),
+            },
+            stage_positions: HashMap::from([
+                (
+                    targets[0],
+                    SpatialPosition {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ),
+                (
+                    targets[1],
+                    SpatialPosition {
+                        x: 10.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ),
+            ]),
+            inherited_spatial_mapping: Some(mapping.clone()),
+            now_millis: 123,
+            activation_delay_millis: 0,
+            activation_duration_millis: 0,
+            activation_policy_override: None,
+            reuse_matching_targetless: false,
+        })
+        .unwrap();
+
+    let changed = runtime
+        .reconcile_instance_targets(
+            instance,
+            DynamicTargetScope {
+                ordered_targets: vec![targets[1], targets[2]],
+            },
+            &HashMap::from([
+                (
+                    targets[1],
+                    SpatialPosition {
+                        x: 10.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ),
+                (
+                    targets[2],
+                    SpatialPosition {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ),
+            ]),
+            Some(&mapping),
+        )
+        .unwrap();
+    assert!(changed);
+
+    let snapshot = runtime.snapshot();
+    let live = snapshot
+        .instances
+        .iter()
+        .find(|candidate| candidate.id == instance)
+        .unwrap();
+    assert_eq!(live.started_at_millis, 123);
+    assert_eq!(live.targets, vec![targets[1], targets[2]]);
+    assert_eq!(live.controllers[0].id, controller_id);
+    let phases = live
+        .phase_by_lane_target
+        .iter()
+        .filter(|(candidate_lane, _, _)| *candidate_lane == lane_id)
+        .map(|(_, target, phase)| (*target, *phase))
+        .collect::<HashMap<_, _>>();
+    assert!(!phases.contains_key(&targets[0]));
+    assert_eq!(phases[&targets[2]], 0.0);
+    assert_eq!(phases[&targets[1]], 180.0);
+}
+
+#[test]
+fn runtime_reconciliation_rejects_invalid_mapping_atomically() {
+    let targets = [FixtureId::new(), FixtureId::new()];
+    let mut dynamic = definition(lane());
+    dynamic.spatial_mapping.shape = OverrideStage::Replace(DynamicSelectionShape::Grid {
+        angle_degrees: 0.0,
+        direction: RankDirection::Ascending,
+    });
+    let definition_id = dynamic.id;
+    let inherited = SpatialSelectionMapping {
+        projection: SpatialProjection::from_preset(ProjectionPreset::Top, Position3d::default()),
+        shape: SpatialSelectionShape::Grid {
+            angle_degrees: 0.0,
+            direction: RankDirection::Ascending,
+        },
+    };
+    let mut runtime = DynamicRuntime::default();
+    runtime.install_definitions([dynamic]).unwrap();
+    let instance = runtime
+        .start(DynamicStartRequest {
+            definition_id,
+            controller: controller(0, 1, false),
+            target_scope: DynamicTargetScope {
+                ordered_targets: targets.to_vec(),
+            },
+            stage_positions: HashMap::new(),
+            inherited_spatial_mapping: Some(inherited),
+            now_millis: 0,
+            activation_delay_millis: 0,
+            activation_duration_millis: 0,
+            activation_policy_override: None,
+            reuse_matching_targetless: false,
+        })
+        .unwrap();
+    let before = runtime.snapshot();
+
+    assert!(matches!(
+        runtime.reconcile_instance_targets(
+            instance,
+            DynamicTargetScope {
+                ordered_targets: targets.into_iter().rev().collect(),
+            },
+            &HashMap::new(),
+            None,
+        ),
+        Err(DynamicRuntimeError::InvalidSpatialMapping(_))
+    ));
+    assert_eq!(runtime.snapshot(), before);
 }
 
 #[test]

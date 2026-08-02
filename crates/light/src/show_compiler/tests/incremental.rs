@@ -6,6 +6,7 @@ use light_core::CueListId;
 use light_playback::{Cue, CueList, CueListMode, IntensityPriorityMode, RestartMode, WrapMode};
 use serde_json::{Value, json};
 use std::sync::Arc;
+use uuid::Uuid;
 
 fn normalized_document() -> (light_show::ShowStore, light_show::PortableShowDocument) {
     let cue = CueList {
@@ -148,4 +149,62 @@ fn touched_legacy_object_is_normalized_without_sweeping_unrelated_objects() {
     assert_eq!(migrated["intensity_priority_mode"], "htp");
     assert!(Arc::ptr_eq(&next.groups, &previous.groups));
     assert!(Arc::ptr_eq(&next.fixtures, &previous.fixtures));
+}
+
+#[test]
+fn touched_legacy_dynamic_writes_through_its_inferred_spatial_mapping() {
+    let dynamic = light_dynamics::DynamicDefinition {
+        id: Uuid::new_v4(),
+        pool_number: 7,
+        revision: 1,
+        name: "Touched legacy Dynamic".into(),
+        color: None,
+        icon: None,
+        target_binding: light_dynamics::DynamicTargetBinding::Targetless,
+        lanes: Vec::new(),
+        random_groups: Vec::new(),
+        phase_spread_mode: light_dynamics::DynamicPhaseSpreadMode::Uniform,
+        spatial_mapping: light_dynamics::DynamicSpatialMappingOverride::default(),
+        phase: light_dynamics::PhaseDistribution {
+            ordering: light_dynamics::PhaseOrdering::Selection,
+            offset_degrees: 0.0,
+            span_degrees: 360.0,
+            block_size: 1,
+            repeats: 1,
+            wings: false,
+            anchors_degrees: Vec::new(),
+        },
+        speed: light_dynamics::DynamicSpeed::Fixed {
+            duration_millis: 1_000,
+        },
+        overall_speed_multiplier: light_dynamics::Rational::ONE,
+        run_mode: light_dynamics::DynamicRunMode::Loop,
+        default_activation: light_dynamics::ActivationPolicy::StartNow,
+        activation_boundary: light_dynamics::ActivationBoundary::Beat,
+    };
+    let (_, document) =
+        document_with_objects(&[("dynamic", "7", serde_json::to_value(&dynamic).unwrap())]);
+    let previous = prepare_show_candidate(&document, document.transaction())
+        .unwrap()
+        .into_parts()
+        .1;
+    let mut legacy = serde_json::to_value(dynamic).unwrap();
+    legacy["phase"]["ordering"] = json!({"type": "grid_linear", "angle_degrees": 30.0});
+    legacy.as_object_mut().unwrap().remove("spatial_mapping");
+    legacy["future_dynamic"] = json!({"preserved": true});
+    let mut transaction = document.transaction();
+    transaction.put("dynamic", "7", legacy);
+
+    let prepared =
+        prepare_normalized_show_candidate_incremental(&document, transaction, &previous).unwrap();
+    let (transaction, _) = prepared.into_parts();
+    let candidate = document.candidate(&transaction).unwrap();
+    let migrated = candidate.object("dynamic", "7").unwrap().body();
+
+    assert_eq!(
+        migrated["spatial_mapping"]["shape"]["value"]["type"],
+        "grid"
+    );
+    assert_eq!(migrated["phase"]["ordering"]["type"], "grid_linear");
+    assert_eq!(migrated["future_dynamic"], json!({"preserved": true}));
 }

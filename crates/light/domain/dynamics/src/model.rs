@@ -3,9 +3,12 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::DynamicSpatialMappingOverride;
+use crate::{
+    DynamicSelectionShape, DynamicSpatialMappingOverride, OverrideStage, Position3d,
+    ProjectionPreset, RadarSweep, RadialDirection, RankDirection, SpatialProjection,
+};
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DynamicDefinition {
     pub id: Uuid,
     pub pool_number: u16,
@@ -35,6 +38,136 @@ pub struct DynamicDefinition {
     pub default_activation: ActivationPolicy,
     #[serde(default)]
     pub activation_boundary: ActivationBoundary,
+}
+
+#[derive(Deserialize)]
+struct StoredDynamicDefinition {
+    id: Uuid,
+    pool_number: u16,
+    revision: u64,
+    name: String,
+    #[serde(default)]
+    color: Option<String>,
+    #[serde(default)]
+    icon: Option<String>,
+    target_binding: DynamicTargetBinding,
+    lanes: Vec<DynamicLane>,
+    #[serde(default)]
+    random_groups: Vec<DynamicRandomGroup>,
+    #[serde(default, rename = "phase_mode", alias = "phase_spread_mode")]
+    phase_spread_mode: DynamicPhaseSpreadMode,
+    #[serde(default)]
+    spatial_mapping: Option<DynamicSpatialMappingOverride>,
+    phase: PhaseDistribution,
+    speed: DynamicSpeed,
+    #[serde(default)]
+    overall_speed_multiplier: Rational,
+    #[serde(default)]
+    run_mode: DynamicRunMode,
+    default_activation: ActivationPolicy,
+    #[serde(default)]
+    activation_boundary: ActivationBoundary,
+}
+
+impl<'de> Deserialize<'de> for DynamicDefinition {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let stored = StoredDynamicDefinition::deserialize(deserializer)?;
+        let spatial_mapping = stored.spatial_mapping.unwrap_or_else(|| {
+            infer_legacy_spatial_mapping(stored.phase_spread_mode, &stored.phase, &stored.lanes)
+        });
+        Ok(Self {
+            id: stored.id,
+            pool_number: stored.pool_number,
+            revision: stored.revision,
+            name: stored.name,
+            color: stored.color,
+            icon: stored.icon,
+            target_binding: stored.target_binding,
+            lanes: stored.lanes,
+            random_groups: stored.random_groups,
+            phase_spread_mode: stored.phase_spread_mode,
+            spatial_mapping,
+            phase: stored.phase,
+            speed: stored.speed,
+            overall_speed_multiplier: stored.overall_speed_multiplier,
+            run_mode: stored.run_mode,
+            default_activation: stored.default_activation,
+            activation_boundary: stored.activation_boundary,
+        })
+    }
+}
+
+fn infer_legacy_spatial_mapping(
+    phase_spread_mode: DynamicPhaseSpreadMode,
+    phase: &PhaseDistribution,
+    lanes: &[DynamicLane],
+) -> DynamicSpatialMappingOverride {
+    let ordering = match phase_spread_mode {
+        DynamicPhaseSpreadMode::Uniform => Some(&phase.ordering),
+        DynamicPhaseSpreadMode::PerLane => {
+            let mut orderings = lanes
+                .iter()
+                .map(|lane| &lane.phase.as_ref().unwrap_or(phase).ordering);
+            let first = orderings.next().unwrap_or(&phase.ordering);
+            orderings.all(|ordering| ordering == first).then_some(first)
+        }
+    };
+    ordering.map_or_else(
+        DynamicSpatialMappingOverride::default,
+        legacy_spatial_mapping,
+    )
+}
+
+fn legacy_spatial_mapping(ordering: &PhaseOrdering) -> DynamicSpatialMappingOverride {
+    let front = || {
+        OverrideStage::Replace(SpatialProjection::from_preset(
+            ProjectionPreset::Front,
+            Position3d::default(),
+        ))
+    };
+    let (projection, shape) = match *ordering {
+        PhaseOrdering::Selection => return DynamicSpatialMappingOverride::default(),
+        PhaseOrdering::GridLinear { angle_degrees } => (
+            front(),
+            OverrideStage::Replace(DynamicSelectionShape::Grid {
+                angle_degrees: f64::from(angle_degrees),
+                direction: RankDirection::Ascending,
+            }),
+        ),
+        PhaseOrdering::RadialOut { center_x, center_z } => (
+            front(),
+            OverrideStage::Replace(DynamicSelectionShape::Radial {
+                center_u: f64::from(center_x),
+                center_v: f64::from(center_z),
+                direction: RadialDirection::Outward,
+            }),
+        ),
+        PhaseOrdering::RadialIn { center_x, center_z } => (
+            front(),
+            OverrideStage::Replace(DynamicSelectionShape::Radial {
+                center_u: f64::from(center_x),
+                center_v: f64::from(center_z),
+                direction: RadialDirection::Inward,
+            }),
+        ),
+        PhaseOrdering::Axial { center_x, center_z } => (
+            front(),
+            OverrideStage::Replace(DynamicSelectionShape::Radar {
+                center_u: f64::from(center_x),
+                center_v: f64::from(center_z),
+                start_angle_degrees: -180.0,
+                sweep: RadarSweep::CounterClockwise,
+            }),
+        ),
+        PhaseOrdering::RandomEachLoop { seed } => (
+            OverrideStage::Inherit,
+            OverrideStage::Replace(DynamicSelectionShape::Random { seed }),
+        ),
+    };
+    DynamicSpatialMappingOverride { projection, shape }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

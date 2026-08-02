@@ -55,7 +55,35 @@ pub(super) fn reconcile_dynamic_playbacks(
             .cloned()
             .unwrap_or_else(|| (*assignment.dynamic.embedded_fallback.definition).clone());
         let speed_multiplier = effective_dynamic_playback_speed(&definition, &active);
+        let (targets, inherited_spatial_mapping) = match &definition.target_binding {
+            light_dynamics::DynamicTargetBinding::LiveGroup { group_id } => {
+                resolve_dynamic_group(group_id, &groups, snapshot).unwrap_or_default()
+            }
+            light_dynamics::DynamicTargetBinding::FrozenTargets { targets } => {
+                (targets.clone(), None)
+            }
+            light_dynamics::DynamicTargetBinding::Targetless => match &assignment.target_scope {
+                Some(light_playback::DynamicPlaybackTargetScope::LiveGroup { group_id }) => {
+                    let targets = resolve_dynamic_group(group_id, &groups, snapshot)
+                        .map(|(targets, _)| targets)
+                        .unwrap_or_default();
+                    (targets, None)
+                }
+                Some(light_playback::DynamicPlaybackTargetScope::FrozenTargets { targets }) => {
+                    (targets.clone(), None)
+                }
+                None => (Vec::new(), None),
+            },
+        };
         if let Some((instance_id, _)) = dynamics.controller(controller_id) {
+            let _ = dynamics.reconcile_instance_targets(
+                instance_id,
+                light_dynamics::DynamicTargetScope {
+                    ordered_targets: targets,
+                },
+                snapshot.dynamic_stage_positions.as_ref(),
+                inherited_spatial_mapping.as_ref(),
+            );
             let _ = dynamics.update_controller(
                 controller_id,
                 Some(active.size),
@@ -90,26 +118,6 @@ pub(super) fn reconcile_dynamic_playbacks(
         {
             continue;
         }
-        let (targets, inherited_spatial_mapping) = match &definition.target_binding {
-            light_dynamics::DynamicTargetBinding::LiveGroup { group_id } => {
-                resolve_dynamic_group(group_id, &groups, snapshot).unwrap_or_default()
-            }
-            light_dynamics::DynamicTargetBinding::FrozenTargets { targets } => {
-                (targets.clone(), None)
-            }
-            light_dynamics::DynamicTargetBinding::Targetless => match &assignment.target_scope {
-                Some(light_playback::DynamicPlaybackTargetScope::LiveGroup { group_id }) => {
-                    let targets = resolve_dynamic_group(group_id, &groups, snapshot)
-                        .map(|(targets, _)| targets)
-                        .unwrap_or_default();
-                    (targets, None)
-                }
-                Some(light_playback::DynamicPlaybackTargetScope::FrozenTargets { targets }) => {
-                    (targets.clone(), None)
-                }
-                None => (Vec::new(), None),
-            },
-        };
         let activated_at_millis =
             u64::try_from(active.activated_at.timestamp_millis()).unwrap_or_default();
         if dynamics
@@ -315,7 +323,30 @@ pub(super) fn reconcile_programmer_dynamics(
         .map(|group| (group.id.clone(), group.clone()))
         .collect::<HashMap<_, _>>();
     for (controller_id, desired) in desired {
-        if dynamics.controller(controller_id).is_some() {
+        let definition = desired
+            .reference
+            .dynamic_id
+            .and_then(|id| definitions.get(&id).copied())
+            .cloned()
+            .unwrap_or_else(|| (*desired.reference.embedded_fallback.definition).clone());
+        let (targets, inherited_spatial_mapping) = match &definition.target_binding {
+            light_dynamics::DynamicTargetBinding::LiveGroup { group_id } => {
+                resolve_dynamic_group(group_id, &groups, snapshot).unwrap_or_default()
+            }
+            light_dynamics::DynamicTargetBinding::FrozenTargets { targets } => {
+                (targets.clone(), None)
+            }
+            light_dynamics::DynamicTargetBinding::Targetless => (desired.targets, None),
+        };
+        if let Some((instance_id, _)) = dynamics.controller(controller_id) {
+            let _ = dynamics.reconcile_instance_targets(
+                instance_id,
+                light_dynamics::DynamicTargetScope {
+                    ordered_targets: targets,
+                },
+                snapshot.dynamic_stage_positions.as_ref(),
+                inherited_spatial_mapping.as_ref(),
+            );
             let _ = dynamics.update_controller(
                 controller_id,
                 Some(desired.overrides.size),
@@ -324,12 +355,6 @@ pub(super) fn reconcile_programmer_dynamics(
             );
             continue;
         }
-        let definition = desired
-            .reference
-            .dynamic_id
-            .and_then(|id| definitions.get(&id).copied())
-            .cloned()
-            .unwrap_or_else(|| (*desired.reference.embedded_fallback.definition).clone());
         if !definitions.contains_key(&definition.id)
             && dynamics
                 .install_fallback_definition(definition.clone())
@@ -337,13 +362,6 @@ pub(super) fn reconcile_programmer_dynamics(
         {
             continue;
         }
-        let inherited_spatial_mapping = match &definition.target_binding {
-            light_dynamics::DynamicTargetBinding::LiveGroup { group_id } => {
-                resolve_dynamic_group(group_id, &groups, snapshot).and_then(|(_, mapping)| mapping)
-            }
-            light_dynamics::DynamicTargetBinding::FrozenTargets { .. }
-            | light_dynamics::DynamicTargetBinding::Targetless => None,
-        };
         let _ = dynamics.start(light_dynamics::DynamicStartRequest {
             definition_id: definition.id,
             controller: light_dynamics::DynamicController {
@@ -359,7 +377,7 @@ pub(super) fn reconcile_programmer_dynamics(
                 paused: false,
             },
             target_scope: light_dynamics::DynamicTargetScope {
-                ordered_targets: desired.targets,
+                ordered_targets: targets,
             },
             stage_positions: (*snapshot.dynamic_stage_positions).clone(),
             inherited_spatial_mapping,
@@ -459,28 +477,12 @@ pub(super) fn reconcile_cue_dynamics(
         .map(|group| (group.id.clone(), group.clone()))
         .collect::<HashMap<_, _>>();
     for desired in desired {
-        if dynamics.controller(desired.controller_id).is_some() {
-            let _ = dynamics.update_controller(
-                desired.controller_id,
-                Some(desired.overrides.size),
-                Some(desired.overrides.speed_multiplier.factor() as f32),
-                Some(desired.overrides.phase_offset_degrees),
-            );
-            continue;
-        }
         let definition = desired
             .reference
             .dynamic_id
             .and_then(|id| definitions.get(&id).copied())
             .cloned()
             .unwrap_or_else(|| (*desired.reference.embedded_fallback.definition).clone());
-        if !definitions.contains_key(&definition.id)
-            && dynamics
-                .install_fallback_definition(definition.clone())
-                .is_err()
-        {
-            continue;
-        }
         let (targets, inherited_spatial_mapping) = match &definition.target_binding {
             light_dynamics::DynamicTargetBinding::LiveGroup { group_id } => {
                 resolve_dynamic_group(group_id, &groups, snapshot).unwrap_or_default()
@@ -490,6 +492,30 @@ pub(super) fn reconcile_cue_dynamics(
             }
             light_dynamics::DynamicTargetBinding::Targetless => (desired.targets, None),
         };
+        if let Some((instance_id, _)) = dynamics.controller(desired.controller_id) {
+            let _ = dynamics.reconcile_instance_targets(
+                instance_id,
+                light_dynamics::DynamicTargetScope {
+                    ordered_targets: targets,
+                },
+                snapshot.dynamic_stage_positions.as_ref(),
+                inherited_spatial_mapping.as_ref(),
+            );
+            let _ = dynamics.update_controller(
+                desired.controller_id,
+                Some(desired.overrides.size),
+                Some(desired.overrides.speed_multiplier.factor() as f32),
+                Some(desired.overrides.phase_offset_degrees),
+            );
+            continue;
+        }
+        if !definitions.contains_key(&definition.id)
+            && dynamics
+                .install_fallback_definition(definition.clone())
+                .is_err()
+        {
+            continue;
+        }
         let _ = dynamics.start(light_dynamics::DynamicStartRequest {
             definition_id: definition.id,
             controller: light_dynamics::DynamicController {
@@ -579,4 +605,170 @@ fn cue_dynamic_controller_id(cue_list_id: light_core::CueListId, instance_link: 
             ^ cue_list_id.0.as_u128().rotate_left(1)
             ^ 0x4355_452d_4459_4e41_4d49_432d_4354_524c,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use light_dynamics::{
+        DynamicAddressValue, DynamicDefinition, DynamicDefinitionSnapshot,
+        DynamicInstanceOverrides, DynamicReference, DynamicSemanticValue, DynamicValueTiming,
+        Position3d, ProjectionPreset, RankDirection, Rational, SpatialPosition, SpatialProjection,
+        SpatialSelectionMapping, SpatialSelectionShape,
+    };
+    use light_programmer::{GroupDefinition, GroupFixtureSource};
+    use std::sync::Arc;
+
+    #[test]
+    fn programmer_live_group_reconciliation_uses_current_membership_and_positions() {
+        let fixtures = [FixtureId::new(), FixtureId::new(), FixtureId::new()];
+        let dynamic = live_group_dynamic();
+        let instance_link = Uuid::new_v4();
+        let programmer_id = Uuid::new_v4();
+        let values = fixtures[..2]
+            .iter()
+            .copied()
+            .map(|fixture_id| {
+                (
+                    programmer_id,
+                    1,
+                    DynamicAddressValue {
+                        fixture_id,
+                        attribute: AttributeKey::intensity(),
+                        value: DynamicSemanticValue::DynamicOn {
+                            instance_link,
+                            dynamic: DynamicReference {
+                                dynamic_id: Some(dynamic.id),
+                                last_known_pool_number: dynamic.pool_number,
+                                embedded_fallback: DynamicDefinitionSnapshot {
+                                    definition: Arc::new(dynamic.clone()),
+                                },
+                            },
+                            lane_id: dynamic.lanes[0].id,
+                            overrides: DynamicInstanceOverrides {
+                                size: 1.0,
+                                speed_multiplier: Rational::ONE,
+                                phase_offset_degrees: 0.0,
+                            },
+                            timing: DynamicValueTiming::default(),
+                        },
+                        programmer_order: 1,
+                        changed_at_millis: 10,
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut snapshot = light_engine::EngineSnapshot {
+            dynamics: Arc::new(vec![dynamic.clone()]),
+            groups: Arc::new(vec![group(&fixtures[..2])]),
+            dynamic_stage_positions: Arc::new(positions([(fixtures[0], 0.0), (fixtures[1], 10.0)])),
+            ..Default::default()
+        };
+        let mut runtime = light_dynamics::DynamicRuntime::default();
+        runtime.install_definitions([dynamic]).unwrap();
+
+        reconcile_programmer_dynamics(&mut runtime, 10, &snapshot, &values, &[]);
+        let first = runtime.snapshot();
+        assert_eq!(first.instances.len(), 1);
+        let instance_id = first.instances[0].id;
+        assert_eq!(first.instances[0].targets, fixtures[..2]);
+
+        snapshot.groups = Arc::new(vec![group(&fixtures[1..])]);
+        snapshot.dynamic_stage_positions =
+            Arc::new(positions([(fixtures[1], 10.0), (fixtures[2], 0.0)]));
+        reconcile_programmer_dynamics(&mut runtime, 20, &snapshot, &values, &[]);
+
+        let reconciled = runtime.snapshot();
+        assert_eq!(reconciled.instances.len(), 1);
+        assert_eq!(reconciled.instances[0].id, instance_id);
+        assert_eq!(reconciled.instances[0].started_at_millis, 10);
+        assert_eq!(
+            reconciled.instances[0].targets,
+            vec![fixtures[1], fixtures[2]]
+        );
+        let phases = reconciled.instances[0]
+            .phase_by_lane_target
+            .iter()
+            .map(|(_, target, phase)| (*target, *phase))
+            .collect::<HashMap<_, _>>();
+        assert_eq!(phases[&fixtures[2]], 0.0);
+        assert_eq!(phases[&fixtures[1]], 180.0);
+    }
+
+    fn group(fixtures: &[FixtureId]) -> GroupDefinition {
+        GroupDefinition {
+            id: "front".into(),
+            name: "Front".into(),
+            source: Some(GroupFixtureSource::Explicit {
+                fixture_ids: fixtures.to_vec(),
+            }),
+            mapping: Some(SpatialSelectionMapping {
+                projection: SpatialProjection::from_preset(
+                    ProjectionPreset::Top,
+                    Position3d::default(),
+                ),
+                shape: SpatialSelectionShape::Grid {
+                    angle_degrees: 0.0,
+                    direction: RankDirection::Ascending,
+                },
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn positions<const N: usize>(
+        values: [(FixtureId, f32); N],
+    ) -> HashMap<FixtureId, SpatialPosition> {
+        values
+            .into_iter()
+            .map(|(fixture_id, x)| (fixture_id, SpatialPosition { x, y: 0.0, z: 0.0 }))
+            .collect()
+    }
+
+    fn live_group_dynamic() -> DynamicDefinition {
+        serde_json::from_value(serde_json::json!({
+            "id": Uuid::new_v4(),
+            "pool_number": 7,
+            "revision": 1,
+            "name": "Live Group wave",
+            "color": null,
+            "icon": null,
+            "target_binding": {"type": "live_group", "group_id": "front"},
+            "lanes": [{
+                "id": Uuid::new_v4(),
+                "attribute": "intensity",
+                "mode": "keyframes",
+                "keyframes": {
+                    "points": [
+                        {"position": 0.0, "source": {"type": "value", "value": 0.0}, "interpolation": "linear"},
+                        {"position": 0.5, "source": {"type": "value", "value": 1.0}, "interpolation": "linear"}
+                    ],
+                    "size": 1.0
+                },
+                "max_min": {
+                    "minimum": {"type": "value", "value": 0.0},
+                    "maximum": {"type": "value", "value": 1.0},
+                    "function": "sinus", "size": 1.0,
+                    "pwm": {"attack": 0.0, "on": 0.5, "decay": 0.0, "off": 0.5,
+                        "attack_interpolation": "linear", "decay_interpolation": "linear"}
+                },
+                "middle_amplitude": {
+                    "middle": {"type": "current"}, "amplitude": 0.5,
+                    "function": "sinus", "size": 1.0,
+                    "pwm": {"attack": 0.0, "on": 0.5, "decay": 0.0, "off": 0.5,
+                        "attack_interpolation": "linear", "decay_interpolation": "linear"}
+                },
+                "speed_multiplier": {"numerator": 1, "denominator": 1},
+                "width": 1.0,
+                "random_group_id": null
+            }],
+            "random_groups": [],
+            "phase": {"ordering": {"type": "selection"}, "offset_degrees": 0.0,
+                "span_degrees": 360.0, "block_size": 1, "repeats": 1,
+                "wings": false, "anchors_degrees": []},
+            "speed": {"type": "fixed", "duration_millis": 1000},
+            "default_activation": "start_now"
+        }))
+        .unwrap()
+    }
 }

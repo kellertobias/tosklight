@@ -59,6 +59,7 @@ fn migrate_dynamic_fallbacks(
         serde_json::to_value(definition).map_err(|error| invalid_object(object, error))?;
     let mut migrated = object.body().clone();
     copy_dynamic_fallbacks(&canonical, &mut migrated);
+    migrate_embedded_dynamic_phase_orderings(&mut migrated);
     Ok((migrated != *object.body()).then(|| ObjectUpdate::from_object(object, migrated)))
 }
 
@@ -114,8 +115,9 @@ fn copy_scalar_fallback(canonical: &Value, migrated: &mut Value, path: &str) {
 pub(super) fn migrate(
     object: PortableShowCandidateObject<'_>,
 ) -> Result<Option<ObjectUpdate>, ActionError> {
-    let migrated = match object.key().kind() {
+    let mut migrated = match object.key().kind() {
         "cue_list" => migrate_cue_list(object)?,
+        "dynamic" => object.body().clone(),
         "group" => migrate_group(object)?,
         "playback" => migrate_playback(object)?,
         "playback_page" => migrate_playback_page(object)?,
@@ -124,7 +126,60 @@ pub(super) fn migrate(
         "stage_layout" => migrate_stage_layout(object)?,
         _ => return Ok(None),
     };
+    migrate_embedded_dynamic_phase_orderings(&mut migrated);
     Ok((migrated != *object.body()).then(|| ObjectUpdate::from_object(object, migrated)))
+}
+
+/// Writes inferred definition-wide mappings into every typed Dynamic definition nested in a
+/// portable object while leaving unknown sibling fields and legacy phase ordering untouched.
+///
+/// The `DynamicDefinition` deserializer is the compatibility oracle used by runtime snapshots,
+/// Programmer/Preload state, and session undo/redo state. Portable objects need this additional
+/// lossless write-through because their raw JSON bodies deliberately preserve unknown fields.
+fn migrate_embedded_dynamic_phase_orderings(value: &mut Value) {
+    if looks_like_dynamic_definition(value)
+        && value.get("spatial_mapping").is_none()
+        && let Ok(definition) =
+            serde_json::from_value::<light_dynamics::DynamicDefinition>(value.clone())
+        && let Ok(canonical) = serde_json::to_value(definition)
+        && let Some(mapping) = canonical.get("spatial_mapping")
+        && let Some(body) = value.as_object_mut()
+    {
+        body.insert("spatial_mapping".into(), mapping.clone());
+    }
+
+    match value {
+        Value::Array(values) => {
+            for value in values {
+                migrate_embedded_dynamic_phase_orderings(value);
+            }
+        }
+        Value::Object(fields) => {
+            for value in fields.values_mut() {
+                migrate_embedded_dynamic_phase_orderings(value);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
+}
+
+fn looks_like_dynamic_definition(value: &Value) -> bool {
+    let Some(body) = value.as_object() else {
+        return false;
+    };
+    [
+        "id",
+        "pool_number",
+        "revision",
+        "name",
+        "target_binding",
+        "lanes",
+        "phase",
+        "speed",
+        "default_activation",
+    ]
+    .iter()
+    .all(|field| body.contains_key(*field))
 }
 
 fn migrate_stage_layout(object: PortableShowCandidateObject<'_>) -> Result<Value, ActionError> {

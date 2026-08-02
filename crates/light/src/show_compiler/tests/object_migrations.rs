@@ -521,6 +521,126 @@ fn targetless_dynamic_assignment_without_legacy_scope_fails_visibly() {
     assert!(transaction.is_empty());
 }
 
+#[test]
+fn legacy_dynamic_phase_ordering_migrates_losslessly_across_pool_cue_and_playback_fallbacks() {
+    let target = light_core::FixtureId::new();
+    let mut dynamic = targetless_dynamic(7);
+    dynamic.target_binding = light_dynamics::DynamicTargetBinding::FrozenTargets {
+        targets: vec![target],
+    };
+    dynamic.phase.ordering = light_dynamics::PhaseOrdering::RadialIn {
+        center_x: 1.25,
+        center_z: -2.5,
+    };
+    let mut dynamic_body = serde_json::to_value(&dynamic).unwrap();
+    dynamic_body["future_dynamic"] = json!({"kept": true});
+
+    let reference = light_dynamics::DynamicReference {
+        dynamic_id: Some(dynamic.id),
+        last_known_pool_number: dynamic.pool_number,
+        embedded_fallback: light_dynamics::DynamicDefinitionSnapshot {
+            definition: std::sync::Arc::new(dynamic.clone()),
+        },
+    };
+    let mut cue = Cue::new(1.0);
+    cue.dynamic_changes.push(light_playback::CueDynamicChange {
+        fixture_id: target,
+        attribute: light_core::AttributeKey::intensity(),
+        value: light_dynamics::DynamicSemanticValue::DynamicOn {
+            instance_link: Uuid::new_v4(),
+            dynamic: reference,
+            lane_id: Uuid::new_v4(),
+            overrides: light_dynamics::DynamicInstanceOverrides {
+                size: 1.0,
+                speed_multiplier: light_dynamics::Rational::ONE,
+                phase_offset_degrees: 0.0,
+            },
+            timing: light_dynamics::DynamicValueTiming::default(),
+        },
+        automatic_restore: false,
+    });
+    let cue_list = CueList {
+        id: CueListId::new(),
+        name: "Legacy Dynamic fallback".into(),
+        priority: 0,
+        mode: CueListMode::Sequence,
+        looped: false,
+        chaser_step_millis: 1_000,
+        speed_group: None,
+        intensity_priority_mode: IntensityPriorityMode::Htp,
+        wrap_mode: Some(WrapMode::Tracking),
+        restart_mode: RestartMode::FirstCue,
+        force_cue_timing: false,
+        disable_cue_timing: false,
+        chaser_xfade_millis: 0,
+        chaser_xfade_percent: None,
+        speed_multiplier: 1.0,
+        cues: vec![cue],
+    };
+    let playback = dynamic_playback(
+        1,
+        &dynamic,
+        light_playback::DynamicPlaybackTargetScope::FrozenTargets {
+            targets: vec![target],
+        },
+    );
+    let objects = vec![
+        ("dynamic", "7", dynamic_body),
+        ("cue_list", "1", serde_json::to_value(cue_list).unwrap()),
+        ("playback", "1", serde_json::to_value(playback).unwrap()),
+    ];
+    let (store, document) = document_with_objects(&objects);
+    let mut transaction = document.transaction();
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+    let candidate = document.candidate(&transaction).unwrap();
+
+    let pool = candidate.object("dynamic", "7").unwrap().body();
+    let cue_fallback = &candidate.object("cue_list", "1").unwrap().body()["cues"][0]["dynamic_changes"]
+        [0]["value"]["dynamic"]["embedded_fallback"]["definition"];
+    let playback_fallback =
+        migrated_dynamic_definition(candidate.object("playback", "1").unwrap().body());
+    for definition in [pool, cue_fallback, playback_fallback] {
+        assert_eq!(definition["phase"]["ordering"]["type"], "radial_in");
+        assert_eq!(
+            definition["spatial_mapping"]["shape"]["value"]["type"],
+            "radial"
+        );
+        assert_eq!(
+            definition["spatial_mapping"]["shape"]["value"]["direction"],
+            "inward"
+        );
+    }
+    assert_eq!(pool["future_dynamic"], json!({"kept": true}));
+    assert!(
+        stored_body(&store, "dynamic", "7")
+            .get("spatial_mapping")
+            .is_none(),
+        "migration must remain staged until the candidate commit"
+    );
+
+    let migrated = candidate
+        .objects()
+        .map(|object| {
+            (
+                object.key().kind().to_owned(),
+                object.key().id().to_owned(),
+                object.body().clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let migrated_refs = migrated
+        .iter()
+        .map(|(kind, id, body)| (kind.as_str(), id.as_str(), body.clone()))
+        .collect::<Vec<_>>();
+    let (_, migrated_document) = document_with_objects(&migrated_refs);
+    let mut second_pass = migrated_document.transaction();
+    stage_candidate_migrations(&migrated_document, &mut second_pass).unwrap();
+    assert!(
+        second_pass.is_empty(),
+        "Dynamic migration must be idempotent"
+    );
+}
+
 fn migrated_dynamic_definition(playback: &serde_json::Value) -> &serde_json::Value {
     &playback["target"]["assignment"]["dynamic"]["embedded_fallback"]["definition"]
 }

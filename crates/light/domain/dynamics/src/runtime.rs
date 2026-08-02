@@ -646,68 +646,13 @@ impl DynamicRuntime {
             return Ok(instance_id);
         }
 
-        let ranked_selection = definition
-            .lanes
-            .iter()
-            .any(|lane| {
-                matches!(
-                    definition.phase_for_lane(lane).ordering,
-                    PhaseOrdering::Selection
-                )
-            })
-            .then(|| {
-                let spatial_targets = request
-                    .target_scope
-                    .ordered_targets
-                    .iter()
-                    .copied()
-                    .map(|fixture_id| SpatialTarget {
-                        fixture_id,
-                        position: request.stage_positions.get(&fixture_id).map(|position| {
-                            Position3d {
-                                x: f64::from(position.x),
-                                y: f64::from(position.y),
-                                z: f64::from(position.z),
-                            }
-                        }),
-                    })
-                    .collect::<Vec<_>>();
-                evaluate_dynamic_spatial_mapping(
-                    request.inherited_spatial_mapping.as_ref(),
-                    &definition.spatial_mapping,
-                    &spatial_targets,
-                    None,
-                )
-                .map_err(|error| DynamicRuntimeError::InvalidSpatialMapping(error.to_string()))
-            })
-            .transpose()?;
-
         let instance_id = Uuid::new_v4();
-        let phase_by_lane_target = definition
-            .lanes
-            .iter()
-            .flat_map(|lane| {
-                let phase = definition.phase_for_lane(lane);
-                let projected = if matches!(phase.ordering, PhaseOrdering::Selection) {
-                    project_ranked_phase(
-                        phase,
-                        ranked_selection
-                            .as_ref()
-                            .expect("Selection lanes resolve one shared spatial ranking"),
-                    )
-                } else {
-                    project_phase(
-                        phase,
-                        &request.target_scope.ordered_targets,
-                        &request.stage_positions,
-                        0,
-                    )
-                };
-                projected
-                    .into_iter()
-                    .map(move |phase| ((lane.id, phase.target), phase.degrees))
-            })
-            .collect();
+        let phase_by_lane_target = project_instance_phases(
+            &definition,
+            &request.target_scope.ordered_targets,
+            &request.stage_positions,
+            request.inherited_spatial_mapping.as_ref(),
+        )?;
         let mut controllers = HashMap::new();
         controllers.insert(request.controller.id, request.controller.clone());
         let controller_transitions = HashMap::from([(
@@ -751,6 +696,57 @@ impl DynamicRuntime {
         }
         self.instances.insert(instance_id, instance);
         Ok(instance_id)
+    }
+
+    /// Replaces one running instance's authoritative target/mapping evaluation without restarting
+    /// its clock or controller stack.
+    ///
+    /// The candidate phase map is resolved before any live state changes. This makes invalid
+    /// Group/Dynamic mapping edits fail atomically and leaves the prior output snapshot intact.
+    pub fn reconcile_instance_targets(
+        &mut self,
+        instance_id: Uuid,
+        target_scope: DynamicTargetScope,
+        stage_positions: &HashMap<FixtureId, SpatialPosition>,
+        inherited_spatial_mapping: Option<&SpatialSelectionMapping>,
+    ) -> Result<bool, DynamicRuntimeError> {
+        let instance = self
+            .instances
+            .get(&instance_id)
+            .ok_or(DynamicRuntimeError::MissingInstance)?;
+        let phase_by_lane_target = project_instance_phases(
+            &instance.definition,
+            &target_scope.ordered_targets,
+            stage_positions,
+            inherited_spatial_mapping,
+        )?;
+        let changed = instance.targets != target_scope.ordered_targets
+            || instance.phase_by_lane_target != phase_by_lane_target;
+        if !changed {
+            return Ok(false);
+        }
+
+        let retained_targets = target_scope
+            .ordered_targets
+            .iter()
+            .copied()
+            .collect::<std::collections::HashSet<_>>();
+        let instance = self
+            .instances
+            .get_mut(&instance_id)
+            .expect("instance remains present during atomic reconciliation");
+        instance.targets = target_scope.ordered_targets;
+        instance.phase_by_lane_target = phase_by_lane_target;
+        instance
+            .random_streams
+            .retain(|(_, target), _| retained_targets.contains(target));
+        instance
+            .last_sample_values
+            .retain(|(_, target, _), _| retained_targets.contains(target));
+        instance
+            .synchronized_hold_values
+            .retain(|(_, target, _), _| retained_targets.contains(target));
+        Ok(true)
     }
 
     pub fn off_controller(
@@ -946,6 +942,66 @@ impl DynamicRuntime {
             .values()
             .any(|instance| instance.definition.id == definition_id)
     }
+}
+
+fn project_instance_phases(
+    definition: &DynamicDefinition,
+    targets: &[FixtureId],
+    stage_positions: &HashMap<FixtureId, SpatialPosition>,
+    inherited_spatial_mapping: Option<&SpatialSelectionMapping>,
+) -> Result<HashMap<(Uuid, FixtureId), f32>, DynamicRuntimeError> {
+    let ranked_selection = definition
+        .lanes
+        .iter()
+        .any(|lane| {
+            matches!(
+                definition.phase_for_lane(lane).ordering,
+                PhaseOrdering::Selection
+            )
+        })
+        .then(|| {
+            let spatial_targets = targets
+                .iter()
+                .copied()
+                .map(|fixture_id| SpatialTarget {
+                    fixture_id,
+                    position: stage_positions.get(&fixture_id).map(|position| Position3d {
+                        x: f64::from(position.x),
+                        y: f64::from(position.y),
+                        z: f64::from(position.z),
+                    }),
+                })
+                .collect::<Vec<_>>();
+            evaluate_dynamic_spatial_mapping(
+                inherited_spatial_mapping,
+                &definition.spatial_mapping,
+                &spatial_targets,
+                None,
+            )
+            .map_err(|error| DynamicRuntimeError::InvalidSpatialMapping(error.to_string()))
+        })
+        .transpose()?;
+
+    Ok(definition
+        .lanes
+        .iter()
+        .flat_map(|lane| {
+            let phase = definition.phase_for_lane(lane);
+            let projected = if matches!(phase.ordering, PhaseOrdering::Selection) {
+                project_ranked_phase(
+                    phase,
+                    ranked_selection
+                        .as_ref()
+                        .expect("Selection lanes resolve one shared spatial ranking"),
+                )
+            } else {
+                project_phase(phase, targets, stage_positions, 0)
+            };
+            projected
+                .into_iter()
+                .map(move |phase| ((lane.id, phase.target), phase.degrees))
+        })
+        .collect())
 }
 
 fn sample_values_snapshot(
