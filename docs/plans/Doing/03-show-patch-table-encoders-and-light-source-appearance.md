@@ -99,6 +99,26 @@ before moving it to `Done` in a semantic commit.
   focused headless Patch-route filter is 7/8: its unrelated direct-store group-mutation scenario
   currently reaches the active-show canonical-migration guard and remains unresolved rather than
   being counted as passing.
+- Patch now owns one typed sparse fixture-update command and HTTP route for atomic Masters,
+  Pan/Tilt, MIB, one transform axis, installed bracket/module/static-shaper angles, and the full
+  installed appearance. The server resolves the current lossless portable record, targets exactly
+  the requested root or multi-patch, checks show/Patch/fixture revisions before planning and again
+  inside the transaction, replays the raw intent by request ID, and emits at most one Patch event.
+  The desk publishes the same semantic actions optimistically, retains authoritative per-fixture
+  revisions, retries an ambiguous response with identical identity/revisions, and repairs genuine
+  conflicts before reapplying. The real table editors and Location encoders now use this sparse
+  path instead of whole-fixture resubmission. All 30 application Patch tests, 105 wire tests plus
+  generated-contract guard, all 9 headless Patch-route tests, 37 focused Patch session tests, and
+  45 focused Show Patch/encoder interaction tests pass. The former route failure now performs its
+  unrelated Group mutation through the canonical HTTP boundary and proves Patch revision
+  independence without bypassing active-show migration.
+- Visualization now exposes the exact six required encoder slots on the same touch/hardware
+  surface. Bracket and canonical static shaper roles use 1°/10° changes and normalized exact
+  root/copy sparse intents; unsupported roles stay in place disabled, and canonical live blade
+  angle or module-rotation attributes disable the corresponding installed control. The focused
+  Patch parameter suite passes all 10 tests across exact slot labels, availability, live-role
+  precedence, and exact primary/multi-patch targeting. Shared renderer consumption remains in
+  progress.
 
 ## Current behavior and problem
 
