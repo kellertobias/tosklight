@@ -324,4 +324,24 @@ describe("Fixture Sheet attribute-group values", () => {
 			fixtureSheetSnapshotsEqual(left, snapshot("2026-08-02T10:00:03Z", 0.8)),
 		).toBe(false);
 	});
+
+	it("keeps an ordinary winning contribution's source even when its value equals the default", () => {
+		const target = fixtureSheetTargets(fixture())[0];
+		const values = new Map([
+			["intensity", { kind: "normalized" as const, value: 0 }],
+		]);
+		const groups = fixtureSheetGroupValues({
+			target,
+			registry,
+			values,
+			preloadValues: undefined,
+			programmerAttributes: new Set(),
+			dynamicStack: [],
+			preloadDynamicStack: [],
+		});
+		expect(groups.intensity.members[0]).toMatchObject({
+			text: "0%",
+			source: "playback",
+		});
+	});
 });

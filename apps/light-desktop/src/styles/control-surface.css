@@ -1262,6 +1262,29 @@ button.large-action:disabled {
 .fixture-dynamic-stack:not([data-winning]) {
 	opacity: 0.65;
 }
+.fixture-group-master-status[data-group-master-state="flash"] {
+	text-decoration: underline;
+	text-decoration-style: double;
+}
+.fixture-group-master-status[data-group-master-state="highlight-bypass"] {
+	border-left: 2px solid var(--cyan);
+	padding-left: 4px;
+	color: var(--cyan);
+}
+.fixture-window .fixture-name {
+	grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+	column-gap: 4px;
+}
+.fixture-window .fixture-name small {
+	margin-left: 0;
+}
+.fixture-window .fixture-name .fixture-group-master-status {
+	grid-column: 1 / -1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .fixture-sheet-group-presentation,
 .fixture-sheet-member-value,
 .fixture-dynamic-indicators {

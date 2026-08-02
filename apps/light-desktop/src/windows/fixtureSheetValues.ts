@@ -116,8 +116,7 @@ export function fixtureSheetGroupValues({
 						: null;
 				const source = programmerAttributes.has(descriptor.id)
 					? ("programmer" as const)
-					: values?.has(descriptor.id) &&
-							!fixtureSheetAttributeValuesEqual(value, fallback)
+					: values?.has(descriptor.id)
 						? ("playback" as const)
 						: ("default" as const);
 				return {

@@ -3643,6 +3643,27 @@ test("Fixture Sheet compact modes increase density without dropping configured v
 				}),
 			),
 		).toBe(true);
+		const groupStatuses = rows.locator(".fixture-group-master-status");
+		await expect(groupStatuses.first()).toHaveAttribute(
+			"data-group-master-state",
+			"highlight-bypass",
+		);
+		await expect(groupStatuses.nth(1)).toHaveAttribute(
+			"data-group-master-state",
+			"flash",
+		);
+		expect(
+			await groupStatuses.evaluateAll((statuses) =>
+				statuses.every((status) => {
+					const bounds = status.getBoundingClientRect();
+					const cell = status.closest('[role="cell"]')?.getBoundingClientRect();
+					return Boolean(
+						cell && bounds.top >= cell.top && bounds.bottom <= cell.bottom,
+					);
+				}),
+			),
+		).toBe(true);
+		expect(await table.locator(".source-programmer").count()).toBeGreaterThan(0);
 		return geometry;
 	};
 

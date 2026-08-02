@@ -138,6 +138,21 @@ const storyGroupValues = (() => {
 	) as FixtureSheetGroupValues;
 })();
 
+const storyLimitedGroup = {
+	kind: "group" as const,
+	id: "front",
+	revision: 1,
+	updated_at: "2026-08-02T10:00:00Z",
+	body: { name: "Front", fixtures: ["fixture-101"], programming: {} },
+	runtime: { master: 0.4, flashLevel: 0, playbackNumber: 17 },
+} as FixtureSheetRow["limitingGroups"][number];
+const storyFlashedGroup = {
+	...storyLimitedGroup,
+	id: "movers",
+	body: { ...storyLimitedGroup.body, name: "Movers" },
+	runtime: { master: 0.4, flashLevel: 0.8, playbackNumber: 18 },
+};
+
 const common = {
 	beam: "Open",
 	childFixtureIds: [] as string[],
@@ -146,7 +161,8 @@ const common = {
 	dimmer: 0,
 	focus: "Sharp",
 	indented: false,
-	limitingGroups: [],
+	limitingGroups: [storyLimitedGroup],
+	highlightBypassesGroupMaster: false,
 	groupValues: storyGroupValues,
 	parentFixtureId: "",
 	pan: 50,
@@ -173,6 +189,7 @@ const rows: FixtureSheetRow[] = [
 		...common,
 		id: "101",
 		fixtureId: "fixture-101",
+		highlightBypassesGroupMaster: true,
 		name: "Front Profile SL",
 		fixtureType: "ETC · Source Four LED Series 3",
 		icon: profileIcon,
@@ -196,6 +213,7 @@ const rows: FixtureSheetRow[] = [
 		...common,
 		id: "102.0",
 		fixtureId: "fixture-102",
+		limitingGroups: [storyFlashedGroup],
 		name: "Stage Left Mover · Master",
 		fixtureType: "Robe · Tetra2",
 		icon: washIcon,

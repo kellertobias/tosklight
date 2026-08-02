@@ -119,7 +119,7 @@ vi.mock("../features/programmerValues/useProgrammerValueTargets", () => ({
 	useProgrammerValueTargets: () => [],
 }));
 
-function rows() {
+function rows(highlight: Parameters<typeof useFixtureSheetRows>[0]["highlight"] = null) {
 	return useFixtureSheetRows({
 		visualization: {
 			revision: 1,
@@ -133,6 +133,7 @@ function rows() {
 		activeOnly: false,
 		selectedCueList: null,
 		includedHeads: "all",
+		highlight,
 		active: true,
 	});
 }
@@ -140,6 +141,7 @@ function rows() {
 beforeEach(() => {
 	mocks.ready = true;
 	mocks.runtime.master = 0.4;
+	mocks.runtime.flashLevel = 0;
 	mocks.runtime.playbackNumber = 17;
 	mocks.server.patch.fixtures[0].group_masters_enabled = true;
 });
@@ -170,6 +172,52 @@ describe("Fixture Sheet scoped Group runtime", () => {
 		mocks.runtime.playbackNumber = null;
 		view.rerender();
 		expect(view.result.current.rows[0].limitingGroups).toEqual([]);
+	});
+
+	it("shows effective Flash level and active Highlight bypass without losing Group status", () => {
+		mocks.runtime.flashLevel = 0.8;
+		const highlight = {
+			active: true,
+			mode: "selection" as const,
+			output_enabled: true,
+			capture_only: false,
+			remembered: [{ fixture_id: "fixture-1" }],
+			active_index: null,
+			active_fixture: null,
+			can_previous: false,
+			can_next: false,
+			owner_user_id: "operator-a",
+		};
+		const view = renderHook(() => rows(highlight));
+		expect(view.result.current.rows[0].highlightBypassesGroupMaster).toBe(true);
+		const nameColumn = fixtureSheetColumns(false, () => ({
+			base: false,
+			containedBase: false,
+			containedCurrent: false,
+			current: false,
+		})).find(({ id }) => id === "name");
+		render(nameColumn?.render(view.result.current.rows[0], 0) ?? null);
+		expect(
+			screen.getByText("◒ Group master bypassed · Highlight"),
+		).toHaveAttribute("data-group-master-state", "highlight-bypass");
+		expect(
+			screen.getByText("◒ Group master bypassed · Highlight"),
+		).toHaveAttribute(
+			"title",
+			"Front: fader 40%, Flash 80%, effective 80%; bypassed by Highlight",
+		);
+
+		cleanup();
+		render(
+			nameColumn?.render(
+				{ ...view.result.current.rows[0], highlightBypassesGroupMaster: false },
+				0,
+			) ?? null,
+		);
+		expect(screen.getByText("◒ Group master 80% · Flash")).toHaveAttribute(
+			"data-group-master-state",
+			"flash",
+		);
 	});
 
 	it("exposes no rows while exact Group runtime authority is loading", () => {

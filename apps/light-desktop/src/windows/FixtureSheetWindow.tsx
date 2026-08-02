@@ -107,6 +107,7 @@ export function FixtureSheetWindow({
 			activeOnly,
 			selectedCueList: cuelistFilter.selectedCueList,
 			includedHeads,
+			highlight,
 			active,
 		});
 	const presentStep = useMemo(

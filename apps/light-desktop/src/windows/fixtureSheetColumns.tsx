@@ -57,7 +57,10 @@ function fixtureIconColumn(): Column {
 	};
 }
 
-function fixtureNameColumn(showType: boolean): Column {
+function fixtureNameColumn(
+	showType: boolean,
+	compactMode: FixtureSheetCompactMode,
+): Column {
 	return {
 		id: "name",
 		header: showType ? "Name / type" : "Name",
@@ -69,29 +72,70 @@ function fixtureNameColumn(showType: boolean): Column {
 					<small className="fixture-type">{fixture.fixtureType}</small>
 				)}
 				{fixture.limitingGroups.length > 0 && (
-					<em title={groupMasterTitle(fixture)}>
-						◒ Group master {limitingGroupPercentage(fixture)}%
-					</em>
+					<GroupMasterStatus fixture={fixture} compact={compactMode !== "off"} />
 				)}
 			</span>
 		),
 	};
 }
 
-function groupMasterTitle(fixture: FixtureSheetRow) {
-	return fixture.limitingGroups
-		.map(
-			(group) =>
-				`${group.body.name}: ${Math.round(group.runtime.master * 100)}%`,
-		)
-		.join(", ");
+function GroupMasterStatus({
+	fixture,
+	compact,
+}: {
+	fixture: FixtureSheetRow;
+	compact: boolean;
+}) {
+	const flash = fixture.limitingGroups.some(
+		(group) => group.runtime.flashLevel > 0,
+	);
+	const state = fixture.highlightBypassesGroupMaster
+		? "highlight-bypass"
+		: flash
+			? "flash"
+			: "limited";
+	const effective = limitingGroupPercentage(fixture);
+	const label = fixture.highlightBypassesGroupMaster
+		? compact
+			? "GM bypass · Highlight"
+			: "Group master bypassed · Highlight"
+		: flash
+			? `${compact ? "GM" : "Group master"} ${effective}% · Flash`
+			: `${compact ? "GM" : "Group master"} ${effective}%`;
+	return (
+		<em
+			className="fixture-group-master-status"
+			data-group-master-state={state}
+			title={groupMasterTitle(fixture)}
+		>
+			◒ {label}
+		</em>
+	);
 }
 
 function limitingGroupPercentage(fixture: FixtureSheetRow) {
 	return Math.round(
-		Math.max(...fixture.limitingGroups.map((group) => group.runtime.master)) *
-			100,
+		Math.max(...fixture.limitingGroups.map(effectiveGroupMaster)) * 100,
 	);
+}
+
+function effectiveGroupMaster(group: FixtureSheetRow["limitingGroups"][number]) {
+	return Math.max(group.runtime.master, group.runtime.flashLevel);
+}
+
+function groupMasterTitle(fixture: FixtureSheetRow) {
+	const groups = fixture.limitingGroups
+		.map((group) => {
+			const master = Math.round(group.runtime.master * 100);
+			const flash = Math.round(group.runtime.flashLevel * 100);
+			return flash > 0
+				? `${group.body.name}: fader ${master}%, Flash ${flash}%, effective ${Math.round(effectiveGroupMaster(group) * 100)}%`
+				: `${group.body.name}: ${master}%`;
+		})
+		.join(", ");
+	return fixture.highlightBypassesGroupMaster
+		? `${groups}; bypassed by Highlight`
+		: groups;
 }
 
 function patchColumn(): Column {
@@ -409,7 +453,7 @@ export function fixtureSheetColumns(
 	return [
 		fixtureIdColumn(present),
 		fixtureIconColumn(),
-		fixtureNameColumn(showType),
+		fixtureNameColumn(showType, compactMode),
 		patchColumn(),
 		dimmerColumn(compactMode),
 		colorColumn(compactMode),

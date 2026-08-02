@@ -83,11 +83,19 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
   rows than Off, retain `.0`/`.1` IDs and both Dynamic identities without clipping, preserve distinct
   Media/Mask markers or text, and do not silently drop columns. The Storybook build, two focused
   browser cases, 70 focused unit cases, and both frontend typechecks pass.
+- Group-master status now follows the engine's effective `max(fader, flash)` rule, keeps an active
+  Flash visibly distinct, and remains present with an explicit Highlight-bypass state while
+  Highlight output deliberately bypasses Group Masters. Multi-head master rows inherit the bypass
+  when a represented child is highlighted. Compact name cells keep type and abbreviated status in
+  a deterministic two-line layout rather than clipping either. Ordinary winning contributions are
+  identified as Playback by presence, including a valid Playback value equal to the profile default;
+  current fixture and ordered Group programmer ownership continues to take precedence. Fourteen
+  focused status/value tests, desktop typecheck, the Storybook build, and the two 430 px browser
+  cases pass with Flash and Highlight fixtures in all three modes.
 
 ## Remaining work
 
-- Add accurate base-source ownership, Group-master flash/Highlight-bypass presentation, and the
-  deterministic base-versus-changing-DMX acceptance proof in a later coherent slice.
+- Add the deterministic base-versus-changing-DMX acceptance proof.
 - Add the human scenario, root E2E coverage, screenshot contract, and operator help updates.
 - Keep every acceptance item below unclaimed until current source and focused verification prove it.
 

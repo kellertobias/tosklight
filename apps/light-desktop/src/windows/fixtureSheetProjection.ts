@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
 	CueList,
+	HighlightState,
 	PatchedFixture,
 	VisualizationSnapshot,
 } from "../api/types";
@@ -107,6 +108,7 @@ function fixtureSheetRow({
 	preloadOrdinaryValues,
 	attributeRegistry,
 	limitingGroups,
+	highlightBypassesGroupMaster,
 }: {
 	target: FixtureSheetTarget;
 	programmerValues: ProgrammingValueIndex;
@@ -116,6 +118,7 @@ function fixtureSheetRow({
 	preloadOrdinaryValues: ReadonlyMap<string, AttributeValue> | undefined;
 	attributeRegistry: NonNullable<ReturnType<typeof useAttributeRegistry>>;
 	limitingGroups: readonly LimitingGroup[];
+	highlightBypassesGroupMaster: boolean;
 }) {
 	const patched = target.fixture;
 	const targetValues = programmerValues.get(target.fixtureId);
@@ -206,6 +209,7 @@ function fixtureSheetRow({
 			focus: groupValues.focus.source,
 		},
 		limitingGroups,
+		highlightBypassesGroupMaster,
 		positionLabel: groupValues.position.available ? undefined : "—",
 		beam: groupValues.beam.available
 			? groupValues.beam.members.map((member) => member.text).join(" / ")
@@ -326,7 +330,7 @@ function indexLimitingGroups(
 		if (
 			group.runtime == null ||
 			group.runtime.playbackNumber == null ||
-			group.runtime.master >= 1
+			(group.runtime.master >= 1 && group.runtime.flashLevel <= 0)
 		)
 			continue;
 		const limitingGroup = group as LimitingGroup;
@@ -338,6 +342,15 @@ function indexLimitingGroups(
 		}
 	}
 	return result;
+}
+
+function fixtureSheetHighlightIds(highlight: HighlightState | null | undefined) {
+	if (!highlight?.active || !highlight.output_enabled) return new Set<string>();
+	if (highlight.mode === "step")
+		return new Set(
+			highlight.active_fixture ? [highlight.active_fixture.fixture_id] : [],
+		);
+	return new Set(highlight.remembered.map((fixture) => fixture.fixture_id));
 }
 
 function demoFixtureSheetRows() {
@@ -352,6 +365,7 @@ function demoFixtureSheetRows() {
 		childFixtureIds: [] as string[],
 		indented: false,
 		limitingGroups: [] as LimitingGroup[],
+		highlightBypassesGroupMaster: false,
 		preloadDimmer: null,
 		preloadColor: null,
 		preloadPan: null,
@@ -369,6 +383,7 @@ export function useFixtureSheetRows({
 	activeOnly,
 	selectedCueList,
 	includedHeads,
+	highlight,
 	active = true,
 }: {
 	visualization: VisualizationSnapshot | null;
@@ -379,6 +394,7 @@ export function useFixtureSheetRows({
 	activeOnly: boolean;
 	selectedCueList: CueList | null;
 	includedHeads: FixtureSheetIncludedHeads;
+	highlight?: HighlightState | null;
 	active?: boolean;
 }) {
 	const bootstrapReady = useBootstrapReady();
@@ -407,6 +423,7 @@ export function useFixtureSheetRows({
 			groupAuthority.groups,
 			patchedFixtures,
 		);
+		const highlightedFixtureIds = fixtureSheetHighlightIds(highlight);
 		return orderedFixtureTargets({
 			fixtures: patchedFixtures,
 			fixtureOrder,
@@ -425,6 +442,12 @@ export function useFixtureSheetRows({
 				preloadOrdinaryValues: preloadOrdinaryValues.get(target.fixtureId),
 				attributeRegistry,
 				limitingGroups: limitingGroups.get(target.fixtureId) ?? [],
+				highlightBypassesGroupMaster:
+					highlightedFixtureIds.has(target.fixtureId) ||
+					(target.order === 0 &&
+						target.fixture.logical_heads.some((head) =>
+							highlightedFixtureIds.has(head.fixture_id),
+						)),
 			}),
 		);
 	}, [
@@ -435,6 +458,7 @@ export function useFixtureSheetRows({
 		fixtureOrder,
 		groupAuthority.groups,
 		groupAuthority.serving,
+		highlight,
 		includedHeads,
 		observesGroupRuntime,
 		patchedFixtures,
@@ -454,10 +478,15 @@ export function useFixtureSheetRows({
 type OptionalFixtureSheetRuntime<T> = T extends {
 	dynamicStack: infer Stack;
 	groupValues: infer Groups;
+	highlightBypassesGroupMaster: infer HighlightBypass;
 }
-	? Omit<T, "dynamicStack" | "groupValues"> & {
+	? Omit<
+			T,
+			"dynamicStack" | "groupValues" | "highlightBypassesGroupMaster"
+		> & {
 			dynamicStack?: Stack;
 			groupValues?: Groups;
+			highlightBypassesGroupMaster?: HighlightBypass;
 		}
 	: T;
 
