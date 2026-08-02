@@ -62,6 +62,14 @@ before moving it to `Done` in a semantic commit.
   copies, and never falls back from a stale copy to its parent. Desktop typecheck and 44 focused
   tests pass across the Show Patch table, exact root/copy mutations, loading/stale behavior, and
   selection reconciliation.
+- The stacked policy cells now have one SET target each. Masters exposes only the applicable
+  choices from Not controlled, Group Master, Grand Master, and Both; Pan/Tilt exposes only the
+  applicable choices from None, Invert Pan, Invert Tilt, and Invert Both for the addressed root or
+  multi-patch. Each Apply writes both underlying flags in one patch mutation while preserving
+  dormant inapplicable values. MIB now accepts one value, `Off` or non-negative decimal seconds;
+  `0` remains enabled at zero delay, fractional values use millisecond rounding, and invalid,
+  non-finite, non-decimal, or unsafe-overflow input is rejected visibly. Desktop typecheck and 50
+  focused table/editor/parser tests pass.
 
 ## Current behavior and problem
 

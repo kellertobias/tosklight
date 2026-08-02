@@ -1,10 +1,12 @@
 import type { PatchedFixture } from "../../../api/types";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { fixtureRanges, groupFixtureFamilies } from "../patchUtils";
+import { combinedPolicyChoice } from "./combinedPolicy";
 import type { EditKind, PatchController, VectorAxis } from "./controller";
 import {
 	definitionSplits,
 	effectiveSplitPatches,
+	fixturePolicyApplicability,
 	splitPatchSetError,
 } from "./patchModel";
 import { fixtureSelectionIds } from "./selection";
@@ -30,17 +32,13 @@ export function armEdit(
 		);
 		ui.setEditSplitDrafts(splitDraftValues(fixture));
 	} else if (kind === "mib")
-		ui.setEditText(String(fixture.move_in_black_enabled ?? true));
-	else if (kind === "mib_delay")
-		ui.setEditText(String((fixture.move_in_black_delay_millis ?? 0) / 1000));
-	else if (kind === "group_masters")
-		ui.setEditText(String(fixture.group_masters_enabled ?? true));
-	else if (kind === "grand_master")
-		ui.setEditText(String(fixture.grand_master_enabled ?? true));
-	else if (kind === "invert_pan")
-		ui.setEditText(String(fixture.invert_pan ?? false));
-	else if (kind === "invert_tilt")
-		ui.setEditText(String(fixture.invert_tilt ?? false));
+		ui.setEditText(
+			(fixture.move_in_black_enabled ?? true)
+				? String((fixture.move_in_black_delay_millis ?? 0) / 1_000)
+				: "Off",
+		);
+	else if (kind === "masters") ui.setEditText(masterChoice(fixture));
+	else if (kind === "pan_tilt") ui.setEditText(panTiltChoice(fixture));
 	else if (kind === "bracket_angle")
 		ui.setEditText(String(fixture.bracket_angle ?? 0));
 	// An empty field is a fixture with no shaper or barn door fitted, which is most of them.
@@ -57,6 +55,22 @@ export function armEdit(
 		kind === "location" || kind === "rotation" ? (axis ?? null) : null,
 	);
 	ui.setEdit(kind);
+}
+
+function masterChoice(fixture: PatchedFixture) {
+	const applicable = fixturePolicyApplicability(fixture.definition);
+	return combinedPolicyChoice(
+		applicable.groupMasters && (fixture.group_masters_enabled ?? true),
+		applicable.grandMaster && (fixture.grand_master_enabled ?? true),
+	);
+}
+
+function panTiltChoice(fixture: PatchedFixture) {
+	const applicable = fixturePolicyApplicability(fixture.definition);
+	return combinedPolicyChoice(
+		applicable.pan && (fixture.invert_pan ?? false),
+		applicable.tilt && (fixture.invert_tilt ?? false),
+	);
 }
 
 export function armEditFromContextMenu(

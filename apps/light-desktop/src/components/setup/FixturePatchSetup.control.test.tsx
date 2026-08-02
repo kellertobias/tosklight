@@ -346,51 +346,44 @@ describe("fixture output policy cells", () => {
 		).not.toBeInTheDocument();
 	});
 
-	it("shows independent effective values and only edits a master through armed SET", async () => {
+	it("shows independent effective values and atomically edits both masters through armed SET", async () => {
 		server.patch.fixtures = [policyFixture()];
 		render(<FixturePatchSetup />);
 
 		expect(
-			screen.getByRole("button", { name: "Group Masters 17" }),
+			screen.getByRole("button", { name: "Masters 17" }),
 		).toHaveTextContent("Controlled");
 		expect(
-			screen.getByRole("button", { name: "Grand Master 17" }),
-		).toHaveTextContent("Controlled");
-		expect(
-			screen.getByRole("button", { name: "Invert Pan 17" }),
-		).toHaveTextContent("Normal");
-		expect(
-			screen.getByRole("button", { name: "Invert Tilt 17" }),
+			screen.getByRole("button", { name: "Pan and Tilt 17" }),
 		).toHaveTextContent("Normal");
 
-		fireEvent.click(screen.getByRole("button", { name: "Group Masters 17" }));
+		fireEvent.click(screen.getByRole("button", { name: "Masters 17" }));
 		expect(
-			screen.queryByRole("heading", { name: "Set fixture Group Masters" }),
+			screen.queryByRole("heading", { name: "Set fixture Masters" }),
 		).not.toBeInTheDocument();
-		expect(patchFeature.updatePolicy).not.toHaveBeenCalled();
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
 
 		state.patchSetArmed = true;
-		fireEvent.click(screen.getByRole("button", { name: "Group Masters 17" }));
+		fireEvent.click(screen.getByRole("button", { name: "Masters 17" }));
 		const dialog = (
 			await screen.findByRole("heading", {
-				name: "Set fixture Group Masters",
+				name: "Set fixture Masters",
 			})
 		).closest("section") as HTMLElement;
-		fireEvent.click(within(dialog).getByRole("button", { name: "Controlled" }));
-		fireEvent.click(screen.getByRole("option", { name: "Ignored" }));
+		fireEvent.click(within(dialog).getByRole("button", { name: "Both" }));
+		fireEvent.click(screen.getByRole("option", { name: "Grand Master" }));
 		expect(
 			within(dialog).getByText(
-				"This fixture can remain live while the Group Masters are reduced.",
+				"This fixture may remain live while an applicable master is reduced.",
 			),
 		).toBeInTheDocument();
 		fireEvent.click(within(dialog).getByRole("button", { name: "Set" }));
 
 		await waitFor(() =>
-			expect(patchFeature.updatePolicy).toHaveBeenCalledWith(
-				"fixture-split",
-				{ type: "group_masters", controlled: false },
-				{ group_masters_enabled: false },
-			),
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
+				group_masters_enabled: false,
+				grand_master_enabled: true,
+			}),
 		);
 		expect(dispatch).toHaveBeenCalledWith({
 			type: "SET_PATCH_ARMED",
@@ -398,7 +391,7 @@ describe("fixture output policy cells", () => {
 		});
 	});
 
-	it("edits one physical multi-patch axis without changing its shared policy", async () => {
+	it("atomically edits both axes on one physical multi-patch without changing shared policy", async () => {
 		server.patch.fixtures = [policyFixture()];
 		state.patchSetArmed = true;
 		render(<FixturePatchSetup />);
@@ -410,38 +403,60 @@ describe("fixture output policy cells", () => {
 		);
 		expect(
 			screen.getByRole("button", {
-				name: "Invert tilt Opposite hang",
+				name: "Pan and Tilt Opposite hang",
 			}),
 		).toHaveTextContent("Inverted");
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "Invert pan Opposite hang" }),
+			screen.getByRole("button", { name: "Pan and Tilt Opposite hang" }),
 		);
 		const dialog = (
 			await screen.findByRole("heading", {
-				name: "Set multi-patch Invert Pan",
+				name: "Set multi-patch Pan / Tilt",
 			})
 		).closest("section") as HTMLElement;
-		fireEvent.click(within(dialog).getByRole("button", { name: "Normal" }));
-		fireEvent.click(screen.getByRole("option", { name: "Inverted" }));
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Invert Tilt" }),
+		);
+		fireEvent.click(screen.getByRole("option", { name: "Invert Both" }));
 		fireEvent.click(within(dialog).getByRole("button", { name: "Set" }));
 
 		await waitFor(() => {
-			const [fixtureId, action, changes] =
-				patchFeature.updatePolicy.mock.calls[0];
+			const [fixtureId, changes] = patchFeature.updateFixture.mock.calls[0];
 			expect(fixtureId).toBe("fixture-split");
-			expect(action).toEqual({
-				type: "axis_inversion",
-				axis: "pan",
-				inverted: true,
-				multipatchInstanceId: "physical-copy",
-			});
 			expect(changes.multipatch[0]).toMatchObject({
 				id: "physical-copy",
 				invert_pan: true,
 				invert_tilt: true,
 			});
 		});
+	});
+
+	it("keeps MIB Off distinct from an enabled zero-second delay", async () => {
+		const fixture = policyFixture();
+		fixture.move_in_black_enabled = false;
+		fixture.move_in_black_delay_millis = 750;
+		server.patch.fixtures = [fixture];
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(screen.getByRole("button", { name: "MIB 17: Off" }));
+		const dialog = (
+			await screen.findByRole("heading", { name: "Set fixture MIB" })
+		).closest("section") as HTMLElement;
+		const input = within(dialog).getByRole("textbox", {
+			name: "MIB value: Off or non-negative seconds",
+		});
+		expect(input).toHaveValue("Off");
+		fireEvent.change(input, { target: { value: "0" } });
+		fireEvent.click(within(dialog).getByRole("button", { name: "Set" }));
+
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
+				move_in_black_enabled: true,
+				move_in_black_delay_millis: 0,
+			}),
+		);
 	});
 });
 

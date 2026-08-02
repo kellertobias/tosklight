@@ -1,5 +1,10 @@
 import type { MultiPatchInstance, SplitPatch } from "../../../api/types";
 import { parsePatchAddress } from "../../input/ConsoleFields";
+import {
+	type CombinedPolicyChoice,
+	combinedPolicyChoice,
+	combinedPolicyValues,
+} from "./combinedPolicy";
 import type {
 	MultiPatchEdit,
 	PatchController,
@@ -8,6 +13,7 @@ import type {
 import {
 	definitionSplits,
 	effectiveSplitPatches,
+	fixturePolicyApplicability,
 	replaceSelectedSplitPatch,
 	splitPatchSetError,
 } from "./patchModel";
@@ -68,11 +74,7 @@ export function beginMultipatchEdit(
 	axis?: NonNullable<MultiPatchEdit>["axis"],
 ) {
 	const { ui } = controller;
-	if (
-		(kind === "invert_pan" || kind === "invert_tilt") &&
-		!controller.appState.patchSetArmed
-	)
-		return;
+	if (kind === "pan_tilt" && !controller.appState.patchSetArmed) return;
 	ui.setEditError("");
 	ui.setSelectedFixture(fixture.fixture_id);
 	ui.setMultipatchEdit({
@@ -102,8 +104,8 @@ export function beginMultipatchEdit(
 				]),
 			),
 		);
-	} else if (kind === "invert_pan" || kind === "invert_tilt")
-		ui.setEditText(String(instance[kind] ?? false));
+	} else if (kind === "pan_tilt")
+		ui.setEditText(panTiltChoice(fixture, instance));
 	else if (kind === "bracket_angle")
 		ui.setEditText(String(instance.bracket_angle ?? 0));
 	// An empty field is an instance with no shaper or barn door fitted.
@@ -124,6 +126,17 @@ export function beginMultipatchEdit(
 				),
 			);
 	}
+}
+
+function panTiltChoice(
+	fixture: PatchController["data"]["all"][number],
+	instance: MultiPatchInstance,
+) {
+	const applicable = fixturePolicyApplicability(fixture.definition);
+	return combinedPolicyChoice(
+		applicable.pan && (instance.invert_pan ?? false),
+		applicable.tilt && (instance.invert_tilt ?? false),
+	);
 }
 
 export function beginMultipatchVectorEditFromContextMenu(
@@ -239,19 +252,9 @@ export async function saveMultipatchEdit(
 	const multipatch = (fixture.multipatch ?? []).map((item) =>
 		item.id === instance.id ? { ...item, ...changes } : item,
 	);
-	if (edit.kind === "invert_pan" || edit.kind === "invert_tilt") {
-		const axis = edit.kind === "invert_pan" ? "pan" : "tilt";
+	if (edit.kind === "pan_tilt") {
 		if (
-			await controller.patch.updatePolicy(
-				fixture.fixture_id,
-				{
-					type: "axis_inversion",
-					axis,
-					inverted: value === "true",
-					multipatchInstanceId: instance.id,
-				},
-				{ multipatch },
-			)
+			await controller.patch.updateFixture(fixture.fixture_id, { multipatch })
 		) {
 			controller.ui.setMultipatchEdit(null);
 			controller.dispatch({ type: "SET_PATCH_ARMED", value: false });
@@ -274,8 +277,18 @@ function multipatchChanges(
 ): Partial<MultiPatchInstance> | null {
 	const edit = controller.ui.multipatchEdit;
 	if (!edit) return null;
-	if (edit.kind === "invert_pan" || edit.kind === "invert_tilt")
-		return { [edit.kind]: value === "true" };
+	if (edit.kind === "pan_tilt") {
+		const choice = combinedPolicyValues(value as CombinedPolicyChoice);
+		const applicable = fixturePolicyApplicability(fixture.definition);
+		return {
+			invert_pan: applicable.pan
+				? choice.first
+				: (instance.invert_pan ?? false),
+			invert_tilt: applicable.tilt
+				? choice.second
+				: (instance.invert_tilt ?? false),
+		};
+	}
 	if (
 		edit.kind === "address" &&
 		definitionSplits(fixture.definition).length > 1
@@ -375,12 +388,7 @@ export function closeMultipatchEdit(controller: PatchController) {
 
 export function multipatchVectorIsDirty(controller: PatchController) {
 	const edit = controller.ui.multipatchEdit;
-	if (
-		!edit ||
-		edit.kind === "address" ||
-		edit.kind === "invert_pan" ||
-		edit.kind === "invert_tilt"
-	)
+	if (!edit || edit.kind === "address" || edit.kind === "pan_tilt")
 		return false;
 	const fixture = controller.data.all.find(
 		(item) => item.fixture_id === edit.fixtureId,

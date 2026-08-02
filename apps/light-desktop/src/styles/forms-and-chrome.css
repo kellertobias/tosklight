@@ -322,6 +322,10 @@
 .patch-stacked-cell.shared {
 	color: color-mix(in srgb, var(--muted) 82%, transparent);
 }
+.patch-stacked-editor {
+	display: block;
+	width: 100%;
+}
 .patch-stacked-line {
 	display: flex;
 	width: 100%;

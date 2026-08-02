@@ -8,6 +8,11 @@ import {
 } from "@tosklight/ui";
 import { ModalNumberEditor } from "@tosklight/ui/input";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
+import {
+	allowedCombinedPolicyChoices,
+	type CombinedPolicyChoice,
+	combinedPolicyValues,
+} from "./combinedPolicy";
 import { usePatchController } from "./controller";
 import {
 	saveEdit,
@@ -23,13 +28,13 @@ import {
 	saveMultipatchEdit,
 	saveMultipatchVectorInput,
 } from "./multipatchActions";
-import { definitionSplits } from "./patchModel";
+import { definitionSplits, fixturePolicyApplicability } from "./patchModel";
 
 export function MultipatchVectorDialog() {
 	const controller = usePatchController();
 	const edit = controller.ui.multipatchEdit;
 	if (!edit || edit.kind === "address") return null;
-	const policy = edit.kind === "invert_pan" || edit.kind === "invert_tilt";
+	const policy = edit.kind === "pan_tilt";
 	const close = () => requestMultipatchEditClose(controller);
 	if (!policy && edit.axis) {
 		const label = `${edit.kind === "location" ? "Location" : "Rotation"} ${edit.axis.toUpperCase()} (${edit.kind === "location" ? "meter" : "degree"})`;
@@ -59,9 +64,7 @@ export function MultipatchVectorDialog() {
 					<ModalTitleBar
 						title={`Set multi-patch ${
 							policy
-								? edit.kind === "invert_pan"
-									? "Invert Pan"
-									: "Invert Tilt"
+								? "Pan / Tilt"
 								: vectorEditTitle(
 										edit.kind as "location" | "rotation",
 										edit.axis,
@@ -80,13 +83,7 @@ export function MultipatchVectorDialog() {
 					/>
 					<EditError />
 					{policy ? (
-						<PolicySelect
-							label={
-								edit.kind === "invert_pan" ? "Pan direction" : "Tilt direction"
-							}
-							falseLabel="Normal"
-							trueLabel="Inverted"
-						/>
+						<CombinedPolicySelect kind="pan_tilt" />
 					) : (
 						<VectorInputs
 							kind={edit.kind as "location" | "rotation"}
@@ -205,19 +202,15 @@ function FixtureEditFields() {
 		);
 	if (edit === "mib")
 		return (
-			// biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label.
-			<label>
-				Move in Black
-				<Select
+			<div>
+				<TextInput
 					autoFocus
-					aria-label="Move in Black value"
+					aria-label="MIB value: Off or non-negative seconds"
 					value={editText}
 					onChange={(event) => controller.ui.setEditText(event.target.value)}
-				>
-					<option value="true">Enabled</option>
-					<option value="false">Disabled</option>
-				</Select>
-			</label>
+				/>
+				<small>Enter Off or a non-negative delay in seconds. 0 means on.</small>
+			</div>
 		);
 	if (edit === "bracket_angle")
 		return (
@@ -245,44 +238,8 @@ function FixtureEditFields() {
 				onChange={(event) => controller.ui.setEditText(event.target.value)}
 			/>
 		);
-	if (edit === "mib_delay")
-		return (
-			<NumberField
-				autoFocus
-				label="MIB Delay (s)"
-				min={0}
-				step={0.1}
-				allowDecimal
-				value={editText}
-				onChange={(event) => controller.ui.setEditText(event.target.value)}
-			/>
-		);
-	if (edit === "group_masters" || edit === "grand_master")
-		return (
-			<>
-				<PolicySelect
-					label={edit === "group_masters" ? "Group Masters" : "Grand Master"}
-					falseLabel="Ignored"
-					trueLabel="Controlled"
-				/>
-				{editText === "false" && (
-					<p className="patch-policy-warning" role="alert">
-						This fixture can remain live while the{" "}
-						{edit === "group_masters"
-							? "Group Masters are reduced."
-							: "Grand Master is reduced."}
-					</p>
-				)}
-			</>
-		);
-	if (edit === "invert_pan" || edit === "invert_tilt")
-		return (
-			<PolicySelect
-				label={edit === "invert_pan" ? "Pan direction" : "Tilt direction"}
-				falseLabel="Normal"
-				trueLabel="Inverted"
-			/>
-		);
+	if (edit === "masters" || edit === "pan_tilt")
+		return <CombinedPolicySelect kind={edit} />;
 	if (edit === "location" || edit === "rotation")
 		return (
 			<VectorInputs kind={edit} axis={controller.ui.editAxis ?? undefined} />
@@ -291,30 +248,68 @@ function FixtureEditFields() {
 	return null;
 }
 
-function PolicySelect({
-	label,
-	falseLabel,
-	trueLabel,
-}: {
-	label: string;
-	falseLabel: string;
-	trueLabel: string;
-}) {
+function CombinedPolicySelect({ kind }: { kind: "masters" | "pan_tilt" }) {
 	const controller = usePatchController();
+	const edit = controller.ui.multipatchEdit;
+	const fixture = edit
+		? controller.data.all.find(
+				(candidate) => candidate.fixture_id === edit.fixtureId,
+			)
+		: controller.data.selected;
+	if (!fixture) return null;
+	const applicable = fixturePolicyApplicability(fixture.definition);
+	const firstAvailable =
+		kind === "masters" ? applicable.groupMasters : applicable.pan;
+	const secondAvailable =
+		kind === "masters" ? applicable.grandMaster : applicable.tilt;
+	const choices = allowedCombinedPolicyChoices(firstAvailable, secondAvailable);
+	const labels: Record<CombinedPolicyChoice, string> =
+		kind === "masters"
+			? {
+					none: "Not controlled",
+					first: "Group Master",
+					second: "Grand Master",
+					both: "Both",
+				}
+			: {
+					none: "None",
+					first: "Invert Pan",
+					second: "Invert Tilt",
+					both: "Invert Both",
+				};
+	const value = controller.ui.editText as CombinedPolicyChoice;
+	const values = combinedPolicyValues(value);
+	const warning =
+		kind === "masters" &&
+		((firstAvailable && !values.first) || (secondAvailable && !values.second));
 	return (
-		// biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label.
-		<label>
-			{label}
-			<Select
-				autoFocus
-				aria-label={`${label} value`}
-				value={controller.ui.editText}
-				onChange={(event) => controller.ui.setEditText(event.target.value)}
-			>
-				<option value="true">{trueLabel}</option>
-				<option value="false">{falseLabel}</option>
-			</Select>
-		</label>
+		<>
+			{/* biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label. */}
+			<label>
+				{kind === "masters" ? "Master participation" : "Pan / Tilt inversion"}
+				<Select
+					autoFocus
+					aria-label={
+						kind === "masters"
+							? "Master participation value"
+							: "Pan and Tilt inversion value"
+					}
+					value={value}
+					onChange={(event) => controller.ui.setEditText(event.target.value)}
+				>
+					{choices.map((choice) => (
+						<option key={choice} value={choice}>
+							{labels[choice]}
+						</option>
+					))}
+				</Select>
+			</label>
+			{warning && (
+				<p className="patch-policy-warning" role="alert">
+					This fixture may remain live while an applicable master is reduced.
+				</p>
+			)}
+		</>
 	);
 }
 
@@ -437,11 +432,8 @@ function editTitle(
 	edit: NonNullable<ReturnType<typeof usePatchController>["ui"]["edit"]>,
 ) {
 	if (edit === "mib") return "MIB";
-	if (edit === "mib_delay") return "MIB Delay";
-	if (edit === "group_masters") return "Group Masters";
-	if (edit === "grand_master") return "Grand Master";
-	if (edit === "invert_pan") return "Invert Pan";
-	if (edit === "invert_tilt") return "Invert Tilt";
+	if (edit === "masters") return "Masters";
+	if (edit === "pan_tilt") return "Pan / Tilt";
 	if (edit === "bracket_angle") return "Bracket angle";
 	if (edit === "shaper_angle") return "Shaper angle";
 	return edit;

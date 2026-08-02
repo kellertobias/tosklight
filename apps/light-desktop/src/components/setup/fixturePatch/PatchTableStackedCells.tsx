@@ -44,15 +44,11 @@ function PolicyLine({
 	state,
 	available,
 	shared,
-	accessibleName,
-	onClick,
 }: {
 	label: string;
 	state: string;
 	available: boolean;
 	shared: boolean;
-	accessibleName: string;
-	onClick: () => void;
 }) {
 	const content = (
 		<>
@@ -61,23 +57,13 @@ function PolicyLine({
 			{shared && available && <small>Shared</small>}
 		</>
 	);
-	if (shared || !available)
-		return (
-			<span
-				className="patch-stacked-line"
-				title={`${label} ${available ? state : "unavailable"}`}
-			>
-				{content}
-			</span>
-		);
 	return (
-		<Button
-			className="patch-value patch-stacked-line"
-			aria-label={accessibleName}
-			onClick={onClick}
+		<span
+			className="patch-stacked-line"
+			title={`${label} ${available ? state : "unavailable"}${shared ? ", shared" : ""}`}
 		>
 			{content}
-		</Button>
+		</span>
 	);
 }
 
@@ -90,8 +76,8 @@ export function MastersCell({
 }) {
 	const controller = usePatchController();
 	const applicable = fixturePolicyApplicability(fixture.definition);
-	return (
-		<td className={`patch-stacked-cell${shared ? " shared" : ""}`}>
+	const content = (
+		<>
 			<PolicyLine
 				label="Group Masters"
 				state={
@@ -101,8 +87,6 @@ export function MastersCell({
 				}
 				available={applicable.groupMasters}
 				shared={shared}
-				accessibleName={`Group Masters ${fixtureDisplayId(fixture)}`}
-				onClick={() => armEdit(controller, fixture, "group_masters")}
 			/>
 			<PolicyLine
 				label="Grand Master"
@@ -113,9 +97,22 @@ export function MastersCell({
 				}
 				available={applicable.grandMaster}
 				shared={shared}
-				accessibleName={`Grand Master ${fixtureDisplayId(fixture)}`}
-				onClick={() => armEdit(controller, fixture, "grand_master")}
 			/>
+		</>
+	);
+	return (
+		<td className={`patch-stacked-cell${shared ? " shared" : ""}`}>
+			{shared || (!applicable.groupMasters && !applicable.grandMaster) ? (
+				<span>{content}</span>
+			) : (
+				<Button
+					className="patch-value patch-stacked-editor"
+					aria-label={`Masters ${fixtureDisplayId(fixture)}`}
+					onClick={() => armEdit(controller, fixture, "masters")}
+				>
+					{content}
+				</Button>
+			)}
 		</td>
 	);
 }
@@ -129,23 +126,13 @@ export function PanTiltCell({
 }) {
 	const controller = usePatchController();
 	const applicable = fixturePolicyApplicability(fixture.definition);
-	const edit = (axis: "pan" | "tilt") => {
+	const edit = () => {
 		if (instance)
-			beginMultipatchEdit(
-				controller,
-				fixture,
-				instance,
-				axis === "pan" ? "invert_pan" : "invert_tilt",
-			);
-		else
-			armEdit(
-				controller,
-				fixture,
-				axis === "pan" ? "invert_pan" : "invert_tilt",
-			);
+			beginMultipatchEdit(controller, fixture, instance, "pan_tilt");
+		else armEdit(controller, fixture, "pan_tilt");
 	};
-	return (
-		<td className="patch-stacked-cell">
+	const content = (
+		<>
 			<PolicyLine
 				label="Invert Pan"
 				state={
@@ -155,12 +142,6 @@ export function PanTiltCell({
 				}
 				available={applicable.pan}
 				shared={false}
-				accessibleName={
-					instance
-						? `Invert pan ${instance.name || "Multi-patch"}`
-						: `Invert Pan ${fixtureDisplayId(fixture)}`
-				}
-				onClick={() => edit("pan")}
 			/>
 			<PolicyLine
 				label="Invert Tilt"
@@ -171,13 +152,26 @@ export function PanTiltCell({
 				}
 				available={applicable.tilt}
 				shared={false}
-				accessibleName={
-					instance
-						? `Invert tilt ${instance.name || "Multi-patch"}`
-						: `Invert Tilt ${fixtureDisplayId(fixture)}`
-				}
-				onClick={() => edit("tilt")}
 			/>
+		</>
+	);
+	return (
+		<td className="patch-stacked-cell">
+			{!applicable.pan && !applicable.tilt ? (
+				<span>{content}</span>
+			) : (
+				<Button
+					className="patch-value patch-stacked-editor"
+					aria-label={
+						instance
+							? `Pan and Tilt ${instance.name || "Multi-patch"}`
+							: `Pan and Tilt ${fixtureDisplayId(fixture)}`
+					}
+					onClick={edit}
+				>
+					{content}
+				</Button>
+			)}
 		</td>
 	);
 }

@@ -34,11 +34,8 @@ export type EditKind =
 	| "rotation"
 	| "mode"
 	| "mib"
-	| "mib_delay"
-	| "group_masters"
-	| "grand_master"
-	| "invert_pan"
-	| "invert_tilt"
+	| "masters"
+	| "pan_tilt"
 	| "bracket_angle"
 	| "shaper_angle"
 	| null;
@@ -52,8 +49,7 @@ export type MultiPatchEdit = {
 		| "address"
 		| "location"
 		| "rotation"
-		| "invert_pan"
-		| "invert_tilt"
+		| "pan_tilt"
 		| "bracket_angle"
 		| "shaper_angle";
 	axis?: VectorAxis;

@@ -1,11 +1,16 @@
 import type { SplitPatch } from "../../../api/types";
 import { parsePatchAddress } from "../../input/ConsoleFields";
 import { compatibleHighlightOverrides, isDmxPatchable } from "../patchUtils";
+import {
+	type CombinedPolicyChoice,
+	combinedPolicyValues,
+} from "./combinedPolicy";
 import type { PatchController } from "./controller";
 import { applyEdit, completeEdit } from "./editSession";
 import { parseFixtureNumber, parseVirtualFixtureNumber } from "./fixtureIds";
 import {
 	definitionSplits,
+	fixturePolicyApplicability,
 	reconcileModePatchChanges,
 	replaceSelectedSplitPatch,
 } from "./patchModel";
@@ -21,49 +26,35 @@ export function saveEdit(
 	if (edit === "name")
 		void applyEdit(controller, { name: value.trim() || selected.name });
 	if (edit === "address") saveSingleAddress(controller, value);
-	if (edit === "mib")
-		void applyEdit(controller, { move_in_black_enabled: value === "true" });
-	if (edit === "mib_delay") {
-		const seconds = Number(value);
-		if (Number.isFinite(seconds))
-			void applyEdit(controller, {
-				move_in_black_delay_millis: Math.max(0, Math.round(seconds * 1000)),
-			});
+	if (edit === "mib") {
+		const result = parseMibInput(value);
+		if ("error" in result) controller.ui.setEditError(result.error);
+		else void applyEdit(controller, result.changes);
 	}
-	if (edit === "group_masters")
-		void savePolicy(
-			controller,
-			{ type: "group_masters", controlled: value === "true" },
-			{ group_masters_enabled: value === "true" },
-		);
-	if (edit === "grand_master")
-		void savePolicy(
-			controller,
-			{ type: "grand_master", controlled: value === "true" },
-			{ grand_master_enabled: value === "true" },
-		);
-	if (edit === "invert_pan")
-		void savePolicy(
-			controller,
-			{
-				type: "axis_inversion",
-				axis: "pan",
-				inverted: value === "true",
-				multipatchInstanceId: null,
-			},
-			{ invert_pan: value === "true" },
-		);
-	if (edit === "invert_tilt")
-		void savePolicy(
-			controller,
-			{
-				type: "axis_inversion",
-				axis: "tilt",
-				inverted: value === "true",
-				multipatchInstanceId: null,
-			},
-			{ invert_tilt: value === "true" },
-		);
+	if (edit === "masters") {
+		const choice = combinedPolicyValues(value as CombinedPolicyChoice);
+		const applicable = fixturePolicyApplicability(selected.definition);
+		void applyEdit(controller, {
+			group_masters_enabled: applicable.groupMasters
+				? choice.first
+				: (selected.group_masters_enabled ?? true),
+			grand_master_enabled: applicable.grandMaster
+				? choice.second
+				: (selected.grand_master_enabled ?? true),
+		});
+	}
+	if (edit === "pan_tilt") {
+		const choice = combinedPolicyValues(value as CombinedPolicyChoice);
+		const applicable = fixturePolicyApplicability(selected.definition);
+		void applyEdit(controller, {
+			invert_pan: applicable.pan
+				? choice.first
+				: (selected.invert_pan ?? false),
+			invert_tilt: applicable.tilt
+				? choice.second
+				: (selected.invert_tilt ?? false),
+		});
+	}
 	if (edit === "bracket_angle") {
 		const degrees = Number(value);
 		if (Number.isFinite(degrees))
@@ -180,15 +171,36 @@ export async function saveVectorAxisInput(
 	});
 }
 
-async function savePolicy(
-	controller: PatchController,
-	action: Parameters<typeof controller.patch.updatePolicy>[1],
-	changes: Parameters<typeof controller.patch.updatePolicy>[2],
-) {
-	const selected = controller.data.selected;
-	if (!selected) return;
-	if (await controller.patch.updatePolicy(selected.fixture_id, action, changes))
-		completeEdit(controller);
+export function parseMibInput(value: string):
+	| {
+			changes: {
+				move_in_black_enabled: boolean;
+				move_in_black_delay_millis: number;
+			};
+	  }
+	| { error: string } {
+	const trimmed = value.trim();
+	if (trimmed.toLowerCase() === "off")
+		return {
+			changes: {
+				move_in_black_enabled: false,
+				move_in_black_delay_millis: 0,
+			},
+		};
+	if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(trimmed))
+		return { error: "Enter Off or a finite non-negative delay in seconds." };
+	const seconds = Number(trimmed);
+	if (!Number.isFinite(seconds))
+		return { error: "Enter Off or a finite non-negative delay in seconds." };
+	const milliseconds = Math.round(seconds * 1_000);
+	if (!Number.isSafeInteger(milliseconds))
+		return { error: "The MIB delay is too large to store safely." };
+	return {
+		changes: {
+			move_in_black_enabled: true,
+			move_in_black_delay_millis: milliseconds,
+		},
+	};
 }
 
 function saveFixtureNumber(controller: PatchController, value: string) {
