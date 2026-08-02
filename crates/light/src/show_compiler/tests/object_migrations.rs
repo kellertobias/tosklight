@@ -171,14 +171,9 @@ fn defaults_are_raw_preserving_side_effect_free_and_compile_equivalent() {
     assert!(cue.get("chaser_xfade_millis").is_none());
     assert!(Uuid::parse_str(cue["cues"][0]["id"].as_str().unwrap()).is_ok());
     assert_eq!(cue["cues"][0]["future_cue"], json!({"kept": [3, 1, 2]}));
-    assert_eq!(candidate.object("group", "7").unwrap().body()["id"], "7");
-    assert_eq!(
-        candidate.object("group", "7").unwrap().body()["grid"],
-        json!({
-            "method": "stage2d",
-            "axis_origin": {"x": 0.0, "y": 0.0, "z": 0.0}
-        })
-    );
+    let group = candidate.object("group", "7").unwrap().body();
+    assert_eq!(group["id"], "7");
+    assert!(group.get("grid").is_none());
     let preset = candidate.object("preset", "1.5").unwrap().body();
     assert_eq!(preset["number"], 5);
     assert_eq!(
