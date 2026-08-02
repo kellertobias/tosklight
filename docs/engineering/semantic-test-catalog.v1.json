@@ -35266,14 +35266,14 @@
         },
         {
           "kind": "expected-outcome",
-          "description": "Virtual playback → runtime: $thirdPlayback (result of virtualPlayback.assignSource), { target: \"cue_list\", runtime: null }.",
+          "description": "Virtual playback → runtime: $thirdPlayback (result of virtualPlayback.assignSource), { target: \"cue_list\", runtime: { enabled: false } }.",
           "call": "virtualPlayback.expect.runtime",
           "arguments": [
             "$thirdPlayback (result of virtualPlayback.assignSource)",
-            "{ target: \"cue_list\", runtime: null }"
+            "{ target: \"cue_list\", runtime: { enabled: false } }"
           ],
-          "expression": "t.virtualPlayback.expect.runtime(thirdPlayback, { target: \"cue_list\", runtime: null, })",
-          "sourceCode": "t.virtualPlayback.expect.runtime(thirdPlayback, {\n\t\t\ttarget: \"cue_list\",\n\t\t\truntime: null,\n\t\t})",
+          "expression": "t.virtualPlayback.expect.runtime(thirdPlayback, { target: \"cue_list\", runtime: { enabled: false }, })",
+          "sourceCode": "t.virtualPlayback.expect.runtime(thirdPlayback, {\n\t\t\ttarget: \"cue_list\",\n\t\t\truntime: { enabled: false },\n\t\t})",
           "surfaces": [
             "Browser UI",
             "Virtual Playbacks"

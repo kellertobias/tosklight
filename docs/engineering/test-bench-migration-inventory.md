@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **162 root cases across 65 files**.
+Default catalog: **164 root cases across 66 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -175,6 +175,8 @@ Default catalog: **162 root cases across 65 files**.
 | 78-missing-fixture-selection.spec.ts | CLOCK-002 @ui › larger clock seconds stay inside the unchanged clock layout with and without attached hardware | repository contract | @ui | missing-fixture-selection | standard failure evidence | parallel | pending-semantic-migration |
 | 79-attribute-registry-indexed-presets.spec.ts | CROSS-004 @ui › Desk Setup creates a fully placed show-owned attribute | docs/testing/04-osc-api-and-cross-surface.md | @ui | attribute-registry-indexed-presets | standard failure evidence | parallel | pending-semantic-migration |
 | 79-attribute-registry-indexed-presets.spec.ts | CROSS-004 @ui › one Indexed Preset resolves each embedded fixture profile | docs/testing/04-osc-api-and-cross-surface.md | @ui | attribute-registry-indexed-presets | standard failure evidence | parallel | pending-semantic-migration |
+| 81-group-spatial-mapping-and-dynamics-projection.spec.ts | GROUP-SPATIAL-010 @ui › Group settings author ranked output without retired authority | repository contract | @ui | group-spatial-mapping-and-dynamics-projection | standard failure evidence | parallel | pending-semantic-migration |
+| 81-group-spatial-mapping-and-dynamics-projection.spec.ts | GROUP-SPATIAL-020 @api › canonical live references drive command output and refresh membership | repository contract | @api | group-spatial-mapping-and-dynamics-projection | standard failure evidence | parallel | reviewed-low-level-boundary |
 | playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
 
