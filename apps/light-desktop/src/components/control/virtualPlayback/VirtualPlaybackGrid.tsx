@@ -13,6 +13,7 @@ import {
 	VIRTUAL_PLAYBACKS_PER_PAGE,
 	virtualPlaybackNumber,
 } from "../../../api/virtualPlaybackAddress";
+import { useSetInteraction } from "../../../features/controlSurfaceInteraction/SetInteractionProvider";
 import { useActiveShowId } from "../../../features/deskSnapshot/DeskSnapshotState";
 import type { PlaybackRuntimeActions } from "../../../features/playbackRuntime/actionWriter";
 import type { PlaybackProjection } from "../../../features/playbackRuntime/contracts";
@@ -33,6 +34,8 @@ export const MAX_VIRTUAL_PLAYBACK_CELLS = VIRTUAL_PLAYBACKS_PER_PAGE;
 interface VirtualPlaybackGridProps {
 	pageNumber: number;
 	page: PlaybackPage | undefined;
+	pageObjectId: string | null;
+	pageObjectRevision: number;
 	rows: number;
 	columns: number;
 	playbacks: ReadonlyMap<number, PlaybackDefinition>;
@@ -51,6 +54,7 @@ interface VirtualPlaybackGridProps {
 
 export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 	const heldActions = useHeldPlaybackActions(props.runtimeActions);
+	const setInteraction = useSetInteraction();
 	const poolPresentation = usePoolPresentationConfiguration();
 	const showId = useActiveShowId() ?? "unresolved";
 	const surfaceKey = poolSurfaceKey(showId, "cuelist", props.paneId);
@@ -81,6 +85,19 @@ export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 				},
 				onAction: (slot) => {
 					const playback = playbackAt(slot);
+					if (setInteraction?.state && setInteraction.state.phase !== "idle") {
+						void setInteraction.choosePlayback(
+							{
+								addressing: "virtual",
+								pageNumber: props.pageNumber,
+								playbackNumber: virtualPlaybackNumber(props.pageNumber, slot),
+								pageObjectId: props.pageObjectId,
+								pageObjectRevision: props.pageObjectRevision,
+							},
+							"touch",
+						);
+						return;
+					}
 					const action = playback?.buttons[0] ?? "none";
 					if (playback && action !== "none")
 						void props.runtimeActions?.virtualPlaybackAction(

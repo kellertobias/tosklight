@@ -107,6 +107,25 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		);
 	}
 
+	assignVirtualGroupMaster(
+		groupObjectId: string,
+		expectedGroupRevision: number,
+		page: number,
+		playbackNumber: number,
+		revisionBasis?: PlaybackPageRevisionBasis,
+	) {
+		return this.lifecycle.enqueue((generation) =>
+			this.assignVirtualGroupMasterNow(
+				generation,
+				groupObjectId,
+				expectedGroupRevision,
+				page,
+				playbackNumber,
+				revisionBasis,
+			),
+		);
+	}
+
 	configureVirtual(
 		page: number,
 		playbackNumber: number,
@@ -276,9 +295,43 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 				type: "assign_group_master",
 				groupObjectId,
 				expectedGroupRevision,
-				page,
-				slot,
-				...revisions,
+				address: { kind: "physical", page, slot, ...revisions },
+			},
+			generation,
+		);
+	}
+
+	private assignVirtualGroupMasterNow(
+		generation: number,
+		groupObjectId: string,
+		expectedGroupRevision: number,
+		page: number,
+		playbackNumber: number,
+		revisionBasis?: PlaybackPageRevisionBasis,
+	) {
+		const snapshot = this.options.store.getSnapshot();
+		if (!snapshot.readyCollections.has("group"))
+			return this.fail("Authoritative Groups are loading", generation);
+		const group = snapshot.groups.find(
+			(candidate) => candidate.id === groupObjectId,
+		);
+		if (!group || group.revision !== expectedGroupRevision)
+			return this.fail(
+				`Authoritative Group ${groupObjectId} is stale or unavailable`,
+				generation,
+			);
+		const revisions = this.readyPageRevisions(page, revisionBasis);
+		if (!revisions)
+			return this.fail(
+				"Authoritative Playback topology is loading",
+				generation,
+			);
+		return this.apply(
+			{
+				type: "assign_group_master",
+				groupObjectId,
+				expectedGroupRevision,
+				address: { kind: "virtual", page, playbackNumber, ...revisions },
 			},
 			generation,
 		);
@@ -512,6 +565,22 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 			);
 			if (!group || group.revision !== action.expectedGroupRevision)
 				return false;
+			const page = snapshot.playbackPages.find(
+				(object) => object.body.number === action.address.page,
+			);
+			const pageCurrent =
+				(page?.id ?? null) === action.address.expectedPageObjectId &&
+				(page?.revision ?? 0) === action.address.expectedPageRevision;
+			if (action.address.kind === "virtual") return pageCurrent;
+			const address = action.address;
+			const playback = snapshot.playbacks.find(
+				(object) => object.id === address.expectedPlaybackObjectId,
+			);
+			return (
+				pageCurrent &&
+				(playback?.id ?? null) === address.expectedPlaybackObjectId &&
+				(playback?.revision ?? 0) === address.expectedPlaybackRevision
+			);
 		}
 		const page = snapshot.playbackPages.find(
 			(object) => object.body.number === action.page,
@@ -593,6 +662,28 @@ function assertOutcome(
 		)
 			throw new Error(
 				"Playback topology response Virtual Playback does not match",
+			);
+		return;
+	}
+	if (action.type === "assign_group_master") {
+		if (action.address.kind === "virtual") {
+			if (
+				resolution.kind !== "virtual" ||
+				resolution.page !== action.address.page ||
+				resolution.playbackNumber !== action.address.playbackNumber
+			)
+				throw new Error(
+					"Playback topology response Virtual Group Master does not match",
+				);
+			return;
+		}
+		if (
+			resolution.kind !== "page_slot" ||
+			resolution.page !== action.address.page ||
+			resolution.slot !== action.address.slot
+		)
+			throw new Error(
+				"Playback topology response physical Group Master does not match",
 			);
 		return;
 	}

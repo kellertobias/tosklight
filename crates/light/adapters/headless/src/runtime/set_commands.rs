@@ -125,16 +125,20 @@ fn assign_group_page_slot(
             action: light_application::PlaybackTopologyAction::AssignGroupMaster {
                 group_object_id: group_object.id,
                 expected_group_revision: group_object.revision,
-                page,
-                slot,
-                expected_page_revision: page_object
-                    .as_ref()
-                    .map_or(0, |(object, _)| object.revision),
-                expected_page_object_id: page_object.as_ref().map(|(object, _)| object.id.clone()),
-                expected_playback_revision: playback_object
-                    .as_ref()
-                    .map_or(0, |object| object.revision),
-                expected_playback_object_id: playback_object.map(|object| object.id),
+                address: light_application::GroupMasterPlaybackAddress::Physical {
+                    page,
+                    slot,
+                    expected_page_revision: page_object
+                        .as_ref()
+                        .map_or(0, |(object, _)| object.revision),
+                    expected_page_object_id: page_object
+                        .as_ref()
+                        .map(|(object, _)| object.id.clone()),
+                    expected_playback_revision: playback_object
+                        .as_ref()
+                        .map_or(0, |object| object.revision),
+                    expected_playback_object_id: playback_object.map(|object| object.id),
+                },
             },
         },
     };

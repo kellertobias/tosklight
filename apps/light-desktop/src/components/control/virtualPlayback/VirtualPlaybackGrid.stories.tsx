@@ -185,6 +185,8 @@ function StoryGrid({
 			<VirtualPlaybackGrid
 				pageNumber={page.number}
 				page={page}
+				pageObjectId="story-page-one"
+				pageObjectRevision={1}
 				rows={rows}
 				columns={columns}
 				playbacks={playbacks}
@@ -243,6 +245,8 @@ export const DocumentationPane: Story = {
 						"1004": virtualPlayback(1, 4, 10),
 					},
 				}}
+				pageObjectId="story-page-one"
+				pageObjectRevision={1}
 				rows={args.rows}
 				columns={args.columns}
 				playbacks={playbacks}

@@ -18,6 +18,7 @@ import {
 	enumAt,
 	exactRecordAt,
 	integerAt,
+	numberAt,
 	printableStringAt,
 	recordAt,
 	stringAt,
@@ -140,6 +141,28 @@ function encodeAction(action: PlaybackTopologyAction) {
 		};
 	if (action.type === "create_page" || action.type === "rename_page")
 		return encodePlaybackPageAction(action);
+	if (action.type === "assign_group_master") {
+		const expectedGroupRevision = revisionAt(
+			action.expectedGroupRevision,
+			"$.action.expectedGroupRevision",
+		);
+		if (expectedGroupRevision < 1)
+			invalid(
+				"$.action.expectedGroupRevision",
+				"an existing Group revision",
+				expectedGroupRevision,
+			);
+		return {
+			type: action.type,
+			group_object_id: printableStringAt(
+				action.groupObjectId,
+				"$.action.groupObjectId",
+				128,
+			),
+			expected_group_revision: expectedGroupRevision,
+			address: encodeGroupMasterAddress(action.address),
+		};
+	}
 	if (action.type === "configure_virtual" || action.type === "clear_virtual") {
 		const page = boundedPositiveIntegerAt(action.page, "$.action.page", 127);
 		const playbackNumber = boundedVirtualPlaybackNumber(
@@ -186,27 +209,6 @@ function encodeAction(action: PlaybackTopologyAction) {
 		),
 		expected_playback_object_id: action.expectedPlaybackObjectId,
 	};
-	if (action.type === "assign_group_master") {
-		const expectedGroupRevision = revisionAt(
-			action.expectedGroupRevision,
-			"$.action.expectedGroupRevision",
-		);
-		if (expectedGroupRevision < 1)
-			invalid(
-				"$.action.expectedGroupRevision",
-				"an existing Group revision",
-				expectedGroupRevision,
-			);
-		return {
-			...shared,
-			group_object_id: printableStringAt(
-				action.groupObjectId,
-				"$.action.groupObjectId",
-				128,
-			),
-			expected_group_revision: expectedGroupRevision,
-		};
-	}
 	if (action.type === "configure_slot")
 		return { ...shared, playback: encodePlayback(action.playback) };
 	if (action.type === "map_existing_playback") {
@@ -221,6 +223,54 @@ function encodeAction(action: PlaybackTopologyAction) {
 		};
 	}
 	return shared;
+}
+
+function encodeGroupMasterAddress(
+	address: Extract<
+		PlaybackTopologyAction,
+		{ type: "assign_group_master" }
+	>["address"],
+) {
+	const page = boundedPositiveIntegerAt(
+		address.page,
+		"$.action.address.page",
+		127,
+	);
+	const pageAuthority = {
+		expected_page_revision: revisionAt(
+			address.expectedPageRevision,
+			"$.action.address.expectedPageRevision",
+		),
+		expected_page_object_id: address.expectedPageObjectId,
+	};
+	if (address.kind === "virtual") {
+		const playbackNumber = boundedVirtualPlaybackNumber(
+			address.playbackNumber,
+			"$.action.address.playbackNumber",
+		);
+		validateVirtualPlaybackBank(
+			page,
+			playbackNumber,
+			"$.action.address.playbackNumber",
+		);
+		return {
+			kind: address.kind,
+			page,
+			playback_number: playbackNumber,
+			...pageAuthority,
+		};
+	}
+	return {
+		kind: address.kind,
+		page,
+		slot: boundedPositiveIntegerAt(address.slot, "$.action.address.slot", 127),
+		...pageAuthority,
+		expected_playback_revision: revisionAt(
+			address.expectedPlaybackRevision,
+			"$.action.address.expectedPlaybackRevision",
+		),
+		expected_playback_object_id: address.expectedPlaybackObjectId,
+	};
 }
 
 function validateExistingPlaybackAuthority(
@@ -300,6 +350,14 @@ function encodeTarget(target: PlaybackDefinition["target"]) {
 				"$.action.playback.target.group_id",
 				128,
 			),
+			...(target.initial_master == null
+				? {}
+				: {
+						initial_master: boundedMasterAt(
+							target.initial_master,
+							"$.action.playback.target.initial_master",
+						),
+					}),
 		};
 	if (target.type === "speed_group")
 		return {
@@ -316,6 +374,12 @@ function encodeTarget(target: PlaybackDefinition["target"]) {
 			assignment: target.assignment,
 		};
 	return { type: target.type };
+}
+
+function boundedMasterAt(value: unknown, path: string) {
+	const number = numberAt(value, path);
+	if (number < 0 || number > 1) invalid(path, "number between 0 and 1", value);
+	return number;
 }
 
 function decodeResolution(
@@ -365,10 +429,12 @@ function decodeResolution(
 			"$.resolution.playback_number",
 		);
 		if (
-			(action.type !== "configure_virtual" &&
-				action.type !== "clear_virtual") ||
-			action.page !== page ||
-			action.playbackNumber !== playbackNumber
+			!(action.type === "configure_virtual" || action.type === "clear_virtual"
+				? action.page === page && action.playbackNumber === playbackNumber
+				: action.type === "assign_group_master" &&
+					action.address.kind === "virtual" &&
+					action.address.page === page &&
+					action.address.playbackNumber === playbackNumber)
 		)
 			invalid("$.resolution", "the requested Virtual Playback", resolution);
 		return { kind, page, playbackNumber };
@@ -403,8 +469,11 @@ function decodeResolution(
 		action.type === "rename_page" ||
 		action.type === "configure_virtual" ||
 		action.type === "clear_virtual" ||
-		action.page !== page ||
-		action.slot !== slot
+		(action.type === "assign_group_master"
+			? action.address.kind !== "physical" ||
+				action.address.page !== page ||
+				action.address.slot !== slot
+			: action.page !== page || action.slot !== slot)
 	)
 		invalid("$.resolution", "the requested page slot", resolution);
 	if (

@@ -9,6 +9,7 @@ import {
 	booleanAt,
 	enumAt,
 	integerAt,
+	numberAt,
 	recordAt,
 	stringAt,
 } from "./playbackWirePrimitives";
@@ -202,6 +203,13 @@ function decodeTarget(value: unknown, path: string) {
 			...target,
 			type,
 			group_id: stringAt(target.group_id, `${path}.group_id`),
+			initial_master:
+				target.initial_master == null
+					? target.initial_master
+					: boundedMasterAt(
+							target.initial_master,
+							`${path}.initial_master`,
+						),
 		};
 	if (type === "speed_group")
 		return { ...target, type, group: stringAt(target.group, `${path}.group`) };
@@ -343,6 +351,12 @@ function positiveIntegerAt(value: unknown, path: string, maximum: number) {
 	if (integer < 1 || integer > maximum)
 		invalid(path, `integer between 1 and ${maximum}`, value);
 	return integer;
+}
+
+function boundedMasterAt(value: unknown, path: string) {
+	const number = numberAt(value, path);
+	if (number < 0 || number > 1) invalid(path, "number between 0 and 1", value);
+	return number;
 }
 
 function plainStringAt(value: unknown, path: string) {

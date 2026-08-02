@@ -61,9 +61,10 @@ export function useVirtualPlaybackController(
 		runtimeStatus.status === "ready" &&
 		playbackDesk !== null &&
 		pageNumber !== null;
-	const page = topology.pages.find(
+	const pageObject = topology.pages.find(
 		(candidate) => candidate.body.number === pageNumber,
-	)?.body;
+	);
+	const page = pageObject?.body;
 	const playbacks = useMemo(
 		() => new Map(topology.playbacks.map(({ body }) => [body.number, body])),
 		[topology.playbacks],
@@ -110,6 +111,7 @@ export function useVirtualPlaybackController(
 		runtimeActions,
 		pageNumber,
 		page,
+		pageObject,
 		rows,
 		columns,
 		playbacks,

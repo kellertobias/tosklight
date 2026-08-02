@@ -765,6 +765,7 @@ fn playback_topology(config: &Config) -> Vec<String> {
         PlaybackTopologyDynamicFaderMode::decl(config),
         PlaybackTopologyDynamicResumePolicy::decl(config),
         PlaybackTopologyPlaybackDefinition::decl(config),
+        PlaybackTopologyGroupMasterAddress::decl(config),
         PlaybackTopologyAction::decl(config),
         PlaybackTopologyActionRequest::decl(config),
         PlaybackTopologyResolution::decl(config),

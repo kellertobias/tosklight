@@ -27,12 +27,7 @@ export type PlaybackTopologyAction =
 			type: "assign_group_master";
 			groupObjectId: string;
 			expectedGroupRevision: number;
-			page: number;
-			slot: number;
-			expectedPageRevision: number;
-			expectedPageObjectId: string | null;
-			expectedPlaybackRevision: number;
-			expectedPlaybackObjectId: string | null;
+			address: GroupMasterPlaybackAddress;
 	  }
 	| {
 			type: "configure_virtual";
@@ -86,6 +81,18 @@ export interface PlaybackTopologyRequest {
 	requestId: string;
 	action: PlaybackTopologyAction;
 }
+
+export type GroupMasterPlaybackAddress =
+	| ({
+			kind: "physical";
+			page: number;
+			slot: number;
+	  } & PlaybackTopologyRevisionBasis)
+	| ({
+			kind: "virtual";
+			page: number;
+			playbackNumber: number;
+	  } & PlaybackPageRevisionBasis);
 
 export type PlaybackTopologyResolution =
 	| { kind: "cue_list"; cueListId: string }
@@ -164,6 +171,13 @@ export interface PlaybackTopologyActions {
 		page: number,
 		slot: number,
 		revisionBasis?: PlaybackTopologyRevisionBasis,
+	): Promise<PlaybackTopologyOutcome | null>;
+	assignVirtualGroupMaster(
+		groupObjectId: string,
+		expectedGroupRevision: number,
+		page: number,
+		playbackNumber: number,
+		revisionBasis?: PlaybackPageRevisionBasis,
 	): Promise<PlaybackTopologyOutcome | null>;
 	configureVirtual(
 		page: number,

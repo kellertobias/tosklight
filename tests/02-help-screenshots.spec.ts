@@ -335,21 +335,19 @@ async function seedScreenshotProgramming(api: ApiDriver, showId: string) {
     return id;
   });
   const groups = [
-    ["1", "Front Fresnels", fixtureIds(1, 2, 3, 4, 5, 6), 0.9, 2],
-    ["2", "Back Profiles", fixtureIds(101, 102, 103, 104, 105, 106, 107, 108), 0.75, 3],
-    ["3", "LED Washes", fixtureIds(201, 202, 203, 204, 205), 0.65, 4],
-    ["4", "Floor PARs", fixtureIds(401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412), 0.8, 5],
-    ["5", "RGB Sunstrips", fixtureIds(501, 502, 503, 504, 505, 506), 0.7, 6],
+    ["1", "Front Fresnels", fixtureIds(1, 2, 3, 4, 5, 6), 0.9],
+    ["2", "Back Profiles", fixtureIds(101, 102, 103, 104, 105, 106, 107, 108), 0.75],
+    ["3", "LED Washes", fixtureIds(201, 202, 203, 204, 205), 0.65],
+    ["4", "Floor PARs", fixtureIds(401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412), 0.8],
+    ["5", "RGB Sunstrips", fixtureIds(501, 502, 503, 504, 505, 506), 0.7],
   ] as const;
-  for (const [id, name, fixtures, master, playbackFader] of groups) {
+  for (const [id, name, fixtures] of groups) {
     await put(api, showId, "group", id, {
       name,
       fixtures,
       derived_from: null,
       frozen_from: null,
       programming: {},
-      master,
-      playback_fader: playbackFader,
     });
   }
   await put(api, showId, "preset", "1.1", {
@@ -386,8 +384,8 @@ async function seedScreenshotProgramming(api: ApiDriver, showId: string) {
     ],
   });
   await put(api, showId, "playback", "1", playback(1, "Opening Sequence", { type: "cue_list", cue_list_id: cueListId }));
-  for (const [id, name] of groups.slice(0, 4).map(([id, name]) => [id, name] as const)) {
-    await put(api, showId, "playback", String(Number(id) + 1), playback(Number(id) + 1, name, { type: "group", group_id: id }, ["select", "flash", "select_dereferenced"]));
+  for (const [id, name, , initialMaster] of groups.slice(0, 4)) {
+    await put(api, showId, "playback", String(Number(id) + 1), playback(Number(id) + 1, name, { type: "group", group_id: id, initial_master: initialMaster }, ["select", "flash", "select_dereferenced"]));
   }
   await put(api, showId, "playback_page", "1", {
     number: 1,
@@ -395,10 +393,10 @@ async function seedScreenshotProgramming(api: ApiDriver, showId: string) {
     slots: { "1": 1, "2": 2, "3": 3, "4": 4, "5": 5 },
     virtual_playbacks: {
       "1001": playback(1001, "Opening Sequence", { type: "cue_list", cue_list_id: cueListId }),
-      "1002": playback(1002, "Front Fresnels", { type: "group", group_id: "1" }, ["select", "flash", "select_dereferenced"]),
-      "1003": playback(1003, "Back Fresnels", { type: "group", group_id: "2" }, ["select", "flash", "select_dereferenced"]),
-      "1004": playback(1004, "LED Washes", { type: "group", group_id: "3" }, ["select", "flash", "select_dereferenced"]),
-      "1005": playback(1005, "Floor PARs", { type: "group", group_id: "4" }, ["select", "flash", "select_dereferenced"]),
+      "1002": playback(1002, "Front Fresnels", { type: "group", group_id: "1", initial_master: 0.9 }, ["select", "flash", "select_dereferenced"]),
+      "1003": playback(1003, "Back Fresnels", { type: "group", group_id: "2", initial_master: 0.75 }, ["select", "flash", "select_dereferenced"]),
+      "1004": playback(1004, "LED Washes", { type: "group", group_id: "3", initial_master: 0.65 }, ["select", "flash", "select_dereferenced"]),
+      "1005": playback(1005, "Floor PARs", { type: "group", group_id: "4", initial_master: 0.8 }, ["select", "flash", "select_dereferenced"]),
     },
   });
   await api.request("POST", "/api/v2/files/shows/operations", { operation: "create_file", sources: [], destination: "", name: SCREENSHOT_TEXT_FILE });

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 	replace: vi.fn(),
 	reset: vi.fn(),
 	assignGroupMaster: vi.fn(),
+	assignVirtualGroupMaster: vi.fn(),
 	command: { text: "" },
 	groups: [
 		{
@@ -34,6 +35,7 @@ vi.mock("../programmingInteraction/ProgrammingInteractionView", () => ({
 vi.mock("../playbackTopology/PlaybackTopologyProvider", () => ({
 	usePlaybackTopologyActions: () => ({
 		assignGroupMaster: mocks.assignGroupMaster,
+		assignVirtualGroupMaster: mocks.assignVirtualGroupMaster,
 	}),
 }));
 vi.mock("../showObjects/ShowObjectsState", () => ({
@@ -79,7 +81,43 @@ describe("desk SET interaction owner", () => {
 		mocks.assignGroupMaster
 			.mockReset()
 			.mockResolvedValue({ status: "changed" });
+		mocks.assignVirtualGroupMaster
+			.mockReset()
+			.mockResolvedValue({ status: "changed" });
 		mocks.command.text = "";
+	});
+
+	it("assigns the explicit Group to one revision-guarded Virtual Playback", async () => {
+		render(<View />);
+		await act(async () => {
+			await controller?.arm("touch");
+			await controller?.chooseGroup(
+				{ objectId: "4", objectRevision: 12 },
+				"touch",
+			);
+			await controller?.choosePlayback(
+				{
+					addressing: "virtual",
+					pageNumber: 2,
+					playbackNumber: 1301,
+					pageObjectId: "page-two",
+					pageObjectRevision: 7,
+				},
+				"touch",
+			);
+		});
+		expect(mocks.assignVirtualGroupMaster).toHaveBeenCalledWith(
+			"4",
+			12,
+			2,
+			1301,
+			{
+				expectedPageRevision: 7,
+				expectedPageObjectId: "page-two",
+			},
+		);
+		expect(mocks.assignGroupMaster).not.toHaveBeenCalled();
+		expect(controller?.state?.phase).toBe("idle");
 	});
 
 	it("assigns one explicit Group to one revision-guarded current-page Playback", async () => {

@@ -51,30 +51,14 @@ pub(super) fn application_command(
         wire::PlaybackTopologyAction::AssignGroupMaster {
             group_object_id,
             expected_group_revision,
-            page,
-            slot,
-            expected_page_revision,
-            expected_page_object_id,
-            expected_playback_revision,
-            expected_playback_object_id,
+            address,
         } => application::PlaybackTopologyAction::AssignGroupMaster {
             group_object_id,
             expected_group_revision: input_revision(
                 expected_group_revision,
                 "expected_group_revision",
             )?,
-            page,
-            slot,
-            expected_page_revision: input_revision(
-                expected_page_revision,
-                "expected_page_revision",
-            )?,
-            expected_page_object_id: expected_page_object_id.into_option(),
-            expected_playback_revision: input_revision(
-                expected_playback_revision,
-                "expected_playback_revision",
-            )?,
-            expected_playback_object_id: expected_playback_object_id.into_option(),
+            address: application_group_master_address(address)?,
         },
         wire::PlaybackTopologyAction::ConfigureVirtual {
             page,
@@ -352,9 +336,12 @@ fn application_target(
                 },
             }
         }
-        wire::PlaybackTopologyTarget::Group { group_id } => playback::PlaybackTarget::Group {
+        wire::PlaybackTopologyTarget::Group {
             group_id,
-            initial_master: None,
+            initial_master,
+        } => playback::PlaybackTarget::Group {
+            group_id,
+            initial_master,
         },
         wire::PlaybackTopologyTarget::SpeedGroup { group } => {
             playback::PlaybackTarget::SpeedGroup { group }
@@ -362,6 +349,48 @@ fn application_target(
         wire::PlaybackTopologyTarget::ProgrammerFade {} => playback::PlaybackTarget::ProgrammerFade,
         wire::PlaybackTopologyTarget::CueFade {} => playback::PlaybackTarget::CueFade,
         wire::PlaybackTopologyTarget::GrandMaster {} => playback::PlaybackTarget::GrandMaster,
+    })
+}
+
+fn application_group_master_address(
+    value: wire::PlaybackTopologyGroupMasterAddress,
+) -> Result<application::GroupMasterPlaybackAddress, String> {
+    Ok(match value {
+        wire::PlaybackTopologyGroupMasterAddress::Physical {
+            page,
+            slot,
+            expected_page_revision,
+            expected_page_object_id,
+            expected_playback_revision,
+            expected_playback_object_id,
+        } => application::GroupMasterPlaybackAddress::Physical {
+            page,
+            slot,
+            expected_page_revision: input_revision(
+                expected_page_revision,
+                "expected_page_revision",
+            )?,
+            expected_page_object_id: expected_page_object_id.into_option(),
+            expected_playback_revision: input_revision(
+                expected_playback_revision,
+                "expected_playback_revision",
+            )?,
+            expected_playback_object_id: expected_playback_object_id.into_option(),
+        },
+        wire::PlaybackTopologyGroupMasterAddress::Virtual {
+            page,
+            playback_number,
+            expected_page_revision,
+            expected_page_object_id,
+        } => application::GroupMasterPlaybackAddress::Virtual {
+            page,
+            playback_number,
+            expected_page_revision: input_revision(
+                expected_page_revision,
+                "expected_page_revision",
+            )?,
+            expected_page_object_id: expected_page_object_id.into_option(),
+        },
     })
 }
 
@@ -529,16 +558,18 @@ mod tests {
             action: wire::PlaybackTopologyAction::AssignGroupMaster {
                 group_object_id: "front".into(),
                 expected_group_revision: revision,
-                page: 2,
-                slot: 4,
-                expected_page_revision: 5,
-                expected_page_object_id: wire::PlaybackTopologyObjectIdentity::Present(
-                    "page-two".into(),
-                ),
-                expected_playback_revision: 6,
-                expected_playback_object_id: wire::PlaybackTopologyObjectIdentity::Present(
-                    "playback-six".into(),
-                ),
+                address: wire::PlaybackTopologyGroupMasterAddress::Physical {
+                    page: 2,
+                    slot: 4,
+                    expected_page_revision: 5,
+                    expected_page_object_id: wire::PlaybackTopologyObjectIdentity::Present(
+                        "page-two".into(),
+                    ),
+                    expected_playback_revision: 6,
+                    expected_playback_object_id: wire::PlaybackTopologyObjectIdentity::Present(
+                        "playback-six".into(),
+                    ),
+                },
             },
         }
     }
@@ -553,18 +584,24 @@ mod tests {
         let application::PlaybackTopologyAction::AssignGroupMaster {
             group_object_id,
             expected_group_revision,
-            page,
-            slot,
-            expected_page_revision,
-            expected_page_object_id,
-            expected_playback_revision,
-            expected_playback_object_id,
+            address,
         } = command.action
         else {
             panic!("expected AssignGroupMaster action");
         };
         assert_eq!(group_object_id, "front");
         assert_eq!(expected_group_revision, 3);
+        let application::GroupMasterPlaybackAddress::Physical {
+            page,
+            slot,
+            expected_page_revision,
+            expected_page_object_id,
+            expected_playback_revision,
+            expected_playback_object_id,
+        } = address
+        else {
+            panic!("expected physical Group Master address");
+        };
         assert_eq!((page, slot), (2, 4));
         assert_eq!(expected_page_revision, 5);
         assert_eq!(expected_page_object_id.as_deref(), Some("page-two"));
@@ -582,6 +619,40 @@ mod tests {
 
         assert!(error.contains("expected_group_revision"));
         assert!(error.contains("maximum safe integer"));
+    }
+
+    #[test]
+    fn virtual_group_master_assignment_maps_exact_page_contained_authority() {
+        let request = wire::PlaybackTopologyActionRequest {
+            request_id: "assign-virtual-front".into(),
+            action: wire::PlaybackTopologyAction::AssignGroupMaster {
+                group_object_id: "front".into(),
+                expected_group_revision: 3,
+                address: wire::PlaybackTopologyGroupMasterAddress::Virtual {
+                    page: 2,
+                    playback_number: 1301,
+                    expected_page_revision: 5,
+                    expected_page_object_id: wire::PlaybackTopologyObjectIdentity::Present(
+                        "page-two".into(),
+                    ),
+                },
+            },
+        };
+
+        let (_, command) = application_command(ShowId(uuid::Uuid::from_u128(1)), request).unwrap();
+        let application::PlaybackTopologyAction::AssignGroupMaster { address, .. } = command.action
+        else {
+            panic!("expected AssignGroupMaster action");
+        };
+        assert!(matches!(
+            address,
+            application::GroupMasterPlaybackAddress::Virtual {
+                page: 2,
+                playback_number: 1301,
+                expected_page_revision: 5,
+                expected_page_object_id: Some(ref id),
+            } if id == "page-two"
+        ));
     }
 
     #[test]

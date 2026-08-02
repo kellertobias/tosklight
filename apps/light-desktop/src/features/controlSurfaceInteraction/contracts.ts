@@ -24,15 +24,23 @@ export interface GroupInteractionIdentity {
  * The concrete Playback page/slot observed by the originating surface. Addressing
  * remains explicit so a current-page touch cannot be confused with a typed page.
  */
-export interface PlaybackInteractionIdentity {
-	addressing: "current_page" | "explicit_page";
-	pageNumber: number;
-	slot: number;
-	pageObjectId: string | null;
-	pageObjectRevision: number;
-	playbackObjectId: string | null;
-	playbackObjectRevision: number;
-}
+export type PlaybackInteractionIdentity =
+	| {
+			addressing: "current_page" | "explicit_page";
+			pageNumber: number;
+			slot: number;
+			pageObjectId: string | null;
+			pageObjectRevision: number;
+			playbackObjectId: string | null;
+			playbackObjectRevision: number;
+	  }
+	| {
+			addressing: "virtual";
+			pageNumber: number;
+			playbackNumber: number;
+			pageObjectId: string | null;
+			pageObjectRevision: number;
+	  };
 
 interface ScopedTerminalIntent {
 	source: ControlSurfaceSource;

@@ -63,7 +63,7 @@ fn group_assignment_preserves_existing_assignment_local_presentation_and_layout(
     let mut existing = playback(7, "Local label");
     existing.target = PlaybackTarget::Group {
         group_id: "old-group".into(),
-        initial_master: None,
+        initial_master: Some(0.0),
     };
     existing.buttons = [
         light_playback::PlaybackButtonAction::Flash,
@@ -126,6 +126,72 @@ fn group_assignment_preserves_existing_assignment_local_presentation_and_layout(
     );
     assert_eq!(result.outcome.objects().len(), 2);
     assert_one_event(&rig, 1);
+}
+
+#[test]
+fn physical_group_reassignment_preserves_zero_seed_for_the_same_group() {
+    let rig = TestRig::new();
+    rig.seed(
+        "group",
+        "front",
+        &serde_json::to_value(group("front", "Front", "#123456", "front-icon")).unwrap(),
+    );
+    let mut existing = playback(7, "Local");
+    existing.target = PlaybackTarget::Group {
+        group_id: "front".into(),
+        initial_master: Some(0.0),
+    };
+    rig.seed(
+        "playback",
+        "legacy-seven",
+        &serde_json::to_value(&existing).unwrap(),
+    );
+    rig.seed(
+        "playback_page",
+        "page-one",
+        &json!({"number":1,"name":"Main","slots":{"2":7},"virtual_playbacks":{}}),
+    );
+
+    let result = rig
+        .handle(
+            "preserve-zero",
+            rig.show_revision(),
+            assign_group_action(
+                "front",
+                1,
+                1,
+                2,
+                1,
+                Some("page-one"),
+                1,
+                Some("legacy-seven"),
+            ),
+        )
+        .unwrap();
+
+    let stored: PlaybackDefinition = serde_json::from_value(
+        rig.document()
+            .object("playback", "legacy-seven")
+            .unwrap()
+            .body()
+            .clone(),
+    )
+    .unwrap();
+    assert_eq!(
+        stored.target,
+        PlaybackTarget::Group {
+            group_id: "front".into(),
+            initial_master: Some(0.0),
+        }
+    );
+    assert_eq!(
+        result.outcome.resolution(),
+        PlaybackTopologyResolution::PageSlot {
+            page: 1,
+            slot: 2,
+            playback_number: Some(7),
+        }
+    );
 }
 
 #[test]
@@ -254,6 +320,120 @@ fn group_assignment_replay_fingerprint_includes_group_identity_and_revision() {
     assert_eq!(conflict.kind, ActionErrorKind::Conflict);
 }
 
+#[test]
+fn virtual_group_assignment_uses_page_authority_and_preserves_zero_seed() {
+    let rig = TestRig::new();
+    rig.seed(
+        "group",
+        "front",
+        &serde_json::to_value(group("front", "Front", "#123456", "front-icon")).unwrap(),
+    );
+    let mut existing = playback(1001, "Virtual label");
+    existing.target = PlaybackTarget::Group {
+        group_id: "front".into(),
+        initial_master: Some(0.0),
+    };
+    existing.has_fader = false;
+    existing.button_count = 1;
+    existing.buttons[1] = light_playback::PlaybackButtonAction::None;
+    existing.buttons[2] = light_playback::PlaybackButtonAction::None;
+    rig.seed(
+        "playback_page",
+        "page-one",
+        &serde_json::to_value(light_playback::PlaybackPage {
+            number: 1,
+            name: "Main".into(),
+            slots: Default::default(),
+            virtual_playbacks: [(1001, existing.clone())].into(),
+        })
+        .unwrap(),
+    );
+
+    let result = rig
+        .handle(
+            "assign-virtual-front",
+            rig.show_revision(),
+            PlaybackTopologyAction::AssignGroupMaster {
+                group_object_id: "front".into(),
+                expected_group_revision: 1,
+                address: GroupMasterPlaybackAddress::Virtual {
+                    page: 1,
+                    playback_number: 1001,
+                    expected_page_revision: 1,
+                    expected_page_object_id: Some("page-one".into()),
+                },
+            },
+        )
+        .unwrap();
+
+    assert_eq!(
+        result.outcome.resolution(),
+        PlaybackTopologyResolution::Virtual {
+            page: 1,
+            playback_number: 1001,
+        }
+    );
+    let page: light_playback::PlaybackPage = serde_json::from_value(
+        rig.document()
+            .object("playback_page", "page-one")
+            .unwrap()
+            .body()
+            .clone(),
+    )
+    .unwrap();
+    assert_eq!(
+        page.virtual_playbacks[&1001].target,
+        PlaybackTarget::Group {
+            group_id: "front".into(),
+            initial_master: Some(0.0),
+        }
+    );
+    assert!(result.outcome.objects().iter().all(|object| matches!(
+        object,
+        PlaybackTopologyObjectProjection::Present {
+            kind: ActiveShowObjectKind::PlaybackPage,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn virtual_group_assignment_rejects_stale_page_without_mutation() {
+    let rig = TestRig::new();
+    rig.seed(
+        "group",
+        "front",
+        &serde_json::to_value(group("front", "Front", "#123456", "front-icon")).unwrap(),
+    );
+    rig.seed(
+        "playback_page",
+        "page-one",
+        &json!({"number":1,"name":"Main","slots":{},"virtual_playbacks":{}}),
+    );
+    let before = rig.show_revision();
+
+    let error = rig
+        .handle(
+            "stale-virtual-front",
+            before,
+            PlaybackTopologyAction::AssignGroupMaster {
+                group_object_id: "front".into(),
+                expected_group_revision: 1,
+                address: GroupMasterPlaybackAddress::Virtual {
+                    page: 1,
+                    playback_number: 1001,
+                    expected_page_revision: 0,
+                    expected_page_object_id: None,
+                },
+            },
+        )
+        .unwrap_err();
+
+    assert_eq!(error.kind, ActionErrorKind::Conflict);
+    assert_eq!(rig.show_revision(), before);
+    assert_one_event(&rig, 0);
+}
+
 fn assign_group_action(
     group_object_id: &str,
     expected_group_revision: u64,
@@ -267,12 +447,14 @@ fn assign_group_action(
     PlaybackTopologyAction::AssignGroupMaster {
         group_object_id: group_object_id.into(),
         expected_group_revision,
-        page,
-        slot,
-        expected_page_revision,
-        expected_page_object_id: expected_page_object_id.map(str::to_owned),
-        expected_playback_revision,
-        expected_playback_object_id: expected_playback_object_id.map(str::to_owned),
+        address: GroupMasterPlaybackAddress::Physical {
+            page,
+            slot,
+            expected_page_revision,
+            expected_page_object_id: expected_page_object_id.map(str::to_owned),
+            expected_playback_revision,
+            expected_playback_object_id: expected_playback_object_id.map(str::to_owned),
+        },
     }
 }
 

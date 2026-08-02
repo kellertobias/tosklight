@@ -1,5 +1,6 @@
 use super::{
-    PlaybackTopologyAction, PlaybackTopologyCommand, PlaybackTopologyResolution,
+    GroupMasterPlaybackAddress, PlaybackTopologyAction, PlaybackTopologyCommand,
+    PlaybackTopologyResolution,
     change::{PreparedTopology, changed_configure, changed_present, no_change},
     map_existing::map_existing_playback,
     page::configured_page,
@@ -63,23 +64,13 @@ pub(super) fn prepare(
         PlaybackTopologyAction::AssignGroupMaster {
             group_object_id,
             expected_group_revision,
-            page,
-            slot,
-            expected_page_revision,
-            expected_page_object_id,
-            expected_playback_revision,
-            expected_playback_object_id,
+            address,
         } => assign_group_master(
             document,
             command,
             group_object_id,
             *expected_group_revision,
-            (*page, *slot),
-            (*expected_page_revision, *expected_playback_revision),
-            (
-                expected_page_object_id.as_deref(),
-                expected_playback_object_id.as_deref(),
-            ),
+            address,
         ),
         PlaybackTopologyAction::ConfigureVirtual {
             page,
@@ -449,11 +440,8 @@ fn assign_group_master(
     command: &PlaybackTopologyCommand,
     group_object_id: &str,
     expected_group_revision: u64,
-    address: (u8, u8),
-    expected: (u64, u64),
-    expected_ids: (Option<&str>, Option<&str>),
+    address: &GroupMasterPlaybackAddress,
 ) -> Result<PreparedActiveShowTransaction<PreparedTopology>, ActionError> {
-    validate_page_slot(address)?;
     let group = find_group(document, group_object_id)?
         .ok_or_else(|| not_found(format!("Group {group_object_id} does not exist")))?;
     validate_revision(
@@ -462,6 +450,51 @@ fn assign_group_master(
         "Group",
         document.revision().value(),
     )?;
+    match address {
+        GroupMasterPlaybackAddress::Physical {
+            page,
+            slot,
+            expected_page_revision,
+            expected_page_object_id,
+            expected_playback_revision,
+            expected_playback_object_id,
+        } => assign_physical_group_master(
+            document,
+            command,
+            &group,
+            (*page, *slot),
+            (*expected_page_revision, *expected_playback_revision),
+            (
+                expected_page_object_id.as_deref(),
+                expected_playback_object_id.as_deref(),
+            ),
+        ),
+        GroupMasterPlaybackAddress::Virtual {
+            page,
+            playback_number,
+            expected_page_revision,
+            expected_page_object_id,
+        } => assign_virtual_group_master(
+            document,
+            command,
+            &group,
+            *page,
+            *playback_number,
+            *expected_page_revision,
+            expected_page_object_id.as_deref(),
+        ),
+    }
+}
+
+fn assign_physical_group_master(
+    document: &PortableShowDocument,
+    command: &PlaybackTopologyCommand,
+    group: &Stored<light_programmer::GroupDefinition>,
+    address: (u8, u8),
+    expected: (u64, u64),
+    expected_ids: (Option<&str>, Option<&str>),
+) -> Result<PreparedActiveShowTransaction<PreparedTopology>, ActionError> {
+    validate_page_slot(address)?;
     let (page_number, slot) = address;
     let page = find_page(document, page_number)?;
     validate_identity(
@@ -495,7 +528,10 @@ fn assign_group_master(
     )?;
     let target = PlaybackTarget::Group {
         group_id: group.object_id.clone(),
-        initial_master: None,
+        initial_master: preserved_initial_master(
+            playback.as_ref().map(|stored| &stored.typed.target),
+            &group.object_id,
+        ),
     };
     let desired_playback = playback.as_ref().map_or_else(
         || PlaybackDefinition {
@@ -574,6 +610,126 @@ fn assign_group_master(
         ));
     }
     changed_configure(document, command, resolution, writes, playback, page)
+}
+
+fn assign_virtual_group_master(
+    document: &PortableShowDocument,
+    command: &PlaybackTopologyCommand,
+    group: &Stored<light_programmer::GroupDefinition>,
+    page_number: u8,
+    playback_number: u16,
+    expected_page_revision: u64,
+    expected_page_object_id: Option<&str>,
+) -> Result<PreparedActiveShowTransaction<PreparedTopology>, ActionError> {
+    light_playback::VirtualPlaybackAddress::new(page_number, playback_number).map_err(invalid)?;
+    let stored = find_page(document, page_number)?;
+    validate_identity(
+        stored.as_ref(),
+        expected_page_object_id,
+        "Playback Page",
+        document.revision().value(),
+    )?;
+    validate_revision(
+        stored.as_ref(),
+        expected_page_revision,
+        "Playback Page",
+        document.revision().value(),
+    )?;
+    let mut page = stored.as_ref().map_or_else(
+        || light_playback::PlaybackPage {
+            number: page_number,
+            name: format!("Page {page_number}"),
+            slots: std::collections::HashMap::new(),
+            virtual_playbacks: std::collections::HashMap::new(),
+        },
+        |stored| stored.typed.clone(),
+    );
+    let target = PlaybackTarget::Group {
+        group_id: group.object_id.clone(),
+        initial_master: preserved_initial_master(
+            page.virtual_playbacks
+                .get(&playback_number)
+                .map(|playback| &playback.target),
+            &group.object_id,
+        ),
+    };
+    let desired = page.virtual_playbacks.get(&playback_number).map_or_else(
+        || PlaybackDefinition {
+            number: playback_number,
+            name: group.typed.name.clone(),
+            buttons: PlaybackDefinition::default_buttons(&target),
+            button_count: 1,
+            fader: PlaybackFaderMode::Master,
+            has_fader: false,
+            go_activates: true,
+            auto_off: true,
+            xfade_millis: 0,
+            color: group
+                .typed
+                .color
+                .clone()
+                .unwrap_or_else(|| "#20c997".into()),
+            flash_release: FlashReleaseMode::default(),
+            protect_from_swap: false,
+            presentation_icon: group.typed.icon.clone(),
+            presentation_image: None,
+            target: target.clone(),
+        },
+        |existing| {
+            let mut desired = existing.clone();
+            desired.target = target.clone();
+            desired.reset_incompatible_layout();
+            desired.has_fader = false;
+            desired.button_count = 1;
+            desired.buttons[1] = light_playback::PlaybackButtonAction::None;
+            desired.buttons[2] = light_playback::PlaybackButtonAction::None;
+            desired
+        },
+    );
+    desired.validate().map_err(invalid)?;
+    page.virtual_playbacks.insert(playback_number, desired);
+    page.validate().map_err(invalid)?;
+    let resolution = PlaybackTopologyResolution::Virtual {
+        page: page_number,
+        playback_number,
+    };
+    if let Some(stored) = stored.as_ref()
+        && same_typed(&stored.typed, &page)?
+    {
+        return Ok(no_change(
+            document,
+            command,
+            resolution,
+            vec![stored_projection(
+                ActiveShowObjectKind::PlaybackPage,
+                stored,
+            )],
+        ));
+    }
+    let object_id = page_object_id(document, stored.as_ref(), page_number)?;
+    let body = stored.as_ref().map_or_else(
+        || serde_json::to_value(&page).map_err(invalid),
+        |stored| {
+            lossless_json::merge_typed(&stored.raw_body, &stored.typed, &page).map_err(invalid)
+        },
+    )?;
+    changed_present(
+        document,
+        command,
+        resolution,
+        vec![(ActiveShowObjectKind::PlaybackPage, object_id, body)],
+        Vec::new(),
+    )
+}
+
+fn preserved_initial_master(target: Option<&PlaybackTarget>, group_id: &str) -> Option<f32> {
+    match target {
+        Some(PlaybackTarget::Group {
+            group_id: existing_group_id,
+            initial_master,
+        }) if existing_group_id == group_id => *initial_master,
+        _ => None,
+    }
 }
 
 fn clear_mapped_playback(

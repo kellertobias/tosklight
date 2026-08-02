@@ -170,6 +170,37 @@ function changed(
 			eventSequence,
 			replayed: false,
 		};
+	if (action.type === "assign_group_master")
+		return action.address.kind === "virtual"
+			? {
+					status: "changed",
+					requestId: request.requestId,
+					correlationId: CORRELATION_ID,
+					showRevision,
+					resolution: {
+						kind: "virtual",
+						page: action.address.page,
+						playbackNumber: action.address.playbackNumber,
+					},
+					objects,
+					eventSequence,
+					replayed: false,
+				}
+			: {
+					status: "changed",
+					requestId: request.requestId,
+					correlationId: CORRELATION_ID,
+					showRevision,
+					resolution: {
+						kind: "page_slot",
+						page: action.address.page,
+						slot: action.address.slot,
+						playbackNumber: 7,
+					},
+					objects,
+					eventSequence,
+					replayed: false,
+				};
 	return {
 		status: "changed",
 		requestId: request.requestId,
@@ -359,12 +390,52 @@ describe("PlaybackTopologyWriter", () => {
 				type: "assign_group_master",
 				groupObjectId: "group-front",
 				expectedGroupRevision: 6,
-				page: 4,
-				slot: 2,
+				address: {
+					kind: "physical",
+					page: 4,
+					slot: 2,
+					expectedPageRevision: 1,
+					expectedPageObjectId: "legacy-page-four",
+					expectedPlaybackRevision: 1,
+					expectedPlaybackObjectId: "legacy-seven",
+				},
+			},
+		});
+	});
+
+	it("assigns a Virtual Group Master from exact Group and Page authority", async () => {
+		const assignedPage = page(2);
+		assignedPage.body.virtual_playbacks["1901"] = {
+			...playbackBody("Virtual Front", 1901),
+			target: {
+				type: "group",
+				group_id: "group-front",
+				initial_master: 0,
+			},
+		};
+		const apply = vi.fn(async (_show, _revision, request) =>
+			changed(request, [present(assignedPage)]),
+		);
+		const { writer } = setup(apply);
+
+		await expect(
+			writer.assignVirtualGroupMaster("group-front", 6, 4, 1901, {
 				expectedPageRevision: 1,
 				expectedPageObjectId: "legacy-page-four",
-				expectedPlaybackRevision: 1,
-				expectedPlaybackObjectId: "legacy-seven",
+			}),
+		).resolves.toMatchObject({ status: "changed" });
+		expect(apply.mock.calls[0][2]).toMatchObject({
+			action: {
+				type: "assign_group_master",
+				groupObjectId: "group-front",
+				expectedGroupRevision: 6,
+				address: {
+					kind: "virtual",
+					page: 4,
+					playbackNumber: 1901,
+					expectedPageRevision: 1,
+					expectedPageObjectId: "legacy-page-four",
+				},
 			},
 		});
 	});

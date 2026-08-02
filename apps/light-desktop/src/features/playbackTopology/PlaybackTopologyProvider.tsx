@@ -72,6 +72,7 @@ export function PlaybackTopologyProvider({
 				saveCueList: writer.saveCueList.bind(writer),
 				configureSlot: writer.configureSlot.bind(writer),
 				assignGroupMaster: writer.assignGroupMaster.bind(writer),
+				assignVirtualGroupMaster: writer.assignVirtualGroupMaster.bind(writer),
 				configureVirtual: writer.configureVirtual.bind(writer),
 				mapExistingPlayback: writer.mapExistingPlayback.bind(writer),
 				clearMappedPlayback: writer.clearMappedPlayback.bind(writer),

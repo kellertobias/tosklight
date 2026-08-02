@@ -91,12 +91,33 @@ function assignGroupMasterRequest(): PlaybackTopologyRequest {
 			type: "assign_group_master",
 			groupObjectId: "group-front",
 			expectedGroupRevision: 9,
-			page: 4,
-			slot: 2,
-			expectedPageRevision: 7,
-			expectedPageObjectId: "legacy-page-four",
-			expectedPlaybackRevision: 3,
-			expectedPlaybackObjectId: "legacy-playback-seven",
+			address: {
+				kind: "physical",
+				page: 4,
+				slot: 2,
+				expectedPageRevision: 7,
+				expectedPageObjectId: "legacy-page-four",
+				expectedPlaybackRevision: 3,
+				expectedPlaybackObjectId: "legacy-playback-seven",
+			},
+		},
+	};
+}
+
+function assignVirtualGroupMasterRequest(): PlaybackTopologyRequest {
+	return {
+		requestId: REQUEST_ID,
+		action: {
+			type: "assign_group_master",
+			groupObjectId: "group-front",
+			expectedGroupRevision: 9,
+			address: {
+				kind: "virtual",
+				page: 4,
+				playbackNumber: 1901,
+				expectedPageRevision: 7,
+				expectedPageObjectId: "legacy-page-four",
+			},
 		},
 	};
 }
@@ -211,6 +232,35 @@ describe("Playback topology v2 wire", () => {
 		});
 	});
 
+	it("preserves a zero initial Group Master seed in physical and virtual target edits", () => {
+		const target = {
+			type: "group" as const,
+			group_id: "group-front",
+			initial_master: 0,
+		};
+		const physical = request();
+		if (physical.action.type !== "configure_slot")
+			throw new Error("physical configure fixture");
+		physical.action.playback = { ...physical.action.playback, target };
+		expect(encodePlaybackTopologyRequest(physical)).toMatchObject({
+			action: { playback: { target } },
+		});
+		const virtual: PlaybackTopologyRequest = {
+			requestId: REQUEST_ID,
+			action: {
+				type: "configure_virtual",
+				page: 4,
+				playbackNumber: 1901,
+				expectedPageRevision: 7,
+				expectedPageObjectId: "legacy-page-four",
+				playback: { ...playback(1901), target },
+			},
+		};
+		expect(encodePlaybackTopologyRequest(virtual)).toMatchObject({
+			action: { playback: { target } },
+		});
+	});
+
 	it("encodes one exact existing-Playback map without a Playback body", () => {
 		expect(encodePlaybackTopologyRequest(mapExistingRequest())).toEqual({
 			request_id: REQUEST_ID,
@@ -244,12 +294,15 @@ describe("Playback topology v2 wire", () => {
 				type: "assign_group_master",
 				group_object_id: "group-front",
 				expected_group_revision: 9,
-				page: 4,
-				slot: 2,
-				expected_page_revision: 7,
-				expected_page_object_id: "legacy-page-four",
-				expected_playback_revision: 3,
-				expected_playback_object_id: "legacy-playback-seven",
+				address: {
+					kind: "physical",
+					page: 4,
+					slot: 2,
+					expected_page_revision: 7,
+					expected_page_object_id: "legacy-page-four",
+					expected_playback_revision: 3,
+					expected_playback_object_id: "legacy-playback-seven",
+				},
 			},
 		});
 		const request = assignGroupMasterRequest();
@@ -262,6 +315,50 @@ describe("Playback topology v2 wire", () => {
 				action: invalidAction,
 			}),
 		).toThrow("existing Group revision");
+	});
+
+	it("encodes and validates a Virtual Group Master assignment", () => {
+		expect(
+			encodePlaybackTopologyRequest(assignVirtualGroupMasterRequest()),
+		).toEqual({
+			request_id: REQUEST_ID,
+			action: {
+				type: "assign_group_master",
+				group_object_id: "group-front",
+				expected_group_revision: 9,
+				address: {
+					kind: "virtual",
+					page: 4,
+					playback_number: 1901,
+					expected_page_revision: 7,
+					expected_page_object_id: "legacy-page-four",
+				},
+			},
+		});
+		const virtualPage = pageObject();
+		virtualPage.body.virtual_playbacks = {
+			"1901": {
+				...playback(1901),
+				target: { type: "group", group_id: "group-front", initial_master: 0 },
+			},
+		};
+		expect(
+			decodePlaybackTopologyOutcome(
+				changedOutcome({
+					resolution: {
+						kind: "virtual",
+						page: 4,
+						playback_number: 1901,
+					},
+					objects: [virtualPage],
+				}),
+				assignVirtualGroupMasterRequest(),
+				11,
+			),
+		).toMatchObject({
+			status: "changed",
+			resolution: { kind: "virtual", page: 4, playbackNumber: 1901 },
+		});
 	});
 
 	it("accepts only the explicitly requested Group in an assignment outcome", () => {

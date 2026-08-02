@@ -33,17 +33,29 @@ export function validatePlaybackTopologyObjects(
 			return invalid("Virtual Playback resolution", resolution);
 		return validateVirtualPlaybackAction(action, objects, status);
 	}
-	if (resolution.kind !== "page_slot")
-		return invalid("page-slot resolution", resolution);
-	if (action.type === "configure_slot")
-		return validateConfiguredSlot(
+	if (action.type === "assign_group_master") {
+		if (action.address.kind === "virtual") {
+			if (
+				resolution.kind !== "virtual" ||
+				resolution.page !== action.address.page ||
+				resolution.playbackNumber !== action.address.playbackNumber
+			)
+				return invalid("Virtual Group Master resolution", resolution);
+			return validateAssignedVirtualGroupMaster(action, objects, status);
+		}
+		if (resolution.kind !== "page_slot")
+			return invalid("page-slot Group Master resolution", resolution);
+		return validateAssignedPhysicalGroupMaster(
 			action,
 			resolution.playbackNumber,
 			objects,
 			status,
 		);
-	if (action.type === "assign_group_master")
-		return validateAssignedGroupMaster(
+	}
+	if (resolution.kind !== "page_slot")
+		return invalid("page-slot resolution", resolution);
+	if (action.type === "configure_slot")
+		return validateConfiguredSlot(
 			action,
 			resolution.playbackNumber,
 			objects,
@@ -59,17 +71,20 @@ export function validatePlaybackTopologyObjects(
 	validateClearedSlot(action, resolution.playbackNumber, objects, status);
 }
 
-function validateAssignedGroupMaster(
+function validateAssignedPhysicalGroupMaster(
 	action: Extract<PlaybackTopologyAction, { type: "assign_group_master" }>,
 	playbackNumber: number | null,
 	objects: PlaybackTopologyObject[],
 	status: "changed" | "no_change",
 ) {
+	if (action.address.kind !== "physical")
+		return invalid("a physical Group Master address", action.address);
+	const address = action.address;
 	if (playbackNumber == null)
 		return invalid("an assigned Group Master Playback number", playbackNumber);
 	if (objects.length !== 2)
 		return invalid("only the assigned Page and Playback", objects);
-	const page = matchingPage(objects, action.page);
+	const page = matchingPage(objects, address.page);
 	const playback = objects.find(
 		(object) =>
 			object.kind === "playback" &&
@@ -78,7 +93,7 @@ function validateAssignedGroupMaster(
 	);
 	if (
 		!page ||
-		(page.body as PlaybackPage).slots[String(action.slot)] !== playbackNumber
+		(page.body as PlaybackPage).slots[String(address.slot)] !== playbackNumber
 	)
 		invalid("the assigned Group Master Page mapping", objects);
 	if (!playback) invalid("the assigned Group Master Playback", objects);
@@ -91,17 +106,53 @@ function validateAssignedGroupMaster(
 		invalid("the explicitly requested Group Master target", target);
 	validateStorageId(
 		page.objectId,
-		action.expectedPageObjectId,
-		String(action.page),
+		address.expectedPageObjectId,
+		String(address.page),
 		"Playback Page",
 	);
 	validateStorageId(
 		presentPlayback.objectId,
-		action.expectedPlaybackObjectId,
+		address.expectedPlaybackObjectId,
 		String(playbackNumber),
 		"Playback",
 	);
-	validateConfigureRevisions(action, page, presentPlayback, status);
+	validateConfiguredObjectRevisions(address, page, presentPlayback, status);
+}
+
+function validateAssignedVirtualGroupMaster(
+	action: Extract<PlaybackTopologyAction, { type: "assign_group_master" }>,
+	objects: PlaybackTopologyObject[],
+	status: "changed" | "no_change",
+) {
+	if (action.address.kind !== "virtual")
+		return invalid("a virtual Group Master address", action.address);
+	const address = action.address;
+	if (objects.length !== 1)
+		return invalid("only the assigned Virtual Playback Page", objects);
+	const page = matchingPage(objects, address.page);
+	if (!page) return invalid("the assigned Virtual Playback Page", objects);
+	validateStorageId(
+		page.objectId,
+		address.expectedPageObjectId,
+		String(address.page),
+		"Playback Page",
+	);
+	validateExactRevision(
+		page.objectRevision,
+		address.expectedPageRevision,
+		status,
+		"Playback Page",
+	);
+	const playback = (page.body as PlaybackPage).virtual_playbacks?.[
+		String(address.playbackNumber)
+	];
+	if (
+		!playback ||
+		playback.number !== address.playbackNumber ||
+		playback.target.type !== "group" ||
+		playback.target.group_id !== action.groupObjectId
+	)
+		invalid("the explicitly requested Virtual Group Master target", playback);
 }
 
 function validateVirtualPlaybackAction(
@@ -384,23 +435,32 @@ function validateEmptyClear(
 }
 
 function validateConfigureRevisions(
-	action: Extract<
-		PlaybackTopologyAction,
-		{ type: "configure_slot" | "assign_group_master" }
-	>,
+	action: Extract<PlaybackTopologyAction, { type: "configure_slot" }>,
+	page: Extract<PlaybackTopologyObject, { state: "present" }>,
+	playback: Extract<PlaybackTopologyObject, { state: "present" }>,
+	status: "changed" | "no_change",
+) {
+	validateConfiguredObjectRevisions(action, page, playback, status);
+}
+
+function validateConfiguredObjectRevisions(
+	authority: {
+		expectedPageRevision: number;
+		expectedPlaybackRevision: number;
+	},
 	page: Extract<PlaybackTopologyObject, { state: "present" }>,
 	playback: Extract<PlaybackTopologyObject, { state: "present" }>,
 	status: "changed" | "no_change",
 ) {
 	const pageChanged = validatePossibleRevision(
 		page.objectRevision,
-		action.expectedPageRevision,
+		authority.expectedPageRevision,
 		status,
 		"Playback Page",
 	);
 	const playbackChanged = validatePossibleRevision(
 		playback.objectRevision,
-		action.expectedPlaybackRevision,
+		authority.expectedPlaybackRevision,
 		status,
 		"Playback",
 	);

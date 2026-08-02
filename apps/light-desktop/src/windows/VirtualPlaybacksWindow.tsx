@@ -6,16 +6,44 @@ import {
 } from "@tosklight/ui";
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { virtualPlaybackNumber } from "../api/virtualPlaybackAddress";
+import {
+	virtualPlaybackBankStart,
+	virtualPlaybackNumber,
+} from "../api/virtualPlaybackAddress";
 import { VirtualPlaybackConfigurationModal } from "../components/control/VirtualPlaybackConfigurationModal";
 import { useVirtualPlaybackController } from "../components/control/virtualPlayback/useVirtualPlaybackController";
 import { VirtualPlaybackGrid } from "../components/control/virtualPlayback/VirtualPlaybackGrid";
 import { usePaneChromeTargets } from "../components/shell/PaneChromeContext";
+import { useControlSurfaceTarget } from "../features/controlSurfaceInteraction/useControlSurfaceTarget";
 import type { WindowProps } from "./windowTypes";
 
 export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 	const controller = useVirtualPlaybackController(paneId, active);
 	const paneChrome = usePaneChromeTargets();
+	useControlSurfaceTarget({
+		id: `virtual-playback-settings:${paneId ?? "builtin"}`,
+		priority: 100,
+		accepts: (intent) =>
+			intent.type === "open_playback_settings" &&
+			intent.playback.addressing === "virtual" &&
+			intent.playback.pageNumber === controller.pageNumber &&
+			intent.playback.pageObjectId === (controller.pageObject?.id ?? null) &&
+			intent.playback.pageObjectRevision ===
+				(controller.pageObject?.revision ?? 0),
+		handle: (intent) => {
+			if (
+				intent.type !== "open_playback_settings" ||
+				intent.playback.addressing !== "virtual" ||
+				controller.pageNumber == null
+			)
+				return;
+			const playbackNumber = intent.playback.playbackNumber;
+			controller.openConfiguration(
+				controller.page?.virtual_playbacks?.[String(playbackNumber)] ?? null,
+				playbackNumber - virtualPlaybackBankStart(controller.pageNumber) + 1,
+			);
+		},
+	});
 	if (!controller.authorityReady || controller.pageNumber == null)
 		return (
 			<section className="virtual-playback-pane" aria-busy="true">
@@ -58,6 +86,8 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 			<VirtualPlaybackGrid
 				pageNumber={controller.pageNumber}
 				page={controller.page}
+				pageObjectId={controller.pageObject?.id ?? null}
+				pageObjectRevision={controller.pageObject?.revision ?? 0}
 				rows={controller.rows}
 				columns={controller.columns}
 				playbacks={controller.playbacks}

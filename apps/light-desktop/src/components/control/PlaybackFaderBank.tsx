@@ -22,23 +22,28 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 					intent.surfaceId === interactionSurfaceId
 				)
 					return true;
-				if (intent.type !== "open_playback_settings") return false;
+				if (
+					intent.type !== "open_playback_settings" ||
+					intent.playback.addressing === "virtual"
+				)
+					return false;
+				const playbackIdentity = intent.playback;
 				const slotData = controller.slots.find(
-					(candidate) => candidate.slot === intent.playback.slot,
+					(candidate) => candidate.slot === playbackIdentity.slot,
 				);
 				const playbackObject = controller.topology.playbacks.find(
 					(candidate) => candidate.body.number === slotData?.playback?.number,
 				);
 				return (
-					controller.activePageNumber === intent.playback.pageNumber &&
-					controller.playbackAddressing === intent.playback.addressing &&
+					controller.activePageNumber === playbackIdentity.pageNumber &&
+					controller.playbackAddressing === playbackIdentity.addressing &&
 					(controller.pageObject?.id ?? null) ===
-						intent.playback.pageObjectId &&
+						playbackIdentity.pageObjectId &&
 					(controller.pageObject?.revision ?? 0) ===
-						intent.playback.pageObjectRevision &&
-					(playbackObject?.id ?? null) === intent.playback.playbackObjectId &&
+						playbackIdentity.pageObjectRevision &&
+					(playbackObject?.id ?? null) === playbackIdentity.playbackObjectId &&
 					(playbackObject?.revision ?? 0) ===
-						intent.playback.playbackObjectRevision
+						playbackIdentity.playbackObjectRevision
 				);
 			},
 			handle: (intent) => {
@@ -50,7 +55,10 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 				const slot =
 					intent.type === "configure_playback"
 						? intent.slot
-						: intent.playback.slot;
+						: intent.playback.addressing === "virtual"
+							? null
+							: intent.playback.slot;
+				if (slot == null) return;
 				const slotData = controller.slots.find(
 					(candidate) => candidate.slot === slot,
 				);

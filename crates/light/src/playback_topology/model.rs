@@ -41,12 +41,7 @@ pub enum PlaybackTopologyAction {
     AssignGroupMaster {
         group_object_id: String,
         expected_group_revision: Revision,
-        page: u8,
-        slot: u8,
-        expected_page_revision: Revision,
-        expected_page_object_id: Option<String>,
-        expected_playback_revision: Revision,
-        expected_playback_object_id: Option<String>,
+        address: GroupMasterPlaybackAddress,
     },
     ConfigureVirtual {
         page: u8,
@@ -86,6 +81,24 @@ pub enum PlaybackTopologyAction {
     ClearVirtual {
         page: u8,
         number: u16,
+        expected_page_revision: Revision,
+        expected_page_object_id: Option<String>,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub enum GroupMasterPlaybackAddress {
+    Physical {
+        page: u8,
+        slot: u8,
+        expected_page_revision: Revision,
+        expected_page_object_id: Option<String>,
+        expected_playback_revision: Revision,
+        expected_playback_object_id: Option<String>,
+    },
+    Virtual {
+        page: u8,
+        playback_number: u16,
         expected_page_revision: Revision,
         expected_page_object_id: Option<String>,
     },

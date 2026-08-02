@@ -110,9 +110,9 @@ pub use playback::{
     committed_playback_event, publish_automatic_playback_events, telemetry_frame_divider,
 };
 pub use playback_topology::{
-    PlaybackTopologyAction, PlaybackTopologyCommand, PlaybackTopologyObjectProjection,
-    PlaybackTopologyOutcome, PlaybackTopologyPorts, PlaybackTopologyResolution,
-    PlaybackTopologyResult, PlaybackTopologyService,
+    GroupMasterPlaybackAddress, PlaybackTopologyAction, PlaybackTopologyCommand,
+    PlaybackTopologyObjectProjection, PlaybackTopologyOutcome, PlaybackTopologyPorts,
+    PlaybackTopologyResolution, PlaybackTopologyResult, PlaybackTopologyService,
 };
 pub use programming::update as programming_update;
 pub use programming::{

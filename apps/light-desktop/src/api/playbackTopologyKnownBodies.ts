@@ -1,11 +1,9 @@
-import type {
-	Cue,
-	CueList,
-	PlaybackDefinition,
-} from "./types";
+import type { Cue, CueList, PlaybackDefinition } from "./types";
 
 export function sameKnownCueList(actual: CueList, requested: CueList) {
-	return stableJson(knownCueList(actual)) === stableJson(knownCueList(requested));
+	return (
+		stableJson(knownCueList(actual)) === stableJson(knownCueList(requested))
+	);
 }
 
 export function sameKnownPlayback(
@@ -13,8 +11,10 @@ export function sameKnownPlayback(
 	requested: PlaybackDefinition,
 	number: number,
 ) {
-	return stableJson(knownPlayback(actual, number)) ===
-		stableJson(knownPlayback(requested, number));
+	return (
+		stableJson(knownPlayback(actual, number)) ===
+		stableJson(knownPlayback(requested, number))
+	);
 }
 
 function knownCueList(cueList: CueList) {
@@ -65,16 +65,12 @@ function knownFixtureChange(change: Cue["changes"][number]) {
 	return { fixture_id: change.fixture_id, ...knownChangeFields(change) };
 }
 
-function knownGroupChange(
-	change: NonNullable<Cue["group_changes"]>[number],
-) {
+function knownGroupChange(change: NonNullable<Cue["group_changes"]>[number]) {
 	return { group_id: change.group_id, ...knownChangeFields(change) };
 }
 
 function knownChangeFields(
-	change:
-		| Cue["changes"][number]
-		| NonNullable<Cue["group_changes"]>[number],
+	change: Cue["changes"][number] | NonNullable<Cue["group_changes"]>[number],
 ) {
 	return {
 		attribute: change.attribute,
@@ -113,7 +109,13 @@ function knownTarget(target: PlaybackDefinition["target"]) {
 	if (target.type === "cue_list")
 		return { type: target.type, cue_list_id: target.cue_list_id };
 	if (target.type === "group")
-		return { type: target.type, group_id: target.group_id };
+		return {
+			type: target.type,
+			group_id: target.group_id,
+			...(target.initial_master == null
+				? {}
+				: { initial_master: target.initial_master }),
+		};
 	if (target.type === "speed_group")
 		return { type: target.type, group: target.group };
 	if (target.type === "dynamic")

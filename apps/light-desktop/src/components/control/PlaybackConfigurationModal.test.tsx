@@ -152,6 +152,41 @@ function choose(label: string, option: string) {
 }
 
 describe("PlaybackConfigurationModal function and behavior", () => {
+	it("preserves a zero Group Master seed while editing physical or virtual presentation", async () => {
+		for (const virtual of [false, true]) {
+			show(
+				{
+					...base,
+					number: virtual ? 1301 : 7,
+					target: {
+						type: "group",
+						group_id: "group-1",
+						initial_master: 0,
+					},
+				},
+				{ virtual },
+			);
+			fireEvent.change(screen.getByLabelText("Playback name"), {
+				target: { value: virtual ? "Virtual zero" : "Physical zero" },
+			});
+			fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+			await waitFor(() => expect(mocks.savePlaybackSlot).toHaveBeenCalled());
+			expect(mocks.savePlaybackSlot).toHaveBeenLastCalledWith(
+				2,
+				4,
+				expect.objectContaining({
+					target: {
+						type: "group",
+						group_id: "group-1",
+						initial_master: 0,
+					},
+				}),
+			);
+			cleanup();
+			mocks.savePlaybackSlot.mockClear();
+		}
+	});
+
 	it("uses a Cuelist semantic ID instead of its legacy storage key", async () => {
 		const cueListId = "11111111-1111-4111-8111-111111111111";
 		mocks.scopedCueLists = [

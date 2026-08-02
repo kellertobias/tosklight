@@ -199,18 +199,30 @@ export function SetInteractionProvider({
 			});
 			if (intent && stateRef.current) await writeVisibleState(stateRef.current);
 			if (intent?.type === "assign_group_master")
-				await topology?.assignGroupMaster(
-					intent.group.objectId,
-					intent.group.objectRevision,
-					intent.playback.pageNumber,
-					intent.playback.slot,
-					{
-						expectedPageRevision: intent.playback.pageObjectRevision,
-						expectedPageObjectId: intent.playback.pageObjectId,
-						expectedPlaybackRevision: intent.playback.playbackObjectRevision,
-						expectedPlaybackObjectId: intent.playback.playbackObjectId,
-					},
-				);
+				if (intent.playback.addressing === "virtual")
+					await topology?.assignVirtualGroupMaster(
+						intent.group.objectId,
+						intent.group.objectRevision,
+						intent.playback.pageNumber,
+						intent.playback.playbackNumber,
+						{
+							expectedPageRevision: intent.playback.pageObjectRevision,
+							expectedPageObjectId: intent.playback.pageObjectId,
+						},
+					);
+				else
+					await topology?.assignGroupMaster(
+						intent.group.objectId,
+						intent.group.objectRevision,
+						intent.playback.pageNumber,
+						intent.playback.slot,
+						{
+							expectedPageRevision: intent.playback.pageObjectRevision,
+							expectedPageObjectId: intent.playback.pageObjectId,
+							expectedPlaybackRevision: intent.playback.playbackObjectRevision,
+							expectedPlaybackObjectId: intent.playback.playbackObjectId,
+						},
+					);
 			if (intent?.type === "open_playback_settings")
 				routeControlSurfaceIntentWithFeedback(intent);
 			return intent;

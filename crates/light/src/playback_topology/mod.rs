@@ -11,8 +11,9 @@ mod stored;
 mod validation;
 
 pub use model::{
-    PlaybackTopologyAction, PlaybackTopologyCommand, PlaybackTopologyObjectProjection,
-    PlaybackTopologyOutcome, PlaybackTopologyResolution, PlaybackTopologyResult,
+    GroupMasterPlaybackAddress, PlaybackTopologyAction, PlaybackTopologyCommand,
+    PlaybackTopologyObjectProjection, PlaybackTopologyOutcome, PlaybackTopologyResolution,
+    PlaybackTopologyResult,
 };
 pub use ports::PlaybackTopologyPorts;
 pub use service::PlaybackTopologyService;

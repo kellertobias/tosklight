@@ -37,8 +37,22 @@ export async function repairPlaybackTopologyConflict(
 		return repairPage(options, action, generation);
 	if (action.type === "map_existing_playback")
 		return repairExistingPlaybackMap(options, action, generation);
-	if (action.type === "assign_group_master")
+	if (action.type === "assign_group_master") {
 		await repairObject(options, "group", action.groupObjectId, generation);
+		if (action.address.kind === "virtual")
+			return repairObject(
+				options,
+				"playback_page",
+				action.address.expectedPageObjectId ?? String(action.address.page),
+				generation,
+			);
+		return repairMappedSlot(
+			options,
+			action.address.page,
+			action.address.slot,
+			generation,
+		);
+	}
 	await repairMappedSlot(options, action.page, action.slot, generation);
 }
 

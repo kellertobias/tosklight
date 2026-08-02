@@ -1,6 +1,6 @@
 use super::{
-    PlaybackTopologyAction, PlaybackTopologyCommand, PlaybackTopologyObjectProjection,
-    PlaybackTopologyResult,
+    GroupMasterPlaybackAddress, PlaybackTopologyAction, PlaybackTopologyCommand,
+    PlaybackTopologyObjectProjection, PlaybackTopologyResult,
 };
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use sha2::{Digest, Sha256};
@@ -163,20 +163,38 @@ pub(super) fn fingerprint(
         PlaybackTopologyAction::AssignGroupMaster {
             group_object_id,
             expected_group_revision,
-            page,
-            slot,
-            expected_page_revision,
-            expected_page_object_id,
-            expected_playback_revision,
-            expected_playback_object_id,
+            address,
         } => {
-            hasher.update([8, *page, *slot]);
+            hasher.update([8]);
             hash_json(&mut hasher, group_object_id)?;
             hasher.update(expected_group_revision.to_le_bytes());
-            hasher.update(expected_page_revision.to_le_bytes());
-            hash_json(&mut hasher, expected_page_object_id)?;
-            hasher.update(expected_playback_revision.to_le_bytes());
-            hash_json(&mut hasher, expected_playback_object_id)?;
+            match address {
+                GroupMasterPlaybackAddress::Physical {
+                    page,
+                    slot,
+                    expected_page_revision,
+                    expected_page_object_id,
+                    expected_playback_revision,
+                    expected_playback_object_id,
+                } => {
+                    hasher.update([0, *page, *slot]);
+                    hasher.update(expected_page_revision.to_le_bytes());
+                    hash_json(&mut hasher, expected_page_object_id)?;
+                    hasher.update(expected_playback_revision.to_le_bytes());
+                    hash_json(&mut hasher, expected_playback_object_id)?;
+                }
+                GroupMasterPlaybackAddress::Virtual {
+                    page,
+                    playback_number,
+                    expected_page_revision,
+                    expected_page_object_id,
+                } => {
+                    hasher.update([1, *page]);
+                    hasher.update(playback_number.to_le_bytes());
+                    hasher.update(expected_page_revision.to_le_bytes());
+                    hash_json(&mut hasher, expected_page_object_id)?;
+                }
+            }
         }
         PlaybackTopologyAction::ConfigureVirtual {
             page,
