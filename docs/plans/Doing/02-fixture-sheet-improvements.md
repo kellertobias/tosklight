@@ -2,12 +2,47 @@
 
 ## Status
 
-**Specification only.** This plan records future Fixture Sheet filtering, attribute-group columns, value-display semantics, and view-density rules. It does not implement filtering, selection behavior, pane settings, row rendering, value summaries, persistence, responsive layout, show migration, help changes, screenshots, testing scenarios, or executable tests.
+**Doing.** Claimed on 2026-08-02 after completing Plan 01. This is the sole active implementation
+contract for Fixture Sheet invariant filtering, attribute-group base-value presentation, Dynamic
+identity feedback, per-surface Compact mode, and shared dense rendering.
 
-This is the second item in the current [Next plan order](README.md), immediately after Group and
-Dynamics spatial mapping. The Group-master and Dynamics indicators implemented here must consume
-the authoritative contracts delivered by that plan rather than recreating them in the Fixture
-Sheet.
+This follows Group and Dynamics spatial mapping in the current [Next plan order](../Next/README.md).
+The Group-master and Dynamics indicators implemented here must consume the authoritative contracts
+delivered by that completed plan rather than recreating them in the Fixture Sheet.
+
+## Progress
+
+- [x] Claimed from `docs/plans/Next` in numeric order.
+- [ ] Audit existing Fixture Sheet projection, filters, columns, settings ownership, persistence,
+  compact rendering, Dynamic/base-value telemetry, help, screenshots, and acceptance seams.
+- [ ] Implement invariant programmable-row filtering without changing show or selection authority.
+- [ ] Implement authoritative attribute-group base summaries and stable Dynamic identity/state
+  feedback without sampled-value repainting.
+- [ ] Implement per-surface Off/Icon only/Text only configuration, migration, and shared rendering.
+- [ ] Update help, deterministic screenshot contracts, human scenarios, and focused root Playwright
+  coverage.
+- [ ] Run focused checks, required major suites, migration/recovery proof, small-screen geometry, and
+  the real desktop path.
+
+## Implementation decisions
+
+- Preserve one Fixture Sheet projection and renderer contract for pane, built-in, external-screen,
+  screenshot, and test consumers; do not create compact-only parallel business rules.
+- Treat the three independent scenery exclusions, base-versus-sampled Dynamic distinction, exact
+  attribute-group inventory, literal Compact mode labels, and desk-local per-surface ownership as
+  acceptance requirements.
+- Reuse Plan 01 Group-master and Dynamic runtime identities and the authoritative attribute registry;
+  the Fixture Sheet must not infer or recreate those authorities.
+
+## Implementation verification
+
+- Plan 01 is complete in commit `9216b28e`; its assigned-only Group Master runtime and authoritative
+  Dynamic identity/projection contracts are available dependencies for this plan.
+
+## Remaining work
+
+- Complete the audit before selecting the first implementation boundary.
+- Keep every acceptance item below unclaimed until current source and focused verification prove it.
 
 ## Goal
 
