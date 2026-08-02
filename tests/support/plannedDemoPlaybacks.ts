@@ -187,22 +187,6 @@ export async function installPlannedDemoPlaybacks(
 		},
 		virtual_playbacks: existingPage?.body.virtual_playbacks ?? {},
 	});
-	const groupPlaybackNumbers = new Map([
-		["6", 101],
-		["7", 102],
-		["18", 103],
-		["11", 104],
-		["32", 105],
-		["26", 106],
-	]);
-	for (const group of await api.showObjects<any>(showId, "group")) {
-		const playbackNumber = groupPlaybackNumbers.get(group.id);
-		if (playbackNumber == null) continue;
-		await putPlannedDemoObject(api, showId, "group", group.id, {
-			...group.body,
-			playback_fader: playbackNumber,
-		});
-	}
 	return { cuelists, playbacks };
 }
 

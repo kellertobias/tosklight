@@ -38,13 +38,11 @@ fn active_group_cue_survives_snapshot_swap_and_gains_new_members() {
     let snapshot = |members| EngineSnapshot {
         fixtures: vec![first.clone(), second.clone()].into(),
         cue_lists: vec![list.clone()].into(),
-        playbacks: vec![test_group_playback(1, "live")].into(),
+        playbacks: vec![test_group_playback_with_master(1, "live", 0.5)].into(),
         groups: vec![GroupDefinition {
             id: "live".into(),
             name: "Live".into(),
             fixtures: members,
-            master: 0.5,
-            playback_fader: Some(1),
             ..Default::default()
         }]
         .into(),
@@ -105,8 +103,6 @@ fn unpatched_group_member_keeps_programming_but_outputs_no_dmx() {
         id: "look".into(),
         name: "Look".into(),
         fixtures: vec![patched_logical, unpatched_logical],
-        master: 1.0,
-        playback_fader: None,
         ..Default::default()
     };
     let snapshot = |unpatched_fixture: PatchedFixture| EngineSnapshot {

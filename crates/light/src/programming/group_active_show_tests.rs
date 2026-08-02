@@ -55,7 +55,7 @@ fn identical_overwrite_is_a_no_change_and_preserves_unknown_fields() {
 }
 
 #[test]
-fn minimal_legacy_body_keeps_omitted_defaults_and_extensions_losslessly() {
+fn minimal_legacy_body_writes_canonical_source_and_keeps_extensions_losslessly() {
     let fixture = light_core::FixtureId::new();
     let body = json!({
         "name": "Legacy minimal",
@@ -69,17 +69,17 @@ fn minimal_legacy_body_keeps_omitted_defaults_and_extensions_losslessly() {
         [fixture],
         ProgrammingGroupRecordOperation::Overwrite,
     );
-    let prepared = prepare_recording(&document.document, &commit).unwrap();
-    let PreparedActiveShowTransaction::NoChange(state) = prepared else {
-        let result = prepared_result(prepared);
-        panic!(
-            "unchanged legacy omissions must not be materialized: {:?}",
-            result.projection.raw_body
-        )
-    };
-
-    assert_eq!(state.result.projection.raw_body.as_deref(), Some(&body));
-    assert_eq!(state.result.projection.object_id, "legacy minimal");
+    let result = prepared_result(prepare_recording(&document.document, &commit).unwrap());
+    assert!(result.changed);
+    let stored = result.projection.raw_body.as_deref().unwrap();
+    assert_eq!(stored["name"], body["name"]);
+    assert_eq!(stored["fixtures"], body["fixtures"]);
+    assert_eq!(stored["future_extension"], body["future_extension"]);
+    assert_eq!(
+        stored["source"],
+        json!({"type":"explicit","fixture_ids":[fixture]})
+    );
+    assert_eq!(result.projection.object_id, "legacy minimal");
 }
 
 #[test]
@@ -106,6 +106,7 @@ fn changed_legacy_body_updates_only_semantic_fields_without_materializing_defaul
         &json!({
             "name": "Legacy minimal",
             "fixtures": [after],
+            "source": {"type":"explicit","fixture_ids":[after]},
             "future_extension": {"retain": true}
         })
     );
@@ -150,11 +151,11 @@ fn merge_materializes_derived_membership_and_preserves_metadata_and_extensions()
             AttributeKey("portable.future".into()),
             AttributeValue::Normalized(0.25),
         )]),
-        master: 0.35,
-        playback_fader: Some(4),
         ..Default::default()
     })
     .unwrap();
+    derived["master"] = json!(0.35);
+    derived["playback_fader"] = json!(4);
     derived["future_extension"] = json!({"keep":true});
     let document = TestDocument::new([("source", source), ("derived", derived)]);
     let commit = recording(
@@ -171,8 +172,8 @@ fn merge_materializes_derived_membership_and_preserves_metadata_and_extensions()
     assert_eq!(body["name"], "Presentation");
     assert_eq!(body["color"], "#112233");
     assert_eq!(body["icon"], "wash");
-    assert!((body["master"].as_f64().unwrap() - 0.35).abs() < 0.000_001);
-    assert_eq!(body["playback_fader"], 4);
+    assert!(body.get("master").is_none());
+    assert!(body.get("playback_fader").is_none());
     assert_eq!(body["future_extension"], json!({"keep":true}));
     assert_eq!(body["programming"]["portable.future"]["value"], 0.25);
 }
@@ -266,10 +267,14 @@ fn group_body(
     name: &str,
     fixtures: impl IntoIterator<Item = light_core::FixtureId>,
 ) -> Value {
+    let fixtures = fixtures.into_iter().collect::<Vec<_>>();
     serde_json::to_value(GroupDefinition {
         id: id.into(),
         name: name.into(),
-        fixtures: fixtures.into_iter().collect(),
+        fixtures: fixtures.clone(),
+        source: Some(light_programmer::GroupFixtureSource::Explicit {
+            fixture_ids: fixtures,
+        }),
         ..Default::default()
     })
     .unwrap()

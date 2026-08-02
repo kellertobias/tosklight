@@ -401,7 +401,6 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
             groups: vec![light_programmer::GroupDefinition {
                 id: "front".into(),
                 name: "Front".into(),
-                master: 1.0,
                 ..Default::default()
             }].into(),
             playbacks: vec![
@@ -409,6 +408,7 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
                     1,
                     light_playback::PlaybackTarget::Group {
                         group_id: "front".into(),
+                        initial_master: None,
                     },
                     light_playback::PlaybackFaderMode::Master,
                 ),

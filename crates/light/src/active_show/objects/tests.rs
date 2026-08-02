@@ -78,6 +78,8 @@ fn group_update_preserves_extensions_inside_derived_and_frozen_sources() {
     assert_eq!(normalized["derived_from"]["rule"]["future_rule"], "kept");
     assert_eq!(normalized["frozen_from"]["future_frozen"], json!([1, 2, 3]));
     assert_eq!(normalized["name"], "After");
+    assert!(normalized.get("master").is_none());
+    assert!(normalized.get("playback_fader").is_none());
 }
 
 #[test]

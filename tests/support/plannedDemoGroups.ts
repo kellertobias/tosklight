@@ -12,15 +12,6 @@ interface PatchedTargetFixture {
 	logical_heads?: Array<{ fixture_id: string }>;
 }
 
-const GROUP_MASTER_PLAYBACKS: Readonly<Record<string, number>> = {
-	"Beam Show Odd": 1,
-	"Beam Show Even": 2,
-	"LED Show": 3,
-	"Wash Show": 4,
-	"All ACLs": 5,
-	Blinders: 6,
-};
-
 export interface PlannedDemoGroupSpec {
 	id: string;
 	name: string;
@@ -150,8 +141,6 @@ export async function installPlannedDemoGroups(
 			derived_from: current?.body.derived_from ?? null,
 			frozen_from: current?.body.frozen_from ?? null,
 			programming: current?.body.programming ?? {},
-			master: 1,
-			playback_fader: GROUP_MASTER_PLAYBACKS[spec.name] ?? null,
 		});
 	}
 	return specs;

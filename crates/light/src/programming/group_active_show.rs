@@ -274,6 +274,10 @@ fn merged_body(
     let after = serde_json::to_value(group).map_err(invalid)?;
     let mut merged = object.body().clone();
     lossless_json::apply_delta(&mut merged, &before, &after);
+    if let Some(body) = merged.as_object_mut() {
+        body.remove("master");
+        body.remove("playback_fader");
+    }
     Ok(merged)
 }
 

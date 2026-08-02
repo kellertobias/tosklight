@@ -50,6 +50,7 @@ pub(super) fn resolve_group_playback(
                 &playback.target,
                 light_playback::PlaybackTarget::Group {
                     group_id: assigned_id,
+                    ..
                 } if assigned_id == group_id
             )
         })

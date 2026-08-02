@@ -727,8 +727,7 @@ fn object_undo_commits_pending_migrations_in_the_same_compiled_candidate() {
         "derived_from":null,
         "frozen_from":null,
         "programming":{},
-        "master":1,
-        "playback_fader":null
+        "source":{"type":"explicit","fixture_ids":[]}
     });
     let mut original = json!({
         "id":"7",

@@ -9,7 +9,7 @@ pub(super) fn apply_specialized_master(
     value: f32,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     match &definition.target {
-        PlaybackTarget::Group { group_id } => set_group_playback_master(state, group_id, value)
+        PlaybackTarget::Group { group_id, .. } => set_group_playback_master(state, group_id, value)
             .map(PlaybackTargetOutcome::output_runtime),
         PlaybackTarget::SpeedGroup { group } => {
             apply_speed_group_playback_action(state, group, "master", input, definition.fader)
@@ -37,7 +37,7 @@ pub(super) fn apply_specialized_target_action(
     pressed: bool,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     match &definition.target {
-        PlaybackTarget::Group { group_id } => {
+        PlaybackTarget::Group { group_id, .. } => {
             apply_group_action(state, session, group_id, action, pressed)
         }
         PlaybackTarget::SpeedGroup { group } => {

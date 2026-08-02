@@ -161,6 +161,95 @@ fn startup_migrates_legacy_patch_to_lean_once_and_reopens_at_the_relocated_addre
 }
 
 #[test]
+fn startup_moves_assigned_group_master_to_playback_and_reopens_without_a_sidecar() {
+    let data_dir =
+        std::env::temp_dir().join(format!("light-group-master-startup-{}", Uuid::new_v4()));
+    let path = data_dir.join("shows/group-master.show");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let show_id = default_show::initialise(&path).unwrap();
+    let store = ShowStore::open(&path).unwrap();
+    store
+        .put_object(
+            "group",
+            "900",
+            &serde_json::json!({
+                "id": "900",
+                "name": "Portable master",
+                "fixtures": [],
+                "master": 0.375,
+                "playback_fader": 99,
+                "future_group": {"kept": true}
+            }),
+            0,
+        )
+        .unwrap();
+    store
+        .put_object(
+            "playback",
+            "900",
+            &serde_json::json!({
+                "number": 900,
+                "name": "Portable master",
+                "target": {"type": "group", "group_id": "900"},
+                "future_playback": {"kept": true}
+            }),
+            0,
+        )
+        .unwrap();
+    let source_revision = store.portable_revision().unwrap().value();
+    drop(store);
+    let entry = migration_test_entry(&path, show_id, "Group Master transfer");
+
+    let first = Engine::new(ProgrammerRegistry::default());
+    assert_eq!(
+        compile_active_show_for_startup(&first, &entry, &data_dir, 5),
+        None
+    );
+    assert_eq!(first.group_master("900"), Some(0.375));
+
+    let store = ShowStore::open(&path).unwrap();
+    let document = store.portable_document().unwrap();
+    let migrated_revision = document.revision();
+    let group = document.object("group", "900").unwrap().body();
+    assert!(group.get("master").is_none());
+    assert!(group.get("playback_fader").is_none());
+    assert_eq!(group["future_group"], serde_json::json!({"kept": true}));
+    let playback = document.object("playback", "900").unwrap().body();
+    assert_eq!(playback["target"]["initial_master"], 0.375);
+    assert_eq!(
+        playback["future_playback"],
+        serde_json::json!({"kept": true})
+    );
+    drop(store);
+    let backups = migration_backup_files(&data_dir);
+    assert_eq!(backups.len(), 1);
+    assert!(backups[0]
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .contains(&format!("source-revision-{source_revision}")));
+    let backup = ShowStore::open(&backups[0]).unwrap().portable_document().unwrap();
+    assert_eq!(backup.object("group", "900").unwrap().body()["master"], 0.375);
+    assert_eq!(
+        backup.object("group", "900").unwrap().body()["playback_fader"],
+        99
+    );
+
+    let reopened = Engine::new(ProgrammerRegistry::default());
+    assert_eq!(
+        compile_active_show_for_startup(&reopened, &entry, &data_dir, 5),
+        None
+    );
+    assert_eq!(reopened.group_master("900"), Some(0.375));
+    assert_eq!(
+        ShowStore::open(&path).unwrap().portable_revision().unwrap(),
+        migrated_revision
+    );
+    assert_eq!(migration_backup_files(&data_dir), backups);
+    std::fs::remove_dir_all(data_dir).unwrap();
+}
+
+#[test]
 fn failed_legacy_candidate_leaves_the_stored_document_unchanged_and_enters_recovery() {
     let data_dir =
         std::env::temp_dir().join(format!("light-failed-migration-{}", Uuid::new_v4()));

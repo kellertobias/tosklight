@@ -1,7 +1,7 @@
 use super::{ObjectUpdate, invalid_object};
 use crate::{ActionError, lossless_json};
 use light_output::OutputRoute;
-use light_playback::{CueList, PlaybackDefinition};
+use light_playback::{CueList, PlaybackDefinition, PlaybackTarget};
 use light_programmer::{GroupDefinition, Preset};
 use light_show::{PortableShowCandidate, PortableShowCandidateObject};
 use serde_json::{Map, Value, json};
@@ -30,13 +30,14 @@ pub(super) fn collect(
                 .map_err(|error| invalid_object(object, error))
         })
         .collect::<Result<std::collections::HashMap<_, _>, _>>()?;
+    let group_master_levels = reconcile_group_master_levels(candidate)?;
     candidate
         .objects()
         .filter_map(|object| {
             if object.key().kind() == "dynamic" {
                 migrate_dynamic_fallbacks(object, &presets, &groups).transpose()
             } else {
-                migrate(object).transpose()
+                migrate_with_group_masters(object, &group_master_levels).transpose()
             }
         })
         .collect()
@@ -115,12 +116,19 @@ fn copy_scalar_fallback(canonical: &Value, migrated: &mut Value, path: &str) {
 pub(super) fn migrate(
     object: PortableShowCandidateObject<'_>,
 ) -> Result<Option<ObjectUpdate>, ActionError> {
+    migrate_with_group_masters(object, &std::collections::HashMap::new())
+}
+
+fn migrate_with_group_masters(
+    object: PortableShowCandidateObject<'_>,
+    group_master_levels: &std::collections::HashMap<String, f32>,
+) -> Result<Option<ObjectUpdate>, ActionError> {
     let mut migrated = match object.key().kind() {
         "cue_list" => migrate_cue_list(object)?,
         "dynamic" => object.body().clone(),
         "group" => migrate_group(object)?,
-        "playback" => migrate_playback(object)?,
-        "playback_page" => migrate_playback_page(object)?,
+        "playback" => migrate_playback(object, group_master_levels)?,
+        "playback_page" => migrate_playback_page(object, group_master_levels)?,
         "preset" => migrate_preset(object)?,
         "route" => migrate_route(object)?,
         "stage_layout" => migrate_stage_layout(object)?,
@@ -314,8 +322,6 @@ fn migrate_group(object: PortableShowCandidateObject<'_>) -> Result<Value, Actio
         "derived_from",
         "frozen_from",
         "programming",
-        "master",
-        "playback_fader",
     ] {
         if !body.contains_key(field)
             && let Some(value) = canonical.get(field)
@@ -323,6 +329,8 @@ fn migrate_group(object: PortableShowCandidateObject<'_>) -> Result<Value, Actio
             body.insert(field.into(), value.clone());
         }
     }
+    body.remove("master");
+    body.remove("playback_fader");
     Ok(migrated)
 }
 
@@ -355,7 +363,10 @@ fn migrate_preset(object: PortableShowCandidateObject<'_>) -> Result<Value, Acti
     Ok(migrated)
 }
 
-fn migrate_playback(object: PortableShowCandidateObject<'_>) -> Result<Value, ActionError> {
+fn migrate_playback(
+    object: PortableShowCandidateObject<'_>,
+    group_master_levels: &std::collections::HashMap<String, f32>,
+) -> Result<Value, ActionError> {
     let mut playback = serde_json::from_value::<PlaybackDefinition>(object.body().clone())
         .map_err(|error| invalid_object(object, error))?;
     let before = serde_json::to_value(&playback).map_err(|error| invalid_object(object, error))?;
@@ -365,6 +376,7 @@ fn migrate_playback(object: PortableShowCandidateObject<'_>) -> Result<Value, Ac
         DynamicAssignmentIdentity::Physical(playback_number),
     )
     .map_err(|error| invalid_object(object, error))?;
+    reconcile_playback_group_master(&mut playback, group_master_levels);
     let canonical =
         serde_json::to_value(playback).map_err(|error| invalid_object(object, error))?;
     let mut migrated = object.body().clone();
@@ -402,7 +414,10 @@ fn migrate_playback(object: PortableShowCandidateObject<'_>) -> Result<Value, Ac
     Ok(migrated)
 }
 
-fn migrate_playback_page(object: PortableShowCandidateObject<'_>) -> Result<Value, ActionError> {
+fn migrate_playback_page(
+    object: PortableShowCandidateObject<'_>,
+    group_master_levels: &std::collections::HashMap<String, f32>,
+) -> Result<Value, ActionError> {
     let mut page = serde_json::from_value::<light_playback::PlaybackPage>(object.body().clone())
         .map_err(|error| invalid_object(object, error))?;
     let before = serde_json::to_value(&page).map_err(|error| invalid_object(object, error))?;
@@ -416,11 +431,123 @@ fn migrate_playback_page(object: PortableShowCandidateObject<'_>) -> Result<Valu
             },
         )
         .map_err(|error| invalid_object(object, error))?;
+        reconcile_playback_group_master(playback, group_master_levels);
     }
     let after = serde_json::to_value(page).map_err(|error| invalid_object(object, error))?;
     let mut migrated = object.body().clone();
     lossless_json::apply_delta(&mut migrated, &before, &after);
     Ok(migrated)
+}
+
+fn reconcile_playback_group_master(
+    playback: &mut PlaybackDefinition,
+    levels: &std::collections::HashMap<String, f32>,
+) {
+    let PlaybackTarget::Group {
+        group_id,
+        initial_master,
+    } = &mut playback.target
+    else {
+        return;
+    };
+    if let Some(level) = levels.get(group_id) {
+        *initial_master = Some(*level);
+    }
+}
+
+/// Choose one portable compatibility seed per assigned Group.
+///
+/// Explicit Playback-owned seeds win over legacy Group-owned values. When several assignments
+/// disagree, the lowest physical Playback number wins; virtual assignments follow, ordered by
+/// page and then number. The chosen value is subsequently written into every assignment for that
+/// Group so transfer to a desk without an output-runtime sidecar remains deterministic.
+fn reconcile_group_master_levels(
+    candidate: PortableShowCandidate<'_>,
+) -> Result<std::collections::HashMap<String, f32>, ActionError> {
+    let mut assignments = Vec::new();
+    for object in candidate.objects_of_kind("playback") {
+        let playback = serde_json::from_value::<PlaybackDefinition>(object.body().clone())
+            .map_err(|error| invalid_object(object, error))?;
+        if let PlaybackTarget::Group {
+            group_id,
+            initial_master,
+        } = playback.target
+        {
+            assignments.push(((0_u8, 0_u8, playback.number), group_id, initial_master));
+        }
+    }
+    for object in candidate.objects_of_kind("playback_page") {
+        let page = serde_json::from_value::<light_playback::PlaybackPage>(object.body().clone())
+            .map_err(|error| invalid_object(object, error))?;
+        for playback in page.virtual_playbacks.into_values() {
+            if let PlaybackTarget::Group {
+                group_id,
+                initial_master,
+            } = playback.target
+            {
+                assignments.push((
+                    (1_u8, page.number, playback.number),
+                    group_id,
+                    initial_master,
+                ));
+            }
+        }
+    }
+    assignments.sort_by_key(|(address, _, _)| *address);
+
+    let mut levels = std::collections::HashMap::new();
+    let mut assigned_groups = std::collections::HashSet::new();
+    for (_, group_id, initial_master) in &assignments {
+        assigned_groups.insert(group_id.clone());
+        if let Some(initial_master) = initial_master {
+            if let Some(chosen) = levels.get(group_id) {
+                if chosen != initial_master {
+                    tracing::warn!(
+                        %group_id,
+                        chosen_level = *chosen,
+                        ignored_level = *initial_master,
+                        "reconciled divergent portable Group Master assignment levels by stable Playback address"
+                    );
+                }
+            } else {
+                levels.insert(group_id.clone(), *initial_master);
+            }
+        }
+    }
+    for object in candidate.objects_of_kind("group") {
+        let group_id = object.key().id();
+        if !assigned_groups.contains(group_id) {
+            continue;
+        }
+        if let Some(value) = object.body().get("master") {
+            let Some(level) = value.as_f64() else {
+                if levels.contains_key(group_id) {
+                    continue;
+                }
+                return Err(invalid_object(object, "master must be a number"));
+            };
+            if !level.is_finite() || !(0.0..=1.0).contains(&level) {
+                if levels.contains_key(group_id) {
+                    continue;
+                }
+                return Err(invalid_object(object, "master must be within 0-1"));
+            }
+            let level = level as f32;
+            if let Some(chosen) = levels.get(group_id) {
+                if *chosen != level {
+                    tracing::warn!(
+                        %group_id,
+                        chosen_level = *chosen,
+                        ignored_legacy_level = level,
+                        "reconciled a legacy Group-owned master against Playback-owned state"
+                    );
+                }
+            } else {
+                levels.insert(group_id.to_owned(), level);
+            }
+        }
+    }
+    Ok(levels)
 }
 
 #[derive(Clone, Copy)]

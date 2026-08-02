@@ -503,7 +503,7 @@ impl ServerPlaybackPorts<'_> {
                     }
                     effect.changed()
                 }
-                light_playback::PlaybackTarget::Group { group_id } => {
+                light_playback::PlaybackTarget::Group { group_id, .. } => {
                     let changed = self
                         .state
                         .output

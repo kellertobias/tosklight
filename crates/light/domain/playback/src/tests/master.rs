@@ -309,6 +309,7 @@ fn legacy_layout_defaults_are_target_specific_and_invalid_layouts_are_rejected()
     assert_eq!(
         PlaybackDefinition::default_buttons(&PlaybackTarget::Group {
             group_id: "front".into(),
+            initial_master: None,
         }),
         [
             PlaybackButtonAction::Select,
@@ -335,6 +336,40 @@ fn legacy_layout_defaults_are_target_specific_and_invalid_layouts_are_rejected()
     assert!(incompatible.validate().is_ok());
     incompatible.presentation_image = Some("asset://background".into());
     assert!(incompatible.validate().is_err());
+}
+
+#[test]
+fn group_master_initial_seed_is_optional_portable_and_range_checked() {
+    let target = PlaybackTarget::Group {
+        group_id: "front".into(),
+        initial_master: Some(0.375),
+    };
+    let mut definition = PlaybackDefinition {
+        number: 1,
+        name: "Front".into(),
+        buttons: PlaybackDefinition::default_buttons(&target),
+        fader: PlaybackDefinition::default_fader(&target),
+        target,
+        ..definition(1, CueListId::new())
+    };
+    definition.validate().unwrap();
+    let stored = serde_json::to_value(&definition).unwrap();
+    assert_eq!(stored["target"]["initial_master"], 0.375);
+    assert_eq!(
+        serde_json::from_value::<PlaybackDefinition>(stored)
+            .unwrap()
+            .target,
+        definition.target
+    );
+
+    let PlaybackTarget::Group { initial_master, .. } = &mut definition.target else {
+        unreachable!()
+    };
+    *initial_master = Some(1.1);
+    assert_eq!(
+        definition.validate().unwrap_err(),
+        "Group Master initial level must be within 0-1"
+    );
 }
 
 #[test]

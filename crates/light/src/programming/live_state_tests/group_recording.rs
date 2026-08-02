@@ -309,6 +309,9 @@ fn direct_no_change_closes_and_publishes_one_final_interaction() {
             id: "same".into(),
             name: "Group same".into(),
             fixtures: vec![fixture],
+            source: Some(light_programmer::GroupFixtureSource::Explicit {
+                fixture_ids: vec![fixture],
+            }),
             ..Default::default()
         },
     );

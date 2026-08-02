@@ -486,7 +486,7 @@ async function updateGroup(api: ApiDriver, showId: string, id: string, update: R
 }
 
 async function createGroup(api: ApiDriver, showId: string, id: string, name: string, fixtures: string[]): Promise<void> {
-  await put(api, showId, "group", id, group(name, fixtures, null));
+  await put(api, showId, "group", id, group(name, fixtures));
 }
 
 async function saveNamedRevision(api: ApiDriver, showId: string, name: string): Promise<{ revision: number }> {
@@ -518,6 +518,6 @@ async function activeShowEntry(api: ApiDriver): Promise<ShowEntry> {
   return bootstrap.active_show!;
 }
 
-function group(name: string, fixtures: string[], playback_fader: number | null) {
-  return { name, fixtures, derived_from: null, frozen_from: null, programming: {}, master: 1, playback_fader };
+function group(name: string, fixtures: string[]) {
+  return { name, fixtures, derived_from: null, frozen_from: null, programming: {} };
 }

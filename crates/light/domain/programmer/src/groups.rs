@@ -73,7 +73,7 @@ impl<'de> Deserialize<'de> for GroupProgrammerValue {
 pub(crate) type GroupProgrammerValues =
     HashMap<String, HashMap<AttributeKey, GroupProgrammerValue>>;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct GroupDefinition {
     pub id: String,
@@ -96,8 +96,6 @@ pub struct GroupDefinition {
     pub derived_from: Option<DerivedGroup>,
     pub frozen_from: Option<FrozenGroup>,
     pub programming: HashMap<AttributeKey, AttributeValue>,
-    pub master: f32,
-    pub playback_fader: Option<u8>,
 }
 
 fn deserialize_grid_configuration<'de, D>(
@@ -118,26 +116,6 @@ where
             GridConfigurationRepresentation::Invalid(_) => GridMethodConfiguration::default(),
         },
     )
-}
-
-impl Default for GroupDefinition {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            name: String::new(),
-            color: None,
-            icon: None,
-            fixtures: vec![],
-            source: None,
-            grid: GridMethodConfiguration::default(),
-            mapping: None,
-            derived_from: None,
-            frozen_from: None,
-            programming: HashMap::new(),
-            master: 1.0,
-            playback_fader: None,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

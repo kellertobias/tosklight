@@ -265,6 +265,7 @@ impl GroupMasterIndex {
         snapshot: &EngineSnapshot,
         preserved: Option<&Self>,
     ) -> Self {
+        let initial_masters = initial_group_masters(snapshot);
         let assigned_groups = snapshot
             .playbacks
             .iter()
@@ -275,7 +276,7 @@ impl GroupMasterIndex {
                     .flat_map(|page| page.virtual_playbacks.values()),
             )
             .filter_map(|playback| match &playback.target {
-                PlaybackTarget::Group { group_id } => Some(group_id.as_str()),
+                PlaybackTarget::Group { group_id, .. } => Some(group_id.as_str()),
                 _ => None,
             })
             .collect::<HashSet<_>>();
@@ -294,7 +295,8 @@ impl GroupMasterIndex {
                 group_id: definition.id.clone(),
                 master: preserved
                     .and_then(|current| current.master(&definition.id))
-                    .unwrap_or(definition.master),
+                    .or_else(|| initial_masters.get(&definition.id).copied())
+                    .unwrap_or(1.0),
             });
             for fixture_id in fixtures {
                 index
@@ -339,6 +341,45 @@ impl GroupMasterIndex {
             .master = value;
         Some(updated)
     }
+}
+
+/// Resolve portable Group Master seeds by stable Playback address. Physical assignments precede
+/// virtual assignments; each class is ordered by its operator-visible address. Migration writes
+/// one reconciled value to every assignment, but retaining the rule here makes direct snapshots
+/// deterministic and keeps malformed divergent input from becoming iteration-order dependent.
+fn initial_group_masters(snapshot: &EngineSnapshot) -> HashMap<String, f32> {
+    let mut assignments = snapshot
+        .playbacks
+        .iter()
+        .filter_map(|playback| match &playback.target {
+            PlaybackTarget::Group {
+                group_id,
+                initial_master: Some(master),
+            } => Some(((0_u8, 0_u8, playback.number), group_id.clone(), *master)),
+            _ => None,
+        })
+        .chain(snapshot.playback_pages.iter().flat_map(|page| {
+            page.virtual_playbacks
+                .values()
+                .filter_map(move |playback| match &playback.target {
+                    PlaybackTarget::Group {
+                        group_id,
+                        initial_master: Some(master),
+                    } => Some((
+                        (1_u8, page.number, playback.number),
+                        group_id.clone(),
+                        *master,
+                    )),
+                    _ => None,
+                })
+        }))
+        .collect::<Vec<_>>();
+    assignments.sort_by_key(|(address, _, _)| *address);
+    let mut levels = HashMap::new();
+    for (_, group_id, master) in assignments {
+        levels.entry(group_id).or_insert(master);
+    }
+    levels
 }
 
 fn compile_snap_attributes(snapshot: &EngineSnapshot) -> HashMap<FixtureId, HashSet<AttributeKey>> {

@@ -262,12 +262,10 @@ impl TemplateGroupScenario {
             ("leds", "LEDs", 2),
             ("profile", "Profile", 3),
         ]
-        .map(|(id, name, fader)| light_programmer::GroupDefinition {
+        .map(|(id, name, _fader)| light_programmer::GroupDefinition {
             id: id.into(),
             name: name.into(),
             fixtures: vec![],
-            master: 0.0,
-            playback_fader: Some(fader),
             ..Default::default()
         });
         let populated_groups = [
@@ -303,7 +301,6 @@ fn group_with_fixtures(
 ) -> light_programmer::GroupDefinition {
     light_programmer::GroupDefinition {
         fixtures: fixtures.iter().map(|fixture| fixture.fixture_id).collect(),
-        master: 1.0,
         ..group.clone()
     }
 }

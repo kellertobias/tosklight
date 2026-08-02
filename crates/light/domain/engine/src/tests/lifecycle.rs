@@ -9,10 +9,10 @@ fn invalid_snapshot_preparation_does_not_change_live_state() {
         groups: vec![GroupDefinition {
             id: "invalid".into(),
             name: "Invalid".into(),
-            master: 2.0,
             ..GroupDefinition::default()
         }]
         .into(),
+        playbacks: vec![test_group_playback_with_master(1, "invalid", 2.0)].into(),
         revision: 2,
         ..EngineSnapshot::default()
     };
@@ -147,13 +147,13 @@ fn final_group_assignment_removes_transient_master_state() {
     let group = GroupDefinition {
         id: "front".into(),
         name: "Front".into(),
-        master: 0.4,
         ..GroupDefinition::default()
     };
     let group_playback = |number| {
         let mut playback = test_playback(number, light_core::CueListId::new());
         playback.target = PlaybackTarget::Group {
             group_id: "front".into(),
+            initial_master: Some(0.4),
         };
         playback.buttons = PlaybackDefinition::default_buttons(&playback.target);
         playback.fader = PlaybackDefinition::default_fader(&playback.target);

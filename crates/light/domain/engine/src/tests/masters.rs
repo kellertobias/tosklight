@@ -1,5 +1,50 @@
 use super::*;
 
+fn group_playback(number: u16, group_id: &str, initial_master: f32) -> PlaybackDefinition {
+    let mut playback = test_group_playback(number, group_id);
+    let PlaybackTarget::Group {
+        initial_master: seed,
+        ..
+    } = &mut playback.target
+    else {
+        unreachable!()
+    };
+    *seed = Some(initial_master);
+    playback
+}
+
+#[test]
+fn portable_group_master_seed_uses_lowest_physical_assignment_before_virtual() {
+    let mut virtual_playback = group_playback(1_001, "front", 0.9);
+    virtual_playback.has_fader = false;
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            groups: vec![GroupDefinition {
+                id: "front".into(),
+                name: "Front".into(),
+                ..Default::default()
+            }]
+            .into(),
+            playbacks: vec![
+                group_playback(9, "front", 0.7),
+                group_playback(2, "front", 0.3),
+            ]
+            .into(),
+            playback_pages: vec![light_playback::PlaybackPage {
+                number: 1,
+                name: "Virtual".into(),
+                slots: HashMap::new(),
+                virtual_playbacks: HashMap::from([(1_001, virtual_playback)]),
+            }]
+            .into(),
+            ..Default::default()
+        })
+        .unwrap();
+
+    assert_eq!(engine.group_master("front"), Some(0.3));
+}
+
 #[test]
 fn grand_master_and_blackout_affect_intensity() {
     let programmers = ProgrammerRegistry::default();
@@ -76,12 +121,10 @@ fn patch_master_opt_outs_are_independent_and_blackout_remains_authoritative() {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![participating, ignores_grand, ignores_groups].into(),
-            playbacks: vec![test_group_playback(1, "all")].into(),
+            playbacks: vec![group_playback(1, "all", 0.25)].into(),
             groups: vec![GroupDefinition {
                 id: "all".into(),
                 fixtures: vec![participating_id, ignores_grand_id, ignores_groups_id],
-                master: 0.25,
-                playback_fader: Some(1),
                 ..Default::default()
             }]
             .into(),
@@ -141,9 +184,6 @@ fn group_masters_follow_real_assignments_and_resolve_overlap_by_htp() {
             id: "all".into(),
             name: "All".into(),
             fixtures: logical_ids.clone(),
-            master: 0.0,
-            // A stale legacy pointer is not an actual Group Master assignment.
-            playback_fader: Some(99),
             ..Default::default()
         },
         GroupDefinition {
@@ -153,7 +193,6 @@ fn group_masters_follow_real_assignments_and_resolve_overlap_by_htp() {
                 source_group_id: "all".into(),
                 rule: SelectionRule::Odd,
             }),
-            master: 0.25,
             ..Default::default()
         },
         GroupDefinition {
@@ -165,15 +204,14 @@ fn group_masters_follow_real_assignments_and_resolve_overlap_by_htp() {
                 source_revision: 1,
                 captured_at: chrono::Utc::now(),
             }),
-            master: 0.75,
             ..Default::default()
         },
     ];
     let mut snapshot = EngineSnapshot {
         fixtures: fixtures.into(),
         playbacks: vec![
-            test_group_playback(1, "odd"),
-            test_group_playback(2, "even"),
+            group_playback(1, "odd", 0.25),
+            group_playback(2, "even", 0.75),
         ]
         .into(),
         groups: groups.into(),
@@ -198,7 +236,7 @@ fn group_masters_follow_real_assignments_and_resolve_overlap_by_htp() {
         );
     }
 
-    Arc::make_mut(&mut snapshot.playbacks).push(test_group_playback(3, "all"));
+    Arc::make_mut(&mut snapshot.playbacks).push(group_playback(3, "all", 0.0));
     engine.replace_snapshot(snapshot).unwrap();
     assert!(engine.set_group_master("all", 0.9).unwrap());
     assert_eq!(
@@ -241,19 +279,16 @@ fn group_master_runtime_update_is_targeted_idempotent_and_revision_neutral() {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
-            playbacks: vec![test_group_playback(1, "front")].into(),
+            playbacks: vec![group_playback(1, "front", 0.25)].into(),
             groups: vec![
                 GroupDefinition {
                     id: "front".into(),
                     fixtures: vec![logical],
-                    master: 0.25,
-                    playback_fader: Some(1),
                     ..Default::default()
                 },
                 GroupDefinition {
                     id: "unassigned".into(),
                     fixtures: vec![logical],
-                    master: 0.4,
                     ..Default::default()
                 },
             ]
@@ -265,7 +300,6 @@ fn group_master_runtime_update_is_targeted_idempotent_and_revision_neutral() {
 
     assert!(engine.set_group_master("front", 0.75).unwrap());
     assert_eq!(engine.snapshot().revision, 7);
-    assert_eq!(engine.snapshot().groups[0].master, 0.25);
     assert_eq!(engine.group_master("front"), Some(0.75));
     assert_eq!(
         engine.render(RenderOptions::default()).unwrap().universes[&1][0],
@@ -273,10 +307,10 @@ fn group_master_runtime_update_is_targeted_idempotent_and_revision_neutral() {
     );
     assert!(!engine.set_group_master("front", 0.75).unwrap());
     let mut replacement = (*engine.snapshot()).clone();
-    Arc::make_mut(&mut replacement.groups)[0].master = 1.0;
+    Arc::make_mut(&mut replacement.groups)[0].name = "Renamed".into();
     replacement.revision += 1;
     engine.replace_snapshot(replacement).unwrap();
-    assert_eq!(engine.snapshot().groups[0].master, 1.0);
+    assert_eq!(engine.snapshot().groups[0].name, "Renamed");
     assert_eq!(engine.group_master("front"), Some(0.75));
     assert!(engine.set_group_master("unassigned", 0.5).is_err());
     assert!(engine.set_group_master("missing", 0.5).is_err());
@@ -302,12 +336,10 @@ fn group_master_transition_advances_on_render_without_scheduler_updates() {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
-            playbacks: vec![test_group_playback(1, "front")].into(),
+            playbacks: vec![group_playback(1, "front", 0.25)].into(),
             groups: vec![GroupDefinition {
                 id: "front".into(),
                 fixtures: vec![logical],
-                master: 0.25,
-                playback_fader: Some(1),
                 ..Default::default()
             }]
             .into(),
@@ -351,13 +383,11 @@ fn group_master_flash_is_temporary_and_does_not_move_the_fader() {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
-            playbacks: vec![test_group_playback(1, "front")].into(),
+            playbacks: vec![group_playback(1, "front", 0.25)].into(),
             groups: vec![GroupDefinition {
                 id: "front".into(),
                 name: "Front".into(),
                 fixtures: vec![logical],
-                master: 0.25,
-                playback_fader: Some(1),
                 ..Default::default()
             }]
             .into(),
@@ -374,7 +404,6 @@ fn group_master_flash_is_temporary_and_does_not_move_the_fader() {
         engine.render(RenderOptions::default()).unwrap().universes[&1][0],
         204
     );
-    assert_eq!(engine.snapshot().groups[0].master, 0.25);
     engine.set_group_master_flash("front".into(), 0.0);
     assert_eq!(
         engine.render(RenderOptions::default()).unwrap().universes[&1][0],
@@ -483,13 +512,11 @@ fn logical_head_master_does_not_limit_sibling_heads() {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
-            playbacks: vec![test_group_playback(1, "first")].into(),
+            playbacks: vec![group_playback(1, "first", 0.5)].into(),
             groups: vec![GroupDefinition {
                 id: "first".into(),
                 name: "First".into(),
                 fixtures: vec![first],
-                master: 0.5,
-                playback_fader: Some(1),
                 ..Default::default()
             }]
             .into(),

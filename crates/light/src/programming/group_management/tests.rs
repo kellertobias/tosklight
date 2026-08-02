@@ -437,9 +437,7 @@ fn group_body(id: &str, name: &str, fixtures: &[FixtureId]) -> Value {
         "fixtures": fixtures,
         "derived_from": null,
         "frozen_from": null,
-        "programming": {},
-        "master": 1.0,
-        "playback_fader": null
+        "programming": {}
     })
 }
 

@@ -343,7 +343,6 @@ fn static_group(fixtures: &[FixtureId], fixture_footprint: u16) -> GroupDefiniti
                 )
             })
             .collect(),
-        master: 0.9,
         ..Default::default()
     }
 }

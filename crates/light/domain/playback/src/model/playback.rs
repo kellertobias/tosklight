@@ -138,6 +138,13 @@ pub enum PlaybackTarget {
     },
     Group {
         group_id: String,
+        /// Portable compatibility seed for the shared runtime Group Master.
+        ///
+        /// Every assignment for one Group is normalized to the same value when a legacy show is
+        /// opened. The value is not live authority: the runtime owns subsequent changes and the
+        /// desk/show output-runtime sidecar overrides this seed when present.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        initial_master: Option<f32>,
     },
     SpeedGroup {
         group: String,
@@ -495,6 +502,14 @@ impl PlaybackDefinition {
                         .into(),
                 );
             }
+        }
+        if let PlaybackTarget::Group {
+            initial_master: Some(initial_master),
+            ..
+        } = &self.target
+            && (!initial_master.is_finite() || !(0.0..=1.0).contains(initial_master))
+        {
+            return Err("Group Master initial level must be within 0-1".into());
         }
         let bytes = self.color.as_bytes();
         if bytes.len() != 7 || bytes[0] != b'#' || !bytes[1..].iter().all(u8::is_ascii_hexdigit) {

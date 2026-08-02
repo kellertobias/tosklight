@@ -74,12 +74,6 @@ impl EngineSnapshot {
                 light_dynamics::evaluate_spatial_mapping(mapping, &[])
                     .map_err(|error| EngineError::Invalid(error.to_string()))?;
             }
-            if !group.master.is_finite() || !(0.0..=1.0).contains(&group.master) {
-                return Err(EngineError::Invalid(format!(
-                    "group {} master must be within 0-1",
-                    group.id
-                )));
-            }
             resolve_group(&group.id, &groups).map_err(EngineError::Invalid)?;
         }
         for cue_list in self.cue_lists.iter().filter(|_| cue_lists_changed) {
@@ -127,7 +121,7 @@ impl EngineSnapshot {
                         "playback references a missing cue list".into(),
                     ));
                 }
-                PlaybackTarget::Group { group_id }
+                PlaybackTarget::Group { group_id, .. }
                     if !self.groups.iter().any(|group| group.id == *group_id) =>
                 {
                     return Err(EngineError::Invalid(
@@ -161,7 +155,7 @@ impl EngineSnapshot {
                             "virtual playback references a missing cue list".into(),
                         ));
                     }
-                    PlaybackTarget::Group { group_id }
+                    PlaybackTarget::Group { group_id, .. }
                         if !self.groups.iter().any(|group| group.id == *group_id) =>
                     {
                         return Err(EngineError::Invalid(

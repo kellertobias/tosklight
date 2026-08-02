@@ -448,7 +448,6 @@ pub(super) fn demo_group(fixtures: &[FixtureId]) -> GroupDefinition {
         name: "Sustained benchmark-show fixtures".into(),
         fixtures: fixtures.to_vec(),
         programming: [(AttributeKey::intensity(), AttributeValue::Normalized(0.2))].into(),
-        master: 0.9,
         ..Default::default()
     }
 }

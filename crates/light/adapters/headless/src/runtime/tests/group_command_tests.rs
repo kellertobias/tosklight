@@ -285,7 +285,7 @@ fn set_group_at_page_slot_assigns_a_group_master() {
         serde_json::from_value::<light_playback::PlaybackDefinition>(playback.body).unwrap();
     assert!(matches!(
         playback.target,
-        light_playback::PlaybackTarget::Group { ref group_id } if group_id == "4"
+        light_playback::PlaybackTarget::Group { ref group_id, .. } if group_id == "4"
     ));
     assert_eq!(
         store
@@ -332,14 +332,17 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
         .put_object(
             "group",
             "3",
-            &serde_json::to_value(light_programmer::GroupDefinition {
+            &{
+                let mut group = serde_json::to_value(light_programmer::GroupDefinition {
                 id: "3".into(),
                 name: "Kept name".into(),
                 fixtures: fixtures[..2].to_vec(),
-                master: 0.4,
                 ..Default::default()
             })
-            .unwrap(),
+                .unwrap();
+                group["master"] = serde_json::json!(0.4);
+                group
+            },
             0,
         )
         .unwrap();
@@ -370,7 +373,6 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
     let overwritten = read_group();
     assert_eq!(overwritten.fixtures, fixtures[..3]);
     assert_eq!(overwritten.name, "Kept name");
-    assert_eq!(overwritten.master, 0.4);
     assert!(overwritten.derived_from.is_none());
     assert_eq!(
         overwritten.source,

@@ -294,7 +294,7 @@ fn assigned_group_targets(snapshot: &EngineSnapshot) -> HashSet<String> {
                 .flat_map(|page| page.virtual_playbacks.values()),
         )
         .filter_map(|definition| match &definition.target {
-            light_playback::PlaybackTarget::Group { group_id } => Some(group_id.clone()),
+            light_playback::PlaybackTarget::Group { group_id, .. } => Some(group_id.clone()),
             _ => None,
         })
         .collect()

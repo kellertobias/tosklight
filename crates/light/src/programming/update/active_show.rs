@@ -353,7 +353,11 @@ fn merged_body(
     before: &StoredUpdateObject,
     after: &PlannedUpdateObject,
 ) -> Result<serde_json::Value, ActionError> {
-    let merged = match (before, after) {
+    let retires_group_master_fields = matches!(
+        (before, after),
+        (StoredUpdateObject::Group(_), PlannedUpdateObject::Group(_))
+    );
+    let mut merged = match (before, after) {
         (StoredUpdateObject::CueList(before), PlannedUpdateObject::CueList(after)) => {
             lossless_json::merge_typed(object.body(), before, after)
         }
@@ -368,8 +372,13 @@ fn merged_body(
                 "Update planner returned the wrong target object kind",
             ));
         }
-    };
-    merged.map_err(|error| invalid(error.to_string()))
+    }
+    .map_err(|error| invalid(error.to_string()))?;
+    if retires_group_master_fields && let Some(body) = merged.as_object_mut() {
+        body.remove("master");
+        body.remove("playback_fader");
+    }
+    Ok(merged)
 }
 
 fn plan_kind(plan: &AtomicUpdatePlan) -> ActiveShowObjectKind {

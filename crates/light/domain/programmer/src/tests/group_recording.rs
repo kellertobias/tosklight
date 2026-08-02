@@ -56,8 +56,6 @@ fn overwrite_preserves_existing_presentation_and_portable_programming() {
             source_revision: 4,
             captured_at: Utc::now(),
         }),
-        master: 0.4,
-        playback_fader: Some(7),
         ..Default::default()
     };
     let groups = HashMap::from([("opaque target".into(), existing.clone())]);
@@ -69,8 +67,6 @@ fn overwrite_preserves_existing_presentation_and_portable_programming() {
     assert_eq!(recorded.name, "Front wash");
     assert_eq!(recorded.color.as_deref(), Some("#102030"));
     assert_eq!(recorded.icon.as_deref(), Some("star"));
-    assert_eq!(recorded.master, 0.4);
-    assert_eq!(recorded.playback_fader, Some(7));
     assert_eq!(recorded.programming, existing.programming);
     assert_eq!(
         recorded.fixtures,
@@ -102,8 +98,6 @@ fn new_empty_group_uses_defaults_and_remains_distinct_from_absence() {
         })
     );
     assert!(recorded.programming.is_empty());
-    assert_eq!(recorded.master, 1.0);
-    assert_eq!(recorded.playback_fader, None);
 }
 
 #[test]
@@ -343,7 +337,6 @@ fn merge_and_subtract_materialize_resolved_order_without_touching_metadata() {
                 rule: SelectionRule::Odd,
             }],
         }),
-        master: 0.6,
         ..Default::default()
     };
     let groups = HashMap::from([
@@ -379,7 +372,6 @@ fn merge_and_subtract_materialize_resolved_order_without_touching_metadata() {
         })
     );
     assert_eq!(merged.name, "Derived");
-    assert_eq!(merged.master, 0.6);
 
     let materialized_groups = HashMap::from([("derived".into(), merged.clone())]);
     scenario.registry.select(

@@ -37,7 +37,7 @@ pub(super) fn update_target_for_playback(
                 validate_active_context: true,
             })
         }
-        light_playback::PlaybackTarget::Group { group_id } => Ok(UpdateApiTarget {
+        light_playback::PlaybackTarget::Group { group_id, .. } => Ok(UpdateApiTarget {
             family: UpdateApiTargetFamily::Group,
             object_id: Some(group_id.clone()),
             playback_number: Some(definition.number),

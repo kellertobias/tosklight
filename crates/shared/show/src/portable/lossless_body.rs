@@ -68,6 +68,13 @@ where
         super::lossless_json::strip_zero_u64_echo(&mut self.raw, key);
     }
 
+    /// Removes one retired top-level typed key while preserving all unrelated unknown fields.
+    pub fn strip_object_key(&mut self, key: &str) {
+        if let Some(body) = self.raw.as_object_mut() {
+            body.remove(key);
+        }
+    }
+
     /// Removes one retired typed key from every object inside a named array while preserving all
     /// unrelated unknown extensions.
     pub fn strip_nested_array_object_key(&mut self, array: &str, key: &str) {

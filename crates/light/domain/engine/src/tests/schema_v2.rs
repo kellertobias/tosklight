@@ -599,7 +599,7 @@ fn schema_v2_master_reactions_use_only_the_winning_sources_and_scale_once() {
     let playbacks = vec![
         test_playback(1, main.id),
         test_playback(2, unrelated.id),
-        test_group_playback(3, "front"),
+        test_group_playback_with_master(3, "front", 0.5),
     ];
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
@@ -611,8 +611,6 @@ fn schema_v2_master_reactions_use_only_the_winning_sources_and_scale_once() {
                 id: "front".into(),
                 name: "Front".into(),
                 fixtures: vec![fixture_id],
-                master: 0.5,
-                playback_fader: Some(3),
                 ..Default::default()
             }]
             .into(),

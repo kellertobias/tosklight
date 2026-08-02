@@ -247,8 +247,26 @@ fn test_group_playback(number: u16, group_id: &str) -> PlaybackDefinition {
         number,
         PlaybackTarget::Group {
             group_id: group_id.into(),
+            initial_master: None,
         },
     )
+}
+
+fn test_group_playback_with_master(
+    number: u16,
+    group_id: &str,
+    initial_master: f32,
+) -> PlaybackDefinition {
+    let mut playback = test_group_playback(number, group_id);
+    let PlaybackTarget::Group {
+        initial_master: seed,
+        ..
+    } = &mut playback.target
+    else {
+        unreachable!()
+    };
+    *seed = Some(initial_master);
+    playback
 }
 
 fn test_playback_for_target(number: u16, target: PlaybackTarget) -> PlaybackDefinition {

@@ -271,12 +271,12 @@ async fn group_master_rejects_exclusive_show_change_but_not_output_read_permit()
     let (state, data_dir) = test_state();
     let target = light_playback::PlaybackTarget::Group {
         group_id: "front".into(),
+        initial_master: None,
     };
     state
         .output.replace_snapshot(EngineSnapshot {
             groups: vec![light_programmer::GroupDefinition {
                 id: "front".into(),
-                master: 1.0,
                 ..Default::default()
             }].into(),
             playbacks: vec![light_playback::PlaybackDefinition {

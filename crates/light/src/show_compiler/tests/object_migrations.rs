@@ -374,6 +374,114 @@ fn group_sources_backfill_losslessly_once_and_canonical_source_wins() {
 }
 
 #[test]
+fn group_master_migration_reconciles_assignments_strips_groups_and_is_idempotent() {
+    let group = |name: &str, master: f64| {
+        json!({
+            "name": name,
+            "fixtures": [],
+            "master": master,
+            "playback_fader": 77,
+            "future_group": {"kept": true}
+        })
+    };
+    let playback = |number: u16, group_id: &str, initial_master: Option<f32>| {
+        let mut target = json!({"type": "group", "group_id": group_id});
+        if let Some(initial_master) = initial_master {
+            target["initial_master"] = json!(initial_master);
+        }
+        json!({
+            "number": number,
+            "name": format!("Playback {number}"),
+            "target": target,
+            "future_playback": {"kept": number}
+        })
+    };
+    let objects = [
+        ("group", "front", group("Front", 0.5)),
+        ("group", "back", group("Back", 0.625)),
+        (
+            "group",
+            "orphan",
+            json!({
+                "name": "Orphan",
+                "fixtures": [],
+                "master": "invalid but unassigned",
+                "playback_fader": 99,
+                "future_group": {"kept": true}
+            }),
+        ),
+        ("playback", "9", playback(9, "front", Some(0.75))),
+        ("playback", "2", playback(2, "front", Some(0.25))),
+        ("playback", "3", playback(3, "back", None)),
+        (
+            "playback_page",
+            "1",
+            json!({
+                "number": 1,
+                "name": "Virtual",
+                "slots": {},
+                "virtual_playbacks": {
+                    "1001": playback(1001, "front", Some(0.875)),
+                    "1002": playback(1002, "back", None)
+                },
+                "future_page": {"kept": true}
+            }),
+        ),
+    ];
+    let object_refs = objects
+        .iter()
+        .map(|(kind, id, body)| (*kind, *id, body.clone()))
+        .collect::<Vec<_>>();
+    let (store, document) = document_with_objects(&object_refs);
+    let mut transaction = document.transaction();
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+    let candidate = document.candidate(&transaction).unwrap();
+
+    for group_id in ["front", "back", "orphan"] {
+        let body = candidate.object("group", group_id).unwrap().body();
+        assert!(body.get("master").is_none());
+        assert!(body.get("playback_fader").is_none());
+        assert_eq!(body["future_group"], json!({"kept": true}));
+    }
+    for number in ["2", "9"] {
+        let body = candidate.object("playback", number).unwrap().body();
+        assert_eq!(body["target"]["initial_master"], 0.25);
+        assert_eq!(body["future_playback"]["kept"], body["number"]);
+    }
+    assert_eq!(
+        candidate.object("playback", "3").unwrap().body()["target"]["initial_master"],
+        0.625
+    );
+    let page = candidate.object("playback_page", "1").unwrap().body();
+    assert_eq!(
+        page["virtual_playbacks"]["1001"]["target"]["initial_master"],
+        0.25
+    );
+    assert_eq!(
+        page["virtual_playbacks"]["1002"]["target"]["initial_master"],
+        0.625
+    );
+    assert_eq!(page["future_page"], json!({"kept": true}));
+
+    store.apply_portable_transaction(transaction).unwrap();
+    let migrated = store.portable_document().unwrap();
+    let revision = migrated.revision();
+    let mut second_pass = migrated.transaction();
+    stage_candidate_migrations(&migrated, &mut second_pass).unwrap();
+    assert!(
+        second_pass.is_empty(),
+        "Group Master migration must be idempotent"
+    );
+    assert_eq!(
+        store
+            .apply_portable_transaction(second_pass)
+            .unwrap()
+            .revision(),
+        revision
+    );
+}
+
+#[test]
 fn targetless_dynamic_assignments_migrate_to_distinct_target_bound_fallbacks() {
     let original = targetless_dynamic(7);
     let original_id = original.id;

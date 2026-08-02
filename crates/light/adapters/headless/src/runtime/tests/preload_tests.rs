@@ -99,6 +99,7 @@ fn preload_atomicity_test_snapshot() -> EngineSnapshot {
                 3,
                 light_playback::PlaybackTarget::Group {
                     group_id: "front".into(),
+                    initial_master: None,
                 },
             ),
         ].into(),

@@ -4005,17 +4005,6 @@ async function migrateDemoGroupMastersToCanonicalPlaybacks(
 			existing?.revision ?? 0,
 		);
 	}
-	for (const group of await api.showObjects<any>(showId, "group")) {
-		const playbackFader = numberMap.get(group.body.playback_fader);
-		if (playbackFader == null) continue;
-		await api.seedShowObject(
-			showId,
-			"group",
-			group.id,
-			{ ...group.body, playback_fader: playbackFader },
-			group.revision,
-		);
-	}
 	for (const page of await api.showObjects<any>(showId, "playback_page")) {
 		const slots = Object.fromEntries(
 			Object.entries(page.body.slots ?? {}).map(([slot, playback]) => [

@@ -195,7 +195,7 @@ pub(super) fn matter_playback_values(
                         })
                         .unwrap_or_default()
                 }
-                PlaybackTarget::Group { group_id } => state
+                PlaybackTarget::Group { group_id, .. } => state
                     .output
                     .group_master(group_id)
                     .map(|master| matter::PlaybackValue::new(master, master > 0.0))

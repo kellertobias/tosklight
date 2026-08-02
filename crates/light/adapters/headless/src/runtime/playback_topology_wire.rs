@@ -352,9 +352,10 @@ fn application_target(
                 },
             }
         }
-        wire::PlaybackTopologyTarget::Group { group_id } => {
-            playback::PlaybackTarget::Group { group_id }
-        }
+        wire::PlaybackTopologyTarget::Group { group_id } => playback::PlaybackTarget::Group {
+            group_id,
+            initial_master: None,
+        },
         wire::PlaybackTopologyTarget::SpeedGroup { group } => {
             playback::PlaybackTarget::SpeedGroup { group }
         }

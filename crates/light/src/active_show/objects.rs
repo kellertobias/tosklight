@@ -284,7 +284,11 @@ fn normalize_group(
     let requested = request.typed();
     let mut normalized = requested.clone();
     normalized.id.clone_from(&mutation.object_id);
-    LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)
+    let mut merged =
+        LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)?;
+    merged.strip_object_key("master");
+    merged.strip_object_key("playback_fader");
+    Ok(merged)
 }
 
 fn normalize_preset(

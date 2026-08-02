@@ -286,7 +286,7 @@ fn scheduled_action(
     target: &light_playback::PlaybackTarget,
     action: light_application::ScheduledPlaybackAction,
 ) -> Result<light_application::PlaybackAction, ApiError> {
-    if let light_playback::PlaybackTarget::Group { group_id } = target {
+    if let light_playback::PlaybackTarget::Group { group_id, .. } = target {
         let level = match action {
             light_application::ScheduledPlaybackAction::On => 1.0,
             light_application::ScheduledPlaybackAction::Off

@@ -36,7 +36,8 @@ fn group_assignment_resolves_group_and_constructs_new_playback_atomically() {
     assert_eq!(
         playback.target,
         PlaybackTarget::Group {
-            group_id: "front".into()
+            group_id: "front".into(),
+            initial_master: None,
         }
     );
     assert_eq!(playback.name, "Front");
@@ -62,6 +63,7 @@ fn group_assignment_preserves_existing_assignment_local_presentation_and_layout(
     let mut existing = playback(7, "Local label");
     existing.target = PlaybackTarget::Group {
         group_id: "old-group".into(),
+        initial_master: None,
     };
     existing.buttons = [
         light_playback::PlaybackButtonAction::Flash,
@@ -118,7 +120,8 @@ fn group_assignment_preserves_existing_assignment_local_presentation_and_layout(
     assert_eq!(
         stored.target,
         PlaybackTarget::Group {
-            group_id: "new-group".into()
+            group_id: "new-group".into(),
+            initial_master: None,
         }
     );
     assert_eq!(result.outcome.objects().len(), 2);

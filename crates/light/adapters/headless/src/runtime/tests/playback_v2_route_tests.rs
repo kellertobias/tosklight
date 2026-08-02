@@ -1274,7 +1274,6 @@ async fn v2_group_actions_reject_unsupported_missing_and_unassigned_groups() {
         );
     }
 
-    set_group_playback_assignment(&state, "side", Some(9));
     let missing_assignment = post_action(
         &app,
         Some(&token),
@@ -1288,7 +1287,6 @@ async fn v2_group_actions_reject_unsupported_missing_and_unassigned_groups() {
     .await;
     assert_eq!(missing_assignment.status(), StatusCode::BAD_REQUEST);
 
-    set_group_playback_assignment(&state, "side", Some(1));
     let wrong_assignment = post_action(
         &app,
         Some(&token),
@@ -2415,6 +2413,7 @@ fn install_playback_test_state(state: &AppState) -> light_core::FixtureId {
                     2,
                     light_playback::PlaybackTarget::Group {
                         group_id: "front".into(),
+                        initial_master: Some(0.75),
                     },
                 ),
             ]
@@ -2423,7 +2422,6 @@ fn install_playback_test_state(state: &AppState) -> light_core::FixtureId {
                 id: "front".into(),
                 name: "Front".into(),
                 fixtures: vec![fixture],
-                master: 0.75,
                 ..light_programmer::GroupDefinition::default()
             }]
             .into(),
@@ -2437,27 +2435,11 @@ fn install_group_runtime_test_state(state: &AppState) {
     install_playback_test_state(state);
     let mut snapshot = (*state.output.snapshot()).clone();
     let groups = std::sync::Arc::make_mut(&mut snapshot.groups);
-    groups
-        .iter_mut()
-        .find(|group| group.id == "front")
-        .unwrap()
-        .playback_fader = Some(1);
     groups.push(light_programmer::GroupDefinition {
         id: "side".into(),
         name: "Side".into(),
-        master: 0.6,
         ..light_programmer::GroupDefinition::default()
     });
-    state.output.replace_snapshot(snapshot).unwrap();
-}
-
-fn set_group_playback_assignment(state: &AppState, group_id: &str, playback: Option<u8>) {
-    let mut snapshot = (*state.output.snapshot()).clone();
-    std::sync::Arc::make_mut(&mut snapshot.groups)
-        .iter_mut()
-        .find(|group| group.id == group_id)
-        .unwrap()
-        .playback_fader = playback;
     state.output.replace_snapshot(snapshot).unwrap();
 }
 

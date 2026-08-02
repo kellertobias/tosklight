@@ -559,6 +559,7 @@ async fn group_master_runtime_restores_and_persists_only_assigned_targets() {
 
     let target = light_playback::PlaybackTarget::Group {
         group_id: "front".into(),
+        initial_master: Some(0.25),
     };
     state
         .output
@@ -566,12 +567,10 @@ async fn group_master_runtime_restores_and_persists_only_assigned_targets() {
             groups: vec![
                 light_programmer::GroupDefinition {
                     id: "front".into(),
-                    master: 0.25,
                     ..Default::default()
                 },
                 light_programmer::GroupDefinition {
                     id: "unassigned".into(),
-                    master: 0.4,
                     ..Default::default()
                 },
             ]
@@ -607,8 +606,6 @@ async fn group_master_runtime_restores_and_persists_only_assigned_targets() {
     );
     assert_eq!(state.output.group_master("front"), Some(0.65));
     assert_eq!(state.output.group_master("unassigned"), None);
-    assert_eq!(state.output.snapshot().groups[0].master, 0.25);
-    assert_eq!(state.output.snapshot().groups[1].master, 0.4);
 
     persist_output_runtime(&state).unwrap();
     let show_id = light_core::ShowId(Uuid::parse_str(show["id"].as_str().unwrap()).unwrap());

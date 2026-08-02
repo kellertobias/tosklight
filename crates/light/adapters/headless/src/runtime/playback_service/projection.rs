@@ -221,7 +221,7 @@ fn project_virtual(
                 .active_dynamic_playback_at(PlaybackIdentity::Virtual(address))
                 .map(|active| dynamic_runtime_projection(ports, snapshot, assignment, active)),
         },
-        PlaybackTarget::Group { group_id } => group_projection(ports, snapshot, group_id)?,
+        PlaybackTarget::Group { group_id, .. } => group_projection(ports, snapshot, group_id)?,
         PlaybackTarget::SpeedGroup { group } => speed_projection(ports, group)?,
         PlaybackTarget::GrandMaster => grand_master_projection(ports),
         PlaybackTarget::ProgrammerFade => PlaybackTargetProjection::ProgrammerFade {
@@ -311,7 +311,7 @@ fn project_playback(
                 .and_then(|identity| ports.state.output.active_dynamic_playback_at(identity))
                 .map(|active| dynamic_runtime_projection(ports, snapshot, assignment, active)),
         },
-        PlaybackTarget::Group { group_id } => group_projection(ports, snapshot, group_id)?,
+        PlaybackTarget::Group { group_id, .. } => group_projection(ports, snapshot, group_id)?,
         PlaybackTarget::SpeedGroup { group } => speed_projection(ports, group)?,
         PlaybackTarget::GrandMaster => grand_master_projection(ports),
         PlaybackTarget::ProgrammerFade => PlaybackTargetProjection::ProgrammerFade {

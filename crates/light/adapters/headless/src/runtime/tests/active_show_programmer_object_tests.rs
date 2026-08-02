@@ -240,9 +240,7 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
                 "frozen_from": null,
                 "icon": null,
                 "id": "9",
-                "master": 1.0,
                 "name": "Current",
-                "playback_fader": null,
                 "programming": {},
                 "grid": {
                     "method": "stage2d",

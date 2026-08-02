@@ -495,6 +495,7 @@ fn assign_group_master(
     )?;
     let target = PlaybackTarget::Group {
         group_id: group.object_id.clone(),
+        initial_master: None,
     };
     let desired_playback = playback.as_ref().map_or_else(
         || PlaybackDefinition {

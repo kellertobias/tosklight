@@ -164,6 +164,9 @@ impl TestRig {
         let group = light_programmer::GroupDefinition {
             id: "unrelated".into(),
             name: "Unrelated Group".into(),
+            source: Some(light_programmer::GroupFixtureSource::Explicit {
+                fixture_ids: vec![],
+            }),
             ..Default::default()
         };
         ShowStore::open(&self.ports.path)
