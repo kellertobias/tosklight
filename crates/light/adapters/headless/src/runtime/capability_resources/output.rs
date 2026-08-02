@@ -528,17 +528,17 @@ impl OutputResource {
             .playback_runtime_status_for_cue_list(cue_list_id)
     }
 
-    pub(in crate::runtime) fn active_dynamic_playbacks(
-        &self,
-    ) -> Vec<light_playback::ActiveDynamicPlayback> {
-        self.engine.active_dynamic_playbacks()
-    }
-
     pub(in crate::runtime) fn active_dynamic_playback_at(
         &self,
         identity: light_playback::PlaybackIdentity,
     ) -> Option<light_playback::ActiveDynamicPlayback> {
         self.engine.active_dynamic_playback_at(identity)
+    }
+
+    pub(in crate::runtime) fn active_dynamic_playbacks_for_persistence(
+        &self,
+    ) -> Vec<light_playback::ActiveDynamicPlayback> {
+        self.engine.active_dynamic_playbacks_for_persistence()
     }
 
     pub(in crate::runtime) fn playback_dynamics(&self) -> light_engine::PlaybackDynamicsProjection {

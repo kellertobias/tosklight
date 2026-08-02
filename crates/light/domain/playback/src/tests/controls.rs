@@ -608,9 +608,17 @@ fn target_bound_dynamic_runtime_is_shared_across_physical_and_virtual_assignment
         PlaybackIdentity::physical(22).unwrap(),
         PlaybackIdentity::Virtual(virtual_address),
     ] {
+        let projected = engine.active_dynamic_playback_at(identity).unwrap();
+        assert_eq!(projected.dynamic_id, Some(target_id));
+        assert!(projected.paused);
+        assert_eq!(projected.master, 0.35);
         assert_eq!(
-            engine.active_dynamic_playback_at(identity),
-            Some(&active[0])
+            projected.fader_pickup_required,
+            matches!(identity, PlaybackIdentity::Physical(_))
+        );
+        assert_eq!(
+            projected.fader_pickup_target,
+            matches!(identity, PlaybackIdentity::Physical(_)).then_some(0.35)
         );
     }
 
@@ -635,6 +643,129 @@ fn target_bound_dynamic_runtime_is_shared_across_physical_and_virtual_assignment
         next.active_dynamics_for_snapshot(&PlaybackEngine::default())
             .is_empty()
     );
+}
+
+#[test]
+fn shared_dynamic_physical_faders_pick_up_independently_and_software_bypasses_pickup() {
+    let first = dynamic_playback_definition(41, DynamicPlaybackFaderMode::Master, false);
+    let mut second = first.clone();
+    second.number = 42;
+    let mut engine = PlaybackEngine::default();
+    engine.register_definition(first).unwrap();
+    engine.register_definition(second).unwrap();
+
+    engine.set_virtual_master_mutation(41, 0.6).unwrap();
+    engine.set_master_mutation(41, 0.2).unwrap();
+    assert_eq!(engine.active_dynamic_playbacks()[0].master, 0.6);
+    assert_eq!(
+        engine
+            .active_dynamic_playback_at(PlaybackIdentity::physical(41).unwrap())
+            .unwrap()
+            .fader_pickup_target,
+        Some(0.6)
+    );
+
+    engine.set_master_mutation(41, 0.7).unwrap();
+    assert_eq!(engine.active_dynamic_playbacks()[0].master, 0.7);
+    assert!(
+        !engine
+            .active_dynamic_playback_at(PlaybackIdentity::physical(41).unwrap())
+            .unwrap()
+            .fader_pickup_required
+    );
+    assert_eq!(
+        engine
+            .active_dynamic_playback_at(PlaybackIdentity::physical(42).unwrap())
+            .unwrap()
+            .fader_pickup_target,
+        Some(0.7)
+    );
+
+    engine.set_virtual_master_mutation(42, 0.4).unwrap();
+    assert_eq!(engine.active_dynamic_playbacks()[0].master, 0.4);
+    for number in [41, 42] {
+        assert_eq!(
+            engine
+                .active_dynamic_playback_at(PlaybackIdentity::physical(number).unwrap())
+                .unwrap()
+                .fader_pickup_target,
+            Some(0.4)
+        );
+    }
+    engine.set_master_mutation(42, 0.4).unwrap();
+    assert!(
+        !engine
+            .active_dynamic_playback_at(PlaybackIdentity::physical(42).unwrap())
+            .unwrap()
+            .fader_pickup_required
+    );
+}
+
+#[test]
+fn shared_dynamic_flash_holds_remain_assignment_local_until_the_last_release() {
+    let first = dynamic_playback_definition(51, DynamicPlaybackFaderMode::Master, false);
+    let mut second = first.clone();
+    second.number = 52;
+    let mut engine = PlaybackEngine::default();
+    engine.register_definition(first).unwrap();
+    engine.register_definition(second).unwrap();
+
+    engine.set_dynamic_flash_mutation(51, true).unwrap();
+    engine.set_dynamic_flash_mutation(52, true).unwrap();
+    assert_eq!(engine.active_dynamic_playbacks().len(), 1);
+    assert!(engine.active_dynamic_playbacks()[0].enabled);
+    for number in [51, 52] {
+        let projected = engine
+            .active_dynamic_playback_at(PlaybackIdentity::physical(number).unwrap())
+            .unwrap();
+        assert!(projected.flash);
+        assert!(projected.flash_restore_off);
+    }
+    let persisted = engine.active_dynamic_playbacks_for_persistence();
+    assert_eq!(persisted.len(), 1);
+    assert!(!persisted[0].enabled);
+    assert!(!persisted[0].flash);
+    assert!(!persisted[0].flash_restore_off);
+
+    engine.set_dynamic_flash_mutation(51, false).unwrap();
+    assert!(engine.active_dynamic_playbacks()[0].enabled);
+    assert!(
+        !engine
+            .active_dynamic_playback_at(PlaybackIdentity::physical(51).unwrap())
+            .unwrap()
+            .flash
+    );
+    assert!(
+        engine
+            .active_dynamic_playback_at(PlaybackIdentity::physical(52).unwrap())
+            .unwrap()
+            .flash
+    );
+
+    engine.set_dynamic_flash_mutation(52, false).unwrap();
+    let active = &engine.active_dynamic_playbacks()[0];
+    assert!(!active.enabled);
+    assert!(!active.flash);
+    assert!(!active.flash_restore_off);
+}
+
+#[test]
+fn dynamic_flash_release_without_auto_off_promotes_the_shared_target_on() {
+    let mut definition = dynamic_playback_definition(53, DynamicPlaybackFaderMode::Master, false);
+    let PlaybackTarget::Dynamic { assignment } = &mut definition.target else {
+        unreachable!()
+    };
+    assignment.auto_off_flash_release = false;
+    let mut engine = PlaybackEngine::default();
+    engine.register_definition(definition).unwrap();
+
+    engine.set_dynamic_flash_mutation(53, true).unwrap();
+    engine.set_dynamic_flash_mutation(53, false).unwrap();
+
+    let active = &engine.active_dynamic_playbacks()[0];
+    assert!(active.enabled);
+    assert!(!active.flash);
+    assert!(!active.flash_restore_off);
 }
 
 #[test]

@@ -128,6 +128,8 @@ describe("Playback wire validation", () => {
 			flash: false,
 			activated_at: "2026-07-31T12:00:00Z",
 			fader_value: 1,
+			fader_pickup_required: true,
+			fader_pickup_target: 0.5,
 			size: 1,
 			master: 1,
 			local_speed_numerator: 1,

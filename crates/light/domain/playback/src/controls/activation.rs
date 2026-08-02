@@ -226,7 +226,16 @@ impl PlaybackEngine {
                     release_after: false,
                 });
             }
-            return Ok(PlaybackMutation::new((), durable_effect(*active != before)));
+            let changed = *active != before;
+            let control_changed = self.retarget_dynamic_physical_controls(target_id, value, None);
+            return Ok(PlaybackMutation::new(
+                (),
+                durable_effect(changed).combine(if control_changed {
+                    PlaybackRuntimeEffect::Transient
+                } else {
+                    PlaybackRuntimeEffect::None
+                }),
+            ));
         }
 
         let id = self.cue_list_for(number)?;
@@ -327,7 +336,11 @@ impl PlaybackEngine {
         allow_faderless: bool,
     ) -> Result<PlaybackMutation<()>, String> {
         if self.dynamic_assignment(number).is_some() {
-            return self.set_dynamic_fader_mutation(number, value);
+            return self.set_dynamic_fader_at_mutation_inner(
+                PlaybackIdentity::physical(number)?,
+                value,
+                !allow_faderless,
+            );
         }
         let mode = self.validate_master(number, value, allow_faderless)?;
         match mode {

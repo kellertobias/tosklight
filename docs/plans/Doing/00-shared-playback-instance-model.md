@@ -11,7 +11,7 @@ to Playbacks depends on it.
 
 - [x] Claimed from `docs/plans/Next` and began the implementation audit.
 - [x] Map current assignment, runtime, persistence, feedback, and pickup ownership.
-- [ ] Implement shared runtime identity and assignment lifecycle in coherent compatibility-safe steps.
+- [x] Implement shared runtime identity and assignment lifecycle in coherent compatibility-safe steps.
   Cuelist actions now use one target-keyed domain runtime across physical, Virtual, and direct-Cuelist
   addresses. Physical Master faders now retain independent observed positions and pickup latches, including
   crossing takeover and peer retargeting after authoritative software updates. Physical, Virtual, and direct
@@ -25,8 +25,11 @@ to Playbacks depends on it.
   Dynamic remains targetless; new targetless Dynamics are rejected by both topology validation and the SET path.
   Target-bound Dynamics now key active state and scheduler controllers by stable Dynamic identity across physical
   and Virtual assignments, restore one deterministic legacy row, rebind surviving placement provenance, and feed
-  the shared runtime through HTTP/WebSocket projections, Matter, OSC, and related peer events.
-- [ ] Add focused migration, runtime, cross-surface, and operator acceptance coverage. Shared Cuelist,
+  the shared runtime through HTTP/WebSocket projections, Matter, OSC, and related peer events. Dynamic Flash holds
+  are assignment-local and non-portable while composing one effective target run; physical Dynamic faders now
+  retain independent crossing pickup, software changes bypass pickup, automated changes retarget peers, and v2
+  projections carry each assignment's pickup feedback through reconnect.
+- [x] Add focused migration, runtime, cross-surface, and operator acceptance coverage. Shared Cuelist,
   physical-pickup, Matter/software, peer-event, Preload, restart, and legacy duplicate-row coverage is in place;
   assignment removal/reassignment, Group Master topology, and targetless-Dynamic migration coverage is in place;
   shared target-bound Dynamic runtime and cross-surface coverage remain.
@@ -74,11 +77,13 @@ to Playbacks depends on it.
 - `cargo test -p light-playback --lib --quiet` passed after target-bound Dynamic identity and lifecycle changes:
   104 passed, including physical/Virtual shared state, final detach, and order-independent legacy duplicate restore.
 - Focused `light-headless-runtime` Dynamic scheduler and projection tests passed with target-derived controller IDs.
+- `cargo test -p light-playback --lib --quiet` passed after Dynamic held-gesture and pickup separation: 107 passed.
+- `cargo test -p light-wire --no-default-features --quiet` passed: 98 passed plus the generated-artifact check.
+- Desktop TypeScript typecheck passed; focused playback wire/runtime tests passed: 43 tests.
+- Focused headless Dynamic projection coverage passed with target-derived controller and pickup fields.
 
 ## Remaining work
 
-- Complete target-bound Dynamic physical pickup and assignment-local held gestures on the shared runtime.
-- Confirm generated wire/frontend selection and reconnect state consume the authoritative peer projections.
 - Run full plan closeout verification and record the truthful result.
 
 ## Goal

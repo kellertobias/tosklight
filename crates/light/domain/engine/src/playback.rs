@@ -263,7 +263,14 @@ impl Engine {
             .playback()
             .read()
             .active_dynamic_playback_at(identity)
-            .cloned()
+    }
+
+    pub fn active_dynamic_playbacks_for_persistence(&self) -> Vec<ActiveDynamicPlayback> {
+        self.generation
+            .load()
+            .playback()
+            .read()
+            .active_dynamic_playbacks_for_persistence()
     }
 
     /// Applies output-resolved full-control auto-off as one durable Playback mutation.

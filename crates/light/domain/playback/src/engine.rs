@@ -7,6 +7,7 @@ pub struct PlaybackEngine {
     pub(crate) active: HashMap<PlaybackKey, ActivePlayback>,
     pub(crate) control_states: HashMap<PlaybackIdentity, PlaybackControlState>,
     pub(crate) active_dynamics: HashMap<uuid::Uuid, ActiveDynamicPlayback>,
+    pub(crate) dynamic_flash_states: HashMap<PlaybackIdentity, DynamicFlashState>,
     pub(crate) temporary: HashMap<(PlaybackIdentity, TemporaryPlaybackKind), ActivePlayback>,
     pub(crate) swap_held: HashSet<PlaybackIdentity>,
     pub(crate) dynamics_paused_at: Option<DateTime<Utc>>,
@@ -33,6 +34,7 @@ impl PlaybackEngine {
             active: HashMap::new(),
             control_states: HashMap::new(),
             active_dynamics: HashMap::new(),
+            dynamic_flash_states: HashMap::new(),
             temporary: HashMap::new(),
             swap_held: HashSet::new(),
             dynamics_paused_at: None,
@@ -230,4 +232,44 @@ impl PlaybackEngine {
         }
         changed
     }
+
+    pub(crate) fn retarget_dynamic_physical_controls(
+        &mut self,
+        target_id: Uuid,
+        target: f32,
+        controlling: Option<PlaybackIdentity>,
+    ) -> bool {
+        let identities = self
+            .definitions
+            .values()
+            .filter_map(|definition| match &definition.target {
+                PlaybackTarget::Dynamic { assignment }
+                    if assignment.target_id() == target_id
+                        && definition.has_fader
+                        && assignment.fader_mode != DynamicPlaybackFaderMode::None =>
+                {
+                    PlaybackIdentity::physical(definition.number).ok()
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let mut changed = false;
+        for identity in identities {
+            let state = self.control_states.entry(identity).or_default();
+            let satisfied =
+                controlling == Some(identity) || (state.observed && state.fader_position == target);
+            let required = !satisfied;
+            let pickup_target = required.then_some(target);
+            changed |= state.fader_pickup_required != required
+                || state.fader_pickup_target != pickup_target;
+            state.fader_pickup_required = required;
+            state.fader_pickup_target = pickup_target;
+        }
+        changed
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct DynamicFlashState {
+    pub(crate) restore_off: bool,
 }

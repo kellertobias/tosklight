@@ -114,7 +114,7 @@ pub(super) fn persist_output_runtime(state: &AppState) -> Result<(), ApiError> {
         grand_master: control.grand_master,
         blackout: control.blackout,
         dynamics_paused_at: state.output.playback_dynamics().paused_since,
-        dynamic_playbacks: state.output.active_dynamic_playbacks(),
+        dynamic_playbacks: state.output.active_dynamic_playbacks_for_persistence(),
         dynamic_runtime: Some(state.output.dynamic_runtime_snapshot()),
         group_masters: state
             .output

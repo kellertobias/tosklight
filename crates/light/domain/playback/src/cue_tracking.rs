@@ -371,6 +371,11 @@ impl PlaybackEngine {
     ) -> Result<PlaybackMutation<()>, String> {
         self.definition_at(identity)
             .ok_or("playback does not exist")?;
+        let dynamic_flash_effect = if self.dynamic_flash_states.contains_key(&identity) {
+            self.set_dynamic_flash_at_mutation(identity, false)?.effect
+        } else {
+            PlaybackRuntimeEffect::None
+        };
         let durable = if self.dynamic_assignment_at(identity).is_some() {
             self.off_dynamic_at_mutation(identity)?.value
         } else {
@@ -379,7 +384,9 @@ impl PlaybackEngine {
         let before = self.temporary.len();
         self.temporary
             .retain(|(candidate, _), _| *candidate != identity);
-        let transient = before != self.temporary.len() || self.swap_held.remove(&identity);
+        let transient = before != self.temporary.len()
+            || self.swap_held.remove(&identity)
+            || dynamic_flash_effect.changed();
         Ok(PlaybackMutation::new(
             (),
             (if durable {

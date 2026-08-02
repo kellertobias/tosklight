@@ -256,6 +256,15 @@ function decodeDynamicRuntime(
 		flash: booleanAt(runtime.flash, `${path}.flash`),
 		activated_at: stringAt(runtime.activated_at, `${path}.activated_at`),
 		fader_value: numberAt(runtime.fader_value, `${path}.fader_value`),
+		fader_pickup_required: booleanAt(
+			runtime.fader_pickup_required,
+			`${path}.fader_pickup_required`,
+		),
+		fader_pickup_target: nullable(
+			runtime.fader_pickup_target,
+			`${path}.fader_pickup_target`,
+			numberAt,
+		),
 		size: numberAt(runtime.size, `${path}.size`),
 		master: numberAt(runtime.master, `${path}.master`),
 		local_speed_numerator: integerAt(

@@ -34,6 +34,8 @@ pub(super) fn target_projection(
                     flash: runtime.active.flash,
                     activated_at: runtime.active.activated_at.to_rfc3339(),
                     fader_value: runtime.active.fader_value,
+                    fader_pickup_required: runtime.active.fader_pickup_required,
+                    fader_pickup_target: runtime.active.fader_pickup_target,
                     size: runtime.active.size,
                     master: runtime.active.master,
                     local_speed_numerator: runtime.active.local_speed_multiplier.numerator,

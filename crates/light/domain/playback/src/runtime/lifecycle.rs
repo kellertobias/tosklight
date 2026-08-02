@@ -184,6 +184,7 @@ impl PlaybackEngine {
         playbacks: impl IntoIterator<Item = ActiveDynamicPlayback>,
     ) {
         self.active_dynamics.clear();
+        self.dynamic_flash_states.clear();
         let mut restored_origins = HashMap::<Uuid, PlaybackIdentity>::new();
         for mut playback in playbacks {
             let persisted_identity = playback.playback_identity.unwrap_or_else(|| {
@@ -214,10 +215,13 @@ impl PlaybackEngine {
             playback.fader_value = playback.fader_value.clamp(0.0, 1.0);
             playback.size = playback.size.clamp(0.0, 1.0);
             playback.master = playback.master.clamp(0.0, 1.0);
-            if !playback.enabled {
-                playback.flash = false;
-                playback.flash_restore_off = false;
+            if playback.flash_restore_off {
+                playback.enabled = false;
             }
+            playback.flash = false;
+            playback.flash_restore_off = false;
+            playback.fader_pickup_required = false;
+            playback.fader_pickup_target = None;
             playback.dynamic_id = Some(target_id);
             playback.playback_number = identity.number();
             playback.playback_identity = identity.virtual_address().map(PlaybackIdentity::Virtual);
@@ -245,6 +249,13 @@ impl PlaybackEngine {
             .filter_map(|(target_id, active)| {
                 let identity = next.first_dynamic_identity(*target_id)?;
                 let mut active = active.clone();
+                if active.flash_restore_off {
+                    active.enabled = false;
+                }
+                active.flash = false;
+                active.flash_restore_off = false;
+                active.fader_pickup_required = false;
+                active.fader_pickup_target = None;
                 active.dynamic_id = Some(*target_id);
                 active.playback_number = identity.number();
                 active.playback_identity =
@@ -322,6 +333,7 @@ impl PlaybackEngine {
                     active: HashMap::from([(*key, playback.clone())]),
                     control_states: HashMap::new(),
                     active_dynamics: HashMap::new(),
+                    dynamic_flash_states: HashMap::new(),
                     temporary: HashMap::new(),
                     swap_held: HashSet::new(),
                     dynamics_paused_at: None,

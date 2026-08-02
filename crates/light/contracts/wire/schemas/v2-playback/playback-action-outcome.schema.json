@@ -263,6 +263,16 @@
         "enabled": {
           "type": "boolean"
         },
+        "fader_pickup_required": {
+          "type": "boolean"
+        },
+        "fader_pickup_target": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
         "fader_value": {
           "type": "number",
           "format": "float"
@@ -369,6 +379,8 @@
         "flash",
         "activated_at",
         "fader_value",
+        "fader_pickup_required",
+        "fader_pickup_target",
         "size",
         "master",
         "local_speed_numerator",

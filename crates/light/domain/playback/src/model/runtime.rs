@@ -205,6 +205,10 @@ pub struct ActiveDynamicPlayback {
     pub activated_at: DateTime<Utc>,
     #[serde(default = "default_master")]
     pub fader_value: f32,
+    #[serde(skip)]
+    pub fader_pickup_required: bool,
+    #[serde(skip)]
+    pub fader_pickup_target: Option<f32>,
     #[serde(default = "default_master")]
     pub size: f32,
     #[serde(default = "default_master")]

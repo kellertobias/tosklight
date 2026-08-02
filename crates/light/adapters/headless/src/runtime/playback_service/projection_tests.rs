@@ -129,6 +129,8 @@ fn dynamic_projection_reports_hidden_controller_identity_speed_and_coverage() {
         flash_restore_off: false,
         activated_at: chrono::Utc::now(),
         fader_value: 1.0,
+        fader_pickup_required: false,
+        fader_pickup_target: None,
         size: 0.75,
         master: 0.8,
         master_transition: None,

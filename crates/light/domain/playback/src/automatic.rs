@@ -72,8 +72,17 @@ impl PlaybackEngine {
         for playback in self.temporary.values_mut() {
             update_master_transition(playback, now);
         }
-        for playback in self.active_dynamics.values_mut() {
-            update_dynamic_master_transition(playback, now);
+        let dynamic_updates = self
+            .active_dynamics
+            .iter_mut()
+            .filter_map(|(target_id, playback)| {
+                let before = playback.master;
+                update_dynamic_master_transition(playback, now);
+                (playback.master != before).then_some((*target_id, playback.master))
+            })
+            .collect::<Vec<_>>();
+        for (target_id, master) in dynamic_updates {
+            self.retarget_dynamic_physical_controls(target_id, master, None);
         }
     }
 

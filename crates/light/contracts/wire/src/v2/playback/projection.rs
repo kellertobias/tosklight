@@ -77,6 +77,8 @@ pub struct DynamicPlaybackRuntimeProjection {
     pub flash: bool,
     pub activated_at: String,
     pub fader_value: f32,
+    pub fader_pickup_required: bool,
+    pub fader_pickup_target: Option<f32>,
     pub size: f32,
     pub master: f32,
     pub local_speed_numerator: u32,
