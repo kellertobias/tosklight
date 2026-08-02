@@ -293,6 +293,7 @@ fn item_key(value: &Value) -> Option<String> {
     ["fixture_id", "channel_id", "split", "head_index"]
         .into_iter()
         .find_map(|field| scalar_key(field, object.get(field)?))
+        .or_else(|| scalar_key("group_id", object.get("group_id")?))
 }
 
 fn composite_key(fields: &[&str], object: &Map<String, Value>) -> Option<String> {
@@ -311,3 +312,6 @@ fn scalar_key(field: &str, value: &Value) -> Option<String> {
     }
     Some(format!("{field}:{}", serde_json::to_string(value).ok()?))
 }
+
+#[cfg(test)]
+mod tests;
