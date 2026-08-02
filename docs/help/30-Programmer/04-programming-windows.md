@@ -7,7 +7,7 @@ Use the window that gives the clearest view of the current task; all of them ope
 | Stage | Spatial selection, 2D/3D visualization, and Preload following. |
 | Fixtures | Fixture/head rows, attributes, source ownership, ordering, and active/Cuelist filters. |
 | Channels | Channel-oriented value and source inspection. |
-| Groups | Reusable ordered selections and group masters. |
+| Groups | Reusable ordered selections, references, projection, and phaser ranking. |
 | Presets | Mixed, Intensity, Color, Position, and Beam pools. |
 | Dynamics | Numbered Dynamic pool, Lanes, Phase, Speed, targets, and running state. |
 | Cuelists / Cues | Cue content, order, timing, triggers, tracking, and execution. |
@@ -16,6 +16,13 @@ Use the window that gives the clearest view of the current task; all of them ope
 Selections made in Stage, Fixtures, Groups, Presets, or the command line are the same actual programmer selection. While using [Highlight and Step Through](02-selecting-and-setting-values.md#highlight-and-step-through), PREV and NEXT replace that actual selection with one item, ALL restores the current membership of the remembered live source, and any ordinary selection from one of these windows becomes the new complete step basis. Preset, encoder, dialog, and other value changes use the actual selection but do not reset the basis. HIGH remains independent and follows whatever is actually selected.
 
 In the Dynamics Speed view, choose **Loop** to repeat until Off or **One-shot** to run one complete effective cycle and stop automatically. Run Mode is separate from Start now, Join sync now, and Next boundary, which determine when and where the cycle begins. A completed one-shot does not restart merely because its Cue, Programmer, or Playback value remains active; trigger it again with a new deliberate activation.
+
+The Dynamics editor separates target ordering from phase distribution. **Projection** starts with
+the saved live Group's mapping and can override projection, shape, or both without changing the
+Group. Returning either stage to **Inherit** reveals the current Group stage immediately. Frozen or
+targetless Dynamics instead show **Selection order (no Group mapping)**. **Random** ignores fixture
+positions and projection. Incomplete spatial overrides cannot be applied. **Phaser** continues to
+own offset, span, anchors, blocks, repeats, wings, and uniform/per-lane phase behavior.
 
 With an empty programmer selection, the first ordinary tap on a populated Preset selects every
 fixture or logical head for which that Preset stores a value; it does not recall values. Tap the

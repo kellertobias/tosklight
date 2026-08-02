@@ -8,6 +8,25 @@ Select fixtures, press `[REC]`, and choose a Group target or enter its number. N
 
 A Group reference remains connected to its source; dereference it when a frozen fixture list is required. Derived Groups retain their ordering rule and source relationship. See [Command Line Reference](../30-Programmer/01-command-line.md) for exact syntax.
 
+Plain-click a Group to select its live membership. Double-press it quickly to select the current
+members as frozen fixtures. Right-click, touch-hold, or enter `[SET] [GRP] <number> [ENTER]` to open
+the same Group settings modal. **General** contains only name, icon, and color. **Projection** maps
+Stage X/Y/Z positions into a 2D plane using an anchor, view direction, rotation, and the named
+Top/Front/Back/Left/Right presets. **Phaser** ranks that plane as Grid, Radial, or Radar. Fixtures
+that share a rank receive the same point of a `THRU` spread; members without a valid Stage position
+remain visible and receive individual fallback ranks.
+
+A Group can inherit mapping from referenced Groups, own one complete local mapping, copy inherited
+values as a local mapping, or remove its local mapping. Membership remains live when the mapping is
+local. Mixed referenced mappings use visible source order until the Group receives a local mapping.
+There is no general Layout pane or selection grid: edit fixture positions in Stage, Group ordering
+here, and a Dynamic-only override in that Dynamic's **Projection** tab.
+
+Group settings never contain a master. To create a Group Master, press `[SET]`, choose the explicit
+Group, then press the destination physical or Virtual Playback. Every Playback targeting the same
+Group controls one shared master; Playbacks targeting different Groups remain independent HTP
+contributors. Changing a Playback to **None** removes that assignment without changing the Group.
+
 ![Group pool with populated ordered Groups](../assets/screenshots/panes/groups.png)
 
 ## Presets
