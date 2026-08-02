@@ -2,10 +2,10 @@
 
 ## Status
 
-**Doing.** Claimed on 2026-08-02. The shared-instance identity, Group Master participation, control arbitration,
-assignment removal, persistence, and operator feedback decisions are settled below. This contract
-must be implemented before work that assigns Groups, Cuelists, target-bound Dynamics, or Timecodes
-to Playbacks depends on it.
+**Completed 2026-08-02.** The shared-instance identity, Group Master participation, control arbitration,
+assignment removal, persistence, and operator feedback contract below is implemented for every
+currently assignable Playback target. The same target-owned rule remains the contract for a future
+assignable Timecode target.
 
 ## Progress
 
@@ -32,8 +32,8 @@ to Playbacks depends on it.
 - [x] Add focused migration, runtime, cross-surface, and operator acceptance coverage. Shared Cuelist,
   physical-pickup, Matter/software, peer-event, Preload, restart, and legacy duplicate-row coverage is in place;
   assignment removal/reassignment, Group Master topology, and targetless-Dynamic migration coverage is in place;
-  shared target-bound Dynamic runtime and cross-surface coverage remain.
-- [ ] Run the required major suites and verify the real desktop path.
+  shared target-bound Dynamic runtime and cross-surface coverage is in place.
+- [x] Run the required major suites and verify the real desktop path.
 
 ## Decisions
 
@@ -81,10 +81,31 @@ to Playbacks depends on it.
 - `cargo test -p light-wire --no-default-features --quiet` passed: 98 passed plus the generated-artifact check.
 - Desktop TypeScript typecheck passed; focused playback wire/runtime tests passed: 43 tests.
 - Focused headless Dynamic projection coverage passed with target-derived controller and pickup fields.
+- `cargo test -p light-playback --lib --quiet` passed at closeout: 108 passed.
+- `cargo test -p light-engine --lib --quiet` passed at closeout: 93 passed. The closeout run first
+  exposed one stale physical-projection assertion; it now verifies the compatibility representation
+  (`playback_number` plus no tagged identity) while retaining the virtual-exclusion boundary.
+- `cargo test -p light-headless-runtime --lib --quiet -- --test-threads=1 --skip
+  citp_thumbnail_api_uses_patched_parent_endpoint_and_cache` passed at closeout: 624 passed, 1 ignored,
+  1 filtered. The first closeout run exposed one stale Dynamic-deletion expectation; focused coverage
+  now verifies that a migrated assignment-owned fallback is not recaptured as the deleted pool Dynamic.
+- `npm run test:e2e-api` passed: 26 passed.
+- `npm run test:e2e-ui` completed with 148 passed, 1 skipped, and 8 failed. Two plan-related failures
+  were corrected and their focused rerun passed (2 passed). The six remaining failures are unrelated
+  existing scenarios: PATCH-PLACEMENT-001, SHOW-000, DMX-004, PRELOAD-005, MANUAL-019, and
+  BENCH-GROUP-001.
+- `npm run test:unit` ran its constituent checks and failed only the repository size-ratchet gate on
+  ten unrelated pre-existing files; none is part of this plan's implementation.
+- `npm run test:desktop-smoke` is not present in the current root scripts, so that named convenience
+  gate could not be run.
+- `npm run open` built both native bundles, opened ToskLight, and started the app-owned server.
+  `GET /api/v2/readiness` returned `status: ready`, no active-show error, and no recovery mode. The
+  current startup log records desk-state load, fixture-library readiness, active-show compilation,
+  engine snapshot readiness, and the server binding to `127.0.0.1:5000` without a current startup error.
 
 ## Remaining work
 
-- Run full plan closeout verification and record the truthful result.
+- None for this plan. The unrelated repository gates recorded above remain outside this plan's scope.
 
 ## Goal
 
@@ -247,4 +268,22 @@ assignments presenting divergent runtime copies.
 
 ## Result
 
-Pending implementation.
+Playback runtime for Cuelists and target-bound Dynamics is now owned by stable target identity rather
+than by the physical or Virtual address exposing it. Every assignment projects the same authoritative
+transport, enabled state, master, Dynamic phase/speed state, and target revision while retaining its
+own presentation, held gestures, observed physical position, and pickup latch.
+
+Assignment detach and reassignment preserve a shared target while another control remains and release
+ordinary runtime only after the final assignment is removed. Group Masters follow the same structural
+topology rule, including Virtual assignments and final-contribution removal. Feedback, Matter, OSC,
+HTTP/WebSocket, persistence, restore, and scheduler paths use the shared target identity, while physical
+faders independently reacquire authoritative levels and software faders remain directly operable.
+
+Legacy targetless-Dynamic assignments migrate losslessly to deterministic assignment-owned target-bound
+fallbacks without changing the original targetless pool Dynamic. New targetless assignments are rejected.
+Legacy duplicate runtime rows restore deterministically, temporary holds and pickup state do not become
+portable show data, and physical runtime projection retains its compatible number-based serialization.
+
+The focused domain, migration, wire, frontend, API, and operator scenarios pass. The relevant Rust suites
+and real desktop readiness pass at closeout; the unrelated repository-wide gate failures are recorded
+above rather than being represented as plan failures or silently omitted.
