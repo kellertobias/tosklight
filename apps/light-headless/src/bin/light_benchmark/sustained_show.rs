@@ -19,7 +19,7 @@ use light_playback::{
     PlaybackButtonAction, PlaybackDefinition, PlaybackFaderMode, PlaybackTarget, RestartMode,
     WrapMode,
 };
-use light_programmer::{GroupDefinition, ProgrammerRegistry};
+use light_programmer::{GroupDefinition, MAX_GROUP_RESOLVED_FIXTURES, ProgrammerRegistry};
 use std::{fs, net::SocketAddr, path::Path, sync::Arc};
 use uuid::Uuid;
 
@@ -180,8 +180,12 @@ pub fn build(
         .iter()
         .map(|fixture| fixture.fixture_id)
         .collect::<Vec<_>>();
-    let group = demo_group(&fixture_ids);
-    let (cue_list, playback) = demo_playback();
+    let groups = demo_groups(&fixture_ids);
+    let group_ids = groups
+        .iter()
+        .map(|group| group.id.clone())
+        .collect::<Vec<_>>();
+    let (cue_list, playback) = demo_playback_for_groups(&group_ids);
     let output_routes = routes(config.universes, protocol, loopback_destination);
     let packet_count = output_routes.len();
     let engine = Engine::new(programmers.clone());
@@ -191,7 +195,7 @@ pub fn build(
             cue_lists: vec![cue_list].into(),
             playbacks: vec![playback].into(),
             routes: output_routes.into(),
-            groups: vec![group].into(),
+            groups: groups.into(),
             revision: 1,
             ..Default::default()
         })
@@ -443,8 +447,27 @@ pub(super) fn patched_fixture(
 }
 
 pub(super) fn demo_group(fixtures: &[FixtureId]) -> GroupDefinition {
+    demo_group_with_id(GROUP_ID, fixtures)
+}
+
+fn demo_groups(fixtures: &[FixtureId]) -> Vec<GroupDefinition> {
+    fixtures
+        .chunks(MAX_GROUP_RESOLVED_FIXTURES)
+        .enumerate()
+        .map(|(index, fixtures)| {
+            let id = if index == 0 {
+                GROUP_ID.to_owned()
+            } else {
+                format!("{GROUP_ID}.{}", index + 1)
+            };
+            demo_group_with_id(&id, fixtures)
+        })
+        .collect()
+}
+
+fn demo_group_with_id(id: &str, fixtures: &[FixtureId]) -> GroupDefinition {
     GroupDefinition {
-        id: GROUP_ID.into(),
+        id: id.into(),
         name: "Sustained benchmark-show fixtures".into(),
         fixtures: fixtures.to_vec(),
         programming: [(AttributeKey::intensity(), AttributeValue::Normalized(0.2))].into(),
@@ -453,6 +476,10 @@ pub(super) fn demo_group(fixtures: &[FixtureId]) -> GroupDefinition {
 }
 
 pub(super) fn demo_playback() -> (CueList, PlaybackDefinition) {
+    demo_playback_for_groups(&[GROUP_ID.to_owned()])
+}
+
+fn demo_playback_for_groups(group_ids: &[String]) -> (CueList, PlaybackDefinition) {
     let cue_list_id = CueListId(fixed_uuid(0x83, 1));
     let cue = Cue {
         id: fixed_uuid(0x84, 1),
@@ -464,14 +491,17 @@ pub(super) fn demo_playback() -> (CueList, PlaybackDefinition) {
         trigger: CueTrigger::Manual,
         cue_only: false,
         dynamic_changes: vec![],
-        group_changes: vec![GroupCueChange {
-            group_id: GROUP_ID.into(),
-            attribute: AttributeKey::intensity(),
-            value: Some(AttributeValue::Normalized(0.6)),
-            automatic_restore: false,
-            fade_millis: None,
-            delay_millis: None,
-        }],
+        group_changes: group_ids
+            .iter()
+            .map(|group_id| GroupCueChange {
+                group_id: group_id.clone(),
+                attribute: AttributeKey::intensity(),
+                value: Some(AttributeValue::Normalized(0.6)),
+                automatic_restore: false,
+                fade_millis: None,
+                delay_millis: None,
+            })
+            .collect(),
     };
     let cue_list = CueList {
         id: cue_list_id,
