@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **166 root cases across 67 files**.
+Default catalog: **167 root cases across 68 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -179,6 +179,7 @@ Default catalog: **166 root cases across 67 files**.
 | 81-group-spatial-mapping-and-dynamics-projection.spec.ts | GROUP-SPATIAL-020 @api › canonical live references drive command output and refresh membership | repository contract | @api | group-spatial-mapping-and-dynamics-projection | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 82-fixture-sheet-filtering-and-compact-mode.spec.ts | FIXTURE-SHEET-002-010 @ui › scenery stays out of the programmable sheet and compact choices are literal | repository contract | @ui | fixture-sheet-filtering-and-compact-mode | standard failure evidence | parallel | pending-semantic-migration |
 | 82-fixture-sheet-filtering-and-compact-mode.spec.ts | FIXTURE-SHEET-002-020 @ui › a Dynamic changes DMX while the Fixture Sheet base stays stable | repository contract | @ui | fixture-sheet-filtering-and-compact-mode | standard failure evidence | parallel | pending-semantic-migration |
+| 83-show-patch-installed-appearance.spec.ts | PATCH-APPEARANCE-003-001 @ui › exact table, combined MIB, and emitterless source state survive reopen | repository contract | @ui | show-patch-installed-appearance | standard failure evidence | parallel | pending-semantic-migration |
 | playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
 
