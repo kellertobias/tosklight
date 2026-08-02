@@ -21,7 +21,7 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   pure-domain evaluation and validation.
 - [x] Implement the authoritative source, projection, shape, ranking, inheritance, and migration
   domain model with focused tests.
-- [ ] Implement rank-aware programming and Dynamic evaluation plus explicit SET/Playback routing.
+- [x] Implement rank-aware programming and Dynamic evaluation plus explicit SET/Playback routing.
 - [x] Replace the retired Layout and Group context-menu surfaces with the specified Group and
   Dynamics settings workflows.
 - [ ] Update generated contracts, help/manual, human acceptance scenarios, and focused Playwright
@@ -235,33 +235,35 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
 - Commit `37a6d983` removes the compatibility-only typed Group-assignment alias from new operator
   help while preserving direct physical and Virtual SET-touch instructions. The semantic
   documentation suite passed all eight tests.
-- A completion audit found that the retired per-selection grid remains live below the already
-  removed Layout surface: Group `grid`, Programmer selection-grid state/actions, generated wire,
-  OSC Shift gestures, Highlight controls, and startup migration still form a second ordering
-  authority. It also found canonical Group-reference selection gaps in the real HTTP selection
-  environment and legacy-shaped desktop Group readers, missing evaluation bounds, and no projected
-  `(u, v)` coordinates in the Group preview. These are implementation work, not verification-only
-  gaps, and must close before the major suites.
+- Commit `f9ae9182` closes the completion-audit gaps across the generated contracts and live
+  surfaces: Group `grid`, Programmer selection-grid state/actions, OSC Shift gestures, Highlight
+  controls, and startup backfill are retired; canonical explicit/nested/multi-reference sources are
+  authoritative in the real selection environment and desktop projections; evaluation is bounded
+  to depth 64, 4,096 reference evaluations, and 4,096 unique fixtures; and authoritative projected
+  `(u, v)` preview coordinates are exposed. The focused domain, migration, application, OSC,
+  headless HTTP, desktop, generated-freshness, formatting, and typecheck slices all passed.
+- Commit `ba2c043e` fixes the acceptance-run regression where Group Pool and Fixture Sheet requested
+  Group-Master runtime for every stored Group. Physical and virtual Playback topology now scopes
+  runtime requests to actually assigned Group IDs, unassigned Groups remain visible with no hidden
+  master, and Fixture Sheet excludes them from limiting-master presentation. Four focused desktop
+  files passed 28 tests and the desktop typecheck passed.
+- Commit `d0e45aff` adds the named root Playwright scenario. Its UI path opens the literal
+  General/Projection/Phaser modal, proves retired controls are absent, authors Top/Radial mapping,
+  and verifies coincident Stage positions share the same `0 THRU 100` output rank. Its API path
+  proves canonical live references drive output and re-resolve after source-membership changes.
+  The final focused run passed both tests against isolated real headless servers.
 
 ## Remaining work
 
 - Complete every unchecked progress and acceptance item, then add a truthful `## Result` before
   moving this plan to `docs/plans/Done`.
-- Retire the legacy Group source fields from live authority only after all remaining readers and
-  recovery paths have been audited. Recording, mutation, validation, selective import, startup
-  migration, structural lossless identity, and idempotence proof are integrated; tolerant legacy
-  reads remain deliberately available until the final compatibility pass.
 - Keep the deliberate divergent PerLane compatibility shim until a future representation can encode
   multiple legacy lane mappings without changing output; uniform and lane-consistent definitions now
   write through a local mapping while retaining their legacy ordering as the runtime compatibility
   marker.
-- Retire Group `grid`, Programmer selection-grid state/actions, generated wire/API representations,
-  OSC Shift gestures, desktop Highlight grid controls, and startup backfill. Preserve tolerant
-  legacy reads only where migration diagnostics require them, without allowing live authority.
-- Make the real selection environment and desktop Group projections resolve canonical explicit and
-  multi-reference sources/mappings rather than depending on legacy `fixtures`/`derived_from` fields.
-- Add explicit evaluation limits for reference depth, reference count, and resolved fixture count,
-  and expose projected `(u, v)` positions in the authoritative Group preview.
+- Run the complete required unit, API-E2E, UI-E2E, manual, migration/recovery, and real desktop
+  verification gates. Reconcile only Plan 01 regressions, record exact evidence, then perform the
+  requirement-by-requirement acceptance audit.
 
 ## Decision and superseded behavior
 
