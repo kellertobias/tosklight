@@ -1,21 +1,8 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 import type { AttributeValue } from "../../../apps/light-desktop/src/api/types/playback";
+import type { BrowserSelection } from "../command-selection/selectionScenario";
 import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
-import {
-	BeamAttribute,
-	ColorAttribute,
-	EncoderGroup,
-	FocusAttribute,
-	IntensityAttribute,
-	type ProgrammerExpression,
-	PositionAttribute,
-	ProgrammerToken,
-	ShapersAttribute,
-	encoderCatalogEntry,
-	normalizedEncoderValue,
-} from "./encoderCatalog";
-import { BrowserOscEncoderRoute } from "./encoderOscScenario";
 import type { SimulatedHardware } from "../hardware/hardwareScenario";
 import {
 	applyProgrammerSelectionValue,
@@ -23,7 +10,20 @@ import {
 	clearProgrammerValues,
 } from "../programmer/programmerValues";
 import { BrowserDiscreteEncoders } from "./discreteEncoderScenario";
-import type { BrowserSelection } from "../command-selection/selectionScenario";
+import {
+	BeamAttribute,
+	ColorAttribute,
+	EncoderGroup,
+	encoderCatalogEntry,
+	FocusAttribute,
+	IntensityAttribute,
+	normalizedEncoderValue,
+	PositionAttribute,
+	type ProgrammerExpression,
+	ProgrammerToken,
+	ShapersAttribute,
+} from "./encoderCatalog";
+import { BrowserOscEncoderRoute } from "./encoderOscScenario";
 
 type EncoderRoute = "api" | "ui" | "osc";
 type EncoderOperation = "set" | "add" | "subtract";
@@ -55,9 +55,7 @@ export interface RelativeEncoderPort {
 }
 
 class ApiNormalizedEncoderPort implements NormalizedEncoderPort {
-	constructor(
-		private readonly encoder: NormalizedEncoder,
-	) {}
+	constructor(private readonly encoder: NormalizedEncoder) {}
 
 	set(value: number | ProgrammerExpression): Promise<void> {
 		return this.encoder.execute("set", value, "api");
@@ -95,10 +93,7 @@ class VisibleEncoderPort implements NormalizedEncoderPort {
 		return this.encoder.release();
 	}
 
-	drag(
-		direction: "add" | "subtract",
-		rate: "slow" | "fast",
-	): Promise<void> {
+	drag(direction: "add" | "subtract", rate: "slow" | "fast"): Promise<void> {
 		return this.encoder.drag(direction, rate);
 	}
 }
@@ -275,9 +270,7 @@ export class BrowserEncoders {
 			throw new Error(`${catalog.label} requires a typed discrete value`);
 		if (operation !== "set") assertPositiveSteps(input);
 		const value =
-			operation === "set"
-				? normalizedEncoderValue(input)
-				: (input as number);
+			operation === "set" ? normalizedEncoderValue(input) : (input as number);
 		await this.desk.recordStep(
 			"ENCODER",
 			`${operation} ${catalog.familyLabel} ${catalog.label} through the ${route.toUpperCase()} route.`,
@@ -339,10 +332,7 @@ export class BrowserEncoders {
 					? { type: "absolute_set", value: value as AttributeValue }
 					: {
 							type: "relative_step",
-							delta:
-								(operation === "add" ? 1 : -1) *
-								(value as number) *
-								0.01,
+							delta: (operation === "add" ? 1 : -1) * (value as number) * 0.01,
 						},
 			timing: {
 				fade: false,
@@ -379,10 +369,10 @@ export class BrowserEncoders {
 	): Promise<void> {
 		await this.activateFamily(family);
 		const control = this.softwareControl(label);
-		if (!(await control.isVisible()))
-			throw new Error(
-				`${family} ${label} is not present on the live software encoder page`,
-			);
+		await expect(
+			control,
+			`${family} ${label} should appear on the live software encoder page`,
+		).toBeVisible();
 		await control
 			.getByRole("button", {
 				name: new RegExp(`^Set Enc \\d+ · ${escapeRegex(label)} value$`),
@@ -469,14 +459,18 @@ function valueTokens(value: AttributeValue): string[] {
 				: [];
 	if (points.length === 0)
 		throw new Error("Visible normalized encoder entry requires numeric points");
-	return points.flatMap((point, index) => [
-		...(index === 0 ? [] : [ProgrammerToken.Thru]),
-		...percentageTokens(point * 100),
-	]).concat("ENTER");
+	return points
+		.flatMap((point, index) => [
+			...(index === 0 ? [] : [ProgrammerToken.Thru]),
+			...percentageTokens(point * 100),
+		])
+		.concat("ENTER");
 }
 
 function percentageTokens(value: number): string[] {
-	return String(value).split("").map((token) => (token === "." ? "." : token));
+	return String(value)
+		.split("")
+		.map((token) => (token === "." ? "." : token));
 }
 
 function assertPositiveSteps(value: number | ProgrammerExpression): void {
