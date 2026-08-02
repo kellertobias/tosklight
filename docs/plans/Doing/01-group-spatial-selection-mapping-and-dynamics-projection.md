@@ -19,7 +19,7 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   help, and acceptance-test seams.
 - [x] Add the portable projection, shape, override, and ranked-selection model with deterministic
   pure-domain evaluation and validation.
-- [ ] Implement the authoritative source, projection, shape, ranking, inheritance, and migration
+- [x] Implement the authoritative source, projection, shape, ranking, inheritance, and migration
   domain model with focused tests.
 - [ ] Implement rank-aware programming and Dynamic evaluation plus explicit SET/Playback routing.
 - [ ] Replace the retired Layout and Group context-menu surfaces with the specified Group and
@@ -170,6 +170,13 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   idempotent. The affected application, engine, Playback, and Programmer suites passed 819 tests,
   focused startup/reopen and sidecar-precedence checks passed, and the headless package check,
   formatting, scoped strict Clippy, and diff check passed.
+- Commit `b0240da2` adds the typed Dynamic spatial-mapping update and revision-guarded authoritative
+  draft-preview API. Preview resolves only the saved live, frozen, or targetless binding, returns
+  inheritance provenance, source order, ordered fixtures, ranks, rank count, and warnings, and
+  rejects incomplete or stale drafts without changing the target binding. The shared generated
+  TypeScript and JSON Schemas now include Dynamic mapping plus the earlier typed Group Master
+  assignment. All 103 wire tests and generated-contract freshness passed, the focused real headless
+  update/preview route passed, desktop typecheck passed, and the staged diff check was clean.
 
 ## Remaining work
 
@@ -183,9 +190,9 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   multiple legacy lane mappings without changing output; uniform and lane-consistent definitions now
   write through a local mapping while retaining their legacy ordering as the runtime compatibility
   marker.
-- Finish the desktop compatibility audit for retired Group master/pointer fields and commit the
-  shared generated contracts. Runtime readers, typed assignment, initial-level migration, canonical
-  field retirement, recovery, and portable fixture generation are integrated.
+- Finish the desktop compatibility audit for retired Group master/pointer fields. Runtime readers,
+  typed assignment, initial-level migration, canonical field retirement, generated contracts,
+  recovery, and portable fixture generation are integrated.
 - Connect the typed SET state machine to the command line, Group tiles, Playback controls, and
   revision-guarded application commands; its committed pure model is not runtime proof.
 
