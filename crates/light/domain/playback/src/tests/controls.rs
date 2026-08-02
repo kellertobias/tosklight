@@ -59,7 +59,9 @@ fn off_requires_zero_pickup_without_moving_the_recorded_fader() {
     engine.set_master(1, 0.6).unwrap();
     engine.on(1).unwrap();
     engine.off(1).unwrap();
-    let runtime = &engine.runtime()[0];
+    let identity = PlaybackIdentity::physical(1).unwrap();
+    let runtime = engine.runtime_status_at(identity).unwrap();
+    let runtime = &runtime.playback;
     assert_eq!(runtime.fader_position, 0.6);
     assert!(runtime.fader_pickup_required);
     assert_eq!(runtime.fader_pickup_target, Some(0.0));
@@ -67,14 +69,78 @@ fn off_requires_zero_pickup_without_moving_the_recorded_fader() {
     engine.set_master(1, 0.9).unwrap();
     assert!(!engine.runtime()[0].enabled);
     assert_eq!(engine.runtime()[0].master, 1.0);
-    assert_eq!(engine.runtime()[0].fader_pickup_target, Some(0.0));
+    assert_eq!(
+        engine
+            .runtime_status_at(identity)
+            .unwrap()
+            .playback
+            .fader_pickup_target,
+        Some(0.0)
+    );
     engine.set_master(1, 0.0).unwrap();
-    assert!(!engine.runtime()[0].fader_pickup_required);
-    assert_eq!(engine.runtime()[0].fader_pickup_target, None);
+    assert!(
+        !engine
+            .runtime_status_at(identity)
+            .unwrap()
+            .playback
+            .fader_pickup_required
+    );
+    assert_eq!(
+        engine
+            .runtime_status_at(identity)
+            .unwrap()
+            .playback
+            .fader_pickup_target,
+        None
+    );
     assert!(!engine.runtime()[0].enabled);
     engine.set_master(1, 0.4).unwrap();
     assert!(engine.runtime()[0].enabled);
     assert_eq!(engine.runtime()[0].master, 0.4);
+}
+
+#[test]
+fn physical_faders_take_over_one_shared_master_independently() {
+    let fixture = FixtureId::new();
+    let mut cue = Cue::new(1.0);
+    cue.changes.push(value(fixture, "intensity", 1.0));
+    let cue_list = list(vec![cue]);
+    let cue_list_id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine
+        .register_definition(definition(1, cue_list_id))
+        .unwrap();
+    engine
+        .register_definition(definition(2, cue_list_id))
+        .unwrap();
+
+    engine.set_virtual_master(1, 0.5).unwrap();
+    assert_eq!(engine.runtime()[0].master, 0.5);
+    engine.set_master(1, 0.6).unwrap();
+    assert_eq!(engine.runtime()[0].master, 0.5);
+    engine.set_master(1, 0.4).unwrap();
+    assert_eq!(engine.runtime()[0].master, 0.4);
+
+    engine.set_master(2, 0.8).unwrap();
+    assert_eq!(engine.runtime()[0].master, 0.4);
+    engine.set_master(2, 0.3).unwrap();
+    assert_eq!(engine.runtime()[0].master, 0.3);
+
+    engine.set_virtual_master(1, 0.7).unwrap();
+    assert_eq!(engine.runtime()[0].master, 0.7);
+    let one = engine
+        .runtime_status_at(PlaybackIdentity::physical(1).unwrap())
+        .unwrap()
+        .playback;
+    let two = engine
+        .runtime_status_at(PlaybackIdentity::physical(2).unwrap())
+        .unwrap()
+        .playback;
+    assert_eq!(one.fader_position, 0.4);
+    assert_eq!(two.fader_position, 0.3);
+    assert_eq!(one.fader_pickup_target, Some(0.7));
+    assert_eq!(two.fader_pickup_target, Some(0.7));
 }
 
 #[test]

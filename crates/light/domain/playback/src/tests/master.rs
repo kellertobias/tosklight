@@ -130,7 +130,14 @@ fn virtual_master_controls_faderless_playback_without_adding_a_local_fader() {
     let runtime = &engine.runtime()[0];
     assert!(runtime.enabled);
     assert_eq!(runtime.master, 0.5);
-    assert_eq!(runtime.fader_position, 0.5);
+    assert_eq!(
+        engine
+            .runtime_status_at(PlaybackIdentity::physical(1).unwrap())
+            .unwrap()
+            .playback
+            .fader_position,
+        0.5
+    );
     assert_eq!(
         engine.contributions()[0].value,
         AttributeValue::Normalized(0.5)

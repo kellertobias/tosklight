@@ -13,7 +13,9 @@ to Playbacks depends on it.
 - [x] Map current assignment, runtime, persistence, feedback, and pickup ownership.
 - [ ] Implement shared runtime identity and assignment lifecycle in coherent compatibility-safe steps.
   Cuelist actions now use one target-keyed domain runtime across physical, Virtual, and direct-Cuelist
-  addresses; assignment-local control state, projection/event reconciliation, and topology lifecycle remain.
+  addresses. Physical Master faders now retain independent observed positions and pickup latches, including
+  crossing takeover and peer retargeting after authoritative software updates; projection/event reconciliation
+  and topology lifecycle remain.
 - [ ] Add focused migration, runtime, cross-surface, and operator acceptance coverage.
 - [ ] Run the required major suites and verify the real desktop path.
 
@@ -33,12 +35,14 @@ to Playbacks depends on it.
 - `cargo check -p light-playback --message-format short` passed after the target-key refactor.
 - `cargo test -p light-playback --lib --quiet` passed: 100 tests, including deterministic legacy
   duplicate-runtime precedence.
+- `cargo test -p light-playback --lib --quiet` passed after assignment-local pickup separation: 101 tests,
+  including two physical faders taking over one target independently and software pickup bypass.
 
 ## Remaining work
 
-- Separate physical fader position/pickup from the shared Cuelist runtime and preserve held controls per
-  assignment.
 - Compose authoritative projections/events for every assignment and update generated wire/frontend state.
+- Route input by actual surface so desktop/software faders bypass pickup while physical and attached OSC
+  faders participate; retarget pickup across automated master transitions and restored runtime.
 - Reconcile assignment removal/reassignment, migrate persistence and legacy Dynamics, then synchronize
   selection and cross-surface feedback.
 - Run full plan closeout verification and record the truthful result.

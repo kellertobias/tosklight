@@ -105,27 +105,8 @@ impl PlaybackEngine {
             .into_iter()
             .map(|mut playback| {
                 let identity = playback_runtime_identity(&playback);
-                let temporary_master = identity
-                    .map(|identity| {
-                        self.temporary
-                            .iter()
-                            .filter(|((candidate, _), _)| *candidate == identity)
-                            .map(|(_, playback)| playback.master)
-                            .fold(0.0_f32, f32::max)
-                    })
-                    .unwrap_or(0.0);
-                let temporary_active = temporary_master > 0.0
-                    || identity.is_some_and(|identity| {
-                        self.temporary
-                            .keys()
-                            .any(|(candidate, _)| *candidate == identity)
-                    });
-                let swap_active =
-                    identity.is_some_and(|identity| self.swap_held.contains(&identity));
-                playback.flash = identity.is_some_and(|identity| {
-                    self.temporary
-                        .contains_key(&(identity, TemporaryPlaybackKind::Flash))
-                });
+                let (temporary_active, temporary_master, swap_active) =
+                    self.apply_assignment_feedback(&mut playback, identity);
                 let cue_list = self.cue_lists.get(&playback.cue_list_id);
                 let normal = cue_list.and_then(|list| {
                     if let Some(hold) = &playback.deleted_cue_hold {
@@ -170,6 +151,71 @@ impl PlaybackEngine {
                 }
             })
             .collect()
+    }
+
+    /// Composes one assignment-local control projection over its target-owned Cuelist runtime.
+    pub fn runtime_status_at(&self, identity: PlaybackIdentity) -> Option<PlaybackRuntimeStatus> {
+        let cue_list_id = match self.definition_at(identity)?.target {
+            PlaybackTarget::CueList { cue_list_id } => cue_list_id,
+            _ => return None,
+        };
+        let mut status = self
+            .runtime_status()
+            .into_iter()
+            .find(|status| status.playback.cue_list_id == cue_list_id)?;
+        status.playback.playback_number = Some(identity.number());
+        status.playback.playback_identity = Some(identity);
+        let (temporary_active, temporary_master, swap_active) =
+            self.apply_assignment_feedback(&mut status.playback, Some(identity));
+        status.temporary_active = temporary_active;
+        status.temporary_master = temporary_master;
+        status.swap_active = swap_active;
+        Some(status)
+    }
+
+    fn apply_assignment_feedback(
+        &self,
+        playback: &mut ActivePlayback,
+        identity: Option<PlaybackIdentity>,
+    ) -> (bool, f32, bool) {
+        match identity {
+            Some(identity @ PlaybackIdentity::Physical(_))
+                if self
+                    .definition_at(identity)
+                    .is_some_and(|definition| definition.has_fader) =>
+            {
+                let control = self.control_state_at(identity);
+                playback.fader_position = control.fader_position;
+                playback.fader_pickup_required = control.fader_pickup_required;
+                playback.fader_pickup_target = control.fader_pickup_target;
+            }
+            Some(PlaybackIdentity::Physical(_)) | Some(PlaybackIdentity::Virtual(_)) | None => {
+                playback.fader_position = playback.master;
+                playback.fader_pickup_required = false;
+                playback.fader_pickup_target = None;
+            }
+        }
+        let temporary_master = identity
+            .map(|identity| {
+                self.temporary
+                    .iter()
+                    .filter(|((candidate, _), _)| *candidate == identity)
+                    .map(|(_, playback)| playback.master)
+                    .fold(0.0_f32, f32::max)
+            })
+            .unwrap_or(0.0);
+        let temporary_active = temporary_master > 0.0
+            || identity.is_some_and(|identity| {
+                self.temporary
+                    .keys()
+                    .any(|(candidate, _)| *candidate == identity)
+            });
+        let swap_active = identity.is_some_and(|identity| self.swap_held.contains(&identity));
+        playback.flash = identity.is_some_and(|identity| {
+            self.temporary
+                .contains_key(&(identity, TemporaryPlaybackKind::Flash))
+        });
+        (temporary_active, temporary_master, swap_active)
     }
 
     /// Reconstructs the next eventual lit Position state for every fixture whose current tracked

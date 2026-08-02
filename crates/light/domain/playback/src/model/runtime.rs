@@ -17,6 +17,18 @@ pub(crate) enum TemporaryPlaybackKind {
     Swap,
 }
 
+/// Session-local state for one absolute physical control of a shared playback target.
+///
+/// This is deliberately separate from `ActivePlayback`: multiple assignments may expose one
+/// target runtime while each non-motorized fader retains its own sensed position and pickup latch.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PlaybackControlState {
+    pub fader_position: f32,
+    pub fader_pickup_required: bool,
+    pub fader_pickup_target: Option<f32>,
+    pub(crate) observed: bool,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlaybackActivationSurface {

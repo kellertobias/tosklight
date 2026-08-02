@@ -149,7 +149,7 @@ fn master_and_pickup_changes_are_detected_without_runtime_snapshots() {
     let (mut engine, _) = single_cue_engine();
     assert_eq!(
         engine.set_master_mutation(1, 0.0).unwrap().effect,
-        PlaybackRuntimeEffect::None
+        PlaybackRuntimeEffect::Transient
     );
     assert_eq!(
         engine.set_master_mutation(1, 0.4).unwrap().effect,
@@ -162,7 +162,7 @@ fn master_and_pickup_changes_are_detected_without_runtime_snapshots() {
     engine.off(1).unwrap();
     assert_eq!(
         engine.set_master_mutation(1, 0.9).unwrap().effect,
-        PlaybackRuntimeEffect::Durable
+        PlaybackRuntimeEffect::Transient
     );
     assert_eq!(
         engine.set_master_mutation(1, 0.9).unwrap().effect,
@@ -176,16 +176,13 @@ fn master_and_pickup_changes_are_detected_without_runtime_snapshots() {
         engine.set_master_mutation(1, 0.0).unwrap().effect,
         PlaybackRuntimeEffect::None
     );
-    let cue_list_id = engine.cue_list_for(1).unwrap();
-    let active = engine
-        .active
-        .get_mut(&PlaybackKey::CueList(cue_list_id))
-        .unwrap();
-    active.fader_pickup_required = true;
-    active.fader_pickup_target = Some(0.0);
+    let identity = PlaybackIdentity::physical(1).unwrap();
+    let control = engine.control_states.get_mut(&identity).unwrap();
+    control.fader_pickup_required = true;
+    control.fader_pickup_target = Some(0.0);
     assert_eq!(
         engine.set_master_mutation(1, 0.0).unwrap().effect,
-        PlaybackRuntimeEffect::Durable
+        PlaybackRuntimeEffect::Transient
     );
 }
 

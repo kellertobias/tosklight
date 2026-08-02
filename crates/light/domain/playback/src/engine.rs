@@ -5,6 +5,7 @@ pub struct PlaybackEngine {
     pub(crate) cue_lists: HashMap<CueListId, CueList>,
     pub(crate) compiled_cue_lists: HashMap<CueListId, Arc<CompiledCueList>>,
     pub(crate) active: HashMap<PlaybackKey, ActivePlayback>,
+    pub(crate) control_states: HashMap<PlaybackIdentity, PlaybackControlState>,
     pub(crate) active_dynamics: HashMap<PlaybackIdentity, ActiveDynamicPlayback>,
     pub(crate) temporary: HashMap<(PlaybackIdentity, TemporaryPlaybackKind), ActivePlayback>,
     pub(crate) swap_held: HashSet<PlaybackIdentity>,
@@ -30,6 +31,7 @@ impl PlaybackEngine {
             cue_lists: HashMap::new(),
             compiled_cue_lists: HashMap::new(),
             active: HashMap::new(),
+            control_states: HashMap::new(),
             active_dynamics: HashMap::new(),
             temporary: HashMap::new(),
             swap_held: HashSet::new(),
@@ -184,5 +186,48 @@ impl PlaybackEngine {
             PlaybackTarget::CueList { cue_list_id } => Ok(PlaybackKey::CueList(cue_list_id)),
             _ => Err("playback does not target a Cuelist".into()),
         }
+    }
+
+    pub fn control_state_at(&self, identity: PlaybackIdentity) -> PlaybackControlState {
+        self.control_states
+            .get(&identity)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn retarget_physical_controls(
+        &mut self,
+        cue_list_id: CueListId,
+        target: f32,
+        controlling: Option<PlaybackIdentity>,
+    ) -> bool {
+        let identities = self
+            .definitions
+            .values()
+            .filter_map(|definition| match definition.target {
+                PlaybackTarget::CueList {
+                    cue_list_id: candidate,
+                } if candidate == cue_list_id
+                    && definition.has_fader
+                    && definition.fader == PlaybackFaderMode::Master =>
+                {
+                    PlaybackIdentity::physical(definition.number).ok()
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let mut changed = false;
+        for identity in identities {
+            let state = self.control_states.entry(identity).or_default();
+            let satisfied =
+                controlling == Some(identity) || (state.observed && state.fader_position == target);
+            let required = !satisfied;
+            let pickup_target = required.then_some(target);
+            changed |= state.fader_pickup_required != required
+                || state.fader_pickup_target != pickup_target;
+            state.fader_pickup_required = required;
+            state.fader_pickup_target = pickup_target;
+        }
+        changed
     }
 }

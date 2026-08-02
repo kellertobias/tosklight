@@ -280,6 +280,7 @@ impl PlaybackEngine {
                     cue_lists: self.cue_lists.clone(),
                     compiled_cue_lists: self.compiled_cue_lists.clone(),
                     active: HashMap::from([(*key, playback.clone())]),
+                    control_states: HashMap::new(),
                     active_dynamics: HashMap::new(),
                     temporary: HashMap::new(),
                     swap_held: HashSet::new(),

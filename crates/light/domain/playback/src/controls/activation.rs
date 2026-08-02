@@ -24,6 +24,7 @@ impl PlaybackEngine {
                     .expect("virtual playback activation inserted runtime");
                 active.playback_identity = Some(identity);
                 activate_normal(active, address.number().get());
+                self.retarget_physical_controls(cue_list_id, 1.0, None);
                 Ok(())
             }
         }
@@ -39,6 +40,8 @@ impl PlaybackEngine {
                 };
                 let was_enabled = playback.enabled;
                 deactivate(playback);
+                let PlaybackKey::CueList(cue_list_id) = key;
+                self.retarget_physical_controls(cue_list_id, 0.0, None);
                 Ok(was_enabled)
             }
         }
@@ -63,7 +66,13 @@ impl PlaybackEngine {
         let active = self.active.get_mut(&key).unwrap();
         active.playback_identity = Some(PlaybackIdentity::physical(number)?);
         changed |= activate_normal(active, number);
+        let control_changed = self.retarget_physical_controls(id, 1.0, None);
         let addressed_effect = durable_effect(changed);
+        let addressed_effect = addressed_effect.combine(if control_changed {
+            PlaybackRuntimeEffect::Transient
+        } else {
+            PlaybackRuntimeEffect::None
+        });
         let related_effect = durable_effect(self.auto_off_overwritten());
         Ok(PlaybackMutation::with_related_effect(
             (),
@@ -119,13 +128,22 @@ impl PlaybackEngine {
         if self.dynamic_assignment(number).is_some() {
             return self.off_dynamic_mutation(number);
         }
-        let key = self.runtime_key(number)?;
+        let id = self.cue_list_for(number)?;
+        let key = PlaybackKey::CueList(id);
         let Some(playback) = self.active.get_mut(&key) else {
             return Ok(PlaybackMutation::new(false, PlaybackRuntimeEffect::None));
         };
         let was_enabled = playback.enabled;
         let changed = deactivate(playback);
-        Ok(PlaybackMutation::new(was_enabled, durable_effect(changed)))
+        let control_changed = self.retarget_physical_controls(id, 0.0, None);
+        Ok(PlaybackMutation::new(
+            was_enabled,
+            durable_effect(changed).combine(if control_changed {
+                PlaybackRuntimeEffect::Transient
+            } else {
+                PlaybackRuntimeEffect::None
+            }),
+        ))
     }
 
     pub fn toggle(&mut self, number: u16) -> Result<bool, String> {
@@ -275,7 +293,7 @@ impl PlaybackEngine {
         let mut changed = self
             .active
             .get(&key)
-            .is_some_and(|active| active.fader_position != value);
+            .is_some_and(|active| active.master != value);
         if value > 0.0 && !self.active.contains_key(&key) {
             self.go_at_key(key, cue_list_id, self.clock.now())?;
             changed = true;
@@ -284,7 +302,13 @@ impl PlaybackEngine {
             active.playback_identity = Some(identity);
             changed |= set_master_state(active, address.number().get(), value);
         }
+        let control_changed = self.retarget_physical_controls(cue_list_id, value, None);
         let addressed_effect = durable_effect(changed);
+        let addressed_effect = addressed_effect.combine(if control_changed {
+            PlaybackRuntimeEffect::Transient
+        } else {
+            PlaybackRuntimeEffect::None
+        });
         let related_effect = durable_effect(self.auto_off_overwritten());
         Ok(PlaybackMutation::with_related_effect(
             (),
@@ -311,7 +335,7 @@ impl PlaybackEngine {
             PlaybackFaderMode::Master => {}
             _ => return Err("fader mode is not handled by the Cuelist engine".into()),
         }
-        self.set_cuelist_master_mutation(number, value)
+        self.set_cuelist_master_mutation(number, value, !allow_faderless)
     }
 
     fn validate_master(
@@ -337,16 +361,54 @@ impl PlaybackEngine {
         &mut self,
         number: u16,
         value: f32,
+        physical: bool,
     ) -> Result<PlaybackMutation<()>, String> {
         let id = self.cue_list_for(number)?;
         let key = PlaybackKey::CueList(id);
-        if let Some(effect) = self.update_fader_pickup(key, value) {
-            return Ok(PlaybackMutation::new((), effect));
+        let identity = PlaybackIdentity::physical(number)?;
+        let mut control_changed = false;
+        if physical {
+            if !self.control_states.contains_key(&identity) {
+                let authoritative = self.active.get(&key).map(|active| active.master);
+                self.control_states.insert(
+                    identity,
+                    PlaybackControlState {
+                        fader_pickup_required: authoritative.is_some(),
+                        fader_pickup_target: authoritative,
+                        ..PlaybackControlState::default()
+                    },
+                );
+                control_changed = true;
+            }
+            let state = self.control_states.entry(identity).or_default();
+            let previous = state.fader_position;
+            let was_observed = state.observed;
+            control_changed |= !was_observed || previous != value;
+            state.fader_position = value;
+            state.observed = true;
+            if state.fader_pickup_required {
+                let target = state.fader_pickup_target.unwrap_or(0.0);
+                let crossed = value == target
+                    || (was_observed && previous == target)
+                    || (was_observed
+                        && ((previous < target && value > target)
+                            || (previous > target && value < target)));
+                if !crossed {
+                    return Ok(PlaybackMutation::new(
+                        (),
+                        if control_changed {
+                            PlaybackRuntimeEffect::Transient
+                        } else {
+                            PlaybackRuntimeEffect::None
+                        },
+                    ));
+                }
+                state.fader_pickup_required = false;
+                state.fader_pickup_target = None;
+                control_changed = true;
+            }
         }
-        let mut changed = self
-            .active
-            .get(&key)
-            .is_some_and(|active| active.fader_position != value);
+        let mut changed = false;
         if value > 0.0 && !self.active.contains_key(&key) {
             self.go_at_key(key, id, self.clock.now())?;
             changed = true;
@@ -354,35 +416,18 @@ impl PlaybackEngine {
         if let Some(active) = self.active.get_mut(&key) {
             changed |= set_master_state(active, number, value);
         }
-        let addressed_effect = durable_effect(changed);
+        control_changed |= self.retarget_physical_controls(id, value, physical.then_some(identity));
+        let addressed_effect = durable_effect(changed).combine(if control_changed {
+            PlaybackRuntimeEffect::Transient
+        } else {
+            PlaybackRuntimeEffect::None
+        });
         let related_effect = durable_effect(self.auto_off_overwritten());
         Ok(PlaybackMutation::with_related_effect(
             (),
             addressed_effect,
             related_effect,
         ))
-    }
-
-    fn update_fader_pickup(
-        &mut self,
-        key: PlaybackKey,
-        value: f32,
-    ) -> Option<PlaybackRuntimeEffect> {
-        let active = self.active.get_mut(&key)?;
-        if !active.fader_pickup_required {
-            return None;
-        }
-        let position_changed = active.fader_position != value;
-        active.fader_position = value;
-        let target = active.fader_pickup_target.unwrap_or(0.0);
-        let released = value == target;
-        let changed = position_changed || released;
-        if released {
-            active.fader_pickup_required = false;
-            active.fader_pickup_target = None;
-            active.master = target;
-        }
-        Some(durable_effect(changed))
     }
 
     pub fn set_flash(&mut self, number: u16, pressed: bool) -> Result<(), String> {
@@ -437,8 +482,6 @@ fn activate_normal(playback: &mut ActivePlayback, number: u16) -> bool {
         || playback.master != 1.0
         || !playback.enabled
         || playback.temporary
-        || playback.fader_pickup_required
-        || playback.fader_pickup_target.is_some()
         || playback.master_transition.is_some()
         || playback.deleted_cue_transition_source.is_some()
         || playback.transition_timing_bypassed
@@ -450,8 +493,6 @@ fn activate_normal(playback: &mut ActivePlayback, number: u16) -> bool {
     playback.master = 1.0;
     playback.enabled = true;
     playback.temporary = false;
-    playback.fader_pickup_required = false;
-    playback.fader_pickup_target = None;
     playback.master_transition = None;
     playback.deleted_cue_transition_source = None;
     reset_manual_transition(playback);
@@ -459,11 +500,8 @@ fn activate_normal(playback: &mut ActivePlayback, number: u16) -> bool {
 }
 
 fn deactivate(playback: &mut ActivePlayback) -> bool {
-    let pickup_required = playback.fader_position > 0.0;
     let changed = playback.enabled
         || playback.flash
-        || playback.fader_pickup_required != pickup_required
-        || playback.fader_pickup_target != pickup_required.then_some(0.0)
         || playback.master_transition.is_some()
         || playback.deleted_cue_hold.is_some()
         || playback.deleted_cue_transition_source.is_some()
@@ -472,8 +510,6 @@ fn deactivate(playback: &mut ActivePlayback) -> bool {
     playback.enabled = false;
     playback.activation = None;
     playback.flash = false;
-    playback.fader_pickup_required = pickup_required;
-    playback.fader_pickup_target = pickup_required.then_some(0.0);
     playback.master_transition = None;
     playback.deleted_cue_hold = None;
     playback.deleted_cue_transition_source = None;
@@ -486,13 +522,11 @@ fn set_master_state(playback: &mut ActivePlayback, number: u16, value: f32) -> b
     let enables = value > 0.0;
     let changed = playback.playback_number != Some(number)
         || playback.master != value
-        || playback.fader_position != value
         || playback.master_transition.is_some()
         || playback.temporary
         || (enables && !playback.enabled);
     playback.playback_number = Some(number);
     playback.master = value;
-    playback.fader_position = value;
     playback.master_transition = None;
     playback.temporary = false;
     if enables {

@@ -6,7 +6,10 @@ impl PlaybackEngine {
     pub fn retained_runtime_effect_since(&self, before: &Self) -> PlaybackRuntimeEffect {
         if self.active != before.active {
             PlaybackRuntimeEffect::Durable
-        } else if self.temporary != before.temporary || self.swap_held != before.swap_held {
+        } else if self.control_states != before.control_states
+            || self.temporary != before.temporary
+            || self.swap_held != before.swap_held
+        {
             PlaybackRuntimeEffect::Transient
         } else {
             PlaybackRuntimeEffect::None
@@ -30,7 +33,8 @@ impl PlaybackEngine {
     fn numbered_runtime_effect_since(&self, before: &Self, number: u16) -> PlaybackRuntimeEffect {
         if active_playback(self, number) != active_playback(before, number) {
             PlaybackRuntimeEffect::Durable
-        } else if temporary_playbacks(self, number) != temporary_playbacks(before, number)
+        } else if control_state(self, number) != control_state(before, number)
+            || temporary_playbacks(self, number) != temporary_playbacks(before, number)
             || self
                 .swap_held
                 .contains(&PlaybackIdentity::physical(number).expect("valid physical number"))
@@ -43,6 +47,13 @@ impl PlaybackEngine {
             PlaybackRuntimeEffect::None
         }
     }
+}
+
+fn control_state(engine: &PlaybackEngine, number: u16) -> PlaybackControlState {
+    PlaybackIdentity::physical(number)
+        .ok()
+        .map(|identity| engine.control_state_at(identity))
+        .unwrap_or_default()
 }
 
 fn runtime_numbers(current: &PlaybackEngine, before: &PlaybackEngine) -> BTreeSet<u16> {
