@@ -19,7 +19,7 @@ before moving it to `Done` in a semantic commit.
 - [x] Implement portable installed appearance, typed sparse mutations, compatibility, and catalog
   import infrastructure.
 - [x] Implement Location/Visualization encoders and shared Stage/Viz appearance evaluation.
-- [ ] Update help, screenshots, human scenarios, and focused automated acceptance coverage.
+- [x] Update help, screenshots, human scenarios, and focused automated acceptance coverage.
 - [ ] Run focused checks, required major suites, migration/recovery proof, and real desktop/Viz
   verification.
 
@@ -155,6 +155,16 @@ before moving it to `Done` in a semantic commit.
   modules/blades use declared physical ranges with live-over-static precedence, allocate nothing
   for unsupported roles, and never infer arbitrary GLB names. Desktop typecheck, 36 focused Stage
   tests, Biome, and diff checks pass.
+- The shipped ROBE Robin DLS Profile is revision 2 with its stable profile, mode, channel, and
+  function identities retained. All three personalities now expose canonical module rotation,
+  four blade insertion roles, and four blade-angle roles with the documented centred defaults and
+  -45/+45 degree module and -25/+25 degree blade ranges; the independent shutter/strobe channel
+  remains unchanged. The package validator and exact focused contract test pass.
+- Cross-renderer shaper proof now covers two independent physical instances with different bracket,
+  module, and all four static blade angles. Built-in Stage tests inspect the final typed scene
+  objects and rotations; standalone Viz tests cover project compilation and final GPU light
+  direction/tangent/shaper upload, including live-role precedence. Focused Stage 2/2, Viz project
+  1/1, and Viz render 1/1 pass; real wgpu pixels remain part of final runtime verification.
 - Focused real-browser acceptance now proves the exact sixteen headers, absence of the retired
   headers, ordinary-click versus SET-gated combined MIB editing, emitterless Light source state,
   authoritative sparse persistence, and reopen behavior. The focused Playwright scenario passes
@@ -166,6 +176,15 @@ before moving it to `Done` in a semantic commit.
 - Whole-show download and independent database upload now have route-level proof that stable
   fixture/profile/mode identities plus distinct root and multi-patch source/CCT/gel/static-shaper
   payloads survive exactly. The focused headless route test passes 1/1.
+- Real sparse installed-appearance, bracket, module-rotation, and static-blade mutations now have
+  direct output-isolation proof: a live Programmer intensity continues to render DMX 107 and the
+  serialized Programmer plus universe, resolved-value, and profile-output maps remain exactly
+  unchanged after every metadata update. The focused headless test passes 1/1.
+- Startup coverage now distinguishes legacy inline migration from an already-lean show. Missing
+  root/copy appearance defaults at runtime without changing the lean show file digest, show/object
+  revisions, raw body, or backup inventory across first load and reopen; malformed root CCT and
+  copy gel hex enter recovery with the original file equally intact. Focused compatibility tests
+  pass 3/3 across the two malformed variants.
 - Oversized Plan-owned implementation paths are now split without changing the operator contract:
   the appearance editor, patch encoder surfaces, strict CSV parser, Viz fixture planning/fallback
   emitter construction, and renderer laser path all pass their focused suites. The architecture
