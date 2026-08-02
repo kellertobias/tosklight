@@ -183,6 +183,13 @@ impl Default for DynamicSpatialMappingOverride {
     }
 }
 
+impl DynamicSpatialMappingOverride {
+    pub(crate) fn is_inherit(&self) -> bool {
+        matches!(self.projection, OverrideStage::Inherit)
+            && matches!(self.shape, OverrideStage::Inherit)
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value", rename_all = "snake_case")]
 pub enum OverrideStage<T> {

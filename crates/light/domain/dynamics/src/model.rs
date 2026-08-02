@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
+use crate::DynamicSpatialMappingOverride;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DynamicDefinition {
     pub id: Uuid,
@@ -19,6 +21,11 @@ pub struct DynamicDefinition {
     pub random_groups: Vec<DynamicRandomGroup>,
     #[serde(default, rename = "phase_mode", alias = "phase_spread_mode")]
     pub phase_spread_mode: DynamicPhaseSpreadMode,
+    #[serde(
+        default,
+        skip_serializing_if = "DynamicSpatialMappingOverride::is_inherit"
+    )]
+    pub spatial_mapping: DynamicSpatialMappingOverride,
     pub phase: PhaseDistribution,
     pub speed: DynamicSpeed,
     #[serde(default)]

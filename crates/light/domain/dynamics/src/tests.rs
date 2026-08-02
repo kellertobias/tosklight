@@ -93,6 +93,7 @@ fn definition(lane: DynamicLane) -> DynamicDefinition {
         lanes: vec![lane],
         random_groups: vec![],
         phase_spread_mode: DynamicPhaseSpreadMode::Uniform,
+        spatial_mapping: DynamicSpatialMappingOverride::default(),
         phase: PhaseDistribution {
             ordering: PhaseOrdering::Selection,
             offset_degrees: 0.0,
@@ -165,6 +166,91 @@ fn legacy_phase_spread_defaults_to_uniform_without_lane_configuration() {
     assert_eq!(restored.phase_spread_mode, DynamicPhaseSpreadMode::Uniform);
     assert_eq!(restored.lanes[0].phase, None);
     assert_eq!(restored.phase_for_lane(&restored.lanes[0]), &restored.phase);
+}
+
+#[test]
+fn spatial_mapping_defaults_to_inherit_and_canonical_serialization_omits_it() {
+    let source = definition(lane());
+    let mut absent = serde_json::to_value(&source).unwrap();
+    assert!(absent.get("spatial_mapping").is_none());
+
+    let restored: DynamicDefinition = serde_json::from_value(absent.clone()).unwrap();
+    assert_eq!(
+        restored.spatial_mapping,
+        DynamicSpatialMappingOverride::default()
+    );
+
+    absent["spatial_mapping"] = serde_json::json!({
+        "projection": {"type": "inherit"},
+        "shape": {"type": "inherit"}
+    });
+    let explicit_inherit: DynamicDefinition = serde_json::from_value(absent).unwrap();
+    assert_eq!(explicit_inherit.spatial_mapping, restored.spatial_mapping);
+    assert!(
+        serde_json::to_value(explicit_inherit)
+            .unwrap()
+            .get("spatial_mapping")
+            .is_none()
+    );
+}
+
+#[test]
+fn explicit_projection_and_random_shape_replacements_round_trip() {
+    let mut configured = definition(lane());
+    configured.spatial_mapping = DynamicSpatialMappingOverride {
+        projection: OverrideStage::Replace(SpatialProjection::from_preset(
+            ProjectionPreset::Front,
+            Position3d {
+                x: 1.0,
+                y: 2.0,
+                z: 3.0,
+            },
+        )),
+        shape: OverrideStage::Replace(DynamicSelectionShape::Random { seed: 0x5eed }),
+    };
+
+    let stored = serde_json::to_value(&configured).unwrap();
+    assert_eq!(stored["spatial_mapping"]["projection"]["type"], "replace");
+    assert_eq!(stored["spatial_mapping"]["shape"]["type"], "replace");
+    assert_eq!(
+        stored["spatial_mapping"]["shape"]["value"],
+        serde_json::json!({"type": "random", "seed": 0x5eed})
+    );
+
+    let restored: DynamicDefinition = serde_json::from_value(stored).unwrap();
+    assert_eq!(restored, configured);
+}
+
+#[test]
+fn legacy_per_lane_phase_ordering_json_decodes_and_round_trips_unchanged() {
+    let mut configured_lane = lane();
+    configured_lane.phase = Some(PhaseDistribution {
+        ordering: PhaseOrdering::Axial {
+            center_x: 0.25,
+            center_z: 0.75,
+        },
+        offset_degrees: 15.0,
+        span_degrees: 270.0,
+        block_size: 2,
+        repeats: 3,
+        wings: true,
+        anchors_degrees: vec![0.0, 120.0, 240.0],
+    });
+    let mut legacy = definition(configured_lane);
+    legacy.phase_spread_mode = DynamicPhaseSpreadMode::PerLane;
+    let stored = serde_json::to_value(legacy).unwrap();
+    assert!(stored.get("spatial_mapping").is_none());
+
+    let restored: DynamicDefinition = serde_json::from_value(stored.clone()).unwrap();
+    assert_eq!(
+        restored.lanes[0].phase.as_ref().unwrap().ordering,
+        PhaseOrdering::Axial {
+            center_x: 0.25,
+            center_z: 0.75,
+        }
+    );
+    assert_eq!(restored.phase_spread_mode, DynamicPhaseSpreadMode::PerLane);
+    assert_eq!(serde_json::to_value(restored).unwrap(), stored);
 }
 
 #[test]
