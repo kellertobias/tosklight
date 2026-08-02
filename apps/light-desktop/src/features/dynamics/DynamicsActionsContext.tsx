@@ -9,11 +9,13 @@ export interface DynamicsActions {
 	showObjects: Pick<
 		ShowObjectsApiClient,
 		| "object"
+		| "collectionSnapshot"
 		| "createDynamic"
 		| "moveDynamic"
 		| "copyDynamic"
 		| "deleteDynamic"
 		| "updateDynamic"
+		| "previewDynamicSpatialMapping"
 	>;
 }
 

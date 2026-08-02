@@ -1,89 +1,33 @@
-import {
-	Button,
-	ColorPickerField,
-	CyclingValueToggle,
-	FadedDivider,
-	FormLayout,
-	GroupedSelectionField,
-	IconPickerField,
-	MultiValueToggle,
-	MultiValueToggleField,
-	NumberField,
-	SelectField,
-	SwitchField,
-	TextField,
-} from "@tosklight/ui";
-import {
-	EncoderSection,
-	type EncoderSectionItem,
-	type HardwareEncoderDisplayHandle,
-} from "@tosklight/ui/encoders";
+import { Button } from "@tosklight/ui";
 import { ModalFrame } from "@tosklight/ui/modals";
-import {
-	PoolCard,
-	PoolGrid,
-	type PoolSlotViewModel,
-} from "@tosklight/ui/pools";
-import {
-	WindowHeader,
-	WindowScrollArea,
-	WindowSettings,
-} from "@tosklight/ui/window-kit";
-import {
-	type CSSProperties,
-	type Dispatch,
-	type ReactNode,
-	type SetStateAction,
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
-import { createLightApi } from "../../api/client/api";
+import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import type {
 	DynamicDefinitionProjection,
 	DynamicDefinitionStatusProjection,
 	DynamicLaneModeProjection,
 	DynamicLaneProjection,
-	DynamicPeriodicFunctionProjection,
 	DynamicPhaseOrderingProjection,
 	DynamicRandomGroupProjection,
 	DynamicRuntimeSnapshotProjection,
 	DynamicScalarSourceProjection,
+	DynamicSpatialMappingOverrideProjection,
+	DynamicSpatialPreviewResponse,
 	DynamicUpdateIntent,
 	SpeedGroupId,
 } from "../../api/types";
-import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
-import { monotonicEpochMillis } from "../../components/control/soundToLightAnalyzer";
-import { useSoundToLight } from "../../components/control/useSoundToLight";
-import {
-	useActiveShowId,
-	useAttributeRegistry,
-	useHardwareConnected,
-} from "../../features/deskSnapshot/DeskSnapshotState";
 import { useDynamicEditorSession } from "../../features/dynamics/DynamicEditorSessionContext";
-import { DynamicMutationWriter } from "../../features/dynamics/DynamicMutationWriter";
-import { useDynamicsActions } from "../../features/dynamics/DynamicsActionsContext";
-import {
-	useProgrammingCommandLineActions,
-	useProgrammingDeleteCommandActive,
-} from "../../features/programmingInteraction/ProgrammingInteractionView";
 import type { ShowObject } from "../../features/showObjects/contracts";
-import {
-	useDynamics,
-	usePresets,
-	useShowObjectsStore,
-} from "../../features/showObjects/ShowObjectsState";
-import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
-import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/SpeedGroupRuntimeView";
 import { useApp } from "../../state/AppContext";
 import { useStageLayout } from "../stageWindow/useStageLayout";
 import { DynamicEditorSurface } from "./DynamicEditorSurface";
+import {
+	DynamicProjectionView,
+	type DynamicSpatialApplyResult,
+} from "./DynamicProjectionView";
 
 type DynamicObject = ShowObject<"dynamic">;
 type PresetObject = ShowObject<"preset">;
-export type DynamicEditorView = "curves" | "phase" | "speed";
+export type DynamicEditorView = "curves" | "projection" | "phase" | "speed";
 
 export const sourceCurrent: DynamicScalarSourceProjection = { type: "current" };
 const sourceZero: DynamicScalarSourceProjection = { type: "value", value: 0 };
@@ -113,6 +57,12 @@ export interface DynamicEditorProps {
 		intent: DynamicUpdateIntent,
 		mutationGroup?: string,
 	): Promise<void>;
+	onLoadSpatialPreview?(
+		draft: DynamicSpatialMappingOverrideProjection,
+	): Promise<DynamicSpatialPreviewResponse>;
+	onApplySpatialMapping?(
+		draft: DynamicSpatialMappingOverrideProjection,
+	): Promise<DynamicSpatialApplyResult>;
 	onSpeedGroupTap?(group: SpeedGroupId): void;
 	onDelete(): void;
 	onMove(poolNumber: number): void;
@@ -138,6 +88,8 @@ export function DynamicEditor({
 	onViewChange,
 	onBack,
 	onMutate,
+	onLoadSpatialPreview,
+	onApplySpatialMapping,
 	onSpeedGroupTap,
 }: DynamicEditorProps) {
 	const { state: appState, dispatch } = useApp();
@@ -257,6 +209,16 @@ export function DynamicEditor({
 			status={status}
 			contentSidebar={contentSidebar}
 			contentFooter={contentFooter}
+			projectionContent={
+				onLoadSpatialPreview && onApplySpatialMapping ? (
+					<DynamicProjectionView
+						dynamic={dynamic}
+						busy={busy}
+						loadPreview={onLoadSpatialPreview}
+						apply={onApplySpatialMapping}
+					/>
+				) : null
+			}
 			onBack={onBack}
 			onChangeView={changeView}
 			onPreviewing={setPreviewing}
@@ -502,10 +464,8 @@ import {
 	dynamicPreviewCycleMillis,
 	periodicPreviewValue,
 } from "./DynamicPreview";
-import { CurvesView } from "./CurvesView";
-import { PhaseView, SpeedView } from "./PhaseSpeedViews";
+
 export { DynamicEncoderDeck } from "./DynamicEncoderDeck";
-import { DynamicEncoderDeck } from "./DynamicEncoderDeck";
 export function LaneAttributeModal({
 	id,
 	title,

@@ -1,56 +1,22 @@
 import {
-	Button,
-	ColorPickerField,
-	CyclingValueToggle,
-	FadedDivider,
-	FormLayout,
-	GroupedSelectionField,
-	IconPickerField,
-	MultiValueToggle,
-	MultiValueToggleField,
-	NumberField,
-	SelectField,
-	SwitchField,
-	TextField,
-} from "@tosklight/ui";
-import {
-	EncoderSection,
-	type EncoderSectionItem,
-	type HardwareEncoderDisplayHandle,
-} from "@tosklight/ui/encoders";
-import { ModalFrame } from "@tosklight/ui/modals";
-import {
 	PoolCard,
 	PoolGrid,
 	type PoolSlotViewModel,
 } from "@tosklight/ui/pools";
+import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
 import {
-	WindowHeader,
-	WindowScrollArea,
-	WindowSettings,
-} from "@tosklight/ui/window-kit";
-import {
-	type CSSProperties,
-	type ReactNode,
 	useCallback,
 	useEffect,
 	useMemo,
-	useRef,
 	useState,
+	useSyncExternalStore,
 } from "react";
+import { ApiRequestError } from "../api/ApiRequestError";
 import { createLightApi } from "../api/client/api";
 import type {
-	DynamicDefinitionProjection,
-	DynamicDefinitionStatusProjection,
-	DynamicLaneModeProjection,
-	DynamicLaneProjection,
-	DynamicPeriodicFunctionProjection,
-	DynamicPhaseOrderingProjection,
-	DynamicRandomGroupProjection,
 	DynamicRuntimeSnapshotProjection,
-	DynamicScalarSourceProjection,
+	DynamicSpatialMappingOverrideProjection,
 	DynamicUpdateIntent,
-	SpeedGroupId,
 } from "../api/types";
 import { useCommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
 import { monotonicEpochMillis } from "../components/control/soundToLightAnalyzer";
@@ -58,7 +24,6 @@ import { useSoundToLight } from "../components/control/useSoundToLight";
 import {
 	useActiveShowId,
 	useAttributeRegistry,
-	useHardwareConnected,
 } from "../features/deskSnapshot/DeskSnapshotState";
 import { useDynamicEditorSession } from "../features/dynamics/DynamicEditorSessionContext";
 import { DynamicMutationWriter } from "../features/dynamics/DynamicMutationWriter";
@@ -76,7 +41,6 @@ import {
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { useSpeedGroupRuntimeView } from "../features/speedGroupRuntime/SpeedGroupRuntimeView";
 import { useApp } from "../state/AppContext";
-import { useStageLayout } from "./stageWindow/useStageLayout";
 import type { WindowProps } from "./windowTypes";
 import "./DynamicsWindow.css";
 
@@ -351,12 +315,81 @@ function ConnectedDynamicEditor({
 	onDeleted(): void;
 	onCopied(id: string): void;
 }) {
+	const showObjectsStore = useShowObjectsStore();
+	const showRevision = useSyncExternalStore(
+		showObjectsStore.subscribe,
+		() => showObjectsStore.getSnapshot().showRevision,
+	);
+	const loadSpatialPreview = useCallback(
+		async (spatialMapping: DynamicSpatialMappingOverrideProjection) => {
+			if (!showId || showRevision == null)
+				throw new Error("No authoritative show revision");
+			return api.showObjects.previewDynamicSpatialMapping(showId, selected.id, {
+				expected_dynamic_revision: selected.revision,
+				expected_show_revision: showRevision,
+				spatial_mapping: spatialMapping,
+			});
+		},
+		[api.showObjects, selected.id, selected.revision, showId, showRevision],
+	);
+	const applySpatialMapping = useCallback(
+		async (spatialMapping: DynamicSpatialMappingOverrideProjection) => {
+			if (!showId) throw new Error("No active show");
+			try {
+				const outcome = await api.showObjects.updateDynamic(
+					showId,
+					selected.id,
+					selected.revision,
+					{ type: "set_spatial_mapping", spatial_mapping: spatialMapping },
+				);
+				showObjectsStore.installObjects(
+					showId,
+					[
+						{
+							kind: "dynamic",
+							objectId: selected.id,
+							object: outcome.object as DynamicObject,
+						},
+					],
+					outcome.event_sequence,
+					outcome.show_revision,
+				);
+				return "applied" as const;
+			} catch (error) {
+				if (!(error instanceof ApiRequestError) || error.status !== 409)
+					throw error;
+				const snapshot = await api.showObjects.collectionSnapshot<
+					DynamicObject["body"]
+				>(showId, "dynamic");
+				const authoritative = snapshot.objects.find(
+					(candidate) => candidate.id === selected.id,
+				);
+				if (authoritative)
+					showObjectsStore.installObjects(
+						showId,
+						[
+							{
+								kind: "dynamic",
+								objectId: selected.id,
+								object: authoritative as DynamicObject,
+							},
+						],
+						null,
+						snapshot.showRevision,
+					);
+				return "conflict" as const;
+			}
+		},
+		[api.showObjects, selected.id, selected.revision, showId, showObjectsStore],
+	);
 	return (
 		<DynamicEditor
 			{...view}
 			dynamic={selected}
 			onBack={onBack}
 			onMutate={onMutate}
+			onLoadSpatialPreview={loadSpatialPreview}
+			onApplySpatialMapping={applySpatialMapping}
 			onSpeedGroupTap={(group) =>
 				run(async () => {
 					await soundToLight.action(group, {
@@ -568,17 +601,17 @@ export {
 	createDefaultDynamicDefinition,
 	createDefaultDynamicLane,
 	DynamicEditor,
-	DynamicEncoderDeck,
 	type DynamicEditorProps,
 	type DynamicEditorView,
+	DynamicEncoderDeck,
 } from "./dynamics/DynamicsEditor";
+
 import {
 	coverageSummary,
 	createDefaultDynamicDefinition,
-	definitionStatus,
 	DynamicEditor,
 	type DynamicEditorProps,
-	type DynamicEditorView,
+	definitionStatus,
 	LaneAttributeModal,
 	runningCount,
 	targetSummary,

@@ -1,90 +1,26 @@
 import {
 	Button,
 	ColorPickerField,
-	CyclingValueToggle,
-	FadedDivider,
 	FormLayout,
-	GroupedSelectionField,
 	IconPickerField,
-	MultiValueToggle,
-	MultiValueToggleField,
-	NumberField,
-	SelectField,
-	SwitchField,
 	TextField,
 } from "@tosklight/ui";
-import {
-	EncoderSection,
-	type EncoderSectionItem,
-	type HardwareEncoderDisplayHandle,
-} from "@tosklight/ui/encoders";
-import { ModalFrame } from "@tosklight/ui/modals";
-import {
-	PoolCard,
-	PoolGrid,
-	type PoolSlotViewModel,
-} from "@tosklight/ui/pools";
-import {
-	WindowHeader,
-	WindowScrollArea,
-	WindowSettings,
-} from "@tosklight/ui/window-kit";
-import {
-	type CSSProperties,
-	type ReactNode,
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
-import { createLightApi } from "../../api/client/api";
+import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
+import type { ReactNode } from "react";
 import type {
-	DynamicDefinitionProjection,
 	DynamicDefinitionStatusProjection,
-	DynamicLaneModeProjection,
 	DynamicLaneProjection,
-	DynamicPeriodicFunctionProjection,
-	DynamicPhaseOrderingProjection,
-	DynamicRandomGroupProjection,
 	DynamicRuntimeSnapshotProjection,
-	DynamicScalarSourceProjection,
-	DynamicUpdateIntent,
 	SpeedGroupId,
 } from "../../api/types";
-import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
-import { monotonicEpochMillis } from "../../components/control/soundToLightAnalyzer";
-import { useSoundToLight } from "../../components/control/useSoundToLight";
-import {
-	useActiveShowId,
-	useAttributeRegistry,
-	useHardwareConnected,
-} from "../../features/deskSnapshot/DeskSnapshotState";
-import { useDynamicEditorSession } from "../../features/dynamics/DynamicEditorSessionContext";
-import { DynamicMutationWriter } from "../../features/dynamics/DynamicMutationWriter";
-import { useDynamicsActions } from "../../features/dynamics/DynamicsActionsContext";
-import {
-	useProgrammingCommandLineActions,
-	useProgrammingDeleteCommandActive,
-} from "../../features/programmingInteraction/ProgrammingInteractionView";
 import type { ShowObject } from "../../features/showObjects/contracts";
-import {
-	useDynamics,
-	usePresets,
-	useShowObjectsStore,
-} from "../../features/showObjects/ShowObjectsState";
-import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
-import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/SpeedGroupRuntimeView";
-import { useApp } from "../../state/AppContext";
-import { useStageLayout } from "../stageWindow/useStageLayout";
-
+import { CurvesView } from "./CurvesView";
 import type { DynamicEditorProps, DynamicEditorView } from "./DynamicsEditor";
 import {
 	coverageSummary,
 	LaneAttributeModal,
 	targetSummary,
 } from "./DynamicsEditor";
-import { CurvesView } from "./CurvesView";
 import { PhaseView, SpeedView } from "./PhaseSpeedViews";
 
 type DynamicObject = ShowObject<"dynamic">;
@@ -111,6 +47,7 @@ interface DynamicEditorSurfaceProps {
 	status: DynamicDefinitionStatusProjection | null;
 	contentSidebar: ReactNode;
 	contentFooter: ReactNode;
+	projectionContent: ReactNode;
 	onBack(): void;
 	onChangeView(view: DynamicEditorView): void;
 	onPreviewing(update: (current: boolean) => boolean): void;
@@ -192,8 +129,14 @@ function DynamicEditorHeader({
 						onClick: () => onChangeView("curves"),
 					},
 					{
+						id: "projection",
+						label: "Projection",
+						active: view === "projection",
+						onClick: () => onChangeView("projection"),
+					},
+					{
 						id: "phase",
-						label: "Phase",
+						label: "Phaser",
 						active: view === "phase",
 						onClick: () => onChangeView("phase"),
 					},
@@ -359,6 +302,7 @@ function DynamicEditorWorkspace(props: DynamicEditorSurfaceProps) {
 		<div className="dynamics-editor-body">
 			<main className="dynamic-workspace">
 				{props.view === "curves" && <CurvesWorkspace {...props} />}
+				{props.view === "projection" && props.projectionContent}
 				{props.view === "phase" && <PhaseWorkspace {...props} />}
 				{props.view === "speed" && <SpeedWorkspace {...props} />}
 			</main>

@@ -7,7 +7,7 @@ import {
 	useState,
 } from "react";
 
-export type DynamicEditorTask = "curves" | "phase" | "speed";
+export type DynamicEditorTask = "curves" | "projection" | "phase" | "speed";
 
 export interface DynamicEditorSession {
 	dynamicId: string;

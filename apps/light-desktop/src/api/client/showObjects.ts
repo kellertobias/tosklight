@@ -4,6 +4,8 @@ import type {
 	DynamicCreateActionRequest,
 	DynamicDeleteActionRequest,
 	DynamicPoolActionRequest,
+	DynamicSpatialPreviewRequest,
+	DynamicSpatialPreviewResponse,
 	DynamicUpdateActionRequest,
 	DynamicUpdateIntent,
 	OutputRoute,
@@ -148,6 +150,21 @@ export class ShowObjectsApiClient {
 			`/api/v2/dynamics/${encodeURIComponent(id)}/update`,
 			showId,
 			request,
+		);
+	}
+
+	previewDynamicSpatialMapping(
+		showId: string,
+		id: string,
+		requestBody: DynamicSpatialPreviewRequest,
+	): Promise<DynamicSpatialPreviewResponse> {
+		const request = jsonRequest("POST", requestBody);
+		return this.transport.request(
+			`/api/v2/dynamics/${encodeURIComponent(id)}/spatial-preview`,
+			{
+				...request,
+				headers: { ...request.headers, ...showScopeHeaders(showId) },
+			},
 		);
 	}
 
