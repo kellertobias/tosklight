@@ -673,6 +673,7 @@ fn benchmark_dynamic_definition(
         lanes: vec![lane],
         random_groups: vec![],
         phase_spread_mode: light_dynamics::DynamicPhaseSpreadMode::Uniform,
+        spatial_mapping: light_dynamics::DynamicSpatialMappingOverride::default(),
         phase: PhaseDistribution {
             ordering: PhaseOrdering::Selection,
             offset_degrees: 0.0,

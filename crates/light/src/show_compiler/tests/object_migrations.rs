@@ -386,6 +386,7 @@ fn targetless_dynamic(pool_number: u16) -> light_dynamics::DynamicDefinition {
         lanes: Vec::new(),
         random_groups: Vec::new(),
         phase_spread_mode: light_dynamics::DynamicPhaseSpreadMode::Uniform,
+        spatial_mapping: light_dynamics::DynamicSpatialMappingOverride::default(),
         phase: light_dynamics::PhaseDistribution {
             ordering: light_dynamics::PhaseOrdering::Selection,
             offset_degrees: 0.0,
@@ -510,6 +511,7 @@ fn dynamics_compile_preset_sources_into_per_target_sampler_fallbacks() {
         }],
         random_groups: Vec::new(),
         phase_spread_mode: light_dynamics::DynamicPhaseSpreadMode::Uniform,
+        spatial_mapping: light_dynamics::DynamicSpatialMappingOverride::default(),
         phase: light_dynamics::PhaseDistribution {
             ordering: light_dynamics::PhaseOrdering::Selection,
             offset_degrees: 0.0,
@@ -640,6 +642,7 @@ fn dynamics_persist_preset_fallbacks_losslessly_before_the_preset_is_deleted() {
         }],
         random_groups: Vec::new(),
         phase_spread_mode: light_dynamics::DynamicPhaseSpreadMode::Uniform,
+        spatial_mapping: light_dynamics::DynamicSpatialMappingOverride::default(),
         phase: light_dynamics::PhaseDistribution {
             ordering: light_dynamics::PhaseOrdering::Selection,
             offset_degrees: 0.0,
