@@ -8,8 +8,8 @@ import type { PaneHandle } from "../window-system/desktopScenario";
 import { type PaneType, StageRenderQuality } from "../window-system/paneTypes";
 
 const FIXED_STAGE_CAMERA = {
-	position: "0,1.625,8",
-	target: "0,2.6,-4",
+	position: "10,8,11",
+	target: "0,1.8,-4",
 } as const;
 
 interface StageSocketObservation {
