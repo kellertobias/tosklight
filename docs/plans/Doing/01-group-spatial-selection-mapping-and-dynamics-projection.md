@@ -63,11 +63,26 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   zero canonicalization.
 - `cargo test -p light-dynamics --lib` passed all 40 tests; `cargo clippy -p light-dynamics
   --all-targets -- -D warnings` and `git diff --check` passed.
+- Commit `dc0927ea` adds the canonical explicit/reference Group source, ordered multi-reference
+  evaluation with first-occurrence deduplication, legacy `fixtures`/`derived_from` fallback,
+  complete cycle-path diagnostics, local/inherited/mixed mapping provenance, and live Stage-position
+  ranking. All 120 `light-programmer` library tests, formatting, and the focused diff check passed.
+  Strict package Clippy currently also reports a pre-existing `type_complexity` warning in untouched
+  `registry.rs`; rerunning with only that unrelated lint allowed passed with warnings otherwise
+  denied.
+- Commit `45ab0755` adds the pure desk/show/surface-scoped SET state machine and typed Group and
+  current-page/explicit-page Playback identities. The six explicit routing intents do not inspect
+  selection or other incidental UI state. Its two focused Vitest files passed all 16 tests, desktop
+  TypeScript typecheck passed, Biome passed, and `git diff --check` passed.
 
 ## Remaining work
 
 - Complete every unchecked progress and acceptance item, then add a truthful `## Result` before
   moving this plan to `docs/plans/Done`.
+- Wire the canonical Group source into recording, mutation, validation, selective import, portable
+  lossless persistence, and migration before treating the domain representation as authoritative.
+- Connect the typed SET state machine to the command line, Group tiles, Playback controls, and
+  revision-guarded application commands; its committed pure model is not runtime proof.
 
 ## Decision and superseded behavior
 
