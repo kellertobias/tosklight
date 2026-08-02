@@ -12,7 +12,11 @@ test("PATCH-PERF-001 @ui › warmed Patch actions retain informational action-to
 	const mib = page.getByRole("button", { name: /^MIB 1:/ });
 	await expect(mib).toBeVisible();
 
-	const patchRequests: string[] = [];
+	const patchRequests: Array<{
+		path: string;
+		requestId: string | undefined;
+		action: string | undefined;
+	}> = [];
 	const unrelatedReads: string[] = [];
 	page.on("request", (request) => {
 		const url = new URL(request.url());
@@ -20,7 +24,15 @@ test("PATCH-PERF-001 @ui › warmed Patch actions retain informational action-to
 			request.method() === "POST" &&
 			/^\/api\/v2\/patch\/fixtures\/[^/]+\/update$/.test(url.pathname)
 		) {
-			patchRequests.push(url.pathname);
+			const body = request.postDataJSON() as {
+				request_id?: string;
+				action?: string;
+			};
+			patchRequests.push({
+				path: url.pathname,
+				requestId: body.request_id,
+				action: body.action,
+			});
 		} else if (
 			request.method() === "GET" &&
 			[
@@ -64,13 +76,22 @@ test("PATCH-PERF-001 @ui › warmed Patch actions retain informational action-to
 		p95Ms: expect.any(Number),
 		gateEnforced: false,
 	});
-	expect(patchRequests).toHaveLength(samples);
+	expect(new Set(patchRequests.map(({ requestId }) => requestId)).size).toBe(
+		samples,
+	);
+	expect(new Set(patchRequests.map(({ action }) => action))).toEqual(
+		new Set(["set_move_in_black"]),
+	);
 	expect(unrelatedReads).toEqual([]);
 	await testInfo.attach("patch-action-to-visible.json", {
 		body: JSON.stringify(
 			{
 				action_to_visible: diagnostics?.patchActionToVisible,
-				patch_request_count: patchRequests.length,
+				logical_patch_request_count: new Set(
+					patchRequests.map(({ requestId }) => requestId),
+				).size,
+				raw_patch_request_count: patchRequests.length,
+				patch_requests: patchRequests,
 				unrelated_reads: unrelatedReads,
 			},
 			null,

@@ -127,12 +127,10 @@ export class BrowserMoveInBlack {
 			})
 			.toEqual({ enabled: expected.enabled, delayMillis });
 		await this.openPatch();
-		await expect(this.page.getByLabel(`Move in Black ${number}`)).toHaveText(
-			expected.enabled ? "On" : "Off",
-		);
-		await expect(this.page.getByLabel(`MIB Delay ${number}`)).toHaveText(
-			formatDelay(delayMillis),
-		);
+		const value = expected.enabled ? formatDelay(delayMillis) : "Off";
+		await expect(
+			this.page.getByRole("button", { name: `MIB ${number}: ${value}` }),
+		).toHaveText(value);
 	}
 
 	async expectState(
@@ -195,19 +193,25 @@ export class BrowserMoveInBlack {
 			`SELECT FIXTURE ${number}`,
 			"Select the Patch row without entering SET-gated Move in Black editing.",
 		);
-		await this.page.getByLabel(`Move in Black ${number}`).click();
+		await this.page
+			.getByRole("button", { name: new RegExp(`^MIB ${number}:`) })
+			.click();
 		await expect(this.page.locator(".patch-edit-modal")).toHaveCount(0);
 		expect((await this.fixtureObject(number)).revision).toBe(before.revision);
 	}
 
 	async setEnabled(number: number, enabled: boolean): Promise<void> {
+		const fixture = await this.fixtureObject(number);
+		const value = enabled
+			? String(fixture.body.move_in_black_delay_millis / 1_000)
+			: "Off";
 		await this.edit(number, "Move in Black", async (editor) => {
 			await expect(
 				editor.getByRole("heading", { name: "Set fixture MIB" }),
 			).toBeVisible();
 			await editor
-				.getByLabel("Move in Black value")
-				.selectOption(String(enabled));
+				.getByLabel("MIB value: Off or non-negative seconds")
+				.fill(value);
 		});
 	}
 
@@ -215,9 +219,11 @@ export class BrowserMoveInBlack {
 		const millis = parseClockDuration(delay);
 		await this.edit(number, "MIB Delay", async (editor) => {
 			await expect(
-				editor.getByRole("heading", { name: "Set fixture MIB Delay" }),
+				editor.getByRole("heading", { name: "Set fixture MIB" }),
 			).toBeVisible();
-			await editor.getByLabel("MIB Delay (s)").fill(String(millis / 1_000));
+			await editor
+				.getByLabel("MIB value: Off or non-negative seconds")
+				.fill(String(millis / 1_000));
 		});
 	}
 
@@ -233,7 +239,9 @@ export class BrowserMoveInBlack {
 			`Edit ${field} through the visible SET-gated Patch workflow.`,
 		);
 		await this.page.getByRole("button", { name: "SET", exact: true }).click();
-		await this.page.getByLabel(`${field} ${number}`).click();
+		await this.page
+			.getByRole("button", { name: new RegExp(`^MIB ${number}:`) })
+			.click();
 		const editor = this.page.locator(".patch-edit-modal");
 		await update(editor);
 		await this.desk.click(
@@ -245,7 +253,8 @@ export class BrowserMoveInBlack {
 	}
 
 	private async openPatch(): Promise<void> {
-		if (await this.page.getByLabel("Move in Black 101").count()) return;
+		if (await this.page.getByRole("button", { name: /^MIB 101:/ }).count())
+			return;
 		await openPatch(this.page);
 		await expect(patchFixtureRow(this.page, 101)).toBeVisible();
 	}
