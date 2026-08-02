@@ -4,6 +4,10 @@ use crate::selection_grid::GridMethodConfiguration;
 use crate::state::ProgrammerValueTiming;
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId};
+use light_dynamics::{
+    Position3d, RankedSelection, SpatialMappingWarning, SpatialSelectionMapping, SpatialTarget,
+    evaluate_spatial_mapping,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -77,10 +81,18 @@ pub struct GroupDefinition {
     pub color: Option<String>,
     pub icon: Option<String>,
     pub fixtures: Vec<FixtureId>,
+    /// Canonical live membership authority. Legacy files without this field are interpreted from
+    /// `fixtures` and `derived_from` without changing their observable membership.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<GroupFixtureSource>,
     /// Portable Stage-derived grid configuration. Cells are intentionally not stored: they are
     /// rebuilt from current Stage positions so moving a fixture cannot rewrite Group order.
     #[serde(default, deserialize_with = "deserialize_grid_configuration")]
     pub grid: GridMethodConfiguration,
+    /// Optional portable projection-plus-shape mapping. Legacy `grid` state is deliberately not
+    /// promoted because it did not affect Group order or value spreading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mapping: Option<SpatialSelectionMapping>,
     pub derived_from: Option<DerivedGroup>,
     pub frozen_from: Option<FrozenGroup>,
     pub programming: HashMap<AttributeKey, AttributeValue>,
@@ -116,7 +128,9 @@ impl Default for GroupDefinition {
             color: None,
             icon: None,
             fixtures: vec![],
+            source: None,
             grid: GridMethodConfiguration::default(),
+            mapping: None,
             derived_from: None,
             frozen_from: None,
             programming: HashMap::new(),
@@ -124,6 +138,19 @@ impl Default for GroupDefinition {
             playback_fader: None,
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum GroupFixtureSource {
+    Explicit { fixture_ids: Vec<FixtureId> },
+    References { references: Vec<GroupReference> },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GroupReference {
+    pub group_id: String,
+    pub rule: SelectionRule,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -139,6 +166,22 @@ pub struct FrozenGroup {
     pub captured_at: chrono::DateTime<Utc>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum GroupMappingProvenance {
+    None,
+    Local { group_id: String },
+    Inherited { source_group_ids: Vec<String> },
+    MixedSourceMappings,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResolvedGroup {
+    pub source_order: Vec<FixtureId>,
+    pub effective_mapping: Option<SpatialSelectionMapping>,
+    pub ranked_selection: RankedSelection,
+    pub mapping_provenance: GroupMappingProvenance,
+}
+
 // @tour ordered-selection:20 Resolve a Group without losing emptiness
 // An existing Group resolves in stored membership order, including a valid empty result. An
 // absent Group is an error, while derived Groups preserve the source's ordered rule.
@@ -146,29 +189,223 @@ pub fn resolve_group(
     id: &str,
     groups: &HashMap<String, GroupDefinition>,
 ) -> Result<Vec<FixtureId>, String> {
-    fn visit(
-        id: &str,
-        groups: &HashMap<String, GroupDefinition>,
-        visiting: &mut HashSet<String>,
-    ) -> Result<Vec<FixtureId>, String> {
-        if !visiting.insert(id.to_owned()) {
-            return Err(format!("derived group cycle detected at {id}"));
+    resolve_group_membership(id, groups, &mut Vec::new())
+}
+
+pub fn resolve_group_spatial(
+    id: &str,
+    groups: &HashMap<String, GroupDefinition>,
+    stage_positions: &HashMap<FixtureId, Position3d>,
+) -> Result<ResolvedGroup, String> {
+    resolve_group_spatial_inner(id, groups, stage_positions, &mut Vec::new())
+}
+
+fn resolve_group_membership(
+    id: &str,
+    groups: &HashMap<String, GroupDefinition>,
+    stack: &mut Vec<String>,
+) -> Result<Vec<FixtureId>, String> {
+    push_group(id, groups, stack)?;
+    let group = groups
+        .get(id)
+        .ok_or_else(|| format!("group {id} does not exist"))?;
+    let resolved = match effective_source(group) {
+        GroupFixtureSource::Explicit { fixture_ids } => deduplicate(fixture_ids),
+        GroupFixtureSource::References { references } => {
+            let mut combined = Vec::new();
+            let mut seen = HashSet::new();
+            for reference in references {
+                let source = resolve_group_membership(&reference.group_id, groups, stack)?;
+                for fixture_id in apply_selection_rule(&source, &reference.rule) {
+                    if seen.insert(fixture_id) {
+                        combined.push(fixture_id);
+                    }
+                }
+            }
+            combined
         }
-        let group = groups
-            .get(id)
-            .ok_or_else(|| format!("group {id} does not exist"))?;
-        let resolved = if let Some(derived) = &group.derived_from {
-            apply_selection_rule(
-                &visit(&derived.source_group_id, groups, visiting)?,
-                &derived.rule,
-            )
-        } else {
-            group.fixtures.clone()
-        };
-        visiting.remove(id);
-        Ok(resolved)
+    };
+    stack.pop();
+    Ok(resolved)
+}
+
+fn resolve_group_spatial_inner(
+    id: &str,
+    groups: &HashMap<String, GroupDefinition>,
+    stage_positions: &HashMap<FixtureId, Position3d>,
+    stack: &mut Vec<String>,
+) -> Result<ResolvedGroup, String> {
+    push_group(id, groups, stack)?;
+    let group = groups
+        .get(id)
+        .ok_or_else(|| format!("group {id} does not exist"))?;
+
+    let (source_order, inherited_mapping, inherited_from, mixed) = match effective_source(group) {
+        GroupFixtureSource::Explicit { fixture_ids } => {
+            (deduplicate(fixture_ids), None, Vec::new(), false)
+        }
+        GroupFixtureSource::References { references } => {
+            let mut combined = Vec::new();
+            let mut seen = HashSet::new();
+            let mut evaluated_sources = Vec::new();
+            for reference in references {
+                let resolved = resolve_group_spatial_inner(
+                    &reference.group_id,
+                    groups,
+                    stage_positions,
+                    stack,
+                )?;
+                let selected = apply_selection_rule(
+                    &resolved.ranked_selection.ordered_fixture_ids,
+                    &reference.rule,
+                );
+                for fixture_id in selected.iter().copied() {
+                    if seen.insert(fixture_id) {
+                        combined.push(fixture_id);
+                    }
+                }
+                evaluated_sources.push((
+                    reference.group_id,
+                    !selected.is_empty(),
+                    resolved.effective_mapping,
+                ));
+            }
+            let (mapping, sources, mixed) = inherited_mapping(&evaluated_sources);
+            (combined, mapping, sources, mixed)
+        }
+    };
+
+    let (effective_mapping, mapping_provenance) = if let Some(mapping) = group.mapping.clone() {
+        (
+            Some(mapping),
+            GroupMappingProvenance::Local {
+                group_id: id.to_owned(),
+            },
+        )
+    } else if mixed {
+        (None, GroupMappingProvenance::MixedSourceMappings)
+    } else if let Some(mapping) = inherited_mapping {
+        (
+            Some(mapping),
+            GroupMappingProvenance::Inherited {
+                source_group_ids: inherited_from,
+            },
+        )
+    } else {
+        (None, GroupMappingProvenance::None)
+    };
+
+    let ranked_selection = if let Some(mapping) = effective_mapping.as_ref() {
+        let targets = source_order
+            .iter()
+            .copied()
+            .map(|fixture_id| SpatialTarget {
+                fixture_id,
+                position: stage_positions.get(&fixture_id).copied(),
+            })
+            .collect::<Vec<_>>();
+        evaluate_spatial_mapping(mapping, &targets).map_err(|error| error.to_string())?
+    } else {
+        source_order_ranks(&source_order)
+    };
+    stack.pop();
+    Ok(ResolvedGroup {
+        source_order,
+        effective_mapping,
+        ranked_selection,
+        mapping_provenance,
+    })
+}
+
+fn effective_source(group: &GroupDefinition) -> GroupFixtureSource {
+    group.source.clone().unwrap_or_else(|| {
+        group.derived_from.as_ref().map_or_else(
+            || GroupFixtureSource::Explicit {
+                fixture_ids: group.fixtures.clone(),
+            },
+            |derived| GroupFixtureSource::References {
+                references: vec![GroupReference {
+                    group_id: derived.source_group_id.clone(),
+                    rule: derived.rule.clone(),
+                }],
+            },
+        )
+    })
+}
+
+fn push_group(
+    id: &str,
+    groups: &HashMap<String, GroupDefinition>,
+    stack: &mut Vec<String>,
+) -> Result<(), String> {
+    if !groups.contains_key(id) {
+        return Err(format!("group {id} does not exist"));
     }
-    visit(id, groups, &mut HashSet::new())
+    if let Some(index) = stack.iter().position(|entry| entry == id) {
+        let mut cycle = stack[index..].to_vec();
+        cycle.push(id.to_owned());
+        return Err(format!(
+            "group reference cycle detected: {}",
+            cycle.join(" -> ")
+        ));
+    }
+    stack.push(id.to_owned());
+    Ok(())
+}
+
+fn deduplicate(fixture_ids: Vec<FixtureId>) -> Vec<FixtureId> {
+    let mut seen = HashSet::new();
+    fixture_ids
+        .into_iter()
+        .filter(|fixture_id| seen.insert(*fixture_id))
+        .collect()
+}
+
+fn inherited_mapping(
+    sources: &[(String, bool, Option<SpatialSelectionMapping>)],
+) -> (Option<SpatialSelectionMapping>, Vec<String>, bool) {
+    let considered = if sources.iter().any(|(_, non_empty, _)| *non_empty) {
+        sources
+            .iter()
+            .filter(|(_, non_empty, _)| *non_empty)
+            .collect::<Vec<_>>()
+    } else {
+        sources.iter().collect::<Vec<_>>()
+    };
+    let Some((_, _, first_mapping)) = considered.first().copied() else {
+        return (None, Vec::new(), false);
+    };
+    if considered
+        .iter()
+        .any(|(_, _, mapping)| mapping != first_mapping)
+    {
+        return (None, Vec::new(), true);
+    }
+    let Some(mapping) = first_mapping.clone() else {
+        return (None, Vec::new(), false);
+    };
+    (
+        Some(mapping),
+        considered
+            .into_iter()
+            .map(|(group_id, _, _)| group_id.clone())
+            .collect(),
+        false,
+    )
+}
+
+fn source_order_ranks(source_order: &[FixtureId]) -> RankedSelection {
+    RankedSelection {
+        ordered_fixture_ids: source_order.to_vec(),
+        rank_by_fixture: source_order
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(rank, fixture_id)| (fixture_id, rank))
+            .collect(),
+        rank_count: source_order.len(),
+        warnings: Vec::<SpatialMappingWarning>::new(),
+    }
 }
 
 /// Apply the desk's ordered Group Merge rule: retain the existing membership exactly, then append
@@ -414,5 +651,250 @@ impl ProgrammerRegistry {
             self.mark_normal_values_changed(user_id);
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod group_resolution_tests {
+    use super::*;
+    use light_dynamics::{
+        Position3d, ProjectionPreset, RankDirection, SpatialProjection, SpatialSelectionShape,
+    };
+    use uuid::Uuid;
+
+    fn fixture(value: u128) -> FixtureId {
+        FixtureId(Uuid::from_u128(value))
+    }
+
+    fn explicit(id: &str, fixture_ids: Vec<FixtureId>) -> GroupDefinition {
+        GroupDefinition {
+            id: id.to_owned(),
+            name: id.to_owned(),
+            source: Some(GroupFixtureSource::Explicit { fixture_ids }),
+            ..GroupDefinition::default()
+        }
+    }
+
+    fn reference(id: &str, references: Vec<GroupReference>) -> GroupDefinition {
+        GroupDefinition {
+            id: id.to_owned(),
+            name: id.to_owned(),
+            source: Some(GroupFixtureSource::References { references }),
+            ..GroupDefinition::default()
+        }
+    }
+
+    fn top_grid(direction: RankDirection) -> SpatialSelectionMapping {
+        SpatialSelectionMapping {
+            projection: SpatialProjection::from_preset(
+                ProjectionPreset::Top,
+                Position3d::default(),
+            ),
+            shape: SpatialSelectionShape::Grid {
+                angle_degrees: 0.0,
+                direction,
+            },
+        }
+    }
+
+    #[test]
+    fn canonical_and_legacy_sources_preserve_order_rules_and_first_occurrence() {
+        let first = fixture(1);
+        let second = fixture(2);
+        let legacy = GroupDefinition {
+            id: "legacy".into(),
+            name: "Legacy".into(),
+            fixtures: vec![first, second, first],
+            ..GroupDefinition::default()
+        };
+        let derived = GroupDefinition {
+            id: "derived".into(),
+            name: "Derived".into(),
+            derived_from: Some(DerivedGroup {
+                source_group_id: "legacy".into(),
+                rule: SelectionRule::Odd,
+            }),
+            ..GroupDefinition::default()
+        };
+        let canonical = reference(
+            "canonical",
+            vec![
+                GroupReference {
+                    group_id: "derived".into(),
+                    rule: SelectionRule::All,
+                },
+                GroupReference {
+                    group_id: "legacy".into(),
+                    rule: SelectionRule::Even,
+                },
+            ],
+        );
+        let groups = HashMap::from([
+            ("legacy".into(), legacy),
+            ("derived".into(), derived),
+            ("canonical".into(), canonical),
+        ]);
+
+        assert_eq!(resolve_group("legacy", &groups).unwrap(), [first, second]);
+        assert_eq!(resolve_group("derived", &groups).unwrap(), [first]);
+        assert_eq!(
+            resolve_group("canonical", &groups).unwrap(),
+            [first, second]
+        );
+    }
+
+    #[test]
+    fn canonical_source_wins_over_disagreeing_legacy_fields() {
+        let mut group = explicit("group", vec![fixture(2)]);
+        group.fixtures = vec![fixture(1)];
+        group.derived_from = Some(DerivedGroup {
+            source_group_id: "absent".into(),
+            rule: SelectionRule::All,
+        });
+        assert_eq!(
+            resolve_group("group", &HashMap::from([("group".into(), group)])).unwrap(),
+            [fixture(2)]
+        );
+    }
+
+    #[test]
+    fn cycles_name_the_complete_reference_path() {
+        let groups = HashMap::from([
+            (
+                "a".into(),
+                reference(
+                    "a",
+                    vec![GroupReference {
+                        group_id: "b".into(),
+                        rule: SelectionRule::All,
+                    }],
+                ),
+            ),
+            (
+                "b".into(),
+                reference(
+                    "b",
+                    vec![GroupReference {
+                        group_id: "c".into(),
+                        rule: SelectionRule::All,
+                    }],
+                ),
+            ),
+            (
+                "c".into(),
+                reference(
+                    "c",
+                    vec![GroupReference {
+                        group_id: "a".into(),
+                        rule: SelectionRule::All,
+                    }],
+                ),
+            ),
+        ]);
+        assert_eq!(
+            resolve_group("a", &groups).unwrap_err(),
+            "group reference cycle detected: a -> b -> c -> a"
+        );
+    }
+
+    #[test]
+    fn inherited_and_local_mappings_recompute_over_live_membership() {
+        let first = fixture(1);
+        let second = fixture(2);
+        let mut source = explicit("source", vec![first, second]);
+        source.mapping = Some(top_grid(RankDirection::Ascending));
+        let derived = reference(
+            "derived",
+            vec![GroupReference {
+                group_id: "source".into(),
+                rule: SelectionRule::All,
+            }],
+        );
+        let mut local = derived.clone();
+        local.id = "local".into();
+        local.mapping = Some(top_grid(RankDirection::Descending));
+        let groups = HashMap::from([
+            ("source".into(), source),
+            ("derived".into(), derived),
+            ("local".into(), local),
+        ]);
+        let positions = HashMap::from([
+            (
+                first,
+                Position3d {
+                    x: 2.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+            ),
+            (
+                second,
+                Position3d {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+            ),
+        ]);
+
+        let inherited = resolve_group_spatial("derived", &groups, &positions).unwrap();
+        assert_eq!(
+            inherited.ranked_selection.ordered_fixture_ids,
+            [second, first]
+        );
+        assert_eq!(
+            inherited.mapping_provenance,
+            GroupMappingProvenance::Inherited {
+                source_group_ids: vec!["source".into()]
+            }
+        );
+
+        let local = resolve_group_spatial("local", &groups, &positions).unwrap();
+        assert_eq!(local.source_order, [second, first]);
+        assert_eq!(local.ranked_selection.ordered_fixture_ids, [first, second]);
+        assert_eq!(
+            local.mapping_provenance,
+            GroupMappingProvenance::Local {
+                group_id: "local".into()
+            }
+        );
+    }
+
+    #[test]
+    fn mixed_reference_mappings_fall_back_to_concatenated_source_order() {
+        let first = fixture(1);
+        let second = fixture(2);
+        let mut mapped = explicit("mapped", vec![first]);
+        mapped.mapping = Some(top_grid(RankDirection::Ascending));
+        let plain = explicit("plain", vec![second]);
+        let combined = reference(
+            "combined",
+            vec![
+                GroupReference {
+                    group_id: "mapped".into(),
+                    rule: SelectionRule::All,
+                },
+                GroupReference {
+                    group_id: "plain".into(),
+                    rule: SelectionRule::All,
+                },
+            ],
+        );
+        let groups = HashMap::from([
+            ("mapped".into(), mapped),
+            ("plain".into(), plain),
+            ("combined".into(), combined),
+        ]);
+
+        let resolved = resolve_group_spatial("combined", &groups, &HashMap::new()).unwrap();
+        assert_eq!(resolved.effective_mapping, None);
+        assert_eq!(
+            resolved.ranked_selection.ordered_fixture_ids,
+            [first, second]
+        );
+        assert_eq!(
+            resolved.mapping_provenance,
+            GroupMappingProvenance::MixedSourceMappings
+        );
     }
 }

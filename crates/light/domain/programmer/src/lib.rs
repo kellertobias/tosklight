@@ -45,8 +45,9 @@ pub use cue_recording::{
 pub use dynamic_values::DynamicProgrammerValueMutation;
 pub use group_recording::{GroupRecordingCapture, group_delete_blocker};
 pub use groups::{
-    DerivedGroup, FrozenGroup, GroupDefinition, GroupProgrammerValue,
-    merge_ordered_group_membership, resolve_group,
+    DerivedGroup, FrozenGroup, GroupDefinition, GroupFixtureSource, GroupMappingProvenance,
+    GroupProgrammerValue, GroupReference, ResolvedGroup, merge_ordered_group_membership,
+    resolve_group, resolve_group_spatial,
 };
 pub use highlight::{
     HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightRegistry,
