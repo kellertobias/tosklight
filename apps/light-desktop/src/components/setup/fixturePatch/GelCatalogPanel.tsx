@@ -31,8 +31,22 @@ export function GelCatalogPanel({
 }) {
 	const model = useGelCatalogModel(active, api, onError);
 	if (!active) return null;
+	const availability = catalogGelAvailability(
+		selectedGel,
+		model.catalogIndex,
+		model.catalogIndexLoaded,
+	);
 	return (
 		<section className="gel-catalog-panel" aria-label="Gel catalog">
+			{selectedGel && availability !== "available" && (
+				<UnavailableCatalogGel
+					gel={selectedGel}
+					availability={availability}
+					catalog={model.catalogIndex.find(
+						(candidate) => candidate.id === selectedGel.catalog_id,
+					)}
+				/>
+			)}
 			<TextField
 				label="Search catalog, number, or name"
 				value={model.query}
@@ -68,6 +82,68 @@ export function GelCatalogPanel({
 			<GelCatalogImport model={model} />
 		</section>
 	);
+}
+
+function UnavailableCatalogGel({
+	gel,
+	availability,
+	catalog,
+}: {
+	gel: CatalogGel;
+	availability: Exclude<CatalogGelAvailability, "available">;
+	catalog?: GelCatalog;
+}) {
+	if (availability === "checking")
+		return (
+			<p className="patch-secondary" role="status">
+				Checking installed catalog for {gelSummary(gel)}…
+			</p>
+		);
+	const fallback = gel.embedded_fallback;
+	return (
+		<section className="gel-catalog-unavailable" aria-label="Unavailable gel">
+			<p role="alert">
+				<strong>
+					{availability === "catalog_unavailable"
+						? "Catalog unavailable"
+						: "Catalog entry unavailable"}
+				</strong>
+				. The stored appearance continues to use its embedded fallback.
+			</p>
+			<p className="patch-secondary">
+				Stored reference: {gel.catalog_id} / {gel.entry_id}
+				{catalog ? ` in ${catalog.name}` : ""}
+			</p>
+			<p className="patch-secondary">
+				Fallback: {fallback.number} · {fallback.name} · display{" "}
+				{fallback.display_srgb} · visualizer {fallback.visualizer_srgb}
+			</p>
+			<p className="patch-secondary">
+				Search for a replacement below or import/update a catalog CSV. Selecting
+				a result explicitly reconciles this fixture; closing or applying other
+				changes keeps this reference and fallback unchanged.
+			</p>
+		</section>
+	);
+}
+
+type CatalogGelAvailability =
+	| "checking"
+	| "available"
+	| "catalog_unavailable"
+	| "entry_unavailable";
+
+function catalogGelAvailability(
+	gel: CatalogGel | null,
+	catalogs: GelCatalog[],
+	catalogIndexLoaded: boolean,
+): CatalogGelAvailability {
+	if (!gel || !catalogIndexLoaded) return "checking";
+	const catalog = catalogs.find((candidate) => candidate.id === gel.catalog_id);
+	if (!catalog) return "catalog_unavailable";
+	return catalog.entries.some((entry) => entry.id === gel.entry_id)
+		? "available"
+		: "entry_unavailable";
 }
 
 function GelCatalogImport({ model }: { model: GelCatalogModel }) {
@@ -161,6 +237,7 @@ function useGelCatalogModel(
 	const [query, setQuery] = useState("");
 	const [catalogs, setCatalogs] = useState<GelCatalog[]>([]);
 	const [catalogIndex, setCatalogIndex] = useState<GelCatalog[]>([]);
+	const [catalogIndexLoaded, setCatalogIndexLoaded] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [importCatalogId, setImportCatalogId] = useState("new");
 	const [newCatalogId] = useState(() => crypto.randomUUID());
@@ -175,19 +252,23 @@ function useGelCatalogModel(
 		let current = true;
 		setBusy(true);
 		onError("");
-		void api
-			.gelCatalogs(query)
-			.then((next) => {
+		const indexRequest =
+			query.trim() && !catalogIndexLoaded ? api.gelCatalogs("") : null;
+		void Promise.all([indexRequest, api.gelCatalogs(query)])
+			.then(([index, next]) => {
 				if (!current) return;
 				setCatalogs(next);
-				setCatalogIndex((known) => mergeGelCatalogs(known, next));
+				if (index || !query.trim()) {
+					setCatalogIndex(index ?? next);
+					setCatalogIndexLoaded(true);
+				}
 			})
 			.catch((reason) => current && onError(errorMessage(reason)))
 			.finally(() => current && setBusy(false));
 		return () => {
 			current = false;
 		};
-	}, [active, api, query, onError]);
+	}, [active, api, query, catalogIndexLoaded, onError]);
 	const target = gelImportTarget(importCatalogId, newCatalogId, catalogIndex);
 	const previewImport = async () => {
 		if (!api?.previewGelCatalogCsvImport || !importCsv || !target || busy)
@@ -246,6 +327,7 @@ function useGelCatalogModel(
 		setQuery,
 		catalogs,
 		catalogIndex,
+		catalogIndexLoaded,
 		busy,
 		importCatalogId,
 		importCatalogName,

@@ -507,6 +507,177 @@ describe("fixture output policy cells", () => {
 });
 
 describe("installed light-source appearance", () => {
+	it("keeps an unavailable catalog gel's complete embedded fallback during unrelated edits", async () => {
+		const fixture = appearanceFixture();
+		fixture.installed_appearance = {
+			light_source: { type: "profile_default" },
+			color_temperature_kelvin: null,
+			gel: {
+				type: "built_in",
+				catalog_id: "missing-catalog",
+				entry_id: "missing-entry",
+				embedded_fallback: {
+					number: "G12",
+					name: "Deep Violet",
+					display_srgb: "#552288",
+					visualizer_srgb: "#32105F",
+				},
+			},
+			shaper_angles_degrees: [1, 2, 3, 4],
+		};
+		server.patch.fixtures = [fixture];
+		server.gelCatalogs.mockResolvedValue([
+			{
+				id: "lookalike-catalog",
+				revision: 1,
+				name: "Lookalike filters",
+				entries: [
+					{
+						id: "lookalike-entry",
+						number: "G12",
+						name: "Deep Violet",
+						display_srgb: "#552288",
+						visualizer_srgb: "#32105F",
+					},
+				],
+			},
+		]);
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(screen.getByRole("button", { name: /Light source 17:/ }));
+		const dialog = screen.getByRole("dialog", { name: "Set light source 17" });
+		expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+			"Catalog unavailable",
+		);
+		expect(within(dialog).getByLabelText("Unavailable gel")).toHaveTextContent(
+			"Stored reference: missing-catalog / missing-entry",
+		);
+		expect(within(dialog).getByLabelText("Unavailable gel")).toHaveTextContent(
+			"Fallback: G12 · Deep Violet · display #552288 · visualizer #32105F",
+		);
+		expect(within(dialog).getByLabelText("Unavailable gel")).toHaveTextContent(
+			"Selecting a result explicitly reconciles this fixture",
+		);
+		expect(
+			within(dialog).getByText("Import gel catalog CSV"),
+		).toBeInTheDocument();
+
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Profile default" }),
+		);
+		fireEvent.click(screen.getByRole("option", { name: "Halogen" }));
+		fireEvent.click(within(dialog).getByRole("button", { name: "Apply" }));
+
+		await waitFor(() =>
+			expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith(
+				"fixture-split",
+				null,
+				{
+					type: "set_installed_appearance",
+					appearance: {
+						lightSource: { type: "halogen" },
+						colorTemperatureKelvin: null,
+						gel: {
+							type: "built_in",
+							catalogId: "missing-catalog",
+							entryId: "missing-entry",
+							embeddedFallback: {
+								number: "G12",
+								name: "Deep Violet",
+								displaySrgb: "#552288",
+								visualizerSrgb: "#32105F",
+							},
+						},
+						shaperAnglesDegrees: [1, 2, 3, 4],
+					},
+				},
+			),
+		);
+	});
+
+	it("identifies a missing entry and reconciles it only after explicit selection", async () => {
+		const fixture = appearanceFixture();
+		fixture.installed_appearance = {
+			light_source: { type: "profile_default" },
+			color_temperature_kelvin: null,
+			gel: {
+				type: "built_in",
+				catalog_id: "catalog-blue",
+				entry_id: "retired-entry",
+				embedded_fallback: {
+					number: "B1",
+					name: "Retired Blue",
+					display_srgb: "#1122AA",
+					visualizer_srgb: "#0F1F99",
+				},
+			},
+			shaper_angles_degrees: [1, 2, 3, 4],
+		};
+		server.patch.fixtures = [fixture];
+		server.gelCatalogs.mockResolvedValue([
+			{
+				id: "catalog-blue",
+				revision: 4,
+				name: "Touring filters",
+				entries: [
+					{
+						id: "replacement-entry",
+						number: "B2",
+						name: "Current Blue",
+						display_srgb: "#2233BB",
+						visualizer_srgb: "#1020A0",
+					},
+				],
+			},
+		]);
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(screen.getByRole("button", { name: /Light source 17:/ }));
+		const dialog = screen.getByRole("dialog", { name: "Set light source 17" });
+		expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+			"Catalog entry unavailable",
+		);
+		expect(within(dialog).getByLabelText("Unavailable gel")).toHaveTextContent(
+			"retired-entry in Touring filters",
+		);
+		expect(
+			within(dialog).getByRole("button", { name: "Apply" }),
+		).toBeDisabled();
+
+		fireEvent.click(
+			within(dialog).getByRole("button", {
+				name: /Touring filters · B2 · Current Blue/,
+			}),
+		);
+		expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+		fireEvent.click(within(dialog).getByRole("button", { name: "Apply" }));
+
+		await waitFor(() =>
+			expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith(
+				"fixture-split",
+				null,
+				expect.objectContaining({
+					type: "set_installed_appearance",
+					appearance: expect.objectContaining({
+						gel: {
+							type: "built_in",
+							catalogId: "catalog-blue",
+							entryId: "replacement-entry",
+							embeddedFallback: {
+								number: "B2",
+								name: "Current Blue",
+								displaySrgb: "#2233BB",
+								visualizerSrgb: "#1020A0",
+							},
+						},
+					}),
+				}),
+			),
+		);
+	});
+
 	it("searches installed catalogs and stores a portable embedded fallback", async () => {
 		server.patch.fixtures = [appearanceFixture()];
 		server.gelCatalogs.mockResolvedValue([
