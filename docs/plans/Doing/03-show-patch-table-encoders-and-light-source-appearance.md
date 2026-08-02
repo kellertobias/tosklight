@@ -16,9 +16,9 @@ before moving it to `Done` in a semantic commit.
 - [x] Audit the current table, patch selection, encoder, persistence, API, catalog, and visualizer
   ownership boundaries plus compatibility and acceptance seams.
 - [x] Implement the exact shared sixteen-column table and physical-instance editing geometry.
-- [ ] Implement portable installed appearance, typed sparse mutations, compatibility, and catalog
+- [x] Implement portable installed appearance, typed sparse mutations, compatibility, and catalog
   import infrastructure.
-- [ ] Implement Location/Visualization encoders and shared Stage/Viz appearance evaluation.
+- [x] Implement Location/Visualization encoders and shared Stage/Viz appearance evaluation.
 - [ ] Update help, screenshots, human scenarios, and focused automated acceptance coverage.
 - [ ] Run focused checks, required major suites, migration/recovery proof, and real desktop/Viz
   verification.
@@ -117,8 +117,62 @@ before moving it to `Done` in a semantic commit.
   root/copy sparse intents; unsupported roles stay in place disabled, and canonical live blade
   angle or module-rotation attributes disable the corresponding installed control. The focused
   Patch parameter suite passes all 10 tests across exact slot labels, availability, live-role
-  precedence, and exact primary/multi-patch targeting. Shared renderer consumption remains in
-  progress.
+  precedence, and exact primary/multi-patch targeting.
+- Installation-owned gel catalogs now use stable catalog/entry UUIDs and revisions in the fixture
+  library. Strict UTF-8 CSV preview accepts exactly `number,name,display_rgb,visualizer_rgb`, reports
+  row-specific encoding/header/quoting/field/color/duplicate errors, distinguishes additions,
+  replacements, unchanged rows, and identity/revision conflicts, and confirms only the immutable
+  preview in one transaction with a stale-revision recheck and stable entry identity. No generic or
+  third-party entries ship in this infrastructure slice. All 7 focused catalog tests, all 111
+  `light-fixture` library tests, package check, Clippy with warnings denied, formatting, and diff
+  checks pass.
+- Authenticated installation-scoped catalog search and typed CSV preview now feed the Show Patch
+  light-source editor. Operators search catalog/number/name/display color, assign an entry with its
+  complete embedded fallback, or preview additions/replacements/unchanged/conflicts/row errors and
+  explicitly confirm a new/update import. Confirmation uses the object-specific
+  `gel-catalogs/{id}/update` intent, validates path/body identity, rechecks the preview against the
+  current revision, replays by request ID, and emits one change event. Generated contracts, the
+  focused wire and headless route tests, desktop typecheck/Biome, and 43 client/editor tests pass.
+- MVR reimport now decodes both modern reference-only and legacy inline portable patch records
+  through the canonical codec before merging. The archive remains authoritative for the root
+  address and transform, while desk-owned Masters, Pan/Tilt inversion, MIB, bracket/module angles,
+  installed source/CCT/gel/static shapers, and independent multi-patch physical copies survive the
+  merge. All 6 focused application MVR tests pass, including exact modern-record retention.
+- Standalone Viz now propagates root/copy installed appearance through its desk/planning contracts,
+  resolves profile/default CCT plus embedded/custom gel into one linear multiplier, and applies it
+  to apertures, beams, lights, semantic exports, cells, and lasers. Canonical live blade-angle and
+  module-rotation roles decode in physical degrees and win over the corresponding static values;
+  supported static roles reach the shader without GLB node-name inference. Viz desk 33/33, project
+  56/56, render 63/63, planning 10/10, scene 26/26, snapshot 30/30, all-target checks, and the real
+  Blender export 1/1 pass.
+- Built-in Stage now consumes the same exact root/copy installed appearance and module rotation.
+  Deterministic linear live color × CCT × embedded/custom gel reaches fallback/profile emissive
+  surfaces, beam volumes, ground footprints, and improved SpotLight spill. Typed semantic shaper
+  modules/blades use declared physical ranges with live-over-static precedence, allocate nothing
+  for unsupported roles, and never infer arbitrary GLB names. Desktop typecheck, 36 focused Stage
+  tests, Biome, and diff checks pass.
+- Focused real-browser acceptance now proves the exact sixteen headers, absence of the retired
+  headers, ordinary-click versus SET-gated combined MIB editing, emitterless Light source state,
+  authoritative sparse persistence, and reopen behavior. The focused Playwright scenario passes
+  1/1 with the real server; existing MIB declaration and performance selectors use the combined
+  cell and object-specific sparse route.
+- Creating a multi-patch now clones the primary physical source/CCT/gel/static shapers and
+  bracket/module angles into an independent object instead of silently reverting to defaults. The
+  complete 43-test Show Patch control file and desktop typecheck pass after the compatibility fix.
+- Oversized Plan-owned implementation paths are now split without changing the operator contract:
+  the appearance editor, patch encoder surfaces, strict CSV parser, Viz fixture planning/fallback
+  emitter construction, and renderer laser path all pass their focused suites. The architecture
+  source-size checker no longer reports a Plan 03 file; it still fails on eight unrelated
+  concurrent System Controls, pane-options, Grid Dynamics, Timecode, and UI-library changes.
+- The complete help screenshot workflow is green in both halves: Storybook captured its full
+  manifest 1/1 and the live application captured the seeded desk, Show Patch, workflows, and pane
+  gallery 1/1. The final pane inventory now derives from all manifest-owned Storybook and live-app
+  files, so the two fixture-view variants no longer appear as false extras.
+- The required major API suite passes 27/27. The first full UI suite run passed 156 tests, skipped
+  one, and exposed four failures: the two Plan-owned consolidated-MIB/performance scenarios were
+  corrected and now pass together 2/2; fixture placement and telemetry remain unrelated failures
+  to recheck after the remaining Plan work. The unit umbrella reaches 67/67 Node tests before its
+  architecture gate fails only on the eight unrelated source-size violations listed above.
 
 ## Current behavior and problem
 
