@@ -213,6 +213,35 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   explanation are visible. Apply sends one typed update; a 409 reloads authority while retaining
   the draft without replay. Three focused files passed all eight API/draft/component tests, owned
   Biome and diff checks passed, and the slice introduced no desktop type errors.
+- Commit `38e983f1` updates the Fixture Sheet Group-runtime test for the current column-renderer
+  contract. Its three focused tests and the full desktop TypeScript typecheck passed.
+- Commit `17899546` removes the obsolete Layout pane/window help and documents shifted ALL, PREV,
+  and NEXT as unassigned while preserving their unshifted Highlight behavior. The semantic
+  documentation suite passed all eight tests and the focused diff check was clean.
+- Commit `441f6b88` extends typed Group Master assignment with explicit physical and virtual
+  addresses. Virtual assignment is guarded by the containing Playback Page identity/revision,
+  preserves a same-Group `initial_master` including zero, clears that seed when retargeting to a
+  different Group, and routes the visible Virtual Playback surface without selection or text
+  authority. The help-gallery fixture now carries migrated levels on its real physical and virtual
+  targets. Six wire tests, generated-contract freshness, eight application tests, four headless
+  conversion tests, seven desktop files with 131 tests, desktop typecheck, Cargo formatting, Biome,
+  and focused diff checks passed.
+- Commit `7c2a24ad` prevents SET targeting of a held-action Virtual Playback from firing its old
+  Flash/Swap target on pointer-down. Its regression test uses the real UI-library pointer path and
+  passed with focused Biome and diff checks.
+- Commit `08997cda` exposes deduplicated authoritative projected `(u, v)` coordinates from the same
+  projection plane used for ranking, retaining missing/non-finite Stage targets with absent
+  coordinates. Its focused Dynamics test passed in an isolated Cargo target.
+- Commit `37a6d983` removes the compatibility-only typed Group-assignment alias from new operator
+  help while preserving direct physical and Virtual SET-touch instructions. The semantic
+  documentation suite passed all eight tests.
+- A completion audit found that the retired per-selection grid remains live below the already
+  removed Layout surface: Group `grid`, Programmer selection-grid state/actions, generated wire,
+  OSC Shift gestures, Highlight controls, and startup migration still form a second ordering
+  authority. It also found canonical Group-reference selection gaps in the real HTTP selection
+  environment and legacy-shaped desktop Group readers, missing evaluation bounds, and no projected
+  `(u, v)` coordinates in the Group preview. These are implementation work, not verification-only
+  gaps, and must close before the major suites.
 
 ## Remaining work
 
@@ -226,12 +255,13 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   multiple legacy lane mappings without changing output; uniform and lane-consistent definitions now
   write through a local mapping while retaining their legacy ordering as the runtime compatibility
   marker.
-- Transfer the help-gallery fixture's non-default legacy levels to its real physical and virtual
-  Playback Group targets once `initial_master` preservation lands. Every other desktop runtime
-  reader, canonical Group writer, migration/recovery path, and portable fixture generator is clean;
-  remaining retired-field occurrences are explicit tolerant migration tests or stripping code.
-- Extend typed SET assignment to virtual Playbacks; the current connected path intentionally covers
-  physical page/slot Playbacks only because the server action has no virtual address variant yet.
+- Retire Group `grid`, Programmer selection-grid state/actions, generated wire/API representations,
+  OSC Shift gestures, desktop Highlight grid controls, and startup backfill. Preserve tolerant
+  legacy reads only where migration diagnostics require them, without allowing live authority.
+- Make the real selection environment and desktop Group projections resolve canonical explicit and
+  multi-reference sources/mappings rather than depending on legacy `fixtures`/`derived_from` fields.
+- Add explicit evaluation limits for reference depth, reference count, and resolved fixture count,
+  and expose projected `(u, v)` positions in the authoritative Group preview.
 
 ## Decision and superseded behavior
 
