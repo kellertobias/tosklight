@@ -49,6 +49,20 @@ function queuedPlaybackLabel(action: string, playbackNumber: number) {
 	return `${label} ${playbackNumber}`;
 }
 
+function pendingCommandSummary(
+	pendingValueCount: number,
+	actions: readonly { action: string; playbackNumber: number }[],
+) {
+	return [
+		pendingValueCount ? `PROG ${pendingValueCount}` : "",
+		...actions.map((pending) =>
+			queuedPlaybackLabel(pending.action, pending.playbackNumber),
+		),
+	]
+		.filter(Boolean)
+		.join(" · ");
+}
+
 function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	const shellStatus = useShellStatusActions();
 	const serverError = useServerError();
@@ -126,17 +140,10 @@ function useCommandLineBarModel() {
 		command.selected.length > 0 ||
 		(programmerActivity.ready && programmerActivity.valueCount > 0) ||
 		preload.active;
-	const pendingLabels = (preloadPlaybackQueue?.actions ?? []).map((pending) =>
-		queuedPlaybackLabel(pending.action, pending.playbackNumber),
+	const pendingSummary = pendingCommandSummary(
+		programmerActivity.pendingValueCount,
+		preloadPlaybackQueue?.actions ?? [],
 	);
-	const pendingSummary = [
-		programmerActivity.pendingValueCount
-			? `PROG ${programmerActivity.pendingValueCount}`
-			: "",
-		...pendingLabels,
-	]
-		.filter(Boolean)
-		.join(" · ");
 	const replaceCommand = (value: string, pristine = false) => {
 		if (!command.ready) return;
 		editGeneration.current++;

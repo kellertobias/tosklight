@@ -1,5 +1,6 @@
 import {
 	createContext,
+	type MutableRefObject,
 	type PropsWithChildren,
 	useCallback,
 	useContext,
@@ -67,6 +68,209 @@ const SetInteractionContext = createContext<SetInteractionController | null>(
 	null,
 );
 
+type ApplySetEvent = (
+	event: SetInteractionEvent,
+) => SetInteractionTerminalIntent | null;
+type WriteVisibleState = (next: SetInteractionState) => Promise<boolean>;
+
+function useInteractionScope(
+	deskId: string | null,
+	showId: string | null,
+	surfaceId: string,
+) {
+	return useMemo<ControlSurfaceInteractionScope | null>(
+		() => (deskId && showId ? { deskId, showId, surfaceId } : null),
+		[deskId, showId, surfaceId],
+	);
+}
+
+function useSetInteractionExit({
+	scope,
+	stateRef,
+	apply,
+	writeVisibleState,
+}: {
+	scope: ControlSurfaceInteractionScope | null;
+	stateRef: MutableRefObject<SetInteractionState | null>;
+	apply: ApplySetEvent;
+	writeVisibleState: WriteVisibleState;
+}) {
+	const leave = useCallback(
+		async (type: "clear" | "cancel") => {
+			if (!scope || stateRef.current?.phase === "idle") return false;
+			apply({ type, scope });
+			if (stateRef.current) await writeVisibleState(stateRef.current);
+			return true;
+		},
+		[apply, scope, stateRef, writeVisibleState],
+	);
+	const direct = useCallback(
+		async (
+			event: Extract<
+				SetInteractionEvent,
+				{
+					type:
+						| "select_group_live"
+						| "select_group_frozen"
+						| "open_group_settings";
+				}
+			>,
+		) => {
+			const replacesPending = stateRef.current?.phase !== "idle";
+			const intent = apply(event);
+			if (replacesPending && stateRef.current)
+				await writeVisibleState(stateRef.current);
+			if (intent?.type === "open_group_settings")
+				routeControlSurfaceIntentWithFeedback(intent);
+			return intent;
+		},
+		[apply, stateRef, writeVisibleState],
+	);
+	return { leave, direct };
+}
+
+function useCommandGroupRouting({
+	scope,
+	groupsReady,
+	state,
+	text,
+	groups,
+	chooseGroup,
+	apply,
+}: {
+	scope: ControlSurfaceInteractionScope | null;
+	groupsReady: boolean;
+	state: SetInteractionState | null;
+	text: string | undefined;
+	groups: ReturnType<typeof usePortableGroups>;
+	chooseGroup: SetInteractionController["chooseGroup"];
+	apply: ApplySetEvent;
+}) {
+	useEffect(() => {
+		if (!scope || !groupsReady || state?.phase !== "set_armed") return;
+		const commandText = text?.trim() ?? "";
+		const match = commandText.match(/^SET\s+GROUP\s+(\S+)$/i);
+		if (match) {
+			const group = groups.find((candidate) => candidate.id === match[1]);
+			if (group)
+				void chooseGroup(
+					{ objectId: group.id, objectRevision: group.revision },
+					"keyboard",
+				);
+			return;
+		}
+		if (commandText && !/^SET(?:\s+GROUP(?:\s+\S*)?)?$/i.test(commandText))
+			apply({ type: "cancel", scope });
+	}, [apply, chooseGroup, groups, groupsReady, scope, state?.phase, text]);
+}
+
+function useChoosePlayback({
+	scope,
+	stateRef,
+	apply,
+	writeVisibleState,
+	topology,
+}: {
+	scope: ControlSurfaceInteractionScope | null;
+	stateRef: MutableRefObject<SetInteractionState | null>;
+	apply: ApplySetEvent;
+	writeVisibleState: WriteVisibleState;
+	topology: ReturnType<typeof usePlaybackTopologyActions>;
+}) {
+	return useCallback(
+		async (
+			playback: PlaybackInteractionIdentity,
+			source: ControlSurfaceSource,
+		) => {
+			if (!scope) return null;
+			const intent = apply({
+				type: "choose_playback",
+				playback,
+				source,
+				scope,
+			});
+			if (intent && stateRef.current) await writeVisibleState(stateRef.current);
+			if (intent?.type === "assign_group_master") {
+				const options = {
+					expectedPageRevision: intent.playback.pageObjectRevision,
+					expectedPageObjectId: intent.playback.pageObjectId,
+				};
+				if (intent.playback.addressing === "virtual")
+					await topology?.assignVirtualGroupMaster(
+						intent.group.objectId,
+						intent.group.objectRevision,
+						intent.playback.pageNumber,
+						intent.playback.playbackNumber,
+						options,
+					);
+				else
+					await topology?.assignGroupMaster(
+						intent.group.objectId,
+						intent.group.objectRevision,
+						intent.playback.pageNumber,
+						intent.playback.slot,
+						{
+							...options,
+							expectedPlaybackRevision: intent.playback.playbackObjectRevision,
+							expectedPlaybackObjectId: intent.playback.playbackObjectId,
+						},
+					);
+			}
+			if (intent?.type === "open_playback_settings")
+				routeControlSurfaceIntentWithFeedback(intent);
+			return intent;
+		},
+		[apply, scope, stateRef, topology, writeVisibleState],
+	);
+}
+
+function useEnterSetInteraction({
+	scope,
+	stateRef,
+	apply,
+	writeVisibleState,
+	text,
+	groups,
+	groupsReady,
+}: {
+	scope: ControlSurfaceInteractionScope | null;
+	stateRef: MutableRefObject<SetInteractionState | null>;
+	apply: ApplySetEvent;
+	writeVisibleState: WriteVisibleState;
+	text: string | undefined;
+	groups: ReturnType<typeof usePortableGroups>;
+	groupsReady: boolean;
+}) {
+	return useCallback(
+		async (source: ControlSurfaceSource) => {
+			if (!scope || stateRef.current?.phase === "idle") return false;
+			if (stateRef.current?.phase === "set_armed") {
+				const commandText = text?.trim() ?? "";
+				if (commandText.toUpperCase() !== "SET") {
+					const match = commandText.match(/^SET\s+GROUP\s+(\S+)$/i);
+					const group =
+						groupsReady && match
+							? groups.find((candidate) => candidate.id === match[1])
+							: null;
+					if (!group) return false;
+					apply({
+						type: "choose_group",
+						source,
+						scope,
+						group: { objectId: group.id, objectRevision: group.revision },
+					});
+				}
+			}
+			const intent = apply({ type: "enter", source, scope });
+			if (stateRef.current) await writeVisibleState(stateRef.current);
+			if (intent?.type === "open_group_settings")
+				routeControlSurfaceIntentWithFeedback(intent);
+			return true;
+		},
+		[apply, groups, groupsReady, scope, stateRef, text, writeVisibleState],
+	);
+}
+
 export function SetInteractionProvider({
 	children,
 	deskId,
@@ -80,17 +284,7 @@ export function SetInteractionProvider({
 	const command = useProgrammingCommandLineActions();
 	const commandView = useProgrammingCommandLineView();
 	const topology = usePlaybackTopologyActions();
-	const scope = useMemo<ControlSurfaceInteractionScope | null>(
-		() =>
-			deskId && showId
-				? {
-						deskId,
-						showId,
-						surfaceId,
-					}
-				: null,
-		[deskId, showId, surfaceId],
-	);
+	const scope = useInteractionScope(deskId, showId, surfaceId);
 	const stateRef = useRef<SetInteractionState | null>(
 		scope ? initialSetInteractionState(scope) : null,
 	);
@@ -160,140 +354,40 @@ export function SetInteractionProvider({
 		[apply, scope, writeVisibleState],
 	);
 
-	useEffect(() => {
-		if (!scope || !groupsReady || state?.phase !== "set_armed") return;
-		const text = commandView?.text.trim() ?? "";
-		const match = text.match(/^SET\s+GROUP\s+(\S+)$/i);
-		if (match) {
-			const group = groups.find((candidate) => candidate.id === match[1]);
-			if (group)
-				void chooseGroup(
-					{ objectId: group.id, objectRevision: group.revision },
-					"keyboard",
-				);
-			return;
-		}
-		if (text && !/^SET(?:\s+GROUP(?:\s+\S*)?)?$/i.test(text))
-			apply({ type: "cancel", scope });
-	}, [
-		apply,
+	useCommandGroupRouting({
+		scope,
+		groupsReady,
+		state,
+		text: commandView?.text,
+		groups,
 		chooseGroup,
-		commandView?.text,
+		apply,
+	});
+
+	const choosePlayback = useChoosePlayback({
+		scope,
+		stateRef,
+		apply,
+		writeVisibleState,
+		topology,
+	});
+
+	const enter = useEnterSetInteraction({
+		scope,
+		stateRef,
+		apply,
+		writeVisibleState,
+		text: commandView?.text,
 		groups,
 		groupsReady,
+	});
+
+	const { leave, direct } = useSetInteractionExit({
 		scope,
-		state?.phase,
-	]);
-
-	const choosePlayback = useCallback(
-		async (
-			playback: PlaybackInteractionIdentity,
-			source: ControlSurfaceSource,
-		) => {
-			if (!scope) return null;
-			const intent = apply({
-				type: "choose_playback",
-				playback,
-				source,
-				scope,
-			});
-			if (intent && stateRef.current) await writeVisibleState(stateRef.current);
-			if (intent?.type === "assign_group_master")
-				if (intent.playback.addressing === "virtual")
-					await topology?.assignVirtualGroupMaster(
-						intent.group.objectId,
-						intent.group.objectRevision,
-						intent.playback.pageNumber,
-						intent.playback.playbackNumber,
-						{
-							expectedPageRevision: intent.playback.pageObjectRevision,
-							expectedPageObjectId: intent.playback.pageObjectId,
-						},
-					);
-				else
-					await topology?.assignGroupMaster(
-						intent.group.objectId,
-						intent.group.objectRevision,
-						intent.playback.pageNumber,
-						intent.playback.slot,
-						{
-							expectedPageRevision: intent.playback.pageObjectRevision,
-							expectedPageObjectId: intent.playback.pageObjectId,
-							expectedPlaybackRevision: intent.playback.playbackObjectRevision,
-							expectedPlaybackObjectId: intent.playback.playbackObjectId,
-						},
-					);
-			if (intent?.type === "open_playback_settings")
-				routeControlSurfaceIntentWithFeedback(intent);
-			return intent;
-		},
-		[apply, scope, topology, writeVisibleState],
-	);
-
-	const enter = useCallback(
-		async (source: ControlSurfaceSource) => {
-			if (!scope || stateRef.current?.phase === "idle") return false;
-			if (stateRef.current?.phase === "set_armed") {
-				const text = commandView?.text.trim() ?? "";
-				if (text.toUpperCase() !== "SET") {
-					const match = text.match(/^SET\s+GROUP\s+(\S+)$/i);
-					const group =
-						groupsReady && match
-							? groups.find((candidate) => candidate.id === match[1])
-							: null;
-					if (!group) return false;
-					apply({
-						type: "choose_group",
-						source,
-						scope,
-						group: {
-							objectId: group.id,
-							objectRevision: group.revision,
-						},
-					});
-				}
-			}
-			const intent = apply({ type: "enter", source, scope });
-			if (stateRef.current) await writeVisibleState(stateRef.current);
-			if (intent?.type === "open_group_settings")
-				routeControlSurfaceIntentWithFeedback(intent);
-			return true;
-		},
-		[apply, commandView?.text, groups, groupsReady, scope, writeVisibleState],
-	);
-
-	const leave = useCallback(
-		async (type: "clear" | "cancel") => {
-			if (!scope || stateRef.current?.phase === "idle") return false;
-			apply({ type, scope });
-			if (stateRef.current) await writeVisibleState(stateRef.current);
-			return true;
-		},
-		[apply, scope, writeVisibleState],
-	);
-
-	const direct = useCallback(
-		async (
-			event: Extract<
-				SetInteractionEvent,
-				{
-					type:
-						| "select_group_live"
-						| "select_group_frozen"
-						| "open_group_settings";
-				}
-			>,
-		) => {
-			const replacesPending = stateRef.current?.phase !== "idle";
-			const intent = apply(event);
-			if (replacesPending && stateRef.current)
-				await writeVisibleState(stateRef.current);
-			if (intent?.type === "open_group_settings")
-				routeControlSurfaceIntentWithFeedback(intent);
-			return intent;
-		},
-		[apply, writeVisibleState],
-	);
+		stateRef,
+		apply,
+		writeVisibleState,
+	});
 
 	const value = useMemo<SetInteractionController>(
 		() => ({

@@ -134,7 +134,137 @@ export function GroupSettingsDialog({
 		: null;
 	const displayedMapping = mapping ?? mappingPresentation.mapping;
 	const canEditMapping = Boolean(groupManagement && mapping);
-	const general = (
+	const commonPanelProps = {
+		group,
+		mappingPresentation,
+		displayedMapping,
+		resolvedSpatial,
+		status,
+		saving,
+		canEditMapping,
+		commitMapping,
+	};
+
+	return (
+		<GroupSettingsWindow
+			group={group}
+			onClose={onClose}
+			name={name}
+			color={color}
+			icon={icon}
+			saving={saving}
+			status={status}
+			setName={setName}
+			setColor={setColor}
+			setIcon={setIcon}
+			saveProperties={saveProperties}
+			commonPanelProps={commonPanelProps}
+			editingUnavailable={editingUnavailable}
+			hasManagement={Boolean(groupManagement)}
+		/>
+	);
+}
+
+function GroupSettingsWindow({
+	group,
+	onClose,
+	name,
+	color,
+	icon,
+	saving,
+	status,
+	setName,
+	setColor,
+	setIcon,
+	saveProperties,
+	commonPanelProps,
+	editingUnavailable,
+	hasManagement,
+}: {
+	group: Group;
+	onClose(): void;
+	name: string;
+	color: string;
+	icon: string;
+	saving: boolean;
+	status: string | null;
+	setName(value: string): void;
+	setColor(value: string): void;
+	setIcon(value: string): void;
+	saveProperties(next: {
+		name: string;
+		color: string;
+		icon: string;
+	}): Promise<void>;
+	commonPanelProps: MappingPanelProps;
+	editingUnavailable: string | null;
+	hasManagement: boolean;
+}) {
+	return (
+		<WindowSettings
+			title={`Group ${group.id} settings`}
+			onClose={onClose}
+			tabs={[
+				{
+					id: "general",
+					label: "General",
+					content: (
+						<GeneralSettingsPanel
+							name={name}
+							color={color}
+							icon={icon}
+							saving={saving}
+							status={status}
+							setName={setName}
+							setColor={setColor}
+							setIcon={setIcon}
+							save={saveProperties}
+						/>
+					),
+				},
+				{
+					id: "projection",
+					label: "Projection",
+					content: (
+						<ProjectionSettingsPanel
+							{...commonPanelProps}
+							editingUnavailable={editingUnavailable}
+							hasManagement={hasManagement}
+						/>
+					),
+				},
+				{
+					id: "phaser",
+					label: "Phaser",
+					content: <PhaserSettingsPanel {...commonPanelProps} />,
+				},
+			]}
+		/>
+	);
+}
+
+function GeneralSettingsPanel({
+	name,
+	color,
+	icon,
+	saving,
+	status,
+	setName,
+	setColor,
+	setIcon,
+	save,
+}: {
+	name: string;
+	color: string;
+	icon: string;
+	saving: boolean;
+	status: string | null;
+	setName(value: string): void;
+	setColor(value: string): void;
+	setIcon(value: string): void;
+	save(next: { name: string; color: string; icon: string }): Promise<void>;
+}) {
+	return (
 		<section className="group-settings-panel group-settings-general">
 			<fieldset disabled={saving} className="group-general-fields">
 				<FormLayout labelPlacement="side">
@@ -144,7 +274,7 @@ export function GroupSettingsDialog({
 						autoFocus
 						value={name}
 						onChange={(event) => setName(event.target.value)}
-						onBlur={() => void saveProperties({ name, color, icon })}
+						onBlur={() => void save({ name, color, icon })}
 						onKeyDown={(event) => {
 							if (event.key === "Enter") event.currentTarget.blur();
 						}}
@@ -154,7 +284,7 @@ export function GroupSettingsDialog({
 						value={color}
 						onChange={(next) => {
 							setColor(next);
-							void saveProperties({ name, color: next, icon });
+							void save({ name, color: next, icon });
 						}}
 					/>
 					<IconPickerField
@@ -162,7 +292,7 @@ export function GroupSettingsDialog({
 						value={icon}
 						onChange={(next) => {
 							setIcon(next);
-							void saveProperties({ name, color, icon: next });
+							void save({ name, color, icon: next });
 						}}
 					/>
 				</FormLayout>
@@ -170,7 +300,38 @@ export function GroupSettingsDialog({
 			<SaveStatus status={status} saving={saving} />
 		</section>
 	);
-	const projection = (
+}
+
+interface MappingPanelProps {
+	group: Group;
+	mappingPresentation: ReturnType<typeof resolveMappingPresentation>;
+	displayedMapping: SpatialSelectionMapping | null;
+	resolvedSpatial: ResolvedSpatialMapping | null;
+	status: string | null;
+	saving: boolean;
+	canEditMapping: boolean;
+	commitMapping(next: SpatialSelectionMapping | null): Promise<void>;
+}
+
+function ProjectionSettingsPanel(
+	props: MappingPanelProps & {
+		editingUnavailable: string | null;
+		hasManagement: boolean;
+	},
+) {
+	const {
+		group,
+		mappingPresentation,
+		displayedMapping,
+		resolvedSpatial,
+		status,
+		saving,
+		canEditMapping,
+		commitMapping,
+		editingUnavailable,
+		hasManagement,
+	} = props;
+	return (
 		<section className="group-settings-panel">
 			<MappingIdentity
 				label={mappingPresentation.label}
@@ -179,7 +340,7 @@ export function GroupSettingsDialog({
 			<MappingOwnershipActions
 				presentation={mappingPresentation.type}
 				hasInheritedSource={hasGroupReferenceSource(group.body)}
-				disabled={!groupManagement || saving}
+				disabled={!hasManagement || saving}
 				onCreate={() => void commitMapping(defaultSpatialMapping())}
 				onCopy={() =>
 					mappingPresentation.mapping &&
@@ -208,7 +369,19 @@ export function GroupSettingsDialog({
 			<SaveStatus status={status} saving={saving} />
 		</section>
 	);
-	const phaser = (
+}
+
+function PhaserSettingsPanel({
+	group,
+	mappingPresentation,
+	displayedMapping,
+	resolvedSpatial,
+	status,
+	saving,
+	canEditMapping,
+	commitMapping,
+}: MappingPanelProps) {
+	return (
 		<section className="group-settings-panel">
 			<MappingIdentity
 				label={mappingPresentation.label}
@@ -230,18 +403,6 @@ export function GroupSettingsDialog({
 			/>
 			<SaveStatus status={status} saving={saving} />
 		</section>
-	);
-
-	return (
-		<WindowSettings
-			title={`Group ${group.id} settings`}
-			onClose={onClose}
-			tabs={[
-				{ id: "general", label: "General", content: general },
-				{ id: "projection", label: "Projection", content: projection },
-				{ id: "phaser", label: "Phaser", content: phaser },
-			]}
-		/>
 	);
 }
 

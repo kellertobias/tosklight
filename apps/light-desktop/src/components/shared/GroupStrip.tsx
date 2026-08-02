@@ -158,6 +158,71 @@ function GroupShortcut({
 	);
 }
 
+function GroupShortcutList({
+	visible,
+	command,
+	state,
+	setInteraction,
+	groupSelection,
+	activateShortcut,
+	poolPresentation,
+	showId,
+	viewOnly,
+}: {
+	visible: readonly (ShortcutGroup | null)[];
+	command: ReturnType<typeof useCommandLineSurface>;
+	state: ReturnType<typeof useApp>["state"];
+	setInteraction: ReturnType<typeof useSetInteraction>;
+	groupSelection: ReturnType<typeof useGroupSelectionActions>;
+	activateShortcut(group: ShortcutGroup | null, index: number): void;
+	poolPresentation: PoolPresentationConfiguration;
+	showId: string;
+	viewOnly: boolean;
+}) {
+	return (
+		<>
+			{visible.map((group, index) => (
+				<GroupShortcut
+					key={group?.id ?? `empty-${index + 1}`}
+					group={group}
+					index={index}
+					selected={command.selectedGroupId === group?.id}
+					storeArmed={state.storeArmed}
+					updateArmed={state.updateArmed}
+					onClick={() => activateShortcut(group, index)}
+					onDoubleClick={() => {
+						if (group && !state.updateArmed) {
+							const scope = setInteraction?.state?.scope;
+							if (scope)
+								void setInteraction.direct({
+									type: "select_group_frozen",
+									source: "touch",
+									scope,
+									group: { objectId: group.id, objectRevision: group.revision },
+								});
+							void groupSelection.selectFrozen(group);
+						}
+					}}
+					onContextMenu={() => {
+						if (!group || state.updateArmed) return;
+						const scope = setInteraction?.state?.scope;
+						if (!scope) return;
+						void setInteraction.direct({
+							type: "open_group_settings",
+							source: "context_menu",
+							scope,
+							group: { objectId: group.id, objectRevision: group.revision },
+						});
+					}}
+					poolPresentation={poolPresentation}
+					showId={showId}
+					viewOnly={viewOnly}
+				/>
+			))}
+		</>
+	);
+}
+
 export function GroupStrip({
 	active = true,
 	viewOnly = false,
@@ -280,50 +345,17 @@ export function GroupStrip({
 				className="card-pool group-shortcut-grid"
 				style={{ "--group-shortcut-columns": slotCount } as React.CSSProperties}
 			>
-				{visible.map((group, index) => (
-					<GroupShortcut
-						key={group?.id ?? `empty-${index + 1}`}
-						group={group}
-						index={index}
-						selected={commandLine.selectedGroupId === group?.id}
-						storeArmed={state.storeArmed}
-						updateArmed={state.updateArmed}
-						onClick={() => activateShortcut(group, index)}
-						onDoubleClick={() => {
-							if (group && !state.updateArmed) {
-								const scope = setInteraction?.state?.scope;
-								if (scope)
-									void setInteraction.direct({
-										type: "select_group_frozen",
-										source: "touch",
-										scope,
-										group: {
-											objectId: group.id,
-											objectRevision: group.revision,
-										},
-									});
-								void groupSelection.selectFrozen(group);
-							}
-						}}
-						onContextMenu={() => {
-							if (!group || state.updateArmed) return;
-							const scope = setInteraction?.state?.scope;
-							if (!scope) return;
-							void setInteraction.direct({
-								type: "open_group_settings",
-								source: "context_menu",
-								scope,
-								group: {
-									objectId: group.id,
-									objectRevision: group.revision,
-								},
-							});
-						}}
-						poolPresentation={poolPresentation}
-						showId={showId}
-						viewOnly={viewOnly}
-					/>
-				))}
+				<GroupShortcutList
+					visible={visible}
+					command={commandLine}
+					state={state}
+					setInteraction={setInteraction}
+					groupSelection={groupSelection}
+					activateShortcut={activateShortcut}
+					poolPresentation={poolPresentation}
+					showId={showId}
+					viewOnly={viewOnly}
+				/>
 			</ButtonGrid>
 			{recordTarget && (
 				<RecordModeDialog

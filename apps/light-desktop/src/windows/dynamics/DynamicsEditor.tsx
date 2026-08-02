@@ -121,12 +121,7 @@ export function DynamicEditor({
 	const lane =
 		dynamic.body.lanes.find((candidate) => candidate.id === primaryLane) ??
 		dynamic.body.lanes[0];
-	const replaceLane = (next: DynamicLaneProjection, group?: string) =>
-		onMutate(
-			dynamic,
-			{ type: "replace_lane", lane_id: next.id, lane: next },
-			group,
-		);
+	const replaceLane = createReplaceLaneAction(dynamic, onMutate);
 	const selectLane = useLaneSelection(
 		setPrimaryLane,
 		setSelectedLanes,
@@ -163,25 +158,19 @@ export function DynamicEditor({
 		clearSelection,
 		onMutate,
 	});
-	useDynamicLaneSynchronization({
+	useEditorSynchronization({
 		dynamic,
 		session,
 		primaryLane,
 		setPrimaryLane,
 		setSelectedLanes,
 		updateEditor,
-	});
-	useDynamicPreviewAnimation({
 		previewing,
 		previewPhase,
 		previewCycleMillis,
 		setPreviewPhase,
-	});
-	useDynamicEditorSessionSync({
-		dynamicId: dynamic.id,
 		view,
 		encoderPage,
-		primaryLane,
 		primaryKeyframeIndex,
 		openEditor,
 	});
@@ -210,14 +199,12 @@ export function DynamicEditor({
 			contentSidebar={contentSidebar}
 			contentFooter={contentFooter}
 			projectionContent={
-				onLoadSpatialPreview && onApplySpatialMapping ? (
-					<DynamicProjectionView
-						dynamic={dynamic}
-						busy={busy}
-						loadPreview={onLoadSpatialPreview}
-						apply={onApplySpatialMapping}
-					/>
-				) : null
+				<DynamicProjectionContent
+					dynamic={dynamic}
+					busy={busy}
+					loadPreview={onLoadSpatialPreview}
+					apply={onApplySpatialMapping}
+				/>
 			}
 			onBack={onBack}
 			onChangeView={changeView}
@@ -235,6 +222,73 @@ export function DynamicEditor({
 			onSpeedGroupTap={onSpeedGroupTap}
 		/>
 	);
+}
+
+function useEditorSynchronization({
+	dynamic,
+	session,
+	primaryLane,
+	setPrimaryLane,
+	setSelectedLanes,
+	updateEditor,
+	previewing,
+	previewPhase,
+	previewCycleMillis,
+	setPreviewPhase,
+	view,
+	encoderPage,
+	primaryKeyframeIndex,
+	openEditor,
+}: Parameters<typeof useDynamicLaneSynchronization>[0] &
+	Parameters<typeof useDynamicPreviewAnimation>[0] & {
+		view: DynamicEditorView;
+		encoderPage: number;
+		primaryKeyframeIndex: number;
+		openEditor: Parameters<typeof useDynamicEditorSessionSync>[0]["openEditor"];
+	}) {
+	useDynamicLaneSynchronization({
+		dynamic,
+		session,
+		primaryLane,
+		setPrimaryLane,
+		setSelectedLanes,
+		updateEditor,
+	});
+	useDynamicPreviewAnimation({
+		previewing,
+		previewPhase,
+		previewCycleMillis,
+		setPreviewPhase,
+	});
+	useDynamicEditorSessionSync({
+		dynamicId: dynamic.id,
+		view,
+		encoderPage,
+		primaryLane,
+		primaryKeyframeIndex,
+		openEditor,
+	});
+}
+
+function DynamicProjectionContent({
+	dynamic,
+	busy,
+	loadPreview,
+	apply,
+}: {
+	dynamic: DynamicObject;
+	busy: boolean;
+	loadPreview: DynamicEditorProps["onLoadSpatialPreview"];
+	apply: DynamicEditorProps["onApplySpatialMapping"];
+}) {
+	return loadPreview && apply ? (
+		<DynamicProjectionView
+			dynamic={dynamic}
+			busy={busy}
+			loadPreview={loadPreview}
+			apply={apply}
+		/>
+	) : null;
 }
 
 function editorSupplementalContent({
@@ -302,6 +356,18 @@ function createAddLaneAction(
 			index: null,
 		});
 	};
+}
+
+function createReplaceLaneAction(
+	dynamic: DynamicObject,
+	onMutate: DynamicEditorProps["onMutate"],
+) {
+	return (next: DynamicLaneProjection, group?: string) =>
+		onMutate(
+			dynamic,
+			{ type: "replace_lane", lane_id: next.id, lane: next },
+			group,
+		);
 }
 
 function useTargetBindingActions(

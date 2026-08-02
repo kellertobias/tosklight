@@ -4,7 +4,7 @@ import {
 	type PoolSlotViewModel,
 } from "@tosklight/ui/pools";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
-import { useRef } from "react";
+import { type MutableRefObject, useRef } from "react";
 import type { CommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import { requestUpdateTarget } from "../../components/control/updateWorkflow";
 import { useSetInteraction } from "../../features/controlSurfaceInteraction/SetInteractionProvider";
@@ -22,6 +22,92 @@ import {
 import { useApp } from "../../state/AppContext";
 import { GroupCard } from "./GroupCard";
 import type { FixtureMetadata, Group } from "./model";
+
+interface GroupPoolCardSlotProps
+	extends Pick<FixtureMetadata, "capabilities" | "knownFixtureIds"> {
+	group: Group | null;
+	index: number;
+	selected: boolean;
+	storeArmed: boolean;
+	updateArmed: boolean;
+	poolPresentation: ReturnType<typeof usePoolPresentationConfiguration>;
+	showId: string;
+	surfaceKey: string;
+	setInteraction: ReturnType<typeof useSetInteraction>;
+	select(): void;
+	dereference(group: Group): void;
+	onOpenSettings(id: string): void;
+	hold: MutableRefObject<number | null>;
+	held: MutableRefObject<boolean>;
+}
+
+function GroupPoolCardSlot({
+	group,
+	index,
+	selected,
+	storeArmed,
+	updateArmed,
+	poolPresentation,
+	showId,
+	surfaceKey,
+	setInteraction,
+	select,
+	dereference,
+	onOpenSettings,
+	knownFixtureIds,
+	capabilities,
+	hold,
+	held,
+}: GroupPoolCardSlotProps) {
+	const cancelHold = () => {
+		if (hold.current) window.clearTimeout(hold.current);
+		hold.current = null;
+	};
+	const openSettings = (source: "touch" | "context_menu") => {
+		if (!group) return;
+		const scope = setInteraction?.state?.scope;
+		if (!scope) return onOpenSettings(group.id);
+		void setInteraction.direct({
+			type: "open_group_settings",
+			source,
+			scope,
+			group: { objectId: group.id, objectRevision: group.revision },
+		});
+	};
+	return (
+		<GroupCard
+			group={group}
+			index={index}
+			poolSlotId={String(group?.id ?? index + 1)}
+			knownFixtureIds={knownFixtureIds}
+			capabilities={capabilities}
+			selected={selected}
+			storeArmed={storeArmed}
+			updateArmed={updateArmed}
+			poolPresentation={poolPresentation}
+			showId={showId}
+			surfaceKey={surfaceKey}
+			beginHold={() => {
+				if (group && !updateArmed) {
+					held.current = false;
+					hold.current = window.setTimeout(() => {
+						held.current = true;
+						openSettings("touch");
+					}, 600);
+				}
+			}}
+			cancelHold={cancelHold}
+			consumeHold={() => {
+				const consumed = held.current;
+				held.current = false;
+				return consumed;
+			}}
+			openSettings={() => openSettings("context_menu")}
+			dereference={() => group && dereference(group)}
+			select={select}
+		/>
+	);
+}
 
 export function GroupPoolGrid({
 	active = true,
@@ -52,15 +138,6 @@ export function GroupPoolGrid({
 	const surfaceKey = poolSurfaceKey(showId, "group", paneId);
 	const hold = useRef<number | null>(null);
 	const held = useRef(false);
-	const cancelHold = () => {
-		if (hold.current) window.clearTimeout(hold.current);
-		hold.current = null;
-	};
-	const consumeHold = () => {
-		const consumed = held.current;
-		held.current = false;
-		return consumed;
-	};
 	const selectCard = (group: Group | null, index: number) => {
 		const id = group?.id ?? String(index + 1);
 		if (state.updateArmed) {
@@ -128,6 +205,17 @@ export function GroupPoolGrid({
 				]
 			: [],
 	);
+	const dereference = (group: Group) => {
+		const scope = setInteraction?.state?.scope;
+		if (scope)
+			void setInteraction.direct({
+				type: "select_group_frozen",
+				source: "touch",
+				scope,
+				group: { objectId: group.id, objectRevision: group.revision },
+			});
+		void groupSelection.selectFrozen(group);
+	};
 
 	return (
 		<WindowScrollArea>
@@ -144,70 +232,23 @@ export function GroupPoolGrid({
 				renderSlot={(_, index) => {
 					const group = cards[index] ?? null;
 					return (
-						<GroupCard
+						<GroupPoolCardSlot
 							group={group}
 							index={index}
-							poolSlotId={String(group?.id ?? index + 1)}
-							knownFixtureIds={knownFixtureIds}
-							capabilities={capabilities}
 							selected={command.selectedGroupId === group?.id}
 							storeArmed={state.storeArmed}
 							updateArmed={state.updateArmed}
 							poolPresentation={poolPresentation}
 							showId={showId}
 							surfaceKey={surfaceKey}
-							beginHold={() => {
-								if (group && !state.updateArmed) {
-									held.current = false;
-									hold.current = window.setTimeout(() => {
-										held.current = true;
-										const scope = setInteraction?.state?.scope;
-										if (scope)
-											void setInteraction.direct({
-												type: "open_group_settings",
-												source: "touch",
-												scope,
-												group: {
-													objectId: group.id,
-													objectRevision: group.revision,
-												},
-											});
-										else onOpenSettings(group.id);
-									}, 600);
-								}
-							}}
-							cancelHold={cancelHold}
-							consumeHold={consumeHold}
-							openSettings={() => {
-								if (!group) return;
-								const scope = setInteraction?.state?.scope;
-								if (!scope) return onOpenSettings(group.id);
-								void setInteraction.direct({
-									type: "open_group_settings",
-									source: "context_menu",
-									scope,
-									group: {
-										objectId: group.id,
-										objectRevision: group.revision,
-									},
-								});
-							}}
-							dereference={() => {
-								if (!group) return;
-								const scope = setInteraction?.state?.scope;
-								if (scope)
-									void setInteraction.direct({
-										type: "select_group_frozen",
-										source: "touch",
-										scope,
-										group: {
-											objectId: group.id,
-											objectRevision: group.revision,
-										},
-									});
-								void groupSelection.selectFrozen(group);
-							}}
+							setInteraction={setInteraction}
 							select={() => selectCard(group, index)}
+							dereference={dereference}
+							onOpenSettings={onOpenSettings}
+							knownFixtureIds={knownFixtureIds}
+							capabilities={capabilities}
+							hold={hold}
+							held={held}
 						/>
 					);
 				}}

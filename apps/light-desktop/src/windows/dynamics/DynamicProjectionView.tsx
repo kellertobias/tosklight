@@ -134,109 +134,29 @@ export function DynamicProjectionView({
 
 	return (
 		<div className="dynamic-projection-view">
-			<section className="dynamic-projection-card">
-				<h2>Projection</h2>
-				<strong>{dynamicMappingBaseLabel(dynamic.body.target_binding)}</strong>
-				{preview?.base.type === "live_group" && (
-					<p>
-						Group mapping provenance:{" "}
-						{provenanceLabel(preview.base.mapping_provenance)}
-					</p>
-				)}
-				<p className="dynamic-projection-help">
-					Preview uses this Dynamic’s saved target binding, never the current
-					Programmer selection.
-				</p>
-			</section>
+			<ProjectionHeader dynamic={dynamic} preview={preview} />
 
-			<section className="dynamic-projection-card">
-				<h3>Projection stage</h3>
-				<label>
-					<input
-						type="radio"
-						checked={draft.projection.type === "inherit"}
-						onChange={() => changeProjection(false)}
-					/>{" "}
-					Inherit
-				</label>
-				<label>
-					<input
-						type="radio"
-						checked={draft.projection.type === "replace"}
-						onChange={() => changeProjection(true)}
-					/>{" "}
-					Override
-				</label>
-				{draft.projection.type === "replace" && (
-					<ProjectionFields
-						value={draft.projection.value}
-						onChange={(value) =>
-							setDraft((current) => ({
-								...current,
-								projection: { type: "replace", value },
-							}))
-						}
-					/>
-				)}
-			</section>
-
-			<section className="dynamic-projection-card">
-				<h3>Phaser shape</h3>
-				<label>
-					<input
-						type="radio"
-						checked={draft.shape.type === "inherit"}
-						onChange={() => changeShape(false)}
-					/>{" "}
-					Inherit
-				</label>
-				<label>
-					<input
-						type="radio"
-						checked={draft.shape.type === "replace"}
-						onChange={() => changeShape(true)}
-					/>{" "}
-					Override
-				</label>
-				{draft.shape.type === "replace" && (
-					<ShapeFields
-						value={draft.shape.value}
-						onChange={(value) =>
-							setDraft((current) => ({
-								...current,
-								shape: { type: "replace", value },
-							}))
-						}
-					/>
-				)}
-			</section>
-
-			<section className="dynamic-projection-card dynamic-projection-preview">
-				<h3>Authoritative preview</h3>
-				{loading ? (
-					<p>Refreshing preview…</p>
-				) : preview?.ordered_fixture_ids.length ? (
-					<ol>
-						{preview.ordered_fixture_ids.map((id, index) => (
-							<li key={id}>
-								<code>{id}</code>
-								<span>rank {preview.ranks[index]?.rank ?? index + 1}</span>
-							</li>
-						))}
-					</ol>
-				) : (
-					<p>No saved targets to rank.</p>
-				)}
-				{preview?.warnings.map((warning, index) => (
-					<p
-						className="dynamics-warning"
-						key={`${warning.fixture_id}-${index}`}
-					>
-						Fixture {warning.fixture_id} has no Stage position and follows saved
-						selection order.
-					</p>
-				))}
-			</section>
+			<ProjectionControls
+				draft={draft}
+				onOverride={changeProjection}
+				onChange={(value) =>
+					setDraft((current) => ({
+						...current,
+						projection: { type: "replace", value },
+					}))
+				}
+			/>
+			<ShapeControls
+				draft={draft}
+				onOverride={changeShape}
+				onChange={(value) =>
+					setDraft((current) => ({
+						...current,
+						shape: { type: "replace", value },
+					}))
+				}
+			/>
+			<ProjectionPreview loading={loading} preview={preview} />
 
 			{validation && (
 				<p className="dynamics-warning" role="alert">
@@ -262,6 +182,135 @@ export function DynamicProjectionView({
 				Apply
 			</Button>
 		</div>
+	);
+}
+
+function ProjectionHeader({
+	dynamic,
+	preview,
+}: {
+	dynamic: DynamicObject;
+	preview: DynamicSpatialPreviewResponse | null;
+}) {
+	return (
+		<section className="dynamic-projection-card">
+			<h2>Projection</h2>
+			<strong>{dynamicMappingBaseLabel(dynamic.body.target_binding)}</strong>
+			{preview?.base.type === "live_group" && (
+				<p>
+					Group mapping provenance:{" "}
+					{provenanceLabel(preview.base.mapping_provenance)}
+				</p>
+			)}
+			<p className="dynamic-projection-help">
+				Preview uses this Dynamic’s saved target binding, never the current
+				Programmer selection.
+			</p>
+		</section>
+	);
+}
+
+function ProjectionControls({
+	draft,
+	onOverride,
+	onChange,
+}: {
+	draft: ReturnType<typeof dynamicSpatialDraft>;
+	onOverride(override: boolean): void;
+	onChange(value: typeof TOP_PROJECTION): void;
+}) {
+	return (
+		<section className="dynamic-projection-card">
+			<h3>Projection stage</h3>
+			<label>
+				<input
+					type="radio"
+					checked={draft.projection.type === "inherit"}
+					onChange={() => onOverride(false)}
+				/>{" "}
+				Inherit
+			</label>
+			<label>
+				<input
+					type="radio"
+					checked={draft.projection.type === "replace"}
+					onChange={() => onOverride(true)}
+				/>{" "}
+				Override
+			</label>
+			{draft.projection.type === "replace" && (
+				<ProjectionFields value={draft.projection.value} onChange={onChange} />
+			)}
+		</section>
+	);
+}
+
+function ShapeControls({
+	draft,
+	onOverride,
+	onChange,
+}: {
+	draft: ReturnType<typeof dynamicSpatialDraft>;
+	onOverride(override: boolean): void;
+	onChange(value: DynamicSelectionShapeProjection): void;
+}) {
+	return (
+		<section className="dynamic-projection-card">
+			<h3>Phaser shape</h3>
+			<label>
+				<input
+					type="radio"
+					checked={draft.shape.type === "inherit"}
+					onChange={() => onOverride(false)}
+				/>{" "}
+				Inherit
+			</label>
+			<label>
+				<input
+					type="radio"
+					checked={draft.shape.type === "replace"}
+					onChange={() => onOverride(true)}
+				/>{" "}
+				Override
+			</label>
+			{draft.shape.type === "replace" && (
+				<ShapeFields value={draft.shape.value} onChange={onChange} />
+			)}
+		</section>
+	);
+}
+
+function ProjectionPreview({
+	loading,
+	preview,
+}: {
+	loading: boolean;
+	preview: DynamicSpatialPreviewResponse | null;
+}) {
+	return (
+		<section className="dynamic-projection-card dynamic-projection-preview">
+			<h3>Authoritative preview</h3>
+			{loading ? (
+				<p>Refreshing preview…</p>
+			) : preview?.ordered_fixture_ids.length ? (
+				<ol>
+					{preview.ordered_fixture_ids.map((id, index) => (
+						<li key={id}>
+							<code>{id}</code>
+							<span>rank {preview.ranks[index]?.rank ?? index + 1}</span>
+						</li>
+					))}
+				</ol>
+			) : (
+				<p>No saved targets to rank.</p>
+			)}
+			{preview?.warnings.map((warning, index) => (
+				<p className="dynamics-warning" key={`${warning.fixture_id}-${index}`}>
+					Fixture {warning.fixture_id} has no Stage position and follows saved
+					selection order.
+				</p>
+			))}
+		</section>
 	);
 }
 
