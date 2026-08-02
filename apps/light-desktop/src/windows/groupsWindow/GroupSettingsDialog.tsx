@@ -7,8 +7,8 @@ import {
 } from "@tosklight/ui";
 import { WindowSettings } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useState } from "react";
-import type { GroupResolvedSpatialProjection } from "../../api/generated/light-wire";
 import { useGroupManagement } from "../../features/groupManagement/GroupManagementProvider";
+import type { ResolvedSpatialMapping } from "../../features/spatialMapping/contracts";
 import type { Group } from "./model";
 import {
 	defaultSpatialMapping,
@@ -45,7 +45,7 @@ export function GroupSettingsDialog({
 	const [status, setStatus] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [resolvedSpatial, setResolvedSpatial] =
-		useState<GroupResolvedSpatialProjection | null>(null);
+		useState<ResolvedSpatialMapping | null>(null);
 	const refreshSettings = useCallback(async () => {
 		if (!groupManagement) return null;
 		const snapshot = await groupManagement.settings(group.id);
@@ -550,7 +550,7 @@ function MappingPreview({
 }: {
 	title: string;
 	fixtures: number;
-	resolved: GroupResolvedSpatialProjection | null;
+	resolved: ResolvedSpatialMapping | null;
 }) {
 	return (
 		<section className="group-mapping-preview" aria-label={title}>
@@ -602,7 +602,7 @@ function formatCoordinate(value: number) {
 }
 
 function resolvedMappingPresentation(
-	resolved: GroupResolvedSpatialProjection,
+	resolved: ResolvedSpatialMapping,
 ): ReturnType<typeof resolveMappingPresentation> {
 	const mapping = resolved.effective_mapping ?? null;
 	switch (resolved.mapping_provenance.type) {

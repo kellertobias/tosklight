@@ -1,15 +1,14 @@
-import type {
-	DynamicSelectionShapeProjection,
-	DynamicSpatialMappingOverrideProjection,
-	DynamicSpatialProjectionStageProjection,
-	DynamicSpatialShapeStageProjection,
-	GroupMappingProjection,
-} from "../../api/generated/light-wire";
 import type { DynamicTargetBindingProjection } from "../../api/types";
+import type {
+	DynamicProjectionStage,
+	DynamicSelectionShape,
+	DynamicShapeStage,
+	DynamicSpatialMapping,
+	SpatialProjection,
+} from "../spatialMapping/contracts";
 
-export type DynamicMappingShape = DynamicSelectionShapeProjection;
-export type DynamicSpatialMappingDraft =
-	DynamicSpatialMappingOverrideProjection;
+export type DynamicMappingShape = DynamicSelectionShape;
+export type DynamicSpatialMappingDraft = DynamicSpatialMapping;
 
 export const INHERIT_SPATIAL_MAPPING: DynamicSpatialMappingDraft = {
 	projection: { type: "inherit" },
@@ -68,9 +67,7 @@ export function sameDynamicSpatialDraft(
 	return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function projectionStage(
-	value: unknown,
-): DynamicSpatialProjectionStageProjection {
+function projectionStage(value: unknown): DynamicProjectionStage {
 	if (
 		!isRecord(value) ||
 		value.type !== "replace" ||
@@ -80,13 +77,13 @@ function projectionStage(
 	return { type: "replace", value: structuredClone(value.value) };
 }
 
-function shapeStage(value: unknown): DynamicSpatialShapeStageProjection {
+function shapeStage(value: unknown): DynamicShapeStage {
 	if (!isRecord(value) || value.type !== "replace" || !isShape(value.value))
 		return { type: "inherit" };
 	return { type: "replace", value: structuredClone(value.value) };
 }
 
-function validateProjection(projection: GroupMappingProjection) {
+function validateProjection(projection: SpatialProjection) {
 	const values = [
 		projection.anchor.x,
 		projection.anchor.y,
@@ -122,7 +119,7 @@ function validateShape(shape: DynamicMappingShape) {
 		: null;
 }
 
-function isProjection(value: unknown): value is GroupMappingProjection {
+function isProjection(value: unknown): value is SpatialProjection {
 	if (!isRecord(value)) return false;
 	return (
 		isPosition(value.anchor) &&

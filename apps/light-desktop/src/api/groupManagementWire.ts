@@ -6,8 +6,10 @@ import type {
 	ManagedGroupProjection,
 } from "../features/groupManagement/contracts";
 import type {
-	GroupResolvedSpatialProjection,
-	GroupSpatialSelectionMapping,
+	ResolvedSpatialMapping,
+	SpatialSelectionMapping,
+} from "../features/spatialMapping/contracts";
+import type {
 	GroupManagementErrorKind as WireGroupManagementErrorKind,
 	GroupManagementOperation as WireGroupManagementOperation,
 	GroupManagementRequest as WireGroupManagementRequest,
@@ -230,7 +232,7 @@ function decodeProjection(
 	};
 }
 
-function decodeResolvedSpatial(value: unknown): GroupResolvedSpatialProjection {
+function decodeResolvedSpatial(value: unknown): ResolvedSpatialMapping {
 	const spatial = exactRecordAt(value, "$.resolved_spatial", [
 		"source_order",
 		"effective_mapping",
@@ -372,7 +374,7 @@ function decodeMappingProvenance(value: unknown, path: string) {
 function decodeSpatialMapping(
 	value: unknown,
 	path: string,
-): GroupSpatialSelectionMapping {
+): SpatialSelectionMapping {
 	const mapping = exactRecordAt(value, path, ["projection", "shape"]);
 	const projection = exactRecordAt(mapping.projection, `${path}.projection`, [
 		"anchor",
@@ -419,7 +421,7 @@ function decodePosition(value: unknown, path: string) {
 function decodeShape(
 	value: unknown,
 	path: string,
-): GroupSpatialSelectionMapping["shape"] {
+): SpatialSelectionMapping["shape"] {
 	const shape = recordAt(value, path);
 	const type = enumAt(shape.type, `${path}.type`, ["grid", "radial", "radar"]);
 	if (type === "grid") {

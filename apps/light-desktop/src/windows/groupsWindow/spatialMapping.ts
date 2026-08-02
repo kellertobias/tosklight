@@ -1,24 +1,26 @@
-import type {
-	GroupMappingPosition3d,
-	GroupMappingProjection,
-	GroupMappingProjectionPreset,
-	GroupMappingRadarSweep,
-	GroupMappingRadialDirection,
-	GroupMappingRankDirection,
-	GroupMappingShape,
-	GroupSpatialSelectionMapping,
-} from "../../api/generated/light-wire";
 import type { StoredGroup } from "../../api/types";
+import type {
+	Position3d,
+	ProjectionPreset,
+	RadarSweep,
+	RadialDirection,
+	RankDirection,
+	SpatialProjection,
+	SpatialSelectionMapping,
+	SpatialSelectionShape,
+} from "../../features/spatialMapping/contracts";
 import type { Group } from "./model";
 
-export type ProjectionPreset = GroupMappingProjectionPreset;
-export type RankDirection = GroupMappingRankDirection;
-export type RadialDirection = GroupMappingRadialDirection;
-export type RadarSweep = GroupMappingRadarSweep;
-export type Position3d = GroupMappingPosition3d;
-export type SpatialProjection = GroupMappingProjection;
-export type SpatialSelectionShape = GroupMappingShape;
-export type SpatialSelectionMapping = GroupSpatialSelectionMapping;
+export type {
+	Position3d,
+	ProjectionPreset,
+	RadarSweep,
+	RadialDirection,
+	RankDirection,
+	SpatialProjection,
+	SpatialSelectionMapping,
+	SpatialSelectionShape,
+};
 
 export type GroupMappingPresentation =
 	| { type: "none"; label: "Mapping: None"; mapping: null }

@@ -1,8 +1,8 @@
-import type {
-	GroupResolvedSpatialProjection,
-	GroupSpatialSelectionMapping,
-} from "../../api/generated/light-wire";
 import type { ShowObject } from "../showObjects/contracts";
+import type {
+	ResolvedSpatialMapping,
+	SpatialSelectionMapping,
+} from "../spatialMapping/contracts";
 
 export interface GroupPropertiesUpdate {
 	name: string;
@@ -21,7 +21,7 @@ export type GroupManagementOperation =
 	| { type: "undo" }
 	| { type: "refresh_frozen"; expectedSource: GroupSourceExpectation | null }
 	| { type: "detach_derived"; expectedSource: GroupSourceExpectation | null }
-	| { type: "set_spatial_mapping"; mapping: GroupSpatialSelectionMapping }
+	| { type: "set_spatial_mapping"; mapping: SpatialSelectionMapping }
 	| { type: "remove_spatial_mapping" };
 
 export interface GroupManagementRequest {
@@ -42,7 +42,7 @@ export interface GroupSettingsSnapshot {
 	showId: string;
 	showRevision: number;
 	group: ManagedGroupProjection;
-	resolvedSpatial: GroupResolvedSpatialProjection;
+	resolvedSpatial: ResolvedSpatialMapping;
 }
 
 interface GroupManagementOutcomeBase {
