@@ -5,8 +5,9 @@
 **Manual review and specification only.** This plan records a future operator-behavior audit. It does not implement preload behavior, playback behavior, API behavior, UI changes, OSC behavior, or executable tests.
 
 The dedicated Virtual Playback identity, addressing, exclusion-zone, and
-Virtual-Playback-specific release contract is owned by
-[refactoring chunk 15](../refactoring/pending/15-virtual-playbacks-and-exclusion-zones.md).
+Virtual-Playback-specific release contract was completed by the Virtual Playbacks and Exclusion
+Zones refactoring work, now recorded in the
+[major refactoring execution](../Done/major-refactoring-execution.DONE.md).
 This review retains the broader comparison between Programmer, cue-like scenes,
 ordinary Playbacks, and Virtual Playbacks; it must not define a second Virtual
 Playback model.

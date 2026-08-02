@@ -26,7 +26,7 @@ rendered-video stream.
 The earlier [`60-dedicated-renderer-and-paperwork-app.md`](./60-dedicated-renderer-and-paperwork-app.md) is the short seed plan from which this specification grew. Where the two differ, the canonical application plan in this folder is authoritative.
 
 Queued follow-up work lives with the other queued plans:
-[`../../Next/77-viz-one-application-and-editor-demo-show.md`](../../Next/77-viz-one-application-and-editor-demo-show.md)
+[`../../Next/08-viz-one-application-and-editor-demo-show.md`](../../Next/08-viz-one-application-and-editor-demo-show.md)
 covers one application identity for the editor and the visualizer, the editor window that opens
 white, and a demo show the editor can open and drive without DMX.
 

@@ -1006,7 +1006,7 @@ Closed since the third implementation pass:
   what it is holding, and each offers the other's show: **Load from Desk** in the editor's file
   bar, **Load from Visualizer** in the desk's Load Show menu. Both transfers are a copy through a
   portable show file, and a network without discovery costs the button and nothing else. See
-  [78-desk-and-viz-discovery](../../Next/78-desk-and-viz-discovery.md).
+  [Desk and Viz Discovery](../../Done/78-desk-and-viz-discovery.DONE.md).
 
 - Gobo artwork travels in the fixture package. A profile declares its wheel as `profile.gobos` —
   slot, name and a mask where light passes through white — and the shipped moving heads carry one.
