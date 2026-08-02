@@ -1,7 +1,10 @@
 import type { PatchedFixture } from "../../api/types";
+import { frontendPerformanceDiagnostics } from "../frontendWarmup/diagnostics";
 import type {
 	PatchEventMessage,
 	PatchFixturePolicyAction,
+	PatchFixtureUpdateAction,
+	PatchInstalledFixtureAppearance,
 	PatchMutation,
 	PatchMutationOutcome,
 	PatchPlacement,
@@ -9,10 +12,10 @@ import type {
 } from "./contracts";
 import {
 	changedPatchFixtureCandidate,
+	defaultInstalledFixtureAppearance,
 	type PatchDefinitionResolver,
 	type PatchFixtureCandidate,
 } from "./model";
-import { type PatchEventStream, type PatchTransport } from "./transport";
 import {
 	asError,
 	authorityChanged,
@@ -22,7 +25,7 @@ import {
 	shouldRepair,
 } from "./mutationSupport";
 import { PatchStore } from "./store";
-import { frontendPerformanceDiagnostics } from "../frontendWarmup/diagnostics";
+import type { PatchEventStream, PatchTransport } from "./transport";
 
 export interface PatchSessionOptions {
 	showId: string;
@@ -146,7 +149,9 @@ export class PatchSession {
 		});
 	}
 
-	spreadFixtureVector(spread: PatchVectorSpread): Promise<PatchMutationOutcome> {
+	spreadFixtureVector(
+		spread: PatchVectorSpread,
+	): Promise<PatchMutationOutcome> {
 		if (this.writableLifecycle() == null)
 			return Promise.reject(authorityChanged());
 		const materialize = () =>
@@ -163,7 +168,51 @@ export class PatchSession {
 	updatePolicy(
 		fixtureId: string,
 		action: PatchFixturePolicyAction,
-		changes: Partial<PatchedFixture>,
+		_changes: Partial<PatchedFixture>,
+	): Promise<PatchMutationOutcome> {
+		if (this.writableLifecycle() == null)
+			return Promise.reject(authorityChanged());
+		const fixture = this.store
+			.getSnapshot()
+			.fixtures.find((candidate) => candidate.fixture_id === fixtureId);
+		if (!fixture)
+			return Promise.reject(new Error("Patched fixture was not found"));
+		if (action.type === "group_masters")
+			return this.updateFixtureIntent(fixtureId, null, {
+				type: "set_masters",
+				groupMastersEnabled: action.controlled,
+				grandMasterEnabled: fixture.grand_master_enabled ?? true,
+			});
+		if (action.type === "grand_master")
+			return this.updateFixtureIntent(fixtureId, null, {
+				type: "set_masters",
+				groupMastersEnabled: fixture.group_masters_enabled ?? true,
+				grandMasterEnabled: action.controlled,
+			});
+		const physical = action.multipatchInstanceId
+			? fixture.multipatch?.find(
+					(instance) => instance.id === action.multipatchInstanceId,
+				)
+			: fixture;
+		if (!physical)
+			return Promise.reject(new Error("Multi-patch instance was not found"));
+		return this.updateFixtureIntent(fixtureId, action.multipatchInstanceId, {
+			type: "set_pan_tilt",
+			invertPan:
+				action.axis === "pan"
+					? action.inverted
+					: (physical.invert_pan ?? false),
+			invertTilt:
+				action.axis === "tilt"
+					? action.inverted
+					: (physical.invert_tilt ?? false),
+		});
+	}
+
+	updateFixtureIntent(
+		fixtureId: string,
+		multipatchInstanceId: string | null,
+		action: PatchFixtureUpdateAction,
 	): Promise<PatchMutationOutcome> {
 		const lifecycle = this.writableLifecycle();
 		if (lifecycle == null) return Promise.reject(authorityChanged());
@@ -173,17 +222,28 @@ export class PatchSession {
 		if (!fixture)
 			return Promise.reject(new Error("Patched fixture was not found"));
 		const requestId = crypto.randomUUID();
-		const optimistic = changedPatchFixtureCandidate(fixture, changes);
-		const performanceSample =
-			frontendPerformanceDiagnostics.beginPatchMutation(requestId, 1);
+		let optimistic: PatchFixtureCandidate;
+		try {
+			optimistic = fixtureUpdateCandidate(
+				fixture,
+				multipatchInstanceId,
+				action,
+			);
+		} catch (reason) {
+			return Promise.reject(asError(reason));
+		}
+		const performanceSample = frontendPerformanceDiagnostics.beginPatchMutation(
+			requestId,
+			1,
+		);
 		this.store.begin(requestId, [optimistic], []);
 		performanceSample.optimisticStorePublished();
 		return this.enqueueWrite(() =>
-			this.runPolicy(
+			this.runFixtureUpdate(
 				requestId,
 				fixtureId,
+				multipatchInstanceId,
 				action,
-				changes,
 				lifecycle,
 				performanceSample,
 			),
@@ -204,11 +264,10 @@ export class PatchSession {
 		const lifecycle = this.writableLifecycle();
 		if (lifecycle == null) return Promise.reject(authorityChanged());
 		const requestId = crypto.randomUUID();
-		const performanceSample =
-			frontendPerformanceDiagnostics.beginPatchMutation(
-				requestId,
-				initial.length,
-			);
+		const performanceSample = frontendPerformanceDiagnostics.beginPatchMutation(
+			requestId,
+			initial.length,
+		);
 		this.store.begin(requestId, initial, removeFixtureIds);
 		performanceSample.optimisticStorePublished();
 		return this.enqueueWrite(() =>
@@ -260,11 +319,11 @@ export class PatchSession {
 		}
 	}
 
-	private async runPolicy(
+	private async runFixtureUpdate(
 		requestId: string,
 		fixtureId: string,
-		action: PatchFixturePolicyAction,
-		changes: Partial<PatchedFixture>,
+		multipatchInstanceId: string | null,
+		action: PatchFixtureUpdateAction,
 		lifecycle: number,
 		performanceSample: ReturnType<
 			typeof frontendPerformanceDiagnostics.beginPatchMutation
@@ -274,17 +333,17 @@ export class PatchSession {
 			for (let conflicts = 0; ; conflicts++) {
 				this.requireActiveLifecycle(lifecycle);
 				const current = this.store.fixtureBefore(requestId, fixtureId);
-				if (!current)
-					throw new Error("Patched fixture was not found");
+				if (!current) throw new Error("Patched fixture was not found");
 				this.store.replacePending(
 					requestId,
-					[changedPatchFixtureCandidate(current, changes)],
+					[fixtureUpdateCandidate(current, multipatchInstanceId, action)],
 					[],
 				);
 				try {
-					const outcome = await this.sendPolicyReplaySafe(
+					const outcome = await this.sendFixtureUpdateReplaySafe(
 						fixtureId,
 						requestId,
+						multipatchInstanceId,
 						action,
 						lifecycle,
 					);
@@ -308,24 +367,38 @@ export class PatchSession {
 		}
 	}
 
-	private async sendPolicyReplaySafe(
+	private async sendFixtureUpdateReplaySafe(
 		fixtureId: string,
 		requestId: string,
-		action: PatchFixturePolicyAction,
+		multipatchInstanceId: string | null,
+		action: PatchFixtureUpdateAction,
 		lifecycle: number,
 	): Promise<PatchMutationOutcome> {
-		const updatePolicy = this.transport.patchFixturePolicy?.bind(this.transport);
-		if (!updatePolicy)
-			throw new Error("Patch policy updates are not supported by this transport");
-		const expectedRevision = this.requiredRevision();
-		try {
-			const outcome = await updatePolicy(
+		const updateFixture = this.transport.patchFixtureUpdate?.bind(
+			this.transport,
+		);
+		if (!updateFixture)
+			throw new Error(
+				"Sparse Patch updates are not supported by this transport",
+			);
+		const expectedFixtureRevision = this.store.fixtureRevision(fixtureId);
+		if (expectedFixtureRevision == null)
+			throw new Error("The authoritative fixture revision is not loaded");
+		const expectedPatchRevision = this.requiredRevision();
+		const expectedShowRevision = this.requiredShowRevision();
+		const send = () =>
+			updateFixture(
 				this.showId,
 				fixtureId,
-				expectedRevision,
+				expectedFixtureRevision,
+				expectedPatchRevision,
+				expectedShowRevision,
 				requestId,
+				multipatchInstanceId,
 				action,
 			);
+		try {
+			const outcome = await send();
 			this.requireActiveLifecycle(lifecycle);
 			return outcome;
 		} catch (reason) {
@@ -334,13 +407,7 @@ export class PatchSession {
 			if (!isAmbiguous(error)) throw error;
 			await this.repair();
 			this.requireActiveLifecycle(lifecycle);
-			return updatePolicy(
-				this.showId,
-				fixtureId,
-				expectedRevision,
-				requestId,
-				action,
-			);
+			return send();
 		}
 	}
 
@@ -409,6 +476,13 @@ export class PatchSession {
 		const revision = this.store.getSnapshot().patchRevision;
 		if (revision == null)
 			throw new Error("The authoritative Patch revision is not loaded");
+		return revision;
+	}
+
+	private requiredShowRevision(): number {
+		const revision = this.store.getSnapshot().showRevision;
+		if (revision == null)
+			throw new Error("The authoritative show revision is not loaded");
 		return revision;
 	}
 
@@ -571,6 +645,140 @@ export class PatchSession {
 	private requireActiveLifecycle(lifecycle: number): void {
 		if (!this.isActive(lifecycle)) throw authorityChanged();
 	}
+}
+
+function fixtureUpdateCandidate(
+	fixture: PatchedFixture,
+	multipatchInstanceId: string | null,
+	action: PatchFixtureUpdateAction,
+): PatchFixtureCandidate {
+	if (multipatchInstanceId == null)
+		return changedPatchFixtureCandidate(
+			fixture,
+			applyRootFixtureAction(fixture, action),
+		);
+	if (action.type === "set_masters" || action.type === "set_move_in_black")
+		throw new Error(
+			"This Patch update only supports the root physical fixture",
+		);
+	let found = false;
+	const multipatch = (fixture.multipatch ?? []).map((instance) => {
+		if (instance.id !== multipatchInstanceId) return instance;
+		found = true;
+		return { ...instance, ...applyPhysicalAction(instance, action) };
+	});
+	if (!found) throw new Error("Multi-patch instance was not found");
+	return changedPatchFixtureCandidate(fixture, { multipatch });
+}
+
+function applyRootFixtureAction(
+	fixture: PatchedFixture,
+	action: PatchFixtureUpdateAction,
+): Partial<PatchedFixture> {
+	if (action.type === "set_masters")
+		return {
+			group_masters_enabled: action.groupMastersEnabled,
+			grand_master_enabled: action.grandMasterEnabled,
+		};
+	if (action.type === "set_move_in_black")
+		return {
+			move_in_black_enabled: action.enabled,
+			move_in_black_delay_millis: action.delayMillis,
+		};
+	return applyPhysicalAction(fixture, action);
+}
+
+function applyPhysicalAction(
+	physical: Pick<
+		PatchedFixture,
+		| "location"
+		| "rotation"
+		| "invert_pan"
+		| "invert_tilt"
+		| "bracket_angle"
+		| "shaper_angle"
+		| "installed_appearance"
+	>,
+	action: Exclude<
+		PatchFixtureUpdateAction,
+		{ type: "set_masters" } | { type: "set_move_in_black" }
+	>,
+): Partial<PatchedFixture> {
+	switch (action.type) {
+		case "set_pan_tilt":
+			return {
+				invert_pan: action.invertPan,
+				invert_tilt: action.invertTilt,
+			};
+		case "set_location_axis":
+			return {
+				location: {
+					...(physical.location ?? { x: 0, y: 0, z: 0 }),
+					[action.axis]: action.millimetres,
+				},
+			};
+		case "set_rotation_axis":
+			return {
+				rotation: {
+					...(physical.rotation ?? { x: 0, y: 0, z: 0 }),
+					[action.axis]: action.degrees,
+				},
+			};
+		case "set_bracket_angle":
+			return { bracket_angle: action.degrees };
+		case "set_shaper_module_rotation":
+			return { shaper_angle: action.degrees };
+		case "set_static_shaper_angle": {
+			const appearance =
+				physical.installed_appearance ?? defaultInstalledFixtureAppearance();
+			const shaperAngles = [...appearance.shaper_angles_degrees] as [
+				number,
+				number,
+				number,
+				number,
+			];
+			shaperAngles[action.element - 1] = action.degrees;
+			return {
+				installed_appearance: {
+					...appearance,
+					shaper_angles_degrees: shaperAngles,
+				},
+			};
+		}
+		case "set_installed_appearance":
+			return { installed_appearance: toFixtureAppearance(action.appearance) };
+	}
+}
+
+function toFixtureAppearance(
+	appearance: PatchInstalledFixtureAppearance,
+): NonNullable<PatchedFixture["installed_appearance"]> {
+	return {
+		light_source: { ...appearance.lightSource },
+		color_temperature_kelvin: appearance.colorTemperatureKelvin,
+		gel:
+			appearance.gel.type === "built_in"
+				? {
+						type: "built_in",
+						catalog_id: appearance.gel.catalogId,
+						entry_id: appearance.gel.entryId,
+						embedded_fallback: {
+							number: appearance.gel.embeddedFallback.number,
+							name: appearance.gel.embeddedFallback.name,
+							display_srgb: appearance.gel.embeddedFallback.displaySrgb,
+							visualizer_srgb: appearance.gel.embeddedFallback.visualizerSrgb,
+						},
+					}
+				: appearance.gel.type === "custom"
+					? {
+							type: "custom",
+							name: appearance.gel.name,
+							color_srgb: appearance.gel.colorSrgb,
+							note: appearance.gel.note,
+						}
+					: { type: "open_white" },
+		shaper_angles_degrees: [...appearance.shaperAnglesDegrees],
+	};
 }
 
 function afterVisiblePaint(callback: () => void) {

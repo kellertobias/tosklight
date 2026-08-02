@@ -1,6 +1,7 @@
 import type {
 	PatchDirectControlEndpoint,
 	PatchFixturePolicyAction,
+	PatchFixtureUpdateAction,
 	PatchFixtureWrite,
 	PatchMutation,
 	PatchPlacement,
@@ -16,8 +17,10 @@ import type {
 	EventClientMessage,
 	PatchFixtureInput,
 	PatchFixturesRequest,
+	PatchFixtureUpdateRequest,
 	PatchInstalledFixtureAppearance,
 	PatchPlacementIntent,
+	PatchFixtureUpdateAction as WirePatchFixtureUpdateAction,
 } from "./generated/light-wire";
 import {
 	decodePatchErrorResponse,
@@ -116,6 +119,38 @@ export class HttpPatchTransport implements PatchTransport {
 				method: "POST",
 				headers,
 				body: JSON.stringify(body),
+			},
+		);
+		return decodePatchFixturesOutcome(await this.responseValue(response));
+	}
+
+	async patchFixtureUpdate(
+		showId: string,
+		fixtureId: string,
+		expectedFixtureRevision: number,
+		expectedPatchRevision: number,
+		expectedShowRevision: number,
+		requestId: string,
+		multipatchInstanceId: string | null,
+		action: PatchFixtureUpdateAction,
+	) {
+		const headers = this.headers(showId);
+		headers.set("content-type", "application/json");
+		headers.set("if-match", String(expectedPatchRevision));
+		const request = {
+			request_id: requestId,
+			expected_fixture_revision: expectedFixtureRevision,
+			expected_patch_revision: expectedPatchRevision,
+			expected_show_revision: expectedShowRevision,
+			multipatch_instance_id: multipatchInstanceId,
+			...toWireFixtureUpdateAction(action),
+		} as PatchFixtureUpdateRequest;
+		const response = await this.fetchImplementation(
+			`${this.patchPath()}/fixtures/${fixtureId}/update`,
+			{
+				method: "POST",
+				headers,
+				body: JSON.stringify(request),
 			},
 		);
 		return decodePatchFixturesOutcome(await this.responseValue(response));
@@ -257,6 +292,58 @@ function toWireVectorSpread(spread: PatchVectorSpread) {
 		axis: spread.axis,
 		points: [...spread.points],
 	};
+}
+
+function toWireFixtureUpdateAction(
+	action: PatchFixtureUpdateAction,
+): WirePatchFixtureUpdateAction {
+	switch (action.type) {
+		case "set_masters":
+			return {
+				action: action.type,
+				group_masters_enabled: action.groupMastersEnabled,
+				grand_master_enabled: action.grandMasterEnabled,
+			};
+		case "set_pan_tilt":
+			return {
+				action: action.type,
+				invert_pan: action.invertPan,
+				invert_tilt: action.invertTilt,
+			};
+		case "set_move_in_black":
+			return {
+				action: action.type,
+				enabled: action.enabled,
+				delay_millis: action.delayMillis,
+			};
+		case "set_location_axis":
+			return {
+				action: action.type,
+				axis: action.axis,
+				millimetres: action.millimetres,
+			};
+		case "set_rotation_axis":
+			return {
+				action: action.type,
+				axis: action.axis,
+				degrees: action.degrees,
+			};
+		case "set_bracket_angle":
+			return { action: action.type, degrees: action.degrees };
+		case "set_shaper_module_rotation":
+			return { action: action.type, degrees: action.degrees };
+		case "set_static_shaper_angle":
+			return {
+				action: action.type,
+				element: action.element,
+				degrees: action.degrees,
+			};
+		case "set_installed_appearance":
+			return {
+				action: action.type,
+				appearance: toWireInstalledAppearance(action.appearance),
+			};
+	}
 }
 
 export function browserDeskBoundaryToken(): string {

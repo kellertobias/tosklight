@@ -12,6 +12,7 @@ import type { FixtureDefinition, PatchedFixture } from "../../api/types";
 import type {
 	PatchFixturePolicyAction,
 	PatchFixtureProjection,
+	PatchFixtureUpdateAction,
 	PatchPlacement,
 	PatchVectorSpread,
 } from "./contracts";
@@ -88,6 +89,11 @@ export interface PatchContextValue extends PatchStoreSnapshot {
 		fixtureId: string,
 		action: PatchFixturePolicyAction,
 		changes: Partial<PatchedFixture>,
+	): Promise<boolean>;
+	updateFixtureIntent(
+		fixtureId: string,
+		multipatchInstanceId: string | null,
+		action: PatchFixtureUpdateAction,
 	): Promise<boolean>;
 	deleteFixture(fixtureId: string): Promise<boolean>;
 }
@@ -197,6 +203,19 @@ export function PatchViewProvider({
 				if (!session || snapshot.status !== "ready") return false;
 				try {
 					await session.updatePolicy(fixtureId, action, changes);
+					return true;
+				} catch {
+					return false;
+				}
+			},
+			updateFixtureIntent: async (fixtureId, multipatchInstanceId, action) => {
+				if (!session || snapshot.status !== "ready") return false;
+				try {
+					await session.updateFixtureIntent(
+						fixtureId,
+						multipatchInstanceId,
+						action,
+					);
 					return true;
 				} catch {
 					return false;

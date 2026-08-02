@@ -34,6 +34,7 @@ interface PendingPatch {
 export class PatchStore {
 	private readonly listeners = new Set<() => void>();
 	private authoritative = new Map<string, PatchedFixture>();
+	private fixtureRevisions = new Map<string, number>();
 	private readonly fixtureHints: ReadonlyMap<string, PatchedFixture>;
 	private profiles = new Map<string, PatchProfileRevision>();
 	private pending = new Map<string, PendingPatch>();
@@ -125,6 +126,10 @@ export class PatchStore {
 		return fixture;
 	}
 
+	fixtureRevision(fixtureId: string): number | null {
+		return this.fixtureRevisions.get(fixtureId) ?? null;
+	}
+
 	applySnapshot(snapshot: PatchSnapshot): void {
 		if (snapshot.showId !== this.showId)
 			throw new Error(
@@ -135,6 +140,7 @@ export class PatchStore {
 			);
 		const profiles = profileMap(snapshot.profileRevisions);
 		const next = new Map<string, PatchedFixture>();
+		const fixtureRevisions = new Map<string, number>();
 		for (const projection of snapshot.fixtures) {
 			const profile = requiredProfile(profiles, projection);
 			const fallback = this.fixtureHint(projection.fixtureId);
@@ -147,8 +153,10 @@ export class PatchStore {
 					fallback,
 				),
 			);
+			fixtureRevisions.set(projection.fixtureId, projection.fixtureRevision);
 		}
 		this.authoritative = next;
+		this.fixtureRevisions = fixtureRevisions;
 		this.profiles = profiles;
 		this.showRevision = snapshot.showRevision;
 		this.patchRevision = snapshot.patchRevision;
@@ -230,8 +238,11 @@ export class PatchStore {
 				profile,
 			);
 		const authoritative = new Map(this.authoritative);
-		for (const fixtureId of delta.removedFixtureIds)
+		const fixtureRevisions = new Map(this.fixtureRevisions);
+		for (const fixtureId of delta.removedFixtureIds) {
 			authoritative.delete(fixtureId);
+			fixtureRevisions.delete(fixtureId);
+		}
 		for (const projection of delta.fixtures) {
 			const profile = requiredProfile(profiles, projection);
 			authoritative.set(
@@ -243,8 +254,10 @@ export class PatchStore {
 					this.fixtureHint(projection.fixtureId, requestId),
 				),
 			);
+			fixtureRevisions.set(projection.fixtureId, projection.fixtureRevision);
 		}
 		this.authoritative = authoritative;
+		this.fixtureRevisions = fixtureRevisions;
 		this.profiles = profiles;
 		this.showRevision = delta.showRevision;
 		this.patchRevision = delta.patchRevision;

@@ -1,6 +1,7 @@
 import type {
 	PatchEventMessage,
 	PatchFixturePolicyAction,
+	PatchFixtureUpdateAction,
 	PatchMutation,
 	PatchMutationOutcome,
 	PatchSnapshot,
@@ -31,6 +32,16 @@ export interface PatchTransport {
 		expectedPatchRevision: number,
 		requestId: string,
 		action: PatchFixturePolicyAction,
+	): Promise<PatchMutationOutcome>;
+	patchFixtureUpdate?(
+		showId: string,
+		fixtureId: string,
+		expectedFixtureRevision: number,
+		expectedPatchRevision: number,
+		expectedShowRevision: number,
+		requestId: string,
+		multipatchInstanceId: string | null,
+		action: PatchFixtureUpdateAction,
 	): Promise<PatchMutationOutcome>;
 	subscribe(
 		showId: string,

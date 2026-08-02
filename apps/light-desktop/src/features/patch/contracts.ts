@@ -210,6 +210,40 @@ export type PatchFixturePolicyAction =
 			multipatchInstanceId: string | null;
 	  };
 
+/**
+ * One semantic update to one installed physical fixture instance. The session applies the same
+ * action optimistically and the server rechecks the supplied show, Patch, and fixture revisions.
+ */
+export type PatchFixtureUpdateAction =
+	| {
+			type: "set_masters";
+			groupMastersEnabled: boolean;
+			grandMasterEnabled: boolean;
+	  }
+	| { type: "set_pan_tilt"; invertPan: boolean; invertTilt: boolean }
+	| { type: "set_move_in_black"; enabled: boolean; delayMillis: number }
+	| {
+			type: "set_location_axis";
+			axis: "x" | "y" | "z";
+			millimetres: number;
+	  }
+	| {
+			type: "set_rotation_axis";
+			axis: "x" | "y" | "z";
+			degrees: number;
+	  }
+	| { type: "set_bracket_angle"; degrees: number }
+	| { type: "set_shaper_module_rotation"; degrees: number | null }
+	| {
+			type: "set_static_shaper_angle";
+			element: 1 | 2 | 3 | 4;
+			degrees: number;
+	  }
+	| {
+			type: "set_installed_appearance";
+			appearance: PatchInstalledFixtureAppearance;
+	  };
+
 export interface PatchSnapshot {
 	showId: string;
 	showRevision: number;

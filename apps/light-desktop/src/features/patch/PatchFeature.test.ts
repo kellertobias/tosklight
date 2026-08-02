@@ -13,6 +13,7 @@ import {
 import type {
 	PatchChange,
 	PatchFixtureProjection,
+	PatchFixtureUpdateAction,
 	PatchMutation,
 	PatchMutationOutcome,
 	PatchProfileRevision,
@@ -449,6 +450,153 @@ describe("Patch v2 network boundary", () => {
 		);
 	});
 
+	it.each<{
+		action: PatchFixtureUpdateAction;
+		wireAction: Record<string, unknown>;
+	}>([
+		{
+			action: {
+				type: "set_masters",
+				groupMastersEnabled: false,
+				grandMasterEnabled: true,
+			},
+			wireAction: {
+				action: "set_masters",
+				group_masters_enabled: false,
+				grand_master_enabled: true,
+			},
+		},
+		{
+			action: { type: "set_pan_tilt", invertPan: true, invertTilt: false },
+			wireAction: {
+				action: "set_pan_tilt",
+				invert_pan: true,
+				invert_tilt: false,
+			},
+		},
+		{
+			action: {
+				type: "set_move_in_black",
+				enabled: false,
+				delayMillis: 750,
+			},
+			wireAction: {
+				action: "set_move_in_black",
+				enabled: false,
+				delay_millis: 750,
+			},
+		},
+		{
+			action: { type: "set_location_axis", axis: "z", millimetres: 1250 },
+			wireAction: {
+				action: "set_location_axis",
+				axis: "z",
+				millimetres: 1250,
+			},
+		},
+		{
+			action: { type: "set_rotation_axis", axis: "y", degrees: -45.5 },
+			wireAction: {
+				action: "set_rotation_axis",
+				axis: "y",
+				degrees: -45.5,
+			},
+		},
+		{
+			action: { type: "set_bracket_angle", degrees: 30 },
+			wireAction: { action: "set_bracket_angle", degrees: 30 },
+		},
+		{
+			action: { type: "set_shaper_module_rotation", degrees: null },
+			wireAction: {
+				action: "set_shaper_module_rotation",
+				degrees: null,
+			},
+		},
+		{
+			action: { type: "set_static_shaper_angle", element: 3, degrees: 12 },
+			wireAction: {
+				action: "set_static_shaper_angle",
+				element: 3,
+				degrees: 12,
+			},
+		},
+		{
+			action: {
+				type: "set_installed_appearance",
+				appearance: {
+					lightSource: { type: "tungsten" },
+					colorTemperatureKelvin: 3200,
+					gel: {
+						type: "custom",
+						name: "Warm tint",
+						colorSrgb: "#FFCC99",
+						note: null,
+					},
+					shaperAnglesDegrees: [1, 2, 3, 4],
+				},
+			},
+			wireAction: {
+				action: "set_installed_appearance",
+				appearance: {
+					light_source: { type: "tungsten" },
+					color_temperature_kelvin: 3200,
+					gel: {
+						type: "custom",
+						name: "Warm tint",
+						color_srgb: "#FFCC99",
+						note: null,
+					},
+					shaper_angles_degrees: [1, 2, 3, 4],
+				},
+			},
+		},
+	])("maps $action.type to one sparse fixture update body", async ({
+		action,
+		wireAction,
+	}) => {
+		let body: Record<string, unknown> | null = null;
+		const fetchMock = vi.fn(
+			async (_input: RequestInfo | URL, init?: RequestInit) => {
+				body = JSON.parse(String(init?.body));
+				return new Response(JSON.stringify(wireOutcome("update-1")), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				});
+			},
+		);
+		const transport = new HttpPatchTransport({
+			baseUrl: "http://desk.local",
+			sessionToken: "session-token",
+			fetch: fetchMock as typeof fetch,
+		});
+
+		await transport.patchFixtureUpdate(
+			SHOW_ID,
+			FIXTURE_ID,
+			9,
+			7,
+			12,
+			"update-1",
+			"copy-2",
+			action,
+		);
+
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(String(url)).toBe(
+			`http://desk.local/api/v2/patch/fixtures/${FIXTURE_ID}/update`,
+		);
+		expect((init?.headers as Headers).get("if-match")).toBe("7");
+		expect(body).toEqual({
+			request_id: "update-1",
+			expected_fixture_revision: 9,
+			expected_patch_revision: 7,
+			expected_show_revision: 12,
+			multipatch_instance_id: "copy-2",
+			...wireAction,
+		});
+	});
+
 	it("sends placement starts and sparse operator overrides without final assignments", async () => {
 		let body: Record<string, unknown> | null = null;
 		const fetchMock = vi.fn(
@@ -861,6 +1009,173 @@ describe("Patch session repair lifecycle", () => {
 		session.stop();
 	});
 
+	it("optimistically updates only the exact root or multi-patch instance", async () => {
+		const withCopies = {
+			...fixtureProjection(),
+			location: { x: 10, y: 20, z: 30 },
+			multipatch: [
+				{
+					id: "copy-1",
+					name: "Copy 1",
+					splitPatches: [{ split: 1, universe: 1, address: 20 }],
+					location: { x: 100, y: 200, z: 300 },
+					rotation: { x: 0, y: 0, z: 0 },
+				},
+				{
+					id: "copy-2",
+					name: "Copy 2",
+					splitPatches: [{ split: 1, universe: 1, address: 40 }],
+					location: { x: 400, y: 500, z: 600 },
+					rotation: { x: 0, y: 0, z: 0 },
+				},
+			],
+		};
+		const transport = new FakePatchTransport([
+			snapshot(4, 6, 10, [withCopies]),
+		]);
+		let resolveUpdate!: (value: PatchMutationOutcome) => void;
+		transport.patchFixtureUpdate.mockImplementation(
+			() => new Promise((resolve) => (resolveUpdate = resolve)),
+		);
+		const session = patchSession(transport);
+		await session.start();
+
+		const write = session.updateFixtureIntent(FIXTURE_ID, "copy-1", {
+			type: "set_location_axis",
+			axis: "x",
+			millimetres: 999,
+		});
+		await vi.waitFor(() =>
+			expect(transport.patchFixtureUpdate).toHaveBeenCalledOnce(),
+		);
+		const visible = session.store.getSnapshot().fixtures[0];
+		expect(visible.location).toEqual({ x: 10, y: 20, z: 30 });
+		expect(visible.multipatch?.[0].location).toEqual({
+			x: 999,
+			y: 200,
+			z: 300,
+		});
+		expect(visible.multipatch?.[1].location).toEqual({
+			x: 400,
+			y: 500,
+			z: 600,
+		});
+
+		const accepted = {
+			...withCopies,
+			fixtureRevision: 2,
+			multipatch: withCopies.multipatch.map((copy) =>
+				copy.id === "copy-1"
+					? { ...copy, location: { ...copy.location, x: 999 } }
+					: copy,
+			),
+		};
+		resolveUpdate(
+			outcome(transport.patchFixtureUpdate.mock.calls[0][5], 5, 7, [accepted]),
+		);
+		await write;
+
+		const rootWrite = session.updateFixtureIntent(FIXTURE_ID, null, {
+			type: "set_location_axis",
+			axis: "y",
+			millimetres: 777,
+		});
+		await vi.waitFor(() =>
+			expect(transport.patchFixtureUpdate).toHaveBeenCalledTimes(2),
+		);
+		expect(session.store.getSnapshot().fixtures[0].location).toEqual({
+			x: 10,
+			y: 777,
+			z: 30,
+		});
+		resolveUpdate({
+			...outcome(transport.patchFixtureUpdate.mock.calls[1][5], 6, 8, [
+				{
+					...accepted,
+					fixtureRevision: 3,
+					location: { x: 10, y: 777, z: 30 },
+				},
+			]),
+			eventSequence: 12,
+		});
+		await rootWrite;
+		session.stop();
+	});
+
+	it("replays an ambiguous sparse update with the same identity and revisions", async () => {
+		const accepted = {
+			...fixtureProjection(),
+			fixtureRevision: 4,
+			rotation: { x: 0, y: 25, z: 0 },
+		};
+		const transport = new FakePatchTransport([
+			snapshot(7, 3, 10, [{ ...fixtureProjection(), fixtureRevision: 3 }]),
+			snapshot(8, 4, 11, [accepted]),
+		]);
+		transport.patchFixtureUpdate.mockImplementation(async (...args) => {
+			if (transport.patchFixtureUpdate.mock.calls.length === 1)
+				throw new TypeError("response connection closed");
+			return outcome(args[5], 8, 4, [accepted]);
+		});
+		const session = patchSession(transport);
+		await session.start();
+
+		await session.updateFixtureIntent(FIXTURE_ID, null, {
+			type: "set_rotation_axis",
+			axis: "y",
+			degrees: 25,
+		});
+
+		expect(transport.patchFixtureUpdate).toHaveBeenCalledTimes(2);
+		expect(transport.patchFixtureUpdate.mock.calls[0]).toEqual(
+			transport.patchFixtureUpdate.mock.calls[1],
+		);
+		expect(session.store.getSnapshot().fixtures[0].rotation?.y).toBe(25);
+		session.stop();
+	});
+
+	it("repairs a sparse update conflict and refreshes all authority revisions", async () => {
+		const repaired = {
+			...fixtureProjection(),
+			fixtureRevision: 8,
+			name: "External name",
+		};
+		const accepted = {
+			...repaired,
+			fixtureRevision: 9,
+			bracketAngle: 35,
+		};
+		const transport = new FakePatchTransport([
+			snapshot(10, 4, 10, [{ ...fixtureProjection(), fixtureRevision: 7 }]),
+			snapshot(11, 5, 11, [repaired]),
+		]);
+		transport.patchFixtureUpdate.mockImplementation(async (...args) => {
+			if (transport.patchFixtureUpdate.mock.calls.length === 1)
+				throw new PatchTransportError("revision conflict", 409, 5, false);
+			return { ...outcome(args[5], 12, 6, [accepted]), eventSequence: 12 };
+		});
+		const session = patchSession(transport);
+		await session.start();
+
+		await session.updateFixtureIntent(FIXTURE_ID, null, {
+			type: "set_bracket_angle",
+			degrees: 35,
+		});
+
+		expect(transport.patchFixtureUpdate).toHaveBeenCalledTimes(2);
+		const attempts = transport.patchFixtureUpdate.mock.calls;
+		expect(attempts.map((call) => call.slice(2, 5))).toEqual([
+			[7, 4, 10],
+			[8, 5, 11],
+		]);
+		expect(attempts[0][5]).toBe(attempts[1][5]);
+		expect(session.store.getSnapshot().fixtures[0]).toMatchObject({
+			name: "External name",
+			bracket_angle: 35,
+		});
+		session.stop();
+	});
+
 	it("settles optimistic state from authoritative no-change and replay outcomes", async () => {
 		const transport = new FakePatchTransport([
 			snapshot(1, 1, 10, [fixtureProjection()]),
@@ -1026,6 +1341,19 @@ class FakePatchTransport implements PatchTransport {
 			_showId: string,
 			_expectedRevision: number,
 			_mutation: PatchMutation,
+		): Promise<PatchMutationOutcome> => Promise.reject(new Error("Not used")),
+	);
+
+	patchFixtureUpdate = vi.fn(
+		(
+			_showId: string,
+			_fixtureId: string,
+			_expectedFixtureRevision: number,
+			_expectedPatchRevision: number,
+			_expectedShowRevision: number,
+			_requestId: string,
+			_multipatchInstanceId: string | null,
+			_action: PatchFixtureUpdateAction,
 		): Promise<PatchMutationOutcome> => Promise.reject(new Error("Not used")),
 	);
 
