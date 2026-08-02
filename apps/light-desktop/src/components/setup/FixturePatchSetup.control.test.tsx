@@ -668,6 +668,40 @@ describe("installed light-source appearance", () => {
 		expect(copy.cells[8]).toHaveTextContent("LED · 5,600 KSteel Blue");
 	});
 
+	it("copies the primary installed appearance into a new independent physical copy", async () => {
+		const fixture = appearanceFixture();
+		fixture.bracket_angle = 35;
+		fixture.shaper_angle = -15;
+		server.patch.fixtures = [fixture];
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(screen.getByRole("row", { name: /17 Split Wash 17/ }));
+		const add = screen.getByRole("button", { name: "+ Add multi-patch" });
+		await waitFor(() => expect(add).toBeEnabled());
+		fireEvent.click(add);
+
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith(
+				"fixture-split",
+				expect.objectContaining({
+					multipatch: expect.arrayContaining([
+						expect.objectContaining({
+							name: "multi-patch",
+							bracket_angle: 35,
+							shaper_angle: -15,
+							installed_appearance: fixture.installed_appearance,
+						}),
+					]),
+				}),
+			),
+		);
+		const update = patchFeature.updateFixture.mock.calls.at(-1)?.[1];
+		const created = update?.multipatch?.at(-1);
+		expect(created?.installed_appearance).not.toBe(
+			fixture.installed_appearance,
+		);
+	});
+
 	it("updates only the addressed multi-patch and preserves its selected gel", async () => {
 		server.patch.fixtures = [appearanceFixture()];
 		state.patchSetArmed = true;

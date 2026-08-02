@@ -1,4 +1,5 @@
 import type { MultiPatchInstance, SplitPatch } from "../../../api/types";
+import { defaultInstalledFixtureAppearance } from "../../../features/patch/model";
 import { parsePatchAddress } from "../../input/ConsoleFields";
 import {
 	type CombinedPolicyChoice,
@@ -21,6 +22,9 @@ import {
 export async function addMultipatch(controller: PatchController) {
 	const selected = controller.data.selected;
 	if (!selected) return;
+	const installedAppearance = structuredClone(
+		selected.installed_appearance ?? defaultInstalledFixtureAppearance(),
+	);
 	const instance: MultiPatchInstance = {
 		id: crypto.randomUUID(),
 		name: "multi-patch",
@@ -33,6 +37,9 @@ export async function addMultipatch(controller: PatchController) {
 		})),
 		location: { x: 0, y: 0, z: 0 },
 		rotation: { x: 0, y: 0, z: 0 },
+		bracket_angle: selected.bracket_angle ?? 0,
+		shaper_angle: selected.shaper_angle ?? null,
+		installed_appearance: installedAppearance,
 	};
 	await controller.patch.updateFixture(selected.fixture_id, {
 		multipatch: [...(selected.multipatch ?? []), instance],
