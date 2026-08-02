@@ -227,6 +227,74 @@ fn assert_moving_lamp_geometry(filename: &str) {
 }
 
 #[test]
+fn robe_dls_profile_exposes_canonical_framing_controls() {
+    let profile = shipped_profile("robe--robin-dls-profile.toskfixture");
+    assert_eq!(profile.revision, 2);
+    assert_eq!(
+        profile
+            .modes
+            .iter()
+            .map(|mode| (mode.name.as_str(), mode.splits[0].footprint))
+            .collect::<Vec<_>>(),
+        [("Mode 1", 47), ("Mode 2", 38), ("Mode 3", 36)]
+    );
+
+    for mode in &profile.modes {
+        let rotation = mode
+            .channels
+            .iter()
+            .find(|channel| channel.attribute.0 == "shaper.rotation")
+            .unwrap();
+        assert_eq!(rotation.fixture_attribute, rotation.attribute);
+        assert_eq!(rotation.default_raw, 128);
+        assert_eq!(rotation.highlight_raw, 128);
+        assert_eq!(rotation.physical_min, Some(-45.0));
+        assert_eq!(rotation.physical_max, Some(45.0));
+        assert_eq!(rotation.unit.as_deref(), Some("degrees"));
+        assert!(!rotation.snap);
+
+        for blade in 1..=4 {
+            let position_attribute = format!("shaper.blade.{blade}.position");
+            let position = mode
+                .channels
+                .iter()
+                .find(|channel| channel.attribute.0 == position_attribute)
+                .unwrap();
+            assert_eq!(position.fixture_attribute, position.attribute);
+            assert_eq!(position.default_raw, 0);
+            assert_eq!(position.highlight_raw, 0);
+            assert_eq!(position.physical_min, Some(0.0));
+            assert_eq!(position.physical_max, Some(1.0));
+            assert_eq!(position.unit, None);
+            assert!(!position.snap);
+
+            let angle_attribute = format!("shaper.blade.{blade}.angle");
+            let angle = mode
+                .channels
+                .iter()
+                .find(|channel| channel.attribute.0 == angle_attribute)
+                .unwrap();
+            assert_eq!(angle.fixture_attribute, angle.attribute);
+            assert_eq!(angle.default_raw, 128);
+            assert_eq!(angle.highlight_raw, 128);
+            assert_eq!(angle.physical_min, Some(-25.0));
+            assert_eq!(angle.physical_max, Some(25.0));
+            assert_eq!(angle.unit.as_deref(), Some("degrees"));
+            assert!(!angle.snap);
+        }
+
+        assert_eq!(
+            mode.channels
+                .iter()
+                .filter(|channel| channel.fixture_attribute.0 == "shutter")
+                .count(),
+            1,
+            "the independent shutter/strobe channel must remain a shutter"
+        );
+    }
+}
+
+#[test]
 fn generic_led_packages_keep_only_operator_useful_channel_orders() {
     let expected = [
         (
