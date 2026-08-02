@@ -1,3 +1,5 @@
+import { fixtureSheetIncludesFixture } from "../apps/light-desktop/src/windows/fixtureSheetFilters";
+import { fixtureSheetTargets } from "../apps/light-desktop/src/windows/fixtureSheetTargets";
 import { BrowserScenarioWorld } from "./bench/core/browserScenario";
 import { expect, test } from "./bench/core/fixtures";
 import { installDeterministicLargeStage } from "./bench/performance/stageLargeScene";
@@ -47,6 +49,23 @@ test("PLAN76-LARGE-001 @ui @benchmark › keeps Fixture Sheet, Programmer, and o
 
 		await world.app.open();
 		await world.app.expect.ready();
+		const patch = await api.patch();
+		const excludedScenery = patch.fixtures.filter(
+			(fixture) => !fixtureSheetIncludesFixture(fixture),
+		);
+		expect(excludedScenery).toHaveLength(20);
+		const excludedSceneryRows = excludedScenery.reduce(
+			(count, fixture) => count + Math.max(1, fixture.logical_heads.length + 1),
+			0,
+		);
+		expect(excludedSceneryRows).toBe(20);
+		const programmableRows = patch.fixtures
+			.filter(fixtureSheetIncludesFixture)
+			.reduce(
+				(count, fixture) => count + fixtureSheetTargets(fixture).length,
+				0,
+			);
+		expect(programmableRows).toBe(1_890);
 		const desktop = world.desktop.configure("Plan 76 · Interactive large tier");
 		const stage = desktop.addPane(PaneType.Stage, {
 			slug: "interactive-large-stage",
@@ -76,7 +95,10 @@ test("PLAN76-LARGE-001 @ui @benchmark › keeps Fixture Sheet, Programmer, and o
 			fixtures.root().getByText("0 selected", { exact: true }),
 		).toBeVisible();
 		const fixtureTable = fixtures.root().getByRole("table");
-		await expect(fixtureTable).toHaveAttribute("aria-rowcount", "1912");
+		await expect(fixtureTable).toHaveAttribute(
+			"aria-rowcount",
+			String(programmableRows + 1),
+		);
 		expect(
 			await fixtureTable.locator(".ui-data-table-row:not(.header)").count(),
 		).toBeLessThan(80);

@@ -154,7 +154,7 @@ function dimmerColumn(compactMode: FixtureSheetCompactMode): Column {
 		id: "intensity",
 		header: "Intensity",
 		width:
-			compactMode === "off" ? "minmax(180px,.9fr)" : "minmax(128px,.7fr)",
+			compactMode === "off" ? "minmax(180px,.9fr)" : "minmax(144px,.7fr)",
 		render: (fixture) => {
 			const group = fixture.groupValues?.intensity;
 			const member = group?.members.find(

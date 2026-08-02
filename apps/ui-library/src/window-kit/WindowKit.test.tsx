@@ -191,6 +191,31 @@ describe("window kit", () => {
 		);
 		expect(visibleRows.mock.lastCall?.[0].length).toBeLessThan(40);
 	});
+	it("stabilizes table width from declared pixel column minima", () => {
+		render(
+			<DataTable
+				rows={[{ id: "one" }]}
+				columns={[
+					{ id: "exact", header: "Exact", width: "48px", render: () => "A" },
+					{
+						id: "flexible",
+						header: "Flexible",
+						width: "minmax(72px, 1fr)",
+						render: () => "B",
+					},
+					{
+						id: "unresolved",
+						header: "Unresolved",
+						width: "1fr",
+						render: () => "C",
+					},
+				]}
+				rowKey={(row) => row.id}
+			/>,
+		);
+
+		expect(screen.getByRole("table")).toHaveStyle({ minWidth: "120px" });
+	});
 	it("exposes button grid states", () => {
 		render(
 			<ButtonGrid>

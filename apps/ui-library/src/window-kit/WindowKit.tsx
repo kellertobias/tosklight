@@ -511,6 +511,17 @@ export interface DataTableColumn<T> {
 	render: (row: T, index: number) => ReactNode;
 }
 
+function dataTableMinimumWidth<T>(columns: readonly DataTableColumn<T>[]) {
+	return columns.reduce((total, column) => {
+		const width = column.width?.trim();
+		if (!width) return total;
+		const pixels = width.match(
+			/^(?:minmax\(\s*)?(\d+(?:\.\d+)?)px(?:\s*,|\s*$)/u,
+		)?.[1];
+		return total + (pixels ? Number(pixels) : 0);
+	}, 0);
+}
+
 function dataTableIndices(start: number, end: number) {
 	return Array.from(
 		{ length: Math.max(0, end - start) },
@@ -585,6 +596,7 @@ export function DataTable<T>({
 	const template = columns
 		.map((column) => column.width ?? "minmax(0,1fr)")
 		.join(" ");
+	const minimumWidth = dataTableMinimumWidth(columns);
 	const start = usesViewport ? viewport.start : 0;
 	const end = usesViewport ? viewport.end : total;
 	const visibleIndices = dataTableIndices(start, end);
@@ -612,6 +624,7 @@ export function DataTable<T>({
 				{
 					"--table-columns": template,
 					"--table-row-height": `${rowHeight}px`,
+					minWidth: minimumWidth > 0 ? `${minimumWidth}px` : undefined,
 				} as CSSProperties
 			}
 		>

@@ -335,14 +335,14 @@
 }
 
 .ui-data-table {
-  width: max-content;
+  width: 100%;
   min-width: 100%;
   min-height: 100%;
   background: #0b0f13;
 }
 
 .ui-data-table-row {
-  min-width: 100%;
+  width: 100%;
   display: grid;
   grid-template-columns: var(--table-columns);
   align-items: center;

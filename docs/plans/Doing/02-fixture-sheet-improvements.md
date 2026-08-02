@@ -112,6 +112,13 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
   430×360 captures. Visual inspection confirms Icon only exposes meters, swatches, glyphs, Preload,
   and Dynamic identities while Text only exposes concise authoritative values. `npm run manual`
   then builds and verifies the 178-page PDF plus the offline HTML manual with both images.
+- The large-tier acceptance expectation now derives its programmable row count from the production
+  Fixture Sheet target projection and proves that the 20 seeded scenery objects contribute no rows.
+  The shared DataTable fixes its used width from declared pixel column minima, so virtualized row
+  replacement cannot resize fractional columns according to whichever cell content is mounted.
+  Compact Intensity remains narrower than Off while giving Text only enough room for an ordinary
+  base and two Dynamic identities. The focused DataTable test, both frontend builds, the rebuilt
+  430 px Storybook case, and the rebuilt `PLAN76-LARGE-001` 1,000-instance benchmark pass.
 
 ## Remaining work
 
