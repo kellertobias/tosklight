@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
 	recordGroup: vi.fn(),
 	resetCommand: vi.fn(),
 	manageGroup: vi.fn(),
+	loadGroupSettings: vi.fn(),
 	setGroupMaster: vi.fn(),
 	commandLine: "",
 	state: {
@@ -76,7 +77,10 @@ vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
 	useActiveShowId: () => "show",
 }));
 vi.mock("../features/groupManagement/GroupManagementProvider", () => ({
-	useGroupManagement: () => ({ manage: mocks.manageGroup }),
+	useGroupManagement: () => ({
+		manage: mocks.manageGroup,
+		settings: mocks.loadGroupSettings,
+	}),
 }));
 vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
 	useCommandLineSurface: () => ({
@@ -152,6 +156,7 @@ describe("GroupsWindow action routing", () => {
 			group: { revision: 2 },
 			persistenceWarning: null,
 		});
+		mocks.loadGroupSettings.mockReset().mockResolvedValue(null);
 		mocks.setGroupMaster.mockReset().mockResolvedValue(null);
 		mocks.commandLine = "";
 		mocks.state.storeArmed = false;

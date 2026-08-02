@@ -6,7 +6,8 @@ import {
 	TextField,
 } from "@tosklight/ui";
 import { WindowSettings } from "@tosklight/ui/window-kit";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { GroupResolvedSpatialProjection } from "../../api/generated/light-wire";
 import { useGroupManagement } from "../../features/groupManagement/GroupManagementProvider";
 import type { Group } from "./model";
 import {
@@ -17,32 +18,18 @@ import {
 	resolveMappingPresentation,
 	type SpatialSelectionMapping,
 	type SpatialSelectionShape,
+	storedMapping,
 	validateSpatialMapping,
 } from "./spatialMapping";
-
-export interface GroupMappingUpdateResult {
-	revision: number;
-}
-
-/** Revisioned server action required before Group mapping controls become writable. */
-export interface GroupMappingActions {
-	update(
-		groupId: string,
-		expectedRevision: number,
-		mapping: SpatialSelectionMapping | null,
-	): Promise<GroupMappingUpdateResult | null>;
-}
 
 export function GroupSettingsDialog({
 	group,
 	groups,
 	onClose,
-	mappingActions = null,
 }: {
 	group: Group;
 	groups: readonly Group[];
 	onClose: () => void;
-	mappingActions?: GroupMappingActions | null;
 }) {
 	const groupManagement = useGroupManagement();
 	const [name, setName] = useState(group.body.name ?? `Group ${group.id}`);
@@ -57,6 +44,27 @@ export function GroupSettingsDialog({
 	);
 	const [status, setStatus] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
+	const [resolvedSpatial, setResolvedSpatial] =
+		useState<GroupResolvedSpatialProjection | null>(null);
+	const refreshSettings = useCallback(async () => {
+		if (!groupManagement) return null;
+		const snapshot = await groupManagement.settings(group.id);
+		if (!snapshot) return null;
+		setExpectedRevision(snapshot.group.revision);
+		setResolvedSpatial(snapshot.resolvedSpatial);
+		setMappingPresentation(
+			resolvedMappingPresentation(snapshot.resolvedSpatial),
+		);
+		setMapping(
+			snapshot.resolvedSpatial.mapping_provenance.type === "local"
+				? storedMapping(snapshot.group.object.body)
+				: null,
+		);
+		return snapshot;
+	}, [group.id, groupManagement]);
+	useEffect(() => {
+		void refreshSettings();
+	}, [refreshSettings]);
 
 	const saveProperties = async (next: {
 		name: string;
@@ -88,16 +96,18 @@ export function GroupSettingsDialog({
 	};
 
 	const commitMapping = async (next: SpatialSelectionMapping | null) => {
-		if (!mappingActions || saving) return;
+		if (!groupManagement || saving) return;
 		const validation = next ? validateSpatialMapping(next) : null;
 		if (validation) return setStatus(validation);
 		setSaving(true);
 		setStatus("Saving spatial mapping…");
-		const outcome = await mappingActions.update(
-			group.id,
-			expectedRevision,
-			next,
-		);
+		const outcome = await groupManagement.manage({
+			objectId: group.id,
+			expectedObjectRevision: expectedRevision,
+			operation: next
+				? { type: "set_spatial_mapping", mapping: next }
+				: { type: "remove_spatial_mapping" },
+		});
 		setSaving(false);
 		if (!outcome) {
 			setStatus(
@@ -105,7 +115,7 @@ export function GroupSettingsDialog({
 			);
 			return;
 		}
-		setExpectedRevision(outcome.revision);
+		setExpectedRevision(outcome.group.revision);
 		setMapping(next);
 		setMappingPresentation(
 			next
@@ -115,14 +125,15 @@ export function GroupSettingsDialog({
 						groups,
 					),
 		);
+		await refreshSettings();
 		setStatus("Saved.");
 	};
 
-	const editingUnavailable = !mappingActions
+	const editingUnavailable = !groupManagement
 		? "Spatial mapping editing is unavailable until the revisioned Group mapping action is connected."
 		: null;
 	const displayedMapping = mapping ?? mappingPresentation.mapping;
-	const canEditMapping = Boolean(mappingActions && mapping);
+	const canEditMapping = Boolean(groupManagement && mapping);
 	const general = (
 		<section className="group-settings-panel group-settings-general">
 			<fieldset disabled={saving} className="group-general-fields">
@@ -168,7 +179,7 @@ export function GroupSettingsDialog({
 			<MappingOwnershipActions
 				presentation={mappingPresentation.type}
 				hasInheritedSource={hasGroupReferenceSource(group.body)}
-				disabled={!mappingActions || saving}
+				disabled={!groupManagement || saving}
 				onCreate={() => void commitMapping(defaultSpatialMapping())}
 				onCopy={() =>
 					mappingPresentation.mapping &&
@@ -192,6 +203,7 @@ export function GroupSettingsDialog({
 			<MappingPreview
 				title="Projected-position preview"
 				fixtures={group.body.fixtures.length}
+				resolved={resolvedSpatial}
 			/>
 			<SaveStatus status={status} saving={saving} />
 		</section>
@@ -214,6 +226,7 @@ export function GroupSettingsDialog({
 			<MappingPreview
 				title="Ranked preview"
 				fixtures={group.body.fixtures.length}
+				resolved={resolvedSpatial}
 			/>
 			<SaveStatus status={status} saving={saving} />
 		</section>
@@ -533,20 +546,76 @@ function SelectField({
 function MappingPreview({
 	title,
 	fixtures,
+	resolved,
 }: {
 	title: string;
 	fixtures: number;
+	resolved: GroupResolvedSpatialProjection | null;
 }) {
 	return (
 		<section className="group-mapping-preview" aria-label={title}>
 			<strong>{title}</strong>
-			<p>
-				{fixtures
-					? `${fixtures} source fixtures · authoritative Stage preview pending`
-					: "This intentionally empty Group has no ranked positions."}
-			</p>
+			{resolved ? (
+				<>
+					<p>
+						{resolved.ordered_fixture_ids.length} source fixtures ·{" "}
+						{resolved.rank_count} authoritative ranks
+					</p>
+					<ol className="group-mapping-ranks">
+						{resolved.ranks.slice(0, 24).map((rank) => (
+							<li key={rank.fixture_id}>
+								<code>{rank.fixture_id}</code>
+								<span>Rank {rank.rank + 1}</span>
+							</li>
+						))}
+					</ol>
+					{resolved.warnings.map((warning) => (
+						<p className="group-mapping-warning" key={warning.fixture_id}>
+							Fixture {warning.fixture_id} has no Stage position and uses its
+							own fallback rank.
+						</p>
+					))}
+				</>
+			) : (
+				<p>
+					{fixtures
+						? "Loading authoritative Stage ranks…"
+						: "This intentionally empty Group has no ranked positions."}
+				</p>
+			)}
 		</section>
 	);
+}
+
+function resolvedMappingPresentation(
+	resolved: GroupResolvedSpatialProjection,
+): ReturnType<typeof resolveMappingPresentation> {
+	const mapping = resolved.effective_mapping ?? null;
+	switch (resolved.mapping_provenance.type) {
+		case "local":
+			return mapping
+				? { type: "local", label: "Local override", mapping }
+				: { type: "none", label: "Mapping: None", mapping: null };
+		case "inherited":
+			return mapping
+				? {
+						type: "inherited",
+						label: `Inherited from ${resolved.mapping_provenance.source_group_ids
+							.map((id) => `Group ${id}`)
+							.join(" · ")}`,
+						mapping,
+						sourceGroupIds: resolved.mapping_provenance.source_group_ids,
+					}
+				: { type: "none", label: "Mapping: None", mapping: null };
+		case "mixed_source_mappings":
+			return {
+				type: "mixed",
+				label: "Mixed source mappings — source order",
+				mapping: null,
+			};
+		case "none":
+			return { type: "none", label: "Mapping: None", mapping: null };
+	}
 }
 
 function SaveStatus({

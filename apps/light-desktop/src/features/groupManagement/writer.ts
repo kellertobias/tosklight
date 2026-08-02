@@ -38,6 +38,23 @@ export class GroupManagementWriter implements GroupManagementActions {
 		return run;
 	}
 
+	async settings(objectId: string) {
+		if (this.stopped) return null;
+		try {
+			const snapshot = await this.options.transport.settings(
+				this.options.showId,
+				objectId,
+			);
+			if (this.stopped) return null;
+			this.options.onError?.(null);
+			return snapshot;
+		} catch (reason) {
+			if (this.stopped) return null;
+			this.options.onError?.(asError(reason));
+			return null;
+		}
+	}
+
 	stop() {
 		this.stopped = true;
 	}
@@ -50,8 +67,15 @@ export class GroupManagementWriter implements GroupManagementActions {
 			);
 			return null;
 		}
-		const generation = this.options.store.getSnapshot().authorityGeneration;
-		const request = managementRequest(input);
+		const snapshot = this.options.store.getSnapshot();
+		const generation = snapshot.authorityGeneration;
+		if (snapshot.showRevision == null) {
+			this.options.onError?.(
+				new Error("Authoritative show revision is still loading"),
+			);
+			return null;
+		}
+		const request = managementRequest(input, snapshot.showRevision);
 		const token = this.options.store.beginPending(
 			this.options.showId,
 			"group",
@@ -74,7 +98,9 @@ export class GroupManagementWriter implements GroupManagementActions {
 			);
 			if (!settled) return null;
 			this.options.onError?.(
-				outcome.persistenceWarning ? new Error(outcome.persistenceWarning) : null,
+				outcome.persistenceWarning
+					? new Error(outcome.persistenceWarning)
+					: null,
 			);
 			return outcome;
 		} catch (reason) {
@@ -130,12 +156,16 @@ export class GroupManagementWriter implements GroupManagementActions {
 	}
 }
 
-function managementRequest(input: ManageGroupInput): GroupManagementRequest {
+function managementRequest(
+	input: ManageGroupInput,
+	expectedShowRevision: number,
+): GroupManagementRequest {
 	return {
 		requestId: crypto.randomUUID(),
 		groupId: input.objectId,
 		operation: input.operation,
 		expectedObjectRevision: input.expectedObjectRevision,
+		expectedShowRevision,
 	};
 }
 

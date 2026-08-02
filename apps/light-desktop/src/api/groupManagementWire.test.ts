@@ -3,6 +3,7 @@ import type { GroupManagementRequest } from "../features/groupManagement/contrac
 import {
 	decodeGroupManagementErrorResponse,
 	decodeGroupManagementOutcome,
+	decodeGroupSettingsSnapshot,
 	encodeGroupManagementRequest,
 } from "./groupManagementWire";
 
@@ -16,6 +17,7 @@ function request(
 		requestId: "manage-1",
 		groupId: "front",
 		expectedObjectRevision: 1,
+		expectedShowRevision: 7,
 		operation: {
 			type: "update_properties",
 			properties: { name: "Front wash", color: "#204060", icon: "◆" },
@@ -48,11 +50,34 @@ describe("group management wire", () => {
 			request_id: "manage-1",
 			group_id: "front",
 			expected_object_revision: 1,
+			expected_show_revision: 7,
 			operation: {
 				type: "update_properties",
 				properties: { name: "Front wash", color: "#204060", icon: "◆" },
 			},
 		});
+		expect(
+			encodeGroupManagementRequest(
+				request({
+					operation: {
+						type: "set_spatial_mapping",
+						mapping: {
+							projection: {
+								anchor: { x: 0, y: 0, z: 0 },
+								view_direction: { x: 0, y: 0, z: -1 },
+								rotation_degrees: 0,
+								preset: "top",
+							},
+							shape: {
+								type: "grid",
+								angle_degrees: 0,
+								direction: "ascending",
+							},
+						},
+					},
+				}),
+			).operation,
+		).toMatchObject({ type: "set_spatial_mapping" });
 		expect(
 			encodeGroupManagementRequest(request({ operation: { type: "undo" } }))
 				.operation,
@@ -114,6 +139,56 @@ describe("group management wire", () => {
 			future_extension: { retain: true },
 		});
 		expect(outcome.persistenceWarning).toBeNull();
+	});
+
+	it("decodes authoritative settings provenance, ranks, and warnings", () => {
+		const fixture = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+		const snapshot = decodeGroupSettingsSnapshot(
+			{
+				show_id: SHOW_ID,
+				show_revision: 7,
+				group: {
+					object_id: "front",
+					object_revision: 3,
+					body: { name: "Front", fixtures: [fixture] },
+				},
+				resolved_spatial: {
+					source_order: [fixture],
+					effective_mapping: {
+						projection: {
+							anchor: { x: 0, y: 0, z: 0 },
+							view_direction: { x: 0, y: 0, z: -1 },
+							rotation_degrees: 0,
+							preset: "top",
+						},
+						shape: {
+							type: "grid",
+							angle_degrees: 0,
+							direction: "ascending",
+						},
+					},
+					mapping_provenance: {
+						type: "inherited",
+						source_group_ids: ["source"],
+					},
+					ordered_fixture_ids: [fixture],
+					ranks: [{ fixture_id: fixture, rank: 0 }],
+					rank_count: 1,
+					warnings: [{ type: "missing_position", fixture_id: fixture }],
+				},
+			},
+			"front",
+		);
+
+		expect(snapshot.group.revision).toBe(3);
+		expect(snapshot.resolvedSpatial.mapping_provenance).toEqual({
+			type: "inherited",
+			source_group_ids: ["source"],
+		});
+		expect(snapshot.resolvedSpatial.ranks).toEqual([
+			{ fixture_id: fixture, rank: 0 },
+		]);
+		expect(snapshot.resolvedSpatial.warnings).toHaveLength(1);
 	});
 
 	it("rejects undeclared response fields", () => {

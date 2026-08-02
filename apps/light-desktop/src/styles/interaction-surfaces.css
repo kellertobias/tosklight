@@ -1117,6 +1117,32 @@
 	border-radius: 7px;
 	background: color-mix(in srgb, var(--panel2) 75%, transparent);
 }
+.group-mapping-ranks {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+	gap: 5px;
+	max-height: 180px;
+	overflow: auto;
+	margin: 10px 0 0;
+	padding: 0;
+	list-style: none;
+}
+.group-mapping-ranks li {
+	display: flex;
+	min-width: 0;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 6px 8px;
+	border-radius: 4px;
+	background: var(--panel2);
+}
+.group-mapping-ranks code {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.group-mapping-warning {
+	color: var(--warning, #ffbd66) !important;
+}
 .group-settings-status {
 	margin: 0;
 	color: var(--cyan);

@@ -5,6 +5,7 @@ import type {
 import {
 	decodeGroupManagementErrorResponse,
 	decodeGroupManagementOutcome,
+	decodeGroupSettingsSnapshot,
 	encodeGroupManagementRequest,
 	type GroupManagementErrorKind,
 } from "./groupManagementWire";
@@ -62,6 +63,25 @@ export class HttpGroupManagementTransport implements GroupManagementTransport {
 		);
 		verifyRevisionEtag(response, outcome.group.revision);
 		return outcome;
+	}
+
+	async settings(showId: string, objectId: string) {
+		const headers = this.headers();
+		headers.set("x-tosk-show", showId);
+		const url = `${this.baseUrl}/api/v2/groups/${encodeURIComponent(objectId)}`;
+		let response: Response;
+		try {
+			response = await this.fetchImplementation(url, {
+				method: "GET",
+				headers,
+			});
+		} catch (reason) {
+			throw unavailableError(reason);
+		}
+		return decodeGroupSettingsSnapshot(
+			await this.responseValue(response),
+			objectId,
+		);
 	}
 
 	private headers() {

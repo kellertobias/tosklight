@@ -61,6 +61,10 @@ export function GroupManagementProvider({
 					onError?.(new Error("Group management is unavailable"));
 					return null;
 				},
+				settings: async () => {
+					onError?.(new Error("Group management is unavailable"));
+					return null;
+				},
 			},
 		[onError, writer],
 	);

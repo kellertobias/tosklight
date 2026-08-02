@@ -65,16 +65,17 @@ function setup(
 ) {
 	const store = new ShowObjectsStore();
 	store.reset(SHOW_ID, "session-a");
-	store.setCollection(SHOW_ID, "group", [group(1, "Original")], 10);
+	store.setCollection(SHOW_ID, "group", [group(1, "Original")], 10, 7);
 	const onError = vi.fn();
+	const settings = vi.fn<GroupManagementTransport["settings"]>();
 	const writer = new GroupManagementWriter({
 		showId: SHOW_ID,
 		store,
-		transport: { manage },
+		transport: { manage, settings },
 		loadGroup,
 		onError,
 	});
-	return { store, writer, loadGroup, onError };
+	return { store, writer, loadGroup, onError, settings };
 }
 
 function deferred<T>() {
@@ -96,7 +97,7 @@ describe("GroupManagementWriter", () => {
 		const writer = new GroupManagementWriter({
 			showId: SHOW_ID,
 			store,
-			transport: { manage },
+			transport: { manage, settings: vi.fn() },
 			loadGroup: vi.fn(),
 			onError,
 		});
@@ -110,6 +111,30 @@ describe("GroupManagementWriter", () => {
 		);
 	});
 
+	it("loads the authoritative settings snapshot without creating a mutation", async () => {
+		const manage = vi.fn();
+		const { writer, settings } = setup(manage);
+		const snapshot = {
+			showId: SHOW_ID,
+			showRevision: 7,
+			group: { id: "front", revision: 1, object: group(1, "Original") },
+			resolvedSpatial: {
+				source_order: [],
+				effective_mapping: null,
+				mapping_provenance: { type: "none" as const },
+				ordered_fixture_ids: [],
+				ranks: [],
+				rank_count: 0,
+				warnings: [],
+			},
+		};
+		settings.mockResolvedValue(snapshot);
+
+		expect(await writer.settings("front")).toEqual(snapshot);
+		expect(settings).toHaveBeenCalledWith(SHOW_ID, "front");
+		expect(manage).not.toHaveBeenCalled();
+	});
+
 	it("installs a response before its one authoritative event", async () => {
 		const manage = vi.fn(
 			async (_showId: string, request: GroupManagementRequest) =>
@@ -118,6 +143,7 @@ describe("GroupManagementWriter", () => {
 		const { store, writer } = setup(manage);
 
 		await writer.manage(input());
+		expect(manage.mock.calls[0]?.[1].expectedShowRevision).toBe(7);
 		expect(store.getSnapshot().groups[0]).toEqual(group(2, "Managed"));
 		expect(store.getSnapshot().pendingObjectKeys.size).toBe(0);
 		store.applyChange(groupEvent(12, group(2, "Canonical event")));
@@ -127,7 +153,8 @@ describe("GroupManagementWriter", () => {
 	it("retains the event when it arrives before the response", async () => {
 		const pending = deferred<GroupManagementOutcome>();
 		const manage = vi.fn(
-			async (_showId: string, _request: GroupManagementRequest) => pending.promise,
+			async (_showId: string, _request: GroupManagementRequest) =>
+				pending.promise,
 		);
 		const { store, writer } = setup(manage);
 		const writing = writer.manage(input());
@@ -267,7 +294,8 @@ describe("GroupManagementWriter", () => {
 	it("ignores late outcomes after same-show authority replacement", async () => {
 		const pending = deferred<GroupManagementOutcome>();
 		const manage = vi.fn(
-			async (_showId: string, _request: GroupManagementRequest) => pending.promise,
+			async (_showId: string, _request: GroupManagementRequest) =>
+				pending.promise,
 		);
 		const { store, writer, loadGroup, onError } = setup(manage);
 		const writing = writer.manage(input());
@@ -286,7 +314,8 @@ describe("GroupManagementWriter", () => {
 	it("ignores a late error after same-show authority replacement", async () => {
 		const pending = deferred<GroupManagementOutcome>();
 		const manage = vi.fn(
-			async (_showId: string, _request: GroupManagementRequest) => pending.promise,
+			async (_showId: string, _request: GroupManagementRequest) =>
+				pending.promise,
 		);
 		const { store, writer, loadGroup, onError } = setup(manage);
 		const writing = writer.manage(input());

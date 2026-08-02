@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ShowObjectsStore } from "../showObjects/store";
 import type { GroupManagementRequest } from "./contracts";
@@ -64,17 +70,18 @@ describe("GroupManagementProvider", () => {
 		unrelatedRenders = 0;
 		const store = new ShowObjectsStore();
 		store.reset(SHOW_ID, "session-a");
-		store.setCollection(SHOW_ID, "group", []);
+		store.setCollection(SHOW_ID, "group", [], undefined, 1);
 		const manage = vi.fn(
 			async (_showId: string, request: GroupManagementRequest) =>
 				manageResponse(request),
 		);
 		const loadGroup = vi.fn(async () => null);
+		const settings = vi.fn();
 		render(
 			<GroupManagementProvider
 				showId={SHOW_ID}
 				store={store}
-				transport={{ manage }}
+				transport={{ manage, settings }}
 				loadGroup={loadGroup}
 			>
 				<ManageButton />
@@ -98,7 +105,7 @@ describe("GroupManagementProvider", () => {
 			<GroupManagementProvider
 				showId={null}
 				store={store}
-				transport={{ manage }}
+				transport={{ manage, settings: vi.fn() }}
 				loadGroup={vi.fn(async () => null)}
 				onError={onError}
 			>

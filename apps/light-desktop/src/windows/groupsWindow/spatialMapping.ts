@@ -1,44 +1,24 @@
+import type {
+	GroupMappingPosition3d,
+	GroupMappingProjection,
+	GroupMappingProjectionPreset,
+	GroupMappingRadarSweep,
+	GroupMappingRadialDirection,
+	GroupMappingRankDirection,
+	GroupMappingShape,
+	GroupSpatialSelectionMapping,
+} from "../../api/generated/light-wire";
 import type { StoredGroup } from "../../api/types";
 import type { Group } from "./model";
 
-export type ProjectionPreset = "top" | "front" | "back" | "left" | "right";
-export type RankDirection = "ascending" | "descending";
-export type RadialDirection = "outward" | "inward";
-export type RadarSweep = "clockwise" | "counter_clockwise";
-
-export interface Position3d {
-	x: number;
-	y: number;
-	z: number;
-}
-
-export interface SpatialProjection {
-	anchor: Position3d;
-	view_direction: Position3d;
-	rotation_degrees: number;
-	preset?: ProjectionPreset;
-}
-
-export type SpatialSelectionShape =
-	| { type: "grid"; angle_degrees: number; direction: RankDirection }
-	| {
-			type: "radial";
-			center_u: number;
-			center_v: number;
-			direction: RadialDirection;
-	  }
-	| {
-			type: "radar";
-			center_u: number;
-			center_v: number;
-			start_angle_degrees: number;
-			sweep: RadarSweep;
-	  };
-
-export interface SpatialSelectionMapping {
-	projection: SpatialProjection;
-	shape: SpatialSelectionShape;
-}
+export type ProjectionPreset = GroupMappingProjectionPreset;
+export type RankDirection = GroupMappingRankDirection;
+export type RadialDirection = GroupMappingRadialDirection;
+export type RadarSweep = GroupMappingRadarSweep;
+export type Position3d = GroupMappingPosition3d;
+export type SpatialProjection = GroupMappingProjection;
+export type SpatialSelectionShape = GroupMappingShape;
+export type SpatialSelectionMapping = GroupSpatialSelectionMapping;
 
 export type GroupMappingPresentation =
 	| { type: "none"; label: "Mapping: None"; mapping: null }

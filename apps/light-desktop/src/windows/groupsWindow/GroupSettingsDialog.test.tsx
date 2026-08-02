@@ -13,8 +13,11 @@ import type { Group } from "./model";
 import { defaultSpatialMapping } from "./spatialMapping";
 
 const manage = vi.fn();
+const settings = vi.fn();
+const managementActions = { manage, settings };
+let managementAvailable = true;
 vi.mock("../../features/groupManagement/GroupManagementProvider", () => ({
-	useGroupManagement: () => ({ manage }),
+	useGroupManagement: () => (managementAvailable ? managementActions : null),
 }));
 
 function group(overrides: Record<string, unknown> = {}): Group {
@@ -34,20 +37,10 @@ function group(overrides: Record<string, unknown> = {}): Group {
 	} as Group;
 }
 
-function renderDialog(
-	target = group(),
-	mappingActions: Parameters<
-		typeof GroupSettingsDialog
-	>[0]["mappingActions"] = null,
-) {
+function renderDialog(target = group()) {
 	return render(
 		<ModalProvider>
-			<GroupSettingsDialog
-				group={target}
-				groups={[target]}
-				onClose={vi.fn()}
-				mappingActions={mappingActions}
-			/>
+			<GroupSettingsDialog group={target} groups={[target]} onClose={vi.fn()} />
 		</ModalProvider>,
 	);
 }
@@ -55,11 +48,46 @@ function renderDialog(
 describe("Group settings modal", () => {
 	afterEach(() => cleanup());
 	beforeEach(() => {
+		managementAvailable = true;
+		settings.mockReset().mockResolvedValue(null);
 		manage.mockReset().mockResolvedValue({
 			status: "changed",
 			group: { revision: 8 },
 			persistenceWarning: null,
 		});
+	});
+
+	it("reconciles mapping provenance and ranks from the authoritative settings snapshot", async () => {
+		settings.mockResolvedValue({
+			showId: "11111111-1111-4111-8111-111111111111",
+			showRevision: 12,
+			group: { id: "4", revision: 9, object: group() },
+			resolvedSpatial: {
+				source_order: ["11111111-1111-4111-8111-111111111111"],
+				effective_mapping: defaultSpatialMapping(),
+				mapping_provenance: {
+					type: "inherited",
+					source_group_ids: ["2"],
+				},
+				ordered_fixture_ids: ["11111111-1111-4111-8111-111111111111"],
+				ranks: [
+					{
+						fixture_id: "11111111-1111-4111-8111-111111111111",
+						rank: 0,
+					},
+				],
+				rank_count: 1,
+				warnings: [],
+			},
+		});
+		renderDialog();
+		fireEvent.click(screen.getByRole("tab", { name: "Projection" }));
+
+		await waitFor(() =>
+			expect(screen.getByText("Inherited from Group 2")).toBeInTheDocument(),
+		);
+		expect(screen.getByText(/1 authoritative ranks/)).toBeInTheDocument();
+		expect(settings).toHaveBeenCalledWith("4");
 	});
 
 	it("has only General, Projection, and Phaser plus an X close control", () => {
@@ -110,6 +138,7 @@ describe("Group settings modal", () => {
 	});
 
 	it("shows mapping state without enabling writes when the typed server action is absent", () => {
+		managementAvailable = false;
 		renderDialog(group({ mapping: defaultSpatialMapping() }));
 		fireEvent.click(screen.getByRole("tab", { name: "Projection" }));
 		expect(screen.getByText("Local override")).toBeInTheDocument();
@@ -123,23 +152,25 @@ describe("Group settings modal", () => {
 	});
 
 	it("sends one complete revisioned mapping when a Phaser shape changes", async () => {
-		const update = vi.fn().mockResolvedValue({ revision: 8 });
-		renderDialog(group({ mapping: defaultSpatialMapping() }), { update });
+		renderDialog(group({ mapping: defaultSpatialMapping() }));
 		fireEvent.click(screen.getByRole("tab", { name: "Phaser" }));
 		fireEvent.click(screen.getByRole("radio", { name: "Radial" }));
 
-		await waitFor(() => expect(update).toHaveBeenCalledOnce());
-		expect(update).toHaveBeenCalledWith(
-			"4",
-			7,
-			expect.objectContaining({
-				shape: {
-					type: "radial",
-					center_u: 0,
-					center_v: 0,
-					direction: "outward",
-				},
+		await waitFor(() => expect(manage).toHaveBeenCalledOnce());
+		expect(manage).toHaveBeenCalledWith({
+			objectId: "4",
+			expectedObjectRevision: 7,
+			operation: expect.objectContaining({
+				type: "set_spatial_mapping",
+				mapping: expect.objectContaining({
+					shape: {
+						type: "radial",
+						center_u: 0,
+						center_v: 0,
+						direction: "outward",
+					},
+				}),
 			}),
-		);
+		});
 	});
 });
