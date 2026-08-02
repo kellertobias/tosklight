@@ -35,9 +35,7 @@ export interface DynamicInstanceChoice {
 	cancelLabel: string;
 }
 
-export type PendingCommandChoice =
-	| CueMoveCopyChoice
-	| DynamicInstanceChoice;
+export type PendingCommandChoice = CueMoveCopyChoice | DynamicInstanceChoice;
 
 export interface CommandLineProjection {
 	text: string;
@@ -63,44 +61,11 @@ export type SelectionExpression =
 			items: readonly SelectionReference[];
 	  };
 
-export type SelectionGridMethod =
-	| "stage2d"
-	| "top_to_bottom"
-	| "bottom_to_top"
-	| "front_to_back"
-	| "back_to_front"
-	| "left_to_right"
-	| "right_to_left"
-	| "horizontal_axis_x"
-	| "vertical_axis_z"
-	| "room_depth_axis_y";
-
-export interface SelectionGridConfiguration {
-	method: SelectionGridMethod;
-	axisOrigin: { x: number; y: number; z: number };
-}
-
-export interface SelectionGridState {
-	configuration: SelectionGridConfiguration;
-	rowsFirst: "top_left" | "top_right" | "bottom_left" | "bottom_right";
-	columnsFirst: "top_left" | "bottom_left" | "top_right" | "bottom_right";
-}
-
-export const DEFAULT_SELECTION_GRID_STATE: SelectionGridState = {
-	configuration: {
-		method: "stage2d",
-		axisOrigin: { x: 0, y: 0, z: 0 },
-	},
-	rowsFirst: "top_left",
-	columnsFirst: "top_left",
-};
-
 export interface SelectionProjection {
 	selected: readonly string[];
 	expression: SelectionExpression | null;
 	revision: number;
 	gestureOpen: boolean;
-	grid: SelectionGridState;
 }
 
 export type SelectionGestureSource =
@@ -125,14 +90,7 @@ export type SelectionAction =
 			rule: SelectionRule;
 			expectedRevision: number;
 	  }
-	| { type: "apply_rule"; rule: SelectionRule }
-	| { type: "cycle_grid_method" }
-	| {
-			type: "set_grid_configuration";
-			configuration: SelectionGridConfiguration;
-			expectedRevision: number;
-	  }
-	| { type: "reorder_from_grid"; axis: "rows" | "columns" };
+	| { type: "apply_rule"; rule: SelectionRule };
 
 export interface SelectionActionRequest {
 	requestId: string;
@@ -142,14 +100,7 @@ export interface SelectionActionRequest {
 export interface SelectionActionOutcome {
 	requestId: string;
 	correlationId: string;
-	action:
-		| "replaced"
-		| "gesture_applied"
-		| "group_selected"
-		| "rule_applied"
-		| "grid_method_cycled"
-		| "grid_configuration_set"
-		| "grid_reordered";
+	action: "replaced" | "gesture_applied" | "group_selected" | "rule_applied";
 	applied: number;
 	selection: SelectionProjection;
 	eventSequence: number;

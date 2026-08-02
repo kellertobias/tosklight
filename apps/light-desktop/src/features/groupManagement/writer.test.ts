@@ -123,6 +123,7 @@ describe("GroupManagementWriter", () => {
 				effective_mapping: null,
 				mapping_provenance: { type: "none" as const },
 				ordered_fixture_ids: [],
+				projected_positions: [],
 				ranks: [],
 				rank_count: 0,
 				warnings: [],

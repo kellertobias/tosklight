@@ -2,8 +2,7 @@ use crate::{ActionContext, ApplicationCommand, CommandFamily};
 use light_core::FixtureId;
 use light_programmer::command_line::{CommandKey, CommandKeyPhase};
 use light_programmer::{
-    CommandLineState, GridMethodConfiguration, GridTraversalAxis, PendingCommandChoice,
-    ProgrammerSelection, SelectionRule,
+    CommandLineState, PendingCommandChoice, ProgrammerSelection, SelectionRule,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -49,14 +48,6 @@ pub enum ProgrammingCommand {
     ApplySelectionRule {
         rule: SelectionRule,
     },
-    CycleSelectionGridMethod,
-    SetSelectionGridConfiguration {
-        configuration: GridMethodConfiguration,
-        expected_revision: u64,
-    },
-    ReorderSelectionFromGrid {
-        axis: GridTraversalAxis,
-    },
 }
 
 impl ProgrammingCommand {
@@ -67,9 +58,6 @@ impl ProgrammingCommand {
                 | Self::ApplySelectionGesture { .. }
                 | Self::SelectGroup { .. }
                 | Self::ApplySelectionRule { .. }
-                | Self::CycleSelectionGridMethod
-                | Self::SetSelectionGridConfiguration { .. }
-                | Self::ReorderSelectionFromGrid { .. }
         )
     }
 }
@@ -106,9 +94,6 @@ pub enum ProgrammingAction {
     SelectionGestureApplied,
     GroupSelected,
     SelectionRuleApplied,
-    SelectionGridMethodCycled,
-    SelectionGridConfigurationSet,
-    SelectionGridReordered,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

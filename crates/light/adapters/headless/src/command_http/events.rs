@@ -307,9 +307,6 @@ const fn changes_programmer(action: ProgrammingAction) -> bool {
             | ProgrammingAction::SelectionGestureApplied
             | ProgrammingAction::GroupSelected
             | ProgrammingAction::SelectionRuleApplied
-            | ProgrammingAction::SelectionGridMethodCycled
-            | ProgrammingAction::SelectionGridConfigurationSet
-            | ProgrammingAction::SelectionGridReordered
     )
 }
 
@@ -326,9 +323,6 @@ const fn action_name(action: ProgrammingAction) -> &'static str {
         ProgrammingAction::SelectionGestureApplied => "programmer.selection.gesture",
         ProgrammingAction::GroupSelected => "programmer.selection.group",
         ProgrammingAction::SelectionRuleApplied => "programmer.selection.rule",
-        ProgrammingAction::SelectionGridMethodCycled => "programmer.selection.grid.cycle",
-        ProgrammingAction::SelectionGridConfigurationSet => "programmer.selection.grid.configure",
-        ProgrammingAction::SelectionGridReordered => "programmer.selection.grid.reorder",
         _ => "programmer.command_line",
     }
 }
@@ -365,10 +359,7 @@ const fn base_change_categories(action: ProgrammingAction) -> &'static [&'static
         ProgrammingAction::SelectionReplaced
         | ProgrammingAction::SelectionGestureApplied
         | ProgrammingAction::GroupSelected
-        | ProgrammingAction::SelectionRuleApplied
-        | ProgrammingAction::SelectionGridMethodCycled
-        | ProgrammingAction::SelectionGridConfigurationSet
-        | ProgrammingAction::SelectionGridReordered => &["interaction"],
+        | ProgrammingAction::SelectionRuleApplied => &["interaction"],
         ProgrammingAction::Executed
         | ProgrammingAction::ClearedPreload
         | ProgrammingAction::ClearedValues

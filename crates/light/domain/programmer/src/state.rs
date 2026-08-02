@@ -1,7 +1,6 @@
 use crate::groups::GroupProgrammerValues;
 use crate::preload::PreloadPlaybackAction;
 use crate::selection::SelectionExpression;
-use crate::selection::SelectionGridState;
 use chrono::{DateTime, Utc};
 use light_core::{
     AttributeKey, AttributeValue, FixtureId, ProgrammerId, SessionId, TimedValue, UserId,
@@ -26,7 +25,6 @@ pub(crate) struct ProgrammerValueTiming {
 pub struct ProgrammerSnapshot {
     pub selected: Vec<FixtureId>,
     pub selection_expression: Option<SelectionExpression>,
-    pub selection_grid: SelectionGridState,
     pub values: Vec<TimedValue>,
     pub dynamic_values: Arc<Vec<DynamicAddressValue>>,
     pub group_values: GroupProgrammerValues,
@@ -53,8 +51,6 @@ pub struct ProgrammerState {
     pub selected: Vec<FixtureId>,
     #[serde(default)]
     pub selection_expression: Option<SelectionExpression>,
-    #[serde(default)]
-    pub selection_grid: SelectionGridState,
     pub values: Vec<TimedValue>,
     #[serde(default)]
     pub dynamic_values: Arc<Vec<DynamicAddressValue>>,

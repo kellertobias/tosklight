@@ -3,7 +3,6 @@ use crate::{ActionContext, ActionError};
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use light_programmer::GroupDefinition;
 use light_programmer::ProgrammerRegistry;
-use light_programmer::{StageGridPosition, StageGridPosition2d};
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -12,10 +11,6 @@ pub struct ProgrammingSelectionEnvironment {
     pub show_revision: u64,
     pub selectable_fixtures: HashMap<FixtureId, Vec<FixtureId>>,
     pub groups: HashMap<String, GroupDefinition>,
-    /// Authoritative Stage coordinates for requested fixture identities. Missing entries remain
-    /// selectable and are placed in the grid's deterministic overflow row.
-    pub stage_positions_2d: HashMap<FixtureId, StageGridPosition2d>,
-    pub stage_positions_3d: HashMap<FixtureId, StageGridPosition>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -47,9 +42,6 @@ pub struct ProgrammingValuesEnvironment {
 pub enum ProgrammingSelectionQuery {
     Fixtures(Vec<FixtureId>),
     Groups(Vec<String>),
-    /// Resolve authoritative Stage positions only for an explicit grid operation. Ordinary
-    /// selection gestures must not open the persisted show document on every press.
-    Grid(Vec<FixtureId>),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

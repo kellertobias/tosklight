@@ -18,12 +18,11 @@ import {
 import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import { GroupStrip } from "../../components/shared/GroupStrip";
 import { GroupPoolGrid } from "../../windows/groupsWindow/GroupPoolGrid";
-import {
-	DEFAULT_SELECTION_GRID_STATE,
-	type ProgrammingSnapshot,
-	type SelectionActionOutcome,
-	type SelectionActionRequest,
-	type SelectionProjection,
+import type {
+	ProgrammingSnapshot,
+	SelectionActionOutcome,
+	SelectionActionRequest,
+	SelectionProjection,
 } from "../programmingInteraction/contracts";
 import { ProgrammingInteractionViewProvider } from "../programmingInteraction/ProgrammingInteractionView";
 import { ProgrammingInteractionStore } from "../programmingInteraction/store";
@@ -450,7 +449,6 @@ describe("scoped Group activation", () => {
 				expression: { type: "live_group", groupId: "1", rule: { type: "all" } },
 				revision: 2,
 				gestureOpen: false,
-				grid: DEFAULT_SELECTION_GRID_STATE,
 			}),
 		);
 		render(view(context, <GroupStrip />));

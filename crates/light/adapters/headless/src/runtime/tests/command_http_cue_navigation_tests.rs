@@ -510,7 +510,6 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
             shift_held: false,
             update_record_started: None,
             update_first_release: None,
-            selection_grid_all_started: None,
             last_highlight_action: None,
         },
     );

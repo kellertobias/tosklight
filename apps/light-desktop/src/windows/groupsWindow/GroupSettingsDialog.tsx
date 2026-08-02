@@ -562,12 +562,22 @@ function MappingPreview({
 						{resolved.rank_count} authoritative ranks
 					</p>
 					<ol className="group-mapping-ranks">
-						{resolved.ranks.slice(0, 24).map((rank) => (
-							<li key={rank.fixture_id}>
-								<code>{rank.fixture_id}</code>
-								<span>Rank {rank.rank + 1}</span>
-							</li>
-						))}
+						{resolved.projected_positions.slice(0, 24).map((position) => {
+							const rank = resolved.ranks.find(
+								(candidate) => candidate.fixture_id === position.fixture_id,
+							);
+							return (
+								<li key={position.fixture_id}>
+									<code>{position.fixture_id}</code>
+									<span>
+										{position.u == null || position.v == null
+											? "U — · V —"
+											: `U ${formatCoordinate(position.u)} · V ${formatCoordinate(position.v)}`}
+									</span>
+									<span>{rank ? `Rank ${rank.rank + 1}` : "No rank"}</span>
+								</li>
+							);
+						})}
 					</ol>
 					{resolved.warnings.map((warning) => (
 						<p className="group-mapping-warning" key={warning.fixture_id}>
@@ -585,6 +595,10 @@ function MappingPreview({
 			)}
 		</section>
 	);
+}
+
+function formatCoordinate(value: number) {
+	return value.toFixed(3).replace(/0+$/u, "").replace(/\.$/u, "");
 }
 
 function resolvedMappingPresentation(

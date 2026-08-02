@@ -115,12 +115,23 @@ pub struct GroupSpatialRankProjection {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
+pub struct GroupProjectedPositionProjection {
+    pub fixture_id: Uuid,
+    #[ts(optional = nullable)]
+    pub u: Option<f64>,
+    #[ts(optional = nullable)]
+    pub v: Option<f64>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct GroupResolvedSpatialProjection {
     pub source_order: Vec<Uuid>,
     #[ts(optional = nullable)]
     pub effective_mapping: Option<GroupSpatialSelectionMapping>,
     pub mapping_provenance: GroupMappingProvenanceProjection,
     pub ordered_fixture_ids: Vec<Uuid>,
+    pub projected_positions: Vec<GroupProjectedPositionProjection>,
     pub ranks: Vec<GroupSpatialRankProjection>,
     pub rank_count: usize,
     pub warnings: Vec<GroupSpatialWarningProjection>,

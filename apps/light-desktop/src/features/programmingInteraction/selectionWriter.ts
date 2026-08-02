@@ -2,8 +2,6 @@ import type {
 	ProgrammingSnapshot,
 	SelectionAction,
 	SelectionActionOutcome,
-	SelectionGridConfiguration,
-	SelectionGridMethod,
 	SelectionGestureSource,
 	SelectionRule,
 } from "./contracts";
@@ -29,13 +27,7 @@ type SelectionIntent =
 			frozen: boolean;
 			rule: SelectionRule;
 	  }
-	| { type: "apply_rule"; rule: SelectionRule }
-	| { type: "cycle_grid_method" }
-	| {
-			type: "set_grid_configuration";
-			configuration: SelectionGridConfiguration;
-	  }
-	| { type: "reorder_from_grid"; axis: "rows" | "columns" };
+	| { type: "apply_rule"; rule: SelectionRule };
 
 interface QueuedSelectionWrite {
 	requestId: string;
@@ -110,9 +102,8 @@ export class ProgrammingSelectionWriter {
 	}
 
 	replace({ resolvedFixtures }: ProgrammingSelectionReplacementIntent) {
-		return this.enqueue(
-			{ type: "replace", fixtures: resolvedFixtures },
-			() => replaceSelectionPrediction(resolvedFixtures),
+		return this.enqueue({ type: "replace", fixtures: resolvedFixtures }, () =>
+			replaceSelectionPrediction(resolvedFixtures),
 		);
 	}
 
@@ -122,9 +113,8 @@ export class ProgrammingSelectionWriter {
 		operation = "add",
 	}: ProgrammingSelectionGestureIntent) {
 		const remove = operation === "remove";
-		return this.enqueue(
-			{ type: "gesture", source, remove },
-			() => gestureSelectionPrediction(source, resolvedFixtures, remove),
+		return this.enqueue({ type: "gesture", source, remove }, () =>
+			gestureSelectionPrediction(source, resolvedFixtures, remove),
 		);
 	}
 
@@ -135,52 +125,14 @@ export class ProgrammingSelectionWriter {
 		rule,
 	}: ProgrammingGroupSelectionIntent) {
 		const frozen = mode === "frozen";
-		return this.enqueue(
-			{ type: "select_group", groupId, frozen, rule },
-			() => groupSelectionPrediction(groupId, resolvedFixtures, frozen, rule),
+		return this.enqueue({ type: "select_group", groupId, frozen, rule }, () =>
+			groupSelectionPrediction(groupId, resolvedFixtures, frozen, rule),
 		);
 	}
 
 	applyRule(rule: SelectionRule) {
-		return this.enqueue(
-			{ type: "apply_rule", rule },
-			() => ruleSelectionPrediction(rule),
-		);
-	}
-
-	cycleGridMethod() {
-		const current = this.options.store.getSnapshot().selection;
-		const method = current
-			? nextGridMethod(current.grid.configuration.method)
-			: "stage2d";
-		return this.enqueue(
-			{ type: "cycle_grid_method" },
-			() => setGridConfigurationPrediction({
-				...(current?.grid.configuration ?? {
-					method: "stage2d",
-					axisOrigin: { x: 0, y: 0, z: 0 },
-				}),
-				method,
-			}),
-		);
-	}
-
-	setGridConfiguration(configuration: SelectionGridConfiguration) {
-		validateGridConfiguration(configuration);
-		const captured = {
-			method: configuration.method,
-			axisOrigin: { ...configuration.axisOrigin },
-		};
-		return this.enqueue(
-			{ type: "set_grid_configuration", configuration: captured },
-			() => setGridConfigurationPrediction(captured),
-		);
-	}
-
-	reorderFromGrid(axis: "rows" | "columns") {
-		return this.enqueue(
-			{ type: "reorder_from_grid", axis },
-			() => (current) => current,
+		return this.enqueue({ type: "apply_rule", rule }, () =>
+			ruleSelectionPrediction(rule),
 		);
 	}
 
@@ -288,8 +240,7 @@ export class ProgrammingSelectionWriter {
 	}
 
 	private async runBarrier<T>(run: () => Promise<T>, failed: T) {
-		if (this.stopped || !this.scopeIsCurrent())
-			return failed;
+		if (this.stopped || !this.scopeIsCurrent()) return failed;
 		this.barrierRunning = true;
 		try {
 			if (!(await this.flush()) || this.stopped) return failed;
@@ -309,14 +260,12 @@ export class ProgrammingSelectionWriter {
 	}
 
 	private async send(write: QueuedSelectionWrite) {
-		if (this.stopped || !this.scopeIsCurrent())
-			return null;
+		if (this.stopped || !this.scopeIsCurrent()) return null;
 		try {
 			const action = this.actionAtCurrentRevision(write.intent);
 			const request = { requestId: write.requestId, action };
 			const outcome = await this.options.apply(this.options.deskId, request);
-			if (this.stopped || !this.scopeIsCurrent())
-				return null;
+			if (this.stopped || !this.scopeIsCurrent()) return null;
 			if (
 				!this.options.store.commitSelection(
 					write.token,
@@ -330,14 +279,12 @@ export class ProgrammingSelectionWriter {
 			);
 			return outcome;
 		} catch (reason) {
-			if (this.stopped || !this.scopeIsCurrent())
-				return null;
+			if (this.stopped || !this.scopeIsCurrent()) return null;
 			const error = asError(reason);
 			const reported = needsAuthoritativeRepair(reason)
 				? await this.repair(write.token, error)
 				: this.rollback(write.token, error);
-			if (this.stopped || !this.scopeIsCurrent())
-				return null;
+			if (this.stopped || !this.scopeIsCurrent()) return null;
 			this.options.onError?.(reported);
 			return null;
 		}
@@ -353,12 +300,9 @@ export class ProgrammingSelectionWriter {
 			case "replace":
 				return { ...intent, expectedRevision: revision };
 			case "select_group":
-			case "set_grid_configuration":
 				return { ...intent, expectedRevision: revision };
 			case "gesture":
 			case "apply_rule":
-			case "cycle_grid_method":
-			case "reorder_from_grid":
 				return intent;
 		}
 	}
@@ -366,8 +310,7 @@ export class ProgrammingSelectionWriter {
 	private async repair(token: string, original: Error): Promise<Error> {
 		try {
 			const snapshot = await this.options.loadSnapshot();
-			if (this.stopped || !this.scopeIsCurrent())
-				return original;
+			if (this.stopped || !this.scopeIsCurrent()) return original;
 			if (
 				!this.options.store.installSelectionRepair(
 					token,
@@ -375,7 +318,9 @@ export class ProgrammingSelectionWriter {
 					snapshot,
 				)
 			)
-				throw new Error("The repaired selection no longer belongs to this view");
+				throw new Error(
+					"The repaired selection no longer belongs to this view",
+				);
 			return original;
 		} catch (reason) {
 			this.options.store.rollback(token, original, this.expectedScope());
@@ -397,10 +342,7 @@ export class ProgrammingSelectionWriter {
 
 	private claimScope() {
 		const state = this.options.store.getSnapshot();
-		if (
-			state.showId !== this.showId ||
-			state.deskId !== this.options.deskId
-		)
+		if (state.showId !== this.showId || state.deskId !== this.options.deskId)
 			return false;
 		this.scope ??= this.options.store.captureScope();
 		return true;
@@ -409,44 +351,6 @@ export class ProgrammingSelectionWriter {
 	private expectedScope() {
 		return this.scope ?? -1;
 	}
-}
-
-const GRID_METHODS: readonly SelectionGridMethod[] = [
-	"stage2d",
-	"top_to_bottom",
-	"bottom_to_top",
-	"front_to_back",
-	"back_to_front",
-	"left_to_right",
-	"right_to_left",
-	"horizontal_axis_x",
-	"vertical_axis_z",
-	"room_depth_axis_y",
-];
-
-function nextGridMethod(method: SelectionGridMethod): SelectionGridMethod {
-	const index = GRID_METHODS.indexOf(method);
-	return GRID_METHODS[(index + 1) % GRID_METHODS.length] ?? "stage2d";
-}
-
-function setGridConfigurationPrediction(
-	configuration: SelectionGridConfiguration,
-): SelectionReducer {
-	return (current) => ({
-		...current,
-		gestureOpen: false,
-		grid: {
-			configuration,
-			rowsFirst: "top_left",
-			columnsFirst: "top_left",
-		},
-	});
-}
-
-function validateGridConfiguration(configuration: SelectionGridConfiguration) {
-	const { x, y, z } = configuration.axisOrigin;
-	if (![x, y, z].every(Number.isFinite))
-		throw new Error("Selection grid origin must contain finite coordinates");
 }
 
 function httpStatus(reason: unknown) {

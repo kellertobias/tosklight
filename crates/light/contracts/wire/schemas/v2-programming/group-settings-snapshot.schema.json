@@ -305,6 +305,35 @@
         "z"
       ]
     },
+    "GroupProjectedPositionProjection": {
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "u": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "v": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "fixture_id",
+        "u",
+        "v"
+      ]
+    },
     "GroupResolvedSpatialProjection": {
       "type": "object",
       "properties": {
@@ -326,6 +355,12 @@
           "items": {
             "type": "string",
             "format": "uuid"
+          }
+        },
+        "projected_positions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GroupProjectedPositionProjection"
           }
         },
         "rank_count": {
@@ -359,6 +394,7 @@
         "effective_mapping",
         "mapping_provenance",
         "ordered_fixture_ids",
+        "projected_positions",
         "ranks",
         "rank_count",
         "warnings"

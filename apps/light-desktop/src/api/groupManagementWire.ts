@@ -236,6 +236,7 @@ function decodeResolvedSpatial(value: unknown): GroupResolvedSpatialProjection {
 		"effective_mapping",
 		"mapping_provenance",
 		"ordered_fixture_ids",
+		"projected_positions",
 		"ranks",
 		"rank_count",
 		"warnings",
@@ -260,6 +261,36 @@ function decodeResolvedSpatial(value: unknown): GroupResolvedSpatialProjection {
 			spatial.ordered_fixture_ids,
 			"$.resolved_spatial.ordered_fixture_ids",
 		),
+		projected_positions: arrayAt(
+			spatial.projected_positions,
+			"$.resolved_spatial.projected_positions",
+		).map((value, index) => {
+			const position = exactRecordAt(
+				value,
+				`$.resolved_spatial.projected_positions[${index}]`,
+				["fixture_id", "u", "v"],
+			);
+			return {
+				fixture_id: uuidAt(
+					position.fixture_id,
+					`$.resolved_spatial.projected_positions[${index}].fixture_id`,
+				),
+				u:
+					position.u == null
+						? null
+						: numberAt(
+								position.u,
+								`$.resolved_spatial.projected_positions[${index}].u`,
+							),
+				v:
+					position.v == null
+						? null
+						: numberAt(
+								position.v,
+								`$.resolved_spatial.projected_positions[${index}].v`,
+							),
+			};
+		}),
 		ranks: arrayAt(spatial.ranks, "$.resolved_spatial.ranks").map(
 			(value, index) => {
 				const rank = exactRecordAt(

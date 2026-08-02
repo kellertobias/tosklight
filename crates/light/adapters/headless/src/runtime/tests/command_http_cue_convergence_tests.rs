@@ -65,7 +65,6 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
             shift_held: false,
             update_record_started: None,
             update_first_release: None,
-            selection_grid_all_started: None,
             last_highlight_action: None,
         },
     );
@@ -144,7 +143,6 @@ async fn real_osc_record_touch_creates_exact_page_target_and_suppresses_control(
             shift_held: false,
             update_record_started: None,
             update_first_release: None,
-            selection_grid_all_started: None,
             last_highlight_action: None,
         },
     );

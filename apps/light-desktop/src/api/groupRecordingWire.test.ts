@@ -87,7 +87,7 @@ describe("Group recording wire", () => {
 		expect(body).toHaveProperty("future", { kept: true });
 	});
 
-	it("validates and preserves portable selection-grid configuration", () => {
+	it("tolerates and strips retired Group grid fields", () => {
 		const grid = {
 			method: "vertical_axis_z",
 			axis_origin: { x: 1, y: 2, z: 3 },
@@ -101,7 +101,7 @@ describe("Group recording wire", () => {
 			}),
 			REQUEST,
 		);
-		expect(outcome.group.object?.body.grid).toEqual(grid);
+		expect(outcome.group.object?.body).not.toHaveProperty("grid");
 
 		expect(
 			decodeGroupRecordingOutcome(
@@ -115,11 +115,8 @@ describe("Group recording wire", () => {
 					},
 				}),
 				REQUEST,
-			).group.object?.body.grid,
-		).toEqual({
-			method: "stage2d",
-			axis_origin: { x: 0, y: 0, z: 0 },
-		});
+			).group.object?.body,
+		).not.toHaveProperty("grid");
 	});
 
 	it("accepts a losslessly preserved legacy body with only fixtures", () => {

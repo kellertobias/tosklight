@@ -35,15 +35,10 @@ pub(super) fn handle_highlight_osc(
     let Some(source) = source.and_then(|value| value.parse::<SocketAddr>().ok()) else {
         return;
     };
-    let gesture = state.integrations.selection_grid_gesture(
-        source,
-        parts[1],
-        action,
-        pressed,
-        Instant::now(),
-    );
-    if gesture != OscSelectionGridGesture::Ordinary {
-        handle_selection_grid_gesture(state, parts[1], source, gesture);
+    if state
+        .integrations
+        .consume_unassigned_shifted_highlight(source, parts[1], action)
+    {
         return;
     }
     if !pressed {
@@ -92,67 +87,6 @@ pub(super) fn handle_highlight_osc(
     }
 }
 
-fn handle_selection_grid_gesture(
-    state: &AppState,
-    desk_alias: &str,
-    source: SocketAddr,
-    gesture: OscSelectionGridGesture,
-) {
-    let Some((subscriber, session)) = programmer_osc_session(state, Some(source)) else {
-        return;
-    };
-    if subscriber.desk_alias != desk_alias || read_desk_lock(state, session.desk.id).locked {
-        return;
-    }
-    match gesture {
-        OscSelectionGridGesture::Ordinary | OscSelectionGridGesture::Pending => {}
-        OscSelectionGridGesture::OpenSettings => {
-            emit(
-                state,
-                "desk_action",
-                serde_json::json!({
-                    "desk_alias":desk_alias,
-                    "desk_id":session.desk.id,
-                    "session_id":session.id,
-                    "action":"selection-grid-settings",
-                    "source":"osc"
-                }),
-            );
-        }
-        OscSelectionGridGesture::CycleMethod => {
-            command_http::route_osc_programming_command(
-                state,
-                &session,
-                desk_alias,
-                light_application::ProgrammingCommand::CycleSelectionGridMethod,
-                None,
-            );
-        }
-        OscSelectionGridGesture::ReorderRows => {
-            command_http::route_osc_programming_command(
-                state,
-                &session,
-                desk_alias,
-                light_application::ProgrammingCommand::ReorderSelectionFromGrid {
-                    axis: light_programmer::GridTraversalAxis::Rows,
-                },
-                None,
-            );
-        }
-        OscSelectionGridGesture::ReorderColumns => {
-            command_http::route_osc_programming_command(
-                state,
-                &session,
-                desk_alias,
-                light_application::ProgrammingCommand::ReorderSelectionFromGrid {
-                    axis: light_programmer::GridTraversalAxis::Columns,
-                },
-                None,
-            );
-        }
-    }
-}
-
 fn emit_highlight_osc_rejection(
     state: &AppState,
     session: &Session,
@@ -178,16 +112,6 @@ pub(super) enum OscRecordGesture {
     Arm,
     Targets,
     Settings,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum OscSelectionGridGesture {
-    Ordinary,
-    Pending,
-    CycleMethod,
-    OpenSettings,
-    ReorderRows,
-    ReorderColumns,
 }
 
 pub(super) fn programmer_osc_session(

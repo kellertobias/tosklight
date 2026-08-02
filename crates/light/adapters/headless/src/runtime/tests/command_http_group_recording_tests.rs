@@ -617,7 +617,6 @@ async fn command_keyboard_osc_and_websocket_group_recording_converge_on_typed_ca
             shift_held: false,
             update_record_started: None,
             update_first_release: None,
-            selection_grid_all_started: None,
             last_highlight_action: None,
         },
     );

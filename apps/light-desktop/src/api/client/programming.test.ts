@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_SELECTION_GRID_STATE } from "../../features/programmingInteraction/contracts";
 import { ProgrammingApiClient } from "./programming";
 import type { LiveClientTransport } from "./transport";
 
@@ -54,7 +53,6 @@ function decodedInteractionSnapshot() {
 				expression: { type: "static" },
 				revision: 3,
 				gestureOpen: false,
-				grid: DEFAULT_SELECTION_GRID_STATE,
 			},
 		},
 	};
@@ -87,11 +85,15 @@ describe("ProgrammingApiClient v2 interaction boundary", () => {
 			)
 			.mockResolvedValueOnce({ accepted: true });
 
-		await expect(client.executeCommandLine("FIXTURE 1 AT 25")).resolves.toEqual({
-			accepted: true,
-		});
+		await expect(client.executeCommandLine("FIXTURE 1 AT 25")).resolves.toEqual(
+			{
+				accepted: true,
+			},
+		);
 		expect(sendAction).toHaveBeenCalledTimes(2);
-		expect(sendAction.mock.calls[1]?.[0]).toEqual(sendAction.mock.calls[0]?.[0]);
+		expect(sendAction.mock.calls[1]?.[0]).toEqual(
+			sendAction.mock.calls[0]?.[0],
+		);
 	});
 
 	it("sends one correlated Programmer values command frame", async () => {

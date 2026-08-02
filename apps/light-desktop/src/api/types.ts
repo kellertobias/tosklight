@@ -1,4 +1,5 @@
 import type { PresetFamily } from "../presetFamilies";
+import type { GroupSpatialSelectionMapping } from "./generated/light-wire";
 import type { ShowEntry } from "./types/desk";
 
 export type {
@@ -320,29 +321,17 @@ export interface VersionedObject<T = Record<string, unknown>> {
 
 export * from "./types/configuration";
 
-export type SelectionGridMethod =
-	| "stage2d"
-	| "top_to_bottom"
-	| "bottom_to_top"
-	| "front_to_back"
-	| "back_to_front"
-	| "left_to_right"
-	| "right_to_left"
-	| "horizontal_axis_x"
-	| "vertical_axis_z"
-	| "room_depth_axis_y";
-
-export interface SelectionGridConfiguration {
-	method: SelectionGridMethod;
-	axis_origin?: { x: number; y: number; z: number };
-}
-
 export interface StoredGroup {
 	name?: string;
 	color?: string;
 	icon?: string;
+	/**
+	 * Compatibility cache for legacy readers. Canonical live membership is owned by `source` when
+	 * it is present; show-object decoding still supplies this array for source-only bodies.
+	 */
 	fixtures: string[];
-	grid?: SelectionGridConfiguration;
+	source?: GroupFixtureSource;
+	mapping?: GroupSpatialSelectionMapping;
 	programming?: Record<string, unknown>;
 	derived_from?: {
 		source_group_id: string;
@@ -354,6 +343,21 @@ export interface StoredGroup {
 		captured_at: string;
 	} | null;
 }
+
+export type GroupSelectionRule =
+	| { type: "all" }
+	| { type: "odd" }
+	| { type: "even" }
+	| { type: "every_nth"; n: number; offset: number };
+
+export interface GroupReference {
+	group_id: string;
+	rule: GroupSelectionRule;
+}
+
+export type GroupFixtureSource =
+	| { type: "explicit"; fixture_ids: string[] }
+	| { type: "references"; references: GroupReference[] };
 
 export interface StoredPreset {
 	name: string;

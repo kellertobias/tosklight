@@ -20,7 +20,6 @@ mod preset_capture;
 mod presets;
 mod registry;
 mod selection;
-mod selection_grid;
 mod sessions;
 mod state;
 mod transactions;
@@ -46,8 +45,9 @@ pub use dynamic_values::DynamicProgrammerValueMutation;
 pub use group_recording::{GroupRecordingCapture, group_delete_blocker};
 pub use groups::{
     DerivedGroup, FrozenGroup, GroupDefinition, GroupFixtureSource, GroupMappingProvenance,
-    GroupProgrammerValue, GroupReference, ResolvedGroup, merge_ordered_group_membership,
-    resolve_group, resolve_group_spatial,
+    GroupProgrammerValue, GroupReference, MAX_GROUP_REFERENCE_DEPTH,
+    MAX_GROUP_REFERENCE_EVALUATIONS, MAX_GROUP_RESOLVED_FIXTURES, ResolvedGroup,
+    merge_ordered_group_membership, resolve_group, resolve_group_spatial,
 };
 pub use highlight::{
     HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightRegistry,
@@ -67,13 +67,8 @@ pub use preload_values::{
 pub use presets::{Preset, PresetAddress, PresetFamily, PresetStoreMode};
 pub use registry::ProgrammerRegistry;
 pub use selection::{
-    ProgrammerSelection, SelectionExpression, SelectionGridState, SelectionReference,
-    SelectionReplaceError, SelectionRule, apply_selection_rule, resolve_selection_references,
-};
-pub use selection_grid::{
-    AxisOrigin, ColumnsFirstTraversal, GridCell, GridConstructionError, GridMethod,
-    GridMethodConfiguration, GridTraversalAxis, PositionedFixture, RowsFirstTraversal,
-    SelectionGrid, StageGridPosition, StageGridPosition2d,
+    ProgrammerSelection, SelectionExpression, SelectionReference, SelectionReplaceError,
+    SelectionRule, apply_selection_rule, resolve_selection_references,
 };
 pub use state::{
     ProgrammerFixtureUpdate, ProgrammerGroupUpdate, ProgrammerOutputState, ProgrammerSnapshot,

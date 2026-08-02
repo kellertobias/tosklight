@@ -35,53 +35,16 @@ export function decodeRecordedGroupBody(
 		derivedGroupAt(body.derived_from, "$.group.body.derived_from");
 	if ("frozen_from" in body)
 		frozenGroupAt(body.frozen_from, "$.group.body.frozen_from");
-	const grid =
-		"grid" in body ? safeGridAt(body.grid, "$.group.body.grid") : undefined;
 	if ("programming" in body)
 		programmingAt(body.programming, "$.group.body.programming");
 	const canonicalBody = { ...body };
 	delete canonicalBody.master;
 	delete canonicalBody.playback_fader;
+	delete canonicalBody.grid;
 	return {
 		...canonicalBody,
 		fixtures,
-		...(grid === undefined ? {} : { grid }),
 	} as ShowObject<"group">["body"];
-}
-
-function safeGridAt(value: unknown, path: string) {
-	try {
-		const grid = recordAt(value, path);
-		const method = enumAt(grid.method, `${path}.method`, [
-			"stage2d",
-			"top_to_bottom",
-			"bottom_to_top",
-			"front_to_back",
-			"back_to_front",
-			"left_to_right",
-			"right_to_left",
-			"horizontal_axis_x",
-			"vertical_axis_z",
-			"room_depth_axis_y",
-		]);
-		const origin =
-			grid.axis_origin == null
-				? { x: 0, y: 0, z: 0 }
-				: recordAt(grid.axis_origin, `${path}.axis_origin`);
-		return {
-			method,
-			axis_origin: {
-				x: numberAt(origin.x, `${path}.axis_origin.x`),
-				y: numberAt(origin.y, `${path}.axis_origin.y`),
-				z: numberAt(origin.z, `${path}.axis_origin.z`),
-			},
-		};
-	} catch {
-		return {
-			method: "stage2d" as const,
-			axis_origin: { x: 0, y: 0, z: 0 },
-		};
-	}
 }
 
 function derivedGroupAt(value: unknown, path: string) {
@@ -143,9 +106,9 @@ function attributeValueAt(value: unknown, path: string) {
 	]);
 	if (kind === "normalized") numberAt(attribute.value, `${path}.value`);
 	else if (kind === "spread")
-		arrayAt(attribute.value, `${path}.value`).forEach((item, index) =>
-			numberAt(item, `${path}.value[${index}]`),
-		);
+		arrayAt(attribute.value, `${path}.value`).forEach((item, index) => {
+			numberAt(item, `${path}.value[${index}]`);
+		});
 	else if (kind === "discrete") stringValueAt(attribute.value, `${path}.value`);
 	else if (kind === "color_xyz") xyzAt(attribute.value, `${path}.value`);
 	else

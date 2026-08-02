@@ -18,6 +18,7 @@ import { usePatchedFixturesView } from "../features/patch/PatchState";
 import type { ProgrammerPreloadValuesProjection } from "../features/programmerPreloadValues/contracts";
 import type { ProgrammerValuesProjection } from "../features/programmerValues/contracts";
 import { useProgrammerValueTargets } from "../features/programmerValues/useProgrammerValueTargets";
+import { resolveGroupMembership } from "../features/showObjects/groupProjection";
 import { useVisualizationRuntimeRead } from "../features/visualizationRuntime/VisualizationRuntimeView";
 import type { FixtureSheetIncludedHeads, FixtureSheetOrder } from "../types";
 import {
@@ -240,9 +241,9 @@ export function fixtureSheetProgrammerValueIndex(
 			value.value,
 			value.programmerOrder,
 		);
-	const groupsById = new Map(groups.map((group) => [group.id, group]));
+	const membership = resolveGroupMembership(groups);
 	for (const value of projection?.groupValues ?? []) {
-		const fixtureIds = groupsById.get(value.groupId)?.body.fixtures ?? [];
+		const fixtureIds = membership.get(value.groupId) ?? [];
 		fixtureIds.forEach((fixtureId, index) => {
 			assign(
 				fixtureId,
@@ -294,6 +295,7 @@ function indexLimitingGroups(
 	fixtures: readonly PatchedFixture[],
 ): Map<string, FixtureGroup[]> {
 	const result = new Map<string, FixtureGroup[]>();
+	const membership = resolveGroupMembership(groups);
 	const participates = new Map<string, boolean>();
 	for (const fixture of fixtures) {
 		const profileMode =
@@ -301,16 +303,13 @@ function indexLimitingGroups(
 				(mode) => mode.id === fixture.definition.mode_id,
 			) ?? fixture.definition.profile_snapshot?.modes[0];
 		const eligible = profileMode
-			? profileMode.channels.some(
-					(channel) => channel.reacts_to_group_master,
-				)
+			? profileMode.channels.some((channel) => channel.reacts_to_group_master)
 			: fixture.definition.heads.some((head) =>
 					head.parameters.some((parameter) =>
 						parameter.attribute.toLowerCase().includes("intensity"),
 					),
 				);
-		const active =
-			(fixture.group_masters_enabled ?? true) && eligible;
+		const active = (fixture.group_masters_enabled ?? true) && eligible;
 		participates.set(fixture.fixture_id, active);
 		for (const head of fixture.logical_heads)
 			participates.set(head.fixture_id, active);
@@ -318,7 +317,7 @@ function indexLimitingGroups(
 	for (const group of groups) {
 		if (group.runtime.playbackNumber == null || group.runtime.master >= 1)
 			continue;
-		for (const fixtureId of group.body.fixtures) {
+		for (const fixtureId of membership.get(group.id) ?? []) {
 			if (!participates.get(fixtureId)) continue;
 			const fixtureGroups = result.get(fixtureId);
 			if (fixtureGroups) fixtureGroups.push(group);

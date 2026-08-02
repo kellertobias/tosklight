@@ -29,9 +29,7 @@ export {
 type GroupObject = ShowObject<"group">;
 type PresetObject = ShowObject<"preset">;
 
-export function useDynamics(
-	enabled = true,
-): readonly ShowObject<"dynamic">[] {
+export function useDynamics(enabled = true): readonly ShowObject<"dynamic">[] {
 	return useShowObjectsSelector(selectDynamics, shallowEqualArray, enabled);
 }
 
@@ -207,11 +205,9 @@ function equalGroup(left: GroupObject, right: GroupObject | undefined) {
 		leftBody.name === rightBody.name &&
 		leftBody.color === rightBody.color &&
 		leftBody.icon === rightBody.icon &&
-		leftBody.grid?.method === rightBody.grid?.method &&
-		leftBody.grid?.axis_origin?.x === rightBody.grid?.axis_origin?.x &&
-		leftBody.grid?.axis_origin?.y === rightBody.grid?.axis_origin?.y &&
-		leftBody.grid?.axis_origin?.z === rightBody.grid?.axis_origin?.z &&
 		leftBody.programming === rightBody.programming &&
+		leftBody.source === rightBody.source &&
+		leftBody.mapping === rightBody.mapping &&
 		leftBody.derived_from === rightBody.derived_from &&
 		leftBody.frozen_from === rightBody.frozen_from &&
 		shallowEqualArray(leftBody.fixtures, rightBody.fixtures)

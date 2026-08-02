@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-	CommandLineProjection,
-	DEFAULT_SELECTION_GRID_STATE,
-	ProgrammingChange,
-	ProgrammingSnapshot,
-	SelectionProjection,
+	type CommandLineProjection,
+	type ProgrammingChange,
+	type ProgrammingSnapshot,
+	type SelectionProjection,
+	selectedGroupId,
 } from "./contracts";
-import { selectedGroupId } from "./contracts";
 import { ProgrammingInteractionStore } from "./store";
 import { ProgrammingProtocolError } from "./transport";
 
@@ -22,7 +21,13 @@ function commandLine(
 	text = "FIXTURE",
 	target: CommandLineProjection["target"] = "FIXTURE",
 ): CommandLineProjection {
-	return { text, target, pristine: text === target, revision, pendingChoice: null };
+	return {
+		text,
+		target,
+		pristine: text === target,
+		revision,
+		pendingChoice: null,
+	};
 }
 
 function selection(
@@ -35,7 +40,6 @@ function selection(
 		expression,
 		revision,
 		gestureOpen: false,
-		grid: DEFAULT_SELECTION_GRID_STATE,
 	};
 }
 
@@ -179,9 +183,9 @@ describe("ProgrammingInteractionStore optimism", () => {
 		const first = store.beginOptimisticCommandLine({ text: "FIXTURE 1" });
 		const second = store.beginOptimisticCommandLine({ text: "FIXTURE 12" });
 
-		expect(
-			store.commitCommandLine(first, commandLine(2, "FIXTURE 1")),
-		).toBe(true);
+		expect(store.commitCommandLine(first, commandLine(2, "FIXTURE 1"))).toBe(
+			true,
+		);
 		expect(store.getSnapshot().commandLine).toMatchObject({
 			text: "FIXTURE 12",
 			revision: 2,
@@ -190,9 +194,9 @@ describe("ProgrammingInteractionStore optimism", () => {
 			new Set(["commandLine"]),
 		);
 
-		expect(
-			store.commitCommandLine(second, commandLine(3, "FIXTURE 12")),
-		).toBe(true);
+		expect(store.commitCommandLine(second, commandLine(3, "FIXTURE 12"))).toBe(
+			true,
+		);
 		expect(store.getSnapshot().commandLine).toEqual(
 			commandLine(3, "FIXTURE 12"),
 		);
@@ -203,10 +207,7 @@ describe("ProgrammingInteractionStore optimism", () => {
 		const store = readyStore();
 		const token = store.beginOptimisticCommandLine({ text: "FIXTURE 9" });
 		const authoritative = commandLine(2, "FIXTURE 9");
-		store.applyChange(
-			{ deskId: DESK_ID, commandLine: authoritative },
-			12,
-		);
+		store.applyChange({ deskId: DESK_ID, commandLine: authoritative }, 12);
 
 		expect(store.commitCommandLine(token, authoritative)).toBe(true);
 		expect(store.getSnapshot().commandLine).toEqual(authoritative);
@@ -391,9 +392,7 @@ describe("ProgrammingInteractionStore optimism", () => {
 			24,
 		);
 
-		expect(store.commitSelection(token, selection(2, [FIXTURE_2]))).toBe(
-			true,
-		);
+		expect(store.commitSelection(token, selection(2, [FIXTURE_2]))).toBe(true);
 		expect(store.getSnapshot().selection?.selected).toEqual([FIXTURE_3]);
 		expect(store.authoritativeSelectionRevision()).toBe(3);
 	});

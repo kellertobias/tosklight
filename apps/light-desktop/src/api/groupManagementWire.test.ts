@@ -172,6 +172,7 @@ describe("group management wire", () => {
 						source_group_ids: ["source"],
 					},
 					ordered_fixture_ids: [fixture],
+					projected_positions: [{ fixture_id: fixture, u: 1.25, v: -2.5 }],
 					ranks: [{ fixture_id: fixture, rank: 0 }],
 					rank_count: 1,
 					warnings: [{ type: "missing_position", fixture_id: fixture }],
@@ -187,6 +188,9 @@ describe("group management wire", () => {
 		});
 		expect(snapshot.resolvedSpatial.ranks).toEqual([
 			{ fixture_id: fixture, rank: 0 },
+		]);
+		expect(snapshot.resolvedSpatial.projected_positions).toEqual([
+			{ fixture_id: fixture, u: 1.25, v: -2.5 },
 		]);
 		expect(snapshot.resolvedSpatial.warnings).toHaveLength(1);
 	});

@@ -1,7 +1,4 @@
-use super::{
-    ProgrammerSelectionGridConfiguration, ProgrammerSelectionGridTraversalAxis,
-    ProgrammerSelectionProjection, ProgrammerSelectionRule,
-};
+use super::{ProgrammerSelectionProjection, ProgrammerSelectionRule};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -36,15 +33,6 @@ pub enum ProgrammingSelectionAction {
     ApplyRule {
         rule: ProgrammerSelectionRule,
     },
-    CycleGridMethod,
-    SetGridConfiguration {
-        configuration: ProgrammerSelectionGridConfiguration,
-        #[ts(type = "number")]
-        expected_revision: u64,
-    },
-    ReorderFromGrid {
-        axis: ProgrammerSelectionGridTraversalAxis,
-    },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -78,9 +66,6 @@ pub enum ProgrammingSelectionAcceptedAction {
     GestureApplied,
     GroupSelected,
     RuleApplied,
-    GridMethodCycled,
-    GridConfigurationSet,
-    GridReordered,
 }
 
 #[cfg(test)]
@@ -142,46 +127,6 @@ mod tests {
             }),
         ] {
             assert!(serde_json::from_value::<ProgrammingSelectionActionRequest>(gesture).is_err());
-        }
-    }
-
-    #[test]
-    fn grid_configuration_requires_a_complete_typed_action() {
-        let configured = serde_json::json!({
-            "request_id": "selection-grid-1",
-            "action": "set_grid_configuration",
-            "configuration": {
-                "method": "vertical_axis_z",
-                "axis_origin": {"x": 1.0, "y": 2.0, "z": 3.0}
-            },
-            "expected_revision": 9
-        });
-        assert!(matches!(
-            serde_json::from_value::<ProgrammingSelectionActionRequest>(configured)
-                .unwrap()
-                .action,
-            ProgrammingSelectionAction::SetGridConfiguration { .. }
-        ));
-        for malformed in [
-            serde_json::json!({
-                "request_id": "selection-grid-2",
-                "action": "set_grid_configuration",
-                "configuration": {"method": "vertical_axis_z"}
-            }),
-            serde_json::json!({
-                "request_id": "selection-grid-3",
-                "action": "set_grid_configuration",
-                "configuration": {"method": "diagonal"}
-            }),
-            serde_json::json!({
-                "request_id": "selection-grid-4",
-                "action": "reorder_from_grid",
-                "axis": "diagonal"
-            }),
-        ] {
-            assert!(
-                serde_json::from_value::<ProgrammingSelectionActionRequest>(malformed).is_err()
-            );
         }
     }
 }

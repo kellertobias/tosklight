@@ -1,9 +1,5 @@
 import type { ReactNode } from "react";
-import {
-	type CommandTarget,
-	DEFAULT_SELECTION_GRID_STATE,
-	type ProgrammingSnapshot,
-} from "../contracts";
+import type { CommandTarget, ProgrammingSnapshot } from "../contracts";
 import { ProgrammingInteractionViewProvider } from "../ProgrammingInteractionView";
 import { ProgrammingInteractionStore } from "../store";
 
@@ -43,7 +39,6 @@ export function createCommandLineTestAuthority({
 				expression: { type: "static" },
 				revision: 1,
 				gestureOpen: false,
-				grid: DEFAULT_SELECTION_GRID_STATE,
 			},
 		},
 	});

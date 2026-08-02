@@ -70,6 +70,13 @@ describe("Group settings modal", () => {
 					source_group_ids: ["2"],
 				},
 				ordered_fixture_ids: ["11111111-1111-4111-8111-111111111111"],
+				projected_positions: [
+					{
+						fixture_id: "11111111-1111-4111-8111-111111111111",
+						u: 1.25,
+						v: -2.5,
+					},
+				],
 				ranks: [
 					{
 						fixture_id: "11111111-1111-4111-8111-111111111111",
@@ -87,6 +94,7 @@ describe("Group settings modal", () => {
 			expect(screen.getByText("Inherited from Group 2")).toBeInTheDocument(),
 		);
 		expect(screen.getByText(/1 authoritative ranks/)).toBeInTheDocument();
+		expect(screen.getByText("U 1.25 · V -2.5")).toBeInTheDocument();
 		expect(settings).toHaveBeenCalledWith("4");
 	});
 

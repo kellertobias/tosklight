@@ -51,4 +51,59 @@ describe("Fixture Sheet programmer value projection", () => {
 			value: 0.5,
 		});
 	});
+
+	it("spreads Group values over canonical source order instead of a legacy cache", () => {
+		const projection: ProgrammerValuesProjection = {
+			userId: "operator",
+			revision: 1,
+			fixtureValues: [],
+			groupValues: [
+				{
+					groupId: "derived",
+					attribute: "intensity",
+					value: { kind: "spread", value: [0, 1] },
+					programmerOrder: 1,
+					fade: true,
+					fadeMillis: null,
+					delayMillis: null,
+				},
+			],
+		};
+		const groups = [
+			{
+				id: "source",
+				body: {
+					fixtures: [],
+					source: {
+						type: "explicit",
+						fixture_ids: ["fixture-1", "fixture-2", "fixture-3"],
+					},
+				},
+				runtime: { master: 1, flashLevel: 1, playbackNumber: null },
+			},
+			{
+				id: "derived",
+				body: {
+					fixtures: ["stale-cache"],
+					source: {
+						type: "references",
+						references: [{ group_id: "source", rule: { type: "odd" } }],
+					},
+				},
+				runtime: { master: 1, flashLevel: 1, playbackNumber: null },
+			},
+		] as RuntimeGroup[];
+
+		const values = fixtureSheetProgrammerValueIndex(projection, groups);
+
+		expect(values.get("fixture-1")?.get("intensity")?.value).toEqual({
+			kind: "normalized",
+			value: 0,
+		});
+		expect(values.get("fixture-3")?.get("intensity")?.value).toEqual({
+			kind: "normalized",
+			value: 1,
+		});
+		expect(values.has("stale-cache")).toBe(false);
+	});
 });

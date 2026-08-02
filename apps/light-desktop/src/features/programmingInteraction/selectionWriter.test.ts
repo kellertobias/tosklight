@@ -12,8 +12,8 @@ import {
 	FIXTURE_2,
 	FIXTURE_3,
 	programmingSnapshot,
-	selection,
 	SHOW_ID,
+	selection,
 } from "./testFixtures";
 
 function deferred<T>() {
@@ -58,114 +58,6 @@ function requestAt(
 }
 
 describe("ProgrammingSelectionWriter", () => {
-	it("sends grid actions semantically and reconciles their complete authority", async () => {
-		const store = readyStore();
-		const apply = vi.fn(
-			async (_deskId: string, request: SelectionActionRequest) => {
-				const current = store.getSnapshot().selection ?? selection();
-				const next =
-					request.action.type === "cycle_grid_method"
-						? {
-								...current,
-								revision: current.revision + 1,
-								grid: {
-									configuration: {
-										...current.grid.configuration,
-										method: "top_to_bottom" as const,
-									},
-									rowsFirst: "top_left" as const,
-									columnsFirst: "top_left" as const,
-								},
-							}
-						: request.action.type === "set_grid_configuration"
-							? {
-									...current,
-									revision: current.revision + 1,
-									grid: {
-										configuration: request.action.configuration,
-										rowsFirst: "top_left" as const,
-										columnsFirst: "top_left" as const,
-									},
-								}
-							: {
-									...current,
-									revision: current.revision + 1,
-									grid: {
-										...current.grid,
-										rowsFirst: "top_right" as const,
-									},
-								};
-				return outcome(request, next);
-			},
-		);
-		const writer = new ProgrammingSelectionWriter({
-			deskId: DESK_ID,
-			store,
-			apply,
-			loadSnapshot: vi.fn(),
-		});
-
-		await expect(writer.cycleGridMethod()).resolves.not.toBeNull();
-		expect(requestAt(apply, 0).action).toEqual({ type: "cycle_grid_method" });
-
-		const configured = {
-			method: "vertical_axis_z" as const,
-			axisOrigin: { x: 1, y: 2, z: 3 },
-		};
-		await expect(
-			writer.setGridConfiguration(configured),
-		).resolves.not.toBeNull();
-		expect(requestAt(apply, 1).action).toEqual({
-			type: "set_grid_configuration",
-			configuration: configured,
-			expectedRevision: 2,
-		});
-
-		await expect(writer.reorderFromGrid("rows")).resolves.not.toBeNull();
-		expect(requestAt(apply, 2).action).toEqual({
-			type: "reorder_from_grid",
-			axis: "rows",
-		});
-		expect(store.getSnapshot().selection?.grid).toEqual({
-			configuration: configured,
-			rowsFirst: "top_right",
-			columnsFirst: "top_left",
-		});
-	});
-
-	it("does not double-cycle when authority arrives before the response", async () => {
-		const store = readyStore();
-		const response = deferred<SelectionActionOutcome>();
-		const apply = vi.fn().mockReturnValue(response.promise);
-		const writer = new ProgrammingSelectionWriter({
-			deskId: DESK_ID,
-			store,
-			apply,
-			loadSnapshot: vi.fn(),
-		});
-
-		const write = writer.cycleGridMethod();
-		await vi.waitFor(() => expect(apply).toHaveBeenCalledOnce());
-		const authority = {
-			...selection(2),
-			grid: {
-				...selection(2).grid,
-				configuration: {
-					...selection(2).grid.configuration,
-					method: "top_to_bottom" as const,
-				},
-			},
-		};
-		store.applyChange({ deskId: DESK_ID, selection: authority }, 27);
-		expect(store.getSnapshot().selection?.grid.configuration.method).toBe(
-			"top_to_bottom",
-		);
-
-		response.resolve(outcome(requestAt(apply, 0), authority));
-		await expect(write).resolves.not.toBeNull();
-		expect(store.getSnapshot().selection).toEqual(authority);
-	});
-
 	it("applies the selection optimistically before the request completes", async () => {
 		const store = readyStore();
 		const response = deferred<SelectionActionOutcome>();
@@ -187,9 +79,7 @@ describe("ProgrammingSelectionWriter", () => {
 		response.resolve(outcome(requestAt(apply, 0), selection(2, [FIXTURE_2])));
 
 		await expect(write).resolves.toMatchObject({ action: "replaced" });
-		expect(store.getSnapshot().selection).toEqual(
-			selection(2, [FIXTURE_2]),
-		);
+		expect(store.getSnapshot().selection).toEqual(selection(2, [FIXTURE_2]));
 		expect(store.getSnapshot().pendingCapabilities).toEqual(new Set());
 	});
 
@@ -315,15 +205,10 @@ describe("ProgrammingSelectionWriter", () => {
 		const write = writer.replace({ resolvedFixtures: [FIXTURE_2] });
 		await vi.waitFor(() => expect(apply).toHaveBeenCalledOnce());
 		const newerOscAuthority = selection(3, [FIXTURE_3]);
-		store.applyChange(
-			{ deskId: DESK_ID, selection: newerOscAuthority },
-			28,
-		);
+		store.applyChange({ deskId: DESK_ID, selection: newerOscAuthority }, 28);
 		expect(store.getSnapshot().selection?.selected).toEqual([FIXTURE_2]);
 
-		response.resolve(
-			outcome(requestAt(apply, 0), selection(2, [FIXTURE_2])),
-		);
+		response.resolve(outcome(requestAt(apply, 0), selection(2, [FIXTURE_2])));
 		await expect(write).resolves.not.toBeNull();
 
 		expect(store.getSnapshot().selection).toEqual(newerOscAuthority);
@@ -337,9 +222,11 @@ describe("ProgrammingSelectionWriter", () => {
 		});
 		const apply = vi.fn().mockRejectedValue(conflict);
 		const repaired = selection(4, [FIXTURE_3]);
-		const loadSnapshot = vi.fn().mockResolvedValue(
-			programmingSnapshot({ sequence: 31, selected: repaired }),
-		);
+		const loadSnapshot = vi
+			.fn()
+			.mockResolvedValue(
+				programmingSnapshot({ sequence: 31, selected: repaired }),
+			);
 		const onError = vi.fn();
 		const writer = new ProgrammingSelectionWriter({
 			deskId: DESK_ID,
@@ -370,7 +257,9 @@ describe("ProgrammingSelectionWriter", () => {
 			deskId: DESK_ID,
 			store,
 			apply,
-			loadSnapshot: vi.fn().mockRejectedValue(new Error("snapshot unavailable")),
+			loadSnapshot: vi
+				.fn()
+				.mockRejectedValue(new Error("snapshot unavailable")),
 			onError,
 		});
 
@@ -390,9 +279,11 @@ describe("ProgrammingSelectionWriter", () => {
 		const store = readyStore();
 		const apply = vi.fn().mockRejectedValueOnce(new Error("connection reset"));
 		const repaired = selection(2, [FIXTURE_2]);
-		const loadSnapshot = vi.fn().mockResolvedValue(
-			programmingSnapshot({ sequence: 32, selected: repaired }),
-		);
+		const loadSnapshot = vi
+			.fn()
+			.mockResolvedValue(
+				programmingSnapshot({ sequence: 32, selected: repaired }),
+			);
 		const writer = new ProgrammingSelectionWriter({
 			deskId: DESK_ID,
 			store,
@@ -440,15 +331,14 @@ describe("ProgrammingSelectionWriter", () => {
 	it("commits authoritative selection while surfacing a persistence warning", async () => {
 		const store = readyStore();
 		const onError = vi.fn();
-		const apply = vi.fn(
-			(_deskId: string, request: SelectionActionRequest) =>
-				Promise.resolve(
-					outcome(
-						request,
-						selection(2, [FIXTURE_2]),
-						"selection applied but persistence failed",
-					),
+		const apply = vi.fn((_deskId: string, request: SelectionActionRequest) =>
+			Promise.resolve(
+				outcome(
+					request,
+					selection(2, [FIXTURE_2]),
+					"selection applied but persistence failed",
 				),
+			),
 		);
 		const writer = new ProgrammingSelectionWriter({
 			deskId: DESK_ID,
@@ -462,9 +352,7 @@ describe("ProgrammingSelectionWriter", () => {
 			writer.replace({ resolvedFixtures: [FIXTURE_2] }),
 		).resolves.not.toBeNull();
 
-		expect(store.getSnapshot().selection).toEqual(
-			selection(2, [FIXTURE_2]),
-		);
+		expect(store.getSnapshot().selection).toEqual(selection(2, [FIXTURE_2]));
 		expect(store.authoritativeSelectionRevision()).toBe(2);
 		expect(onError).toHaveBeenCalledOnce();
 		expect(onError.mock.calls[0]?.[0]).toEqual(
@@ -475,9 +363,8 @@ describe("ProgrammingSelectionWriter", () => {
 	it("rejects an invalid optimistic rule without poisoning later writes", async () => {
 		const store = readyStore();
 		const onError = vi.fn();
-		const apply = vi.fn(
-			(_deskId: string, request: SelectionActionRequest) =>
-				Promise.resolve(outcome(request, selection(2, [FIXTURE_2]))),
+		const apply = vi.fn((_deskId: string, request: SelectionActionRequest) =>
+			Promise.resolve(outcome(request, selection(2, [FIXTURE_2]))),
 		);
 		const writer = new ProgrammingSelectionWriter({
 			deskId: DESK_ID,
@@ -499,9 +386,7 @@ describe("ProgrammingSelectionWriter", () => {
 		await expect(
 			writer.replace({ resolvedFixtures: [FIXTURE_2] }),
 		).resolves.not.toBeNull();
-		expect(store.getSnapshot().selection).toEqual(
-			selection(2, [FIXTURE_2]),
-		);
+		expect(store.getSnapshot().selection).toEqual(selection(2, [FIXTURE_2]));
 	});
 
 	it("rolls back a definitive client rejection without reloading authority", async () => {

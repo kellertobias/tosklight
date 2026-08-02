@@ -393,65 +393,6 @@ fn merge_and_subtract_materialize_resolved_order_without_touching_metadata() {
 }
 
 #[test]
-fn recording_never_copies_selection_grid_and_preserves_existing_target_grid() {
-    let scenario = CaptureScenario::new();
-    scenario
-        .registry
-        .select(scenario.session, scenario.fixtures[..2].iter().copied());
-    let selection_configuration = GridMethodConfiguration {
-        method: GridMethod::RoomDepthAxisY,
-        axis_origin: AxisOrigin {
-            x: 4.0,
-            y: 5.0,
-            z: 6.0,
-        },
-    };
-    let revision = scenario
-        .registry
-        .selection(scenario.session)
-        .unwrap()
-        .revision;
-    scenario
-        .registry
-        .set_selection_grid_configuration_if_revision(
-            scenario.session,
-            revision,
-            selection_configuration,
-        )
-        .unwrap();
-
-    let target_configuration = GridMethodConfiguration {
-        method: GridMethod::BackToFront,
-        ..Default::default()
-    };
-    let target = GroupDefinition {
-        id: "target".into(),
-        fixtures: scenario.fixtures[2..].to_vec(),
-        grid: target_configuration,
-        ..Default::default()
-    };
-    let groups = HashMap::from([("target".into(), target.clone())]);
-    let capture = scenario.capture();
-
-    assert_eq!(
-        capture.overwrite("target", Some(&target), &groups).grid,
-        target_configuration
-    );
-    assert_eq!(
-        capture.overwrite("new", None, &groups).grid,
-        GridMethodConfiguration::default()
-    );
-    assert_eq!(
-        capture.merge("target", &target, &groups).unwrap().grid,
-        target_configuration
-    );
-    assert_eq!(
-        capture.subtract("target", &target, &groups).unwrap().grid,
-        target_configuration
-    );
-}
-
-#[test]
 fn direct_derived_dependency_blocks_deletion_but_frozen_provenance_does_not() {
     let captured_at = Utc::now();
     let groups = HashMap::from([

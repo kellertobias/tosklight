@@ -10,6 +10,7 @@ import {
 	useSyncExternalStore,
 } from "react";
 import { measureFrontendSnapshot } from "../frontendWarmup/diagnostics";
+import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
 import type { ExecuteCommandLine } from "./commandExecution";
 import {
 	type ProgrammingCommandLineActions,
@@ -22,7 +23,6 @@ import {
 import type {
 	ProgrammingCapability,
 	SelectionActionOutcome,
-	SelectionGridConfiguration,
 	SelectionRule,
 } from "./contracts";
 import {
@@ -41,7 +41,6 @@ import {
 	ProgrammingInteractionStore,
 } from "./store";
 import type { ProgrammingEventTransport } from "./transport";
-import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
 
 interface ProgrammingInteractionViewProviderProps {
 	showId: string | null;
@@ -69,13 +68,6 @@ export interface ProgrammingSelectionActions {
 		intent: ProgrammingGroupSelectionIntent,
 	): Promise<SelectionActionOutcome | null>;
 	applyRule(rule: SelectionRule): Promise<SelectionActionOutcome | null>;
-	cycleGridMethod(): Promise<SelectionActionOutcome | null>;
-	setGridConfiguration(
-		configuration: SelectionGridConfiguration,
-	): Promise<SelectionActionOutcome | null>;
-	reorderFromGrid(
-		axis: "rows" | "columns",
-	): Promise<SelectionActionOutcome | null>;
 }
 
 /** Stable lifecycle seam for action-only features that depend on selection. */
@@ -197,10 +189,6 @@ export function ProgrammingInteractionViewProvider({
 						gesture: (intent) => selectionWriter.gesture(intent),
 						selectGroup: (intent) => selectionWriter.selectGroup(intent),
 						applyRule: (rule) => selectionWriter.applyRule(rule),
-						cycleGridMethod: () => selectionWriter.cycleGridMethod(),
-						setGridConfiguration: (configuration) =>
-							selectionWriter.setGridConfiguration(configuration),
-						reorderFromGrid: (axis) => selectionWriter.reorderFromGrid(axis),
 					}
 				: null,
 		[selectionWriter],

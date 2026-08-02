@@ -1,5 +1,6 @@
 import type { CueList, PatchedFixture, StoredGroup } from "../api/types";
 import type { ProgrammerValueTargets } from "../features/programmerValues/useProgrammerValueTargets";
+import { resolveGroupMembership } from "../features/showObjects/groupProjection";
 
 type Group = { id: string; body: StoredGroup };
 
@@ -8,10 +9,11 @@ function fixtureIdsForGroups(
 	groups: readonly Group[],
 ) {
 	const wanted = new Set(groupIds);
+	const membership = resolveGroupMembership(groups);
 	return new Set(
 		groups
 			.filter((group) => wanted.has(group.id))
-			.flatMap((group) => group.body.fixtures),
+			.flatMap((group) => membership.get(group.id) ?? []),
 	);
 }
 

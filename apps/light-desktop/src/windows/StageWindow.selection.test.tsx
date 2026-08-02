@@ -8,8 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { VisualizationSnapshot } from "../api/types";
-import {
-	DEFAULT_SELECTION_GRID_STATE,
+import type {
 	ProgrammingSnapshot,
 	SelectionActionOutcome,
 	SelectionActionRequest,
@@ -125,7 +124,6 @@ function openSelection(
 		},
 		revision,
 		gestureOpen: true,
-		grid: DEFAULT_SELECTION_GRID_STATE,
 	};
 }
 

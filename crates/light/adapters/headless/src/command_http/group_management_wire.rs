@@ -143,6 +143,46 @@ pub(super) fn resolved_spatial(
     let resolved = light_programmer::resolve_group_spatial(group_id, &groups, &positions).map_err(
         |error| application::ActionError::new(application::ActionErrorKind::Invalid, error),
     )?;
+    let projected_positions = resolved.effective_mapping.as_ref().map_or_else(
+        || {
+            Ok(resolved
+                .source_order
+                .iter()
+                .map(|fixture_id| wire::GroupProjectedPositionProjection {
+                    fixture_id: fixture_id.0,
+                    u: None,
+                    v: None,
+                })
+                .collect())
+        },
+        |mapping| {
+            let targets = resolved
+                .source_order
+                .iter()
+                .map(|fixture_id| light_dynamics::SpatialTarget {
+                    fixture_id: *fixture_id,
+                    position: positions.get(fixture_id).copied(),
+                })
+                .collect::<Vec<_>>();
+            light_dynamics::project_spatial_positions(&mapping.projection, &targets)
+                .map(|positions| {
+                    positions
+                        .into_iter()
+                        .map(|position| wire::GroupProjectedPositionProjection {
+                            fixture_id: position.fixture_id.0,
+                            u: position.u,
+                            v: position.v,
+                        })
+                        .collect()
+                })
+                .map_err(|error| {
+                    application::ActionError::new(
+                        application::ActionErrorKind::Invalid,
+                        error.to_string(),
+                    )
+                })
+        },
+    )?;
     let ranks = resolved
         .ranked_selection
         .ordered_fixture_ids
@@ -179,6 +219,7 @@ pub(super) fn resolved_spatial(
             .iter()
             .map(|fixture_id| fixture_id.0)
             .collect(),
+        projected_positions,
         ranks,
         rank_count: resolved.ranked_selection.rank_count,
         warnings: resolved

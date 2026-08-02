@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
 import { ProgrammerValuesStore } from "../programmerValues/store";
 import { ProgrammingInteractionStore } from "../programmingInteraction/store";
-import { DEFAULT_SELECTION_GRID_STATE } from "../programmingInteraction/contracts";
 import { ShowObjectsStore } from "../showObjects/store";
 import type {
 	PresetRecallOutcome,
@@ -145,7 +144,6 @@ function harness(
 				expression: { type: "static" },
 				revision: 8,
 				gestureOpen: false,
-				grid: DEFAULT_SELECTION_GRID_STATE,
 			},
 		},
 	});
@@ -261,7 +259,6 @@ describe("PresetRecallWriter", () => {
 						expression: { type: "static" },
 						revision: 9,
 						gestureOpen: false,
-						grid: DEFAULT_SELECTION_GRID_STATE,
 					},
 				},
 			});
@@ -297,7 +294,6 @@ describe("PresetRecallWriter", () => {
 					expression: { type: "static" },
 					revision: 9,
 					gestureOpen: false,
-					grid: DEFAULT_SELECTION_GRID_STATE,
 				},
 			},
 			42,
@@ -323,7 +319,6 @@ describe("PresetRecallWriter", () => {
 						expression: { type: "static" },
 						revision: 9,
 						gestureOpen: false,
-						grid: DEFAULT_SELECTION_GRID_STATE,
 					},
 				},
 				42,
@@ -377,7 +372,6 @@ describe("PresetRecallWriter", () => {
 						expression: { type: "static" },
 						revision: 9,
 						gestureOpen: false,
-						grid: DEFAULT_SELECTION_GRID_STATE,
 					},
 				},
 				42,

@@ -1023,18 +1023,21 @@ describe("ShowObjectsSession", () => {
 		}
 	});
 
-	it("hydrates and subscribes to the transitive dependencies of an exact live Group", async () => {
+	it("projects canonical live Group updates from exact dependencies", async () => {
 		const source = group(1, "Source");
-		source.body.fixtures = ["a", "b", "c", "d"];
+		source.body.source = {
+			type: "explicit",
+			fixture_ids: ["a", "b", "c", "d"],
+		};
 		const derived: ShowObject<"group"> = {
 			...group(1, "Derived"),
 			id: "2",
 			body: {
 				name: "Derived",
-				fixtures: ["a", "c"],
-				derived_from: {
-					source_group_id: "1",
-					rule: { type: "odd" },
+				fixtures: ["stale-cache"],
+				source: {
+					type: "references",
+					references: [{ group_id: "1", rule: { type: "odd" } }],
 				},
 			},
 		};
@@ -1068,8 +1071,17 @@ describe("ShowObjectsSession", () => {
 			],
 		});
 
-		source.revision = 2;
-		source.body.fixtures = ["b", "c", "d"];
+		const updatedSource: ShowObject<"group"> = {
+			...source,
+			revision: 2,
+			body: {
+				...source.body,
+				source: {
+					type: "explicit",
+					fixture_ids: ["b", "c", "d"],
+				},
+			},
+		};
 		transport.emit({
 			type: "event",
 			change: {
@@ -1081,7 +1093,7 @@ describe("ShowObjectsSession", () => {
 						kind: "group",
 						objectId: "1",
 						objectRevision: 2,
-						body: source.body,
+						body: updatedSource.body,
 						deleted: false,
 					},
 				],

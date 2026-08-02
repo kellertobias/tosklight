@@ -58,17 +58,6 @@ impl IntegrationResource {
         }
     }
 
-    #[cfg(test)]
-    pub(in crate::runtime) fn set_selection_grid_all_started(
-        &self,
-        client_id: &str,
-        started: Instant,
-    ) {
-        if let Some(subscriber) = self.osc_subscribers.lock().get_mut(client_id) {
-            subscriber.selection_grid_all_started = Some(started);
-        }
-    }
-
     pub(in crate::runtime) fn osc_subscriber_for_source(
         &self,
         source: SocketAddr,
@@ -169,61 +158,33 @@ impl IntegrationResource {
             .find(|candidate| candidate.command_source == source)
         {
             target.shifted = false;
-            target.selection_grid_all_started = None;
         }
     }
 
-    pub(in crate::runtime) fn selection_grid_gesture(
+    /// Shifted ALL/PREV/NEXT were formerly selection-grid gestures. They are deliberately
+    /// unassigned now and must not leak into ordinary Highlight navigation.
+    pub(in crate::runtime) fn consume_unassigned_shifted_highlight(
         &self,
         source: SocketAddr,
         desk_alias: &str,
         action: HighlightAction,
-        pressed: bool,
-        now: Instant,
-    ) -> osc_highlight::OscSelectionGridGesture {
-        use osc_highlight::OscSelectionGridGesture as Gesture;
+    ) -> bool {
         let mut subscribers = self.osc_subscribers.lock();
         let Some(target) = subscribers
             .values_mut()
             .find(|target| target.command_source == source && target.desk_alias == desk_alias)
         else {
-            return Gesture::Pending;
+            return false;
         };
         if !target.shifted && !target.shift_held {
-            return Gesture::Ordinary;
+            return false;
         }
-        // Consuming the latched bit does not affect the physical held bit. A held chord may
-        // therefore execute multiple shifted keys, but releasing it cannot leave a surprise
-        // one-shot Shift behind.
-        let consume_latched = |target: &mut OscSubscriber| target.shifted = false;
         match action {
-            HighlightAction::Next if pressed => {
-                consume_latched(target);
-                Gesture::ReorderRows
+            HighlightAction::All | HighlightAction::Next | HighlightAction::Previous => {
+                target.shifted = false;
+                true
             }
-            HighlightAction::Previous if pressed => {
-                consume_latched(target);
-                Gesture::ReorderColumns
-            }
-            HighlightAction::Next | HighlightAction::Previous => Gesture::Pending,
-            HighlightAction::All if pressed => {
-                target.selection_grid_all_started = Some(now);
-                Gesture::Pending
-            }
-            HighlightAction::All => {
-                let Some(started) = target.selection_grid_all_started.take() else {
-                    return Gesture::Pending;
-                };
-                consume_latched(target);
-                if now.saturating_duration_since(started) >= Duration::from_millis(650) {
-                    Gesture::OpenSettings
-                } else {
-                    Gesture::CycleMethod
-                }
-            }
-            HighlightAction::On | HighlightAction::Off | HighlightAction::Toggle => {
-                Gesture::Ordinary
-            }
+            HighlightAction::On | HighlightAction::Off | HighlightAction::Toggle => false,
         }
     }
 

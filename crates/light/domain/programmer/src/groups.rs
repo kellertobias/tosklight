@@ -1,6 +1,5 @@
 use crate::ProgrammerRegistry;
 use crate::selection::{SelectionRule, apply_selection_rule};
-use crate::selection_grid::GridMethodConfiguration;
 use crate::state::ProgrammerValueTiming;
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId};
@@ -85,10 +84,6 @@ pub struct GroupDefinition {
     /// `fixtures` and `derived_from` without changing their observable membership.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<GroupFixtureSource>,
-    /// Portable Stage-derived grid configuration. Cells are intentionally not stored: they are
-    /// rebuilt from current Stage positions so moving a fixture cannot rewrite Group order.
-    #[serde(default, deserialize_with = "deserialize_grid_configuration")]
-    pub grid: GridMethodConfiguration,
     /// Optional portable projection-plus-shape mapping. Legacy `grid` state is deliberately not
     /// promoted because it did not affect Group order or value spreading.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -96,26 +91,6 @@ pub struct GroupDefinition {
     pub derived_from: Option<DerivedGroup>,
     pub frozen_from: Option<FrozenGroup>,
     pub programming: HashMap<AttributeKey, AttributeValue>,
-}
-
-fn deserialize_grid_configuration<'de, D>(
-    deserializer: D,
-) -> Result<GridMethodConfiguration, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum GridConfigurationRepresentation {
-        Valid(GridMethodConfiguration),
-        Invalid(serde::de::IgnoredAny),
-    }
-    Ok(
-        match GridConfigurationRepresentation::deserialize(deserializer)? {
-            GridConfigurationRepresentation::Valid(configuration) => configuration,
-            GridConfigurationRepresentation::Invalid(_) => GridMethodConfiguration::default(),
-        },
-    )
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -160,6 +135,29 @@ pub struct ResolvedGroup {
     pub mapping_provenance: GroupMappingProvenance,
 }
 
+/// Public evaluation bounds for canonical Group sources. These cover the supported 4,000-fixture
+/// stress tier while bounding hostile or accidentally explosive reference graphs.
+pub const MAX_GROUP_REFERENCE_DEPTH: usize = 64;
+pub const MAX_GROUP_REFERENCE_EVALUATIONS: usize = 4096;
+pub const MAX_GROUP_RESOLVED_FIXTURES: usize = 4096;
+
+#[derive(Default)]
+struct GroupEvaluationBudget {
+    reference_evaluations: usize,
+}
+
+impl GroupEvaluationBudget {
+    fn count_reference(&mut self) -> Result<(), String> {
+        if self.reference_evaluations >= MAX_GROUP_REFERENCE_EVALUATIONS {
+            return Err(format!(
+                "group reference evaluation limit exceeded: maximum {MAX_GROUP_REFERENCE_EVALUATIONS} references"
+            ));
+        }
+        self.reference_evaluations += 1;
+        Ok(())
+    }
+}
+
 // @tour ordered-selection:20 Resolve a Group without losing emptiness
 // An existing Group resolves in stored membership order, including a valid empty result. An
 // absent Group is an error, while derived Groups preserve the source's ordered rule.
@@ -167,7 +165,13 @@ pub fn resolve_group(
     id: &str,
     groups: &HashMap<String, GroupDefinition>,
 ) -> Result<Vec<FixtureId>, String> {
-    resolve_group_membership(id, groups, &mut Vec::new())
+    resolve_group_membership(
+        id,
+        groups,
+        &mut Vec::new(),
+        &mut GroupEvaluationBudget::default(),
+        false,
+    )
 }
 
 pub fn resolve_group_spatial(
@@ -175,27 +179,41 @@ pub fn resolve_group_spatial(
     groups: &HashMap<String, GroupDefinition>,
     stage_positions: &HashMap<FixtureId, Position3d>,
 ) -> Result<ResolvedGroup, String> {
-    resolve_group_spatial_inner(id, groups, stage_positions, &mut Vec::new())
+    resolve_group_spatial_inner(
+        id,
+        groups,
+        stage_positions,
+        &mut Vec::new(),
+        &mut GroupEvaluationBudget::default(),
+        false,
+    )
 }
 
 fn resolve_group_membership(
     id: &str,
     groups: &HashMap<String, GroupDefinition>,
     stack: &mut Vec<String>,
+    budget: &mut GroupEvaluationBudget,
+    is_reference: bool,
 ) -> Result<Vec<FixtureId>, String> {
     push_group(id, groups, stack)?;
+    if is_reference {
+        budget.count_reference()?;
+    }
     let group = groups
         .get(id)
         .ok_or_else(|| format!("group {id} does not exist"))?;
     let resolved = match effective_source(group) {
-        GroupFixtureSource::Explicit { fixture_ids } => deduplicate(fixture_ids),
+        GroupFixtureSource::Explicit { fixture_ids } => limited_deduplicate(fixture_ids)?,
         GroupFixtureSource::References { references } => {
             let mut combined = Vec::new();
             let mut seen = HashSet::new();
             for reference in references {
-                let source = resolve_group_membership(&reference.group_id, groups, stack)?;
+                let source =
+                    resolve_group_membership(&reference.group_id, groups, stack, budget, true)?;
                 for fixture_id in apply_selection_rule(&source, &reference.rule) {
                     if seen.insert(fixture_id) {
+                        ensure_fixture_limit(seen.len())?;
                         combined.push(fixture_id);
                     }
                 }
@@ -212,15 +230,20 @@ fn resolve_group_spatial_inner(
     groups: &HashMap<String, GroupDefinition>,
     stage_positions: &HashMap<FixtureId, Position3d>,
     stack: &mut Vec<String>,
+    budget: &mut GroupEvaluationBudget,
+    is_reference: bool,
 ) -> Result<ResolvedGroup, String> {
     push_group(id, groups, stack)?;
+    if is_reference {
+        budget.count_reference()?;
+    }
     let group = groups
         .get(id)
         .ok_or_else(|| format!("group {id} does not exist"))?;
 
     let (source_order, inherited_mapping, inherited_from, mixed) = match effective_source(group) {
         GroupFixtureSource::Explicit { fixture_ids } => {
-            (deduplicate(fixture_ids), None, Vec::new(), false)
+            (limited_deduplicate(fixture_ids)?, None, Vec::new(), false)
         }
         GroupFixtureSource::References { references } => {
             let mut combined = Vec::new();
@@ -232,6 +255,8 @@ fn resolve_group_spatial_inner(
                     groups,
                     stage_positions,
                     stack,
+                    budget,
+                    true,
                 )?;
                 let selected = apply_selection_rule(
                     &resolved.ranked_selection.ordered_fixture_ids,
@@ -239,6 +264,7 @@ fn resolve_group_spatial_inner(
                 );
                 for fixture_id in selected.iter().copied() {
                     if seen.insert(fixture_id) {
+                        ensure_fixture_limit(seen.len())?;
                         combined.push(fixture_id);
                     }
                 }
@@ -327,16 +353,35 @@ fn push_group(
             cycle.join(" -> ")
         ));
     }
+    if stack.len() > MAX_GROUP_REFERENCE_DEPTH {
+        return Err(format!(
+            "group reference depth limit exceeded while resolving group {id}: maximum depth {MAX_GROUP_REFERENCE_DEPTH}"
+        ));
+    }
     stack.push(id.to_owned());
     Ok(())
 }
 
-fn deduplicate(fixture_ids: Vec<FixtureId>) -> Vec<FixtureId> {
+fn limited_deduplicate(fixture_ids: Vec<FixtureId>) -> Result<Vec<FixtureId>, String> {
     let mut seen = HashSet::new();
-    fixture_ids
-        .into_iter()
-        .filter(|fixture_id| seen.insert(*fixture_id))
-        .collect()
+    let mut deduplicated = Vec::new();
+    for fixture_id in fixture_ids {
+        if seen.insert(fixture_id) {
+            ensure_fixture_limit(seen.len())?;
+            deduplicated.push(fixture_id);
+        }
+    }
+    Ok(deduplicated)
+}
+
+fn ensure_fixture_limit(unique_fixtures: usize) -> Result<(), String> {
+    if unique_fixtures > MAX_GROUP_RESOLVED_FIXTURES {
+        Err(format!(
+            "group resolved fixture limit exceeded: maximum {MAX_GROUP_RESOLVED_FIXTURES} unique fixtures"
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 fn inherited_mapping(
@@ -873,6 +918,113 @@ mod group_resolution_tests {
         assert_eq!(
             resolved.mapping_provenance,
             GroupMappingProvenance::MixedSourceMappings
+        );
+    }
+
+    #[test]
+    fn reference_depth_accepts_64_and_rejects_65_without_masking_other_diagnostics() {
+        let mut groups = HashMap::new();
+        for depth in 0..MAX_GROUP_REFERENCE_DEPTH {
+            groups.insert(
+                depth.to_string(),
+                reference(
+                    &depth.to_string(),
+                    vec![GroupReference {
+                        group_id: (depth + 1).to_string(),
+                        rule: SelectionRule::All,
+                    }],
+                ),
+            );
+        }
+        groups.insert(
+            MAX_GROUP_REFERENCE_DEPTH.to_string(),
+            explicit(&MAX_GROUP_REFERENCE_DEPTH.to_string(), vec![fixture(1)]),
+        );
+        assert_eq!(resolve_group("0", &groups).unwrap(), [fixture(1)]);
+
+        groups.insert(
+            MAX_GROUP_REFERENCE_DEPTH.to_string(),
+            reference(
+                &MAX_GROUP_REFERENCE_DEPTH.to_string(),
+                vec![GroupReference {
+                    group_id: (MAX_GROUP_REFERENCE_DEPTH + 1).to_string(),
+                    rule: SelectionRule::All,
+                }],
+            ),
+        );
+        groups.insert(
+            (MAX_GROUP_REFERENCE_DEPTH + 1).to_string(),
+            explicit(
+                &(MAX_GROUP_REFERENCE_DEPTH + 1).to_string(),
+                vec![fixture(1)],
+            ),
+        );
+        assert_eq!(
+            resolve_group("0", &groups).unwrap_err(),
+            format!(
+                "group reference depth limit exceeded while resolving group {}: maximum depth {MAX_GROUP_REFERENCE_DEPTH}",
+                MAX_GROUP_REFERENCE_DEPTH + 1
+            )
+        );
+
+        assert_eq!(
+            resolve_group("missing", &HashMap::<String, GroupDefinition>::new()).unwrap_err(),
+            "group missing does not exist"
+        );
+    }
+
+    #[test]
+    fn reference_evaluation_count_accepts_4096_and_rejects_the_next_reference() {
+        let references = (0..MAX_GROUP_REFERENCE_EVALUATIONS)
+            .map(|_| GroupReference {
+                group_id: "leaf".into(),
+                rule: SelectionRule::All,
+            })
+            .collect::<Vec<_>>();
+        let mut groups = HashMap::from([
+            ("leaf".into(), explicit("leaf", vec![fixture(1)])),
+            ("root".into(), reference("root", references.clone())),
+        ]);
+        assert_eq!(resolve_group("root", &groups).unwrap(), [fixture(1)]);
+
+        let mut overflowing = references;
+        overflowing.push(GroupReference {
+            group_id: "leaf".into(),
+            rule: SelectionRule::All,
+        });
+        groups.insert("root".into(), reference("root", overflowing));
+        assert_eq!(
+            resolve_group_spatial("root", &groups, &HashMap::new()).unwrap_err(),
+            format!(
+                "group reference evaluation limit exceeded: maximum {MAX_GROUP_REFERENCE_EVALUATIONS} references"
+            )
+        );
+    }
+
+    #[test]
+    fn resolved_fixture_count_accepts_4096_and_rejects_the_next_unique_fixture() {
+        let fixtures = (1..=MAX_GROUP_RESOLVED_FIXTURES)
+            .map(|value| fixture(value as u128))
+            .collect::<Vec<_>>();
+        let mut group = explicit("group", fixtures.clone());
+        let mut groups = HashMap::from([("group".into(), group.clone())]);
+        assert_eq!(resolve_group("group", &groups).unwrap(), fixtures);
+
+        group
+            .source
+            .as_mut()
+            .and_then(|source| match source {
+                GroupFixtureSource::Explicit { fixture_ids } => Some(fixture_ids),
+                GroupFixtureSource::References { .. } => None,
+            })
+            .unwrap()
+            .push(fixture((MAX_GROUP_RESOLVED_FIXTURES + 1) as u128));
+        groups.insert("group".into(), group);
+        assert_eq!(
+            resolve_group_spatial("group", &groups, &HashMap::new()).unwrap_err(),
+            format!(
+                "group resolved fixture limit exceeded: maximum {MAX_GROUP_RESOLVED_FIXTURES} unique fixtures"
+            )
         );
     }
 }

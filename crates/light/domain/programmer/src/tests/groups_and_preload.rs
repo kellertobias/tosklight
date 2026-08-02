@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn legacy_and_malformed_group_grids_fall_back_without_losing_membership() {
+fn legacy_and_malformed_group_grids_are_ignored_without_losing_membership() {
     let fixture = FixtureId::new();
     for grid in [
         serde_json::Value::Null,
@@ -18,7 +18,7 @@ fn legacy_and_malformed_group_grids_fall_back_without_losing_membership() {
         }
         let group: GroupDefinition = serde_json::from_value(body).unwrap();
         assert_eq!(group.fixtures, vec![fixture]);
-        assert_eq!(group.grid, GridMethodConfiguration::default());
+        assert!(serde_json::to_value(group).unwrap().get("grid").is_none());
     }
 }
 

@@ -2,6 +2,7 @@ import { PoolCard } from "@tosklight/ui/pools";
 import { useEffect, useRef } from "react";
 import type { PoolPresentationConfiguration } from "../../api/types";
 import { resolveConfiguredPoolPresentation } from "../../features/poolPresentation/poolPresentation";
+import { canonicalGroupSource } from "../../features/showObjects/groupProjection";
 import type { Group } from "./model";
 
 function missingFixtureCount(
@@ -98,6 +99,9 @@ export function GroupCard({
 		dereference();
 	};
 	const missing = missingFixtureCount(group, knownFixtureIds);
+	const canonicalSource = group ? canonicalGroupSource(group.body) : null;
+	const canonicalReferences =
+		canonicalSource?.type === "references" ? canonicalSource.references : [];
 	const attributes = Object.keys(group?.body.programming ?? {});
 	const unsupported = unsupportedValueCount(group, attributes, capabilities);
 	const presentation = resolveConfiguredPoolPresentation(poolPresentation, {
@@ -144,10 +148,14 @@ export function GroupCard({
 				color: group?.body.color,
 				kind: "group",
 				states: presentation.states,
-				derived: Boolean(group?.body.derived_from),
-				derivedLabel: group?.body.derived_from
-					? `Derived · ${group.body.derived_from.rule.type}`
-					: undefined,
+				derived:
+					canonicalReferences.length > 0 || Boolean(group?.body.derived_from),
+				derivedLabel:
+					canonicalReferences.length > 0
+						? `Referenced · ${canonicalReferences.length} ${canonicalReferences.length === 1 ? "Group" : "Groups"}`
+						: group?.body.derived_from
+							? `Derived · ${group.body.derived_from.rule.type}`
+							: undefined,
 				frozen: Boolean(group?.body.frozen_from),
 				frozenLabel: group?.body.frozen_from
 					? `Frozen · rev ${group.body.frozen_from.source_revision}`

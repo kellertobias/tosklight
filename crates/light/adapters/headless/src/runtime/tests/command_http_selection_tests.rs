@@ -103,75 +103,139 @@ async fn programming_selection_gestures_return_the_complete_authoritative_contex
 }
 
 #[tokio::test]
-async fn programming_selection_grid_actions_round_trip_through_http_and_snapshot_authority() {
+async fn canonical_multi_reference_group_selects_and_rank_spreads_through_http() {
     let scenario = CommandHttpScenario::new().await;
-    let initial = scenario
-        .state
-        .programming
-        .selection(scenario.session.id)
-        .unwrap();
-    let configured = json(
-        scenario
-            .selection_action(serde_json::json!({
-                "request_id": "selection-grid-configure",
-                "action": "set_grid_configuration",
-                "configuration": {
-                    "method": "vertical_axis_z",
-                    "axis_origin": {"x": 1.0, "y": 2.0, "z": 3.0}
-                },
-                "expected_revision": initial.revision,
-            }))
-            .await,
-    )
-    .await;
-    assert_eq!(configured["action"], "grid_configuration_set");
-    assert_eq!(
-        configured["selection"]["grid"],
-        serde_json::json!({
-            "configuration": {
-                "method": "vertical_axis_z",
-                "axis_origin": {"x": 1.0, "y": 2.0, "z": 3.0}
-            },
-            "rows_first": "top_left",
-            "columns_first": "top_left"
+    let template = schema_v2_direct_fixture().0;
+    let mut fixtures = (0..3_u32)
+        .map(|index| {
+            let mut fixture = template.clone();
+            fixture.fixture_id = light_core::FixtureId::new();
+            fixture.fixture_number = Some(index + 1);
+            fixture.address = Some(1 + index as u16 * 8);
+            fixture
         })
+        .collect::<Vec<_>>();
+    let ids = fixtures
+        .iter()
+        .map(|fixture| fixture.fixture_id)
+        .collect::<Vec<_>>();
+    let explicit =
+        |id: &str, fixture_ids: Vec<light_core::FixtureId>| light_programmer::GroupDefinition {
+            id: id.into(),
+            source: Some(light_programmer::GroupFixtureSource::Explicit { fixture_ids }),
+            ..Default::default()
+        };
+    let references = |id: &str, group_ids: &[&str]| light_programmer::GroupDefinition {
+        id: id.into(),
+        source: Some(light_programmer::GroupFixtureSource::References {
+            references: group_ids
+                .iter()
+                .map(|group_id| light_programmer::GroupReference {
+                    group_id: (*group_id).into(),
+                    rule: light_programmer::SelectionRule::All,
+                })
+                .collect(),
+        }),
+        ..Default::default()
+    };
+    let mut target = references("target", &["near", "nested"]);
+    target.mapping = Some(light_dynamics::SpatialSelectionMapping {
+        projection: light_dynamics::SpatialProjection::from_preset(
+            light_dynamics::ProjectionPreset::Top,
+            light_dynamics::Position3d::default(),
+        ),
+        shape: light_dynamics::SpatialSelectionShape::Radial {
+            center_u: 0.0,
+            center_v: 0.0,
+            direction: light_dynamics::RadialDirection::Outward,
+        },
+    });
+    scenario
+        .state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: std::mem::take(&mut fixtures).into(),
+            groups: vec![
+                explicit("near", vec![ids[0], ids[1]]),
+                explicit("far", vec![ids[2]]),
+                references("nested", &["far"]),
+                target,
+            ]
+            .into(),
+            dynamic_stage_positions: std::collections::HashMap::from([
+                (
+                    ids[0],
+                    light_dynamics::SpatialPosition {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ),
+                (
+                    ids[1],
+                    light_dynamics::SpatialPosition {
+                        x: 1.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ),
+                (
+                    ids[2],
+                    light_dynamics::SpatialPosition {
+                        x: 2.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ),
+            ])
+            .into(),
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+
+    let selection = scenario
+        .selection_action(serde_json::json!({
+            "request_id": "canonical-reference-selection",
+            "action": "select_group",
+            "group_id": "target",
+            "frozen": false,
+            "rule": {"type": "all"},
+            "expected_revision": 0,
+        }))
+        .await;
+    assert_eq!(selection.status(), StatusCode::OK);
+    assert_eq!(
+        json(selection).await["selection"]["selected"],
+        serde_json::json!([ids[0].0, ids[1].0, ids[2].0])
     );
 
-    let cycled = json(
-        scenario
-            .selection_action(serde_json::json!({
-                "request_id": "selection-grid-cycle",
-                "action": "cycle_grid_method",
-            }))
-            .await,
-    )
-    .await;
-    assert_eq!(cycled["action"], "grid_method_cycled");
-    assert_eq!(
-        cycled["selection"]["grid"]["configuration"]["method"],
-        "room_depth_axis_y"
-    );
+    let spread = scenario
+        .values_action(serde_json::json!({
+            "request_id": "canonical-reference-spread",
+            "expected_revision": 0,
+            "expected_capture_mode_revision": 0,
+            "action": {
+                "type": "set_group",
+                "group_id": "target",
+                "attribute": "intensity",
+                "value": {"kind": "spread", "value": [0.0, 1.0]},
+                "timing": {"fade": false}
+            }
+        }))
+        .await;
+    assert_eq!(spread.status(), StatusCode::OK, "{}", json(spread).await);
 
-    let reordered = json(
-        scenario
-            .selection_action(serde_json::json!({
-                "request_id": "selection-grid-reorder",
-                "action": "reorder_from_grid",
-                "axis": "columns",
-            }))
-            .await,
-    )
-    .await;
-    assert_eq!(reordered["action"], "grid_reordered");
-    assert_eq!(
-        reordered["selection"]["grid"]["columns_first"],
-        "bottom_left"
-    );
-    let snapshot = json(scenario.interaction_snapshot().await).await;
-    assert_eq!(
-        snapshot["projection"]["selection"],
-        reordered["selection"]
-    );
+    let resolved = scenario.state.output.resolved_values();
+    for (fixture_id, expected) in ids.into_iter().zip([0.0, 0.5, 1.0]) {
+        assert_eq!(
+            resolved
+                .get(&(fixture_id, light_core::AttributeKey::intensity()))
+                .and_then(light_core::AttributeValue::normalized),
+            Some(expected),
+            "the spread follows the Group's spatial rank"
+        );
+    }
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

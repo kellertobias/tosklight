@@ -129,8 +129,6 @@ pub(super) struct OscSubscriber {
     pub(super) shift_held: bool,
     pub(super) update_record_started: Option<Instant>,
     pub(super) update_first_release: Option<Instant>,
-    /// Bounded press timestamp for shifted ALL short-vs-hold classification.
-    pub(super) selection_grid_all_started: Option<Instant>,
     pub(super) last_highlight_action: Option<(String, Instant)>,
 }
 

@@ -24,7 +24,6 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
             shift_held: false,
             update_record_started: None,
             update_first_release: None,
-            selection_grid_all_started: None,
             last_highlight_action: None,
         },
     );
@@ -204,7 +203,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
 }
 
 #[test]
-fn shifted_highlight_keys_share_grid_authority_without_leaking_ordinary_all() {
+fn shifted_all_previous_and_next_are_unassigned_without_leaking_highlight_actions() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);
     let session = Session {
@@ -229,7 +228,6 @@ fn shifted_highlight_keys_share_grid_authority_without_leaking_ordinary_all() {
             shift_held: false,
             update_record_started: None,
             update_first_release: None,
-            selection_grid_all_started: None,
             last_highlight_action: None,
         },
     );
@@ -260,91 +258,19 @@ fn shifted_highlight_keys_share_grid_authority_without_leaking_ordinary_all() {
             .count()
     };
 
-    // Released Shift remains latched for one short ALL gesture.
-    send_programmer("shift", true);
-    send_programmer("shift", false);
-    assert!(state.integrations.osc_subscriber("grid-test").unwrap().shifted);
-    send_highlight("all", true);
-    assert_eq!(
-        state
-            .programming
-            .selection(session.id)
-            .unwrap()
-            .grid
-            .configuration
-            .method,
-        light_programmer::GridMethod::Stage2d
-    );
-    send_highlight("all", false);
-    assert_eq!(
-        state
-            .programming
-            .selection(session.id)
-            .unwrap()
-            .grid
-            .configuration
-            .method,
-        light_programmer::GridMethod::TopToBottom
-    );
+    for action in ["all", "next", "prev"] {
+        send_programmer("shift", true);
+        send_programmer("shift", false);
+        assert!(state.integrations.osc_subscriber("grid-test").unwrap().shifted);
+        send_highlight(action, true);
+        send_highlight(action, false);
+        assert!(!state.integrations.osc_subscriber("grid-test").unwrap().shifted);
+    }
     assert_eq!(ordinary_all_count(), 0);
-    assert!(!state.integrations.osc_subscriber("grid-test").unwrap().shifted);
-    assert!(state.events.audit_events().iter().any(|event| {
-        event.kind == "programmer_changed"
-            && event.payload["command"] == "programmer.selection.grid.cycle"
-            && event.payload["source"] == "osc"
-    }));
-
-    // A long ALL release opens settings and neither cycles nor reaches Highlight ALL.
-    send_programmer("shift", true);
-    send_programmer("shift", false);
-    send_highlight("all", true);
-    state.integrations.set_selection_grid_all_started(
-        "grid-test",
-        Instant::now() - Duration::from_millis(700),
-    );
-    send_highlight("all", false);
-    assert_eq!(
-        state
-            .programming
-            .selection(session.id)
-            .unwrap()
-            .grid
-            .configuration
-            .method,
-        light_programmer::GridMethod::TopToBottom
-    );
-    assert_eq!(ordinary_all_count(), 0);
-    assert!(state.events.audit_events().iter().any(|event| {
+    assert!(!state.events.audit_events().iter().any(|event| {
         event.kind == "desk_action"
-            && event.payload["action"] == "selection-grid-settings"
-            && event.payload["desk_id"] == serde_json::json!(session.desk.id)
-            && event.payload["session_id"] == serde_json::json!(session.id)
+            && event.payload["action"].as_str().is_some_and(|action| action.contains("grid"))
     }));
-
-    // Held Shift remains effective across NEXT and PREV; released/latching Shift is consumed.
-    send_programmer("shift", true);
-    send_highlight("next", true);
-    send_highlight("prev", true);
-    let held = state.integrations.osc_subscriber("grid-test").unwrap();
-    assert!(held.shift_held);
-    assert!(!held.shifted);
-    let grid = state.programming.selection(session.id).unwrap().grid;
-    assert_eq!(grid.rows_first, light_programmer::RowsFirstTraversal::TopRight);
-    assert_eq!(
-        grid.columns_first,
-        light_programmer::ColumnsFirstTraversal::BottomLeft
-    );
-    send_programmer("shift", false);
-    let released = state.integrations.osc_subscriber("grid-test").unwrap();
-    assert!(!released.shift_held);
-    assert!(!released.shifted);
-    send_highlight("next", false);
-    send_highlight("prev", false);
-
-    send_programmer("shift", true);
-    send_programmer("shift", false);
-    send_highlight("next", true);
-    assert!(!state.integrations.osc_subscriber("grid-test").unwrap().shifted);
 
     // Unshifted ALL retains the original Highlight behavior.
     send_highlight("all", true);
@@ -377,7 +303,6 @@ fn osc_playback_source_cannot_cross_its_subscribed_desk_alias() {
             shift_held: false,
             update_record_started: None,
             update_first_release: None,
-            selection_grid_all_started: None,
             last_highlight_action: None,
         },
     );
@@ -420,7 +345,6 @@ fn held_shift_record_short_double_and_long_gestures_are_mutually_distinct() {
             shift_held: false,
             update_record_started: None,
             update_first_release: None,
-            selection_grid_all_started: None,
             last_highlight_action: None,
         },
     );

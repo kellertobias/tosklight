@@ -43,14 +43,6 @@ export function selection(
 		expression: { type: "static" },
 		revision,
 		gestureOpen: false,
-		grid: {
-			configuration: {
-				method: "stage2d",
-				axisOrigin: { x: 0, y: 0, z: 0 },
-			},
-			rowsFirst: "top_left",
-			columnsFirst: "top_left",
-		},
 	};
 }
 

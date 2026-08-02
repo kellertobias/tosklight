@@ -27,6 +27,38 @@ describe("fixture sheet filters", () => {
 		]);
 	});
 
+	it("resolves canonical multi-reference membership for filters", () => {
+		const canonicalGroups = [
+			{
+				id: "left",
+				body: {
+					fixtures: ["stale-left"],
+					source: {
+						type: "explicit" as const,
+						fixture_ids: ["fixture-1", "fixture-2"],
+					},
+				},
+			},
+			{
+				id: "combined",
+				body: {
+					fixtures: ["stale-combined"],
+					source: {
+						type: "references" as const,
+						references: [{ group_id: "left", rule: { type: "even" as const } }],
+					},
+				},
+			},
+		];
+
+		expect(
+			activeProgrammerFixtureIds(
+				{ fixtureIds: [], groupIds: ["combined"] },
+				canonicalGroups,
+			),
+		).toEqual(new Set(["fixture-2"]));
+	});
+
 	it("skips stored-empty, missing, and deleted group targets", () => {
 		const programmer = {
 			fixtureIds: [],
@@ -48,7 +80,7 @@ describe("fixture sheet filters", () => {
 				},
 			],
 		} as unknown as CueList;
-		expect([...cueListFixtureIds(cueList, groups)!].sort()).toEqual([
+		expect([...(cueListFixtureIds(cueList, groups) ?? [])].sort()).toEqual([
 			"fixture-1",
 			"fixture-2",
 			"head-3",

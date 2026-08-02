@@ -1,6 +1,7 @@
 import type { ShowObject, ShowObjectKind } from "./contracts";
-import type { ShowObjectInstall } from "./storeTypes";
+import { groupReferenceIds } from "./groupProjection";
 import type { HydrationTarget } from "./scope";
+import type { ShowObjectInstall } from "./storeTypes";
 
 export type ShowObjectCollectionLoader = (
 	showId: string,
@@ -73,24 +74,20 @@ async function loadGroupGraph(
 	const dependencies = new Set<string>();
 	const visited = new Set<string>();
 	let showRevision: number | null = null;
-	let objectId: string | null = targetId;
-	while (objectId && !visited.has(objectId)) {
+	const pending = [targetId];
+	while (pending.length > 0) {
+		const objectId = pending.shift();
+		if (!objectId || visited.has(objectId)) continue;
 		visited.add(objectId);
-		const snapshot = await loadExact(
-			loadObject,
-			showId,
-			"group",
-			objectId,
-		);
+		const snapshot = await loadExact(loadObject, showId, "group", objectId);
 		showRevision = consistentRevision(showRevision, snapshot.showRevision);
 		const object = snapshot.object as ShowObject<"group"> | null;
 		installs.push({ kind: "group", objectId, object });
-		if (!object) break;
-		const sourceId: string | null =
-			object.body.derived_from?.source_group_id ?? null;
-		if (!sourceId) break;
-		dependencies.add(sourceId);
-		objectId = sourceId;
+		if (!object) continue;
+		for (const sourceId of groupReferenceIds(object.body)) {
+			dependencies.add(sourceId);
+			if (!visited.has(sourceId)) pending.push(sourceId);
+		}
 	}
 	if (showRevision == null)
 		throw new Error("Exact Group hydration requires a non-empty object ID");

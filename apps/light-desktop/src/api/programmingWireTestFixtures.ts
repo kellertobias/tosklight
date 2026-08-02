@@ -4,12 +4,9 @@ import type {
 	ProgrammingInteractionChange,
 } from "./generated/light-wire";
 
-export const PROGRAMMING_DESK_ID =
-	"11111111-1111-4111-8111-111111111111";
-export const OTHER_PROGRAMMING_DESK_ID =
-	"99999999-9999-4999-8999-999999999999";
-export const PROGRAMMING_FIXTURE_ID =
-	"22222222-2222-4222-8222-222222222222";
+export const PROGRAMMING_DESK_ID = "11111111-1111-4111-8111-111111111111";
+export const OTHER_PROGRAMMING_DESK_ID = "99999999-9999-4999-8999-999999999999";
+export const PROGRAMMING_FIXTURE_ID = "22222222-2222-4222-8222-222222222222";
 
 export function programmingCommandLine(
 	overrides: Partial<CommandLineResponse> = {},
@@ -36,14 +33,6 @@ export function programmingSelection(
 		},
 		revision: 6,
 		gesture_open: true,
-		grid: {
-			configuration: {
-				method: "stage2d",
-				axis_origin: { x: 0, y: 0, z: 0 },
-			},
-			rows_first: "top_left",
-			columns_first: "top_left",
-		},
 		...overrides,
 	};
 }
