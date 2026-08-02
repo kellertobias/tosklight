@@ -57,10 +57,7 @@ export function decodeProgrammerValuesProjection(
 	const dynamicDefinitions = (
 		projection.dynamic_definitions == null
 			? []
-			: arrayAt(
-					projection.dynamic_definitions,
-					`${path}.dynamic_definitions`,
-				)
+			: arrayAt(projection.dynamic_definitions, `${path}.dynamic_definitions`)
 	).map((definition, index) =>
 		decodeEmbeddedDefinition(
 			definition,
@@ -286,6 +283,7 @@ function decodeEmbeddedDefinition(
 		"lanes",
 		"random_groups",
 		"phase_mode",
+		"spatial_mapping",
 		"phase",
 		"speed",
 		"overall_speed_multiplier",

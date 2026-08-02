@@ -155,6 +155,43 @@ describe("Programmer values wire projection", () => {
 		).toThrow(/declared wire field/);
 	});
 
+	it("accepts the generated spatial mapping field on embedded Dynamics", () => {
+		const candidate = projection() as ReturnType<typeof projection> & {
+			dynamic_definitions: unknown[];
+		};
+		candidate.dynamic_definitions = [
+			{
+				id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+				pool_number: 1,
+				revision: 2,
+				name: "Spatial chase",
+				color: null,
+				icon: null,
+				target_binding: null,
+				lanes: [],
+				random_groups: [],
+				phase_mode: "absolute",
+				spatial_mapping: {
+					source: { type: "stage" },
+					mapping: { type: "radial", center_x: 0.5, center_y: 0.5 },
+				},
+				phase: 0,
+				speed: 1,
+				overall_speed_multiplier: 1,
+				run_mode: "loop",
+				default_activation: null,
+				activation_boundary: null,
+			},
+		];
+
+		expect(
+			decodeProgrammerValuesSnapshot(
+				{ cursor: { sequence: 1 }, projection: candidate },
+				USER_ID,
+			),
+		).toMatchObject({ projection: { userId: USER_ID, revision: 7 } });
+	});
+
 	it("rejects foreign users and invalid attribute values", () => {
 		expect(() =>
 			decodeProgrammerValuesSnapshot(
