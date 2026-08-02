@@ -16,10 +16,10 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
 - [x] Audit existing Fixture Sheet projection, filters, columns, settings ownership, persistence,
   compact rendering, Dynamic/base-value telemetry, help, screenshots, and acceptance seams.
 - [x] Implement invariant programmable-row filtering without changing show or selection authority.
-- [ ] Implement authoritative attribute-group base summaries and stable Dynamic identity/state
+- [x] Implement authoritative attribute-group base summaries and stable Dynamic identity/state
   feedback without sampled-value repainting.
 - [x] Implement per-surface Off/Icon only/Text only configuration, migration, and shared rendering.
-- [ ] Update help, deterministic screenshot contracts, human scenarios, and focused root Playwright
+- [x] Update help, deterministic screenshot contracts, human scenarios, and focused root Playwright
   coverage.
 - [ ] Run focused checks, required major suites, migration/recovery proof, small-screen geometry, and
   the real desktop path.
@@ -92,12 +92,31 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
   current fixture and ordered Group programmer ownership continues to take precedence. Fourteen
   focused status/value tests, desktop typecheck, the Storybook build, and the two 430 px browser
   cases pass with Flash and Highlight fixtures in all three modes.
+- Operator help now defines the programmable-row invariant, stable ordinary bases, all eight exact
+  attribute-group columns, source/status behavior, the three literal modes, per-surface ownership,
+  and horizontal overflow. The former claim that Venue `0.x` scenery appears in Fixture Sheet is
+  removed. The coverage catalog and five-part `FIXTURE-SHEET-002` human scenario cover filtering,
+  multi-head survival, values, Dynamics, Preload, geometry, persistence, and migration. Two new
+  deterministic 430 px Storybook screenshots document Icon only and Text only.
+- Root Playwright now seeds valid current-schema Venue and visual-only `0.x` scenery, proves those
+  objects remain selectable while no programmable row is substituted, exercises the three literal
+  pane choices, and uses the production Fixture Sheet plus DMX pane against the deterministic clock.
+  The latter proves a 50% ordinary base and Dynamic 77 identity remain stable while at least two
+  distinct logical DMX values appear, verifies the scoped projection has no sampled fields, and
+  confirms stopping the Dynamic removes only its identity. Both focused root cases pass. Independent
+  legacy combinations that current patch validation deliberately rejects remain covered at the
+  pure filtering boundary. The final focused command
+  `npm run test:e2e -- tests/82-fixture-sheet-filtering-and-compact-mode.spec.ts` passes both cases
+  concurrently.
+- The complete deterministic Storybook help-screenshot manifest passes after generating the new
+  430×360 captures. Visual inspection confirms Icon only exposes meters, swatches, glyphs, Preload,
+  and Dynamic identities while Text only exposes concise authoritative values. `npm run manual`
+  then builds and verifies the 178-page PDF plus the offline HTML manual with both images.
 
 ## Remaining work
 
-- Add the deterministic base-versus-changing-DMX acceptance proof.
-- Add the human scenario, root E2E coverage, screenshot contract, and operator help updates.
-- Keep every acceptance item below unclaimed until current source and focused verification prove it.
+- Run the required major suites, migration/recovery proof, desktop smoke, and real desktop path.
+- Audit every acceptance item below against the final combined verification before closeout.
 
 ## Goal
 
