@@ -161,6 +161,7 @@ vi.mock("../features/highlight/HighlightState", async (importOriginal) => ({
 vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
 	useBootstrapReady: () => true,
 	useActiveShowId: () => null,
+	useAttributeRegistry: () => [],
 }));
 vi.mock(
 	"../features/programmingInteraction/ProgrammingInteractionView",

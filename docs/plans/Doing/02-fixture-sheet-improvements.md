@@ -59,11 +59,18 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
   and paused/pending/hidden/winning state, and removes sampled/resolved values. Fixture scoping still
   applies to both bases and identities. The two focused projection tests and the focused route test
   pass in `light-headless-runtime`.
+- The shared frontend projection now consumes those bases through the authoritative attribute
+  registry for all eight groups, resolves profile semantic labels and units, keeps Media and Mask
+  folder/file members distinct, and removes production Beam/Focus demo placeholders. Dynamic
+  indicators stay attached to exact member attributes, retain each pool or stable snapshot identity
+  and state separately, and omit sampled values. Poll responses publish React state only when the
+  semantic bases or identities change; timestamps, revisions, and sampled-only fields do not cause
+  repainting. Desktop typecheck, focused Biome, and 25 focused Fixture Sheet tests pass.
 
 ## Remaining work
 
-- Connect the stable backend projection to a registry-driven frontend model for all eight attribute
-  groups, semantic value formatting, unmerged Dynamic indicators, and semantic equality publication.
+- Migrate the saved Dimmer column to Intensity, expose the three new group columns, and render every
+  group through Off/Icon only/Text only from the shared member-value model.
 - Add accurate base-source ownership, Group-master flash/Highlight-bypass presentation, and the
   deterministic base-versus-changing-DMX acceptance proof in a later coherent slice.
 - Implement compact rendering and per-surface persistence only after the shared value model no

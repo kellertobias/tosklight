@@ -8,6 +8,7 @@ import type { AttributeValue } from "../api/types/playback";
 import { fixtures } from "../data/mockData";
 import {
 	useActiveShowId,
+	useAttributeRegistry,
 	useBootstrapReady,
 } from "../features/deskSnapshot/DeskSnapshotState";
 import {
@@ -28,11 +29,12 @@ import {
 	cueListFixtureIds,
 	fixtureSheetIncludesFixture,
 } from "./fixtureSheetFilters";
+import { fixtureSheetTargets } from "./fixtureSheetTargets";
 import {
-	fixtureSheetTargets,
-	targetDefault,
-	targetHasAttribute,
-} from "./fixtureSheetTargets";
+	fixtureSheetGroupValues,
+	fixtureSheetNormalizedValue,
+	fixtureSheetValueIndex,
+} from "./fixtureSheetValues";
 
 type FixtureSheetTarget = ReturnType<typeof fixtureSheetTargets>[number];
 type FixtureGroup = RuntimeGroup;
@@ -98,71 +100,74 @@ function orderedFixtureTargets({
 
 function fixtureSheetRow({
 	target,
-	index,
 	programmerValues,
-	preloadValues,
 	dynamicStack,
+	preloadDynamicStack,
+	ordinaryValues,
+	preloadOrdinaryValues,
+	attributeRegistry,
 	limitingGroups,
 }: {
 	target: FixtureSheetTarget;
-	index: number;
 	programmerValues: ProgrammingValueIndex;
-	preloadValues: ProgrammingValueIndex;
 	dynamicStack: readonly DynamicStackEntry[];
+	preloadDynamicStack: readonly DynamicStackEntry[];
+	ordinaryValues: ReadonlyMap<string, AttributeValue> | undefined;
+	preloadOrdinaryValues: ReadonlyMap<string, AttributeValue> | undefined;
+	attributeRegistry: NonNullable<ReturnType<typeof useAttributeRegistry>>;
 	limitingGroups: readonly LimitingGroup[];
 }) {
 	const patched = target.fixture;
 	const targetValues = programmerValues.get(target.fixtureId);
-	const targetPreloadValues = preloadValues.get(target.fixtureId);
-	const intensity = indexedTargetValue(targetValues, target, "intensity");
-	const red = indexedTargetValue(targetValues, target, "color.red", 1);
-	const green = indexedTargetValue(targetValues, target, "color.green", 1);
-	const blue = indexedTargetValue(targetValues, target, "color.blue", 1);
-	const pan = indexedTargetValue(targetValues, target, "pan");
-	const tilt = indexedTargetValue(targetValues, target, "tilt");
-	const base = fixtures[index % fixtures.length];
-	const hasIntensity = targetHasAttribute(target, "intensity");
-	const hasColor = target.heads.some((head) =>
-		head.parameters.some((parameter) =>
-			parameter.attribute.startsWith("color."),
-		),
+	const groupValues = fixtureSheetGroupValues({
+		target,
+		registry: attributeRegistry,
+		values: ordinaryValues,
+		preloadValues: preloadOrdinaryValues,
+		programmerAttributes: new Set(targetValues?.keys() ?? []),
+		dynamicStack,
+		preloadDynamicStack,
+	});
+	const intensityMember = groupValues.intensity.members.find(
+		(member) => member.attribute === "intensity",
 	);
-	const hasPosition =
-		targetHasAttribute(target, "pan") || targetHasAttribute(target, "tilt");
-	const preloadIntensity =
-		hasIntensity && targetPreloadValues
-			? indexedTargetValue(targetPreloadValues, target, "intensity")
-			: null;
-	const preloadRed =
-		hasColor && targetPreloadValues
-			? indexedTargetValue(targetPreloadValues, target, "color.red", 1)
-			: null;
-	const preloadGreen =
-		hasColor && targetPreloadValues
-			? indexedTargetValue(targetPreloadValues, target, "color.green", 1)
-			: null;
-	const preloadBlue =
-		hasColor && targetPreloadValues
-			? indexedTargetValue(targetPreloadValues, target, "color.blue", 1)
-			: null;
-	const preloadPan =
-		hasPosition && targetPreloadValues
-			? indexedTargetValue(targetPreloadValues, target, "pan")
-			: null;
-	const preloadTilt =
-		hasPosition && targetPreloadValues
-			? indexedTargetValue(targetPreloadValues, target, "tilt")
-			: null;
-	const hasLiveColor =
-		targetValues != null &&
-		[...targetValues.keys()].some((attribute) =>
-			attribute.startsWith("color."),
+	const colorMember = (attribute: string) =>
+		groupValues.color.members.find((member) => member.attribute === attribute);
+	const positionMember = (attribute: string) =>
+		groupValues.position.members.find(
+			(member) => member.attribute === attribute,
 		);
-	const color = `rgb(${Math.round(red * 255)}, ${Math.round(green * 255)}, ${Math.round(blue * 255)})`;
+	const intensity = fixtureSheetNormalizedValue(intensityMember) ?? 0;
+	const red = fixtureSheetNormalizedValue(colorMember("color.red"));
+	const green = fixtureSheetNormalizedValue(colorMember("color.green"));
+	const blue = fixtureSheetNormalizedValue(colorMember("color.blue"));
+	const pan = fixtureSheetNormalizedValue(positionMember("pan")) ?? 0;
+	const tilt = fixtureSheetNormalizedValue(positionMember("tilt")) ?? 0;
+	const preloadIntensity =
+		intensityMember?.preloadValue?.kind === "normalized"
+			? intensityMember.preloadValue.value
+			: null;
+	const preloadColorValue = (attribute: string) => {
+		const value = colorMember(attribute)?.preloadValue;
+		return value?.kind === "normalized" ? value.value : null;
+	};
+	const preloadRed = preloadColorValue("color.red");
+	const preloadGreen = preloadColorValue("color.green");
+	const preloadBlue = preloadColorValue("color.blue");
+	const preloadPositionValue = (attribute: string) => {
+		const value = positionMember(attribute)?.preloadValue;
+		return value?.kind === "normalized" ? value.value : null;
+	};
+	const preloadPan = preloadPositionValue("pan");
+	const preloadTilt = preloadPositionValue("tilt");
+	const color =
+		red == null || green == null || blue == null
+			? "transparent"
+			: `rgb(${Math.round(red * 255)}, ${Math.round(green * 255)}, ${Math.round(blue * 255)})`;
 	return {
-		...base,
 		id: target.displayId,
 		name: target.name,
+		type: patched.definition.mode,
 		fixtureType: `${patched.definition.manufacturer} · ${patched.definition.mode}`,
 		patch:
 			patched.universe != null && patched.address != null
@@ -180,7 +185,9 @@ function fixtureSheetRow({
 		indented: target.indented,
 		dimmer: Math.round(intensity * 100),
 		color,
-		colorLabel: hasColor ? color : "White",
+		colorLabel: groupValues.color.available
+			? groupValues.color.members.map((member) => member.text).join(" / ")
+			: "—",
 		pan: Math.round(pan * 100),
 		tilt: Math.round(tilt * 100),
 		preloadDimmer:
@@ -192,25 +199,22 @@ function fixtureSheetRow({
 		preloadPan: preloadPan == null ? null : Math.round(preloadPan * 100),
 		preloadTilt: preloadTilt == null ? null : Math.round(preloadTilt * 100),
 		sources: {
-			...base.sources,
-			dimmer:
-				hasIntensity && targetValues?.has("intensity")
-					? ("programmer" as const)
-					: ("default" as const),
-			color:
-				hasColor && hasLiveColor
-					? ("programmer" as const)
-					: ("default" as const),
-			position:
-				hasPosition &&
-				(targetValues?.has("pan") === true ||
-					targetValues?.has("tilt") === true)
-					? ("programmer" as const)
-					: ("default" as const),
+			dimmer: groupValues.intensity.source,
+			color: groupValues.color.source,
+			position: groupValues.position.source,
+			beam: groupValues.beam.source,
+			focus: groupValues.focus.source,
 		},
 		limitingGroups,
-		positionLabel: hasPosition ? undefined : "—",
-		dynamicStack,
+		positionLabel: groupValues.position.available ? undefined : "—",
+		beam: groupValues.beam.available
+			? groupValues.beam.members.map((member) => member.text).join(" / ")
+			: "—",
+		focus: groupValues.focus.available
+			? groupValues.focus.members.map((member) => member.text).join(" / ")
+			: "—",
+		dynamicStack: [...dynamicStack, ...preloadDynamicStack],
+		groupValues,
 	};
 }
 
@@ -336,19 +340,6 @@ function indexLimitingGroups(
 	return result;
 }
 
-function indexedTargetValue(
-	values: Map<string, ProgrammingValue> | undefined,
-	target: FixtureSheetTarget,
-	attribute: string,
-	fallback = 0,
-) {
-	if (!targetHasAttribute(target, attribute)) return fallback;
-	const value = values?.get(attribute)?.value;
-	return value?.kind === "normalized"
-		? value.value
-		: targetDefault(target, attribute, fallback);
-}
-
 function demoFixtureSheetRows() {
 	return fixtures.map((fixture) => ({
 		...fixture,
@@ -366,6 +357,7 @@ function demoFixtureSheetRows() {
 		preloadPan: null,
 		preloadTilt: null,
 		dynamicStack: [],
+		groupValues: undefined,
 	}));
 }
 
@@ -373,7 +365,6 @@ export function useFixtureSheetRows({
 	visualization,
 	preloadVisualization,
 	programmerValues,
-	preloadProgrammerValues,
 	fixtureOrder,
 	activeOnly,
 	selectedCueList,
@@ -394,6 +385,7 @@ export function useFixtureSheetRows({
 	const activeShowId = useActiveShowId();
 	const observesGroupRuntime = active && activeShowId !== null;
 	const groupAuthority = useGroupRuntimeAuthority(observesGroupRuntime);
+	const attributeRegistry = useAttributeRegistry() ?? [];
 	const patchedFixtures = usePatchedFixturesView(active);
 	const observesActiveValues =
 		active && (activeOnly || fixtureOrder === "active");
@@ -407,11 +399,10 @@ export function useFixtureSheetRows({
 			programmerValues,
 			groupAuthority.groups,
 		);
-		const preloadValues = fixtureSheetProgrammerValueIndex(
-			preloadProgrammerValues,
-			groupAuthority.groups,
-		);
-		const dynamicStack = indexDynamicStack(visualization, preloadVisualization);
+		const dynamicStack = indexDynamicStack(visualization);
+		const preloadDynamicStack = indexDynamicStack(preloadVisualization);
+		const ordinaryValues = fixtureSheetValueIndex(visualization);
+		const preloadOrdinaryValues = fixtureSheetValueIndex(preloadVisualization);
 		const limitingGroups = indexLimitingGroups(
 			groupAuthority.groups,
 			patchedFixtures,
@@ -424,19 +415,22 @@ export function useFixtureSheetRows({
 			includedHeads,
 			groups: groupAuthority.groups,
 			activeValueTargets,
-		}).map((target, index) =>
+		}).map((target) =>
 			fixtureSheetRow({
 				target,
-				index,
 				programmerValues: indexedProgrammerValues,
-				preloadValues,
 				dynamicStack: dynamicStack.get(target.fixtureId) ?? [],
+				preloadDynamicStack: preloadDynamicStack.get(target.fixtureId) ?? [],
+				ordinaryValues: ordinaryValues.get(target.fixtureId),
+				preloadOrdinaryValues: preloadOrdinaryValues.get(target.fixtureId),
+				attributeRegistry,
 				limitingGroups: limitingGroups.get(target.fixtureId) ?? [],
 			}),
 		);
 	}, [
 		activeOnly,
 		activeValueTargets,
+		attributeRegistry,
 		bootstrapReady,
 		fixtureOrder,
 		groupAuthority.groups,
@@ -444,7 +438,6 @@ export function useFixtureSheetRows({
 		includedHeads,
 		observesGroupRuntime,
 		patchedFixtures,
-		preloadProgrammerValues,
 		preloadVisualization,
 		programmerValues,
 		selectedCueList,
@@ -458,11 +451,17 @@ export function useFixtureSheetRows({
 	};
 }
 
-type OptionalDynamicStack<T> = T extends { dynamicStack: infer Stack }
-	? Omit<T, "dynamicStack"> & { dynamicStack?: Stack }
+type OptionalFixtureSheetRuntime<T> = T extends {
+	dynamicStack: infer Stack;
+	groupValues: infer Groups;
+}
+	? Omit<T, "dynamicStack" | "groupValues"> & {
+			dynamicStack?: Stack;
+			groupValues?: Groups;
+		}
 	: T;
 
-export type FixtureSheetRow = OptionalDynamicStack<
+export type FixtureSheetRow = OptionalFixtureSheetRuntime<
 	| ReturnType<typeof fixtureSheetRow>
 	| ReturnType<typeof demoFixtureSheetRows>[number]
 >;
@@ -508,7 +507,10 @@ function useEventuallyConsistentFixtureSheetSnapshot(
 			inFlight = true;
 			try {
 				const next = await read();
-				if (!cancelled) setSnapshot(next);
+				if (!cancelled)
+					setSnapshot((current) =>
+						fixtureSheetSnapshotsEqual(current, next) ? current : next,
+					);
 			} catch {
 				// The regular connection/error surfaces remain authoritative.
 				// Keep the last Dynamic identity projection while reconnecting.
@@ -524,4 +526,50 @@ function useEventuallyConsistentFixtureSheetSnapshot(
 		};
 	}, [enabled, read]);
 	return snapshot;
+}
+
+export function fixtureSheetSnapshotsEqual(
+	left: VisualizationSnapshot | null,
+	right: VisualizationSnapshot | null,
+) {
+	if (left === right) return true;
+	if (left == null || right == null) return false;
+	return (
+		fixtureSheetSnapshotSignature(left) === fixtureSheetSnapshotSignature(right)
+	);
+}
+
+function fixtureSheetSnapshotSignature(snapshot: VisualizationSnapshot) {
+	const values = snapshot.values
+		.map((value) => [value.fixture_id, value.attribute, value.value] as const)
+		.sort((left, right) =>
+			`${left[0]}:${left[1]}`.localeCompare(`${right[0]}:${right[1]}`),
+		);
+	const dynamics = (snapshot.dynamic_stack ?? [])
+		.map((entry) => ({
+			fixtureId: entry.fixture_id,
+			attribute: entry.attribute,
+			type: entry.entry_type,
+			source: entry.source,
+			dynamicId: entry.dynamic_id ?? null,
+			poolNumber: entry.pool_number ?? null,
+			name: entry.name,
+			runtimeInstanceId: entry.runtime_instance_id ?? null,
+			controllerId: entry.controller_id ?? null,
+			laneId: entry.lane_id ?? null,
+			size: entry.size ?? null,
+			paused: entry.paused,
+			hidden: entry.hidden,
+			pending: entry.pending,
+			winning: entry.winning,
+		}))
+		.sort((left, right) =>
+			JSON.stringify(left).localeCompare(JSON.stringify(right)),
+		);
+	return JSON.stringify({
+		showId: snapshot.scope?.show_id ?? null,
+		preload: snapshot.preload ?? false,
+		values,
+		dynamics,
+	});
 }

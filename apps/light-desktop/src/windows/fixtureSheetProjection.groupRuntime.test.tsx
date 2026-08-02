@@ -91,6 +91,18 @@ vi.mock("../api/ServerContext", () => ({ useServer: () => mocks.server }));
 vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
 	useBootstrapReady: () => mocks.server.bootstrap !== null,
 	useActiveShowId: () => mocks.server.bootstrap?.active_show?.id ?? null,
+	useAttributeRegistry: () => [
+		{
+			id: "intensity",
+			label: "Intensity",
+			family: "intensity",
+			value_type: "continuous",
+			default_unit: "percent",
+			encoder_group: "intensity",
+			encoder_page: 1,
+			encoder_slot: 1,
+		},
+	],
 }));
 vi.mock("../features/groupRuntime/groupRuntimeAuthority", () => ({
 	useGroupRuntimeAuthority: () => ({

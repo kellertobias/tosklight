@@ -1,8 +1,14 @@
+import type { DataTableColumn } from "@tosklight/ui/window-kit";
 import { FixtureColorDot } from "../components/shared/FixtureColorDot";
 import { SourceValue } from "../components/shared/SourceValue";
-import type { DataTableColumn } from "@tosklight/ui/window-kit";
 import type { FixtureSheetRow } from "./fixtureSheetProjection";
 import type { FixtureStepPresenter } from "./fixtureSheetStep";
+import type {
+	FixtureSheetAttributeGroup,
+	FixtureSheetDynamicIdentity,
+	FixtureSheetGroupValue,
+	FixtureSheetMemberValue,
+} from "./fixtureSheetValues";
 
 type Column = DataTableColumn<FixtureSheetRow>;
 
@@ -101,20 +107,36 @@ function patchColumn(): Column {
 function dimmerColumn(): Column {
 	return {
 		id: "dimmer",
-		header: "Dimmer",
+		header: "Intensity",
 		width: "minmax(95px,.7fr)",
-		render: (fixture) => (
-			<SourceValue source={fixture.sources.dimmer}>
-				<i className="vertical-meter">
-					<i style={{ height: `${fixture.dimmer}%` }} />
-				</i>
-				{fixture.dimmer}%
-				{fixture.preloadDimmer != null && (
-					<small className="preload-value">→ {fixture.preloadDimmer}%</small>
-				)}
-				<DynamicStackSummary fixture={fixture} attributes={["intensity"]} />
-			</SourceValue>
-		),
+		render: (fixture) => {
+			const group = fixture.groupValues?.intensity;
+			const member = group?.members.find(
+				(candidate) => candidate.attribute === "intensity",
+			);
+			return (
+				<SourceValue
+					source={group?.source ?? fixture.sources.dimmer}
+					className="fixture-sheet-group-value"
+				>
+					<i className="vertical-meter">
+						<i style={{ height: `${fixture.dimmer}%` }} />
+					</i>
+					<span className="fixture-sheet-value-text">
+						{member?.text ?? `${fixture.dimmer}%`}
+					</span>
+					{(member?.preloadText ??
+						(fixture.preloadDimmer == null
+							? null
+							: `${fixture.preloadDimmer}%`)) && (
+						<small className="preload-value">
+							→ {member?.preloadText ?? `${fixture.preloadDimmer}%`}
+						</small>
+					)}
+					<DynamicIndicators member={member} />
+				</SourceValue>
+			);
+		},
 	};
 }
 
@@ -124,15 +146,18 @@ function colorColumn(): Column {
 		header: "Color",
 		width: "minmax(105px,1fr)",
 		render: (fixture) => (
-			<SourceValue source={fixture.sources.color}>
+			<SourceValue
+				source={fixture.groupValues?.color.source ?? fixture.sources.color}
+				className="fixture-sheet-group-value"
+			>
 				<FixtureColorDot color={fixture.color} />
-				{fixture.colorLabel}
+				<span className="fixture-sheet-value-text">{fixture.colorLabel}</span>
 				{fixture.preloadColor && (
 					<small className="preload-value">
 						<FixtureColorDot color={fixture.preloadColor} /> Preload
 					</small>
 				)}
-				<DynamicStackSummary fixture={fixture} attributes={["color."]} prefix />
+				<GroupDynamicIndicators group={fixture.groupValues?.color} />
 			</SourceValue>
 		),
 	};
@@ -144,7 +169,12 @@ function positionColumn(): Column {
 		header: "Position",
 		width: "minmax(145px,1.25fr)",
 		render: (fixture) => (
-			<SourceValue source={fixture.sources.position}>
+			<SourceValue
+				source={
+					fixture.groupValues?.position.source ?? fixture.sources.position
+				}
+				className="fixture-sheet-group-value"
+			>
 				<i className="position-glyph">
 					<i
 						style={{
@@ -153,72 +183,124 @@ function positionColumn(): Column {
 						}}
 					/>
 				</i>
-				{fixture.positionLabel ?? `${fixture.pan}° / ${fixture.tilt}°`}
+				<span className="fixture-sheet-value-text">
+					{fixture.groupValues?.position.members
+						.map((member) => member.text)
+						.join(" / ") ??
+						fixture.positionLabel ??
+						`${fixture.pan}° / ${fixture.tilt}°`}
+				</span>
 				{fixture.preloadPan != null && fixture.preloadTilt != null && (
 					<small className="preload-value">
 						→ {fixture.preloadPan} / {fixture.preloadTilt}
 					</small>
 				)}
-				<DynamicStackSummary fixture={fixture} attributes={["pan", "tilt"]} />
+				<GroupDynamicIndicators group={fixture.groupValues?.position} />
 			</SourceValue>
 		),
 	};
 }
 
-function DynamicStackSummary({
-	fixture,
-	attributes,
-	prefix = false,
-}: {
-	fixture: FixtureSheetRow;
-	attributes: string[];
-	prefix?: boolean;
-}) {
-	const entries = (fixture.dynamicStack ?? []).filter((entry) =>
-		attributes.some((attribute) =>
-			prefix ? entry.attribute.startsWith(attribute) : entry.attribute === attribute,
-		),
-	);
-	if (!entries.length) return null;
-	const count = entries.reduce(
-		(total, entry) => total + (entry.summary_count ?? 1),
-		0,
-	);
-	const title = entries
-		.map((entry) => {
-			if (entry.summary_title) {
-				const hidden = Math.max(0, (entry.summary_count ?? 1) - 3);
-				return `${entry.summary_title}${hidden ? `\n… ${hidden} more` : ""}`;
-			}
-			const state = [
-				entry.winning ? "winning" : null,
-				entry.pending ? "pending" : null,
-				entry.paused ? "paused" : null,
-				entry.hidden ? "hidden" : null,
-			]
-				.filter(Boolean)
-				.join(", ");
-			const size =
-				entry.size == null ? "" : ` · Size ${Math.round(entry.size * 100)}%`;
-			return `${entry.name} · ${entry.source}${size}${state ? ` · ${state}` : ""}`;
-		})
-		.join("\n");
+function DynamicIndicators({ member }: { member?: FixtureSheetMemberValue }) {
+	if (!member?.dynamics.length) return null;
 	return (
-		<small className="fixture-dynamic-stack" title={title}>
-			∿ {count}
+		<span className="fixture-dynamic-indicators">
+			{member.dynamics.map((dynamic, index) => (
+				<DynamicIndicator
+					key={`${dynamic.lane}:${dynamic.dynamicId ?? dynamic.label}:${index}`}
+					dynamic={dynamic}
+				/>
+			))}
+		</span>
+	);
+}
+
+function DynamicIndicator({
+	dynamic,
+}: {
+	dynamic: FixtureSheetDynamicIdentity;
+}) {
+	return (
+		<small
+			className="fixture-dynamic-stack"
+			role="img"
+			data-hidden={dynamic.hidden || undefined}
+			data-lane={dynamic.lane}
+			data-paused={dynamic.paused || undefined}
+			data-pending={dynamic.pending || undefined}
+			data-winning={dynamic.winning || undefined}
+			title={dynamic.accessibleName}
+			aria-label={dynamic.accessibleName}
+		>
+			<span aria-hidden="true">∿</span> {dynamic.label}
 		</small>
 	);
 }
 
-function valueColumn(id: "beam" | "focus", header: "Beam" | "Focus"): Column {
+function GroupDynamicIndicators({ group }: { group?: FixtureSheetGroupValue }) {
+	if (!group) return null;
+	return (
+		<>
+			{group.members.map((member) => (
+				<DynamicIndicators key={member.attribute} member={member} />
+			))}
+		</>
+	);
+}
+
+function valueColumn(
+	id: "beam" | "shapers" | "focus" | "control" | "media",
+	header: "Beam" | "Shapers" | "Focus" | "Control" | "Media",
+): Column {
 	return {
 		id,
 		header,
-		width: "minmax(80px,.8fr)",
-		render: (fixture) => (
-			<SourceValue source={fixture.sources[id]}>{fixture[id]}</SourceValue>
-		),
+		width: id === "media" ? "minmax(180px,1.2fr)" : "minmax(95px,.8fr)",
+		render: (fixture) => {
+			const group = fixture.groupValues?.[id as FixtureSheetAttributeGroup];
+			if (!group)
+				return (
+					<SourceValue source={legacySource(fixture, id)}>
+						{id === "beam" || id === "focus" ? fixture[id] : "—"}
+					</SourceValue>
+				);
+			return (
+				<SourceValue
+					source={group.source}
+					className="fixture-sheet-group-value"
+				>
+					{group.available ? (
+						group.members.map((member) => (
+							<span
+								className="fixture-sheet-member-value"
+								key={member.attribute}
+							>
+								<span className="fixture-sheet-value-text">
+									{group.members.length > 1 ? `${member.label} ` : ""}
+									{member.text}
+								</span>
+								{member.preloadText && (
+									<small className="preload-value">
+										→ {member.preloadText}
+									</small>
+								)}
+								<DynamicIndicators member={member} />
+							</span>
+						))
+					) : (
+						<span title={group.accessibleName}>—</span>
+					)}
+				</SourceValue>
+			);
+		},
 	};
+}
+
+function legacySource(
+	fixture: FixtureSheetRow,
+	id: "beam" | "shapers" | "focus" | "control" | "media",
+) {
+	return id === "beam" || id === "focus" ? fixture.sources[id] : "default";
 }
 
 export function fixtureSheetColumns(
@@ -234,6 +316,9 @@ export function fixtureSheetColumns(
 		colorColumn(),
 		positionColumn(),
 		valueColumn("beam", "Beam"),
+		valueColumn("shapers", "Shapers"),
 		valueColumn("focus", "Focus"),
+		valueColumn("control", "Control"),
+		valueColumn("media", "Media"),
 	];
 }
