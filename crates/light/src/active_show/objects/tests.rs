@@ -415,6 +415,71 @@ fn typed_active_show_decoder_rejects_cross_family_and_unknown_kinds() {
 }
 
 #[test]
+fn canonical_group_sources_decode_without_legacy_fixtures_and_remain_lossless() {
+    let explicit = json!({
+        "name": "Empty",
+        "source": {"type": "explicit", "fixture_ids": [], "future_source": true},
+        "future_group": {"kept": true}
+    });
+    let decoded =
+        ActiveShowObjectBody::decode(ActiveShowObjectKind::Group, explicit.clone()).unwrap();
+    assert!(matches!(
+        decoded.group().unwrap().typed().source,
+        Some(light_programmer::GroupFixtureSource::Explicit { ref fixture_ids })
+            if fixture_ids.is_empty()
+    ));
+    assert_eq!(decoded.encode(), explicit);
+
+    let references = json!({
+        "name": "Combined",
+        "source": {
+            "type": "references",
+            "references": [
+                {"group_id": "left", "rule": {"type": "all"}},
+                {"group_id": "right", "rule": {"type": "odd"}}
+            ]
+        }
+    });
+    let decoded = ActiveShowObjectBody::decode(ActiveShowObjectKind::Group, references).unwrap();
+    assert!(matches!(
+        decoded.group().unwrap().typed().source,
+        Some(light_programmer::GroupFixtureSource::References { ref references })
+            if references.len() == 2
+    ));
+}
+
+#[test]
+fn group_family_shape_requires_a_name_and_a_valid_legacy_or_canonical_source() {
+    for invalid in [
+        json!({"name": "Missing membership"}),
+        json!({"source": {"type": "explicit", "fixture_ids": []}}),
+        json!({"name": "Wrong source", "source": "explicit"}),
+        json!({"name": "Missing array", "source": {"type": "explicit"}}),
+        json!({"name": "Unknown", "source": {"type": "future", "fixture_ids": []}}),
+    ] {
+        assert!(
+            ActiveShowObjectBody::decode(ActiveShowObjectKind::Group, invalid).is_err(),
+            "invalid Group shape decoded"
+        );
+    }
+
+    let coexistence = json!({
+        "name": "Canonical wins",
+        "fixtures": [FIXTURE_ID],
+        "source": {"type": "explicit", "fixture_ids": []},
+        "future_group": true
+    });
+    let decoded =
+        ActiveShowObjectBody::decode(ActiveShowObjectKind::Group, coexistence.clone()).unwrap();
+    assert!(matches!(
+        decoded.group().unwrap().typed().source,
+        Some(light_programmer::GroupFixtureSource::Explicit { ref fixture_ids })
+            if fixture_ids.is_empty()
+    ));
+    assert_eq!(decoded.encode(), coexistence);
+}
+
+#[test]
 fn legacy_opaque_user_layout_remains_lossless() {
     let raw = json!({"marker":"legacy layout payload","future":{"kept":true}});
     let decoded =

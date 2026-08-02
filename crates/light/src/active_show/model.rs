@@ -206,6 +206,9 @@ fn validate_family_shape(
             "stage_layout body has no Stage Layout fields",
         ));
     }
+    if kind == ActiveShowObjectKind::Group {
+        return validate_group_family_shape(object);
+    }
     let required: &[&str] = match kind {
         ActiveShowObjectKind::AttributeConfiguration => &[
             "version",
@@ -225,8 +228,7 @@ fn validate_family_shape(
             "speed",
             "default_activation",
         ],
-        // Legacy/group recording clients omit `id`; normalization supplies the storage identity.
-        ActiveShowObjectKind::Group => &["name", "fixtures"],
+        ActiveShowObjectKind::Group => unreachable!("handled above"),
         ActiveShowObjectKind::PatchLayer => &["id", "name", "order"],
         ActiveShowObjectKind::Playback => &["number", "name", "target"],
         ActiveShowObjectKind::PlaybackPage => &["number", "name", "slots", "virtual_playbacks"],
@@ -245,6 +247,54 @@ fn validate_family_shape(
     Ok(())
 }
 
+fn validate_group_family_shape(
+    object: &serde_json::Map<String, serde_json::Value>,
+) -> serde_json::Result<()> {
+    if !object.contains_key("name") {
+        return Err(<serde_json::Error as serde::de::Error>::custom(
+            "group body is missing required field name",
+        ));
+    }
+
+    let Some(source) = object.get("source").filter(|source| !source.is_null()) else {
+        if object.contains_key("fixtures") {
+            return Ok(());
+        }
+        return Err(<serde_json::Error as serde::de::Error>::custom(
+            "group body requires fixtures or a canonical source",
+        ));
+    };
+    let source = source.as_object().ok_or_else(|| {
+        <serde_json::Error as serde::de::Error>::custom("group source must be an object")
+    })?;
+    let source_type = source
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| {
+            <serde_json::Error as serde::de::Error>::custom(
+                "group source is missing required string field type",
+            )
+        })?;
+    let required_array = match source_type {
+        "explicit" => "fixture_ids",
+        "references" => "references",
+        other => {
+            return Err(<serde_json::Error as serde::de::Error>::custom(format!(
+                "group source has unsupported type {other}"
+            )));
+        }
+    };
+    if !source
+        .get(required_array)
+        .is_some_and(serde_json::Value::is_array)
+    {
+        return Err(<serde_json::Error as serde::de::Error>::custom(format!(
+            "group {source_type} source requires array field {required_array}"
+        )));
+    }
+    Ok(())
+}
+
 fn looks_like_other_family(object: &serde_json::Map<String, serde_json::Value>) -> bool {
     [
         &[
@@ -255,7 +305,6 @@ fn looks_like_other_family(object: &serde_json::Map<String, serde_json::Value>) 
         ][..],
         &["id", "name", "cues"][..],
         &["id", "pool_number", "revision", "target_binding", "lanes"],
-        &["name", "fixtures"],
         &["name", "order"],
         &["number", "name", "target"],
         &["number", "name", "slots", "virtual_playbacks"],
@@ -265,6 +314,8 @@ fn looks_like_other_family(object: &serde_json::Map<String, serde_json::Value>) 
     ]
     .into_iter()
     .any(|required| required.iter().all(|field| object.contains_key(*field)))
+        || (object.contains_key("name")
+            && (object.contains_key("fixtures") || object.contains_key("source")))
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

@@ -647,6 +647,179 @@ fn replace_by_position_maps_fixture_references_to_the_destination_fixture_number
 }
 
 #[test]
+fn canonical_explicit_group_source_wins_over_legacy_membership_and_remains_lossless() {
+    let rig = TestRig::new();
+    let source = portable_fixture_record(21_000, 8);
+    let target = portable_fixture_record(31_000, 8);
+    let legacy_fixture_id = Uuid::new_v4().to_string();
+    rig.source_profile(&source.profile);
+    rig.target_profile(&target.profile);
+    rig.source_object(
+        "patched_fixture",
+        &source.fixture_id.0.to_string(),
+        source.body,
+    );
+    rig.target_object(
+        "patched_fixture",
+        &target.fixture_id.0.to_string(),
+        target.body,
+    );
+    rig.source_object(
+        "group",
+        "front",
+        json!({
+            "id": "front",
+            "name": "Front",
+            "source": {
+                "type": "explicit",
+                "fixture_ids": [source.fixture_id.0],
+                "future_source": {"kept": true}
+            },
+            "fixtures": [legacy_fixture_id],
+            "derived_from": {
+                "source_group_id": "legacy-parent",
+                "rule": {"type": "all"}
+            },
+            "future_group": [1, 2, 3]
+        }),
+    );
+
+    let preview = rig.preview(rig.request("group", "front"));
+
+    assert!(preview.can_apply(), "{:?}", preview.blockers);
+    assert_eq!(preview.dependencies.len(), 1, "{:?}", preview.dependencies);
+    assert_eq!(
+        preview.dependencies[0].dependency,
+        key("patched_fixture", &source.fixture_id.0.to_string())
+    );
+    rig.apply(&preview).unwrap();
+    let document = rig.target_document();
+    let imported = document.object("group", "front").unwrap().body();
+    let target_fixture_id = target.fixture_id.0.to_string();
+    assert_eq!(
+        imported
+            .pointer("/source/fixture_ids/0")
+            .and_then(serde_json::Value::as_str),
+        Some(target_fixture_id.as_str())
+    );
+    assert_eq!(
+        imported
+            .pointer("/fixtures/0")
+            .and_then(serde_json::Value::as_str),
+        Some(legacy_fixture_id.as_str())
+    );
+    assert_eq!(
+        imported.pointer("/derived_from/source_group_id"),
+        Some(&json!("legacy-parent"))
+    );
+    assert_eq!(
+        imported.pointer("/source/future_source"),
+        Some(&json!({"kept": true}))
+    );
+    assert_eq!(imported.pointer("/future_group"), Some(&json!([1, 2, 3])));
+}
+
+#[test]
+fn canonical_group_references_include_and_remap_every_source_group() {
+    let rig = TestRig::new();
+    for id in ["left", "right"] {
+        rig.source_object(
+            "group",
+            id,
+            json!({
+                "id": id,
+                "name": format!("Source {id}"),
+                "source": {"type": "explicit", "fixture_ids": []}
+            }),
+        );
+        rig.target_object(
+            "group",
+            id,
+            json!({"id": id, "name": format!("Target {id}"), "fixtures": []}),
+        );
+    }
+    rig.source_object(
+        "group",
+        "combined",
+        json!({
+            "id": "combined",
+            "name": "Combined",
+            "source": {
+                "type": "references",
+                "references": [
+                    {"group_id": "left", "rule": {"type": "all"}},
+                    {"group_id": "right", "rule": {"type": "odd"}}
+                ],
+                "future_source": true
+            },
+            "derived_from": {
+                "source_group_id": "legacy-parent",
+                "rule": {"type": "all"}
+            },
+            "future_group": {"kept": true}
+        }),
+    );
+    let request = rig
+        .request("group", "combined")
+        .resolve(key("group", "left"), ImportConflictResolution::Duplicate)
+        .resolve(key("group", "right"), ImportConflictResolution::Duplicate);
+
+    let preview = rig.preview(request);
+
+    assert!(preview.can_apply(), "{:?}", preview.blockers);
+    for id in ["left", "right"] {
+        assert!(preview.dependencies.iter().any(|dependency| {
+            dependency.owner == key("group", "combined")
+                && dependency.dependency == key("group", id)
+        }));
+    }
+    assert_eq!(preview.dependencies.len(), 2, "{:?}", preview.dependencies);
+    let left_destination = preview
+        .objects
+        .iter()
+        .find(|object| object.source == key("group", "left"))
+        .unwrap()
+        .destination
+        .id()
+        .to_string();
+    let right_destination = preview
+        .objects
+        .iter()
+        .find(|object| object.source == key("group", "right"))
+        .unwrap()
+        .destination
+        .id()
+        .to_string();
+    rig.apply(&preview).unwrap();
+    let document = rig.target_document();
+    let imported = document.object("group", "combined").unwrap().body();
+    assert_eq!(
+        imported
+            .pointer("/source/references/0/group_id")
+            .and_then(serde_json::Value::as_str),
+        Some(left_destination.as_str())
+    );
+    assert_eq!(
+        imported
+            .pointer("/source/references/1/group_id")
+            .and_then(serde_json::Value::as_str),
+        Some(right_destination.as_str())
+    );
+    assert_eq!(
+        imported.pointer("/derived_from/source_group_id"),
+        Some(&json!("legacy-parent"))
+    );
+    assert_eq!(
+        imported.pointer("/source/future_source"),
+        Some(&json!(true))
+    );
+    assert_eq!(
+        imported.pointer("/future_group"),
+        Some(&json!({"kept": true}))
+    );
+}
+
+#[test]
 fn add_to_end_allocates_a_fixture_number_after_the_destination_patch() {
     let rig = TestRig::new();
     let source = portable_fixture_record(40_000, 2);

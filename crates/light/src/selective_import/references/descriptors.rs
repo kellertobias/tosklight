@@ -16,14 +16,81 @@ pub(super) fn group_descriptor(
     target: &FixtureIdentityCatalog,
 ) -> Result<ImportObjectDescriptor, String> {
     let mut descriptor = id_descriptor(object)?;
-    add_fixture_array(object.body(), "/fixtures", source, target, &mut descriptor)?;
-    for pointer in [
-        "/derived_from/source_group_id",
-        "/frozen_from/source_group_id",
-    ] {
-        add_optional_direct_reference(object.body(), pointer, "group", &mut descriptor)?;
+    let body = object.body();
+    match body.get("source").filter(|source| !source.is_null()) {
+        Some(canonical_source) => add_canonical_group_source_references(
+            canonical_source,
+            source,
+            target,
+            &mut descriptor,
+        )?,
+        None => {
+            add_fixture_array(body, "/fixtures", source, target, &mut descriptor)?;
+            add_optional_direct_reference(
+                body,
+                "/derived_from/source_group_id",
+                "group",
+                &mut descriptor,
+            )?;
+        }
     }
+    add_optional_direct_reference(
+        body,
+        "/frozen_from/source_group_id",
+        "group",
+        &mut descriptor,
+    )?;
     Ok(descriptor)
+}
+
+fn add_canonical_group_source_references(
+    canonical_source: &Value,
+    source: &FixtureIdentityCatalog,
+    target: &FixtureIdentityCatalog,
+    descriptor: &mut ImportObjectDescriptor,
+) -> Result<(), String> {
+    let source_type = canonical_source
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "group source is missing required string field type".to_string())?;
+    match source_type {
+        "explicit" => {
+            if canonical_source
+                .get("fixture_ids")
+                .and_then(Value::as_array)
+                .is_none()
+            {
+                return Err("group explicit source requires array field fixture_ids".into());
+            }
+            add_fixture_array_at(
+                canonical_source,
+                "/fixture_ids",
+                "/source/fixture_ids",
+                source,
+                target,
+                descriptor,
+            )?;
+        }
+        "references" => {
+            let references = canonical_source
+                .get("references")
+                .and_then(Value::as_array)
+                .ok_or_else(|| {
+                    "group references source requires array field references".to_string()
+                })?;
+            for (index, reference) in references.iter().enumerate() {
+                add_direct_value(
+                    reference,
+                    "/group_id",
+                    format!("/source/references/{index}/group_id"),
+                    "group",
+                    descriptor,
+                )?;
+            }
+        }
+        other => return Err(format!("group source has unsupported type {other}")),
+    }
+    Ok(())
 }
 
 pub(super) fn patch_layer_descriptor(
