@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **164 root cases across 66 files**.
+Default catalog: **166 root cases across 67 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -177,6 +177,8 @@ Default catalog: **164 root cases across 66 files**.
 | 79-attribute-registry-indexed-presets.spec.ts | CROSS-004 @ui › one Indexed Preset resolves each embedded fixture profile | docs/testing/04-osc-api-and-cross-surface.md | @ui | attribute-registry-indexed-presets | standard failure evidence | parallel | pending-semantic-migration |
 | 81-group-spatial-mapping-and-dynamics-projection.spec.ts | GROUP-SPATIAL-010 @ui › Group settings author ranked output without retired authority | repository contract | @ui | group-spatial-mapping-and-dynamics-projection | standard failure evidence | parallel | pending-semantic-migration |
 | 81-group-spatial-mapping-and-dynamics-projection.spec.ts | GROUP-SPATIAL-020 @api › canonical live references drive command output and refresh membership | repository contract | @api | group-spatial-mapping-and-dynamics-projection | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 82-fixture-sheet-filtering-and-compact-mode.spec.ts | FIXTURE-SHEET-002-010 @ui › scenery stays out of the programmable sheet and compact choices are literal | repository contract | @ui | fixture-sheet-filtering-and-compact-mode | standard failure evidence | parallel | pending-semantic-migration |
+| 82-fixture-sheet-filtering-and-compact-mode.spec.ts | FIXTURE-SHEET-002-020 @ui › a Dynamic changes DMX while the Fixture Sheet base stays stable | repository contract | @ui | fixture-sheet-filtering-and-compact-mode | standard failure evidence | parallel | pending-semantic-migration |
 | playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
 
