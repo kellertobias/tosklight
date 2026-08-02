@@ -5421,17 +5421,17 @@
         },
         {
           "kind": "step",
-          "description": "Selection → groups → pool → range with 1, 4.",
-          "call": "selection.groups.via.pool.range",
+          "description": "Selection → groups → api → range with 1, 4.",
+          "call": "selection.groups.via.api.range",
           "arguments": [
             "1",
             "4"
           ],
-          "expression": "t.selection.groups.via.pool.range(1, 4)",
-          "sourceCode": "t.selection.groups.via.pool.range(1, 4)",
+          "expression": "t.selection.groups.via.api.range(1, 4)",
+          "sourceCode": "t.selection.groups.via.api.range(1, 4)",
           "surfaces": [
-            "Pool UI",
-            "Selection"
+            "Selection",
+            "Typed API"
           ],
           "phase": "scenario",
           "order": 14,
@@ -5680,7 +5680,6 @@
         "Desktop layout",
         "Fixture Sheet",
         "OSC",
-        "Pool UI",
         "Selection",
         "Semantic oracle",
         "Stage",

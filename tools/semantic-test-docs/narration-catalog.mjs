@@ -326,6 +326,7 @@ const supportedCallPaths = new Set([
 	"selection.fixtures.via.click.item",
 	"selection.fixtures.via.ui.item",
 	"selection.fixtures.via.ui.items",
+	"selection.groups.via.api.range",
 	"selection.groups.via.pool.item",
 	"selection.fixtures.via.api.item",
 	"selection.fixtures.via.api.items",
