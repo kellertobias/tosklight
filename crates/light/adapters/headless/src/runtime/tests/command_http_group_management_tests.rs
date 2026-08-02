@@ -270,7 +270,10 @@ async fn spatial_mapping_set_validate_and_remove_are_atomic_revisioned_object_in
         serde_json::json!([fixture.0])
     );
     assert_eq!(settings["resolved_spatial"]["rank_count"], 1);
-    assert_eq!(settings["resolved_spatial"]["ranks"][0]["fixture_id"], fixture.0);
+    assert_eq!(
+        settings["resolved_spatial"]["ranks"][0]["fixture_id"],
+        serde_json::json!(fixture.0)
+    );
     assert_eq!(settings["resolved_spatial"]["ranks"][0]["rank"], 0);
     let baseline = scenario.state.events.latest_sequence();
 
