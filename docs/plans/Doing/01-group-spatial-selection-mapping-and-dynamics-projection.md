@@ -153,6 +153,15 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   live, frozen, or settings behavior. Mapping ownership and shape controls are present but visibly
   disabled until the revisioned server mapping action is connected. Desktop typecheck, focused
   Biome, and 43 tests across five Group UI/selection files passed.
+- Commit `fee1af62` adds revision- and show-guarded Group mapping set/remove intents, validates the
+  complete projection-plus-shape mapping atomically, preserves unknown stored Group fields, and
+  exposes an authoritative Group settings snapshot with effective mapping, provenance, source
+  order, ranks, rank count, and missing-position warnings. Unknown request fields are accepted and
+  logged without values through the tolerant JSON boundary. Four wire tests, 16 application
+  Group-management tests, generated schema freshness, and focused diff checks passed. A fresh
+  headless compile remains pending until the concurrent Playback target migration closes its
+  temporary `initial_master` exhaustiveness gap; the shared generated desktop declaration will be
+  committed with the in-progress Dynamic contract refresh.
 
 ## Remaining work
 
