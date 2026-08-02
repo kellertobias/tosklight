@@ -397,64 +397,45 @@ describe("appReducer Stage and Development pane settings", () => {
 		expect(updated.stageRenderQuality).toBe("lines_and_beams");
 	});
 
-	it("stores each Layout pane Group independently from the full-window Layout", () => {
-		const state = {
-			...initialState,
-			desks: initialState.desks.map((desk) =>
-				desk.id !== initialState.activeDeskId
-					? desk
-					: {
-							...desk,
-							panes: [
-								...desk.panes,
-								{
-									id: "layout-a",
-									kind: "layout" as const,
-									title: "Front Layout",
-									x: 0,
-									y: 0,
-									width: 8,
-									height: 8,
-									layoutGroupId: "missing-group",
-								},
-								{
-									id: "layout-b",
-									kind: "layout" as const,
-									title: "Back Layout",
-									x: 8,
-									y: 0,
-									width: 8,
-									height: 8,
-									layoutGroupId: "2",
-								},
-							],
-						},
-			),
-		};
-		const paneUpdated = appReducer(state, {
-			type: "SET_PANE_LAYOUT_GROUP",
-			id: "layout-a",
-			groupId: "1",
+	it("retires persisted Layout panes and built-ins with one actionable notice", () => {
+		const desks = [
+			{
+				id: "test",
+				name: "Test",
+				panes: [
+					{
+						id: "layout-a",
+						kind: "layout",
+						title: "Front Layout",
+						x: 0,
+						y: 0,
+						width: 8,
+						height: 8,
+						layoutGroupId: "1",
+					},
+				],
+			},
+		];
+		const hydrated = appReducer(initialState, {
+			type: "HYDRATE_LAYOUT",
+			desks: desks as typeof initialState.desks,
+			activeDeskId: "test",
+			windowSettings: {
+				builtIn: "layout",
+				lastBuiltIn: "layout",
+				layoutGroupId: "2",
+			},
 		});
-		const panes = paneUpdated.desks.find(
-			(desk) => desk.id === paneUpdated.activeDeskId,
-		)!.panes;
-		expect(panes.find((pane) => pane.id === "layout-a")?.layoutGroupId).toBe(
-			"1",
-		);
-		expect(panes.find((pane) => pane.id === "layout-b")?.layoutGroupId).toBe(
-			"2",
-		);
-		const fullWindowUpdated = appReducer(paneUpdated, {
-			type: "SET_LAYOUT_GROUP",
-			groupId: "3",
+		expect(hydrated.desks[0].panes).toEqual([]);
+		expect(hydrated.builtIn).toBeNull();
+		expect(hydrated.lastBuiltIn).toBe(initialState.lastBuiltIn);
+		expect(hydrated.layoutMigrationNotice).toBe(true);
+		expect("layoutGroupId" in hydrated).toBe(false);
+
+		const dismissed = appReducer(hydrated, {
+			type: "DISMISS_LAYOUT_MIGRATION_NOTICE",
 		});
-		expect(fullWindowUpdated.layoutGroupId).toBe("3");
-		expect(
-			fullWindowUpdated.desks
-				.find((desk) => desk.id === fullWindowUpdated.activeDeskId)
-				?.panes.find((pane) => pane.id === "layout-a")?.layoutGroupId,
-		).toBe("1");
+		expect(dismissed.layoutMigrationNotice).toBe(false);
 	});
 
 	it("drops retired Development panes from persisted layouts", () => {

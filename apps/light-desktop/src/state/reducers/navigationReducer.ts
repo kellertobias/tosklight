@@ -32,6 +32,7 @@ export function reduceNavigation(
 			};
 		case "OPEN_BUILTIN": {
 			const kind = cueListWindowKind(action.kind);
+			if (kind === "layout") return state;
 			if (
 				kind === "cuelists" &&
 				state.builtIn === "cuelists" &&

@@ -17,8 +17,6 @@ import {
 	usePlaybackDeskView,
 	usePlaybackRuntimeStatus,
 } from "../../features/playbackRuntime/PlaybackRuntimeView";
-import { usePortableGroups } from "../../features/showObjects/ShowObjectsState";
-import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
 import type { VirtualPlaybackZone } from "../../features/virtualPlaybackZones/contracts";
 import { PRESET_FAMILIES } from "../../presetFamilies";
 import { useApp } from "../../state/AppContext";
@@ -203,41 +201,6 @@ function CuePaneSettings({
 						value: event.target.checked,
 					})
 				}
-			/>
-		</FormLayout>
-	);
-}
-
-function LayoutPaneSettings({ pane }: { pane: PaneModel }) {
-	const { dispatch } = useApp();
-	useShowObjectView("group");
-	const groups = usePortableGroups();
-	const missing =
-		pane.layoutGroupId &&
-		!groups.some((group) => group.id === pane.layoutGroupId)
-			? [
-					{
-						value: pane.layoutGroupId,
-						label: `Unavailable · ${pane.layoutGroupId}`,
-					},
-				]
-			: [];
-	return (
-		<FormLayout labelPlacement="side">
-			<SelectField
-				label="Group"
-				value={pane.layoutGroupId ?? ""}
-				onChange={(groupId) =>
-					dispatch({ type: "SET_PANE_LAYOUT_GROUP", id: pane.id, groupId })
-				}
-				options={[
-					{ value: "", label: "Choose a Group" },
-					...missing,
-					...groups.map((group) => ({
-						value: group.id,
-						label: `${group.id} · ${group.body.name || `Group ${group.id}`}`,
-					})),
-				]}
 			/>
 		</FormLayout>
 	);
@@ -730,12 +693,6 @@ function paneSpecificTabs(
 			id: "channels",
 			label: "Channels",
 			content: <ChannelPaneSettings pane={pane} />,
-		});
-	if (pane.kind === "layout")
-		tabs.push({
-			id: "layout-group",
-			label: "Layout",
-			content: <LayoutPaneSettings pane={pane} />,
 		});
 	if (pane.kind === "fixtures")
 		tabs.push({

@@ -33,8 +33,8 @@ export function nextDesktopId(desks: readonly { id: string }[]): string {
 	return `desk-${suffix}`;
 }
 
-function isRetiredDevelopmentWindow(kind: unknown): boolean {
-	return kind === "development";
+function isRetiredWindow(kind: unknown): boolean {
+	return kind === "development" || kind === "layout";
 }
 
 function schedulerPaneLayout(pane: AppState["desks"][number]["panes"][number]) {
@@ -56,10 +56,22 @@ export function reduceHydration(
 	action: Action,
 ): AppState | undefined {
 	switch (action.type) {
-		case "HYDRATE_LAYOUT":
+		case "HYDRATE_LAYOUT": {
+			const retiredLayout =
+				action.windowSettings?.builtIn === "layout" ||
+				action.windowSettings?.lastBuiltIn === "layout" ||
+				action.windowSettings?.layoutGroupId != null ||
+				action.desks.some((desk) =>
+					desk.panes.some(
+						(pane) => pane.kind === "layout" || pane.layoutGroupId != null,
+					),
+				);
+			const { layoutGroupId: _retiredLayoutGroupId, ...windowSettings } =
+				action.windowSettings ?? {};
 			return {
 				...state,
-				...action.windowSettings,
+				...windowSettings,
+				layoutMigrationNotice: retiredLayout,
 				fixtureSheetIncludedHeads: normalizeFixtureSheetIncludedHeads(
 					action.windowSettings?.fixtureSheetIncludedHeads,
 					action.windowSettings?.fixtureSheetShowSubheads,
@@ -87,10 +99,10 @@ export function reduceHydration(
 				builtIn:
 					action.windowSettings?.builtIn == null
 						? (action.windowSettings?.builtIn ?? state.builtIn)
-						: isRetiredDevelopmentWindow(action.windowSettings.builtIn)
+						: isRetiredWindow(action.windowSettings.builtIn)
 							? null
 							: cueListWindowKind(action.windowSettings.builtIn),
-				lastBuiltIn: isRetiredDevelopmentWindow(
+				lastBuiltIn: isRetiredWindow(
 					action.windowSettings?.lastBuiltIn,
 				)
 					? state.lastBuiltIn
@@ -100,11 +112,13 @@ export function reduceHydration(
 				desks: action.desks.map((desk) => ({
 					...desk,
 					panes: desk.panes
-						.filter((pane) => !isRetiredDevelopmentWindow(pane.kind))
+						.filter((pane) => !isRetiredWindow(pane.kind))
 						.map((pane) => {
+							const { layoutGroupId: _retiredPaneGroupId, ...activePane } =
+								pane;
 							const kind = cueListWindowKind(pane.kind);
 							const migrated = {
-								...pane,
+								...activePane,
 								kind,
 								title: cueListWindowTitle(pane.title, kind),
 								...(kind === "stage"
@@ -150,6 +164,9 @@ export function reduceHydration(
 					: (action.desks[0]?.id ?? state.activeDeskId),
 				savingDesk: false,
 			};
+		}
+		case "DISMISS_LAYOUT_MIGRATION_NOTICE":
+			return { ...state, layoutMigrationNotice: false };
 		case "NEW_DESK": {
 			const id = nextDesktopId(state.desks);
 			const source = state.desks.find((desk) => desk.id === state.activeDeskId);

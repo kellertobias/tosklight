@@ -7,6 +7,7 @@ export type BuiltInWindow =
 	| "stage"
 	| "groups"
 	| "fixtures"
+	// Persisted only so pre-retirement desk layouts can be decoded and discarded safely.
 	| "layout"
 	| "presets"
 	| "cuelists"
@@ -78,6 +79,7 @@ export interface PaneModel extends GridRect {
 	followPreload?: boolean;
 	showBeamGuides?: boolean;
 	stageRenderQuality?: StageRenderQuality;
+	/** Legacy Layout-pane field retained only for tolerant persisted-layout decoding. */
 	layoutGroupId?: string;
 	presetFamily?: AppState["presetFamily"];
 	presetPoolColors?: boolean;
@@ -214,7 +216,7 @@ export interface AppState {
 	stageShowBeamGuides: boolean;
 	stageRenderQuality: StageRenderQuality;
 	stageEnvironmentBrightness: number;
-	layoutGroupId: string;
+	layoutMigrationNotice: boolean;
 	dmxDotSize: DmxDotSize;
 	fixtureSheetOrder: FixtureSheetOrder;
 	fixtureSheetActiveOnly: boolean;
@@ -265,7 +267,8 @@ export interface WindowSettings {
 	stageShowBeamGuides: boolean;
 	stageRenderQuality: StageRenderQuality;
 	stageEnvironmentBrightness: number;
-	layoutGroupId: string;
+	/** Legacy Layout-window field retained only for tolerant persisted-layout decoding. */
+	layoutGroupId?: string;
 	dmxDotSize: DmxDotSize;
 	fixtureSheetOrder: FixtureSheetOrder;
 	fixtureSheetActiveOnly: boolean;

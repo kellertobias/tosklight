@@ -24,8 +24,7 @@ export type Action =
 	| { type: "SET_PANE_GROUP_SHORTCUTS"; id: string; value: boolean }
 	| { type: "SET_PANE_FIXTURE_ACTIVE_ONLY"; id: string; value: boolean }
 	| { type: "SET_PANE_POOL_COLUMNS"; id: string; value: number }
-	| { type: "SET_PANE_LAYOUT_GROUP"; id: string; groupId: string }
-	| { type: "SET_LAYOUT_GROUP"; groupId: string }
+	| { type: "DISMISS_LAYOUT_MIGRATION_NOTICE" }
 	| { type: "SET_PANE_CUE_SIDEBAR"; id: string; value: boolean }
 	| {
 			type: "SET_PANE_CUELIST";

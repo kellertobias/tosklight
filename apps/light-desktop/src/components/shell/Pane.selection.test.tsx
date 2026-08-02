@@ -28,6 +28,7 @@ vi.mock("../../state/AppContext", () => ({
 	}),
 }));
 vi.mock("../../windows/WindowRegistry", () => ({
+	isRegisteredWindow: (kind: string) => kind !== "layout",
 	windowRegistry: {
 		stage: () => <div>Stage body</div>,
 		fixtures: () => <div>Fixture body</div>,

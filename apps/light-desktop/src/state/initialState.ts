@@ -59,7 +59,7 @@ export const initialState: AppState = {
 	stageShowBeamGuides: true,
 	stageRenderQuality: "lines_and_beams",
 	stageEnvironmentBrightness: 1,
-	layoutGroupId: "",
+	layoutMigrationNotice: false,
 	dmxDotSize:
 		typeof globalThis.matchMedia === "function" &&
 		globalThis.matchMedia("(pointer: coarse)").matches

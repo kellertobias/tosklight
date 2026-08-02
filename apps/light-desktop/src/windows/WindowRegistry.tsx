@@ -8,7 +8,6 @@ import { FileManagerWindow } from "./FileManagerWindow";
 import { FixtureSheetWindow } from "./FixtureSheetWindow";
 import { GroupsWindow } from "./GroupsWindow";
 import { HelpWindow } from "./HelpWindow";
-import { LayoutWindow } from "./LayoutWindow";
 import { PatchWindow } from "./PatchWindow";
 import { PresetsWindow } from "./PresetsWindow";
 import { SchedulerWindow } from "./SchedulerWindow";
@@ -18,14 +17,21 @@ import { TextEditorWindow } from "./TextEditorWindow";
 import { VirtualPlaybacksWindow } from "./VirtualPlaybacksWindow";
 import type { WindowProps } from "./windowTypes";
 
+export type RegisteredWindow = Exclude<BuiltInWindow, "layout">;
+
+export function isRegisteredWindow(
+	kind: BuiltInWindow,
+): kind is RegisteredWindow {
+	return kind !== "layout";
+}
+
 export const windowRegistry: Record<
-	BuiltInWindow,
+	RegisteredWindow,
 	ComponentType<WindowProps>
 > = {
 	stage: StageWindow,
 	groups: GroupsWindow,
 	fixtures: FixtureSheetWindow,
-	layout: LayoutWindow,
 	presets: PresetsWindow,
 	cuelists: CuelistWindow,
 	cuelist_pool: (props) => <CuelistWindow {...props} cueListTab="pool" />,

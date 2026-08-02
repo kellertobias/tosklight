@@ -7,7 +7,10 @@ import {
 } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../../state/AppContext";
 import type { PaneModel } from "../../types";
-import { windowRegistry } from "../../windows/WindowRegistry";
+import {
+	isRegisteredWindow,
+	windowRegistry,
+} from "../../windows/WindowRegistry";
 import { SourceLegend } from "../shared/SourceLegend";
 import { PaneChromeProvider } from "./PaneChromeContext";
 import { requestPaneRemoval } from "./paneRemovalGuard";
@@ -25,10 +28,7 @@ export function Pane({
 }) {
 	const { dispatch } = useApp();
 	const selection = useProgrammingSelectionView(
-		active &&
-			(pane.kind === "stage" ||
-				pane.kind === "fixtures" ||
-				pane.kind === "layout"),
+		active && (pane.kind === "stage" || pane.kind === "fixtures"),
 	);
 	const commandLineActions = useProgrammingCommandLineActions();
 	const deleteArmed = useProgrammingDeleteCommandActive();
@@ -119,12 +119,7 @@ export function Pane({
 										primary: `${selection?.selected.length ?? 0} selected`,
 										secondary: <SourceLegend />,
 									}
-								: pane.kind === "layout"
-									? {
-											primary: `${selection?.selected.length ?? 0} selected`,
-											secondary: "Live intensity and color",
-										}
-									: undefined
+								: undefined
 			}
 			toolbar={
 				pane.kind === "file_manager" ||
@@ -166,6 +161,7 @@ function PaneContent({
 	pane: PaneModel;
 }) {
 	const { state, dispatch } = useApp();
+	if (!isRegisteredWindow(pane.kind)) return null;
 	const Window = windowRegistry[pane.kind];
 	return (
 		<PaneChromeProvider value={{ info: chromeInfo, toolbar: chromeToolbar }}>
@@ -183,7 +179,6 @@ function PaneContent({
 				showBeamGuides={pane.showBeamGuides ?? true}
 				stageRenderQuality={pane.stageRenderQuality ?? "lines_and_beams"}
 				channelDisplayMode={pane.channelDisplayMode ?? "intensity"}
-				layoutGroupId={pane.layoutGroupId}
 				presetFamily={pane.presetFamily ?? state.presetFamily}
 				presetPoolColors={pane.presetPoolColors ?? true}
 				poolColumns={pane.poolColumns}
