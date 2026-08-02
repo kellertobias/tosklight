@@ -124,6 +124,18 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   entry is tolerated but cannot create a master. Focused restore/persistence, Matter, and WebSocket
   tests passed, as did the headless package check. Unqualified strict headless Clippy remains blocked
   by existing findings in unrelated command, configuration, visualization, and Dynamic test files.
+- Commit `112fdd06` feeds each live Group's resolved source order and effective mapping into
+  Programmer, Cue, Playback, and restored Dynamic controllers, evaluates one shared rank set for
+  all Selection-ordered lanes, and counts exact spatial peers as one phase rank. The 51-test
+  `light-dynamics` suite, warning-clean strict Dynamics Clippy, application Dynamics checks,
+  headless package check, and focused restore/projection/recovery tests passed.
+- Commit `85fa7ace` moves Playback projection, authoritative-control, OSC, and Matter Group Master
+  readers to the assigned-only shared runtime value. Focused HTTP and Matter authority tests passed,
+  and unassigned Groups can no longer expose or mutate a hidden stored master through those paths.
+- Commit `e9a503e3` adds the strict typed `AssignGroupMaster` wire and application intent with
+  independent Group, Page, and Playback identity/revision guards, server-side Group resolution and
+  Playback allocation, atomic writes, and replay identity. Five focused application tests, six wire
+  contract/schema tests, two headless conversion/bounds tests, formatting, and diff checks passed.
 
 ## Remaining work
 
@@ -133,11 +145,12 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   recovery paths have been audited. Recording, mutation, validation, selective import, startup
   migration, structural lossless identity, and idempotence proof are integrated; tolerant legacy
   reads remain deliberately available until the final compatibility pass.
-- Feed the committed Group ranks through Dynamic inheritance/override evaluation and migrate every
-  persisted legacy `PhaseOrdering` surface without changing existing output.
-- Finish moving Group Master readers, assignment routing, and portable writes away from
-  `GroupDefinition.master`/`playback_fader`; runtime state and assigned-only sidecar persistence are
-  integrated, while projection readers, write-first portable migration, and field retirement remain.
+- Re-evaluate live-bound Dynamic membership, mapping, and Stage positions when those inputs change,
+  and migrate every persisted legacy `PhaseOrdering` surface without changing existing output.
+- Finish moving Group Master pointer resolution, legacy assignment aliases, and portable writes away
+  from `GroupDefinition.master`/`playback_fader`; runtime readers and typed assignment are integrated,
+  while write-first portable migration, field retirement, generated contracts, and desktop
+  consumption remain.
 - Connect the typed SET state machine to the command line, Group tiles, Playback controls, and
   revision-guarded application commands; its committed pure model is not runtime proof.
 
