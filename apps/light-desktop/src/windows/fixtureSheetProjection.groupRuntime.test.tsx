@@ -149,7 +149,7 @@ describe("Fixture Sheet scoped Group runtime", () => {
 			containedCurrent: false,
 			current: false,
 		})).find(({ id }) => id === "name");
-		render(nameColumn?.render(view.result.current.rows[0]) ?? null);
+		render(nameColumn?.render(view.result.current.rows[0], 0) ?? null);
 		expect(screen.getByText("◒ Group master 40%")).toHaveAttribute(
 			"title",
 			"Front: 40%",
