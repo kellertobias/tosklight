@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
 use light_core::FixtureId;
-use light_programmer::{GroupDefinition, ProgrammerUpdateContent, merge_ordered_group_membership};
+use light_programmer::{
+    GroupDefinition, GroupFixtureSource, ProgrammerUpdateContent, merge_ordered_group_membership,
+};
 
 use super::error::UpdateError;
 use super::model::{
@@ -73,8 +75,12 @@ pub fn plan_group_update(
         });
     }
     let mut updated = group.clone();
-    updated.fixtures =
+    let fixtures =
         merge_ordered_group_membership(resolved_membership, &programmer.selected_fixtures);
+    updated.fixtures.clone_from(&fixtures);
+    updated.source = Some(GroupFixtureSource::Explicit {
+        fixture_ids: fixtures,
+    });
     // Normal Group Merge dereferences only when it actually adds membership.
     updated.derived_from = None;
     updated.frozen_from = None;

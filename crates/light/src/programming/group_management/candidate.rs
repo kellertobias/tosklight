@@ -6,7 +6,7 @@ use super::{
 use crate::active_show::PreparedActiveShowTransaction;
 use crate::show_compiler::prepare_show_candidate_preserving_object;
 use crate::{ActionError, ActionErrorKind, ActiveShowUnitOfWork, lossless_json};
-use light_programmer::{FrozenGroup, GroupDefinition, resolve_group};
+use light_programmer::{FrozenGroup, GroupDefinition, GroupFixtureSource, resolve_group};
 use light_show::{PortableShowDocument, PortableShowObject, PortableShowRevision};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -93,6 +93,10 @@ fn refresh_frozen(
     let source_revision = document.revision().value();
     let mut group = current.clone();
     group.fixtures.clone_from(&fixtures);
+    group.source = Some(GroupFixtureSource::Explicit {
+        fixture_ids: fixtures.clone(),
+    });
+    group.derived_from = None;
     group.frozen_from = Some(FrozenGroup {
         source_group_id: source_group_id.clone(),
         source_revision,
@@ -112,23 +116,48 @@ fn detach_derived(
     groups: &HashMap<String, GroupDefinition>,
     expected_source: Option<&GroupSourceExpectation>,
 ) -> Result<GroupDefinition, ActionError> {
-    let derived = current
-        .derived_from
-        .as_ref()
-        .ok_or_else(|| invalid(format!("Group {} is not derived", commit.group_id)))?;
-    let source_group_id = derived.source_group_id.clone();
-    if let Some(expectation) = expected_source
-        && expectation.source_group_id != source_group_id
-    {
-        return Err(source_conflict(&source_group_id));
+    let source_group_ids = reference_source_ids(current);
+    if source_group_ids.is_empty() {
+        return Err(invalid(format!(
+            "Group {} is not reference-derived",
+            commit.group_id
+        )));
+    }
+    if let Some(expectation) = expected_source {
+        let [source_group_id] = source_group_ids.as_slice() else {
+            return Err(invalid(
+                "a source expectation cannot identify a multi-reference Group",
+            ));
+        };
+        if expectation.source_group_id != *source_group_id {
+            return Err(source_conflict(source_group_id));
+        }
     }
     // Resolve the currently materialized membership through the derivation chain so the detached
     // Group keeps exactly what the operator sees, in order.
     let fixtures = resolve_group(&commit.group_id, groups).map_err(decode_error)?;
     let mut group = current.clone();
-    group.fixtures = fixtures;
+    group.fixtures.clone_from(&fixtures);
+    group.source = Some(GroupFixtureSource::Explicit {
+        fixture_ids: fixtures,
+    });
     group.derived_from = None;
     Ok(group)
+}
+
+fn reference_source_ids(group: &GroupDefinition) -> Vec<String> {
+    match group.source.as_ref() {
+        Some(GroupFixtureSource::References { references }) => references
+            .iter()
+            .map(|reference| reference.group_id.clone())
+            .collect(),
+        Some(GroupFixtureSource::Explicit { .. }) => Vec::new(),
+        None => group
+            .derived_from
+            .as_ref()
+            .map(|derived| vec![derived.source_group_id.clone()])
+            .unwrap_or_default(),
+    }
 }
 
 /// A frozen source must exist and match any declared identity/revision before anything mutates.

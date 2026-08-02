@@ -103,6 +103,13 @@ fn group_add_new_preserves_order_and_existing_only_never_mutates_membership() {
         .unwrap(),
     );
     assert_eq!(updated.fixtures, vec![second, first, third, fourth]);
+    assert_eq!(
+        updated.source,
+        Some(light_programmer::GroupFixtureSource::Explicit {
+            fixture_ids: vec![second, first, third, fourth],
+        })
+    );
+    assert!(updated.derived_from.is_none());
 }
 
 #[test]

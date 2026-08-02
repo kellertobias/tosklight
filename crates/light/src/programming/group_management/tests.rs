@@ -109,6 +109,10 @@ fn refresh_frozen_recaptures_ordered_membership_and_selects_the_source() {
     let result = changed(&rig, &commit);
 
     assert_eq!(result.projection.raw_body["fixtures"], json!(members));
+    assert_eq!(
+        result.projection.raw_body["source"],
+        json!({"type": "explicit", "fixture_ids": members})
+    );
     let stored = &result.projection.raw_body["frozen_from"];
     assert_eq!(stored["source_group_id"], "source");
     assert_eq!(stored["source_revision"], rig.document.revision().value());
@@ -210,6 +214,10 @@ fn detach_derived_freezes_the_resolved_membership_and_keeps_frozen_metadata() {
 
     assert_eq!(result.projection.raw_body["derived_from"], Value::Null);
     assert_eq!(
+        result.projection.raw_body["source"],
+        json!({"type": "explicit", "fixture_ids": [members[0], members[2]]})
+    );
+    assert_eq!(
         result.projection.raw_body["fixtures"],
         json!([members[0], members[2]])
     );
@@ -234,6 +242,39 @@ fn detaching_a_group_that_is_not_derived_mutates_nothing() {
     let error = error_for(&rig, &commit);
 
     assert_eq!(error.kind, ActionErrorKind::Invalid);
+}
+
+#[test]
+fn detach_canonical_multi_reference_materializes_the_resolved_order() {
+    let members = [FixtureId::new(), FixtureId::new(), FixtureId::new()];
+    let mut combined = group_body("combined", "Combined", &[]);
+    combined["source"] = json!({
+        "type": "references",
+        "references": [
+            {"group_id": "first", "rule": {"type": "all"}},
+            {"group_id": "second", "rule": {"type": "all"}}
+        ]
+    });
+    let rig = TestRig::new([
+        ("first", group_body("first", "First", &members[..2])),
+        ("second", group_body("second", "Second", &members[1..])),
+        ("combined", combined),
+    ]);
+    let commit = commit_for(
+        &rig,
+        "combined",
+        GroupManagementOperation::DetachDerived {
+            expected_source: None,
+        },
+    );
+
+    let result = changed(&rig, &commit);
+
+    assert_eq!(
+        result.projection.raw_body["source"],
+        json!({"type": "explicit", "fixture_ids": members})
+    );
+    assert_eq!(result.projection.raw_body["fixtures"], json!(members));
 }
 
 #[test]

@@ -30,14 +30,16 @@ fn group_from_programmer(
     group.frozen_from = None;
     match operation {
         RecordOperation::Overwrite => {
-            group.fixtures = programmer.selected.clone();
+            group.fixtures.clone_from(&programmer.selected);
+            group.source = Some(light_programmer::GroupFixtureSource::Explicit {
+                fixture_ids: programmer.selected.clone(),
+            });
             match programmer.selection_expression.clone() {
                 Some(light_programmer::SelectionExpression::LiveGroup { group_id, rule })
                     if group_id != id =>
                 {
-                    group.derived_from = Some(light_programmer::DerivedGroup {
-                        source_group_id: group_id,
-                        rule,
+                    group.source = Some(light_programmer::GroupFixtureSource::References {
+                        references: vec![light_programmer::GroupReference { group_id, rule }],
                     });
                 }
                 _ => {}
@@ -50,12 +52,18 @@ fn group_from_programmer(
                     group.fixtures.push(*fixture);
                 }
             }
+            group.source = Some(light_programmer::GroupFixtureSource::Explicit {
+                fixture_ids: group.fixtures.clone(),
+            });
         }
         RecordOperation::Subtract => {
             group.fixtures = existing_membership;
             group
                 .fixtures
                 .retain(|fixture| !programmer.selected.contains(fixture));
+            group.source = Some(light_programmer::GroupFixtureSource::Explicit {
+                fixture_ids: group.fixtures.clone(),
+            });
         }
     }
     group
@@ -67,7 +75,11 @@ fn prevent_derived_group_cycle(
     snapshot: &EngineSnapshot,
     programmer: &light_programmer::ProgrammerState,
 ) -> light_programmer::GroupDefinition {
-    if group.derived_from.is_none() {
+    if !matches!(
+        group.source.as_ref(),
+        Some(light_programmer::GroupFixtureSource::References { .. })
+    ) && group.derived_from.is_none()
+    {
         return group;
     }
     let mut groups = snapshot
@@ -80,7 +92,10 @@ fn prevent_derived_group_cycle(
     if light_programmer::resolve_group(id, &groups).is_err() {
         group.derived_from = None;
         group.frozen_from = None;
-        group.fixtures = programmer.selected.clone();
+        group.fixtures.clone_from(&programmer.selected);
+        group.source = Some(light_programmer::GroupFixtureSource::Explicit {
+            fixture_ids: programmer.selected.clone(),
+        });
     }
     group
 }
@@ -93,12 +108,20 @@ fn delete_empty_group(
     let Some(existing) = existing else {
         return Err(format!("group {id} does not exist"));
     };
-    if let Some(dependent) = snapshot.groups.iter().find(|group| {
-        group
-            .derived_from
-            .as_ref()
-            .is_some_and(|derived| derived.source_group_id == id)
-    }) {
+    if let Some(dependent) = snapshot
+        .groups
+        .iter()
+        .find(|group| match group.source.as_ref() {
+            Some(light_programmer::GroupFixtureSource::References { references }) => {
+                references.iter().any(|reference| reference.group_id == id)
+            }
+            Some(light_programmer::GroupFixtureSource::Explicit { .. }) => false,
+            None => group
+                .derived_from
+                .as_ref()
+                .is_some_and(|derived| derived.source_group_id == id),
+        })
+    {
         return Err(format!(
             "cannot delete group {id}; derived group {} depends on it",
             dependent.id

@@ -352,6 +352,12 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
     assert_eq!(overwritten.name, "Kept name");
     assert_eq!(overwritten.master, 0.4);
     assert!(overwritten.derived_from.is_none());
+    assert_eq!(
+        overwritten.source,
+        Some(light_programmer::GroupFixtureSource::Explicit {
+            fixture_ids: fixtures[..3].to_vec(),
+        })
+    );
 
     let group_3_revision = ShowStore::open(&show_path)
         .unwrap()
@@ -369,9 +375,11 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
             &serde_json::to_value(light_programmer::GroupDefinition {
                 id: "4".into(),
                 name: "Derived from 3".into(),
-                derived_from: Some(light_programmer::DerivedGroup {
-                    source_group_id: "3".into(),
-                    rule: light_programmer::SelectionRule::All,
+                source: Some(light_programmer::GroupFixtureSource::References {
+                    references: vec![light_programmer::GroupReference {
+                        group_id: "3".into(),
+                        rule: light_programmer::SelectionRule::All,
+                    }],
                 }),
                 ..Default::default()
             })
@@ -391,7 +399,14 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
         },
     );
     execute_programmer_command(&state, &session, "RECORD GROUP 3").unwrap();
-    assert!(read_group().derived_from.is_none());
+    let cycle_safe = read_group();
+    assert!(cycle_safe.derived_from.is_none());
+    assert_eq!(
+        cycle_safe.source,
+        Some(light_programmer::GroupFixtureSource::Explicit {
+            fixture_ids: fixtures[..3].to_vec(),
+        })
+    );
     assert!(
         ShowStore::open(&show_path)
             .unwrap()
@@ -412,13 +427,27 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
         .programming
         .select(session.id, [fixtures[2], fixtures[3]]);
     execute_programmer_command(&state, &session, "RECORD + GROUP 3").unwrap();
-    assert_eq!(read_group().fixtures, fixtures);
+    let merged = read_group();
+    assert_eq!(merged.fixtures, fixtures);
+    assert_eq!(
+        merged.source,
+        Some(light_programmer::GroupFixtureSource::Explicit {
+            fixture_ids: fixtures.clone(),
+        })
+    );
 
     state
         .programming
         .select(session.id, [fixtures[1], fixtures[3]]);
     execute_programmer_command(&state, &session, "RECORD - GROUP 3").unwrap();
-    assert_eq!(read_group().fixtures, vec![fixtures[0], fixtures[2]]);
+    let subtracted = read_group();
+    assert_eq!(subtracted.fixtures, vec![fixtures[0], fixtures[2]]);
+    assert_eq!(
+        subtracted.source,
+        Some(light_programmer::GroupFixtureSource::Explicit {
+            fixture_ids: vec![fixtures[0], fixtures[2]],
+        })
+    );
 
     state.programming.select(session.id, []);
     execute_programmer_command(&state, &session, "RECORD - GROUP 3").unwrap();
