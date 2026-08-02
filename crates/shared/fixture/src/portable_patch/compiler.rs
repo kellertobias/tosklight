@@ -330,6 +330,7 @@ fn into_runtime_fixture(
         invert_tilt: patch.invert_tilt,
         bracket_angle: patch.bracket_angle,
         shaper_angle: patch.shaper_angle,
+        installed_appearance: patch.installed_appearance,
         move_in_black_enabled: patch.move_in_black_enabled,
         move_in_black_delay_millis: patch.move_in_black_delay_millis,
         highlight_overrides: patch.highlight_overrides,

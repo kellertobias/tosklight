@@ -1,4 +1,6 @@
-use crate::{FixtureError, PatchedFixture, SplitPatch};
+use crate::{
+    FixtureError, InstalledFixtureAppearance, InstalledLightSource, PatchedFixture, SplitPatch,
+};
 use light_core::Universe;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -33,6 +35,18 @@ impl PatchValidator {
         self.validate_stable_identities(fixture)?;
         self.validate_fixture_numbers(fixture)?;
         fixture.definition.validate()?;
+        validate_installed_appearance(
+            &fixture.fixture_id.0.to_string(),
+            &fixture.installed_appearance,
+            fixture,
+        )?;
+        for instance in &fixture.multipatch {
+            validate_installed_appearance(
+                &instance.id.to_string(),
+                &instance.installed_appearance,
+                fixture,
+            )?;
+        }
         validate_logical_head_topology(fixture)?;
         if !fixture.definition.is_dmx_patchable() {
             return validate_visual_only_fixture(fixture);
@@ -191,6 +205,35 @@ impl PatchValidator {
         }
         Ok(())
     }
+}
+
+fn validate_installed_appearance(
+    instance: &str,
+    appearance: &InstalledFixtureAppearance,
+    fixture: &PatchedFixture,
+) -> Result<(), FixtureError> {
+    appearance.validate().map_err(|message| {
+        invalid(format!(
+            "fixture instance {instance} has invalid installed appearance: {message}"
+        ))
+    })?;
+
+    let explicit_source = !matches!(
+        appearance.light_source,
+        InstalledLightSource::ProfileDefault
+    );
+    let inherited_cct = fixture
+        .definition
+        .profile_snapshot
+        .as_ref()
+        .and_then(|profile| profile.physical.color_temperature_kelvin);
+    if explicit_source && appearance.color_temperature_kelvin.is_none() && inherited_cct.is_none() {
+        return Err(invalid(format!(
+            "fixture instance {instance} with an explicit installed light source requires an explicit color temperature or an embedded profile color temperature"
+        )));
+    }
+
+    Ok(())
 }
 
 fn validate_logical_head_topology(fixture: &PatchedFixture) -> Result<(), FixtureError> {

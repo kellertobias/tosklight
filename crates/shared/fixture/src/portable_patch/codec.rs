@@ -244,7 +244,18 @@ fn validate_record_body(
     representation: RecordRepresentation,
 ) -> Result<(), PortablePatchError> {
     if representation == RecordRepresentation::LegacyInline {
-        serde_json::from_value::<PatchedFixture>(body.clone()).map_err(invalid_record)?;
+        let fixture =
+            serde_json::from_value::<PatchedFixture>(body.clone()).map_err(invalid_record)?;
+        fixture
+            .installed_appearance
+            .validate()
+            .map_err(PortablePatchError::InvalidRecord)?;
+        for instance in &fixture.multipatch {
+            instance
+                .installed_appearance
+                .validate()
+                .map_err(PortablePatchError::InvalidRecord)?;
+        }
     } else {
         let reference =
             serde_json::from_value::<StoredReference>(body.clone()).map_err(invalid_record)?;
@@ -253,7 +264,18 @@ fn validate_record_body(
                 reference.patch_record_schema,
             )));
         }
-        serde_json::from_value::<PatchedFixturePatch>(body.clone()).map_err(invalid_record)?;
+        let patch =
+            serde_json::from_value::<PatchedFixturePatch>(body.clone()).map_err(invalid_record)?;
+        patch
+            .installed_appearance
+            .validate()
+            .map_err(PortablePatchError::InvalidRecord)?;
+        for instance in &patch.multipatch {
+            instance
+                .installed_appearance
+                .validate()
+                .map_err(PortablePatchError::InvalidRecord)?;
+        }
     }
     Ok(())
 }

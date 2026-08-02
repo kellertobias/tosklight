@@ -1,5 +1,6 @@
 use super::support::{fixture, profile};
 use crate::{
+    GelAssignment, GelDefinitionSnapshot, InstalledFixtureAppearance, InstalledLightSource,
     PatchedFixture, PatchedFixturePatch, PortablePatchError, PortablePatchedFixtureRecord,
 };
 use serde_json::{Value, json};
@@ -368,4 +369,127 @@ fn the_mechanical_angles_survive_a_write_and_a_read() {
     let patch = read.patch().unwrap();
     assert_eq!(patch.bracket_angle, -32.5);
     assert_eq!(patch.shaper_angle, Some(45.0));
+}
+
+#[test]
+fn legacy_records_default_installed_appearance_without_rewriting_or_losing_angles() {
+    let profile = profile();
+    let mut fixture = fixture(&profile);
+    fixture.bracket_angle = -27.5;
+    fixture.shaper_angle = Some(33.0);
+    fixture.multipatch[0].bracket_angle = 12.0;
+    fixture.multipatch[0].shaper_angle = Some(-45.0);
+    let record = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap();
+    let mut body = record.body().clone();
+    body.as_object_mut().unwrap().remove("installed_appearance");
+    body["multipatch"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("installed_appearance");
+    let original = body.clone();
+
+    let decoded = PortablePatchedFixtureRecord::decode(body).unwrap();
+    assert_eq!(decoded.body(), &original, "decode is read-only");
+    let patch = decoded.patch().unwrap();
+    assert_eq!(
+        patch.installed_appearance,
+        InstalledFixtureAppearance::default()
+    );
+    assert_eq!(
+        patch.multipatch[0].installed_appearance,
+        InstalledFixtureAppearance::default()
+    );
+    assert_eq!(patch.bracket_angle, -27.5);
+    assert_eq!(patch.shaper_angle, Some(33.0));
+    assert_eq!(patch.multipatch[0].bracket_angle, 12.0);
+    assert_eq!(patch.multipatch[0].shaper_angle, Some(-45.0));
+}
+
+#[test]
+fn installed_appearance_round_trips_catalog_fallbacks_and_custom_gels_per_instance() {
+    let profile = profile();
+    let mut fixture = fixture(&profile);
+    fixture.installed_appearance = InstalledFixtureAppearance {
+        light_source: InstalledLightSource::Halogen,
+        color_temperature_kelvin: Some(3_200),
+        gel: GelAssignment::BuiltIn {
+            catalog_id: "touring-gels".into(),
+            entry_id: "deep-red".into(),
+            embedded_fallback: GelDefinitionSnapshot {
+                number: "R1".into(),
+                name: "Deep red".into(),
+                display_srgb: "#D92838".into(),
+                visualizer_srgb: "#C01020".into(),
+            },
+        },
+        shaper_angles_degrees: [-30.0, 15.5, 0.0, 179.5],
+    };
+    fixture.multipatch[0].installed_appearance = InstalledFixtureAppearance {
+        light_source: InstalledLightSource::Other {
+            label: "Carbon arc".into(),
+        },
+        color_temperature_kelvin: Some(5_600),
+        gel: GelAssignment::Custom {
+            name: "Window blue".into(),
+            color_srgb: "#80A0FF".into(),
+            note: Some("Balcony copy only".into()),
+        },
+        shaper_angles_degrees: [1.0, 2.0, 3.0, 4.0],
+    };
+
+    let record = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap();
+    let patch = PortablePatchedFixtureRecord::decode(record.body().clone())
+        .unwrap()
+        .patch()
+        .unwrap();
+
+    assert_eq!(patch.installed_appearance, fixture.installed_appearance);
+    assert_eq!(
+        patch.multipatch[0].installed_appearance,
+        fixture.multipatch[0].installed_appearance
+    );
+}
+
+#[test]
+fn invalid_installed_appearance_is_rejected_at_the_portable_record_boundary() {
+    let profile = profile();
+    let fixture = fixture(&profile);
+    let valid = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture)
+        .unwrap()
+        .into_body();
+    let invalid_values = [
+        json!({
+            "light_source": {"type":"profile_default"},
+            "color_temperature_kelvin": 999,
+            "gel": {"type":"open_white"},
+            "shaper_angles_degrees": [0.0,0.0,0.0,0.0]
+        }),
+        json!({
+            "light_source": {"type":"other","label":" untrimmed"},
+            "color_temperature_kelvin": null,
+            "gel": {"type":"open_white"},
+            "shaper_angles_degrees": [0.0,0.0,0.0,0.0]
+        }),
+        json!({
+            "light_source": {"type":"led"},
+            "color_temperature_kelvin": 6500,
+            "gel": {"type":"custom","name":"Blue","color_srgb":"#80a0ff"},
+            "shaper_angles_degrees": [0.0,0.0,0.0,0.0]
+        }),
+        json!({
+            "light_source": {"type":"tungsten"},
+            "color_temperature_kelvin": 3200,
+            "gel": {"type":"open_white"},
+            "shaper_angles_degrees": [0.0,180.0,0.0,0.0]
+        }),
+    ];
+
+    for installed_appearance in invalid_values {
+        let mut body = valid.clone();
+        body["installed_appearance"] = installed_appearance;
+        assert!(matches!(
+            PortablePatchedFixtureRecord::decode(body),
+            Err(PortablePatchError::InvalidRecord(_))
+        ));
+    }
 }

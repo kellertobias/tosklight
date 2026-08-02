@@ -327,6 +327,7 @@ fn patched_fixture(
         invert_tilt: existing_mib.is_some_and(|settings| settings.5),
         bracket_angle: existing_mib.map_or(0.0, |settings| settings.6),
         shaper_angle: existing_mib.and_then(|settings| settings.7),
+        installed_appearance: Default::default(),
         highlight_overrides: Default::default(),
         multipatch: Vec::new(),
     }

@@ -15,7 +15,7 @@ before moving it to `Done` in a semantic commit.
 - [x] Claimed from `docs/plans/Next` in numeric order.
 - [x] Audit the current table, patch selection, encoder, persistence, API, catalog, and visualizer
   ownership boundaries plus compatibility and acceptance seams.
-- [ ] Implement the exact shared sixteen-column table and physical-instance editing geometry.
+- [x] Implement the exact shared sixteen-column table and physical-instance editing geometry.
 - [ ] Implement portable installed appearance, typed sparse mutations, compatibility, and catalog
   import infrastructure.
 - [ ] Implement Location/Visualization encoders and shared Stage/Viz appearance evaluation.
@@ -77,6 +77,13 @@ before moving it to `Done` in a semantic commit.
   opens the same absolute Set Value surface from touch or hardware press. Visualization currently
   preserves all six disabled slots until the appearance projection and profile-role availability
   are integrated. Desktop typecheck and all 9 focused patch-encoder tests pass.
+- Portable patch records now carry a serde-defaulted installed appearance independently on the root
+  and every multi-patch: typed source, optional whole-kelvin CCT, Open-white/built-in/custom gel
+  assignment with stable catalog/entry identity and embedded display/visualizer fallback, plus four
+  static shaper-element angles. Validation enforces bounded trimmed labels and identities,
+  canonical uppercase `#RRGGBB`, 1,000–25,000 K, finite normalized angles, and an effective CCT for
+  explicit sources. Legacy inline/reference records default without being rewritten, existing
+  mechanical fields remain independent, and the focused `light-fixture` suite passes all 104 tests.
 
 ## Current behavior and problem
 

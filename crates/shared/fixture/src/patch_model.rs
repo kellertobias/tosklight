@@ -5,6 +5,177 @@ use std::collections::BTreeMap;
 use std::net::IpAddr;
 use uuid::Uuid;
 
+const MAX_APPEARANCE_ID_BYTES: usize = 128;
+const MAX_APPEARANCE_LABEL_BYTES: usize = 256;
+const MAX_APPEARANCE_NOTE_BYTES: usize = 1_024;
+
+/// Portable, installed appearance of one physical fixture instance.
+///
+/// Mechanical bracket and shaper-module rotation remain in their established patch fields. This
+/// value carries the additional lamp, filter, and four static shaper-element settings that travel
+/// with the physical instance rather than its immutable fixture profile.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct InstalledFixtureAppearance {
+    #[serde(default)]
+    pub light_source: InstalledLightSource,
+    /// An explicit installed colour temperature. `None` inherits the selected profile revision.
+    #[serde(default)]
+    pub color_temperature_kelvin: Option<u32>,
+    #[serde(default)]
+    pub gel: GelAssignment,
+    /// Installed static shutter or barn-door element angles, in element order one through four.
+    #[serde(default)]
+    pub shaper_angles_degrees: [f32; 4],
+}
+
+impl Default for InstalledFixtureAppearance {
+    fn default() -> Self {
+        Self {
+            light_source: InstalledLightSource::ProfileDefault,
+            color_temperature_kelvin: None,
+            gel: GelAssignment::OpenWhite,
+            shaper_angles_degrees: [0.0; 4],
+        }
+    }
+}
+
+impl InstalledFixtureAppearance {
+    pub fn validate(&self) -> Result<(), String> {
+        self.light_source.validate()?;
+        if self
+            .color_temperature_kelvin
+            .is_some_and(|kelvin| !(1_000..=25_000).contains(&kelvin))
+        {
+            return Err("installed color temperature must be within 1000-25000 K".into());
+        }
+        self.gel.validate()?;
+        if self
+            .shaper_angles_degrees
+            .iter()
+            .any(|angle| !angle.is_finite() || !(-180.0..180.0).contains(angle))
+        {
+            return Err("installed shaper angles must be finite degrees within [-180, 180)".into());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InstalledLightSource {
+    #[default]
+    ProfileDefault,
+    Tungsten,
+    Halogen,
+    Discharge,
+    Led,
+    Fluorescent,
+    Arc,
+    Other {
+        label: String,
+    },
+}
+
+impl InstalledLightSource {
+    fn validate(&self) -> Result<(), String> {
+        if let Self::Other { label } = self {
+            validate_trimmed(
+                label,
+                "installed light-source label",
+                MAX_APPEARANCE_LABEL_BYTES,
+            )?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum GelAssignment {
+    #[default]
+    OpenWhite,
+    BuiltIn {
+        catalog_id: String,
+        entry_id: String,
+        embedded_fallback: GelDefinitionSnapshot,
+    },
+    Custom {
+        name: String,
+        color_srgb: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+    },
+}
+
+impl GelAssignment {
+    fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::OpenWhite => Ok(()),
+            Self::BuiltIn {
+                catalog_id,
+                entry_id,
+                embedded_fallback,
+            } => {
+                validate_trimmed(catalog_id, "gel catalog identity", MAX_APPEARANCE_ID_BYTES)?;
+                validate_trimmed(entry_id, "gel entry identity", MAX_APPEARANCE_ID_BYTES)?;
+                embedded_fallback.validate()
+            }
+            Self::Custom {
+                name,
+                color_srgb,
+                note,
+            } => {
+                validate_trimmed(name, "custom gel name", MAX_APPEARANCE_LABEL_BYTES)?;
+                validate_srgb(color_srgb, "custom gel color")?;
+                if let Some(note) = note {
+                    validate_trimmed(note, "custom gel note", MAX_APPEARANCE_NOTE_BYTES)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Portable fallback for an assigned catalog entry when its source catalog is unavailable.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct GelDefinitionSnapshot {
+    pub number: String,
+    pub name: String,
+    pub display_srgb: String,
+    pub visualizer_srgb: String,
+}
+
+impl GelDefinitionSnapshot {
+    fn validate(&self) -> Result<(), String> {
+        validate_trimmed(&self.number, "gel catalog number", MAX_APPEARANCE_ID_BYTES)?;
+        validate_trimmed(&self.name, "gel display name", MAX_APPEARANCE_LABEL_BYTES)?;
+        validate_srgb(&self.display_srgb, "gel display color")?;
+        validate_srgb(&self.visualizer_srgb, "gel visualizer color")
+    }
+}
+
+fn validate_trimmed(value: &str, label: &str, max_bytes: usize) -> Result<(), String> {
+    if value.is_empty() || value.trim() != value || value.len() > max_bytes {
+        return Err(format!(
+            "{label} must be trimmed and contain 1-{max_bytes} bytes"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_srgb(value: &str, label: &str) -> Result<(), String> {
+    let bytes = value.as_bytes();
+    if bytes.len() != 7
+        || bytes[0] != b'#'
+        || bytes[1..]
+            .iter()
+            .any(|byte| !byte.is_ascii_digit() && !(b'A'..=b'F').contains(byte))
+    {
+        return Err(format!("{label} must be canonical #RRGGBB sRGB"));
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PatchedFixture {
     pub fixture_id: FixtureId,
@@ -66,6 +237,9 @@ pub struct PatchedFixture {
     /// nothing turns but a hand, only ever has this one.
     #[serde(default)]
     pub shaper_angle: Option<f32>,
+    /// Installed source, CCT, gel, and static shaper-element settings for this root instance.
+    #[serde(default)]
+    pub installed_appearance: InstalledFixtureAppearance,
     /// Preposition Position-family attributes for the next lit Cue while dark.
     #[serde(default = "default_true")]
     pub move_in_black_enabled: bool,
@@ -109,6 +283,9 @@ pub struct MultiPatchInstance {
     /// when none is fitted.
     #[serde(default)]
     pub shaper_angle: Option<f32>,
+    /// Installed source, CCT, gel, and static shaper-element settings for this physical copy.
+    #[serde(default)]
+    pub installed_appearance: InstalledFixtureAppearance,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -24,6 +24,7 @@ fn rejects_patch_overlap_and_boundary_overflow() {
         invert_tilt: false,
         bracket_angle: 0.0,
         shaper_angle: None,
+        installed_appearance: Default::default(),
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
@@ -49,6 +50,7 @@ fn rejects_patch_overlap_and_boundary_overflow() {
         invert_tilt: false,
         bracket_angle: 0.0,
         shaper_angle: None,
+        installed_appearance: Default::default(),
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
@@ -75,6 +77,7 @@ fn rejects_patch_overlap_and_boundary_overflow() {
         invert_tilt: false,
         bracket_angle: 0.0,
         shaper_angle: None,
+        installed_appearance: Default::default(),
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
@@ -111,6 +114,7 @@ fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
                 invert_tilt: false,
                 bracket_angle: 0.0,
                 shaper_angle: None,
+                installed_appearance: Default::default(),
             },
             MultiPatchInstance {
                 id: Uuid::new_v4(),
@@ -124,6 +128,7 @@ fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
                 invert_tilt: false,
                 bracket_angle: 0.0,
                 shaper_angle: None,
+                installed_appearance: Default::default(),
             },
         ],
         group_masters_enabled: true,
@@ -132,6 +137,7 @@ fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
         invert_tilt: false,
         bracket_angle: 0.0,
         shaper_angle: None,
+        installed_appearance: Default::default(),
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
@@ -141,6 +147,78 @@ fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
     assert!(validate_patch(std::slice::from_ref(&fixture)).is_err());
     fixture.multipatch[1].address = Some(2);
     assert!(validate_patch(&[fixture]).is_err());
+}
+
+#[test]
+fn installed_appearance_validation_applies_to_root_and_multipatch_instances() {
+    let mut fixture = schema_v2_two_split_fixture();
+    fixture.installed_appearance.shaper_angles_degrees[0] = 180.0;
+    assert!(
+        validate_patch(std::slice::from_ref(&fixture))
+            .unwrap_err()
+            .to_string()
+            .contains("invalid installed appearance")
+    );
+
+    fixture.installed_appearance = Default::default();
+    fixture.multipatch[0].installed_appearance.gel = GelAssignment::Custom {
+        name: "R27".into(),
+        color_srgb: "#ff0000".into(),
+        note: None,
+    };
+    assert!(
+        validate_patch(std::slice::from_ref(&fixture))
+            .unwrap_err()
+            .to_string()
+            .contains("custom gel color")
+    );
+}
+
+#[test]
+fn explicit_installed_sources_require_an_explicit_or_embedded_profile_cct() {
+    let mut fixture = schema_v2_two_split_fixture();
+    fixture.installed_appearance.light_source = InstalledLightSource::Led;
+    let error = validate_patch(std::slice::from_ref(&fixture)).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("requires an explicit color temperature"),
+        "{error}"
+    );
+
+    fixture.installed_appearance.color_temperature_kelvin = Some(5_600);
+    validate_patch(std::slice::from_ref(&fixture)).unwrap();
+
+    fixture.installed_appearance.color_temperature_kelvin = None;
+    fixture
+        .definition
+        .profile_snapshot
+        .as_mut()
+        .unwrap()
+        .physical
+        .color_temperature_kelvin = Some(6_500.0);
+    validate_patch(std::slice::from_ref(&fixture)).unwrap();
+
+    fixture
+        .definition
+        .profile_snapshot
+        .as_mut()
+        .unwrap()
+        .physical
+        .color_temperature_kelvin = None;
+    fixture.installed_appearance = Default::default();
+    fixture.multipatch[0].installed_appearance.light_source = InstalledLightSource::Halogen;
+    let error = validate_patch(std::slice::from_ref(&fixture)).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("requires an explicit color temperature"),
+        "{error}"
+    );
+    fixture.multipatch[0]
+        .installed_appearance
+        .color_temperature_kelvin = Some(3_200);
+    validate_patch(std::slice::from_ref(&fixture)).unwrap();
 }
 
 #[test]
@@ -292,6 +370,7 @@ fn media_server_layers_inherit_parent_direct_control_endpoint() {
         invert_tilt: false,
         bracket_angle: 0.0,
         shaper_angle: None,
+        installed_appearance: Default::default(),
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
@@ -345,6 +424,7 @@ fn logical_head_reconciliation_preserves_matching_ids_and_repairs_shape() {
         invert_tilt: false,
         bracket_angle: 0.0,
         shaper_angle: None,
+        installed_appearance: Default::default(),
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),

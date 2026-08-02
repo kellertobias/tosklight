@@ -1,6 +1,6 @@
 use crate::{
-    DirectControlEndpoint, FixtureLocation, FixtureVector, MultiPatchInstance, PatchedFixture,
-    PatchedHead, SplitPatch, default_patch_layer,
+    DirectControlEndpoint, FixtureLocation, FixtureVector, InstalledFixtureAppearance,
+    MultiPatchInstance, PatchedFixture, PatchedHead, SplitPatch, default_patch_layer,
 };
 use light_core::{DmxAddress, FixtureId, Revision, Universe};
 use serde::{Deserialize, Serialize};
@@ -73,6 +73,9 @@ pub struct PatchedFixturePatch {
     /// nothing can rotate but a hand, only ever has this one.
     #[serde(default)]
     pub shaper_angle: Option<f32>,
+    /// Installed source, CCT, gel, and static shaper-element settings for this root instance.
+    #[serde(default)]
+    pub installed_appearance: InstalledFixtureAppearance,
     #[serde(default = "default_true")]
     pub move_in_black_enabled: bool,
     #[serde(default)]
@@ -103,6 +106,7 @@ impl PatchedFixturePatch {
             invert_tilt: fixture.invert_tilt,
             bracket_angle: fixture.bracket_angle,
             shaper_angle: fixture.shaper_angle,
+            installed_appearance: fixture.installed_appearance.clone(),
             move_in_black_enabled: fixture.move_in_black_enabled,
             move_in_black_delay_millis: fixture.move_in_black_delay_millis,
             highlight_overrides: fixture.highlight_overrides.clone(),
