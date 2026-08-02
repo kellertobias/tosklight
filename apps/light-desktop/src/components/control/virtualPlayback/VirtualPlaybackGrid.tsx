@@ -62,6 +62,21 @@ export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 		const number = virtualPlaybackNumber(props.pageNumber, slot);
 		return props.page?.virtual_playbacks?.[String(number)] ?? null;
 	};
+	const chooseSetPlayback = (slot: number) => {
+		if (!setInteraction?.state || setInteraction.state.phase === "idle")
+			return false;
+		void setInteraction.choosePlayback(
+			{
+				addressing: "virtual",
+				pageNumber: props.pageNumber,
+				playbackNumber: virtualPlaybackNumber(props.pageNumber, slot),
+				pageObjectId: props.pageObjectId,
+				pageObjectRevision: props.pageObjectRevision,
+			},
+			"touch",
+		);
+		return true;
+	};
 	return (
 		<VirtualPlaybackGridView
 			page={props.pageNumber}
@@ -84,20 +99,8 @@ export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 					return true;
 				},
 				onAction: (slot) => {
+					if (chooseSetPlayback(slot)) return;
 					const playback = playbackAt(slot);
-					if (setInteraction?.state && setInteraction.state.phase !== "idle") {
-						void setInteraction.choosePlayback(
-							{
-								addressing: "virtual",
-								pageNumber: props.pageNumber,
-								playbackNumber: virtualPlaybackNumber(props.pageNumber, slot),
-								pageObjectId: props.pageObjectId,
-								pageObjectRevision: props.pageObjectRevision,
-							},
-							"touch",
-						);
-						return;
-					}
 					const action = playback?.buttons[0] ?? "none";
 					if (playback && action !== "none")
 						void props.runtimeActions?.virtualPlaybackAction(
@@ -108,6 +111,7 @@ export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 						);
 				},
 				onActionPress: (slot) => {
+					if (chooseSetPlayback(slot)) return;
 					const playback = playbackAt(slot);
 					if (playback) heldActions.press(slot, props.pageNumber, playback);
 				},

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaybackDefinition, PlaybackPage } from "../../../api/types";
 import type { PlaybackRuntimeActions } from "../../../features/playbackRuntime/actionWriter";
@@ -8,17 +8,6 @@ const mocks = vi.hoisted(() => ({
 	choosePlayback: vi.fn(),
 }));
 
-vi.mock("@tosklight/ui/playback", () => ({
-	VirtualPlaybackGridView: ({
-		callbacks,
-	}: {
-		callbacks: { onAction(slot: number): void };
-	}) => (
-		<button type="button" onClick={() => callbacks.onAction(1)}>
-			Virtual Playback 1
-		</button>
-	),
-}));
 vi.mock(
 	"../../../features/controlSurfaceInteraction/SetInteractionProvider",
 	() => ({
@@ -41,7 +30,7 @@ const playback: PlaybackDefinition = {
 	number: 1301,
 	name: "Virtual Front",
 	target: { type: "group", group_id: "4" },
-	buttons: ["select", "none", "none"],
+	buttons: ["flash", "none", "none"],
 	button_count: 1,
 	fader: "master",
 	has_fader: false,
@@ -59,12 +48,12 @@ const page: PlaybackPage = {
 describe("Virtual Playback SET routing", () => {
 	beforeEach(() => mocks.choosePlayback.mockReset().mockResolvedValue(null));
 
-	it("routes the exact Page-contained Virtual identity instead of operating it", () => {
+	it("routes the real held-action pointer path instead of operating it", () => {
 		const virtualPlaybackAction = vi.fn();
 		const runtimeActions = {
 			virtualPlaybackAction,
 		} as unknown as PlaybackRuntimeActions;
-		render(
+		const view = render(
 			<VirtualPlaybackGrid
 				pageNumber={2}
 				page={page}
@@ -78,7 +67,7 @@ describe("Virtual Playback SET routing", () => {
 				runtimeActions={runtimeActions}
 				zones={[]}
 				selectedSlots={[]}
-				configurationArmed
+				configurationArmed={false}
 				updateArmed={false}
 				shiftArmed={false}
 				onConfigure={vi.fn()}
@@ -86,7 +75,13 @@ describe("Virtual Playback SET routing", () => {
 			/>,
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: "Virtual Playback 1" }));
+		const card = view.container.querySelector<HTMLElement>(
+			'[data-virtual-playback-slot="1"]',
+		);
+		expect(card).not.toBeNull();
+		if (!card) throw new Error("Expected the real Virtual Playback card");
+		fireEvent.pointerDown(card, { pointerId: 1 });
+		fireEvent.pointerUp(card, { pointerId: 1 });
 
 		expect(mocks.choosePlayback).toHaveBeenCalledWith(
 			{
