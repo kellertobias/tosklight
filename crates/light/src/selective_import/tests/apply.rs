@@ -670,6 +670,150 @@ fn additive_patch_layer_rewrites_membership_and_appends_fixture_numbers() {
 }
 
 #[test]
+fn replace_by_position_preserves_installed_appearance_per_physical_instance() {
+    let rig = TestRig::new();
+    let mut source = portable_fixture_record(170_000, 7);
+    let target = portable_fixture_record(180_000, 7);
+    let (root_appearance, multipatch_appearance) = distinct_installed_appearances();
+    source.body["installed_appearance"] = root_appearance.clone();
+    source.body["multipatch"][0]["installed_appearance"] = multipatch_appearance.clone();
+    rig.source_profile(&source.profile);
+    rig.target_profile(&target.profile);
+    rig.source_object(
+        "patched_fixture",
+        &source.fixture_id.0.to_string(),
+        source.body,
+    );
+    rig.target_object(
+        "patched_fixture",
+        &target.fixture_id.0.to_string(),
+        target.body,
+    );
+    let source_key = key("patched_fixture", &source.fixture_id.0.to_string());
+    let target_key = key("patched_fixture", &target.fixture_id.0.to_string());
+
+    let preview = rig.preview(rig.request(source_key.kind(), source_key.id()));
+
+    assert!(preview.can_apply(), "{:?}", preview.blockers);
+    assert!(preview.objects.iter().any(|object| {
+        object.source == source_key
+            && object.destination == target_key
+            && object.action == ImportObjectAction::ReplaceDestination
+    }));
+    rig.apply(&preview).unwrap();
+
+    let target_document = rig.target_document();
+    assert!(
+        target_document
+            .object("patched_fixture", &source.fixture_id.0.to_string())
+            .is_none()
+    );
+    let imported = target_document
+        .object("patched_fixture", &target.fixture_id.0.to_string())
+        .unwrap()
+        .body();
+    assert_eq!(imported["fixture_id"], target.fixture_id.0.to_string());
+    assert_eq!(imported["installed_appearance"], root_appearance);
+    assert_eq!(
+        imported["multipatch"][0]["installed_appearance"],
+        multipatch_appearance
+    );
+}
+
+#[test]
+fn add_to_end_duplicate_preserves_installed_appearance_per_physical_instance() {
+    let rig = TestRig::new();
+    let mut source = portable_fixture_record(190_000, 2);
+    let target = portable_fixture_record(200_000, 10);
+    let (root_appearance, multipatch_appearance) = distinct_installed_appearances();
+    source.body["installed_appearance"] = root_appearance.clone();
+    source.body["multipatch"][0]["installed_appearance"] = multipatch_appearance.clone();
+    rig.source_profile(&source.profile);
+    rig.target_profile(&target.profile);
+    rig.source_object(
+        "patched_fixture",
+        &source.fixture_id.0.to_string(),
+        source.body,
+    );
+    rig.target_object(
+        "patched_fixture",
+        &target.fixture_id.0.to_string(),
+        target.body,
+    );
+    let source_key = key("patched_fixture", &source.fixture_id.0.to_string());
+
+    let preview = rig.preview(
+        rig.request(source_key.kind(), source_key.id())
+            .with_mode(ImportLoadMode::AddToEnd),
+    );
+
+    assert!(preview.can_apply(), "{:?}", preview.blockers);
+    let imported_key = preview
+        .objects
+        .iter()
+        .find(|object| object.source == source_key)
+        .map(|object| {
+            assert!(matches!(
+                object.action,
+                ImportObjectAction::Duplicate { .. }
+            ));
+            object.destination.clone()
+        })
+        .unwrap();
+    assert_ne!(imported_key, source_key);
+    rig.apply(&preview).unwrap();
+
+    let target_document = rig.target_document();
+    let imported = target_document
+        .object(imported_key.kind(), imported_key.id())
+        .unwrap()
+        .body();
+    assert_eq!(imported["fixture_number"], 11);
+    assert_ne!(imported["fixture_id"], source.fixture_id.0.to_string());
+    assert_ne!(
+        imported["multipatch"][0]["id"],
+        source.multipatch_id.to_string()
+    );
+    assert_eq!(imported["installed_appearance"], root_appearance);
+    assert_eq!(
+        imported["multipatch"][0]["installed_appearance"],
+        multipatch_appearance
+    );
+}
+
+fn distinct_installed_appearances() -> (serde_json::Value, serde_json::Value) {
+    (
+        json!({
+            "light_source": {"type": "halogen"},
+            "color_temperature_kelvin": 3_200,
+            "gel": {
+                "type": "built_in",
+                "catalog_id": "missing-touring-catalog",
+                "entry_id": "deep-red",
+                "embedded_fallback": {
+                    "number": "R1",
+                    "name": "Deep red fallback",
+                    "display_srgb": "#D92838",
+                    "visualizer_srgb": "#C01020"
+                }
+            },
+            "shaper_angles_degrees": [-30.0, 15.5, 0.0, 179.5]
+        }),
+        json!({
+            "light_source": {"type": "other", "label": "Carbon arc"},
+            "color_temperature_kelvin": 5_600,
+            "gel": {
+                "type": "custom",
+                "name": "Window blue",
+                "color_srgb": "#80A0FF",
+                "note": "Balcony copy only"
+            },
+            "shaper_angles_degrees": [1.0, 2.0, 3.0, 4.0]
+        }),
+    )
+}
+
+#[test]
 fn legacy_inline_fixture_materializes_profile_and_retains_unknown_data() {
     let rig = TestRig::new();
     let legacy = legacy_fixture_record(120_000, 3);
