@@ -119,6 +119,14 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
   Compact Intensity remains narrower than Off while giving Text only enough room for an ordinary
   base and two Dynamic identities. The focused DataTable test, both frontend builds, the rebuilt
   430 px Storybook case, and the rebuilt `PLAN76-LARGE-001` 1,000-instance benchmark pass.
+- The final full `test:e2e-ui` run reports 157 passed, one skipped, and two unrelated reproduced
+  failures: `TELEMETRY-001` remains in playback-telemetry hydration `error`, and
+  `PATCH-PLACEMENT-001` still cannot find the baseline `8-bit` fixture mode. Both new
+  `FIXTURE-SHEET-002` cases and the corrected `PLAN76-LARGE-001` benchmark pass in that full run.
+  The required API suite passed all 27 cases after the backend implementation. `test:unit` reaches
+  the repository source-size gate; extracting shared DataTable keyboard/style helpers removes the
+  Plan 02-owned violation and its 14 focused component tests pass, while the gate still reports ten
+  unrelated existing oversized functions outside this plan.
 
 ## Remaining work
 

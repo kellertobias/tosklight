@@ -522,11 +522,48 @@ function dataTableMinimumWidth<T>(columns: readonly DataTableColumn<T>[]) {
 	}, 0);
 }
 
+function dataTableStyle<T>(
+	columns: readonly DataTableColumn<T>[],
+	rowHeight: number,
+) {
+	const minimumWidth = dataTableMinimumWidth(columns);
+	return {
+		"--table-columns": columns
+			.map((column) => column.width ?? "minmax(0,1fr)")
+			.join(" "),
+		"--table-row-height": `${rowHeight}px`,
+		minWidth: minimumWidth > 0 ? `${minimumWidth}px` : undefined,
+	} as CSSProperties;
+}
+
 function dataTableIndices(start: number, end: number) {
 	return Array.from(
 		{ length: Math.max(0, end - start) },
 		(_, offset) => start + offset,
 	);
+}
+
+function handleDataTableKeyDown<T>(
+	event: KeyboardEvent,
+	index: number,
+	total: number,
+	rows: readonly T[],
+	onActiveIndexChange?: (index: number) => void,
+	onActivate?: (row: T, index: number) => void,
+) {
+	if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+		event.preventDefault();
+		onActiveIndexChange?.(
+			Math.max(
+				0,
+				Math.min(total - 1, index + (event.key === "ArrowDown" ? 1 : -1)),
+			),
+		);
+	}
+	if ((event.key === "Enter" || event.key === " ") && rows[index]) {
+		event.preventDefault();
+		onActivate?.(rows[index], index);
+	}
 }
 
 export function DataTable<T>({
@@ -578,25 +615,6 @@ export function DataTable<T>({
 		usesViewport,
 		viewport,
 	} = tableWindow;
-	const keyDown = (event: KeyboardEvent, index: number) => {
-		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-			event.preventDefault();
-			onActiveIndexChange?.(
-				Math.max(
-					0,
-					Math.min(total - 1, index + (event.key === "ArrowDown" ? 1 : -1)),
-				),
-			);
-		}
-		if ((event.key === "Enter" || event.key === " ") && rows[index]) {
-			event.preventDefault();
-			onActivate?.(rows[index], index);
-		}
-	};
-	const template = columns
-		.map((column) => column.width ?? "minmax(0,1fr)")
-		.join(" ");
-	const minimumWidth = dataTableMinimumWidth(columns);
 	const start = usesViewport ? viewport.start : 0;
 	const end = usesViewport ? viewport.end : total;
 	const visibleIndices = dataTableIndices(start, end);
@@ -620,13 +638,7 @@ export function DataTable<T>({
 				if (!event.currentTarget.contains(event.relatedTarget as Node | null))
 					tableFocused.current = false;
 			}}
-			style={
-				{
-					"--table-columns": template,
-					"--table-row-height": `${rowHeight}px`,
-					minWidth: minimumWidth > 0 ? `${minimumWidth}px` : undefined,
-				} as CSSProperties
-			}
+			style={dataTableStyle(columns, rowHeight)}
 		>
 			<div className="ui-data-table-row header" role="row" aria-rowindex={1}>
 				{columns.map((column) => (
@@ -665,7 +677,16 @@ export function DataTable<T>({
 							onActiveIndexChange?.(index);
 							if (row) onActivate?.(row, index);
 						}}
-						onKeyDown={(event) => keyDown(event, index)}
+						onKeyDown={(event) =>
+							handleDataTableKeyDown(
+								event,
+								index,
+								total,
+								rows,
+								onActiveIndexChange,
+								onActivate,
+							)
+						}
 					>
 						{columns.map((column) => (
 							<span
