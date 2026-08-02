@@ -229,22 +229,35 @@ export class BrowserGroups {
 			await expect(commandLine).toHaveValue(`SET GROUP ${number}`);
 			await this.desk.click(card);
 			const dialog = this.page.getByRole("dialog", {
-				name: "Group properties",
+				name: `Group ${number} settings`,
 				exact: true,
 			});
 			const name = dialog.getByLabel("Group name");
 			await name.fill(properties.name);
-			await expect(name).toHaveValue(properties.name);
-			if (properties.icon)
+			await name.blur();
+			await expect
+				.poll(async () => (await this.requiredObject(number)).body.name)
+				.toBe(properties.name);
+			if (properties.icon) {
 				await choosePicker(dialog, this.page, "Icon", `Use ${properties.icon}`);
-			if (properties.color)
+				await expect
+					.poll(async () => (await this.requiredObject(number)).body.icon)
+					.toBe(properties.icon);
+			}
+			if (properties.color) {
 				await choosePicker(
 					dialog,
 					this.page,
 					"Color",
 					`Use color ${properties.color.toLowerCase()}`,
 				);
-			await this.desk.click(dialog.getByRole("button", { name: "Save group" }));
+				await expect
+					.poll(async () => (await this.requiredObject(number)).body.color)
+					.toBe(properties.color);
+			}
+			await this.desk.click(
+				dialog.getByRole("button", { name: "Close settings" }),
+			);
 			await expect(dialog).toBeHidden();
 		} else {
 			throw new Error(`Group edit has no truthful ${route} route`);
