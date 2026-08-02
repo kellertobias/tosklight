@@ -124,6 +124,34 @@
 			"interactions": []
 		},
 		{
+			"file": "panes/fixtures-icon-only.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-fixture-sheet--icon-only",
+			"viewport": { "width": 430, "height": 360 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [
+				{
+					"action": "scroll",
+					"selector": ".fixture-table .ui-data-table-row.header > span:nth-child(5)"
+				}
+			]
+		},
+		{
+			"file": "panes/fixtures-text-only.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-fixture-sheet--text-only",
+			"viewport": { "width": 430, "height": 360 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [
+				{
+					"action": "scroll",
+					"selector": ".fixture-table .ui-data-table-row.header > span:nth-child(5)"
+				}
+			]
+		},
+		{
 			"file": "panes/groups.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-pools--groups",

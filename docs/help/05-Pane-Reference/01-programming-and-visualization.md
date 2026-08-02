@@ -32,7 +32,9 @@ The Group master limits the intensity of members when that Group is assigned to 
 
 ## Fixture sheet
 
-The Fixture sheet is the detailed live inspection and selection table. It refreshes resolved output values continuously and, while Preload is active, adds the pending Preload values for comparison. Activating a row selects that fixture or logical head. A compact pane shows every row in Fixture ID order and scrolls when the rows exceed the available pane height.
+The Fixture sheet is the detailed programming-state inspection and selection table. Each value cell shows the winning ordinary static base before Dynamic/FAT modulation. A running Dynamic keeps its icon and pool number beside the affected member but does not replace the base with its continuously sampled value. Open **DMX output** to inspect the changing resolved DMX result. While Preload is active, the Fixture sheet adds the pending base and Dynamic identity for comparison. Activating a row selects that fixture or logical head. A compact pane shows every eligible row in Fixture ID order and scrolls when the rows exceed the available pane height.
+
+Venue fixtures, `visual_only` profiles, and complete fixture IDs beginning `0.` remain in Show Patch, Stage, selection, MVR, and the portable show but never appear as Fixture sheet rows. These independent scenery checks run before active-only, Cuelist, ordering, and head filters. An authoritative selection containing only hidden scenery therefore selects no unrelated Fixture sheet row.
 
 Simple fixtures use one row. Multi-head fixtures can expose a `.0` master row for shared parameters and `.1`, `.2`, and following logical-head rows for the individual heads.
 
@@ -44,19 +46,28 @@ During PREV/NEXT stepping, every row in the remembered base selection remains vi
 | --- | --- |
 | **ID** | The fixture number. Multi-head targets add `.0` for the master and `.1` onward for logical heads. |
 | **Icon** | The fixture profile's stage icon. This column normally appears between ID and Name. |
-| **Name / type** | Operator name with optional manufacturer/mode on its own line at the same horizontal position as the name. A Group-master badge appears when a playback-fader Group is limiting this fixture. |
+| **Name / type** | Operator name with optional manufacturer/mode. An assigned Group-master badge shows its effective fader/Flash state and explicitly reports when live Highlight output bypasses it. |
 | **Patch** | The fixture's universe and address, or **Unpatched**. This dedicated column is off by default. |
-| **Dimmer** | A level meter and resolved intensity percentage. During Preload, an arrow shows the pending target percentage. |
+| **Intensity** | The ordinary base level as a meter and percentage. During Preload, an arrow shows the pending base percentage. |
 | **Color** | An RGB swatch and label. Every swatch has the same thin light-grey boundary so black, dark, bright, absent, and mixed colors remain distinct from the table without changing the resolved fill. During Preload, a second swatch identifies the pending color. Fixtures without color parameters show the neutral fallback. |
 | **Position** | A position glyph and pan/tilt values. Fixtures without position parameters show a dash. During Preload, the pending pan/tilt values appear below. |
-| **Beam** | Reserved beam-summary column. Its current compact summary is not yet an authoritative live engine value. |
-| **Focus** | Reserved focus-summary column. Its current compact summary is not yet an authoritative live engine value. |
+| **Beam** | Authoritative semantic Beam bases such as an open state or indexed gobo. |
+| **Shapers** | Authoritative framing/shaper member bases. |
+| **Focus** | Authoritative focus, edge, frost, or zoom member bases. |
+| **Control** | Authoritative semantic fixture-control bases without exposing raw DMX. |
+| **Media** | Distinct Media Folder/File and, where supported, Mask Folder/File base pairs. |
 
-The **Columns** settings can show or hide ID, Icon, Name, Patch address, Dimmer, Color, Position, Beam, and Focus. At least one column remains visible. Icon is on by default; Patch address is off by default. The source colors currently distinguish resolved programmer data from defaults for Dimmer, Color, and Position. Do not use this table alone as proof of complete cross-source ownership; detailed playback/programmer arbitration is documented separately.
+The **Columns** settings independently control ID, Icon, Name, Patch address, Intensity, Color, Position, Beam, Shapers, Focus, Control, and Media. At least one column remains visible. Existing saved **Dimmer** visibility migrates to **Intensity**; newly available group columns do not turn themselves on in an existing layout. Source styling distinguishes current Programmer, Playback, and profile-default bases.
 
-**Pane configuration:** **Fixture Sheet → Show active fixtures only** limits that pane to fixtures carrying Programmer values; this is useful beside a Cuelist Pool while recording looks. **Show group shortcuts** adds the Group strip. The common size and removal controls also apply. In the full Fixture Sheet window, open **Fixture Sheet** settings and use **View** for fixture heads, ordering, and filters; **Columns** for visible data and optional Name details; and **Groups** for the Group strip. **Included heads** defaults to **All**. Choose **No sub heads** to show only master rows with the fixture's bare ID, or **No master heads** to show only subhead rows without indentation. There is no per-row expand or collapse button. These full-sheet choices persist with the desk layout. Ordering can use Fixture ID or put active programmer fixtures first; filters can show only active fixtures or limit membership to one Cuelist.
+**Pane configuration:** **Fixture Sheet → Compact mode** has exactly **Off**, **Icon only**, and **Text only**. Off keeps the detailed 43 px presentation. Icon only uses deterministic 32 px rows, retains graphical base/Preload summaries, and removes ordinary value text. Text only uses the same 32 px rows, retains concise semantic base/Preload text, and removes decorative value graphics. Both compact modes keep Dynamic identities, source ownership, Group-master/Highlight status, fixture type, selection, and step markers. Configured columns are never dropped at a breakpoint; a small pane scrolls horizontally when the selected set still cannot fit. Each pane, the full built-in, and each fixed external Fixture Sheet persist their own desk-local mode, defaulting to Off without changing portable show data.
+
+**Show active fixtures only** limits that pane to fixtures carrying Programmer values; this is useful beside a Cuelist Pool while recording looks. **Show group shortcuts** adds the Group strip. The common size and removal controls also apply. In the full Fixture Sheet window, open **Fixture Sheet** settings and use **View** for Compact mode, fixture heads, ordering, and filters; **Columns** for visible data and optional Name details; and **Groups** for the Group strip. **Included heads** defaults to **All**. Choose **No sub heads** to show only master rows with the fixture's bare ID, or **No master heads** to show only subhead rows without indentation. There is no per-row expand or collapse button. These full-sheet choices persist with the desk layout. Ordering can use Fixture ID or put active programmer fixtures first; filters can show only active fixtures or limit membership to one Cuelist.
 
 ![Fixture sheet pane](../assets/screenshots/panes/fixtures.png)
+
+![Fixture sheet Icon-only compact mode](../assets/screenshots/panes/fixtures-icon-only.png)
+
+![Fixture sheet Text-only compact mode](../assets/screenshots/panes/fixtures-text-only.png)
 
 ![Fixture sheet pane settings](../assets/screenshots/panes/fixtures-settings.png)
 
