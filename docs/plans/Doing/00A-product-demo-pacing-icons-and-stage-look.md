@@ -2,14 +2,39 @@
 
 ## Status
 
-**Plan 00A — specification only.** This plan records the next reviewed revision of the maintained
-product-demo video. It does not change the demo scenario, edit timeline, Stage renderer, generated
-video, exported demo show, help text, or executable tests.
+**Doing.** Claimed on 2026-08-02. This plan is now the sole active implementation contract for the
+next reviewed revision of the maintained product-demo video.
 
 Implement this plan against the single maintained `DEMO-001` workflow in
 `tests/bench/show/productDemoScenario.ts`. Preserve that workflow as a real regression test and
 keep its deterministic 25 fps edit timeline. Video acceleration changes below refer to retained
 video time and visible click/type pacing, not to weakening assertions or racing the application.
+
+## Progress
+
+- [x] Claimed from `docs/plans/Next` after completing plan 00.
+- [ ] Audit the maintained DEMO-001 workflow, deterministic edit timeline, current generated-video
+  path, and the previously observed Show Patch navigation blocker.
+- [ ] Implement the exact Patch, Group-selection, and icon-picker pacing contract.
+- [ ] Trace and correct the authoritative Pan/Tilt and color path into the final Stage rendering.
+- [ ] Run focused checks, canonical demo inventory verification, retained-video review, major suites,
+  and the real desktop path.
+
+## Decisions
+
+- The literal retained-video boundaries and visible Fixture Sheet/icon-picker interactions below
+  are acceptance requirements; faster setup must not bypass them through API-only shortcuts.
+- Earlier focused Stage geometry checks are supporting evidence only. A previous maintained-demo run
+  stopped before fixture patching because Show Patch did not become visible, so current video and
+  operator-path proof must be established afresh.
+
+## Verification
+
+- Pending implementation.
+
+## Remaining work
+
+- Complete the audit and every unchecked progress item above.
 
 ## Goal
 
@@ -132,4 +157,3 @@ used by the desk.
 - Re-run the canonical demo-show generation/inventory checks and confirm no fixture, layer,
   address, physical-instance, Group, preset, Dynamic, Cuelist, Playback, or output-route totals
   drifted unintentionally.
-
