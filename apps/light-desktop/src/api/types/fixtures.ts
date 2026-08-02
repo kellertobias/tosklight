@@ -29,6 +29,7 @@ export interface PatchedFixture {
 	bracket_angle?: number;
 	/** Degrees a fitted shaper or barn-door module is turned to; absent when none is fitted. */
 	shaper_angle?: number | null;
+	installed_appearance?: InstalledFixtureAppearance;
 	/** Schema-v2 fixtures patch each independently addressable split separately. */
 	split_patches?: SplitPatch[];
 	/** Exact raw values captured with the embedded profile snapshot. */
@@ -49,6 +50,46 @@ export interface MultiPatchInstance {
 	invert_tilt?: boolean;
 	bracket_angle?: number;
 	shaper_angle?: number | null;
+	installed_appearance?: InstalledFixtureAppearance;
+}
+
+export type InstalledLightSource =
+	| { type: "profile_default" }
+	| { type: "tungsten" }
+	| { type: "halogen" }
+	| { type: "discharge" }
+	| { type: "led" }
+	| { type: "fluorescent" }
+	| { type: "arc" }
+	| { type: "other"; label: string };
+
+export interface GelDefinitionSnapshot {
+	number: string;
+	name: string;
+	display_srgb: string;
+	visualizer_srgb: string;
+}
+
+export type GelAssignment =
+	| { type: "open_white" }
+	| {
+			type: "built_in";
+			catalog_id: string;
+			entry_id: string;
+			embedded_fallback: GelDefinitionSnapshot;
+	  }
+	| {
+			type: "custom";
+			name: string;
+			color_srgb: string;
+			note: string | null;
+	  };
+
+export interface InstalledFixtureAppearance {
+	light_source: InstalledLightSource;
+	color_temperature_kelvin: number | null;
+	gel: GelAssignment;
+	shaper_angles_degrees: [number, number, number, number];
 }
 
 export interface SplitPatch {

@@ -1,15 +1,17 @@
 import type {
-	FixtureDefinition,
-	FixtureProfile,
-	PatchedFixture,
-	SplitPatch,
-} from "../wire";
-import type {
 	PatchFixtureProjection,
 	PatchFixtureWrite,
+	PatchInstalledFixtureAppearance,
 	PatchProfileRevision,
 } from "../contracts";
 import { fixtureDefinitionFromProfileMode } from "../sheet/fixtureProfileModel";
+import type {
+	FixtureDefinition,
+	FixtureProfile,
+	InstalledFixtureAppearance,
+	PatchedFixture,
+	SplitPatch,
+} from "../wire";
 
 export interface PatchFixtureCandidate {
 	input: PatchFixtureWrite;
@@ -49,16 +51,15 @@ export function newPatchFixtureCandidate(
 	fixture: NewPatchFixture,
 ): PatchFixtureCandidate {
 	const fixtureId = crypto.randomUUID();
-	const splitPatches =
-		fixture.split_patches?.length
-			? fixture.split_patches
-			: [
-					{
-						split: primarySplit(fixture.definition),
-						universe: fixture.universe,
-						address: fixture.address,
-					},
-				];
+	const splitPatches = fixture.split_patches?.length
+		? fixture.split_patches
+		: [
+				{
+					split: primarySplit(fixture.definition),
+					universe: fixture.universe,
+					address: fixture.address,
+				},
+			];
 	const optimistic: PatchedFixture = {
 		fixture_id: fixtureId,
 		fixture_number: fixture.fixture_number,
@@ -80,6 +81,7 @@ export function newPatchFixtureCandidate(
 		invert_tilt: false,
 		bracket_angle: 0,
 		shaper_angle: null,
+		installed_appearance: defaultInstalledFixtureAppearance(),
 		move_in_black_enabled: true,
 		move_in_black_delay_millis: 0,
 		highlight_overrides: {},
@@ -105,16 +107,15 @@ export function patchedFixtureCandidate(
 				" has no immutable profile and mode reference",
 		);
 	const [profileId, profileRevision, modeId] = reference;
-	const splitPatches =
-		fixture.split_patches?.length
-			? fixture.split_patches
-			: [
-					{
-						split: primarySplit(fixture.definition),
-						universe: fixture.universe,
-						address: fixture.address,
-					},
-				];
+	const splitPatches = fixture.split_patches?.length
+		? fixture.split_patches
+		: [
+				{
+					split: primarySplit(fixture.definition),
+					universe: fixture.universe,
+					address: fixture.address,
+				},
+			];
 	return {
 		fixture,
 		input: {
@@ -139,22 +140,22 @@ export function patchedFixtureCandidate(
 			multipatch: (fixture.multipatch ?? []).map((instance) => ({
 				id: instance.id,
 				name: instance.name,
-				splitPatches:
-					instance.split_patches?.length
-						? instance.split_patches
-						: [
-								{
-									split: primarySplit(fixture.definition),
-									universe: instance.universe,
-									address: instance.address,
-								},
-							],
+				splitPatches: instance.split_patches?.length
+					? instance.split_patches
+					: [
+							{
+								split: primarySplit(fixture.definition),
+								universe: instance.universe,
+								address: instance.address,
+							},
+						],
 				location: instance.location,
 				rotation: instance.rotation,
 				invertPan: instance.invert_pan ?? false,
 				invertTilt: instance.invert_tilt ?? false,
 				bracketAngle: instance.bracket_angle ?? 0,
 				shaperAngle: instance.shaper_angle ?? null,
+				installedAppearance: patchAppearance(instance.installed_appearance),
 			})),
 			groupMastersEnabled: fixture.group_masters_enabled ?? true,
 			grandMasterEnabled: fixture.grand_master_enabled ?? true,
@@ -162,12 +163,12 @@ export function patchedFixtureCandidate(
 			invertTilt: fixture.invert_tilt ?? false,
 			bracketAngle: fixture.bracket_angle ?? 0,
 			shaperAngle: fixture.shaper_angle ?? null,
+			installedAppearance: patchAppearance(fixture.installed_appearance),
 			moveInBlackEnabled: fixture.move_in_black_enabled ?? true,
-			moveInBlackDelayMillis:
-				fixture.move_in_black_delay_millis ?? 0,
-			highlightOverrides: Object.entries(
-				fixture.highlight_overrides ?? {},
-			).map(([channelId, rawValue]) => ({ channelId, rawValue })),
+			moveInBlackDelayMillis: fixture.move_in_black_delay_millis ?? 0,
+			highlightOverrides: Object.entries(fixture.highlight_overrides ?? {}).map(
+				([channelId, rawValue]) => ({ channelId, rawValue }),
+			),
 		},
 	};
 }
@@ -255,6 +256,7 @@ export function projectionToPatchedFixture(
 				invert_tilt: instance.invertTilt ?? false,
 				bracket_angle: instance.bracketAngle ?? 0,
 				shaper_angle: instance.shaperAngle ?? null,
+				installed_appearance: fixtureAppearance(instance.installedAppearance),
 			};
 		}),
 		group_masters_enabled: projection.groupMastersEnabled ?? true,
@@ -263,6 +265,7 @@ export function projectionToPatchedFixture(
 		invert_tilt: projection.invertTilt ?? false,
 		bracket_angle: projection.bracketAngle ?? 0,
 		shaper_angle: projection.shaperAngle ?? null,
+		installed_appearance: fixtureAppearance(projection.installedAppearance),
 		move_in_black_enabled: projection.moveInBlackEnabled,
 		move_in_black_delay_millis: projection.moveInBlackDelayMillis,
 		highlight_overrides: Object.fromEntries(
@@ -271,6 +274,79 @@ export function projectionToPatchedFixture(
 				override.rawValue,
 			]),
 		),
+	};
+}
+
+export function defaultInstalledFixtureAppearance(): InstalledFixtureAppearance {
+	return {
+		light_source: { type: "profile_default" },
+		color_temperature_kelvin: null,
+		gel: { type: "open_white" },
+		shaper_angles_degrees: [0, 0, 0, 0],
+	};
+}
+
+function patchAppearance(
+	appearance: InstalledFixtureAppearance | undefined,
+): PatchInstalledFixtureAppearance {
+	const resolved = appearance ?? defaultInstalledFixtureAppearance();
+	return {
+		lightSource: { ...resolved.light_source },
+		colorTemperatureKelvin: resolved.color_temperature_kelvin,
+		gel:
+			resolved.gel.type === "built_in"
+				? {
+						type: "built_in",
+						catalogId: resolved.gel.catalog_id,
+						entryId: resolved.gel.entry_id,
+						embeddedFallback: {
+							number: resolved.gel.embedded_fallback.number,
+							name: resolved.gel.embedded_fallback.name,
+							displaySrgb: resolved.gel.embedded_fallback.display_srgb,
+							visualizerSrgb: resolved.gel.embedded_fallback.visualizer_srgb,
+						},
+					}
+				: resolved.gel.type === "custom"
+					? {
+							type: "custom",
+							name: resolved.gel.name,
+							colorSrgb: resolved.gel.color_srgb,
+							note: resolved.gel.note,
+						}
+					: { type: "open_white" },
+		shaperAnglesDegrees: [...resolved.shaper_angles_degrees],
+	};
+}
+
+function fixtureAppearance(
+	appearance: PatchInstalledFixtureAppearance | undefined,
+): InstalledFixtureAppearance {
+	const resolved = appearance ?? patchAppearance(undefined);
+	return {
+		light_source: { ...resolved.lightSource },
+		color_temperature_kelvin: resolved.colorTemperatureKelvin,
+		gel:
+			resolved.gel.type === "built_in"
+				? {
+						type: "built_in",
+						catalog_id: resolved.gel.catalogId,
+						entry_id: resolved.gel.entryId,
+						embedded_fallback: {
+							number: resolved.gel.embeddedFallback.number,
+							name: resolved.gel.embeddedFallback.name,
+							display_srgb: resolved.gel.embeddedFallback.displaySrgb,
+							visualizer_srgb: resolved.gel.embeddedFallback.visualizerSrgb,
+						},
+					}
+				: resolved.gel.type === "custom"
+					? {
+							type: "custom",
+							name: resolved.gel.name,
+							color_srgb: resolved.gel.colorSrgb,
+							note: resolved.gel.note,
+						}
+					: { type: "open_white" },
+		shaper_angles_degrees: [...resolved.shaperAnglesDegrees],
 	};
 }
 
@@ -311,9 +387,9 @@ function matchingDefinition(
 
 function primarySplit(definition: FixtureDefinition): number {
 	return (
-		definition.profile_snapshot?.modes
-			.find((mode) => mode.id === definition.mode_id)
-			?.splits[0]?.number ?? 1
+		definition.profile_snapshot?.modes.find(
+			(mode) => mode.id === definition.mode_id,
+		)?.splits[0]?.number ?? 1
 	);
 }
 

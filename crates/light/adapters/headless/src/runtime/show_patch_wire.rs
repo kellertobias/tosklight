@@ -267,6 +267,7 @@ fn application_fixture(
             invert_tilt: input.invert_tilt,
             bracket_angle: input.bracket_angle,
             shaper_angle: input.shaper_angle,
+            installed_appearance: application_installed_appearance(input.installed_appearance),
             move_in_black_enabled: input.move_in_black_enabled,
             move_in_black_delay_millis: input.move_in_black_delay_millis,
             highlight_overrides: application_highlights(input.highlight_overrides)?,
@@ -330,6 +331,58 @@ fn application_multipatch(input: wire::PatchMultiPatchInput) -> fixture::MultiPa
         invert_tilt: input.invert_tilt,
         bracket_angle: input.bracket_angle,
         shaper_angle: input.shaper_angle,
+        installed_appearance: application_installed_appearance(input.installed_appearance),
+    }
+}
+
+fn application_installed_appearance(
+    input: wire::PatchInstalledFixtureAppearance,
+) -> fixture::InstalledFixtureAppearance {
+    fixture::InstalledFixtureAppearance {
+        light_source: match input.light_source {
+            wire::PatchInstalledLightSource::ProfileDefault => {
+                fixture::InstalledLightSource::ProfileDefault
+            }
+            wire::PatchInstalledLightSource::Tungsten => fixture::InstalledLightSource::Tungsten,
+            wire::PatchInstalledLightSource::Halogen => fixture::InstalledLightSource::Halogen,
+            wire::PatchInstalledLightSource::Discharge => fixture::InstalledLightSource::Discharge,
+            wire::PatchInstalledLightSource::Led => fixture::InstalledLightSource::Led,
+            wire::PatchInstalledLightSource::Fluorescent => {
+                fixture::InstalledLightSource::Fluorescent
+            }
+            wire::PatchInstalledLightSource::Arc => fixture::InstalledLightSource::Arc,
+            wire::PatchInstalledLightSource::Other { label } => {
+                fixture::InstalledLightSource::Other { label }
+            }
+        },
+        color_temperature_kelvin: input.color_temperature_kelvin,
+        gel: match input.gel {
+            wire::PatchGelAssignment::OpenWhite => fixture::GelAssignment::OpenWhite,
+            wire::PatchGelAssignment::BuiltIn {
+                catalog_id,
+                entry_id,
+                embedded_fallback,
+            } => fixture::GelAssignment::BuiltIn {
+                catalog_id,
+                entry_id,
+                embedded_fallback: fixture::GelDefinitionSnapshot {
+                    number: embedded_fallback.number,
+                    name: embedded_fallback.name,
+                    display_srgb: embedded_fallback.display_srgb,
+                    visualizer_srgb: embedded_fallback.visualizer_srgb,
+                },
+            },
+            wire::PatchGelAssignment::Custom {
+                name,
+                color_srgb,
+                note,
+            } => fixture::GelAssignment::Custom {
+                name,
+                color_srgb,
+                note,
+            },
+        },
+        shaper_angles_degrees: input.shaper_angles_degrees,
     }
 }
 
@@ -380,6 +433,7 @@ fn wire_fixture(input: &application::PatchFixtureProjection) -> wire::PatchFixtu
         invert_tilt: patch.invert_tilt,
         bracket_angle: patch.bracket_angle,
         shaper_angle: patch.shaper_angle,
+        installed_appearance: wire_installed_appearance(&patch.installed_appearance),
         move_in_black_enabled: patch.move_in_black_enabled,
         move_in_black_delay_millis: patch.move_in_black_delay_millis,
         highlight_overrides: patch
@@ -442,6 +496,60 @@ fn wire_multipatch(instance: &fixture::MultiPatchInstance) -> wire::PatchMultiPa
         invert_tilt: instance.invert_tilt,
         bracket_angle: instance.bracket_angle,
         shaper_angle: instance.shaper_angle,
+        installed_appearance: wire_installed_appearance(&instance.installed_appearance),
+    }
+}
+
+fn wire_installed_appearance(
+    input: &fixture::InstalledFixtureAppearance,
+) -> wire::PatchInstalledFixtureAppearance {
+    wire::PatchInstalledFixtureAppearance {
+        light_source: match &input.light_source {
+            fixture::InstalledLightSource::ProfileDefault => {
+                wire::PatchInstalledLightSource::ProfileDefault
+            }
+            fixture::InstalledLightSource::Tungsten => wire::PatchInstalledLightSource::Tungsten,
+            fixture::InstalledLightSource::Halogen => wire::PatchInstalledLightSource::Halogen,
+            fixture::InstalledLightSource::Discharge => wire::PatchInstalledLightSource::Discharge,
+            fixture::InstalledLightSource::Led => wire::PatchInstalledLightSource::Led,
+            fixture::InstalledLightSource::Fluorescent => {
+                wire::PatchInstalledLightSource::Fluorescent
+            }
+            fixture::InstalledLightSource::Arc => wire::PatchInstalledLightSource::Arc,
+            fixture::InstalledLightSource::Other { label } => {
+                wire::PatchInstalledLightSource::Other {
+                    label: label.clone(),
+                }
+            }
+        },
+        color_temperature_kelvin: input.color_temperature_kelvin,
+        gel: match &input.gel {
+            fixture::GelAssignment::OpenWhite => wire::PatchGelAssignment::OpenWhite,
+            fixture::GelAssignment::BuiltIn {
+                catalog_id,
+                entry_id,
+                embedded_fallback,
+            } => wire::PatchGelAssignment::BuiltIn {
+                catalog_id: catalog_id.clone(),
+                entry_id: entry_id.clone(),
+                embedded_fallback: wire::PatchGelDefinitionSnapshot {
+                    number: embedded_fallback.number.clone(),
+                    name: embedded_fallback.name.clone(),
+                    display_srgb: embedded_fallback.display_srgb.clone(),
+                    visualizer_srgb: embedded_fallback.visualizer_srgb.clone(),
+                },
+            },
+            fixture::GelAssignment::Custom {
+                name,
+                color_srgb,
+                note,
+            } => wire::PatchGelAssignment::Custom {
+                name: name.clone(),
+                color_srgb: color_srgb.clone(),
+                note: note.clone(),
+            },
+        },
+        shaper_angles_degrees: input.shaper_angles_degrees,
     }
 }
 

@@ -25,6 +25,45 @@ export interface PatchFixtureRotation {
 	z: number;
 }
 
+export type PatchInstalledLightSource =
+	| { type: "profile_default" }
+	| { type: "tungsten" }
+	| { type: "halogen" }
+	| { type: "discharge" }
+	| { type: "led" }
+	| { type: "fluorescent" }
+	| { type: "arc" }
+	| { type: "other"; label: string };
+
+export interface PatchGelDefinitionSnapshot {
+	number: string;
+	name: string;
+	displaySrgb: string;
+	visualizerSrgb: string;
+}
+
+export type PatchGelAssignment =
+	| { type: "open_white" }
+	| {
+			type: "built_in";
+			catalogId: string;
+			entryId: string;
+			embeddedFallback: PatchGelDefinitionSnapshot;
+	  }
+	| {
+			type: "custom";
+			name: string;
+			colorSrgb: string;
+			note: string | null;
+	  };
+
+export interface PatchInstalledFixtureAppearance {
+	lightSource: PatchInstalledLightSource;
+	colorTemperatureKelvin: number | null;
+	gel: PatchGelAssignment;
+	shaperAnglesDegrees: [number, number, number, number];
+}
+
 export interface PatchMultiPatch {
 	id: string;
 	name: string;
@@ -35,6 +74,7 @@ export interface PatchMultiPatch {
 	invertTilt?: boolean;
 	bracketAngle?: number;
 	shaperAngle?: number | null;
+	installedAppearance?: PatchInstalledFixtureAppearance;
 }
 
 export interface PatchHighlightOverride {
@@ -64,6 +104,7 @@ export interface PatchFixtureWrite {
 	bracketAngle?: number;
 	/** Degrees a fitted shaper or barn-door module is turned to; `null` when none is fitted. */
 	shaperAngle?: number | null;
+	installedAppearance?: PatchInstalledFixtureAppearance;
 	moveInBlackEnabled: boolean;
 	moveInBlackDelayMillis: number;
 	highlightOverrides: readonly PatchHighlightOverride[];

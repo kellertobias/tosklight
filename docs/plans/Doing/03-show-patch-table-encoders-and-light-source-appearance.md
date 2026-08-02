@@ -89,6 +89,16 @@ before moving it to `Done` in a semantic commit.
   gel composition entirely in linear space. Golden tests cover stable warm/cool vectors, Open white,
   warm red filtering, range clamping, invalid hex, and zero-live-output darkness; all 52
   `viz-project` tests pass. Renderer scene integration remains outstanding.
+- The authoritative v2 Patch input/snapshot/delta/event projection now carries the raw portable
+  installed appearance for roots and multi-patches. Rust owns the DTOs and regenerated TypeScript
+  plus JSON schemas; the desk validates and maps source/CCT/gel/fallback/static angles without a
+  browser-local authority. The host-agnostic Patch package and standalone Viz planning Tauri
+  contract preserve the same data in both directions. All 103 `light-wire` tests plus the generated
+  artifact guard, desktop typecheck and 25 focused Patch boundary tests, all 61 Patch-package tests,
+  the focused Viz-editor contract test, and `cargo check --workspace --all-targets` pass. The
+  focused headless Patch-route filter is 7/8: its unrelated direct-store group-mutation scenario
+  currently reaches the active-show canonical-migration guard and remains unresolved rather than
+  being counted as passing.
 
 ## Current behavior and problem
 

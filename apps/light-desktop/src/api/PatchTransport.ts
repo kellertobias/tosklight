@@ -1,10 +1,4 @@
 import type {
-	EventClientMessage,
-	PatchFixtureInput,
-	PatchFixturesRequest,
-	PatchPlacementIntent,
-} from "./generated/light-wire";
-import type {
 	PatchDirectControlEndpoint,
 	PatchFixturePolicyAction,
 	PatchFixtureWrite,
@@ -18,6 +12,13 @@ import {
 	type PatchTransport,
 	PatchTransportError,
 } from "../features/patch/transport";
+import type {
+	EventClientMessage,
+	PatchFixtureInput,
+	PatchFixturesRequest,
+	PatchInstalledFixtureAppearance,
+	PatchPlacementIntent,
+} from "./generated/light-wire";
 import {
 	decodePatchErrorResponse,
 	decodePatchEventServerMessage,
@@ -291,6 +292,9 @@ export function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
 			invert_tilt: instance.invertTilt ?? false,
 			bracket_angle: instance.bracketAngle ?? 0,
 			shaper_angle: instance.shaperAngle ?? null,
+			installed_appearance: toWireInstalledAppearance(
+				instance.installedAppearance,
+			),
 		})),
 		group_masters_enabled: fixture.groupMastersEnabled ?? true,
 		grand_master_enabled: fixture.grandMasterEnabled ?? true,
@@ -298,12 +302,52 @@ export function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
 		invert_tilt: fixture.invertTilt ?? false,
 		bracket_angle: fixture.bracketAngle ?? 0,
 		shaper_angle: fixture.shaperAngle ?? null,
+		installed_appearance: toWireInstalledAppearance(
+			fixture.installedAppearance,
+		),
 		move_in_black_enabled: fixture.moveInBlackEnabled,
 		move_in_black_delay_millis: fixture.moveInBlackDelayMillis,
 		highlight_overrides: fixture.highlightOverrides.map((override) => ({
 			channel_id: override.channelId,
 			raw_value: override.rawValue,
 		})),
+	};
+}
+
+function toWireInstalledAppearance(
+	appearance: PatchFixtureWrite["installedAppearance"],
+): PatchInstalledFixtureAppearance {
+	const resolved = appearance ?? {
+		lightSource: { type: "profile_default" as const },
+		colorTemperatureKelvin: null,
+		gel: { type: "open_white" as const },
+		shaperAnglesDegrees: [0, 0, 0, 0] as [number, number, number, number],
+	};
+	return {
+		light_source: { ...resolved.lightSource },
+		color_temperature_kelvin: resolved.colorTemperatureKelvin,
+		gel:
+			resolved.gel.type === "built_in"
+				? {
+						type: "built_in",
+						catalog_id: resolved.gel.catalogId,
+						entry_id: resolved.gel.entryId,
+						embedded_fallback: {
+							number: resolved.gel.embeddedFallback.number,
+							name: resolved.gel.embeddedFallback.name,
+							display_srgb: resolved.gel.embeddedFallback.displaySrgb,
+							visualizer_srgb: resolved.gel.embeddedFallback.visualizerSrgb,
+						},
+					}
+				: resolved.gel.type === "custom"
+					? {
+							type: "custom",
+							name: resolved.gel.name,
+							color_srgb: resolved.gel.colorSrgb,
+							note: resolved.gel.note,
+						}
+					: { type: "open_white" },
+		shaper_angles_degrees: [...resolved.shaperAnglesDegrees],
 	};
 }
 

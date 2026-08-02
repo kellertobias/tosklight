@@ -19,6 +19,7 @@ fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_
             invert_tilt: false,
             bracket_angle: 0.0,
             shaper_angle: None,
+            installed_appearance: Default::default(),
         },
         MultiPatchInstance {
             id: FixtureId::new().0,
@@ -32,6 +33,7 @@ fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_
             invert_tilt: false,
             bracket_angle: 0.0,
             shaper_angle: None,
+            installed_appearance: Default::default(),
         },
     ];
     programmers.set(

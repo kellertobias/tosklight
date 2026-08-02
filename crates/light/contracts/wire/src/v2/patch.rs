@@ -92,6 +92,72 @@ pub enum PatchFixtureAxis {
     Tilt,
 }
 
+/// Portable installed lamp/filter/static-shaper appearance for one physical fixture instance.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchInstalledFixtureAppearance {
+    #[serde(default)]
+    pub light_source: PatchInstalledLightSource,
+    #[serde(default)]
+    pub color_temperature_kelvin: Option<u32>,
+    #[serde(default)]
+    pub gel: PatchGelAssignment,
+    #[serde(default)]
+    #[ts(type = "[number, number, number, number]")]
+    pub shaper_angles_degrees: [f32; 4],
+}
+
+impl Default for PatchInstalledFixtureAppearance {
+    fn default() -> Self {
+        Self {
+            light_source: PatchInstalledLightSource::ProfileDefault,
+            color_temperature_kelvin: None,
+            gel: PatchGelAssignment::OpenWhite,
+            shaper_angles_degrees: [0.0; 4],
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PatchInstalledLightSource {
+    #[default]
+    ProfileDefault,
+    Tungsten,
+    Halogen,
+    Discharge,
+    Led,
+    Fluorescent,
+    Arc,
+    Other {
+        label: String,
+    },
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PatchGelAssignment {
+    #[default]
+    OpenWhite,
+    BuiltIn {
+        catalog_id: String,
+        entry_id: String,
+        embedded_fallback: PatchGelDefinitionSnapshot,
+    },
+    Custom {
+        name: String,
+        color_srgb: String,
+        note: Option<String>,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchGelDefinitionSnapshot {
+    pub number: String,
+    pub name: String,
+    pub display_srgb: String,
+    pub visualizer_srgb: String,
+}
+
 /// One ordered fixture batch whose per-split addresses are resolved by the server.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PatchPlacementIntent {
@@ -163,6 +229,8 @@ pub struct PatchFixtureInput {
     /// Degrees a fitted shaper or barn-door module is turned to, or absent when none is fitted.
     #[serde(default)]
     pub shaper_angle: Option<f32>,
+    #[serde(default)]
+    pub installed_appearance: PatchInstalledFixtureAppearance,
     pub move_in_black_enabled: bool,
     #[ts(type = "number")]
     pub move_in_black_delay_millis: u64,
@@ -222,6 +290,8 @@ pub struct PatchMultiPatchInput {
     pub bracket_angle: f32,
     #[serde(default)]
     pub shaper_angle: Option<f32>,
+    #[serde(default)]
+    pub installed_appearance: PatchInstalledFixtureAppearance,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -308,6 +378,7 @@ pub struct PatchFixtureProjection {
     pub invert_tilt: bool,
     pub bracket_angle: f32,
     pub shaper_angle: Option<f32>,
+    pub installed_appearance: PatchInstalledFixtureAppearance,
     pub move_in_black_enabled: bool,
     #[ts(type = "number")]
     pub move_in_black_delay_millis: u64,
@@ -333,6 +404,7 @@ pub struct PatchMultiPatchProjection {
     pub invert_tilt: bool,
     pub bracket_angle: f32,
     pub shaper_angle: Option<f32>,
+    pub installed_appearance: PatchInstalledFixtureAppearance,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

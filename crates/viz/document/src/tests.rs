@@ -94,6 +94,7 @@ fn patch_one(show_id: ShowId, profile: PatchedFixtureProfileReference) -> PatchF
                 invert_tilt: false,
                 bracket_angle: 0.0,
                 shaper_angle: None,
+                installed_appearance: Default::default(),
                 move_in_black_enabled: true,
                 move_in_black_delay_millis: 0,
                 highlight_overrides: BTreeMap::new(),
@@ -101,6 +102,7 @@ fn patch_one(show_id: ShowId, profile: PatchedFixtureProfileReference) -> PatchF
         }],
         remove_fixture_ids: Vec::new(),
         placements: Vec::new(),
+        vector_spreads: Vec::new(),
     }
 }
 

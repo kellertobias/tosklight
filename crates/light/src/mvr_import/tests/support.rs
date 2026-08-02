@@ -322,6 +322,7 @@ pub fn stored_fixture(
         invert_tilt: false,
         bracket_angle: 0.0,
         shaper_angle: None,
+        installed_appearance: Default::default(),
         move_in_black_enabled: mib.0,
         move_in_black_delay_millis: mib.1,
         highlight_overrides: Default::default(),

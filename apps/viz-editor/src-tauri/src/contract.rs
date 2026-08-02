@@ -12,7 +12,8 @@ use light_application::{
 };
 use light_core::{FixtureId, ShowId};
 use light_fixture::{
-    DirectControlEndpoint, FixtureLocation, FixtureVector, MultiPatchInstance, PatchedFixturePatch,
+    DirectControlEndpoint, FixtureLocation, FixtureVector, GelAssignment, GelDefinitionSnapshot,
+    InstalledFixtureAppearance, InstalledLightSource, MultiPatchInstance, PatchedFixturePatch,
     PatchedFixtureProfileReference, PatchedHead, SplitPatch,
 };
 use serde::{Deserialize, Serialize};
@@ -95,6 +96,76 @@ pub struct HighlightOverrideDto {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct InstalledAppearanceDto {
+    #[serde(default)]
+    pub light_source: InstalledLightSourceDto,
+    #[serde(default)]
+    pub color_temperature_kelvin: Option<u32>,
+    #[serde(default)]
+    pub gel: GelAssignmentDto,
+    #[serde(default)]
+    pub shaper_angles_degrees: [f32; 4],
+}
+
+impl Default for InstalledAppearanceDto {
+    fn default() -> Self {
+        Self {
+            light_source: InstalledLightSourceDto::ProfileDefault,
+            color_temperature_kelvin: None,
+            gel: GelAssignmentDto::OpenWhite,
+            shaper_angles_degrees: [0.0; 4],
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InstalledLightSourceDto {
+    #[default]
+    ProfileDefault,
+    Tungsten,
+    Halogen,
+    Discharge,
+    Led,
+    Fluorescent,
+    Arc,
+    Other {
+        label: String,
+    },
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum GelAssignmentDto {
+    #[default]
+    OpenWhite,
+    BuiltIn {
+        #[serde(rename = "catalogId")]
+        catalog_id: String,
+        #[serde(rename = "entryId")]
+        entry_id: String,
+        #[serde(rename = "embeddedFallback")]
+        embedded_fallback: GelDefinitionSnapshotDto,
+    },
+    Custom {
+        name: String,
+        #[serde(rename = "colorSrgb")]
+        color_srgb: String,
+        note: Option<String>,
+    },
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GelDefinitionSnapshotDto {
+    pub number: String,
+    pub name: String,
+    pub display_srgb: String,
+    pub visualizer_srgb: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MultipatchDto {
     pub id: Uuid,
     pub name: String,
@@ -109,6 +180,8 @@ pub struct MultipatchDto {
     pub bracket_angle: f32,
     #[serde(default)]
     pub shaper_angle: Option<f32>,
+    #[serde(default)]
+    pub installed_appearance: InstalledAppearanceDto,
 }
 
 #[derive(Debug, Serialize)]
@@ -151,6 +224,8 @@ pub struct FixtureDto {
     /// Degrees a fitted shaper or barn-door module is turned to, absent when none is fitted.
     #[serde(default)]
     pub shaper_angle: Option<f32>,
+    #[serde(default)]
+    pub installed_appearance: InstalledAppearanceDto,
     #[serde(default = "yes")]
     pub move_in_black_enabled: bool,
     #[serde(default)]
@@ -274,6 +349,7 @@ impl From<PatchFixtureProjection> for FixtureDto {
             invert_tilt: patch.invert_tilt,
             bracket_angle: patch.bracket_angle,
             shaper_angle: patch.shaper_angle,
+            installed_appearance: InstalledAppearanceDto::from(&patch.installed_appearance),
             move_in_black_enabled: patch.move_in_black_enabled,
             move_in_black_delay_millis: patch.move_in_black_delay_millis,
             highlight_overrides: patch
@@ -391,6 +467,7 @@ impl From<&MultiPatchInstance> for MultipatchDto {
             invert_tilt: value.invert_tilt,
             bracket_angle: value.bracket_angle,
             shaper_angle: value.shaper_angle,
+            installed_appearance: InstalledAppearanceDto::from(&value.installed_appearance),
         }
     }
 }
@@ -407,6 +484,7 @@ impl MutationDto {
                 .collect(),
             remove_fixture_ids: self.remove_fixture_ids.into_iter().map(FixtureId).collect(),
             placements: Vec::new(),
+            vector_spreads: Vec::new(),
         }
     }
 }
@@ -463,6 +541,7 @@ impl From<FixtureDto> for PatchFixtureCandidate {
                 invert_tilt: dto.invert_tilt,
                 bracket_angle: dto.bracket_angle,
                 shaper_angle: dto.shaper_angle,
+                installed_appearance: InstalledFixtureAppearance::from(dto.installed_appearance),
                 move_in_black_enabled: dto.move_in_black_enabled,
                 move_in_black_delay_millis: dto.move_in_black_delay_millis,
                 highlight_overrides: dto
@@ -508,6 +587,134 @@ impl From<MultipatchDto> for MultiPatchInstance {
             invert_tilt: dto.invert_tilt,
             bracket_angle: dto.bracket_angle,
             shaper_angle: dto.shaper_angle,
+            installed_appearance: InstalledFixtureAppearance::from(dto.installed_appearance),
         }
+    }
+}
+
+impl From<&InstalledFixtureAppearance> for InstalledAppearanceDto {
+    fn from(value: &InstalledFixtureAppearance) -> Self {
+        Self {
+            light_source: match &value.light_source {
+                InstalledLightSource::ProfileDefault => InstalledLightSourceDto::ProfileDefault,
+                InstalledLightSource::Tungsten => InstalledLightSourceDto::Tungsten,
+                InstalledLightSource::Halogen => InstalledLightSourceDto::Halogen,
+                InstalledLightSource::Discharge => InstalledLightSourceDto::Discharge,
+                InstalledLightSource::Led => InstalledLightSourceDto::Led,
+                InstalledLightSource::Fluorescent => InstalledLightSourceDto::Fluorescent,
+                InstalledLightSource::Arc => InstalledLightSourceDto::Arc,
+                InstalledLightSource::Other { label } => InstalledLightSourceDto::Other {
+                    label: label.clone(),
+                },
+            },
+            color_temperature_kelvin: value.color_temperature_kelvin,
+            gel: match &value.gel {
+                GelAssignment::OpenWhite => GelAssignmentDto::OpenWhite,
+                GelAssignment::BuiltIn {
+                    catalog_id,
+                    entry_id,
+                    embedded_fallback,
+                } => GelAssignmentDto::BuiltIn {
+                    catalog_id: catalog_id.clone(),
+                    entry_id: entry_id.clone(),
+                    embedded_fallback: GelDefinitionSnapshotDto {
+                        number: embedded_fallback.number.clone(),
+                        name: embedded_fallback.name.clone(),
+                        display_srgb: embedded_fallback.display_srgb.clone(),
+                        visualizer_srgb: embedded_fallback.visualizer_srgb.clone(),
+                    },
+                },
+                GelAssignment::Custom {
+                    name,
+                    color_srgb,
+                    note,
+                } => GelAssignmentDto::Custom {
+                    name: name.clone(),
+                    color_srgb: color_srgb.clone(),
+                    note: note.clone(),
+                },
+            },
+            shaper_angles_degrees: value.shaper_angles_degrees,
+        }
+    }
+}
+
+impl From<InstalledAppearanceDto> for InstalledFixtureAppearance {
+    fn from(value: InstalledAppearanceDto) -> Self {
+        Self {
+            light_source: match value.light_source {
+                InstalledLightSourceDto::ProfileDefault => InstalledLightSource::ProfileDefault,
+                InstalledLightSourceDto::Tungsten => InstalledLightSource::Tungsten,
+                InstalledLightSourceDto::Halogen => InstalledLightSource::Halogen,
+                InstalledLightSourceDto::Discharge => InstalledLightSource::Discharge,
+                InstalledLightSourceDto::Led => InstalledLightSource::Led,
+                InstalledLightSourceDto::Fluorescent => InstalledLightSource::Fluorescent,
+                InstalledLightSourceDto::Arc => InstalledLightSource::Arc,
+                InstalledLightSourceDto::Other { label } => InstalledLightSource::Other { label },
+            },
+            color_temperature_kelvin: value.color_temperature_kelvin,
+            gel: match value.gel {
+                GelAssignmentDto::OpenWhite => GelAssignment::OpenWhite,
+                GelAssignmentDto::BuiltIn {
+                    catalog_id,
+                    entry_id,
+                    embedded_fallback,
+                } => GelAssignment::BuiltIn {
+                    catalog_id,
+                    entry_id,
+                    embedded_fallback: GelDefinitionSnapshot {
+                        number: embedded_fallback.number,
+                        name: embedded_fallback.name,
+                        display_srgb: embedded_fallback.display_srgb,
+                        visualizer_srgb: embedded_fallback.visualizer_srgb,
+                    },
+                },
+                GelAssignmentDto::Custom {
+                    name,
+                    color_srgb,
+                    note,
+                } => GelAssignment::Custom {
+                    name,
+                    color_srgb,
+                    note,
+                },
+            },
+            shaper_angles_degrees: value.shaper_angles_degrees,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn installed_appearance_crosses_the_planning_contract_without_identity_loss() {
+        let appearance = InstalledFixtureAppearance {
+            light_source: InstalledLightSource::Tungsten,
+            color_temperature_kelvin: Some(3_200),
+            gel: GelAssignment::BuiltIn {
+                catalog_id: "touring-gels".into(),
+                entry_id: "deep-red".into(),
+                embedded_fallback: GelDefinitionSnapshot {
+                    number: "R1".into(),
+                    name: "Deep red".into(),
+                    display_srgb: "#D92838".into(),
+                    visualizer_srgb: "#C01020".into(),
+                },
+            },
+            shaper_angles_degrees: [-10.0, 20.0, 0.0, 179.0],
+        };
+
+        let value = serde_json::to_value(InstalledAppearanceDto::from(&appearance)).unwrap();
+        assert_eq!(value["lightSource"]["type"], "tungsten");
+        assert_eq!(value["colorTemperatureKelvin"], 3_200);
+        assert_eq!(value["gel"]["catalogId"], "touring-gels");
+        assert_eq!(
+            value["gel"]["embeddedFallback"]["visualizerSrgb"],
+            "#C01020"
+        );
+        let decoded: InstalledAppearanceDto = serde_json::from_value(value).unwrap();
+        assert_eq!(InstalledFixtureAppearance::from(decoded), appearance);
     }
 }

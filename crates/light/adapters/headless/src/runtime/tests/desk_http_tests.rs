@@ -219,6 +219,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
                 invert_tilt: false,
                 bracket_angle: 0.0,
                 shaper_angle: None,
+                installed_appearance: Default::default(),
                 move_in_black_enabled: true,
                 move_in_black_delay_millis: 0,
                 multipatch: vec![],

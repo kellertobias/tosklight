@@ -1,4 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
+import { HttpPatchTransport } from "../../api/PatchTransport";
+import {
+	decodePatchEventServerMessage,
+	decodePatchFixturesOutcome,
+	decodePatchSnapshot,
+} from "../../api/patchWire";
+import type { FixtureDefinition } from "../../api/types";
+import {
+	blankFixtureProfile,
+	fixtureDefinitionsFromProfiles,
+} from "../../components/setup/fixtureProfileModel";
 import type {
 	PatchChange,
 	PatchFixtureProjection,
@@ -7,25 +18,14 @@ import type {
 	PatchProfileRevision,
 	PatchSnapshot,
 } from "./contracts";
-import { HttpPatchTransport } from "../../api/PatchTransport";
-import type { FixtureDefinition } from "../../api/types";
-import {
-	decodePatchEventServerMessage,
-	decodePatchFixturesOutcome,
-	decodePatchSnapshot,
-} from "../../api/patchWire";
-import {
-	blankFixtureProfile,
-	fixtureDefinitionsFromProfiles,
-} from "../../components/setup/fixtureProfileModel";
 import {
 	createPatchDefinitionResolver,
 	newPatchFixtureCandidate,
 } from "./model";
+import { patchMutation } from "./mutationSupport";
 import { patchedFixtureResults } from "./PatchContext";
 import { PatchSession } from "./session";
 import { PatchStore } from "./store";
-import { patchMutation } from "./mutationSupport";
 import {
 	type PatchEventObserver,
 	type PatchEventStream,
@@ -192,6 +192,12 @@ function wireFixtureProjection(fixtureId = FIXTURE_ID, fixtureNumber = 1) {
 			fixture_id: head.fixtureId,
 		})),
 		multipatch: [],
+		installed_appearance: {
+			light_source: { type: "profile_default" },
+			color_temperature_kelvin: null,
+			gel: { type: "open_white" },
+			shaper_angles_degrees: [0, 0, 0, 0] as [number, number, number, number],
+		},
 		move_in_black_enabled: fixture.moveInBlackEnabled,
 		move_in_black_delay_millis: fixture.moveInBlackDelayMillis,
 		highlight_overrides: [],
@@ -286,6 +292,47 @@ describe("Patch v2 wire boundary", () => {
 		).toThrowError("$.show_revision");
 	});
 
+	it("maps portable installed appearance and rejects non-canonical gel colors", () => {
+		const appearance = {
+			light_source: { type: "tungsten" },
+			color_temperature_kelvin: 3200,
+			gel: {
+				type: "built_in",
+				catalog_id: "touring-gels",
+				entry_id: "deep-red",
+				embedded_fallback: {
+					number: "R1",
+					name: "Deep red",
+					display_srgb: "#D92838",
+					visualizer_srgb: "#C01020",
+				},
+			},
+			shaper_angles_degrees: [-10, 20, 0, 179],
+		};
+		const value = wireSnapshot(7, 4, 22, [wireFixtureProjection()]);
+		Object.assign(value.fixtures[0], { installed_appearance: appearance });
+		const decoded = decodePatchSnapshot(value);
+		expect(decoded.fixtures[0].installedAppearance).toEqual({
+			lightSource: { type: "tungsten" },
+			colorTemperatureKelvin: 3200,
+			gel: {
+				type: "built_in",
+				catalogId: "touring-gels",
+				entryId: "deep-red",
+				embeddedFallback: {
+					number: "R1",
+					name: "Deep red",
+					displaySrgb: "#D92838",
+					visualizerSrgb: "#C01020",
+				},
+			},
+			shaperAnglesDegrees: [-10, 20, 0, 179],
+		});
+
+		appearance.gel.embedded_fallback.visualizer_srgb = "#c01020";
+		expect(() => decodePatchSnapshot(value)).toThrowError("visualizer_srgb");
+	});
+
 	it("requires a Patch event delta to carry its enclosing sequence", () => {
 		const message = {
 			type: "event",
@@ -360,13 +407,13 @@ describe("Patch v2 network boundary", () => {
 	])("sends one atomic request for a batch of %i fixture(s) and no unrelated reads", async (count) => {
 		const fetchMock = vi.fn(
 			async (_input: RequestInfo | URL, init?: RequestInit) => {
-					const body = JSON.parse(String(init?.body)) as {
-						request_id: string;
-						fixtures: unknown[];
-						placements: unknown[];
-					};
-					expect(body.placements).toEqual([]);
-					return new Response(JSON.stringify(wireOutcome(body.request_id)), {
+				const body = JSON.parse(String(init?.body)) as {
+					request_id: string;
+					fixtures: unknown[];
+					placements: unknown[];
+				};
+				expect(body.placements).toEqual([]);
+				return new Response(JSON.stringify(wireOutcome(body.request_id)), {
 					status: 200,
 					headers: { "content-type": "application/json" },
 				});
@@ -433,28 +480,33 @@ describe("Patch v2 network boundary", () => {
 			splitPatches: [{ split: 1, universe: 1, address: 50 }],
 		};
 		const fixtureIds = candidates.map((item) => item.fixture.fixture_id);
-		const mutation = patchMutation("place-3", candidates, [], [
-			{
-				fixtureIds,
-				splits: [
-					{
-						split: 1,
-						universe: 1,
-						address: 1,
-						mode: {
-							type: "operator_overrides",
-							overrides: [
-								{
-									fixtureId: fixtureIds[1],
-									universe: 1,
-									address: 50,
-								},
-							],
+		const mutation = patchMutation(
+			"place-3",
+			candidates,
+			[],
+			[
+				{
+					fixtureIds,
+					splits: [
+						{
+							split: 1,
+							universe: 1,
+							address: 1,
+							mode: {
+								type: "operator_overrides",
+								overrides: [
+									{
+										fixtureId: fixtureIds[1],
+										universe: 1,
+										address: 50,
+									},
+								],
+							},
 						},
-					},
-				],
-			},
-		]);
+					],
+				},
+			],
+		);
 
 		await transport.patchFixtures(SHOW_ID, 7, mutation);
 
@@ -687,9 +739,7 @@ describe("Patch session repair lifecycle", () => {
 		});
 		await expect(
 			session.updateFixture(FIXTURE_ID, { name: "Stale edit" }),
-		).rejects.toThrow(
-			"Patch authority changed before the mutation completed",
-		);
+		).rejects.toThrow("Patch authority changed before the mutation completed");
 		await vi.waitFor(() =>
 			expect(session.store.getSnapshot().status).toBe("ready"),
 		);

@@ -58,11 +58,43 @@ fn legacy_patch_input_defaults_output_policies_compatibly() {
     ] {
         value.as_object_mut().unwrap().remove(field);
     }
+    value
+        .as_object_mut()
+        .unwrap()
+        .remove("installed_appearance");
     let decoded: PatchFixtureInput = serde_json::from_value(value).unwrap();
     assert!(decoded.group_masters_enabled);
     assert!(decoded.grand_master_enabled);
     assert!(!decoded.invert_pan);
     assert!(!decoded.invert_tilt);
+    assert_eq!(
+        decoded.installed_appearance,
+        PatchInstalledFixtureAppearance::default()
+    );
+}
+
+#[test]
+fn installed_appearance_round_trips_stable_catalog_identity_and_fallback() {
+    let mut fixture = fixture_input();
+    fixture.installed_appearance = PatchInstalledFixtureAppearance {
+        light_source: PatchInstalledLightSource::Tungsten,
+        color_temperature_kelvin: Some(3_200),
+        gel: PatchGelAssignment::BuiltIn {
+            catalog_id: "touring-gels".into(),
+            entry_id: "deep-red".into(),
+            embedded_fallback: PatchGelDefinitionSnapshot {
+                number: "R1".into(),
+                name: "Deep red".into(),
+                display_srgb: "#D92838".into(),
+                visualizer_srgb: "#C01020".into(),
+            },
+        },
+        shaper_angles_degrees: [-10.0, 20.0, 0.0, 179.0],
+    };
+
+    let value = serde_json::to_value(&fixture).unwrap();
+    let decoded: PatchFixtureInput = serde_json::from_value(value).unwrap();
+    assert_eq!(decoded.installed_appearance, fixture.installed_appearance);
 }
 
 #[test]
@@ -233,6 +265,7 @@ fn fixture_input() -> PatchFixtureInput {
         invert_tilt: false,
         bracket_angle: 0.0,
         shaper_angle: None,
+        installed_appearance: Default::default(),
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: Vec::new(),
@@ -263,6 +296,7 @@ fn fixture_projection() -> PatchFixtureProjection {
         invert_tilt: input.invert_tilt,
         bracket_angle: 0.0,
         shaper_angle: None,
+        installed_appearance: input.installed_appearance,
         move_in_black_enabled: input.move_in_black_enabled,
         move_in_black_delay_millis: input.move_in_black_delay_millis,
         highlight_overrides: Vec::new(),

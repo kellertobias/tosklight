@@ -80,7 +80,10 @@ function unsignedIntegerAt(
 		invalid(path, "a non-negative safe integer", value);
 }
 
-function signedIntegerAt(value: unknown, path: string): asserts value is number {
+function signedIntegerAt(
+	value: unknown,
+	path: string,
+): asserts value is number {
 	if (!Number.isSafeInteger(value)) invalid(path, "a safe integer", value);
 }
 
@@ -105,7 +108,11 @@ function nullableUuidAt(value: unknown, path: string): void {
 	if (value !== null) uuidAt(value, path);
 }
 
-function enumAt(value: unknown, path: string, values: ReadonlySet<string>): void {
+function enumAt(
+	value: unknown,
+	path: string,
+	values: ReadonlySet<string>,
+): void {
 	if (typeof value !== "string" || !values.has(value))
 		invalid(path, "one of " + [...values].join(", "), value);
 }
@@ -128,9 +135,9 @@ function splitAt(value: unknown, path: string): void {
 }
 
 function splitArrayAt(value: unknown, path: string): void {
-	arrayAt(value, path).forEach((split, index) =>
-		splitAt(split, path + "[" + index + "]"),
-	);
+	arrayAt(value, path).forEach((split, index) => {
+		splitAt(split, path + "[" + index + "]");
+	});
 }
 
 function directControlAt(value: unknown, path: string): void {
@@ -155,6 +162,10 @@ function multipatchAt(value: unknown, path: string): void {
 		booleanAt(instance.invert_tilt, path + ".invert_tilt");
 	angleAt(instance.bracket_angle, path + ".bracket_angle");
 	nullableAngleAt(instance.shaper_angle, path + ".shaper_angle");
+	installedAppearanceAt(
+		instance.installed_appearance,
+		path + ".installed_appearance",
+	);
 }
 
 /** Degrees. Absent is the same as zero, so an older desk's payload still validates. */
@@ -165,6 +176,85 @@ function angleAt(value: unknown, path: string): void {
 /** Degrees, or `null`/absent when no shaper or barn-door module is fitted. */
 function nullableAngleAt(value: unknown, path: string): void {
 	if (value !== undefined && value !== null) finiteNumberAt(value, path);
+}
+
+function installedAppearanceAt(value: unknown, path: string): void {
+	const appearance = objectAt(value, path);
+	const source = objectAt(appearance.light_source, path + ".light_source");
+	enumAt(
+		source.type,
+		path + ".light_source.type",
+		new Set([
+			"profile_default",
+			"tungsten",
+			"halogen",
+			"discharge",
+			"led",
+			"fluorescent",
+			"arc",
+			"other",
+		]),
+	);
+	if (source.type === "other")
+		stringAt(source.label, path + ".light_source.label");
+	const cct = appearance.color_temperature_kelvin;
+	if (cct !== null) {
+		unsignedIntegerAt(cct, path + ".color_temperature_kelvin");
+		if ((cct as number) < 1_000 || (cct as number) > 25_000)
+			invalid(
+				path + ".color_temperature_kelvin",
+				"an integer from 1000 through 25000",
+				cct,
+			);
+	}
+	const gel = objectAt(appearance.gel, path + ".gel");
+	enumAt(
+		gel.type,
+		path + ".gel.type",
+		new Set(["open_white", "built_in", "custom"]),
+	);
+	if (gel.type === "built_in") {
+		stringAt(gel.catalog_id, path + ".gel.catalog_id");
+		stringAt(gel.entry_id, path + ".gel.entry_id");
+		const fallback = objectAt(
+			gel.embedded_fallback,
+			path + ".gel.embedded_fallback",
+		);
+		stringAt(fallback.number, path + ".gel.embedded_fallback.number");
+		stringAt(fallback.name, path + ".gel.embedded_fallback.name");
+		canonicalSrgbAt(
+			fallback.display_srgb,
+			path + ".gel.embedded_fallback.display_srgb",
+		);
+		canonicalSrgbAt(
+			fallback.visualizer_srgb,
+			path + ".gel.embedded_fallback.visualizer_srgb",
+		);
+	} else if (gel.type === "custom") {
+		stringAt(gel.name, path + ".gel.name");
+		canonicalSrgbAt(gel.color_srgb, path + ".gel.color_srgb");
+		if (gel.note !== null) stringAt(gel.note, path + ".gel.note");
+	}
+	const angles = arrayAt(
+		appearance.shaper_angles_degrees,
+		path + ".shaper_angles_degrees",
+	);
+	if (angles.length !== 4)
+		invalid(path + ".shaper_angles_degrees", "exactly four angles", angles);
+	angles.forEach((angle, index) => {
+		finiteNumberAt(angle, `${path}.shaper_angles_degrees[${index}]`);
+		if ((angle as number) < -180 || (angle as number) >= 180)
+			invalid(
+				`${path}.shaper_angles_degrees[${index}]`,
+				"degrees within [-180, 180)",
+				angle,
+			);
+	});
+}
+
+function canonicalSrgbAt(value: unknown, path: string): void {
+	if (typeof value !== "string" || !/^#[0-9A-F]{6}$/.test(value))
+		invalid(path, "canonical #RRGGBB sRGB", value);
 }
 
 function logicalHeadAt(value: unknown, path: string): void {
@@ -202,40 +292,41 @@ function fixtureAt(
 	vectorAt(fixture.location, path + ".location", true);
 	vectorAt(fixture.rotation, path + ".rotation", false);
 	arrayAt(fixture.logical_heads, path + ".logical_heads").forEach(
-		(head, index) =>
-			logicalHeadAt(head, path + ".logical_heads[" + index + "]"),
+		(head, index) => {
+			logicalHeadAt(head, path + ".logical_heads[" + index + "]");
+		},
 	);
 	arrayAt(fixture.multipatch, path + ".multipatch").forEach(
-		(instance, index) =>
-			multipatchAt(instance, path + ".multipatch[" + index + "]"),
+		(instance, index) => {
+			multipatchAt(instance, path + ".multipatch[" + index + "]");
+		},
 	);
 	if (fixture.group_masters_enabled !== undefined)
-		booleanAt(
-			fixture.group_masters_enabled,
-			path + ".group_masters_enabled",
-		);
+		booleanAt(fixture.group_masters_enabled, path + ".group_masters_enabled");
 	if (fixture.grand_master_enabled !== undefined)
-		booleanAt(
-			fixture.grand_master_enabled,
-			path + ".grand_master_enabled",
-		);
+		booleanAt(fixture.grand_master_enabled, path + ".grand_master_enabled");
 	if (fixture.invert_pan !== undefined)
 		booleanAt(fixture.invert_pan, path + ".invert_pan");
 	if (fixture.invert_tilt !== undefined)
 		booleanAt(fixture.invert_tilt, path + ".invert_tilt");
 	angleAt(fixture.bracket_angle, path + ".bracket_angle");
 	nullableAngleAt(fixture.shaper_angle, path + ".shaper_angle");
+	installedAppearanceAt(
+		fixture.installed_appearance,
+		path + ".installed_appearance",
+	);
 	booleanAt(fixture.move_in_black_enabled, path + ".move_in_black_enabled");
 	unsignedIntegerAt(
 		fixture.move_in_black_delay_millis,
 		path + ".move_in_black_delay_millis",
 	);
 	arrayAt(fixture.highlight_overrides, path + ".highlight_overrides").forEach(
-		(override, index) =>
+		(override, index) => {
 			highlightOverrideAt(
 				override,
 				path + ".highlight_overrides[" + index + "]",
-			),
+			);
+		},
 	);
 }
 
@@ -251,11 +342,7 @@ function profileAt(
 	stringAt(profile.name, path + ".name");
 	stringAt(profile.fixture_type, path + ".fixture_type");
 	if (profile.patch_policy !== "dmx" && profile.patch_policy !== "visual_only")
-		invalid(
-			path + ".patch_policy",
-			"dmx or visual_only",
-			profile.patch_policy,
-		);
+		invalid(path + ".patch_policy", "dmx or visual_only", profile.patch_policy);
 	arrayAt(profile.referenced_modes, path + ".referenced_modes").forEach(
 		(modeValue, modeIndex) => {
 			const modePath = path + ".referenced_modes[" + modeIndex + "]";
@@ -281,15 +368,18 @@ function deltaAt(value: unknown, path: string): asserts value is PatchDelta {
 	unsignedIntegerAt(delta.patch_revision, path + ".patch_revision");
 	if (delta.event_sequence !== undefined && delta.event_sequence !== null)
 		unsignedIntegerAt(delta.event_sequence, path + ".event_sequence");
-	arrayAt(delta.fixtures, path + ".fixtures").forEach((fixture, index) =>
-		fixtureAt(fixture, path + ".fixtures[" + index + "]"),
-	);
+	arrayAt(delta.fixtures, path + ".fixtures").forEach((fixture, index) => {
+		fixtureAt(fixture, path + ".fixtures[" + index + "]");
+	});
 	arrayAt(delta.removed_fixture_ids, path + ".removed_fixture_ids").forEach(
-		(id, index) => uuidAt(id, path + ".removed_fixture_ids[" + index + "]"),
+		(id, index) => {
+			uuidAt(id, path + ".removed_fixture_ids[" + index + "]");
+		},
 	);
 	arrayAt(delta.profile_revisions, path + ".profile_revisions").forEach(
-		(profile, index) =>
-			profileAt(profile, path + ".profile_revisions[" + index + "]"),
+		(profile, index) => {
+			profileAt(profile, path + ".profile_revisions[" + index + "]");
+		},
 	);
 }
 
@@ -304,17 +394,20 @@ export function validatePatchSnapshot(value: unknown): PatchSnapshot {
 	unsignedIntegerAt(snapshot.show_revision, "$.show_revision");
 	unsignedIntegerAt(snapshot.patch_revision, "$.patch_revision");
 	cursorAt(snapshot.cursor, "$.cursor");
-	arrayAt(snapshot.fixtures, "$.fixtures").forEach((fixture, index) =>
-		fixtureAt(fixture, "$.fixtures[" + index + "]"),
-	);
+	arrayAt(snapshot.fixtures, "$.fixtures").forEach((fixture, index) => {
+		fixtureAt(fixture, "$.fixtures[" + index + "]");
+	});
 	arrayAt(snapshot.profile_revisions, "$.profile_revisions").forEach(
-		(profile, index) =>
-			profileAt(profile, "$.profile_revisions[" + index + "]"),
+		(profile, index) => {
+			profileAt(profile, "$.profile_revisions[" + index + "]");
+		},
 	);
 	return value as PatchSnapshot;
 }
 
-export function validatePatchFixturesOutcome(value: unknown): PatchFixturesOutcome {
+export function validatePatchFixturesOutcome(
+	value: unknown,
+): PatchFixturesOutcome {
 	const outcome = objectAt(value, "$");
 	stringAt(outcome.request_id, "$.request_id");
 	booleanAt(outcome.replayed, "$.replayed");
@@ -369,11 +462,7 @@ function patchEventAt(value: unknown, path: string): void {
 	enumAt(envelope.delivery, path + ".delivery", EVENT_DELIVERY_POLICIES);
 	const payload = objectAt(envelope.payload, path + ".payload");
 	if (payload.type !== "show_patch_changed")
-		invalid(
-			path + ".payload.type",
-			"show_patch_changed",
-			payload.type,
-		);
+		invalid(path + ".payload.type", "show_patch_changed", payload.type);
 	deltaAt(payload.delta, path + ".payload.delta");
 	const delta = payload.delta as PatchDelta;
 	if (delta.event_sequence !== envelope.sequence)
@@ -407,11 +496,7 @@ export function validatePatchEventServerMessage(
 			stringAt(message.error, "$.error");
 			break;
 		default:
-			invalid(
-				"$.type",
-				"ready, event, gap, repaired, or error",
-				message.type,
-			);
+			invalid("$.type", "ready, event, gap, repaired, or error", message.type);
 	}
 	return value as EventServerMessage;
 }

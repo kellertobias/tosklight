@@ -98,6 +98,7 @@ fn document(name: &str) -> (PlanningDocument, PathBuf) {
             }],
             remove_fixture_ids: Vec::new(),
             placements: Vec::new(),
+            vector_spreads: Vec::new(),
         })
         .expect("patch one fixture");
     (document, path)
@@ -372,6 +373,7 @@ async fn the_renderer_reads_the_bracket_and_shaper_angles() {
             }],
             remove_fixture_ids: Vec::new(),
             placements: Vec::new(),
+            vector_spreads: Vec::new(),
         })
         .expect("set the angles");
 

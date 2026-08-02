@@ -157,6 +157,9 @@
             "$ref": "#/$defs/PatchHighlightOverrideProjection"
           }
         },
+        "installed_appearance": {
+          "$ref": "#/$defs/PatchInstalledFixtureAppearance"
+        },
         "invert_pan": {
           "type": "boolean"
         },
@@ -252,6 +255,7 @@
         "invert_tilt",
         "bracket_angle",
         "shaper_angle",
+        "installed_appearance",
         "move_in_black_enabled",
         "move_in_black_delay_millis",
         "highlight_overrides"
@@ -280,6 +284,96 @@
         "z"
       ]
     },
+    "PatchGelAssignment": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "open_white"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "catalog_id": {
+              "type": "string"
+            },
+            "embedded_fallback": {
+              "$ref": "#/$defs/PatchGelDefinitionSnapshot"
+            },
+            "entry_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "built_in"
+            }
+          },
+          "required": [
+            "type",
+            "catalog_id",
+            "entry_id",
+            "embedded_fallback"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "color_srgb": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "custom"
+            }
+          },
+          "required": [
+            "type",
+            "name",
+            "color_srgb",
+            "note"
+          ]
+        }
+      ]
+    },
+    "PatchGelDefinitionSnapshot": {
+      "type": "object",
+      "properties": {
+        "display_srgb": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "number": {
+          "type": "string"
+        },
+        "visualizer_srgb": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "number",
+        "name",
+        "display_srgb",
+        "visualizer_srgb"
+      ]
+    },
     "PatchHighlightOverrideProjection": {
       "type": "object",
       "properties": {
@@ -296,6 +390,158 @@
       "required": [
         "channel_id",
         "raw_value"
+      ]
+    },
+    "PatchInstalledFixtureAppearance": {
+      "description": "Portable installed lamp/filter/static-shaper appearance for one physical fixture instance.",
+      "type": "object",
+      "properties": {
+        "color_temperature_kelvin": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "gel": {
+          "$ref": "#/$defs/PatchGelAssignment",
+          "default": {
+            "type": "open_white"
+          }
+        },
+        "light_source": {
+          "$ref": "#/$defs/PatchInstalledLightSource",
+          "default": {
+            "type": "profile_default"
+          }
+        },
+        "shaper_angles_degrees": {
+          "type": "array",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 4,
+          "minItems": 4
+        }
+      },
+      "required": [
+        "light_source",
+        "color_temperature_kelvin",
+        "gel",
+        "shaper_angles_degrees"
+      ]
+    },
+    "PatchInstalledLightSource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "profile_default"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "tungsten"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "halogen"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "discharge"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "led"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "fluorescent"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "arc"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "other"
+            }
+          },
+          "required": [
+            "type",
+            "label"
+          ]
+        }
       ]
     },
     "PatchLogicalHeadProjection": {
@@ -381,6 +627,9 @@
           "type": "string",
           "format": "uuid"
         },
+        "installed_appearance": {
+          "$ref": "#/$defs/PatchInstalledFixtureAppearance"
+        },
         "invert_pan": {
           "type": "boolean"
         },
@@ -419,7 +668,8 @@
         "invert_pan",
         "invert_tilt",
         "bracket_angle",
-        "shaper_angle"
+        "shaper_angle",
+        "installed_appearance"
       ]
     },
     "PatchProfilePolicy": {

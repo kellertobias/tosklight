@@ -1,26 +1,28 @@
 import type {
+	PatchDirectControlEndpoint as FeatureDirectControlEndpoint,
+	PatchFixtureProjection as FeatureFixtureProjection,
+	PatchInstalledFixtureAppearance as FeatureInstalledFixtureAppearance,
+	PatchError as FeaturePatchError,
+	PatchSnapshot as FeaturePatchSnapshot,
+	PatchProfileRevision as FeatureProfileRevision,
+	PatchChange,
+	PatchEventMessage,
+	PatchMutationOutcome,
+} from "../features/patch/contracts";
+import type {
 	PatchDelta,
 	PatchFixtureProjection,
+	PatchInstalledFixtureAppearance,
 	PatchProfileRevisionProjection,
 } from "./generated/light-wire";
-import type {
-	PatchChange,
-	PatchDirectControlEndpoint as FeatureDirectControlEndpoint,
-	PatchError as FeaturePatchError,
-	PatchEventMessage,
-	PatchFixtureProjection as FeatureFixtureProjection,
-	PatchMutationOutcome,
-	PatchProfileRevision as FeatureProfileRevision,
-	PatchSnapshot as FeaturePatchSnapshot,
-} from "../features/patch/contracts";
 import {
 	validatePatchErrorResponse,
 	validatePatchEventServerMessage,
 	validatePatchFixturesOutcome,
 	validatePatchSnapshot,
 } from "./patchWireValidation";
-import { WireValidationError } from "./wireValidation";
 import type { FixtureProfile } from "./types";
+import { WireValidationError } from "./wireValidation";
 
 export function decodePatchSnapshot(value: unknown): FeaturePatchSnapshot {
 	const snapshot = validatePatchSnapshot(value);
@@ -34,7 +36,9 @@ export function decodePatchSnapshot(value: unknown): FeaturePatchSnapshot {
 	};
 }
 
-export function decodePatchFixturesOutcome(value: unknown): PatchMutationOutcome {
+export function decodePatchFixturesOutcome(
+	value: unknown,
+): PatchMutationOutcome {
 	const outcome = validatePatchFixturesOutcome(value);
 	return {
 		requestId: outcome.request_id,
@@ -130,6 +134,9 @@ function mapFixtureProjection(
 			invertTilt: instance.invert_tilt,
 			bracketAngle: instance.bracket_angle,
 			shaperAngle: instance.shaper_angle,
+			installedAppearance: mapInstalledAppearance(
+				instance.installed_appearance,
+			),
 		})),
 		groupMastersEnabled: fixture.group_masters_enabled,
 		grandMasterEnabled: fixture.grand_master_enabled,
@@ -137,12 +144,44 @@ function mapFixtureProjection(
 		invertTilt: fixture.invert_tilt,
 		bracketAngle: fixture.bracket_angle,
 		shaperAngle: fixture.shaper_angle,
+		installedAppearance: mapInstalledAppearance(fixture.installed_appearance),
 		moveInBlackEnabled: fixture.move_in_black_enabled,
 		moveInBlackDelayMillis: fixture.move_in_black_delay_millis,
 		highlightOverrides: fixture.highlight_overrides.map((override) => ({
 			channelId: override.channel_id,
 			rawValue: override.raw_value,
 		})),
+	};
+}
+
+function mapInstalledAppearance(
+	appearance: PatchInstalledFixtureAppearance,
+): FeatureInstalledFixtureAppearance {
+	return {
+		lightSource: { ...appearance.light_source },
+		colorTemperatureKelvin: appearance.color_temperature_kelvin ?? null,
+		gel:
+			appearance.gel.type === "built_in"
+				? {
+						type: "built_in",
+						catalogId: appearance.gel.catalog_id,
+						entryId: appearance.gel.entry_id,
+						embeddedFallback: {
+							number: appearance.gel.embedded_fallback.number,
+							name: appearance.gel.embedded_fallback.name,
+							displaySrgb: appearance.gel.embedded_fallback.display_srgb,
+							visualizerSrgb: appearance.gel.embedded_fallback.visualizer_srgb,
+						},
+					}
+				: appearance.gel.type === "custom"
+					? {
+							type: "custom",
+							name: appearance.gel.name,
+							colorSrgb: appearance.gel.color_srgb,
+							note: appearance.gel.note ?? null,
+						}
+					: { type: "open_white" },
+		shaperAnglesDegrees: [...appearance.shaper_angles_degrees],
 	};
 }
 

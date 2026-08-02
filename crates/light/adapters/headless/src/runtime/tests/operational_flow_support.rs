@@ -56,6 +56,7 @@ fn operational_fixture(fixture_id: light_core::FixtureId) -> light_fixture::Patc
         invert_tilt: false,
         bracket_angle: 0.0,
         shaper_angle: None,
+        installed_appearance: Default::default(),
         move_in_black_enabled: true,
         highlight_overrides: Default::default(),
         move_in_black_delay_millis: 0,

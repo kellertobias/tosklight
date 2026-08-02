@@ -327,9 +327,11 @@ async fn v2_patch_revision_ignores_unrelated_group_mutations() {
     )
     .await;
 
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(response.headers()[header::ETAG], "\"1\"");
+    let status = response.status();
+    let etag = response.headers().get(header::ETAG).cloned();
     let outcome = json(response).await;
+    assert_eq!(status, StatusCode::OK, "{outcome}");
+    assert_eq!(etag.as_ref().unwrap(), "\"1\"");
     assert_eq!(outcome["show_revision"], 3);
     assert_eq!(outcome["patch_revision"], 1);
     let _ = std::fs::remove_dir_all(data_dir);
