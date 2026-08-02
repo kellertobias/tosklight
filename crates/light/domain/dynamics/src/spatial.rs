@@ -225,6 +225,13 @@ pub struct SpatialTarget {
     pub position: Option<Position3d>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ProjectedSpatialPosition {
+    pub fixture_id: FixtureId,
+    pub u: Option<f64>,
+    pub v: Option<f64>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RankedSelection {
     pub ordered_fixture_ids: Vec<FixtureId>,
@@ -286,13 +293,7 @@ pub fn evaluate_spatial_mapping(
             });
             continue;
         }
-        let relative = Vector3 {
-            x: position.x - mapping.projection.anchor.x,
-            y: position.y - mapping.projection.anchor.y,
-            z: position.z - mapping.projection.anchor.z,
-        };
-        let u = canonical_zero(dot(relative, screen_right));
-        let v = canonical_zero(dot(relative, screen_up));
+        let (u, v) = projected_coordinates(&mapping.projection, position, screen_right, screen_up);
         positioned.push(ProjectedTarget {
             source_index,
             fixture_id: target.fixture_id,
@@ -330,6 +331,33 @@ pub fn evaluate_spatial_mapping(
         rank_count,
         warnings,
     })
+}
+
+/// Projects each unique target into the same authoritative `(u, v)` plane used for ranking.
+/// Missing and non-finite Stage positions remain visible with absent coordinates.
+pub fn project_spatial_positions(
+    projection: &SpatialProjection,
+    targets: &[SpatialTarget],
+) -> Result<Vec<ProjectedSpatialPosition>, SpatialMappingError> {
+    validate_projection(projection)?;
+    let (screen_right, screen_up) = projection_basis(projection)?;
+    Ok(deduplicated_targets(targets)
+        .map(|(_, target)| {
+            let coordinates = target.position.filter(|position| {
+                position.x.is_finite() && position.y.is_finite() && position.z.is_finite()
+            });
+            let (u, v) = coordinates
+                .map(|position| {
+                    projected_coordinates(projection, position, screen_right, screen_up)
+                })
+                .map_or((None, None), |(u, v)| (Some(u), Some(v)));
+            ProjectedSpatialPosition {
+                fixture_id: target.fixture_id,
+                u,
+                v,
+            }
+        })
+        .collect())
 }
 
 /// Resolves one Dynamic's mapping override against its optional live Group mapping.
@@ -476,29 +504,7 @@ fn dynamic_random_key(seed: u64, loop_index: u64, fixture_id: FixtureId) -> u64 
 }
 
 fn validate_mapping(mapping: &SpatialSelectionMapping) -> Result<(), SpatialMappingError> {
-    for (field, value) in [
-        ("projection.anchor.x", mapping.projection.anchor.x),
-        ("projection.anchor.y", mapping.projection.anchor.y),
-        ("projection.anchor.z", mapping.projection.anchor.z),
-        (
-            "projection.view_direction.x",
-            mapping.projection.view_direction.x,
-        ),
-        (
-            "projection.view_direction.y",
-            mapping.projection.view_direction.y,
-        ),
-        (
-            "projection.view_direction.z",
-            mapping.projection.view_direction.z,
-        ),
-        (
-            "projection.rotation_degrees",
-            mapping.projection.rotation_degrees,
-        ),
-    ] {
-        require_finite(field, value)?;
-    }
+    validate_projection(&mapping.projection)?;
     match mapping.shape {
         SpatialSelectionShape::Grid { angle_degrees, .. } => {
             require_finite("shape.angle_degrees", angle_degrees)?;
@@ -519,6 +525,21 @@ fn validate_mapping(mapping: &SpatialSelectionMapping) -> Result<(), SpatialMapp
             require_finite("shape.center_v", center_v)?;
             require_finite("shape.start_angle_degrees", start_angle_degrees)?;
         }
+    }
+    Ok(())
+}
+
+fn validate_projection(projection: &SpatialProjection) -> Result<(), SpatialMappingError> {
+    for (field, value) in [
+        ("projection.anchor.x", projection.anchor.x),
+        ("projection.anchor.y", projection.anchor.y),
+        ("projection.anchor.z", projection.anchor.z),
+        ("projection.view_direction.x", projection.view_direction.x),
+        ("projection.view_direction.y", projection.view_direction.y),
+        ("projection.view_direction.z", projection.view_direction.z),
+        ("projection.rotation_degrees", projection.rotation_degrees),
+    ] {
+        require_finite(field, value)?;
     }
     Ok(())
 }
@@ -566,6 +587,23 @@ fn projection_basis(
             z: up.z * cos - right.z * sin,
         },
     ))
+}
+
+fn projected_coordinates(
+    projection: &SpatialProjection,
+    position: Position3d,
+    screen_right: Vector3,
+    screen_up: Vector3,
+) -> (f64, f64) {
+    let relative = Vector3 {
+        x: position.x - projection.anchor.x,
+        y: position.y - projection.anchor.y,
+        z: position.z - projection.anchor.z,
+    };
+    (
+        canonical_zero(dot(relative, screen_right)),
+        canonical_zero(dot(relative, screen_up)),
+    )
 }
 
 fn shape_key(shape: &SpatialSelectionShape, u: f64, v: f64) -> f64 {
@@ -707,6 +745,42 @@ mod tests {
                 evaluate_spatial_mapping(&mapping(preset, ascending_up.clone()), &targets).unwrap();
             assert!(side.rank_by_fixture[&fixture(6)] < side.rank_by_fixture[&fixture(5)]);
         }
+    }
+
+    #[test]
+    fn projected_position_preview_uses_ranking_plane_and_retains_missing_targets() {
+        let projection = SpatialProjection::from_preset(
+            ProjectionPreset::Top,
+            Position3d {
+                x: 10.0,
+                y: 20.0,
+                z: 5.0,
+            },
+        );
+        let targets = [
+            target(1, 12.0, 17.0, 9.0),
+            SpatialTarget {
+                fixture_id: fixture(2),
+                position: None,
+            },
+            target(1, 99.0, 99.0, 99.0),
+        ];
+
+        assert_eq!(
+            project_spatial_positions(&projection, &targets).unwrap(),
+            [
+                ProjectedSpatialPosition {
+                    fixture_id: fixture(1),
+                    u: Some(2.0),
+                    v: Some(-3.0),
+                },
+                ProjectedSpatialPosition {
+                    fixture_id: fixture(2),
+                    u: None,
+                    v: None,
+                },
+            ]
+        );
     }
 
     #[test]
