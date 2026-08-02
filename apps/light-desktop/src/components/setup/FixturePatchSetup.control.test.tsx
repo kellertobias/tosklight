@@ -839,6 +839,103 @@ describe("installed light-source appearance", () => {
 		expect(copy.cells[8]).toHaveTextContent("LED · 5,600 KSteel Blue");
 	});
 
+	it("retains independent installed appearances when changing to a newly embedded profile mode", async () => {
+		const fixture = appearanceFixture();
+		fixture.installed_appearance = {
+			light_source: { type: "profile_default" },
+			color_temperature_kelvin: null,
+			gel: {
+				type: "built_in",
+				catalog_id: "catalog-tour",
+				entry_id: "entry-r80",
+				embedded_fallback: {
+					number: "R80",
+					name: "Primary Blue",
+					display_srgb: "#1122AA",
+					visualizer_srgb: "#0F1F99",
+				},
+			},
+			shaper_angles_degrees: [1, 2, 3, 4],
+		};
+		const originalRootAppearance = structuredClone(
+			fixture.installed_appearance,
+		);
+		const originalCopyAppearance = structuredClone(
+			fixture.multipatch?.[0]?.installed_appearance,
+		);
+		const nextProfile = structuredClone(fixture.definition.profile_snapshot);
+		if (!nextProfile) throw new Error("appearance fixture profile is missing");
+		nextProfile.revision = 2;
+		nextProfile.physical.color_temperature_kelvin = 6_500;
+		nextProfile.modes[0].id = "mode-touring";
+		nextProfile.modes[0].name = "Touring";
+		nextProfile.modes[0].channels = [];
+		server.fixtureProfiles = [nextProfile];
+		server.patch.fixtures = [fixture];
+		patchFeature.updateFixture.mockImplementation(
+			async (fixtureId: string, changes: Partial<PatchedFixture>) => {
+				const index = server.patch.fixtures.findIndex(
+					(candidate) => candidate.fixture_id === fixtureId,
+				);
+				if (index < 0) return false;
+				server.patch.fixtures[index] = {
+					...server.patch.fixtures[index],
+					...structuredClone(changes),
+				};
+				return true;
+			},
+		);
+		state.patchSetArmed = true;
+		const rendered = render(<FixturePatchSetup />);
+
+		fireEvent.click(
+			screen.getByRole("button", { name: /Fixture and mode 17:/ }),
+		);
+		const dialog = screen
+			.getByRole("heading", { name: "Set fixture mode" })
+			.closest("section") as HTMLElement;
+		expect(
+			within(dialog).getByRole("button", { name: "Touring · 4ch" }),
+		).toBeInTheDocument();
+		fireEvent.click(within(dialog).getByRole("button", { name: "Set" }));
+
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledOnce(),
+		);
+		const changes = patchFeature.updateFixture.mock.calls[0]?.[1];
+		expect(changes?.definition).toMatchObject({
+			revision: 2,
+			mode: "Touring",
+			mode_id: "mode-touring",
+			profile_snapshot: {
+				revision: 2,
+				physical: { color_temperature_kelvin: 6_500 },
+			},
+		});
+		expect(changes).not.toHaveProperty("installed_appearance");
+		expect(changes?.multipatch?.[0]?.installed_appearance).toEqual(
+			originalCopyAppearance,
+		);
+		expect(server.patch.fixtures[0].installed_appearance).toEqual(
+			originalRootAppearance,
+		);
+		expect(
+			server.patch.fixtures[0].multipatch?.[0]?.installed_appearance,
+		).toEqual(originalCopyAppearance);
+
+		rendered.rerender(<FixturePatchSetup />);
+		const root = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+		const copy = screen.getByRole("row", {
+			name: "Multi-patch Opposite hang",
+		}) as HTMLTableRowElement;
+		expect(root.cells[8]).toHaveTextContent(
+			"Profile default · 6,500 KR80 · Primary Blue",
+		);
+		expect(copy.cells[8]).toHaveTextContent("LED · 5,600 KSteel Blue");
+	});
+
 	it("copies the primary installed appearance into a new independent physical copy", async () => {
 		const fixture = appearanceFixture();
 		fixture.bracket_angle = 35;
