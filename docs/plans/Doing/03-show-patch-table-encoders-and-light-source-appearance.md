@@ -2,14 +2,33 @@
 
 ## Status
 
-**Specification only.** This plan records the agreed Show Patch table consolidation, patch-specific
-encoder groups, and installed light-source/gel visualization contract. It does not implement product
-code, executable tests, generated contracts, help text, screenshots, or migrations.
+**Doing.** Claimed on 2026-08-02 after completing Plan 02. This is the sole active implementation
+contract for the Show Patch table consolidation, patch-specific encoder groups, and installed
+light-source/gel visualization contract.
 
 This is the third item in the current [Next plan order](README.md), after Group/Dynamics spatial
-mapping and the Fixture Sheet improvements. Keep this file in `Next` while implementing it, then
-add the normal `## Result` and verification evidence before moving it to `Done` in a semantic
-commit.
+mapping and the Fixture Sheet improvements. Add the normal `## Result` and verification evidence
+before moving it to `Done` in a semantic commit.
+
+## Progress
+
+- [x] Claimed from `docs/plans/Next` in numeric order.
+- [ ] Audit the current table, patch selection, encoder, persistence, API, catalog, and visualizer
+  ownership boundaries plus compatibility and acceptance seams.
+- [ ] Implement the exact shared sixteen-column table and physical-instance editing geometry.
+- [ ] Implement portable installed appearance, typed sparse mutations, compatibility, and catalog
+  import infrastructure.
+- [ ] Implement Location/Visualization encoders and shared Stage/Viz appearance evaluation.
+- [ ] Update help, screenshots, human scenarios, and focused automated acceptance coverage.
+- [ ] Run focused checks, required major suites, migration/recovery proof, and real desktop/Viz
+  verification.
+
+## Implementation decisions
+
+- The plan's required focused operator review of the final generic gel names, numbers, display RGB,
+  and visualizer RGB remains open. Work may advance on independent table, model, API, encoder,
+  import, and renderer contracts, but the shipped catalog entries will not be implemented or
+  represented as accepted until that review occurs.
 
 ## Current behavior and problem
 
