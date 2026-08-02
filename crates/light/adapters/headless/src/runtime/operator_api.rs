@@ -233,6 +233,7 @@ pub(super) async fn visualization_snapshot(
     let source = state.output.latest_visualization_frame();
     let projection_started = Instant::now();
     let mut snapshot = if query.dynamic_stack_only {
+        let ordinary = fixture_sheet_ordinary_values(&state, &session, query.preload);
         let mut snapshot = visualization_snapshot_for_session_content_from_resolved(
             &state,
             &session,
@@ -242,64 +243,11 @@ pub(super) async fn visualization_snapshot(
             None,
             None,
         )?;
-        if let Some(snapshot) = snapshot.as_object_mut() {
-            snapshot.insert("values".into(), serde_json::Value::Array(Vec::new()));
-            snapshot.insert(
-                "profile_output_values".into(),
-                serde_json::Value::Array(Vec::new()),
-            );
-            let fixture_ids = requested_visualization_fixture_ids(query.fixture_ids.as_deref());
-            if let Some(dynamic_stack) = snapshot
-                .get_mut("dynamic_stack")
-                .and_then(serde_json::Value::as_array_mut)
-            {
-                dynamic_stack.retain_mut(|entry| {
-                    if entry.get("entry_type").and_then(serde_json::Value::as_str)
-                        == Some("ordinary_static")
-                    {
-                        return false;
-                    }
-                    if let Some(fixture_ids) = fixture_ids.as_ref()
-                        && !entry
-                            .get("fixture_id")
-                            .and_then(serde_json::Value::as_str)
-                            .and_then(|fixture_id| Uuid::parse_str(fixture_id).ok())
-                            .is_some_and(|fixture_id| fixture_ids.contains(&fixture_id))
-                    {
-                        return false;
-                    }
-                    let displayed_attribute = entry
-                        .get("attribute")
-                        .and_then(serde_json::Value::as_str)
-                        .is_some_and(|attribute| {
-                            matches!(attribute, "intensity" | "pan" | "tilt")
-                                || attribute.starts_with("color")
-                        });
-                    if !displayed_attribute {
-                        return false;
-                    }
-                    if let Some(entry) = entry.as_object_mut() {
-                        entry.retain(|field, _| {
-                            matches!(
-                                field.as_str(),
-                                "fixture_id"
-                                    | "attribute"
-                                    | "entry_type"
-                                    | "source"
-                                    | "name"
-                                    | "size"
-                                    | "paused"
-                                    | "hidden"
-                                    | "pending"
-                                    | "winning"
-                            )
-                        });
-                    }
-                    true
-                });
-                compact_fixture_sheet_dynamic_stack(dynamic_stack);
-            }
-        }
+        project_fixture_sheet_snapshot(
+            &mut snapshot,
+            ordinary.as_ref(),
+            requested_visualization_fixture_ids(query.fixture_ids.as_deref()).as_ref(),
+        );
         snapshot
     } else {
         let mut snapshot = visualization_snapshot_for_session(&state, &session, query.preload)?;
@@ -333,6 +281,120 @@ pub(super) async fn visualization_snapshot(
         source.as_deref(),
     );
     Ok(Json(snapshot))
+}
+
+/// Returns the Fixture Sheet's stable ordinary base, before Dynamic/FAT sampling.
+///
+/// Preload is a second programming lane, so its pending ordinary values replace the normal base in
+/// that lane. Pending Dynamic values remain identities in `dynamic_stack`; they never replace this
+/// map with a sampled value.
+fn fixture_sheet_ordinary_values(
+    state: &AppState,
+    session: &Session,
+    preload: bool,
+) -> Arc<HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>> {
+    let ordinary = state.output.cached_visualization_ordinary_values();
+    if !preload {
+        return ordinary;
+    }
+    let Some(programmer) = state.programming.get(session.id) else {
+        return ordinary;
+    };
+    let mut values = ordinary.as_ref().clone();
+    for value in programmer
+        .preload_active
+        .iter()
+        .chain(&programmer.preload_pending)
+    {
+        values.insert(
+            (value.fixture_id, value.attribute.clone()),
+            value.value.clone(),
+        );
+    }
+    let snapshot = state.output.snapshot();
+    let groups = snapshot
+        .groups
+        .iter()
+        .map(|group| (group.id.clone(), group.clone()))
+        .collect::<HashMap<_, _>>();
+    for (group_id, attributes) in programmer
+        .preload_group_active
+        .iter()
+        .chain(&programmer.preload_group_pending)
+    {
+        if let Ok(fixtures) = light_programmer::resolve_group(group_id, &groups) {
+            let fixture_count = fixtures.len();
+            for (index, fixture) in fixtures.into_iter().enumerate() {
+                for (attribute, value) in attributes {
+                    values.insert(
+                        (fixture, attribute.clone()),
+                        fixture_sheet_value_for_ordered_position(
+                            &value.value,
+                            index,
+                            fixture_count,
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    Arc::new(values)
+}
+
+fn fixture_sheet_value_for_ordered_position(
+    value: &light_core::AttributeValue,
+    index: usize,
+    count: usize,
+) -> light_core::AttributeValue {
+    let light_core::AttributeValue::Spread(points) = value else {
+        return value.clone();
+    };
+    if points.is_empty() {
+        return light_core::AttributeValue::Normalized(0.0);
+    }
+    light_core::AttributeValue::Normalized(light_core::spread_position(points, index, count))
+}
+
+fn project_fixture_sheet_snapshot(
+    snapshot: &mut serde_json::Value,
+    ordinary: &HashMap<
+        (light_core::FixtureId, light_core::AttributeKey),
+        light_core::AttributeValue,
+    >,
+    fixture_ids: Option<&HashSet<Uuid>>,
+) {
+    let Some(snapshot_object) = snapshot.as_object_mut() else {
+        return;
+    };
+    snapshot_object.insert("values".into(), visualization_wire_values(ordinary).into());
+    snapshot_object.insert(
+        "profile_output_values".into(),
+        serde_json::Value::Array(Vec::new()),
+    );
+    if let Some(dynamic_stack) = snapshot_object
+        .get_mut("dynamic_stack")
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        dynamic_stack.retain_mut(|entry| {
+            if entry.get("entry_type").and_then(serde_json::Value::as_str)
+                == Some("ordinary_static")
+            {
+                return false;
+            }
+            if let Some(entry) = entry.as_object_mut() {
+                // The Fixture Sheet consumes stable identity/state only. Enforce that boundary even
+                // if a future caller accidentally requests the verbose sampled projection.
+                entry.remove("value");
+                entry.remove("resolved_value");
+                entry.remove("summary_count");
+                entry.remove("summary_title");
+            }
+            true
+        });
+    }
+    if let Some(fixture_ids) = fixture_ids {
+        retain_visualization_fixtures(snapshot, fixture_ids);
+    }
 }
 
 fn requested_visualization_fixture_ids(value: Option<&str>) -> Option<HashSet<Uuid>> {
@@ -371,69 +433,6 @@ fn retain_visualization_fixtures(snapshot: &mut serde_json::Value, fixture_ids: 
     }
 }
 
-fn compact_fixture_sheet_dynamic_stack(dynamic_stack: &mut Vec<serde_json::Value>) {
-    let mut compacted = Vec::new();
-    let mut positions = HashMap::<(String, String), usize>::new();
-    for mut entry in std::mem::take(dynamic_stack) {
-        let Some(fixture_id) = entry
-            .get("fixture_id")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned)
-        else {
-            continue;
-        };
-        let Some(attribute) = entry
-            .get("attribute")
-            .and_then(serde_json::Value::as_str)
-            .map(|attribute| match attribute {
-                "intensity" => "intensity",
-                "pan" | "tilt" => "pan",
-                attribute if attribute.starts_with("color") => "color",
-                attribute => attribute,
-            })
-            .map(str::to_owned)
-        else {
-            continue;
-        };
-        if let Some(entry) = entry.as_object_mut() {
-            entry.insert("attribute".into(), attribute.clone().into());
-        }
-        let summary_line = fixture_sheet_dynamic_summary_line(&entry);
-        if let Some(position) = positions.get(&(fixture_id.clone(), attribute.clone())) {
-            let Some(existing) = compacted
-                .get_mut(*position)
-                .and_then(serde_json::Value::as_object_mut)
-            else {
-                continue;
-            };
-            let count = existing
-                .get("summary_count")
-                .and_then(serde_json::Value::as_u64)
-                .unwrap_or(1)
-                + 1;
-            existing.insert("summary_count".into(), count.into());
-            if count <= 3
-                && let Some(title) = existing
-                    .get("summary_title")
-                    .and_then(serde_json::Value::as_str)
-            {
-                let mut title = title.to_owned();
-                title.push('\n');
-                title.push_str(&summary_line);
-                existing.insert("summary_title".into(), title.into());
-            }
-            continue;
-        }
-        if let Some(entry) = entry.as_object_mut() {
-            entry.insert("summary_count".into(), 1.into());
-            entry.insert("summary_title".into(), summary_line.into());
-        }
-        positions.insert((fixture_id, attribute), compacted.len());
-        compacted.push(entry);
-    }
-    *dynamic_stack = compacted;
-}
-
 #[cfg(test)]
 mod scoped_visualization_tests {
     use super::*;
@@ -465,39 +464,108 @@ mod scoped_visualization_tests {
         }
         assert_eq!(snapshot["revision"], 7);
     }
-}
 
-fn fixture_sheet_dynamic_summary_line(entry: &serde_json::Value) -> String {
-    let name = entry
-        .get("name")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("Dynamic");
-    let source = entry
-        .get("source")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("unknown");
-    let mut details = Vec::new();
-    if let Some(size) = entry.get("size").and_then(serde_json::Value::as_f64) {
-        details.push(format!("Size {:.0}%", size * 100.0));
-    }
-    for (field, label) in [
-        ("winning", "winning"),
-        ("pending", "pending"),
-        ("paused", "paused"),
-        ("hidden", "hidden"),
-    ] {
-        if entry
-            .get(field)
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false)
-        {
-            details.push(label.into());
-        }
-    }
-    if details.is_empty() {
-        format!("{name} · {source}")
-    } else {
-        format!("{name} · {source} · {}", details.join(", "))
+    #[test]
+    fn fixture_sheet_projection_keeps_stable_bases_and_individual_dynamic_identities() {
+        let included = light_core::FixtureId(Uuid::from_u128(1));
+        let excluded = light_core::FixtureId(Uuid::from_u128(2));
+        let first_dynamic = Uuid::from_u128(10);
+        let second_dynamic = Uuid::from_u128(11);
+        let mut snapshot = json!({
+            "values": [
+                {"fixture_id": included.0, "attribute": "intensity", "value": 0.95}
+            ],
+            "profile_output_values": [
+                {"fixture_id": included.0, "attribute": "intensity", "value": 0.9}
+            ],
+            "dynamic_stack": [
+                {
+                    "fixture_id": included.0,
+                    "attribute": "intensity",
+                    "entry_type": "ordinary_static",
+                    "name": "Static base"
+                },
+                {
+                    "fixture_id": included.0,
+                    "attribute": "shaper_1_a",
+                    "entry_type": "dynamic",
+                    "dynamic_id": first_dynamic,
+                    "pool_number": 7,
+                    "name": "Fan",
+                    "paused": false,
+                    "pending": false,
+                    "hidden": false,
+                    "winning": true,
+                    "value": 0.42,
+                    "resolved_value": 0.73
+                },
+                {
+                    "fixture_id": included.0,
+                    "attribute": "shaper_1_a",
+                    "entry_type": "dynamic",
+                    "dynamic_id": second_dynamic,
+                    "pool_number": 8,
+                    "name": "Pulse",
+                    "paused": true,
+                    "pending": false,
+                    "hidden": true,
+                    "winning": false,
+                    "value": 0.12,
+                    "resolved_value": 0.73
+                },
+                {
+                    "fixture_id": excluded.0,
+                    "attribute": "media_file",
+                    "entry_type": "dynamic",
+                    "dynamic_id": Uuid::from_u128(12),
+                    "pool_number": 9,
+                    "name": "Excluded"
+                }
+            ]
+        });
+        let ordinary = HashMap::from([
+            (
+                (included, light_core::AttributeKey("intensity".into())),
+                light_core::AttributeValue::Normalized(0.25),
+            ),
+            (
+                (included, light_core::AttributeKey("media.file".into())),
+                light_core::AttributeValue::Discrete("4".into()),
+            ),
+            (
+                (excluded, light_core::AttributeKey("intensity".into())),
+                light_core::AttributeValue::Normalized(0.5),
+            ),
+        ]);
+
+        project_fixture_sheet_snapshot(
+            &mut snapshot,
+            &ordinary,
+            Some(&HashSet::from([included.0])),
+        );
+
+        let values = snapshot["values"].as_array().unwrap();
+        assert_eq!(values.len(), 2);
+        assert!(values.iter().any(|value| {
+            value["attribute"] == "intensity"
+                && value["value"] == serde_json::json!({"kind": "normalized", "value": 0.25})
+        }));
+        assert!(values.iter().any(|value| {
+            value["attribute"] == "media.file"
+                && value["value"] == serde_json::json!({"kind": "discrete", "value": "4"})
+        }));
+        assert_eq!(snapshot["profile_output_values"], json!([]));
+        let dynamic_stack = snapshot["dynamic_stack"].as_array().unwrap();
+        assert_eq!(dynamic_stack.len(), 2);
+        assert_eq!(dynamic_stack[0]["dynamic_id"], first_dynamic.to_string());
+        assert_eq!(dynamic_stack[1]["dynamic_id"], second_dynamic.to_string());
+        assert_eq!(dynamic_stack[0]["attribute"], "shaper_1_a");
+        assert_eq!(dynamic_stack[1]["attribute"], "shaper_1_a");
+        assert!(dynamic_stack.iter().all(|entry| {
+            entry.get("value").is_none()
+                && entry.get("resolved_value").is_none()
+                && entry.get("summary_count").is_none()
+        }));
     }
 }
 
@@ -608,11 +676,17 @@ pub(super) fn visualization_snapshot_for_session_content_from_resolved(
             .chain(&programmer.preload_group_pending)
         {
             if let Ok(fixtures) = light_programmer::resolve_group(group_id, &groups) {
-                for fixture in fixtures {
+                let fixture_count = fixtures.len();
+                for (index, fixture) in fixtures.into_iter().enumerate() {
                     for (attribute, value) in attributes {
-                        resolved
-                            .to_mut()
-                            .insert((fixture, attribute.clone()), value.value.clone());
+                        resolved.to_mut().insert(
+                            (fixture, attribute.clone()),
+                            fixture_sheet_value_for_ordered_position(
+                                &value.value,
+                                index,
+                                fixture_count,
+                            ),
+                        );
                     }
                 }
             }

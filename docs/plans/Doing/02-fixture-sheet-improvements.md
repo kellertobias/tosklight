@@ -13,7 +13,7 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
 ## Progress
 
 - [x] Claimed from `docs/plans/Next` in numeric order.
-- [ ] Audit existing Fixture Sheet projection, filters, columns, settings ownership, persistence,
+- [x] Audit existing Fixture Sheet projection, filters, columns, settings ownership, persistence,
   compact rendering, Dynamic/base-value telemetry, help, screenshots, and acceptance seams.
 - [x] Implement invariant programmable-row filtering without changing show or selection authority.
 - [ ] Implement authoritative attribute-group base summaries and stable Dynamic identity/state
@@ -33,6 +33,11 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
   acceptance requirements.
 - Reuse Plan 01 Group-master and Dynamic runtime identities and the authoritative attribute registry;
   the Fixture Sheet must not infer or recreate those authorities.
+- Keep the existing scoped `dynamic_stack_only` visualization read as the backend boundary for this
+  implementation slice: it is already Fixture-Sheet-specific. Its values now mean stable ordinary
+  bases, and its Dynamic entries retain exact attributes and identities without sampled values or
+  lossy fixture/group aggregation. The frontend must publish only semantically changed projections
+  while this existing eventually-consistent read remains in use.
 
 ## Implementation verification
 
@@ -43,11 +48,26 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
   virtual identity, and a legacy complete ID beginning `0.` are independent exclusions; physical
   fixture 100 and identities `100.0`/`100.1` remain eligible. Thirteen focused filter/target tests,
   desktop typecheck, focused Biome, and the diff check passed.
+- The completed read-only audit found one shared renderer but nine legacy columns, fabricated
+  Beam/Focus row data, no density mode, a hard-coded 43 px virtualized row metric, and independent
+  built-in/pane/fixed-screen persistence seams. It also found that the Fixture-Sheet-specific
+  backend read discarded ordinary bases, restricted attributes, stripped Dynamic IDs/pool numbers,
+  and merged identities. Existing help explicitly contradicts the new scenery invariant.
+- The backend projection now returns the authoritative ordinary pre-Dynamic/FAT base in `values`,
+  overlays current-session Preload ordinary values (including canonical ordered Group spreads),
+  preserves individual Dynamic IDs, pool numbers, member attributes, runtime/controller/lane IDs,
+  and paused/pending/hidden/winning state, and removes sampled/resolved values. Fixture scoping still
+  applies to both bases and identities. The two focused projection tests and the focused route test
+  pass in `light-headless-runtime`.
 
 ## Remaining work
 
-- Complete the remaining data, rendering, settings, persistence, documentation, and coverage audit
-  before selecting the next implementation boundary.
+- Connect the stable backend projection to a registry-driven frontend model for all eight attribute
+  groups, semantic value formatting, unmerged Dynamic indicators, and semantic equality publication.
+- Add accurate base-source ownership, Group-master flash/Highlight-bypass presentation, and the
+  deterministic base-versus-changing-DMX acceptance proof in a later coherent slice.
+- Implement compact rendering and per-surface persistence only after the shared value model no
+  longer depends on demo row placeholders.
 - Keep every acceptance item below unclaimed until current source and focused verification prove it.
 
 ## Goal
