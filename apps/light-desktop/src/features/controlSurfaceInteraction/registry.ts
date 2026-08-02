@@ -1,6 +1,25 @@
 import type { UpdateTargetRequest } from "../../api/types";
+import type {
+	ControlSurfaceSource,
+	SetInteractionTerminalIntent,
+} from "./contracts";
+
+export type {
+	AssignGroupMaster,
+	ChooseGroupMasterSource,
+	ControlSurfaceInteractionScope,
+	ControlSurfaceSource,
+	GroupInteractionIdentity,
+	OpenGroupSettings,
+	OpenPlaybackSettings,
+	PlaybackInteractionIdentity,
+	SelectGroupFrozen,
+	SelectGroupLive,
+	SetInteractionTerminalIntent,
+} from "./contracts";
 
 export type ControlSurfaceIntent =
+	| SetInteractionTerminalIntent
 	| { type: "set"; source: ControlSurfaceSource }
 	| {
 			type: "update_target";
@@ -50,15 +69,6 @@ export type DeskShortcut =
 	| "shift_7"
 	| "shift_8"
 	| "shift_9";
-
-export type ControlSurfaceSource =
-	| "touch"
-	| "mouse"
-	| "keyboard"
-	| "context_menu"
-	| "osc"
-	| "hardware"
-	| "server";
 
 export interface ControlSurfaceTarget {
 	id: string;
@@ -124,6 +134,13 @@ function intentLabel(intent: ControlSurfaceIntent) {
 	if (intent.type === "desk_shortcut")
 		return intent.action.replaceAll("_", " ");
 	if (intent.type === "configure_playback") return "playback configuration";
+	if (intent.type === "select_group_live") return "live Group selection";
+	if (intent.type === "select_group_frozen") return "frozen Group selection";
+	if (intent.type === "open_group_settings") return "Group settings";
+	if (intent.type === "open_playback_settings") return "Playback settings";
+	if (intent.type === "choose_group_master_source")
+		return "Group Master source selection";
+	if (intent.type === "assign_group_master") return "Group Master assignment";
 	return "Update";
 }
 
