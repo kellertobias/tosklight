@@ -411,6 +411,7 @@ fn installed_colour_tints_aperture_beam_light_and_semantic_export_once() {
 fn typed_shaper_roles_use_static_angles_until_live_values_take_ownership() {
     let mut scene = Scene::default();
     let mut fixture = fixture();
+    fixture.bracket_degrees = -35.0;
     fixture.shaper_degrees = Some(30.0);
     fixture.installed_shaper_angles_degrees = [10.0, 20.0, 30.0, 40.0];
     scene.fixtures.push(fixture);
@@ -425,23 +426,39 @@ fn typed_shaper_roles_use_static_angles_until_live_values_take_ownership() {
     values.emitters[0].shaper_blade_angles_degrees[1] = -75.0;
 
     let static_module = build(&scene, &values, &FrameStyle::default()).lights[0];
+    let expected_direction = scene.fixtures[0].orientation() * Vec3::NEG_Y;
+    let actual_direction = Vec3::from_slice(&static_module.direction_cos_outer[..3]);
+    assert!(
+        (actual_direction - expected_direction).length() < 1e-6,
+        "the GPU light direction must include the installed bracket angle"
+    );
     let expected = [10.0_f32, -75.0, 0.0, 40.0].map(f32::to_radians);
     for (actual, expected) in static_module.shaper_angles.into_iter().zip(expected) {
         assert!((actual - expected).abs() < 1e-6);
     }
     let tangent = Vec3::from_slice(&static_module.tangent_frost[..3]);
+    let expected_tangent = rotate_about(
+        scene.fixtures[0].orientation() * Vec3::X,
+        expected_direction,
+        30_f32.to_radians(),
+    );
     assert!(
-        (tangent - Vec3::new(30_f32.to_radians().cos(), 0.0, 30_f32.to_radians().sin())).length()
-            < 1e-5
+        (tangent - expected_tangent).length() < 1e-5,
+        "the installed module rotation must be relative to the bracketed fixture"
     );
 
     scene.emitters[0].live_shaper_rotation_role = true;
     values.emitters[0].shaper_rotation_degrees = -45.0;
     let live_module = build(&scene, &values, &FrameStyle::default()).lights[0];
     let tangent = Vec3::from_slice(&live_module.tangent_frost[..3]);
+    let expected_tangent = rotate_about(
+        scene.fixtures[0].orientation() * Vec3::X,
+        expected_direction,
+        -45_f32.to_radians(),
+    );
     assert!(
-        (tangent - Vec3::new(45_f32.to_radians().cos(), 0.0, -45_f32.to_radians().sin())).length()
-            < 1e-5
+        (tangent - expected_tangent).length() < 1e-5,
+        "live module rotation must be relative to the bracketed fixture"
     );
 }
 

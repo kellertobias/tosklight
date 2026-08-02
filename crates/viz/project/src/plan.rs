@@ -1024,14 +1024,33 @@ mod model_tests {
     /// A rig where every clamp is set at 35 degrees and half the lanterns wear barn doors is drawn
     /// hanging straight and square if this seam drops them.
     #[test]
-    fn the_projection_carries_the_bracket_and_shaper_angles_into_the_scene() {
+    fn root_and_multipatch_keep_independent_bracket_and_installed_shaper_angles() {
         let mut fixture = patched("profile", ProfileOptics::default());
         fixture.instances[0].bracket_angle = -35.0;
         fixture.instances[0].shaper_angle = Some(22.5);
+        fixture.instances[0]
+            .installed_appearance
+            .shaper_angles_degrees = [10.0, 20.0, 30.0, 40.0];
+        let mut copy = fixture.instances[0].clone();
+        copy.instance_id = Uuid::new_v4();
+        copy.bracket_angle = 17.0;
+        copy.shaper_angle = Some(-12.5);
+        copy.installed_appearance.shaper_angles_degrees = [-11.0, -22.0, -33.0, -44.0];
+        fixture.instances.push(copy);
         let plan = compile(&[fixture]);
-        let instance = plan.scene.fixtures.first().expect("one instance");
-        assert_eq!(instance.bracket_degrees, -35.0);
-        assert_eq!(instance.shaper_degrees, Some(22.5));
+        assert_eq!(plan.scene.fixtures.len(), 2);
+        assert_eq!(plan.scene.fixtures[0].bracket_degrees, -35.0);
+        assert_eq!(plan.scene.fixtures[0].shaper_degrees, Some(22.5));
+        assert_eq!(
+            plan.scene.fixtures[0].installed_shaper_angles_degrees,
+            [10.0, 20.0, 30.0, 40.0]
+        );
+        assert_eq!(plan.scene.fixtures[1].bracket_degrees, 17.0);
+        assert_eq!(plan.scene.fixtures[1].shaper_degrees, Some(-12.5));
+        assert_eq!(
+            plan.scene.fixtures[1].installed_shaper_angles_degrees,
+            [-11.0, -22.0, -33.0, -44.0]
+        );
     }
 
     #[test]
