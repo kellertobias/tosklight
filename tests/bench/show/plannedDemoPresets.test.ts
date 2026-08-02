@@ -59,6 +59,18 @@ describe("Plan 76 preset library", () => {
 				"fixture-101"
 			],
 		).toHaveProperty("pan");
+		const fanOut = writes.find((write) => write.body.name === "Fan Out")?.body;
+		expect(fanOut?.values["fixture-101"]).toEqual({
+			pan: { kind: "normalized", value: 0.18 },
+			tilt: { kind: "normalized", value: 0.44 },
+		});
+		expect(
+			new Set(
+				Object.values(fanOut?.values ?? {}).map(
+					(value: any) => `${value.pan.value}:${value.tilt.value}`,
+				),
+			).size,
+		).toBeGreaterThan(2);
 		expect(
 			writes.find((write) => write.body.name === "Prism Rotation")?.body.values[
 				"fixture-101"

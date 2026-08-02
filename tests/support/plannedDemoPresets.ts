@@ -93,13 +93,16 @@ export async function installPlannedDemoPresets(
 		await options.onItem?.({ family: "Color", index, name });
 	}
 	for (const [index, [name, pan, tilt]] of POSITIONS.entries()) {
-		await putPlannedDemoObject(
-			api,
-			showId,
-			"preset",
-			`3.${index + 1}`,
-			preset(index + 1, name, "Position", movingTargets, { pan, tilt }),
-		);
+		const body =
+			name === "Fan Out"
+				? presetWithFixtureValues(
+						index + 1,
+						name,
+						"Position",
+						fanOutPositionValues(movingTargets),
+					)
+				: preset(index + 1, name, "Position", movingTargets, { pan, tilt });
+		await putPlannedDemoObject(api, showId, "preset", `3.${index + 1}`, body);
 		await options.onItem?.({ family: "Position", index, name });
 	}
 	for (const [index, [name, attribute, value]] of BEAM.entries()) {
@@ -144,11 +147,11 @@ function preset(
 	fixtureIds: readonly string[],
 	attributes: Readonly<Record<string, number>>,
 ) {
-	return {
+	return presetWithFixtureValues(
+		number,
 		name,
 		family,
-		number,
-		values: Object.fromEntries(
+		Object.fromEntries(
 			fixtureIds.map((fixtureId) => [
 				fixtureId,
 				Object.fromEntries(
@@ -159,8 +162,46 @@ function preset(
 				),
 			]),
 		),
+	);
+}
+
+function presetWithFixtureValues(
+	number: number,
+	name: string,
+	family: string,
+	values: Readonly<
+		Record<
+			string,
+			Readonly<Record<string, { kind: "normalized"; value: number }>>
+		>
+	>,
+) {
+	return {
+		name,
+		family,
+		number,
+		values,
 		group_values: {},
 	};
+}
+
+function fanOutPositionValues(fixtureIds: readonly string[]) {
+	const lastIndex = Math.max(fixtureIds.length - 1, 1);
+	return Object.fromEntries(
+		fixtureIds.map((fixtureId, index) => [
+			fixtureId,
+			{
+				pan: {
+					kind: "normalized" as const,
+					value: 0.18 + (0.64 * index) / lastIndex,
+				},
+				tilt: {
+					kind: "normalized" as const,
+					value: index % 2 === 0 ? 0.44 : 0.62,
+				},
+			},
+		]),
+	);
 }
 
 function targetIds(fixture: PatchedTargetFixture) {

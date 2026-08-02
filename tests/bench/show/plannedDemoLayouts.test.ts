@@ -46,6 +46,11 @@ describe("Plan 76 desktop layout", () => {
 			"stage",
 			"dmx",
 		]);
+		expect(layout.desks[3].panes[1]).toMatchObject({
+			stageView: "3d",
+			showBeamGuides: true,
+			stageRenderQuality: "lines_and_beams",
+		});
 		expect(layout.desks[4].panes.map((pane) => pane.kind)).toEqual([
 			"cue_list",
 			"text_editor",

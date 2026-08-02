@@ -2640,15 +2640,18 @@ async function demonstrateBuskingAndPreload(
 	await desk.click(
 		presets.getByRole("button", { name: "Position", exact: true }),
 	);
-	const beamPositionValues = Object.fromEntries(
-		preparedLook.beamFixtureIds.flatMap((fixtureId) => [
-			[`${fixtureId}:pan`, 0.5],
-			[`${fixtureId}:tilt`, 0.05],
-		]),
+	const fanOut = await api.showObject<any>(showId, "preset", "3.4");
+	if (!fanOut)
+		throw new Error("The Busking Preload look requires Position 3.4 Fan Out");
+	const beamPositionValues = normalizedPresetFixtureValues(
+		fanOut.body.values,
+		preparedLook.beamFixtureIds,
+		new Set(["pan", "tilt"]),
 	);
+	expect(new Set(Object.values(beamPositionValues)).size).toBeGreaterThan(2);
 	await recallPresetThroughTouchWithRetry(
 		desk,
-		presetTile(presets, "3.5"),
+		presetTile(presets, "3.4"),
 		async () =>
 			valuesMatch(
 				await preloadProgrammerAttributeLook(
@@ -2727,6 +2730,31 @@ async function demonstrateBuskingAndPreload(
 			visualizationColorLook(api, preparedLook.fixtureIds, false),
 		)
 		.toEqual(preparedLook.values);
+	await expect
+		.poll(async () =>
+			valuesMatch(
+				await visualizationAttributeLook(
+					api,
+					preparedLook.beamFixtureIds,
+					new Set(["pan", "tilt"]),
+					false,
+				),
+				beamPositionValues,
+			),
+		)
+		.toBe(true);
+	await expectProfileColorSeparation(api, preparedLook);
+	await desk.setDemoAction(
+		"Open the Programming desktop, switch its Stage pane to 3D, and hold the non-uniform blue-and-yellow moving-light look.",
+	);
+	await openDesktop(desk, app, "Programming");
+	const finalStage = await ensureStagePane3d(desk, app);
+	await expect(finalStage).toBeVisible();
+	await expect(finalStage).toHaveAttribute(
+		"data-live-visualization-state",
+		"ready",
+	);
+	await expect(finalStage.locator(".stage-3d-canvas")).toBeVisible();
 	await demoPause(demo.page(), PRODUCT_DEMO_SCRIPT.pacing.finalLookHoldFrames);
 }
 
@@ -2828,6 +2856,22 @@ function valuesForFixtures(
 	);
 }
 
+function normalizedPresetFixtureValues(
+	values: Record<string, Record<string, any>>,
+	fixtureIds: readonly string[],
+	attributes: ReadonlySet<string>,
+) {
+	return Object.fromEntries(
+		fixtureIds.flatMap((fixtureId) =>
+			Object.entries(values[fixtureId] ?? {}).flatMap(([attribute, value]) =>
+				attributes.has(attribute) && value?.kind === "normalized"
+					? [[`${fixtureId}:${attribute}`, value.value]]
+					: [],
+			),
+		),
+	);
+}
+
 function valuesMatch(
 	actual: Record<string, number>,
 	expected: Record<string, number>,
@@ -2835,7 +2879,7 @@ function valuesMatch(
 	const keys = Object.keys(expected);
 	return (
 		Object.keys(actual).length === keys.length &&
-		keys.every((key) => actual[key] === expected[key])
+		keys.every((key) => Math.abs(actual[key] - expected[key]) <= 0.000_01)
 	);
 }
 
@@ -2858,6 +2902,67 @@ async function visualizationColorLook(
 				: [],
 		),
 	);
+}
+
+async function visualizationAttributeLook(
+	api: ApiDriver,
+	fixtureIds: readonly string[],
+	attributes: ReadonlySet<string>,
+	preload: boolean,
+) {
+	const snapshot = await api.request<any>(
+		"GET",
+		`/api/v2/output/visualization${preload ? "?preload=true" : ""}`,
+	);
+	const targets = new Set(fixtureIds);
+	return Object.fromEntries(
+		snapshot.values.flatMap((entry: any) =>
+			targets.has(entry.fixture_id) &&
+			attributes.has(entry.attribute) &&
+			entry.value.kind === "normalized"
+				? [[`${entry.fixture_id}:${entry.attribute}`, entry.value.value]]
+				: [],
+		),
+	);
+}
+
+async function expectProfileColorSeparation(
+	api: ApiDriver,
+	look: {
+		washFixtureIds: readonly string[];
+		beamFixtureIds: readonly string[];
+	},
+) {
+	await expect
+		.poll(async () => {
+			const snapshot = await api.request<any>(
+				"GET",
+				"/api/v2/output/visualization",
+			);
+			const colors = new Map(
+				snapshot.profile_output_values.flatMap((entry: any) =>
+					entry.attribute === "color" && entry.value.kind === "color_xyz"
+						? [[entry.fixture_id, entry.value.value] as const]
+						: [],
+				),
+			);
+			const wash = look.washFixtureIds
+				.map((fixtureId) => colors.get(fixtureId))
+				.find(Boolean);
+			const beam = look.beamFixtureIds
+				.map((fixtureId) => colors.get(fixtureId))
+				.find(Boolean);
+			return {
+				washBlue: Boolean(wash && wash.z > wash.x && wash.z > wash.y),
+				beamYellow: Boolean(beam && beam.x > beam.z && beam.y > beam.z),
+				distinct: Boolean(
+					wash &&
+						beam &&
+						(wash.x !== beam.x || wash.y !== beam.y || wash.z !== beam.z),
+				),
+			};
+		})
+		.toEqual({ washBlue: true, beamYellow: true, distinct: true });
 }
 
 async function preloadProgrammerAttributeLook(
@@ -3007,6 +3112,41 @@ async function openBuiltIn(desk: DeskDriver, app: Locator, name: string) {
 			.getByRole("navigation", { name: "Built-ins", exact: true })
 			.getByRole("button", { name, exact: true }),
 	);
+}
+
+async function openDesktop(desk: DeskDriver, app: Locator, name: string) {
+	const toggle = app.getByRole("button", {
+		name: "Desktops / Built-ins",
+		exact: true,
+	});
+	if ((await toggle.getAttribute("data-dock-mode")) !== "desks")
+		await desk.click(toggle);
+	await desk.click(
+		app.locator(".dock-entry").filter({ hasText: name }).first(),
+	);
+	await expect(
+		app.locator(`[data-light-surface="desktop"][aria-label="Desktop ${name}"]`),
+	).toBeVisible();
+}
+
+async function ensureStagePane3d(desk: DeskDriver, app: Locator) {
+	const stage = app.locator(".stage-window");
+	if (!(await stage.locator(".stage-3d-canvas").count())) {
+		const pane = stage.locator(
+			"xpath=ancestor::*[contains(@class,'desk-pane')][1]",
+		);
+		await desk.click(
+			pane.getByRole("button", { name: "Settings", exact: true }),
+		);
+		const settings = app.page().getByRole("dialog", { name: "Pane Settings" });
+		await desk.click(settings.getByRole("tab", { name: "Stage", exact: true }));
+		await desk.click(settings.getByRole("radio", { name: "3D", exact: true }));
+		await desk.click(
+			settings.getByRole("button", { name: "Close settings", exact: true }),
+		);
+	}
+	await expect(stage.locator(".stage-3d-canvas")).toBeVisible();
+	return stage;
 }
 
 async function openGroups(desk: DeskDriver, keypad: Locator) {

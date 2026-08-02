@@ -16,7 +16,7 @@ video time and visible click/type pacing, not to weakening assertions or racing 
 - [x] Audit the maintained DEMO-001 workflow, deterministic edit timeline, current generated-video
   path, and the previously observed Show Patch navigation blocker.
 - [x] Implement the exact Patch, Group-selection, and icon-picker pacing contract.
-- [ ] Trace and correct the authoritative Pan/Tilt and color path into the final Stage rendering.
+- [x] Trace and correct the authoritative Pan/Tilt and color path into the final Stage rendering.
 - [ ] Run focused checks, canonical demo inventory verification, retained-video review, major suites,
   and the real desktop path.
 
@@ -35,6 +35,15 @@ video time and visible click/type pacing, not to weakening assertions or racing 
   The generated URL exceeded the Group wire contract's 64-byte icon limit in the real workflow
   and would not be a portable show value across builds. Rendering retains the bundled URL as
   separate catalog metadata and recognizes the current-build URL as a compatibility alias.
+- The concluding position is canonical Position 3.4 **Fan Out**, whose fixture-specific values span
+  Pan and alternate Tilt across the moving-light targets. Stage consumes those semantic
+  visualization axes directly; profile output is separately required and checked for calibrated
+  `color_xyz`. JavaScript expectations use a narrow tolerance because normalized values cross the
+  Rust `f32` wire.
+- The already-open browser demo can retain its original default Programming pane even after the
+  canonical layout object is installed. The final operator path therefore opens that desktop and,
+  when necessary, visibly switches the Stage pane's accessible **Stage view** control from 2D to
+  3D before the final hold. The canonical stored Programming pane remains explicitly 3D.
 
 ## Verification
 
@@ -62,6 +71,16 @@ video time and visible click/type pacing, not to weakening assertions or racing 
   Node syntax check, and `git diff --check` passed. The timeline unit proves the remaining-layer
   fixed window is exactly 125 frames at 25 fps and rejects missing named markers; canonical retained
   source/target timecodes still require the recording run.
+- Focused `plannedDemoLayouts`, `plannedDemoPresets`, and `productDemoTimeline` tests passed (4
+  assertions across 3 files). They prove the canonical Programming Stage configuration, the
+  fixture-specific Fan Out spread, and deterministic edit window.
+- The final Stage-focused `npm run test:e2e -- tests/product-demo.spec.ts --workers=1` pass completed
+  in 3.5 minutes. It proves every selected Beam fixture receives the stored non-uniform Pan/Tilt
+  values in authoritative semantic visualization state, Wash and Beam families project distinct
+  blue/yellow `color_xyz` values, and the final Programming Stage reaches live-ready state with its
+  3D canvas visible. Intermediate diagnostic runs correctly exposed and then removed an invalid
+  expectation that Pan/Tilt must also appear in profile output, and corrected the 3D toggle locator
+  to its real `radio` semantics.
 
 ## Remaining work
 
