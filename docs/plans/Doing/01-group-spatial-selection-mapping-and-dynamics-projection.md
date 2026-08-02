@@ -24,7 +24,7 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
 - [x] Implement rank-aware programming and Dynamic evaluation plus explicit SET/Playback routing.
 - [x] Replace the retired Layout and Group context-menu surfaces with the specified Group and
   Dynamics settings workflows.
-- [ ] Update generated contracts, help/manual, human acceptance scenarios, and focused Playwright
+- [x] Update generated contracts, help/manual, human acceptance scenarios, and focused Playwright
   coverage through repository workflows.
 - [ ] Run focused checks, required major suites, migration/recovery proof, and the real desktop path.
 
@@ -252,6 +252,15 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   and verifies coincident Stage positions share the same `0 THRU 100` output rank. Its API path
   proves canonical live references drive output and re-resolve after source-membership changes.
   The final focused run passed both tests against isolated real headless servers.
+- Commit `c7fa245a` fixes the exact Programmer-values boundary exposed by the major UI suite: an
+  embedded Dynamic definition now accepts its generated `spatial_mapping` field instead of
+  rejecting the authoritative payload as undeclared. The focused decoder suite passed all 22 tests
+  and includes a regression payload with a Radial Stage mapping; owned Biome and diff checks passed.
+- `npm run manual` passed and generated the 176-page PDF plus 48-page offline HTML manual. The
+  complete API E2E suite passed all 27 tests, including the Plan 01 API scenario, against isolated
+  artifacts. The first complete UI E2E run reached 137 passed, 20 failed, and 1 skipped; its one
+  confirmed Plan 01 product regression is fixed by `c7fa245a`, while stale Plan 01 expectations and
+  unrelated baseline failures are being reconciled before the required rerun.
 
 ## Remaining work
 
