@@ -36,6 +36,9 @@ export function GroupSettingsDialog({
 	const [color, setColor] = useState(group.body.color ?? "#718596");
 	const [icon, setIcon] = useState(group.body.icon ?? "◇");
 	const [expectedRevision, setExpectedRevision] = useState(group.revision);
+	const [expectedShowRevision, setExpectedShowRevision] = useState<
+		number | null
+	>(null);
 	const [mappingPresentation, setMappingPresentation] = useState(() =>
 		resolveMappingPresentation(group, groups),
 	);
@@ -51,6 +54,7 @@ export function GroupSettingsDialog({
 		const snapshot = await groupManagement.settings(group.id);
 		if (!snapshot) return null;
 		setExpectedRevision(snapshot.group.revision);
+		setExpectedShowRevision(snapshot.showRevision);
 		setResolvedSpatial(snapshot.resolvedSpatial);
 		setMappingPresentation(
 			resolvedMappingPresentation(snapshot.resolvedSpatial),
@@ -76,9 +80,19 @@ export function GroupSettingsDialog({
 		if (!groupManagement || saving) return;
 		setSaving(true);
 		setStatus("Saving Group settings…");
+		const authority =
+			expectedShowRevision == null ? await refreshSettings() : null;
+		const objectRevision = authority?.group.revision ?? expectedRevision;
+		const showRevision = authority?.showRevision ?? expectedShowRevision;
+		if (showRevision == null) {
+			setSaving(false);
+			setStatus("Authoritative Group settings are still loading.");
+			return;
+		}
 		const outcome = await groupManagement.manage({
 			objectId: group.id,
-			expectedObjectRevision: expectedRevision,
+			expectedObjectRevision: objectRevision,
+			expectedShowRevision: showRevision,
 			operation: {
 				type: "update_properties",
 				properties: { name: trimmed, color: next.color, icon: next.icon },
@@ -86,12 +100,14 @@ export function GroupSettingsDialog({
 		});
 		setSaving(false);
 		if (!outcome) {
+			await refreshSettings();
 			setStatus(
 				"Change was not accepted. Authoritative Group values were reloaded; review and retry.",
 			);
 			return;
 		}
 		setExpectedRevision(outcome.group.revision);
+		setExpectedShowRevision(outcome.showRevision);
 		setStatus(outcome.persistenceWarning ?? "Saved.");
 	};
 
@@ -101,21 +117,33 @@ export function GroupSettingsDialog({
 		if (validation) return setStatus(validation);
 		setSaving(true);
 		setStatus("Saving spatial mapping…");
+		const authority =
+			expectedShowRevision == null ? await refreshSettings() : null;
+		const objectRevision = authority?.group.revision ?? expectedRevision;
+		const showRevision = authority?.showRevision ?? expectedShowRevision;
+		if (showRevision == null) {
+			setSaving(false);
+			setStatus("Authoritative Group settings are still loading.");
+			return;
+		}
 		const outcome = await groupManagement.manage({
 			objectId: group.id,
-			expectedObjectRevision: expectedRevision,
+			expectedObjectRevision: objectRevision,
+			expectedShowRevision: showRevision,
 			operation: next
 				? { type: "set_spatial_mapping", mapping: next }
 				: { type: "remove_spatial_mapping" },
 		});
 		setSaving(false);
 		if (!outcome) {
+			await refreshSettings();
 			setStatus(
 				"Mapping change was not accepted. Reloaded authoritative values must be reviewed before retrying.",
 			);
 			return;
 		}
 		setExpectedRevision(outcome.group.revision);
+		setExpectedShowRevision(outcome.showRevision);
 		setMapping(next);
 		setMappingPresentation(
 			next

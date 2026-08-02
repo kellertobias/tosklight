@@ -35,6 +35,7 @@ function outcome(
 		status?: "changed" | "no_change";
 		replayed?: boolean;
 		persistenceWarning?: string | null;
+		showRevision?: number;
 	} = {},
 ): GroupManagementOutcome {
 	const base = {
@@ -42,7 +43,7 @@ function outcome(
 		correlationId: CORRELATION_ID,
 		replayed: options.replayed ?? false,
 		showId: SHOW_ID,
-		showRevision: 8,
+		showRevision: options.showRevision ?? 8,
 		group: { id: value.id, revision: value.revision, object: value },
 		persistenceWarning: options.persistenceWarning ?? null,
 	};
@@ -149,6 +150,18 @@ describe("GroupManagementWriter", () => {
 		expect(store.getSnapshot().pendingObjectKeys.size).toBe(0);
 		store.applyChange(groupEvent(12, group(2, "Canonical event")));
 		expect(store.getSnapshot().groups[0].body.name).toBe("Canonical event");
+	});
+
+	it("uses a settings snapshot revision instead of a lagging collection revision", async () => {
+		const manage = vi.fn(
+			async (_showId: string, request: GroupManagementRequest) =>
+				outcome(request.requestId, group(2, "Managed"), { showRevision: 13 }),
+		);
+		const { writer } = setup(manage);
+
+		await writer.manage({ ...input(), expectedShowRevision: 12 });
+
+		expect(manage.mock.calls[0]?.[1].expectedShowRevision).toBe(12);
 	});
 
 	it("retains the event when it arrives before the response", async () => {

@@ -67,6 +67,7 @@ export type GroupManagementOutcome = GroupManagementOutcomeBase &
 export interface ManageGroupInput {
 	objectId: string;
 	expectedObjectRevision: number;
+	expectedShowRevision?: number;
 	operation: GroupManagementOperation;
 }
 

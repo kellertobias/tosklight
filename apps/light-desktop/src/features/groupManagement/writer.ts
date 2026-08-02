@@ -75,7 +75,10 @@ export class GroupManagementWriter implements GroupManagementActions {
 			);
 			return null;
 		}
-		const request = managementRequest(input, snapshot.showRevision);
+		const request = managementRequest(
+			input,
+			input.expectedShowRevision ?? snapshot.showRevision,
+		);
 		const token = this.options.store.beginPending(
 			this.options.showId,
 			"group",

@@ -45,14 +45,34 @@ function renderDialog(target = group()) {
 	);
 }
 
+function settingsSnapshot(target = group()) {
+	const mapping = target.body.mapping ?? null;
+	return {
+		showId: "11111111-1111-4111-8111-111111111111",
+		showRevision: 12,
+		group: { id: target.id, revision: target.revision, object: target },
+		resolvedSpatial: {
+			source_order: target.body.fixtures,
+			effective_mapping: mapping,
+			mapping_provenance: mapping ? { type: "local" } : { type: "none" },
+			ordered_fixture_ids: target.body.fixtures,
+			projected_positions: [],
+			ranks: [],
+			rank_count: target.body.fixtures.length,
+			warnings: [],
+		},
+	};
+}
+
 describe("Group settings modal", () => {
 	afterEach(() => cleanup());
 	beforeEach(() => {
 		managementAvailable = true;
-		settings.mockReset().mockResolvedValue(null);
+		settings.mockReset().mockResolvedValue(settingsSnapshot());
 		manage.mockReset().mockResolvedValue({
 			status: "changed",
 			group: { revision: 8 },
+			showRevision: 13,
 			persistenceWarning: null,
 		});
 	});
@@ -133,6 +153,7 @@ describe("Group settings modal", () => {
 			expect(manage).toHaveBeenCalledWith({
 				objectId: "4",
 				expectedObjectRevision: 7,
+				expectedShowRevision: 12,
 				operation: {
 					type: "update_properties",
 					properties: {
@@ -160,7 +181,9 @@ describe("Group settings modal", () => {
 	});
 
 	it("sends one complete revisioned mapping when a Phaser shape changes", async () => {
-		renderDialog(group({ mapping: defaultSpatialMapping() }));
+		const target = group({ mapping: defaultSpatialMapping() });
+		settings.mockResolvedValue(settingsSnapshot(target));
+		renderDialog(target);
 		fireEvent.click(screen.getByRole("tab", { name: "Phaser" }));
 		fireEvent.click(screen.getByRole("radio", { name: "Radial" }));
 
@@ -168,6 +191,7 @@ describe("Group settings modal", () => {
 		expect(manage).toHaveBeenCalledWith({
 			objectId: "4",
 			expectedObjectRevision: 7,
+			expectedShowRevision: 12,
 			operation: expect.objectContaining({
 				type: "set_spatial_mapping",
 				mapping: expect.objectContaining({
