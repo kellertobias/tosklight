@@ -244,7 +244,7 @@ fn migrate_group(object: PortableShowCandidateObject<'_>) -> Result<Value, Actio
     if let Some(id) = canonical.get("id") {
         body.insert("id".into(), id.clone());
     }
-    if !body.get("source").is_some_and(|source| !source.is_null()) {
+    if body.get("source").is_none_or(Value::is_null) {
         let source = legacy_group_source(body);
         body.insert("source".into(), source);
     }
