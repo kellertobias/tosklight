@@ -7,6 +7,7 @@ import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { useRef } from "react";
 import type { CommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import { requestUpdateTarget } from "../../components/control/updateWorkflow";
+import { useSetInteraction } from "../../features/controlSurfaceInteraction/SetInteractionProvider";
 import { useActiveShowId } from "../../features/deskSnapshot/DeskSnapshotState";
 import {
 	captureGroupRecordingTarget,
@@ -44,6 +45,7 @@ export function GroupPoolGrid({
 	columns?: number;
 }) {
 	const groupSelection = useGroupSelectionActions(active);
+	const setInteraction = useSetInteraction();
 	const { state, dispatch } = useApp();
 	const poolPresentation = usePoolPresentationConfiguration();
 	const showId = useActiveShowId() ?? "unresolved";
@@ -65,22 +67,39 @@ export function GroupPoolGrid({
 			requestUpdateTarget({ family: { type: "group" }, object_id: id });
 			return;
 		}
-		const commandText = command.read().text.trim();
-		if (
-			group &&
-			state.controlMode === "playbacks" &&
-			(state.playbackSetArmed || /^SET$/i.test(commandText))
-		) {
-			void command.replace(`SET GROUP ${group.id}`, false);
-			dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
+		if (group && setInteraction?.state?.phase === "set_armed") {
+			void setInteraction.chooseGroup(
+				{ objectId: group.id, objectRevision: group.revision },
+				"touch",
+			);
 			return;
 		}
-		if (group && /^SET\b/i.test(commandText)) {
-			onOpenSettings(group.id);
-			void command.reset();
-			return;
+		if (!setInteraction) {
+			const commandText = command.read().text.trim();
+			if (
+				group &&
+				state.controlMode === "playbacks" &&
+				(state.playbackSetArmed || /^SET$/i.test(commandText))
+			) {
+				void command.replace(`SET GROUP ${group.id}`, false);
+				dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
+				return;
+			}
+			if (group && /^SET\b/i.test(commandText)) {
+				onOpenSettings(group.id);
+				void command.reset();
+				return;
+			}
 		}
 		if (group && !state.storeArmed) {
+			const scope = setInteraction?.state?.scope;
+			if (scope)
+				void setInteraction.direct({
+					type: "select_group_live",
+					source: "touch",
+					scope,
+					group: { objectId: group.id, objectRevision: group.revision },
+				});
 			void groupSelection.selectLive(group);
 			return;
 		}
@@ -142,16 +161,52 @@ export function GroupPoolGrid({
 									held.current = false;
 									hold.current = window.setTimeout(() => {
 										held.current = true;
-										onOpenSettings(group.id);
+										const scope = setInteraction?.state?.scope;
+										if (scope)
+											void setInteraction.direct({
+												type: "open_group_settings",
+												source: "touch",
+												scope,
+												group: {
+													objectId: group.id,
+													objectRevision: group.revision,
+												},
+											});
+										else onOpenSettings(group.id);
 									}, 600);
 								}
 							}}
 							cancelHold={cancelHold}
 							consumeHold={consumeHold}
-							openSettings={() => group && onOpenSettings(group.id)}
-							dereference={() =>
-								group && void groupSelection.selectFrozen(group)
-							}
+							openSettings={() => {
+								if (!group) return;
+								const scope = setInteraction?.state?.scope;
+								if (!scope) return onOpenSettings(group.id);
+								void setInteraction.direct({
+									type: "open_group_settings",
+									source: "context_menu",
+									scope,
+									group: {
+										objectId: group.id,
+										objectRevision: group.revision,
+									},
+								});
+							}}
+							dereference={() => {
+								if (!group) return;
+								const scope = setInteraction?.state?.scope;
+								if (scope)
+									void setInteraction.direct({
+										type: "select_group_frozen",
+										source: "touch",
+										scope,
+										group: {
+											objectId: group.id,
+											objectRevision: group.revision,
+										},
+									});
+								void groupSelection.selectFrozen(group);
+							}}
 							select={() => selectCard(group, index)}
 						/>
 					);

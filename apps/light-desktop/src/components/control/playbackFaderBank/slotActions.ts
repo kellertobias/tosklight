@@ -82,6 +82,15 @@ export function buildPlaybackActions({
 						return;
 					}
 					if (
+						controller.setInteractionArmed ||
+						controller.groupAssignmentPending
+					) {
+						event.preventDefault();
+						event.stopPropagation();
+						void assignGroupPlayback(controller, slot);
+						return;
+					}
+					if (
 						isPlaybackSetClickArmed(controller) ||
 						(button === 0 && (event.shiftKey || controller.state.shiftArmed))
 					) {
@@ -161,6 +170,10 @@ export function createSlotInterceptors(
 			event.stopPropagation();
 			return;
 		}
+		if (controller.setInteractionArmed || controller.groupAssignmentPending) {
+			event.stopPropagation();
+			return;
+		}
 		const firstButton = (event.target as Element).closest(
 			'[data-playback-button-index="1"]',
 		);
@@ -174,7 +187,7 @@ export function createSlotInterceptors(
 		openPlaybackConfiguration(controller, playback, slot);
 	};
 	const interceptClick = (event: ReactMouseEvent<HTMLElement>) => {
-		if (controller.groupAssignmentPending) {
+		if (controller.groupAssignmentPending || controller.setInteractionArmed) {
 			event.preventDefault();
 			event.stopPropagation();
 			void assignGroupPlayback(controller, slot);

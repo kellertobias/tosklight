@@ -84,6 +84,23 @@ function mapExistingRequest(
 	};
 }
 
+function assignGroupMasterRequest(): PlaybackTopologyRequest {
+	return {
+		requestId: REQUEST_ID,
+		action: {
+			type: "assign_group_master",
+			groupObjectId: "group-front",
+			expectedGroupRevision: 9,
+			page: 4,
+			slot: 2,
+			expectedPageRevision: 7,
+			expectedPageObjectId: "legacy-page-four",
+			expectedPlaybackRevision: 3,
+			expectedPlaybackObjectId: "legacy-playback-seven",
+		},
+	};
+}
+
 function pageRequest(
 	type: "create_page" | "rename_page",
 ): PlaybackTopologyRequest {
@@ -218,6 +235,71 @@ describe("Playback topology v2 wire", () => {
 				expected_page_object_id: null,
 			},
 		});
+	});
+
+	it("encodes an explicit Group Master assignment with all three revision guards", () => {
+		expect(encodePlaybackTopologyRequest(assignGroupMasterRequest())).toEqual({
+			request_id: REQUEST_ID,
+			action: {
+				type: "assign_group_master",
+				group_object_id: "group-front",
+				expected_group_revision: 9,
+				page: 4,
+				slot: 2,
+				expected_page_revision: 7,
+				expected_page_object_id: "legacy-page-four",
+				expected_playback_revision: 3,
+				expected_playback_object_id: "legacy-playback-seven",
+			},
+		});
+		const request = assignGroupMasterRequest();
+		if (request.action.type !== "assign_group_master")
+			throw new Error("assignment request fixture");
+		const invalidAction = { ...request.action, expectedGroupRevision: 0 };
+		expect(() =>
+			encodePlaybackTopologyRequest({
+				...request,
+				action: invalidAction,
+			}),
+		).toThrow("existing Group revision");
+	});
+
+	it("accepts only the explicitly requested Group in an assignment outcome", () => {
+		const assignedPlayback = {
+			...playbackObject(),
+			body: {
+				...playbackObject().body,
+				target: { type: "group", group_id: "group-front" },
+			},
+		};
+		expect(
+			decodePlaybackTopologyOutcome(
+				changedOutcome({ objects: [assignedPlayback, pageObject()] }),
+				assignGroupMasterRequest(),
+				11,
+			),
+		).toMatchObject({
+			status: "changed",
+			resolution: { kind: "page_slot", page: 4, slot: 2 },
+		});
+		expect(() =>
+			decodePlaybackTopologyOutcome(
+				changedOutcome({
+					objects: [
+						{
+							...assignedPlayback,
+							body: {
+								...assignedPlayback.body,
+								target: { type: "group", group_id: "incidental-group" },
+							},
+						},
+						pageObject(),
+					],
+				}),
+				assignGroupMasterRequest(),
+				11,
+			),
+		).toThrow("explicitly requested Group Master target");
 	});
 
 	it("encodes the exact Cuelist storage identity precondition", () => {

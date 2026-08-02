@@ -24,6 +24,17 @@ export type PlaybackTopologyAction =
 			playback: PlaybackDefinition;
 	  }
 	| {
+			type: "assign_group_master";
+			groupObjectId: string;
+			expectedGroupRevision: number;
+			page: number;
+			slot: number;
+			expectedPageRevision: number;
+			expectedPageObjectId: string | null;
+			expectedPlaybackRevision: number;
+			expectedPlaybackObjectId: string | null;
+	  }
+	| {
 			type: "configure_virtual";
 			page: number;
 			playbackNumber: number;
@@ -145,6 +156,13 @@ export interface PlaybackTopologyActions {
 		page: number,
 		slot: number,
 		playback: PlaybackDefinition,
+		revisionBasis?: PlaybackTopologyRevisionBasis,
+	): Promise<PlaybackTopologyOutcome | null>;
+	assignGroupMaster(
+		groupObjectId: string,
+		expectedGroupRevision: number,
+		page: number,
+		slot: number,
 		revisionBasis?: PlaybackTopologyRevisionBasis,
 	): Promise<PlaybackTopologyOutcome | null>;
 	configureVirtual(

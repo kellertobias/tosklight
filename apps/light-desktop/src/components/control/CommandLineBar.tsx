@@ -12,6 +12,7 @@ import {
 	mergeCommandHistory,
 	useContentErrorHistory,
 } from "../../features/commandHistory/useContentErrorHistory";
+import { useSetInteraction } from "../../features/controlSurfaceInteraction/SetInteractionProvider";
 import {
 	useActiveTimecode,
 	useFrameRateHz,
@@ -112,6 +113,7 @@ function useCommandLineBarModel() {
 	const preloadPlaybackQueue = useProgrammerPreloadPlaybackQueueView();
 	const preload = useProgrammerPreloadLifecycleView();
 	const numericPad = useNumericPadController();
+	const setInteraction = useSetInteraction();
 	const hardware = hardwareAttached || Boolean(state.midiProfile);
 	const [completed, setCompleted] = useState(false);
 	const editGeneration = useRef(0);
@@ -144,6 +146,12 @@ function useCommandLineBarModel() {
 	};
 	const execute = async (value?: string) => {
 		if (!command.ready) return;
+		if (
+			value == null &&
+			setInteraction &&
+			(await setInteraction.enter("touch"))
+		)
+			return;
 		const generation = editGeneration.current;
 		const ok = await command.execute(value);
 		setCompleted(ok && generation === editGeneration.current);

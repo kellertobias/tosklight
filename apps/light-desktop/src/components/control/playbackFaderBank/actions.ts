@@ -12,6 +12,7 @@ import { emptyConfiguration } from "./feedback";
 export function isPlaybackSetClickArmed(controller: PlaybackBankController) {
 	const { state } = controller;
 	return (
+		controller.setInteractionArmed ||
 		state.playbackSetArmed ||
 		(state.cueListSetArmed && state.cueListSetTarget == null)
 	);
@@ -95,52 +96,71 @@ export async function assignGroupPlayback(
 	controller: PlaybackBankController,
 	slot: number,
 ) {
-	const match = controller.commandLine?.text
-		.trim()
-		.match(/^SET\s+GROUP\s+(\S+)$/i);
-	if (!match || controller.activePageNumber == null) return false;
-	const groupId = match[1];
+	if (controller.activePageNumber == null) return false;
 	const slotData = controller.slots.find(
 		(candidate) => candidate.slot === slot,
 	);
 	const existing = slotData?.playback ?? null;
-	const fallbackButtons = Math.max(
-		0,
-		Math.min(3, slotData?.row?.button_count ?? controller.buttons ?? 3),
+	if (!controller.setInteraction) {
+		const match = controller.commandLine?.text
+			.trim()
+			.match(/^SET\s+GROUP\s+(\S+)$/i);
+		if (!match) return false;
+		const groupId = match[1];
+		const fallbackButtons = Math.max(
+			0,
+			Math.min(3, slotData?.row?.button_count ?? controller.buttons ?? 3),
+		);
+		const draft = withFunctionDefaults(
+			existing ??
+				emptyConfiguration(
+					controller.activePageNumber,
+					slot,
+					fallbackButtons,
+					slotData?.row?.has_fader ?? true,
+					"",
+				),
+			"group",
+			"",
+			groupId,
+		);
+		const playbackObject = controller.topology.playbacks.find(
+			(candidate) => candidate.body.number === existing?.number,
+		);
+		const outcome = await controller.topologyActions?.configureSlot(
+			controller.activePageNumber,
+			slot,
+			{ ...draft, name: `Group ${groupId}` },
+			{
+				expectedPageRevision: controller.pageObject?.revision ?? 0,
+				expectedPageObjectId: controller.pageObject?.id ?? null,
+				expectedPlaybackRevision: playbackObject?.revision ?? 0,
+				expectedPlaybackObjectId: playbackObject?.id ?? null,
+			},
+		);
+		if (!outcome) return false;
+		await controller.commandLineActions?.reset();
+		return true;
+	}
+	const playbackObject = controller.topology.playbacks.find(
+		(candidate) => candidate.body.number === existing?.number,
 	);
-	const draft = withFunctionDefaults(
-		existing ??
-			emptyConfiguration(
-				controller.activePageNumber,
-				slot,
-				fallbackButtons,
-				slotData?.row?.has_fader ?? true,
-				"",
-			),
-		"group",
-		"",
-		groupId,
-	);
-	const outcome = await controller.topologyActions?.configureSlot(
-		controller.activePageNumber,
-		slot,
-		{ ...draft, name: `Group ${groupId}` },
+	const intent = await controller.setInteraction.choosePlayback(
 		{
-			expectedPageRevision: controller.pageObject?.revision ?? 0,
-			expectedPageObjectId: controller.pageObject?.id ?? null,
-			expectedPlaybackRevision:
-				controller.topology.playbacks.find(
-					(candidate) => candidate.body.number === existing?.number,
-				)?.revision ?? 0,
-			expectedPlaybackObjectId:
-				controller.topology.playbacks.find(
-					(candidate) => candidate.body.number === existing?.number,
-				)?.id ?? null,
+			addressing: controller.playbackAddressing,
+			pageNumber: controller.activePageNumber,
+			slot,
+			pageObjectId: controller.pageObject?.id ?? null,
+			pageObjectRevision: controller.pageObject?.revision ?? 0,
+			playbackObjectId: playbackObject?.id ?? null,
+			playbackObjectRevision: playbackObject?.revision ?? 0,
 		},
+		controller.hardware ? "hardware" : "touch",
 	);
-	if (!outcome) return false;
-	await controller.commandLineActions?.reset();
-	return true;
+	return (
+		intent?.type === "open_playback_settings" ||
+		intent?.type === "assign_group_master"
+	);
 }
 
 export async function recordPlayback(
@@ -177,7 +197,7 @@ export async function activateHardwareCard(
 	playback: PlaybackDefinition | null,
 	slot: number,
 ) {
-	if (controller.groupAssignmentPending) {
+	if (controller.groupAssignmentPending || controller.setInteractionArmed) {
 		event.preventDefault();
 		event.stopPropagation();
 		await assignGroupPlayback(controller, slot);
@@ -191,7 +211,7 @@ export async function activateHardwareCard(
 		return;
 	}
 	if (isPlaybackSetClickArmed(controller)) {
-		openPlaybackConfiguration(controller, playback, slot);
+		await assignGroupPlayback(controller, slot);
 		return;
 	}
 	if (controller.state.updateArmed) {

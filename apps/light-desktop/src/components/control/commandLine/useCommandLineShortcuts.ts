@@ -1,5 +1,6 @@
 import { type Dispatch, useEffect, useLayoutEffect, useRef } from "react";
 import type { CommandTargetMode } from "../../../controlSurface/commandTarget";
+import { useSetInteraction } from "../../../features/controlSurfaceInteraction/SetInteractionProvider";
 import { usePlaybackRuntimeActions } from "../../../features/playbackRuntime/PlaybackRuntimeView";
 import { usePlaybackTopologyActions } from "../../../features/playbackTopology/PlaybackTopologyProvider";
 import { useApp } from "../../../state/AppContext";
@@ -47,6 +48,7 @@ interface ShortcutContext extends ShortcutCallbacks, PlaybackShortcutContext {
 	state: AppState;
 	dispatch: Dispatch<Action>;
 	update: UpdateGesture;
+	setInteraction: ReturnType<typeof useSetInteraction>;
 }
 
 function isExternalEditor(target: EventTarget | null) {
@@ -63,7 +65,16 @@ function handleFunctionKey(context: ShortcutContext, event: KeyboardEvent) {
 	const number = Number(event.key.slice(1));
 	if (number <= 8) {
 		// A loading Page/desk/topology consumes the key but sends nothing.
-		if (context.authority.ready) pressPlaybackSlot(context, event, number);
+		if (context.authority.ready) {
+			const identity = context.authority.playbackIdentity(number);
+			if (
+				identity &&
+				(context.setInteraction?.state?.phase === "set_armed" ||
+					context.setInteraction?.state?.phase === "group_source_pending")
+			)
+				void context.setInteraction.choosePlayback(identity, "keyboard");
+			else pressPlaybackSlot(context, event, number);
+		}
 		return true;
 	}
 	const group = String.fromCharCode(65 + number - 9) as
@@ -227,6 +238,7 @@ export function useCommandLineShortcuts(
 	const authority = usePlaybackShortcutAuthority(active);
 	const runtimeActions = usePlaybackRuntimeActions();
 	const topologyActions = usePlaybackTopologyActions();
+	const setInteraction = useSetInteraction();
 	const update: UpdateGesture = {
 		hold: useRef<number | null>(null),
 		active: useRef(false),
@@ -243,6 +255,7 @@ export function useCommandLineShortcuts(
 		update,
 		heldActions,
 		pageActions,
+		setInteraction,
 		...callbacks,
 	};
 	useRunningMenuShortcut(hardware);

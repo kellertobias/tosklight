@@ -23,12 +23,12 @@ import {
 	stringAt,
 } from "./playbackWirePrimitives";
 import { decodeShowObjectBody } from "./showObjectBodyWire";
+import type { PlaybackDefinition } from "./types";
 import {
-	MAX_VIRTUAL_PLAYBACK_NUMBER,
 	isVirtualPlaybackNumberForPage,
+	MAX_VIRTUAL_PLAYBACK_NUMBER,
 	virtualPlaybackBankStart,
 } from "./virtualPlaybackAddress";
-import type { PlaybackDefinition } from "./types";
 import { WireValidationError } from "./wireValidation";
 
 const TOPOLOGY_KINDS = [
@@ -146,7 +146,11 @@ function encodeAction(action: PlaybackTopologyAction) {
 			action.playbackNumber,
 			"$.action.playbackNumber",
 		);
-		validateVirtualPlaybackBank(page, playbackNumber, "$.action.playbackNumber");
+		validateVirtualPlaybackBank(
+			page,
+			playbackNumber,
+			"$.action.playbackNumber",
+		);
 		const shared = {
 			type: action.type,
 			page,
@@ -182,6 +186,27 @@ function encodeAction(action: PlaybackTopologyAction) {
 		),
 		expected_playback_object_id: action.expectedPlaybackObjectId,
 	};
+	if (action.type === "assign_group_master") {
+		const expectedGroupRevision = revisionAt(
+			action.expectedGroupRevision,
+			"$.action.expectedGroupRevision",
+		);
+		if (expectedGroupRevision < 1)
+			invalid(
+				"$.action.expectedGroupRevision",
+				"an existing Group revision",
+				expectedGroupRevision,
+			);
+		return {
+			...shared,
+			group_object_id: printableStringAt(
+				action.groupObjectId,
+				"$.action.groupObjectId",
+				128,
+			),
+			expected_group_revision: expectedGroupRevision,
+		};
+	}
 	if (action.type === "configure_slot")
 		return { ...shared, playback: encodePlayback(action.playback) };
 	if (action.type === "map_existing_playback") {
@@ -400,8 +425,7 @@ function boundedVirtualPlaybackNumber(value: unknown, path: string) {
 		path,
 		MAX_VIRTUAL_PLAYBACK_NUMBER,
 	);
-	if (number < 1_001)
-		invalid(path, "integer between 1001 and 39100", number);
+	if (number < 1_001) invalid(path, "integer between 1001 and 39100", number);
 	return number;
 }
 

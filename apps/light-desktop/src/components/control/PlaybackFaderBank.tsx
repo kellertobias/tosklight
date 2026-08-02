@@ -16,20 +16,46 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 		useControlSurfaceTarget({
 			id: `playback-bank:${interactionSurfaceId}`,
 			priority: 300,
-			accepts: (intent) =>
-				intent.type === "configure_playback" &&
-				intent.surfaceId === interactionSurfaceId,
-			handle: (intent) => {
-				if (intent.type !== "configure_playback") return;
+			accepts: (intent) => {
+				if (
+					intent.type === "configure_playback" &&
+					intent.surfaceId === interactionSurfaceId
+				)
+					return true;
+				if (intent.type !== "open_playback_settings") return false;
 				const slotData = controller.slots.find(
-					(candidate) => candidate.slot === intent.slot,
+					(candidate) => candidate.slot === intent.playback.slot,
+				);
+				const playbackObject = controller.topology.playbacks.find(
+					(candidate) => candidate.body.number === slotData?.playback?.number,
+				);
+				return (
+					controller.activePageNumber === intent.playback.pageNumber &&
+					controller.playbackAddressing === intent.playback.addressing &&
+					(controller.pageObject?.id ?? null) ===
+						intent.playback.pageObjectId &&
+					(controller.pageObject?.revision ?? 0) ===
+						intent.playback.pageObjectRevision &&
+					(playbackObject?.id ?? null) === intent.playback.playbackObjectId &&
+					(playbackObject?.revision ?? 0) ===
+						intent.playback.playbackObjectRevision
+				);
+			},
+			handle: (intent) => {
+				if (
+					intent.type !== "configure_playback" &&
+					intent.type !== "open_playback_settings"
+				)
+					return;
+				const slot =
+					intent.type === "configure_playback"
+						? intent.slot
+						: intent.playback.slot;
+				const slotData = controller.slots.find(
+					(candidate) => candidate.slot === slot,
 				);
 				if (slotData)
-					openPlaybackConfiguration(
-						controller,
-						slotData.playback,
-						slotData.slot,
-					);
+					openPlaybackConfiguration(controller, slotData.playback, slot);
 			},
 		});
 		// Once the grid has rendered for a ready topology, transient projection refetches

@@ -42,6 +42,13 @@ export function validatePlaybackTopologyObjects(
 			objects,
 			status,
 		);
+	if (action.type === "assign_group_master")
+		return validateAssignedGroupMaster(
+			action,
+			resolution.playbackNumber,
+			objects,
+			status,
+		);
 	if (action.type === "map_existing_playback")
 		return validateMappedExistingPlayback(
 			action,
@@ -50,6 +57,51 @@ export function validatePlaybackTopologyObjects(
 			status,
 		);
 	validateClearedSlot(action, resolution.playbackNumber, objects, status);
+}
+
+function validateAssignedGroupMaster(
+	action: Extract<PlaybackTopologyAction, { type: "assign_group_master" }>,
+	playbackNumber: number | null,
+	objects: PlaybackTopologyObject[],
+	status: "changed" | "no_change",
+) {
+	if (playbackNumber == null)
+		return invalid("an assigned Group Master Playback number", playbackNumber);
+	if (objects.length !== 2)
+		return invalid("only the assigned Page and Playback", objects);
+	const page = matchingPage(objects, action.page);
+	const playback = objects.find(
+		(object) =>
+			object.kind === "playback" &&
+			object.state === "present" &&
+			(object.body as PlaybackDefinition).number === playbackNumber,
+	);
+	if (
+		!page ||
+		(page.body as PlaybackPage).slots[String(action.slot)] !== playbackNumber
+	)
+		invalid("the assigned Group Master Page mapping", objects);
+	if (!playback) invalid("the assigned Group Master Playback", objects);
+	const presentPlayback = playback as Extract<
+		PlaybackTopologyObject,
+		{ state: "present" }
+	>;
+	const target = (presentPlayback.body as PlaybackDefinition).target;
+	if (target.type !== "group" || target.group_id !== action.groupObjectId)
+		invalid("the explicitly requested Group Master target", target);
+	validateStorageId(
+		page.objectId,
+		action.expectedPageObjectId,
+		String(action.page),
+		"Playback Page",
+	);
+	validateStorageId(
+		presentPlayback.objectId,
+		action.expectedPlaybackObjectId,
+		String(playbackNumber),
+		"Playback",
+	);
+	validateConfigureRevisions(action, page, presentPlayback, status);
 }
 
 function validateVirtualPlaybackAction(
@@ -332,7 +384,10 @@ function validateEmptyClear(
 }
 
 function validateConfigureRevisions(
-	action: Extract<PlaybackTopologyAction, { type: "configure_slot" }>,
+	action: Extract<
+		PlaybackTopologyAction,
+		{ type: "configure_slot" | "assign_group_master" }
+	>,
 	page: Extract<PlaybackTopologyObject, { state: "present" }>,
 	playback: Extract<PlaybackTopologyObject, { state: "present" }>,
 	status: "changed" | "no_change",

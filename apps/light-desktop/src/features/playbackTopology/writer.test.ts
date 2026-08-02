@@ -101,6 +101,16 @@ function cueList(
 	};
 }
 
+function group(revision = 6, id = "group-front"): ShowObject<"group"> {
+	return {
+		kind: "group",
+		id,
+		revision,
+		updated_at: "",
+		body: { name: "Front", fixtures: ["fixture-1"] },
+	};
+}
+
 function present<K extends "cue_list" | "playback" | "playback_page">(
 	object: ShowObject<K>,
 ): PlaybackTopologyObject<K> {
@@ -191,6 +201,7 @@ function setup(
 	store.setCollection(SHOW_ID, "cue_list", [cueList()], 10, 11);
 	store.setCollection(SHOW_ID, "playback", [playback(1)], 10, 11);
 	store.setCollection(SHOW_ID, "playback_page", [page(1)], 10, 11);
+	store.setCollection(SHOW_ID, "group", [group()], 10, 11);
 	const onError = vi.fn();
 	const writer = new PlaybackTopologyWriter({
 		showId: SHOW_ID,
@@ -320,6 +331,42 @@ describe("PlaybackTopologyWriter", () => {
 		expect(observed).toHaveLength(1);
 		expect(observed[0].playbacks[0].revision).toBe(2);
 		expect(observed[0].playbackPages[0].revision).toBe(2);
+	});
+
+	it("assigns a Group Master only from exact Group, Page, and Playback authority", async () => {
+		const assigned = {
+			...playback(2, "Front"),
+			body: {
+				...playback(2, "Front").body,
+				target: { type: "group" as const, group_id: "group-front" },
+			},
+		};
+		const apply = vi.fn(async (_show, _revision, request) =>
+			changed(request, [present(assigned), present(page(2))]),
+		);
+		const { writer } = setup(apply);
+
+		await expect(
+			writer.assignGroupMaster("group-front", 6, 4, 2, {
+				expectedPageRevision: 1,
+				expectedPageObjectId: "legacy-page-four",
+				expectedPlaybackRevision: 1,
+				expectedPlaybackObjectId: "legacy-seven",
+			}),
+		).resolves.toMatchObject({ status: "changed" });
+		expect(apply.mock.calls[0][2]).toMatchObject({
+			action: {
+				type: "assign_group_master",
+				groupObjectId: "group-front",
+				expectedGroupRevision: 6,
+				page: 4,
+				slot: 2,
+				expectedPageRevision: 1,
+				expectedPageObjectId: "legacy-page-four",
+				expectedPlaybackRevision: 1,
+				expectedPlaybackObjectId: "legacy-seven",
+			},
+		});
 	});
 
 	it("configures and clears a Virtual Playback through serialized Page authority", async () => {
@@ -658,13 +705,7 @@ describe("PlaybackTopologyWriter", () => {
 		const replacementPage = numberedPage(9, "Replacement", 4, "replacement");
 		store.setCollection(SHOW_ID, "cue_list", [cueList()], 20, 21);
 		store.setCollection(SHOW_ID, "playback", [playback(1)], 20, 21);
-		store.setCollection(
-			SHOW_ID,
-			"playback_page",
-			[replacementPage],
-			20,
-			21,
-		);
+		store.setCollection(SHOW_ID, "playback_page", [replacementPage], 20, 21);
 		pending.resolve(changed(firstRequest, [present(numberedPage(5))]));
 
 		const [firstOutcome, secondOutcome] = await Promise.all([first, second]);

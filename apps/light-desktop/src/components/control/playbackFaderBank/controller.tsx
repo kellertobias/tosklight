@@ -4,6 +4,7 @@ import type {
 	PlaybackRuntimeProjection,
 	PlaybackSurfaceLayout,
 } from "../../../api/types";
+import { useSetInteraction } from "../../../features/controlSurfaceInteraction/SetInteractionProvider";
 import { useCueRecording } from "../../../features/cueRecording/CueRecordingProvider";
 import {
 	usePlaybackDeskView,
@@ -56,6 +57,7 @@ export function usePlaybackBankController({
 	const commandLineActions = useProgrammingCommandLineActions();
 	const commandStatus = useProgrammingInteractionStatus();
 	const cueRecording = useCueRecording();
+	const setInteraction = useSetInteraction();
 	const { state, dispatch } = useApp();
 	const hardware = Boolean(hardwareConnected || state.midiProfile);
 	const pageSize = count ?? state.playbackColumns * state.playbackRows;
@@ -111,6 +113,7 @@ export function usePlaybackBankController({
 		commandLineActions,
 		commandLine,
 		cueRecording,
+		setInteraction,
 		state,
 		dispatch,
 		hardware,
@@ -126,9 +129,15 @@ export function usePlaybackBankController({
 		dynamicAssignmentPending: /^SET\s+DYNAMIC\s+\d+\s*$/i.test(
 			commandLine?.text ?? "",
 		),
-		groupAssignmentPending: /^SET\s+GROUP\s+\S+\s*$/i.test(
-			commandLine?.text ?? "",
-		),
+		groupAssignmentPending:
+			setInteraction?.state?.phase === "group_source_pending" ||
+			(!setInteraction &&
+				/^SET\s+GROUP\s+\S+\s*$/i.test(commandLine?.text ?? "")),
+		setInteractionArmed: setInteraction?.state?.phase === "set_armed",
+		playbackAddressing:
+			pageNumber == null
+				? ("current_page" as const)
+				: ("explicit_page" as const),
 		slots,
 		rowTracks,
 		heldActions,

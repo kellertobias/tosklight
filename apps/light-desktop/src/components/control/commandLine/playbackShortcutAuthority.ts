@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import type { PlaybackDefinition, PlaybackPage } from "../../../api/types";
+import type { PlaybackInteractionIdentity } from "../../../features/controlSurfaceInteraction/contracts";
 import {
 	usePlaybackDeskView,
 	usePlaybackRuntimeStatus,
@@ -26,6 +27,7 @@ export interface PlaybackShortcutAuthority {
 	pages: readonly PlaybackPage[];
 	/** Resolves slot 1-8 on the authoritative current Page. */
 	slotPlayback: (slot: number) => PlaybackDefinition | null;
+	playbackIdentity: (slot: number) => PlaybackInteractionIdentity | null;
 }
 
 const NO_PAGES: readonly PlaybackPage[] = [];
@@ -35,6 +37,7 @@ const DORMANT: PlaybackShortcutAuthority = {
 	activePage: null,
 	pages: NO_PAGES,
 	slotPlayback: () => null,
+	playbackIdentity: () => null,
 };
 
 /**
@@ -78,8 +81,33 @@ export function usePlaybackShortcutAuthority(
 		},
 		[activePage, pages, playbacks, ready],
 	);
+	const playbackIdentity = useCallback(
+		(slot: number): PlaybackInteractionIdentity | null => {
+			if (!ready || activePage == null) return null;
+			const page = pageObjects.find(
+				(candidate) => candidate.body.number === activePage,
+			);
+			const playbackNumber = page?.body.slots[String(slot)];
+			const playback = playbackObjects.find(
+				(candidate) => candidate.body.number === playbackNumber,
+			);
+			return {
+				addressing: "current_page",
+				pageNumber: activePage,
+				slot,
+				pageObjectId: page?.id ?? null,
+				pageObjectRevision: page?.revision ?? 0,
+				playbackObjectId: playback?.id ?? null,
+				playbackObjectRevision: playback?.revision ?? 0,
+			};
+		},
+		[activePage, pageObjects, playbackObjects, ready],
+	);
 	return useMemo(
-		() => (enabled ? { ready, activePage, pages, slotPlayback } : DORMANT),
-		[activePage, enabled, pages, ready, slotPlayback],
+		() =>
+			enabled
+				? { ready, activePage, pages, slotPlayback, playbackIdentity }
+				: DORMANT,
+		[activePage, enabled, pages, playbackIdentity, ready, slotPlayback],
 	);
 }

@@ -123,7 +123,7 @@ export function AppProvider({ children }: PropsWithChildren) {
 function activeSetTarget(state: AppState) {
 	if (state.dockMode === "builtins" && state.builtIn === "patch")
 		return "patch" as const;
-	if (state.controlMode === "playbacks") return "playback" as const;
+	if (state.controlMode === "playbacks") return null;
 	const kinds =
 		state.dockMode === "desks"
 			? (state.desks
@@ -156,7 +156,7 @@ function activeSetTarget(state: AppState) {
 			["playback", "playback_pool", "virtual_playbacks"].includes(kind),
 		)
 	)
-		return "playback" as const;
+		return null;
 	if (kinds.includes("presets")) return "preset" as const;
 	return null;
 }
@@ -175,11 +175,6 @@ function applySetTarget(
 			value: !state.cueListSetArmed,
 		});
 	}
-	if (target === "playback")
-		return dispatch({
-			type: "SET_PLAYBACK_SET_ARMED",
-			value: !state.playbackSetArmed,
-		});
 	dispatch({ type: "SET_PRESET_SET_ARMED", value: !state.presetSetArmed });
 }
 

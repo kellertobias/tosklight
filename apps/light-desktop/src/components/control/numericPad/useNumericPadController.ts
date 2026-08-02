@@ -1,5 +1,6 @@
 import type { ControlSurfaceSource } from "../../../features/controlSurfaceInteraction/registry";
 import { routeControlSurfaceIntent } from "../../../features/controlSurfaceInteraction/registry";
+import { useSetInteraction } from "../../../features/controlSurfaceInteraction/SetInteractionProvider";
 import {
 	usePlaybackDeskView,
 	usePlaybackRuntimeStatus,
@@ -39,6 +40,7 @@ export function useNumericPadController() {
 	const playbackDesk = usePlaybackDeskView();
 	const playbackStatus = usePlaybackRuntimeStatus();
 	const preload = useProgrammerPreloadLifecycleView();
+	const setInteraction = useSetInteraction();
 	const hasSelection = command.selected.length > 0;
 	const hasProgrammerValues = values.ready && values.valueCount > 0;
 	const context = {
@@ -52,6 +54,7 @@ export function useNumericPadController() {
 		playbackDesk,
 		playbackReady: playbackStatus.status === "ready" && playbackDesk !== null,
 		preload,
+		setInteraction,
 	};
 	return {
 		state,
@@ -63,7 +66,13 @@ export function useNumericPadController() {
 				: ("idle" as const),
 		toggleRecord: () => toggleRecord(context),
 		advancePreload: () => advancePreload(context),
-		escape: () => void command.reset(),
+		escape: () => {
+			if (setInteraction)
+				void setInteraction.cancel().then((consumed) => {
+					if (!consumed) void command.reset();
+				});
+			else void command.reset();
+		},
 		press: (key: SoftwareKey, source: ControlSurfaceSource = "touch") =>
 			pressKey(context, key, source),
 	};
@@ -80,6 +89,7 @@ interface NumericPadContext {
 	playbackDesk: ReturnType<typeof usePlaybackDeskView>;
 	playbackReady: boolean;
 	preload: ReturnType<typeof useProgrammerPreloadLifecycleView>;
+	setInteraction: ReturnType<typeof useSetInteraction>;
 }
 
 function toggleRecord({ state, dispatch, command }: NumericPadContext) {
@@ -180,6 +190,16 @@ function handleShiftedKey(
 }
 
 function clearStep(context: NumericPadContext) {
+	if (context.setInteraction) {
+		void context.setInteraction.clear().then((consumed) => {
+			if (!consumed) clearProgrammerStep(context);
+		});
+		return;
+	}
+	clearProgrammerStep(context);
+}
+
+function clearProgrammerStep(context: NumericPadContext) {
 	const {
 		state,
 		dispatch,
@@ -219,11 +239,14 @@ function handleSet(source: ControlSurfaceSource) {
 	);
 }
 
-function executeCommand({ state, dispatch, command }: NumericPadContext) {
-	return void command.execute().then((ok) => {
+function executeCommand(context: NumericPadContext) {
+	const { state, dispatch, command, setInteraction } = context;
+	return void (async () => {
+		if (setInteraction && (await setInteraction.enter("touch"))) return;
+		const ok = await command.execute();
 		if (ok && state.storeArmed)
 			dispatch({ type: "SET_STORE_ARMED", value: false });
 		if (ok && state.updateArmed)
 			dispatch({ type: "SET_UPDATE_ARMED", value: false });
-	});
+	})();
 }

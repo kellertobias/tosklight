@@ -88,6 +88,25 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		);
 	}
 
+	assignGroupMaster(
+		groupObjectId: string,
+		expectedGroupRevision: number,
+		page: number,
+		slot: number,
+		revisionBasis?: PlaybackTopologyRevisionBasis,
+	) {
+		return this.lifecycle.enqueue((generation) =>
+			this.assignGroupMasterNow(
+				generation,
+				groupObjectId,
+				expectedGroupRevision,
+				page,
+				slot,
+				revisionBasis,
+			),
+		);
+	}
+
 	configureVirtual(
 		page: number,
 		playbackNumber: number,
@@ -223,6 +242,44 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 			);
 		return this.apply(
 			{ type: "configure_slot", page, slot, ...revisions, playback },
+			generation,
+		);
+	}
+
+	private assignGroupMasterNow(
+		generation: number,
+		groupObjectId: string,
+		expectedGroupRevision: number,
+		page: number,
+		slot: number,
+		revisionBasis?: PlaybackTopologyRevisionBasis,
+	) {
+		const snapshot = this.options.store.getSnapshot();
+		if (!snapshot.readyCollections.has("group"))
+			return this.fail("Authoritative Groups are loading", generation);
+		const group = snapshot.groups.find(
+			(candidate) => candidate.id === groupObjectId,
+		);
+		if (!group || group.revision !== expectedGroupRevision)
+			return this.fail(
+				`Authoritative Group ${groupObjectId} is stale or unavailable`,
+				generation,
+			);
+		const revisions = this.readySlotRevisions(page, slot, revisionBasis);
+		if (!revisions)
+			return this.fail(
+				"Authoritative Playback topology is loading",
+				generation,
+			);
+		return this.apply(
+			{
+				type: "assign_group_master",
+				groupObjectId,
+				expectedGroupRevision,
+				page,
+				slot,
+				...revisions,
+			},
 			generation,
 		);
 	}
@@ -448,6 +505,13 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 				(current?.id ?? null) === action.expectedObjectId &&
 				(current?.revision ?? 0) === action.expectedRevision
 			);
+		}
+		if (action.type === "assign_group_master") {
+			const group = snapshot.groups.find(
+				(object) => object.id === action.groupObjectId,
+			);
+			if (!group || group.revision !== action.expectedGroupRevision)
+				return false;
 		}
 		const page = snapshot.playbackPages.find(
 			(object) => object.body.number === action.page,

@@ -43,8 +43,12 @@ function ControlModeState() {
 			<Button onClick={() => dispatch({ type: "TOGGLE_CONTROL_MODE" })}>
 				Toggle control mode
 			</Button>
-			<span>{state.playbackSetArmed ? "playback-set-armed" : "playback-set-idle"}</span>
-			<span>{state.presetSetArmed ? "preset-set-armed" : "preset-set-idle"}</span>
+			<span>
+				{state.playbackSetArmed ? "playback-set-armed" : "playback-set-idle"}
+			</span>
+			<span>
+				{state.presetSetArmed ? "preset-set-armed" : "preset-set-idle"}
+			</span>
 		</>
 	);
 }
@@ -157,17 +161,25 @@ describe("desk shortcuts", () => {
 		expect(screen.getByText("patch-set-armed")).toBeInTheDocument();
 	});
 
-	it("routes SET to Playbacks while the control surface is in Playbacks mode", () => {
+	it("leaves Playback-mode SET ownership to the scoped interaction owner", () => {
 		render(
 			<AppProvider>
 				<ControlModeState />
 			</AppProvider>,
 		);
-		fireEvent.click(screen.getByRole("button", { name: "Toggle control mode" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Toggle control mode" }),
+		);
 
-		act(() => routeControlSurfaceIntent({ type: "set", source: "touch" }));
+		const outcomes: ReturnType<typeof routeControlSurfaceIntent>[] = [];
+		act(() => {
+			outcomes.push(
+				routeControlSurfaceIntent({ type: "set", source: "touch" }),
+			);
+		});
 
-		expect(screen.getByText("playback-set-armed")).toBeInTheDocument();
+		expect(outcomes).toEqual([{ status: "missing" }]);
+		expect(screen.getByText("playback-set-idle")).toBeInTheDocument();
 		expect(screen.getByText("preset-set-idle")).toBeInTheDocument();
 	});
 

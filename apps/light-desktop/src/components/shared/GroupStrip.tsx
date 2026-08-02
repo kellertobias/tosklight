@@ -3,6 +3,7 @@ import { ButtonGrid } from "@tosklight/ui/window-kit";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PoolPresentationConfiguration } from "../../api/types";
 import { groups } from "../../data/mockData";
+import { useSetInteraction } from "../../features/controlSurfaceInteraction/SetInteractionProvider";
 import {
 	useActiveShowId,
 	useBootstrapReady,
@@ -76,6 +77,7 @@ function GroupShortcut({
 	updateArmed,
 	onClick,
 	onDoubleClick,
+	onContextMenu,
 	poolPresentation,
 	showId,
 	viewOnly,
@@ -87,6 +89,7 @@ function GroupShortcut({
 	updateArmed: boolean;
 	onClick: () => void;
 	onDoubleClick: () => void;
+	onContextMenu: () => void;
 	poolPresentation: PoolPresentationConfiguration;
 	showId: string;
 	viewOnly: boolean;
@@ -140,6 +143,13 @@ function GroupShortcut({
 							onDoubleClick();
 						}
 			}
+			onContextMenu={(event) => {
+				event.preventDefault();
+				if (clickTimer.current !== null)
+					window.clearTimeout(clickTimer.current);
+				clickTimer.current = null;
+				onContextMenu();
+			}}
 		>
 			<span className="number">{index + 1}</span>
 			<b>{group?.body.name ?? "Empty"}</b>
@@ -166,6 +176,7 @@ export function GroupStrip({
 	});
 	const storedGroups = usePortableGroups(active);
 	const groupSelection = useGroupSelectionActions(interactionActive);
+	const setInteraction = useSetInteraction();
 	const { state, dispatch } = useApp();
 	const { gridRef, slotCount } = useGroupShortcutCount(active);
 	const poolPresentation = usePoolPresentationConfiguration();
@@ -210,6 +221,21 @@ export function GroupStrip({
 		return outcome;
 	};
 	const selectGroup = (group: ShortcutGroup) => {
+		if (setInteraction?.state?.phase === "set_armed") {
+			void setInteraction.chooseGroup(
+				{ objectId: group.id, objectRevision: group.revision },
+				"touch",
+			);
+			return;
+		}
+		const scope = setInteraction?.state?.scope;
+		if (scope)
+			void setInteraction.direct({
+				type: "select_group_live",
+				source: "touch",
+				scope,
+				group: { objectId: group.id, objectRevision: group.revision },
+			});
 		const write = groupSelection.selectLive(group);
 		if (!write) return;
 		void write;
@@ -264,8 +290,34 @@ export function GroupStrip({
 						updateArmed={state.updateArmed}
 						onClick={() => activateShortcut(group, index)}
 						onDoubleClick={() => {
-							if (group && !state.updateArmed)
+							if (group && !state.updateArmed) {
+								const scope = setInteraction?.state?.scope;
+								if (scope)
+									void setInteraction.direct({
+										type: "select_group_frozen",
+										source: "touch",
+										scope,
+										group: {
+											objectId: group.id,
+											objectRevision: group.revision,
+										},
+									});
 								void groupSelection.selectFrozen(group);
+							}
+						}}
+						onContextMenu={() => {
+							if (!group || state.updateArmed) return;
+							const scope = setInteraction?.state?.scope;
+							if (!scope) return;
+							void setInteraction.direct({
+								type: "open_group_settings",
+								source: "context_menu",
+								scope,
+								group: {
+									objectId: group.id,
+									objectRevision: group.revision,
+								},
+							});
 						}}
 						poolPresentation={poolPresentation}
 						showId={showId}
