@@ -233,6 +233,121 @@ async fn v2_patch_update_route_mutates_the_exact_physical_instance_and_replays()
 }
 
 #[tokio::test]
+async fn appearance_and_static_geometry_updates_leave_programmer_and_output_values_unchanged() {
+    let (state, data_dir) = test_state();
+    let (profile_id, mode_id) = install_patch_route_profile(&state);
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = state
+        .sessions
+        .sessions()
+        .into_iter()
+        .find(|session| session.token == token)
+        .unwrap();
+    let show = create_show(&app, &token, "Appearance output isolation").await;
+    let show_id = show["id"].as_str().unwrap();
+    open_show_for_patch_test(&app, &token, show_id).await;
+
+    let mut request = valid_patch_request_for(profile_id, mode_id, "appearance-isolation-seed");
+    let fixture_id = request["fixtures"][0]["fixture_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    request["fixtures"][0]["split_patches"] =
+        serde_json::json!([{"split": 1, "universe": 1, "address": 1}]);
+    let created = post_patch(&app, &token, show_id, Some(0), request).await;
+    assert_eq!(created.status(), StatusCode::OK);
+
+    let fixture_id = light_core::FixtureId(Uuid::parse_str(&fixture_id).unwrap());
+    let programmers = state.programming.programmers();
+    programmers.set(
+        session.id,
+        fixture_id,
+        light_core::AttributeKey::intensity(),
+        light_core::AttributeValue::Normalized(0.42),
+    );
+    let baseline_programmer = serde_json::to_value(programmers.get(session.id).unwrap()).unwrap();
+    let baseline_output = state.output.render(RenderOptions::default()).unwrap();
+    assert_eq!(baseline_output.universes[&1][0], 107);
+
+    let updates = [
+        serde_json::json!({
+            "action": "set_installed_appearance",
+            "appearance": {
+                "light_source": {"type": "halogen"},
+                "color_temperature_kelvin": 3200,
+                "gel": {
+                    "type": "custom",
+                    "name": "Isolation amber",
+                    "color_srgb": "#FFB060",
+                    "note": "Metadata only"
+                },
+                "shaper_angles_degrees": [1.0, 2.0, 3.0, 4.0]
+            }
+        }),
+        serde_json::json!({"action": "set_bracket_angle", "degrees": 18.0}),
+        serde_json::json!({
+            "action": "set_shaper_module_rotation",
+            "degrees": -12.5
+        }),
+        serde_json::json!({
+            "action": "set_static_shaper_angle",
+            "element": 3,
+            "degrees": 22.0
+        }),
+    ];
+
+    for (index, action) in updates.into_iter().enumerate() {
+        let revision = u64::try_from(index).unwrap() + 1;
+        let mut update = serde_json::json!({
+            "request_id": format!("appearance-isolation-{index}"),
+            "expected_fixture_revision": revision,
+            "expected_patch_revision": revision,
+            "expected_show_revision": revision + 1,
+            "multipatch_instance_id": null
+        });
+        update.as_object_mut().unwrap().extend(
+            action
+                .as_object()
+                .unwrap()
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone())),
+        );
+        let changed = post_patch_update(
+            &app,
+            &token,
+            show_id,
+            fixture_id.0.to_string().as_str(),
+            update,
+        )
+        .await;
+        let status = changed.status();
+        let changed = json(changed).await;
+        assert_eq!(status, StatusCode::OK, "{changed}");
+
+        assert_eq!(
+            serde_json::to_value(programmers.get(session.id).unwrap()).unwrap(),
+            baseline_programmer,
+            "metadata update {index} changed Programmer state"
+        );
+        let output = state.output.render(RenderOptions::default()).unwrap();
+        assert_eq!(
+            output.universes, baseline_output.universes,
+            "metadata update {index} changed DMX"
+        );
+        assert_eq!(
+            output.resolved_values, baseline_output.resolved_values,
+            "metadata update {index} changed resolved output"
+        );
+        assert_eq!(
+            output.profile_visualization_values, baseline_output.profile_visualization_values,
+            "metadata update {index} changed profile output"
+        );
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn whole_show_upload_preserves_distinct_root_and_multipatch_appearance() {
     let (state, data_dir) = test_state();
     let (profile_id, mode_id) = install_patch_route_profile(&state);
