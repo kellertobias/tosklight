@@ -1,28 +1,13 @@
-import { Button } from "@tosklight/ui";
-import { TouchEncoder } from "@tosklight/ui/encoders";
 import { useEffect, useRef, useState } from "react";
 import type { MultiPatchInstance, PatchedFixture } from "../../api/types";
 import { usePatch, usePatchView } from "../../features/patch/PatchContext";
-import { HardwareEncoderDisplay } from "./HardwareEncoderDisplay";
+import {
+	type LocationEncoderSlot,
+	PatchParameterEncoderSurfaces,
+	type VisualizationEncoderSlot,
+} from "./PatchParameterEncoderSurfaces";
 
 type PatchEncoderGroup = "location" | "visualization";
-type VectorKind = "location" | "rotation";
-type VectorAxis = "x" | "y" | "z";
-
-interface LocationEncoderSlot {
-	kind: VectorKind;
-	axis: VectorAxis;
-	label: string;
-	unit: "m" | "°";
-	fineStep: number;
-	coarseStep: number;
-}
-
-interface VisualizationEncoderSlot {
-	label: string;
-	kind: "bracket" | "shaper" | "module";
-	element?: 1 | 2 | 3 | 4;
-}
 
 const locationSlots: readonly LocationEncoderSlot[] = [
 	{
@@ -151,30 +136,10 @@ export function PatchParameterControls({
 		accumulated.current.set(slotIndex, { targetKey, observed, value });
 		setValue(slot, value);
 	};
-	const visualizationStoredValue = (slot: VisualizationEncoderSlot) => {
-		if (!target) return 0;
-		if (slot.kind === "bracket") return target.instance.bracket_angle ?? 0;
-		if (slot.kind === "module") return target.instance.shaper_angle ?? 0;
-		return (
-			target.instance.installed_appearance?.shaper_angles_degrees[
-				(slot.element ?? 1) - 1
-			] ?? 0
-		);
-	};
-	const visualizationAvailable = (slot: VisualizationEncoderSlot) => {
-		if (!visualizationCapabilities) return false;
-		if (slot.kind === "bracket") return visualizationCapabilities.bracket;
-		if (slot.kind === "module")
-			return (
-				visualizationCapabilities.module &&
-				!visualizationCapabilities.liveModule
-			);
-		const index = (slot.element ?? 1) - 1;
-		return (
-			visualizationCapabilities.shapers[index] &&
-			!visualizationCapabilities.liveShaperAngles[index]
-		);
-	};
+	const visualizationStoredValue = (slot: VisualizationEncoderSlot) =>
+		installedVisualizationValue(target, slot);
+	const visualizationAvailable = (slot: VisualizationEncoderSlot) =>
+		isVisualizationSlotAvailable(visualizationCapabilities, slot);
 	const setVisualizationValue = (
 		slot: VisualizationEncoderSlot,
 		value: number,
@@ -218,8 +183,50 @@ export function PatchParameterControls({
 		setVisualizationValue(slot, value);
 	};
 
+	useHardwarePatchEncoders({
+		enabled: hardwareConnected && Boolean(target),
+		group,
+		onLocationStep: applyStep,
+		onVisualizationStep: applyVisualizationStep,
+	});
+
+	const label = patchTargetLabel(patch.status, target);
+	const disabled = patch.status !== "ready" || !target;
+	return (
+		<div className="parameter-controls patch-parameter-controls">
+			<PatchParameterEncoderSurfaces
+				group={group}
+				onGroupChange={setGroup}
+				label={label}
+				hardwareConnected={hardwareConnected}
+				disabled={disabled}
+				locationSlots={locationSlots}
+				locationValue={storedValue}
+				onLocationStep={applyStep}
+				onLocationSet={applyAbsolute}
+				visualizationSlots={visualizationSlots}
+				visualizationValue={visualizationStoredValue}
+				visualizationAvailable={visualizationAvailable}
+				onVisualizationStep={applyVisualizationStep}
+				onVisualizationSet={applyVisualizationAbsolute}
+			/>
+		</div>
+	);
+}
+
+function useHardwarePatchEncoders({
+	enabled,
+	group,
+	onLocationStep,
+	onVisualizationStep,
+}: {
+	enabled: boolean;
+	group: PatchEncoderGroup;
+	onLocationStep: (slotIndex: number, delta: number) => void;
+	onVisualizationStep: (slotIndex: number, delta: number) => void;
+}) {
 	useEffect(() => {
-		if (!hardwareConnected || !target) return;
+		if (!enabled) return;
 		const handleEncoder = (event: Event) => {
 			const { control, value } = (
 				event as CustomEvent<{ control: string; value?: string }>
@@ -228,150 +235,65 @@ export function PatchParameterControls({
 			if (group === "location") {
 				const slot = locationSlots[slotIndex];
 				if (!slot) return;
-				if (value === "up") applyStep(slotIndex, slot.fineStep);
-				if (value === "down") applyStep(slotIndex, -slot.fineStep);
-				if (value === "right") applyStep(slotIndex, slot.coarseStep);
-				if (value === "left") applyStep(slotIndex, -slot.coarseStep);
+				if (value === "up") onLocationStep(slotIndex, slot.fineStep);
+				if (value === "down") onLocationStep(slotIndex, -slot.fineStep);
+				if (value === "right") onLocationStep(slotIndex, slot.coarseStep);
+				if (value === "left") onLocationStep(slotIndex, -slot.coarseStep);
 				return;
 			}
 			if (!visualizationSlots[slotIndex]) return;
-			if (value === "up") applyVisualizationStep(slotIndex, 1);
-			if (value === "down") applyVisualizationStep(slotIndex, -1);
-			if (value === "right") applyVisualizationStep(slotIndex, 10);
-			if (value === "left") applyVisualizationStep(slotIndex, -10);
+			if (value === "up") onVisualizationStep(slotIndex, 1);
+			if (value === "down") onVisualizationStep(slotIndex, -1);
+			if (value === "right") onVisualizationStep(slotIndex, 10);
+			if (value === "left") onVisualizationStep(slotIndex, -10);
 		};
 		window.addEventListener("light:encoder-action", handleEncoder);
 		return () =>
 			window.removeEventListener("light:encoder-action", handleEncoder);
 	});
+}
 
-	const label =
-		patch.status !== "ready"
-			? "Patch loading…"
-			: target
-				? target.multipatch?.name ||
-					target.fixture.name ||
-					target.fixture.definition.name
-				: "Select a physical patch row";
-	const disabled = patch.status !== "ready" || !target;
+function patchTargetLabel(
+	status: string,
+	target: ReturnType<typeof selectedPhysicalTarget>,
+) {
+	if (status !== "ready") return "Patch loading…";
+	if (!target) return "Select a physical patch row";
 	return (
-		<div className="parameter-controls patch-parameter-controls">
-			<div className="family-tabs">
-				<Button
-					active={group === "location"}
-					onClick={() => setGroup("location")}
-				>
-					Location
-				</Button>
-				<Button
-					active={group === "visualization"}
-					onClick={() => setGroup("visualization")}
-				>
-					Visualization
-				</Button>
-				<span className="family-spacer" />
-				<small>{label}</small>
-			</div>
-			<div className="parameter-surfaces">
-				{group === "location"
-					? locationSlots.map((slot, index) =>
-							hardwareConnected ? (
-								<HardwareEncoderDisplay
-									key={slot.label}
-									slot={index + 1}
-									activateOnHardwarePress
-									target={
-										disabled
-											? undefined
-											: {
-													label: slot.label,
-													value: formatLocationEncoderValue(
-														storedValue(slot),
-														slot,
-													),
-													role: "Turn · Press-turn coarse",
-												}
-									}
-									editValue={storedValue(slot)}
-									onEdit={(value) => applyAbsolute(index, value)}
-								/>
-							) : (
-								<TouchEncoder
-									key={slot.label}
-									label={`Enc ${index + 1} · ${slot.label}`}
-									slot={index + 1}
-									attributeLabel={slot.label}
-									value={storedValue(slot)}
-									display={formatLocationEncoderValue(storedValue(slot), slot)}
-									minimum={Number.MIN_SAFE_INTEGER}
-									maximum={Number.MAX_SAFE_INTEGER}
-									inputScale={1}
-									slowStep={slot.fineStep}
-									fastStep={slot.coarseStep}
-									disabled={disabled}
-									onStep={(delta) => applyStep(index, delta)}
-									onSet={(value) => applyAbsolute(index, value)}
-								/>
-							),
-						)
-					: visualizationSlots.map((slot, index) => {
-							const available = !disabled && visualizationAvailable(slot);
-							const value = visualizationStoredValue(slot);
-							return hardwareConnected ? (
-								<HardwareEncoderDisplay
-									key={slot.label}
-									slot={index + 1}
-									activateOnHardwarePress
-									target={
-										available
-											? {
-													label: slot.label,
-													value: formatVisualizationValue(value),
-													role: "Turn · Press-turn coarse",
-												}
-											: undefined
-									}
-									editValue={value}
-									onEdit={(next) => applyVisualizationAbsolute(index, next)}
-								/>
-							) : (
-								<TouchEncoder
-									key={slot.label}
-									label={`Enc ${index + 1} · ${slot.label}`}
-									slot={index + 1}
-									attributeLabel={slot.label}
-									value={value}
-									display={
-										available ? formatVisualizationValue(value) : "Unavailable"
-									}
-									minimum={-180}
-									maximum={179.999}
-									inputScale={1}
-									slowStep={1}
-									fastStep={10}
-									disabled={!available}
-									onStep={(delta) => applyVisualizationStep(index, delta)}
-									onSet={(next) => applyVisualizationAbsolute(index, next)}
-								/>
-							);
-						})}
-			</div>
-		</div>
+		target.multipatch?.name ||
+		target.fixture.name ||
+		target.fixture.definition.name
 	);
-}
-
-function formatLocationEncoderValue(value: number, slot: LocationEncoderSlot) {
-	return slot.unit === "m"
-		? `${value.toFixed(3)} m`
-		: `${Number(value.toFixed(3))}°`;
-}
-
-function formatVisualizationValue(value: number) {
-	return `${Number(value.toFixed(3))}°`;
 }
 
 function normalizeInstalledAngle(value: number) {
 	return ((((value + 180) % 360) + 360) % 360) - 180;
+}
+
+function installedVisualizationValue(
+	target: ReturnType<typeof selectedPhysicalTarget>,
+	slot: VisualizationEncoderSlot,
+) {
+	if (!target) return 0;
+	if (slot.kind === "bracket") return target.instance.bracket_angle ?? 0;
+	if (slot.kind === "module") return target.instance.shaper_angle ?? 0;
+	return (
+		target.instance.installed_appearance?.shaper_angles_degrees[
+			(slot.element ?? 1) - 1
+		] ?? 0
+	);
+}
+
+function isVisualizationSlotAvailable(
+	capabilities: ReturnType<typeof physicalVisualizationCapabilities> | null,
+	slot: VisualizationEncoderSlot,
+) {
+	if (!capabilities) return false;
+	if (slot.kind === "bracket") return capabilities.bracket;
+	if (slot.kind === "module")
+		return capabilities.module && !capabilities.liveModule;
+	const index = (slot.element ?? 1) - 1;
+	return capabilities.shapers[index] && !capabilities.liveShaperAngles[index];
 }
 
 function physicalVisualizationCapabilities(fixture: PatchedFixture) {
