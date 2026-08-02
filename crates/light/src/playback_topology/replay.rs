@@ -168,33 +168,7 @@ pub(super) fn fingerprint(
             hasher.update([8]);
             hash_json(&mut hasher, group_object_id)?;
             hasher.update(expected_group_revision.to_le_bytes());
-            match address {
-                GroupMasterPlaybackAddress::Physical {
-                    page,
-                    slot,
-                    expected_page_revision,
-                    expected_page_object_id,
-                    expected_playback_revision,
-                    expected_playback_object_id,
-                } => {
-                    hasher.update([0, *page, *slot]);
-                    hasher.update(expected_page_revision.to_le_bytes());
-                    hash_json(&mut hasher, expected_page_object_id)?;
-                    hasher.update(expected_playback_revision.to_le_bytes());
-                    hash_json(&mut hasher, expected_playback_object_id)?;
-                }
-                GroupMasterPlaybackAddress::Virtual {
-                    page,
-                    playback_number,
-                    expected_page_revision,
-                    expected_page_object_id,
-                } => {
-                    hasher.update([1, *page]);
-                    hasher.update(playback_number.to_le_bytes());
-                    hasher.update(expected_page_revision.to_le_bytes());
-                    hash_json(&mut hasher, expected_page_object_id)?;
-                }
-            }
+            hash_group_master_address(&mut hasher, address)?;
         }
         PlaybackTopologyAction::ConfigureVirtual {
             page,
@@ -272,6 +246,40 @@ pub(super) fn fingerprint(
         }
     }
     Ok(hasher.finalize().into())
+}
+
+fn hash_group_master_address(
+    hasher: &mut Sha256,
+    address: &GroupMasterPlaybackAddress,
+) -> Result<(), ActionError> {
+    match address {
+        GroupMasterPlaybackAddress::Physical {
+            page,
+            slot,
+            expected_page_revision,
+            expected_page_object_id,
+            expected_playback_revision,
+            expected_playback_object_id,
+        } => {
+            hasher.update([0, *page, *slot]);
+            hasher.update(expected_page_revision.to_le_bytes());
+            hash_json(hasher, expected_page_object_id)?;
+            hasher.update(expected_playback_revision.to_le_bytes());
+            hash_json(hasher, expected_playback_object_id)?;
+        }
+        GroupMasterPlaybackAddress::Virtual {
+            page,
+            playback_number,
+            expected_page_revision,
+            expected_page_object_id,
+        } => {
+            hasher.update([1, *page]);
+            hasher.update(playback_number.to_le_bytes());
+            hasher.update(expected_page_revision.to_le_bytes());
+            hash_json(hasher, expected_page_object_id)?;
+        }
+    }
+    Ok(())
 }
 
 fn hash_json(hasher: &mut Sha256, value: &impl serde::Serialize) -> Result<(), ActionError> {
