@@ -223,25 +223,49 @@ export class BrowserCrossSurface {
 		const groupCard = this.page
 			.locator(".group-pool-window .group-card")
 			.filter({ hasText: "Front Dimmers" });
-		await this.openGroupContext(groupCard);
-		const order = this.page.locator(".group-context-menu .group-order");
-		await expect(order).not.toContainText("Fixture 5");
+		await groupCard.click({ button: "right" });
+		const dialog = this.page.getByRole("dialog", {
+			name: "Group 3 settings",
+			exact: true,
+		});
+		await expect(dialog).toBeVisible();
+		await this.desk.click(dialog.getByRole("tab", { name: "Projection" }));
+		const preview = dialog.getByRole("region", {
+			name: "Projected-position preview",
+		});
 		const group = await this.requiredGroup(3);
 		const fixtures = await this.fixtureIds();
+		await expect(
+			preview.locator("code").filter({ hasText: fixtures[5] }),
+		).toHaveCount(0);
 		await this.api.seedShowObject(
 			this.showId(),
 			"group",
 			"3",
-			{ ...group.body, fixtures: [...group.body.fixtures, fixtures[5]] },
+			{
+				...group.body,
+				source: {
+					type: "explicit",
+					fixture_ids: [...group.body.fixtures, fixtures[5]],
+				},
+			},
 			group.revision,
 		);
 		await expect(groupCard).toContainText("5 fixtures");
-		await expect(order).toContainText("5. Fixture 5");
 		await this.desk.click(
-			this.page
-				.locator(".group-context-menu")
-				.getByRole("button", { name: "Select live group", exact: true }),
+			dialog.getByRole("button", { name: "Close settings" }),
 		);
+		await groupCard.click({ button: "right" });
+		await expect(dialog).toBeVisible();
+		await this.desk.click(dialog.getByRole("tab", { name: "Projection" }));
+		await expect(
+			preview.locator("code").filter({ hasText: fixtures[5] }),
+		).toHaveCount(1);
+		await this.desk.click(
+			dialog.getByRole("button", { name: "Close settings" }),
+		);
+		await this.desk.click(groupCard);
+		await expect(groupCard).toHaveClass(/selected/);
 		await setProgrammerGroupValue(this.api, {
 			surface: "api",
 			showId: this.showId(),
@@ -383,17 +407,6 @@ export class BrowserCrossSurface {
 			.getByRole("button", { name: "Group pool" })
 			.click();
 		await expect(groupPool).toBeVisible();
-	}
-
-	private async openGroupContext(card: Locator): Promise<void> {
-		await card.scrollIntoViewIfNeeded();
-		const box = await card.boundingBox();
-		if (!box) throw new Error("Group card is not visible");
-		await this.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-		await this.page.mouse.down();
-		await this.page.waitForTimeout(700);
-		await this.page.mouse.up();
-		await expect(this.page.locator(".group-context-menu")).toBeVisible();
 	}
 
 	private fixtureRow(number: number): Locator {

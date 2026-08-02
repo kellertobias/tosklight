@@ -24,7 +24,6 @@ export enum PaneType {
 export type BuiltInPaneType =
 	| PaneType.Stage
 	| PaneType.Fixtures
-	| PaneType.Layout
 	| PaneType.Presets
 	| PaneType.Cuelists
 	| PaneType.Dynamics
@@ -33,7 +32,6 @@ export type BuiltInPaneType =
 export const builtInPaneTypes: readonly BuiltInPaneType[] = [
 	PaneType.Stage,
 	PaneType.Fixtures,
-	PaneType.Layout,
 	PaneType.Presets,
 	PaneType.Cuelists,
 	PaneType.Dynamics,
@@ -43,7 +41,6 @@ export const builtInPaneTypes: readonly BuiltInPaneType[] = [
 export const builtInLabels: Readonly<Record<BuiltInPaneType, string>> = {
 	[PaneType.Stage]: "Stage",
 	[PaneType.Fixtures]: "Fixtures",
-	[PaneType.Layout]: "Layout",
 	[PaneType.Presets]: "Presets",
 	[PaneType.Cuelists]: "Cuelists",
 	[PaneType.Dynamics]: "Dynamics",
@@ -54,7 +51,6 @@ export type OperatorPaneType =
 	| PaneType.Stage
 	| PaneType.Groups
 	| PaneType.Fixtures
-	| PaneType.Layout
 	| PaneType.Presets
 	| PaneType.Cuelists
 	| PaneType.CuelistPool

@@ -212,13 +212,13 @@ export const dimmerDialogsUi: FoundationalCase = {
 		await pressCommand(page, "GROUP 3 - 2", "G3 - F2");
 		await recordExistingGroup(page, 3, "Overwrite");
 		await expectGroupNumbers(api, "3", [1, 3, 4, 5, 6]);
-		await expectVisibleGroupOrder(page, 3, [1, 3, 4, 5, 6]);
+		await expectVisibleGroupOrder(api, page, 3, [1, 3, 4, 5, 6]);
 		await expectSlotsAfterTick(bench, 0, [128, 0, 128, 128, 128, 128]);
 
 		await pressCommand(page, "GROUP 3 + 2", "G3 + F2");
 		await recordExistingGroup(page, 3, "Overwrite");
 		await expectGroupNumbers(api, "3", [1, 3, 4, 5, 6, 2]);
-		await expectVisibleGroupOrder(page, 3, [1, 3, 4, 5, 6, 2]);
+		await expectVisibleGroupOrder(api, page, 3, [1, 3, 4, 5, 6, 2]);
 		await expectSlotsAfterTick(bench, 0, [128, 128, 128, 128, 128, 128]);
 	},
 };

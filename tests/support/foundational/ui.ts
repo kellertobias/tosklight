@@ -98,26 +98,33 @@ export async function recordExistingGroup(
 }
 
 export async function expectVisibleGroupOrder(
+	api: ApiDriver,
 	page: Page,
 	number: number,
 	fixtures: number[],
 ): Promise<void> {
 	await openGroups(page);
 	const card = groupCard(page, number);
-	const box = await card.boundingBox();
-	expect(box).toBeTruthy();
-	await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
-	await page.mouse.down();
-	await page.waitForTimeout(700);
-	await page.mouse.up();
-	const order = page.locator(".group-context-menu .group-order");
-	await expect(order).toBeVisible();
-	for (const [index, fixture] of fixtures.entries())
-		await expect(order).toContainText(`${index + 1}. Fixture ${fixture}`);
-	await page
-		.locator(".group-context-menu")
-		.getByRole("button", { name: "Cancel", exact: true })
-		.click();
+	await card.click({ button: "right" });
+	const dialog = page.getByRole("dialog", {
+		name: `Group ${number} settings`,
+		exact: true,
+	});
+	await expect(dialog).toBeVisible();
+	await dialog.getByRole("tab", { name: "Projection" }).click();
+	const preview = dialog.getByRole("region", {
+		name: "Projected-position preview",
+	});
+	const patch = await api.patch();
+	const fixtureIds = fixtures.map((fixtureNumber) => {
+		const fixture = patch.fixtures.find(
+			(candidate) => candidate.fixture_number === fixtureNumber,
+		);
+		if (!fixture) throw new Error(`Fixture ${fixtureNumber} is absent from the patch`);
+		return fixture.fixture_id;
+	});
+	await expect(preview.locator("code")).toHaveText(fixtureIds);
+	await dialog.getByRole("button", { name: "Close settings" }).click();
 }
 
 export function fixtureRow(page: Page, number: number) {

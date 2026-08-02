@@ -467,11 +467,12 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       await openCrossSurfaceLayout(page);
 
       const groupCard = page.locator(".group-pool-window .group-card").filter({ hasText: "Front Dimmers" });
-      await openGroupContext(page, groupCard);
-      const order = page.locator(".group-context-menu .group-order");
-      await expect(order).toContainText("1. Fixture 1");
-      await expect(order).toContainText("4. Fixture 4");
-      await expect(order).not.toContainText("Fixture 5");
+      await groupCard.click({ button: "right" });
+      const dialog = page.getByRole("dialog", { name: "Group 3 settings", exact: true });
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole("tab", { name: "Projection" }).click();
+      const preview = dialog.getByRole("region", { name: "Projected-position preview" });
+      await expect(preview.locator("code").filter({ hasText: state.fixtureFive })).toHaveCount(0);
 
       // CROSS-002 is intentionally the external-source exception for an @ui
       // adapter: the Markdown contract makes REST and typed live-action writes
@@ -480,9 +481,14 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
         state.mutationRevision = await appendFixtureFive(api);
       });
       await expect(groupCard).toContainText("5 fixtures");
-      await expect(order).toContainText("5. Fixture 5");
+      await dialog.getByRole("button", { name: "Close settings" }).click();
+      await groupCard.click({ button: "right" });
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole("tab", { name: "Projection" }).click();
+      await expect(preview.locator("code").filter({ hasText: state.fixtureFive })).toHaveCount(1);
 
-      await page.locator(".group-context-menu").getByRole("button", { name: "Select live group", exact: true }).click();
+      await dialog.getByRole("button", { name: "Close settings" }).click();
+      await groupCard.click();
       await expect(groupCard).toHaveClass(/selected/);
 
       await test.step("Apply the contract's external authenticated live action", async () => {
@@ -930,7 +936,10 @@ async function audit(api: ApiDriver): Promise<any[]> {
 async function appendFixtureFive(api: ApiDriver): Promise<number> {
   const group = await object(api, "group", "3");
   const fixture = (await fixtureIdsByNumber(api))[5];
-  await putObject(api, "group", "3", { ...group.body, fixtures: [...group.body.fixtures, fixture] }, group.revision);
+  await putObject(api, "group", "3", {
+    ...group.body,
+    source: { type: "explicit", fixture_ids: [...group.body.fixtures, fixture] },
+  }, group.revision);
   return (await object(api, "group", "3")).revision;
 }
 
@@ -957,18 +966,6 @@ async function openCrossSurfaceLayout(page: Page): Promise<void> {
   await picker.getByRole("button", { name: "Group pool", exact: true }).click();
   await expect(groupPool).toBeVisible();
   await expect(fixtureSheet).toBeVisible();
-}
-
-async function openGroupContext(page: Page, card: Locator): Promise<void> {
-  await card.scrollIntoViewIfNeeded();
-  await expect(card).toBeVisible();
-  const box = await card.boundingBox();
-  expect(box).not.toBeNull();
-  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
-  await page.mouse.down();
-  await page.waitForTimeout(700);
-  await page.mouse.up();
-  await expect(page.locator(".group-context-menu")).toBeVisible();
 }
 
 function fixtureSheetRow(page: Page, number: number): Locator {

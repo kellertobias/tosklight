@@ -157,6 +157,12 @@ export class BrowserGroups {
 	async storeVia(route: GroupRoute, number: number, mode: StoreMode) {
 		number = validNumber(number);
 		const before = await this.object(number);
+		const selected = [...(await this.selection.observe()).selected];
+		const expectedFixtures = storedFixturesAfter(
+			before?.body.fixtures ?? [],
+			selected,
+			mode,
+		);
 		if (route === "api") {
 			const session = this.session();
 			await new HttpGroupRecordingTransport({
@@ -177,13 +183,18 @@ export class BrowserGroups {
 				name: mode === StoreMode.Merge ? "Merge" : "Overwrite",
 				exact: true,
 			});
-			if (await choice.count()) await this.desk.click(choice);
+			if (before?.body.fixtures.length) {
+				await expect(choice).toBeVisible();
+				await this.desk.click(choice);
+			}
 		} else if (route === "keypad") {
 			await this.commands.via.ui.execute(groupRecordCommand(number, mode));
 		} else {
 			await this.sendOsc(groupRecordKeys(number, mode));
 		}
-		await this.waitForRevision(number, before?.revision ?? 0);
+		await expect
+			.poll(async () => (await this.object(number))?.body.fixtures ?? null)
+			.toEqual(expectedFixtures);
 	}
 
 	async selectVia(route: GroupRoute, number: number) {
@@ -193,6 +204,17 @@ export class BrowserGroups {
 		else if (route === "keypad")
 			await this.commands.via.ui.execute(`GROUP ${number}`);
 		else await this.sendOsc(["group", ...digits(number), "enter"]);
+		if (route === "pool")
+			await expect
+				.poll(async () => {
+					try {
+						await this.selection.expectSelection({ kind: "group", number });
+						return true;
+					} catch {
+						return false;
+					}
+				})
+				.toBe(true);
 		await this.selection.expectSelection({ kind: "group", number });
 	}
 
@@ -218,20 +240,18 @@ export class BrowserGroups {
 				},
 			});
 		} else if (route === "pool") {
-			const commandLine = this.page.getByRole("textbox", {
-				name: "Command line",
-				exact: true,
-			});
-			await commandLine.fill("SET");
-			await expect(commandLine).toHaveValue("SET");
 			const card = this.groupCard(number);
-			await this.desk.click(card);
-			await expect(commandLine).toHaveValue(`SET GROUP ${number}`);
-			await this.desk.click(card);
+			await expect(card).toContainText(
+				group.body.fixtures.length
+					? `${group.body.fixtures.length} fixtures`
+					: "Group is empty",
+			);
+			await card.click({ button: "right" });
 			const dialog = this.page.getByRole("dialog", {
 				name: `Group ${number} settings`,
 				exact: true,
 			});
+			await expect(dialog).toBeVisible();
 			const name = dialog.getByLabel("Group name");
 			await name.fill(properties.name);
 			await name.blur();
@@ -335,10 +355,6 @@ export class BrowserGroups {
 			.nth(number - 1);
 	}
 
-	private async waitForRevision(number: number, previous: number) {
-		await expect.poll(async () => (await this.object(number))?.revision ?? 0).toBeGreaterThan(previous);
-	}
-
 	private async sendOsc(keys: string[]) {
 		if (!this.hardware.connected)
 			throw new Error("Group OSC route requires hardware.connect()");
@@ -362,6 +378,18 @@ export class BrowserGroups {
 		if (!this.api.session) throw new Error("Group helper requires an API session");
 		return this.api.session;
 	}
+}
+
+function storedFixturesAfter(
+	current: readonly string[],
+	selected: readonly string[],
+	mode: StoreMode,
+) {
+	if (mode === StoreMode.Overwrite) return [...new Set(selected)];
+	if (mode === StoreMode.Merge)
+		return [...new Set([...current, ...selected])];
+	const removed = new Set(selected);
+	return current.filter((fixture) => !removed.has(fixture));
 }
 
 function validNumber(number: number) {

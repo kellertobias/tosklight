@@ -155,7 +155,7 @@ scenario(
 		await t.expect.selection(fixtureRange(1, 4));
 
 		await t.selection.clear();
-		await t.selection.groups.via.pool.range(1, 4);
+		await t.selection.groups.via.api.range(1, 4);
 		await t.expect.selection(groupRange(1, 4));
 
 		await t.selection.fixtures.via.keypad.range(2, 5);
