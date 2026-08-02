@@ -2,9 +2,9 @@
 
 ## Status
 
-**Doing.** Claimed on 2026-08-02 after completing Plan 00A. This is the sole active implementation
-contract for Group settings and interaction, spatially ordered Group selection, Playback-owned
-Group Masters, and Dynamics projection.
+**Complete.** Claimed and completed on 2026-08-02 after completing Plan 00A. This was the sole
+active implementation contract for Group settings and interaction, spatially ordered Group
+selection, Playback-owned Group Masters, and Dynamics projection.
 
 This was the first item in the current [Next plan order](../Next/README.md). The earlier dependency on
 Macros has been explicitly removed by the operator's queue reorder. The completed supported-scale,
@@ -26,7 +26,7 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   Dynamics settings workflows.
 - [x] Update generated contracts, help/manual, human acceptance scenarios, and focused Playwright
   coverage through repository workflows.
-- [ ] Run focused checks, required major suites, migration/recovery proof, and the real desktop path.
+- [x] Run focused checks, required major suites, migration/recovery proof, and the real desktop path.
 
 ## Implementation decisions
 
@@ -271,23 +271,83 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
 - Commit `093f7498` registers typed Group API range selection in the semantic narration catalog and
   refreshes both generated catalogs. All eight documentation tests and the generated-catalog
   freshness check passed with 112 scenarios covered.
+- Commit `ebff5125` splits Group settings authority state out of the modal component and clears the
+  final Plan-owned source-size violation without changing its API or operator behavior. Commit
+  `db249fb9` removes the last retired Group-grid fixture from desktop tests.
+- Commit `ee901a16` replaces raw Group and Dynamic Projection form controls with the shared desk UI
+  primitives while retaining literal labels, immediate authoritative writes, and draft behavior.
+  Forty-two focused tests, desktop typecheck, and focused Biome passed.
+- Commit `d54fe044` updates the remaining application migration expectation to the canonical
+  source-without-grid result. The complete `light-application` library suite passed all 493 tests.
+- Commit `10f2828d` keeps the sustained hard-floor benchmark's 4,148-fixture workload while splitting
+  its synthetic Groups at the real 4,096-fixture domain limit. All 21 benchmark tests passed.
+- Commit `713d1246` makes the semantic encoder helper wait for the live post-selection Group control
+  instead of reading a stale pre-selection surface. The focused `TIME-002` scenario and the final
+  complete UI rerun prove the hardware-connected layout path.
 - `npm run manual` passed and generated the 176-page PDF plus 48-page offline HTML manual. The
   complete API E2E suite passed all 27 tests, including the Plan 01 API scenario, against isolated
-  artifacts. The first complete UI E2E run reached 137 passed, 20 failed, and 1 skipped; its one
-  confirmed Plan 01 product regression is fixed by `c7fa245a`, while stale Plan 01 expectations and
-  unrelated baseline failures are being reconciled before the required rerun.
+  artifacts. The final complete UI E2E run passed 155 tests with one intentional skip; its only two
+  failures were unrelated `TELEMETRY-001` readiness and `PATCH-PLACEMENT-001` fixture-mode baseline
+  failures. Both Plan 01 root scenarios passed, as did the Group, Dynamics, SET, Group Master,
+  Stage, migration, cross-surface, and hardware-connected scenarios.
+- `npm run test:unit` reached the repository source-size gate, which now reports no Plan-owned file;
+  its nine remaining findings are unrelated System Controls, Patch, pane-options, Grid Dynamics,
+  Timecode, and shared NumberInput baseline files. Direct package runs passed UI 176/176, Patch
+  61/61, Viz editor 12/12, hardware controls 18/18, and the desktop and hardware production builds.
+  The complete desktop-unit run left only the unrelated Visualization secondary-stream expectation
+  and raw-control audit for Grid Dynamics/Timecode before its existing leaked-handle hang. Bench
+  units passed 177/178, with only the pre-existing `commandScenario` mock lacking `api.request`.
+- The workspace Cargo umbrella is still prevented from completing by unrelated stale
+  `vector_spreads` initializers in the Viz document, planning, and editor binary tests. The Plan
+  packages and reduced workspace passed: Control 23/23, Core 19/19, Discovery 5 plus one ignored,
+  Dynamics 58/58, Engine 97/97, Fixture 99/99, Application 493/493, Benchmark 21/21, and the Playback
+  transition integration test. The timing-sensitive Engine LTP test and the complete Engine suite
+  were rerun after desktop verification and passed 1/1 and 97/97 respectively.
+- `npm run open` rebuilt the production desktop assets, bundled headless runtime, Hardware Controls,
+  and the real Tauri application, then opened ToskLight. Readiness was `ready`, recovery mode was
+  false, and the active show advanced from snapshot revision 79 to 88 through real interactions.
+  The rendered desk had no Layout built-in; right-click and `SET GROUP 4 ENTER` opened the same
+  X-only General/Projection/Phaser modal; General exposed only name, color, and icon; Projection
+  exposed Top/Front/Back/Left/Right plus anchor XYZ, direction XYZ, and rotation; Phaser exposed
+  Grid/Radial/Radar without Random. A real Dynamic exposed Projection beside Phaser, independent
+  projection/shape Inherit and Override states, authoritative saved-target wording, and the
+  Dynamics-only Random option. The in-app browser reported no warning/error logs, post-interaction
+  readiness remained healthy, and the app-owned runtime log contained no warning, error, or panic.
 
 ## Remaining work
 
-- Complete every unchecked progress and acceptance item, then add a truthful `## Result` before
-  moving this plan to `docs/plans/Done`.
+- No Plan 01 implementation or verification work remains.
 - Keep the deliberate divergent PerLane compatibility shim until a future representation can encode
   multiple legacy lane mappings without changing output; uniform and lane-consistent definitions now
   write through a local mapping while retaining their legacy ordering as the runtime compatibility
   marker.
-- Run the complete required unit, API-E2E, UI-E2E, manual, migration/recovery, and real desktop
-  verification gates. Reconcile only Plan 01 regressions, record exact evidence, then perform the
-  requirement-by-requirement acceptance audit.
+- The unrelated repository-wide gate failures recorded above remain outside this plan; none is
+  rooted in or contradicts Plan 01 ownership after the focused regressions were fixed.
+
+## Result
+
+Implemented one canonical, bounded, revision-guarded spatial-selection model across portable Group
+sources, Stage XYZ projection, ranked Grid/Radial/Radar shapes, rank-aware Programmer/Cue/Playback
+output, Dynamic inheritance and overrides, and compatibility migration. Exact projected peers share
+one rank, live references and saved Dynamics re-resolve from authoritative membership/mapping/Stage
+state, frozen values remain frozen, and Random remains deterministic, position-independent, and
+Dynamics-only.
+
+Retired Layout and selection-grid authority, Group-owned master/pointer data, incidental-selection
+Playback assignment, and the old Group context-management surfaces. Group settings now own the
+literal General/Projection/Phaser workflow; Dynamics owns its separate Projection draft and preview;
+and typed desk/show/surface-scoped SET routing carries explicit Group, Page, and Playback identities
+through software, keyboard, OSC, HTTP/WebSocket, and hardware-facing paths. Group Masters exist only
+for assigned Playback targets, share one runtime by Group ID, and retain independent HTP contribution
+for different Group IDs.
+
+Focused domain, migration, persistence, API, UI, output, benchmark, documentation, and root
+Playwright evidence passed. The complete API suite passed 27/27, the complete UI suite passed 155
+with two classified unrelated failures and one skip, the manual generated successfully, and the
+real bundled desktop path passed readiness plus rendered operator inspection with no browser or
+runtime errors. The requirement-by-requirement audit found every Plan 01 acceptance criterion backed
+by current source, focused tests, broad-suite coverage, or direct desktop evidence; the separately
+listed pre-existing repository gate failures do not contradict this result.
 
 ## Decision and superseded behavior
 
@@ -997,41 +1057,41 @@ and a semantic commit.
 
 ## Acceptance criteria
 
-- [ ] No built-in Layout pane/window or hidden global/per-selection layout authority exists.
-- [ ] Group settings own an optional canonical projection-plus-shape mapping.
-- [ ] Group settings contain only General, Projection, and Phaser tabs, close with X, and contain
+- [x] No built-in Layout pane/window or hidden global/per-selection layout authority exists.
+- [x] Group settings own an optional canonical projection-plus-shape mapping.
+- [x] Group settings contain only General, Projection, and Phaser tabs, close with X, and contain
       none of the retired Master/selection/membership/Undo context actions.
-- [ ] The first stage supports a 3D anchor, view direction, rotation, and Top/Front/Back/Left/Right
+- [x] The first stage supports a 3D anchor, view direction, rotation, and Top/Front/Back/Left/Right
       presets.
-- [ ] The second stage supports Grid, Radial, and Radar; Random is position-independent and
+- [x] The second stage supports Grid, Radial, and Radar; Random is position-independent and
       Dynamics-only.
-- [ ] Exact projected-coordinate peers share rank/value and visibly act in parallel.
-- [ ] Group-exact `THRU` and other selection-sensitive operations evaluate by rank on the server.
-- [ ] Live Group references preserve membership updates and inherit mapping/order by default.
-- [ ] Group-local mappings replace inherited mapping/order without freezing membership.
-- [ ] Nested and multiple-reference precedence is deterministic, validated, and visible.
-- [ ] Dynamics inherit a live-bound Group mapping by default and can override either/both stages
+- [x] Exact projected-coordinate peers share rank/value and visibly act in parallel.
+- [x] Group-exact `THRU` and other selection-sensitive operations evaluate by rank on the server.
+- [x] Live Group references preserve membership updates and inherit mapping/order by default.
+- [x] Group-local mappings replace inherited mapping/order without freezing membership.
+- [x] Nested and multiple-reference precedence is deterministic, validated, and visible.
+- [x] Dynamics inherit a live-bound Group mapping by default and can override either/both stages
       without changing Group settings.
-- [ ] The Dynamics editor has a dedicated Projection tab alongside Phaser with an explicit
+- [x] The Dynamics editor has a dedicated Projection tab alongside Phaser with an explicit
       inheritance state.
-- [ ] Editing an existing Dynamic uses its saved target binding, not an incidental current
+- [x] Editing an existing Dynamic uses its saved target binding, not an incidental current
       selection.
-- [ ] Direct/ungrouped selections retain explicit selection order and create no hidden mapping.
-- [ ] Plain click selects a live Group, double quick press selects it frozen, and neither gesture
+- [x] Direct/ungrouped selections retain explicit selection order and create no hidden mapping.
+- [x] Plain click selects a live Group, double quick press selects it frozen, and neither gesture
       opens or mutates settings.
-- [ ] SET + Group + Enter opens Group settings; SET + explicit Group + Playback assigns; SET +
+- [x] SET + Group + Enter opens Group settings; SET + explicit Group + Playback assigns; SET +
       Playback alone always opens Playback Configuration regardless of selection.
-- [ ] Direct SET-click and right-click open the same Group settings modal, and direct Playback
+- [x] Direct SET-click and right-click open the same Group settings modal, and direct Playback
       targeting completes assignment without Enter.
-- [ ] Membership replacement remains Record → Group → Override, not a settings action.
-- [ ] Group Masters exist only through Playback assignments; Group settings/data own no master, and
+- [x] Membership replacement remains Record → Group → Override, not a settings action.
+- [x] Group Masters exist only through Playback assignments; Group settings/data own no master, and
       Playbacks for one Group share one master while different assigned Groups remain independent
       HTP contributors.
-- [ ] Legacy Groups, Dynamics, embedded fallbacks, desktops, and malformed-show recovery meet the
+- [x] Legacy Groups, Dynamics, embedded fallbacks, desktops, and malformed-show recovery meet the
       compatibility contract.
-- [ ] Software, keyboard, OSC, HTTP/WebSocket, and attached-hardware paths share authoritative
+- [x] Software, keyboard, OSC, HTTP/WebSocket, and attached-hardware paths share authoritative
       semantics where those surfaces expose the operation.
-- [ ] Focused domain, persistence, API, UI, migration, and real desktop/output acceptance evidence
+- [x] Focused domain, persistence, API, UI, migration, and real desktop/output acceptance evidence
       is recorded in `## Result` before completion.
 
 ## Explicit non-goals
