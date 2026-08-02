@@ -1,4 +1,5 @@
 use super::*;
+use http_body_util::BodyExt;
 
 #[tokio::test]
 async fn v2_patch_route_resolves_ordered_placement_and_replays_authoritative_addresses() {
@@ -228,6 +229,108 @@ async fn v2_patch_update_route_mutates_the_exact_physical_instance_and_replays()
     let stale = post_patch_update(&app, &token, show_id, &fixture_id, stale_fixture).await;
     assert_eq!(stale.status(), StatusCode::CONFLICT);
     assert_eq!(json(stale).await["error"], "stale fixture revision");
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn whole_show_upload_preserves_distinct_root_and_multipatch_appearance() {
+    let (state, data_dir) = test_state();
+    let (profile_id, mode_id) = install_patch_route_profile(&state);
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+    let source = create_show(&app, &token, "Appearance upload source").await;
+    let source_id = source["id"].as_str().unwrap();
+    open_show_for_patch_test(&app, &token, source_id).await;
+
+    let root_appearance = serde_json::json!({
+        "light_source": {"type": "halogen"},
+        "color_temperature_kelvin": 3200,
+        "gel": {
+            "type": "built_in",
+            "catalog_id": "touring-gels",
+            "entry_id": "deep-red",
+            "embedded_fallback": {
+                "number": "R1",
+                "name": "Deep red",
+                "display_srgb": "#D92838",
+                "visualizer_srgb": "#C01020"
+            }
+        },
+        "shaper_angles_degrees": [-30.0, 15.5, 0.0, 179.5]
+    });
+    let copy_appearance = serde_json::json!({
+        "light_source": {"type": "other", "label": "Carbon arc"},
+        "color_temperature_kelvin": 5600,
+        "gel": {
+            "type": "custom",
+            "name": "Window blue",
+            "color_srgb": "#80A0FF",
+            "note": "Balcony copy only"
+        },
+        "shaper_angles_degrees": [1.0, 2.0, 3.0, 4.0]
+    });
+    let mut patch = valid_patch_request_for(profile_id, mode_id, "appearance-upload-seed");
+    let fixture_id = patch["fixtures"][0]["fixture_id"].clone();
+    let copy_id = Uuid::new_v4();
+    patch["fixtures"][0]["installed_appearance"] = root_appearance.clone();
+    patch["fixtures"][0]["multipatch"] = serde_json::json!([{
+        "id": copy_id,
+        "name": "Balcony copy",
+        "split_patches": [{"split": 1, "universe": null, "address": null}],
+        "location": {"x": 100, "y": 200, "z": 300},
+        "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
+        "installed_appearance": copy_appearance
+    }]);
+    let created = post_patch(&app, &token, source_id, Some(0), patch).await;
+    assert_eq!(created.status(), StatusCode::OK);
+
+    let download = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v2/shows/{source_id}/download"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(download.status(), StatusCode::OK);
+    let show_bytes = download.into_body().collect().await.unwrap().to_bytes();
+    let uploaded = app
+        .clone()
+        .oneshot(show_action_request(
+            &token,
+            serde_json::json!({
+                "type": "create",
+                "name": "Appearance upload copy",
+                "data_base64": STANDARD.encode(show_bytes),
+                "overwrite": false
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::OK);
+    let uploaded = show_action_result(json(uploaded).await, "show");
+    let uploaded_id = uploaded["id"].as_str().unwrap();
+    assert_ne!(uploaded_id, source_id, "the upload is an independent show");
+    open_show_for_patch_test(&app, &token, uploaded_id).await;
+
+    let imported = get_patch(&app, &token, uploaded_id).await;
+    assert_eq!(imported.status(), StatusCode::OK);
+    let imported = json(imported).await;
+    assert_eq!(imported["fixtures"].as_array().unwrap().len(), 1);
+    let fixture = &imported["fixtures"][0];
+    assert_eq!(fixture["fixture_id"], fixture_id);
+    assert_eq!(fixture["profile_id"], profile_id.to_string());
+    assert_eq!(fixture["profile_revision"], 1);
+    assert_eq!(fixture["mode_id"], mode_id.to_string());
+    assert_eq!(fixture["installed_appearance"], root_appearance);
+    assert_eq!(fixture["multipatch"].as_array().unwrap().len(), 1);
+    assert_eq!(fixture["multipatch"][0]["id"], copy_id.to_string());
+    assert_eq!(
+        fixture["multipatch"][0]["installed_appearance"],
+        copy_appearance
+    );
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
