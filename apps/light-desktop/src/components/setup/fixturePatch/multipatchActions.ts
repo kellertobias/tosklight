@@ -209,6 +209,26 @@ export async function saveMultipatchVectorInput(
 					((endpoints[1] - endpoints[0]) * index) / (targets.length - 1);
 		return kind === "location" ? Math.round(point * 1_000) : point;
 	});
+	if (targets.length === 1) {
+		const target = targets[0];
+		const changed = await controller.patch.updateFixtureIntent(
+			fixture.fixture_id,
+			target === PRIMARY_PHYSICAL_PATCH ? null : target,
+			kind === "location"
+				? {
+						type: "set_location_axis",
+						axis,
+						millimetres: values[0],
+					}
+				: {
+						type: "set_rotation_axis",
+						axis,
+						degrees: values[0],
+					},
+		);
+		if (changed) controller.ui.setMultipatchEdit(null);
+		return;
+	}
 	let primary = fixture[kind] ?? { x: 0, y: 0, z: 0 };
 	const byTarget = new Map(
 		targets.map((target, index) => [target, values[index]]),
@@ -252,12 +272,54 @@ export async function saveMultipatchEdit(
 	const multipatch = (fixture.multipatch ?? []).map((item) =>
 		item.id === instance.id ? { ...item, ...changes } : item,
 	);
-	if (edit.kind === "pan_tilt") {
+	if (edit.kind !== "address") {
+		const action =
+			edit.kind === "pan_tilt"
+				? {
+						type: "set_pan_tilt" as const,
+						invertPan: changes.invert_pan ?? instance.invert_pan ?? false,
+						invertTilt: changes.invert_tilt ?? instance.invert_tilt ?? false,
+					}
+				: edit.kind === "bracket_angle"
+					? {
+							type: "set_bracket_angle" as const,
+							degrees: changes.bracket_angle ?? instance.bracket_angle ?? 0,
+						}
+					: edit.kind === "shaper_angle"
+						? {
+								type: "set_shaper_module_rotation" as const,
+								degrees: changes.shaper_angle ?? null,
+							}
+						: edit.kind === "location" && edit.axis
+							? {
+									type: "set_location_axis" as const,
+									axis: edit.axis,
+									millimetres:
+										changes.location?.[edit.axis] ??
+										instance.location?.[edit.axis] ??
+										0,
+								}
+							: edit.kind === "rotation" && edit.axis
+								? {
+										type: "set_rotation_axis" as const,
+										axis: edit.axis,
+										degrees:
+											changes.rotation?.[edit.axis] ??
+											instance.rotation?.[edit.axis] ??
+											0,
+									}
+								: null;
 		if (
-			await controller.patch.updateFixture(fixture.fixture_id, { multipatch })
+			action &&
+			(await controller.patch.updateFixtureIntent(
+				fixture.fixture_id,
+				instance.id,
+				action,
+			))
 		) {
 			controller.ui.setMultipatchEdit(null);
-			controller.dispatch({ type: "SET_PATCH_ARMED", value: false });
+			if (edit.kind === "pan_tilt")
+				controller.dispatch({ type: "SET_PATCH_ARMED", value: false });
 		}
 		return;
 	}

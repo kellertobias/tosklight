@@ -1,4 +1,5 @@
 import type { SplitPatch } from "../../../api/types";
+import type { PatchFixtureUpdateAction } from "../../../features/patch/contracts";
 import { parsePatchAddress } from "../../input/ConsoleFields";
 import { compatibleHighlightOverrides, isDmxPatchable } from "../patchUtils";
 import {
@@ -29,16 +30,22 @@ export function saveEdit(
 	if (edit === "mib") {
 		const result = parseMibInput(value);
 		if ("error" in result) controller.ui.setEditError(result.error);
-		else void applyEdit(controller, result.changes);
+		else
+			void applyFixtureIntent(controller, {
+				type: "set_move_in_black",
+				enabled: result.changes.move_in_black_enabled,
+				delayMillis: result.changes.move_in_black_delay_millis,
+			});
 	}
 	if (edit === "masters") {
 		const choice = combinedPolicyValues(value as CombinedPolicyChoice);
 		const applicable = fixturePolicyApplicability(selected.definition);
-		void applyEdit(controller, {
-			group_masters_enabled: applicable.groupMasters
+		void applyFixtureIntent(controller, {
+			type: "set_masters",
+			groupMastersEnabled: applicable.groupMasters
 				? choice.first
 				: (selected.group_masters_enabled ?? true),
-			grand_master_enabled: applicable.grandMaster
+			grandMasterEnabled: applicable.grandMaster
 				? choice.second
 				: (selected.grand_master_enabled ?? true),
 		});
@@ -46,11 +53,10 @@ export function saveEdit(
 	if (edit === "pan_tilt") {
 		const choice = combinedPolicyValues(value as CombinedPolicyChoice);
 		const applicable = fixturePolicyApplicability(selected.definition);
-		void applyEdit(controller, {
-			invert_pan: applicable.pan
-				? choice.first
-				: (selected.invert_pan ?? false),
-			invert_tilt: applicable.tilt
+		void applyFixtureIntent(controller, {
+			type: "set_pan_tilt",
+			invertPan: applicable.pan ? choice.first : (selected.invert_pan ?? false),
+			invertTilt: applicable.tilt
 				? choice.second
 				: (selected.invert_tilt ?? false),
 		});
@@ -58,28 +64,42 @@ export function saveEdit(
 	if (edit === "bracket_angle") {
 		const degrees = Number(value);
 		if (Number.isFinite(degrees))
-			void applyEdit(controller, { bracket_angle: degrees });
+			void applyFixtureIntent(controller, {
+				type: "set_bracket_angle",
+				degrees,
+			});
 	}
 	// Clearing the field takes the module off the fixture again; any number fits one at that
 	// angle. Nothing else can say "there is no shaper here" as plainly.
 	if (edit === "shaper_angle") {
 		const trimmed = value.trim();
 		const degrees = Number(trimmed);
-		if (!trimmed) void applyEdit(controller, { shaper_angle: null });
+		if (!trimmed)
+			void applyFixtureIntent(controller, {
+				type: "set_shaper_module_rotation",
+				degrees: null,
+			});
 		else if (Number.isFinite(degrees))
-			void applyEdit(controller, { shaper_angle: degrees });
+			void applyFixtureIntent(controller, {
+				type: "set_shaper_module_rotation",
+				degrees,
+			});
 	}
-	if (edit === "location" || edit === "rotation")
-		void applyEdit(controller, {
-			// A single-axis edit recomposes over the fixture's current siblings so it can
-			// never resubmit a stale value for an axis it did not touch.
-			[edit]: editAxis
+	if ((edit === "location" || edit === "rotation") && editAxis)
+		void applyFixtureIntent(
+			controller,
+			edit === "location"
 				? {
-						...(selected[edit] ?? { x: 0, y: 0, z: 0 }),
-						[editAxis]: vector[editAxis],
+						type: "set_location_axis",
+						axis: editAxis,
+						millimetres: vector[editAxis],
 					}
-				: vector,
-		});
+				: {
+						type: "set_rotation_axis",
+						axis: editAxis,
+						degrees: vector[editAxis],
+					},
+		);
 	if (edit === "mode" && definition) {
 		const highlight_overrides = compatibleHighlightOverrides(
 			definition,
@@ -91,6 +111,24 @@ export function saveEdit(
 		});
 	}
 	void all;
+}
+
+async function applyFixtureIntent(
+	controller: PatchController,
+	action: PatchFixtureUpdateAction,
+) {
+	const selected = controller.data.selected;
+	if (!selected) return;
+	controller.ui.setEditError("");
+	if (
+		await controller.patch.updateFixtureIntent(
+			selected.fixture_id,
+			null,
+			action,
+		)
+	)
+		completeEdit(controller);
+	else controller.ui.setEditError("The fixture update could not be applied.");
 }
 
 export async function saveVectorSpread(
@@ -163,12 +201,16 @@ export async function saveVectorAxisInput(
 	}
 	const selected = controller.data.selected;
 	if (!selected) return;
-	await applyEdit(controller, {
-		[kind]: {
-			...(selected[kind] ?? { x: 0, y: 0, z: 0 }),
-			[axis]: kind === "location" ? Math.round(parsed * 1_000) : parsed,
-		},
-	});
+	await applyFixtureIntent(
+		controller,
+		kind === "location"
+			? {
+					type: "set_location_axis",
+					axis,
+					millimetres: Math.round(parsed * 1_000),
+				}
+			: { type: "set_rotation_axis", axis, degrees: parsed },
+	);
 }
 
 export function parseMibInput(value: string):

@@ -96,21 +96,21 @@ export function PatchParameterControls({
 	const setValue = (slot: LocationEncoderSlot, value: number) => {
 		if (!target || !Number.isFinite(value)) return;
 		const stored = slot.kind === "location" ? Math.round(value * 1_000) : value;
-		const current = target.instance[slot.kind] ?? { x: 0, y: 0, z: 0 };
-		const updated = { ...current, [slot.axis]: stored };
-		if (!target.multipatch) {
-			void patch.updateFixture(target.fixture.fixture_id, {
-				[slot.kind]: updated,
-			});
-			return;
-		}
-		void patch.updateFixture(target.fixture.fixture_id, {
-			multipatch: (target.fixture.multipatch ?? []).map((instance) =>
-				instance.id === target.multipatch?.id
-					? { ...instance, [slot.kind]: updated }
-					: instance,
-			),
-		});
+		void patch.updateFixtureIntent(
+			target.fixture.fixture_id,
+			target.multipatch?.id ?? null,
+			slot.kind === "location"
+				? {
+						type: "set_location_axis",
+						axis: slot.axis,
+						millimetres: stored,
+					}
+				: {
+						type: "set_rotation_axis",
+						axis: slot.axis,
+						degrees: stored,
+					},
+		);
 	};
 	const applyAbsolute = (slotIndex: number, value: number) => {
 		const slot = locationSlots[slotIndex];

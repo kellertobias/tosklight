@@ -48,7 +48,7 @@ vi.mock("../../features/patch/PatchContext", () => ({
 		status: mocks.patchStatus,
 		fixtures: mocks.patchStatus === "ready" ? [fixture, secondFixture] : [],
 		selectedPatchInstance: mocks.selection,
-		updateFixture: mocks.update,
+		updateFixtureIntent: mocks.update,
 	}),
 	usePatchView: vi.fn(),
 }));
@@ -91,8 +91,10 @@ describe("Patch parameter selection", () => {
 			{ key: "ArrowUp" },
 		);
 
-		expect(mocks.update).toHaveBeenCalledWith("fixture-1", {
-			location: { x: 101, y: 0, z: 0 },
+		expect(mocks.update).toHaveBeenCalledWith("fixture-1", null, {
+			type: "set_location_axis",
+			axis: "x",
+			millimetres: 101,
 		});
 	});
 
@@ -108,13 +110,10 @@ describe("Patch parameter selection", () => {
 			screen.getByRole("group", { name: "Enc 1 · Location X" }),
 			{ key: "ArrowUp" },
 		);
-		expect(mocks.update).toHaveBeenCalledWith("fixture-1", {
-			multipatch: [
-				expect.objectContaining({
-					id: "copy-1",
-					location: { x: 301, y: 0, z: 0 },
-				}),
-			],
+		expect(mocks.update).toHaveBeenCalledWith("fixture-1", "copy-1", {
+			type: "set_location_axis",
+			axis: "x",
+			millimetres: 301,
 		});
 	});
 
@@ -169,16 +168,20 @@ describe("Patch parameter selection", () => {
 				detail: { control: "encode/1", value: "up" },
 			}),
 		);
-		expect(mocks.update).toHaveBeenLastCalledWith("fixture-1", {
-			location: { x: 101, y: 0, z: 0 },
+		expect(mocks.update).toHaveBeenLastCalledWith("fixture-1", null, {
+			type: "set_location_axis",
+			axis: "x",
+			millimetres: 101,
 		});
 		window.dispatchEvent(
 			new CustomEvent("light:encoder-action", {
 				detail: { control: "encode/4", value: "right" },
 			}),
 		);
-		expect(mocks.update).toHaveBeenLastCalledWith("fixture-1", {
-			rotation: { x: 15, y: 0, z: 0 },
+		expect(mocks.update).toHaveBeenLastCalledWith("fixture-1", null, {
+			type: "set_rotation_axis",
+			axis: "x",
+			degrees: 15,
 		});
 	});
 
@@ -197,8 +200,10 @@ describe("Patch parameter selection", () => {
 		for (const key of ["1", ".", "2", "5", "ENTER"])
 			fireEvent.click(within(dialog).getByRole("button", { name: key }));
 
-		expect(mocks.update).toHaveBeenLastCalledWith("fixture-1", {
-			location: { x: 1_250, y: 0, z: 0 },
+		expect(mocks.update).toHaveBeenLastCalledWith("fixture-1", null, {
+			type: "set_location_axis",
+			axis: "x",
+			millimetres: 1_250,
 		});
 	});
 
@@ -218,8 +223,10 @@ describe("Patch parameter selection", () => {
 		for (const key of ["2", ".", "5", "ENTER"])
 			fireEvent.click(within(dialog).getByRole("button", { name: key }));
 
-		expect(mocks.update).toHaveBeenLastCalledWith("fixture-1", {
-			location: { x: 2_500, y: 0, z: 0 },
+		expect(mocks.update).toHaveBeenLastCalledWith("fixture-1", null, {
+			type: "set_location_axis",
+			axis: "x",
+			millimetres: 2_500,
 		});
 	});
 });

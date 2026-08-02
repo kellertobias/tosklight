@@ -58,6 +58,7 @@ const patchFeature = {
 	spreadFixtureVector: vi.fn().mockResolvedValue(true),
 	updateFixture: vi.fn().mockResolvedValue(true),
 	updatePolicy: vi.fn().mockResolvedValue(true),
+	updateFixtureIntent: vi.fn().mockResolvedValue(true),
 	deleteFixture: vi.fn().mockResolvedValue(true),
 };
 
@@ -102,6 +103,7 @@ vi.mock("../../features/patch/PatchContext", async (importOriginal) => {
 			spreadFixtureVector: patchFeature.spreadFixtureVector,
 			updateFixture: patchFeature.updateFixture,
 			updatePolicy: patchFeature.updatePolicy,
+			updateFixtureIntent: patchFeature.updateFixtureIntent,
 			deleteFixture: patchFeature.deleteFixture,
 		}),
 	};
@@ -315,6 +317,7 @@ beforeEach(() => {
 	programming.actions.replace.mockResolvedValue(null);
 	programming.actions.gesture.mockResolvedValue(null);
 	patchFeature.updateFixture.mockResolvedValue(true);
+	patchFeature.updateFixtureIntent.mockResolvedValue(true);
 	patchFeature.spreadFixtureVector.mockResolvedValue(true);
 	patchFeature.updatePolicy.mockResolvedValue(true);
 	patchFeature.deleteFixture.mockResolvedValue(true);
@@ -380,10 +383,15 @@ describe("fixture output policy cells", () => {
 		fireEvent.click(within(dialog).getByRole("button", { name: "Set" }));
 
 		await waitFor(() =>
-			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
-				group_masters_enabled: false,
-				grand_master_enabled: true,
-			}),
+			expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith(
+				"fixture-split",
+				null,
+				{
+					type: "set_masters",
+					groupMastersEnabled: false,
+					grandMasterEnabled: true,
+				},
+			),
 		);
 		expect(dispatch).toHaveBeenCalledWith({
 			type: "SET_PATCH_ARMED",
@@ -421,15 +429,17 @@ describe("fixture output policy cells", () => {
 		fireEvent.click(screen.getByRole("option", { name: "Invert Both" }));
 		fireEvent.click(within(dialog).getByRole("button", { name: "Set" }));
 
-		await waitFor(() => {
-			const [fixtureId, changes] = patchFeature.updateFixture.mock.calls[0];
-			expect(fixtureId).toBe("fixture-split");
-			expect(changes.multipatch[0]).toMatchObject({
-				id: "physical-copy",
-				invert_pan: true,
-				invert_tilt: true,
-			});
-		});
+		await waitFor(() =>
+			expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith(
+				"fixture-split",
+				"physical-copy",
+				{
+					type: "set_pan_tilt",
+					invertPan: true,
+					invertTilt: true,
+				},
+			),
+		);
 	});
 
 	it("keeps MIB Off distinct from an enabled zero-second delay", async () => {
@@ -452,10 +462,15 @@ describe("fixture output policy cells", () => {
 		fireEvent.click(within(dialog).getByRole("button", { name: "Set" }));
 
 		await waitFor(() =>
-			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
-				move_in_black_enabled: true,
-				move_in_black_delay_millis: 0,
-			}),
+			expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith(
+				"fixture-split",
+				null,
+				{
+					type: "set_move_in_black",
+					enabled: true,
+					delayMillis: 0,
+				},
+			),
 		);
 	});
 });
@@ -1353,9 +1368,15 @@ describe("schema-v2 location and multi-patch editing", () => {
 		);
 		fireEvent.click(within(modal).getByRole("button", { name: "ENTER" }));
 		await waitFor(() =>
-			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
-				location: { x: 1000, y: 0, z: 0 },
-			}),
+			expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith(
+				"fixture-split",
+				null,
+				{
+					type: "set_location_axis",
+					axis: "x",
+					millimetres: 1000,
+				},
+			),
 		);
 	});
 
@@ -1380,9 +1401,15 @@ describe("schema-v2 location and multi-patch editing", () => {
 		for (const key of ["4", "5", "ENTER"])
 			fireEvent.click(within(modal).getByRole("button", { name: key }));
 		await waitFor(() =>
-			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
-				rotation: { x: 10, y: 45, z: 30 },
-			}),
+			expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith(
+				"fixture-split",
+				null,
+				{
+					type: "set_rotation_axis",
+					axis: "y",
+					degrees: 45,
+				},
+			),
 		);
 	});
 
@@ -1469,15 +1496,15 @@ describe("schema-v2 location and multi-patch editing", () => {
 		for (const key of ["4", "5", "ENTER"])
 			fireEvent.click(within(modal).getByRole("button", { name: key }));
 		await waitFor(() =>
-			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
-				multipatch: [
-					expect.objectContaining({
-						id: "current-mp",
-						location: { x: 111, y: 222, z: 333 },
-						rotation: { x: 10, y: 45, z: 30 },
-					}),
-				],
-			}),
+			expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith(
+				"fixture-split",
+				"current-mp",
+				{
+					type: "set_rotation_axis",
+					axis: "y",
+					degrees: 45,
+				},
+			),
 		);
 	});
 
