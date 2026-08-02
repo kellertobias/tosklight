@@ -4,7 +4,7 @@ use super::model::{
 };
 use super::projection::{mvr_transform, profile_projections, project_fixture};
 use crate::{ActionContext, ActionError, ActionErrorKind};
-use light_fixture::{FixtureDefinition, PatchedFixture, PatchedHead};
+use light_fixture::{FixtureDefinition, PatchedFixture, PatchedHead, PortablePatchedFixtureRecord};
 use light_mvr::MvrFixture;
 use light_show::{PortableShowDocument, PortableShowTransaction};
 use std::collections::{HashMap, HashSet};
@@ -275,24 +275,11 @@ fn patched_fixture(
     existing: &[&light_show::PortableShowObject],
 ) -> PatchedFixture {
     let (location, rotation) = mvr_transform(source.matrix);
-    let existing_mib = existing
+    let existing_patch = existing
         .iter()
         .find(|object| object.key().id() == fixture_id.0.to_string())
-        .and_then(|object| serde_json::from_value::<PatchedFixture>(object.body().clone()).ok())
-        .map(|fixture| {
-            (
-                fixture.move_in_black_enabled,
-                fixture.move_in_black_delay_millis,
-                fixture.group_masters_enabled,
-                fixture.grand_master_enabled,
-                fixture.invert_pan,
-                fixture.invert_tilt,
-                // Mechanical settings somebody made at the rig: an archive from another
-                // application knows nothing about them, so a re-import must not reset them.
-                fixture.bracket_angle,
-                fixture.shaper_angle,
-            )
-        });
+        .and_then(|object| PortablePatchedFixtureRecord::decode(object.body().clone()).ok())
+        .and_then(|record| record.patch().ok());
     PatchedFixture {
         fixture_id,
         fixture_number: source
@@ -319,17 +306,40 @@ fn patched_fixture(
                 fixture_id: light_core::FixtureId::new(),
             })
             .collect(),
-        move_in_black_enabled: existing_mib.is_none_or(|settings| settings.0),
-        move_in_black_delay_millis: existing_mib.map_or(0, |settings| settings.1),
-        group_masters_enabled: existing_mib.is_none_or(|settings| settings.2),
-        grand_master_enabled: existing_mib.is_none_or(|settings| settings.3),
-        invert_pan: existing_mib.is_some_and(|settings| settings.4),
-        invert_tilt: existing_mib.is_some_and(|settings| settings.5),
-        bracket_angle: existing_mib.map_or(0.0, |settings| settings.6),
-        shaper_angle: existing_mib.and_then(|settings| settings.7),
-        installed_appearance: Default::default(),
+        move_in_black_enabled: existing_patch
+            .as_ref()
+            .is_none_or(|fixture| fixture.move_in_black_enabled),
+        move_in_black_delay_millis: existing_patch
+            .as_ref()
+            .map_or(0, |fixture| fixture.move_in_black_delay_millis),
+        group_masters_enabled: existing_patch
+            .as_ref()
+            .is_none_or(|fixture| fixture.group_masters_enabled),
+        grand_master_enabled: existing_patch
+            .as_ref()
+            .is_none_or(|fixture| fixture.grand_master_enabled),
+        invert_pan: existing_patch
+            .as_ref()
+            .is_some_and(|fixture| fixture.invert_pan),
+        invert_tilt: existing_patch
+            .as_ref()
+            .is_some_and(|fixture| fixture.invert_tilt),
+        // An MVR source owns the root transform and address, but knows nothing about installed
+        // lamp/filter/mechanical settings or desk-owned physical copies. Retain those exact
+        // values across a reference-only portable record as well as a legacy inline record.
+        bracket_angle: existing_patch
+            .as_ref()
+            .map_or(0.0, |fixture| fixture.bracket_angle),
+        shaper_angle: existing_patch
+            .as_ref()
+            .and_then(|fixture| fixture.shaper_angle),
+        installed_appearance: existing_patch
+            .as_ref()
+            .map_or_else(Default::default, |fixture| {
+                fixture.installed_appearance.clone()
+            }),
         highlight_overrides: Default::default(),
-        multipatch: Vec::new(),
+        multipatch: existing_patch.map_or_else(Vec::new, |fixture| fixture.multipatch),
     }
 }
 

@@ -3,7 +3,10 @@ mod support;
 use super::*;
 use crate::{ActionErrorKind, ApplicationEvent, EventFilter, EventReplay, ShowEvent};
 use light_core::FixtureId;
-use light_fixture::PortablePatchedFixtureRecord;
+use light_fixture::{
+    FixtureProfile, GelAssignment, InstalledFixtureAppearance, InstalledLightSource,
+    MultiPatchInstance, PortablePatchedFixtureRecord, SplitPatch,
+};
 use std::sync::atomic::Ordering;
 use support::*;
 use uuid::Uuid;
@@ -162,24 +165,67 @@ fn backup_failure_leaves_persistence_and_live_runtime_unchanged() {
 }
 
 #[test]
-fn replace_and_reimport_preserve_mvr_identity_and_move_in_black_settings() {
+fn replace_and_reimport_preserve_reference_only_patch_settings_and_physical_copies() {
     let rig = Rig::new();
-    let definition = fixture_definition(1);
+    let mut profile = FixtureProfile::blank();
+    profile.id = FixtureId(Uuid::from_u128(800));
+    profile.revision = 1;
+    profile.manufacturer = "MVR Maker".into();
+    profile.name = "MVR Model".into();
+    profile.short_name = "MVR Model".into();
+    profile.modes[0].id = Uuid::from_u128(801);
+    profile.modes[0].name = "Standard".into();
+    let definition = profile.resolved_definition(profile.modes[0].id).unwrap();
     let retained_id = FixtureId(Uuid::from_u128(301));
     let replaced_id = FixtureId(Uuid::from_u128(302));
     let retained_source = Uuid::from_u128(303);
     let store = rig.ports.store();
+    let mut retained_fixture = stored_fixture(retained_id, definition.clone(), 10, (false, 750));
+    retained_fixture.group_masters_enabled = false;
+    retained_fixture.grand_master_enabled = false;
+    retained_fixture.invert_pan = true;
+    retained_fixture.invert_tilt = true;
+    retained_fixture.bracket_angle = -25.0;
+    retained_fixture.shaper_angle = Some(15.0);
+    retained_fixture.installed_appearance = InstalledFixtureAppearance {
+        light_source: InstalledLightSource::Tungsten,
+        color_temperature_kelvin: Some(3_200),
+        gel: GelAssignment::Custom {
+            name: "MVR retained amber".into(),
+            color_srgb: "#FFAA44".into(),
+            note: Some("Installed at the rig".into()),
+        },
+        shaper_angles_degrees: [1.0, 2.0, 3.0, 4.0],
+    };
+    retained_fixture.multipatch.push(MultiPatchInstance {
+        id: Uuid::from_u128(305),
+        name: "Retained copy".into(),
+        universe: Some(2),
+        address: Some(1),
+        split_patches: vec![SplitPatch {
+            split: 1,
+            universe: Some(2),
+            address: Some(1),
+        }],
+        location: Default::default(),
+        rotation: Default::default(),
+        invert_pan: false,
+        invert_tilt: false,
+        bracket_angle: 12.0,
+        shaper_angle: None,
+        installed_appearance: InstalledFixtureAppearance {
+            light_source: InstalledLightSource::Led,
+            color_temperature_kelvin: Some(5_600),
+            ..Default::default()
+        },
+    });
+    let retained_record =
+        PortablePatchedFixtureRecord::from_runtime_fixture(&retained_fixture).unwrap();
     store
         .put_object(
             "patched_fixture",
             &retained_id.0.to_string(),
-            &serde_json::to_value(stored_fixture(
-                retained_id,
-                definition.clone(),
-                10,
-                (false, 750),
-            ))
-            .unwrap(),
+            retained_record.body(),
             0,
         )
         .unwrap();
@@ -229,6 +275,17 @@ fn replace_and_reimport_preserve_mvr_identity_and_move_in_black_settings() {
         .unwrap();
     assert!(!retained.patch.move_in_black_enabled);
     assert_eq!(retained.patch.move_in_black_delay_millis, 750);
+    assert!(!retained.patch.group_masters_enabled);
+    assert!(!retained.patch.grand_master_enabled);
+    assert!(retained.patch.invert_pan);
+    assert!(retained.patch.invert_tilt);
+    assert_eq!(retained.patch.bracket_angle, -25.0);
+    assert_eq!(retained.patch.shaper_angle, Some(15.0));
+    assert_eq!(
+        retained.patch.installed_appearance,
+        retained_fixture.installed_appearance
+    );
+    assert_eq!(retained.patch.multipatch, retained_fixture.multipatch);
     let document = rig.document();
     assert!(
         document
