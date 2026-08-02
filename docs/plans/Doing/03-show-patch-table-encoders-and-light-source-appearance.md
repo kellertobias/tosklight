@@ -84,6 +84,11 @@ before moving it to `Done` in a semantic commit.
   canonical uppercase `#RRGGBB`, 1,000–25,000 K, finite normalized angles, and an effective CCT for
   explicit sources. Legacy inline/reference records default without being rewritten, existing
   mechanical fields remain independent, and the focused `light-fixture` suite passes all 104 tests.
+- The shared Viz projection crate now owns deterministic installed-appearance color math: bounded
+  1,000–25,000 K CCT approximation, canonical sRGB-to-linear gel decoding, and live-color × CCT ×
+  gel composition entirely in linear space. Golden tests cover stable warm/cool vectors, Open white,
+  warm red filtering, range clamping, invalid hex, and zero-live-output darkness; all 52
+  `viz-project` tests pass. Renderer scene integration remains outstanding.
 
 ## Current behavior and problem
 

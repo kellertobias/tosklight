@@ -6,6 +6,7 @@
 //! semantics — splits, fine bytes, ranges, heads, colour systems, pixels, hazers — come from the
 //! shared ToskLight fixture library rather than a second schema.
 
+mod appearance;
 mod binding;
 mod colour;
 mod decode;
@@ -13,6 +14,10 @@ mod default_model;
 mod fallback;
 mod plan;
 
+pub use appearance::{
+    MAX_COLOUR_TEMPERATURE_KELVIN, MIN_COLOUR_TEMPERATURE_KELVIN, apply_installed_appearance,
+    colour_temperature_linear_rgb, parse_srgb_hex_linear,
+};
 pub use binding::ChannelRef;
 pub use colour::{ResolvedColour, named_colour};
 pub use decode::Decoder;
