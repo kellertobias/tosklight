@@ -1848,6 +1848,48 @@ button.large-action:disabled {
 .light-source-editor > p {
 	margin: 0 0 14px;
 }
+.gel-catalog-panel {
+	display: grid;
+	grid-column: 1 / -1;
+	gap: 10px;
+	padding: 12px;
+	border: 1px solid var(--panel-border);
+	background: rgb(0 0 0 / 14%);
+}
+.gel-catalog-results {
+	display: grid;
+	max-height: 220px;
+	gap: 6px;
+	overflow: auto;
+}
+.gel-catalog-results .gel-catalog-entry {
+	display: flex;
+	justify-content: flex-start;
+	gap: 9px;
+	text-align: left;
+}
+.gel-catalog-swatch {
+	width: 24px;
+	height: 24px;
+	flex: 0 0 24px;
+	border: 1px solid rgb(255 255 255 / 35%);
+	border-radius: 3px;
+}
+.gel-catalog-import {
+	display: grid;
+	gap: 10px;
+}
+.gel-catalog-import[open] {
+	padding-top: 8px;
+}
+.gel-catalog-import > label,
+.gel-import-preview {
+	display: grid;
+	gap: 6px;
+}
+.gel-import-preview p {
+	margin: 0;
+}
 @media (max-width: 680px) {
 	.light-source-editor-grid {
 		grid-template-columns: 1fr;

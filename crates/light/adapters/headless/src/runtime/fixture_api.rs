@@ -28,6 +28,140 @@ pub(super) fn router() -> Router<AppState> {
             "/api/v2/fixture-library/profiles/{id}/revisions/{revision}/package",
             get(export_fixture_package),
         )
+        .route(
+            "/api/v2/fixture-library/gel-catalogs",
+            get(gel_catalogs_snapshot),
+        )
+        .route(
+            "/api/v2/fixture-library/gel-catalogs/import/preview",
+            post(preview_gel_catalog_import),
+        )
+        .route(
+            "/api/v2/fixture-library/gel-catalogs/{catalog_id}/update",
+            post(confirm_gel_catalog_import),
+        )
+}
+
+#[derive(Default, Deserialize)]
+struct GelCatalogSearchQuery {
+    query: Option<String>,
+}
+
+async fn gel_catalogs_snapshot(
+    State(state): State<AppState>,
+    Query(search): Query<GelCatalogSearchQuery>,
+    headers: HeaderMap,
+) -> Result<Json<wire::GelCatalogsSnapshot>, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    let query = search.query.unwrap_or_default();
+    if query.len() > 256 || query.chars().any(char::is_control) {
+        return Err(ApiError::bad_request(
+            "gel catalog query must contain at most 256 printable bytes",
+        ));
+    }
+    let needle = query.trim().to_lowercase();
+    let catalogs = state
+        .installation
+        .gel_catalogs()
+        .map_err(ApiError::fixture)?
+        .into_iter()
+        .filter_map(|mut catalog| {
+            if !needle.is_empty() && !catalog.name.to_lowercase().contains(&needle) {
+                catalog.entries.retain(|entry| {
+                    entry.number.to_lowercase().contains(&needle)
+                        || entry.name.to_lowercase().contains(&needle)
+                        || entry.display_srgb.to_lowercase().contains(&needle)
+                });
+                if catalog.entries.is_empty() {
+                    return None;
+                }
+            }
+            Some(gel_catalog(&catalog))
+        })
+        .collect();
+    Ok(Json(wire::GelCatalogsSnapshot { catalogs }))
+}
+
+async fn preview_gel_catalog_import(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    TolerantJson(request): TolerantJson<wire::GelCatalogImportPreviewRequest>,
+) -> Result<Json<wire::GelCatalogImportPreview>, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    let csv = decode_archive(&request.csv_base64, "gel catalog CSV")?;
+    let preview = state
+        .installation
+        .preview_gel_catalog_csv_import(
+            gel_catalog_import_target(request.target),
+            &request.catalog_name,
+            &csv,
+        )
+        .map_err(ApiError::fixture)?;
+    Ok(Json(gel_catalog_import_preview(&preview)))
+}
+
+async fn confirm_gel_catalog_import(
+    State(state): State<AppState>,
+    Path(catalog_id): Path<Uuid>,
+    headers: HeaderMap,
+    TolerantJson(request): TolerantJson<wire::GelCatalogImportConfirmRequest>,
+) -> Result<Json<wire::GelCatalogImportConfirmOutcome>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    validate_request_id(&request.request_id)?;
+    if catalog_id != wire_gel_catalog_target_id(request.target) {
+        return Err(ApiError::bad_request(
+            "gel catalog path identity must match the import target",
+        ));
+    }
+    let key = ReplayKey {
+        session_id: session.id.0,
+        request_id: request.request_id.clone(),
+    };
+    let signature =
+        gel_catalog_import_signature(request.target, &request.catalog_name, &request.csv_base64)?;
+    if let Some(outcome) = state
+        .replay
+        .lookup_fixture_library(&key, &signature)
+        .await?
+    {
+        let wire::FixtureLibraryActionResult::GelCatalogImported { catalog } = outcome.result
+        else {
+            return Err(ApiError::internal(
+                "gel catalog replay returned an incompatible fixture-library outcome",
+            ));
+        };
+        return Ok(Json(wire::GelCatalogImportConfirmOutcome {
+            request_id: outcome.request_id,
+            replayed: true,
+            catalog,
+        }));
+    }
+    let catalog = execute_gel_catalog_import(
+        &state,
+        request.target,
+        request.catalog_name,
+        request.csv_base64,
+    )?;
+    let result = wire::FixtureLibraryActionResult::GelCatalogImported {
+        catalog: catalog.clone(),
+    };
+    state
+        .replay
+        .insert_fixture_library(
+            key,
+            signature,
+            wire::FixtureLibraryActionOutcome {
+                request_id: request.request_id.clone(),
+                replayed: false,
+                result,
+            },
+        )
+        .await;
+    Ok(Json(wire::GelCatalogImportConfirmOutcome {
+        request_id: request.request_id,
+        replayed: false,
+        catalog,
+    }))
 }
 
 async fn fixture_definitions_snapshot(
@@ -222,6 +356,161 @@ fn execute_action(
                 revision,
             })
         }
+    }
+}
+
+fn execute_gel_catalog_import(
+    state: &AppState,
+    target: wire::GelCatalogImportTarget,
+    catalog_name: String,
+    csv_base64: String,
+) -> Result<wire::GelCatalog, ApiError> {
+    let csv = decode_archive(&csv_base64, "gel catalog CSV")?;
+    let preview = state
+        .installation
+        .preview_gel_catalog_csv_import(gel_catalog_import_target(target), &catalog_name, &csv)
+        .map_err(ApiError::fixture)?;
+    if !preview.conflicts().is_empty() {
+        return Err(ApiError::conflict(
+            "gel catalog changed after preview; preview the import again before confirming",
+        ));
+    }
+    if !preview.invalid_rows().is_empty() {
+        return Err(ApiError::bad_request(
+            "gel catalog import has invalid rows and cannot be confirmed",
+        ));
+    }
+    let catalog = state
+        .installation
+        .confirm_gel_catalog_csv_import(&preview)
+        .map_err(gel_catalog_confirm_error)?;
+    emit(
+        state,
+        "fixture_library_changed",
+        serde_json::json!({
+            "id": catalog.id,
+            "revision": catalog.revision,
+            "gel_catalog": true
+        }),
+    );
+    Ok(gel_catalog(&catalog))
+}
+
+fn gel_catalog_confirm_error(error: light_fixture::FixtureError) -> ApiError {
+    match &error {
+        light_fixture::FixtureError::Invalid(message)
+            if message.starts_with("stale gel catalog import preview:") =>
+        {
+            ApiError::conflict(message.clone())
+        }
+        _ => ApiError::fixture(error),
+    }
+}
+
+fn gel_catalog_import_target(
+    target: wire::GelCatalogImportTarget,
+) -> light_fixture::GelCatalogImportTarget {
+    match target {
+        wire::GelCatalogImportTarget::Create { catalog_id } => {
+            light_fixture::GelCatalogImportTarget::Create { catalog_id }
+        }
+        wire::GelCatalogImportTarget::Update {
+            catalog_id,
+            expected_revision,
+        } => light_fixture::GelCatalogImportTarget::Update {
+            catalog_id,
+            expected_revision,
+        },
+    }
+}
+
+fn wire_gel_catalog_target_id(target: wire::GelCatalogImportTarget) -> Uuid {
+    match target {
+        wire::GelCatalogImportTarget::Create { catalog_id }
+        | wire::GelCatalogImportTarget::Update { catalog_id, .. } => catalog_id,
+    }
+}
+
+fn gel_catalog(catalog: &light_fixture::GelCatalog) -> wire::GelCatalog {
+    wire::GelCatalog {
+        id: catalog.id,
+        revision: catalog.revision,
+        name: catalog.name.clone(),
+        entries: catalog.entries.iter().map(gel_catalog_entry).collect(),
+    }
+}
+
+fn gel_catalog_entry(entry: &light_fixture::GelCatalogEntry) -> wire::GelCatalogEntry {
+    wire::GelCatalogEntry {
+        id: entry.id,
+        number: entry.number.clone(),
+        name: entry.name.clone(),
+        display_srgb: entry.display_srgb.clone(),
+        visualizer_srgb: entry.visualizer_srgb.clone(),
+    }
+}
+
+fn gel_catalog_import_preview(
+    preview: &light_fixture::GelCatalogImportPreview,
+) -> wire::GelCatalogImportPreview {
+    wire::GelCatalogImportPreview {
+        catalog_id: preview.catalog_id(),
+        catalog_name: preview.catalog_name().to_owned(),
+        catalog_name_changed: preview.catalog_name_changed(),
+        additions: preview
+            .additions()
+            .iter()
+            .map(|addition| wire::GelCatalogImportAddition {
+                entry: gel_catalog_entry(&addition.entry),
+            })
+            .collect(),
+        replacements: preview
+            .replacements()
+            .iter()
+            .map(|replacement| wire::GelCatalogImportReplacement {
+                previous: gel_catalog_entry(&replacement.previous),
+                replacement: gel_catalog_entry(&replacement.replacement),
+            })
+            .collect(),
+        unchanged: preview
+            .unchanged()
+            .iter()
+            .map(|unchanged| gel_catalog_entry(&unchanged.entry))
+            .collect(),
+        conflicts: preview
+            .conflicts()
+            .iter()
+            .map(|conflict| match conflict {
+                light_fixture::GelCatalogImportConflict::CatalogIdentityAlreadyExists {
+                    catalog_id,
+                } => wire::GelCatalogImportConflict::CatalogIdentityAlreadyExists {
+                    catalog_id: *catalog_id,
+                },
+                light_fixture::GelCatalogImportConflict::CatalogMissing { catalog_id } => {
+                    wire::GelCatalogImportConflict::CatalogMissing {
+                        catalog_id: *catalog_id,
+                    }
+                }
+                light_fixture::GelCatalogImportConflict::RevisionMismatch {
+                    catalog_id,
+                    expected,
+                    current,
+                } => wire::GelCatalogImportConflict::RevisionMismatch {
+                    catalog_id: *catalog_id,
+                    expected: *expected,
+                    current: *current,
+                },
+            })
+            .collect(),
+        invalid_rows: preview
+            .invalid_rows()
+            .iter()
+            .map(|error| wire::GelCatalogCsvError {
+                row: error.row,
+                message: error.message.clone(),
+            })
+            .collect(),
+        confirmable: preview.is_confirmable(),
     }
 }
 
@@ -550,6 +839,17 @@ fn json_values<T: Serialize>(values: Vec<T>) -> Result<Vec<serde_json::Value>, A
 fn action_signature(action: &wire::FixtureLibraryAction) -> Result<[u8; 32], ApiError> {
     let bytes = serde_json::to_vec(action).map_err(|error| {
         ApiError::internal(format!("fixture-library action encoding failed: {error}"))
+    })?;
+    Ok(Sha256::digest(bytes).into())
+}
+
+fn gel_catalog_import_signature(
+    target: wire::GelCatalogImportTarget,
+    catalog_name: &str,
+    csv_base64: &str,
+) -> Result<[u8; 32], ApiError> {
+    let bytes = serde_json::to_vec(&(target, catalog_name, csv_base64)).map_err(|error| {
+        ApiError::internal(format!("gel catalog import encoding failed: {error}"))
     })?;
     Ok(Sha256::digest(bytes).into())
 }

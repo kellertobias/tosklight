@@ -1,5 +1,5 @@
-import type { ServerController } from "./model";
 import type { ServerCapabilities } from "./capabilityContracts";
+import type { ServerController } from "./model";
 
 export function createFixtureLibraryActions(
 	model: ServerController,
@@ -13,6 +13,9 @@ export function createFixtureLibraryActions(
 	| "saveFixtureProfileSourceGdtf"
 	| "importFixturePackage"
 	| "exportFixturePackage"
+	| "gelCatalogs"
+	| "previewGelCatalogCsvImport"
+	| "confirmGelCatalogCsvImport"
 > {
 	const {
 		api,
@@ -44,7 +47,10 @@ export function createFixtureLibraryActions(
 		},
 		saveFixtureProfile: async (profile, expectedRevision) => {
 			try {
-				const saved = await api.fixtures.putFixtureProfile(profile, expectedRevision);
+				const saved = await api.fixtures.putFixtureProfile(
+					profile,
+					expectedRevision,
+				);
 				setFixtureProfiles(await api.fixtures.fixtureProfiles());
 				setFixtureProfileWarnings(await api.fixtures.fixtureProfileWarnings());
 				setFixtureLibrary(await api.fixtures.fixtureLibrary());
@@ -99,5 +105,10 @@ export function createFixtureLibraryActions(
 		},
 		exportFixturePackage: (id, revision) =>
 			api.fixtures.exportFixturePackage(id, revision),
+		gelCatalogs: (query) => api.fixtures.gelCatalogs(query),
+		previewGelCatalogCsvImport: (input) =>
+			api.fixtures.previewGelCatalogCsvImport(input),
+		confirmGelCatalogCsvImport: (input) =>
+			api.fixtures.confirmGelCatalogCsvImport(input),
 	};
 }

@@ -395,6 +395,32 @@ impl InstallationResource {
         self.fixture_library.lock().migration_warnings()
     }
 
+    pub(in crate::runtime) fn gel_catalogs(
+        &self,
+    ) -> Result<Vec<light_fixture::GelCatalog>, light_fixture::FixtureError> {
+        self.fixture_library.lock().gel_catalogs()
+    }
+
+    pub(in crate::runtime) fn preview_gel_catalog_csv_import(
+        &self,
+        target: light_fixture::GelCatalogImportTarget,
+        catalog_name: &str,
+        csv: &[u8],
+    ) -> Result<light_fixture::GelCatalogImportPreview, light_fixture::FixtureError> {
+        self.fixture_library
+            .lock()
+            .preview_gel_catalog_csv_import(target, catalog_name, csv)
+    }
+
+    pub(in crate::runtime) fn confirm_gel_catalog_csv_import(
+        &self,
+        preview: &light_fixture::GelCatalogImportPreview,
+    ) -> Result<light_fixture::GelCatalog, light_fixture::FixtureError> {
+        self.fixture_library
+            .lock()
+            .confirm_gel_catalog_csv_import(preview)
+    }
+
     #[cfg(test)]
     pub(in crate::runtime) fn fixture_profile(
         &self,

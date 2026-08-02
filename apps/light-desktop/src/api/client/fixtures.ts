@@ -7,6 +7,11 @@ import type {
 	FixtureLibraryWarningsSnapshot,
 	FixtureProfileRevisionsSnapshot,
 	FixtureProfilesSnapshot,
+	GelCatalog,
+	GelCatalogImportConfirmOutcome,
+	GelCatalogImportPreview,
+	GelCatalogImportTarget,
+	GelCatalogsSnapshot,
 } from "../generated/light-wire";
 import { decodePatchSnapshot } from "../patchWire";
 import type { FixtureDefinition, FixtureProfile } from "../types";
@@ -26,6 +31,8 @@ export interface FixtureImportRequirement {
 export type FixturePackageImportOutcome =
 	| { type: "profile"; profile: FixtureProfile }
 	| { type: "import_required"; unknown_attributes: FixtureImportRequirement[] };
+
+export type { GelCatalog, GelCatalogImportPreview, GelCatalogImportTarget };
 
 export class FixtureApiClient {
 	constructor(private readonly transport: ClientTransport) {}
@@ -56,6 +63,51 @@ export class FixtureApiClient {
 				"/api/v2/fixture-library/warnings",
 			)
 			.then((snapshot) => snapshot.warnings);
+	}
+
+	gelCatalogs(query = ""): Promise<GelCatalog[]> {
+		const parameters = new URLSearchParams();
+		if (query) parameters.set("query", query);
+		const suffix = parameters.size ? `?${parameters.toString()}` : "";
+		return this.transport
+			.request<GelCatalogsSnapshot>(
+				`/api/v2/fixture-library/gel-catalogs${suffix}`,
+			)
+			.then((snapshot) => snapshot.catalogs);
+	}
+
+	async previewGelCatalogCsvImport(input: {
+		target: GelCatalogImportTarget;
+		catalogName: string;
+		csv: Uint8Array;
+	}): Promise<GelCatalogImportPreview> {
+		return this.transport.request(
+			"/api/v2/fixture-library/gel-catalogs/import/preview",
+			jsonRequest("POST", {
+				target: input.target,
+				catalog_name: input.catalogName,
+				csv_base64: await bytesToBase64(input.csv),
+			}),
+		);
+	}
+
+	async confirmGelCatalogCsvImport(input: {
+		target: GelCatalogImportTarget;
+		catalogName: string;
+		csv: Uint8Array;
+	}): Promise<GelCatalog> {
+		const catalogId = input.target.catalog_id;
+		const outcome =
+			await this.transport.request<GelCatalogImportConfirmOutcome>(
+				`/api/v2/fixture-library/gel-catalogs/${encodeURIComponent(catalogId)}/update`,
+				jsonRequest("POST", {
+					request_id: crypto.randomUUID(),
+					target: input.target,
+					catalog_name: input.catalogName,
+					csv_base64: await bytesToBase64(input.csv),
+				}),
+			);
+		return outcome.catalog;
 	}
 
 	async fixtureProfileRevisions(id: string): Promise<FixtureProfile[]> {

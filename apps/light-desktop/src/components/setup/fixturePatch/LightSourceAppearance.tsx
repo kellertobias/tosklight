@@ -6,7 +6,12 @@ import {
 	Select,
 	TextField,
 } from "@tosklight/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type {
+	GelCatalog,
+	GelCatalogImportPreview,
+	GelCatalogImportTarget,
+} from "../../../api/client/fixtures";
 import type {
 	GelAssignment,
 	InstalledFixtureAppearance,
@@ -50,6 +55,7 @@ type AppearanceDraft = {
 	customName: string;
 	customColor: string;
 	customNote: string;
+	catalogGel: Extract<GelAssignment, { type: "built_in" }> | null;
 };
 
 export function LightSourceCell({
@@ -143,6 +149,46 @@ function AppearanceEditor({
 	const [draft, setDraft] = useState(() => appearanceDraft(appearance));
 	const [submitError, setSubmitError] = useState("");
 	const [busy, setBusy] = useState(false);
+	const [catalogQuery, setCatalogQuery] = useState("");
+	const [catalogs, setCatalogs] = useState<GelCatalog[]>([]);
+	const [catalogIndex, setCatalogIndex] = useState<GelCatalog[]>([]);
+	const [catalogError, setCatalogError] = useState("");
+	const [catalogBusy, setCatalogBusy] = useState(false);
+	const [importCatalogId, setImportCatalogId] = useState("new");
+	const [newCatalogId] = useState(() => crypto.randomUUID());
+	const [importCatalogName, setImportCatalogName] = useState("");
+	const [importCsv, setImportCsv] = useState<Uint8Array | null>(null);
+	const [importFileName, setImportFileName] = useState("");
+	const [importPreview, setImportPreview] =
+		useState<GelCatalogImportPreview | null>(null);
+	const [importStatus, setImportStatus] = useState("");
+	const catalogApi = controller.server;
+	useEffect(() => {
+		if (draft.gelType !== "built_in" || !catalogApi?.gelCatalogs) return;
+		let current = true;
+		setCatalogBusy(true);
+		setCatalogError("");
+		void catalogApi
+			.gelCatalogs(catalogQuery)
+			.then((next) => {
+				if (current) {
+					setCatalogs(next);
+					setCatalogIndex((known) => mergeGelCatalogs(known, next));
+				}
+			})
+			.catch((reason) => {
+				if (current)
+					setCatalogError(
+						reason instanceof Error ? reason.message : String(reason),
+					);
+			})
+			.finally(() => {
+				if (current) setCatalogBusy(false);
+			});
+		return () => {
+			current = false;
+		};
+	}, [catalogApi, catalogQuery, draft.gelType]);
 	const result = normalizeAppearanceDraft(
 		draft,
 		appearance,
@@ -169,8 +215,72 @@ function AppearanceEditor({
 		if (applied) close();
 		else setSubmitError("The installed appearance could not be applied.");
 	};
-	const assignedBuiltIn =
-		appearance.gel.type === "built_in" ? appearance.gel : null;
+	const importTarget = gelImportTarget(
+		importCatalogId,
+		newCatalogId,
+		catalogIndex,
+	);
+	const previewImport = async () => {
+		if (
+			!catalogApi?.previewGelCatalogCsvImport ||
+			!importCsv ||
+			!importTarget ||
+			catalogBusy
+		)
+			return;
+		setCatalogBusy(true);
+		setImportStatus("");
+		setCatalogError("");
+		try {
+			setImportPreview(
+				await catalogApi.previewGelCatalogCsvImport({
+					target: importTarget,
+					catalogName: importCatalogName.trim(),
+					csv: importCsv,
+				}),
+			);
+		} catch (reason) {
+			setCatalogError(
+				reason instanceof Error ? reason.message : String(reason),
+			);
+			setImportPreview(null);
+		} finally {
+			setCatalogBusy(false);
+		}
+	};
+	const confirmImport = async () => {
+		if (
+			!catalogApi?.confirmGelCatalogCsvImport ||
+			!catalogApi.gelCatalogs ||
+			!importCsv ||
+			!importTarget ||
+			!importPreview?.confirmable ||
+			catalogBusy
+		)
+			return;
+		setCatalogBusy(true);
+		setCatalogError("");
+		try {
+			const imported = await catalogApi.confirmGelCatalogCsvImport({
+				target: importTarget,
+				catalogName: importCatalogName.trim(),
+				csv: importCsv,
+			});
+			setCatalogs(await catalogApi.gelCatalogs(catalogQuery));
+			setCatalogIndex((known) => mergeGelCatalogs(known, [imported]));
+			setImportPreview(null);
+			setImportStatus(
+				`Imported ${imported.name} revision ${imported.revision}.`,
+			);
+			setImportCatalogId(imported.id);
+		} catch (reason) {
+			setCatalogError(
+				reason instanceof Error ? reason.message : String(reason),
+			);
+		} finally {
+			setCatalogBusy(false);
+		}
+	};
 
 	return (
 		<ModalRegistration onClose={close}>
@@ -250,19 +360,162 @@ function AppearanceEditor({
 								}
 							>
 								<option value="open_white">Open white</option>
-								{assignedBuiltIn && (
-									<option value="built_in">
-										Assigned catalog gel · {gelSummary(assignedBuiltIn)}
-									</option>
-								)}
+								<option value="built_in">Catalog gel</option>
 								<option value="custom">Custom color</option>
-								{!assignedBuiltIn && (
-									<option disabled value="built_in">
-										Catalog gels unavailable pending review
-									</option>
-								)}
 							</Select>
 						</label>
+						{draft.gelType === "built_in" && (
+							<section className="gel-catalog-panel" aria-label="Gel catalog">
+								<TextField
+									label="Search catalog, number, or name"
+									value={catalogQuery}
+									onChange={(event) => setCatalogQuery(event.target.value)}
+								/>
+								{draft.catalogGel && (
+									<p className="patch-secondary">
+										Selected: {gelSummary(draft.catalogGel)}
+									</p>
+								)}
+								<div className="gel-catalog-results" aria-busy={catalogBusy}>
+									{catalogs.flatMap((catalog) =>
+										catalog.entries.map((entry) => (
+											<Button
+												key={`${catalog.id}:${entry.id}`}
+												className="gel-catalog-entry"
+												onClick={() =>
+													setDraft({
+														...draft,
+														catalogGel: {
+															type: "built_in",
+															catalog_id: catalog.id,
+															entry_id: entry.id,
+															embedded_fallback: {
+																number: entry.number,
+																name: entry.name,
+																display_srgb: entry.display_srgb,
+																visualizer_srgb: entry.visualizer_srgb,
+															},
+														},
+													})
+												}
+											>
+												<span
+													className="gel-catalog-swatch"
+													style={{ backgroundColor: entry.display_srgb }}
+													role="img"
+													aria-label={`Display color ${entry.display_srgb}`}
+												/>
+												{catalog.name} · {entry.number} · {entry.name} ·{" "}
+												{entry.display_srgb}
+											</Button>
+										)),
+									)}
+									{!catalogBusy &&
+										catalogs.every((catalog) => !catalog.entries.length) && (
+											<p className="patch-secondary">
+												No matching catalog gels.
+											</p>
+										)}
+								</div>
+								<details className="gel-catalog-import">
+									<summary>Import gel catalog CSV</summary>
+									{/* biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label. */}
+									<label>
+										Import into
+										<Select
+											aria-label="Import gel catalog target"
+											value={importCatalogId}
+											onChange={(event) => {
+												const id = event.target.value;
+												setImportCatalogId(id);
+												setImportCatalogName(
+													catalogIndex.find((catalog) => catalog.id === id)
+														?.name ?? "",
+												);
+												setImportPreview(null);
+											}}
+										>
+											<option value="new">New catalog</option>
+											{catalogIndex.map((catalog) => (
+												<option key={catalog.id} value={catalog.id}>
+													{catalog.name} · revision {catalog.revision}
+												</option>
+											))}
+										</Select>
+									</label>
+									<TextField
+										label="Catalog name"
+										value={importCatalogName}
+										onChange={(event) => {
+											setImportCatalogName(event.target.value);
+											setImportPreview(null);
+										}}
+									/>
+									<label>
+										Catalog CSV
+										<input
+											type="file"
+											accept=".csv,text/csv"
+											onChange={(event) => {
+												const file = event.target.files?.[0];
+												setImportPreview(null);
+												setImportFileName(file?.name ?? "");
+												if (!file) {
+													setImportCsv(null);
+													return;
+												}
+												void file
+													.arrayBuffer()
+													.then((buffer) =>
+														setImportCsv(new Uint8Array(buffer)),
+													);
+											}}
+										/>
+									</label>
+									{importFileName && (
+										<p className="patch-secondary">{importFileName}</p>
+									)}
+									<Button
+										disabled={
+											!importCsv || !importCatalogName.trim() || catalogBusy
+										}
+										onClick={() => void previewImport()}
+									>
+										Preview import
+									</Button>
+									{importPreview && (
+										<section
+											className="gel-import-preview"
+											aria-label="Gel catalog import preview"
+										>
+											<p>
+												{importPreview.additions.length} additions ·{" "}
+												{importPreview.replacements.length} replacements ·{" "}
+												{importPreview.unchanged.length} unchanged
+											</p>
+											{importPreview.conflicts.map((conflict) => (
+												<p key={JSON.stringify(conflict)} role="alert">
+													{gelImportConflict(conflict)}
+												</p>
+											))}
+											{importPreview.invalid_rows.map((error) => (
+												<p key={`${error.row}:${error.message}`} role="alert">
+													Row {error.row}: {error.message}
+												</p>
+											))}
+											<Button
+												className="primary"
+												disabled={!importPreview.confirmable || catalogBusy}
+												onClick={() => void confirmImport()}
+											>
+												Confirm import
+											</Button>
+										</section>
+									)}
+									{importStatus && <p role="status">{importStatus}</p>}
+								</details>
+							</section>
+						)}
 						{draft.gelType === "custom" && (
 							<>
 								<TextField
@@ -289,13 +542,9 @@ function AppearanceEditor({
 							</>
 						)}
 					</div>
-					<p className="patch-secondary" data-catalog-status="unavailable">
-						Catalog gel search and CSV import remain unavailable until the
-						manufacturer-neutral catalog review is complete.
-					</p>
-					{(result.error || submitError) && (
+					{(result.error || submitError || catalogError) && (
 						<p className="patch-status" role="alert">
-							{result.error || submitError}
+							{result.error || submitError || catalogError}
 						</p>
 					)}
 				</section>
@@ -358,6 +607,7 @@ function appearanceDraft(
 			appearance.gel.type === "custom" ? appearance.gel.color_srgb : "#FFFFFF",
 		customNote:
 			appearance.gel.type === "custom" ? (appearance.gel.note ?? "") : "",
+		catalogGel: appearance.gel.type === "built_in" ? appearance.gel : null,
 	};
 }
 
@@ -400,17 +650,17 @@ function normalizeAppearanceDraft(
 	let gel: PatchGelAssignment;
 	if (draft.gelType === "open_white") gel = { type: "open_white" };
 	else if (draft.gelType === "built_in") {
-		if (baseline.gel.type !== "built_in")
-			return { error: "The selected catalog gel is unavailable on this desk." };
+		if (!draft.catalogGel)
+			return { error: "Choose a gel from an installed catalog." };
 		gel = {
 			type: "built_in",
-			catalogId: baseline.gel.catalog_id,
-			entryId: baseline.gel.entry_id,
+			catalogId: draft.catalogGel.catalog_id,
+			entryId: draft.catalogGel.entry_id,
 			embeddedFallback: {
-				number: baseline.gel.embedded_fallback.number,
-				name: baseline.gel.embedded_fallback.name,
-				displaySrgb: baseline.gel.embedded_fallback.display_srgb,
-				visualizerSrgb: baseline.gel.embedded_fallback.visualizer_srgb,
+				number: draft.catalogGel.embedded_fallback.number,
+				name: draft.catalogGel.embedded_fallback.name,
+				displaySrgb: draft.catalogGel.embedded_fallback.display_srgb,
+				visualizerSrgb: draft.catalogGel.embedded_fallback.visualizer_srgb,
 			},
 		};
 	} else {
@@ -529,4 +779,40 @@ function boundedTextError(value: string, label: string, limit: number) {
 
 function utf8Length(value: string) {
 	return new TextEncoder().encode(value).length;
+}
+
+function gelImportTarget(
+	selectedId: string,
+	newCatalogId: string,
+	catalogs: GelCatalog[],
+): GelCatalogImportTarget | null {
+	if (selectedId === "new") return { type: "create", catalog_id: newCatalogId };
+	const catalog = catalogs.find((candidate) => candidate.id === selectedId);
+	return catalog
+		? {
+				type: "update",
+				catalog_id: catalog.id,
+				expected_revision: catalog.revision,
+			}
+		: null;
+}
+
+function gelImportConflict(
+	conflict: GelCatalogImportPreview["conflicts"][number],
+) {
+	if (conflict.type === "catalog_identity_already_exists")
+		return "A catalog with this identity already exists.";
+	if (conflict.type === "catalog_missing")
+		return "The catalog no longer exists.";
+	return `Catalog revision changed from ${conflict.expected} to ${conflict.current}. Preview again.`;
+}
+
+function mergeGelCatalogs(known: GelCatalog[], received: GelCatalog[]) {
+	const byId = new Map(known.map((catalog) => [catalog.id, catalog]));
+	for (const catalog of received) byId.set(catalog.id, catalog);
+	return [...byId.values()].sort(
+		(left, right) =>
+			left.name.localeCompare(right.name, undefined, { sensitivity: "base" }) ||
+			left.id.localeCompare(right.id),
+	);
 }

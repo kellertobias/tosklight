@@ -64,6 +64,106 @@ async fn fixture_profile_api_rejects_invalid_discrete_wheel_before_storing_revis
 }
 
 #[tokio::test]
+async fn gel_catalog_csv_preview_confirm_replay_and_search_are_typed() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let catalog_id = Uuid::new_v4();
+    let csv = b"number,name,display_rgb,visualizer_rgb\nR80,Primary Blue,#1122AA,#0F1F99\n";
+    let preview_request = serde_json::json!({
+        "target": {"type": "create", "catalog_id": catalog_id},
+        "catalog_name": "Touring filters",
+        "csv_base64": STANDARD.encode(csv),
+        "future_field": true
+    });
+
+    let preview = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/fixture-library/gel-catalogs/import/preview")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(preview_request.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(preview.status(), StatusCode::OK);
+    let preview = json(preview).await;
+    assert_eq!(preview["confirmable"], true);
+    assert_eq!(preview["additions"][0]["entry"]["number"], "R80");
+
+    let confirm_body = serde_json::json!({
+        "request_id": "gel-import-1",
+        "target": {"type": "create", "catalog_id": catalog_id},
+        "catalog_name": "Touring filters",
+        "csv_base64": STANDARD.encode(csv)
+    });
+    for replayed in [false, true] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/api/v2/fixture-library/gel-catalogs/{catalog_id}/update"
+                ))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(confirm_body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let outcome = json(response).await;
+        assert_eq!(outcome["replayed"], replayed);
+        assert_eq!(outcome["catalog"]["revision"], 1);
+    }
+
+    let search = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v2/fixture-library/gel-catalogs?query=primary")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(search.status(), StatusCode::OK);
+    let search = json(search).await;
+    assert_eq!(search["catalogs"].as_array().unwrap().len(), 1);
+    assert_eq!(search["catalogs"][0]["entries"][0]["name"], "Primary Blue");
+
+    let invalid = app
+        .oneshot(
+            Request::post("/api/v2/fixture-library/gel-catalogs/import/preview")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "target": {
+                            "type": "update",
+                            "catalog_id": catalog_id,
+                            "expected_revision": 1
+                        },
+                        "catalog_name": "Touring filters",
+                        "csv_base64": STANDARD.encode(b"wrong,header\n")
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::OK);
+    let invalid = json(invalid).await;
+    assert_eq!(invalid["confirmable"], false);
+    assert_eq!(invalid["invalid_rows"][0]["row"], 1);
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

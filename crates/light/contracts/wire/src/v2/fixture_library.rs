@@ -36,6 +36,109 @@ pub struct FixtureProfileRevisionsSnapshot {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct GelCatalogsSnapshot {
+    pub catalogs: Vec<GelCatalog>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct GelCatalog {
+    pub id: Uuid,
+    pub revision: u32,
+    pub name: String,
+    pub entries: Vec<GelCatalogEntry>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct GelCatalogEntry {
+    pub id: Uuid,
+    pub number: String,
+    pub name: String,
+    pub display_srgb: String,
+    pub visualizer_srgb: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum GelCatalogImportTarget {
+    Create {
+        catalog_id: Uuid,
+    },
+    Update {
+        catalog_id: Uuid,
+        expected_revision: u32,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct GelCatalogImportPreviewRequest {
+    pub target: GelCatalogImportTarget,
+    pub catalog_name: String,
+    pub csv_base64: String,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct GelCatalogImportConfirmRequest {
+    #[schemars(length(min = 1, max = 128))]
+    pub request_id: String,
+    pub target: GelCatalogImportTarget,
+    pub catalog_name: String,
+    pub csv_base64: String,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct GelCatalogImportConfirmOutcome {
+    pub request_id: String,
+    pub replayed: bool,
+    pub catalog: GelCatalog,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct GelCatalogImportPreview {
+    pub catalog_id: Uuid,
+    pub catalog_name: String,
+    pub catalog_name_changed: bool,
+    pub additions: Vec<GelCatalogImportAddition>,
+    pub replacements: Vec<GelCatalogImportReplacement>,
+    pub unchanged: Vec<GelCatalogEntry>,
+    pub conflicts: Vec<GelCatalogImportConflict>,
+    pub invalid_rows: Vec<GelCatalogCsvError>,
+    pub confirmable: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct GelCatalogImportAddition {
+    pub entry: GelCatalogEntry,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct GelCatalogImportReplacement {
+    pub previous: GelCatalogEntry,
+    pub replacement: GelCatalogEntry,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum GelCatalogImportConflict {
+    CatalogIdentityAlreadyExists {
+        catalog_id: Uuid,
+    },
+    CatalogMissing {
+        catalog_id: Uuid,
+    },
+    RevisionMismatch {
+        catalog_id: Uuid,
+        expected: u32,
+        current: u32,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct GelCatalogCsvError {
+    pub row: usize,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct FixtureLibraryActionRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,
@@ -116,6 +219,9 @@ pub enum FixtureLibraryActionResult {
     },
     ImportRequired {
         unknown_attributes: Vec<FixtureImportRequirement>,
+    },
+    GelCatalogImported {
+        catalog: GelCatalog,
     },
 }
 

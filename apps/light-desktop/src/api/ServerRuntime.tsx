@@ -37,11 +37,11 @@ import type { SessionRole } from "../features/session/ownership";
 import { useSessionHandoff } from "../features/session/SessionHandoffContext";
 import { ShellStatusActionsProvider } from "../features/shellStatus/ShellStatusActionsProvider";
 import { ShowLifecycleProvider } from "../features/showLifecycle/ShowLifecycleContext";
-import { VisualizerViewProvider } from "../features/visualizerView/VisualizerViewContext";
-import type { VisualizerViewPatch } from "./client/visualizerView";
 import { ShowObjectsViewProvider } from "../features/showObjects/ShowObjectsView";
 import { SoundToLightProvider } from "../features/soundToLight/SoundToLightContext";
 import { VirtualPlaybackZonesProvider } from "../features/virtualPlaybackZones/VirtualPlaybackZonesContext";
+import { VisualizerViewProvider } from "../features/visualizerView/VisualizerViewContext";
+import type { VisualizerViewPatch } from "./client/visualizerView";
 import { ServerDeskBoundaries } from "./ServerDeskBoundaries";
 import { ServerProgrammingProviders } from "./ServerProgrammingProviders";
 import { ServerVisualizationRuntimeBoundary } from "./ServerVisualizationRuntimeBoundary";
@@ -139,6 +139,9 @@ function useProviderDataSources(
 			saveFixtureProfileSourceGdtf: value.saveFixtureProfileSourceGdtf,
 			importFixturePackage: value.importFixturePackage,
 			exportFixturePackage: value.exportFixturePackage,
+			gelCatalogs: value.gelCatalogs,
+			previewGelCatalogCsvImport: value.previewGelCatalogCsvImport,
+			confirmGelCatalogCsvImport: value.confirmGelCatalogCsvImport,
 		}),
 		[
 			value.fixtureLibrary,
@@ -153,6 +156,9 @@ function useProviderDataSources(
 			value.saveFixtureProfileSourceGdtf,
 			value.importFixturePackage,
 			value.exportFixturePackage,
+			value.gelCatalogs,
+			value.previewGelCatalogCsvImport,
+			value.confirmGelCatalogCsvImport,
 		],
 	);
 	const mediaServersState = useMemo(
@@ -332,7 +338,9 @@ function useDynamicsActionSource(state: ReturnType<typeof useServerState>) {
 }
 
 /// What the desk sends its connected visualizers, bound to the one desk connection.
-function useVisualizerViewActionSource(state: ReturnType<typeof useServerState>) {
+function useVisualizerViewActionSource(
+	state: ReturnType<typeof useServerState>,
+) {
 	return useMemo(
 		() => ({
 			views: () => state.api.visualizerView.views(),
@@ -365,19 +373,21 @@ function ServerActionProviderStack({
 						<ShellStatusActionsProvider actions={actions.shellStatusActions}>
 							<DmxDiagnosticsProvider diagnostics={actions.dmxDiagnostics}>
 								<VisualizerViewProvider actions={visualizerViewActions}>
-								<ShowLifecycleProvider lifecycle={data.showLifecycle}>
-									<DeskConnectionProvider connection={data.deskConnection}>
-										<FixtureLibraryProvider library={data.fixtureLibraryState}>
-											<MediaServersProvider media={data.mediaServersState}>
-												<SoundToLightProvider
-													actions={actions.soundToLightActions}
-												>
-													{children}
-												</SoundToLightProvider>
-											</MediaServersProvider>
-										</FixtureLibraryProvider>
-									</DeskConnectionProvider>
-								</ShowLifecycleProvider>
+									<ShowLifecycleProvider lifecycle={data.showLifecycle}>
+										<DeskConnectionProvider connection={data.deskConnection}>
+											<FixtureLibraryProvider
+												library={data.fixtureLibraryState}
+											>
+												<MediaServersProvider media={data.mediaServersState}>
+													<SoundToLightProvider
+														actions={actions.soundToLightActions}
+													>
+														{children}
+													</SoundToLightProvider>
+												</MediaServersProvider>
+											</FixtureLibraryProvider>
+										</DeskConnectionProvider>
+									</ShowLifecycleProvider>
 								</VisualizerViewProvider>
 							</DmxDiagnosticsProvider>
 						</ShellStatusActionsProvider>

@@ -47,6 +47,9 @@ const server = {
 	setSelection: vi.fn(),
 	refresh: vi.fn(),
 	savePatchLayer: vi.fn(),
+	gelCatalogs: vi.fn().mockResolvedValue([]),
+	previewGelCatalogCsvImport: vi.fn(),
+	confirmGelCatalogCsvImport: vi.fn(),
 };
 const patchFeature = {
 	selectedPatchInstance: null as null | {
@@ -504,6 +507,151 @@ describe("fixture output policy cells", () => {
 });
 
 describe("installed light-source appearance", () => {
+	it("searches installed catalogs and stores a portable embedded fallback", async () => {
+		server.patch.fixtures = [appearanceFixture()];
+		server.gelCatalogs.mockResolvedValue([
+			{
+				id: "catalog-blue",
+				revision: 3,
+				name: "Touring filters",
+				entries: [
+					{
+						id: "entry-r80",
+						number: "R80",
+						name: "Primary Blue",
+						display_srgb: "#1122AA",
+						visualizer_srgb: "#0F1F99",
+					},
+				],
+			},
+		]);
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(screen.getByRole("button", { name: /Light source 17:/ }));
+		const dialog = screen.getByRole("dialog", { name: "Set light source 17" });
+		fireEvent.click(within(dialog).getByRole("button", { name: "Open white" }));
+		fireEvent.click(screen.getByRole("option", { name: "Catalog gel" }));
+		fireEvent.change(
+			within(dialog).getByLabelText("Search catalog, number, or name"),
+			{ target: { value: "primary" } },
+		);
+		await waitFor(() =>
+			expect(server.gelCatalogs).toHaveBeenLastCalledWith("primary"),
+		);
+		fireEvent.click(
+			await within(dialog).findByRole("button", {
+				name: /Touring filters · R80 · Primary Blue/,
+			}),
+		);
+		fireEvent.click(within(dialog).getByRole("button", { name: "Apply" }));
+
+		await waitFor(() =>
+			expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith(
+				"fixture-split",
+				null,
+				{
+					type: "set_installed_appearance",
+					appearance: {
+						lightSource: { type: "profile_default" },
+						colorTemperatureKelvin: null,
+						gel: {
+							type: "built_in",
+							catalogId: "catalog-blue",
+							entryId: "entry-r80",
+							embeddedFallback: {
+								number: "R80",
+								name: "Primary Blue",
+								displaySrgb: "#1122AA",
+								visualizerSrgb: "#0F1F99",
+							},
+						},
+						shaperAnglesDegrees: [1, 2, 3, 4],
+					},
+				},
+			),
+		);
+	});
+
+	it("shows strict CSV preview problems and requires explicit confirmation", async () => {
+		server.patch.fixtures = [appearanceFixture()];
+		server.gelCatalogs.mockResolvedValue([]);
+		server.previewGelCatalogCsvImport.mockResolvedValue({
+			catalog_id: "catalog-new",
+			catalog_name: "Imported filters",
+			catalog_name_changed: true,
+			additions: [
+				{
+					entry: {
+						id: "entry",
+						number: "1",
+						name: "Blue",
+						display_srgb: "#0000FF",
+						visualizer_srgb: "#0000EE",
+					},
+				},
+			],
+			replacements: [],
+			unchanged: [],
+			conflicts: [],
+			invalid_rows: [],
+			confirmable: true,
+		});
+		server.confirmGelCatalogCsvImport.mockResolvedValue({
+			id: "catalog-new",
+			revision: 1,
+			name: "Imported filters",
+			entries: [],
+		});
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+		fireEvent.click(screen.getByRole("button", { name: /Light source 17:/ }));
+		const dialog = screen.getByRole("dialog", { name: "Set light source 17" });
+		fireEvent.click(within(dialog).getByRole("button", { name: "Open white" }));
+		fireEvent.click(screen.getByRole("option", { name: "Catalog gel" }));
+		fireEvent.click(within(dialog).getByText("Import gel catalog CSV"));
+		fireEvent.change(within(dialog).getByLabelText("Catalog name"), {
+			target: { value: "Imported filters" },
+		});
+		const file = new File(
+			["number,name,display_rgb,visualizer_rgb\n1,Blue,#0000FF,#0000EE\n"],
+			"filters.csv",
+			{ type: "text/csv" },
+		);
+		Object.defineProperty(file, "arrayBuffer", {
+			value: async () =>
+				new TextEncoder().encode(
+					"number,name,display_rgb,visualizer_rgb\n1,Blue,#0000FF,#0000EE\n",
+				).buffer,
+		});
+		fireEvent.change(within(dialog).getByLabelText("Catalog CSV"), {
+			target: { files: [file] },
+		});
+		await waitFor(() =>
+			expect(
+				within(dialog).getByRole("button", { name: "Preview import" }),
+			).toBeEnabled(),
+		);
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Preview import" }),
+		);
+		expect(
+			await within(dialog).findByText(
+				"1 additions · 0 replacements · 0 unchanged",
+			),
+		).toBeInTheDocument();
+		expect(server.confirmGelCatalogCsvImport).not.toHaveBeenCalled();
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Confirm import" }),
+		);
+		await waitFor(() =>
+			expect(server.confirmGelCatalogCsvImport).toHaveBeenCalledOnce(),
+		);
+		expect(await within(dialog).findByRole("status")).toHaveTextContent(
+			"Imported Imported filters revision 1.",
+		);
+	});
+
 	it("shows the exact root and multi-patch source, effective CCT, and gel", () => {
 		server.patch.fixtures = [appearanceFixture()];
 		render(<FixturePatchSetup />);

@@ -2,6 +2,9 @@ import { createContext, type PropsWithChildren, useContext } from "react";
 import type {
 	FixtureAttributeMapping,
 	FixturePackageImportOutcome,
+	GelCatalog,
+	GelCatalogImportPreview,
+	GelCatalogImportTarget,
 } from "../../api/client/fixtures";
 import type {
 	FixtureDefinition,
@@ -38,6 +41,17 @@ export interface FixtureLibraryState {
 		attributeMappings?: FixtureAttributeMapping[],
 	) => Promise<FixturePackageImportOutcome>;
 	exportFixturePackage: (id: string, revision: number) => Promise<Blob>;
+	gelCatalogs?: (query?: string) => Promise<GelCatalog[]>;
+	previewGelCatalogCsvImport?: (input: {
+		target: GelCatalogImportTarget;
+		catalogName: string;
+		csv: Uint8Array;
+	}) => Promise<GelCatalogImportPreview>;
+	confirmGelCatalogCsvImport?: (input: {
+		target: GelCatalogImportTarget;
+		catalogName: string;
+		csv: Uint8Array;
+	}) => Promise<GelCatalog>;
 }
 
 const FixtureLibraryContext = createContext<FixtureLibraryState | null>(null);
