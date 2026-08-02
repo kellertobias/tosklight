@@ -26,6 +26,7 @@ import {
 	activeProgrammerFixtureIds,
 	compareFixtureIds,
 	cueListFixtureIds,
+	fixtureSheetIncludesFixture,
 } from "./fixtureSheetFilters";
 import {
 	fixtureSheetTargets,
@@ -76,6 +77,7 @@ function orderedFixtureTargets({
 	const activeIds = activeProgrammerFixtureIds(activeValueTargets, groups);
 	const cueIds = cueListFixtureIds(selectedCueList ?? undefined, groups);
 	return [...fixtures]
+		.filter(fixtureSheetIncludesFixture)
 		.sort(compareFixtureIds)
 		.flatMap((fixture) => fixtureSheetTargets(fixture, includedHeads))
 		.filter((target) => !activeOnly || targetFamilyActive(target, activeIds))

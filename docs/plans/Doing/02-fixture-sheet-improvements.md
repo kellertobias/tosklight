@@ -15,7 +15,7 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
 - [x] Claimed from `docs/plans/Next` in numeric order.
 - [ ] Audit existing Fixture Sheet projection, filters, columns, settings ownership, persistence,
   compact rendering, Dynamic/base-value telemetry, help, screenshots, and acceptance seams.
-- [ ] Implement invariant programmable-row filtering without changing show or selection authority.
+- [x] Implement invariant programmable-row filtering without changing show or selection authority.
 - [ ] Implement authoritative attribute-group base summaries and stable Dynamic identity/state
   feedback without sampled-value repainting.
 - [ ] Implement per-surface Off/Icon only/Text only configuration, migration, and shared rendering.
@@ -38,10 +38,16 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
 
 - Plan 01 is complete in commit `9216b28e`; its assigned-only Group Master runtime and authoritative
   Dynamic identity/projection contracts are available dependencies for this plan.
+- The first implementation slice filters parent fixtures before logical-head expansion, ordering,
+  active/Cuelist filters, or rendering. `visual_only`, manufacturer `Venue`, a projected reserved
+  virtual identity, and a legacy complete ID beginning `0.` are independent exclusions; physical
+  fixture 100 and identities `100.0`/`100.1` remain eligible. Thirteen focused filter/target tests,
+  desktop typecheck, focused Biome, and the diff check passed.
 
 ## Remaining work
 
-- Complete the audit before selecting the first implementation boundary.
+- Complete the remaining data, rendering, settings, persistence, documentation, and coverage audit
+  before selecting the next implementation boundary.
 - Keep every acceptance item below unclaimed until current source and focused verification prove it.
 
 ## Goal

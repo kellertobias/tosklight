@@ -4,6 +4,24 @@ import { resolveGroupMembership } from "../features/showObjects/groupProjection"
 
 type Group = { id: string; body: StoredGroup };
 
+/**
+ * The regular Fixture Sheet is a programming surface. Scenic fixtures remain in
+ * the show and selection authority, but none of their independent legacy/profile
+ * identities may make them visible here.
+ */
+export function fixtureSheetIncludesFixture(fixture: PatchedFixture) {
+	if (fixture.definition.profile_snapshot?.patch_policy === "visual_only")
+		return false;
+	if (fixture.definition.manufacturer === "Venue") return false;
+	const completeFixtureId =
+		fixture.virtual_fixture_number != null
+			? `0.${fixture.virtual_fixture_number}`
+			: fixture.fixture_number != null
+				? String(fixture.fixture_number)
+				: fixture.fixture_id;
+	return !completeFixtureId.startsWith("0.");
+}
+
 function fixtureIdsForGroups(
 	groupIds: Iterable<string>,
 	groups: readonly Group[],

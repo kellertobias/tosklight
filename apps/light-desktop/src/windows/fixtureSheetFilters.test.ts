@@ -5,6 +5,7 @@ import {
 	compareFixtureIds,
 	cueListFixtureIds,
 	fixtureIsIncluded,
+	fixtureSheetIncludesFixture,
 } from "./fixtureSheetFilters";
 
 const groups = [
@@ -15,6 +16,79 @@ const groups = [
 ];
 
 describe("fixture sheet filters", () => {
+	const fixture = ({
+		fixtureId = "fixture-1",
+		fixtureNumber = 1,
+		virtualFixtureNumber = null,
+		manufacturer = "Test",
+		patchPolicy = "dmx",
+	}: {
+		fixtureId?: string;
+		fixtureNumber?: number | null;
+		virtualFixtureNumber?: number | null;
+		manufacturer?: string;
+		patchPolicy?: "dmx" | "visual_only";
+	} = {}) =>
+		({
+			fixture_id: fixtureId,
+			fixture_number: fixtureNumber,
+			virtual_fixture_number: virtualFixtureNumber,
+			universe: null,
+			address: null,
+			definition: {
+				manufacturer,
+				profile_snapshot: { patch_policy: patchPolicy },
+			},
+			logical_heads: [],
+		}) as unknown as PatchedFixture;
+
+	it("independently excludes visual-only, Venue, and complete 0.x identities", () => {
+		expect(
+			fixtureSheetIncludesFixture(
+				fixture({ manufacturer: "Touring", patchPolicy: "visual_only" }),
+			),
+		).toBe(false);
+		expect(
+			fixtureSheetIncludesFixture(
+				fixture({ manufacturer: "Venue", patchPolicy: "dmx" }),
+			),
+		).toBe(false);
+		expect(
+			fixtureSheetIncludesFixture(
+				fixture({
+					fixtureId: "legacy-scenery",
+					fixtureNumber: null,
+					virtualFixtureNumber: 7,
+				}),
+			),
+		).toBe(false);
+		expect(
+			fixtureSheetIncludesFixture(
+				fixture({ fixtureId: "0.imported", fixtureNumber: null }),
+			),
+		).toBe(false);
+	});
+
+	it("retains ordinary 100-series fixtures whose rendered heads contain .0", () => {
+		const fixture100 = fixture({
+			fixtureId: "fixture-100",
+			fixtureNumber: 100,
+		});
+		fixture100.logical_heads = [{ fixture_id: "head-100.1", head_index: 1 }];
+
+		expect(fixtureSheetIncludesFixture(fixture100)).toBe(true);
+		expect(
+			fixtureSheetIncludesFixture(
+				fixture({ fixtureId: "100.0", fixtureNumber: null }),
+			),
+		).toBe(true);
+		expect(
+			fixtureSheetIncludesFixture(
+				fixture({ fixtureId: "100.1", fixtureNumber: null }),
+			),
+		).toBe(true);
+	});
+
 	it("includes direct and group programmer fixtures", () => {
 		const programmer = {
 			fixtureIds: ["fixture-1"],

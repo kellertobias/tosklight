@@ -92,7 +92,7 @@ describe("fixture sheet targets", () => {
     expect(fixtureSheetTargets(ordinary)[0].displayId).toBe(42);
   });
 
-  it("shows a visual-only fixture in the reserved 0.x namespace", () => {
+  it("derives the reserved 0.x identity used by the upstream scenery filter", () => {
     const visual = fixture();
     visual.fixture_number = null;
     visual.virtual_fixture_number = 3;
