@@ -1,7 +1,7 @@
 use crate::{EngineSnapshot, ProfileEncodingIndex, ProfileProjectionIndex, profile_head_owner};
 use light_core::{AttributeKey, FixtureId};
 use light_output::OutputRoute;
-use light_playback::{PlaybackDefinition, PlaybackEngine, PlaybackTarget};
+use light_playback::{PlaybackEngine, PlaybackTarget};
 use light_programmer::{GroupDefinition, resolve_group};
 use parking_lot::RwLock;
 use std::{
@@ -42,7 +42,7 @@ impl RuntimeGeneration {
     ) -> Self {
         let routes = Arc::from(snapshot.routes.as_slice());
         let snap_attributes = compile_snap_attributes(&snapshot);
-        let group_masters = GroupMasterIndex::compile(&groups, &snapshot.playbacks);
+        let group_masters = GroupMasterIndex::compile(&groups, &snapshot);
         Self {
             snapshot: Arc::new(snapshot),
             playback,
@@ -65,6 +65,8 @@ impl RuntimeGeneration {
     ) -> Self {
         let fixtures_changed = !Arc::ptr_eq(&snapshot.fixtures, &current.snapshot.fixtures);
         let playbacks_changed = !Arc::ptr_eq(&snapshot.playbacks, &current.snapshot.playbacks);
+        let playback_pages_changed =
+            !Arc::ptr_eq(&snapshot.playback_pages, &current.snapshot.playback_pages);
         let groups_changed = !Arc::ptr_eq(&snapshot.groups, &current.snapshot.groups);
         let routes = if Arc::ptr_eq(&snapshot.routes, &current.snapshot.routes) {
             Arc::clone(&current.routes)
@@ -76,8 +78,8 @@ impl RuntimeGeneration {
         } else {
             Arc::clone(&current.snap_attributes)
         };
-        let group_masters = if playbacks_changed || groups_changed {
-            Arc::new(GroupMasterIndex::compile(&groups, &snapshot.playbacks))
+        let group_masters = if playbacks_changed || playback_pages_changed || groups_changed {
+            Arc::new(GroupMasterIndex::compile(&groups, &snapshot))
         } else {
             Arc::clone(&current.group_masters)
         };
@@ -116,7 +118,7 @@ impl RuntimeGeneration {
             .get_mut(group_id)
             .expect("runtime groups and snapshot groups must stay aligned")
             .master = value;
-        let group_masters = GroupMasterIndex::compile(&groups, &current.snapshot.playbacks);
+        let group_masters = GroupMasterIndex::compile(&groups, &current.snapshot);
         (
             Arc::new(Self {
                 snapshot: Arc::new(snapshot),
@@ -209,12 +211,16 @@ struct GroupMasterBinding {
 }
 
 impl GroupMasterIndex {
-    fn compile(
-        groups: &HashMap<String, GroupDefinition>,
-        playbacks: &[PlaybackDefinition],
-    ) -> Self {
-        let assigned_groups = playbacks
+    fn compile(groups: &HashMap<String, GroupDefinition>, snapshot: &EngineSnapshot) -> Self {
+        let assigned_groups = snapshot
+            .playbacks
             .iter()
+            .chain(
+                snapshot
+                    .playback_pages
+                    .iter()
+                    .flat_map(|page| page.virtual_playbacks.values()),
+            )
             .filter_map(|playback| match &playback.target {
                 PlaybackTarget::Group { group_id } => Some(group_id.as_str()),
                 _ => None,

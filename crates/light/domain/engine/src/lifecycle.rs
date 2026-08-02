@@ -132,6 +132,11 @@ impl Engine {
             mut runtime,
         } = prepared;
         let current = self.generation.load_full();
+        let detached_group_masters = if preserve_playback {
+            detached_group_targets(current.snapshot(), &snapshot)
+        } else {
+            assigned_group_targets(current.snapshot())
+        };
         let groups_changed = !Arc::ptr_eq(&snapshot.groups, &current.snapshot().groups);
         if groups_changed {
             self.preserve_group_master_state(
@@ -150,6 +155,14 @@ impl Engine {
                 &mut runtime.playback.write(),
                 preserve_playback,
             );
+        }
+        if !detached_group_masters.is_empty() {
+            self.group_master_flashes
+                .write()
+                .retain(|group_id, _| !detached_group_masters.contains(group_id));
+            self.group_master_transitions
+                .lock()
+                .retain(|group_id, _| !detached_group_masters.contains(group_id));
         }
         self.generation.store(Arc::new(RuntimeGeneration::replacing(
             &current,
@@ -192,7 +205,7 @@ impl Engine {
         if !preserve_playback {
             return;
         }
-        let (active, active_dynamics, dynamics_paused_at) = {
+        let (mut active, active_dynamics, dynamics_paused_at) = {
             let current = generation.playback().read();
             (
                 current.active_for_snapshot(&snapshot.cue_lists, self.clock.now()),
@@ -200,6 +213,8 @@ impl Engine {
                 current.dynamics_paused_since(),
             )
         };
+        let detached_cue_lists = detached_cue_list_targets(generation.snapshot(), snapshot);
+        active.retain(|runtime| !detached_cue_lists.contains(&runtime.cue_list_id));
         playback.restore_active(active);
         playback.restore_active_dynamics(active_dynamics);
         playback.restore_dynamics_paused_since(dynamics_paused_at);
@@ -252,6 +267,62 @@ impl Engine {
         self.timecode_frame
             .store(frame.unwrap_or(u64::MAX), Ordering::Relaxed);
     }
+}
+
+fn detached_cue_list_targets(
+    current: &EngineSnapshot,
+    replacement: &EngineSnapshot,
+) -> HashSet<light_core::CueListId> {
+    let replacement = assigned_cue_list_targets(replacement);
+    assigned_cue_list_targets(current)
+        .difference(&replacement)
+        .copied()
+        .collect()
+}
+
+fn assigned_cue_list_targets(snapshot: &EngineSnapshot) -> HashSet<light_core::CueListId> {
+    snapshot
+        .playbacks
+        .iter()
+        .chain(
+            snapshot
+                .playback_pages
+                .iter()
+                .flat_map(|page| page.virtual_playbacks.values()),
+        )
+        .filter_map(|definition| match definition.target {
+            light_playback::PlaybackTarget::CueList { cue_list_id } => Some(cue_list_id),
+            _ => None,
+        })
+        .collect()
+}
+
+fn detached_group_targets(
+    current: &EngineSnapshot,
+    replacement: &EngineSnapshot,
+) -> HashSet<String> {
+    let replacement = assigned_group_targets(replacement);
+    assigned_group_targets(current)
+        .difference(&replacement)
+        .cloned()
+        .collect()
+}
+
+fn assigned_group_targets(snapshot: &EngineSnapshot) -> HashSet<String> {
+    snapshot
+        .playbacks
+        .iter()
+        .chain(
+            snapshot
+                .playback_pages
+                .iter()
+                .flat_map(|page| page.virtual_playbacks.values()),
+        )
+        .filter_map(|definition| match &definition.target {
+            light_playback::PlaybackTarget::Group { group_id } => Some(group_id.clone()),
+            _ => None,
+        })
+        .collect()
 }
 
 fn snapshot_groups(snapshot: &EngineSnapshot) -> HashMap<String, GroupDefinition> {

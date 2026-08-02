@@ -93,6 +93,15 @@ async fn clearing_a_slot_removes_the_pool_playback_from_every_page_atomically() 
         );
     }
     scenario.open().await;
+    scenario
+        .state
+        .output
+        .execute_playback(light_engine::EnginePlaybackCommand::Pool {
+            number: 1,
+            action: light_engine::PoolPlaybackAction::On,
+        })
+        .unwrap();
+    assert_eq!(scenario.state.output.active_playbacks().len(), 1);
 
     let before = scenario.capture();
     let response = scenario.clear_slot(1, 1, 1, 1).await;
@@ -115,6 +124,12 @@ async fn clearing_a_slot_removes_the_pool_playback_from_every_page_atomically() 
         .unwrap();
     assert_eq!(document.revision().value(), before.show_revision + 1);
     assert!(document.object("playback", "1").is_none());
+    assert!(
+        document
+            .object("cue_list", &cue_list.id.0.to_string())
+            .is_some()
+    );
+    assert!(scenario.state.output.active_playbacks().is_empty());
     for number in [1, 2] {
         let page = document
             .object("playback_page", &number.to_string())
@@ -123,6 +138,69 @@ async fn clearing_a_slot_removes_the_pool_playback_from_every_page_atomically() 
         assert_eq!(page.body()["future_layout"]["page"], number);
     }
     scenario.assert_one_success(&before, 3);
+    scenario.cleanup();
+}
+
+#[tokio::test]
+async fn clearing_one_shared_assignment_rebinds_the_running_target_to_its_peer() {
+    let scenario = PlaybackObjectScenario::new("Shared slot clear").await;
+    let store = ShowStore::open(&scenario.entry.path).unwrap();
+    let cue_list = cue_list("Shared clear target");
+    put_raw(
+        &store,
+        "cue_list",
+        &cue_list.id.0.to_string(),
+        serde_json::to_value(&cue_list).unwrap(),
+    );
+    for number in [1, 2] {
+        put_raw(
+            &store,
+            "playback",
+            &number.to_string(),
+            serde_json::to_value(playback(number, cue_list.id)).unwrap(),
+        );
+    }
+    put_raw(
+        &store,
+        "playback_page",
+        "1",
+        serde_json::json!({
+            "number": 1,
+            "name": "Main",
+            "slots": {"1": 1, "2": 2},
+            "virtual_playbacks": {}
+        }),
+    );
+    scenario.open().await;
+    scenario
+        .state
+        .output
+        .execute_playback(light_engine::EnginePlaybackCommand::Pool {
+            number: 1,
+            action: light_engine::PoolPlaybackAction::On,
+        })
+        .unwrap();
+
+    let before = scenario.capture();
+    let response = scenario.clear_slot(1, 1, 1, 1).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let status = scenario
+        .state
+        .output
+        .playback_runtime_status_at(light_playback::PlaybackIdentity::physical(2).unwrap())
+        .unwrap();
+    assert!(status.playback.enabled);
+    assert_eq!(status.playback.playback_number, Some(2));
+    assert_eq!(scenario.state.output.active_playbacks().len(), 1);
+    assert!(
+        ShowStore::open(&scenario.entry.path)
+            .unwrap()
+            .portable_document()
+            .unwrap()
+            .object("playback", "2")
+            .is_some()
+    );
+    scenario.assert_one_success(&before, 2);
     scenario.cleanup();
 }
 

@@ -327,11 +327,21 @@ fn pool_mutations_report_durable_transient_and_exact_noop_effects() {
     assert_pool_effect(
         &engine,
         PoolPlaybackAction::SetMaster(0.5),
-        PlaybackRuntimeEffect::Durable,
+        PlaybackRuntimeEffect::Transient,
     );
     assert_pool_effect(
         &engine,
         PoolPlaybackAction::SetMaster(0.5),
+        PlaybackRuntimeEffect::None,
+    );
+    assert_pool_effect(
+        &engine,
+        PoolPlaybackAction::SetVirtualMaster(0.5),
+        PlaybackRuntimeEffect::Durable,
+    );
+    assert_pool_effect(
+        &engine,
+        PoolPlaybackAction::SetVirtualMaster(0.5),
         PlaybackRuntimeEffect::None,
     );
     assert_pool_effect(
@@ -622,7 +632,7 @@ fn virtual_exclusions_release_only_their_global_playback_number_peers() {
         runtime
             .iter()
             .any(|playback| playback.playback_number == Some(1)
-                && playback.playback_identity.is_none()
+                && playback.playback_identity == PlaybackIdentity::physical(1).ok()
                 && playback.enabled)
     );
     let recorded = by_identity(PlaybackIdentity::Virtual(activated))
@@ -803,15 +813,19 @@ fn playback_engine() -> Engine {
 }
 
 fn playback_engine_with_numbers(numbers: &[u16]) -> Engine {
-    let cue_list = test_cue_list("Typed boundary", Vec::new());
-    let playbacks = numbers
+    let assignments = numbers
         .iter()
-        .map(|number| test_playback(*number, cue_list.id))
+        .map(|number| {
+            let cue_list = test_cue_list(&format!("Typed boundary {number}"), Vec::new());
+            let playback = test_playback(*number, cue_list.id);
+            (cue_list, playback)
+        })
         .collect::<Vec<_>>();
+    let (cue_lists, playbacks): (Vec<_>, Vec<_>) = assignments.into_iter().unzip();
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
         .replace_snapshot(EngineSnapshot {
-            cue_lists: vec![cue_list].into(),
+            cue_lists: cue_lists.into(),
             playbacks: playbacks.into(),
             revision: 1,
             ..EngineSnapshot::default()
@@ -821,25 +835,40 @@ fn playback_engine_with_numbers(numbers: &[u16]) -> Engine {
 }
 
 fn virtual_playback_engine() -> Engine {
-    let cue_list = test_cue_list("Virtual typed boundary", Vec::new());
-    let page = |number| PlaybackPage {
-        number,
-        name: format!("Page {number}"),
-        slots: HashMap::new(),
-        virtual_playbacks: {
+    let mut cue_lists = Vec::new();
+    let mut page = |number| {
+        let virtual_playbacks = {
             let start = light_playback::virtual_playback_page_start(number).unwrap();
             [start, start + 1]
         }
         .into_iter()
-        .map(|playback_number| (playback_number, test_playback(playback_number, cue_list.id)))
-        .collect(),
+        .map(|playback_number| {
+            let cue_list = test_cue_list(
+                &format!("Virtual typed boundary {playback_number}"),
+                Vec::new(),
+            );
+            let definition = test_playback(playback_number, cue_list.id);
+            cue_lists.push(cue_list);
+            (playback_number, definition)
+        })
+        .collect();
+        PlaybackPage {
+            number,
+            name: format!("Page {number}"),
+            slots: HashMap::new(),
+            virtual_playbacks,
+        }
     };
+    let pages = vec![page(1), page(2)];
+    let physical = test_cue_list("Physical typed boundary", Vec::new());
+    let physical_playback = test_playback(1, physical.id);
+    cue_lists.push(physical);
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
         .replace_snapshot(EngineSnapshot {
-            cue_lists: vec![cue_list.clone()].into(),
-            playbacks: vec![test_playback(1, cue_list.id)].into(),
-            playback_pages: vec![page(1), page(2)].into(),
+            cue_lists: cue_lists.into(),
+            playbacks: vec![physical_playback].into(),
+            playback_pages: pages.into(),
             revision: 1,
             ..EngineSnapshot::default()
         })

@@ -622,8 +622,8 @@ fn schema_v2_master_reactions_use_only_the_winning_sources_and_scale_once() {
         .unwrap();
     execute_pool(&engine, 1, PoolPlaybackAction::Go);
     execute_pool(&engine, 2, PoolPlaybackAction::Go);
-    execute_pool(&engine, 1, PoolPlaybackAction::SetMaster(0.5));
-    execute_pool(&engine, 2, PoolPlaybackAction::SetMaster(0.1));
+    execute_pool(&engine, 1, PoolPlaybackAction::SetVirtualMaster(0.5));
+    execute_pool(&engine, 2, PoolPlaybackAction::SetVirtualMaster(0.1));
 
     let frame = engine
         .render(RenderOptions {

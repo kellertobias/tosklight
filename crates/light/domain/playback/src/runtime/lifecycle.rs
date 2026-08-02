@@ -63,52 +63,23 @@ impl PlaybackEngine {
     pub fn restore_active(&mut self, playbacks: impl IntoIterator<Item = ActivePlayback>) {
         self.control_states.clear();
         for mut playback in playbacks {
-            match playback.playback_identity {
-                Some(PlaybackIdentity::Virtual(address)) => {
-                    if !self
-                        .virtual_definitions
-                        .get(&address)
-                        .is_some_and(|definition| {
-                            matches!(
-                                definition.target,
-                                PlaybackTarget::CueList { cue_list_id }
-                                    if cue_list_id == playback.cue_list_id
-                            )
-                        })
-                    {
-                        continue;
-                    }
-                    playback.playback_number = Some(address.number().get());
-                }
-                Some(PlaybackIdentity::Physical(number)) => {
-                    if !self
-                        .definitions
-                        .get(&number.get())
-                        .is_some_and(|definition| {
-                            matches!(
-                                definition.target,
-                                PlaybackTarget::CueList { cue_list_id }
-                                    if cue_list_id == playback.cue_list_id
-                            )
-                        })
-                    {
-                        continue;
-                    }
-                    playback.playback_number = Some(number.get());
-                }
-                None => {
-                    if let Some(number) = playback.playback_number
-                        && !self.definitions.get(&number).is_some_and(|definition| {
-                            matches!(
-                                definition.target,
-                                PlaybackTarget::CueList { cue_list_id }
-                                    if cue_list_id == playback.cue_list_id
-                            )
-                        })
-                    {
-                        continue;
-                    }
-                }
+            let addressed_identity = playback.playback_identity.or_else(|| {
+                playback
+                    .playback_number
+                    .and_then(|number| PlaybackIdentity::physical(number).ok())
+            });
+            if let Some(identity) = addressed_identity {
+                let identity = if self.identity_targets_cue_list(identity, playback.cue_list_id) {
+                    identity
+                } else if let Some(surviving) =
+                    self.first_identity_for_cue_list(playback.cue_list_id)
+                {
+                    surviving
+                } else {
+                    continue;
+                };
+                playback.playback_identity = Some(identity);
+                playback.playback_number = Some(identity.number());
             }
             let key = PlaybackKey::CueList(playback.cue_list_id);
             let Some(cue_list) = self.cue_lists.get(&playback.cue_list_id) else {
@@ -169,6 +140,43 @@ impl PlaybackEngine {
         for (cue_list_id, master) in restored_targets {
             self.retarget_physical_controls(cue_list_id, master, None);
         }
+    }
+
+    fn identity_targets_cue_list(
+        &self,
+        identity: PlaybackIdentity,
+        cue_list_id: CueListId,
+    ) -> bool {
+        self.definition_at(identity).is_some_and(|definition| {
+            matches!(
+                definition.target,
+                PlaybackTarget::CueList { cue_list_id: assigned } if assigned == cue_list_id
+            )
+        })
+    }
+
+    fn first_identity_for_cue_list(&self, cue_list_id: CueListId) -> Option<PlaybackIdentity> {
+        self.definitions
+            .iter()
+            .filter_map(|(number, definition)| {
+                matches!(
+                    definition.target,
+                    PlaybackTarget::CueList { cue_list_id: assigned } if assigned == cue_list_id
+                )
+                .then(|| PlaybackIdentity::physical(*number).expect("registered physical number"))
+            })
+            .chain(
+                self.virtual_definitions
+                    .iter()
+                    .filter_map(|(address, definition)| {
+                        matches!(
+                    definition.target,
+                    PlaybackTarget::CueList { cue_list_id: assigned } if assigned == cue_list_id
+                )
+                .then_some(PlaybackIdentity::Virtual(*address))
+                    }),
+            )
+            .min()
     }
 
     pub fn restore_active_dynamics(

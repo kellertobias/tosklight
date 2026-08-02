@@ -190,7 +190,10 @@ pub(super) fn supply_playback_defaults(
     playbacks: &mut Vec<PlaybackDefinition>,
     pages: &mut Vec<PlaybackPage>,
 ) {
-    if playbacks.is_empty() {
+    // Only a genuinely legacy document with no Playback topology receives seeded controls.
+    // A persisted page with no definitions is an intentional empty topology (for example after
+    // clearing the final assignment) and must not recreate the detached target.
+    if playbacks.is_empty() && pages.is_empty() {
         playbacks.extend(
             cue_lists
                 .iter()

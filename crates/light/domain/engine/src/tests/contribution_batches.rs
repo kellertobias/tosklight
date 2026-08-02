@@ -179,7 +179,7 @@ fn playback_sample_applies_its_master_to_intensity_and_non_intensity_output() {
     execute_pool(&engine, 1, PoolPlaybackAction::Go);
 
     for (master, expected_intensity, expected_tilt) in [(0.5, 0.1, 0.4), (0.0, 0.0, 0.0)] {
-        execute_pool(&engine, 1, PoolPlaybackAction::SetMaster(master));
+        execute_pool(&engine, 1, PoolPlaybackAction::SetVirtualMaster(master));
         let assignments = playback_assignments(&engine, started, Some(1));
         let sampled = FakeAnimatedSource::default().sample(&assignments);
         let resolved =
@@ -244,7 +244,7 @@ fn sampled_playback_intensity_is_mastered_before_htp_arbitration() {
         .unwrap();
     execute_pool(&engine, 1, PoolPlaybackAction::Go);
     execute_pool(&engine, 2, PoolPlaybackAction::Go);
-    execute_pool(&engine, 1, PoolPlaybackAction::SetMaster(0.5));
+    execute_pool(&engine, 1, PoolPlaybackAction::SetVirtualMaster(0.5));
     let assignments = playback_assignments(&engine, started, Some(1));
     let sampled = FakeAnimatedSource { phase: 0.6 }.sample(&assignments);
 

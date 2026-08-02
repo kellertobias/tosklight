@@ -17,7 +17,10 @@ to Playbacks depends on it.
   crossing takeover and peer retargeting after authoritative software updates. Physical, Virtual, and direct
   projections now compose the same target state with assignment-local pickup feedback; actions publish every
   affected assignment projection, software and Matter faders bypass pickup, and automated/restored masters
-  retarget physical controls. Assignment topology lifecycle remains.
+  retarget physical controls. Prepared snapshot installation now preserves a shared runtime while any physical
+  or Virtual assignment survives, deterministically rebinds an origin whose assignment was detached, and
+  releases the old target after its final assignment is cleared or reassigned. Group Master topology includes
+  Virtual assignments and removes final-detach flash/transition state.
 - [ ] Add focused migration, runtime, cross-surface, and operator acceptance coverage. Shared Cuelist,
   physical-pickup, Matter/software, peer-event, Preload, restart, and legacy duplicate-row coverage is in place;
   assignment removal/reassignment, Group Master topology, and legacy targetless-Dynamic migration remain.
@@ -49,10 +52,16 @@ to Playbacks depends on it.
   citp_thumbnail_api_uses_patched_parent_endpoint_and_cache` passed: 623 passed, 1 ignored, 1 filtered.
   The excluded CITP test fails only because its cache filesystem operation returns macOS `Operation not
   permitted` in the managed sandbox; it remains required in the final unsandboxed/desktop verification.
+- `cargo test -p light-engine --lib --quiet` passed after assignment lifecycle and Virtual Group Master
+  topology coverage: 93 tests.
+- `cargo test -p light-playback --lib --quiet` passed after deterministic surviving-assignment rebinding:
+  102 tests.
+- Focused headless topology tests passed for final physical assignment release and partial shared-target
+  detach/rebinding through the persisted active-show route.
+- The filtered headless suite passed again after lifecycle integration: 624 passed, 1 ignored, 1 filtered.
 
 ## Remaining work
 
-- Reconcile assignment removal/reassignment and final-reference release, including Group Master topology.
 - Migrate legacy targetless Dynamic assignments without losing their stored target scope or output.
 - Confirm generated wire/frontend selection and reconnect state consume the authoritative peer projections.
 - Run full plan closeout verification and record the truthful result.
