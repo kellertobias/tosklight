@@ -2,8 +2,8 @@
 
 ## Status
 
-**Doing.** Claimed on 2026-08-02. This plan is now the sole active implementation contract for the
-next reviewed revision of the maintained product-demo video.
+**Done.** Claimed and completed on 2026-08-02. The maintained product-demo workflow now carries the
+reviewed pacing, portable Group icon, and retained colored Stage proof.
 
 Implement this plan against the single maintained `DEMO-001` workflow in
 `tests/bench/show/productDemoScenario.ts`. Preserve that workflow as a real regression test and
@@ -17,7 +17,7 @@ video time and visible click/type pacing, not to weakening assertions or racing 
   path, and the previously observed Show Patch navigation blocker.
 - [x] Implement the exact Patch, Group-selection, and icon-picker pacing contract.
 - [x] Trace and correct the authoritative Pan/Tilt and color path into the final Stage rendering.
-- [ ] Run focused checks, canonical demo inventory verification, retained-video review, major suites,
+- [x] Run focused checks, canonical demo inventory verification, retained-video review, major suites,
   and the real desktop path.
 
 ## Decisions
@@ -142,10 +142,51 @@ video time and visible click/type pacing, not to weakening assertions or racing 
   different Beam orientations, saturated blue Wash beams, and a separate yellow Beam contribution;
   the concluding Stage is no longer all white. The canonical show still contains 264 fixture
   records, matching the required inventory.
+- The final version-2 timeline records every reviewed pacing boundary at 25 fps: remaining Patch
+  layers are retained at `00:30:03`-`00:35:03` (125 frames); Front Truss Left at
+  `01:26:24`-`01:59:18`; accelerated Front Truss Right at `01:59:18`-`02:09:12`; readable Profile
+  Stage Center at `02:17:03`-`02:26:15`; accelerated Profile Stage sides at
+  `02:26:15`-`02:30:10`; first-Group Fixture Sheet selection at `05:11:05`-`05:16:24`; and repeated
+  Group creation at `05:38:01`-`06:27:16`. The icon modal, Fixture type grid, and saved tile markers
+  are `05:26:04`, `05:27:10`, and `05:29:04` respectively.
+- `npm run test:e2e-api` passed all 26 scenarios. The first full `npm run test:e2e-ui` run passed 143,
+  skipped 1, and failed 13; three failures were the obsolete Stage overview-camera oracle changed by
+  this plan. After aligning that shared test oracle, focused STAGE-001, STAGE-PERF-001, and
+  STAGE-PERF-002 all passed, and a repeated full UI run passed 149, skipped 1, and failed 7. None of
+  the repeated failures were Stage or DEMO-001: PATCH-PLACEMENT-001 lacked its expected 8-bit mode;
+  BENCH-PAGE-PLAYBACK-001 received a screen-following 400; SHOW-000 and BENCH-GROUP-001 retained
+  `FIXTURE` instead of the expected SET command; DMX-004 and DMX-009 did not find expected routes;
+  and PRELOAD-005 timed out while comparing capture masks.
+- `npm run test:unit` stopped in its architecture preflight before package unit tests because the
+  existing `GridDynamicsWindow.tsx` CheckboxField lacks `stateLabel` and the tracked semantic-test
+  catalog JSON/HTML is stale. Those unrelated repository gates were not rewritten in this plan.
+  The current root manifest does not define `test:desktop-smoke`, so that named command was
+  unavailable rather than silently substituted.
+- The authoritative `npm run open` path rebuilt both macOS/Tauri bundles and opened the fresh
+  ToskLight app. The app-owned log reached a healthy server bind; outside the restricted loopback
+  sandbox, `/api/v2/readiness` and `/api/v2/bootstrap` both returned HTTP 200 in about 4 ms, with no
+  recovery mode or active-show error. Against that live server and freshly built UI, the full Stage
+  surface connected without console errors, exposed the exact **Reset 3D view** action, accepted it,
+  and reported **3D** plus **Lines + beams** selected.
 
 ## Remaining work
 
-- Complete the audit and every unchecked progress item above.
+- None.
+
+## Result
+
+The maintained DEMO-001 workflow now keeps representative Patch and Group operations readable while
+compressing repeated work into the reviewed deterministic 25 fps windows. The first edited Group
+visibly chooses **Fixture type** -> **Profile Moving Light**, persists the portable
+`icon:fixture-type/profile-moving-light` identifier, and shows that icon on the saved tile.
+
+The concluding proof now stops competing benchmark sources, clears hidden intensity owners, applies
+non-uniform Fan Out Pan/Tilt values, and renders controlled blue Wash and yellow Beam contributions in
+the live 3D Stage. Both full and compact Stage settings expose **Reset 3D view**, whose canonical
+overview is shared with the Stage thumbnail, and the demo visibly selects **Lines + beams** before
+the final hold. The canonical regenerated show retains 264 fixture records, and direct review of the
+857-second retained video confirms the final Stage is colored, differently aimed, and no longer an
+all-white look.
 
 ## Goal
 
