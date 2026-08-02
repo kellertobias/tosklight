@@ -4,6 +4,8 @@ import {
 	FormLayout,
 	IconPickerField,
 	TextField,
+	NumberField as UiNumberField,
+	SelectField as UiSelectField,
 } from "@tosklight/ui";
 import { WindowSettings } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useState } from "react";
@@ -718,21 +720,18 @@ function NumberField({
 	onCommit: (value: number) => void;
 }) {
 	return (
-		<label className="group-number-field">
-			<span>{label}</span>
-			<span>
-				<input
-					type="number"
-					step="any"
-					defaultValue={value}
-					onBlur={(event) => onCommit(Number(event.currentTarget.value))}
-					onKeyDown={(event) => {
-						if (event.key === "Enter") event.currentTarget.blur();
-					}}
-				/>
-				{unit && <small>{unit}</small>}
-			</span>
-		</label>
+		<UiNumberField
+			className="group-number-field"
+			label={label}
+			unit={unit}
+			defaultValue={value}
+			allowDecimal
+			showStepButtons={false}
+			onBlur={(event) => onCommit(Number(event.currentTarget.value))}
+			onKeyDown={(event) => {
+				if (event.key === "Enter") event.currentTarget.blur();
+			}}
+		/>
 	);
 }
 
@@ -748,16 +747,17 @@ function SelectField({
 	onChange: (value: string) => void;
 }) {
 	return (
-		<label className="group-number-field">
-			<span>{label}</span>
-			<select value={value} onChange={(event) => onChange(event.target.value)}>
-				{options.map(([option, title]) => (
-					<option key={option} value={option}>
-						{title}
-					</option>
-				))}
-			</select>
-		</label>
+		<UiSelectField
+			className="group-number-field"
+			label={label}
+			ariaLabel={label}
+			value={value}
+			options={options.map(([option, title]) => ({
+				value: option,
+				label: title,
+			}))}
+			onChange={onChange}
+		/>
 	);
 }
 

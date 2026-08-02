@@ -111,9 +111,8 @@ describe("DynamicProjectionView", () => {
 			.closest("section");
 		if (!shape) throw new Error("missing Shape section");
 		fireEvent.click(within(shape).getByRole("radio", { name: "Override" }));
-		fireEvent.change(within(shape).getByLabelText("Shape"), {
-			target: { value: "random" },
-		});
+		fireEvent.click(within(shape).getByRole("button", { name: "Shape" }));
+		fireEvent.click(screen.getByRole("option", { name: "Random" }));
 		expect(
 			screen.getByText(
 				"Random ignores fixture positions and the Projection stage.",
@@ -165,11 +164,12 @@ describe("DynamicProjectionView", () => {
 		fireEvent.click(
 			within(projection).getByRole("radio", { name: "Override" }),
 		);
-		const preset = within(projection).getByLabelText(
-			"View preset",
-		) as HTMLSelectElement;
-		expect(preset.value).toBe("top");
-		fireEvent.change(preset, { target: { value: "front" } });
+		const preset = within(projection).getByRole("button", {
+			name: "View preset",
+		});
+		expect(preset).toHaveTextContent("Top");
+		fireEvent.click(preset);
+		fireEvent.click(screen.getByRole("option", { name: "Front" }));
 		await waitFor(() =>
 			expect(
 				(screen.getByRole("button", { name: "Apply" }) as HTMLButtonElement)

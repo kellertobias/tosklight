@@ -1,4 +1,4 @@
-import { Button } from "@tosklight/ui";
+import { Button, NumberField, RadioField, SelectField } from "@tosklight/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	DynamicSelectionShapeProjection,
@@ -222,22 +222,20 @@ function ProjectionControls({
 	return (
 		<section className="dynamic-projection-card">
 			<h3>Projection stage</h3>
-			<label>
-				<input
-					type="radio"
-					checked={draft.projection.type === "inherit"}
-					onChange={() => onOverride(false)}
-				/>{" "}
-				Inherit
-			</label>
-			<label>
-				<input
-					type="radio"
-					checked={draft.projection.type === "replace"}
-					onChange={() => onOverride(true)}
-				/>{" "}
-				Override
-			</label>
+			<RadioField
+				label="Inherit"
+				stateLabel="Inherit"
+				name="dynamic-projection-source"
+				checked={draft.projection.type === "inherit"}
+				onChange={() => onOverride(false)}
+			/>
+			<RadioField
+				label="Override"
+				stateLabel="Override"
+				name="dynamic-projection-source"
+				checked={draft.projection.type === "replace"}
+				onChange={() => onOverride(true)}
+			/>
 			{draft.projection.type === "replace" && (
 				<ProjectionFields value={draft.projection.value} onChange={onChange} />
 			)}
@@ -257,22 +255,20 @@ function ShapeControls({
 	return (
 		<section className="dynamic-projection-card">
 			<h3>Phaser shape</h3>
-			<label>
-				<input
-					type="radio"
-					checked={draft.shape.type === "inherit"}
-					onChange={() => onOverride(false)}
-				/>{" "}
-				Inherit
-			</label>
-			<label>
-				<input
-					type="radio"
-					checked={draft.shape.type === "replace"}
-					onChange={() => onOverride(true)}
-				/>{" "}
-				Override
-			</label>
+			<RadioField
+				label="Inherit"
+				stateLabel="Inherit"
+				name="dynamic-shape-source"
+				checked={draft.shape.type === "inherit"}
+				onChange={() => onOverride(false)}
+			/>
+			<RadioField
+				label="Override"
+				stateLabel="Override"
+				name="dynamic-shape-source"
+				checked={draft.shape.type === "replace"}
+				onChange={() => onOverride(true)}
+			/>
 			{draft.shape.type === "replace" && (
 				<ShapeFields value={draft.shape.value} onChange={onChange} />
 			)}
@@ -339,41 +335,33 @@ function ProjectionFields({
 		current: number,
 		change: (next: number) => typeof TOP_PROJECTION,
 	) => (
-		<label>
-			{label}
-			<input
-				type="number"
-				value={current}
-				step="any"
-				onChange={(event) => onChange(change(Number(event.target.value)))}
-			/>
-		</label>
+		<NumberField
+			label={label}
+			value={current}
+			allowDecimal
+			showStepButtons={false}
+			onValueChange={(next) => onChange(change(Number(next)))}
+		/>
 	);
 	return (
 		<div className="dynamic-projection-fields">
-			<label>
-				View preset
-				<select
-					value={value.preset ?? "custom"}
-					onChange={(event) => {
-						const preset = event.target.value;
-						if (preset === "custom") onChange({ ...value, preset: null });
-						else
-							onChange(
-								projectionForPreset(
-									preset as "top" | "front" | "back" | "left" | "right",
-								),
-							);
-					}}
-				>
-					<option value="custom">Custom</option>
-					<option value="top">Top</option>
-					<option value="front">Front</option>
-					<option value="back">Back</option>
-					<option value="left">Left</option>
-					<option value="right">Right</option>
-				</select>
-			</label>
+			<SelectField
+				label="View preset"
+				ariaLabel="View preset"
+				value={value.preset ?? "custom"}
+				options={[
+					{ value: "custom", label: "Custom" },
+					{ value: "top", label: "Top" },
+					{ value: "front", label: "Front" },
+					{ value: "back", label: "Back" },
+					{ value: "left", label: "Left" },
+					{ value: "right", label: "Right" },
+				]}
+				onChange={(preset) => {
+					if (preset === "custom") onChange({ ...value, preset: null });
+					else onChange(projectionForPreset(preset));
+				}}
+			/>
 			{number("Anchor X", value.anchor.x, (x) => ({
 				...value,
 				anchor: { ...value.anchor, x },
@@ -422,49 +410,42 @@ function ShapeFields({
 }) {
 	return (
 		<div className="dynamic-projection-fields">
-			<label>
-				Shape
-				<select
-					value={value.type}
-					onChange={(event) => {
-						const type = event.target.value;
-						onChange(
-							type === "random"
-								? { type, seed: 0 }
-								: type === "radial"
-									? { type, center_u: 0.5, center_v: 0.5, direction: "outward" }
-									: type === "radar"
-										? {
-												type,
-												center_u: 0.5,
-												center_v: 0.5,
-												start_angle_degrees: 0,
-												sweep: "clockwise",
-											}
-										: GRID_SHAPE,
-						);
-					}}
-				>
-					<option value="grid">Grid</option>
-					<option value="radial">Radial</option>
-					<option value="radar">Radar</option>
-					<option value="random">Random</option>
-				</select>
-			</label>
+			<SelectField
+				label="Shape"
+				ariaLabel="Shape"
+				value={value.type}
+				options={[
+					{ value: "grid", label: "Grid" },
+					{ value: "radial", label: "Radial" },
+					{ value: "radar", label: "Radar" },
+					{ value: "random", label: "Random" },
+				]}
+				onChange={(type) => {
+					onChange(
+						type === "random"
+							? { type, seed: 0 }
+							: type === "radial"
+								? { type, center_u: 0.5, center_v: 0.5, direction: "outward" }
+								: type === "radar"
+									? {
+											type,
+											center_u: 0.5,
+											center_v: 0.5,
+											start_angle_degrees: 0,
+											sweep: "clockwise",
+										}
+									: GRID_SHAPE,
+					);
+				}}
+			/>
 			{value.type === "random" && (
 				<>
-					<label>
-						Seed
-						<input
-							type="number"
-							min="0"
-							step="1"
-							value={value.seed}
-							onChange={(event) =>
-								onChange({ ...value, seed: Number(event.target.value) })
-							}
-						/>
-					</label>
+					<NumberField
+						label="Seed"
+						min={0}
+						value={value.seed}
+						onValueChange={(seed) => onChange({ ...value, seed: Number(seed) })}
+					/>
 					<p>Random ignores fixture positions and the Projection stage.</p>
 				</>
 			)}
@@ -475,21 +456,16 @@ function ShapeFields({
 						value={value.angle_degrees}
 						onChange={(angle_degrees) => onChange({ ...value, angle_degrees })}
 					/>
-					<label>
-						Direction
-						<select
-							value={value.direction}
-							onChange={(event) =>
-								onChange({
-									...value,
-									direction: event.target.value as "ascending" | "descending",
-								})
-							}
-						>
-							<option value="ascending">Ascending</option>
-							<option value="descending">Descending</option>
-						</select>
-					</label>
+					<SelectField
+						label="Direction"
+						ariaLabel="Direction"
+						value={value.direction}
+						options={[
+							{ value: "ascending", label: "Ascending" },
+							{ value: "descending", label: "Descending" },
+						]}
+						onChange={(direction) => onChange({ ...value, direction })}
+					/>
 				</>
 			)}
 			{value.type === "radial" && (
@@ -504,21 +480,16 @@ function ShapeFields({
 						value={value.center_v}
 						onChange={(center_v) => onChange({ ...value, center_v })}
 					/>
-					<label>
-						Direction
-						<select
-							value={value.direction}
-							onChange={(event) =>
-								onChange({
-									...value,
-									direction: event.target.value as "outward" | "inward",
-								})
-							}
-						>
-							<option value="outward">Outward</option>
-							<option value="inward">Inward</option>
-						</select>
-					</label>
+					<SelectField
+						label="Direction"
+						ariaLabel="Direction"
+						value={value.direction}
+						options={[
+							{ value: "outward", label: "Outward" },
+							{ value: "inward", label: "Inward" },
+						]}
+						onChange={(direction) => onChange({ ...value, direction })}
+					/>
 				</>
 			)}
 			{value.type === "radar" && (
@@ -540,23 +511,19 @@ function ShapeFields({
 							onChange({ ...value, start_angle_degrees })
 						}
 					/>
-					<label>
-						Sweep
-						<select
-							value={value.sweep}
-							onChange={(event) =>
-								onChange({
-									...value,
-									sweep: event.target.value as
-										| "clockwise"
-										| "counter_clockwise",
-								})
-							}
-						>
-							<option value="clockwise">Clockwise</option>
-							<option value="counter_clockwise">Counter-clockwise</option>
-						</select>
-					</label>
+					<SelectField
+						label="Sweep"
+						ariaLabel="Sweep"
+						value={value.sweep}
+						options={[
+							{ value: "clockwise", label: "Clockwise" },
+							{
+								value: "counter_clockwise",
+								label: "Counter-clockwise",
+							},
+						]}
+						onChange={(sweep) => onChange({ ...value, sweep })}
+					/>
 				</>
 			)}
 		</div>
@@ -573,14 +540,12 @@ function ShapeNumber({
 	onChange(value: number): void;
 }) {
 	return (
-		<label>
-			{label}
-			<input
-				type="number"
-				step="any"
-				value={value}
-				onChange={(event) => onChange(Number(event.target.value))}
-			/>
-		</label>
+		<NumberField
+			label={label}
+			value={value}
+			allowDecimal
+			showStepButtons={false}
+			onValueChange={(next) => onChange(Number(next))}
+		/>
 	);
 }

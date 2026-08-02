@@ -20,7 +20,8 @@ const updateDynamic = vi.fn();
 const resetCommand = vi.fn();
 const speedGroupAction = vi.fn();
 const showObjectsStore = {
-	getSnapshot: () => ({ dynamics, authorityGeneration: 1 }),
+	subscribe: () => () => undefined,
+	getSnapshot: () => ({ dynamics, authorityGeneration: 1, showRevision: 1 }),
 	beginOptimistic: vi.fn(() => crypto.randomUUID()),
 	settlePending: vi.fn(),
 	installObject: vi.fn(),
@@ -250,12 +251,12 @@ describe("DynamicsWindow", () => {
 		).toBeInTheDocument();
 	});
 
-	it("uses the production selection preview and Phase footer", () => {
+	it("uses the production selection preview and Phaser footer", () => {
 		dynamics = [dynamicObject()];
 		const { container } = renderWindow();
 
 		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
-		fireEvent.click(screen.getByRole("button", { name: "Phase" }));
+		fireEvent.click(screen.getByRole("button", { name: "Phaser" }));
 
 		expect(
 			container.querySelector('aside[aria-label="Selection preview"]'),
@@ -549,7 +550,7 @@ describe("DynamicsWindow", () => {
 		dynamics = [dynamicObject({ multipleLanes: true })];
 		renderWindow();
 		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
-		fireEvent.click(screen.getByRole("button", { name: "Phase" }));
+		fireEvent.click(screen.getByRole("button", { name: "Phaser" }));
 
 		expect(
 			screen.getByRole("radiogroup", { name: "Ordering mode" }),
@@ -590,7 +591,7 @@ describe("DynamicsWindow", () => {
 		dynamics = [object];
 		renderWindow();
 		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
-		fireEvent.click(screen.getByRole("button", { name: "Phase" }));
+		fireEvent.click(screen.getByRole("button", { name: "Phaser" }));
 
 		const lanePicker = screen.getByLabelText("Dynamic phase lane");
 		expect(lanePicker).toHaveTextContent("Lane 1 · intensity");

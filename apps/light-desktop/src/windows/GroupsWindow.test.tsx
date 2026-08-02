@@ -150,9 +150,34 @@ describe("GroupsWindow action routing", () => {
 		mocks.manageGroup.mockReset().mockResolvedValue({
 			status: "changed",
 			group: { revision: 2 },
+			showRevision: 13,
 			persistenceWarning: null,
 		});
-		mocks.loadGroupSettings.mockReset().mockResolvedValue(null);
+		mocks.loadGroupSettings
+			.mockReset()
+			.mockImplementation(async (id: string) => {
+				const target = mocks.groups.find((group) => group.id === id);
+				if (!target) return null;
+				return {
+					showId: "show",
+					showRevision: 12,
+					group: {
+						id,
+						revision: target.revision,
+						object: { kind: "group", ...target },
+					},
+					resolvedSpatial: {
+						source_order: target.body.fixtures,
+						effective_mapping: null,
+						mapping_provenance: { type: "none" },
+						ordered_fixture_ids: target.body.fixtures,
+						projected_positions: [],
+						ranks: [],
+						rank_count: target.body.fixtures.length,
+						warnings: [],
+					},
+				};
+			});
 		mocks.setGroupMaster.mockReset().mockResolvedValue(null);
 		mocks.commandLine = "";
 		mocks.state.storeArmed = false;
@@ -351,6 +376,7 @@ describe("GroupsWindow action routing", () => {
 			expect(mocks.manageGroup).toHaveBeenCalledWith({
 				objectId: "4",
 				expectedObjectRevision: 1,
+				expectedShowRevision: 12,
 				operation: {
 					type: "update_properties",
 					properties: {
