@@ -623,20 +623,32 @@ async fn deleting_a_dynamic_snapshots_cue_and_playback_references_without_old_sl
         .1
         .unwrap()
         .body;
-    for stored_reference in [
-        &cue_body["cues"][0]["dynamic_changes"][0]["value"]["dynamic"],
-        &playback_body["target"]["assignment"]["dynamic"],
-    ] {
-        assert!(stored_reference["dynamic_id"].is_null());
-        assert_eq!(
-            stored_reference["embedded_fallback"]["definition"]["id"],
-            dynamic_id_text
-        );
-        assert_eq!(
-            stored_reference["embedded_fallback"]["definition"]["pool_number"],
-            31
-        );
-    }
+    let cue_reference = &cue_body["cues"][0]["dynamic_changes"][0]["value"]["dynamic"];
+    assert!(cue_reference["dynamic_id"].is_null());
+    assert_eq!(
+        cue_reference["embedded_fallback"]["definition"]["id"],
+        dynamic_id_text
+    );
+    assert_eq!(
+        cue_reference["embedded_fallback"]["definition"]["pool_number"],
+        31
+    );
+
+    let playback_reference = &playback_body["target"]["assignment"]["dynamic"];
+    let migrated_playback_dynamic_id = Uuid::new_v5(&dynamic_id, b"physical:1").to_string();
+    assert!(playback_reference["dynamic_id"].is_null());
+    assert_eq!(
+        playback_reference["embedded_fallback"]["definition"]["id"],
+        migrated_playback_dynamic_id
+    );
+    assert_eq!(
+        playback_reference["embedded_fallback"]["definition"]["pool_number"],
+        31
+    );
+    assert_eq!(
+        playback_reference["embedded_fallback"]["definition"]["target_binding"]["type"],
+        "frozen_targets"
+    );
     assert!(
         store
             .object_with_portable_revision("dynamic", &dynamic_id_text)
