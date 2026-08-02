@@ -24,15 +24,19 @@ await access(timelinePath).catch(() => {
 await mkdir(directory, { recursive: true });
 
 const timeline = JSON.parse(await readFile(timelinePath, "utf8"));
+const clips =
+	Array.isArray(timeline.segments) && timeline.segments.length
+		? timeline.segments
+		: timeline.sections;
 if (
 	!Number.isInteger(timeline.fps) ||
 	timeline.fps <= 0 ||
-	!Array.isArray(timeline.sections) ||
-	!timeline.sections.length
+	!Array.isArray(clips) ||
+	!clips.length
 )
 	throw new Error("Product-demo edit timeline is invalid");
 const clock = await buildCanonicalClock(timeline);
-const filters = timeline.sections.map((section, index) => {
+const filters = clips.map((section, index) => {
 	const sourceDuration = section.sourceEndMillis - section.sourceStartMillis;
 	if (!(sourceDuration > 0) || !(section.frames > 0))
 		throw new Error(
@@ -43,26 +47,35 @@ const filters = timeline.sections.map((section, index) => {
 	return `[0:v]trim=start=${(section.sourceStartMillis / 1_000).toFixed(6)}:end=${(section.sourceEndMillis / 1_000).toFixed(6)},setpts=${speed.toFixed(9)}*(PTS-STARTPTS),fps=${timeline.fps},format=yuv420p[v${index}]`;
 });
 const transitionFrames = Math.max(0, Number(timeline.transitionFrames) || 0);
-if (transitionFrames > 0 && timeline.sections.length > 1) {
-	const transitionSeconds = transitionFrames / timeline.fps;
-	let elapsedFrames = timeline.sections[0].frames;
+if (clips.length > 1) {
+	let elapsedFrames = clips[0].frames;
 	let input = "[v0]";
-	for (let index = 1; index < timeline.sections.length; index++) {
+	for (let index = 1; index < clips.length; index++) {
 		const output = `[x${index}]`;
-		const offsetFrames = elapsedFrames - transitionFrames;
-		filters.push(
-			`${input}[v${index}]xfade=transition=fade:duration=${transitionSeconds.toFixed(6)}:offset=${(offsetFrames / timeline.fps).toFixed(6)}${output}`,
+		const previous = clips[index - 1];
+		const transition = Math.max(
+			0,
+			Number(
+				previous.transitionFramesAfter ??
+					(index < clips.length ? transitionFrames : 0),
+			) || 0,
 		);
+		if (transition > 0) {
+			const offsetFrames = elapsedFrames - transition;
+			filters.push(
+				`${input}[v${index}]xfade=transition=fade:duration=${(transition / timeline.fps).toFixed(6)}:offset=${(offsetFrames / timeline.fps).toFixed(6)}${output}`,
+			);
+		} else {
+			filters.push(`${input}[v${index}]concat=n=2:v=1:a=0${output}`);
+		}
 		input = output;
-		elapsedFrames += timeline.sections[index].frames - transitionFrames;
+		elapsedFrames += clips[index].frames - transition;
 	}
 	filters.push(
 		`${input}trim=duration=${(timeline.totalFrames / timeline.fps).toFixed(6)},setpts=PTS-STARTPTS[editv]`,
 	);
 } else {
-	filters.push(
-		`${timeline.sections.map((_, index) => `[v${index}]`).join("")}concat=n=${timeline.sections.length}:v=1:a=0[editv]`,
-	);
+	filters.push("[v0]null[editv]");
 }
 filters.push(
 	`[editv]delogo=x=1195:y=920:w=88:h=44:show=0:enable='${clock.delogoEnable}'[clockbase]`,
@@ -112,7 +125,9 @@ async function buildCanonicalClock(editTimeline) {
 	for (const command of ["magick", "rsvg-convert"]) {
 		const available = spawnSync(command, ["--version"], { stdio: "ignore" });
 		if (available.error?.code === "ENOENT" || available.status !== 0)
-			throw new Error(`${command} is required to render the canonical demo clock`);
+			throw new Error(
+				`${command} is required to render the canonical demo clock`,
+			);
 	}
 	const workDirectory = path.join(directory, ".canonical-clock");
 	const sourceDirectory = path.join(workDirectory, "source");
@@ -207,12 +222,18 @@ async function buildCanonicalClock(editTimeline) {
 
 function canonicalSourceSecond(editTimeline, targetSecond) {
 	const frame = targetSecond * editTimeline.fps;
-	const section = [...editTimeline.sections]
-		.reverse()
-		.find(
-			(candidate) =>
-				frame >= candidate.targetStartFrame && frame < candidate.targetEndFrame,
-		) ?? editTimeline.sections.at(-1);
+	const timelineClips =
+		Array.isArray(editTimeline.segments) && editTimeline.segments.length
+			? editTimeline.segments
+			: editTimeline.sections;
+	const section =
+		[...timelineClips]
+			.reverse()
+			.find(
+				(candidate) =>
+					frame >= candidate.targetStartFrame &&
+					frame < candidate.targetEndFrame,
+			) ?? editTimeline.sections.at(-1);
 	const progress = Math.max(
 		0,
 		Math.min(1, (frame - section.targetStartFrame) / section.frames),

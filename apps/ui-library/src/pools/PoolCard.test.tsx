@@ -127,11 +127,11 @@ describe("PoolCard", () => {
 				}}
 			/>,
 		);
-		expect(
-			screen
-				.getByRole("button", { name: /Profiles/u })
-				.querySelector(".pool-card-icon-image"),
-		).toHaveAttribute("src", icon?.url);
+		const image = screen
+			.getByRole("button", { name: /Profiles/u })
+			.querySelector(".pool-card-icon-image");
+		expect(image).toHaveAttribute("src", icon?.url);
+		expect(image).toHaveAttribute("data-icon-value", icon?.value);
 	});
 
 	it("separates a press-and-hold callback from the following click", () => {

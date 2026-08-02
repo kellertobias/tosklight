@@ -112,6 +112,15 @@ export const PRODUCT_DEMO_SCRIPT = {
 			frames: 1_400,
 		},
 	],
+	fixedEditWindows: [
+		{
+			id: "remaining-patch-layers",
+			sectionId: "show-setup",
+			startMarker: "remaining-patch-layers-start",
+			endMarker: "remaining-patch-layers-end",
+			frames: 125,
+		},
+	],
 	pacing: {
 		titleCardFrames: 125,
 		patchOpenedHoldFrames: 75,
@@ -124,7 +133,7 @@ export const PRODUCT_DEMO_SCRIPT = {
 		searchClearHoldFrames: 25,
 		searchCharacterFrames: 2.5,
 		sceneryItemFrames: 3,
-		lightingItemFrames: 1,
+		lightingItemFrames: 0.25,
 		postSpreadHoldFrames: 75,
 		aclCommittedHoldFrames: 75,
 		outputSurfaceHoldFrames: 75,
@@ -135,11 +144,14 @@ export const PRODUCT_DEMO_SCRIPT = {
 		groupRecordHoldFrames: 50,
 		groupTileHoldFrames: 50,
 		groupPropertiesHoldFrames: 250,
-		groupFixtureSelectionClickMillis: 70,
-		groupBulkHardwareClickMillis: 12,
+		groupFixtureSelectionClickMillis: 35,
+		groupBulkHardwareClickMillis: 3,
 		groupNameClickMillis: 3,
 		groupNameConfirmHoldFrames: 25,
 		groupSaveHoldFrames: 50,
+		groupIconModalHoldFrames: 75,
+		groupIconGridHoldFrames: 75,
+		groupIconSavedHoldFrames: 75,
 		beamShowHoldFrames: 75,
 		oddRuleHoldFrames: 125,
 		presetItemFrames: 25,
@@ -317,6 +329,11 @@ export class BrowserProductDemo {
 		let recordingStartedAtMillis = 0;
 		let recordingEndedAtMillis = 0;
 		const titleMarkers = new Map<string, number>();
+		const editMarkers = new Map<string, number>();
+		const markEditBoundary = (id: string) => {
+			if (!RECORDING || editMarkers.has(id)) return;
+			editMarkers.set(id, Date.now() - recordingStartedAtMillis);
+		};
 		let stopObservingTitleCards = () => {};
 		try {
 			await desk.open(`${bench.baseUrl}/?demo=product`);
@@ -418,6 +435,7 @@ export class BrowserProductDemo {
 				afterCommitFrames:
 					PRODUCT_DEMO_SCRIPT.pacing.firstLayerCommittedHoldFrames,
 			});
+			markEditBoundary("remaining-patch-layers-start");
 			await desk.setDemoAction(
 				"Add the second Patch layer through Touch UI, then accelerate the remaining repetitive layer creation.",
 			);
@@ -429,6 +447,7 @@ export class BrowserProductDemo {
 					pauseBeforeConfirm: false,
 				});
 			}
+			markEditBoundary("remaining-patch-layers-end");
 			desk.setRecordingClickPace("compact");
 			await demoPause(
 				page,
@@ -526,13 +545,14 @@ export class BrowserProductDemo {
 			);
 			const firstFresnel = requiredFixture(desiredByNumber, 1);
 			await selectPatchLayer(desk, patchWindow, "Conventional Light");
+			markEditBoundary("front-truss-left-start");
 			await addFixtureThroughTouchUi(desk, page, {
 				search: "Dimmer Fresnel",
 				family: "Dimmer Fresnel",
 				mode: "8-bit",
 				name: "Front Truss Left 1",
 				fixtureId: "1",
-				count: 8,
+				count: 3,
 				address: fixtureAddress(firstFresnel),
 				slowSearch: true,
 				visibleModeSelection: true,
@@ -546,11 +566,7 @@ export class BrowserProductDemo {
 					return [fixture?.universe, fixture?.address];
 				})
 				.toEqual([1, 1]);
-			for (const [first, last] of [
-				[1, 3],
-				[4, 6],
-				[7, 8],
-			] as const) {
+			const placeFresnelRange = async (first: number, last: number) => {
 				const placement = demoPatchPlacement(`${first} THRU ${last}`);
 				for (const [axis, keys] of [
 					["X", valuePadKeys(placement.location.x)],
@@ -566,12 +582,49 @@ export class BrowserProductDemo {
 						keys,
 						axis === "X",
 					);
-				if (first === 1)
-					await demoPause(
-						page,
-						PRODUCT_DEMO_SCRIPT.pacing.postSpreadHoldFrames,
-					);
-			}
+			};
+			await placeFresnelRange(1, 3);
+			await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.postSpreadHoldFrames);
+			markEditBoundary("front-truss-left-end");
+
+			markEditBoundary("front-truss-right-start");
+			desk.setRecordingClickPace(
+				"fastTyping",
+				PRODUCT_DEMO_SCRIPT.pacing.groupBulkHardwareClickMillis,
+			);
+			const rightFresnel = requiredFixture(desiredByNumber, 4);
+			await addFixtureThroughTouchUi(desk, page, {
+				search: "Dimmer Fresnel",
+				family: "Dimmer Fresnel",
+				mode: "8-bit",
+				name: "Front Truss Right 1",
+				fixtureId: "4",
+				count: 3,
+				address: fixtureAddress(rightFresnel),
+			});
+			desk.setRecordingClickPace(
+				"fastTyping",
+				PRODUCT_DEMO_SCRIPT.pacing.groupBulkHardwareClickMillis,
+			);
+			await placeFresnelRange(4, 6);
+			markEditBoundary("front-truss-right-end");
+
+			const sideFresnel = requiredFixture(desiredByNumber, 7);
+			await addFixtureThroughTouchUi(desk, page, {
+				search: "Dimmer Fresnel",
+				family: "Dimmer Fresnel",
+				mode: "8-bit",
+				name: "Side Light Left",
+				fixtureId: "7",
+				count: 2,
+				address: fixtureAddress(sideFresnel),
+			});
+			desk.setRecordingClickPace(
+				"fastTyping",
+				PRODUCT_DEMO_SCRIPT.pacing.groupBulkHardwareClickMillis,
+			);
+			await placeFresnelRange(7, 8);
+			desk.setRecordingClickPace("compact");
 			await expectFixtureLocations(api, [1, 2, 3, 4, 5, 6], {
 				y: -3_000,
 				z: 4_150,
@@ -579,6 +632,7 @@ export class BrowserProductDemo {
 			await expectFixtureLocations(api, [7, 8], { y: 1_000, z: 2_400 });
 
 			const centerProfile = requiredFixture(desiredByNumber, 13);
+			markEditBoundary("profile-stage-center-start");
 			await desk.setDemoAction(
 				"Patch Profile Stage Center at 1.12 and add its second, unaddressed physical lamp as a true multi-patch.",
 			);
@@ -594,6 +648,30 @@ export class BrowserProductDemo {
 			});
 			await desk.click(fixtureRow(patchWindow, 13));
 			await addMultipatchesThroughTouchUi(desk, patchWindow, 13, 1);
+			markEditBoundary("profile-stage-center-end");
+
+			markEditBoundary("profile-stage-sides-start");
+			for (const [number, name] of [
+				[11, "Profile Stage Left"],
+				[12, "Profile Stage Right"],
+			] as const) {
+				desk.setRecordingClickPace(
+					"fastTyping",
+					PRODUCT_DEMO_SCRIPT.pacing.groupBulkHardwareClickMillis,
+				);
+				const fixture = requiredFixture(desiredByNumber, number);
+				await addFixtureThroughTouchUi(desk, page, {
+					search: "Dimmer Profile",
+					family: "Dimmer Profile",
+					mode: "8-bit",
+					name,
+					fixtureId: String(number),
+					count: 1,
+					address: fixtureAddress(fixture),
+				});
+			}
+			markEditBoundary("profile-stage-sides-end");
+			desk.setRecordingClickPace("compact");
 
 			const houseLights = requiredFixture(desiredByNumber, 901);
 			await desk.setDemoAction(
@@ -616,6 +694,10 @@ export class BrowserProductDemo {
 				901,
 				3,
 			);
+			desk.setRecordingClickPace(
+				"fastTyping",
+				PRODUCT_DEMO_SCRIPT.pacing.groupBulkHardwareClickMillis,
+			);
 			for (const [index, address] of [18, 19, 20].entries())
 				await setMultipatchAddressThroughTouchUi(
 					desk,
@@ -623,6 +705,7 @@ export class BrowserProductDemo {
 					houseRows[index],
 					`1.${address}`,
 				);
+			desk.setRecordingClickPace("compact");
 
 			const acl = requiredFixture(desiredByNumber, 601);
 			await addFixtureThroughTouchUi(desk, page, {
@@ -716,7 +799,8 @@ export class BrowserProductDemo {
 				z: 4_000,
 			});
 			const visibleLightingNumbers = [
-				1, 2, 3, 4, 5, 6, 7, 8, 13, 601, 901, 101, 102, 103, 104, 105, 106, 107,
+				1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 601, 901, 101, 102, 103, 104, 105,
+				106, 107,
 			];
 			const visibleLightingIdentities = await fixtureIdentities(
 				api,
@@ -782,6 +866,7 @@ export class BrowserProductDemo {
 				api,
 				showId,
 				canonical.patch.fixtures,
+				markEditBoundary,
 			);
 			await buildPresetSetup(
 				desk,
@@ -854,6 +939,7 @@ export class BrowserProductDemo {
 			if (RECORDING) {
 				const timeline = buildProductDemoEditTimeline(
 					titleMarkers,
+					editMarkers,
 					recordingEndedAtMillis,
 				);
 				await fs.writeFile(
@@ -908,6 +994,8 @@ type TouchFixtureInput = {
 	pauseForPlacement?: boolean;
 };
 
+type DemoEditBoundary = (id: string) => void;
+
 function framesToMillis(frames: number) {
 	return (frames / PRODUCT_DEMO_SCRIPT.fps) * 1_000;
 }
@@ -931,8 +1019,9 @@ function valuePadKeys(value: string) {
 	return [...tokens.map((token) => (token === "-" ? "−" : token)), "ENTER"];
 }
 
-function buildProductDemoEditTimeline(
+export function buildProductDemoEditTimeline(
 	markers: ReadonlyMap<string, number>,
+	editMarkers: ReadonlyMap<string, number>,
 	recordingEndMillis: number,
 ) {
 	let targetStartFrame = 0;
@@ -964,8 +1053,119 @@ function buildProductDemoEditTimeline(
 				: 0);
 		return timelineSection;
 	});
+	const segments = sections.flatMap((section, sectionIndex) => {
+		const windows = PRODUCT_DEMO_SCRIPT.fixedEditWindows
+			.filter((window) => window.sectionId === section.id)
+			.map((window) => {
+				const sourceStartMillis = editMarkers.get(window.startMarker);
+				const sourceEndMillis = editMarkers.get(window.endMarker);
+				if (sourceStartMillis == null || sourceEndMillis == null)
+					throw new Error(`Missing product-demo edit markers for ${window.id}`);
+				if (
+					sourceStartMillis < section.sourceStartMillis ||
+					sourceEndMillis > section.sourceEndMillis ||
+					sourceEndMillis <= sourceStartMillis
+				)
+					throw new Error(`Invalid product-demo edit window ${window.id}`);
+				return { ...window, sourceStartMillis, sourceEndMillis };
+			})
+			.sort((left, right) => left.sourceStartMillis - right.sourceStartMillis);
+		const ranges: Array<{
+			id: string;
+			sourceStartMillis: number;
+			sourceEndMillis: number;
+			fixedFrames?: number;
+		}> = [];
+		let sourceCursor = section.sourceStartMillis;
+		for (const [windowIndex, window] of windows.entries()) {
+			if (window.sourceStartMillis < sourceCursor)
+				throw new Error(`Overlapping product-demo edit window ${window.id}`);
+			if (window.sourceStartMillis > sourceCursor)
+				ranges.push({
+					id: `${section.id}-${windowIndex === 0 ? "before" : "between"}-${window.id}`,
+					sourceStartMillis: sourceCursor,
+					sourceEndMillis: window.sourceStartMillis,
+				});
+			ranges.push({
+				id: window.id,
+				sourceStartMillis: window.sourceStartMillis,
+				sourceEndMillis: window.sourceEndMillis,
+				fixedFrames: window.frames,
+			});
+			sourceCursor = window.sourceEndMillis;
+		}
+		const lastWindow = windows.at(-1);
+		if (sourceCursor < section.sourceEndMillis)
+			ranges.push({
+				id: lastWindow ? `${section.id}-after-${lastWindow.id}` : section.id,
+				sourceStartMillis: sourceCursor,
+				sourceEndMillis: section.sourceEndMillis,
+			});
+		const fixedFrames = ranges.reduce(
+			(total, range) => total + (range.fixedFrames ?? 0),
+			0,
+		);
+		if (fixedFrames >= section.frames)
+			throw new Error(`Product-demo edit windows exhaust ${section.id}`);
+		const flexibleRanges = ranges.filter((range) => range.fixedFrames == null);
+		const flexibleFrames = allocateProportionalFrames(
+			flexibleRanges.map(
+				(range) => range.sourceEndMillis - range.sourceStartMillis,
+			),
+			section.frames - fixedFrames,
+		);
+		let flexibleIndex = 0;
+		let segmentTargetStart = section.targetStartFrame;
+		return ranges.map((range, rangeIndex) => {
+			const frames = range.fixedFrames ?? flexibleFrames[flexibleIndex++];
+			const transitionFramesAfter =
+				rangeIndex === ranges.length - 1 && sectionIndex < sections.length - 1
+					? PRODUCT_DEMO_SCRIPT.transitionFrames
+					: 0;
+			const segment = {
+				id: range.id,
+				chapterId: section.id,
+				title: section.title,
+				sourceStartMillis: range.sourceStartMillis,
+				sourceEndMillis: range.sourceEndMillis,
+				frames,
+				targetStartFrame: segmentTargetStart,
+				targetEndFrame: segmentTargetStart + frames,
+				targetStartTimecode: frameTimecode(segmentTargetStart),
+				targetEndTimecode: frameTimecode(segmentTargetStart + frames),
+				transitionFramesAfter,
+			};
+			segmentTargetStart += frames - transitionFramesAfter;
+			return segment;
+		});
+	});
+	const boundaries = [...editMarkers.entries()]
+		.sort(([, left], [, right]) => left - right)
+		.map(([id, sourceMillis]) => {
+			const segment = segments.find(
+				(candidate) =>
+					sourceMillis >= candidate.sourceStartMillis &&
+					sourceMillis <= candidate.sourceEndMillis,
+			);
+			if (!segment)
+				throw new Error(
+					`Edit marker ${id} is outside the product-demo timeline`,
+				);
+			const progress =
+				(sourceMillis - segment.sourceStartMillis) /
+				(segment.sourceEndMillis - segment.sourceStartMillis);
+			const targetFrame = Math.round(
+				segment.targetStartFrame + progress * segment.frames,
+			);
+			return {
+				id,
+				sourceMillis,
+				targetFrame,
+				targetTimecode: frameTimecode(targetFrame),
+			};
+		});
 	return {
-		version: 1,
+		version: 2,
 		fps: PRODUCT_DEMO_SCRIPT.fps,
 		transitionFrames: PRODUCT_DEMO_SCRIPT.transitionFrames,
 		source: path.basename(RAW_VIDEO),
@@ -973,7 +1173,49 @@ function buildProductDemoEditTimeline(
 		totalFrames: targetStartFrame,
 		durationMillis: framesToMillis(targetStartFrame),
 		sections,
+		segments,
+		boundaries,
+		fixedEditWindows: PRODUCT_DEMO_SCRIPT.fixedEditWindows.map((window) => {
+			const segment = segments.find((candidate) => candidate.id === window.id);
+			if (!segment)
+				throw new Error(
+					`Missing timeline segment for edit window ${window.id}`,
+				);
+			return {
+				id: window.id,
+				frames: segment.frames,
+				durationMillis: framesToMillis(segment.frames),
+				targetStartFrame: segment.targetStartFrame,
+				targetEndFrame: segment.targetEndFrame,
+				targetStartTimecode: segment.targetStartTimecode,
+				targetEndTimecode: segment.targetEndTimecode,
+			};
+		}),
 	};
+}
+
+function allocateProportionalFrames(
+	durations: readonly number[],
+	total: number,
+) {
+	if (!durations.length) return [];
+	const durationTotal = durations.reduce((sum, duration) => sum + duration, 0);
+	if (!(durationTotal > 0) || total < durations.length)
+		throw new Error("Product-demo flexible edit ranges are invalid");
+	const exact = durations.map((duration) => (duration / durationTotal) * total);
+	const frames = exact.map((value) => Math.max(1, Math.floor(value)));
+	let remaining = total - frames.reduce((sum, value) => sum + value, 0);
+	for (const index of exact
+		.map((value, index) => ({ index, remainder: value - Math.floor(value) }))
+		.sort((left, right) => right.remainder - left.remainder)
+		.map(({ index }) => index)) {
+		if (remaining <= 0) break;
+		frames[index]++;
+		remaining--;
+	}
+	if (remaining !== 0)
+		throw new Error("Product-demo flexible frame allocation did not balance");
+	return frames;
 }
 
 function frameTimecode(frame: number) {
@@ -1521,6 +1763,7 @@ async function buildGroups(
 	api: ApiDriver,
 	showId: string,
 	fixtures: readonly any[],
+	markEditBoundary: DemoEditBoundary,
 ) {
 	await desk.titleCard(
 		"SETTING UP THE BASICS",
@@ -1580,7 +1823,9 @@ async function buildGroups(
 	await desk.setDemoAction(
 		"Select Beam Stage fixtures 101–128 directly in the Fixture Sheet.",
 	);
+	markEditBoundary("first-group-selection-start");
 	await selectFixturesThroughFixtureSheet(desk, app, fixtures, 101, 128);
+	markEditBoundary("first-group-selection-end");
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupSelectionHoldFrames);
 	await desk.setDemoAction(
 		"Store the visible Beam Stage selection as Group 1: [RECORD], then touch Group tile 1.",
@@ -1593,7 +1838,15 @@ async function buildGroups(
 		.poll(async () => api.showObject(showId, "group", "1"))
 		.not.toBeNull();
 	await clearSelection(desk, keypad, api);
-	await nameGroupThroughTouchTile(desk, page, app, keypad, 1, "Beam Stage");
+	await nameGroupThroughTouchTile(
+		desk,
+		page,
+		app,
+		keypad,
+		1,
+		"Beam Stage",
+		markEditBoundary,
+	);
 
 	await desk.setDemoAction(
 		"Create the Wash Stage Group with the command line, pausing between selection, record, and confirmation.",
@@ -1620,6 +1873,7 @@ async function buildGroups(
 		.poll(async () => api.showObject(showId, "group", "8"))
 		.not.toBeNull();
 	await nameGroupThroughTouch(desk, page, keypad, 8, "Wash Stage", false);
+	markEditBoundary("repeated-group-creation-start");
 
 	await desk.setDemoAction(
 		"Fast forward the remaining first-level Groups through simulated hardware controls.",
@@ -1646,6 +1900,7 @@ async function buildGroups(
 		setBulkGroupCreationPace(desk);
 	}
 	desk.setRecordingClickPace("compact");
+	markEditBoundary("repeated-group-creation-end");
 
 	await desk.setDemoAction(
 		"Select Beam Stage plus Beam Audience and combine them into the reusable Beam Show Group.",
@@ -3253,9 +3508,10 @@ async function nameGroupThroughTouchTile(
 	keypad: Locator,
 	groupId: number,
 	name: string,
+	markEditBoundary: DemoEditBoundary,
 ) {
 	await desk.setDemoAction(
-		`Name Group ${groupId} ${name} and assign its ${plannedDemoGroupIcon(name)} family icon: press [SET], then touch Group tile ${groupId}.`,
+		`Name Group ${groupId} ${name}, inspect the Fixture type icon set, and save Profile Moving Light: press [SET], then touch Group tile ${groupId}.`,
 	);
 	const commandLine = page.getByRole("textbox", { name: "Command line" });
 	await desk.click(keypad.getByRole("button", { name: "SET", exact: true }));
@@ -3269,12 +3525,58 @@ async function nameGroupThroughTouchTile(
 		beforeConfirmFrames: PRODUCT_DEMO_SCRIPT.pacing.groupNameConfirmHoldFrames,
 		pace: "fastTyping",
 	});
-	await selectGroupIconThroughTouch(desk, page, properties, name, true);
+	await selectProfileMovingLightIconThroughTouch(
+		desk,
+		page,
+		properties,
+		markEditBoundary,
+	);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupSaveHoldFrames);
 	await desk.click(
 		properties.getByRole("button", { name: "Save group", exact: true }),
 	);
 	await expect(properties).toBeHidden();
+	const savedTile = groupTile(app, groupId);
+	const savedIcon = savedTile.locator("img.pool-card-icon-image");
+	await expect(savedIcon).toBeVisible();
+	await expect(savedIcon).toHaveAttribute(
+		"data-icon-value",
+		"icon:fixture-type/profile-moving-light",
+	);
+	markEditBoundary("first-group-icon-saved");
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupIconSavedHoldFrames);
+}
+
+async function selectProfileMovingLightIconThroughTouch(
+	desk: DeskDriver,
+	page: Page,
+	properties: Locator,
+	markEditBoundary: DemoEditBoundary,
+) {
+	await desk.click(
+		properties.getByRole("button", { name: "Choose icon", exact: true }),
+	);
+	const picker = page.getByRole("dialog", { name: "Choose icon" });
+	await expect(picker).toBeVisible();
+	markEditBoundary("first-group-icon-modal-open");
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupIconModalHoldFrames);
+	await desk.click(picker.getByRole("button", { name: "Icon group" }));
+	await desk.click(page.getByRole("option", { name: "Fixture type" }));
+	await expect(
+		picker.locator('[data-icon-group="fixture-type"]'),
+	).toBeVisible();
+	markEditBoundary("first-group-icon-fixture-type");
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupIconGridHoldFrames);
+	await desk.click(
+		picker.getByRole("button", {
+			name: "Profile Moving Light",
+			exact: true,
+		}),
+	);
+	await expect(picker).toBeHidden();
+	await expect(
+		properties.getByRole("button", { name: "Choose icon", exact: true }),
+	).toContainText("Profile Moving Light");
 }
 
 async function selectGroupIconThroughTouch(

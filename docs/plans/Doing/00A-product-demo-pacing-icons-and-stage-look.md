@@ -15,7 +15,7 @@ video time and visible click/type pacing, not to weakening assertions or racing 
 - [x] Claimed from `docs/plans/Next` after completing plan 00.
 - [x] Audit the maintained DEMO-001 workflow, deterministic edit timeline, current generated-video
   path, and the previously observed Show Patch navigation blocker.
-- [ ] Implement the exact Patch, Group-selection, and icon-picker pacing contract.
+- [x] Implement the exact Patch, Group-selection, and icon-picker pacing contract.
 - [ ] Trace and correct the authoritative Pan/Tilt and color path into the final Stage rendering.
 - [ ] Run focused checks, canonical demo inventory verification, retained-video review, major suites,
   and the real desktop path.
@@ -53,6 +53,15 @@ video time and visible click/type pacing, not to weakening assertions or racing 
   catalog icon identifiers from their bundled rendering URLs. A raw root Vitest invocation was
   also attempted but lacked the UI package's jsdom configuration, so its 36 `document is not
   defined` failures are invocation/configuration failures rather than product results.
+- The updated full `npm run test:e2e -- tests/product-demo.spec.ts --workers=1` workflow passed in
+  3.5 minutes outside the sandbox. It now performs the required visible Patch batches, saves the
+  stable `icon:fixture-type/profile-moving-light` value, and proves the resulting catalog image on
+  Group tile 1. The first sandboxed attempt stopped before the scenario with loopback `listen
+  EPERM`, so it is recorded as an environment restriction rather than product evidence.
+- `npm run test:bench-types`, the two focused `productDemoTimeline` Vitest cases, the demo encoder's
+  Node syntax check, and `git diff --check` passed. The timeline unit proves the remaining-layer
+  fixed window is exactly 125 frames at 25 fps and rejects missing named markers; canonical retained
+  source/target timecodes still require the recording run.
 
 ## Remaining work
 
