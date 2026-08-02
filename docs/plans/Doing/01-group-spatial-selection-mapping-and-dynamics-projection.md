@@ -162,6 +162,14 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   headless compile remains pending until the concurrent Playback target migration closes its
   temporary `initial_master` exhaustiveness gap; the shared generated desktop declaration will be
   committed with the in-progress Dynamic contract refresh.
+- Commit `8ae596eb` moves portable Group master seeds into assigned Playback targets, removes
+  `master` and `playback_fader` from canonical Group definitions and writes, and deterministically
+  reconciles legacy physical then virtual assignments at startup. Preserved live runtime state and
+  the desk/show sidecar remain authoritative during restore; unassigned legacy pointers are
+  tolerated without creating hidden output, unknown fields survive, and the migration is
+  idempotent. The affected application, engine, Playback, and Programmer suites passed 819 tests,
+  focused startup/reopen and sidecar-precedence checks passed, and the headless package check,
+  formatting, scoped strict Clippy, and diff check passed.
 
 ## Remaining work
 
@@ -175,10 +183,9 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   multiple legacy lane mappings without changing output; uniform and lane-consistent definitions now
   write through a local mapping while retaining their legacy ordering as the runtime compatibility
   marker.
-- Finish moving Group Master pointer resolution, legacy assignment aliases, and portable writes away
-  from `GroupDefinition.master`/`playback_fader`; runtime readers and typed assignment are integrated,
-  while initial-level migration, field retirement, generated contracts, and desktop consumption
-  remain.
+- Finish the desktop compatibility audit for retired Group master/pointer fields and commit the
+  shared generated contracts. Runtime readers, typed assignment, initial-level migration, canonical
+  field retirement, recovery, and portable fixture generation are integrated.
 - Connect the typed SET state machine to the command line, Group tiles, Playback controls, and
   revision-guarded application commands; its committed pure model is not runtime proof.
 
