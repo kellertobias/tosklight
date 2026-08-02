@@ -94,7 +94,10 @@ test("captures help and README screenshots from the default show desk @ui @docs"
   await expect(page.locator(".help-window")).toBeVisible();
   await page.screenshot({ path: shot("help-command-line.png"), fullPage: true });
 
-  const expectedPaneFiles = paneReference.flatMap(([, , slug, settingsTab]) => [`${slug}.png`, ...(settingsTab ? [`${slug}-settings.png`] : [])]).sort();
+  const expectedPaneFiles = screenshotManifest.entries
+    .filter((entry) => entry.file.startsWith("panes/"))
+    .map((entry) => path.basename(entry.file))
+    .sort();
   await expect.poll(async () => (await fs.readdir(PANE_SCREENSHOT_DIR)).filter((file) => file.endsWith(".png")).sort()).toEqual(expectedPaneFiles);
   await expect.poll(async () => (await fs.readdir(WORKFLOW_SCREENSHOT_DIR)).filter((file) => file.endsWith(".png")).sort()).toEqual(workflowScreenshots);
 });
