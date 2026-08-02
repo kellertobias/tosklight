@@ -176,7 +176,7 @@ fn assign_group_page_slot(
 
 fn assign_dynamic_playback(
     state: &AppState,
-    session: &Session,
+    _session: &Session,
     tokens: &[String],
     context: &light_application::ActionContext,
 ) -> Result<usize, String> {
@@ -200,25 +200,12 @@ fn assign_dynamic_playback(
         .find(|dynamic| dynamic.pool_number == dynamic_number)
         .cloned()
         .ok_or_else(|| format!("Dynamic {dynamic_number} does not exist"))?;
-    let target_scope = if matches!(
+    if matches!(
         dynamic.target_binding,
         light_dynamics::DynamicTargetBinding::Targetless
     ) {
-        let selected = state
-            .programming
-            .get(session.id)
-            .ok_or("programmer does not exist")?
-            .selected;
-        if selected.is_empty() {
-            return Err(
-                "targetless Dynamic Playback assignment requires a current ordered selection"
-                    .into(),
-            );
-        }
-        Some(light_playback::DynamicPlaybackTargetScope::FrozenTargets { targets: selected })
-    } else {
-        None
-    };
+        return Err("targetless Dynamics cannot be assigned directly to a Playback".into());
+    }
     let (entry, store) = active_show_store(state)?;
     let object = store
         .objects("playback")
@@ -258,7 +245,7 @@ fn assign_dynamic_playback(
                 },
             },
             revision: assignment_revision,
-            target_scope,
+            target_scope: None,
             fader_mode: light_playback::DynamicPlaybackFaderMode::SizeAndMaster,
             priority: 0,
             activation_override: None,

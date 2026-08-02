@@ -513,7 +513,8 @@ fn dynamic_playback_definition(
 fn dynamic_playback_fader_pause_speed_flash_and_restore_are_authoritative() {
     let started = Utc::now();
     let clock = Arc::new(light_core::ManualClock::new(started));
-    let definition = dynamic_playback_definition(17, DynamicPlaybackFaderMode::SizeAndMaster, true);
+    let definition =
+        dynamic_playback_definition(17, DynamicPlaybackFaderMode::SizeAndMaster, false);
     let mut engine = PlaybackEngine::with_clock(clock.clone());
     engine.register_definition(definition.clone()).unwrap();
 
@@ -616,7 +617,7 @@ fn scheduled_master_transitions_are_advanced_by_the_playback_tick() {
 fn dynamic_master_transition_does_not_rewrite_the_physical_fader_assignment() {
     let started = Utc::now();
     let clock = Arc::new(light_core::ManualClock::new(started));
-    let definition = dynamic_playback_definition(17, DynamicPlaybackFaderMode::Size, true);
+    let definition = dynamic_playback_definition(17, DynamicPlaybackFaderMode::Size, false);
     let mut engine = PlaybackEngine::with_clock(clock.clone());
     engine.register_definition(definition).unwrap();
     engine.set_master(17, 0.4).unwrap();
@@ -634,16 +635,11 @@ fn dynamic_master_transition_does_not_rewrite_the_physical_fader_assignment() {
 }
 
 #[test]
-fn targetless_dynamic_playback_requires_an_explicit_assignment_scope() {
-    let mut definition = dynamic_playback_definition(18, DynamicPlaybackFaderMode::Master, true);
-    let PlaybackTarget::Dynamic { assignment } = &mut definition.target else {
-        unreachable!()
-    };
-    assignment.target_scope = None;
-
+fn targetless_dynamic_cannot_be_assigned_directly_to_a_playback() {
+    let definition = dynamic_playback_definition(18, DynamicPlaybackFaderMode::Master, true);
     assert_eq!(
         definition.validate().unwrap_err(),
-        "targetless Dynamic Playback assignments require an explicit target scope"
+        "targetless Dynamics cannot be assigned directly to a Playback"
     );
 }
 
@@ -651,7 +647,7 @@ fn targetless_dynamic_playback_requires_an_explicit_assignment_scope() {
 fn dynamic_playback_tap_learns_local_cycle_and_double_half_adjust_it() {
     let started = Utc::now();
     let clock = Arc::new(light_core::ManualClock::new(started));
-    let definition = dynamic_playback_definition(19, DynamicPlaybackFaderMode::Master, true);
+    let definition = dynamic_playback_definition(19, DynamicPlaybackFaderMode::Master, false);
     let mut engine = PlaybackEngine::with_clock(clock.clone());
     engine.register_definition(definition).unwrap();
 

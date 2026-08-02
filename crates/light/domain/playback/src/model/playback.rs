@@ -477,18 +477,14 @@ impl PlaybackDefinition {
             if matches!(
                 definition.target_binding,
                 light_dynamics::DynamicTargetBinding::Targetless
-            ) && assignment.target_scope.is_none()
-            {
+            ) {
+                return Err("targetless Dynamics cannot be assigned directly to a Playback".into());
+            }
+            if assignment.target_scope.is_some() {
                 return Err(
-                    "targetless Dynamic Playback assignments require an explicit target scope"
+                    "target-bound Dynamic Playback assignments must not override target scope"
                         .into(),
                 );
-            }
-            if let Some(DynamicPlaybackTargetScope::FrozenTargets { targets }) =
-                &assignment.target_scope
-                && targets.is_empty()
-            {
-                return Err("Dynamic Playback frozen target scope must not be empty".into());
             }
         }
         let bytes = self.color.as_bytes();

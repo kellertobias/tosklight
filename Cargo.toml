@@ -69,7 +69,7 @@ jiff = "0.2"
 midir = "0.11"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-uuid = { version = "1.16", features = ["v4", "serde"] }
+uuid = { version = "1.16", features = ["v4", "v5", "serde"] }
 quick-xml = "0.38"
 zip = { version = "4.6", default-features = false, features = ["deflate"] }
 light-application = { path = "crates/light" }

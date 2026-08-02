@@ -118,6 +118,7 @@ pub(super) fn migrate(
         "cue_list" => migrate_cue_list(object)?,
         "group" => migrate_group(object)?,
         "playback" => migrate_playback(object)?,
+        "playback_page" => migrate_playback_page(object)?,
         "preset" => migrate_preset(object)?,
         "route" => migrate_route(object)?,
         "stage_layout" => migrate_stage_layout(object)?,
@@ -280,11 +281,19 @@ fn migrate_preset(object: PortableShowCandidateObject<'_>) -> Result<Value, Acti
 }
 
 fn migrate_playback(object: PortableShowCandidateObject<'_>) -> Result<Value, ActionError> {
-    let playback = serde_json::from_value::<PlaybackDefinition>(object.body().clone())
+    let mut playback = serde_json::from_value::<PlaybackDefinition>(object.body().clone())
         .map_err(|error| invalid_object(object, error))?;
+    let before = serde_json::to_value(&playback).map_err(|error| invalid_object(object, error))?;
+    let playback_number = playback.number;
+    migrate_targetless_dynamic_assignment(
+        &mut playback,
+        DynamicAssignmentIdentity::Physical(playback_number),
+    )
+    .map_err(|error| invalid_object(object, error))?;
     let canonical =
         serde_json::to_value(playback).map_err(|error| invalid_object(object, error))?;
     let mut migrated = object.body().clone();
+    lossless_json::apply_delta(&mut migrated, &before, &canonical);
     let body = required_object_mut(&mut migrated, object)?;
     let canonical = canonical_object(&canonical, object)?;
     for field in [
@@ -316,6 +325,78 @@ fn migrate_playback(object: PortableShowCandidateObject<'_>) -> Result<Value, Ac
         body.insert("fader".into(), value.clone());
     }
     Ok(migrated)
+}
+
+fn migrate_playback_page(object: PortableShowCandidateObject<'_>) -> Result<Value, ActionError> {
+    let mut page = serde_json::from_value::<light_playback::PlaybackPage>(object.body().clone())
+        .map_err(|error| invalid_object(object, error))?;
+    let before = serde_json::to_value(&page).map_err(|error| invalid_object(object, error))?;
+    let page_number = page.number;
+    for (number, playback) in &mut page.virtual_playbacks {
+        migrate_targetless_dynamic_assignment(
+            playback,
+            DynamicAssignmentIdentity::Virtual {
+                page: page_number,
+                number: *number,
+            },
+        )
+        .map_err(|error| invalid_object(object, error))?;
+    }
+    let after = serde_json::to_value(page).map_err(|error| invalid_object(object, error))?;
+    let mut migrated = object.body().clone();
+    lossless_json::apply_delta(&mut migrated, &before, &after);
+    Ok(migrated)
+}
+
+#[derive(Clone, Copy)]
+enum DynamicAssignmentIdentity {
+    Physical(u16),
+    Virtual { page: u8, number: u16 },
+}
+
+fn migrate_targetless_dynamic_assignment(
+    playback: &mut PlaybackDefinition,
+    identity: DynamicAssignmentIdentity,
+) -> Result<bool, String> {
+    let light_playback::PlaybackTarget::Dynamic { assignment } = &mut playback.target else {
+        return Ok(false);
+    };
+    if !matches!(
+        assignment
+            .dynamic
+            .embedded_fallback
+            .definition
+            .target_binding,
+        light_dynamics::DynamicTargetBinding::Targetless
+    ) {
+        return Ok(false);
+    }
+    let Some(scope) = assignment.target_scope.take() else {
+        return Err(
+            "legacy targetless Dynamic Playback assignment has no stored target scope".into(),
+        );
+    };
+    let target_binding = match scope {
+        light_playback::DynamicPlaybackTargetScope::LiveGroup { group_id } => {
+            light_dynamics::DynamicTargetBinding::LiveGroup { group_id }
+        }
+        light_playback::DynamicPlaybackTargetScope::FrozenTargets { targets } => {
+            light_dynamics::DynamicTargetBinding::FrozenTargets { targets }
+        }
+    };
+    let original = &assignment.dynamic.embedded_fallback.definition;
+    let mut migrated = original.as_ref().clone();
+    let name = match identity {
+        DynamicAssignmentIdentity::Physical(number) => format!("physical:{number}"),
+        DynamicAssignmentIdentity::Virtual { page, number } => {
+            format!("virtual:{page}:{number}")
+        }
+    };
+    migrated.id = uuid::Uuid::new_v5(&original.id, name.as_bytes());
+    migrated.target_binding = target_binding;
+    assignment.dynamic.dynamic_id = None;
+    assignment.dynamic.embedded_fallback.definition = std::sync::Arc::new(migrated);
+    Ok(true)
 }
 
 fn migrate_route(object: PortableShowCandidateObject<'_>) -> Result<Value, ActionError> {

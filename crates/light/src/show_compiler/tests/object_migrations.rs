@@ -223,6 +223,236 @@ fn defaults_are_raw_preserving_side_effect_free_and_compile_equivalent() {
 }
 
 #[test]
+fn targetless_dynamic_assignments_migrate_to_distinct_target_bound_fallbacks() {
+    let original = targetless_dynamic(7);
+    let original_id = original.id;
+    let first_target = light_core::FixtureId::new();
+    let second_target = light_core::FixtureId::new();
+    let mut first = dynamic_playback(
+        1,
+        &original,
+        light_playback::DynamicPlaybackTargetScope::FrozenTargets {
+            targets: vec![first_target],
+        },
+    );
+    let second = dynamic_playback(
+        2,
+        &original,
+        light_playback::DynamicPlaybackTargetScope::LiveGroup {
+            group_id: "front".into(),
+        },
+    );
+    first.name = "First legacy scope".into();
+    let mut first_body = serde_json::to_value(first).unwrap();
+    first_body["future_playback"] = json!({"kept": true});
+    let mut virtual_playback = dynamic_playback(
+        1_001,
+        &original,
+        light_playback::DynamicPlaybackTargetScope::FrozenTargets {
+            targets: vec![second_target],
+        },
+    );
+    virtual_playback.has_fader = false;
+    virtual_playback.button_count = 1;
+    virtual_playback.buttons[1] = light_playback::PlaybackButtonAction::None;
+    virtual_playback.buttons[2] = light_playback::PlaybackButtonAction::None;
+    let objects = vec![
+        ("dynamic", "7", serde_json::to_value(&original).unwrap()),
+        ("playback", "1", first_body),
+        ("playback", "2", serde_json::to_value(second).unwrap()),
+        (
+            "playback_page",
+            "1",
+            json!({
+                "number": 1,
+                "name": "Virtual",
+                "slots": {},
+                "virtual_playbacks": {"1001": virtual_playback},
+                "future_page": {"kept": true}
+            }),
+        ),
+    ];
+    let (store, document) = document_with_objects(&objects);
+    let mut transaction = document.transaction();
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+    let candidate = document.candidate(&transaction).unwrap();
+
+    let first = candidate.object("playback", "1").unwrap().body();
+    let second = candidate.object("playback", "2").unwrap().body();
+    let virtual_playback =
+        &candidate.object("playback_page", "1").unwrap().body()["virtual_playbacks"]["1001"];
+    for playback in [first, second, virtual_playback] {
+        assert!(playback["target"]["assignment"]["dynamic"]["dynamic_id"].is_null());
+        assert!(playback["target"]["assignment"]["target_scope"].is_null());
+    }
+    assert_eq!(
+        migrated_dynamic_definition(first)["target_binding"],
+        json!({"type":"frozen_targets","targets":[first_target]})
+    );
+    assert_eq!(
+        migrated_dynamic_definition(second)["target_binding"],
+        json!({"type":"live_group","group_id":"front"})
+    );
+    assert_eq!(
+        migrated_dynamic_definition(virtual_playback)["target_binding"],
+        json!({"type":"frozen_targets","targets":[second_target]})
+    );
+    let migrated_ids = [first, second, virtual_playback]
+        .map(|playback| {
+            migrated_dynamic_definition(playback)["id"]
+                .as_str()
+                .unwrap()
+        })
+        .into_iter()
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(migrated_ids.len(), 3);
+    let original_id = original_id.to_string();
+    assert!(!migrated_ids.contains(original_id.as_str()));
+    assert_eq!(first["future_playback"], json!({"kept": true}));
+    assert_eq!(
+        candidate.object("playback_page", "1").unwrap().body()["future_page"],
+        json!({"kept": true})
+    );
+    assert_eq!(
+        candidate.object("dynamic", "7").unwrap().body()["target_binding"],
+        json!({"type":"targetless"})
+    );
+    assert_eq!(
+        stored_body(&store, "playback", "1")["target"]["assignment"]["dynamic"]["dynamic_id"],
+        original_id.to_string()
+    );
+
+    let migrated = candidate
+        .objects()
+        .map(|object| {
+            (
+                object.key().kind().to_owned(),
+                object.key().id().to_owned(),
+                object.body().clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let migrated_refs = migrated
+        .iter()
+        .map(|(kind, id, body)| (kind.as_str(), id.as_str(), body.clone()))
+        .collect::<Vec<_>>();
+    let (_, migrated_document) = document_with_objects(&migrated_refs);
+    let mut second_pass = migrated_document.transaction();
+    stage_candidate_migrations(&migrated_document, &mut second_pass).unwrap();
+    assert!(second_pass.is_empty());
+}
+
+#[test]
+fn targetless_dynamic_assignment_without_legacy_scope_fails_visibly() {
+    let original = targetless_dynamic(7);
+    let mut playback = serde_json::to_value(dynamic_playback(
+        1,
+        &original,
+        light_playback::DynamicPlaybackTargetScope::FrozenTargets {
+            targets: vec![light_core::FixtureId::new()],
+        },
+    ))
+    .unwrap();
+    playback["target"]["assignment"]["target_scope"] = serde_json::Value::Null;
+    let objects = vec![
+        ("dynamic", "7", serde_json::to_value(original).unwrap()),
+        ("playback", "1", playback),
+    ];
+    let (_, document) = document_with_objects(&objects);
+    let mut transaction = document.transaction();
+
+    let error = stage_candidate_migrations(&document, &mut transaction).unwrap_err();
+
+    assert_eq!(
+        error.message,
+        "invalid playback 1: legacy targetless Dynamic Playback assignment has no stored target scope"
+    );
+    assert!(transaction.is_empty());
+}
+
+fn migrated_dynamic_definition(playback: &serde_json::Value) -> &serde_json::Value {
+    &playback["target"]["assignment"]["dynamic"]["embedded_fallback"]["definition"]
+}
+
+fn targetless_dynamic(pool_number: u16) -> light_dynamics::DynamicDefinition {
+    light_dynamics::DynamicDefinition {
+        id: Uuid::new_v4(),
+        pool_number,
+        revision: 1,
+        name: format!("Targetless {pool_number}"),
+        color: None,
+        icon: None,
+        target_binding: light_dynamics::DynamicTargetBinding::Targetless,
+        lanes: Vec::new(),
+        random_groups: Vec::new(),
+        phase_spread_mode: light_dynamics::DynamicPhaseSpreadMode::Uniform,
+        phase: light_dynamics::PhaseDistribution {
+            ordering: light_dynamics::PhaseOrdering::Selection,
+            offset_degrees: 0.0,
+            span_degrees: 360.0,
+            block_size: 1,
+            repeats: 1,
+            wings: false,
+            anchors_degrees: Vec::new(),
+        },
+        speed: light_dynamics::DynamicSpeed::Fixed {
+            duration_millis: 1_000,
+        },
+        overall_speed_multiplier: light_dynamics::Rational::ONE,
+        run_mode: light_dynamics::DynamicRunMode::Loop,
+        default_activation: light_dynamics::ActivationPolicy::StartNow,
+        activation_boundary: light_dynamics::ActivationBoundary::Beat,
+    }
+}
+
+fn dynamic_playback(
+    number: u16,
+    definition: &light_dynamics::DynamicDefinition,
+    target_scope: light_playback::DynamicPlaybackTargetScope,
+) -> light_playback::PlaybackDefinition {
+    let target = light_playback::PlaybackTarget::Dynamic {
+        assignment: light_playback::DynamicPlaybackAssignment {
+            dynamic: light_dynamics::DynamicReference {
+                dynamic_id: Some(definition.id),
+                last_known_pool_number: definition.pool_number,
+                embedded_fallback: light_dynamics::DynamicDefinitionSnapshot {
+                    definition: std::sync::Arc::new(definition.clone()),
+                },
+            },
+            revision: 1,
+            target_scope: Some(target_scope),
+            fader_mode: light_playback::DynamicPlaybackFaderMode::SizeAndMaster,
+            priority: 0,
+            activation_override: None,
+            resume_policy: light_playback::DynamicPlaybackResumePolicy::FollowDynamic,
+            local_speed_multiplier: light_dynamics::Rational::ONE,
+            learned_duration_millis: None,
+            crossfade_non_intensity: false,
+            auto_off_at_zero: true,
+            auto_off_flash_release: true,
+            auto_off_full_control: true,
+        },
+    };
+    light_playback::PlaybackDefinition {
+        number,
+        name: format!("Dynamic Playback {number}"),
+        buttons: light_playback::PlaybackDefinition::default_buttons(&target),
+        target,
+        button_count: 3,
+        fader: light_playback::PlaybackFaderMode::Master,
+        has_fader: true,
+        go_activates: true,
+        auto_off: true,
+        xfade_millis: 0,
+        color: "#20c997".into(),
+        flash_release: light_playback::FlashReleaseMode::default(),
+        protect_from_swap: false,
+        presentation_icon: None,
+        presentation_image: None,
+    }
+}
+
+#[test]
 fn dynamics_compile_preset_sources_into_per_target_sampler_fallbacks() {
     let target = light_core::FixtureId::new();
     let dynamic = light_dynamics::DynamicDefinition {

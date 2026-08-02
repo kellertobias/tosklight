@@ -20,10 +20,13 @@ to Playbacks depends on it.
   retarget physical controls. Prepared snapshot installation now preserves a shared runtime while any physical
   or Virtual assignment survives, deterministically rebinds an origin whose assignment was detached, and
   releases the old target after its final assignment is cleared or reassigned. Group Master topology includes
-  Virtual assignments and removes final-detach flash/transition state.
+  Virtual assignments and removes final-detach flash/transition state. Legacy targetless-Dynamic Playback
+  assignments now migrate to deterministic assignment-owned target-bound fallbacks while the original pool
+  Dynamic remains targetless; new targetless Dynamics are rejected by both topology validation and the SET path.
 - [ ] Add focused migration, runtime, cross-surface, and operator acceptance coverage. Shared Cuelist,
   physical-pickup, Matter/software, peer-event, Preload, restart, and legacy duplicate-row coverage is in place;
-  assignment removal/reassignment, Group Master topology, and legacy targetless-Dynamic migration remain.
+  assignment removal/reassignment, Group Master topology, and targetless-Dynamic migration coverage is in place;
+  shared target-bound Dynamic runtime and cross-surface coverage remain.
 - [ ] Run the required major suites and verify the real desktop path.
 
 ## Decisions
@@ -59,10 +62,17 @@ to Playbacks depends on it.
 - Focused headless topology tests passed for final physical assignment release and partial shared-target
   detach/rebinding through the persisted active-show route.
 - The filtered headless suite passed again after lifecycle integration: 624 passed, 1 ignored, 1 filtered.
+- Focused `light-application` migration tests passed for distinct physical/Virtual target-bound fallbacks,
+  unchanged targetless pool content, idempotence, extension-field preservation, and visible failure when a
+  legacy assignment has no stored scope.
+- `cargo test -p light-playback --lib --quiet` passed after rejecting new targetless Playback assignments:
+  102 passed.
+- `cargo check -p light-headless-runtime --message-format short` passed after the migration and SET-path changes.
 
 ## Remaining work
 
-- Migrate legacy targetless Dynamic assignments without losing their stored target scope or output.
+- Share target-bound Dynamic runtime, pickup, lifecycle, persistence, scheduler identity, and peer feedback by
+  stable Dynamic target identity while retaining assignment-local held gestures.
 - Confirm generated wire/frontend selection and reconnect state consume the authoritative peer projections.
 - Run full plan closeout verification and record the truthful result.
 
