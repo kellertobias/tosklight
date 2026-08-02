@@ -28,22 +28,18 @@ export function GroupPoolGrid({
 	capabilities,
 	knownFixtureIds,
 	command,
-	onOpenContext,
-	onOpenProperties,
+	onOpenSettings,
 	onOpenRecord,
 	recordGroup,
-	runCommand,
 	paneId,
 	columns,
 }: Pick<FixtureMetadata, "capabilities" | "knownFixtureIds"> & {
 	active?: boolean;
 	cards: (Group | null)[];
 	command: CommandLineSurface;
-	onOpenContext: (id: string) => void;
-	onOpenProperties: (id: string) => void;
+	onOpenSettings: (id: string) => void;
 	onOpenRecord: (target: GroupRecordingTarget) => void;
 	recordGroup: (target: GroupRecordingTarget) => Promise<unknown>;
-	runCommand: (command: string) => Promise<unknown>;
 	paneId?: string;
 	columns?: number;
 }) {
@@ -53,9 +49,15 @@ export function GroupPoolGrid({
 	const showId = useActiveShowId() ?? "unresolved";
 	const surfaceKey = poolSurfaceKey(showId, "group", paneId);
 	const hold = useRef<number | null>(null);
+	const held = useRef(false);
 	const cancelHold = () => {
 		if (hold.current) window.clearTimeout(hold.current);
 		hold.current = null;
+	};
+	const consumeHold = () => {
+		const consumed = held.current;
+		held.current = false;
+		return consumed;
 	};
 	const selectCard = (group: Group | null, index: number) => {
 		const id = group?.id ?? String(index + 1);
@@ -74,7 +76,7 @@ export function GroupPoolGrid({
 			return;
 		}
 		if (group && /^SET\b/i.test(commandText)) {
-			onOpenProperties(group.id);
+			onOpenSettings(group.id);
 			void command.reset();
 			return;
 		}
@@ -137,15 +139,19 @@ export function GroupPoolGrid({
 							surfaceKey={surfaceKey}
 							beginHold={() => {
 								if (group && !state.updateArmed) {
-									hold.current = window.setTimeout(
-										() => onOpenContext(group.id),
-										600,
-									);
+									held.current = false;
+									hold.current = window.setTimeout(() => {
+										held.current = true;
+										onOpenSettings(group.id);
+									}, 600);
 								}
 							}}
 							cancelHold={cancelHold}
-							openContext={() => group && onOpenContext(group.id)}
-							dereference={() => group && void runCommand(`DEGRP ${group.id}`)}
+							consumeHold={consumeHold}
+							openSettings={() => group && onOpenSettings(group.id)}
+							dereference={() =>
+								group && void groupSelection.selectFrozen(group)
+							}
 							select={() => selectCard(group, index)}
 						/>
 					);

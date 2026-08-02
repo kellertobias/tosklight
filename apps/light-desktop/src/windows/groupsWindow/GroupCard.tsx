@@ -1,4 +1,5 @@
 import { PoolCard } from "@tosklight/ui/pools";
+import { useEffect, useRef } from "react";
 import type { PoolPresentationConfiguration } from "../../api/types";
 import { resolveConfiguredPoolPresentation } from "../../features/poolPresentation/poolPresentation";
 import type { Group } from "./model";
@@ -52,7 +53,8 @@ export function GroupCard({
 	surfaceKey,
 	beginHold,
 	cancelHold,
-	openContext,
+	consumeHold,
+	openSettings,
 	dereference,
 	select,
 }: {
@@ -69,10 +71,32 @@ export function GroupCard({
 	surfaceKey: string;
 	beginHold: () => void;
 	cancelHold: () => void;
-	openContext: () => void;
+	consumeHold: () => boolean;
+	openSettings: () => void;
 	dereference: () => void;
 	select: () => void;
 }) {
+	const clickTimer = useRef<number | null>(null);
+	useEffect(
+		() => () => {
+			if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
+		},
+		[],
+	);
+	const scheduleLiveSelection = () => {
+		if (consumeHold()) return;
+		if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
+		clickTimer.current = window.setTimeout(() => {
+			clickTimer.current = null;
+			select();
+		}, 240);
+	};
+	const selectFrozen = () => {
+		if (consumeHold()) return;
+		if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
+		clickTimer.current = null;
+		dereference();
+	};
 	const missing = missingFixtureCount(group, knownFixtureIds);
 	const attributes = Object.keys(group?.body.programming ?? {});
 	const unsupported = unsupportedValueCount(group, attributes, capabilities);
@@ -134,10 +158,13 @@ export function GroupCard({
 			onPointerCancel={cancelHold}
 			onContextMenu={(event) => {
 				event.preventDefault();
-				openContext();
+				if (clickTimer.current !== null)
+					window.clearTimeout(clickTimer.current);
+				clickTimer.current = null;
+				openSettings();
 			}}
-			onDoubleClick={dereference}
-			onClick={select}
+			onDoubleClick={selectFrozen}
+			onClick={scheduleLiveSelection}
 		/>
 	);
 }

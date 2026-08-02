@@ -147,7 +147,11 @@ describe("GroupsWindow action routing", () => {
 		mocks.refresh.mockReset().mockResolvedValue(undefined);
 		mocks.recordGroup.mockReset().mockResolvedValue({ status: "changed" });
 		mocks.resetCommand.mockReset().mockResolvedValue(true);
-		mocks.manageGroup.mockReset().mockResolvedValue({ status: "changed" });
+		mocks.manageGroup.mockReset().mockResolvedValue({
+			status: "changed",
+			group: { revision: 2 },
+			persistenceWarning: null,
+		});
 		mocks.setGroupMaster.mockReset().mockResolvedValue(null);
 		mocks.commandLine = "";
 		mocks.state.storeArmed = false;
@@ -173,7 +177,7 @@ describe("GroupsWindow action routing", () => {
 		expect(cards[199]).toHaveAttribute("data-pool-slot-id", "200");
 	});
 
-	it("preserves press-and-hold Group context behavior through the shared pool grid", () => {
+	it("opens the three-tab Group settings modal on a touch hold", () => {
 		vi.useFakeTimers();
 		render(<GroupsWindow />);
 		const card = buttonForText("Stored Empty");
@@ -182,7 +186,13 @@ describe("GroupsWindow action routing", () => {
 		act(() => vi.advanceTimersByTime(600));
 		fireEvent.pointerUp(card);
 
-		expect(screen.getByLabelText("Stored Empty master")).toBeInTheDocument();
+		const dialog = screen.getByRole("dialog", { name: "Group 4 settings" });
+		expect(dialog).toBeInTheDocument();
+		expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+			"General",
+			"Projection",
+			"Phaser",
+		]);
 	});
 
 	it("refuses every apparent empty-slot interaction while runtime loads", () => {
@@ -198,43 +208,56 @@ describe("GroupsWindow action routing", () => {
 		expect(mocks.selectLive).not.toHaveBeenCalled();
 	});
 
-	it("disables the Group master when the scoped writer is absent", () => {
-		mocks.runtimeCanWrite = false;
+	it("right-click opens settings and suppresses retired Group management", () => {
 		render(<GroupsWindow />);
 		fireEvent.contextMenu(buttonForText("Stored Empty"));
 
-		expect(screen.getByLabelText("Stored Empty master")).toBeDisabled();
+		expect(
+			screen.getByRole("dialog", { name: "Group 4 settings" }),
+		).toBeInTheDocument();
+		expect(screen.queryByText(/^Master$/)).toBeNull();
+		expect(screen.queryByText("Select live group")).toBeNull();
+		expect(screen.queryByText("Replace membership with selection")).toBeNull();
+		expect(screen.queryByText("Undo membership/programming change")).toBeNull();
 		expect(mocks.setGroupMaster).not.toHaveBeenCalled();
 	});
 
-	it("does not reopen an old Group context after authority replacement", () => {
+	it("does not reopen old Group settings after authority replacement", () => {
 		const view = render(<GroupsWindow />);
 		fireEvent.contextMenu(buttonForText("Stored Empty"));
-		expect(screen.getByLabelText("Stored Empty master")).toBeInTheDocument();
+		expect(
+			screen.getByRole("dialog", { name: "Group 4 settings" }),
+		).toBeInTheDocument();
 
 		mocks.runtimeReady = false;
 		view.rerender(<GroupsWindow />);
-		expect(screen.queryByLabelText("Stored Empty master")).toBeNull();
+		expect(
+			screen.queryByRole("dialog", { name: "Group 4 settings" }),
+		).toBeNull();
 
 		mocks.runtimeReady = true;
 		view.rerender(<GroupsWindow />);
-		expect(screen.queryByLabelText("Stored Empty master")).toBeNull();
+		expect(
+			screen.queryByRole("dialog", { name: "Group 4 settings" }),
+		).toBeNull();
 	});
 
-	it("writes the context master through exact scoped Group authority", async () => {
-		render(<GroupsWindow />);
-		fireEvent.contextMenu(buttonForText("Stored Empty"));
-		fireEvent.change(screen.getByLabelText("Stored Empty master"), {
-			target: { value: "35" },
-		});
-
-		expect(mocks.setGroupMaster).toHaveBeenCalledWith("4", 0.35);
-	});
-
-	it("selects a stored group through the scoped live-Group gesture", () => {
+	it("selects a stored group through the scoped live-Group gesture", async () => {
 		render(<GroupsWindow />);
 		fireEvent.click(buttonForText("Stored Empty"));
-		expect(mocks.selectLive).toHaveBeenCalledWith(mocks.groups[0]);
+		await waitFor(() =>
+			expect(mocks.selectLive).toHaveBeenCalledWith(mocks.groups[0]),
+		);
+	});
+
+	it("uses a double quick press only for frozen Group selection", () => {
+		vi.useFakeTimers();
+		render(<GroupsWindow />);
+		fireEvent.click(buttonForText("Stored Empty"));
+		fireEvent.doubleClick(buttonForText("Stored Empty"));
+		act(() => vi.advanceTimersByTime(300));
+		expect(mocks.selectFrozen).toHaveBeenCalledWith(mocks.groups[0]);
+		expect(mocks.selectLive).not.toHaveBeenCalled();
 	});
 
 	it("records directly into a stored empty Group through the typed action", async () => {
@@ -281,6 +304,7 @@ describe("GroupsWindow action routing", () => {
 		mocks.state.storeArmed = true;
 		const view = render(<GroupsWindow />);
 		fireEvent.click(buttonForText("Stored Populated"));
+		await screen.findByRole("button", { name: "Merge" });
 		mocks.groups[1].revision = 9;
 		view.rerender(<GroupsWindow />);
 		fireEvent.click(screen.getByRole("button", { name: "Merge" }));
@@ -310,22 +334,18 @@ describe("GroupsWindow action routing", () => {
 		expect(mocks.resetCommand).not.toHaveBeenCalled();
 	});
 
-	it("opens and saves group properties when SET is armed before tapping the tile", async () => {
+	it("opens Group settings from SET and saves General fields without an Apply footer", async () => {
 		mocks.commandLine = "SET ";
 		render(<GroupsWindow />);
 		fireEvent.click(buttonForText("Stored Empty"));
-		expect(mocks.resetCommand).toHaveBeenCalledOnce();
+		await waitFor(() => expect(mocks.resetCommand).toHaveBeenCalledOnce());
 		expect(
-			screen.getByRole("dialog", { name: "Group properties" }),
+			screen.getByRole("dialog", { name: "Group 4 settings" }),
 		).toBeInTheDocument();
 		fireEvent.change(screen.getByLabelText("Group name"), {
 			target: { value: "Copy Center Spot" },
 		});
-		fireEvent.click(screen.getByRole("button", { name: /#718596/ }));
-		fireEvent.click(screen.getByRole("option", { name: "Use color #06b6d4" }));
-		fireEvent.click(screen.getByRole("button", { name: /Choose icon/ }));
-		fireEvent.click(await screen.findByRole("button", { name: "Use ★" }));
-		fireEvent.click(screen.getByRole("button", { name: "Save group" }));
+		fireEvent.blur(screen.getByLabelText("Group name"));
 		await waitFor(() =>
 			expect(mocks.manageGroup).toHaveBeenCalledWith({
 				objectId: "4",
@@ -334,27 +354,32 @@ describe("GroupsWindow action routing", () => {
 					type: "update_properties",
 					properties: {
 						name: "Copy Center Spot",
-						color: "#06b6d4",
-						icon: "★",
+						color: "#718596",
+						icon: "◇",
 					},
 				},
 			}),
 		);
+		expect(
+			screen.queryByRole("button", { name: /Save|Apply|Cancel/ }),
+		).toBeNull();
 	});
 
-	it("routes SET plus a group tile into playback assignment in Playback mode", () => {
+	it("routes SET plus a group tile into playback assignment in Playback mode", async () => {
 		mocks.state.controlMode = "playbacks";
 		mocks.state.playbackSetArmed = true;
 		render(<GroupsWindow />);
 		fireEvent.click(buttonForText("Stored Empty"));
 
-		expect(mocks.replaceCommand).toHaveBeenCalledWith("SET GROUP 4", false);
+		await waitFor(() =>
+			expect(mocks.replaceCommand).toHaveBeenCalledWith("SET GROUP 4", false),
+		);
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_PLAYBACK_SET_ARMED",
 			value: false,
 		});
 		expect(
-			screen.queryByRole("dialog", { name: "Group properties" }),
+			screen.queryByRole("dialog", { name: "Group 4 settings" }),
 		).not.toBeInTheDocument();
 	});
 
@@ -368,7 +393,7 @@ describe("GroupsWindow action routing", () => {
 			),
 		);
 		expect(
-			screen.getByRole("dialog", { name: "Group properties" }),
+			screen.getByRole("dialog", { name: "Group 4 settings" }),
 		).toBeInTheDocument();
 		expect(screen.getByLabelText("Group name")).toHaveValue("Stored Empty");
 		expect(screen.getByRole("button", { name: /#D76CFF/ })).toBeInTheDocument();

@@ -1023,14 +1023,112 @@
 	font-size: 18px;
 	line-height: 18px;
 }
-.group-properties-modal {
-	width: min(540px, calc(100vw - 40px));
+.group-settings-panel {
+	display: grid;
+	gap: 14px;
+	min-width: min(620px, calc(100vw - 72px));
 }
-.group-properties-modal footer {
+.group-settings-general {
+	min-width: min(520px, calc(100vw - 72px));
+}
+.group-general-fields {
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+.group-mapping-identity {
+	display: grid;
+	gap: 3px;
+	padding: 10px 12px;
+	border: 1px solid var(--line2);
+	border-radius: 7px;
+	background: var(--panel2);
+}
+.group-mapping-identity span,
+.group-settings-panel [role="note"],
+.group-mapping-empty,
+.group-mapping-preview p {
+	color: var(--muted);
+}
+.group-mapping-actions,
+.group-projection-presets,
+.group-shape-choices {
 	display: flex;
-	justify-content: flex-end;
+	flex-wrap: wrap;
+	gap: 7px;
+}
+.group-mapping-actions,
+.group-projection-presets {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+.group-mapping-actions legend,
+.group-projection-presets legend {
+	flex-basis: 100%;
+	padding: 0;
+	font-size: 12px;
+	color: var(--muted);
+}
+.group-mapping-actions button,
+.group-projection-presets button,
+.group-shape-choices button {
+	min-height: 44px;
+}
+.group-mapping-fields {
+	display: grid;
+	gap: 10px;
+	margin: 0;
+	padding: 12px;
+	border: 1px solid var(--line2);
+	border-radius: 7px;
+}
+.group-mapping-fields legend {
+	padding: 0 6px;
+	font-weight: 700;
+}
+.group-vector-fields {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 8px;
-	margin-top: 14px;
+}
+.group-number-field {
+	display: grid;
+	grid-template-columns: minmax(110px, 1fr) minmax(120px, 1fr);
+	align-items: center;
+	gap: 8px;
+}
+.group-number-field > span:last-child {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	align-items: center;
+	gap: 6px;
+}
+.group-number-field input,
+.group-number-field select {
+	min-height: 44px;
+	width: 100%;
+}
+.group-mapping-preview {
+	min-height: 96px;
+	padding: 12px;
+	border: 1px dashed var(--line2);
+	border-radius: 7px;
+	background: color-mix(in srgb, var(--panel2) 75%, transparent);
+}
+.group-settings-status {
+	margin: 0;
+	color: var(--cyan);
+}
+@media (max-width: 700px) {
+	.group-settings-panel,
+	.group-settings-general {
+		min-width: 0;
+	}
+	.group-vector-fields {
+		grid-template-columns: 1fr;
+	}
 }
 .command-line-bar {
 	height: 44px;

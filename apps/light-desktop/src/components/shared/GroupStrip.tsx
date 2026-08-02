@@ -1,6 +1,6 @@
 import { Button } from "@tosklight/ui";
 import { ButtonGrid } from "@tosklight/ui/window-kit";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PoolPresentationConfiguration } from "../../api/types";
 import { groups } from "../../data/mockData";
 import {
@@ -91,6 +91,13 @@ function GroupShortcut({
 	showId: string;
 	viewOnly: boolean;
 }) {
+	const clickTimer = useRef<number | null>(null);
+	useEffect(
+		() => () => {
+			if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
+		},
+		[],
+	);
 	const presentation = resolveConfiguredPoolPresentation(poolPresentation, {
 		showId,
 		surfaceKey: poolSurfaceKey(showId, "group"),
@@ -111,8 +118,28 @@ function GroupShortcut({
 			style={presentation.style}
 			aria-pressed={selected}
 			disabled={viewOnly}
-			onClick={viewOnly ? undefined : onClick}
-			onDoubleClick={viewOnly ? undefined : onDoubleClick}
+			onClick={
+				viewOnly
+					? undefined
+					: () => {
+							if (clickTimer.current !== null)
+								window.clearTimeout(clickTimer.current);
+							clickTimer.current = window.setTimeout(() => {
+								clickTimer.current = null;
+								onClick();
+							}, 240);
+						}
+			}
+			onDoubleClick={
+				viewOnly
+					? undefined
+					: () => {
+							if (clickTimer.current !== null)
+								window.clearTimeout(clickTimer.current);
+							clickTimer.current = null;
+							onDoubleClick();
+						}
+			}
 		>
 			<span className="number">{index + 1}</span>
 			<b>{group?.body.name ?? "Empty"}</b>

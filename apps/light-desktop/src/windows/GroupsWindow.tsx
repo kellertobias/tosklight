@@ -1,23 +1,22 @@
+import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useEffect, useState } from "react";
-import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
 import {
 	type CommandLineSurface,
 	useCommandLineSurface,
 } from "../components/control/commandLine/useCommandLineSurface";
+import { PoolColorSettings } from "../components/shared/PoolColorSettings";
 import {
 	type RecordMode,
 	RecordModeDialog,
 } from "../components/shared/RecordModeDialog";
-import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
+import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
 import { useGroupRecording } from "../features/groupRecording/GroupRecordingProvider";
 import type { GroupRecordingTarget } from "../features/groupRecording/target";
 import { useApp } from "../state/AppContext";
-import { GroupContextMenu } from "./groupsWindow/GroupContextMenu";
 import { GroupPoolGrid } from "./groupsWindow/GroupPoolGrid";
-import { GroupPropertiesDialog } from "./groupsWindow/GroupPropertiesDialog";
+import { GroupSettingsDialog } from "./groupsWindow/GroupSettingsDialog";
 import { useGroupPoolModel } from "./groupsWindow/model";
 import type { WindowProps } from "./windowTypes";
-import { PoolColorSettings } from "../components/shared/PoolColorSettings";
 
 export function GroupPoolHeader({
 	command,
@@ -60,7 +59,12 @@ export function GroupPoolHeader({
 	);
 }
 
-export function GroupsWindow({ active = true, compact, paneId, poolColumns }: WindowProps) {
+export function GroupsWindow({
+	active = true,
+	compact,
+	paneId,
+	poolColumns,
+}: WindowProps) {
 	const groupScope = useActiveShowId();
 	const groupRecording = useGroupRecording();
 	const command = useCommandLineSurface({
@@ -70,21 +74,18 @@ export function GroupsWindow({ active = true, compact, paneId, poolColumns }: Wi
 	});
 	const { dispatch } = useApp();
 	const model = useGroupPoolModel(active);
-	const [contextGroup, setContextGroup] = useState<string | null>(null);
 	const [recordGroup, setRecordGroup] = useState<GroupRecordingTarget | null>(
 		null,
 	);
-	const [propertiesGroup, setPropertiesGroup] = useState<string | null>(null);
+	const [settingsGroup, setSettingsGroup] = useState<string | null>(null);
 	const [colorSettingsAnchor, setColorSettingsAnchor] =
 		useState<DOMRect | null>(null);
-	const contextual = model.groups.find((group) => group.id === contextGroup);
-	const propertiesTarget = model.groups.find(
-		(group) => group.id === propertiesGroup,
+	const settingsTarget = model.groups.find(
+		(group) => group.id === settingsGroup,
 	);
 
 	useEffect(() => {
-		setContextGroup(null);
-		setPropertiesGroup(null);
+		setSettingsGroup(null);
 		setRecordGroup(null);
 	}, [groupScope, model.groupRuntimeReady]);
 
@@ -92,7 +93,7 @@ export function GroupsWindow({ active = true, compact, paneId, poolColumns }: Wi
 		if (!active) return;
 		const openRequestedGroup = (event: Event) => {
 			const id = (event as CustomEvent<string>).detail;
-			if (model.groups.some((group) => group.id === id)) setPropertiesGroup(id);
+			if (model.groups.some((group) => group.id === id)) setSettingsGroup(id);
 		};
 		window.addEventListener("light:group-configuration", openRequestedGroup);
 		return () =>
@@ -102,7 +103,6 @@ export function GroupsWindow({ active = true, compact, paneId, poolColumns }: Wi
 			);
 	}, [active, model.groups]);
 
-	const runCommand = (value: string) => command.execute(value);
 	const recordGroupAction = async (
 		target: GroupRecordingTarget,
 		mode: RecordMode = "overwrite",
@@ -141,11 +141,9 @@ export function GroupsWindow({ active = true, compact, paneId, poolColumns }: Wi
 					cards={model.cards}
 					capabilities={model.capabilities}
 					knownFixtureIds={model.knownFixtureIds}
-					onOpenContext={setContextGroup}
-					onOpenProperties={setPropertiesGroup}
+					onOpenSettings={setSettingsGroup}
 					onOpenRecord={setRecordGroup}
 					recordGroup={recordGroupAction}
-					runCommand={runCommand}
 					paneId={paneId}
 					columns={poolColumns}
 				/>
@@ -154,17 +152,6 @@ export function GroupsWindow({ active = true, compact, paneId, poolColumns }: Wi
 					Group runtime loading…
 				</p>
 			)}
-			{contextual && (
-				<GroupContextMenu
-					fixtureNames={model.fixtureNames}
-					group={contextual}
-					onClose={() => setContextGroup(null)}
-					recordGroup={recordGroupAction}
-					runCommand={runCommand}
-					setGroupMaster={model.setGroupMaster}
-					canWriteMaster={model.canWriteGroupRuntime}
-				/>
-			)}
 			{recordGroup && (
 				<RecordModeDialog
 					target={recordGroup.label}
@@ -172,11 +159,12 @@ export function GroupsWindow({ active = true, compact, paneId, poolColumns }: Wi
 					onCancel={cancelRecording}
 				/>
 			)}
-			{propertiesTarget && (
-				<GroupPropertiesDialog
-					key={`${propertiesTarget.id}:${propertiesTarget.revision}`}
-					group={propertiesTarget}
-					onClose={() => setPropertiesGroup(null)}
+			{settingsTarget && (
+				<GroupSettingsDialog
+					key={`${settingsTarget.id}:${settingsTarget.revision}`}
+					group={settingsTarget}
+					groups={model.groups}
+					onClose={() => setSettingsGroup(null)}
 				/>
 			)}
 			{colorSettingsAnchor && (
@@ -189,9 +177,7 @@ export function GroupsWindow({ active = true, compact, paneId, poolColumns }: Wi
 						{
 							id: "colors",
 							label: "Colors",
-							content: (
-								<PoolColorSettings objectType="group" paneId={paneId} />
-							),
+							content: <PoolColorSettings objectType="group" paneId={paneId} />,
 						},
 					]}
 				/>

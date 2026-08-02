@@ -51,7 +51,12 @@ const mocks = vi.hoisted(() => ({
 	replaceCommandLine: vi.fn(),
 	recordGroup: vi.fn(),
 	playbackReads: 0,
-	state: { storeArmed: false, updateArmed: false },
+	state: {
+		storeArmed: false,
+		updateArmed: false,
+		controlMode: "programmer" as "programmer" | "playbacks",
+		playbackSetArmed: false,
+	},
 }));
 
 vi.mock("../deskSnapshot/DeskSnapshotState", () => ({
@@ -136,11 +141,9 @@ function GroupPool({
 			capabilities={new Map()}
 			knownFixtureIds={new Set()}
 			command={command}
-			onOpenContext={() => undefined}
-			onOpenProperties={() => undefined}
+			onOpenSettings={() => undefined}
 			onOpenRecord={() => undefined}
 			recordGroup={async () => null}
-			runCommand={async () => null}
 		/>
 	);
 }
@@ -231,6 +234,8 @@ describe("scoped Group activation", () => {
 		mocks.playbackReads = 0;
 		mocks.state.storeArmed = false;
 		mocks.state.updateArmed = false;
+		mocks.state.controlMode = "programmer";
+		mocks.state.playbackSetArmed = false;
 	});
 
 	it("sends exactly one live gesture with the ordered resolved membership", async () => {
@@ -525,6 +530,8 @@ describe("scoped Group activation", () => {
 	});
 
 	it("arms a Group Master assignment when SET is followed by a Group Pool card", async () => {
+		mocks.state.controlMode = "playbacks";
+		mocks.state.playbackSetArmed = true;
 		const context = harness();
 		context.loadSnapshot.mockResolvedValue(
 			programmingSnapshot({ command: commandLine(1, "SET") }),

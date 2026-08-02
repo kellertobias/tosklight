@@ -157,13 +157,11 @@ export function MarketingGroupsWindow({
 						capabilities={new Map()}
 						knownFixtureIds={knownFixtureIds}
 						command={command}
-						onOpenContext={(id) => setInteraction(`Context Group ${id}`)}
-						onOpenProperties={(id) => setInteraction(`Properties Group ${id}`)}
+						onOpenSettings={(id) => setInteraction(`Settings Group ${id}`)}
 						onOpenRecord={(target) => setInteraction(`Record ${target.label}`)}
 						recordGroup={async (target) =>
 							setInteraction(`Recorded ${target.label}`)
 						}
-						runCommand={async (value) => setInteraction(value)}
 					/>
 					<output aria-label="Group pool interaction" hidden>
 						{interaction}

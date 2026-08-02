@@ -479,18 +479,6 @@
 	border: 0;
 	border-radius: 0;
 }
-.group-context-master {
-	display: grid;
-	grid-template-columns: 1fr auto;
-	gap: 5px;
-	padding: 7px;
-	border: 1px solid var(--line);
-	border-radius: 6px;
-}
-.group-context-master input {
-	grid-column: 1 / -1;
-	width: 100%;
-}
 .ui-button.is-arrow-only {
 	min-width: 48px;
 	padding-left: 12px;

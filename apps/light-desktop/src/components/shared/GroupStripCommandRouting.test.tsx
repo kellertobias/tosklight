@@ -106,10 +106,12 @@ describe("GroupStrip action routing", () => {
 		];
 	});
 
-	it("selects shortcut groups through the scoped live-Group gesture", () => {
+	it("selects shortcut groups through the scoped live-Group gesture", async () => {
 		render(<GroupStrip />);
 		fireEvent.click(screen.getByText("Shortcut Group").closest("button")!);
-		expect(mocks.selectLive).toHaveBeenCalledWith(mocks.groups[0]);
+		await waitFor(() =>
+			expect(mocks.selectLive).toHaveBeenCalledWith(mocks.groups[0]),
+		);
 		expect(mocks.replaceCommand).toHaveBeenCalledWith("GROUP 1");
 	});
 
@@ -122,15 +124,15 @@ describe("GroupStrip action routing", () => {
 		expect(mocks.selectLive).not.toHaveBeenCalled();
 	});
 
-	it("leaves the command line alone when refused authority blocks selection", () => {
+	it("leaves the command line alone when refused authority blocks selection", async () => {
 		mocks.selectLive.mockReturnValue(null);
 		render(<GroupStrip />);
 		fireEvent.click(screen.getByText("Shortcut Group").closest("button")!);
-		expect(mocks.selectLive).toHaveBeenCalledOnce();
+		await waitFor(() => expect(mocks.selectLive).toHaveBeenCalledOnce());
 		expect(mocks.replaceCommand).not.toHaveBeenCalled();
 	});
 
-	it("routes an armed Update touch to the exact Group target without selecting it", () => {
+	it("routes an armed Update touch to the exact Group target without selecting it", async () => {
 		mocks.state.updateArmed = true;
 		const selected = vi.fn();
 		const release = registerControlSurfaceTarget({
@@ -141,6 +143,7 @@ describe("GroupStrip action routing", () => {
 		});
 		render(<GroupStrip />);
 		fireEvent.click(screen.getByText("Shortcut Group").closest("button")!);
+		await waitFor(() => expect(selected).toHaveBeenCalledOnce());
 		expect(selected.mock.calls[0][0]).toEqual({
 			type: "update_target",
 			source: "touch",
@@ -194,6 +197,7 @@ describe("GroupStrip action routing", () => {
 		mocks.state.storeArmed = true;
 		const view = render(<GroupStrip />);
 		fireEvent.click(screen.getByText("Shortcut Group").closest("button")!);
+		await screen.findByRole("button", { name: "Merge" });
 		mocks.groups[0].revision = 9;
 		view.rerender(<GroupStrip />);
 		fireEvent.click(screen.getByRole("button", { name: "Merge" }));
@@ -218,7 +222,7 @@ describe("GroupStrip action routing", () => {
 		mocks.recordGroup.mockResolvedValue(null);
 		render(<GroupStrip />);
 		fireEvent.click(screen.getByText("Shortcut Group").closest("button")!);
-		fireEvent.click(screen.getByRole("button", { name: "Overwrite" }));
+		fireEvent.click(await screen.findByRole("button", { name: "Overwrite" }));
 
 		await waitFor(() => expect(mocks.recordGroup).toHaveBeenCalledOnce());
 		expect(mocks.resetCommand).not.toHaveBeenCalled();

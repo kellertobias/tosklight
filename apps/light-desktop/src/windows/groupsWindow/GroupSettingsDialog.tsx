@@ -1,0 +1,585 @@
+import {
+	Button,
+	ColorPickerField,
+	FormLayout,
+	IconPickerField,
+	TextField,
+} from "@tosklight/ui";
+import { WindowSettings } from "@tosklight/ui/window-kit";
+import { useState } from "react";
+import { useGroupManagement } from "../../features/groupManagement/GroupManagementProvider";
+import type { Group } from "./model";
+import {
+	defaultSpatialMapping,
+	groupSourceSummary,
+	hasGroupReferenceSource,
+	projectionForPreset,
+	resolveMappingPresentation,
+	type SpatialSelectionMapping,
+	type SpatialSelectionShape,
+	validateSpatialMapping,
+} from "./spatialMapping";
+
+export interface GroupMappingUpdateResult {
+	revision: number;
+}
+
+/** Revisioned server action required before Group mapping controls become writable. */
+export interface GroupMappingActions {
+	update(
+		groupId: string,
+		expectedRevision: number,
+		mapping: SpatialSelectionMapping | null,
+	): Promise<GroupMappingUpdateResult | null>;
+}
+
+export function GroupSettingsDialog({
+	group,
+	groups,
+	onClose,
+	mappingActions = null,
+}: {
+	group: Group;
+	groups: readonly Group[];
+	onClose: () => void;
+	mappingActions?: GroupMappingActions | null;
+}) {
+	const groupManagement = useGroupManagement();
+	const [name, setName] = useState(group.body.name ?? `Group ${group.id}`);
+	const [color, setColor] = useState(group.body.color ?? "#718596");
+	const [icon, setIcon] = useState(group.body.icon ?? "◇");
+	const [expectedRevision, setExpectedRevision] = useState(group.revision);
+	const [mappingPresentation, setMappingPresentation] = useState(() =>
+		resolveMappingPresentation(group, groups),
+	);
+	const [mapping, setMapping] = useState<SpatialSelectionMapping | null>(() =>
+		mappingPresentation.type === "local" ? mappingPresentation.mapping : null,
+	);
+	const [status, setStatus] = useState<string | null>(null);
+	const [saving, setSaving] = useState(false);
+
+	const saveProperties = async (next: {
+		name: string;
+		color: string;
+		icon: string;
+	}) => {
+		const trimmed = next.name.trim();
+		if (!trimmed) return setStatus("Group name must not be empty.");
+		if (!groupManagement || saving) return;
+		setSaving(true);
+		setStatus("Saving Group settings…");
+		const outcome = await groupManagement.manage({
+			objectId: group.id,
+			expectedObjectRevision: expectedRevision,
+			operation: {
+				type: "update_properties",
+				properties: { name: trimmed, color: next.color, icon: next.icon },
+			},
+		});
+		setSaving(false);
+		if (!outcome) {
+			setStatus(
+				"Change was not accepted. Authoritative Group values were reloaded; review and retry.",
+			);
+			return;
+		}
+		setExpectedRevision(outcome.group.revision);
+		setStatus(outcome.persistenceWarning ?? "Saved.");
+	};
+
+	const commitMapping = async (next: SpatialSelectionMapping | null) => {
+		if (!mappingActions || saving) return;
+		const validation = next ? validateSpatialMapping(next) : null;
+		if (validation) return setStatus(validation);
+		setSaving(true);
+		setStatus("Saving spatial mapping…");
+		const outcome = await mappingActions.update(
+			group.id,
+			expectedRevision,
+			next,
+		);
+		setSaving(false);
+		if (!outcome) {
+			setStatus(
+				"Mapping change was not accepted. Reloaded authoritative values must be reviewed before retrying.",
+			);
+			return;
+		}
+		setExpectedRevision(outcome.revision);
+		setMapping(next);
+		setMappingPresentation(
+			next
+				? { type: "local", label: "Local override", mapping: next }
+				: resolveMappingPresentation(
+						{ ...group, body: { ...group.body, mapping: undefined } } as Group,
+						groups,
+					),
+		);
+		setStatus("Saved.");
+	};
+
+	const editingUnavailable = !mappingActions
+		? "Spatial mapping editing is unavailable until the revisioned Group mapping action is connected."
+		: null;
+	const displayedMapping = mapping ?? mappingPresentation.mapping;
+	const canEditMapping = Boolean(mappingActions && mapping);
+	const general = (
+		<section className="group-settings-panel group-settings-general">
+			<fieldset disabled={saving} className="group-general-fields">
+				<FormLayout labelPlacement="side">
+					<TextField
+						label="Group name"
+						clearable
+						autoFocus
+						value={name}
+						onChange={(event) => setName(event.target.value)}
+						onBlur={() => void saveProperties({ name, color, icon })}
+						onKeyDown={(event) => {
+							if (event.key === "Enter") event.currentTarget.blur();
+						}}
+					/>
+					<ColorPickerField
+						label="Color"
+						value={color}
+						onChange={(next) => {
+							setColor(next);
+							void saveProperties({ name, color: next, icon });
+						}}
+					/>
+					<IconPickerField
+						label="Icon"
+						value={icon}
+						onChange={(next) => {
+							setIcon(next);
+							void saveProperties({ name, color, icon: next });
+						}}
+					/>
+				</FormLayout>
+			</fieldset>
+			<SaveStatus status={status} saving={saving} />
+		</section>
+	);
+	const projection = (
+		<section className="group-settings-panel">
+			<MappingIdentity
+				label={mappingPresentation.label}
+				source={groupSourceSummary(group.body)}
+			/>
+			<MappingOwnershipActions
+				presentation={mappingPresentation.type}
+				hasInheritedSource={hasGroupReferenceSource(group.body)}
+				disabled={!mappingActions || saving}
+				onCreate={() => void commitMapping(defaultSpatialMapping())}
+				onCopy={() =>
+					mappingPresentation.mapping &&
+					void commitMapping(structuredClone(mappingPresentation.mapping))
+				}
+				onRemove={() => void commitMapping(null)}
+			/>
+			{editingUnavailable && <p role="note">{editingUnavailable}</p>}
+			{displayedMapping ? (
+				<ProjectionEditor
+					mapping={displayedMapping}
+					disabled={!canEditMapping || saving}
+					onChange={(next) => void commitMapping(next)}
+				/>
+			) : (
+				<p className="group-mapping-empty">
+					Source order is used until this Group has an inherited or local
+					mapping.
+				</p>
+			)}
+			<MappingPreview
+				title="Projected-position preview"
+				fixtures={group.body.fixtures.length}
+			/>
+			<SaveStatus status={status} saving={saving} />
+		</section>
+	);
+	const phaser = (
+		<section className="group-settings-panel">
+			<MappingIdentity
+				label={mappingPresentation.label}
+				source={groupSourceSummary(group.body)}
+			/>
+			{displayedMapping ? (
+				<PhaserEditor
+					mapping={displayedMapping}
+					disabled={!canEditMapping || saving}
+					onChange={(next) => void commitMapping(next)}
+				/>
+			) : (
+				<p className="group-mapping-empty">No Phaser mapping is configured.</p>
+			)}
+			<MappingPreview
+				title="Ranked preview"
+				fixtures={group.body.fixtures.length}
+			/>
+			<SaveStatus status={status} saving={saving} />
+		</section>
+	);
+
+	return (
+		<WindowSettings
+			title={`Group ${group.id} settings`}
+			onClose={onClose}
+			tabs={[
+				{ id: "general", label: "General", content: general },
+				{ id: "projection", label: "Projection", content: projection },
+				{ id: "phaser", label: "Phaser", content: phaser },
+			]}
+		/>
+	);
+}
+
+function MappingIdentity({ label, source }: { label: string; source: string }) {
+	return (
+		<div className="group-mapping-identity" aria-live="polite">
+			<strong>{label}</strong>
+			<span>{source}</span>
+		</div>
+	);
+}
+
+function MappingOwnershipActions({
+	presentation,
+	hasInheritedSource,
+	disabled,
+	onCreate,
+	onCopy,
+	onRemove,
+}: {
+	presentation: "none" | "local" | "inherited" | "mixed";
+	hasInheritedSource: boolean;
+	disabled: boolean;
+	onCreate: () => void;
+	onCopy: () => void;
+	onRemove: () => void;
+}) {
+	return (
+		<fieldset className="group-mapping-actions">
+			<legend>Mapping ownership</legend>
+			{presentation === "local" ? (
+				<Button disabled={disabled} onClick={onRemove}>
+					{hasInheritedSource
+						? "Use inherited mapping"
+						: "Remove local mapping"}
+				</Button>
+			) : (
+				<Button disabled={disabled} onClick={onCreate}>
+					Create local mapping
+				</Button>
+			)}
+			{presentation === "inherited" && (
+				<Button disabled={disabled} onClick={onCopy}>
+					Copy inherited values as local
+				</Button>
+			)}
+		</fieldset>
+	);
+}
+
+function ProjectionEditor({
+	mapping,
+	disabled,
+	onChange,
+}: {
+	mapping: SpatialSelectionMapping;
+	disabled: boolean;
+	onChange: (mapping: SpatialSelectionMapping) => void;
+}) {
+	const updateProjection = (
+		projection: SpatialSelectionMapping["projection"],
+	) => onChange({ ...mapping, projection });
+	return (
+		<fieldset disabled={disabled} className="group-mapping-fields">
+			<legend>Projection</legend>
+			<fieldset className="group-projection-presets">
+				<legend>Projection preset</legend>
+				{(["top", "front", "back", "left", "right"] as const).map((preset) => (
+					<Button
+						key={preset}
+						aria-pressed={mapping.projection.preset === preset}
+						onClick={() =>
+							updateProjection({
+								...projectionForPreset(preset),
+								anchor: mapping.projection.anchor,
+							})
+						}
+					>
+						{titleCase(preset)}
+					</Button>
+				))}
+			</fieldset>
+			<div className="group-vector-fields">
+				{(["x", "y", "z"] as const).map((axis) => (
+					<NumberField
+						key={`anchor-${axis}`}
+						label={`Anchor ${axis.toUpperCase()}`}
+						unit="m"
+						value={mapping.projection.anchor[axis]}
+						onCommit={(value) =>
+							updateProjection({
+								...mapping.projection,
+								anchor: { ...mapping.projection.anchor, [axis]: value },
+							})
+						}
+					/>
+				))}
+				{(["x", "y", "z"] as const).map((axis) => (
+					<NumberField
+						key={`direction-${axis}`}
+						label={`Direction ${axis.toUpperCase()}`}
+						value={mapping.projection.view_direction[axis]}
+						onCommit={(value) =>
+							updateProjection({
+								...mapping.projection,
+								preset: undefined,
+								view_direction: {
+									...mapping.projection.view_direction,
+									[axis]: value,
+								},
+							})
+						}
+					/>
+				))}
+				<NumberField
+					label="Rotation"
+					unit="°"
+					value={mapping.projection.rotation_degrees}
+					onCommit={(rotation_degrees) =>
+						updateProjection({
+							...mapping.projection,
+							preset: undefined,
+							rotation_degrees,
+						})
+					}
+				/>
+			</div>
+		</fieldset>
+	);
+}
+
+function PhaserEditor({
+	mapping,
+	disabled,
+	onChange,
+}: {
+	mapping: SpatialSelectionMapping;
+	disabled: boolean;
+	onChange: (mapping: SpatialSelectionMapping) => void;
+}) {
+	const updateShape = (shape: SpatialSelectionShape) =>
+		onChange({ ...mapping, shape });
+	const shape = mapping.shape;
+	return (
+		<fieldset disabled={disabled} className="group-mapping-fields">
+			<legend>Phaser mapping</legend>
+			<div className="group-shape-choices" role="radiogroup" aria-label="Shape">
+				{(["grid", "radial", "radar"] as const).map((type) => (
+					<Button
+						key={type}
+						role="radio"
+						aria-checked={shape.type === type}
+						onClick={() => updateShape(defaultShape(type))}
+					>
+						{titleCase(type)}
+					</Button>
+				))}
+			</div>
+			<div className="group-vector-fields">
+				{shape.type === "grid" && (
+					<>
+						<NumberField
+							label="Grid angle"
+							unit="°"
+							value={shape.angle_degrees}
+							onCommit={(angle_degrees) =>
+								updateShape({ ...shape, angle_degrees })
+							}
+						/>
+						<SelectField
+							label="Rank direction"
+							value={shape.direction}
+							options={[
+								["ascending", "Ascending"],
+								["descending", "Descending"],
+							]}
+							onChange={(direction) =>
+								updateShape({
+									...shape,
+									direction: direction as "ascending" | "descending",
+								})
+							}
+						/>
+					</>
+				)}
+				{shape.type !== "grid" && (
+					<>
+						<NumberField
+							label="Centre U"
+							value={shape.center_u}
+							onCommit={(center_u) => updateShape({ ...shape, center_u })}
+						/>
+						<NumberField
+							label="Centre V"
+							value={shape.center_v}
+							onCommit={(center_v) => updateShape({ ...shape, center_v })}
+						/>
+					</>
+				)}
+				{shape.type === "radial" && (
+					<SelectField
+						label="Radial direction"
+						value={shape.direction}
+						options={[
+							["outward", "Outward"],
+							["inward", "Inward"],
+						]}
+						onChange={(direction) =>
+							updateShape({
+								...shape,
+								direction: direction as "outward" | "inward",
+							})
+						}
+					/>
+				)}
+				{shape.type === "radar" && (
+					<>
+						<NumberField
+							label="Start angle"
+							unit="°"
+							value={shape.start_angle_degrees}
+							onCommit={(start_angle_degrees) =>
+								updateShape({ ...shape, start_angle_degrees })
+							}
+						/>
+						<SelectField
+							label="Sweep"
+							value={shape.sweep}
+							options={[
+								["clockwise", "Clockwise"],
+								["counter_clockwise", "Counter-clockwise"],
+							]}
+							onChange={(sweep) =>
+								updateShape({
+									...shape,
+									sweep: sweep as "clockwise" | "counter_clockwise",
+								})
+							}
+						/>
+					</>
+				)}
+			</div>
+		</fieldset>
+	);
+}
+
+function NumberField({
+	label,
+	value,
+	unit,
+	onCommit,
+}: {
+	label: string;
+	value: number;
+	unit?: string;
+	onCommit: (value: number) => void;
+}) {
+	return (
+		<label className="group-number-field">
+			<span>{label}</span>
+			<span>
+				<input
+					type="number"
+					step="any"
+					defaultValue={value}
+					onBlur={(event) => onCommit(Number(event.currentTarget.value))}
+					onKeyDown={(event) => {
+						if (event.key === "Enter") event.currentTarget.blur();
+					}}
+				/>
+				{unit && <small>{unit}</small>}
+			</span>
+		</label>
+	);
+}
+
+function SelectField({
+	label,
+	value,
+	options,
+	onChange,
+}: {
+	label: string;
+	value: string;
+	options: Array<[string, string]>;
+	onChange: (value: string) => void;
+}) {
+	return (
+		<label className="group-number-field">
+			<span>{label}</span>
+			<select value={value} onChange={(event) => onChange(event.target.value)}>
+				{options.map(([option, title]) => (
+					<option key={option} value={option}>
+						{title}
+					</option>
+				))}
+			</select>
+		</label>
+	);
+}
+
+function MappingPreview({
+	title,
+	fixtures,
+}: {
+	title: string;
+	fixtures: number;
+}) {
+	return (
+		<section className="group-mapping-preview" aria-label={title}>
+			<strong>{title}</strong>
+			<p>
+				{fixtures
+					? `${fixtures} source fixtures · authoritative Stage preview pending`
+					: "This intentionally empty Group has no ranked positions."}
+			</p>
+		</section>
+	);
+}
+
+function SaveStatus({
+	status,
+	saving,
+}: {
+	status: string | null;
+	saving: boolean;
+}) {
+	if (!status && !saving) return null;
+	return (
+		<p className="group-settings-status" role="status">
+			{saving ? "Saving…" : status}
+		</p>
+	);
+}
+
+function defaultShape(
+	type: SpatialSelectionShape["type"],
+): SpatialSelectionShape {
+	if (type === "radial")
+		return { type, center_u: 0, center_v: 0, direction: "outward" };
+	if (type === "radar")
+		return {
+			type,
+			center_u: 0,
+			center_v: 0,
+			start_angle_degrees: 0,
+			sweep: "clockwise",
+		};
+	return { type, angle_degrees: 0, direction: "ascending" };
+}
+
+function titleCase(value: string) {
+	return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
