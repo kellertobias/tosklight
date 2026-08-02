@@ -534,6 +534,13 @@ impl OutputResource {
         self.engine.active_dynamic_playbacks()
     }
 
+    pub(in crate::runtime) fn active_dynamic_playback_at(
+        &self,
+        identity: light_playback::PlaybackIdentity,
+    ) -> Option<light_playback::ActiveDynamicPlayback> {
+        self.engine.active_dynamic_playback_at(identity)
+    }
+
     pub(in crate::runtime) fn playback_dynamics(&self) -> light_engine::PlaybackDynamicsProjection {
         self.engine.playback_dynamics()
     }

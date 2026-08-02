@@ -218,9 +218,7 @@ fn project_virtual(
             runtime: ports
                 .state
                 .output
-                .active_dynamic_playbacks()
-                .into_iter()
-                .find(|active| active.playback_identity == Some(PlaybackIdentity::Virtual(address)))
+                .active_dynamic_playback_at(PlaybackIdentity::Virtual(address))
                 .map(|active| dynamic_runtime_projection(ports, snapshot, assignment, active)),
         },
         PlaybackTarget::Group { group_id } => group_projection(ports, snapshot, group_id)?,
@@ -308,12 +306,9 @@ fn project_playback(
             dynamic_id: assignment.dynamic.dynamic_id,
             last_known_pool_number: assignment.dynamic.last_known_pool_number,
             embedded: assignment.dynamic.dynamic_id.is_none(),
-            runtime: ports
-                .state
-                .output
-                .active_dynamic_playbacks()
-                .into_iter()
-                .find(|active| active.playback_number == number)
+            runtime: PlaybackIdentity::physical(number)
+                .ok()
+                .and_then(|identity| ports.state.output.active_dynamic_playback_at(identity))
                 .map(|active| dynamic_runtime_projection(ports, snapshot, assignment, active)),
         },
         PlaybackTarget::Group { group_id } => group_projection(ports, snapshot, group_id)?,
@@ -372,7 +367,7 @@ fn dynamic_runtime_projection_from_snapshot(
         .dynamic_id
         .and_then(|id| snapshot.dynamics.iter().find(|dynamic| dynamic.id == id))
         .unwrap_or(&assignment.dynamic.embedded_fallback.definition);
-    let controller_id = dynamic_playback_controller_id_for_active(&active);
+    let controller_id = light_playback::dynamic_playback_controller_id(assignment.target_id());
     let stored_instance = runtime.instances.iter().find(|instance| {
         instance
             .controllers
@@ -559,23 +554,6 @@ pub(in crate::runtime) fn dynamic_target_lane_coverage(
         }
     }
     coverage
-}
-
-#[cfg(test)]
-const fn dynamic_playback_controller_id(playback_number: u16) -> uuid::Uuid {
-    uuid::Uuid::from_u128(0x4459_4e41_4d49_432d_504c_4159_4241_434b ^ playback_number as u128)
-}
-
-fn dynamic_playback_controller_id_for_active(
-    active: &light_playback::ActiveDynamicPlayback,
-) -> uuid::Uuid {
-    let address = match active.playback_identity {
-        Some(PlaybackIdentity::Virtual(address)) => {
-            (u128::from(address.page()) << 16) | u128::from(address.number().get())
-        }
-        _ => u128::from(active.playback_number),
-    };
-    uuid::Uuid::from_u128(0x4459_4e41_4d49_432d_504c_4159_4241_434b ^ address)
 }
 
 fn show_scope(ports: &ServerPlaybackPorts<'_>, snapshot: &EngineSnapshot) -> PlaybackShowScope {

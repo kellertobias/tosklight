@@ -191,6 +191,8 @@ pub struct ActiveCueDynamicValue {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ActiveDynamicPlayback {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dynamic_id: Option<Uuid>,
     pub playback_number: u16,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub playback_identity: Option<PlaybackIdentity>,

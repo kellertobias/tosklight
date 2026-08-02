@@ -254,6 +254,18 @@ impl Engine {
             .active_dynamic_playbacks()
     }
 
+    pub fn active_dynamic_playback_at(
+        &self,
+        identity: PlaybackIdentity,
+    ) -> Option<ActiveDynamicPlayback> {
+        self.generation
+            .load()
+            .playback()
+            .read()
+            .active_dynamic_playback_at(identity)
+            .cloned()
+    }
+
     /// Applies output-resolved full-control auto-off as one durable Playback mutation.
     ///
     /// The scheduler determines complete address coverage from authoritative contributions; the
@@ -287,13 +299,9 @@ impl Engine {
             if !playback
                 .dynamic_assignment_at(identity)
                 .is_some_and(|assignment| assignment.auto_off_full_control)
-                || !playback.active_dynamic_playbacks().iter().any(|active| {
-                    active
-                        .playback_identity
-                        .or_else(|| PlaybackIdentity::physical(active.playback_number).ok())
-                        == Some(identity)
-                        && active.enabled
-                })
+                || !playback
+                    .active_dynamic_playback_at(identity)
+                    .is_some_and(|active| active.enabled)
             {
                 continue;
             }

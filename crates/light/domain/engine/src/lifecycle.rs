@@ -209,7 +209,7 @@ impl Engine {
             let current = generation.playback().read();
             (
                 current.active_for_snapshot(&snapshot.cue_lists, self.clock.now()),
-                current.active_dynamics_for_snapshot(&snapshot.playbacks),
+                current.active_dynamics_for_snapshot(playback),
                 current.dynamics_paused_since(),
             )
         };

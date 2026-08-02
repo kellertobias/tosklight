@@ -169,10 +169,21 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
                 Some(playback_definition(self.state, number)?)
             }
         };
-        let cue_list_id = match (&address, definition.as_ref()) {
-            (ResolvedPlaybackAddress::CueList(cue_list_id), _) => *cue_list_id,
+        enum SharedTarget {
+            CueList(light_core::CueListId),
+            Dynamic(uuid::Uuid),
+        }
+        let shared_target = match (&address, definition.as_ref()) {
+            (ResolvedPlaybackAddress::CueList(cue_list_id), _) => {
+                SharedTarget::CueList(*cue_list_id)
+            }
             (_, Some(definition)) => match &definition.target {
-                light_playback::PlaybackTarget::CueList { cue_list_id } => *cue_list_id,
+                light_playback::PlaybackTarget::CueList { cue_list_id } => {
+                    SharedTarget::CueList(*cue_list_id)
+                }
+                light_playback::PlaybackTarget::Dynamic { assignment } => {
+                    SharedTarget::Dynamic(assignment.target_id())
+                }
                 _ => return Ok(Vec::new()),
             },
             (_, None) => return Ok(Vec::new()),
@@ -183,21 +194,43 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
             snapshot
                 .playbacks
                 .iter()
-                .filter(|candidate| {
-                    matches!(candidate.target, light_playback::PlaybackTarget::CueList { cue_list_id: candidate_id } if candidate_id == cue_list_id)
+                .filter(|candidate| match (&shared_target, &candidate.target) {
+                    (
+                        SharedTarget::CueList(target),
+                        light_playback::PlaybackTarget::CueList { cue_list_id },
+                    ) => target == cue_list_id,
+                    (
+                        SharedTarget::Dynamic(target),
+                        light_playback::PlaybackTarget::Dynamic { assignment },
+                    ) => *target == assignment.target_id(),
+                    _ => false,
                 })
                 .map(|candidate| PlaybackRuntimeIdentity::Playback(candidate.number)),
         );
         for page in snapshot.playback_pages.iter() {
-            related.extend(page.virtual_playbacks.iter().filter_map(|(number, candidate)| {
-                if !matches!(candidate.target, light_playback::PlaybackTarget::CueList { cue_list_id: candidate_id } if candidate_id == cue_list_id)
-                {
-                    return None;
-                }
-                light_playback::VirtualPlaybackAddress::new(page.number, *number)
-                    .ok()
-                    .map(PlaybackRuntimeIdentity::Virtual)
-            }));
+            related.extend(
+                page.virtual_playbacks
+                    .iter()
+                    .filter_map(|(number, candidate)| {
+                        let matches_target = match (&shared_target, &candidate.target) {
+                            (
+                                SharedTarget::CueList(target),
+                                light_playback::PlaybackTarget::CueList { cue_list_id },
+                            ) => target == cue_list_id,
+                            (
+                                SharedTarget::Dynamic(target),
+                                light_playback::PlaybackTarget::Dynamic { assignment },
+                            ) => *target == assignment.target_id(),
+                            _ => false,
+                        };
+                        if !matches_target {
+                            return None;
+                        }
+                        light_playback::VirtualPlaybackAddress::new(page.number, *number)
+                            .ok()
+                            .map(PlaybackRuntimeIdentity::Virtual)
+                    }),
+            );
         }
         if semantics::may_activate_playback(action) {
             if let ResolvedPlaybackAddress::Virtual(activated) = address {

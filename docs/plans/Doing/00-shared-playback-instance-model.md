@@ -23,6 +23,9 @@ to Playbacks depends on it.
   Virtual assignments and removes final-detach flash/transition state. Legacy targetless-Dynamic Playback
   assignments now migrate to deterministic assignment-owned target-bound fallbacks while the original pool
   Dynamic remains targetless; new targetless Dynamics are rejected by both topology validation and the SET path.
+  Target-bound Dynamics now key active state and scheduler controllers by stable Dynamic identity across physical
+  and Virtual assignments, restore one deterministic legacy row, rebind surviving placement provenance, and feed
+  the shared runtime through HTTP/WebSocket projections, Matter, OSC, and related peer events.
 - [ ] Add focused migration, runtime, cross-surface, and operator acceptance coverage. Shared Cuelist,
   physical-pickup, Matter/software, peer-event, Preload, restart, and legacy duplicate-row coverage is in place;
   assignment removal/reassignment, Group Master topology, and targetless-Dynamic migration coverage is in place;
@@ -68,11 +71,13 @@ to Playbacks depends on it.
 - `cargo test -p light-playback --lib --quiet` passed after rejecting new targetless Playback assignments:
   102 passed.
 - `cargo check -p light-headless-runtime --message-format short` passed after the migration and SET-path changes.
+- `cargo test -p light-playback --lib --quiet` passed after target-bound Dynamic identity and lifecycle changes:
+  104 passed, including physical/Virtual shared state, final detach, and order-independent legacy duplicate restore.
+- Focused `light-headless-runtime` Dynamic scheduler and projection tests passed with target-derived controller IDs.
 
 ## Remaining work
 
-- Share target-bound Dynamic runtime, pickup, lifecycle, persistence, scheduler identity, and peer feedback by
-  stable Dynamic target identity while retaining assignment-local held gestures.
+- Complete target-bound Dynamic physical pickup and assignment-local held gestures on the shared runtime.
 - Confirm generated wire/frontend selection and reconnect state consume the authoritative peer projections.
 - Run full plan closeout verification and record the truthful result.
 

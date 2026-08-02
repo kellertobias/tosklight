@@ -198,17 +198,20 @@ impl PlaybackEngine {
         let started_at = self.clock.now();
         if self.dynamic_assignment(number).is_some() {
             let identity = PlaybackIdentity::physical(number)?;
+            let target_id = self
+                .dynamic_target_id_at(identity)
+                .ok_or("Playback is not assigned to a Dynamic")?;
             if value > 0.0
                 && !self
                     .active_dynamics
-                    .get(&identity)
+                    .get(&target_id)
                     .is_some_and(|active| active.enabled)
             {
                 self.on_dynamic_at_mutation(identity)?;
             }
             let active = self
                 .active_dynamics
-                .get_mut(&identity)
+                .get_mut(&target_id)
                 .ok_or("Playback is not assigned to a Dynamic")?;
             let before = active.clone();
             if duration_millis == 0 {

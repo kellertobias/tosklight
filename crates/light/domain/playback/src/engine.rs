@@ -6,7 +6,7 @@ pub struct PlaybackEngine {
     pub(crate) compiled_cue_lists: HashMap<CueListId, Arc<CompiledCueList>>,
     pub(crate) active: HashMap<PlaybackKey, ActivePlayback>,
     pub(crate) control_states: HashMap<PlaybackIdentity, PlaybackControlState>,
-    pub(crate) active_dynamics: HashMap<PlaybackIdentity, ActiveDynamicPlayback>,
+    pub(crate) active_dynamics: HashMap<uuid::Uuid, ActiveDynamicPlayback>,
     pub(crate) temporary: HashMap<(PlaybackIdentity, TemporaryPlaybackKind), ActivePlayback>,
     pub(crate) swap_held: HashSet<PlaybackIdentity>,
     pub(crate) dynamics_paused_at: Option<DateTime<Utc>>,

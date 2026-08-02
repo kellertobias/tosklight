@@ -176,6 +176,15 @@ pub struct DynamicPlaybackAssignment {
     pub auto_off_full_control: bool,
 }
 
+impl DynamicPlaybackAssignment {
+    /// Stable identity of the target-bound Dynamic controlled by this assignment.
+    pub fn target_id(&self) -> uuid::Uuid {
+        self.dynamic
+            .dynamic_id
+            .unwrap_or(self.dynamic.embedded_fallback.definition.id)
+    }
+}
+
 const fn default_assignment_revision() -> u64 {
     1
 }

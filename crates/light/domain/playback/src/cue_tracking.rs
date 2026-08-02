@@ -357,8 +357,7 @@ impl PlaybackEngine {
         self.playback_runtime_at(identity)
             .is_some_and(|runtime| runtime.enabled)
             || self
-                .active_dynamics
-                .get(&identity)
+                .active_dynamic_playback_at(identity)
                 .is_some_and(|runtime| runtime.enabled)
             || self
                 .temporary

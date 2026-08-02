@@ -41,7 +41,7 @@ fn every_assignment_projects_one_shared_cuelist_runtime() {
 fn dynamic_projection_reports_hidden_controller_identity_speed_and_coverage() {
     let fixture = light_core::FixtureId::new();
     let definition = dynamic_definition(fixture);
-    let playback_controller = dynamic_playback_controller_id(7);
+    let playback_controller = light_playback::dynamic_playback_controller_id(definition.id);
     let mut runtime = light_dynamics::DynamicRuntime::default();
     runtime.install_definitions([definition.clone()]).unwrap();
     let instance_id = runtime
@@ -120,6 +120,7 @@ fn dynamic_projection_reports_hidden_controller_identity_speed_and_coverage() {
         auto_off_full_control: true,
     };
     let active = ActiveDynamicPlayback {
+        dynamic_id: Some(definition.id),
         playback_number: 7,
         playback_identity: None,
         enabled: true,

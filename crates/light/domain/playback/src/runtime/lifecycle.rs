@@ -184,14 +184,27 @@ impl PlaybackEngine {
         playbacks: impl IntoIterator<Item = ActiveDynamicPlayback>,
     ) {
         self.active_dynamics.clear();
+        let mut restored_origins = HashMap::<Uuid, PlaybackIdentity>::new();
         for mut playback in playbacks {
-            let identity = playback.playback_identity.unwrap_or_else(|| {
+            let persisted_identity = playback.playback_identity.unwrap_or_else(|| {
                 PlaybackIdentity::physical(playback.playback_number)
                     .expect("persisted physical Dynamic Playback number")
             });
-            if !self.definition_at(identity).is_some_and(|definition| {
-                matches!(definition.target, PlaybackTarget::Dynamic { .. })
-            }) || !playback.fader_value.is_finite()
+            let Some(target_id) = playback
+                .dynamic_id
+                .or_else(|| self.dynamic_target_id_at(persisted_identity))
+            else {
+                continue;
+            };
+            let Some(identity) = self
+                .dynamic_target_id_at(persisted_identity)
+                .filter(|candidate| *candidate == target_id)
+                .map(|_| persisted_identity)
+                .or_else(|| self.first_dynamic_identity(target_id))
+            else {
+                continue;
+            };
+            if !playback.fader_value.is_finite()
                 || !playback.size.is_finite()
                 || !playback.master.is_finite()
                 || playback.local_speed_multiplier.denominator == 0
@@ -205,29 +218,39 @@ impl PlaybackEngine {
                 playback.flash = false;
                 playback.flash_restore_off = false;
             }
+            playback.dynamic_id = Some(target_id);
             playback.playback_number = identity.number();
-            self.active_dynamics.insert(identity, playback);
+            playback.playback_identity = identity.virtual_address().map(PlaybackIdentity::Virtual);
+            let replace = self.active_dynamics.get(&target_id).is_none_or(|current| {
+                playback.activated_at > current.activated_at
+                    || (playback.activated_at == current.activated_at
+                        && persisted_identity
+                            < *restored_origins
+                                .get(&target_id)
+                                .expect("restored Dynamic origin accompanies runtime"))
+            });
+            if replace {
+                self.active_dynamics.insert(target_id, playback);
+                restored_origins.insert(target_id, persisted_identity);
+            }
         }
     }
 
     pub fn active_dynamics_for_snapshot(
         &self,
-        next_definitions: &[PlaybackDefinition],
+        next: &PlaybackEngine,
     ) -> Vec<ActiveDynamicPlayback> {
         self.active_dynamics
-            .values()
-            .filter(|active| {
-                active.playback_identity.is_some_and(|identity| {
-                    matches!(identity, PlaybackIdentity::Virtual(_))
-                        && self.definition_at(identity).is_some_and(|definition| {
-                            matches!(definition.target, PlaybackTarget::Dynamic { .. })
-                        })
-                }) || next_definitions.iter().any(|definition| {
-                    definition.number == active.playback_number
-                        && matches!(definition.target, PlaybackTarget::Dynamic { .. })
-                })
+            .iter()
+            .filter_map(|(target_id, active)| {
+                let identity = next.first_dynamic_identity(*target_id)?;
+                let mut active = active.clone();
+                active.dynamic_id = Some(*target_id);
+                active.playback_number = identity.number();
+                active.playback_identity =
+                    identity.virtual_address().map(PlaybackIdentity::Virtual);
+                Some(active)
             })
-            .cloned()
             .collect()
     }
 

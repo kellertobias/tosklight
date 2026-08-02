@@ -24,9 +24,10 @@ fn playback_level(
             .unwrap_or(0.0),
         light_playback::PlaybackTarget::Dynamic { .. } => state
             .output
-            .active_dynamic_playbacks()
-            .into_iter()
-            .find(|playback| playback.playback_number == definition.number)
+            .active_dynamic_playback_at(
+                light_playback::PlaybackIdentity::physical(definition.number)
+                    .expect("snapshot physical Playback number"),
+            )
             .map(|playback| playback.fader_value)
             .unwrap_or(0.0),
         light_playback::PlaybackTarget::Group { group_id } => snapshot

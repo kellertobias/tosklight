@@ -198,6 +198,9 @@ fn effective_dynamic_playback_speed(
 }
 
 fn dynamic_playback_controller_id(playback: &light_playback::ActiveDynamicPlayback) -> Uuid {
+    if let Some(target_id) = playback.dynamic_id {
+        return light_playback::dynamic_playback_controller_id(target_id);
+    }
     let address = match playback.playback_identity {
         Some(light_playback::PlaybackIdentity::Virtual(address)) => {
             (u128::from(address.page()) << 16) | u128::from(address.number().get())

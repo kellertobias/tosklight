@@ -565,6 +565,113 @@ fn dynamic_playback_fader_pause_speed_flash_and_restore_are_authoritative() {
 }
 
 #[test]
+fn target_bound_dynamic_runtime_is_shared_across_physical_and_virtual_assignments() {
+    let first = dynamic_playback_definition(21, DynamicPlaybackFaderMode::SizeAndMaster, false);
+    let mut second = first.clone();
+    second.number = 22;
+    second.name = "Second Dynamic control".into();
+    let mut virtual_definition = first.clone();
+    virtual_definition.number = 1_001;
+    virtual_definition.name = "Virtual Dynamic control".into();
+    let surviving_second = second.clone();
+    let surviving_virtual = virtual_definition.clone();
+    let virtual_address = VirtualPlaybackAddress::new(1, 1_001).unwrap();
+    let target_id = match &first.target {
+        PlaybackTarget::Dynamic { assignment } => assignment.target_id(),
+        _ => unreachable!(),
+    };
+    let mut engine = PlaybackEngine::default();
+    engine.register_definition(first).unwrap();
+    engine.register_definition(second).unwrap();
+    engine
+        .register_virtual_definition(virtual_address, virtual_definition)
+        .unwrap();
+
+    engine.on(21).unwrap();
+    engine
+        .toggle_dynamic_pause_at_mutation(PlaybackIdentity::physical(22).unwrap())
+        .unwrap();
+    engine
+        .set_dynamic_fader_at_mutation(PlaybackIdentity::Virtual(virtual_address), 0.35)
+        .unwrap();
+
+    let active = engine.active_dynamic_playbacks();
+    assert_eq!(active.len(), 1);
+    assert_eq!(active[0].dynamic_id, Some(target_id));
+    assert!(active[0].paused);
+    assert_eq!(
+        (active[0].fader_value, active[0].size, active[0].master),
+        (0.35, 0.35, 0.35)
+    );
+    for identity in [
+        PlaybackIdentity::physical(21).unwrap(),
+        PlaybackIdentity::physical(22).unwrap(),
+        PlaybackIdentity::Virtual(virtual_address),
+    ] {
+        assert_eq!(
+            engine.active_dynamic_playback_at(identity),
+            Some(&active[0])
+        );
+    }
+
+    assert!(engine.off_dynamic_mutation(22).unwrap().value);
+    assert!(!engine.active_dynamic_playbacks()[0].enabled);
+
+    engine.on(21).unwrap();
+    let mut next = PlaybackEngine::default();
+    next.register_definition(surviving_second).unwrap();
+    next.register_virtual_definition(virtual_address, surviving_virtual)
+        .unwrap();
+    let preserved = engine.active_dynamics_for_snapshot(&next);
+    assert_eq!(preserved.len(), 1);
+    assert_eq!(preserved[0].playback_number, 22);
+    assert_eq!(preserved[0].playback_identity, None);
+    next.restore_active_dynamics(preserved);
+    assert!(
+        next.active_dynamic_playback_at(PlaybackIdentity::Virtual(virtual_address))
+            .is_some_and(|active| active.enabled)
+    );
+    assert!(
+        next.active_dynamics_for_snapshot(&PlaybackEngine::default())
+            .is_empty()
+    );
+}
+
+#[test]
+fn legacy_duplicate_dynamic_runtime_rows_restore_deterministically_by_latest_activation() {
+    let first = dynamic_playback_definition(31, DynamicPlaybackFaderMode::Master, false);
+    let mut second = first.clone();
+    second.number = 32;
+    let mut source = PlaybackEngine::default();
+    source.register_definition(first.clone()).unwrap();
+    source.register_definition(second.clone()).unwrap();
+    source.on(31).unwrap();
+    let mut older = source.active_dynamic_playbacks()[0].clone();
+    older.dynamic_id = None;
+    older.playback_number = 31;
+    older.master = 0.2;
+    let mut newer = older.clone();
+    newer.playback_number = 32;
+    newer.master = 0.8;
+    newer.activated_at += chrono::Duration::milliseconds(1);
+
+    for rows in [
+        vec![older.clone(), newer.clone()],
+        vec![newer.clone(), older.clone()],
+    ] {
+        let mut restored = PlaybackEngine::default();
+        restored.register_definition(first.clone()).unwrap();
+        restored.register_definition(second.clone()).unwrap();
+        restored.restore_active_dynamics(rows);
+        let active = restored.active_dynamic_playbacks();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].master, 0.8);
+        assert_eq!(active[0].playback_number, 32);
+        assert!(active[0].dynamic_id.is_some());
+    }
+}
+
+#[test]
 fn scheduled_master_transitions_are_advanced_by_the_playback_tick() {
     let started = Utc::now();
     let clock = Arc::new(light_core::ManualClock::new(started));
