@@ -110,6 +110,20 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   All 96 engine tests and 11 focused application value-action tests passed, and the headless crate
   checked successfully. Strict Clippy passed with only the repository's existing unrelated lint
   classes explicitly allowed; an unqualified strict run still reports those pre-existing findings.
+- Commit `4fd08067` resolves a Dynamic's projection and shape overrides against its inherited Group
+  mapping, rejects incomplete ungrouped spatial overrides, preserves source-order fallback and
+  spatial warnings/ties, and gives Random an explicitly stable fixture-ID/seed/loop mixer that does
+  not inspect positions. All 48 dynamics tests and warning-clean strict Clippy passed.
+- Commit `1d23d9b5` detaches live Group Master levels from `GroupDefinition` and the immutable engine
+  snapshot. One runtime binding remains keyed by each actually assigned Group ID, survives while
+  any physical or virtual assignment remains, rejects unassigned Groups, and preserves different
+  Group IDs as independent HTP contributors. All 96 engine tests passed; scoped strict Clippy passed
+  with only the previously documented unrelated lint classes allowed.
+- Commit `dea10b21` makes the desk/show output-runtime sidecar override legacy Group levels directly
+  and persist only actual Playback-assigned Group IDs. A stale legacy pointer or unassigned sidecar
+  entry is tolerated but cannot create a master. Focused restore/persistence, Matter, and WebSocket
+  tests passed, as did the headless package check. Unqualified strict headless Clippy remains blocked
+  by existing findings in unrelated command, configuration, visualization, and Dynamic test files.
 
 ## Remaining work
 
@@ -121,8 +135,9 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   reads remain deliberately available until the final compatibility pass.
 - Feed the committed Group ranks through Dynamic inheritance/override evaluation and migrate every
   persisted legacy `PhaseOrdering` surface without changing existing output.
-- Move Group Master level authority out of `GroupDefinition.master`/`playback_fader` and into the
-  shared Playback-target runtime, with deterministic legacy reconciliation and migration proof.
+- Finish moving Group Master readers, assignment routing, and portable writes away from
+  `GroupDefinition.master`/`playback_fader`; runtime state and assigned-only sidecar persistence are
+  integrated, while projection readers, write-first portable migration, and field retirement remain.
 - Connect the typed SET state machine to the command line, Group tiles, Playback controls, and
   revision-guarded application commands; its committed pure model is not runtime proof.
 
