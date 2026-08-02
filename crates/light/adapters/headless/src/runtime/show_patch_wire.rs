@@ -31,7 +31,88 @@ pub(crate) fn application_command(
             .into_iter()
             .map(application_vector_spread)
             .collect(),
+        fixture_updates: Vec::new(),
     })
+}
+
+pub(crate) fn application_update_command(
+    show_id: ShowId,
+    fixture_id: Uuid,
+    request: wire::PatchFixtureUpdateRequest,
+) -> Result<application::PatchFixturesCommand, String> {
+    let action = match request.action {
+        wire::PatchFixtureUpdateAction::SetMasters {
+            group_masters_enabled,
+            grand_master_enabled,
+        } => application::PatchFixtureUpdateAction::SetMasters {
+            group_masters_enabled,
+            grand_master_enabled,
+        },
+        wire::PatchFixtureUpdateAction::SetPanTilt {
+            invert_pan,
+            invert_tilt,
+        } => application::PatchFixtureUpdateAction::SetPanTilt {
+            invert_pan,
+            invert_tilt,
+        },
+        wire::PatchFixtureUpdateAction::SetMoveInBlack {
+            enabled,
+            delay_millis,
+        } => application::PatchFixtureUpdateAction::SetMoveInBlack {
+            enabled,
+            delay_millis,
+        },
+        wire::PatchFixtureUpdateAction::SetLocationAxis { axis, millimetres } => {
+            application::PatchFixtureUpdateAction::SetLocationAxis {
+                axis: application_update_axis(axis),
+                millimetres,
+            }
+        }
+        wire::PatchFixtureUpdateAction::SetRotationAxis { axis, degrees } => {
+            application::PatchFixtureUpdateAction::SetRotationAxis {
+                axis: application_update_axis(axis),
+                degrees,
+            }
+        }
+        wire::PatchFixtureUpdateAction::SetBracketAngle { degrees } => {
+            application::PatchFixtureUpdateAction::SetBracketAngle { degrees }
+        }
+        wire::PatchFixtureUpdateAction::SetShaperModuleRotation { degrees } => {
+            application::PatchFixtureUpdateAction::SetShaperModuleAngle { degrees }
+        }
+        wire::PatchFixtureUpdateAction::SetStaticShaperAngle { element, degrees } => {
+            application::PatchFixtureUpdateAction::SetStaticShaperAngle { element, degrees }
+        }
+        wire::PatchFixtureUpdateAction::SetInstalledAppearance { appearance } => {
+            application::PatchFixtureUpdateAction::SetInstalledAppearance {
+                appearance: application_installed_appearance(appearance),
+            }
+        }
+    };
+    Ok(application::PatchFixturesCommand {
+        show_id,
+        fixtures: Vec::new(),
+        remove_fixture_ids: Vec::new(),
+        placements: Vec::new(),
+        vector_spreads: Vec::new(),
+        fixture_updates: vec![application::PatchFixtureUpdateIntent {
+            fixture_id: FixtureId(fixture_id),
+            expected_fixture_revision: request.expected_fixture_revision,
+            expected_show_revision: light_show::PortableShowRevision::from_value(
+                request.expected_show_revision,
+            ),
+            multipatch_instance_id: request.multipatch_instance_id,
+            action,
+        }],
+    })
+}
+
+fn application_update_axis(axis: wire::PatchVectorAxis) -> application::PatchFixtureAxis {
+    match axis {
+        wire::PatchVectorAxis::X => application::PatchFixtureAxis::X,
+        wire::PatchVectorAxis::Y => application::PatchFixtureAxis::Y,
+        wire::PatchVectorAxis::Z => application::PatchFixtureAxis::Z,
+    }
 }
 
 pub(crate) fn application_policy_command(
@@ -129,6 +210,7 @@ pub(crate) fn application_policy_command(
         remove_fixture_ids: Vec::new(),
         placements: Vec::new(),
         vector_spreads: Vec::new(),
+        fixture_updates: Vec::new(),
     })
 }
 

@@ -92,6 +92,62 @@ pub enum PatchFixtureAxis {
     Tilt,
 }
 
+/// One typed, replay-safe sparse edit of an existing physical fixture instance.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchFixtureUpdateRequest {
+    #[schemars(length(min = 1, max = 128))]
+    pub request_id: String,
+    #[ts(type = "number")]
+    pub expected_fixture_revision: u64,
+    #[ts(type = "number")]
+    pub expected_patch_revision: u64,
+    #[ts(type = "number")]
+    pub expected_show_revision: u64,
+    /// Absent targets the root physical fixture; present targets exactly one multi-patch copy.
+    pub multipatch_instance_id: Option<Uuid>,
+    #[serde(flatten)]
+    pub action: PatchFixtureUpdateAction,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum PatchFixtureUpdateAction {
+    SetMasters {
+        group_masters_enabled: bool,
+        grand_master_enabled: bool,
+    },
+    SetPanTilt {
+        invert_pan: bool,
+        invert_tilt: bool,
+    },
+    SetMoveInBlack {
+        enabled: bool,
+        #[ts(type = "number")]
+        delay_millis: u64,
+    },
+    SetLocationAxis {
+        axis: PatchVectorAxis,
+        millimetres: i32,
+    },
+    SetRotationAxis {
+        axis: PatchVectorAxis,
+        degrees: f32,
+    },
+    SetBracketAngle {
+        degrees: f32,
+    },
+    SetShaperModuleRotation {
+        degrees: Option<f32>,
+    },
+    SetStaticShaperAngle {
+        element: u8,
+        degrees: f32,
+    },
+    SetInstalledAppearance {
+        appearance: PatchInstalledFixtureAppearance,
+    },
+}
+
 /// Portable installed lamp/filter/static-shaper appearance for one physical fixture instance.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PatchInstalledFixtureAppearance {

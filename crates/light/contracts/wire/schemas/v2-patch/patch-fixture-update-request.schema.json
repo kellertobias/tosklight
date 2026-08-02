@@ -1,0 +1,469 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PatchFixtureUpdateRequest",
+  "description": "One typed, replay-safe sparse edit of an existing physical fixture instance.",
+  "type": "object",
+  "properties": {
+    "expected_fixture_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "expected_patch_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "expected_show_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "multipatch_instance_id": {
+      "description": "Absent targets the root physical fixture; present targets exactly one multi-patch copy.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "set_masters"
+        },
+        "grand_master_enabled": {
+          "type": "boolean"
+        },
+        "group_masters_enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "action",
+        "group_masters_enabled",
+        "grand_master_enabled"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "set_pan_tilt"
+        },
+        "invert_pan": {
+          "type": "boolean"
+        },
+        "invert_tilt": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "action",
+        "invert_pan",
+        "invert_tilt"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "set_move_in_black"
+        },
+        "delay_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "action",
+        "enabled",
+        "delay_millis"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "set_location_axis"
+        },
+        "axis": {
+          "$ref": "#/$defs/PatchVectorAxis"
+        },
+        "millimetres": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "required": [
+        "action",
+        "axis",
+        "millimetres"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "set_rotation_axis"
+        },
+        "axis": {
+          "$ref": "#/$defs/PatchVectorAxis"
+        },
+        "degrees": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "action",
+        "axis",
+        "degrees"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "set_bracket_angle"
+        },
+        "degrees": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "action",
+        "degrees"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "set_shaper_module_rotation"
+        },
+        "degrees": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "set_static_shaper_angle"
+        },
+        "degrees": {
+          "type": "number",
+          "format": "float"
+        },
+        "element": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "action",
+        "element",
+        "degrees"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "set_installed_appearance"
+        },
+        "appearance": {
+          "$ref": "#/$defs/PatchInstalledFixtureAppearance"
+        }
+      },
+      "required": [
+        "action",
+        "appearance"
+      ]
+    }
+  ],
+  "required": [
+    "request_id",
+    "expected_fixture_revision",
+    "expected_patch_revision",
+    "expected_show_revision"
+  ],
+  "$defs": {
+    "PatchGelAssignment": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "open_white"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "catalog_id": {
+              "type": "string"
+            },
+            "embedded_fallback": {
+              "$ref": "#/$defs/PatchGelDefinitionSnapshot"
+            },
+            "entry_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "built_in"
+            }
+          },
+          "required": [
+            "type",
+            "catalog_id",
+            "entry_id",
+            "embedded_fallback"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "color_srgb": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "custom"
+            }
+          },
+          "required": [
+            "type",
+            "name",
+            "color_srgb"
+          ]
+        }
+      ]
+    },
+    "PatchGelDefinitionSnapshot": {
+      "type": "object",
+      "properties": {
+        "display_srgb": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "number": {
+          "type": "string"
+        },
+        "visualizer_srgb": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "number",
+        "name",
+        "display_srgb",
+        "visualizer_srgb"
+      ]
+    },
+    "PatchInstalledFixtureAppearance": {
+      "description": "Portable installed lamp/filter/static-shaper appearance for one physical fixture instance.",
+      "type": "object",
+      "properties": {
+        "color_temperature_kelvin": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "gel": {
+          "$ref": "#/$defs/PatchGelAssignment",
+          "default": {
+            "type": "open_white"
+          }
+        },
+        "light_source": {
+          "$ref": "#/$defs/PatchInstalledLightSource",
+          "default": {
+            "type": "profile_default"
+          }
+        },
+        "shaper_angles_degrees": {
+          "type": "array",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 4,
+          "minItems": 4
+        }
+      }
+    },
+    "PatchInstalledLightSource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "profile_default"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "tungsten"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "halogen"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "discharge"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "led"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "fluorescent"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "arc"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "other"
+            }
+          },
+          "required": [
+            "type",
+            "label"
+          ]
+        }
+      ]
+    },
+    "PatchVectorAxis": {
+      "type": "string",
+      "enum": [
+        "x",
+        "y",
+        "z"
+      ]
+    }
+  }
+}

@@ -98,6 +98,54 @@ fn installed_appearance_round_trips_stable_catalog_identity_and_fallback() {
 }
 
 #[test]
+fn sparse_fixture_update_keeps_paired_fields_atomic_and_tolerates_future_fields() {
+    let value = serde_json::json!({
+        "request_id": "fixture-update-1",
+        "expected_fixture_revision": 7,
+        "expected_patch_revision": 11,
+        "expected_show_revision": 19,
+        "multipatch_instance_id": null,
+        "action": "set_pan_tilt",
+        "invert_pan": true,
+        "invert_tilt": false,
+        "future_field": "ignored"
+    });
+    let decoded: PatchFixtureUpdateRequest = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(decoded.expected_fixture_revision, 7);
+    assert_eq!(decoded.expected_patch_revision, 11);
+    assert_eq!(decoded.expected_show_revision, 19);
+    assert_eq!(
+        decoded.action,
+        PatchFixtureUpdateAction::SetPanTilt {
+            invert_pan: true,
+            invert_tilt: false,
+        }
+    );
+
+    let mut partial = value;
+    partial.as_object_mut().unwrap().remove("invert_tilt");
+    assert!(serde_json::from_value::<PatchFixtureUpdateRequest>(partial).is_err());
+}
+
+#[test]
+fn sparse_fixture_update_distinguishes_clearing_a_module_rotation() {
+    let decoded: PatchFixtureUpdateRequest = serde_json::from_value(serde_json::json!({
+        "request_id": "fixture-update-2",
+        "expected_fixture_revision": 7,
+        "expected_patch_revision": 11,
+        "expected_show_revision": 19,
+        "multipatch_instance_id": Uuid::from_u128(44),
+        "action": "set_shaper_module_rotation",
+        "degrees": null
+    }))
+    .unwrap();
+    assert_eq!(
+        decoded.action,
+        PatchFixtureUpdateAction::SetShaperModuleRotation { degrees: None }
+    );
+}
+
+#[test]
 fn request_preserves_explicit_unpatched_and_partial_pairs_for_application_validation() {
     let mut fixture = fixture_input();
     fixture.split_patches[0].universe = None;

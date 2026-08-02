@@ -122,6 +122,116 @@ async fn v2_patch_policy_route_applies_one_sparse_idempotent_intent() {
 }
 
 #[tokio::test]
+async fn v2_patch_update_route_mutates_the_exact_physical_instance_and_replays() {
+    let (state, data_dir) = test_state();
+    let (profile_id, mode_id) = install_patch_route_profile(&state);
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "Sparse physical fixture update").await;
+    let show_id = show["id"].as_str().unwrap();
+    open_show_for_patch_test(&app, &token, show_id).await;
+    let mut request = valid_patch_request_for(profile_id, mode_id, "physical-update-seed");
+    let fixture_id = request["fixtures"][0]["fixture_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let copy_id = Uuid::new_v4();
+    request["fixtures"][0]["multipatch"] = serde_json::json!([{
+        "id": copy_id,
+        "name": "Exact copy",
+        "split_patches": [{"split": 1, "universe": null, "address": null}],
+        "location": {"x": 100, "y": 200, "z": 300},
+        "rotation": {"x": 0.0, "y": 0.0, "z": 0.0}
+    }]);
+    let created = post_patch(&app, &token, show_id, Some(0), request).await;
+    assert_eq!(created.status(), StatusCode::OK);
+    let created = json(created).await;
+    assert_eq!(created["fixtures"][0]["fixture_revision"], 1);
+
+    let masters = serde_json::json!({
+        "request_id": "paired-master-update",
+        "expected_fixture_revision": 1,
+        "expected_patch_revision": 1,
+        "expected_show_revision": 2,
+        "multipatch_instance_id": null,
+        "action": "set_masters",
+        "group_masters_enabled": false,
+        "grand_master_enabled": true,
+        "future_client_context": {"accepted": true}
+    });
+    let changed = post_patch_update(&app, &token, show_id, &fixture_id, masters.clone()).await;
+    let changed_status = changed.status();
+    let changed = json(changed).await;
+    assert_eq!(changed_status, StatusCode::OK, "{changed}");
+    assert_eq!(changed["fixtures"][0]["group_masters_enabled"], false);
+    assert_eq!(changed["fixtures"][0]["grand_master_enabled"], true);
+    assert_eq!(changed["fixtures"][0]["fixture_revision"], 2);
+    assert_eq!(changed["patch_revision"], 2);
+
+    let replay = post_patch_update(&app, &token, show_id, &fixture_id, masters).await;
+    let replay_status = replay.status();
+    let replay = json(replay).await;
+    assert_eq!(replay_status, StatusCode::OK, "{replay}");
+    assert_eq!(replay["replayed"], true);
+    assert_eq!(replay["event_sequence"], changed["event_sequence"]);
+
+    let copy_update = serde_json::json!({
+        "request_id": "exact-copy-pan-tilt",
+        "expected_fixture_revision": 2,
+        "expected_patch_revision": 2,
+        "expected_show_revision": 3,
+        "multipatch_instance_id": copy_id,
+        "action": "set_pan_tilt",
+        "invert_pan": true,
+        "invert_tilt": false
+    });
+    let copy_changed = post_patch_update(&app, &token, show_id, &fixture_id, copy_update).await;
+    let copy_status = copy_changed.status();
+    let copy_changed = json(copy_changed).await;
+    assert_eq!(copy_status, StatusCode::OK, "{copy_changed}");
+    assert_eq!(copy_changed["fixtures"][0]["invert_pan"], false);
+    assert_eq!(
+        copy_changed["fixtures"][0]["multipatch"][0]["invert_pan"],
+        true
+    );
+    assert_eq!(
+        copy_changed["fixtures"][0]["multipatch"][0]["location"],
+        serde_json::json!({"x": 100, "y": 200, "z": 300})
+    );
+
+    let missing_copy = serde_json::json!({
+        "request_id": "missing-copy-location",
+        "expected_fixture_revision": 3,
+        "expected_patch_revision": 3,
+        "expected_show_revision": 4,
+        "multipatch_instance_id": Uuid::new_v4(),
+        "action": "set_location_axis",
+        "axis": "x",
+        "millimetres": 999
+    });
+    let missing = post_patch_update(&app, &token, show_id, &fixture_id, missing_copy).await;
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        json(missing).await["error"],
+        "multi-patch instance does not exist"
+    );
+
+    let stale_fixture = serde_json::json!({
+        "request_id": "stale-fixture-update",
+        "expected_fixture_revision": 2,
+        "expected_patch_revision": 3,
+        "expected_show_revision": 4,
+        "multipatch_instance_id": null,
+        "action": "set_bracket_angle",
+        "degrees": 15.0
+    });
+    let stale = post_patch_update(&app, &token, show_id, &fixture_id, stale_fixture).await;
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
+    assert_eq!(json(stale).await["error"], "stale fixture revision");
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_patch_snapshot_authenticates_and_returns_the_patch_revision_etag() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
@@ -286,25 +396,25 @@ async fn v2_patch_revision_ignores_unrelated_group_mutations() {
     let show_id = show["id"].as_str().unwrap();
     open_show_for_patch_test(&app, &token, show_id).await;
 
+    let unrelated = seed_show_object(
+        &state,
+        &token,
+        show_id,
+        "group",
+        "unrelated",
+        0,
+        serde_json::json!({
+            "name": "Unrelated Group",
+            "fixtures": []
+        }),
+    )
+    .await;
+    assert_eq!(unrelated.status(), StatusCode::OK);
     let show_uuid = Uuid::parse_str(show_id).unwrap();
     let entry = state
         .installation
         .show(light_core::ShowId(show_uuid))
         .unwrap()
-        .unwrap();
-    let group = light_programmer::GroupDefinition {
-        id: "unrelated".into(),
-        name: "Unrelated Group".into(),
-        ..Default::default()
-    };
-    ShowStore::open(&entry.path)
-        .unwrap()
-        .put_object(
-            "group",
-            &group.id,
-            &serde_json::to_value(&group).unwrap(),
-            0,
-        )
         .unwrap();
     let after_group = ShowStore::open(&entry.path)
         .unwrap()
@@ -623,6 +733,26 @@ async fn post_patch_policy(
                 .header("x-tosk-show", show_id)
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::IF_MATCH, patch_revision.to_string())
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+}
+
+async fn post_patch_update(
+    app: &Router,
+    token: &str,
+    show_id: &str,
+    fixture_id: &str,
+    body: serde_json::Value,
+) -> Response {
+    app.clone()
+        .oneshot(
+            Request::post(format!("/api/v2/patch/fixtures/{fixture_id}/update"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-show", show_id)
+                .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(body.to_string()))
                 .unwrap(),
         )

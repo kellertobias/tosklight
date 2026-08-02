@@ -805,6 +805,8 @@ fn patch(config: &Config) -> Vec<String> {
         PatchFixtureAxis::decl(config),
         PatchFixturePolicyAction::decl(config),
         PatchFixturePolicyActionRequest::decl(config),
+        PatchFixtureUpdateAction::decl(config),
+        PatchFixtureUpdateRequest::decl(config),
         PatchErrorResponse::decl(config),
         PatchLogicalHeadProjection::decl(config),
         PatchMultiPatchProjection::decl(config),

@@ -627,6 +627,12 @@ export type PatchFixturePolicyActionRequest = { request_id: string, } & ({ "acti
  * Absent targets the root physical fixture; present targets one multi-patch instance.
  */
 multipatch_instance_id: string | null, });
+export type PatchFixtureUpdateAction = { "action": "set_masters", group_masters_enabled: boolean, grand_master_enabled: boolean, } | { "action": "set_pan_tilt", invert_pan: boolean, invert_tilt: boolean, } | { "action": "set_move_in_black", enabled: boolean, delay_millis: number, } | { "action": "set_location_axis", axis: PatchVectorAxis, millimetres: number, } | { "action": "set_rotation_axis", axis: PatchVectorAxis, degrees: number, } | { "action": "set_bracket_angle", degrees: number, } | { "action": "set_shaper_module_rotation", degrees: number | null, } | { "action": "set_static_shaper_angle", element: number, degrees: number, } | { "action": "set_installed_appearance", appearance: PatchInstalledFixtureAppearance, };
+export type PatchFixtureUpdateRequest = { request_id: string, expected_fixture_revision: number, expected_patch_revision: number, expected_show_revision: number,
+/**
+ * Absent targets the root physical fixture; present targets exactly one multi-patch copy.
+ */
+multipatch_instance_id: string | null, } & ({ "action": "set_masters", group_masters_enabled: boolean, grand_master_enabled: boolean, } | { "action": "set_pan_tilt", invert_pan: boolean, invert_tilt: boolean, } | { "action": "set_move_in_black", enabled: boolean, delay_millis: number, } | { "action": "set_location_axis", axis: PatchVectorAxis, millimetres: number, } | { "action": "set_rotation_axis", axis: PatchVectorAxis, degrees: number, } | { "action": "set_bracket_angle", degrees: number, } | { "action": "set_shaper_module_rotation", degrees: number | null, } | { "action": "set_static_shaper_angle", element: number, degrees: number, } | { "action": "set_installed_appearance", appearance: PatchInstalledFixtureAppearance, });
 export type PatchErrorResponse = { error: string, current_revision?: number | null, retryable: boolean, };
 export type PatchLogicalHeadProjection = {
 /**

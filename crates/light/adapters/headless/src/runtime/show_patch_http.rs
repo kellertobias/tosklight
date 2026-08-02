@@ -14,7 +14,8 @@ use light_application::{
 };
 use light_core::ShowId;
 use light_wire::v2::patch::{
-    PatchErrorResponse, PatchFixturePolicyActionRequest, PatchFixturesRequest,
+    PatchErrorResponse, PatchFixturePolicyActionRequest, PatchFixtureUpdateRequest,
+    PatchFixturesRequest,
 };
 use uuid::Uuid;
 
@@ -25,6 +26,10 @@ pub(super) fn router() -> Router<AppState> {
         .route(
             "/api/v2/patch/fixtures/{fixture_id}/policy",
             post(patch_fixture_policy),
+        )
+        .route(
+            "/api/v2/patch/fixtures/{fixture_id}/update",
+            post(patch_fixture_update),
         )
 }
 
@@ -76,6 +81,32 @@ async fn patch_fixture_policy(
     let command =
         super::show_patch_wire::application_policy_command(show_id, fixture_id, request, &snapshot)
             .map_err(PatchHttpError::bad_request)?;
+    let action = ActionEnvelope {
+        context: http_context(&session)
+            .with_request_id(request_id)
+            .with_expected_revision(expected_patch_revision),
+        command,
+    };
+    let result = run_patch_fixtures(state, action).await?;
+    let response = super::show_patch_wire::wire_outcome(result);
+    Ok(json_with_etag(response.delta.patch_revision, response))
+}
+
+async fn patch_fixture_update(
+    State(state): State<AppState>,
+    Path(fixture_id): Path<Uuid>,
+    show: ShowContext,
+    headers: HeaderMap,
+    request: Result<TolerantJson<PatchFixtureUpdateRequest>, JsonRejection>,
+) -> Result<Response, PatchHttpError> {
+    let session = authenticate(&state, &headers).map_err(PatchHttpError::api)?;
+    let show_id = show.resolve(&state).map_err(PatchHttpError::api)?;
+    let TolerantJson(request) =
+        request.map_err(|error| PatchHttpError::bad_request(error.body_text()))?;
+    let request_id = request.request_id.clone();
+    let expected_patch_revision = request.expected_patch_revision;
+    let command = super::show_patch_wire::application_update_command(show_id, fixture_id, request)
+        .map_err(PatchHttpError::bad_request)?;
     let action = ActionEnvelope {
         context: http_context(&session)
             .with_request_id(request_id)
