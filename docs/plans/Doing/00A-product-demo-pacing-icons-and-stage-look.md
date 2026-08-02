@@ -13,7 +13,7 @@ video time and visible click/type pacing, not to weakening assertions or racing 
 ## Progress
 
 - [x] Claimed from `docs/plans/Next` after completing plan 00.
-- [ ] Audit the maintained DEMO-001 workflow, deterministic edit timeline, current generated-video
+- [x] Audit the maintained DEMO-001 workflow, deterministic edit timeline, current generated-video
   path, and the previously observed Show Patch navigation blocker.
 - [ ] Implement the exact Patch, Group-selection, and icon-picker pacing contract.
 - [ ] Trace and correct the authoritative Pan/Tilt and color path into the final Stage rendering.
@@ -27,10 +27,24 @@ video time and visible click/type pacing, not to weakening assertions or racing 
 - Earlier focused Stage geometry checks are supporting evidence only. A previous maintained-demo run
   stopped before fixture patching because Show Patch did not become visible, so current video and
   operator-path proof must be established afresh.
+- The current authoritative visualization/provider and Stage hierarchy are structurally correct.
+  The closeout defect is in demo state and proof: the final position values are uniform, the color
+  assertion stops before profile-calibrated output, and the final Busking desktop has no Stage pane.
+  Renderer changes require contrary retained-frame evidence rather than assumption.
 
 ## Verification
 
-- Pending implementation.
+- `npm run test:e2e -- tests/product-demo.spec.ts --workers=1` passed the complete maintained
+  BENCH-PRODUCT-DEMO-001 workflow in 3.5 minutes. The historical Show Patch navigation blocker is
+  therefore no longer current.
+- The current editor keeps one deterministic 25 fps duration per title-card section. Raw interaction
+  pacing is controlled by `DeskDriver` click delays and explicit frame holds, but the edit timeline
+  has no named intra-section markers for the required Patch/Group speed boundaries. Plan 00A must add
+  those markers and their mapped retained frame/timecode evidence without weakening DEMO-001.
+- Source audit traced semantic values through `/api/v2/output/visualization`, engine profile output,
+  the single desktop visualization provider, Stage attribute ownership, authored pan/yoke/head
+  hierarchy, and emitter/beam color updates. Existing renderer tests cover those seams, but the demo
+  currently proves neither non-uniform final motion nor calibrated multi-color Stage output.
 
 ## Remaining work
 
