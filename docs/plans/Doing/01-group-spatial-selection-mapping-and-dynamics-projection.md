@@ -189,6 +189,12 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   its local draft as authority; set and remove remain atomic. Six focused desktop files passed all
   45 tests, desktop typecheck passed, focused Biome completed with only existing warnings in shared
   files, and the staged diff check was clean.
+- Commit `f6ee43f8` updates operator help to place spatial mapping in Group settings and Dynamic
+  Projection, remove Group-owned master and legacy assignment authority, and state that retired
+  Layout panes do not define selection geometry. It adds nine human acceptance scenarios covering
+  ranked output, inheritance, Dynamic drafts, edge cases, migrated Desktops, exact modal/gesture
+  behavior, physical and virtual SET assignment, shared Group Masters, and legacy recovery. The
+  semantic-documentation suite passed all eight tests and the focused diff check was clean.
 
 ## Remaining work
 
