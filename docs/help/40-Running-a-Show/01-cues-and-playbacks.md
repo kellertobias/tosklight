@@ -10,7 +10,7 @@ Arm **SET**, then choose a playback button or fader. Playback Configuration has 
 
 Choosing a different playback type immediately loads its standard layout. Cue List uses Go Minus, Go Plus, Flash, and Master. Group Master uses Select, Select dereferenced, Flash, and Master. Speed Master uses Double, Half, Learn, and Learned-speed percentage. Programmer Fade and Cue Fade use Double, Half, and Off above their time fader; Off sets the time to zero. Grand Master uses Blackout, Pause Dynamics, and Flash above its fixed master fader.
 
-For a direct Group Master assignment, press **SET**, touch the source Group tile, then touch the destination playback. The equivalent command is `SET GROUP <group> AT <page> . <playback> ENTER`.
+For a direct Group Master assignment, press **SET**, touch the source Group tile, then touch the destination physical or Virtual Playback. The visible command line remains armed with the explicit Group until that destination completes the assignment.
 
 Choose the red **None** function and then **Apply** to clear that playback without deleting its referenced Cue List or Group. Selecting None only previews the clear; Close keeps the playback unchanged. Assignment persists in the show and remains page-aware.
 
