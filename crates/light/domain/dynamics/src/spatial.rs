@@ -244,6 +244,10 @@ pub enum SpatialMappingError {
     NonFinite { field: &'static str },
     #[error("spatial projection view direction must be non-zero")]
     InvalidViewDirection,
+    #[error(
+        "dynamic spatial override requires both a projection and shape when no inherited mapping is available"
+    )]
+    IncompleteDynamicOverride,
 }
 
 #[derive(Clone, Copy)]
@@ -326,6 +330,149 @@ pub fn evaluate_spatial_mapping(
         rank_count,
         warnings,
     })
+}
+
+/// Resolves one Dynamic's mapping override against its optional live Group mapping.
+///
+/// `loop_index` perturbs only [`DynamicSelectionShape::Random`]. Source-order and spatial shapes
+/// ignore it. Random is position-independent, so it neither validates nor evaluates a projection.
+pub fn evaluate_dynamic_spatial_mapping(
+    inherited: Option<&SpatialSelectionMapping>,
+    mapping_override: &DynamicSpatialMappingOverride,
+    targets: &[SpatialTarget],
+    loop_index: Option<u64>,
+) -> Result<RankedSelection, SpatialMappingError> {
+    if let OverrideStage::Replace(DynamicSelectionShape::Random { seed }) = &mapping_override.shape
+    {
+        return Ok(evaluate_random_mapping(
+            *seed,
+            loop_index.unwrap_or(0),
+            targets,
+        ));
+    }
+
+    let projection = match &mapping_override.projection {
+        OverrideStage::Inherit => inherited.map(|mapping| mapping.projection.clone()),
+        OverrideStage::Replace(projection) => Some(projection.clone()),
+    };
+    let shape = match &mapping_override.shape {
+        OverrideStage::Inherit => inherited.map(|mapping| mapping.shape.clone()),
+        OverrideStage::Replace(shape) => dynamic_spatial_shape(shape),
+    };
+
+    match (projection, shape) {
+        (None, None) => Ok(evaluate_source_order(targets)),
+        (Some(projection), Some(shape)) => {
+            evaluate_spatial_mapping(&SpatialSelectionMapping { projection, shape }, targets)
+        }
+        (None, Some(_)) | (Some(_), None) => Err(SpatialMappingError::IncompleteDynamicOverride),
+    }
+}
+
+fn dynamic_spatial_shape(shape: &DynamicSelectionShape) -> Option<SpatialSelectionShape> {
+    match *shape {
+        DynamicSelectionShape::Grid {
+            angle_degrees,
+            direction,
+        } => Some(SpatialSelectionShape::Grid {
+            angle_degrees,
+            direction,
+        }),
+        DynamicSelectionShape::Radial {
+            center_u,
+            center_v,
+            direction,
+        } => Some(SpatialSelectionShape::Radial {
+            center_u,
+            center_v,
+            direction,
+        }),
+        DynamicSelectionShape::Radar {
+            center_u,
+            center_v,
+            start_angle_degrees,
+            sweep,
+        } => Some(SpatialSelectionShape::Radar {
+            center_u,
+            center_v,
+            start_angle_degrees,
+            sweep,
+        }),
+        DynamicSelectionShape::Random { .. } => None,
+    }
+}
+
+fn evaluate_source_order(targets: &[SpatialTarget]) -> RankedSelection {
+    let ordered_fixture_ids = deduplicated_targets(targets)
+        .map(|(_, target)| target.fixture_id)
+        .collect::<Vec<_>>();
+    let rank_by_fixture = ordered_fixture_ids
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(rank, fixture_id)| (fixture_id, rank))
+        .collect();
+    RankedSelection {
+        rank_count: ordered_fixture_ids.len(),
+        ordered_fixture_ids,
+        rank_by_fixture,
+        warnings: Vec::new(),
+    }
+}
+
+fn evaluate_random_mapping(
+    seed: u64,
+    loop_index: u64,
+    targets: &[SpatialTarget],
+) -> RankedSelection {
+    let mut ranked = deduplicated_targets(targets)
+        .map(|(source_index, target)| {
+            (
+                dynamic_random_key(seed, loop_index, target.fixture_id),
+                source_index,
+                target.fixture_id,
+            )
+        })
+        .collect::<Vec<_>>();
+    ranked.sort_by_key(|(key, source_index, _)| (*key, *source_index));
+    let ordered_fixture_ids = ranked
+        .into_iter()
+        .map(|(_, _, fixture_id)| fixture_id)
+        .collect::<Vec<_>>();
+    let rank_by_fixture = ordered_fixture_ids
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(rank, fixture_id)| (fixture_id, rank))
+        .collect();
+    RankedSelection {
+        rank_count: ordered_fixture_ids.len(),
+        ordered_fixture_ids,
+        rank_by_fixture,
+        warnings: Vec::new(),
+    }
+}
+
+fn deduplicated_targets(
+    targets: &[SpatialTarget],
+) -> impl Iterator<Item = (usize, SpatialTarget)> + '_ {
+    let mut seen = HashSet::new();
+    targets
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(move |(_, target)| seen.insert(target.fixture_id))
+}
+
+// SplitMix64 finalization over the stable fixture UUID, authored seed, and optional loop index.
+// Keep this explicitly specified: persisted Random mappings must not depend on std hash behavior.
+fn dynamic_random_key(seed: u64, loop_index: u64, fixture_id: FixtureId) -> u64 {
+    let fixture_id = fixture_id.0.as_u128();
+    let folded_fixture = fixture_id as u64 ^ (fixture_id >> 64) as u64;
+    let mut value = seed ^ folded_fixture ^ loop_index.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    value ^ (value >> 31)
 }
 
 fn validate_mapping(mapping: &SpatialSelectionMapping) -> Result<(), SpatialMappingError> {
@@ -627,6 +774,222 @@ mod tests {
         assert_eq!(ranked.rank_by_fixture[&fixture(5)], 3);
         assert_eq!(ranked.rank_count, 4);
         assert_eq!(ranked.warnings.len(), 2);
+    }
+
+    #[test]
+    fn dynamic_mapping_inherits_and_replaces_each_spatial_stage_independently() {
+        let targets = [target(1, -2.0, 0.0, 3.0), target(2, 2.0, 0.0, -3.0)];
+        let inherited = mapping(
+            ProjectionPreset::Top,
+            SpatialSelectionShape::Grid {
+                angle_degrees: 0.0,
+                direction: RankDirection::Ascending,
+            },
+        );
+
+        let inherited_result = evaluate_dynamic_spatial_mapping(
+            Some(&inherited),
+            &DynamicSpatialMappingOverride::default(),
+            &targets,
+            Some(99),
+        )
+        .unwrap();
+        assert_eq!(
+            inherited_result,
+            evaluate_spatial_mapping(&inherited, &targets).unwrap(),
+            "non-Random mappings ignore the loop index"
+        );
+
+        let front = SpatialProjection::from_preset(ProjectionPreset::Front, Position3d::default());
+        let projection_override = DynamicSpatialMappingOverride {
+            projection: OverrideStage::Replace(front.clone()),
+            shape: OverrideStage::Inherit,
+        };
+        assert_eq!(
+            evaluate_dynamic_spatial_mapping(
+                Some(&inherited),
+                &projection_override,
+                &targets,
+                None,
+            )
+            .unwrap(),
+            evaluate_spatial_mapping(
+                &SpatialSelectionMapping {
+                    projection: front,
+                    shape: inherited.shape.clone(),
+                },
+                &targets,
+            )
+            .unwrap()
+        );
+
+        let local_shape = DynamicSelectionShape::Radial {
+            center_u: 0.0,
+            center_v: 0.0,
+            direction: RadialDirection::Inward,
+        };
+        let shape_override = DynamicSpatialMappingOverride {
+            projection: OverrideStage::Inherit,
+            shape: OverrideStage::Replace(local_shape),
+        };
+        assert_eq!(
+            evaluate_dynamic_spatial_mapping(Some(&inherited), &shape_override, &targets, None,)
+                .unwrap(),
+            evaluate_spatial_mapping(
+                &SpatialSelectionMapping {
+                    projection: inherited.projection.clone(),
+                    shape: SpatialSelectionShape::Radial {
+                        center_u: 0.0,
+                        center_v: 0.0,
+                        direction: RadialDirection::Inward,
+                    },
+                },
+                &targets,
+            )
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn dynamic_mapping_without_a_group_uses_source_order_or_rejects_incomplete_spatial_stages() {
+        let targets = [
+            target(3, 3.0, 0.0, 0.0),
+            target(1, 1.0, 0.0, 0.0),
+            target(3, 99.0, 99.0, 99.0),
+            target(2, 2.0, 0.0, 0.0),
+        ];
+        let source_order = evaluate_dynamic_spatial_mapping(
+            None,
+            &DynamicSpatialMappingOverride::default(),
+            &targets,
+            Some(7),
+        )
+        .unwrap();
+        assert_eq!(
+            source_order.ordered_fixture_ids,
+            [fixture(3), fixture(1), fixture(2)]
+        );
+        assert_eq!(source_order.rank_count, 3);
+        assert!(source_order.warnings.is_empty());
+
+        let projection_only = DynamicSpatialMappingOverride {
+            projection: OverrideStage::Replace(SpatialProjection::from_preset(
+                ProjectionPreset::Top,
+                Position3d::default(),
+            )),
+            shape: OverrideStage::Inherit,
+        };
+        assert_eq!(
+            evaluate_dynamic_spatial_mapping(None, &projection_only, &targets, None),
+            Err(SpatialMappingError::IncompleteDynamicOverride)
+        );
+
+        let shape_only = DynamicSpatialMappingOverride {
+            projection: OverrideStage::Inherit,
+            shape: OverrideStage::Replace(DynamicSelectionShape::Grid {
+                angle_degrees: 0.0,
+                direction: RankDirection::Ascending,
+            }),
+        };
+        assert_eq!(
+            evaluate_dynamic_spatial_mapping(None, &shape_only, &targets, None),
+            Err(SpatialMappingError::IncompleteDynamicOverride)
+        );
+
+        let complete = DynamicSpatialMappingOverride {
+            projection: projection_only.projection,
+            shape: shape_only.shape,
+        };
+        assert!(
+            evaluate_dynamic_spatial_mapping(None, &complete, &targets, None).is_ok(),
+            "both local spatial stages make an override complete without a Group mapping"
+        );
+    }
+
+    #[test]
+    fn dynamic_random_is_position_independent_repeatable_and_loop_perturbed() {
+        let targets = [
+            SpatialTarget {
+                fixture_id: fixture(1),
+                position: None,
+            },
+            target(2, f64::NAN, 0.0, 0.0),
+            target(3, 30.0, 20.0, 10.0),
+            target(4, -4.0, -3.0, -2.0),
+            target(5, 5.0, 4.0, 3.0),
+            target(2, 999.0, 999.0, 999.0),
+        ];
+        let random = DynamicSpatialMappingOverride {
+            projection: OverrideStage::Inherit,
+            shape: OverrideStage::Replace(DynamicSelectionShape::Random { seed: 0x5eed }),
+        };
+        let mut invalid_projection_random = random.clone();
+        invalid_projection_random.projection = OverrideStage::Replace(SpatialProjection {
+            anchor: Position3d {
+                x: f64::NAN,
+                y: f64::NAN,
+                z: f64::NAN,
+            },
+            view_direction: Vector3::default(),
+            rotation_degrees: f64::NAN,
+            preset: None,
+        });
+
+        let base = evaluate_dynamic_spatial_mapping(None, &random, &targets, None).unwrap();
+        assert_eq!(
+            base.ordered_fixture_ids,
+            [fixture(1), fixture(3), fixture(4), fixture(5), fixture(2)]
+        );
+        assert_eq!(base.rank_count, 5);
+        assert!(base.warnings.is_empty());
+        assert_eq!(
+            evaluate_dynamic_spatial_mapping(None, &random, &targets, None).unwrap(),
+            base
+        );
+        assert_eq!(
+            evaluate_dynamic_spatial_mapping(None, &invalid_projection_random, &targets, None,)
+                .unwrap(),
+            base,
+            "Random ignores even an invalid local projection"
+        );
+
+        let loop_seven =
+            evaluate_dynamic_spatial_mapping(None, &random, &targets, Some(7)).unwrap();
+        assert_eq!(
+            loop_seven.ordered_fixture_ids,
+            [fixture(4), fixture(2), fixture(1), fixture(3), fixture(5)]
+        );
+        assert_ne!(loop_seven.ordered_fixture_ids, base.ordered_fixture_ids);
+    }
+
+    #[test]
+    fn dynamic_spatial_mapping_preserves_position_warnings() {
+        let inherited = mapping(
+            ProjectionPreset::Top,
+            SpatialSelectionShape::Grid {
+                angle_degrees: 0.0,
+                direction: RankDirection::Ascending,
+            },
+        );
+        let missing = SpatialTarget {
+            fixture_id: fixture(7),
+            position: None,
+        };
+
+        let ranked = evaluate_dynamic_spatial_mapping(
+            Some(&inherited),
+            &DynamicSpatialMappingOverride::default(),
+            &[target(6, 0.0, 0.0, 0.0), missing],
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            ranked.warnings,
+            [SpatialMappingWarning::MissingPosition {
+                fixture_id: fixture(7)
+            }]
+        );
     }
 
     #[test]

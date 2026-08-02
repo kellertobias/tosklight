@@ -27,7 +27,8 @@ pub use spatial::{
     DynamicSelectionShape, DynamicSpatialMappingOverride, OverrideStage, Position3d,
     ProjectionPreset, RadarSweep, RadialDirection, RankDirection, RankedSelection,
     SpatialMappingError, SpatialMappingWarning, SpatialProjection, SpatialSelectionMapping,
-    SpatialSelectionShape, SpatialTarget, Vector3, evaluate_spatial_mapping,
+    SpatialSelectionShape, SpatialTarget, Vector3, evaluate_dynamic_spatial_mapping,
+    evaluate_spatial_mapping,
 };
 pub use validation::{
     DynamicAliasingWarning, DynamicValidationError, aliasing_warning, validate_definition,
