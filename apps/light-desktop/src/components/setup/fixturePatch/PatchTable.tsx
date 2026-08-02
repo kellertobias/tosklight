@@ -18,9 +18,15 @@ import {
 	selectPhysicalPatchRow,
 } from "./multipatchActions";
 import {
+	FixtureModeCell,
+	LightSourceCell,
+	MastersCell,
+	MibCell,
+	PanTiltCell,
+} from "./PatchTableStackedCells";
+import {
 	definitionSplits,
 	effectiveSplitPatches,
-	fixturePolicyApplicability,
 	formatFixturePatch,
 	formatInstancePatch,
 } from "./patchModel";
@@ -29,23 +35,18 @@ const columns = [
 	"Type",
 	"Fixture ID",
 	"Name",
-	"Manufacturer",
-	"Product / mode",
+	"Fixture / mode",
 	"Patch",
-	"Group Masters",
-	"Grand Master",
-	"Invert Pan",
-	"Invert Tilt",
+	"Masters",
+	"Pan / Tilt",
 	"MIB",
-	"MIB Delay",
+	"Light source",
 	"Location X",
 	"Location Y",
 	"Location Z",
 	"Rotation X",
 	"Rotation Y",
 	"Rotation Z",
-	"Bracket",
-	"Shaper",
 	"Layer",
 ];
 
@@ -123,76 +124,13 @@ function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 		>
 			<FixtureIdentityCells fixture={fixture} />
 			<FixturePatchCell fixture={fixture} />
-			<FixturePolicyCells fixture={fixture} />
-			<FixtureBehaviorCells fixture={fixture} />
+			<MastersCell fixture={fixture} />
+			<PanTiltCell fixture={fixture} />
+			<MibCell fixture={fixture} />
+			<LightSourceCell fixture={fixture} />
 			<FixtureTransformCells fixture={fixture} />
 			<FixtureLayerCell fixture={fixture} />
 		</tr>
-	);
-}
-
-function FixturePolicyCells({ fixture }: { fixture: PatchedFixture }) {
-	const controller = usePatchController();
-	const applicable = fixturePolicyApplicability(fixture.definition);
-	const policyCell = (
-		available: boolean,
-		label: string,
-		value: boolean,
-		kind: "group_masters" | "grand_master" | "invert_pan" | "invert_tilt",
-		trueLabel: string,
-		falseLabel: string,
-	) => (
-		<td>
-			{available ? (
-				<Button
-					className="patch-value"
-					aria-label={`${label} ${fixtureDisplayId(fixture)}`}
-					onClick={() => armEdit(controller, fixture, kind)}
-				>
-					{value ? trueLabel : falseLabel}
-				</Button>
-			) : (
-				<span role="img" aria-label={`${label} unavailable`}>
-					—
-				</span>
-			)}
-		</td>
-	);
-	return (
-		<>
-			{policyCell(
-				applicable.groupMasters,
-				"Group Masters",
-				fixture.group_masters_enabled ?? true,
-				"group_masters",
-				"Controlled",
-				"Ignored",
-			)}
-			{policyCell(
-				applicable.grandMaster,
-				"Grand Master",
-				fixture.grand_master_enabled ?? true,
-				"grand_master",
-				"Controlled",
-				"Ignored",
-			)}
-			{policyCell(
-				applicable.pan,
-				"Invert Pan",
-				fixture.invert_pan ?? false,
-				"invert_pan",
-				"Inverted",
-				"Normal",
-			)}
-			{policyCell(
-				applicable.tilt,
-				"Invert Tilt",
-				fixture.invert_tilt ?? false,
-				"invert_tilt",
-				"Inverted",
-				"Normal",
-			)}
-		</>
 	);
 }
 
@@ -212,15 +150,7 @@ function FixtureIdentityCells({ fixture }: { fixture: PatchedFixture }) {
 					{fixture.name || fixture.definition.name}
 				</Button>
 			</td>
-			<td>{fixture.definition.manufacturer}</td>
-			<td>
-				<Button
-					className="patch-value"
-					onClick={() => armEdit(controller, fixture, "mode")}
-				>
-					{fixture.definition.model} · {fixture.definition.mode}
-				</Button>
-			</td>
+			<FixtureModeCell fixture={fixture} />
 		</>
 	);
 }
@@ -282,39 +212,6 @@ function FixturePatchCell({ fixture }: { fixture: PatchedFixture }) {
 	);
 }
 
-function FixtureBehaviorCells({ fixture }: { fixture: PatchedFixture }) {
-	const controller = usePatchController();
-	if (!isDmxPatchable(fixture.definition))
-		return (
-			<>
-				<td>—</td>
-				<td>—</td>
-			</>
-		);
-	return (
-		<>
-			<td>
-				<Button
-					className="patch-value"
-					aria-label={`Move in Black ${fixtureDisplayId(fixture)}`}
-					onClick={() => armEdit(controller, fixture, "mib")}
-				>
-					{(fixture.move_in_black_enabled ?? true) ? "On" : "Off"}
-				</Button>
-			</td>
-			<td>
-				<Button
-					className="patch-value"
-					aria-label={`MIB Delay ${fixtureDisplayId(fixture)}`}
-					onClick={() => armEdit(controller, fixture, "mib_delay")}
-				>
-					{(fixture.move_in_black_delay_millis ?? 0) / 1000} s
-				</Button>
-			</td>
-		</>
-	);
-}
-
 function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 	const controller = usePatchController();
 	return (
@@ -349,24 +246,6 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 					</Button>
 				</td>
 			))}
-			<td className="patch-secondary">
-				<Button
-					className="patch-value"
-					onClick={() => armEdit(controller, fixture, "bracket_angle")}
-				>
-					{Number((fixture.bracket_angle ?? 0).toFixed(1))}°
-				</Button>
-			</td>
-			<td className="patch-secondary">
-				<Button
-					className="patch-value"
-					onClick={() => armEdit(controller, fixture, "shaper_angle")}
-				>
-					{fixture.shaper_angle === undefined || fixture.shaper_angle === null
-						? "\u2014"
-						: `${Number(fixture.shaper_angle.toFixed(1))}°`}
-				</Button>
-			</td>
 		</>
 	);
 }
@@ -402,13 +281,13 @@ function MultiPatchRow({
 	last: boolean;
 }) {
 	const controller = usePatchController();
-	const applicable = fixturePolicyApplicability(fixture.definition);
 	const selected =
 		controller.ui.physicalSelectionFixture === fixture.fixture_id &&
 		controller.ui.physicalSelectionIds.includes(instance.id);
 	return (
 		<tr
 			className={`multipatch-row${selected ? " selected" : ""}`}
+			aria-label={`Multi-patch ${instance.name || instance.id}`}
 			onClick={(event) => {
 				selectPhysicalPatchRow(controller, fixture, instance.id, event);
 				selectPatchFixture(controller, fixture, event);
@@ -417,35 +296,9 @@ function MultiPatchRow({
 			<td className="patch-tree-cell">
 				<MultiPatchBranch last={last} />
 			</td>
-			<td>
-				{applicable.groupMasters
-					? `Shared · ${(fixture.group_masters_enabled ?? true) ? "Controlled" : "Ignored"}`
-					: "—"}
-			</td>
-			<td>
-				{applicable.grandMaster
-					? `Shared · ${(fixture.grand_master_enabled ?? true) ? "Controlled" : "Ignored"}`
-					: "—"}
-			</td>
-			<MultipatchAxisCell
-				fixture={fixture}
-				instance={instance}
-				axis="pan"
-				available={applicable.pan}
-			/>
-			<MultipatchAxisCell
-				fixture={fixture}
-				instance={instance}
-				axis="tilt"
-				available={applicable.tilt}
-			/>
-			<td />
-			<td className="multipatch-name">
-				<strong>{instance.name || "Multi-patch"}</strong>
-				<span>multi-patch</span>
-			</td>
-			<td />
-			<td />
+			<td>—</td>
+			<td>—</td>
+			<FixtureModeCell fixture={fixture} shared />
 			<td>
 				{isDmxPatchable(fixture.definition) ? (
 					<Button
@@ -460,8 +313,10 @@ function MultiPatchRow({
 					<span>Not patchable</span>
 				)}
 			</td>
-			<td />
-			<td />
+			<MastersCell fixture={fixture} shared />
+			<PanTiltCell fixture={fixture} instance={instance} />
+			<MibCell fixture={fixture} shared />
+			<LightSourceCell fixture={fixture} />
 			{(["x", "y", "z"] as const).map((axis) => (
 				<td className="patch-secondary" key={`location-${axis}`}>
 					<Button
@@ -520,73 +375,14 @@ function MultiPatchRow({
 					</Button>
 				</td>
 			))}
-			<td className="patch-secondary">
-				<Button
-					className="patch-value"
-					onClick={() =>
-						beginMultipatchEdit(controller, fixture, instance, "bracket_angle")
-					}
-				>
-					{Number((instance.bracket_angle ?? 0).toFixed(1))}°
-				</Button>
-			</td>
-			<td className="patch-secondary">
-				<Button
-					className="patch-value"
-					onClick={() =>
-						beginMultipatchEdit(controller, fixture, instance, "shaper_angle")
-					}
-				>
-					{instance.shaper_angle === undefined || instance.shaper_angle === null
-						? "\u2014"
-						: `${Number(instance.shaper_angle.toFixed(1))}°`}
-				</Button>
-			</td>
-			<td />
-		</tr>
-	);
-}
-
-function MultipatchAxisCell({
-	fixture,
-	instance,
-	axis,
-	available,
-}: {
-	fixture: PatchedFixture;
-	instance: MultiPatchInstance;
-	axis: "pan" | "tilt";
-	available: boolean;
-}) {
-	const controller = usePatchController();
-	if (!available)
-		return (
-			<td>
-				<span role="img" aria-label={`Invert ${axis} unavailable`}>
-					—
+			<td className="patch-shared-cell">
+				<span>
+					{controller.data.layers.find(
+						(layer) => layer.id === (fixture.layer_id || "default"),
+					)?.name ?? "Default"}
+					<small>Shared</small>
 				</span>
 			</td>
-		);
-	const inverted =
-		axis === "pan"
-			? (instance.invert_pan ?? false)
-			: (instance.invert_tilt ?? false);
-	return (
-		<td>
-			<Button
-				className="patch-value"
-				aria-label={`Invert ${axis} ${instance.name || "Multi-patch"}`}
-				onClick={() =>
-					beginMultipatchEdit(
-						controller,
-						fixture,
-						instance,
-						axis === "pan" ? "invert_pan" : "invert_tilt",
-					)
-				}
-			>
-				{inverted ? "Inverted" : "Normal"}
-			</Button>
-		</td>
+		</tr>
 	);
 }

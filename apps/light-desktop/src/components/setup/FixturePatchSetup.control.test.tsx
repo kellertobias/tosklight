@@ -393,7 +393,12 @@ describe("fixture output policy cells", () => {
 		server.patch.fixtures = [policyFixture()];
 		state.patchSetArmed = true;
 		render(<FixturePatchSetup />);
-		expect(screen.getAllByText("Shared · Controlled")).toHaveLength(2);
+		const multiPatchRow = screen.getByRole("row", {
+			name: "Multi-patch Opposite hang",
+		}) as HTMLTableRowElement;
+		expect(multiPatchRow.cells[5]).toHaveTextContent(
+			"Group MastersControlledSharedGrand MasterControlledShared",
+		);
 		expect(
 			screen.getByRole("button", {
 				name: "Invert tilt Opposite hang",
@@ -1248,7 +1253,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const fixtureRow = screen.getByRole("row", {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
-		fireEvent.contextMenu(within(fixtureRow.cells[12]).getByRole("button"));
+		fireEvent.contextMenu(within(fixtureRow.cells[9]).getByRole("button"));
 
 		const modal = screen.getByRole("dialog", {
 			name: "Location X (meter)",
@@ -1279,7 +1284,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const fixtureRow = screen.getByRole("row", {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
-		fireEvent.contextMenu(within(fixtureRow.cells[13]).getByRole("button"));
+		fireEvent.contextMenu(within(fixtureRow.cells[10]).getByRole("button"));
 
 		const modal = screen.getByRole("dialog", {
 			name: "Location Y (meter)",
@@ -1305,7 +1310,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const fixtureRow = screen.getByRole("row", {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
-		fireEvent.click(within(fixtureRow.cells[12]).getByRole("button"));
+		fireEvent.click(within(fixtureRow.cells[9]).getByRole("button"));
 
 		const modal = screen.getByRole("dialog", {
 			name: "Location X (meter)",
@@ -1340,7 +1345,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const fixtureRow = screen.getByRole("row", {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
-		fireEvent.click(within(fixtureRow.cells[16]).getByRole("button"));
+		fireEvent.click(within(fixtureRow.cells[13]).getByRole("button"));
 
 		const modal = screen.getByRole("dialog", {
 			name: "Rotation Y (degree)",
@@ -1357,61 +1362,54 @@ describe("schema-v2 location and multi-patch editing", () => {
 		);
 	});
 
-	it("records the bracket angle the rig was actually set to", async () => {
-		const { current } = fixturesWithConflict();
-		current.bracket_angle = 0;
-		server.patch.fixtures = [current];
-		state.patchSetArmed = true;
+	it("uses the exact sixteen-column grid for primary and multi-patch rows", () => {
+		server.patch.fixtures = [policyFixture()];
 		render(<FixturePatchSetup />);
-		const fixtureRow = screen.getByRole("row", {
+		expect(
+			screen.getAllByRole("columnheader").map((header) => header.textContent),
+		).toEqual([
+			"Type",
+			"Fixture ID",
+			"Name",
+			"Fixture / mode",
+			"Patch",
+			"Masters",
+			"Pan / Tilt",
+			"MIB",
+			"Light source",
+			"Location X",
+			"Location Y",
+			"Location Z",
+			"Rotation X",
+			"Rotation Y",
+			"Rotation Z",
+			"Layer",
+		]);
+		const primary = screen.getByRole("row", {
 			name: /17 Split Wash 17/,
 		}) as HTMLTableRowElement;
-		// The bracket column sits after the three rotation axes.
-		fireEvent.click(within(fixtureRow.cells[18]).getByRole("button"));
-
-		const modal = screen
-			.getByRole("heading", { name: "Set fixture Bracket angle" })
-			.closest("section") as HTMLElement;
-		fireEvent.change(
-			within(modal).getByRole("textbox", { name: "Bracket angle (°)" }),
-			{ target: { value: "-35" } },
-		);
-		fireEvent.click(within(modal).getByRole("button", { name: "Set" }));
-		await waitFor(() =>
-			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
-				bracket_angle: -35,
-			}),
-		);
-	});
-
-	it("fits and removes a shaper or barn-door module by its angle", async () => {
-		const { current } = fixturesWithConflict();
-		current.shaper_angle = 22.5;
-		server.patch.fixtures = [current];
-		state.patchSetArmed = true;
-		render(<FixturePatchSetup />);
-		const fixtureRow = screen.getByRole("row", {
-			name: /17 Split Wash 17/,
+		const multi = screen.getByRole("row", {
+			name: "Multi-patch Opposite hang",
 		}) as HTMLTableRowElement;
-		expect(fixtureRow.cells[19].textContent).toContain("22.5°");
-		fireEvent.click(within(fixtureRow.cells[19]).getByRole("button"));
-
-		const modal = screen
-			.getByRole("heading", { name: "Set fixture Shaper angle" })
-			.closest("section") as HTMLElement;
-		// Clearing the field is how an operator says the module came off again.
-		fireEvent.change(
-			within(modal).getByRole("textbox", {
-				name: "Shaper / barn door angle (°), empty for none",
-			}),
-			{ target: { value: "" } },
-		);
-		fireEvent.click(within(modal).getByRole("button", { name: "Set" }));
-		await waitFor(() =>
-			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
-				shaper_angle: null,
-			}),
-		);
+		expect(primary.cells).toHaveLength(16);
+		expect(multi.cells).toHaveLength(16);
+		expect(multi.cells[1]).toHaveTextContent(/^—$/);
+		expect(multi.cells[2]).toHaveTextContent(/^—$/);
+		expect(multi.cells[4]).toHaveTextContent("S1 3.1 · S3 4.1");
+		for (const retired of [
+			"Manufacturer",
+			"Product / mode",
+			"Group Masters",
+			"Grand Master",
+			"Invert Pan",
+			"Invert Tilt",
+			"MIB Delay",
+			"Bracket",
+			"Shaper",
+		])
+			expect(
+				screen.queryByRole("columnheader", { name: retired }),
+			).not.toBeInTheDocument();
 	});
 
 	it("edits exactly one multi-patch instance axis without touching its siblings", async () => {
@@ -1429,7 +1427,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		const instanceRow = document.querySelector(
 			"tr.multipatch-row",
 		) as HTMLTableRowElement;
-		fireEvent.click(within(instanceRow.cells[16]).getByRole("button"));
+		fireEvent.click(within(instanceRow.cells[13]).getByRole("button"));
 
 		const modal = screen.getByRole("dialog", {
 			name: "Rotation Y (degree)",
@@ -1471,7 +1469,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		fireEvent.click(fixtureRow);
 		fireEvent.click(instances[1], { shiftKey: true });
 		fireEvent.contextMenu(
-			within((instances[1] as HTMLTableRowElement).cells[16]).getByRole(
+			within((instances[1] as HTMLTableRowElement).cells[13]).getByRole(
 				"button",
 			),
 		);

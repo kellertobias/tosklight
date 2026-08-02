@@ -13,7 +13,7 @@ before moving it to `Done` in a semantic commit.
 ## Progress
 
 - [x] Claimed from `docs/plans/Next` in numeric order.
-- [ ] Audit the current table, patch selection, encoder, persistence, API, catalog, and visualizer
+- [x] Audit the current table, patch selection, encoder, persistence, API, catalog, and visualizer
   ownership boundaries plus compatibility and acceptance seams.
 - [ ] Implement the exact shared sixteen-column table and physical-instance editing geometry.
 - [ ] Implement portable installed appearance, typed sparse mutations, compatibility, and catalog
@@ -29,6 +29,32 @@ before moving it to `Done` in a semantic commit.
   and visualizer RGB remains open. Work may advance on independent table, model, API, encoder,
   import, and renderer contracts, but the shipped catalog entries will not be implemented or
   represented as accepted until that review occurs.
+- The current table has 21 columns rather than the 19 stated in the problem description; the exact
+  required 16-column target remains unambiguous and is the implementation authority.
+- Preserve the existing flat `bracket_angle` as the canonical installed bracket value and interpret
+  the existing optional `shaper_angle` as the installed shaper-module rotation. Add the source,
+  explicit CCT, gel assignment, and four static shaper-element angles alongside them with compatible
+  defaults instead of introducing a duplicate nested authority for already-valid angle fields.
+- Introduce one exact patch-local physical instance for encoder/edit targeting. Keep any ordered
+  multi-row range selection as a separate table-operation concept; a removed multi-patch clears the
+  exact target and never silently retargets its parent.
+- Extend the authoritative Patch projection and shared renderer inputs. Catalog lookup and CCT/gel
+  evaluation must not become browser-local or Viz-only authority, and live shaper attributes win per
+  supported physical component rather than being added to a competing static value.
+- Repair modern reference-only MVR merge retention in this plan: current merge code attempts a
+  legacy inline-fixture decode and can silently default existing policies and angles before the new
+  appearance fields are considered.
+
+## Implementation verification
+
+- The first table slice replaces the current 21-header model with the exact 16 headers, stacks
+  product/mode plus manufacturer, Masters, and Pan/Tilt in shared cells, combines MIB display, adds
+  the Light source default presentation, and removes the retired Bracket/Shaper table columns.
+  Primary and multi-patch rows now use the same 16-cell grid. Multi-patch Fixture ID and Name are
+  literal `—`, its stored name remains in the row's accessible identity, its actual split patch is
+  in the Patch cell, and shared logical values remain visibly identified. Desktop typecheck and all
+  35 focused Show Patch control tests pass, including an exact header/cell-count regression; the
+  production desktop frontend build also passes.
 
 ## Current behavior and problem
 

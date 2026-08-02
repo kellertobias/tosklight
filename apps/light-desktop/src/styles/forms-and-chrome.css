@@ -315,6 +315,43 @@
 .multipatch-row:hover td {
 	background: color-mix(in srgb, var(--panel2) 72%, transparent);
 }
+.patch-stacked-cell {
+	min-width: 132px;
+	max-width: 210px;
+}
+.patch-stacked-cell.shared {
+	color: color-mix(in srgb, var(--muted) 82%, transparent);
+}
+.patch-stacked-line {
+	display: flex;
+	width: 100%;
+	min-width: 0;
+	height: 19px;
+	align-items: center;
+	gap: 5px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.patch-stacked-line > span:first-child {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.patch-stacked-line > strong {
+	margin-left: auto;
+	font-size: 11px;
+}
+.patch-stacked-line > small,
+.patch-shared-cell small {
+	color: var(--muted);
+	font-size: 9px;
+	font-style: italic;
+}
+.patch-shared-cell > span {
+	display: flex;
+	flex-direction: column;
+}
 .multipatch-branch {
 	display: block;
 	width: 28px;
@@ -329,22 +366,6 @@
 	stroke: #53616b;
 	stroke-width: 1.4;
 }
-.multipatch-name {
-	min-width: 145px;
-	padding-left: 18px !important;
-	color: #a9b3ba;
-}
-.multipatch-name > span {
-	display: block;
-	font-size: 10px;
-	font-style: italic;
-}
-.multipatch-name > strong {
-	display: block;
-	color: var(--text);
-	font-size: 12px;
-}
-
 /* Built-in fixture sheet: selection belongs to the row shell, while only its content presses. */
 .fixture-row-shell {
 	width: 100%;
