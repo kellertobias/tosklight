@@ -25,10 +25,9 @@ before moving it to `Done` in a semantic commit.
 
 ## Implementation decisions
 
-- The plan's required focused operator review of the final generic gel names, numbers, display RGB,
-  and visualizer RGB remains open. Work may advance on independent table, model, API, encoder,
-  import, and renderer contracts, but the shipped catalog entries will not be implemented or
-  represented as accepted until that review occurs.
+- The operator approved the exact manufacturer-neutral **Generic gels** G00–G15 inventory on
+  2026-08-03, including every name plus separate display and visualizer sRGB value. Seed those
+  reviewed entries with stable identities, while preserving every later installation-owned edit.
 - The current table has 21 columns rather than the 19 stated in the problem description; the exact
   required 16-column target remains unambiguous and is the implementation authority.
 - Preserve the existing flat `bracket_angle` as the canonical installed bracket value and interpret
@@ -126,6 +125,11 @@ before moving it to `Done` in a semantic commit.
   third-party entries ship in this infrastructure slice. All 7 focused catalog tests, all 111
   `light-fixture` library tests, package check, Clippy with warnings denied, formatting, and diff
   checks pass.
+- The approved **Generic gels** G00–G15 inventory now seeds transactionally with stable catalog and
+  entry UUIDs on first open and on existing installations. A one-time metadata marker prevents
+  reapplication, so reopen and operator-edited names, colors, entries, and revisions remain
+  untouched. Focused catalog tests pass 11/11, the complete `light-fixture` suite and package check
+  pass, and the help identifies the shipped installation-owned starter catalog.
 - Authenticated installation-scoped catalog search and typed CSV preview now feed the Show Patch
   light-source editor. Operators search catalog/number/name/display color, assign an entry with its
   complete embedded fallback, or preview additions/replacements/unchanged/conflicts/row errors and
@@ -159,6 +163,9 @@ before moving it to `Done` in a semantic commit.
 - Creating a multi-patch now clones the primary physical source/CCT/gel/static shapers and
   bracket/module angles into an independent object instead of silently reverting to defaults. The
   complete 43-test Show Patch control file and desktop typecheck pass after the compatibility fix.
+- Whole-show download and independent database upload now have route-level proof that stable
+  fixture/profile/mode identities plus distinct root and multi-patch source/CCT/gel/static-shaper
+  payloads survive exactly. The focused headless route test passes 1/1.
 - Oversized Plan-owned implementation paths are now split without changing the operator contract:
   the appearance editor, patch encoder surfaces, strict CSV parser, Viz fixture planning/fallback
   emitter construction, and renderer laser path all pass their focused suites. The architecture
