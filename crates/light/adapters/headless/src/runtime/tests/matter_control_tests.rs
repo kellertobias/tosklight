@@ -454,7 +454,7 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
     )
     .unwrap_err();
     assert_eq!(rejected.status, StatusCode::CONFLICT);
-    assert_eq!(state.output.snapshot().groups[0].master, 1.0);
+    assert_eq!(state.output.group_master("front"), Some(1.0));
     drop(activation);
 
     let output_cursor = state.events.latest_sequence();
@@ -471,7 +471,7 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
     }
 
     assert!(
-        (state.output.snapshot().groups[0].master - 0.5).abs() < 0.001,
+        (state.output.group_master("front").unwrap() - 0.5).abs() < 0.001,
         "Group Master uses the Matter level"
     );
     let speed = state

@@ -465,14 +465,10 @@ fn apply_output_runtime(engine: &Engine, runtime: &PersistedOutputRuntime) {
 }
 
 fn apply_group_masters(engine: &Engine, runtime: &PersistedOutputRuntime) {
-    let mut snapshot = (*engine.snapshot()).clone();
-    for group in Arc::make_mut(&mut snapshot.groups) {
-        if let Some(master) = runtime.group_masters.get(&group.id) {
-            group.master = *master;
+    for (group_id, master) in &runtime.group_masters {
+        if let Err(error) = engine.set_group_master(group_id, *master) {
+            tracing::warn!(%group_id, %error, "ignoring unassigned persisted Group Master");
         }
-    }
-    if let Err(error) = engine.replace_snapshot(snapshot) {
-        tracing::warn!(%error, "ignoring persisted group output masters");
     }
 }
 

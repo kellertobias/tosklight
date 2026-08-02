@@ -343,6 +343,7 @@ impl OutputResource {
         self.dynamics.lock().set_definitions_pinned(pinned);
     }
 
+    #[cfg(test)]
     pub(in crate::runtime) fn replace_snapshot(
         &self,
         snapshot: EngineSnapshot,

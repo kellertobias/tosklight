@@ -550,6 +550,82 @@ async fn output_persistence_failure_is_visible_and_replay_does_not_retry_it() {
 }
 
 #[tokio::test]
+async fn group_master_runtime_restores_and_persists_only_assigned_targets() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "Group Master runtime").await;
+    open_show_for_output_test(&app, &token, &show).await;
+
+    let target = light_playback::PlaybackTarget::Group {
+        group_id: "front".into(),
+    };
+    state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            groups: vec![
+                light_programmer::GroupDefinition {
+                    id: "front".into(),
+                    master: 0.25,
+                    ..Default::default()
+                },
+                light_programmer::GroupDefinition {
+                    id: "unassigned".into(),
+                    master: 0.4,
+                    ..Default::default()
+                },
+            ]
+            .into(),
+            playbacks: vec![light_playback::PlaybackDefinition {
+                number: 1,
+                name: "Front master".into(),
+                buttons: light_playback::PlaybackDefinition::default_buttons(&target),
+                button_count: 3,
+                fader: light_playback::PlaybackDefinition::default_fader(&target),
+                has_fader: true,
+                go_activates: true,
+                auto_off: false,
+                xfade_millis: 0,
+                color: "#20c997".into(),
+                flash_release: light_playback::FlashReleaseMode::ReleaseAll,
+                protect_from_swap: false,
+                presentation_icon: None,
+                presentation_image: None,
+                target,
+            }]
+            .into(),
+            ..Default::default()
+        })
+        .unwrap();
+
+    restore_output_group_masters(
+        &state,
+        &PersistedOutputRuntime {
+            group_masters: HashMap::from([("front".into(), 0.65), ("unassigned".into(), 0.1)]),
+            ..Default::default()
+        },
+    );
+    assert_eq!(state.output.group_master("front"), Some(0.65));
+    assert_eq!(state.output.group_master("unassigned"), None);
+    assert_eq!(state.output.snapshot().groups[0].master, 0.25);
+    assert_eq!(state.output.snapshot().groups[1].master, 0.4);
+
+    persist_output_runtime(&state).unwrap();
+    let show_id = light_core::ShowId(Uuid::parse_str(show["id"].as_str().unwrap()).unwrap());
+    let stored = state
+        .installation
+        .setting(&output_runtime_setting(show_id))
+        .unwrap()
+        .unwrap();
+    let stored: PersistedOutputRuntime = serde_json::from_str(&stored).unwrap();
+    assert_eq!(
+        stored.group_masters,
+        HashMap::from([("front".into(), 0.65)])
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn legacy_persisted_output_without_revision_activates_at_revision_zero() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

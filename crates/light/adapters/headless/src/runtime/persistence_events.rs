@@ -85,18 +85,11 @@ pub(super) fn restore_output_runtime_for_show(
     state.output.clear_runtime_replay();
 }
 
-fn restore_output_group_masters(state: &AppState, runtime: &PersistedOutputRuntime) {
-    if runtime.group_masters.is_empty() {
-        return;
-    }
-    let mut snapshot = (*state.output.snapshot()).clone();
-    for group in Arc::make_mut(&mut snapshot.groups) {
-        if let Some(master) = runtime.group_masters.get(&group.id) {
-            group.master = *master;
+pub(super) fn restore_output_group_masters(state: &AppState, runtime: &PersistedOutputRuntime) {
+    for (group_id, master) in &runtime.group_masters {
+        if let Err(error) = state.output.set_group_master(group_id, *master) {
+            tracing::warn!(%group_id, %error, "ignoring unassigned persisted Group Master");
         }
-    }
-    if let Err(error) = state.output.replace_snapshot(snapshot) {
-        tracing::warn!(%error, "ignoring persisted group output masters");
     }
 }
 
@@ -121,14 +114,11 @@ pub(super) fn persist_output_runtime(state: &AppState) -> Result<(), ApiError> {
             .snapshot()
             .groups
             .iter()
-            .map(|group| {
-                (
-                    group.id.clone(),
-                    state
-                        .output
-                        .group_master_for_persistence(&group.id)
-                        .unwrap_or(group.master),
-                )
+            .filter_map(|group| {
+                state
+                    .output
+                    .group_master_for_persistence(&group.id)
+                    .map(|master| (group.id.clone(), master))
             })
             .collect(),
     };

@@ -269,6 +269,9 @@ async fn websocket_actions_are_typed_owned_and_revision_checked() {
 #[tokio::test]
 async fn group_master_rejects_exclusive_show_change_but_not_output_read_permit() {
     let (state, data_dir) = test_state();
+    let target = light_playback::PlaybackTarget::Group {
+        group_id: "front".into(),
+    };
     state
         .output.replace_snapshot(EngineSnapshot {
             groups: vec![light_programmer::GroupDefinition {
@@ -276,6 +279,24 @@ async fn group_master_rejects_exclusive_show_change_but_not_output_read_permit()
                 master: 1.0,
                 ..Default::default()
             }].into(),
+            playbacks: vec![light_playback::PlaybackDefinition {
+                number: 1,
+                name: "Front master".into(),
+                buttons: light_playback::PlaybackDefinition::default_buttons(&target),
+                button_count: 3,
+                fader: light_playback::PlaybackDefinition::default_fader(&target),
+                has_fader: true,
+                go_activates: true,
+                auto_off: false,
+                xfade_millis: 0,
+                color: "#20c997".into(),
+                flash_release: light_playback::FlashReleaseMode::ReleaseAll,
+                protect_from_swap: false,
+                presentation_icon: None,
+                presentation_image: None,
+                target,
+            }]
+            .into(),
             ..Default::default()
         })
         .unwrap();
@@ -307,7 +328,7 @@ async fn group_master_rejects_exclusive_show_change_but_not_output_read_permit()
             .as_deref()
             .is_some_and(|error| error.contains("active show is changing"))
     );
-    assert_eq!(state.output.snapshot().groups[0].master, 1.0);
+    assert_eq!(state.output.group_master("front"), Some(1.0));
 
     drop(activation);
     let output_read = state.active_show.acquire_shared().await;
@@ -317,7 +338,7 @@ async fn group_master_rejects_exclusive_show_change_but_not_output_read_permit()
         live_action_frame(&session, "group-master", action),
     );
     assert!(applied.ok, "{:?}", applied.error);
-    assert_eq!(state.output.snapshot().groups[0].master, 0.5);
+    assert_eq!(state.output.group_master("front"), Some(0.5));
     drop(output_read);
     let _ = std::fs::remove_dir_all(data_dir);
 }
