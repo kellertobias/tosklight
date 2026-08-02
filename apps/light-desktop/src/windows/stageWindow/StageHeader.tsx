@@ -146,6 +146,20 @@ function Stage3dSettings({ options }: { options: StageOptionsModel }) {
 	const { state, dispatch } = useApp();
 	return (
 		<>
+			<Button
+				onClick={() =>
+					dispatch({
+						type: "SET_STAGE_NAVIGATION",
+						zoom: 1,
+						panX: 0,
+						panY: 0,
+						orbitX: 0,
+						orbitY: 0,
+					})
+				}
+			>
+				Reset 3D view
+			</Button>
 			<SwitchField
 				label="Floor grid"
 				offLabel="Hidden"

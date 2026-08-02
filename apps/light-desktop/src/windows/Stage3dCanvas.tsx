@@ -13,8 +13,8 @@ import { useStageScene } from "./stage3d/useStageScene";
 import type { Stage3dFixture } from "./stage3dScene";
 
 export const DEFAULT_STAGE_CAMERA_3D = {
-	position: [0, 1.625, 8] as const,
-	target: [0, 2.6, -4] as const,
+	position: [10, 8, 11] as const,
+	target: [0, 1.8, -4] as const,
 };
 
 interface Props {

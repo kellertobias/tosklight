@@ -357,6 +357,20 @@ function StagePaneSettings({ pane }: { pane: PaneModel }) {
 			/>
 			{(pane.stageView ?? "2d") === "3d" && (
 				<>
+					<Button
+						onClick={() =>
+							dispatch({
+								type: "SET_STAGE_NAVIGATION",
+								zoom: 1,
+								panX: 0,
+								panY: 0,
+								orbitX: 0,
+								orbitY: 0,
+							})
+						}
+					>
+						Reset 3D view
+					</Button>
 					<SwitchField
 						label="Beam direction guidelines"
 						offLabel="Hidden"
