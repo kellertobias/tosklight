@@ -18,7 +18,7 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
 - [x] Implement invariant programmable-row filtering without changing show or selection authority.
 - [ ] Implement authoritative attribute-group base summaries and stable Dynamic identity/state
   feedback without sampled-value repainting.
-- [ ] Implement per-surface Off/Icon only/Text only configuration, migration, and shared rendering.
+- [x] Implement per-surface Off/Icon only/Text only configuration, migration, and shared rendering.
 - [ ] Update help, deterministic screenshot contracts, human scenarios, and focused root Playwright
   coverage.
 - [ ] Run focused checks, required major suites, migration/recovery proof, small-screen geometry, and
@@ -73,15 +73,22 @@ delivered by that completed plan rather than recreating them in the Fixture Shee
   and value columns, migrate old JSON, and generated TypeScript is current. Fifty-nine focused
   frontend persistence/surface tests, the focused show-store tests, fixed-screen route test,
   generated-contract test, desktop typecheck, Rust package checks, and focused Biome pass.
+- The shared table now uses an explicit 43 px normal metric and deterministic 32 px compact metric
+  for row layout, virtualization, fill rows, and spacers. Icon only retains graphical ordinary and
+  Preload summaries while hiding ordinary value text; Text only retains concise ordinary and
+  Preload text while hiding decorative glyphs. Both keep exact per-member Dynamic identities,
+  source/status styling, fixture identity details, and all configured columns. Compact value-column
+  minimums are narrower, while the table exposes real horizontal overflow when the selected set
+  still cannot fit. A 430 px deterministic story proves both compact modes show more equal-height
+  rows than Off, retain `.0`/`.1` IDs and both Dynamic identities without clipping, preserve distinct
+  Media/Mask markers or text, and do not silently drop columns. The Storybook build, two focused
+  browser cases, 70 focused unit cases, and both frontend typechecks pass.
 
 ## Remaining work
 
-- Render every group through Off/Icon only/Text only from the shared member-value model, including
-  stable shared row metrics and narrower value-column widths.
 - Add accurate base-source ownership, Group-master flash/Highlight-bypass presentation, and the
   deterministic base-versus-changing-DMX acceptance proof in a later coherent slice.
-- Implement compact rendering and per-surface persistence only after the shared value model no
-  longer depends on demo row placeholders.
+- Add the human scenario, root E2E coverage, screenshot contract, and operator help updates.
 - Keep every acceptance item below unclaimed until current source and focused verification prove it.
 
 ## Goal

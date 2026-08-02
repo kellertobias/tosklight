@@ -90,9 +90,9 @@ const stepState = (active: boolean): HighlightState => ({
 	owner_user_id: "operator-a",
 });
 
-const patchFixtures = vi.hoisted(
-	() => ({ current: [] as ReturnType<typeof multiHeadFixture>[] }),
-);
+const patchFixtures = vi.hoisted(() => ({
+	current: [] as ReturnType<typeof multiHeadFixture>[],
+}));
 vi.mock("../features/patch/PatchState", async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
 	usePatchedFixturesView: (enabled = true) =>
@@ -425,6 +425,14 @@ describe("Fixture Sheet Highlight stepping visualization", () => {
 		).not.toBeInTheDocument();
 		expect(screen.getByRole("heading", { name: "Ordering" })).toBeVisible();
 		expect(screen.getByRole("heading", { name: "Filters" })).toBeVisible();
+		fireEvent.click(screen.getByRole("button", { name: "Off" }));
+		for (const mode of ["Off", "Icon only", "Text only"])
+			expect(screen.getByRole("option", { name: mode })).toBeVisible();
+		fireEvent.click(screen.getByRole("option", { name: "Text only" }));
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "SET_FIXTURE_SHEET_OPTIONS",
+			compactMode: "text-only",
+		});
 		const includedHeads = screen.getByRole("button", { name: /^All$/ });
 		fireEvent.click(includedHeads);
 		fireEvent.click(screen.getByRole("option", { name: "No master heads" }));
@@ -440,6 +448,9 @@ describe("Fixture Sheet Highlight stepping visualization", () => {
 			screen.getByRole("switch", { name: "Patch address" }),
 		).not.toBeChecked();
 		expect(screen.getByRole("switch", { name: "Beam" })).not.toBeChecked();
+		expect(screen.getByRole("switch", { name: "Shapers" })).not.toBeChecked();
+		expect(screen.getByRole("switch", { name: "Control" })).not.toBeChecked();
+		expect(screen.getByRole("switch", { name: "Media" })).not.toBeChecked();
 		expect(
 			screen.getByRole("switch", { name: "Show fixture type" }),
 		).not.toBeChecked();

@@ -335,7 +335,7 @@
 }
 
 .ui-data-table {
-  width: 100%;
+  width: max-content;
   min-width: 100%;
   min-height: 100%;
   background: #0b0f13;
@@ -360,9 +360,9 @@
 }
 
 .ui-data-table-row:not(.header) {
-	min-height: 43px;
+	height: var(--table-row-height, 43px);
 	content-visibility: auto;
-	contain-intrinsic-size: auto 43px;
+	contain-intrinsic-size: auto var(--table-row-height, 43px);
 }
 
 .ui-data-table.virtualized .ui-data-table-row:not(.header) {

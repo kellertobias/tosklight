@@ -1254,6 +1254,75 @@ button.large-action:disabled {
 	line-height: 1.25;
 	white-space: nowrap;
 }
+.fixture-dynamic-stack[data-paused],
+.fixture-dynamic-stack[data-pending] {
+	border-style: dashed;
+}
+.fixture-dynamic-stack[data-hidden],
+.fixture-dynamic-stack:not([data-winning]) {
+	opacity: 0.65;
+}
+.fixture-sheet-group-presentation,
+.fixture-sheet-member-value,
+.fixture-dynamic-indicators {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: 4px;
+	white-space: nowrap;
+}
+.fixture-sheet-group-presentation {
+	overflow: hidden;
+}
+.fixture-sheet-group-glyph {
+	min-width: 20px;
+	height: 20px;
+	display: inline-grid;
+	place-items: center;
+	flex: none;
+	border: 1px solid currentColor;
+	border-radius: 4px;
+	background: linear-gradient(
+		to top,
+		color-mix(in srgb, currentColor 25%, transparent)
+			calc(clamp(0, var(--fixture-value, 0), 1) * 100%),
+		transparent calc(clamp(0, var(--fixture-value, 0), 1) * 100%)
+	);
+	font-size: 8px;
+	font-style: normal;
+	font-weight: 800;
+}
+.fixture-sheet-group-glyph.preload {
+	border-style: dashed;
+	color: var(--amber);
+}
+.fixture-sheet-mode-icon-only .fixture-sheet-value-text {
+	display: none;
+}
+.fixture-sheet-mode-text-only .vertical-meter,
+.fixture-sheet-mode-text-only .color-dot,
+.fixture-sheet-mode-text-only .position-glyph,
+.fixture-sheet-mode-text-only .fixture-sheet-group-glyph {
+	display: none;
+}
+.fixture-sheet-mode-icon-only .fixture-table .ui-data-table-row > span,
+.fixture-sheet-mode-text-only .fixture-table .ui-data-table-row > span {
+	padding: 2px 4px;
+}
+.fixture-sheet-mode-icon-only .source-value,
+.fixture-sheet-mode-text-only .source-value,
+.fixture-sheet-mode-icon-only .fixture-sheet-group-presentation,
+.fixture-sheet-mode-text-only .fixture-sheet-group-presentation {
+	gap: 3px;
+}
+.fixture-sheet-mode-icon-only .fixture-name,
+.fixture-sheet-mode-text-only .fixture-name {
+	line-height: 1.05;
+}
+.fixture-sheet-mode-icon-only .fixture-name small,
+.fixture-sheet-mode-text-only .fixture-name small {
+	margin-left: 4px;
+}
 .patch-window > .show-patch-layout {
 	flex: 1;
 	min-height: 0;

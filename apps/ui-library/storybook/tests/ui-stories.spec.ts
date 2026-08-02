@@ -3487,11 +3487,14 @@ test("named application windows use production Fixture, Cuelist, Patch, and Setu
 		"ID",
 		"Icon",
 		"Name / type",
-		"Dimmer",
+		"Intensity",
 		"Color",
 		"Position",
 		"Beam",
+		"Shapers",
 		"Focus",
+		"Control",
+		"Media",
 	]);
 
 	await page.goto(
@@ -3577,6 +3580,96 @@ test("named application windows use production Fixture, Cuelist, Patch, and Setu
 	await expect(
 		page.getByText("Fallback allowed", { exact: true }),
 	).toBeVisible();
+});
+
+test("Fixture Sheet compact modes increase density without dropping configured values", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 430, height: 844 });
+	const inspect = async (
+		story: "off-small-screen" | "icon-only" | "text-only",
+	) => {
+		await page.goto(
+			`/iframe.html?id=tosklight-windows-fixture-sheet--${story}&viewMode=story`,
+		);
+		await page.evaluate(() => document.fonts.ready);
+		const sheet = page.locator(".fixture-window");
+		await expect(sheet).toHaveAttribute(
+			"data-fixture-sheet-compact-mode",
+			story === "off-small-screen" ? "off" : story,
+		);
+		const table = page.locator(".ui-data-table");
+		const rows = page.locator(".ui-data-table-row:not(.header)");
+		await expect(rows).toHaveCount(24);
+		const geometry = await page
+			.locator(".fixture-table .ui-window-scroller")
+			.evaluate((host) => {
+			const viewport = host.getBoundingClientRect();
+			const bodyRows = [
+				...host.querySelectorAll<HTMLElement>(
+					".ui-data-table-row:not(.header)",
+				),
+			];
+			return {
+				clientWidth: host.clientWidth,
+				scrollWidth: host.scrollWidth,
+				rowHeights: bodyRows.map((row) => row.getBoundingClientRect().height),
+				visibleRows: bodyRows.filter((row) => {
+					const bounds = row.getBoundingClientRect();
+					return bounds.top >= viewport.top && bounds.bottom <= viewport.bottom;
+				}).length,
+			};
+		});
+		expect(geometry.scrollWidth).toBeGreaterThan(geometry.clientWidth);
+		expect(new Set(geometry.rowHeights)).toEqual(
+			new Set([story === "off-small-screen" ? 43 : 32]),
+		);
+		await expect(table.getByText("102.0", { exact: true })).toBeVisible();
+		await expect(table.getByText("102.1", { exact: true })).toBeVisible();
+		const firstRowDynamics = rows.first().locator(".fixture-dynamic-stack");
+		await expect(firstRowDynamics).toHaveCount(2);
+		expect(
+			await firstRowDynamics.evaluateAll((indicators) =>
+				indicators.every((indicator) => {
+					const bounds = indicator.getBoundingClientRect();
+					const cell = indicator.closest('[role="cell"]')?.getBoundingClientRect();
+					return Boolean(
+						cell &&
+						bounds.left >= cell.left &&
+						bounds.right <= cell.right &&
+						bounds.top >= cell.top &&
+						bounds.bottom <= cell.bottom,
+					);
+				}),
+			),
+		).toBe(true);
+		return geometry;
+	};
+
+	const off = await inspect("off-small-screen");
+	await expect(page.locator(".vertical-meter").first()).toBeVisible();
+	await expect(page.locator(".fixture-sheet-value-text").first()).toBeVisible();
+	const offMedia = page.getByText("Media Folder Folder 2", { exact: true }).first();
+	await offMedia.scrollIntoViewIfNeeded();
+	await expect(offMedia).toBeVisible();
+	const iconOnly = await inspect("icon-only");
+	await expect(page.locator(".vertical-meter").first()).toBeVisible();
+	await expect(page.locator(".fixture-sheet-value-text").first()).toBeHidden();
+	for (const marker of ["MeF", "Me", "MaF", "Ma"]) {
+		const glyph = page.getByText(marker, { exact: true }).first();
+		await glyph.scrollIntoViewIfNeeded();
+		await expect(glyph).toBeVisible();
+	}
+	const textOnly = await inspect("text-only");
+	await expect(page.locator(".vertical-meter").first()).toBeHidden();
+	await expect(page.locator(".fixture-sheet-value-text").first()).toBeVisible();
+	const textMedia = page
+		.getByText("Media Folder Folder 2", { exact: true })
+		.first();
+	await textMedia.scrollIntoViewIfNeeded();
+	await expect(textMedia).toBeVisible();
+	expect(iconOnly.visibleRows).toBeGreaterThan(off.visibleRows);
+	expect(textOnly.visibleRows).toBe(iconOnly.visibleRows);
 });
 
 test("Form stories keep inputs, scrolling, fader, pickers, grouped selections, and file drop interactive", async ({

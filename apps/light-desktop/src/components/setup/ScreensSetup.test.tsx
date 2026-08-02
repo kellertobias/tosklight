@@ -197,6 +197,11 @@ describe("additional screen settings", () => {
 		])
 			expect(screen.getByRole("option", { name: label })).toBeVisible();
 		expect(screen.queryByRole("option", { name: "DMX output" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Off" }));
+		for (const mode of ["Off", "Icon only", "Text only"])
+			expect(screen.getByRole("option", { name: mode })).toBeVisible();
+		for (const column of ["Intensity", "Shapers", "Control", "Media"])
+			expect(screen.getByRole("switch", { name: column })).toBeVisible();
 
 		await waitFor(() => expect(save).toHaveBeenCalledOnce());
 		expect(saved[0]).toMatchObject({

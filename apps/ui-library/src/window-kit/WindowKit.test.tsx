@@ -171,12 +171,19 @@ describe("window kit", () => {
 					rowKey={(row) => row.id}
 					onVisibleRowsChange={visibleRows}
 					virtualize
+					rowHeight={32}
 				/>
 			</div>,
 		);
 		const table = screen.getByRole("table");
 		expect(table).toHaveAttribute("aria-rowcount", "201");
 		expect(table).toHaveClass("virtualized");
+		expect(table).toHaveStyle({ "--table-row-height": "32px" });
+		const spacerHeight = Number.parseFloat(
+			(document.querySelector(".ui-data-table-spacer") as HTMLElement).style
+				.height,
+		);
+		expect(spacerHeight / 32).toBe(Math.trunc(spacerHeight / 32));
 		expect(screen.getAllByRole("row").length).toBeLessThan(40);
 		expect(screen.queryByText("row-199")).not.toBeInTheDocument();
 		expect(visibleRows).toHaveBeenLastCalledWith(

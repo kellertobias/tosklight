@@ -72,6 +72,7 @@ export function FixtureSheetTableView<Row extends FixtureSheetRowView>({
 	onVisibleFixtureIdsChange,
 	presentStep,
 	rows,
+	rowHeight = 43,
 	selectedFixtureIds,
 }: {
 	activeRow: number;
@@ -81,6 +82,7 @@ export function FixtureSheetTableView<Row extends FixtureSheetRowView>({
 	onVisibleFixtureIdsChange?: (fixtureIds: readonly string[]) => void;
 	presentStep: FixtureStepPresenter<Row>;
 	rows: Row[];
+	rowHeight?: number;
 	selectedFixtureIds: ReadonlySet<string>;
 }) {
 	const visibleRowsChanged = useCallback(
@@ -114,6 +116,7 @@ export function FixtureSheetTableView<Row extends FixtureSheetRowView>({
 				}
 				onVisibleRowsChange={visibleRowsChanged}
 				virtualize
+				rowHeight={rowHeight}
 			/>
 		</WindowScrollArea>
 	);

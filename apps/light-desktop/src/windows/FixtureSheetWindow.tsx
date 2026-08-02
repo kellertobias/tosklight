@@ -115,10 +115,10 @@ export function FixtureSheetWindow({
 	);
 	const columns = useMemo(
 		() =>
-			fixtureSheetColumns(showType, presentStep).filter((column) =>
+			fixtureSheetColumns(showType, presentStep, compactMode).filter((column) =>
 				visibleColumnIds.includes(column.id as FixtureSheetColumn),
 			),
-		[presentStep, showType, visibleColumnIds],
+		[compactMode, presentStep, showType, visibleColumnIds],
 	);
 	const selectedFixtureIds = useMemo(
 		() => new Set(selection?.selected ?? []),
@@ -153,6 +153,7 @@ export function FixtureSheetWindow({
 					onVisibleFixtureIdsChange={onVisibleFixtureIdsChange}
 					presentStep={presentStep}
 					rows={rows}
+					rowHeight={compactMode === "off" ? 43 : 32}
 					selectedFixtureIds={selectedFixtureIds}
 				/>
 			}

@@ -1,6 +1,7 @@
 import type { DataTableColumn } from "@tosklight/ui/window-kit";
 import { FixtureColorDot } from "../components/shared/FixtureColorDot";
 import { SourceValue } from "../components/shared/SourceValue";
+import type { FixtureSheetCompactMode } from "../types";
 import type { FixtureSheetRow } from "./fixtureSheetProjection";
 import type { FixtureStepPresenter } from "./fixtureSheetStep";
 import type {
@@ -104,11 +105,12 @@ function patchColumn(): Column {
 	};
 }
 
-function dimmerColumn(): Column {
+function dimmerColumn(compactMode: FixtureSheetCompactMode): Column {
 	return {
 		id: "intensity",
 		header: "Intensity",
-		width: "minmax(95px,.7fr)",
+		width:
+			compactMode === "off" ? "minmax(180px,.9fr)" : "minmax(128px,.7fr)",
 		render: (fixture) => {
 			const group = fixture.groupValues?.intensity;
 			const member = group?.members.find(
@@ -119,18 +121,27 @@ function dimmerColumn(): Column {
 					source={group?.source ?? fixture.sources.dimmer}
 					className="fixture-sheet-group-value"
 				>
-					<i className="vertical-meter">
-						<i style={{ height: `${fixture.dimmer}%` }} />
-					</i>
-					<span className="fixture-sheet-value-text">
-						{member?.text ?? `${fixture.dimmer}%`}
+					<span
+						className="fixture-sheet-group-presentation"
+						role="img"
+						aria-label={group?.accessibleName ?? `Intensity ${fixture.dimmer}%`}
+					>
+						<i className="vertical-meter">
+							<i style={{ height: `${fixture.dimmer}%` }} />
+						</i>
+						<span className="fixture-sheet-value-text">
+							{member?.text ?? `${fixture.dimmer}%`}
+						</span>
 					</span>
 					{(member?.preloadText ??
 						(fixture.preloadDimmer == null
 							? null
 							: `${fixture.preloadDimmer}%`)) && (
 						<small className="preload-value">
-							→ {member?.preloadText ?? `${fixture.preloadDimmer}%`}
+							<span className="fixture-sheet-preload-marker">→</span>{" "}
+							<span className="fixture-sheet-value-text">
+								{member?.preloadText ?? `${fixture.preloadDimmer}%`}
+							</span>
 						</small>
 					)}
 					<DynamicIndicators member={member} />
@@ -140,21 +151,31 @@ function dimmerColumn(): Column {
 	};
 }
 
-function colorColumn(): Column {
+function colorColumn(compactMode: FixtureSheetCompactMode): Column {
 	return {
 		id: "color",
 		header: "Color",
-		width: "minmax(105px,1fr)",
+		width: compactMode === "off" ? "minmax(105px,1fr)" : "minmax(72px,.65fr)",
 		render: (fixture) => (
 			<SourceValue
 				source={fixture.groupValues?.color.source ?? fixture.sources.color}
 				className="fixture-sheet-group-value"
 			>
-				<FixtureColorDot color={fixture.color} />
-				<span className="fixture-sheet-value-text">{fixture.colorLabel}</span>
+				<span
+					className="fixture-sheet-group-presentation"
+					role="img"
+					aria-label={
+						fixture.groupValues?.color.accessibleName ?? fixture.colorLabel
+					}
+				>
+					<FixtureColorDot color={fixture.color} />
+					<span className="fixture-sheet-value-text">{fixture.colorLabel}</span>
+				</span>
 				{fixture.preloadColor && (
 					<small className="preload-value">
-						<FixtureColorDot color={fixture.preloadColor} /> Preload
+						<FixtureColorDot color={fixture.preloadColor} />
+						<span className="fixture-sheet-preload-marker">→</span>{" "}
+						<span className="fixture-sheet-value-text">Preload</span>
 					</small>
 				)}
 				<GroupDynamicIndicators group={fixture.groupValues?.color} />
@@ -163,11 +184,12 @@ function colorColumn(): Column {
 	};
 }
 
-function positionColumn(): Column {
+function positionColumn(compactMode: FixtureSheetCompactMode): Column {
 	return {
 		id: "position",
 		header: "Position",
-		width: "minmax(145px,1.25fr)",
+		width:
+			compactMode === "off" ? "minmax(145px,1.25fr)" : "minmax(86px,.75fr)",
 		render: (fixture) => (
 			<SourceValue
 				source={
@@ -175,24 +197,37 @@ function positionColumn(): Column {
 				}
 				className="fixture-sheet-group-value"
 			>
-				<i className="position-glyph">
-					<i
-						style={{
-							left: `${fixture.pan % 75}%`,
-							top: `${fixture.tilt % 65}%`,
-						}}
-					/>
-				</i>
-				<span className="fixture-sheet-value-text">
-					{fixture.groupValues?.position.members
-						.map((member) => member.text)
-						.join(" / ") ??
+				<span
+					className="fixture-sheet-group-presentation"
+					role="img"
+					aria-label={
+						fixture.groupValues?.position.accessibleName ??
 						fixture.positionLabel ??
-						`${fixture.pan}° / ${fixture.tilt}°`}
+						`${fixture.pan}° / ${fixture.tilt}°`
+					}
+				>
+					<i className="position-glyph">
+						<i
+							style={{
+								left: `${fixture.pan % 75}%`,
+								top: `${fixture.tilt % 65}%`,
+							}}
+						/>
+					</i>
+					<span className="fixture-sheet-value-text">
+						{fixture.groupValues?.position.members
+							.map((member) => member.text)
+							.join(" / ") ??
+							fixture.positionLabel ??
+							`${fixture.pan}° / ${fixture.tilt}°`}
+					</span>
 				</span>
 				{fixture.preloadPan != null && fixture.preloadTilt != null && (
 					<small className="preload-value">
-						→ {fixture.preloadPan} / {fixture.preloadTilt}
+						<span className="fixture-sheet-preload-marker">→</span>{" "}
+						<span className="fixture-sheet-value-text">
+							{fixture.preloadPan} / {fixture.preloadTilt}
+						</span>
 					</small>
 				)}
 				<GroupDynamicIndicators group={fixture.groupValues?.position} />
@@ -251,11 +286,19 @@ function GroupDynamicIndicators({ group }: { group?: FixtureSheetGroupValue }) {
 function valueColumn(
 	id: "beam" | "shapers" | "focus" | "control" | "media",
 	header: "Beam" | "Shapers" | "Focus" | "Control" | "Media",
+	compactMode: FixtureSheetCompactMode,
 ): Column {
 	return {
 		id,
 		header,
-		width: id === "media" ? "minmax(180px,1.2fr)" : "minmax(95px,.8fr)",
+		width:
+			compactMode === "off"
+				? id === "media"
+					? "minmax(280px,1.6fr)"
+					: "minmax(95px,.8fr)"
+				: id === "media"
+					? "minmax(160px,1fr)"
+					: "minmax(64px,.6fr)",
 		render: (fixture) => {
 			const group = fixture.groupValues?.[id as FixtureSheetAttributeGroup];
 			if (!group)
@@ -269,31 +312,86 @@ function valueColumn(
 					source={group.source}
 					className="fixture-sheet-group-value"
 				>
-					{group.available ? (
-						group.members.map((member) => (
-							<span
-								className="fixture-sheet-member-value"
-								key={member.attribute}
-							>
-								<span className="fixture-sheet-value-text">
-									{group.members.length > 1 ? `${member.label} ` : ""}
-									{member.text}
+					<span
+						className="fixture-sheet-group-presentation"
+						role="img"
+						aria-label={group.accessibleName}
+					>
+						{group.available ? (
+							group.members.map((member) => (
+								<span
+									className="fixture-sheet-member-value"
+									key={member.attribute}
+								>
+									<MemberGlyph member={member} group={id} />
+									<span className="fixture-sheet-value-text">
+										{group.members.length > 1 ? `${member.label} ` : ""}
+										{member.text}
+									</span>
+									{member.preloadText && (
+										<small className="preload-value">
+											<MemberGlyph
+												member={member}
+												group={id}
+												preload
+												value={member.preloadValue ?? member.value}
+											/>
+											<span className="fixture-sheet-preload-marker">→</span>{" "}
+											<span className="fixture-sheet-value-text">
+												{member.preloadText}
+											</span>
+										</small>
+									)}
+									<DynamicIndicators member={member} />
 								</span>
-								{member.preloadText && (
-									<small className="preload-value">
-										→ {member.preloadText}
-									</small>
-								)}
-								<DynamicIndicators member={member} />
-							</span>
-						))
-					) : (
-						<span title={group.accessibleName}>—</span>
-					)}
+							))
+						) : (
+							<span title={group.accessibleName}>—</span>
+						)}
+					</span>
 				</SourceValue>
 			);
 		},
 	};
+}
+
+function MemberGlyph({
+	member,
+	group,
+	preload = false,
+	value = member.value,
+}: {
+	member: FixtureSheetMemberValue;
+	group: "beam" | "shapers" | "focus" | "control" | "media";
+	preload?: boolean;
+	value?: FixtureSheetMemberValue["value"];
+}) {
+	const normalized = value.kind === "normalized" ? value.value : null;
+	const semantic =
+		group === "media"
+			? member.label.startsWith("Mask")
+				? member.label.endsWith("Folder")
+					? "MaF"
+					: "Ma"
+				: member.label.endsWith("Folder")
+					? "MeF"
+					: "Me"
+			: (member.text.match(/[A-Za-z0-9]/)?.[0]?.toUpperCase() ?? "·");
+	return (
+		<i
+			className={`fixture-sheet-group-glyph${preload ? " preload" : ""}`}
+			data-group={group}
+			data-semantic-value={member.text}
+			style={
+				normalized == null
+					? undefined
+					: ({ "--fixture-value": normalized } as React.CSSProperties)
+			}
+			aria-hidden="true"
+		>
+			{semantic}
+		</i>
+	);
 }
 
 function legacySource(
@@ -306,19 +404,20 @@ function legacySource(
 export function fixtureSheetColumns(
 	showType: boolean,
 	present: FixtureStepPresenter,
+	compactMode: FixtureSheetCompactMode = "off",
 ): Column[] {
 	return [
 		fixtureIdColumn(present),
 		fixtureIconColumn(),
 		fixtureNameColumn(showType),
 		patchColumn(),
-		dimmerColumn(),
-		colorColumn(),
-		positionColumn(),
-		valueColumn("beam", "Beam"),
-		valueColumn("shapers", "Shapers"),
-		valueColumn("focus", "Focus"),
-		valueColumn("control", "Control"),
-		valueColumn("media", "Media"),
+		dimmerColumn(compactMode),
+		colorColumn(compactMode),
+		positionColumn(compactMode),
+		valueColumn("beam", "Beam", compactMode),
+		valueColumn("shapers", "Shapers", compactMode),
+		valueColumn("focus", "Focus", compactMode),
+		valueColumn("control", "Control", compactMode),
+		valueColumn("media", "Media", compactMode),
 	];
 }

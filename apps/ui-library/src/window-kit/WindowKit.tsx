@@ -532,6 +532,7 @@ export function DataTable<T>({
 	emptyRows = 0,
 	className = "",
 	virtualize = false,
+	rowHeight = 43,
 }: {
 	columns: DataTableColumn<T>[];
 	rows: T[];
@@ -549,12 +550,14 @@ export function DataTable<T>({
 	emptyRows?: number;
 	className?: string;
 	virtualize?: boolean;
+	rowHeight?: number;
 }) {
 	const tableWindow = useDataTableWindow({
 		activeIndex,
 		emptyRows,
 		rowCount: rows.length,
 		virtualize,
+		rowHeight,
 	});
 	const {
 		host,
@@ -605,7 +608,12 @@ export function DataTable<T>({
 				if (!event.currentTarget.contains(event.relatedTarget as Node | null))
 					tableFocused.current = false;
 			}}
-			style={{ "--table-columns": template } as CSSProperties}
+			style={
+				{
+					"--table-columns": template,
+					"--table-row-height": `${rowHeight}px`,
+				} as CSSProperties
+			}
 		>
 			<div className="ui-data-table-row header" role="row" aria-rowindex={1}>
 				{columns.map((column) => (
@@ -621,7 +629,7 @@ export function DataTable<T>({
 			{usesViewport && start > 0 && (
 				<div
 					className="ui-data-table-spacer"
-					style={{ height: start * 43 }}
+					style={{ height: start * rowHeight }}
 					aria-hidden="true"
 				/>
 			)}
@@ -661,7 +669,7 @@ export function DataTable<T>({
 			{usesViewport && end < total && (
 				<div
 					className="ui-data-table-spacer"
-					style={{ height: (total - end) * 43 }}
+					style={{ height: (total - end) * rowHeight }}
 					aria-hidden="true"
 				/>
 			)}
@@ -674,11 +682,13 @@ function useDataTableWindow({
 	emptyRows,
 	rowCount,
 	virtualize,
+	rowHeight,
 }: {
 	activeIndex?: number;
 	emptyRows: number;
 	rowCount: number;
 	virtualize: boolean;
+	rowHeight: number;
 }) {
 	const host = useRef<HTMLDivElement>(null);
 	const tableFocused = useRef(false);
@@ -694,7 +704,10 @@ function useDataTableWindow({
 		const measure = () => {
 			if (node.clientHeight > 40)
 				setFillRows(
-					Math.max(0, Math.floor((node.clientHeight - 40) / 43) - rowCount),
+					Math.max(
+						0,
+						Math.floor((node.clientHeight - 40) / rowHeight) - rowCount,
+					),
 				);
 		};
 		if (typeof ResizeObserver === "undefined") {
@@ -705,7 +718,7 @@ function useDataTableWindow({
 		observer.observe(node);
 		measure();
 		return () => observer.disconnect();
-	}, [rowCount]);
+	}, [rowCount, rowHeight]);
 	const total = rowCount + fillRows;
 	const usesViewport = virtualize && total > 100;
 	useLayoutEffect(() => {
@@ -716,11 +729,11 @@ function useDataTableWindow({
 		const measureViewport = () => {
 			const visibleStart = Math.max(
 				0,
-				Math.floor(Math.max(0, scroller.scrollTop - 40) / 43),
+				Math.floor(Math.max(0, scroller.scrollTop - 40) / rowHeight),
 			);
 			const visibleRows = Math.max(
 				1,
-				Math.min(64, Math.ceil(scroller.clientHeight / 43)),
+				Math.min(64, Math.ceil(scroller.clientHeight / rowHeight)),
 			);
 			const visibleEnd = Math.min(rowCount, visibleStart + visibleRows + 1);
 			setReportedViewport((current) =>
@@ -748,7 +761,7 @@ function useDataTableWindow({
 			scroller.removeEventListener("scroll", measureViewport);
 			observer?.disconnect();
 		};
-	}, [rowCount, total, usesViewport]);
+	}, [rowCount, rowHeight, total, usesViewport]);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: viewport changes mount the virtualized active row before it can be scrolled into view.
 	useLayoutEffect(() => {
 		if (!usesViewport || !tableFocused.current || activeIndex == null) return;
