@@ -6,6 +6,8 @@ use std::collections::HashMap;
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct SpatialPosition {
     pub x: f32,
+    #[serde(default)]
+    pub y: f32,
     pub z: f32,
 }
 

@@ -169,6 +169,25 @@ fn legacy_phase_spread_defaults_to_uniform_without_lane_configuration() {
 }
 
 #[test]
+fn legacy_spatial_position_without_y_defaults_to_stage_zero() {
+    let restored: SpatialPosition =
+        serde_json::from_value(serde_json::json!({"x": 1.25, "z": -3.5})).unwrap();
+
+    assert_eq!(
+        restored,
+        SpatialPosition {
+            x: 1.25,
+            y: 0.0,
+            z: -3.5,
+        }
+    );
+    assert_eq!(
+        serde_json::to_value(restored).unwrap(),
+        serde_json::json!({"x": 1.25, "y": 0.0, "z": -3.5})
+    );
+}
+
+#[test]
 fn spatial_mapping_defaults_to_inherit_and_canonical_serialization_omits_it() {
     let source = definition(lane());
     let mut absent = serde_json::to_value(&source).unwrap();
@@ -563,8 +582,22 @@ fn per_lane_phase_snapshot_captures_stage_order_and_legacy_snapshots_expand_unif
                 ordered_targets: targets.to_vec(),
             },
             stage_positions: HashMap::from([
-                (targets[0], SpatialPosition { x: 2.0, z: 0.0 }),
-                (targets[1], SpatialPosition { x: 0.0, z: 0.0 }),
+                (
+                    targets[0],
+                    SpatialPosition {
+                        x: 2.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ),
+                (
+                    targets[1],
+                    SpatialPosition {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ),
             ]),
             now_millis: 0,
             activation_policy_override: None,
@@ -745,9 +778,30 @@ fn explicit_multi_anchor_phase_and_spatial_ties_follow_the_operator_contract() {
     distribution.anchors_degrees.clear();
     distribution.ordering = PhaseOrdering::GridLinear { angle_degrees: 0.0 };
     let mut positions = HashMap::new();
-    positions.insert(targets[0], SpatialPosition { x: 0.0, z: 0.0 });
-    positions.insert(targets[1], SpatialPosition { x: 0.0, z: 2.0 });
-    positions.insert(targets[2], SpatialPosition { x: 1.0, z: 0.0 });
+    positions.insert(
+        targets[0],
+        SpatialPosition {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        },
+    );
+    positions.insert(
+        targets[1],
+        SpatialPosition {
+            x: 0.0,
+            y: 0.0,
+            z: 2.0,
+        },
+    );
+    positions.insert(
+        targets[2],
+        SpatialPosition {
+            x: 1.0,
+            y: 0.0,
+            z: 0.0,
+        },
+    );
     let phases = project_phase(&distribution, &targets[..4], &positions, 0);
     assert_eq!(phases[0].degrees, 0.0);
     assert_eq!(phases[1].degrees, 0.0, "exact spatial ties share one rank");
@@ -767,8 +821,22 @@ fn radial_in_keeps_missing_stage_positions_after_positioned_targets() {
         center_z: 0.0,
     };
     let positions = HashMap::from([
-        (targets[0], SpatialPosition { x: 1.0, z: 0.0 }),
-        (targets[1], SpatialPosition { x: 3.0, z: 0.0 }),
+        (
+            targets[0],
+            SpatialPosition {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+            },
+        ),
+        (
+            targets[1],
+            SpatialPosition {
+                x: 3.0,
+                y: 0.0,
+                z: 0.0,
+            },
+        ),
     ]);
 
     let phases = project_phase(&distribution, &targets, &positions, 0);

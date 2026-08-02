@@ -165,6 +165,7 @@ pub(super) fn decode_dynamic_stage_positions(
                 FixtureId(id),
                 light_dynamics::SpatialPosition {
                     x: position.x as f32,
+                    y: 0.0,
                     z: position.y as f32,
                 },
             );
@@ -177,6 +178,7 @@ pub(super) fn decode_dynamic_stage_positions(
                 FixtureId(id),
                 light_dynamics::SpatialPosition {
                     x: position.x as f32,
+                    y: position.y as f32,
                     z: position.z as f32,
                 },
             );
