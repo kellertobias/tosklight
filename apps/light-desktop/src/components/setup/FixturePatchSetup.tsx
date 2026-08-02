@@ -6,6 +6,7 @@ import {
 } from "./fixturePatch/controller";
 import { FixtureBrowser } from "./fixturePatch/FixtureBrowser";
 import { FixturePlacement } from "./fixturePatch/FixturePlacement";
+import { LightSourceAppearanceDialog } from "./fixturePatch/LightSourceAppearance";
 import { PatchHeader, PatchLayers } from "./fixturePatch/PatchChrome";
 import {
 	AddLayerDialog,
@@ -56,6 +57,7 @@ function FixturePatchLayout() {
 			<DeleteConfirm />
 			<MultipatchVectorDialog />
 			<MultipatchAddressDialog />
+			<LightSourceAppearanceDialog />
 			<AddLayerDialog />
 			<FixtureEditDialog />
 			<FixtureAddressDialog />

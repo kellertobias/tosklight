@@ -56,6 +56,11 @@ export type MultiPatchEdit = {
 	physicalTargets?: string[];
 } | null;
 
+export type AppearanceEditTarget = {
+	fixtureId: string;
+	multipatchInstanceId: string | null;
+} | null;
+
 export type PlacementBaseline = {
 	draft: { name: string; fixtureNumber: string; count: string; patch: string };
 	splitDrafts: Record<number, string>;
@@ -113,6 +118,8 @@ function usePatchUiState() {
 	const [pending, setPending] = useState<Partial<PatchedFixture> | null>(null);
 	const [blockedBy, setBlockedBy] = useState<PatchedFixture[]>([]);
 	const [multipatchEdit, setMultipatchEdit] = useState<MultiPatchEdit>(null);
+	const [appearanceEdit, setAppearanceEdit] =
+		useState<AppearanceEditTarget>(null);
 	const [physicalSelectionFixture, setPhysicalSelectionFixture] = useState<
 		string | null
 	>(null);
@@ -190,6 +197,8 @@ function usePatchUiState() {
 		setBlockedBy,
 		multipatchEdit,
 		setMultipatchEdit,
+		appearanceEdit,
+		setAppearanceEdit,
 		physicalSelectionFixture,
 		setPhysicalSelectionFixture,
 		physicalSelectionIds,

@@ -223,6 +223,34 @@ function policyFixture(): PatchedFixture {
 	return fixture;
 }
 
+function appearanceFixture(): PatchedFixture {
+	const fixture = policyFixture();
+	const profile = fixture.definition.profile_snapshot;
+	if (!profile) throw new Error("appearance fixture profile is missing");
+	profile.physical.light_source = "LED engine";
+	profile.physical.color_temperature_kelvin = 3_200;
+	fixture.installed_appearance = {
+		light_source: { type: "profile_default" },
+		color_temperature_kelvin: null,
+		gel: { type: "open_white" },
+		shaper_angles_degrees: [1, 2, 3, 4],
+	};
+	const copy = fixture.multipatch?.[0];
+	if (!copy) throw new Error("appearance fixture copy is missing");
+	copy.installed_appearance = {
+		light_source: { type: "led" },
+		color_temperature_kelvin: 5_600,
+		gel: {
+			type: "custom",
+			name: "Steel Blue",
+			color_srgb: "#6699CC",
+			note: "Front truss",
+		},
+		shaper_angles_degrees: [10, 20, 30, 40],
+	};
+	return fixture;
+}
+
 function openDimmerPlacement() {
 	const profile = blankFixtureProfile();
 	profile.manufacturer = "Generic";
@@ -472,6 +500,176 @@ describe("fixture output policy cells", () => {
 				},
 			),
 		);
+	});
+});
+
+describe("installed light-source appearance", () => {
+	it("shows the exact root and multi-patch source, effective CCT, and gel", () => {
+		server.patch.fixtures = [appearanceFixture()];
+		render(<FixturePatchSetup />);
+
+		const root = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+		const copy = screen.getByRole("row", {
+			name: "Multi-patch Opposite hang",
+		}) as HTMLTableRowElement;
+		expect(root.cells[8]).toHaveTextContent(
+			"Profile default · 3,200 KOpen white",
+		);
+		expect(copy.cells[8]).toHaveTextContent("LED · 5,600 KSteel Blue");
+	});
+
+	it("updates only the addressed multi-patch and preserves its selected gel", async () => {
+		server.patch.fixtures = [appearanceFixture()];
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: /Light source Opposite hang:/,
+			}),
+		);
+		const dialog = screen.getByRole("dialog", {
+			name: "Set light source Opposite hang",
+		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "LED" }));
+		fireEvent.click(screen.getByRole("option", { name: "Tungsten" }));
+		fireEvent.change(within(dialog).getByLabelText("Color temperature (K)"), {
+			target: { value: "3200" },
+		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Apply" }));
+
+		await waitFor(() =>
+			expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith(
+				"fixture-split",
+				"physical-copy",
+				{
+					type: "set_installed_appearance",
+					appearance: {
+						lightSource: { type: "tungsten" },
+						colorTemperatureKelvin: 3_200,
+						gel: {
+							type: "custom",
+							name: "Steel Blue",
+							colorSrgb: "#6699CC",
+							note: "Front truss",
+						},
+						shaperAnglesDegrees: [10, 20, 30, 40],
+					},
+				},
+			),
+		);
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "SET_PATCH_ARMED",
+			value: false,
+		});
+	});
+
+	it("requires whole in-range kelvin and addresses the primary physical instance", async () => {
+		const fixture = appearanceFixture();
+		const profile = fixture.definition.profile_snapshot;
+		if (!profile) throw new Error("appearance fixture profile is missing");
+		profile.physical.color_temperature_kelvin = null;
+		server.patch.fixtures = [fixture];
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(screen.getByRole("button", { name: /Light source 17:/ }));
+		const dialog = screen.getByRole("dialog", {
+			name: "Set light source 17",
+		});
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Profile default" }),
+		);
+		fireEvent.click(screen.getByRole("option", { name: "Discharge" }));
+		expect(
+			within(dialog).getByRole("button", { name: "Apply" }),
+		).toBeDisabled();
+		expect(within(dialog).getByRole("alert")).toHaveTextContent(
+			"requires a color temperature",
+		);
+
+		fireEvent.change(within(dialog).getByLabelText("Color temperature (K)"), {
+			target: { value: "3200.5" },
+		});
+		expect(within(dialog).getByRole("alert")).toHaveTextContent("whole number");
+		fireEvent.change(within(dialog).getByLabelText("Color temperature (K)"), {
+			target: { value: "999" },
+		});
+		expect(within(dialog).getByRole("alert")).toHaveTextContent(
+			"1,000 K to 25,000 K",
+		);
+		fireEvent.change(within(dialog).getByLabelText("Color temperature (K)"), {
+			target: { value: "4200" },
+		});
+		expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+		expect(within(dialog).getByRole("button", { name: "Apply" })).toBeEnabled();
+		fireEvent.click(within(dialog).getByRole("button", { name: "Apply" }));
+		await waitFor(() =>
+			expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith(
+				"fixture-split",
+				null,
+				{
+					type: "set_installed_appearance",
+					appearance: {
+						lightSource: { type: "discharge" },
+						colorTemperatureKelvin: 4_200,
+						gel: { type: "open_white" },
+						shaperAnglesDegrees: [1, 2, 3, 4],
+					},
+				},
+			),
+		);
+	});
+
+	it("keeps Apply disabled for a no-op, discards Close changes, and marks emitterless fixtures unavailable", () => {
+		const fixture = appearanceFixture();
+		server.patch.fixtures = [fixture];
+		state.patchSetArmed = true;
+		const { rerender } = render(<FixturePatchSetup />);
+
+		fireEvent.click(screen.getByRole("button", { name: /Light source 17:/ }));
+		let dialog = screen.getByRole("dialog", { name: "Set light source 17" });
+		expect(
+			within(dialog).getByRole("button", { name: "Apply" }),
+		).toBeDisabled();
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Profile default" }),
+		);
+		fireEvent.click(screen.getByRole("option", { name: "Halogen" }));
+		expect(within(dialog).getByRole("button", { name: "Apply" })).toBeEnabled();
+		fireEvent.click(
+			within(dialog).getByRole("button", {
+				name: "Close light source editor",
+			}),
+		);
+		expect(
+			screen.queryByRole("dialog", { name: "Set light source 17" }),
+		).not.toBeInTheDocument();
+		expect(patchFeature.updateFixtureIntent).not.toHaveBeenCalled();
+
+		state.patchSetArmed = true;
+		fireEvent.click(screen.getByRole("button", { name: /Light source 17:/ }));
+		dialog = screen.getByRole("dialog", { name: "Set light source 17" });
+		expect(
+			within(dialog).getByRole("button", { name: "Profile default" }),
+		).toBeInTheDocument();
+		fireEvent.click(
+			within(dialog).getByRole("button", {
+				name: "Close light source editor",
+			}),
+		);
+
+		const profile = fixture.definition.profile_snapshot;
+		if (!profile) throw new Error("appearance fixture profile is missing");
+		profile.modes[0].geometry.emitters = [];
+		rerender(<FixturePatchSetup />);
+		const row = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+		expect(row.cells[8]).toHaveTextContent("UnavailableNo geometry emitter");
+		expect(within(row.cells[8]).queryByRole("button")).not.toBeInTheDocument();
 	});
 });
 

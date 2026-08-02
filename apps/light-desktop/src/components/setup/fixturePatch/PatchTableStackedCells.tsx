@@ -210,30 +210,3 @@ export function MibCell({
 		</td>
 	);
 }
-
-function kelvin(value: number | null | undefined) {
-	return value == null
-		? null
-		: `${Math.round(value).toLocaleString("en-US")} K`;
-}
-
-export function LightSourceCell({
-	fixture,
-	shared = false,
-}: {
-	fixture: PatchedFixture;
-	shared?: boolean;
-}) {
-	const temperature = kelvin(
-		fixture.definition.profile_snapshot?.physical.color_temperature_kelvin,
-	);
-	const source = `Profile default${temperature ? ` · ${temperature}` : ""}`;
-	return (
-		<td className={`patch-stacked-cell${shared ? " shared" : ""}`}>
-			<span className="patch-stacked-line" title={source}>
-				{source}
-			</span>
-			<span className="patch-stacked-line patch-secondary">Open white</span>
-		</td>
-	);
-}

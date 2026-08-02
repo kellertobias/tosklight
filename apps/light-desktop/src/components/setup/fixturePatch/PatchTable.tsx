@@ -11,6 +11,7 @@ import {
 import { selectPatchFixture } from "./fixtureActions";
 import { FixtureTypeIcon, MultiPatchBranch } from "./fixtureDisplay";
 import { fixtureDisplayId } from "./fixtureIds";
+import { LightSourceCell } from "./LightSourceAppearance";
 import {
 	beginMultipatchEdit,
 	beginMultipatchVectorEditFromContextMenu,
@@ -19,7 +20,6 @@ import {
 } from "./multipatchActions";
 import {
 	FixtureModeCell,
-	LightSourceCell,
 	MastersCell,
 	MibCell,
 	PanTiltCell,
@@ -326,7 +326,7 @@ function MultiPatchRow({
 			<MastersCell fixture={fixture} shared />
 			<PanTiltCell fixture={fixture} instance={instance} />
 			<MibCell fixture={fixture} shared />
-			<LightSourceCell fixture={fixture} />
+			<LightSourceCell fixture={fixture} instance={instance} />
 			{(["x", "y", "z"] as const).map((axis) => (
 				<td className="patch-secondary" key={`location-${axis}`}>
 					<Button
