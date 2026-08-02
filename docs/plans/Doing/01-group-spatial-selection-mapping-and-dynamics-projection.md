@@ -147,6 +147,12 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   authoritative `PlaybackTarget::Group` assignment deterministically, and normalizes the retained
   legacy `SET GROUP … AT …` input alias into the typed, identity/revision-guarded assignment command.
   Focused alias, snapshot, and unassigned/stale-pointer tests passed, as did the headless check.
+- Commit `16e614fc` replaces the obsolete Group context/properties surfaces with one X-only
+  **General**, **Projection**, **Phaser** modal; removes Group-owned Master, membership, and Undo
+  controls; and gives plain, double-quick, SET, right-click, and touch-hold gestures the specified
+  live, frozen, or settings behavior. Mapping ownership and shape controls are present but visibly
+  disabled until the revisioned server mapping action is connected. Desktop typecheck, focused
+  Biome, and 43 tests across five Group UI/selection files passed.
 
 ## Remaining work
 
