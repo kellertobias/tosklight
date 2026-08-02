@@ -47,13 +47,28 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     ui: async ({ api, bench, desk, page }, state) => {
       await desk.open(bench.baseUrl);
       await openPatch(page);
-      const enabled = page.getByLabel("Move in Black 101");
-      const disabled = page.getByLabel("Move in Black 102");
-      const enabledDelay = page.getByLabel("MIB Delay 101");
-      await expect(enabled).toHaveText("On");
+      await expect(page.locator(".patch-table thead th")).toHaveText([
+        "Type",
+        "Fixture ID",
+        "Name",
+        "Fixture / mode",
+        "Patch",
+        "Masters",
+        "Pan / Tilt",
+        "MIB",
+        "Light source",
+        "Location X",
+        "Location Y",
+        "Location Z",
+        "Rotation X",
+        "Rotation Y",
+        "Rotation Z",
+        "Layer",
+      ]);
+      const enabled = page.getByLabel("MIB 101: 1 s");
+      const disabled = page.getByLabel("MIB 102: Off");
+      await expect(enabled).toHaveText("1 s");
       await expect(disabled).toHaveText("Off");
-      await expect(enabledDelay).toHaveText("1 s");
-      await expect(page.getByLabel("MIB Delay 102")).toHaveText("1 s");
 
       // A normal table-cell click selects the fixture, but it must never write
       // the show. MIB uses the same SET-gated editing flow as the other cells.
@@ -64,40 +79,29 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await enabled.click();
       let editor = page.locator(".patch-edit-modal");
       await expect(editor.getByRole("heading", { name: "Set fixture MIB" })).toBeVisible();
-      await editor.getByLabel("Move in Black value").selectOption("false");
+      const mibValue = editor.getByLabel("MIB value: Off or non-negative seconds");
+      await mibValue.fill("Off");
       await editor.getByRole("button", { name: "Set", exact: true }).click();
       await expect.poll(async () => (await object<any>(api, "patched_fixture", state.enabledFixture)).body.move_in_black_enabled).toBe(false);
-      await expect(enabled).toHaveText("Off");
+      await expect(page.getByLabel("MIB 101: Off")).toHaveText("Off");
 
       await page.getByRole("button", { name: "SET", exact: true }).click();
-      await enabled.click();
+      await page.getByLabel("MIB 101: Off").click();
       editor = page.locator(".patch-edit-modal");
-      await editor.getByLabel("Move in Black value").selectOption("true");
-      await editor.getByRole("button", { name: "Set", exact: true }).click();
-      await expect.poll(async () => (await object<any>(api, "patched_fixture", state.enabledFixture)).body.move_in_black_enabled).toBe(true);
-
-      await enabledDelay.click();
-      await expect(page.locator(".patch-edit-modal")).toHaveCount(0);
-      await expect.poll(async () => (await object<any>(api, "patched_fixture", state.enabledFixture)).body.move_in_black_delay_millis).toBe(1_000);
-      await page.getByRole("button", { name: "SET", exact: true }).click();
-      await enabledDelay.click();
-      editor = page.locator(".patch-edit-modal");
-      await expect(editor.getByRole("heading", { name: "Set fixture MIB Delay" })).toBeVisible();
-      await editor.getByLabel("MIB Delay (s)").fill("1.2");
+      await editor.getByLabel("MIB value: Off or non-negative seconds").fill("1.2");
       await editor.getByRole("button", { name: "Set", exact: true }).click();
       await expect.poll(async () => (await object<any>(api, "patched_fixture", state.enabledFixture)).body.move_in_black_delay_millis).toBe(1_200);
       await page.getByRole("button", { name: "SET", exact: true }).click();
-      await enabledDelay.click();
+      await page.getByLabel("MIB 101: 1.2 s").click();
       editor = page.locator(".patch-edit-modal");
-      await editor.getByLabel("MIB Delay (s)").fill("1");
+      await editor.getByLabel("MIB value: Off or non-negative seconds").fill("1");
       await editor.getByRole("button", { name: "Set", exact: true }).click();
       await expect.poll(async () => (await object<any>(api, "patched_fixture", state.enabledFixture)).body.move_in_black_delay_millis).toBe(1_000);
 
       await page.reload();
       await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
       await openPatch(page);
-      await expect(page.getByLabel("Move in Black 101")).toHaveText("On");
-      await expect(page.getByLabel("MIB Delay 101")).toHaveText("1 s");
+      await expect(page.getByLabel("MIB 101: 1 s")).toHaveText("1 s");
       await openPlaybackMode(page);
       const playback = page.locator('.playback-fader-bank article[data-playback-slot="1"]');
       await expect(playback).toContainText("MIB");
@@ -409,10 +413,10 @@ function mibFor(diagnostics: any[], fixtureId: string, cueListId: string): any {
 }
 
 async function openPatch(page: any): Promise<void> {
-  if (await page.getByLabel("Move in Black 101").count()) return;
+  if (await page.getByLabel(/^MIB 101:/).count()) return;
   await page.getByRole("button", { name: /Open show menu/ }).click();
   await page.getByRole("button", { name: "Show Patch", exact: true }).click();
-  await expect(page.getByLabel("Move in Black 101")).toBeVisible();
+  await expect(page.getByLabel(/^MIB 101:/)).toBeVisible();
 }
 
 async function openPlaybackMode(page: any): Promise<void> {

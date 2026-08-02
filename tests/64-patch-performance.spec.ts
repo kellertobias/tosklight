@@ -9,17 +9,17 @@ test("PATCH-PERF-001 @ui › warmed Patch actions retain informational action-to
 	await desk.open(bench.baseUrl);
 	await page.getByRole("button", { name: /Open show menu/ }).click();
 	await page.getByRole("button", { name: "Show Patch", exact: true }).click();
-	const mib = page.getByRole("button", {
-		name: "Move in Black 1",
-		exact: true,
-	});
+	const mib = page.getByRole("button", { name: /^MIB 1:/ });
 	await expect(mib).toBeVisible();
 
 	const patchRequests: string[] = [];
 	const unrelatedReads: string[] = [];
 	page.on("request", (request) => {
 		const url = new URL(request.url());
-		if (request.method() === "POST" && url.pathname === "/api/v2/patch/fixtures") {
+		if (
+			request.method() === "POST" &&
+			/^\/api\/v2\/patch\/fixtures\/[^/]+\/update$/.test(url.pathname)
+		) {
 			patchRequests.push(url.pathname);
 		} else if (
 			request.method() === "GET" &&
@@ -41,16 +41,15 @@ test("PATCH-PERF-001 @ui › warmed Patch actions retain informational action-to
 		await mib.click();
 		const editor = page.locator(".patch-edit-modal");
 		await editor
-			.getByLabel("Move in Black value")
-			.selectOption(enabled ? "true" : "false");
+			.getByLabel("MIB value: Off or non-negative seconds")
+			.fill(enabled ? "0" : "Off");
 		await editor.getByRole("button", { name: "Set", exact: true }).click();
-		await expect(mib).toHaveText(enabled ? "On" : "Off");
+		await expect(mib).toHaveText(enabled ? "0 s" : "Off");
 		await expect
 			.poll(async () => {
-				const diagnostics =
-					await page.evaluate(() =>
-						window.__TOSKLIGHT_FRONTEND_PERFORMANCE__?.snapshot(),
-					);
+				const diagnostics = await page.evaluate(() =>
+					window.__TOSKLIGHT_FRONTEND_PERFORMANCE__?.snapshot(),
+				);
 				return diagnostics?.patchActionToVisible.samples ?? 0;
 			})
 			.toBe(index + 1);
