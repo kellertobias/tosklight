@@ -200,6 +200,12 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   authoritative persisted value rather than clicking the retired Save footer. The Playwright test
   catalog loaded the affected Group scenarios, the semantic-documentation suite passed all eight
   tests, and the focused diff check was clean.
+- Commit `b0a1b74e` removes retired Group master/pointer fields from the desktop model and canonical
+  fixtures, strips even malformed legacy values tolerantly while preserving unknown fields, keeps
+  authoritative levels only in Group runtime projections, and makes Fixture Sheet read that runtime
+  value. Recovery tests now corrupt an authoritative field rather than relying on a retired field to
+  fail. Eight focused desktop files passed all 68 tests, the root selection bench passed all 10
+  tests, modified Playwright scenarios registered successfully, and the staged diff check was clean.
 
 ## Remaining work
 
@@ -213,9 +219,10 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   multiple legacy lane mappings without changing output; uniform and lane-consistent definitions now
   write through a local mapping while retaining their legacy ordering as the runtime compatibility
   marker.
-- Finish the desktop compatibility audit for retired Group master/pointer fields. Runtime readers,
-  typed assignment, initial-level migration, canonical field retirement, generated contracts,
-  recovery, and portable fixture generation are integrated.
+- Transfer the help-gallery fixture's non-default legacy levels to its real physical and virtual
+  Playback Group targets once `initial_master` preservation lands. Every other desktop runtime
+  reader, canonical Group writer, migration/recovery path, and portable fixture generator is clean;
+  remaining retired-field occurrences are explicit tolerant migration tests or stripping code.
 - Extend typed SET assignment to virtual Playbacks; the current connected path intentionally covers
   physical page/slot Playbacks only because the server action has no virtual address variant yet.
 
