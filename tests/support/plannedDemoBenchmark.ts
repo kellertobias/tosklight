@@ -99,3 +99,40 @@ export async function startPlannedDemoBenchmarkLook(
 		{ showId, deskId: api.session.desk.id },
 	);
 }
+
+export async function stopPlannedDemoBenchmarkLook(
+	api: ApiDriver,
+	showId: string,
+) {
+	if (!api.session)
+		throw new Error("Plan 76 benchmark deactivation requires an API session");
+	for (const assignment of PLANNED_DEMO_BENCHMARK_ASSIGNMENTS) {
+		if (assignment.kind === "physical") {
+			await api.playbackNumberAction(assignment.playbackNumber, "off");
+			continue;
+		}
+		await api.request(
+			"POST",
+			"/api/v2/playback-actions",
+			{
+				request_id: crypto.randomUUID(),
+				address: {
+					kind: "virtual",
+					page: 1,
+					playback_number: assignment.playbackNumber,
+				},
+				action: { type: "off", pressed: true },
+				surface: "virtual",
+			},
+			true,
+			undefined,
+			{ showId, deskId: api.session.desk.id },
+		);
+	}
+	await api.request(
+		"POST",
+		"/api/v2/test/clock/advance",
+		{ millis: 20 },
+		false,
+	);
+}

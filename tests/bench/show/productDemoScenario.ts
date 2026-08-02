@@ -13,6 +13,7 @@ import {
 import {
 	PLANNED_DEMO_BENCHMARK_ASSIGNMENTS,
 	startPlannedDemoBenchmarkLook,
+	stopPlannedDemoBenchmarkLook,
 } from "../../support/plannedDemoBenchmark";
 import {
 	installPlannedDemoDynamicPlaybacks,
@@ -36,6 +37,7 @@ import {
 	PLANNED_DEMO_TOTAL_PHYSICAL_INSTANCES,
 } from "../../support/plannedDemoScenery";
 import { PLANNED_DEMO_VIRTUAL_PLAYBACK_EXCLUSION_ZONES } from "../../support/plannedDemoVirtualPlaybackZones";
+import { replaceActiveProgrammingSelection } from "../command-selection/programmingSelection";
 import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
 import { expect } from "../core/fixtures";
@@ -906,6 +908,15 @@ export class BrowserProductDemo {
 					contentType: "image/png",
 				});
 				recordingEndedAtMillis = Date.now() - recordingStartedAtMillis;
+			} else {
+				const finalStageScreenshot = testInfo.outputPath(
+					"product-demo-final-stage.png",
+				);
+				await page.screenshot({ path: finalStageScreenshot });
+				await testInfo.attach("product-demo-final-stage", {
+					path: finalStageScreenshot,
+					contentType: "image/png",
+				});
 			}
 			await expectLiveOutput(api);
 			if (!performanceBaseline) {
@@ -1685,8 +1696,8 @@ async function verifyDemoFrame(demo: Locator, app: Locator, stage: Locator) {
 	await stage.locator("canvas").evaluate((canvas) => {
 		canvas.dataset.recordingCanvas = "stable";
 	});
-	await expect(stage).toHaveAttribute("data-camera-position", "0,1.625,8");
-	await expect(stage).toHaveAttribute("data-camera-target", "0,2.6,-4");
+	await expect(stage).toHaveAttribute("data-camera-position", "10,8,11");
+	await expect(stage).toHaveAttribute("data-camera-target", "0,1.8,-4");
 	await expect(stage).toHaveAttribute("data-environment-brightness", "1");
 	await expect(stage).toHaveAttribute("data-floor-grid", "off");
 	await expect(stage).toHaveAttribute("data-beam-guides", "off");
@@ -2707,16 +2718,34 @@ async function demonstrateBuskingAndPreload(
 	await desk.setDemoAction(
 		"At bar 16, commit the prepared look with [PRELOAD GO] and the two-second Programmer Fade.",
 	);
-	await desk.click(
-		keypad.getByRole("button", { name: "PRELOAD GO", exact: true }),
-	);
-	for (let step = 0; step < 8; step++) {
-		const fadeStepMillis = PRODUCT_DEMO_SCRIPT.pacing.programmerFadeMillis / 8;
-		await bench.tick(fadeStepMillis);
-		await demoPause(
-			demo.page(),
-			(fadeStepMillis / 1_000) * PRODUCT_DEMO_SCRIPT.fps,
+	for (let attempt = 0; attempt < 3; attempt++) {
+		await desk.click(
+			keypad.getByRole("button", { name: "PRELOAD GO", exact: true }),
 		);
+		for (let step = 0; step < 8; step++) {
+			const fadeStepMillis =
+				PRODUCT_DEMO_SCRIPT.pacing.programmerFadeMillis / 8;
+			await bench.tick(fadeStepMillis);
+			await demoPause(
+				demo.page(),
+				(fadeStepMillis / 1_000) * PRODUCT_DEMO_SCRIPT.fps,
+			);
+		}
+		const state = await preloadState(api);
+		if (
+			!state.capturesValues &&
+			state.valueCount === 0 &&
+			state.playbackCount === 0
+		)
+			break;
+		if (
+			!state.capturesValues ||
+			state.valueCount === 0 ||
+			state.playbackCount === 0
+		)
+			throw new Error(
+				`Product demo PRELOAD GO reached an ambiguous partial commit: ${JSON.stringify(state)}`,
+			);
 	}
 	await expect
 		.poll(async () => preloadState(api))
@@ -2725,6 +2754,78 @@ async function demonstrateBuskingAndPreload(
 			valueCount: 0,
 			playbackCount: 0,
 		});
+	await desk.setDemoAction(
+		"Resolve the concluding Stage proof to representative blue Wash and yellow Beam fixtures at controlled intensity.",
+	);
+	await stopPlannedDemoBenchmarkLook(api, showId);
+	if (
+		await keypad
+			.locator('[data-keypad-key="HIGH"]')
+			.evaluate((element) => element.classList.contains("highlight-armed"))
+	)
+		await desk.click(keypad.locator('[data-keypad-key="HIGH"]'));
+	await replaceActiveProgrammingSelection(api, {
+		surface: "api",
+		fixtures: [],
+	});
+	await expect.poll(async () => (await programmer(api)).selected).toEqual([]);
+	const visibleWashFixtures = lastFixtureId(preparedLook.washFixtureIds);
+	const visibleBeamFixtures = endpointFixtureIds(preparedLook.beamFixtureIds);
+	const visibleFinalFixtures = new Set([
+		visibleWashFixtures,
+		...visibleBeamFixtures,
+	]);
+	const beforeFinalIntensity = await api.request<any>(
+		"GET",
+		"/api/v2/output/visualization",
+	);
+	const finalIntensityOwners = [
+		...new Set([
+			...beforeFinalIntensity.profile_output_values.flatMap((entry: any) =>
+				entry.attribute === "intensity" ? [entry.fixture_id] : [],
+			),
+			...visibleFinalFixtures,
+		]),
+	];
+	const finalIntensityValues = Object.fromEntries(
+		finalIntensityOwners.map((fixtureId) => [
+			`${fixtureId}:intensity`,
+			visibleFinalFixtures.has(fixtureId) ? 0.02 : 0,
+		]),
+	);
+	await setProgrammerFixtureValues(api, finalIntensityValues);
+	await expect
+		.poll(async () =>
+			valuesMatch(
+				await visualizationAttributeLook(
+					api,
+					finalIntensityOwners,
+					new Set(["intensity"]),
+					false,
+				),
+				finalIntensityValues,
+			),
+		)
+		.toBe(true);
+	await expect
+		.poll(async () => {
+			const snapshot = await api.request<any>(
+				"GET",
+				"/api/v2/output/visualization",
+			);
+			return [
+				...new Set(
+					snapshot.profile_output_values.flatMap((entry: any) =>
+						entry.attribute === "intensity" &&
+						entry.value.kind === "normalized" &&
+						entry.value.value > 0.001
+							? [entry.fixture_id]
+							: [],
+					),
+				),
+			].sort();
+		})
+		.toEqual([...visibleFinalFixtures].sort());
 	await expect
 		.poll(async () =>
 			visualizationColorLook(api, preparedLook.fixtureIds, false),
@@ -2743,7 +2844,10 @@ async function demonstrateBuskingAndPreload(
 			),
 		)
 		.toBe(true);
-	await expectProfileColorSeparation(api, preparedLook);
+	await expectProfileColorSeparation(api, {
+		washFixtureIds: [visibleWashFixtures],
+		beamFixtureIds: visibleBeamFixtures,
+	});
 	await desk.setDemoAction(
 		"Open the Programming desktop, switch its Stage pane to 3D, and hold the non-uniform blue-and-yellow moving-light look.",
 	);
@@ -2756,6 +2860,17 @@ async function demonstrateBuskingAndPreload(
 	);
 	await expect(finalStage.locator(".stage-3d-canvas")).toBeVisible();
 	await demoPause(demo.page(), PRODUCT_DEMO_SCRIPT.pacing.finalLookHoldFrames);
+}
+
+function endpointFixtureIds(fixtureIds: string[]) {
+	if (fixtureIds.length <= 2) return fixtureIds;
+	return [fixtureIds[0], fixtureIds[fixtureIds.length - 1]];
+}
+
+function lastFixtureId(fixtureIds: string[]) {
+	const fixtureId = fixtureIds.at(-1);
+	if (!fixtureId) throw new Error("The product demo look requires a fixture");
+	return fixtureId;
 }
 
 async function expectedPreloadColorLook(api: ApiDriver, showId: string) {
@@ -2824,6 +2939,50 @@ async function setPreloadFixtureValues(
 			request: {
 				request_id: requestId,
 				expected_revision: preload.projection.revision,
+				expected_capture_mode_revision: capture.projection.revision,
+				action: {
+					type: "batch",
+					mutations: Object.entries(values).map(([key, value]) => {
+						const separator = key.indexOf(":");
+						return {
+							type: "set_fixture" as const,
+							fixture_id: key.slice(0, separator),
+							attribute: key.slice(separator + 1),
+							value: { kind: "normalized" as const, value },
+							timing: { fade: false },
+						};
+					}),
+				},
+			},
+		},
+		requestId,
+	);
+}
+
+async function setProgrammerFixtureValues(
+	api: ApiDriver,
+	values: Record<string, number>,
+) {
+	const userId = api.session?.user.id;
+	if (!userId)
+		throw new Error("The product demo requires an authenticated user");
+	const [capture, programmerValues] = await Promise.all([
+		api.request<any>(
+			"GET",
+			`/api/v2/users/${userId}/programmer-capture-mode/snapshot`,
+		),
+		api.request<any>(
+			"GET",
+			`/api/v2/users/${userId}/programmer-values/snapshot`,
+		),
+	]);
+	const requestId = crypto.randomUUID();
+	await api.liveAction(
+		{
+			type: "programming_values",
+			request: {
+				request_id: requestId,
+				expected_revision: programmerValues.projection.revision,
 				expected_capture_mode_revision: capture.projection.revision,
 				action: {
 					type: "batch",
@@ -3131,21 +3290,29 @@ async function openDesktop(desk: DeskDriver, app: Locator, name: string) {
 
 async function ensureStagePane3d(desk: DeskDriver, app: Locator) {
 	const stage = app.locator(".stage-window");
-	if (!(await stage.locator(".stage-3d-canvas").count())) {
-		const pane = stage.locator(
-			"xpath=ancestor::*[contains(@class,'desk-pane')][1]",
-		);
-		await desk.click(
-			pane.getByRole("button", { name: "Settings", exact: true }),
-		);
-		const settings = app.page().getByRole("dialog", { name: "Pane Settings" });
-		await desk.click(settings.getByRole("tab", { name: "Stage", exact: true }));
+	const canvas = stage.locator(".stage-3d-canvas");
+	const pane = stage.locator(
+		"xpath=ancestor::*[contains(@class,'desk-pane')][1]",
+	);
+	await desk.click(pane.getByRole("button", { name: "Settings", exact: true }));
+	const settings = app.page().getByRole("dialog", { name: "Pane Settings" });
+	await desk.click(settings.getByRole("tab", { name: "Stage", exact: true }));
+	if (!(await canvas.count()))
 		await desk.click(settings.getByRole("radio", { name: "3D", exact: true }));
+	if ((await canvas.getAttribute("data-render-quality")) !== "lines_and_beams")
 		await desk.click(
-			settings.getByRole("button", { name: "Close settings", exact: true }),
+			settings
+				.getByRole("radiogroup", { name: "Render quality", exact: true })
+				.getByRole("radio", { name: "Lines + beams", exact: true }),
 		);
-	}
-	await expect(stage.locator(".stage-3d-canvas")).toBeVisible();
+	await desk.click(settings.getByRole("button", { name: "Reset 3D view" }));
+	await desk.click(
+		settings.getByRole("button", { name: "Close settings", exact: true }),
+	);
+	await expect(canvas).toBeVisible();
+	await expect(canvas).toHaveAttribute("data-camera-position", "10,8,11");
+	await expect(canvas).toHaveAttribute("data-camera-target", "0,1.8,-4");
+	await expect(canvas).toHaveAttribute("data-render-quality", "lines_and_beams");
 	return stage;
 }
 
