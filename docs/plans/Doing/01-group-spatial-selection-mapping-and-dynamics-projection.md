@@ -94,15 +94,35 @@ in `Next`; the retired refactoring `doing` folder remains outside this queue.
   and the legacy headless record-command path without authoring new legacy derivation authority.
   Thirteen Group-management tests, the focused Update test, and the real headless record-command
   test passed; package formatting and diff checks passed.
+- Commit `041bae00` gives standalone canonical `group_id` references stable occurrence-aware
+  lossless-array identity, so unknown fields follow duplicate references through reordering and are
+  removed with deleted references. All 72 `light-show` tests, warning-clean strict Clippy, package
+  formatting, and the focused diff check passed.
+- Commit `77ed974c` migrates legacy explicit and derived Group sources at startup while preserving
+  frozen membership, empty Groups, retired grid data, unknown fields, canonical precedence, object
+  revisions, and byte-stable idempotence. The seven object-migration tests and focused migration
+  proof passed. Commit `feea8e9f` contains only the subsequent guard simplification.
+- Commit `89231433` preserves full Stage X/Y/Z coordinates for fixture and logical-head spatial
+  identities while legacy 2D layouts remain X/Z with Y defaulted to zero. All 44 dynamics tests,
+  the 15 show-compiler tests, and the isolated Stage-position test passed.
+- Commit `9f1073e6` makes Programmer and Cue spreads consume authoritative spatial ranks, preserves
+  exact-rank peers in parallel, and invalidates Playback compilation when Stage positions change.
+  All 96 engine tests and 11 focused application value-action tests passed, and the headless crate
+  checked successfully. Strict Clippy passed with only the repository's existing unrelated lint
+  classes explicitly allowed; an unqualified strict run still reports those pre-existing findings.
 
 ## Remaining work
 
 - Complete every unchecked progress and acceptance item, then add a truthful `## Result` before
   moving this plan to `docs/plans/Done`.
-- Wire the canonical Group source into recording, mutation, validation, selective import, portable
-  lossless persistence, and migration before treating the domain representation as authoritative.
-  Recording, mutation, validation, and selective import are now integrated; startup migration,
-  structural lossless-array identity, legacy field retirement, and recovery/idempotence proof remain.
+- Retire the legacy Group source fields from live authority only after all remaining readers and
+  recovery paths have been audited. Recording, mutation, validation, selective import, startup
+  migration, structural lossless identity, and idempotence proof are integrated; tolerant legacy
+  reads remain deliberately available until the final compatibility pass.
+- Feed the committed Group ranks through Dynamic inheritance/override evaluation and migrate every
+  persisted legacy `PhaseOrdering` surface without changing existing output.
+- Move Group Master level authority out of `GroupDefinition.master`/`playback_fader` and into the
+  shared Playback-target runtime, with deterministic legacy reconciliation and migration proof.
 - Connect the typed SET state machine to the command line, Group tiles, Playback controls, and
   revision-guarded application commands; its committed pure model is not runtime proof.
 
