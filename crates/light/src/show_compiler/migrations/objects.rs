@@ -4,7 +4,7 @@ use light_output::OutputRoute;
 use light_playback::{CueList, PlaybackDefinition};
 use light_programmer::{GroupDefinition, Preset};
 use light_show::{PortableShowCandidate, PortableShowCandidateObject};
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 
 const LEGACY_SPEED_GROUPS_BPM: [f64; 5] = [120.0, 90.0, 60.0, 30.0, 15.0];
 
@@ -244,6 +244,10 @@ fn migrate_group(object: PortableShowCandidateObject<'_>) -> Result<Value, Actio
     if let Some(id) = canonical.get("id") {
         body.insert("id".into(), id.clone());
     }
+    if !body.get("source").is_some_and(|source| !source.is_null()) {
+        let source = legacy_group_source(body);
+        body.insert("source".into(), source);
+    }
     // Persist the schema's explicit defaults for legacy Groups that predate a field, matching the
     // playback and route migrations. Only absent keys are filled, so the first load after an upgrade
     // rewrites the object once and every later load leaves it byte-identical, while existing values
@@ -265,6 +269,22 @@ fn migrate_group(object: PortableShowCandidateObject<'_>) -> Result<Value, Actio
         }
     }
     Ok(migrated)
+}
+
+fn legacy_group_source(body: &Map<String, Value>) -> Value {
+    if let Some(derived) = body.get("derived_from").and_then(Value::as_object) {
+        return json!({
+            "type": "references",
+            "references": [{
+                "group_id": derived.get("source_group_id").cloned().unwrap_or(Value::Null),
+                "rule": derived.get("rule").cloned().unwrap_or(Value::Null),
+            }]
+        });
+    }
+    json!({
+        "type": "explicit",
+        "fixture_ids": body.get("fixtures").cloned().unwrap_or_else(|| json!([])),
+    })
 }
 
 fn migrate_preset(object: PortableShowCandidateObject<'_>) -> Result<Value, ActionError> {

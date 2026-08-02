@@ -223,6 +223,157 @@ fn defaults_are_raw_preserving_side_effect_free_and_compile_equivalent() {
 }
 
 #[test]
+fn group_sources_backfill_losslessly_once_and_canonical_source_wins() {
+    let first = "00000000-0000-0000-0000-000000000101";
+    let second = "00000000-0000-0000-0000-000000000102";
+    let explicit = json!({
+        "name": "Explicit",
+        "fixtures": [second, first],
+        "future_group": {"kept": true}
+    });
+    let empty = json!({"name": "Empty", "fixtures": []});
+    let derived = json!({
+        "name": "Derived",
+        "fixtures": [first],
+        "derived_from": {
+            "source_group_id": "base",
+            "rule": {"type": "every_nth", "n": 3, "offset": 1, "future_rule": true},
+            "future_derived": [3, 2, 1]
+        }
+    });
+    let frozen = json!({
+        "name": "Frozen",
+        "fixtures": [first, second],
+        "frozen_from": {
+            "source_group_id": "base",
+            "source_revision": 9,
+            "captured_at": "2026-08-02T00:00:00Z",
+            "future_frozen": {"kept": true}
+        }
+    });
+    let gridded = json!({
+        "name": "Gridded",
+        "fixtures": [second],
+        "grid": {
+            "method": "rows_first",
+            "columns": 2,
+            "future_grid": {"kept": true}
+        }
+    });
+    let canonical = json!({
+        "name": "Canonical",
+        "fixtures": [first],
+        "derived_from": {
+            "source_group_id": "legacy-base",
+            "rule": {"type": "all"}
+        },
+        "source": {
+            "type": "explicit",
+            "fixture_ids": [],
+            "future_source": {"kept": true}
+        }
+    });
+    let originals = vec![
+        ("group", "1", explicit),
+        ("group", "2", empty),
+        ("group", "3", derived),
+        ("group", "4", frozen),
+        ("group", "5", gridded),
+        ("group", "6", canonical.clone()),
+    ];
+    let (store, document) = document_with_objects(&originals);
+    let mut transaction = document.transaction();
+
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+
+    let candidate = document.candidate(&transaction).unwrap();
+    assert_eq!(
+        candidate.object("group", "1").unwrap().body()["source"],
+        json!({"type": "explicit", "fixture_ids": [second, first]})
+    );
+    assert_eq!(
+        candidate.object("group", "1").unwrap().body()["future_group"],
+        json!({"kept": true})
+    );
+    assert_eq!(
+        candidate.object("group", "2").unwrap().body()["source"],
+        json!({"type": "explicit", "fixture_ids": []})
+    );
+    let migrated_derived = candidate.object("group", "3").unwrap().body();
+    assert_eq!(
+        migrated_derived["source"],
+        json!({
+            "type": "references",
+            "references": [{
+                "group_id": "base",
+                "rule": {"type": "every_nth", "n": 3, "offset": 1, "future_rule": true}
+            }]
+        })
+    );
+    assert_eq!(
+        migrated_derived["derived_from"]["future_derived"],
+        json!([3, 2, 1])
+    );
+    let migrated_frozen = candidate.object("group", "4").unwrap().body();
+    assert_eq!(
+        migrated_frozen["source"],
+        json!({"type": "explicit", "fixture_ids": [first, second]})
+    );
+    assert_eq!(
+        migrated_frozen["frozen_from"]["future_frozen"],
+        json!({"kept": true})
+    );
+    let migrated_gridded = candidate.object("group", "5").unwrap().body();
+    assert_eq!(
+        migrated_gridded["source"],
+        json!({"type": "explicit", "fixture_ids": [second]})
+    );
+    assert_eq!(migrated_gridded["grid"], originals[4].2["grid"]);
+    let migrated_canonical = candidate.object("group", "6").unwrap().body();
+    assert_eq!(migrated_canonical["source"], canonical["source"]);
+    assert_eq!(migrated_canonical["fixtures"], canonical["fixtures"]);
+    assert_eq!(
+        migrated_canonical["derived_from"],
+        canonical["derived_from"]
+    );
+
+    let first_commit = store.apply_portable_transaction(transaction).unwrap();
+    assert_eq!(first_commit.written_objects().len(), originals.len());
+    let migrated_document = store.portable_document().unwrap();
+    let show_revision = migrated_document.revision();
+    let object_revisions = (1..=6)
+        .map(|id| {
+            migrated_document
+                .object("group", &id.to_string())
+                .unwrap()
+                .revision()
+        })
+        .collect::<Vec<_>>();
+    let mut second_pass = migrated_document.transaction();
+    stage_candidate_migrations(&migrated_document, &mut second_pass).unwrap();
+    assert!(
+        second_pass.is_empty(),
+        "Group source migration must be idempotent"
+    );
+    let second_commit = store.apply_portable_transaction(second_pass).unwrap();
+    assert_eq!(second_commit.revision(), show_revision);
+    assert!(second_commit.written_objects().is_empty());
+    let stable_document = store.portable_document().unwrap();
+    assert_eq!(stable_document.revision(), show_revision);
+    assert_eq!(
+        (1..=6)
+            .map(|id| {
+                stable_document
+                    .object("group", &id.to_string())
+                    .unwrap()
+                    .revision()
+            })
+            .collect::<Vec<_>>(),
+        object_revisions
+    );
+}
+
+#[test]
 fn targetless_dynamic_assignments_migrate_to_distinct_target_bound_fallbacks() {
     let original = targetless_dynamic(7);
     let original_id = original.id;
