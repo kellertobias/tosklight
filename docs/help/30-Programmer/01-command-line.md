@@ -75,14 +75,9 @@ The num block places `[HIGH]`, `[PREV]`, `[NEXT]`, and `[ALL]` in one horizontal
 
 The command-bar space between the command line and the REC/Preload controls contains no separate Highlight menu, selection summary, or suppression panel. While Highlight is active, its existing output-rate field replaces `DMX 44Hz` with a blue, blinking `Highlight` label; HIGH remains lit and the Fixture Sheet retains its complete-versus-stepped selection treatment. An actionable Highlight error opens a dedicated dismissible alert above panes and modal surfaces without changing the num-block grid or the HIGH key's size.
 
-The shifted Highlight-row keys operate on the current selection grid. A short `[SHIFT] [ALL]`
-cycles to the next grid method; holding the combination for 650 ms opens **Grid Settings** without
-also invoking ALL. `[SHIFT] [NEXT]` rewrites the ordered selection using the next Rows-first
-traversal, and `[SHIFT] [PREV]` uses the next Columns-first traversal. These are explicit ordering
-actions: changing the grid method alone never changes the ordered selection. On the computer
-keyboard, use `[KBD:SHIFT]` with the corresponding Alt shortcut. Software Shift is latched for one
-action; attached hardware Shift remains held. Unshifted ALL, PREV, and NEXT retain their Highlight
-behavior.
+The shifted Highlight-row combinations `[SHIFT] [ALL]`, `[SHIFT] [PREV]`, and `[SHIFT] [NEXT]`
+are unassigned. They do not change selection order or open configuration. Unshifted ALL, PREV, and
+NEXT retain their Highlight stepping behavior.
 
 On the software desk, **Programmer Fade** occupies exactly two button columns by two complete button rows. Its label, current value, unit, and touch/value interaction remain visible, and the next command row follows after the ordinary num-block grid gap.
 

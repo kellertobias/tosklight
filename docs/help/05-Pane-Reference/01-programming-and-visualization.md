@@ -104,28 +104,6 @@ Stage receives authoritative Live and Preload output from the engine. The desk s
 
 ![Full Stage window](../assets/screenshots/workflows/stage-window-2d.png)
 
-## Layout
-
-The Layout pane shows one stored Group as a spatial fixture grid. Choose the Group in the pane's
-**Layout** settings. Each occupied cell shows the fixture identity, resolved live intensity, and
-resolved live color. Values are eventually consistent: the pane keeps the newest complete sample
-and skips intermediate display updates when the server or UI is busy. This display path does not
-delay Programmer actions or output.
-
-Tap a cell to replace the current fixture selection. Control/Command toggles a fixture, Shift
-selects the spatial range from the last anchor, and dragging over the empty grid area marquee
-selects the intersecting cells. These actions use the same authoritative selection as Stage,
-Fixture Sheet, Groups, keyboard, OSC, and attached controls.
-
-The Group's ordinary ordered membership remains separate from its grid. Moving a fixture on Stage
-can change its displayed cell without silently changing the stored sequence. A stored empty Group
-shows an empty-Group state. If the configured Group is deleted or unavailable, the pane keeps its
-stable Group ID and reports it as unavailable instead of switching to another Group. Multiple
-Layout panes can therefore remain bound to different Groups.
-
-The full Layout window has the same content and a Group chooser in its header. Its Group choice is
-stored independently from every Layout pane.
-
 ## Channels
 
 The Channels pane is a direct programming bank ordered by Fixture ID. In the default **Intensity only** mode, it assigns one fader to each fixture. Faders fill each page from left to right across the first row and then continue on the second row. Each fader is labelled **Fixture _ID_**, followed by **Intensity**, and shows the resolved percentage. Moving it writes an intensity value into the programmer; tapping its card selects the fixture. Empty positions are disabled.
