@@ -2,16 +2,46 @@
 
 ## Status
 
-**Specification only.** This single integrated plan records the agreed replacement contract for
-Group settings and interaction, spatially ordered Group selection, Playback-owned Group Masters,
-and Dynamics projection. It does not implement product code, executable tests, generated wire
-schemas, help text, screenshots, or migrations.
+**Doing.** Claimed on 2026-08-02 after completing Plan 00A. This is the sole active implementation
+contract for Group settings and interaction, spatially ordered Group selection, Playback-owned
+Group Masters, and Dynamics projection.
 
-This is the first item in the current [Next plan order](README.md). The earlier dependency on
+This was the first item in the current [Next plan order](../Next/README.md). The earlier dependency on
 Macros has been explicitly removed by the operator's queue reorder. The completed supported-scale,
-output-isolation, and warm-UI work remains its architectural prerequisite. Keep this file in `Next`
-while implementing it; the retired
-refactoring `doing` folder is no longer the queue authority.
+output-isolation, and warm-UI work remains its architectural prerequisite. The goal's explicit
+`Next` to `Doing` claim protocol supersedes this specification's older instruction to leave the file
+in `Next`; the retired refactoring `doing` folder remains outside this queue.
+
+## Progress
+
+- [x] Claimed from `docs/plans/Next` in numeric order.
+- [ ] Audit existing Group, Dynamic, Layout, SET-routing, Playback Group Master, persistence, wire,
+  help, and acceptance-test seams.
+- [ ] Implement the authoritative source, projection, shape, ranking, inheritance, and migration
+  domain model with focused tests.
+- [ ] Implement rank-aware programming and Dynamic evaluation plus explicit SET/Playback routing.
+- [ ] Replace the retired Layout and Group context-menu surfaces with the specified Group and
+  Dynamics settings workflows.
+- [ ] Update generated contracts, help/manual, human acceptance scenarios, and focused Playwright
+  coverage through repository workflows.
+- [ ] Run focused checks, required major suites, migration/recovery proof, and the real desktop path.
+
+## Implementation decisions
+
+- Preserve the integrated plan as one ownership contract, but commit coherent domain, persistence,
+  routing, UI, documentation, and verification steps independently.
+- Treat the literal operator grammar, three-tab modal, absence of Layout authority, shared Group
+  Master ownership, and backward-compatible migration as acceptance requirements rather than
+  design suggestions.
+
+## Implementation verification
+
+- Pending the initial seam and compatibility audit.
+
+## Remaining work
+
+- Complete every unchecked progress and acceptance item, then add a truthful `## Result` before
+  moving this plan to `docs/plans/Done`.
 
 ## Decision and superseded behavior
 
