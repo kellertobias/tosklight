@@ -20,10 +20,37 @@ const mocks = vi.hoisted(() => ({
 const fixture = {
 	fixture_id: "fixture-1",
 	name: "Front Truss",
-	definition: { name: "Fixture" },
+	definition: {
+		name: "Fixture",
+		mode_id: "mode-1",
+		profile_snapshot: {
+			modes: [
+				{
+					id: "mode-1",
+					channels: [
+						{
+							attribute: "shaper.blade.1.position",
+							functions: [],
+						},
+						{
+							attribute: "shaper.blade.2.angle",
+							functions: [],
+						},
+						{ attribute: "shaper.rotation", functions: [] },
+					],
+					geometry: { emitters: [{}] },
+				},
+			],
+		},
+	},
 	logical_heads: [],
 	location: { x: 100, y: 0, z: 0 },
 	rotation: { x: 5, y: 0, z: 0 },
+	bracket_angle: 0,
+	shaper_angle: null,
+	installed_appearance: {
+		shaper_angles_degrees: [0, 0, 0, 0],
+	},
 	multipatch: [
 		{
 			id: "copy-1",
@@ -32,6 +59,11 @@ const fixture = {
 			address: 1,
 			location: { x: 300, y: 0, z: 0 },
 			rotation: { x: 15, y: 0, z: 0 },
+			bracket_angle: 0,
+			shaper_angle: null,
+			installed_appearance: {
+				shaper_angles_degrees: [0, 0, 0, 0],
+			},
 		},
 	],
 };
@@ -130,7 +162,7 @@ describe("Patch parameter selection", () => {
 		expect(mocks.update).not.toHaveBeenCalled();
 	});
 
-	it("keeps the exact Location slot order, units, and six-slot Visualization geometry", () => {
+	it("keeps exact Location and typed Visualization slot geometry", () => {
 		mocks.selection = { fixtureId: "fixture-1", multipatchInstanceId: null };
 		render(<PatchParameterControls />);
 
@@ -148,12 +180,77 @@ describe("Patch parameter selection", () => {
 		expect(screen.getByText("5°")).toBeInTheDocument();
 
 		fireEvent.click(screen.getByRole("button", { name: "Visualization" }));
-		for (let slot = 1; slot <= 6; slot += 1)
-			expect(
-				screen.getByRole("img", {
-					name: `Visualization encoder ${slot} unavailable`,
-				}),
-			).toBeInTheDocument();
+		expect(
+			screen
+				.getAllByRole("group")
+				.map((slot) => slot.getAttribute("aria-label")),
+		).toEqual([
+			"Enc 1 · Bracket",
+			"Enc 2 · Shaper 1 Angle",
+			"Enc 3 · Shaper 2 Angle",
+			"Enc 4 · Shaper 3 Angle",
+			"Enc 5 · Shaper 4 Angle",
+			"Enc 6 · Shaper Module Rotation",
+		]);
+		expect(
+			screen.getByRole("group", { name: "Enc 1 · Bracket" }),
+		).toHaveAttribute("aria-disabled", "false");
+		expect(
+			screen.getByRole("group", { name: "Enc 2 · Shaper 1 Angle" }),
+		).toHaveAttribute("aria-disabled", "false");
+		for (const name of [
+			"Enc 3 · Shaper 2 Angle",
+			"Enc 4 · Shaper 3 Angle",
+			"Enc 5 · Shaper 4 Angle",
+			"Enc 6 · Shaper Module Rotation",
+		])
+			expect(screen.getByRole("group", { name })).toHaveAttribute(
+				"aria-disabled",
+				"true",
+			);
+	});
+
+	it("routes installed visualization turns to the exact root or copy and blocks live roles", () => {
+		mocks.selection = { fixtureId: "fixture-1", multipatchInstanceId: null };
+		const rendered = render(<PatchParameterControls />);
+		fireEvent.click(screen.getByRole("button", { name: "Visualization" }));
+		fireEvent.keyDown(screen.getByRole("group", { name: "Enc 1 · Bracket" }), {
+			key: "ArrowUp",
+		});
+		expect(mocks.update).toHaveBeenLastCalledWith("fixture-1", null, {
+			type: "set_bracket_angle",
+			degrees: 1,
+		});
+		fireEvent.keyDown(
+			screen.getByRole("group", { name: "Enc 2 · Shaper 1 Angle" }),
+			{ key: "ArrowRight" },
+		);
+		expect(mocks.update).toHaveBeenLastCalledWith("fixture-1", null, {
+			type: "set_static_shaper_angle",
+			element: 1,
+			degrees: 1,
+		});
+		const calls = mocks.update.mock.calls.length;
+		fireEvent.keyDown(
+			screen.getByRole("group", { name: "Enc 3 · Shaper 2 Angle" }),
+			{ key: "ArrowUp" },
+		);
+		expect(mocks.update).toHaveBeenCalledTimes(calls);
+
+		rendered.unmount();
+		mocks.selection = {
+			fixtureId: "fixture-1",
+			multipatchInstanceId: "copy-1",
+		};
+		render(<PatchParameterControls />);
+		fireEvent.click(screen.getByRole("button", { name: "Visualization" }));
+		fireEvent.keyDown(screen.getByRole("group", { name: "Enc 1 · Bracket" }), {
+			key: "ArrowDown",
+		});
+		expect(mocks.update).toHaveBeenLastCalledWith("fixture-1", "copy-1", {
+			type: "set_bracket_angle",
+			degrees: -1,
+		});
 	});
 
 	it("routes fine and coarse hardware turns to the same exact physical target", () => {
