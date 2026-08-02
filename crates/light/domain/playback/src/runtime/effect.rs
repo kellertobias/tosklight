@@ -47,12 +47,21 @@ impl PlaybackEngine {
 
 fn runtime_numbers(current: &PlaybackEngine, before: &PlaybackEngine) -> BTreeSet<u16> {
     current
-        .active
-        .keys()
-        .chain(before.active.keys())
-        .filter_map(|key| match key {
-            PlaybackKey::Number(number) => Some(*number),
-            PlaybackKey::Virtual(_) | PlaybackKey::CueList(_) => None,
+        .definitions
+        .values()
+        .chain(before.definitions.values())
+        .filter_map(|definition| match definition.target {
+            PlaybackTarget::CueList { cue_list_id }
+                if current
+                    .active
+                    .contains_key(&PlaybackKey::CueList(cue_list_id))
+                    || before
+                        .active
+                        .contains_key(&PlaybackKey::CueList(cue_list_id)) =>
+            {
+                Some(definition.number)
+            }
+            _ => None,
         })
         .chain(
             current
@@ -94,7 +103,8 @@ fn runtime_numbers(current: &PlaybackEngine, before: &PlaybackEngine) -> BTreeSe
 }
 
 fn active_playback(engine: &PlaybackEngine, number: u16) -> Option<&ActivePlayback> {
-    engine.active.get(&PlaybackKey::Number(number))
+    let key = engine.runtime_key(number).ok()?;
+    engine.active.get(&key)
 }
 
 fn temporary_playbacks(

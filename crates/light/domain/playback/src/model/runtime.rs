@@ -6,18 +6,7 @@ fn default_true() -> bool {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum PlaybackKey {
-    Number(u16),
-    Virtual(VirtualPlaybackAddress),
     CueList(CueListId),
-}
-
-impl PlaybackKey {
-    pub(crate) const fn from_identity(identity: PlaybackIdentity) -> Self {
-        match identity {
-            PlaybackIdentity::Physical(number) => Self::Number(number.get()),
-            PlaybackIdentity::Virtual(address) => Self::Virtual(address),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

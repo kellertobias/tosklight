@@ -32,7 +32,7 @@ impl PlaybackEngine {
             return Err("playback is not configured for manual X-fade".into());
         }
         let cue_list_id = self.cue_list_for(number)?;
-        let key = PlaybackKey::Number(number);
+        let key = PlaybackKey::CueList(cue_list_id);
         let mut changed = false;
         if !self.active.contains_key(&key) {
             let cue_list = self
@@ -74,7 +74,7 @@ impl PlaybackEngine {
             .ok_or("playback does not exist")?
             .xfade_millis;
         let id = self.cue_list_for(number)?;
-        let key = PlaybackKey::Number(number);
+        let key = PlaybackKey::CueList(id);
         let mut changed = false;
         if on && !self.active.contains_key(&key) {
             self.go_at_key(key, id, self.clock.now())?;
@@ -132,7 +132,7 @@ impl PlaybackEngine {
         let PlaybackTarget::CueList { cue_list_id } = definition.target else {
             return Err("virtual playback does not have cues".into());
         };
-        let key = PlaybackKey::Virtual(address);
+        let key = PlaybackKey::CueList(cue_list_id);
         let mut changed = false;
         if on && !self.active.contains_key(&key) {
             self.go_at_key(key, cue_list_id, self.clock.now())?;
@@ -190,8 +190,9 @@ impl PlaybackEngine {
         &self,
         identity: PlaybackIdentity,
     ) -> Option<PlaybackPreloadTimingState> {
+        let key = self.runtime_key_at(identity).ok()?;
         self.active
-            .get(&PlaybackKey::from_identity(identity))
+            .get(&key)
             .map(|playback| PlaybackPreloadTimingState {
                 enabled: playback.enabled,
                 master: playback.master,
@@ -243,7 +244,7 @@ impl PlaybackEngine {
         ) {
             return Err("preload timing is available only for Cuelist playbacks".into());
         }
-        let key = PlaybackKey::from_identity(identity);
+        let key = self.runtime_key_at(identity)?;
         let durable = self.active.get_mut(&key).is_some_and(|playback| {
             apply_active_preload_timing(playback, action, started_at, fallback_millis, previous)
         });

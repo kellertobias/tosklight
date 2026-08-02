@@ -14,16 +14,16 @@ impl PlaybackEngine {
                         "operation is not available for this virtual playback function".into(),
                     );
                 };
-                let key = PlaybackKey::Virtual(address);
+                let key = PlaybackKey::CueList(cue_list_id);
                 if !self.active.contains_key(&key) {
                     self.go_at_key(key, cue_list_id, self.clock.now())?;
                 }
-                activate_normal(
-                    self.active
-                        .get_mut(&key)
-                        .expect("virtual playback activation inserted runtime"),
-                    address.number().get(),
-                );
+                let active = self
+                    .active
+                    .get_mut(&key)
+                    .expect("virtual playback activation inserted runtime");
+                active.playback_identity = Some(identity);
+                activate_normal(active, address.number().get());
                 Ok(())
             }
         }
@@ -32,11 +32,9 @@ impl PlaybackEngine {
     pub fn off_at(&mut self, identity: PlaybackIdentity) -> Result<bool, String> {
         match identity {
             PlaybackIdentity::Physical(number) => self.off(number.get()),
-            PlaybackIdentity::Virtual(address) => {
-                if !self.virtual_definitions.contains_key(&address) {
-                    return Err("virtual playback does not exist".into());
-                }
-                let Some(playback) = self.active.get_mut(&PlaybackKey::Virtual(address)) else {
+            PlaybackIdentity::Virtual(_address) => {
+                let key = self.runtime_key_at(identity)?;
+                let Some(playback) = self.active.get_mut(&key) else {
                     return Ok(false);
                 };
                 let was_enabled = playback.enabled;
@@ -55,14 +53,16 @@ impl PlaybackEngine {
             return self.on_dynamic_mutation(number);
         }
         let id = self.cue_list_for(number)?;
-        let key = PlaybackKey::Number(number);
+        let key = PlaybackKey::CueList(id);
         let mut changed = false;
         if !self.active.contains_key(&key) {
             self.go_at_key(key, id, self.clock.now())?;
             changed = true;
         }
         changed |= self.restart_first_cue_if_needed(key, id);
-        changed |= activate_normal(self.active.get_mut(&key).unwrap(), number);
+        let active = self.active.get_mut(&key).unwrap();
+        active.playback_identity = Some(PlaybackIdentity::physical(number)?);
+        changed |= activate_normal(active, number);
         let addressed_effect = durable_effect(changed);
         let related_effect = durable_effect(self.auto_off_overwritten());
         Ok(PlaybackMutation::with_related_effect(
@@ -119,8 +119,8 @@ impl PlaybackEngine {
         if self.dynamic_assignment(number).is_some() {
             return self.off_dynamic_mutation(number);
         }
-        self.cue_list_for(number)?;
-        let Some(playback) = self.active.get_mut(&PlaybackKey::Number(number)) else {
+        let key = self.runtime_key(number)?;
+        let Some(playback) = self.active.get_mut(&key) else {
             return Ok(PlaybackMutation::new(false, PlaybackRuntimeEffect::None));
         };
         let was_enabled = playback.enabled;
@@ -209,7 +209,7 @@ impl PlaybackEngine {
         }
 
         let id = self.cue_list_for(number)?;
-        let key = PlaybackKey::Number(number);
+        let key = PlaybackKey::CueList(id);
         if value > 0.0 && !self.active.contains_key(&key) {
             self.go_at_key(key, id, started_at)?;
         }
@@ -271,7 +271,7 @@ impl PlaybackEngine {
         let PlaybackTarget::CueList { cue_list_id } = definition.target else {
             return Err("virtual playback master is unavailable for this target".into());
         };
-        let key = PlaybackKey::Virtual(address);
+        let key = PlaybackKey::CueList(cue_list_id);
         let mut changed = self
             .active
             .get(&key)
@@ -339,7 +339,7 @@ impl PlaybackEngine {
         value: f32,
     ) -> Result<PlaybackMutation<()>, String> {
         let id = self.cue_list_for(number)?;
-        let key = PlaybackKey::Number(number);
+        let key = PlaybackKey::CueList(id);
         if let Some(effect) = self.update_fader_pickup(key, value) {
             return Ok(PlaybackMutation::new((), effect));
         }

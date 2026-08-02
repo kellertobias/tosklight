@@ -134,14 +134,6 @@ impl PlaybackEngine {
             if !self.cue_lists.contains_key(&cue_list_id) {
                 return Err("playback cue list does not exist".into());
             }
-            let first_assignment = !self.definitions.values().any(|existing| matches!(existing.target, PlaybackTarget::CueList { cue_list_id: existing_id } if existing_id == cue_list_id));
-            if first_assignment
-                && let Some(mut playback) = self.active.remove(&PlaybackKey::CueList(cue_list_id))
-            {
-                playback.playback_number = Some(definition.number);
-                self.active
-                    .insert(PlaybackKey::Number(definition.number), playback);
-            }
         }
         self.definitions.insert(definition.number, definition);
         Ok(())
@@ -176,6 +168,21 @@ impl PlaybackEngine {
         match identity {
             PlaybackIdentity::Physical(number) => self.definitions.get(&number.get()),
             PlaybackIdentity::Virtual(address) => self.virtual_definitions.get(&address),
+        }
+    }
+
+    pub(crate) fn runtime_key(&self, number: u16) -> Result<PlaybackKey, String> {
+        self.runtime_key_at(PlaybackIdentity::physical(number)?)
+    }
+
+    pub(crate) fn runtime_key_at(&self, identity: PlaybackIdentity) -> Result<PlaybackKey, String> {
+        match self
+            .definition_at(identity)
+            .ok_or("playback does not exist")?
+            .target
+        {
+            PlaybackTarget::CueList { cue_list_id } => Ok(PlaybackKey::CueList(cue_list_id)),
+            _ => Err("playback does not target a Cuelist".into()),
         }
     }
 }

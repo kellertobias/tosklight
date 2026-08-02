@@ -15,7 +15,7 @@ impl PlaybackEngine {
                 let PlaybackTarget::CueList { cue_list_id } = definition.target else {
                     return Err("virtual playback does not have cues".into());
                 };
-                let key = PlaybackKey::Virtual(address);
+                let key = PlaybackKey::CueList(cue_list_id);
                 let was_active = self
                     .active
                     .get(&key)
@@ -62,7 +62,7 @@ impl PlaybackEngine {
         let PlaybackTarget::CueList { cue_list_id } = definition.target else {
             return Err("group playback does not have cues".into());
         };
-        let key = PlaybackKey::Number(number);
+        let key = PlaybackKey::CueList(cue_list_id);
         let was_active = self
             .active
             .get(&key)
@@ -96,7 +96,7 @@ impl PlaybackEngine {
 
     pub fn back_playback(&mut self, number: u16) -> Result<&ActivePlayback, String> {
         let id = self.cue_list_for(number)?;
-        self.back_at_key(PlaybackKey::Number(number), id, self.clock.now())
+        self.back_at_key(PlaybackKey::CueList(id), id, self.clock.now())
     }
 
     pub fn back_playback_at(
@@ -105,34 +105,34 @@ impl PlaybackEngine {
     ) -> Result<&ActivePlayback, String> {
         match identity {
             PlaybackIdentity::Physical(number) => self.back_playback(number.get()),
-            PlaybackIdentity::Virtual(address) => {
+            PlaybackIdentity::Virtual(_address) => {
                 let definition = self
                     .definition_at(identity)
                     .ok_or("virtual playback does not exist")?;
                 let PlaybackTarget::CueList { cue_list_id } = definition.target else {
                     return Err("virtual playback does not have cues".into());
                 };
-                self.back_at_key(PlaybackKey::Virtual(address), cue_list_id, self.clock.now())
+                self.back_at_key(
+                    PlaybackKey::CueList(cue_list_id),
+                    cue_list_id,
+                    self.clock.now(),
+                )
             }
         }
     }
 
     pub fn fast_forward_playback(&mut self, number: u16) -> Result<&ActivePlayback, String> {
         self.go_playback(number)?;
-        let playback = self
-            .active
-            .get_mut(&PlaybackKey::Number(number))
-            .ok_or("playback is not active")?;
+        let key = self.runtime_key(number)?;
+        let playback = self.active.get_mut(&key).ok_or("playback is not active")?;
         playback.transition_timing_bypassed = true;
         Ok(playback)
     }
 
     pub fn fast_rewind_playback(&mut self, number: u16) -> Result<&ActivePlayback, String> {
         self.back_playback(number)?;
-        let playback = self
-            .active
-            .get_mut(&PlaybackKey::Number(number))
-            .ok_or("playback is not active")?;
+        let key = self.runtime_key(number)?;
+        let playback = self.active.get_mut(&key).ok_or("playback is not active")?;
         playback.transition_timing_bypassed = true;
         Ok(playback)
     }
@@ -145,13 +145,10 @@ impl PlaybackEngine {
             return self.fast_forward_playback(number.get());
         }
         self.go_playback_at(identity)?;
+        let key = self.runtime_key_at(identity)?;
         let playback = self
             .active
-            .get_mut(&PlaybackKey::Virtual(
-                identity
-                    .virtual_address()
-                    .expect("physical identity returned above"),
-            ))
+            .get_mut(&key)
             .ok_or("virtual playback is not active")?;
         playback.transition_timing_bypassed = true;
         Ok(playback)
@@ -165,13 +162,10 @@ impl PlaybackEngine {
             return self.fast_rewind_playback(number.get());
         }
         self.back_playback_at(identity)?;
+        let key = self.runtime_key_at(identity)?;
         let playback = self
             .active
-            .get_mut(&PlaybackKey::Virtual(
-                identity
-                    .virtual_address()
-                    .expect("physical identity returned above"),
-            ))
+            .get_mut(&key)
             .ok_or("virtual playback is not active")?;
         playback.transition_timing_bypassed = true;
         Ok(playback)
@@ -201,7 +195,7 @@ impl PlaybackEngine {
             .find(|cue| cue.number == cue_number)
             .ok_or("cue does not exist")?;
         let (cue_id, cue_number) = (cue.id, cue.number);
-        let key = PlaybackKey::Number(number);
+        let key = PlaybackKey::CueList(id);
         let now = self.clock.now();
         let changed = self
             .active
@@ -250,7 +244,7 @@ impl PlaybackEngine {
             .find(|cue| cue.number == cue_number)
             .ok_or("cue does not exist")?;
         let (cue_id, cue_number) = (cue.id, cue.number);
-        let key = PlaybackKey::Virtual(address);
+        let key = PlaybackKey::CueList(cue_list_id);
         let now = self.clock.now();
         let changed = self.active.get(&key).is_none_or(|playback| {
             playback.playback_identity != Some(identity)
@@ -298,7 +292,7 @@ impl PlaybackEngine {
             .find(|cue| cue.number == cue_number)
             .ok_or("cue does not exist")?;
         let (cue_id, cue_number) = (cue.id, cue.number);
-        let key = PlaybackKey::Number(number);
+        let key = PlaybackKey::CueList(id);
         let inserted = !self.active.contains_key(&key);
         let now = self.clock.now();
         let playback = self
@@ -343,7 +337,7 @@ impl PlaybackEngine {
             .find(|cue| cue.number == cue_number)
             .ok_or("cue does not exist")?;
         let (cue_id, cue_number) = (cue.id, cue.number);
-        let key = PlaybackKey::Virtual(address);
+        let key = PlaybackKey::CueList(cue_list_id);
         let inserted = !self.active.contains_key(&key);
         let now = self.clock.now();
         let playback = self.active.entry(key).or_insert_with(|| {

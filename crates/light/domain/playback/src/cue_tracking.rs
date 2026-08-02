@@ -17,22 +17,10 @@ impl PlaybackEngine {
     }
 
     fn key_for_cue_list(&self, id: CueListId) -> Result<PlaybackKey, String> {
-        let assigned = self
-            .definitions
-            .values()
-            .filter_map(|definition| match definition.target {
-                PlaybackTarget::CueList { cue_list_id } if cue_list_id == id => {
-                    Some(definition.number)
-                }
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        match assigned.as_slice() {
-            [] => Ok(PlaybackKey::CueList(id)),
-            [number] => Ok(PlaybackKey::Number(*number)),
-            _ => Err(
-                "cue list is assigned to multiple playbacks; address a concrete playback".into(),
-            ),
+        if self.cue_lists.contains_key(&id) {
+            Ok(PlaybackKey::CueList(id))
+        } else {
+            Err("cue list does not exist".into())
         }
     }
 
@@ -152,10 +140,6 @@ impl PlaybackEngine {
                 playback
             }
         };
-        if let PlaybackKey::Virtual(address) = key {
-            playback.playback_number = Some(address.number().get());
-            playback.playback_identity = Some(PlaybackIdentity::Virtual(address));
-        }
         reset_manual_transition(playback);
         Ok(playback)
     }
@@ -221,10 +205,6 @@ impl PlaybackEngine {
             loaded_cue_id: None,
             loaded_cue_number: None,
         });
-        if let PlaybackKey::Virtual(address) = key {
-            playback.playback_number = Some(address.number().get());
-            playback.playback_identity = Some(PlaybackIdentity::Virtual(address));
-        }
         if playback.cue_index != index {
             playback.previous_index = Some(playback.cue_index);
         }
@@ -305,7 +285,7 @@ impl PlaybackEngine {
     }
     pub fn pause_playback_mutation(&mut self, number: u16) -> Result<PlaybackMutation<()>, String> {
         let now = self.clock.now();
-        let key = PlaybackKey::Number(number);
+        let key = self.runtime_key(number)?;
         self.pause_key_at_mutation(key, now, "playback is not active")
     }
     pub fn pause_playback_at_mutation(
@@ -314,11 +294,10 @@ impl PlaybackEngine {
     ) -> Result<PlaybackMutation<()>, String> {
         match identity {
             PlaybackIdentity::Physical(number) => self.pause_playback_mutation(number.get()),
-            PlaybackIdentity::Virtual(address) => self.pause_key_at_mutation(
-                PlaybackKey::Virtual(address),
-                self.clock.now(),
-                "virtual playback is not active",
-            ),
+            PlaybackIdentity::Virtual(_) => {
+                let key = self.runtime_key_at(identity)?;
+                self.pause_key_at_mutation(key, self.clock.now(), "virtual playback is not active")
+            }
         }
     }
     pub fn pause_at(&mut self, id: CueListId, now: DateTime<Utc>) -> Result<(), String> {
@@ -365,14 +344,13 @@ impl PlaybackEngine {
         runtime
     }
     pub fn playback_runtime(&self, number: u16) -> Option<&ActivePlayback> {
-        self.active.get(&PlaybackKey::Number(number))
+        let key = self.runtime_key(number).ok()?;
+        self.active.get(&key)
     }
 
     pub fn playback_runtime_at(&self, identity: PlaybackIdentity) -> Option<&ActivePlayback> {
-        match identity {
-            PlaybackIdentity::Physical(number) => self.playback_runtime(number.get()),
-            PlaybackIdentity::Virtual(address) => self.active.get(&PlaybackKey::Virtual(address)),
-        }
+        let key = self.runtime_key_at(identity).ok()?;
+        self.active.get(&key)
     }
 
     pub fn is_active_at(&self, identity: PlaybackIdentity) -> bool {

@@ -10,8 +10,10 @@ to Playbacks depends on it.
 ## Progress
 
 - [x] Claimed from `docs/plans/Next` and began the implementation audit.
-- [ ] Map current assignment, runtime, persistence, feedback, and pickup ownership.
+- [x] Map current assignment, runtime, persistence, feedback, and pickup ownership.
 - [ ] Implement shared runtime identity and assignment lifecycle in coherent compatibility-safe steps.
+  Cuelist actions now use one target-keyed domain runtime across physical, Virtual, and direct-Cuelist
+  addresses; assignment-local control state, projection/event reconciliation, and topology lifecycle remain.
 - [ ] Add focused migration, runtime, cross-surface, and operator acceptance coverage.
 - [ ] Run the required major suites and verify the real desktop path.
 
@@ -21,15 +23,24 @@ to Playbacks depends on it.
   temporary gestures, and physical pickup while moving logical runtime ownership to stable target identity.
 - Existing valid persisted shows remain supported unless a later recorded decision explicitly declares a
   pre-v1 break and regenerates every repository-owned show.
+- Contradictory legacy per-assignment Cuelist runtime rows migrate deterministically by highest activation
+  ordinal, then newest activation time, then lowest stable assignment identity. A later persistence chunk
+  must surface a visible migration warning when discarded rows disagree; silently retaining two runtimes is
+  not permitted.
 
 ## Verification
 
-- Not started. The initial repository and dirty-worktree inventory was completed before claiming the plan.
+- `cargo check -p light-playback --message-format short` passed after the target-key refactor.
+- `cargo test -p light-playback --lib --quiet` passed: 100 tests, including deterministic legacy
+  duplicate-runtime precedence.
 
 ## Remaining work
 
-- Complete the implementation-seam and compatibility audit.
-- Implement, verify, and commit each coherent behavior slice.
+- Separate physical fader position/pickup from the shared Cuelist runtime and preserve held controls per
+  assignment.
+- Compose authoritative projections/events for every assignment and update generated wire/frontend state.
+- Reconcile assignment removal/reassignment, migrate persistence and legacy Dynamics, then synchronize
+  selection and cross-surface feedback.
 - Run full plan closeout verification and record the truthful result.
 
 ## Goal

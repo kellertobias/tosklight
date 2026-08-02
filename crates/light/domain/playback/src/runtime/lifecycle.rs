@@ -62,7 +62,7 @@ impl PlaybackEngine {
     }
     pub fn restore_active(&mut self, playbacks: impl IntoIterator<Item = ActivePlayback>) {
         for mut playback in playbacks {
-            let key = match playback.playback_identity {
+            match playback.playback_identity {
                 Some(PlaybackIdentity::Virtual(address)) => {
                     if !self
                         .virtual_definitions
@@ -78,7 +78,6 @@ impl PlaybackEngine {
                         continue;
                     }
                     playback.playback_number = Some(address.number().get());
-                    PlaybackKey::Virtual(address)
                 }
                 Some(PlaybackIdentity::Physical(number)) => {
                     if !self
@@ -95,7 +94,6 @@ impl PlaybackEngine {
                         continue;
                     }
                     playback.playback_number = Some(number.get());
-                    PlaybackKey::Number(number.get())
                 }
                 None => {
                     if let Some(number) = playback.playback_number
@@ -109,12 +107,9 @@ impl PlaybackEngine {
                     {
                         continue;
                     }
-                    playback
-                        .playback_number
-                        .map(PlaybackKey::Number)
-                        .unwrap_or(PlaybackKey::CueList(playback.cue_list_id))
                 }
-            };
+            }
+            let key = PlaybackKey::CueList(playback.cue_list_id);
             let Some(cue_list) = self.cue_lists.get(&playback.cue_list_id) else {
                 continue;
             };
@@ -154,7 +149,16 @@ impl PlaybackEngine {
                 playback.loaded_cue_number = None;
             }
             self.observe_restored_activation(playback.activation.as_ref());
-            self.active.insert(key, playback);
+            match self.active.entry(key) {
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(playback);
+                }
+                std::collections::hash_map::Entry::Occupied(mut entry) => {
+                    if restored_runtime_wins(&playback, entry.get()) {
+                        entry.insert(playback);
+                    }
+                }
+            }
         }
     }
 
@@ -305,4 +309,24 @@ impl PlaybackEngine {
             })
             .collect()
     }
+}
+
+fn restored_runtime_wins(candidate: &ActivePlayback, current: &ActivePlayback) -> bool {
+    let candidate_ordinal = candidate
+        .activation
+        .as_ref()
+        .map(|activation| activation.ordinal)
+        .unwrap_or(0);
+    let current_ordinal = current
+        .activation
+        .as_ref()
+        .map(|activation| activation.ordinal)
+        .unwrap_or(0);
+    if candidate_ordinal != current_ordinal {
+        return candidate_ordinal > current_ordinal;
+    }
+    if candidate.activated_at != current.activated_at {
+        return candidate.activated_at > current.activated_at;
+    }
+    candidate.playback_identity < current.playback_identity
 }

@@ -19,10 +19,7 @@ impl PlaybackEngine {
             .get(&cue_list_id)
             .ok_or("playback cue list does not exist")?;
         let now = self.clock.now();
-        let active_key = match identity {
-            PlaybackIdentity::Physical(_) => PlaybackKey::Number(number),
-            PlaybackIdentity::Virtual(address) => PlaybackKey::Virtual(address),
-        };
+        let active_key = PlaybackKey::CueList(cue_list_id);
         let mut playback = self
             .active
             .get(&active_key)
@@ -212,9 +209,8 @@ impl PlaybackEngine {
         mut released: ActivePlayback,
         clear_restore_off: bool,
     ) -> bool {
-        let key = match identity {
-            PlaybackIdentity::Physical(number) => PlaybackKey::Number(number.get()),
-            PlaybackIdentity::Virtual(address) => PlaybackKey::Virtual(address),
+        let Ok(key) = self.runtime_key_at(identity) else {
+            return false;
         };
         let inserted = !self.active.contains_key(&key);
         released.temporary = false;

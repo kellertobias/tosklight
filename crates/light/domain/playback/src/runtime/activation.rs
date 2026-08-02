@@ -15,9 +15,8 @@ impl PlaybackEngine {
     ) {
         let ordinal = self.next_activation_ordinal;
         self.next_activation_ordinal = ordinal.saturating_add(1);
-        let key = match identity {
-            PlaybackIdentity::Physical(number) => PlaybackKey::Number(number.get()),
-            PlaybackIdentity::Virtual(address) => PlaybackKey::Virtual(address),
+        let Ok(key) = self.runtime_key_at(identity) else {
+            return;
         };
         let Some(playback) = self
             .active

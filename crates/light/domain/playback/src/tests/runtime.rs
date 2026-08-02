@@ -134,7 +134,7 @@ fn ltp_intensity_can_select_a_newer_lower_value() {
 }
 
 #[test]
-fn concrete_playbacks_share_a_cuelist_but_keep_independent_runtime() {
+fn concrete_playbacks_share_one_cuelist_runtime() {
     let fixture = FixtureId::new();
     let mut one = Cue::new(1.0);
     one.changes.push(value(fixture, "intensity", 0.1));
@@ -151,23 +151,10 @@ fn concrete_playbacks_share_a_cuelist_but_keep_independent_runtime() {
     engine.goto_playback(1, 2.0).unwrap();
     engine.goto_playback(2, 3.0).unwrap();
     let runtime = engine.runtime();
-    assert_eq!(
-        runtime
-            .iter()
-            .find(|item| item.playback_number == Some(1))
-            .unwrap()
-            .current_cue_number,
-        Some(2.0)
-    );
-    assert_eq!(
-        runtime
-            .iter()
-            .find(|item| item.playback_number == Some(2))
-            .unwrap()
-            .current_cue_number,
-        Some(3.0)
-    );
-    assert!(engine.go(id).unwrap_err().contains("multiple playbacks"));
+    assert_eq!(runtime.len(), 1);
+    assert_eq!(runtime[0].current_cue_number, Some(3.0));
+    assert_eq!(engine.playback_runtime(1), engine.playback_runtime(2));
+    assert_eq!(engine.go(id).unwrap().current_cue_number, Some(3.0));
 }
 
 #[test]

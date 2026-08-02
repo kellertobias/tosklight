@@ -22,7 +22,7 @@ fn physical_and_virtual_playback_ranges_are_explicit_and_disjoint() {
 }
 
 #[test]
-fn banked_virtual_numbers_on_different_pages_have_independent_runtime() {
+fn banked_virtual_assignments_for_one_cuelist_share_runtime() {
     let cue_list = list(vec![Cue::new(1.0)]);
     let cue_list_id = cue_list.id;
     let page_one = VirtualPlaybackAddress::new(1, 1_001).unwrap();
@@ -44,18 +44,7 @@ fn banked_virtual_numbers_on_different_pages_have_independent_runtime() {
 
     engine.on_at(page_one_identity).unwrap();
     engine.on_at(page_two_identity).unwrap();
-    assert_eq!(
-        engine
-            .playback_runtime_at(page_one_identity)
-            .and_then(|runtime| runtime.playback_identity),
-        Some(page_one_identity)
-    );
-    assert_eq!(
-        engine
-            .playback_runtime_at(page_two_identity)
-            .and_then(|runtime| runtime.playback_identity),
-        Some(page_two_identity)
-    );
+    assert_eq!(engine.runtime().len(), 1);
     assert!(
         engine
             .playback_runtime_at(page_one_identity)
@@ -76,7 +65,7 @@ fn banked_virtual_numbers_on_different_pages_have_independent_runtime() {
     assert!(
         engine
             .playback_runtime_at(page_two_identity)
-            .is_some_and(|runtime| runtime.enabled)
+            .is_some_and(|runtime| !runtime.enabled)
     );
 }
 
@@ -121,7 +110,54 @@ fn page_qualified_virtual_runtime_survives_persistence_restore() {
 }
 
 #[test]
-fn page_qualified_virtual_go_advances_only_the_addressed_runtime() {
+fn legacy_duplicate_runtime_restore_uses_the_newest_activation_ordinal() {
+    let cue_list = list(vec![Cue::new(1.0), Cue::new(2.0)]);
+    let cue_list_id = cue_list.id;
+    let mut source = PlaybackEngine::default();
+    source.register(cue_list.clone()).unwrap();
+    source
+        .register_definition(definition(1, cue_list_id))
+        .unwrap();
+    source
+        .register_definition(definition(2, cue_list_id))
+        .unwrap();
+    source.on(1).unwrap();
+
+    let mut older = source.runtime()[0].clone();
+    older.playback_number = Some(1);
+    older.playback_identity = Some(PlaybackIdentity::physical(1).unwrap());
+    older.activation = Some(PlaybackActivationProvenance {
+        ordinal: 4,
+        at: older.activated_at,
+        desk_id: None,
+        surface: PlaybackActivationSurface::Physical,
+        exclusion_scope: PlaybackExclusionScope::Show,
+    });
+    let mut newer = older.clone();
+    newer.playback_number = Some(2);
+    newer.playback_identity = Some(PlaybackIdentity::physical(2).unwrap());
+    newer.activation.as_mut().unwrap().ordinal = 5;
+    newer.cue_index = 1;
+    newer.current_cue_id = Some(cue_list.cues[1].id);
+    newer.current_cue_number = Some(2.0);
+
+    let mut restored = PlaybackEngine::default();
+    restored.register(cue_list).unwrap();
+    restored
+        .register_definition(definition(1, cue_list_id))
+        .unwrap();
+    restored
+        .register_definition(definition(2, cue_list_id))
+        .unwrap();
+    restored.restore_active([newer, older]);
+
+    assert_eq!(restored.runtime().len(), 1);
+    assert_eq!(restored.runtime()[0].current_cue_number, Some(2.0));
+    assert_eq!(restored.playback_runtime(1), restored.playback_runtime(2));
+}
+
+#[test]
+fn page_qualified_virtual_go_advances_the_shared_target_runtime() {
     let cue_list = list(vec![Cue::new(1.0), Cue::new(2.0)]);
     let cue_list_id = cue_list.id;
     let page_one = VirtualPlaybackAddress::new(1, 1_001).unwrap();
@@ -145,7 +181,7 @@ fn page_qualified_virtual_go_advances_only_the_addressed_runtime() {
         engine
             .playback_runtime_at(PlaybackIdentity::Virtual(page_one))
             .and_then(|runtime| runtime.current_cue_number),
-        Some(1.0)
+        Some(2.0)
     );
     assert_eq!(
         engine
