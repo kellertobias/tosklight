@@ -75,14 +75,19 @@ pub(super) fn group_projection(
     snapshot: &EngineSnapshot,
     group_id: &str,
 ) -> Result<PlaybackTargetProjection, ActionError> {
-    let group = snapshot
+    snapshot
         .groups
         .iter()
         .find(|group| group.id == group_id)
         .ok_or_else(|| invalid("group does not exist"))?;
+    let master = ports
+        .state
+        .output
+        .group_master(group_id)
+        .ok_or_else(|| invalid("group has no assigned Group Master"))?;
     Ok(PlaybackTargetProjection::Group {
         group_id: group_id.to_owned(),
-        master: group.master,
+        master,
         flash_level: ports.state.output.group_master_flash(group_id),
     })
 }

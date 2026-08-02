@@ -474,6 +474,11 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
         (state.output.group_master("front").unwrap() - 0.5).abs() < 0.001,
         "Group Master uses the Matter level"
     );
+    let matter_values = matter_playback_values(&state, &state.output.snapshot());
+    assert!(
+        (matter_values[&1].level - 0.5).abs() < 0.001,
+        "Matter feedback uses the shared Group Master runtime level"
+    );
     let speed = state
         .output
         .speed_group_snapshot(0, application_millis(&state));

@@ -1095,7 +1095,7 @@ async fn v2_snapshot_returns_only_requested_runtime_and_a_pre_read_cursor() {
 }
 
 #[tokio::test]
-async fn v2_group_runtime_actions_resolve_assigned_and_direct_authority() {
+async fn v2_group_runtime_actions_use_assigned_runtime_authority() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -1125,6 +1125,10 @@ async fn v2_group_runtime_actions_resolve_assigned_and_direct_authority() {
     assert_eq!(assigned["projection"]["target"], "group");
     assert_eq!(assigned["projection"]["master"], 0.5);
     assert_eq!(assigned["outcome"]["status"], "applied");
+    let controls = authoritative_playback_controls(&state);
+    assert_eq!(controls["groups"].as_array().unwrap().len(), 1);
+    assert_eq!(controls["groups"][0]["id"], "front");
+    assert_eq!(controls["groups"][0]["master"], 0.5);
     let by_group = playback_events_for_object(
         &state,
         cursor,
@@ -1169,37 +1173,19 @@ async fn v2_group_runtime_actions_resolve_assigned_and_direct_authority() {
         .installation
         .set_setting(&output_key, "output-sentinel")
         .unwrap();
-    let direct = json(
-        post_action(
-            &app,
-            Some(&token),
-            desk_id,
-            group_action_request(
-                "direct-group-master",
-                "side",
-                serde_json::json!({"type":"master","value":0.4}),
-            ),
-        )
-        .await,
+    let direct = post_action(
+        &app,
+        Some(&token),
+        desk_id,
+        group_action_request(
+            "direct-unassigned-group-master",
+            "side",
+            serde_json::json!({"type":"master","value":0.4}),
+        ),
     )
     .await;
-    assert_eq!(
-        direct["resolved"],
-        serde_json::json!({"kind":"group","group_id":"side","playback_number":null})
-    );
-    assert_eq!(
-        direct["projection"]["playback_number"],
-        serde_json::Value::Null
-    );
-    assert_eq!(direct["projection"]["master"], 0.4);
-    assert_ne!(setting_value(&state, &output_key), "output-sentinel");
-    state
-        .installation
-        .set_setting(&output_key, "flash-sentinel")
-        .unwrap();
-    assert_group_flash_phase(&app, &state, &token, desk_id, "side", true, 1.0).await;
-    assert_eq!(setting_value(&state, &output_key), "flash-sentinel");
-    assert_group_flash_phase(&app, &state, &token, desk_id, "side", false, 0.0).await;
+    assert_eq!(direct.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(setting_value(&state, &output_key), "output-sentinel");
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

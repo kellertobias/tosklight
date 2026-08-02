@@ -15,7 +15,6 @@ fn playback_level(
     state: &AppState,
     definition: &light_playback::PlaybackDefinition,
     running: Option<&light_playback::PlaybackRuntimeStatus>,
-    snapshot: &EngineSnapshot,
     speed_groups: &[SpeedSnapshot; 5],
 ) -> f32 {
     let level = match &definition.target {
@@ -30,12 +29,9 @@ fn playback_level(
             )
             .map(|playback| playback.fader_value)
             .unwrap_or(0.0),
-        light_playback::PlaybackTarget::Group { group_id } => snapshot
-            .groups
-            .iter()
-            .find(|group| group.id == *group_id)
-            .map(|group| group.master)
-            .unwrap_or(0.0),
+        light_playback::PlaybackTarget::Group { group_id } => {
+            state.output.group_master(group_id).unwrap_or(0.0)
+        }
         light_playback::PlaybackTarget::SpeedGroup { group } => {
             let index = speed_group_index(group).unwrap_or(0);
             match definition.fader {
@@ -213,13 +209,7 @@ fn send_slot_feedback(feedback: &OscPlaybackFeedback<'_>, slot: u8, number: Opti
     );
     let level = definition
         .map(|definition| {
-            playback_level(
-                feedback.state,
-                definition,
-                running,
-                feedback.snapshot,
-                feedback.speed_groups,
-            )
+            playback_level(feedback.state, definition, running, feedback.speed_groups)
         })
         .unwrap_or(0.0);
     send_osc(

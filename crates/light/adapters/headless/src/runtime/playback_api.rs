@@ -7,11 +7,13 @@ pub(super) fn authoritative_playback_controls(state: &AppState) -> serde_json::V
     let groups = snapshot
         .groups
         .iter()
-        .map(|group| {
-            serde_json::json!({
-                "id":group.id,
-                "master":group.master,
-                "flash_level":state.output.group_master_flash(&group.id)
+        .filter_map(|group| {
+            state.output.group_master(&group.id).map(|master| {
+                serde_json::json!({
+                    "id":group.id,
+                    "master":master,
+                    "flash_level":state.output.group_master_flash(&group.id)
+                })
             })
         })
         .collect::<Vec<_>>();

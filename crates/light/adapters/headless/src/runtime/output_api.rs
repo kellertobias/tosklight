@@ -195,11 +195,10 @@ pub(super) fn matter_playback_values(
                         })
                         .unwrap_or_default()
                 }
-                PlaybackTarget::Group { group_id } => snapshot
-                    .groups
-                    .iter()
-                    .find(|group| group.id == *group_id)
-                    .map(|group| matter::PlaybackValue::new(group.master, group.master > 0.0))
+                PlaybackTarget::Group { group_id } => state
+                    .output
+                    .group_master(group_id)
+                    .map(|master| matter::PlaybackValue::new(master, master > 0.0))
                     .unwrap_or_default(),
                 PlaybackTarget::SpeedGroup { group } => speed_group_index(group)
                     .ok()
