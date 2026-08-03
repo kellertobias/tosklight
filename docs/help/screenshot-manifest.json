@@ -291,16 +291,11 @@
     {
       "file": "workflows/desk-setup-inputs.png",
       "source": "storybook",
-      "storyId": "tosklight-windows-setup--programmer",
+			"storyId": "tosklight-windows-setup--others",
 			"viewport": { "width": 1496, "height": 756 },
 			"theme": "dark",
 			"mode": "software",
-      "interactions": [
-        {
-          "action": "scroll",
-          "selector": "article:has-text(\"Update defaults\")"
-        }
-      ]
+			"interactions": []
 		},
 		{
 			"file": "workflows/desk-setup-lock.png",
@@ -347,16 +342,6 @@
 			"theme": "dark",
 			"mode": "software",
       "interactions": []
-		},
-    {
-      "file": "workflows/desk-setup-users.png",
-      "source": "live-app",
-      "storyId": null,
-			"viewport": { "width": 1496, "height": 756 },
-			"theme": "dark",
-			"mode": "software",
-      "interactions": [],
-      "reason": "The production Users and sessions reference depends on authoritative bootstrap, session, and show-lifecycle state that the deterministic setup-section harness does not fabricate."
 		},
 		{
 			"file": "workflows/fixture-library-create.png",

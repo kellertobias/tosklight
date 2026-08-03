@@ -30,6 +30,7 @@ import { ScreensProvider } from "../features/screens/ScreensContext";
 import type { ScreensContextValue } from "../features/screens/types";
 import { SetupWindowView } from "./SetupWindow";
 import type { SetupWindowController } from "./setupWindow/controller";
+import type { SetupSection } from "./setupWindow/SetupChrome";
 
 const screens: ScreensContextValue = {
 	screens: null,
@@ -409,7 +410,7 @@ export function MarketingSetupWindow({
 	initialSection,
 	initialFixtureLibraryOpen = false,
 }: {
-	initialSection: number;
+	initialSection: SetupSection;
 	initialFixtureLibraryOpen?: boolean;
 }) {
 	const [section, setSection] = useState(initialSection);
@@ -464,11 +465,13 @@ export function MarketingSetupWindow({
 }
 
 export function MarketingSetupOutputsWindow() {
-	return <MarketingSetupWindow initialSection={3} />;
+	return <MarketingSetupWindow initialSection="outputs" />;
 }
 
 export function MarketingFixtureLibraryWindow() {
-	return <MarketingSetupWindow initialSection={0} initialFixtureLibraryOpen />;
+	return (
+		<MarketingSetupWindow initialSection="shows" initialFixtureLibraryOpen />
+	);
 }
 
 const meta = {
@@ -481,19 +484,29 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Timecode: Story = {
-	render: () => <MarketingSetupWindow initialSection={4} />,
+	render: () => <MarketingSetupWindow initialSection="timecode" />,
 };
 
 export const ShowsAndRecovery: Story = {
-	render: () => <MarketingSetupWindow initialSection={0} />,
+	render: () => <MarketingSetupWindow initialSection="shows" />,
 };
 
-export const UsersAndSessions: Story = {
-	render: () => <MarketingSetupWindow initialSection={1} />,
+export const Defaults: Story = {
+	render: () => <MarketingSetupWindow initialSection="preferences-defaults" />,
 };
 
-export const Programmer: Story = {
-	render: () => <MarketingSetupWindow initialSection={2} />,
+export const AttributesAndEncoders: Story = {
+	render: () => (
+		<MarketingSetupWindow initialSection="preferences-attributes" />
+	),
+};
+
+export const Highlight: Story = {
+	render: () => <MarketingSetupWindow initialSection="preferences-highlight" />,
+};
+
+export const Others: Story = {
+	render: () => <MarketingSetupWindow initialSection="preferences-others" />,
 };
 
 export const Outputs: Story = {
@@ -509,9 +522,9 @@ export const FixtureLibraryMarketing: Story = {
 };
 
 export const NetworkAndInputs: Story = {
-	render: () => <MarketingSetupWindow initialSection={5} />,
+	render: () => <MarketingSetupWindow initialSection="network" />,
 };
 
 export const ScreensAndPlayback: Story = {
-	render: () => <MarketingSetupWindow initialSection={6} />,
+	render: () => <MarketingSetupWindow initialSection="screens" />,
 };

@@ -30,7 +30,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 			.click();
 		await page
 			.locator(".setup-window nav")
-			.getByRole("button", { name: "Programmer", exact: true })
+			.getByRole("button", { name: "Attributes & encoders", exact: true })
 			.click();
 		const registry = page.locator(".programmer-setup-list");
 		for (const group of [
@@ -57,6 +57,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 			}),
 		).toBeVisible();
 
+		await registry.getByRole("tab", { name: "Custom attributes" }).click();
 		await registry
 			.getByLabel("New custom attribute")
 			.fill("Test aperture mode");

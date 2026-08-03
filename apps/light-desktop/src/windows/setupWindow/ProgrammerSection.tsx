@@ -5,6 +5,7 @@ import {
 	SelectField,
 	SwitchField,
 } from "@tosklight/ui";
+import type { ReactNode } from "react";
 import type {
 	HighlightLookColor,
 	HighlightLookConfiguration,
@@ -13,6 +14,7 @@ import {
 	RecordDefaultsFields,
 	UpdateDefaultsFields,
 } from "../../components/setup/ProgrammerDefaults";
+import { PoolPaletteSettings } from "../../components/shared/PoolColorSettings";
 import { AttributeRegistrySettings } from "./AttributeRegistrySettings";
 import type { SetupWindowController } from "./controller";
 
@@ -106,7 +108,7 @@ export function HighlightLookSettings({
 	return (
 		<article>
 			<header>
-				<b>Highlight Look</b>
+				<b>Highlight look</b>
 				<small>
 					One semantic identification look for every show on this desk.
 				</small>
@@ -194,7 +196,7 @@ export function HighlightLookSettings({
 	);
 }
 
-function PatchHighlightSettings({
+export function PatchHighlightSettings({
 	controller,
 }: {
 	controller: SetupWindowController;
@@ -204,7 +206,7 @@ function PatchHighlightSettings({
 	return (
 		<article>
 			<header>
-				<b>Show Patch</b>
+				<b>Highlight patch</b>
 				<small>
 					Virtual Stage highlighting remains active regardless of this option.
 				</small>
@@ -213,7 +215,7 @@ function PatchHighlightSettings({
 				<SwitchField
 					label="Highlight patch selection via DMX"
 					offLabel="Stage only"
-					onLabel="Stage + DMX"
+					onLabel="Stage and DMX"
 					checked={draft.patch_preview_highlight_dmx ?? false}
 					onChange={(event) =>
 						controller.editDraft({
@@ -312,41 +314,20 @@ function CommandLineTimingSettings({
 	);
 }
 
-export function ProgrammerSection({
+function PreferencesPage({
+	title,
 	controller,
+	children,
 }: {
+	title: string;
 	controller: SetupWindowController;
+	children: ReactNode;
 }) {
 	return (
 		<>
-			<h2>Programmer</h2>
+			<h2>{title}</h2>
 			<div className="setup-list programmer-setup-list">
-				<article>
-					<header>
-						<b>Record defaults</b>
-						<small>Also available by holding Record.</small>
-					</header>
-					<RecordDefaultsFields
-						settings={controller.recordSettings}
-						onChange={controller.setRecordSettings}
-					/>
-				</article>
-				<AttributeRegistrySettings controller={controller} />
-				<article>
-					<header>
-						<b>Update defaults</b>
-						<small>Also available by holding Update.</small>
-					</header>
-					<UpdateDefaultsFields
-						settings={controller.updateSettings}
-						onChange={controller.setUpdateSettings}
-					/>
-				</article>
-				<HighlightLookSettings controller={controller} />
-				<PatchHighlightSettings controller={controller} />
-				<CommandLineTimingSettings controller={controller} />
-				<h3 className="setup-subsection-title">Preload</h3>
-				<PreloadSettings controller={controller} />
+				{children}
 				{controller.programmerSettingsError && (
 					<p className="modal-error" role="alert">
 						{controller.programmerSettingsError}
@@ -354,5 +335,77 @@ export function ProgrammerSection({
 				)}
 			</div>
 		</>
+	);
+}
+
+export function DefaultsSection({
+	controller,
+}: {
+	controller: SetupWindowController;
+}) {
+	return (
+		<PreferencesPage title="Defaults" controller={controller}>
+			<article>
+				<header>
+					<b>Record defaults</b>
+					<small>Also available by holding Record.</small>
+				</header>
+				<RecordDefaultsFields
+					settings={controller.recordSettings}
+					onChange={controller.setRecordSettings}
+				/>
+			</article>
+			<article>
+				<header>
+					<b>Update defaults</b>
+					<small>Also available by holding Update.</small>
+				</header>
+				<UpdateDefaultsFields
+					settings={controller.updateSettings}
+					onChange={controller.setUpdateSettings}
+				/>
+			</article>
+			<article>
+				<PoolPaletteSettings />
+			</article>
+		</PreferencesPage>
+	);
+}
+
+export function AttributesEncodersSection({
+	controller,
+}: {
+	controller: SetupWindowController;
+}) {
+	return (
+		<PreferencesPage title="Attributes & encoders" controller={controller}>
+			<AttributeRegistrySettings controller={controller} />
+		</PreferencesPage>
+	);
+}
+
+export function HighlightSection({
+	controller,
+}: {
+	controller: SetupWindowController;
+}) {
+	return (
+		<PreferencesPage title="Highlight" controller={controller}>
+			<HighlightLookSettings controller={controller} />
+			<PatchHighlightSettings controller={controller} />
+		</PreferencesPage>
+	);
+}
+
+export function OthersSection({
+	controller,
+}: {
+	controller: SetupWindowController;
+}) {
+	return (
+		<PreferencesPage title="Others" controller={controller}>
+			<CommandLineTimingSettings controller={controller} />
+			<PreloadSettings controller={controller} />
+		</PreferencesPage>
 	);
 }

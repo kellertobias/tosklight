@@ -33,6 +33,9 @@ export function AttributeRegistrySettings({
 }: {
 	controller: SetupWindowController;
 }) {
+	const [activeTab, setActiveTab] = useState<
+		"encoder-groups" | "activation-groups" | "custom-attributes"
+	>("encoder-groups");
 	const snapshot = controller.attributeConfiguration;
 	if (!snapshot)
 		return (
@@ -47,25 +50,72 @@ export function AttributeRegistrySettings({
 		controller.editAttributeConfiguration(configuration);
 	return (
 		<>
-			<article>
-				<header>
-					<b>Attributes</b>
-					<small>
-						Show-owned IDs, metadata, and exact six-encoder page positions.
-					</small>
-				</header>
-				<AttributeGroups snapshot={snapshot} onChange={update} />
-			</article>
-			<article>
-				<header>
-					<b>Attribute activation groups</b>
-					<small>
-						Record defaults only. Every attribute belongs to exactly one group
-						within its encoder tab.
-					</small>
-				</header>
-				<ActivationGroups snapshot={snapshot} onChange={update} />
-			</article>
+			<div
+				className="attribute-settings-tabs"
+				role="tablist"
+				aria-label="Attributes & encoders"
+			>
+				{(
+					[
+						["encoder-groups", "Encoder groups"],
+						["activation-groups", "Attribute activation groups"],
+						["custom-attributes", "Custom attributes"],
+					] as const
+				).map(([id, label]) => (
+					<Button
+						key={id}
+						role="tab"
+						aria-selected={activeTab === id}
+						className={activeTab === id ? "active" : ""}
+						onClick={() => setActiveTab(id)}
+					>
+						{label}
+					</Button>
+				))}
+			</div>
+			{activeTab === "encoder-groups" && (
+				<article role="tabpanel">
+					<header>
+						<b>Encoder groups</b>
+						<small>
+							Browse the ordered controls that produce the desk's encoder pages.
+						</small>
+					</header>
+					<AttributeGroups
+						snapshot={snapshot}
+						onChange={update}
+						mode="built-in"
+					/>
+				</article>
+			)}
+			{activeTab === "activation-groups" && (
+				<article role="tabpanel">
+					<header>
+						<b>Attribute activation groups</b>
+						<small>
+							Exactly one member is active within a group, and groups never
+							cross encoder tabs.
+						</small>
+					</header>
+					<ActivationGroups snapshot={snapshot} onChange={update} />
+				</article>
+			)}
+			{activeTab === "custom-attributes" && (
+				<article role="tabpanel">
+					<header>
+						<b>Custom attributes</b>
+						<small>
+							Create and edit show-owned attributes without mixing them into the
+							built-in registry.
+						</small>
+					</header>
+					<AttributeGroups
+						snapshot={snapshot}
+						onChange={update}
+						mode="custom"
+					/>
+				</article>
+			)}
 			{controller.attributeConfigurationError && (
 				<p className="modal-error" role="alert">
 					{controller.attributeConfigurationError}
@@ -78,13 +128,18 @@ export function AttributeRegistrySettings({
 function AttributeGroups({
 	snapshot,
 	onChange,
+	mode,
 }: {
 	snapshot: NonNullable<SetupWindowController["attributeConfiguration"]>;
 	onChange(configuration: AttributeConfiguration): void;
+	mode: "built-in" | "custom";
 }) {
 	const [label, setLabel] = useState("");
 	const [group, setGroup] = useState<AttributeEncoderGroup>("intensity");
 	const descriptors = projectedDescriptors(snapshot);
+	const visibleDescriptors = descriptors.filter((descriptor) =>
+		mode === "built-in" ? descriptor.built_in : !descriptor.built_in,
+	);
 	const create = () => {
 		const trimmed = label.trim();
 		if (!trimmed) return;
@@ -122,7 +177,7 @@ function AttributeGroups({
 				<section key={id} className="attribute-registry-group">
 					<h3>{groupLabel}</h3>
 					<ul className="plain-list">
-						{descriptors
+						{visibleDescriptors
 							.filter((descriptor) => descriptor.encoder_group === id)
 							.map((descriptor) => (
 								<AttributeRow
@@ -135,25 +190,29 @@ function AttributeGroups({
 					</ul>
 				</section>
 			))}
-			<FormLayout labelPlacement="side">
-				<TextField
-					label="New custom attribute"
-					value={label}
-					onChange={(event) => setLabel(event.target.value)}
-				/>
-				<SelectField
-					label="Encoder group"
-					value={group}
-					options={ENCODER_GROUPS.map(({ id, label }) => ({
-						value: id,
-						label,
-					}))}
-					onChange={(value) => setGroup(value as AttributeEncoderGroup)}
-				/>
-			</FormLayout>
-			<Button disabled={!label.trim()} onClick={create}>
-				Create custom attribute
-			</Button>
+			{mode === "custom" && (
+				<>
+					<FormLayout labelPlacement="side">
+						<TextField
+							label="New custom attribute"
+							value={label}
+							onChange={(event) => setLabel(event.target.value)}
+						/>
+						<SelectField
+							label="Encoder group"
+							value={group}
+							options={ENCODER_GROUPS.map(({ id, label }) => ({
+								value: id,
+								label,
+							}))}
+							onChange={(value) => setGroup(value as AttributeEncoderGroup)}
+						/>
+					</FormLayout>
+					<Button disabled={!label.trim()} onClick={create}>
+						Create custom attribute
+					</Button>
+				</>
+			)}
 		</>
 	);
 }
@@ -173,17 +232,6 @@ function AttributeRow({
 	const placement = configuration.placements.find(
 		(candidate) => candidate.attribute === descriptor.id,
 	);
-	const activationOptions = configuration.activation_groups
-		.filter((candidate) =>
-			candidate.members.every((member) =>
-				configuration.placements.some(
-					(memberPlacement) =>
-						memberPlacement.attribute === member &&
-						memberPlacement.encoder_group === descriptor.encoder_group,
-				),
-			),
-		)
-		.map((candidate) => ({ value: candidate.id, label: candidate.label }));
 	return (
 		<li>
 			<div>
@@ -195,14 +243,6 @@ function AttributeRow({
 					{descriptor.retired ? " · Retired" : ""}
 				</small>
 			</div>
-			<SelectField
-				ariaLabel={`${descriptor.label} activation group`}
-				value={activationGroupId(configuration, descriptor.id)}
-				options={activationOptions}
-				onChange={(groupId) =>
-					onChange(moveActivationMember(configuration, descriptor.id, groupId))
-				}
-			/>
 			{custom && placement && (
 				<CustomAttributeControls
 					configuration={configuration}
@@ -539,25 +579,6 @@ function activationGroupId(
 			group.members.includes(attribute),
 		)?.id ?? ""
 	);
-}
-
-function moveActivationMember(
-	configuration: AttributeConfiguration,
-	attribute: string,
-	targetId: string,
-) {
-	return {
-		...configuration,
-		activation_groups: configuration.activation_groups
-			.map((group) => ({
-				...group,
-				members:
-					group.id === targetId
-						? [...new Set([...group.members, attribute])]
-						: group.members.filter((member) => member !== attribute),
-			}))
-			.filter((group) => group.members.length),
-	};
 }
 
 function updatePlacement(

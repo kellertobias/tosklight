@@ -17,6 +17,7 @@ import { useConfigurationActions } from "../../features/configuration/Configurat
 import { useDeskConfiguration } from "../../features/configuration/ConfigurationState";
 import { useDeskConnection } from "../../features/deskConnection/DeskConnectionContext";
 import { useProgrammingUpdate } from "../../features/programmingUpdate/ProgrammingUpdateProvider";
+import type { SetupSection } from "./SetupChrome";
 
 export function useSetupWindowController() {
 	const connection = useDeskConnection();
@@ -24,7 +25,7 @@ export function useSetupWindowController() {
 	const attributeActions = useAttributeConfigurationActions();
 	const configuration = useDeskConfiguration();
 	const programmingUpdate = useProgrammingUpdate();
-	const [section, setSection] = useState(0);
+	const [section, setSection] = useState<SetupSection>("shows");
 	const [draft, setDraft] = useState<DeskConfiguration | null>(configuration);
 	const {
 		recordSettings,
@@ -71,7 +72,7 @@ export function useSetupWindowController() {
 	}, [configuration]);
 
 	useEffect(() => {
-		if (section !== 2) return;
+		if (section !== "preferences-attributes") return;
 		let active = true;
 		setAttributeConfigurationError(null);
 		void attributeActions
@@ -106,10 +107,10 @@ export function useSetupWindowController() {
 		};
 		const [requiresRestart, updateSaved, attributesSaved] = await Promise.all([
 			configurationActions?.saveConfiguration(draft) ?? Promise.resolve(false),
-			section === 2 && programmerSettingsLoaded
+			section === "preferences-defaults" && programmerSettingsLoaded
 				? saveUpdateSettings(programmingUpdate, updateSettings)
 				: Promise.resolve(true),
-			section === 2
+			section === "preferences-attributes"
 				? saveAttributeConfiguration(
 						attributeActions,
 						savedAttributeConfiguration.current,
@@ -117,7 +118,7 @@ export function useSetupWindowController() {
 					)
 				: Promise.resolve(attributeConfiguration),
 		]);
-		if (section === 2) saveRecordSettings(recordSettings);
+		if (section === "preferences-defaults") saveRecordSettings(recordSettings);
 		if (attributesSaved) {
 			savedAttributeConfiguration.current = attributesSaved;
 			setAttributeConfiguration(attributesSaved);
@@ -184,7 +185,7 @@ function updateDeskDraft(
 
 function useProgrammerSetupSettings(
 	programmingUpdate: ReturnType<typeof useProgrammingUpdate>,
-	section: number,
+	section: SetupSection,
 ) {
 	const [recordSettings, setRecordSettings] =
 		useState<RecordSettings>(loadRecordSettings);
@@ -197,7 +198,7 @@ function useProgrammerSetupSettings(
 		string | null
 	>(null);
 	useEffect(() => {
-		if (section !== 2) return;
+		if (section !== "preferences-defaults") return;
 		let active = true;
 		setProgrammerSettingsLoaded(false);
 		setRecordSettings(loadRecordSettings());

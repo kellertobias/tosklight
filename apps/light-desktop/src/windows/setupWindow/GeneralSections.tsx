@@ -1,9 +1,6 @@
 import { Button, NumberField } from "@tosklight/ui";
 import { ShowRecoveryFileManager } from "../../components/setup/ShowRecoveryFileManager";
-import {
-	useBootstrapSnapshot,
-	useSessionSnapshot,
-} from "../../features/deskSnapshot/DeskSnapshotState";
+import { useBootstrapSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useConnectionStatus } from "../../features/shellStatus/ShellStatusState";
 import { useShowLifecycle } from "../../features/showLifecycle/ShowLifecycleContext";
 import { useApp } from "../../state/AppContext";
@@ -20,7 +17,8 @@ export function ShowsRecoverySection({
 	const { dispatch } = useApp();
 	const { draft } = controller;
 	const activeShow = bootstrap?.active_show;
-	const autosaveActive = connectionStatus === "connected" && Boolean(activeShow);
+	const autosaveActive =
+		connectionStatus === "connected" && Boolean(activeShow);
 	const autosaveStatus = autosaveActive
 		? "Connected, autosave active"
 		: connectionStatus === "connected"
@@ -71,35 +69,6 @@ export function ShowsRecoverySection({
 			<ShowRecoveryFileManager
 				onOpenFixtureLibrary={() => controller.setFixtureLibraryOpen(true)}
 			/>
-		</>
-	);
-}
-
-export function UsersSessionsSection(_props: {
-	controller: SetupWindowController;
-}) {
-	const bootstrap = useBootstrapSnapshot();
-	const session = useSessionSnapshot();
-	const lifecycle = useShowLifecycle();
-	return (
-		<>
-			<h2>Users & sessions</h2>
-			<div className="setup-list">
-				{bootstrap?.users.map((user) => (
-					<article key={user.id}>
-						<b>{user.name}</b>
-						<span>{user.enabled ? "Enabled" : "Disabled"}</span>
-						<small>
-							{user.id === session?.user.id ? "Current operator" : user.id}
-						</small>
-						{user.enabled && user.id !== session?.user.id && (
-							<Button onClick={() => lifecycle?.switchUser(user.name)}>
-								Use this operator
-							</Button>
-						)}
-					</article>
-				))}
-			</div>
 		</>
 	);
 }

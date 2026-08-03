@@ -89,6 +89,12 @@ describe("Desk Setup attribute registry", () => {
 		expect(
 			screen.getByText(/intensity · page 1, encoder 1/),
 		).toBeInTheDocument();
+		expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+			"Encoder groups",
+			"Attribute activation groups",
+			"Custom attributes",
+		]);
+		fireEvent.click(screen.getByRole("tab", { name: "Custom attributes" }));
 		fireEvent.change(screen.getByLabelText("New custom attribute"), {
 			target: { value: "House Light" },
 		});
@@ -143,6 +149,9 @@ describe("Desk Setup attribute registry", () => {
 			/>,
 		);
 
+		fireEvent.click(
+			screen.getByRole("tab", { name: "Attribute activation groups" }),
+		);
 		fireEvent.click(
 			screen.getByRole("button", { name: "Restore recommended defaults" }),
 		);

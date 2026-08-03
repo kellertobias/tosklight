@@ -1,14 +1,14 @@
 # OSC, MIDI, and Network Control
 
-Preload capture configuration lives in **Desk Setup > Programmer**. MIDI, OSC, RTP-MIDI, Matter, and remote-server status live together in **Desk Setup > Network & Inputs**.
+Preload capture configuration lives in **Desk Setup > Preferences > Others**. MIDI, OSC, RTP-MIDI, Sound-to-Light input, Matter, and remote-server status are peer groups under **Desk Setup > Network & Inputs**.
 
 ![Desk input status and Preload capture settings](../assets/screenshots/workflows/desk-setup-inputs.png)
 
-## Highlight Look
+## Highlight look
 
-Open **Desk Setup > Programmer > Highlight Look** to configure the transient identification look shared by every show and operator desk connected to this server. Intensity is required. Shutter is fixed to the fixture profile's authored **Open** function and cannot be changed to a raw, closed, or strobe value. Color can be Ignore or one named color; Iris, Zoom, Focus, and Frost independently use Ignore or a normalized value. Ignore leaves the current programmer, playback, default, or other lower-priority value visible.
+Open **Desk Setup > Preferences > Highlight** to configure **Highlight look**, the transient identification look shared by every show and operator desk connected to this server. Intensity is required. Shutter is fixed to the fixture profile's authored **Open** function and cannot be changed to a raw, closed, or strobe value. Color can be Ignore or one named color; Iris, Zoom, Focus, and Frost independently use Ignore or a normalized value. Ignore leaves the current programmer, playback, default, or other lower-priority value visible.
 
-This is installation data, not portable show content. **Highlight patch selection via DMX** uses the same look and only controls whether Patch Preview selection reaches physical output. A **NeedsReview** or **LegacyRaw** warning means an older show contains raw per-fixture Highlight data. Review the semantic settings before choosing **Use semantic Highlight Look**; that choice changes evaluation policy but preserves the original show data for compatibility.
+This is installation data, not portable show content. The peer **Highlight patch** group chooses **Stage only** or **Stage and DMX** and only controls whether Patch Preview selection reaches physical output. A **NeedsReview** or **LegacyRaw** warning means an older show contains raw per-fixture Highlight data. Review the semantic settings before choosing **Use semantic Highlight Look**; that choice changes evaluation policy but preserves the original show data for compatibility.
 
 ## OSC
 
@@ -22,7 +22,7 @@ Network & Inputs reports selected native MIDI inputs and the active RTP-MIDI bin
 
 ## Sound-to-Light audio input
 
-Under **Network & Inputs > Inputs**, request microphone access and choose the audio input used by Sound to Light. This is one browser-local selection for the current desk and is shared by Speed Groups A–E. It is not portable show data and is not sent to the server as a device identifier. Use **Refresh inputs** after connecting or renaming an audio interface.
+Under **Network & Inputs > Sound input**, request microphone access and choose the audio input used by Sound to Light. This is one browser-local selection for the current desk and is shared by Speed Groups A–E. It is not portable show data and is not sent to the server as a device identifier. Use **Refresh inputs** after connecting or renaming an audio interface.
 
 Speed Group source, frequency region, gain, confidence, smoothing, tempo range, hold, and ratio remain in each Speed Group's settings. Open those settings with Shift-tap/Shift-click or a hold on the Speed Group control.
 
@@ -30,9 +30,9 @@ Speed Group source, frequency region, gain, confidence, smoothing, tempo range, 
 
 On **Screens & playback**, the default-screen card can enable or disable all software keyboard shortcuts. Software shortcuts are also disabled automatically while hardware controls are connected so one physical action is not processed twice. The complete key map is in [Command Line Reference](../30-Programmer/01-command-line.md).
 
-## Matter playback bridge
+## Matter bridge
 
-Open **Show > Enter Setup > Network & Inputs**, then use the **Matter server disabled** toggle. When enabled, its label changes to **Matter server enabled**. This is physical desk installation data, not Desktop layout or show data: changing a Desktop, changing or loading a show, or switching the current playback page does not change the setting, pairing identity, or commissioned fabrics. Disabling the setting stops Matter networking and advertising without deleting that persisted identity.
+Open **Show > Enter Setup > Network & Inputs > Matter bridge**, then use the **Matter server disabled** toggle. When enabled, its label changes to **Matter server enabled**. This is physical desk installation data, not Desktop layout or show data: changing a Desktop, changing or loading a show, or switching the current playback page does not change the setting, pairing identity, or commissioned fabrics. Disabling the setting stops Matter networking and advertising without deleting that persisted identity.
 
 When the status says **Ready to commission**, enter the displayed **Manual pairing code** in the Matter controller. **QR payload** exposes the standard `MT:` payload for controller or integration tooling. A basic commissioning window is time-limited by Matter; if the desk has not yet been commissioned and the window expires, disable and re-enable the bridge to open a new window. **Starting Matter networking…** means the UDP and mDNS sockets are not ready yet. A displayed error, such as a port conflict or missing suitable network interface, means the desk is not advertising and is not commissionable.
 

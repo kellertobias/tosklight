@@ -2,16 +2,47 @@ import { Button } from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
 import type { SetupWindowController } from "./controller";
 
-export const SETUP_SECTIONS = [
-	"Shows & recovery",
-	"Users & sessions",
-	"Programmer",
-	"Outputs",
-	"Timecode",
-	"Network & Inputs",
-	"Screens & playback",
-	"Preferences",
+export type SetupSection =
+	| "shows"
+	| "outputs"
+	| "timecode"
+	| "network"
+	| "screens"
+	| "preferences-defaults"
+	| "preferences-attributes"
+	| "preferences-highlight"
+	| "preferences-others";
+
+const SETUP_SECTIONS: ReadonlyArray<{
+	id: SetupSection;
+	label: string;
+	group?: "Preferences";
+}> = [
+	{ id: "shows", label: "Shows & recovery" },
+	{ id: "outputs", label: "Outputs" },
+	{ id: "timecode", label: "Timecode" },
+	{ id: "network", label: "Network & Inputs" },
+	{ id: "screens", label: "Screens & playback" },
+	{ id: "preferences-defaults", label: "Defaults", group: "Preferences" },
+	{
+		id: "preferences-attributes",
+		label: "Attributes & encoders",
+		group: "Preferences",
+	},
+	{ id: "preferences-highlight", label: "Highlight", group: "Preferences" },
+	{ id: "preferences-others", label: "Others", group: "Preferences" },
 ];
+
+export function setupSectionLabel(section: SetupSection) {
+	return (
+		SETUP_SECTIONS.find((candidate) => candidate.id === section)?.label ??
+		section
+	);
+}
+
+export function isPreferencesSection(section: SetupSection) {
+	return section.startsWith("preferences-");
+}
 
 export function SetupHeader({
 	controller,
@@ -19,42 +50,40 @@ export function SetupHeader({
 	controller: SetupWindowController;
 }) {
 	const actions =
-		controller.section === 7
-			? []
-			: controller.section === 6
-				? [
-						[
-							{
-								id: "undo",
-								label: "Undo",
-								disabled: !controller.screenCanUndo,
-								onClick: () => controller.screenUndo.current?.(),
-							},
-							{
-								id: "desk-lock",
-								label: "Desk Lock",
-								onClick: () => controller.setDeskLockSettingsOpen(true),
-							},
-						],
-					]
-				: [
-						[
-							{
-								id: "save",
-								label: "Save changes",
-								disabled:
-									!controller.draft ||
-									(controller.section === 2 &&
-										!controller.programmerSettingsLoaded),
-								onClick: () => void controller.save(),
-							},
-						],
-					];
+		controller.section === "screens"
+			? [
+					[
+						{
+							id: "undo",
+							label: "Undo",
+							disabled: !controller.screenCanUndo,
+							onClick: () => controller.screenUndo.current?.(),
+						},
+						{
+							id: "desk-lock",
+							label: "Desk Lock",
+							onClick: () => controller.setDeskLockSettingsOpen(true),
+						},
+					],
+				]
+			: [
+					[
+						{
+							id: "save",
+							label: "Save changes",
+							disabled:
+								!controller.draft ||
+								(controller.section === "preferences-defaults" &&
+									!controller.programmerSettingsLoaded),
+							onClick: () => void controller.save(),
+						},
+					],
+				];
 	return (
 		<WindowHeader
 			title="Desk Setup"
 			info={{
-				primary: SETUP_SECTIONS[controller.section],
+				primary: setupSectionLabel(controller.section),
 				secondary: controller.restartRequired ? "Restart required" : undefined,
 			}}
 			actions={actions}
@@ -66,20 +95,36 @@ export function SetupNavigation({
 	section,
 	onSelect,
 }: {
-	section: number;
-	onSelect: (section: number) => void;
+	section: SetupSection;
+	onSelect: (section: SetupSection) => void;
 }) {
+	let renderedPreferencesLabel = false;
 	return (
-		<nav>
-			{SETUP_SECTIONS.map((name, index) => (
-				<Button
-					onClick={() => onSelect(index)}
-					className={index === section ? "active" : ""}
-					key={name}
-				>
-					{name}
-				</Button>
-			))}
+		<nav aria-label="Desk Setup">
+			{SETUP_SECTIONS.map(({ id, label, group }) => {
+				const groupLabel =
+					group && !renderedPreferencesLabel ? (
+						<div className="setup-navigation-group" key={`${group}-label`}>
+							{group}
+						</div>
+					) : null;
+				if (group) renderedPreferencesLabel = true;
+				return (
+					<div
+						className={group ? "setup-navigation-child" : undefined}
+						key={id}
+					>
+						{groupLabel}
+						<Button
+							onClick={() => onSelect(id)}
+							className={id === section ? "active" : ""}
+							aria-current={id === section ? "page" : undefined}
+						>
+							{label}
+						</Button>
+					</div>
+				);
+			})}
 		</nav>
 	);
 }

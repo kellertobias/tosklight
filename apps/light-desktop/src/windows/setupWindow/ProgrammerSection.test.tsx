@@ -8,7 +8,10 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DeskConfiguration } from "../../api/types";
 import type { SetupWindowController } from "./controller";
-import { HighlightLookSettings } from "./ProgrammerSection";
+import {
+	HighlightLookSettings,
+	PatchHighlightSettings,
+} from "./ProgrammerSection";
 
 afterEach(cleanup);
 
@@ -138,5 +141,27 @@ describe("Desk Setup Highlight Look", () => {
 		expect(screen.getByRole("status")).toHaveTextContent(
 			"Fixture 7 Dimmer: Color is unavailable",
 		);
+	});
+});
+
+describe("Desk Setup Highlight patch", () => {
+	it("uses the approved group and literal Stage choices", () => {
+		const draft = {
+			frame_rate_hz: 44,
+			patch_preview_highlight_dmx: true,
+		} as DeskConfiguration;
+		const editDraft = vi.fn();
+		render(
+			<PatchHighlightSettings
+				controller={{ draft, editDraft } as unknown as SetupWindowController}
+			/>,
+		);
+
+		expect(screen.getByText("Highlight patch")).toBeInTheDocument();
+		expect(
+			screen.getByLabelText("Highlight patch selection via DMX"),
+		).toBeChecked();
+		expect(screen.getByText("Stage only")).toBeInTheDocument();
+		expect(screen.getByText("Stage and DMX")).toBeInTheDocument();
 	});
 });

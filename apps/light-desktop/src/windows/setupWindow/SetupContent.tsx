@@ -1,16 +1,16 @@
-import { ServerErrorNotice } from "../../components/shell/ServerErrorNotice";
-import { PoolPaletteSettings } from "../../components/shared/PoolColorSettings";
-import { ScreensSetup } from "../../components/setup/ScreensSetup";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
+import { ScreensSetup } from "../../components/setup/ScreensSetup";
+import { ServerErrorNotice } from "../../components/shell/ServerErrorNotice";
 import type { SetupWindowController } from "./controller";
-import {
-	ShowsRecoverySection,
-	TimecodeSection,
-	UsersSessionsSection,
-} from "./GeneralSections";
+import { ShowsRecoverySection, TimecodeSection } from "./GeneralSections";
 import { NetworkSection } from "./NetworkSection";
 import { OutputsSection } from "./OutputsSection";
-import { ProgrammerSection } from "./ProgrammerSection";
+import {
+	AttributesEncodersSection,
+	DefaultsSection,
+	HighlightSection,
+	OthersSection,
+} from "./ProgrammerSection";
 
 function ActiveSetupSection({
 	controller,
@@ -18,25 +18,22 @@ function ActiveSetupSection({
 	controller: SetupWindowController;
 }) {
 	switch (controller.section) {
-		case 0:
+		case "shows":
 			return <ShowsRecoverySection controller={controller} />;
-		case 1:
-			return <UsersSessionsSection controller={controller} />;
-		case 2:
-			return <ProgrammerSection controller={controller} />;
-		case 3:
+		case "outputs":
 			return <OutputsSection controller={controller} />;
-		case 4:
+		case "timecode":
 			return <TimecodeSection controller={controller} />;
-		case 5:
+		case "network":
 			return <NetworkSection controller={controller} />;
-		case 7:
-			return (
-				<section className="setup-section" aria-labelledby="preferences-title">
-					<h2 id="preferences-title">Preferences</h2>
-					<PoolPaletteSettings />
-				</section>
-			);
+		case "preferences-defaults":
+			return <DefaultsSection controller={controller} />;
+		case "preferences-attributes":
+			return <AttributesEncodersSection controller={controller} />;
+		case "preferences-highlight":
+			return <HighlightSection controller={controller} />;
+		case "preferences-others":
+			return <OthersSection controller={controller} />;
 		default:
 			return null;
 	}
@@ -52,7 +49,7 @@ export function SetupContent({
 			<WindowScrollArea className="setup-content-scroll">
 				<div className="setup-content">
 					<ActiveSetupSection controller={controller} />
-					<div hidden={controller.section !== 6}>
+					<div hidden={controller.section !== "screens"}>
 						<ScreensSetup
 							undoRef={controller.screenUndo}
 							onUndoAvailabilityChange={controller.updateScreenUndoAvailability}

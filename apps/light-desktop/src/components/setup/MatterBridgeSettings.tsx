@@ -1,27 +1,81 @@
-import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
-import { useMediaServers } from "../../features/mediaServers/MediaServersContext";
-import {
-  useDeskConfiguration,
-  useMatterEnabled,
-} from "../../features/configuration/ConfigurationState";
 import { Button, SwitchField } from "@tosklight/ui";
+import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
+import {
+	useDeskConfiguration,
+	useMatterEnabled,
+} from "../../features/configuration/ConfigurationState";
+import { useMediaServers } from "../../features/mediaServers/MediaServersContext";
 
 export function MatterBridgeSettings() {
-  const matter = useMediaServers()?.matter ?? null;
-  const configuration = useDeskConfiguration();
-  const configurationActions = useConfigurationActions();
-  const enabled = useMatterEnabled();
-  const toggleMatter = (enabled: boolean) => {
-    if (!configuration) return;
-    void configurationActions?.saveConfiguration({ ...configuration, matter_enabled: enabled });
-  };
+	const matter = useMediaServers()?.matter ?? null;
+	const configuration = useDeskConfiguration();
+	const configurationActions = useConfigurationActions();
+	const enabled = useMatterEnabled();
+	const toggleMatter = (enabled: boolean) => {
+		if (!configuration) return;
+		void configurationActions?.saveConfiguration({
+			...configuration,
+			matter_enabled: enabled,
+		});
+	};
 
-  return <article className="matter-desk-settings" aria-label="Matter playback bridge">
-    <header><div><b>Matter playback bridge</b><small>Desk installation · shared across shows and Desktops</small></div></header>
-    <SwitchField label="Matter server" offLabel="Disabled" onLabel="Enabled" checked={enabled} onChange={(event) => toggleMatter(event.target.checked)}/>
-    <p>{!enabled ? "Disabled. No Matter lights are advertised." : matter?.transport === "running" ? `${matter.lights.length} assigned playback${matter.lights.length === 1 ? "" : "s"} exposed as dimmable lights.` : matter?.limitation ?? "Starting Matter networking…"}</p>
-    {matter?.commissionable && matter.pairing && <div className="matter-pairing"><b>Ready to commission</b><span>Manual pairing code</span><code>{matter.pairing.manual_code}</code><Button onClick={() => void navigator.clipboard?.writeText(matter.pairing?.manual_code ?? "")}>Copy pairing code</Button><details><summary>QR payload</summary><code>{matter.pairing.qr_code}</code></details></div>}
-    {matter?.commissioned && <small>Commissioned on the local Matter fabric. Playback changes and controller writes are synchronized in both directions.</small>}
-    {enabled && <small>Every assigned global page/playback is exposed, including button-only controls; empty slots are not advertised.</small>}
-  </article>;
+	return (
+		<article
+			className="matter-desk-settings"
+			aria-label="Matter bridge settings"
+		>
+			<header>
+				<div>
+					<b>Matter bridge</b>
+					<small>Desk installation · shared across shows and Desktops</small>
+				</div>
+			</header>
+			<SwitchField
+				label="Matter server"
+				offLabel="Disabled"
+				onLabel="Enabled"
+				checked={enabled}
+				onChange={(event) => toggleMatter(event.target.checked)}
+			/>
+			<p>
+				{!enabled
+					? "Disabled. No Matter lights are advertised."
+					: matter?.transport === "running"
+						? `${matter.lights.length} assigned playback${matter.lights.length === 1 ? "" : "s"} exposed as dimmable lights.`
+						: (matter?.limitation ?? "Starting Matter networking…")}
+			</p>
+			{matter?.commissionable && matter.pairing && (
+				<div className="matter-pairing">
+					<b>Ready to commission</b>
+					<span>Manual pairing code</span>
+					<code>{matter.pairing.manual_code}</code>
+					<Button
+						onClick={() =>
+							void navigator.clipboard?.writeText(
+								matter.pairing?.manual_code ?? "",
+							)
+						}
+					>
+						Copy pairing code
+					</Button>
+					<details>
+						<summary>QR payload</summary>
+						<code>{matter.pairing.qr_code}</code>
+					</details>
+				</div>
+			)}
+			{matter?.commissioned && (
+				<small>
+					Commissioned on the local Matter fabric. Playback changes and
+					controller writes are synchronized in both directions.
+				</small>
+			)}
+			{enabled && (
+				<small>
+					Every assigned global page/playback is exposed, including button-only
+					controls; empty slots are not advertised.
+				</small>
+			)}
+		</article>
+	);
 }

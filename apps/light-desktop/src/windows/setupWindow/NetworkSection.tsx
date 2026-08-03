@@ -1,10 +1,5 @@
+import { Button, FormField, FormLayout, TextField } from "@tosklight/ui";
 import { configuredServerUrl } from "../../api/client/serverLocation";
-import {
-	Button,
-	FormField,
-	FormLayout,
-	TextField,
-} from "@tosklight/ui";
 import { MatterBridgeSettings } from "../../components/setup/MatterBridgeSettings";
 import { SoundInputSettings } from "../../components/setup/SoundInputSettings";
 import type { SetupWindowController } from "./controller";
@@ -12,8 +7,11 @@ import type { SetupWindowController } from "./controller";
 function NetworkInputs({ controller }: { controller: SetupWindowController }) {
 	const { draft } = controller;
 	return (
-		<section className="network-settings-group" aria-labelledby="network-inputs">
-			<h3 id="network-inputs">Inputs</h3>
+		<section
+			className="network-settings-group"
+			aria-labelledby="control-inputs"
+		>
+			<h3 id="control-inputs">Control inputs</h3>
 			<div className="setup-list network-input-list">
 				<article>
 					<b>MIDI inputs</b>
@@ -32,7 +30,6 @@ function NetworkInputs({ controller }: { controller: SetupWindowController }) {
 					<span>{draft?.rtp_midi_bind ?? "Disabled"}</span>
 				</article>
 			</div>
-			<SoundInputSettings />
 		</section>
 	);
 }
@@ -44,12 +41,12 @@ export function NetworkSection({
 }) {
 	return (
 		<>
-			<h2>Network</h2>
+			<h2>Network &amp; Inputs</h2>
 			<section
 				className="network-settings-group"
 				aria-labelledby="network-connection"
 			>
-				<h3 id="network-connection">Connection</h3>
+				<h3 id="network-connection">ToskLight server connection</h3>
 				<FormLayout className="configuration-form" labelPlacement="side">
 					<TextField
 						label="Light server URL"
@@ -81,11 +78,15 @@ export function NetworkSection({
 				</div>
 			</section>
 			<NetworkInputs controller={controller} />
+			<section className="network-settings-group" aria-labelledby="sound-input">
+				<h3 id="sound-input">Sound input</h3>
+				<SoundInputSettings />
+			</section>
 			<section
 				className="network-settings-group"
-				aria-labelledby="network-services"
+				aria-labelledby="matter-bridge"
 			>
-				<h3 id="network-services">Services</h3>
+				<h3 id="matter-bridge">Matter bridge</h3>
 				<MatterBridgeSettings />
 			</section>
 		</>

@@ -125,7 +125,6 @@ const workflowScreenshots = [
   "desk-setup-screens.png",
   "desk-setup-shows-recovery.png",
   "desk-setup-timecode.png",
-  "desk-setup-users.png",
   "fixture-library-create.png",
   "fixture-library-import.png",
   "fixture-library-mode-editor.png",
@@ -219,8 +218,7 @@ async function captureWorkflowReference(page: Page) {
   await expect(page.locator(".setup-window")).toBeVisible();
   const setupSections = [
     ["Shows & recovery", "desk-setup-shows-recovery.png"],
-    ["Users & sessions", "desk-setup-users.png"],
-    ["Programmer", "desk-setup-inputs.png"],
+    ["Others", "desk-setup-inputs.png"],
     ["Outputs", "desk-setup-output-engine.png"],
     ["Timecode", "desk-setup-timecode.png"],
     ["Network & Inputs", "desk-setup-network-api.png"],

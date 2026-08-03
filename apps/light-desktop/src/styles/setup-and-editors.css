@@ -5,6 +5,17 @@
 .setup-window nav {
 	background: #0b0e12;
 }
+.setup-navigation-group {
+	margin: 12px 8px 4px;
+	color: var(--muted);
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+.setup-navigation-child > .ui-button {
+	padding-left: 18px;
+}
 .setup-window main {
 	padding: 0;
 	overflow: hidden;
