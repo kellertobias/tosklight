@@ -18,6 +18,8 @@ export interface AttributeEncoderPlacement {
 	encoder_group: AttributeEncoderGroupId;
 	encoder_page: number;
 	encoder_slot: number;
+	/** Controls with the same key are packed together on width-derived pages. */
+	compound_group?: string | null;
 }
 
 export interface AttributeEncoderPage<
@@ -48,8 +50,11 @@ export function attributeEncoderGroups<
 >(
 	registry: readonly Descriptor[],
 	supportedAttributes: ReadonlySet<string>,
+	slotCount: 4 | 5 | 6 = 6,
 ): Array<AttributeEncoderGroup<Descriptor>> {
 	const placements = validatePlacements(registry);
+	if (slotCount !== 6)
+		return repackedEncoderGroups(placements, supportedAttributes, slotCount);
 	return ATTRIBUTE_ENCODER_GROUPS.map(({ id, label }) => {
 		const pages = new Map<number, Array<Descriptor | null>>();
 		for (const descriptor of placements) {
@@ -73,6 +78,80 @@ export function attributeEncoderGroups<
 				.map(([number, slots]) => ({ number, slots })),
 		};
 	});
+}
+
+function repackedEncoderGroups<Descriptor extends AttributeEncoderPlacement>(
+	placements: readonly Descriptor[],
+	supportedAttributes: ReadonlySet<string>,
+	slotCount: 4 | 5,
+): Array<AttributeEncoderGroup<Descriptor>> {
+	return ATTRIBUTE_ENCODER_GROUPS.map(({ id, label }) => {
+		const ordered = placements
+			.filter((descriptor) => descriptor.encoder_group === id)
+			.sort(compareSemanticPlacement);
+		const units = compoundUnits(ordered);
+		const packed: Array<Array<Descriptor | null>> = [];
+		let slots: Array<Descriptor | null> = [];
+		for (const unit of units) {
+			if (unit.length > slotCount)
+				throw new Error(
+					`Compound encoder group ${unit[0]?.compound_group ?? "unknown"} needs ${unit.length} slots on a ${slotCount}-encoder surface`,
+				);
+			if (slots.length && slots.length + unit.length > slotCount) {
+				packed.push(padSlots(slots, slotCount));
+				slots = [];
+			}
+			slots.push(...unit);
+		}
+		if (slots.length) packed.push(padSlots(slots, slotCount));
+		const pages = packed
+			.map((pageSlots, index) => ({
+				number: index + 1,
+				slots: pageSlots.map((descriptor) =>
+					descriptor && supportedAttributes.has(descriptor.id)
+						? descriptor
+						: null,
+				),
+			}))
+			.filter((page) => page.slots.some(Boolean));
+		return { id, label, pages };
+	});
+}
+
+function compoundUnits<Descriptor extends AttributeEncoderPlacement>(
+	ordered: readonly Descriptor[],
+): Descriptor[][] {
+	const units: Descriptor[][] = [];
+	for (const descriptor of ordered) {
+		const previous = units.at(-1);
+		if (
+			descriptor.compound_group &&
+			previous?.[0]?.compound_group === descriptor.compound_group
+		) {
+			previous.push(descriptor);
+		} else {
+			units.push([descriptor]);
+		}
+	}
+	return units;
+}
+
+function compareSemanticPlacement(
+	left: AttributeEncoderPlacement,
+	right: AttributeEncoderPlacement,
+) {
+	return (
+		left.encoder_page - right.encoder_page ||
+		left.encoder_slot - right.encoder_slot ||
+		left.id.localeCompare(right.id)
+	);
+}
+
+function padSlots<Descriptor>(slots: Descriptor[], slotCount: number) {
+	return [
+		...slots,
+		...Array.from<null>({ length: slotCount - slots.length }).fill(null),
+	];
 }
 
 function validatePlacements<Descriptor extends AttributeEncoderPlacement>(

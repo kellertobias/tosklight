@@ -12,6 +12,7 @@ import type {
 	ConfiguredAttributeDescriptor,
 	CustomAttributeDescriptor,
 } from "../../api/client/attributeConfiguration";
+import { attributeEncoderGroups } from "../../components/control/parameterControls/attributeEncoderPages";
 import type { SetupWindowController } from "./controller";
 
 const ENCODER_GROUPS: Array<{
@@ -81,11 +82,7 @@ export function AttributeRegistrySettings({
 							Browse the ordered controls that produce the desk's encoder pages.
 						</small>
 					</header>
-					<AttributeGroups
-						snapshot={snapshot}
-						onChange={update}
-						mode="built-in"
-					/>
+					<EncoderGroupsPreview snapshot={snapshot} />
 				</article>
 			)}
 			{activeTab === "activation-groups" && (
@@ -122,6 +119,74 @@ export function AttributeRegistrySettings({
 				</p>
 			)}
 		</>
+	);
+}
+
+function EncoderGroupsPreview({
+	snapshot,
+}: {
+	snapshot: NonNullable<SetupWindowController["attributeConfiguration"]>;
+}) {
+	const [width, setWidth] = useState<4 | 6>(6);
+	const descriptors = projectedDescriptors(snapshot).filter(
+		(descriptor) => descriptor.built_in && !descriptor.retired,
+	);
+	const groups = attributeEncoderGroups(
+		descriptors,
+		new Set(descriptors.map(({ id }) => id)),
+		width,
+	).filter((group) => group.pages.length);
+	return (
+		<section
+			className="attribute-layout-preview"
+			aria-label={`${width}-encoder layout preview`}
+		>
+			<fieldset className="attribute-layout-width">
+				<legend>Preview width</legend>
+				{([4, 6] as const).map((candidate) => (
+					<Button
+						key={candidate}
+						className={candidate === width ? "active" : ""}
+						aria-pressed={candidate === width}
+						onClick={() => setWidth(candidate)}
+					>
+						{candidate} encoders
+					</Button>
+				))}
+			</fieldset>
+			{groups.map((group) => (
+				<section key={group.id} className="attribute-layout-group">
+					<h3>{group.label}</h3>
+					{group.pages.map((page) => (
+						<div key={page.number} className="attribute-layout-page">
+							<b>Page {page.number}</b>
+							<div
+								className="attribute-layout-slots"
+								style={{
+									gridTemplateColumns: `repeat(${width}, minmax(0, 1fr))`,
+								}}
+							>
+								{page.slots.map((descriptor, index) => (
+									<div
+										key={descriptor?.id ?? `empty-${index}`}
+										className="attribute-layout-slot"
+									>
+										<small>E{index + 1}</small>
+										<strong>{descriptor?.label ?? "Unassigned"}</strong>
+										{descriptor && (
+											<details>
+												<summary>Details</summary>
+												<code>{descriptor.id}</code>
+											</details>
+										)}
+									</div>
+								))}
+							</div>
+						</div>
+					))}
+				</section>
+			))}
+		</section>
 	);
 }
 

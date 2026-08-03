@@ -103,6 +103,60 @@ describe("attribute encoder pages", () => {
 		expect(position?.pages.every((page) => page.slots.length === 6)).toBe(true);
 	});
 
+	it("derives four- and five-encoder pages from one semantic order", () => {
+		const placements = [
+			descriptor("a", "A", "beam", 1, 1),
+			descriptor("b", "B", "beam", 1, 2),
+			descriptor("c", "C", "beam", 1, 3),
+			{
+				...descriptor("pair.a", "Pair A", "beam", 1, 4),
+				compound_group: "pair",
+			},
+			{
+				...descriptor("pair.b", "Pair B", "beam", 1, 5),
+				compound_group: "pair",
+			},
+		];
+		const supported = new Set(placements.map(({ id }) => id));
+
+		const four = attributeEncoderGroups(placements, supported, 4).find(
+			(group) => group.id === "beam",
+		);
+		expect(
+			four?.pages.map((page) => page.slots.map((slot) => slot?.id ?? null)),
+		).toEqual([
+			["a", "b", "c", null],
+			["pair.a", "pair.b", null, null],
+		]);
+
+		const five = attributeEncoderGroups(placements, supported, 5).find(
+			(group) => group.id === "beam",
+		);
+		expect(
+			five?.pages.map((page) => page.slots.map((slot) => slot?.id ?? null)),
+		).toEqual([["a", "b", "c", "pair.a", "pair.b"]]);
+	});
+
+	it("keeps derived page identity stable while omitting wholly unsupported pages", () => {
+		const placements = [
+			descriptor("a", "A", "color", 1, 1),
+			descriptor("b", "B", "color", 1, 2),
+			descriptor("c", "C", "color", 1, 3),
+			descriptor("d", "D", "color", 1, 4),
+			descriptor("e", "E", "color", 1, 5),
+		];
+		const color = attributeEncoderGroups(placements, new Set(["e"]), 4).find(
+			(group) => group.id === "color",
+		);
+
+		expect(color?.pages).toEqual([
+			{
+				number: 2,
+				slots: [placements[4], null, null, null],
+			},
+		]);
+	});
+
 	it("omits unsupported unknown IDs unless the registry gives them a valid placement", () => {
 		const custom = descriptor("vendor.sparkle", "Sparkle", "beam", 7, 2);
 		const supported = new Set(["legacy.unknown", "vendor.sparkle"]);

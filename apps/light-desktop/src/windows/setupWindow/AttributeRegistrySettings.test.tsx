@@ -87,13 +87,20 @@ describe("Desk Setup attribute registry", () => {
 		);
 
 		expect(
-			screen.getByText(/intensity · page 1, encoder 1/),
+			screen.getByText("intensity", { selector: "code" }),
 		).toBeInTheDocument();
 		expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
 			"Encoder groups",
 			"Attribute activation groups",
 			"Custom attributes",
 		]);
+		fireEvent.click(screen.getByRole("button", { name: "4 encoders" }));
+		const fourEncoderPreview = screen.getByLabelText(
+			"4-encoder layout preview",
+		);
+		expect(
+			fourEncoderPreview.querySelectorAll(".attribute-layout-slot"),
+		).toHaveLength(4);
 		fireEvent.click(screen.getByRole("tab", { name: "Custom attributes" }));
 		fireEvent.change(screen.getByLabelText("New custom attribute"), {
 			target: { value: "House Light" },

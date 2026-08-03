@@ -46,29 +46,35 @@ export function useSetupWindowController() {
 	const [deskLockSettingsOpen, setDeskLockSettingsOpen] = useState(false);
 	const [screenCanUndo, setScreenCanUndo] = useState(false);
 	const screenUndo = useRef<(() => void) | null>(null);
-	const draftRevision = useRef(0);
-	const draftDirty = useRef(false);
 	const pendingSave = useRef<{
-		revision: number;
+		fields: DeskConfigurationField[];
 		configuration: DeskConfiguration;
 	} | null>(null);
+	const dirtyFields = useRef(new Set<DeskConfigurationField>());
 	const savedAttributeConfiguration =
 		useRef<AttributeConfigurationSnapshot | null>(null);
 
 	useEffect(() => {
-		const pending = pendingSave.current;
-		if (
-			pending &&
-			JSON.stringify(pending.configuration) === JSON.stringify(configuration)
-		) {
-			pendingSave.current = null;
-			if (draftRevision.current === pending.revision) {
-				draftDirty.current = false;
-				setDraft(configuration);
+		if (!configuration) return;
+		setDraft((current) => {
+			if (!current) return configuration;
+			const pending = pendingSave.current;
+			const confirmed =
+				pending && sameConfiguration(pending.configuration, configuration)
+					? pending
+					: null;
+			if (confirmed) {
+				pendingSave.current = null;
+				for (const field of confirmed.fields)
+					if (sameValue(current[field], confirmed.configuration[field]))
+						dirtyFields.current.delete(field);
 			}
-			return;
-		}
-		if (!draftDirty.current) setDraft(configuration);
+			const merged = { ...current };
+			for (const field of CONFIGURATION_FIELDS)
+				if (!dirtyFields.current.has(field))
+					assignField(merged, configuration, field);
+			return merged;
+		});
 	}, [configuration]);
 
 	useEffect(() => {
@@ -97,16 +103,29 @@ export function useSetupWindowController() {
 		};
 	}, [attributeActions, section]);
 
-	const editDraft = (next: DeskConfiguration) =>
-		updateDeskDraft(next, draftRevision, draftDirty, setDraft);
+	const editDraft = (next: DeskConfiguration) => {
+		if (draft)
+			for (const field of CONFIGURATION_FIELDS)
+				if (!sameValue(draft[field], next[field]))
+					dirtyFields.current.add(field);
+		setDraft(next);
+	};
 	const save = async () => {
 		if (!draft) return;
-		pendingSave.current = {
-			revision: draftRevision.current,
-			configuration: draft,
-		};
+		const deskFields = configurationFieldsForSection(section).filter((field) =>
+			dirtyFields.current.has(field),
+		);
+		const deskConfiguration = configuration
+			? mergeConfigurationFields(configuration, draft, deskFields)
+			: null;
+		pendingSave.current = deskConfiguration
+			? { fields: deskFields, configuration: deskConfiguration }
+			: null;
 		const [requiresRestart, updateSaved, attributesSaved] = await Promise.all([
-			configurationActions?.saveConfiguration(draft) ?? Promise.resolve(false),
+			deskConfiguration
+				? (configurationActions?.saveConfiguration(deskConfiguration) ??
+					Promise.resolve(false))
+				: Promise.resolve(false),
 			section === "preferences-defaults" && programmerSettingsLoaded
 				? saveUpdateSettings(programmingUpdate, updateSettings)
 				: Promise.resolve(true),
@@ -172,17 +191,6 @@ export function useSetupWindowController() {
 
 export type SetupWindowController = ReturnType<typeof useSetupWindowController>;
 
-function updateDeskDraft(
-	next: DeskConfiguration,
-	revision: React.MutableRefObject<number>,
-	dirty: React.MutableRefObject<boolean>,
-	setDraft: React.Dispatch<React.SetStateAction<DeskConfiguration | null>>,
-) {
-	revision.current += 1;
-	dirty.current = true;
-	setDraft(next);
-}
-
 function useProgrammerSetupSettings(
 	programmingUpdate: ReturnType<typeof useProgrammingUpdate>,
 	section: SetupSection,
@@ -238,6 +246,84 @@ function useProgrammerSetupSettings(
 		programmerSettingsError,
 		setProgrammerSettingsError,
 	};
+}
+
+type DeskConfigurationField = keyof DeskConfiguration;
+
+const CONFIGURATION_FIELDS = Object.keys({
+	frame_rate_hz: true,
+	output_bind_ip: true,
+	osc_bind: true,
+	art_timecode_bind: true,
+	osc_timecode: true,
+	midi_inputs: true,
+	rtp_midi_bind: true,
+	timecode_sources: true,
+	backup_retention: true,
+	autosave_interval_seconds: true,
+	speed_groups_bpm: true,
+	programmer_fade_millis: true,
+	command_line_at_uses_programmer_fade: true,
+	sequence_master_fade_millis: true,
+	preload_programmer_changes: true,
+	preload_physical_playback_actions: true,
+	preload_virtual_playback_actions: true,
+	patch_preview_highlight_dmx: true,
+	highlight_look: true,
+	highlight_look_feedback: true,
+	matter_enabled: true,
+	pool_presentation: true,
+	update_settings_by_desk: true,
+	file_manager_system_picker_fallback: true,
+	file_manager_roots: true,
+} satisfies Record<DeskConfigurationField, true>) as DeskConfigurationField[];
+
+export function configurationFieldsForSection(
+	section: SetupSection,
+): DeskConfigurationField[] {
+	switch (section) {
+		case "shows":
+			return ["autosave_interval_seconds"];
+		case "outputs":
+			return ["frame_rate_hz", "output_bind_ip", "backup_retention"];
+		case "preferences-highlight":
+			return ["highlight_look", "patch_preview_highlight_dmx"];
+		case "preferences-others":
+			return [
+				"command_line_at_uses_programmer_fade",
+				"preload_programmer_changes",
+				"preload_physical_playback_actions",
+				"preload_virtual_playback_actions",
+			];
+		default:
+			return [];
+	}
+}
+
+export function mergeConfigurationFields(
+	base: DeskConfiguration,
+	draft: DeskConfiguration,
+	fields: readonly DeskConfigurationField[],
+) {
+	const merged = { ...base };
+	for (const field of fields) assignField(merged, draft, field);
+	return merged;
+}
+
+function assignField(
+	target: DeskConfiguration,
+	source: DeskConfiguration,
+	field: DeskConfigurationField,
+) {
+	Object.assign(target, { [field]: source[field] });
+}
+
+function sameConfiguration(left: DeskConfiguration, right: DeskConfiguration) {
+	return sameValue(left, right);
+}
+
+function sameValue(left: unknown, right: unknown) {
+	return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function saveUpdateSettings(

@@ -16,6 +16,45 @@
 .setup-navigation-child > .ui-button {
 	padding-left: 18px;
 }
+.attribute-settings-tabs,
+.attribute-layout-width {
+	display: flex;
+	gap: 6px;
+}
+.attribute-settings-tabs .ui-button.active,
+.attribute-layout-width .ui-button.active {
+	border-color: var(--cyan);
+	background: #0a252b;
+	color: var(--cyan);
+}
+.attribute-layout-preview,
+.attribute-layout-group,
+.attribute-layout-page {
+	display: grid;
+	gap: 8px;
+}
+.attribute-layout-group {
+	padding-top: 10px;
+	border-top: 1px solid var(--line);
+}
+.attribute-layout-slots {
+	display: grid;
+	gap: 6px;
+}
+.attribute-layout-slot {
+	min-height: 76px;
+	display: grid;
+	align-content: start;
+	gap: 4px;
+	padding: 8px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--panel2);
+}
+.attribute-layout-slot > small,
+.attribute-layout-slot > details {
+	color: var(--muted);
+}
 .setup-window main {
 	padding: 0;
 	overflow: hidden;
