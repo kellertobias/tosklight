@@ -2,9 +2,10 @@
 
 ## Status
 
-**Doing.** Claimed on 2026-08-02 after completing Plan 02. This is the sole active implementation
-contract for the Show Patch table consolidation, patch-specific encoder groups, and installed
-light-source/gel visualization contract.
+**Blocked for closeout.** Claimed on 2026-08-02 after completing Plan 02. The implementation and
+real desktop/Viz verification are complete, but the required manual gate and `Done` move depend on
+documentation paths removed by unrelated concurrent work. Returned to `Next` on 2026-08-03 without
+adopting or restoring that work.
 
 This is the third item in the current [Next plan order](README.md), after Group/Dynamics spatial
 mapping and the Fixture Sheet improvements. Add the normal `## Result` and verification evidence
@@ -213,11 +214,23 @@ before moving it to `Done` in a semantic commit.
   This runtime gate exposed and then verified two stale constructor repairs: neutral installed
   appearance/shaper fields for invented demo fixtures and an empty sparse-update list for the Viz
   editor's existing full-fixture mutation command.
-- Manual generation cannot currently run truthfully because unrelated concurrent work has deleted
-  `docs/testing/README.md` along with a broad set of engineering, plan, and testing documents. The
-  same deletion set also removes the existing `Done` ledger and `Next/README.md`, so Plan 03 cannot
-  be moved to `Done` without either adopting those unrelated deletions or restoring the required
-  queue/documentation paths with explicit operator direction.
+- The required `npm run manual` gate was run after desktop/Viz verification and fails at
+  `99-Development/02-test-bench-coverage.md` because its local target
+  `../../testing/README.md` is missing. Unrelated concurrent work has deleted that target along
+  with a broad set of engineering, plan, and testing documents. The same deletion set removes the
+  existing `Done` ledger and `Next/README.md`, so Plan 03 cannot be moved to `Done` without either
+  adopting those unrelated deletions or restoring the required queue/documentation paths with
+  explicit operator direction.
+
+## Closeout blocker
+
+Plan 03 has no remaining implementation work. To complete its required closeout, the operator must
+confirm whether the broad documentation deletions are intentional and should be included, or allow
+the missing queue/manual targets needed by this plan to be restored from `HEAD`. Until then:
+
+- `npm run manual` remains red solely on the missing `docs/testing/README.md` target;
+- the final progress item and acceptance checklist cannot truthfully be marked complete; and
+- no `## Result`, `.DONE.md` move, or closeout commit is valid.
 
 ## Current behavior and problem
 
