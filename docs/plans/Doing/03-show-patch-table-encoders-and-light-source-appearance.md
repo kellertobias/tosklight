@@ -199,6 +199,25 @@ before moving it to `Done` in a semantic commit.
   corrected and now pass together 2/2; fixture placement and telemetry remain unrelated failures
   to recheck after the remaining Plan work. The unit umbrella reaches 67/67 Node tests before its
   architecture gate fails only on the eight unrelated source-size violations listed above.
+- The final full UI rerun passes 158 tests, skips one, and leaves only the two unrelated failures:
+  TELEMETRY-001 reports readiness `error` instead of `ready`, and PATCH-PLACEMENT-001 cannot find
+  its expected `8-bit` option. The Plan-owned PATCH-APPEARANCE-003-001 scenario and corrected MIB
+  and performance scenarios pass in that integrated run.
+- The authoritative packaged desktop path completes and opens a fresh ToskLight bundle. Its
+  app-owned server reports `ready` without recovery, loads the active show, installs the revised
+  ROBE package, and serves readiness/bootstrap in about 4 ms. The real Tauri window visibly opens
+  both the exact Show Patch table and the built-in 3D Stage with the live rig.
+- The authoritative standalone `npm run open:viz -- --server 127.0.0.1 --port 5000 --quality high
+  --view full_3d` path now builds and bundles the renderer, builds the sibling Viz editor, connects
+  a separate `ToskLight Visualizer` process to the ready desk, and visibly renders the full-3D rig.
+  This runtime gate exposed and then verified two stale constructor repairs: neutral installed
+  appearance/shaper fields for invented demo fixtures and an empty sparse-update list for the Viz
+  editor's existing full-fixture mutation command.
+- Manual generation cannot currently run truthfully because unrelated concurrent work has deleted
+  `docs/testing/README.md` along with a broad set of engineering, plan, and testing documents. The
+  same deletion set also removes the existing `Done` ledger and `Next/README.md`, so Plan 03 cannot
+  be moved to `Done` without either adopting those unrelated deletions or restoring the required
+  queue/documentation paths with explicit operator direction.
 
 ## Current behavior and problem
 
