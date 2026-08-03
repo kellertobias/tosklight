@@ -21,7 +21,7 @@ before moving it to `Done` in a semantic commit.
   import infrastructure.
 - [x] Implement Location/Visualization encoders and shared Stage/Viz appearance evaluation.
 - [x] Update help, screenshots, human scenarios, and focused automated acceptance coverage.
-- [ ] Run focused checks, required major suites, migration/recovery proof, and real desktop/Viz
+- [x] Run focused checks, required major suites, migration/recovery proof, and real desktop/Viz
   verification.
 
 ## Implementation decisions
@@ -229,7 +229,8 @@ confirm whether the broad documentation deletions are intentional and should be 
 the missing queue/manual targets needed by this plan to be restored from `HEAD`. Until then:
 
 - `npm run manual` remains red solely on the missing `docs/testing/README.md` target;
-- the final progress item and acceptance checklist cannot truthfully be marked complete; and
+- the implementation progress and acceptance checklist are complete, but the required repository
+  closeout gate remains red; and
 - no `## Result`, `.DONE.md` move, or closeout commit is valid.
 
 ## Current behavior and problem
@@ -723,29 +724,29 @@ DMX non-interference, or renderer behavior.
 
 ## Acceptance criteria
 
-- [ ] The Show Patch table has the exact sixteen-column model and no retired separate columns.
-- [ ] Fixture/model plus mode is row one and manufacturer row two in one Fixture / mode column.
-- [ ] Group Masters and Grand Master share one two-row Masters cell and one four-state editor.
-- [ ] Invert Pan and Invert Tilt share one two-row Pan / Tilt cell and one None/Pan/Tilt/Both editor.
-- [ ] MIB is one column/editor where Off differs from every non-negative delay, including 0 s.
-- [ ] Multi-patch Fixture ID and Name cells contain only `—`, keep normal widths, and never merge.
-- [ ] Every multi-patch address/position appears in the Patch column.
-- [ ] Selecting a primary or multi-patch row establishes an exact patch-local physical instance.
-- [ ] Location encoders are exactly X/Y/Z and Rotation X/Y/Z in slots 1–6.
-- [ ] Visualization encoders are exactly Bracket, Shaper 1–4 Angle, and Shaper Module Rotation in
+- [x] The Show Patch table has the exact sixteen-column model and no retired separate columns.
+- [x] Fixture/model plus mode is row one and manufacturer row two in one Fixture / mode column.
+- [x] Group Masters and Grand Master share one two-row Masters cell and one four-state editor.
+- [x] Invert Pan and Invert Tilt share one two-row Pan / Tilt cell and one None/Pan/Tilt/Both editor.
+- [x] MIB is one column/editor where Off differs from every non-negative delay, including 0 s.
+- [x] Multi-patch Fixture ID and Name cells contain only `—`, keep normal widths, and never merge.
+- [x] Every multi-patch address/position appears in the Patch column.
+- [x] Selecting a primary or multi-patch row establishes an exact patch-local physical instance.
+- [x] Location encoders are exactly X/Y/Z and Rotation X/Y/Z in slots 1–6.
+- [x] Visualization encoders are exactly Bracket, Shaper 1–4 Angle, and Shaper Module Rotation in
       slots 1–6.
-- [ ] Unsupported/static-versus-live visualization controls are explicit and never mutate DMX
+- [x] Unsupported/static-versus-live visualization controls are explicit and never mutate DMX
       shaper attributes.
-- [ ] Light source is one table column/editor covering source, explicit/profile CCT, and
+- [x] Light source is one table column/editor covering source, explicit/profile CCT, and
       Open-white/built-in/custom gel selection.
-- [ ] The shipped catalog is manufacturer-neutral; CSV import accepts exactly number, name,
+- [x] The shipped catalog is manufacturer-neutral; CSV import accepts exactly number, name,
       display RGB, and visualizer RGB with atomic preview/validation.
-- [ ] Installed appearance is portable per physical instance; multi-patches may differ.
-- [ ] Built-in and standalone visualizers render the same authoritative CCT/gel and physical
+- [x] Installed appearance is portable per physical instance; multi-patches may differ.
+- [x] Built-in and standalone visualizers render the same authoritative CCT/gel and physical
       bracket/shaper appearance without changing DMX or Programmer values.
-- [ ] Legacy shows, imports, profile/mode changes, malformed recovery, and unknown gels meet the
+- [x] Legacy shows, imports, profile/mode changes, malformed recovery, and unknown gels meet the
       compatibility contract.
-- [ ] Exact table geometry, software/hardware encoders, API, persistence, and real visualizer
+- [x] Exact table geometry, software/hardware encoders, API, persistence, and real visualizer
       behavior have focused acceptance evidence before completion.
 
 ## Explicit non-goals
