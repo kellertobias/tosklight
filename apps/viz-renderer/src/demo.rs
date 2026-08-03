@@ -221,6 +221,8 @@ fn push_demo_laser(scene: &mut Scene) {
         rotation_degrees: Vec3::new(48.0, 0.0, 0.0),
         bracket_degrees: 0.0,
         shaper_degrees: None,
+        installed_colour: [1.0; 3],
+        installed_shaper_angles_degrees: [0.0; 4],
         body: FixtureBody {
             size: laser_body,
             kind: BodyKind::Machine,
@@ -261,6 +263,9 @@ fn push_demo_laser(scene: &mut Scene) {
             scan_half_angle_y: 25.0_f32.to_radians(),
             ..viz_scene::LaserOptics::default()
         }),
+        live_shaper_angle_roles: [false; 4],
+        shaper_roles: [false; 4],
+        live_shaper_rotation_role: false,
     });
 }
 
@@ -276,6 +281,8 @@ fn push_demo_hazer(scene: &mut Scene) {
         rotation_degrees: Vec3::ZERO,
         bracket_degrees: 0.0,
         shaper_degrees: None,
+        installed_colour: [1.0; 3],
+        installed_shaper_angles_degrees: [0.0; 4],
         body: FixtureBody {
             size: Vec3::new(0.5, 0.4, 0.35),
             kind: BodyKind::Machine,
@@ -306,6 +313,9 @@ fn push_demo_hazer(scene: &mut Scene) {
         kind: EmitterKind::Atmosphere,
         cells: EmitterLayoutCells::single(),
         laser: None,
+        live_shaper_angle_roles: [false; 4],
+        shaper_roles: [false; 4],
+        live_shaper_rotation_role: false,
     });
 }
 
@@ -382,6 +392,8 @@ pub(crate) fn build_scene() -> Scene {
                 rotation_degrees: Vec3::ZERO,
                 bracket_degrees: 0.0,
                 shaper_degrees: None,
+                installed_colour: [1.0; 3],
+                installed_shaper_angles_degrees: [0.0; 4],
                 body: FixtureBody {
                     size: Vec3::new(0.34, 0.5, 0.34),
                     kind: BodyKind::MovingHead,
@@ -422,6 +434,9 @@ pub(crate) fn build_scene() -> Scene {
                 kind: EmitterKind::Beam,
                 cells: EmitterLayoutCells::single(),
                 laser: None,
+                live_shaper_angle_roles: [false; 4],
+                shaper_roles: [false; 4],
+                live_shaper_rotation_role: false,
             });
         }
     }
@@ -438,6 +453,8 @@ pub(crate) fn build_scene() -> Scene {
             rotation_degrees: Vec3::ZERO,
             bracket_degrees: 0.0,
             shaper_degrees: None,
+            installed_colour: [1.0; 3],
+            installed_shaper_angles_degrees: [0.0; 4],
             body: FixtureBody {
                 size: Vec3::new(1.1, 0.12, 0.12),
                 kind: BodyKind::Bar,
@@ -477,6 +494,9 @@ pub(crate) fn build_scene() -> Scene {
                     .map(|cell| Vec3::new(-0.45 + cell as f32 * 0.1, 0.0, 0.0))
                     .collect(),
             },
+            live_shaper_angle_roles: [false; 4],
+            shaper_roles: [false; 4],
+            live_shaper_rotation_role: false,
         });
     }
 

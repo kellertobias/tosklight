@@ -485,6 +485,7 @@ impl MutationDto {
             remove_fixture_ids: self.remove_fixture_ids.into_iter().map(FixtureId).collect(),
             placements: Vec::new(),
             vector_spreads: Vec::new(),
+            fixture_updates: Vec::new(),
         }
     }
 }
