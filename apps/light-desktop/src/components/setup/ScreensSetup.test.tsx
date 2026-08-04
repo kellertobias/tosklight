@@ -321,6 +321,12 @@ describe("additional screen settings", () => {
 		);
 
 		fireEvent.click(screen.getByRole("button", { name: "Desktop" }));
+		const browserLink = screen.getByRole("link", {
+			name: "Open browser view",
+		});
+		expect(new URL(browserLink.getAttribute("href") ?? "").searchParams.get("screen")).toBe(
+			"screen-1",
+		);
 		fireEvent.click(screen.getByRole("option", { name: "Fixed right pane" }));
 		const width = screen.getByRole("textbox", { name: "Pane width (px)" });
 		expect(width).toHaveValue("420");

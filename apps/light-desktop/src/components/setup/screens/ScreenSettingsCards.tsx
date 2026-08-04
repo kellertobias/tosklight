@@ -17,6 +17,7 @@ import { PlaybackLayoutModal } from "../PlaybackLayoutModal";
 import {
 	DEFAULT_FIXED_SCREEN_PANE,
 	DEFAULT_FIXED_SIDE_WIDTH_PX,
+	browserScreenUrl,
 	playbackLayoutLegacyFields,
 	screenPlaybackLayout,
 	updateScreenConfiguration,
@@ -732,6 +733,14 @@ export function ScreenSettingsCard({
 					onChange={(event) => update({ name: event.target.value })}
 				/>
 				<div className="screen-settings-actions">
+					<a
+						className="ui-button ui-secondary ui-default"
+						href={browserScreenUrl(draft.id, window.location.href)}
+						target="_blank"
+						rel="noreferrer"
+					>
+						Open browser view
+					</a>
 					<Button onClick={() => setPlaybackModalOpen(true)}>
 						Configure Playbacks
 					</Button>

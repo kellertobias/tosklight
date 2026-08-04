@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ScreenConfiguration } from "../../api/types";
 import {
+	browserScreenUrl,
 	createScreenConfiguration,
 	playbackLayoutLegacyFields,
 	screenForAddAction,
@@ -27,6 +28,20 @@ const configuredScreen: ScreenConfiguration = {
 };
 
 describe("Add Screen action", () => {
+	it("builds a stable browser route without carrying incompatible app modes", () => {
+		const url = new URL(
+			browserScreenUrl(
+				"screen-1",
+				"https://desk.example.test/light?demo=product&frontend-warmup-disabled=1#old",
+			),
+		);
+
+		expect(url.searchParams.get("screen")).toBe("screen-1");
+		expect(url.searchParams.get("demo")).toBeNull();
+		expect(url.searchParams.get("frontend-warmup-disabled")).toBe("1");
+		expect(url.hash).toBe("");
+	});
+
 	it("opens the first configured screen that is currently closed", () => {
 		const result = screenForAddAction(
 			[configuredScreen],
