@@ -375,6 +375,7 @@ fn domain_content(content: wire::ScreenContent) -> light_show::ScreenContent {
             pane,
             side,
             width_px,
+            base,
         } => light_show::ScreenContent::FixedSidePane {
             pane: domain_fixed_pane(pane),
             side: match side {
@@ -382,6 +383,13 @@ fn domain_content(content: wire::ScreenContent) -> light_show::ScreenContent {
                 wire::FixedScreenSide::Right => light_show::FixedScreenSide::Right,
             },
             width_px,
+            base: match base {
+                wire::ScreenBaseContent::Desktop => light_show::ScreenBaseContent::Desktop,
+                wire::ScreenBaseContent::ControlSurface => {
+                    light_show::ScreenBaseContent::ControlSurface
+                }
+                wire::ScreenBaseContent::None => light_show::ScreenBaseContent::None,
+            },
         },
     }
 }
@@ -511,6 +519,7 @@ fn wire_content(content: light_show::ScreenContent) -> wire::ScreenContent {
             pane,
             side,
             width_px,
+            base,
         } => wire::ScreenContent::FixedSidePane {
             pane: wire_fixed_pane(pane),
             side: match side {
@@ -518,6 +527,13 @@ fn wire_content(content: light_show::ScreenContent) -> wire::ScreenContent {
                 light_show::FixedScreenSide::Right => wire::FixedScreenSide::Right,
             },
             width_px,
+            base: match base {
+                light_show::ScreenBaseContent::Desktop => wire::ScreenBaseContent::Desktop,
+                light_show::ScreenBaseContent::ControlSurface => {
+                    wire::ScreenBaseContent::ControlSurface
+                }
+                light_show::ScreenBaseContent::None => wire::ScreenBaseContent::None,
+            },
         },
     }
 }

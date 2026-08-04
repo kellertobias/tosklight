@@ -15,7 +15,8 @@ pub use model::{
     FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder, FixedScreenPane, FixedScreenSide,
     FixedScreenStageRenderQuality, FixedScreenTextMode, PersistedSession, PlaybackSurfaceLayout,
     PlaybackSurfaceRow, ProgrammerControlSurfaceConfiguration, RevisionCopySource,
-    ScreenConfiguration, ScreenContent, ShowEntry, ShowRevision, VersionedObject,
+    ScreenBaseContent, ScreenConfiguration, ScreenContent, ShowEntry, ShowRevision,
+    VersionedObject,
 };
 pub use portable::{
     FixtureProfileDigest, FixtureProfileRevision, FixtureProfileRevisionId,

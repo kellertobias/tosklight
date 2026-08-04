@@ -334,15 +334,59 @@ describe("additional screen settings", () => {
 		expect(screen.getByRole("switch", { name: "Dock" })).not.toBeDisabled();
 
 		await waitFor(() => expect(saved.length).toBeGreaterThan(0));
-		expect(saved.at(-1)).toMatchObject({
-			content: {
-				type: "fixed_side_pane",
-				side: "right",
-				width_px: 480,
-			},
-			show_dock: true,
+			expect(saved.at(-1)).toMatchObject({
+				content: {
+					type: "fixed_side_pane",
+					side: "right",
+					width_px: 480,
+					base: "desktop",
+				},
+				show_dock: true,
+			});
 		});
-	});
+
+		it("assigns Programmer ownership when a fixed side pane uses a Control surface base", async () => {
+			const updateProgrammerOwner = vi.fn().mockResolvedValue(undefined);
+			const save = vi.fn().mockResolvedValue(undefined);
+			render(
+				<ScreenSettingsCard
+					screen={{
+						...configuredScreen,
+						content: {
+							type: "fixed_side_pane",
+							pane: { type: "cues", cue_list_id: "" },
+							side: "left",
+							width_px: 420,
+							base: "desktop",
+						},
+					}}
+					displays={[]}
+					save={save}
+					remove={vi.fn()}
+					updateProgrammerOwner={updateProgrammerOwner}
+				/>,
+			);
+
+			const desktopButtons = screen.getAllByRole("button", { name: "Desktop" });
+			fireEvent.click(desktopButtons.at(-1) as HTMLButtonElement);
+			fireEvent.click(screen.getByRole("option", { name: "Control surface" }));
+
+			await waitFor(() => expect(save).toHaveBeenCalledOnce());
+			await waitFor(() =>
+				expect(updateProgrammerOwner).toHaveBeenCalledWith({
+					owner_screen_id: "screen-1",
+				}),
+			);
+			expect(save.mock.calls[0][0]).toMatchObject({
+				content: {
+					type: "fixed_side_pane",
+					side: "left",
+					width_px: 420,
+					base: "control_surface",
+				},
+				show_dock: false,
+			});
+		});
 
 	it("assigns the single Programmer owner when Control surface is selected", async () => {
 		const updateProgrammerOwner = vi.fn().mockResolvedValue(undefined);

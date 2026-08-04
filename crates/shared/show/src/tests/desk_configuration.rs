@@ -3,7 +3,7 @@ use crate::{
     DeskStore, FixedScreenFixtureColumn, FixedScreenFixtureCompactMode,
     FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder, FixedScreenPane, FixedScreenSide,
     FixedScreenStageRenderQuality, PlaybackSurfaceLayout, PlaybackSurfaceRow,
-    ProgrammerControlSurfaceConfiguration, ScreenConfiguration, ScreenContent,
+    ProgrammerControlSurfaceConfiguration, ScreenBaseContent, ScreenConfiguration, ScreenContent,
 };
 use light_core::ShowId;
 use rusqlite::Connection;
@@ -490,6 +490,7 @@ fn fixed_side_pane_round_trips_with_pixel_width_and_keeps_dock() {
             },
             side: FixedScreenSide::Right,
             width_px: 480,
+            base: ScreenBaseContent::Desktop,
         },
     };
 
@@ -505,10 +506,67 @@ fn fixed_side_pane_round_trips_with_pixel_width_and_keeps_dock() {
             },
             side: FixedScreenSide::Left,
             width_px: 120,
+            base: ScreenBaseContent::Desktop,
         },
         ..base
     };
     assert!(store.put_screen(invalid).is_err());
+    drop(store);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn fixed_side_pane_defaults_legacy_base_to_desktop() {
+    let content: ScreenContent = serde_json::from_value(serde_json::json!({
+        "type": "fixed_side_pane",
+        "pane": { "type": "cues", "cue_list_id": "" },
+        "side": "left",
+        "width_px": 420
+    }))
+    .unwrap();
+
+    assert!(matches!(
+        content,
+        ScreenContent::FixedSidePane {
+            base: ScreenBaseContent::Desktop,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn fixed_side_pane_with_control_base_turns_desktop_dock_off() {
+    let path = temporary("fixed-side-control-base");
+    let store = DeskStore::open(&path).unwrap();
+    let saved = store
+        .put_screen(ScreenConfiguration {
+            id: Uuid::new_v4(),
+            name: "Side controls".into(),
+            layout: serde_json::json!({"desks":[],"activeDeskId":"main"}),
+            show_dock: true,
+            show_playbacks: true,
+            playback_count: 8,
+            playback_rows: 1,
+            first_playback_slot: 1,
+            page_mode: "follow_main".into(),
+            show_page_controls: true,
+            desired_open: true,
+            display_id: None,
+            bounds: None,
+            fullscreen: false,
+            playback_layout: None,
+            content: ScreenContent::FixedSidePane {
+                pane: FixedScreenPane::Cues {
+                    cue_list_id: String::new(),
+                },
+                side: FixedScreenSide::Left,
+                width_px: 420,
+                base: ScreenBaseContent::ControlSurface,
+            },
+        })
+        .unwrap();
+
+    assert!(!saved.show_dock);
     drop(store);
     let _ = fs::remove_file(path);
 }

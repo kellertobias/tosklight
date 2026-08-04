@@ -194,11 +194,19 @@ fn normalize_screen(screen: &mut ScreenConfiguration) -> Result<(), StoreError> 
             screen.show_dock = false;
             pane
         }
-        ScreenContent::FixedSidePane { pane, width_px, .. } => {
+        ScreenContent::FixedSidePane {
+            pane,
+            width_px,
+            base,
+            ..
+        } => {
             if !(240..=1200).contains(width_px) {
                 return Err(StoreError::Invalid(
                     "fixed side pane width must be within 240-1200 pixels".into(),
                 ));
+            }
+            if !matches!(base, crate::ScreenBaseContent::Desktop) {
+                screen.show_dock = false;
             }
             pane
         }

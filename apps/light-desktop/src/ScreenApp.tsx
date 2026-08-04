@@ -38,13 +38,22 @@ function DesktopScreenSurface({
 	const showScreenControls =
 		!programmerOwner && (screen.show_playbacks || screen.show_page_controls);
 	const hydrated = useRef(false);
-	const [layoutReady, setLayoutReady] = useState(false);
-	const screenRef = useRef(screen);
 	const sidePane =
 		screen.content.type === "fixed_side_pane" ? screen.content : null;
+	const hasDesktop = !sidePane || sidePane.base === "desktop";
+	const embeddedControl =
+		sidePane?.base === "control_surface" && programmerOwner;
+	const [layoutReady, setLayoutReady] = useState(!hasDesktop);
+	const screenRef = useRef(screen);
 	screenRef.current = screen;
 	useEffect(() => {
+		if (!hasDesktop) {
+			hydrated.current = false;
+			setLayoutReady(true);
+			return;
+		}
 		if (hydrated.current) return;
+		setLayoutReady(false);
 		dispatch({
 			type: "HYDRATE_LAYOUT",
 			desks: screen.layout.desks,
@@ -52,8 +61,9 @@ function DesktopScreenSurface({
 		});
 		hydrated.current = true;
 		setLayoutReady(true);
-	}, [screen, dispatch]);
+	}, [screen, dispatch, hasDesktop]);
 	useEffect(() => {
+		if (!hasDesktop) return;
 		const currentScreen = screenRef.current;
 		if (!currentScreen || !hydrated.current || closing.current) return;
 		const timer = window.setTimeout(() => {
@@ -65,8 +75,8 @@ function DesktopScreenSurface({
 				});
 		}, 600);
 		return () => window.clearTimeout(timer);
-	}, [state.desks, state.activeDeskId]);
-	if (!layoutReady)
+	}, [state.desks, state.activeDeskId, hasDesktop]);
+	if (hasDesktop && (!layoutReady || !hydrated.current))
 		return (
 			<LoadingSurface
 				className="connection-cover"
@@ -77,7 +87,7 @@ function DesktopScreenSurface({
 		);
 	return (
 		<div
-			className={`screen-shell ${screen.show_dock ? "with-dock" : ""} ${showScreenControls ? "with-playbacks" : ""} ${programmerOwner ? "with-control" : ""}`}
+			className={`screen-shell ${screen.show_dock ? "with-dock" : ""} ${showScreenControls ? "with-playbacks" : ""} ${programmerOwner && !embeddedControl ? "with-control" : ""}`}
 		>
 			<NativeDragStrip />
 			{screen.show_dock && <LeftDock />}
@@ -91,13 +101,24 @@ function DesktopScreenSurface({
 					}
 				>
 					<FixedScreenPane pane={sidePane.pane} />
-					<WorkspaceView />
+					{sidePane.base === "desktop" ? (
+						<WorkspaceView />
+					) : embeddedControl ? (
+						<div className="screen-main-base">
+							<ProgrammerControlSurfaceRegion screenId={screen.id} />
+						</div>
+					) : sidePane.base === "control_surface" && !programmerOwner ? (
+						<div className="screen-main-base parameter-empty" role="status">
+							<b>Control surface is assigned elsewhere</b>
+							<small>Assign this screen in Screens & playback.</small>
+						</div>
+					) : null}
 				</div>
 			) : (
 				<WorkspaceView />
 			)}
 			{showScreenControls && <ScreenPlaybackSection screen={screen} />}
-			{programmerOwner && (
+			{programmerOwner && !embeddedControl && (
 				<ProgrammerControlSurfaceRegion screenId={screen.id} />
 			)}
 		</div>

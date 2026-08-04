@@ -276,7 +276,7 @@ export type FixedScreenPane =
 			root: string;
 			path: string;
 			mode: "plain" | "markdown";
-	  };
+		};
 
 export type ScreenContent =
 	| { type: "desktop" }
@@ -288,6 +288,7 @@ export type ScreenContent =
 			pane: FixedScreenPane;
 			side: "left" | "right";
 			width_px: number;
+			base: "desktop" | "control_surface" | "none";
 	  };
 
 export interface ScreenConfiguration {

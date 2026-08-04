@@ -32,6 +32,13 @@ type TextFileOption = {
 	name: string;
 };
 
+function hasControlSurface(content: ScreenConfiguration["content"]) {
+	return (
+		content.type === "control_surface" ||
+		(content.type === "fixed_side_pane" && content.base === "control_surface")
+	);
+}
+
 const fixedPaneLabels: Record<FixedScreenPane["type"], string> = {
 	fixture_sheet: "Fixture Sheet",
 	stage_2d: "Stage - 2D",
@@ -439,6 +446,10 @@ function ScreenLayoutFields({
 												type: "fixed_side_pane",
 												pane: fixedPane ?? DEFAULT_FIXED_SCREEN_PANE,
 												side: "left",
+												base:
+													draft.content.type === "fixed_side_pane"
+														? draft.content.base
+														: "desktop",
 												width_px:
 													draft.content.type === "fixed_side_pane"
 														? draft.content.width_px
@@ -449,6 +460,10 @@ function ScreenLayoutFields({
 													type: "fixed_side_pane",
 													pane: fixedPane ?? DEFAULT_FIXED_SCREEN_PANE,
 													side: "right",
+													base:
+														draft.content.type === "fixed_side_pane"
+															? draft.content.base
+															: "desktop",
 													width_px:
 														draft.content.type === "fixed_side_pane"
 															? draft.content.width_px
@@ -467,7 +482,8 @@ function ScreenLayoutFields({
 					]}
 				/>
 				{(draft.content.type === "desktop" ||
-					draft.content.type === "fixed_side_pane") && (
+					(draft.content.type === "fixed_side_pane" &&
+						draft.content.base === "desktop")) && (
 					<SelectField
 						label="Desktop"
 						value={draft.layout.activeDeskId}
@@ -488,7 +504,9 @@ function ScreenLayoutFields({
 					disabled={
 						draft.content.type === "fixed_pane" ||
 						draft.content.type === "control_surface" ||
-						draft.content.type === "none"
+						draft.content.type === "none" ||
+						(draft.content.type === "fixed_side_pane" &&
+							draft.content.base !== "desktop")
 					}
 					description={
 						draft.content.type === "fixed_pane"
@@ -573,20 +591,34 @@ function ScreenPaneSettings({
 							}}
 						/>
 						{sideContent ? (
-							<NumberField
-								label="Pane width (px)"
-								min={240}
-								max={1200}
-								value={sideContent.width_px}
-								onChange={(event) =>
-									update({
-										content: {
-											...sideContent,
-											width_px: Number(event.target.value),
-										},
-									})
-								}
-							/>
+							<>
+								<SelectField
+									label="Base content"
+									value={sideContent.base}
+									options={[
+										{ value: "desktop", label: "Desktop" },
+										{ value: "control_surface", label: "Control surface" },
+										{ value: "none", label: "None" },
+									]}
+									onChange={(base) =>
+										update({ content: { ...sideContent, base } })
+									}
+								/>
+								<NumberField
+									label="Pane width (px)"
+									min={240}
+									max={1200}
+									value={sideContent.width_px}
+									onChange={(event) =>
+										update({
+											content: {
+												...sideContent,
+												width_px: Number(event.target.value),
+											},
+										})
+									}
+								/>
+							</>
 						) : null}
 					</>
 				) : (
@@ -743,15 +775,12 @@ export function ScreenSettingsCard({
 		saveQueue.current = saveQueue.current
 			.then(async () => {
 				await save(next);
-				if (
-					next.content.type === "control_surface" &&
-					previous.content.type !== "control_surface"
-				)
+				if (hasControlSurface(next.content) && !hasControlSurface(previous.content))
 					await updateProgrammerOwner?.({ owner_screen_id: next.id });
 				else if (
 					programmerOwner &&
-					previous.content.type === "control_surface" &&
-					next.content.type !== "control_surface"
+					hasControlSurface(previous.content) &&
+					!hasControlSurface(next.content)
 				)
 					await updateProgrammerOwner?.({ assign_to_main: true });
 			})

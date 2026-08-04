@@ -141,11 +141,29 @@ describe("Add Screen action", () => {
 					pane: { type: "cues", cue_list_id: "" },
 					side: "left",
 					width_px: 420,
+					base: "desktop",
 				},
 			},
 		);
 
 		expect(side.show_dock).toBe(true);
+	});
+
+	it("removes Desktop Dock from a side pane with a non-Desktop base", () => {
+		const side = updateScreenConfiguration(
+			{ ...configuredScreen, show_dock: true },
+			{
+				content: {
+					type: "fixed_side_pane",
+					pane: { type: "cues", cue_list_id: "" },
+					side: "right",
+					width_px: 420,
+					base: "control_surface",
+				},
+			},
+		);
+
+		expect(side.show_dock).toBe(false);
 	});
 
 	it("removes Desktop Dock from Control surface and None base content", () => {

@@ -54,6 +54,11 @@ export function updateScreenConfiguration(
 		next.content.type === "none"
 	)
 		next.show_dock = false;
+	if (
+		next.content.type === "fixed_side_pane" &&
+		next.content.base !== "desktop"
+	)
+		next.show_dock = false;
 	return next;
 }
 

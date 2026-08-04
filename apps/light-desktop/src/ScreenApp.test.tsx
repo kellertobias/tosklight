@@ -166,6 +166,7 @@ describe("ScreenApp", () => {
 						type: "fixed_side_pane",
 						side: "right",
 						width_px: 480,
+						base: "desktop",
 						pane: {
 							type: "stage_2d",
 							follow_preload: false,
@@ -187,6 +188,42 @@ describe("ScreenApp", () => {
 			"--fixed-side-pane-width": "480px",
 		});
 		expect(mocks.dispatch).toHaveBeenCalledWith(
+			expect.objectContaining({ type: "HYDRATE_LAYOUT" }),
+		);
+	});
+
+	it("renders an assigned Control surface beside a fixed pane without hydrating Desktop", () => {
+		mocks.screens = {
+			screens: [
+				configuredScreen({
+					content: {
+						type: "fixed_side_pane",
+						side: "left",
+						width_px: 360,
+						base: "control_surface",
+						pane: {
+							type: "stage_2d",
+							follow_preload: false,
+							show_floor_grid: true,
+						},
+					},
+				}),
+			],
+			programmer_control_surface: {
+				owner_screen_id: "screen-1",
+				visible_encoders: 4,
+			},
+		};
+
+		const { container } = render(<ScreenApp id="screen-1" />);
+
+		const composition = container.querySelector(".screen-main-composition");
+		expect(composition).toContainElement(screen.getByTestId("fixed-pane"));
+		expect(composition).toContainElement(
+			screen.getByTestId("programmer-controls"),
+		);
+		expect(screen.queryByTestId("workspace")).not.toBeInTheDocument();
+		expect(mocks.dispatch).not.toHaveBeenCalledWith(
 			expect.objectContaining({ type: "HYDRATE_LAYOUT" }),
 		);
 	});

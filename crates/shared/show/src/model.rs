@@ -113,7 +113,18 @@ pub enum ScreenContent {
         pane: FixedScreenPane,
         side: FixedScreenSide,
         width_px: u16,
+        #[serde(default)]
+        base: ScreenBaseContent,
     },
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScreenBaseContent {
+    #[default]
+    Desktop,
+    ControlSurface,
+    None,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

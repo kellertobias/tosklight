@@ -757,18 +757,28 @@
 .screen-main-composition.fixed-left > .workspace-view {
 	grid-column: 2;
 }
+.screen-main-composition.fixed-left > .screen-main-base {
+	grid-column: 2;
+}
 .screen-main-composition.fixed-right > .workspace-view {
+	grid-column: 1;
+}
+.screen-main-composition.fixed-right > .screen-main-base {
 	grid-column: 1;
 }
 .screen-main-composition.fixed-right > .fixed-screen-pane {
 	grid-column: 2;
 }
 .screen-main-composition > .fixed-screen-pane,
-.screen-main-composition > .workspace-view {
+.screen-main-composition > .workspace-view,
+.screen-main-composition > .screen-main-base {
 	grid-row: 1;
 	min-width: 0;
 	min-height: 0;
 	overflow: hidden;
+}
+.screen-main-composition > .screen-main-base {
+	display: grid;
 }
 .screen-shell > .fixed-screen-pane {
 	grid-column: 1;

@@ -331,6 +331,7 @@ fn screen_configuration(config: &Config) -> Vec<String> {
         FixedScreenTextMode::decl(config),
         FixedScreenPane::decl(config),
         FixedScreenSide::decl(config),
+        ScreenBaseContent::decl(config),
         ScreenContent::decl(config),
         ScreenPlaybackSurfaceRow::decl(config),
         ScreenPlaybackSurfaceLayout::decl(config),
