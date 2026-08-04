@@ -5,8 +5,9 @@ use crate::{ActionErrorKind, ApplicationEvent, EventFilter, EventReplay, ShowEve
 use light_core::FixtureId;
 use light_fixture::{
     FixtureProfile, GelAssignment, InstalledFixtureAppearance, InstalledLightSource,
-    MultiPatchInstance, PortablePatchedFixtureRecord, SplitPatch,
+    MultiPatchInstance, PatchPolicy, PortablePatchedFixtureRecord, SplitPatch,
 };
+use std::convert::Infallible;
 use std::sync::atomic::Ordering;
 use support::*;
 use uuid::Uuid;
@@ -323,4 +324,153 @@ fn all_skipped_import_is_a_read_only_noop_without_backup_runtime_or_event() {
     assert_eq!(count(&rig.ports.counters.runtime_prepares), 0);
     assert_eq!(count(&rig.ports.counters.runtime_installs), 0);
     assert_eq!(rig.events.latest_sequence(), 0);
+}
+
+#[test]
+fn tosklight_mvr_round_trip_preserves_scenery_markers_and_ordinary_fixtures() {
+    struct NoGdtf;
+    impl crate::mvr_export::GdtfSource for NoGdtf {
+        type Error = Infallible;
+
+        fn source_gdtf(
+            &self,
+            _profile: FixtureId,
+            _revision: u32,
+        ) -> Result<Option<Vec<u8>>, Self::Error> {
+            Ok(None)
+        }
+    }
+
+    let mut venue = stored_fixture(
+        FixtureId(Uuid::from_u128(501)),
+        fixture_definition(1),
+        1,
+        (true, 0),
+    );
+    venue.name = "Venue marker".into();
+    venue.fixture_number = Some(201);
+    venue.definition.id = FixtureId(Uuid::from_u128(511));
+    venue.definition.manufacturer = "Venue".into();
+
+    let visual = visual_fixture(502, 512, "Independent visual-only", "Touring", 7);
+    let reserved = visual_fixture(503, 513, "Reserved scenery", "Legacy", 8);
+
+    let mut ordinary = stored_fixture(
+        FixtureId(Uuid::from_u128(504)),
+        fixture_definition(1),
+        20,
+        (true, 0),
+    );
+    ordinary.name = "Ordinary fixture".into();
+    ordinary.fixture_number = Some(42);
+    ordinary.definition.id = FixtureId(Uuid::from_u128(514));
+
+    let source = vec![venue, visual, reserved, ordinary];
+    let export_objects = source
+        .iter()
+        .cloned()
+        .map(|fixture| (fixture.fixture_id.0.to_string(), fixture))
+        .collect::<Vec<_>>();
+    let (document, summary) =
+        crate::mvr_export::build_mvr_document(&export_objects, &Default::default(), &NoGdtf)
+            .unwrap();
+    assert_eq!(summary.fixtures, 4);
+    assert_eq!(
+        document
+            .fixtures
+            .iter()
+            .map(|fixture| fixture.fixture_id.as_deref().unwrap())
+            .collect::<Vec<_>>(),
+        ["201", "0.7", "0.8", "42"]
+    );
+
+    let archive = light_mvr::write(&document).unwrap();
+    let round_tripped = light_mvr::read(&archive).unwrap();
+    let embedded = crate::mvr_export::tosklight_mvr_fixture_metadata(&round_tripped);
+    assert_eq!(embedded.len(), 4);
+
+    let rig = Rig::new();
+    let mut envelope = rig.envelope(Vec::new(), Vec::new());
+    envelope.command.document = round_tripped;
+    let result = rig.service.apply(envelope, &rig.ports).unwrap();
+    assert_eq!(result.imported_fixtures, 4);
+    assert_eq!(result.unresolved_fixtures, 0);
+
+    let installed = rig.ports.installed.lock();
+    let fixtures = &installed.as_ref().unwrap().fixtures;
+    let by_name = |name: &str| {
+        fixtures
+            .iter()
+            .find(|fixture| fixture.name == name)
+            .unwrap()
+    };
+    let imported_venue = by_name("Venue marker");
+    assert_eq!(imported_venue.fixture_id, FixtureId(Uuid::from_u128(501)));
+    assert_eq!(imported_venue.fixture_number, Some(201));
+    assert_eq!(imported_venue.definition.manufacturer, "Venue");
+
+    let imported_visual = by_name("Independent visual-only");
+    assert_eq!(imported_visual.fixture_id, FixtureId(Uuid::from_u128(502)));
+    assert_eq!(imported_visual.virtual_fixture_number, Some(7));
+    assert_eq!(
+        imported_visual
+            .definition
+            .profile_snapshot
+            .as_ref()
+            .unwrap()
+            .patch_policy,
+        PatchPolicy::VisualOnly
+    );
+
+    let imported_reserved = by_name("Reserved scenery");
+    assert_eq!(
+        imported_reserved.fixture_id,
+        FixtureId(Uuid::from_u128(503))
+    );
+    assert_eq!(imported_reserved.virtual_fixture_number, Some(8));
+
+    let imported_ordinary = by_name("Ordinary fixture");
+    assert_eq!(
+        imported_ordinary.fixture_id,
+        FixtureId(Uuid::from_u128(504))
+    );
+    assert_eq!(imported_ordinary.fixture_number, Some(42));
+    assert!(imported_ordinary.definition.is_dmx_patchable());
+}
+
+fn visual_fixture(
+    fixture_identity: u128,
+    profile_identity: u128,
+    name: &str,
+    manufacturer: &str,
+    virtual_number: u32,
+) -> light_fixture::PatchedFixture {
+    let mut profile = FixtureProfile::blank();
+    profile.id = FixtureId(Uuid::from_u128(profile_identity));
+    profile.manufacturer = manufacturer.into();
+    profile.name = name.into();
+    profile.short_name = name.into();
+    profile.patch_policy = PatchPolicy::VisualOnly;
+    profile.modes[0].splits[0].footprint = 0;
+    profile.modes[0].channels.clear();
+    profile.modes[0].color_systems.clear();
+    profile.modes[0].control_actions.clear();
+    let definition = profile.resolved_definition(profile.modes[0].id).unwrap();
+    let mut fixture = stored_fixture(
+        FixtureId(Uuid::from_u128(fixture_identity)),
+        definition,
+        1,
+        (true, 0),
+    );
+    fixture.name = name.into();
+    fixture.fixture_number = None;
+    fixture.virtual_fixture_number = Some(virtual_number);
+    fixture.universe = None;
+    fixture.address = None;
+    fixture.split_patches = vec![SplitPatch {
+        split: 1,
+        universe: None,
+        address: None,
+    }];
+    fixture
 }

@@ -282,12 +282,23 @@ const rows: FixtureSheetRow[] = [
 		positionLabel: "—",
 		beam: "Wide",
 		focus: "—",
+		groupValues: {
+			...storyGroupValues,
+			focus: {
+				id: "focus",
+				members: [],
+				available: false,
+				source: "default",
+				accessibleName: "Focus unavailable",
+			},
+		},
 	},
 ];
 
 const denseRows: FixtureSheetRow[] = Array.from({ length: 24 }, (_, index) => {
 	if (index < rows.length) return rows[index];
 	const fixtureNumber = 100 + index;
+	const legacyProjection = index === 4;
 	return {
 		...rows[index % rows.length],
 		id: String(fixtureNumber),
@@ -297,6 +308,10 @@ const denseRows: FixtureSheetRow[] = Array.from({ length: 24 }, (_, index) => {
 		parentFixtureId: "",
 		childFixtureIds: [],
 		indented: false,
+		groupValues: legacyProjection
+			? undefined
+			: rows[index % rows.length]?.groupValues,
+		beam: legacyProjection ? "Legacy Wide" : rows[index % rows.length]?.beam,
 	} as FixtureSheetRow;
 });
 

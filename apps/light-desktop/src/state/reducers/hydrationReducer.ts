@@ -84,9 +84,8 @@ export function reduceHydration(
 					state.fixtureSheetColumns,
 					action.windowSettings?.fixtureSheetShowPatch,
 				),
-				fixtureSheetCompactMode: normalizeFixtureSheetCompactMode(
-					action.windowSettings?.fixtureSheetCompactMode,
-				),
+				// Compact modes are installation-local and hydrate separately by real desk.
+				fixtureSheetCompactMode: "off",
 				presetFamily: normalizePresetFamily(
 					action.windowSettings?.presetFamily,
 					state.presetFamily,
@@ -140,9 +139,7 @@ export function reduceHydration(
 									: {}),
 								...(kind === "fixtures"
 									? {
-											fixtureSheetCompactMode: normalizeFixtureSheetCompactMode(
-												pane.fixtureSheetCompactMode,
-											),
+											fixtureSheetCompactMode: "off" as const,
 										}
 									: {}),
 							};
@@ -174,6 +171,26 @@ export function reduceHydration(
 				savingDesk: false,
 			};
 		}
+		case "HYDRATE_FIXTURE_SHEET_COMPACT_MODES":
+			return {
+				...state,
+				fixtureSheetCompactMode: normalizeFixtureSheetCompactMode(
+					action.builtIn,
+				),
+				desks: state.desks.map((desktop) => ({
+					...desktop,
+					panes: desktop.panes.map((pane) =>
+						pane.kind === "fixtures"
+							? {
+									...pane,
+									fixtureSheetCompactMode: normalizeFixtureSheetCompactMode(
+										action.desktops[desktop.id]?.[pane.id],
+									),
+								}
+							: pane,
+					),
+				})),
+			};
 		case "DISMISS_LAYOUT_MIGRATION_NOTICE":
 			return { ...state, layoutMigrationNotice: false };
 		case "NEW_DESK": {

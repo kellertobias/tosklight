@@ -106,6 +106,16 @@ pub(super) fn mvr_definitions(
         .installation
         .fixture_definitions()
         .map_err(ApiError::fixture)?;
+    for fixture in
+        light_application::mvr_export::tosklight_mvr_fixture_metadata(document).into_values()
+    {
+        if !definitions.iter().any(|definition| {
+            definition.id == fixture.definition.id
+                && definition.revision == fixture.definition.revision
+        }) {
+            definitions.push(fixture.definition);
+        }
+    }
     let mut imported = Vec::new();
     for fixture in &document.fixtures {
         if resolve_mvr_definition(&definitions, fixture).is_some() {

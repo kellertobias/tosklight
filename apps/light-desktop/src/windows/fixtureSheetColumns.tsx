@@ -72,7 +72,10 @@ function fixtureNameColumn(
 					<small className="fixture-type">{fixture.fixtureType}</small>
 				)}
 				{fixture.limitingGroups.length > 0 && (
-					<GroupMasterStatus fixture={fixture} compact={compactMode !== "off"} />
+					<GroupMasterStatus
+						fixture={fixture}
+						compact={compactMode !== "off"}
+					/>
 				)}
 			</span>
 		),
@@ -119,7 +122,9 @@ function limitingGroupPercentage(fixture: FixtureSheetRow) {
 	);
 }
 
-function effectiveGroupMaster(group: FixtureSheetRow["limitingGroups"][number]) {
+function effectiveGroupMaster(
+	group: FixtureSheetRow["limitingGroups"][number],
+) {
 	return Math.max(group.runtime.master, group.runtime.flashLevel);
 }
 
@@ -153,8 +158,7 @@ function dimmerColumn(compactMode: FixtureSheetCompactMode): Column {
 	return {
 		id: "intensity",
 		header: "Intensity",
-		width:
-			compactMode === "off" ? "minmax(180px,.9fr)" : "minmax(144px,.7fr)",
+		width: compactMode === "off" ? "minmax(180px,.9fr)" : "minmax(144px,.7fr)",
 		render: (fixture) => {
 			const group = fixture.groupValues?.intensity;
 			const member = group?.members.find(
@@ -348,7 +352,9 @@ function valueColumn(
 			if (!group)
 				return (
 					<SourceValue source={legacySource(fixture, id)}>
-						{id === "beam" || id === "focus" ? fixture[id] : "—"}
+						<span className="fixture-sheet-value-text">
+							{id === "beam" || id === "focus" ? fixture[id] : "—"}
+						</span>
 					</SourceValue>
 				);
 			return (

@@ -132,66 +132,92 @@ fn patched_mvr_fixture(
     fixture_id: light_core::FixtureId,
     address: (Option<u16>, Option<u16>),
     existing: &[light_show::VersionedObject],
+    embedded: Option<&light_fixture::PatchedFixture>,
 ) -> light_fixture::PatchedFixture {
     let (location, rotation) = mvr_transform(source.matrix);
-    let existing_mib = existing
+    let existing_patch = existing
         .iter()
         .find(|object| object.id == fixture_id.0.to_string())
         .and_then(|object| {
             serde_json::from_value::<light_fixture::PatchedFixture>(object.body.clone()).ok()
-        })
-        .map(|fixture| {
-            (
-                fixture.move_in_black_enabled,
-                fixture.move_in_black_delay_millis,
-                fixture.group_masters_enabled,
-                fixture.grand_master_enabled,
-                fixture.invert_pan,
-                fixture.invert_tilt,
-                // Mechanical settings somebody made at the rig: an archive from another
-                // application knows nothing about them, so a re-import must not reset them.
-                fixture.bracket_angle,
-                fixture.shaper_angle,
-            )
         });
-    light_fixture::PatchedFixture {
-        fixture_id,
-        fixture_number: source
-            .fixture_id
-            .as_deref()
-            .and_then(|value| value.parse().ok()),
-        virtual_fixture_number: None,
-        name: source.name.clone(),
-        definition: definition.clone(),
-        universe: address.0,
-        address: address.1,
-        split_patches: Vec::new(),
-        layer_id: source.layer.clone().unwrap_or_else(|| "default".into()),
-        direct_control: None,
-        location,
-        rotation,
-        logical_heads: definition
-            .heads
-            .iter()
-            .filter(|head| !head.shared)
-            .map(|head| light_fixture::PatchedHead {
-                profile_head_id: None,
-                head_index: head.index,
-                fixture_id: light_core::FixtureId::new(),
-            })
-            .collect(),
-        move_in_black_enabled: existing_mib.is_none_or(|settings| settings.0),
-        move_in_black_delay_millis: existing_mib.map_or(0, |settings| settings.1),
-        group_masters_enabled: existing_mib.is_none_or(|settings| settings.2),
-        grand_master_enabled: existing_mib.is_none_or(|settings| settings.3),
-        invert_pan: existing_mib.is_some_and(|settings| settings.4),
-        invert_tilt: existing_mib.is_some_and(|settings| settings.5),
-        bracket_angle: existing_mib.map_or(0.0, |settings| settings.6),
-        shaper_angle: existing_mib.and_then(|settings| settings.7),
-        installed_appearance: Default::default(),
-        highlight_overrides: Default::default(),
-        multipatch: Vec::new(),
+    let mut patched = embedded
+        .cloned()
+        .unwrap_or_else(|| light_fixture::PatchedFixture {
+            fixture_id,
+            fixture_number: source
+                .fixture_id
+                .as_deref()
+                .and_then(|value| value.parse().ok()),
+            virtual_fixture_number: None,
+            name: source.name.clone(),
+            definition: definition.clone(),
+            universe: address.0,
+            address: address.1,
+            split_patches: Vec::new(),
+            layer_id: source.layer.clone().unwrap_or_else(|| "default".into()),
+            direct_control: None,
+            location,
+            rotation,
+            logical_heads: definition
+                .heads
+                .iter()
+                .filter(|head| !head.shared)
+                .map(|head| light_fixture::PatchedHead {
+                    profile_head_id: None,
+                    head_index: head.index,
+                    fixture_id: light_core::FixtureId::new(),
+                })
+                .collect(),
+            move_in_black_enabled: existing_patch
+                .as_ref()
+                .is_none_or(|fixture| fixture.move_in_black_enabled),
+            move_in_black_delay_millis: existing_patch
+                .as_ref()
+                .map_or(0, |fixture| fixture.move_in_black_delay_millis),
+            group_masters_enabled: existing_patch
+                .as_ref()
+                .is_none_or(|fixture| fixture.group_masters_enabled),
+            grand_master_enabled: existing_patch
+                .as_ref()
+                .is_none_or(|fixture| fixture.grand_master_enabled),
+            invert_pan: existing_patch
+                .as_ref()
+                .is_some_and(|fixture| fixture.invert_pan),
+            invert_tilt: existing_patch
+                .as_ref()
+                .is_some_and(|fixture| fixture.invert_tilt),
+            bracket_angle: existing_patch
+                .as_ref()
+                .map_or(0.0, |fixture| fixture.bracket_angle),
+            shaper_angle: existing_patch
+                .as_ref()
+                .and_then(|fixture| fixture.shaper_angle),
+            installed_appearance: Default::default(),
+            highlight_overrides: Default::default(),
+            multipatch: Vec::new(),
+        });
+    patched.fixture_id = fixture_id;
+    patched.name = source.name.clone();
+    patched.definition = definition.clone();
+    patched.universe = address.0;
+    patched.address = address.1;
+    patched.layer_id = source.layer.clone().unwrap_or_else(|| "default".into());
+    patched.location = location;
+    patched.rotation = rotation;
+    if let Some(existing_patch) = existing_patch {
+        patched.move_in_black_enabled = existing_patch.move_in_black_enabled;
+        patched.move_in_black_delay_millis = existing_patch.move_in_black_delay_millis;
+        patched.group_masters_enabled = existing_patch.group_masters_enabled;
+        patched.grand_master_enabled = existing_patch.grand_master_enabled;
+        patched.invert_pan = existing_patch.invert_pan;
+        patched.invert_tilt = existing_patch.invert_tilt;
+        patched.bracket_angle = existing_patch.bracket_angle;
+        patched.shaper_angle = existing_patch.shaper_angle;
+        patched.installed_appearance = existing_patch.installed_appearance;
+        patched.multipatch = existing_patch.multipatch;
     }
+    patched
 }
 
 fn store_resolved_mvr_fixture(
@@ -235,6 +261,7 @@ pub(super) fn apply_mvr_to_store(
     let mut occupied = occupied_patches(&existing_objects);
     let metadata = store.objects("mvr_fixture").map_err(ApiError::store)?;
     let ids = mvr_fixture_ids(&metadata);
+    let embedded_fixtures = light_application::mvr_export::tosklight_mvr_fixture_metadata(document);
     let mut imported = 0;
     let mut unresolved = 0;
     let mut warnings = Vec::new();
@@ -242,7 +269,11 @@ pub(super) fn apply_mvr_to_store(
         if matches!(resolutions.get(&source.uuid), Some(MvrResolution::Skip)) {
             continue;
         }
-        let Some(definition) = resolve_mvr_definition(definitions, source) else {
+        let embedded = embedded_fixtures.get(&source.uuid);
+        let Some(definition) = embedded
+            .map(|fixture| fixture.definition.clone())
+            .or_else(|| resolve_mvr_definition(definitions, source))
+        else {
             store_unresolved_mvr_fixture(store, source)?;
             unresolved += 1;
             warnings.push(format!(
@@ -255,6 +286,7 @@ pub(super) fn apply_mvr_to_store(
             .get(&source.uuid)
             .and_then(|id| Uuid::parse_str(id).ok())
             .map(light_core::FixtureId)
+            .or_else(|| embedded.map(|fixture| fixture.fixture_id))
             .unwrap_or_default();
         let address = resolved_mvr_address(
             store,
@@ -265,8 +297,14 @@ pub(super) fn apply_mvr_to_store(
             &mut occupied,
             &mut warnings,
         )?;
-        let patched =
-            patched_mvr_fixture(source, &definition, fixture_id, address, &existing_objects);
+        let patched = patched_mvr_fixture(
+            source,
+            &definition,
+            fixture_id,
+            address,
+            &existing_objects,
+            embedded,
+        );
         let id = store_resolved_mvr_fixture(store, source, &patched, &existing_objects, &metadata)?;
         let (universe, address) = address;
         if let (Some(u), Some(a)) = (universe, address) {

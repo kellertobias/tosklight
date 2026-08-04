@@ -193,4 +193,12 @@ export type Action =
 			desks: AppState["desks"];
 			activeDeskId: string;
 			windowSettings?: Partial<WindowSettings>;
+	  }
+	| {
+			type: "HYDRATE_FIXTURE_SHEET_COMPACT_MODES";
+			builtIn: AppState["fixtureSheetCompactMode"];
+			desktops: Record<
+				string,
+				Record<string, AppState["fixtureSheetCompactMode"]>
+			>;
 	  };

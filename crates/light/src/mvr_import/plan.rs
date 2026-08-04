@@ -108,6 +108,7 @@ pub(super) fn plan_import(
         .collect::<Vec<_>>();
     let metadata = document.objects_of_kind("mvr_fixture").collect::<Vec<_>>();
     let fixture_ids = mvr_fixture_ids(&metadata);
+    let embedded_fixtures = crate::mvr_export::tosklight_mvr_fixture_metadata(&command.document);
     let mut changes = ImportChanges::new(document, &existing);
     let mut imported_ids = HashSet::new();
     let mut imported = 0;
@@ -120,7 +121,11 @@ pub(super) fn plan_import(
         ) {
             continue;
         }
-        let Some(definition) = resolve_mvr_definition(&command.definitions, source) else {
+        let embedded = embedded_fixtures.get(&source.uuid);
+        let Some(definition) = embedded
+            .map(|fixture| fixture.definition.clone())
+            .or_else(|| resolve_mvr_definition(&command.definitions, source))
+        else {
             changes.transaction.put(
                 "unresolved_mvr_fixture",
                 source.uuid.to_string(),
@@ -137,6 +142,7 @@ pub(super) fn plan_import(
             .get(&source.uuid)
             .and_then(|id| Uuid::parse_str(id).ok())
             .map(light_core::FixtureId)
+            .or_else(|| embedded.map(|fixture| fixture.fixture_id))
             .unwrap_or_default();
         if !imported_ids.insert(fixture_id) {
             return Err(invalid(format!(
@@ -150,7 +156,14 @@ pub(super) fn plan_import(
             &definition,
             command.resolutions.get(&source.uuid),
         );
-        let patched = patched_fixture(source, &definition, fixture_id, address, &existing);
+        let patched = patched_fixture(
+            source,
+            &definition,
+            fixture_id,
+            address,
+            &existing,
+            embedded,
+        );
         let projection = project_fixture(patched.clone())?;
         changes.transaction.put(
             "patched_fixture",
@@ -273,6 +286,7 @@ fn patched_fixture(
     fixture_id: light_core::FixtureId,
     address: (Option<u16>, Option<u16>),
     existing: &[&light_show::PortableShowObject],
+    embedded: Option<&PatchedFixture>,
 ) -> PatchedFixture {
     let (location, rotation) = mvr_transform(source.matrix);
     let existing_patch = existing
@@ -280,7 +294,7 @@ fn patched_fixture(
         .find(|object| object.key().id() == fixture_id.0.to_string())
         .and_then(|object| PortablePatchedFixtureRecord::decode(object.body().clone()).ok())
         .and_then(|record| record.patch().ok());
-    PatchedFixture {
+    let mut patched = embedded.cloned().unwrap_or_else(|| PatchedFixture {
         fixture_id,
         fixture_number: source
             .fixture_id
@@ -339,8 +353,31 @@ fn patched_fixture(
                 fixture.installed_appearance.clone()
             }),
         highlight_overrides: Default::default(),
-        multipatch: existing_patch.map_or_else(Vec::new, |fixture| fixture.multipatch),
+        multipatch: existing_patch
+            .as_ref()
+            .map_or_else(Vec::new, |fixture| fixture.multipatch.clone()),
+    });
+    patched.fixture_id = fixture_id;
+    patched.name = source.name.clone();
+    patched.definition = definition.clone();
+    patched.universe = address.0;
+    patched.address = address.1;
+    patched.layer_id = source.layer.clone().unwrap_or_else(|| "default".into());
+    patched.location = location;
+    patched.rotation = rotation;
+    if let Some(existing_patch) = existing_patch {
+        patched.move_in_black_enabled = existing_patch.move_in_black_enabled;
+        patched.move_in_black_delay_millis = existing_patch.move_in_black_delay_millis;
+        patched.group_masters_enabled = existing_patch.group_masters_enabled;
+        patched.grand_master_enabled = existing_patch.grand_master_enabled;
+        patched.invert_pan = existing_patch.invert_pan;
+        patched.invert_tilt = existing_patch.invert_tilt;
+        patched.bracket_angle = existing_patch.bracket_angle;
+        patched.shaper_angle = existing_patch.shaper_angle;
+        patched.installed_appearance = existing_patch.installed_appearance;
+        patched.multipatch = existing_patch.multipatch;
     }
+    patched
 }
 
 fn invalid(error: impl std::fmt::Display) -> ActionError {

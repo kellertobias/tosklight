@@ -605,6 +605,37 @@ describe("appReducer Fixture Sheet pane settings", () => {
 		});
 		expect(compact.desks[0].panes[0].fixtureSheetCompactMode).toBe("icon-only");
 		expect(compact.desks[0].panes[1].fixtureSheetCompactMode).toBeUndefined();
+
+		const restored = appReducer(compact, {
+			type: "HYDRATE_FIXTURE_SHEET_COMPACT_MODES",
+			builtIn: "text-only",
+			desktops: {
+				fixtures: {
+					"fixtures-1": "icon-only",
+					"fixtures-2": "text-only",
+				},
+			},
+		});
+		expect(restored.fixtureSheetCompactMode).toBe("text-only");
+		expect(restored.desks[0].panes[0].fixtureSheetCompactMode).toBe(
+			"icon-only",
+		);
+		expect(restored.desks[0].panes[1].fixtureSheetCompactMode).toBe(
+			"text-only",
+		);
+
+		const otherDeskDefault = appReducer(restored, {
+			type: "HYDRATE_FIXTURE_SHEET_COMPACT_MODES",
+			builtIn: "off",
+			desktops: {},
+		});
+		expect(otherDeskDefault.fixtureSheetCompactMode).toBe("off");
+		expect(otherDeskDefault.desks[0].panes[0].fixtureSheetCompactMode).toBe(
+			"off",
+		);
+		expect(otherDeskDefault.desks[0].panes[1].fixtureSheetCompactMode).toBe(
+			"off",
+		);
 	});
 });
 
@@ -906,7 +937,7 @@ describe("appReducer built-in window settings hydration", () => {
 			},
 		});
 		expect(current.fixtureSheetIncludedHeads).toBe("no-master-heads");
-		expect(current.fixtureSheetCompactMode).toBe("text-only");
+		expect(current.fixtureSheetCompactMode).toBe("off");
 
 		const futureQuality = appReducer(initialState, {
 			type: "HYDRATE_LAYOUT",

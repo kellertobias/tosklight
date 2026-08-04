@@ -6,6 +6,12 @@ import {
 } from "../../features/deskSnapshot/DeskSnapshotState";
 import { deskLayoutScopeKey } from "../../features/server/contracts";
 import { useApp } from "../../state/AppContext";
+import {
+	collectFixtureSheetCompactModes,
+	desksWithoutFixtureSheetCompactModes,
+	fixtureSheetCompactModeStorageKey,
+	readFixtureSheetCompactModes,
+} from "./fixtureSheetCompactModePersistence";
 
 export function LayoutPersistence() {
 	const connection = useDeskConnection();
@@ -14,14 +20,32 @@ export function LayoutPersistence() {
 	const { state, dispatch } = useApp();
 	const hydratedScope = useRef<string | null>(null);
 	const skipInitialSave = useRef<string | null>(null);
+	const hydratedCompactScope = useRef<string | null>(null);
+	const skipInitialCompactSave = useRef<string | null>(null);
 	const saveDeskLayout = useRef(
 		connection?.saveDeskLayout ?? (async () => undefined),
 	);
 	const scope = deskLayoutScopeKey(activeShowId ?? undefined, session?.user.id);
+	const compactScope =
+		activeShowId && session?.desk.id
+			? fixtureSheetCompactModeStorageKey(activeShowId, session.desk.id)
+			: null;
+	const portableDesksSignature = JSON.stringify(
+		desksWithoutFixtureSheetCompactModes(state.desks),
+	);
+	const compactModesJson = JSON.stringify(
+		collectFixtureSheetCompactModes(state),
+	);
 
 	useEffect(() => {
 		if (connection) saveDeskLayout.current = connection.saveDeskLayout;
 	}, [connection]);
+
+	useEffect(() => {
+		if (compactScope) return;
+		hydratedCompactScope.current = null;
+		skipInitialCompactSave.current = null;
+	}, [compactScope]);
 
 	useEffect(() => {
 		if (
@@ -45,6 +69,40 @@ export function LayoutPersistence() {
 	useEffect(() => {
 		if (
 			!scope ||
+			!compactScope ||
+			!activeShowId ||
+			!session?.desk.id ||
+			connection?.deskLayoutScope !== scope ||
+			hydratedCompactScope.current === compactScope
+		)
+			return;
+		hydratedCompactScope.current = compactScope;
+		skipInitialCompactSave.current = compactScope;
+		dispatch({
+			type: "HYDRATE_FIXTURE_SHEET_COMPACT_MODES",
+			...readFixtureSheetCompactModes(activeShowId, session.desk.id),
+		});
+	}, [
+		activeShowId,
+		compactScope,
+		connection?.deskLayoutScope,
+		dispatch,
+		scope,
+		session?.desk.id,
+	]);
+
+	useEffect(() => {
+		if (!compactScope || hydratedCompactScope.current !== compactScope) return;
+		if (skipInitialCompactSave.current === compactScope) {
+			skipInitialCompactSave.current = null;
+			return;
+		}
+		localStorage.setItem(compactScope, compactModesJson);
+	}, [compactModesJson, compactScope]);
+
+	useEffect(() => {
+		if (
+			!scope ||
 			connection?.deskLayoutScope !== scope ||
 			hydratedScope.current !== scope
 		)
@@ -56,7 +114,7 @@ export function LayoutPersistence() {
 		const timer = window.setTimeout(
 			() =>
 				void saveDeskLayout.current({
-					desks: state.desks,
+					desks: desksWithoutFixtureSheetCompactModes(state.desks),
 					activeDeskId: state.activeDeskId,
 					windowSettings: {
 						dockMode: state.dockMode,
@@ -83,7 +141,6 @@ export function LayoutPersistence() {
 						dmxDotSize: state.dmxDotSize,
 						fixtureSheetOrder: state.fixtureSheetOrder,
 						fixtureSheetActiveOnly: state.fixtureSheetActiveOnly,
-						fixtureSheetCompactMode: state.fixtureSheetCompactMode,
 						fixtureSheetCueListId: state.fixtureSheetCueListId,
 						fixtureSheetColumns: state.fixtureSheetColumns,
 						fixtureSheetShowType: state.fixtureSheetShowType,
@@ -96,7 +153,7 @@ export function LayoutPersistence() {
 		);
 		return () => window.clearTimeout(timer);
 	}, [
-		state.desks,
+		portableDesksSignature,
 		state.activeDeskId,
 		state.dockMode,
 		state.builtIn,
@@ -122,7 +179,6 @@ export function LayoutPersistence() {
 		state.dmxDotSize,
 		state.fixtureSheetOrder,
 		state.fixtureSheetActiveOnly,
-		state.fixtureSheetCompactMode,
 		state.fixtureSheetCueListId,
 		state.fixtureSheetColumns,
 		state.fixtureSheetShowType,

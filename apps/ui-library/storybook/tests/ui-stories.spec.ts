@@ -3582,7 +3582,7 @@ test("named application windows use production Fixture, Cuelist, Patch, and Setu
 	).toBeVisible();
 });
 
-test("Fixture Sheet compact modes increase density without dropping configured values", async ({
+test("FIXTURE-SHEET-002-004 › compact modes increase density without dropping configured values", async ({
 	page,
 }) => {
 	await page.setViewportSize({ width: 430, height: 844 });
@@ -3604,41 +3604,63 @@ test("Fixture Sheet compact modes increase density without dropping configured v
 		const geometry = await page
 			.locator(".fixture-table .ui-window-scroller")
 			.evaluate((host) => {
-			const viewport = host.getBoundingClientRect();
-			const bodyRows = [
-				...host.querySelectorAll<HTMLElement>(
-					".ui-data-table-row:not(.header)",
-				),
-			];
-			return {
-				clientWidth: host.clientWidth,
-				scrollWidth: host.scrollWidth,
-				rowHeights: bodyRows.map((row) => row.getBoundingClientRect().height),
-				visibleRows: bodyRows.filter((row) => {
-					const bounds = row.getBoundingClientRect();
-					return bounds.top >= viewport.top && bounds.bottom <= viewport.bottom;
-				}).length,
-			};
-		});
+				const viewport = host.getBoundingClientRect();
+				const bodyRows = [
+					...host.querySelectorAll<HTMLElement>(
+						".ui-data-table-row:not(.header)",
+					),
+				];
+				return {
+					clientWidth: host.clientWidth,
+					scrollWidth: host.scrollWidth,
+					rowHeights: bodyRows.map((row) => row.getBoundingClientRect().height),
+					visibleRows: bodyRows.filter((row) => {
+						const bounds = row.getBoundingClientRect();
+						return (
+							bounds.top >= viewport.top && bounds.bottom <= viewport.bottom
+						);
+					}).length,
+				};
+			});
 		expect(geometry.scrollWidth).toBeGreaterThan(geometry.clientWidth);
 		expect(new Set(geometry.rowHeights)).toEqual(
 			new Set([story === "off-small-screen" ? 43 : 32]),
 		);
 		await expect(table.getByText("102.0", { exact: true })).toBeVisible();
 		await expect(table.getByText("102.1", { exact: true })).toBeVisible();
+		const boundedMarkers = rows.locator(
+			".fixture-step-marker, .fixture-sheet-preload-marker, .preload-value, .source-value",
+		);
+		expect(
+			await boundedMarkers.evaluateAll((markers) =>
+				markers.every((marker) => {
+					const bounds = marker.getBoundingClientRect();
+					const cell = marker.closest('[role="cell"]')?.getBoundingClientRect();
+					return Boolean(
+						cell &&
+							bounds.left >= cell.left &&
+							bounds.right <= cell.right &&
+							bounds.top >= cell.top &&
+							bounds.bottom <= cell.bottom,
+					);
+				}),
+			),
+		).toBe(true);
 		const firstRowDynamics = rows.first().locator(".fixture-dynamic-stack");
 		await expect(firstRowDynamics).toHaveCount(2);
 		expect(
 			await firstRowDynamics.evaluateAll((indicators) =>
 				indicators.every((indicator) => {
 					const bounds = indicator.getBoundingClientRect();
-					const cell = indicator.closest('[role="cell"]')?.getBoundingClientRect();
+					const cell = indicator
+						.closest('[role="cell"]')
+						?.getBoundingClientRect();
 					return Boolean(
 						cell &&
-						bounds.left >= cell.left &&
-						bounds.right <= cell.right &&
-						bounds.top >= cell.top &&
-						bounds.bottom <= cell.bottom,
+							bounds.left >= cell.left &&
+							bounds.right <= cell.right &&
+							bounds.top >= cell.top &&
+							bounds.bottom <= cell.bottom,
 					);
 				}),
 			),
@@ -3663,16 +3685,24 @@ test("Fixture Sheet compact modes increase density without dropping configured v
 				}),
 			),
 		).toBe(true);
-		expect(await table.locator(".source-programmer").count()).toBeGreaterThan(0);
+		expect(await table.locator(".source-programmer").count()).toBeGreaterThan(
+			0,
+		);
 		return geometry;
 	};
 
 	const off = await inspect("off-small-screen");
 	await expect(page.locator(".vertical-meter").first()).toBeVisible();
 	await expect(page.locator(".fixture-sheet-value-text").first()).toBeVisible();
-	const offMedia = page.getByText("Media Folder Folder 2", { exact: true }).first();
+	const offMedia = page
+		.getByText("Media Folder Folder 2", { exact: true })
+		.first();
 	await offMedia.scrollIntoViewIfNeeded();
 	await expect(offMedia).toBeVisible();
+	await expect(page.getByRole("columnheader", { name: "Media" })).toBeVisible();
+	const unavailable = page.locator('[title="Focus unavailable"]').first();
+	await unavailable.scrollIntoViewIfNeeded();
+	await expect(unavailable).toBeVisible();
 	const iconOnly = await inspect("icon-only");
 	await expect(page.locator(".vertical-meter").first()).toBeVisible();
 	await expect(page.locator(".fixture-sheet-value-text").first()).toBeHidden();
@@ -3681,6 +3711,11 @@ test("Fixture Sheet compact modes increase density without dropping configured v
 		await glyph.scrollIntoViewIfNeeded();
 		await expect(glyph).toBeVisible();
 	}
+	const legacyWide = page.getByText("Legacy Wide", { exact: true }).first();
+	await expect(legacyWide).toHaveCount(1);
+	expect(
+		await legacyWide.evaluate((element) => getComputedStyle(element).display),
+	).toBe("none");
 	const textOnly = await inspect("text-only");
 	await expect(page.locator(".vertical-meter").first()).toBeHidden();
 	await expect(page.locator(".fixture-sheet-value-text").first()).toBeVisible();

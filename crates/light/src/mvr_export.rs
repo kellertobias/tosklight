@@ -11,8 +11,46 @@ use light_fixture::{
     PatchedFixture, PatchedFixtureCompiler, PatchedFixtureProfileReference, PortablePatchError,
     PortablePatchedFixtureRecord, ResolvedFixtureProfileRevision,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
+
+pub const TOSKLIGHT_MVR_FIXTURE_METADATA_PATH: &str = "tosklight/fixture-metadata.json";
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ToskLightMvrFixtureMetadata {
+    version: u32,
+    fixtures: Vec<ToskLightMvrFixtureMetadataEntry>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ToskLightMvrFixtureMetadataEntry {
+    mvr_uuid: Uuid,
+    fixture: PatchedFixture,
+}
+
+/// Returns ToskLight's lossless fixture metadata when an MVR was exported by this desk.
+///
+/// The manifest is an ancillary archive member, so standards-only MVR consumers can ignore it.
+/// Invalid or future manifests are ignored and leave the normal standards-based import intact.
+pub fn tosklight_mvr_fixture_metadata(
+    document: &light_mvr::MvrDocument,
+) -> HashMap<Uuid, PatchedFixture> {
+    let Some(data) = document.files.get(TOSKLIGHT_MVR_FIXTURE_METADATA_PATH) else {
+        return HashMap::new();
+    };
+    let Ok(metadata) = serde_json::from_slice::<ToskLightMvrFixtureMetadata>(data) else {
+        return HashMap::new();
+    };
+    if metadata.version != 1 {
+        return HashMap::new();
+    }
+    metadata
+        .fixtures
+        .into_iter()
+        .map(|entry| (entry.mvr_uuid, entry.fixture))
+        .collect()
+}
 
 /// What an export contains, and what it could not embed.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -83,6 +121,7 @@ pub fn build_mvr_document<S: GdtfSource>(
     let mut document = light_mvr::MvrDocument::default();
     let mut missing = Vec::new();
     let mut embedded = 0;
+    let mut tosklight_fixtures = Vec::with_capacity(fixtures.len());
     for (id, fixture) in fixtures {
         let meta = metadata.get(id);
         let spec = meta
@@ -112,6 +151,10 @@ pub fn build_mvr_document<S: GdtfSource>(
             .get(id.as_str())
             .and_then(|uuid| Uuid::parse_str(uuid).ok())
             .unwrap_or(fixture.fixture_id.0);
+        tosklight_fixtures.push(ToskLightMvrFixtureMetadataEntry {
+            mvr_uuid: uuid,
+            fixture: fixture.clone(),
+        });
         document.fixtures.push(light_mvr::MvrFixture {
             uuid,
             name: if fixture.name.is_empty() {
@@ -119,7 +162,7 @@ pub fn build_mvr_document<S: GdtfSource>(
             } else {
                 fixture.name.clone()
             },
-            fixture_id: Some(id.clone()),
+            fixture_id: Some(display_fixture_id(id, fixture)),
             gdtf_spec: spec,
             gdtf_mode: fixture.definition.mode.clone(),
             universe: fixture.universe,
@@ -128,6 +171,15 @@ pub fn build_mvr_document<S: GdtfSource>(
             layer: Some(fixture.layer_id.clone()),
             class: None,
         });
+    }
+    let metadata = ToskLightMvrFixtureMetadata {
+        version: 1,
+        fixtures: tosklight_fixtures,
+    };
+    if let Ok(data) = serde_json::to_vec(&metadata) {
+        document
+            .files
+            .insert(TOSKLIGHT_MVR_FIXTURE_METADATA_PATH.into(), data);
     }
     let warnings = if missing.is_empty() {
         Vec::new()
@@ -145,6 +197,16 @@ pub fn build_mvr_document<S: GdtfSource>(
         warnings,
     };
     Ok((document, summary))
+}
+
+fn display_fixture_id(stored_id: &str, fixture: &PatchedFixture) -> String {
+    if let Some(number) = fixture.virtual_fixture_number {
+        format!("0.{number}")
+    } else if let Some(number) = fixture.fixture_number {
+        number.to_string()
+    } else {
+        stored_id.to_owned()
+    }
 }
 
 /// The fixture's rotation and location as an MVR transform matrix.

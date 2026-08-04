@@ -241,7 +241,7 @@ function snapshot(generatedAt: string, red = 0.25): VisualizationSnapshot {
 }
 
 describe("Fixture Sheet attribute-group values", () => {
-	it("keeps all eight groups, semantic media pairs, and separate Dynamic identities", () => {
+	it("FIXTURE-SHEET-002-002 keeps all eight groups, semantic media pairs, and separate Dynamic identities", () => {
 		const target = fixtureSheetTargets(fixture())[0];
 		const current = snapshot("2026-08-02T10:00:00Z");
 		const preload = snapshot("2026-08-02T10:00:01Z");
