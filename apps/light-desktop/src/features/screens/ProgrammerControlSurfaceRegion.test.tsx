@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ScreenConfiguration } from "../../api/types";
 import { ProgrammerControlSurfaceRegion } from "./ProgrammerControlSurfaceRegion";
 import { ScreensProvider } from "./ScreensContext";
 import type { ScreensContextValue } from "./types";
@@ -11,10 +12,13 @@ vi.mock("../../components/control/ControlSection", () => ({
 	ControlSection: () => <div data-testid="control-surface" />,
 }));
 
-function source(ownerScreenId: string | null): ScreensContextValue {
+function source(
+	ownerScreenId: string | null,
+	configuredScreens: ScreenConfiguration[] = [],
+): ScreensContextValue {
 	return {
 		screens: {
-			screens: [],
+			screens: configuredScreens,
 			active_pages: {},
 			programmer_control_surface: {
 				owner_screen_id: ownerScreenId,
@@ -33,9 +37,14 @@ function source(ownerScreenId: string | null): ScreensContextValue {
 	};
 }
 
-function mount(ownerScreenId: string | null, surfaceScreenId?: string) {
+function mount(
+	ownerScreenId: string | null,
+	surfaceScreenId?: string,
+	configuredScreens: ScreenConfiguration[] = [],
+) {
+	const context = source(ownerScreenId, configuredScreens);
 	return render(
-		<ScreensProvider source={source(ownerScreenId)}>
+		<ScreensProvider source={context}>
 			<ProgrammerControlSurfaceRegion screenId={surfaceScreenId} />
 		</ScreensProvider>,
 	);
@@ -56,5 +65,29 @@ describe("ProgrammerControlSurfaceRegion", () => {
 
 		mount("screen-2", "screen-2");
 		expect(screen.getByTestId("control-surface")).toBeInTheDocument();
+	});
+
+	it("lets the main surface explicitly recover controls from a closed owner", () => {
+		const configured = {
+			id: "screen-2",
+			name: "Stage manager",
+			desired_open: false,
+		} as ScreenConfiguration;
+		const context = source("screen-2", [configured]);
+		render(
+			<ScreensProvider source={context}>
+				<ProgrammerControlSurfaceRegion />
+			</ScreensProvider>,
+		);
+
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"Programmer controls unavailable — assigned to Stage manager",
+		);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Use controls on this screen" }),
+		);
+		expect(context.updateProgrammerControlSurface).toHaveBeenCalledWith({
+			assign_to_main: true,
+		});
 	});
 });
