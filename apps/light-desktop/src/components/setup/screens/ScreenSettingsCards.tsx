@@ -16,6 +16,7 @@ import type { DeskModel } from "../../../types";
 import { PlaybackLayoutModal } from "../PlaybackLayoutModal";
 import {
 	DEFAULT_FIXED_SCREEN_PANE,
+	DEFAULT_FIXED_SIDE_WIDTH_PX,
 	playbackLayoutLegacyFields,
 	screenPlaybackLayout,
 	updateScreenConfiguration,
@@ -406,28 +407,57 @@ function ScreenLayoutFields({
 	update,
 }: Pick<ScreenSettingsFieldsProps, "draft" | "desks" | "update">) {
 	const fixedPane =
-		draft.content.type === "fixed_pane" ? draft.content.pane : null;
+		draft.content.type === "desktop" ? null : draft.content.pane;
 	return (
 		<section>
 			<h3>Layout</h3>
 			<div className="screen-settings-fields">
 				<SelectField
 					label="Content"
-					value={draft.content.type}
+					value={
+						draft.content.type === "fixed_side_pane"
+							? `fixed_side_pane_${draft.content.side}`
+							: draft.content.type
+					}
 					onChange={(type) =>
 						update({
 							content:
 								type === "fixed_pane"
-									? { type, pane: DEFAULT_FIXED_SCREEN_PANE }
-									: { type: "desktop" },
+									? {
+											type,
+											pane: fixedPane ?? DEFAULT_FIXED_SCREEN_PANE,
+										}
+									: type === "fixed_side_pane_left"
+										? {
+												type: "fixed_side_pane",
+												pane: fixedPane ?? DEFAULT_FIXED_SCREEN_PANE,
+												side: "left",
+												width_px:
+													draft.content.type === "fixed_side_pane"
+														? draft.content.width_px
+														: DEFAULT_FIXED_SIDE_WIDTH_PX,
+											}
+										: type === "fixed_side_pane_right"
+											? {
+													type: "fixed_side_pane",
+													pane: fixedPane ?? DEFAULT_FIXED_SCREEN_PANE,
+													side: "right",
+													width_px:
+														draft.content.type === "fixed_side_pane"
+															? draft.content.width_px
+															: DEFAULT_FIXED_SIDE_WIDTH_PX,
+												}
+											: { type: "desktop" },
 						})
 					}
 					options={[
 						{ value: "desktop", label: "Desktop" },
 						{ value: "fixed_pane", label: "Fixed full-screen pane" },
+						{ value: "fixed_side_pane_left", label: "Fixed left pane" },
+						{ value: "fixed_side_pane_right", label: "Fixed right pane" },
 					]}
 				/>
-				{!fixedPane && (
+				{draft.content.type !== "fixed_pane" && (
 					<SelectField
 						label="Desktop"
 						value={draft.layout.activeDeskId}
@@ -445,9 +475,9 @@ function ScreenLayoutFields({
 					offLabel="Hidden"
 					onLabel="Visible"
 					checked={draft.show_dock}
-					disabled={Boolean(fixedPane)}
+					disabled={draft.content.type === "fixed_pane"}
 					description={
-						fixedPane
+						draft.content.type === "fixed_pane"
 							? "Dock is unavailable with a fixed full-screen pane."
 							: undefined
 					}
@@ -483,8 +513,11 @@ function ScreenPaneSettings({
 	ScreenSettingsFieldsProps,
 	"draft" | "cueLists" | "textFiles" | "update"
 >) {
-	const fixedPane =
-		draft.content.type === "fixed_pane" ? draft.content.pane : null;
+	const fixedContent =
+		draft.content.type === "desktop" ? null : draft.content;
+	const fixedPane = fixedContent?.pane ?? null;
+	const sideContent =
+		draft.content.type === "fixed_side_pane" ? draft.content : null;
 	return (
 		<section>
 			<h3>Settings</h3>
@@ -494,14 +527,15 @@ function ScreenPaneSettings({
 						<SelectField
 							label="Pane"
 							value={fixedPane.type}
-							onChange={(type) =>
+							onChange={(type) => {
+								if (!fixedContent) return;
 								update({
 									content: {
-										type: "fixed_pane",
+										...fixedContent,
 										pane: defaultFixedPane(type),
 									},
-								})
-							}
+								});
+							}}
 							options={Object.entries(fixedPaneLabels).map(
 								([value, label]) => ({
 									value: value as FixedScreenPane["type"],
@@ -513,10 +547,27 @@ function ScreenPaneSettings({
 							pane={fixedPane}
 							cueLists={cueLists}
 							textFiles={textFiles}
-							update={(pane) =>
-								update({ content: { type: "fixed_pane", pane } })
-							}
+							update={(pane) => {
+								if (fixedContent)
+									update({ content: { ...fixedContent, pane } });
+							}}
 						/>
+						{sideContent ? (
+							<NumberField
+								label="Pane width (px)"
+								min={240}
+								max={1200}
+								value={sideContent.width_px}
+								onChange={(event) =>
+									update({
+										content: {
+											...sideContent,
+											width_px: Number(event.target.value),
+										},
+									})
+								}
+							/>
+						) : null}
 					</>
 				) : (
 					<p className="screen-settings-note">

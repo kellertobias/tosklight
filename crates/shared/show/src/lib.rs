@@ -12,7 +12,7 @@ pub use desk::DeskStore;
 pub use error::StoreError;
 pub use model::{
     ClientDesk, ControlDesk, DeskUser, FixedScreenFixtureColumn, FixedScreenFixtureCompactMode,
-    FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder, FixedScreenPane,
+    FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder, FixedScreenPane, FixedScreenSide,
     FixedScreenStageRenderQuality, FixedScreenTextMode, PersistedSession, PlaybackSurfaceLayout,
     PlaybackSurfaceRow, ProgrammerControlSurfaceConfiguration, RevisionCopySource,
     ScreenConfiguration, ScreenContent, ShowEntry, ShowRevision, VersionedObject,

@@ -369,6 +369,18 @@ fn domain_content(content: wire::ScreenContent) -> light_show::ScreenContent {
         wire::ScreenContent::FixedPane { pane } => light_show::ScreenContent::FixedPane {
             pane: domain_fixed_pane(pane),
         },
+        wire::ScreenContent::FixedSidePane {
+            pane,
+            side,
+            width_px,
+        } => light_show::ScreenContent::FixedSidePane {
+            pane: domain_fixed_pane(pane),
+            side: match side {
+                wire::FixedScreenSide::Left => light_show::FixedScreenSide::Left,
+                wire::FixedScreenSide::Right => light_show::FixedScreenSide::Right,
+            },
+            width_px,
+        },
     }
 }
 
@@ -490,6 +502,18 @@ fn wire_content(content: light_show::ScreenContent) -> wire::ScreenContent {
         light_show::ScreenContent::Desktop => wire::ScreenContent::Desktop,
         light_show::ScreenContent::FixedPane { pane } => wire::ScreenContent::FixedPane {
             pane: wire_fixed_pane(pane),
+        },
+        light_show::ScreenContent::FixedSidePane {
+            pane,
+            side,
+            width_px,
+        } => wire::ScreenContent::FixedSidePane {
+            pane: wire_fixed_pane(pane),
+            side: match side {
+                light_show::FixedScreenSide::Left => wire::FixedScreenSide::Left,
+                light_show::FixedScreenSide::Right => wire::FixedScreenSide::Right,
+            },
+            width_px,
         },
     }
 }

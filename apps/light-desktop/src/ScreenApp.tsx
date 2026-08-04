@@ -1,4 +1,10 @@
-import { type MutableRefObject, useEffect, useRef, useState } from "react";
+import {
+	type CSSProperties,
+	type MutableRefObject,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { ServerRuntime } from "./api/ServerRuntime";
 import type { ScreenConfiguration } from "./api/types";
 import { LoadingSurface } from "./components/common/LoadingSurface";
@@ -34,6 +40,8 @@ function DesktopScreenSurface({
 	const hydrated = useRef(false);
 	const [layoutReady, setLayoutReady] = useState(false);
 	const screenRef = useRef(screen);
+	const sidePane =
+		screen.content.type === "fixed_side_pane" ? screen.content : null;
 	screenRef.current = screen;
 	useEffect(() => {
 		if (hydrated.current) return;
@@ -73,7 +81,21 @@ function DesktopScreenSurface({
 		>
 			<NativeDragStrip />
 			{screen.show_dock && <LeftDock />}
-			<WorkspaceView />
+			{sidePane ? (
+				<div
+					className={`screen-main-composition fixed-${sidePane.side}`}
+					style={
+						{
+							"--fixed-side-pane-width": `${sidePane.width_px}px`,
+						} as CSSProperties
+					}
+				>
+					<FixedScreenPane pane={sidePane.pane} />
+					<WorkspaceView />
+				</div>
+			) : (
+				<WorkspaceView />
+			)}
 			{showScreenControls && <ScreenPlaybackSection screen={screen} />}
 			{programmerOwner && (
 				<ProgrammerControlSurfaceRegion screenId={screen.id} />

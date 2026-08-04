@@ -146,4 +146,37 @@ describe("ScreenApp", () => {
 
 		expect(screen.getByTestId("screen-playbacks")).toBeInTheDocument();
 	});
+
+	it("renders a pixel-sized fixed side pane beside the hydrated Desktop", () => {
+		mocks.screens = {
+			screens: [
+				configuredScreen({
+					content: {
+						type: "fixed_side_pane",
+						side: "right",
+						width_px: 480,
+						pane: {
+							type: "stage_2d",
+							follow_preload: false,
+							show_floor_grid: true,
+						},
+					},
+				}),
+			],
+		};
+
+		const { container } = render(<ScreenApp id="screen-1" />);
+
+		expect(screen.getByTestId("workspace")).toBeInTheDocument();
+		expect(screen.getByTestId("fixed-pane")).toBeInTheDocument();
+		expect(container.querySelector(".screen-main-composition")).toHaveClass(
+			"fixed-right",
+		);
+		expect(container.querySelector(".screen-main-composition")).toHaveStyle({
+			"--fixed-side-pane-width": "480px",
+		});
+		expect(mocks.dispatch).toHaveBeenCalledWith(
+			expect.objectContaining({ type: "HYDRATE_LAYOUT" }),
+		);
+	});
 });

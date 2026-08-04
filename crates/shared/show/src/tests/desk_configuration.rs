@@ -1,7 +1,7 @@
 use super::temporary;
 use crate::{
     DeskStore, FixedScreenFixtureColumn, FixedScreenFixtureCompactMode,
-    FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder, FixedScreenPane,
+    FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder, FixedScreenPane, FixedScreenSide,
     FixedScreenStageRenderQuality, PlaybackSurfaceLayout, PlaybackSurfaceRow,
     ProgrammerControlSurfaceConfiguration, ScreenConfiguration, ScreenContent,
 };
@@ -459,6 +459,56 @@ fn fixed_screen_content_round_trips_and_forces_dock_off() {
         store.screen(id).unwrap().unwrap().layout["activeDeskId"],
         "preserved"
     );
+    drop(store);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn fixed_side_pane_round_trips_with_pixel_width_and_keeps_dock() {
+    let path = temporary("fixed-side-pane");
+    let store = DeskStore::open(&path).unwrap();
+    let id = Uuid::new_v4();
+    let base = ScreenConfiguration {
+        id,
+        name: "Side fixtures".into(),
+        layout: serde_json::json!({"desks":[],"activeDeskId":"main"}),
+        show_dock: true,
+        show_playbacks: true,
+        playback_count: 8,
+        playback_rows: 1,
+        first_playback_slot: 1,
+        page_mode: "follow_main".into(),
+        show_page_controls: true,
+        desired_open: true,
+        display_id: None,
+        bounds: None,
+        fullscreen: false,
+        playback_layout: None,
+        content: ScreenContent::FixedSidePane {
+            pane: FixedScreenPane::Cues {
+                cue_list_id: Uuid::new_v4().to_string(),
+            },
+            side: FixedScreenSide::Right,
+            width_px: 480,
+        },
+    };
+
+    let saved = store.put_screen(base.clone()).unwrap();
+    assert!(saved.show_dock);
+    assert_eq!(saved.content, base.content);
+
+    let invalid = ScreenConfiguration {
+        id: Uuid::new_v4(),
+        content: ScreenContent::FixedSidePane {
+            pane: FixedScreenPane::Cues {
+                cue_list_id: Uuid::new_v4().to_string(),
+            },
+            side: FixedScreenSide::Left,
+            width_px: 120,
+        },
+        ..base
+    };
+    assert!(store.put_screen(invalid).is_err());
     drop(store);
     let _ = fs::remove_file(path);
 }

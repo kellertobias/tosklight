@@ -307,6 +307,37 @@ describe("additional screen settings", () => {
 		});
 	});
 
+	it("configures left and right fixed panes with an explicit pixel width", async () => {
+		const saved: ScreenConfiguration[] = [];
+		render(
+			<ScreenSettingsCard
+				screen={configuredScreen}
+				displays={[]}
+				save={async (value) => {
+					saved.push(value);
+				}}
+				remove={vi.fn()}
+			/>,
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Desktop" }));
+		fireEvent.click(screen.getByRole("option", { name: "Fixed right pane" }));
+		const width = screen.getByRole("textbox", { name: "Pane width (px)" });
+		expect(width).toHaveValue("420");
+		fireEvent.change(width, { target: { value: "480" } });
+		expect(screen.getByRole("switch", { name: "Dock" })).not.toBeDisabled();
+
+		await waitFor(() => expect(saved.length).toBeGreaterThan(0));
+		expect(saved.at(-1)).toMatchObject({
+			content: {
+				type: "fixed_side_pane",
+				side: "right",
+				width_px: 480,
+			},
+			show_dock: true,
+		});
+	});
+
 	it("keeps missing fixed objects configured and leaves Dock off after returning to Desktop", async () => {
 		const fixed: ScreenConfiguration = {
 			...configuredScreen,

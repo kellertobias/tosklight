@@ -32,6 +32,8 @@ export const DEFAULT_FIXED_SCREEN_PANE: FixedScreenPane = {
 	show_group_shortcuts: true,
 };
 
+export const DEFAULT_FIXED_SIDE_WIDTH_PX = 420;
+
 export function updateScreenConfiguration(
 	screen: ScreenConfiguration,
 	changes: Partial<ScreenConfiguration>,

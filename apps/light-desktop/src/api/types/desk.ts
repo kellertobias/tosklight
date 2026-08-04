@@ -280,7 +280,13 @@ export type FixedScreenPane =
 
 export type ScreenContent =
 	| { type: "desktop" }
-	| { type: "fixed_pane"; pane: FixedScreenPane };
+	| { type: "fixed_pane"; pane: FixedScreenPane }
+	| {
+			type: "fixed_side_pane";
+			pane: FixedScreenPane;
+			side: "left" | "right";
+			width_px: number;
+	  };
 
 export interface ScreenConfiguration {
 	id: string;

@@ -184,10 +184,21 @@ impl DeskStore {
 }
 
 fn normalize_screen(screen: &mut ScreenConfiguration) -> Result<(), StoreError> {
-    let ScreenContent::FixedPane { pane } = &screen.content else {
-        return Ok(());
+    let pane = match &screen.content {
+        ScreenContent::Desktop => return Ok(()),
+        ScreenContent::FixedPane { pane } => {
+            screen.show_dock = false;
+            pane
+        }
+        ScreenContent::FixedSidePane { pane, width_px, .. } => {
+            if !(240..=1200).contains(width_px) {
+                return Err(StoreError::Invalid(
+                    "fixed side pane width must be within 240-1200 pixels".into(),
+                ));
+            }
+            pane
+        }
     };
-    screen.show_dock = false;
     match pane {
         FixedScreenPane::FixtureSheet { columns, .. } => {
             if columns.is_empty() || columns.len() > 12 {

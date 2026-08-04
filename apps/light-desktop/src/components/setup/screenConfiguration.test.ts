@@ -116,4 +116,20 @@ describe("Add Screen action", () => {
 			show_dock: false,
 		});
 	});
+
+	it("keeps Dock available for pixel-sized side panes", () => {
+		const side = updateScreenConfiguration(
+			{ ...configuredScreen, show_dock: true },
+			{
+				content: {
+					type: "fixed_side_pane",
+					pane: { type: "cues", cue_list_id: "" },
+					side: "left",
+					width_px: 420,
+				},
+			},
+		);
+
+		expect(side.show_dock).toBe(true);
+	});
 });

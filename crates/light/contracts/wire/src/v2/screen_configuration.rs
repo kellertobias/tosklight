@@ -116,6 +116,18 @@ pub enum ScreenContent {
     FixedPane {
         pane: FixedScreenPane,
     },
+    FixedSidePane {
+        pane: FixedScreenPane,
+        side: FixedScreenSide,
+        width_px: u16,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum FixedScreenSide {
+    Left,
+    Right,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
