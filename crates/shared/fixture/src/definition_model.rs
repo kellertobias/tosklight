@@ -49,6 +49,10 @@ pub struct ParameterMetadata {
     pub invert: bool,
     pub wrap: bool,
     pub curve: DmxCurve,
+    /// Fixture-authored meaning of a normalized Position Movement value. This presentation tag
+    /// never implies a numeric speed/time conversion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_movement_representation: Option<PositionMovementRepresentation>,
 }
 impl Default for ParameterMetadata {
     fn default() -> Self {
@@ -59,8 +63,17 @@ impl Default for ParameterMetadata {
             invert: false,
             wrap: false,
             curve: DmxCurve::Linear,
+            position_movement_representation: None,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PositionMovementRepresentation {
+    Speed,
+    Time,
+    SpeedOrTime,
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

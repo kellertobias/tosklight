@@ -2,6 +2,7 @@ use super::*;
 use crate::{
     CanonicalTransform, ChannelResolution, ColorSystem, EmitterLayout,
     FIXTURE_PROFILE_SCHEMA_VERSION, FixtureProfile, FixtureSplit, ModelUnits, PatchPolicy,
+    PositionMovementRepresentation,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use std::fs;
@@ -600,6 +601,8 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
     let mut prism_selection_modes = 0;
     let mut prism_rotation_modes = 0;
     let mut generic_control_modes = 0;
+    let mut position_movement_modes = 0;
+    let mut position_movement_sources = std::collections::HashMap::<String, usize>::new();
     let mut continuous_pan_or_tilt = Vec::new();
     let mut retired_placeholder_attributes = Vec::new();
 
@@ -610,6 +613,54 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
         }
         let profile = read_fixture_package(&fs::read(&path).unwrap()).unwrap();
         for mode in &profile.modes {
+            let movement_channels = mode
+                .channels
+                .iter()
+                .filter(|channel| channel.attribute.0 == "position.movement")
+                .collect::<Vec<_>>();
+            if !movement_channels.is_empty() {
+                position_movement_modes += 1;
+                assert_eq!(
+                    movement_channels.len(),
+                    1,
+                    "{} / {} must expose one shared Position Movement channel",
+                    profile.name,
+                    mode.name
+                );
+                let channel = movement_channels[0];
+                assert_eq!(channel.canonical_transform, CanonicalTransform::Identity);
+                assert!(
+                    channel
+                        .functions
+                        .iter()
+                        .all(|function| { function.attribute.0 == "position.movement" })
+                );
+                *position_movement_sources
+                    .entry(channel.fixture_attribute.0.clone())
+                    .or_default() += 1;
+                let expected_representation = match channel.fixture_attribute.0.as_str() {
+                    "fixture.pan_tilt_speed" => PositionMovementRepresentation::Speed,
+                    "fixture.mspeed" | "fixture.pan_tilt_time" => {
+                        PositionMovementRepresentation::Time
+                    }
+                    "fixture.pan_tilt_speed_time" => PositionMovementRepresentation::SpeedOrTime,
+                    source => panic!("unexpected Position Movement source {source}"),
+                };
+                let definition = profile.resolved_definition(mode.id).unwrap();
+                let projected = definition
+                    .heads
+                    .iter()
+                    .flat_map(|head| &head.parameters)
+                    .find(|parameter| parameter.attribute.0 == "position.movement")
+                    .unwrap();
+                assert_eq!(
+                    projected.metadata.position_movement_representation,
+                    Some(expected_representation),
+                    "{} / {}",
+                    profile.name,
+                    mode.name
+                );
+            }
             let prism_selection = mode
                 .channels
                 .iter()
@@ -673,6 +724,16 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
     assert_eq!(prism_selection_modes, 7);
     assert_eq!(prism_rotation_modes, 5);
     assert_eq!(generic_control_modes, 5);
+    assert_eq!(position_movement_modes, 26);
+    assert_eq!(
+        position_movement_sources,
+        std::collections::HashMap::from([
+            ("fixture.mspeed".into(), 2),
+            ("fixture.pan_tilt_speed".into(), 4),
+            ("fixture.pan_tilt_speed_time".into(), 19),
+            ("fixture.pan_tilt_time".into(), 1),
+        ])
+    );
     assert!(
         continuous_pan_or_tilt.is_empty(),
         "continuous motion now needs a co-occurrence migration review: {continuous_pan_or_tilt:?}"

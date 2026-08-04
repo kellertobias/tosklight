@@ -72,6 +72,9 @@ typed fixture functions or custom attributes.
 The retired generic `beam.effect.1` and `beam.effect.2` placeholders are still readable in older
 shows but are not offered for new programming: a source Beam FX channel must map to its actual
 mechanism or retain an explicit custom attribute.
+Separate Continuous Pan and Continuous Tilt IDs remain readable in older shows but no longer reserve
+default encoder positions. Absolute and endless operation still require an explicit typed fixture
+mapping; they are not silently identity-aliased together.
 
 ## Default attribute vocabulary and encoder placement
 
@@ -115,12 +118,8 @@ active attribute-group button cycles **Group 1 of N**, **Group 2 of N**, and so 
 | Color | P3/E6 | `color.wheel.2.rotation` | **Color Wheel 2 Rotation** (`color.wheel.2.rotation`) | Color Wheel |
 | Position | P1/E1 | `pan` | **Pan** (`pan`) | Position |
 | Position | P1/E2 | `tilt` | **Tilt** (`tilt`) | Position |
-| Position | P1/E3 | `pan.continuous` | **Continuous Pan** (`pan.continuous`) | — |
-| Position | P1/E4 | `tilt.continuous` | **Continuous Tilt** (`tilt.continuous`) | — |
-| Position | P1/E5 | `pan.time` or shared `position.time` | **Pan Time** (`pan.time`) or **Pan/Tilt Time** (`position.time`, migrated from `fixture.pan_tilt_time`) | — |
-| Position | P1/E6 | `tilt.time` | **Tilt Time** (`tilt.time`); empty when a shared Pan/Tilt Time occupies E5 | — |
-| Position | P2/E1 | `position.speed` | **Pan/Tilt Speed** (`position.speed`, migrated from `fixture.pan_tilt_speed`) | — |
-| Position | P2/E2 | `position.mode` | **Position Mode** (`position.mode`) | — |
+| Position | P1/E3 | `position.movement` | **Position Movement** (`position.movement`; fixture-authored speed, move-time, or speed/time representation) | — |
+| Position | P1/E4 | `position.rotation` | **Rotation** (`position.rotation`) | — |
 | Beam | P1/E1 | `gobo.1` | **Gobo 1** (`gobo.1` and migrated first-wheel gobo IDs) | — |
 | Beam | P1/E2 | `gobo.1.rotation` | **Gobo 1 Rotation** (`gobo.1.rotation`) | — |
 | Beam | P1/E3 | `gobo.2` | **Gobo 2** (`gobo.2` and migrated second-wheel gobo IDs) | — |

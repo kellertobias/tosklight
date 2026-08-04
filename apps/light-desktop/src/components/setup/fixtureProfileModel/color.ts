@@ -133,6 +133,14 @@ export function canonicalAttributeProjection(attribute: string): {
 			"frost.1": ["softness", "identity"],
 			"beam.edge": ["softness", "identity"],
 			strobe: ["shutter", "identity"],
+			"fixture.mspeed": ["position.movement", "identity"],
+			"fixture.pan_tilt_speed": ["position.movement", "identity"],
+			"fixture.pan_tilt_speed_time": ["position.movement", "identity"],
+			"fixture.pan_tilt_time": ["position.movement", "identity"],
+			"pan.time": ["position.movement", "identity"],
+			"position.speed": ["position.movement", "identity"],
+			"position.time": ["position.movement", "identity"],
+			"tilt.time": ["position.movement", "identity"],
 		};
 	const [canonical, canonicalTransform] = migration[attribute] ?? [
 		attribute,

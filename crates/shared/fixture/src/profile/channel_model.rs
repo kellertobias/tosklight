@@ -59,8 +59,10 @@ pub(super) fn legacy_canonical_mapping(
         "fog" => ("intensity", CanonicalTransform::Identity),
         "media.volume" => ("volume", CanonicalTransform::Identity),
         "fixture.tint" => ("color.tint", CanonicalTransform::Identity),
-        "fixture.pan_tilt_time" => ("position.time", CanonicalTransform::Identity),
-        "fixture.pan_tilt_speed" => ("position.speed", CanonicalTransform::Identity),
+        "fixture.pan_tilt_time"
+        | "fixture.pan_tilt_speed"
+        | "fixture.pan_tilt_speed_time"
+        | "fixture.mspeed" => ("position.movement", CanonicalTransform::Identity),
         "prism.prism" | "prism.prism_insertion" => ("prism.1", CanonicalTransform::Identity),
         "prism.prism_rotation" => ("prism.1.rotation", CanonicalTransform::Identity),
         "fixture.blade_1" => ("shaper.blade.1.position", CanonicalTransform::Identity),

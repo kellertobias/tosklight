@@ -392,6 +392,7 @@ export interface FixtureDefinition {
 				invert: boolean;
 				wrap: boolean;
 				curve: string;
+				position_movement_representation?: "speed" | "time" | "speed_or_time";
 			};
 			capabilities: Array<{
 				name: string;

@@ -193,7 +193,26 @@ fn parameter_metadata(channel: &FixtureChannel) -> ParameterMetadata {
         physical_max: channel.physical_max.unwrap_or(1.0),
         unit: channel.unit.clone(),
         invert: channel.invert,
+        position_movement_representation: position_movement_representation(channel),
         ..Default::default()
+    }
+}
+
+fn position_movement_representation(
+    channel: &FixtureChannel,
+) -> Option<crate::PositionMovementRepresentation> {
+    if channel.attribute.0 != "position.movement" {
+        return None;
+    }
+    match channel.fixture_attribute.0.as_str() {
+        "fixture.pan_tilt_speed" | "position.speed" => {
+            Some(crate::PositionMovementRepresentation::Speed)
+        }
+        "fixture.mspeed" | "fixture.pan_tilt_time" | "pan.time" | "position.time" | "tilt.time" => {
+            Some(crate::PositionMovementRepresentation::Time)
+        }
+        "fixture.pan_tilt_speed_time" => Some(crate::PositionMovementRepresentation::SpeedOrTime),
+        _ => None,
     }
 }
 

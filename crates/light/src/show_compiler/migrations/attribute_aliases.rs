@@ -353,8 +353,14 @@ fn migrate_attribute_map_value(
             migration(source).map(|(target, transform)| (source.clone(), target, transform))
         })
         .collect::<Vec<_>>();
+    let mut migrated_targets = HashMap::new();
     for (source, target, _) in &migrations {
         if source != target && values.contains_key(*target) {
+            return Err(conflict(object, path, "stored values", target));
+        }
+        if let Some(previous) = migrated_targets.insert(*target, source.as_str())
+            && previous != source
+        {
             return Err(conflict(object, path, "stored values", target));
         }
     }

@@ -217,6 +217,26 @@ impl AttributeConfiguration {
                 "softness",
                 EncoderPlacement::new(EncoderGroup::Focus, 1, 5),
             ),
+            (
+                "pan.time",
+                "position.movement",
+                EncoderPlacement::new(EncoderGroup::Position, 1, 5),
+            ),
+            (
+                "tilt.time",
+                "position.movement",
+                EncoderPlacement::new(EncoderGroup::Position, 1, 6),
+            ),
+            (
+                "position.time",
+                "position.movement",
+                EncoderPlacement::new(EncoderGroup::Position, 1, 5),
+            ),
+            (
+                "position.speed",
+                "position.movement",
+                EncoderPlacement::new(EncoderGroup::Position, 2, 1),
+            ),
         ] {
             self.migrate_canonical_configuration_pair(source, target, legacy_encoder)?;
         }
@@ -271,6 +291,17 @@ impl AttributeConfiguration {
                     legacy: source.into(),
                     canonical: target.into(),
                 });
+            }
+            (Some(source_index), None)
+                if target == "position.movement"
+                    && self.placements[source_index].encoder == legacy_encoder
+                    && self.placements[source_index].push_turn_of.is_none() =>
+            {
+                let recommended = recommended_builtin_placements()
+                    .into_iter()
+                    .find(|placement| placement.attribute == target_key)
+                    .expect("canonical migration target has a recommended placement");
+                self.placements[source_index] = recommended;
             }
             (Some(source_index), None) => {
                 self.placements[source_index].attribute = target_key.clone();
@@ -735,12 +766,24 @@ pub const ATTRIBUTE_REGISTRY: &[AttributeDescriptor] = &[
     continuous("pan.time", "Pan Time", AttributeClass::Position, "s"),
     continuous("tilt.time", "Tilt Time", AttributeClass::Position, "s"),
     continuous(
+        "position.time",
+        "Pan/Tilt Time",
+        AttributeClass::Position,
+        "s",
+    ),
+    continuous(
         "position.speed",
         "Position Speed",
         AttributeClass::Position,
         "percent",
     ),
     indexed("position.mode", "Position Mode", AttributeClass::Position),
+    continuous(
+        "position.movement",
+        "Position Movement",
+        AttributeClass::Position,
+        "percent",
+    ),
     cyclic_continuous(
         "position.rotation",
         "Head Rotation",

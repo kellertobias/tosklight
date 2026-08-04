@@ -129,6 +129,29 @@ mod canonical_migration_tests {
                 ))
             );
         }
+        for source in ["pan.time", "tilt.time", "position.time", "position.speed"] {
+            assert_eq!(
+                canonical_attribute_migration(&AttributeKey(source.into())),
+                Some((
+                    AttributeKey("position.movement".into()),
+                    CanonicalAttributeTransform::Identity
+                ))
+            );
+        }
+        for source in [
+            "fixture.mspeed",
+            "fixture.pan_tilt_speed",
+            "fixture.pan_tilt_speed_time",
+            "fixture.pan_tilt_time",
+        ] {
+            assert_eq!(
+                canonical_attribute_migration(&AttributeKey(source.into())),
+                Some((
+                    AttributeKey("position.movement".into()),
+                    CanonicalAttributeTransform::Identity
+                ))
+            );
+        }
         assert_eq!(
             canonical_attribute_migration(&AttributeKey("strobe".into())),
             Some((
@@ -710,6 +733,95 @@ mod attribute_registry_tests {
             migrated.clone().migrate_canonical_attributes().unwrap(),
             migrated
         );
+    }
+
+    #[test]
+    fn legacy_position_timing_controls_join_canonical_position_movement() {
+        for (source, encoder) in [
+            (
+                "pan.time",
+                EncoderPlacement::new(EncoderGroup::Position, 1, 5),
+            ),
+            (
+                "tilt.time",
+                EncoderPlacement::new(EncoderGroup::Position, 1, 6),
+            ),
+            (
+                "position.time",
+                EncoderPlacement::new(EncoderGroup::Position, 1, 5),
+            ),
+            (
+                "position.speed",
+                EncoderPlacement::new(EncoderGroup::Position, 2, 1),
+            ),
+        ] {
+            let mut legacy = AttributeConfiguration::recommended();
+            legacy.placements.retain(|placement| {
+                placement.attribute != AttributeKey("position.movement".into())
+            });
+            legacy.placements.push(AttributePlacement {
+                attribute: AttributeKey(source.into()),
+                encoder,
+                push_turn_of: None,
+            });
+            legacy.activation_groups.retain(|group| {
+                !group
+                    .members
+                    .contains(&AttributeKey("position.movement".into()))
+            });
+            legacy.activation_groups.push(AttributeActivationGroup {
+                id: source.into(),
+                label: source.into(),
+                members: vec![AttributeKey(source.into())],
+            });
+
+            let migrated = legacy.migrate_canonical_attributes().unwrap();
+            migrated.validate().unwrap();
+            assert!(
+                migrated
+                    .attribute_placement_for(&AttributeKey(source.into()))
+                    .is_none()
+            );
+            assert_eq!(
+                migrated
+                    .placement_for(&AttributeKey("position.movement".into()))
+                    .unwrap(),
+                EncoderPlacement::new(EncoderGroup::Position, 1, 3)
+            );
+            assert_eq!(
+                migrated.clone().migrate_canonical_attributes().unwrap(),
+                migrated
+            );
+        }
+        assert_eq!(
+            canonical_attribute_migration(&AttributeKey("position.mode".into())),
+            None,
+            "an indexed legacy mode cannot be identity-aliased into a continuous scalar"
+        );
+    }
+
+    #[test]
+    fn position_page_uses_the_accepted_four_control_geometry() {
+        let recommended = AttributeConfiguration::recommended();
+        for (attribute, slot) in [
+            ("pan", 1),
+            ("tilt", 2),
+            ("position.movement", 3),
+            ("position.rotation", 4),
+        ] {
+            assert_eq!(
+                recommended.placement_for(&AttributeKey(attribute.into())),
+                Some(EncoderPlacement::new(EncoderGroup::Position, 1, slot))
+            );
+        }
+        for compatibility_only in ["pan.continuous", "tilt.continuous", "position.mode"] {
+            assert!(
+                recommended
+                    .placement_for(&AttributeKey(compatibility_only.into()))
+                    .is_none()
+            );
+            assert!(attribute_descriptor(&AttributeKey(compatibility_only.into())).built_in);
+        }
     }
 
     #[test]

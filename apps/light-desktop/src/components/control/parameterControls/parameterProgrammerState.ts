@@ -5,6 +5,7 @@ import {
 	formatNormalizedValue,
 	normalizedProgrammerTarget,
 } from "./model";
+import { formatPositionMovement } from "./positionMovement";
 import type { ParameterProjection } from "./useParameterProjection";
 
 function fixtureEntry(
@@ -56,11 +57,15 @@ export function normalizedParameterDisplay(
 	projection: ParameterProjection,
 	attribute: string,
 ) {
+	const format = (value: string) =>
+		attribute === "position.movement"
+			? formatPositionMovement(value, projection.movementRepresentation)
+			: value;
 	if (projection.selectedGroupId) {
 		const target = normalizedParameterTarget(projection, attribute);
-		return target == null ? undefined : formatNormalizedValue(target);
+		return target == null ? undefined : format(formatNormalizedValue(target));
 	}
-	return formatNormalizedRange(
+	const range = formatNormalizedRange(
 		projection.selectedFixtureIds.flatMap((fixtureId) => {
 			const target = normalizedProgrammerTarget(
 				fixtureEntry(projection, fixtureId, attribute)?.value,
@@ -70,6 +75,7 @@ export function normalizedParameterDisplay(
 			return value == null ? [] : [value];
 		}),
 	);
+	return range == null ? undefined : format(range);
 }
 
 export function discreteParameterDisplay(

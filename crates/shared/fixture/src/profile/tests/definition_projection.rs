@@ -36,6 +36,53 @@ fn public_projection_keeps_the_complete_profile_snapshot() {
     definition.validate().unwrap();
 }
 
+#[test]
+fn position_movement_projection_retains_fixture_authored_representation() {
+    for (source, expected) in [
+        (
+            "fixture.pan_tilt_speed",
+            crate::PositionMovementRepresentation::Speed,
+        ),
+        (
+            "fixture.pan_tilt_time",
+            crate::PositionMovementRepresentation::Time,
+        ),
+        (
+            "fixture.mspeed",
+            crate::PositionMovementRepresentation::Time,
+        ),
+        (
+            "fixture.pan_tilt_speed_time",
+            crate::PositionMovementRepresentation::SpeedOrTime,
+        ),
+    ] {
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Movement Test".into();
+        profile.name = "Typed Movement".into();
+        profile.short_name = "Movement".into();
+        profile.fixture_type = "moving_head".into();
+        let mode_id = {
+            let mode = &mut profile.modes[0];
+            mode.splits[0].footprint = 1;
+            let mut movement = channel(mode.heads[0].id, ChannelResolution::U8, Vec::new());
+            movement.fixture_attribute = AttributeKey(source.into());
+            movement.attribute = AttributeKey("position.movement".into());
+            movement.functions[0].attribute = movement.attribute.clone();
+            mode.channels = vec![movement];
+            mode.id
+        };
+
+        let definition = profile.resolved_definition(mode_id).unwrap();
+        assert_eq!(
+            definition.heads[0].parameters[0]
+                .metadata
+                .position_movement_representation,
+            Some(expected),
+            "{source}"
+        );
+    }
+}
+
 fn large_profile() -> FixtureProfile {
     let mut profile = FixtureProfile::blank();
     profile.manufacturer = "Projection Test".into();

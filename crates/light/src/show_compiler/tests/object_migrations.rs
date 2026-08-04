@@ -1256,6 +1256,45 @@ fn retired_strobe_identity_reports_an_actionable_address_conflict() {
 }
 
 #[test]
+fn legacy_position_movement_values_migrate_and_conflicting_axes_stop_atomically() {
+    let fixture = light_core::FixtureId::new();
+    let preset = json!({
+        "name": "Movement",
+        "family": "Position",
+        "number": 1,
+        "values": {fixture.0.to_string(): {
+            "fixture.mspeed": {"kind":"normalized","value":0.4}
+        }},
+        "group_values": {}
+    });
+    let (_, document) = document_with_objects(&[("preset", "3.1", preset)]);
+    let mut transaction = document.transaction();
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+    let candidate = document.candidate(&transaction).unwrap();
+    let values =
+        &candidate.object("preset", "3.1").unwrap().body()["values"][fixture.0.to_string()];
+    assert_eq!(values["position.movement"]["value"], 0.4);
+    assert!(values.get("fixture.mspeed").is_none());
+
+    let conflict = json!({
+        "name": "Conflict",
+        "family": "Position",
+        "number": 2,
+        "values": {fixture.0.to_string(): {
+            "pan.time": {"kind":"normalized","value":0.4},
+            "tilt.time": {"kind":"normalized","value":0.5}
+        }},
+        "group_values": {}
+    });
+    let (_, document) = document_with_objects(&[("preset", "3.2", conflict)]);
+    let mut transaction = document.transaction();
+    let error = stage_candidate_migrations(&document, &mut transaction).unwrap_err();
+    assert!(error.message.contains("attribute migration conflict"));
+    assert!(error.message.contains("position.movement"));
+    assert!(transaction.is_empty());
+}
+
+#[test]
 fn legacy_emitter_and_softness_controls_retire_with_values_and_preserve_unknown_configuration_data()
 {
     let mut configuration = light_core::AttributeConfiguration::recommended();

@@ -20,6 +20,7 @@ import {
 	resolveAnchoredEncoderPage,
 } from "./attributeEncoderPages";
 import { type ParameterFamily, parameterFamilies } from "./model";
+import { positionMovementRepresentation } from "./positionMovement";
 import { useParameterPreloadValues } from "./useParameterPreloadValues";
 import { useParameterProgrammerValues } from "./useParameterProgrammerValues";
 import {
@@ -149,6 +150,10 @@ export function useParameterProjection(
 		selectedFixtureIds,
 		active,
 	);
+	const movementRepresentation = useMemo(
+		() => positionMovementRepresentation(selectedFixtures),
+		[selectedFixtures],
+	);
 	const captureMode = useProgrammerCaptureModeView(active);
 	const preloadCaptureActive = capturesProgrammerWrites(captureMode);
 	const normalValuesView = useParameterProgrammerValues(
@@ -239,6 +244,7 @@ export function useParameterProjection(
 		encoderPushTurnSlots,
 		visibleEncoderCount,
 		attributeLabels,
+		movementRepresentation,
 		hardwareConnected,
 	};
 }

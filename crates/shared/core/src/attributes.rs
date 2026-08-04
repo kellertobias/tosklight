@@ -105,8 +105,13 @@ pub const RETIRED_BUILT_IN_ATTRIBUTES: &[&str] = &[
     "media.effect.4",
     "frost.1",
     "frost.2",
+    "pan.continuous",
     "pan.time",
+    "position.mode",
+    "position.speed",
+    "position.time",
     "tilt.time",
+    "tilt.continuous",
     "shaper.keystone.x",
     "shaper.keystone.y",
     "strobe",
@@ -382,7 +387,14 @@ pub fn canonical_attribute_migration_id(
         "color.yellow" => ("color.blue", CanonicalAttributeTransform::InvertNormalized),
         "color.cold_white" => ("color.white", CanonicalAttributeTransform::Identity),
         "color.warm_white" => ("color.amber", CanonicalAttributeTransform::Identity),
+        "fixture.mspeed"
+        | "fixture.pan_tilt_speed"
+        | "fixture.pan_tilt_speed_time"
+        | "fixture.pan_tilt_time" => ("position.movement", CanonicalAttributeTransform::Identity),
         "frost" | "frost.1" | "beam.edge" => ("softness", CanonicalAttributeTransform::Identity),
+        "pan.time" | "tilt.time" | "position.time" | "position.speed" => {
+            ("position.movement", CanonicalAttributeTransform::Identity)
+        }
         "strobe" => ("shutter", CanonicalAttributeTransform::Identity),
         _ => return None,
     };

@@ -36,6 +36,7 @@ function projection(
 		encoderPushTurnSlots: Array.from({ length: 6 }, () => null),
 		visibleEncoderCount: 6,
 		attributeLabels: new Map(),
+		movementRepresentation: "movement",
 		hardwareConnected: false,
 		...overrides,
 	};
