@@ -757,6 +757,7 @@ export function ScreenSettingsCard({
 }) {
 	const [draft, setDraft] = useState(screen);
 	const [playbackModalOpen, setPlaybackModalOpen] = useState(false);
+	const [browserLinkStatus, setBrowserLinkStatus] = useState<string | null>(null);
 	const draftRef = useRef(screen);
 	const saveQueue = useRef(Promise.resolve());
 	const pending = useRef(0);
@@ -788,6 +789,19 @@ export function ScreenSettingsCard({
 				pending.current -= 1;
 			});
 	};
+	const browserLink = browserScreenUrl(draft.id, window.location.href);
+	const copyBrowserLink = async () => {
+		try {
+			if (!navigator.clipboard)
+				throw new Error("Clipboard access is unavailable in this browser.");
+			await navigator.clipboard.writeText(browserLink);
+			setBrowserLinkStatus("Browser link copied.");
+		} catch (error) {
+			setBrowserLinkStatus(
+				error instanceof Error ? error.message : "Could not copy browser link.",
+			);
+		}
+	};
 	return (
 		<article
 			className="screen-settings-card"
@@ -803,12 +817,15 @@ export function ScreenSettingsCard({
 				<div className="screen-settings-actions">
 					<a
 						className="ui-button ui-secondary ui-default"
-						href={browserScreenUrl(draft.id, window.location.href)}
+						href={browserLink}
 						target="_blank"
 						rel="noreferrer"
 					>
-						Open browser view
+						Open in browser
 					</a>
+					<Button onClick={() => void copyBrowserLink()}>
+						Copy browser link
+					</Button>
 					<Button onClick={() => setPlaybackModalOpen(true)}>
 						Configure Playbacks
 					</Button>
@@ -823,6 +840,11 @@ export function ScreenSettingsCard({
 					</Button>
 				</div>
 			</header>
+			{browserLinkStatus && (
+				<small className="screen-browser-link-status" role="status">
+					{browserLinkStatus}
+				</small>
+			)}
 			<ScreenSettingsFields
 				draft={draft}
 				desks={desks}

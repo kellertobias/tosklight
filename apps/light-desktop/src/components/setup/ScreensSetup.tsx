@@ -122,7 +122,7 @@ export function ProgrammerControlSurfaceSettings() {
 			</header>
 			<FormLayout columns={2} minColumnWidth={180}>
 				<SelectField
-					label="Control surface"
+					label="Show controls on"
 					value={configuration.owner_screen_id ?? "main"}
 					onChange={(owner) =>
 						void server.updateProgrammerControlSurface(
@@ -155,10 +155,7 @@ export function ProgrammerControlSurfaceSettings() {
 			</FormLayout>
 			{ownerClosed && (
 				<div className="programmer-control-owner-warning" role="alert">
-					<span>
-						{owner?.name} is closed, so its Programmer control surface is not
-						currently visible.
-					</span>
+					<span>{`Programmer controls unavailable — assigned to ${owner?.name}`}</span>
 					<Button
 						variant="warning"
 						onClick={() =>
@@ -167,7 +164,7 @@ export function ProgrammerControlSurfaceSettings() {
 							})
 						}
 					>
-						Return controls to main screen
+						Use controls on this screen
 					</Button>
 				</div>
 			)}

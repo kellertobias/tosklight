@@ -66,6 +66,7 @@ describe("programmer control surface settings", () => {
 		expect(
 			screen.getByRole("heading", { name: "Programmer control surface" }),
 		).toBeInTheDocument();
+		expect(screen.getByText("Show controls on")).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Main screen" }));
 		expect(screen.getByRole("option", { name: "Screen 1" })).toBeVisible();
 		fireEvent.click(screen.getByRole("option", { name: "Screen 1" }));
@@ -109,10 +110,12 @@ describe("programmer control surface settings", () => {
 			</ScreensProvider>,
 		);
 
-		expect(screen.getByRole("alert")).toHaveTextContent("Screen 1 is closed");
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"Programmer controls unavailable — assigned to Screen 1",
+		);
 		fireEvent.click(
 			screen.getByRole("button", {
-				name: "Return controls to main screen",
+				name: "Use controls on this screen",
 			}),
 		);
 		expect(updateProgrammerControlSurface).toHaveBeenCalledWith({
@@ -309,6 +312,11 @@ describe("additional screen settings", () => {
 
 	it("configures left and right fixed panes with an explicit pixel width", async () => {
 		const saved: ScreenConfiguration[] = [];
+		const writeText = vi.fn().mockResolvedValue(undefined);
+		Object.defineProperty(navigator, "clipboard", {
+			configurable: true,
+			value: { writeText },
+		});
 		render(
 			<ScreenSettingsCard
 				screen={configuredScreen}
@@ -322,11 +330,15 @@ describe("additional screen settings", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "Desktop" }));
 		const browserLink = screen.getByRole("link", {
-			name: "Open browser view",
+			name: "Open in browser",
 		});
-		expect(new URL(browserLink.getAttribute("href") ?? "").searchParams.get("screen")).toBe(
+		const browserHref = browserLink.getAttribute("href") ?? "";
+		expect(new URL(browserHref).searchParams.get("screen")).toBe(
 			"screen-1",
 		);
+		fireEvent.click(screen.getByRole("button", { name: "Copy browser link" }));
+		await waitFor(() => expect(writeText).toHaveBeenCalledWith(browserHref));
+		expect(screen.getByRole("status")).toHaveTextContent("Browser link copied.");
 		fireEvent.click(screen.getByRole("option", { name: "Fixed right pane" }));
 		const width = screen.getByRole("textbox", { name: "Pane width (px)" });
 		expect(width).toHaveValue("420");

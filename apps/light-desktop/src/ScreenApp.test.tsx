@@ -126,6 +126,18 @@ describe("ScreenApp", () => {
 		expect(authority).not.toContainElement(screen.getByTestId("desk-lock"));
 	});
 
+	it("shows a terminal state when the requested screen was removed or is unavailable", () => {
+		mocks.screens = { screens: [] };
+
+		render(<ScreenApp id="removed-screen" />);
+
+		expect(screen.getByRole("alert")).toHaveTextContent("Screen unavailable");
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"removed or this browser link is not authorized",
+		);
+		expect(screen.queryByTestId("screen-surface")).not.toBeInTheDocument();
+	});
+
 	it("renders fixed content without hydrating a Desktop or exposing Desktop chrome", () => {
 		mocks.screens = { screens: [configuredScreen()] };
 
