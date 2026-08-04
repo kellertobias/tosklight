@@ -62,6 +62,20 @@ function View({ children }: PropsWithChildren) {
 	);
 }
 
+function ScopedView({
+	deskId,
+	showId,
+}: {
+	deskId: string;
+	showId: string;
+}) {
+	return (
+		<SetInteractionProvider deskId={deskId} showId={showId}>
+			<Probe />
+		</SetInteractionProvider>
+	);
+}
+
 const playback = {
 	addressing: "current_page" as const,
 	pageNumber: 2,
@@ -194,6 +208,39 @@ describe("desk SET interaction owner", () => {
 			await controller?.clear();
 		});
 		expect(controller?.state?.phase).toBe("idle");
+		expect(mocks.reset).toHaveBeenCalledOnce();
+	});
+
+	it("clears the visible pending Group source when desk or Show authority is replaced", async () => {
+		const view = render(<ScopedView deskId="desk-a" showId="show-a" />);
+		await act(async () => {
+			await controller?.arm("touch");
+			await controller?.chooseGroup(
+				{ objectId: "4", objectRevision: 12 },
+				"touch",
+			);
+		});
+		expect(controller?.state?.phase).toBe("group_source_pending");
+		mocks.reset.mockClear();
+
+		view.rerender(<ScopedView deskId="desk-b" showId="show-a" />);
+
+		await waitFor(() => expect(controller?.state?.phase).toBe("idle"));
+		expect(mocks.reset).toHaveBeenCalledOnce();
+
+		await act(async () => {
+			await controller?.arm("touch");
+			await controller?.chooseGroup(
+				{ objectId: "4", objectRevision: 12 },
+				"touch",
+			);
+		});
+		expect(controller?.state?.phase).toBe("group_source_pending");
+		mocks.reset.mockClear();
+
+		view.rerender(<ScopedView deskId="desk-b" showId="show-b" />);
+
+		await waitFor(() => expect(controller?.state?.phase).toBe("idle"));
 		expect(mocks.reset).toHaveBeenCalledOnce();
 	});
 

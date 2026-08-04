@@ -282,6 +282,8 @@ export function SetInteractionProvider({
 	surfaceId?: string;
 }>) {
 	const command = useProgrammingCommandLineActions();
+	const commandRef = useRef(command);
+	commandRef.current = command;
 	const commandView = useProgrammingCommandLineView();
 	const topology = usePlaybackTopologyActions();
 	const scope = useInteractionScope(deskId, showId, surfaceId);
@@ -294,9 +296,11 @@ export function SetInteractionProvider({
 	const groupsReady = useShowObjectCollectionsReady(["group"], scope !== null);
 
 	useEffect(() => {
+		const previous = stateRef.current;
 		const next = scope ? initialSetInteractionState(scope) : null;
 		stateRef.current = next;
 		setState(next);
+		if (previous && previous.phase !== "idle") void commandRef.current?.reset();
 	}, [scope]);
 
 	const apply = useCallback((event: SetInteractionEvent) => {
