@@ -209,9 +209,20 @@ mod attribute_registry_tests {
             configuration.placements.len(),
             ATTRIBUTE_REGISTRY
                 .iter()
-                .filter(|descriptor| !built_in_attribute_is_retired(descriptor.id))
+                .filter(|descriptor| {
+                    !built_in_attribute_is_retired(descriptor.id)
+                        && !built_in_attribute_is_projection_only(descriptor.id)
+                })
                 .count()
         );
+        for id in PROJECTION_ONLY_BUILT_IN_ATTRIBUTES {
+            let key = AttributeKey((*id).into());
+            let descriptor = attribute_descriptor(&key);
+            assert!(descriptor.built_in);
+            assert!(!descriptor.recordable);
+            assert_eq!(configuration.placement_for(&key), None);
+            assert_eq!(configuration.activation_group_for(&key), None);
+        }
         assert_eq!(
             configuration.placement_for(&AttributeKey("color.red".into())),
             Some(EncoderPlacement::new(EncoderGroup::Color, 1, 1))

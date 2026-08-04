@@ -145,6 +145,39 @@ impl FixtureMode {
                     );
                 }
             }
+            ColorSystem::HueSaturation {
+                hue_channel_id,
+                saturation_channel_id,
+                intensity_channel_id,
+            } => {
+                let target = corrected_xyz(target, system.correction_matrix);
+                let (red, green, blue) = xyz_to_srgb(target);
+                let (hue, saturation, intensity) = rgb_to_hsv(red, green, blue);
+                for (id, level) in [(*hue_channel_id, hue), (*saturation_channel_id, saturation)]
+                    .into_iter()
+                    .chain(intensity_channel_id.map(|id| (id, intensity)))
+                {
+                    let channel = self
+                        .channels
+                        .iter()
+                        .find(|channel| channel.id == id)
+                        .ok_or_else(|| {
+                            ProfileError::Invalid(
+                                "hue/saturation system references a missing channel".into(),
+                            )
+                        })?;
+                    let max = channel.resolution.max_raw();
+                    let raw = (level.clamp(0.0, 1.0) * max as f32).round() as u32;
+                    output.insert(
+                        id,
+                        if channel.invert {
+                            max.saturating_sub(raw)
+                        } else {
+                            raw
+                        },
+                    );
+                }
+            }
             ColorSystem::DiscreteWheel { channel_id, slots } => {
                 if let Some(slot) = slots
                     .iter()
@@ -163,6 +196,14 @@ impl FixtureMode {
             }
         }
         Ok(output)
+    }
+}
+
+fn corrected_xyz(value: Xyz, matrix: [[f32; 3]; 3]) -> Xyz {
+    Xyz {
+        x: matrix[0][0] * value.x + matrix[0][1] * value.y + matrix[0][2] * value.z,
+        y: matrix[1][0] * value.x + matrix[1][1] * value.y + matrix[1][2] * value.z,
+        z: matrix[2][0] * value.x + matrix[2][1] * value.y + matrix[2][2] * value.z,
     }
 }
 
@@ -204,6 +245,23 @@ fn xyz_to_srgb(value: Xyz) -> (f32, f32, f32) {
         encode(linear.1).clamp(0.0, 1.0),
         encode(linear.2).clamp(0.0, 1.0),
     )
+}
+
+fn rgb_to_hsv(red: f32, green: f32, blue: f32) -> (f32, f32, f32) {
+    let maximum = red.max(green).max(blue);
+    let minimum = red.min(green).min(blue);
+    let delta = maximum - minimum;
+    let saturation = if maximum == 0.0 { 0.0 } else { delta / maximum };
+    let hue = if delta == 0.0 {
+        0.0
+    } else if maximum == red {
+        ((green - blue) / delta).rem_euclid(6.0) / 6.0
+    } else if maximum == green {
+        ((blue - red) / delta + 2.0) / 6.0
+    } else {
+        ((red - green) / delta + 4.0) / 6.0
+    };
+    (hue, saturation, maximum)
 }
 
 pub(super) fn color_distance(left: Xyz, right: Xyz) -> f32 {

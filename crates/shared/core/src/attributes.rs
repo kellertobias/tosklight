@@ -105,6 +105,16 @@ pub fn built_in_attribute_is_retired(attribute: &str) -> bool {
     RETIRED_BUILT_IN_ATTRIBUTES.contains(&attribute)
 }
 
+/// Fixture-facing coordinates populated by a compound canonical value. They are known built-ins
+/// for profile validation/import, but do not receive independent Programmer encoders or activation
+/// groups because the operator authors them through the whole-color control.
+pub const PROJECTION_ONLY_BUILT_IN_ATTRIBUTES: &[&str] =
+    &["color.hue", "color.saturation", "color.brightness"];
+
+pub fn built_in_attribute_is_projection_only(attribute: &str) -> bool {
+    PROJECTION_ONLY_BUILT_IN_ATTRIBUTES.contains(&attribute)
+}
+
 /// The eight fixed programmer tabs. Pages add capacity without changing this hardware-facing
 /// vocabulary.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]

@@ -9,9 +9,10 @@ pub use attributes::{
     AttributeClass, AttributeConfiguration, AttributeConfigurationError, AttributeDescriptor,
     AttributeKey, AttributePlacement, AttributeValue, AttributeValueType,
     CustomAttributeDescriptor, CustomAttributeLifecycle, ENCODER_SLOTS_PER_PAGE, EncoderGroup,
-    EncoderPlacement, MergeMode, PickerColor, RETIRED_BUILT_IN_ATTRIBUTES,
-    ResolvedAttributeDescriptor, TimedValue, Xyz, attribute_descriptor,
-    built_in_attribute_is_retired, color_range_color, hsv_to_rgb, spread_position,
+    EncoderPlacement, MergeMode, PROJECTION_ONLY_BUILT_IN_ATTRIBUTES, PickerColor,
+    RETIRED_BUILT_IN_ATTRIBUTES, ResolvedAttributeDescriptor, TimedValue, Xyz,
+    attribute_descriptor, built_in_attribute_is_projection_only, built_in_attribute_is_retired,
+    color_range_color, hsv_to_rgb, spread_position,
 };
 pub use clock::{ApplicationClock, EngineClock, ManualClock, SharedClock, SystemClock};
 

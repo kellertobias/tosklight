@@ -62,4 +62,27 @@ describe("fixture library editor", () => {
     expect([highlights["color.red"], highlights["color.green"], highlights["color.blue"]]).not.toEqual([255, 255, 255]);
     expect(profile.modes[0].color_systems[0].system).toMatchObject({ type: "additive", emitters: [{ name: "Red" }, { name: "Green" }, { name: "Blue" }] });
   });
+
+  it("imports native GDTF hue and saturation as one whole-color system", async () => {
+    const zip = new JSZip();
+    zip.file("description.xml", `<GDTF><FixtureType Manufacturer="Acme" Name="HS Wash"><DMXModes><DMXMode Name="Standard"><DMXChannels>
+      <DMXChannel Offset="1" Geometry="Main"><LogicalChannel Attribute="ColorHSB_Hue"><ChannelFunction /></LogicalChannel></DMXChannel>
+      <DMXChannel Offset="2" Geometry="Main"><LogicalChannel Attribute="ColorHSB_Saturation"><ChannelFunction /></LogicalChannel></DMXChannel>
+      <DMXChannel Offset="3" Geometry="Main"><LogicalChannel Attribute="ColorHSB_Brightness"><ChannelFunction /></LogicalChannel></DMXChannel>
+    </DMXChannels></DMXMode></DMXModes></FixtureType></GDTF>`);
+    const [definition] = await importGdtfData(await zip.generateAsync({ type: "uint8array" }), "hs.gdtf");
+    expect(definition.heads[0].parameters.map((parameter) => [parameter.source_attribute, parameter.attribute])).toEqual([
+      ["GDTF:ColorHSB_Hue", "color.hue"],
+      ["GDTF:ColorHSB_Saturation", "color.saturation"],
+      ["GDTF:ColorHSB_Brightness", "color.brightness"],
+    ]);
+
+    const profile = fixtureProfileFromDefinition(definition);
+    expect(profile.modes[0].color_systems[0].system).toMatchObject({
+      type: "hue_saturation",
+      hue_channel_id: profile.modes[0].channels[0].id,
+      saturation_channel_id: profile.modes[0].channels[1].id,
+      intensity_channel_id: profile.modes[0].channels[2].id,
+    });
+  });
 });

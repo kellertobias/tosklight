@@ -265,6 +265,30 @@ impl FixtureMode {
                 } => {
                     vec![*cyan_channel_id, *magenta_channel_id, *yellow_channel_id]
                 }
+                ColorSystem::HueSaturation {
+                    hue_channel_id,
+                    saturation_channel_id,
+                    intensity_channel_id,
+                } => {
+                    let mut references = vec![*hue_channel_id, *saturation_channel_id];
+                    references.extend(intensity_channel_id);
+                    if references.iter().collect::<HashSet<_>>().len() != references.len() {
+                        return Err(ProfileError::Invalid(
+                            "hue/saturation color system channels must be distinct".into(),
+                        ));
+                    }
+                    if references.iter().any(|id| {
+                        self.channels
+                            .iter()
+                            .find(|channel| channel.id == *id)
+                            .is_some_and(|channel| channel.head_id != system.head_id)
+                    }) {
+                        return Err(ProfileError::Invalid(
+                            "hue/saturation color system channels must belong to its head".into(),
+                        ));
+                    }
+                    references
+                }
                 ColorSystem::DiscreteWheel { channel_id, slots } => {
                     let Some(channel) = self
                         .channels
@@ -308,6 +332,33 @@ impl FixtureMode {
                 return Err(ProfileError::Invalid(
                     "color system references a missing channel".into(),
                 ));
+            }
+        }
+        for channel in &self.channels {
+            let bound = self.color_systems.iter().any(|system| {
+                if system.head_id != channel.head_id {
+                    return false;
+                }
+                let ColorSystem::HueSaturation {
+                    hue_channel_id,
+                    saturation_channel_id,
+                    intensity_channel_id,
+                } = &system.system
+                else {
+                    return false;
+                };
+                match channel.attribute.0.as_str() {
+                    "color.hue" => *hue_channel_id == channel.id,
+                    "color.saturation" => *saturation_channel_id == channel.id,
+                    "color.brightness" => *intensity_channel_id == Some(channel.id),
+                    _ => false,
+                }
+            });
+            if light_core::built_in_attribute_is_projection_only(&channel.attribute.0) && !bound {
+                return Err(ProfileError::Invalid(format!(
+                    "projection-only channel `{}` is not bound to its color system",
+                    channel.attribute.0
+                )));
             }
         }
         Ok(())

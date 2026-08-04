@@ -75,9 +75,7 @@ function validateFunctionRanges(
 			);
 		}
 		if (index && sorted[index - 1].dmx_to >= fn.dmx_from) {
-			errors.push(
-				`${mode.name}: ${channel.attribute} function ranges overlap`,
-			);
+			errors.push(`${mode.name}: ${channel.attribute} function ranges overlap`);
 		}
 	});
 }
@@ -149,6 +147,7 @@ function validateMode(
 		}
 	}
 	validateChannels(mode, headIds, splitNumbers, errors);
+	validateHueSaturationSystems(mode, errors);
 	if (
 		profile.patch_policy === "visual_only" &&
 		(mode.channels.length ||
@@ -158,10 +157,65 @@ function validateMode(
 		errors.push(`${mode.name}: visual-only modes cannot contain DMX behavior`);
 	}
 	errors.push(
-		...derivePrimarySlots(mode).errors.map(
-			(error) => `${mode.name}: ${error}`,
-		),
+		...derivePrimarySlots(mode).errors.map((error) => `${mode.name}: ${error}`),
 	);
+}
+
+function validateHueSaturationSystems(mode: FixtureMode, errors: string[]) {
+	const systems = mode.color_systems.filter(
+		(record) => record.system.type === "hue_saturation",
+	);
+	for (const record of systems) {
+		if (record.system.type !== "hue_saturation") continue;
+		const references = [
+			record.system.hue_channel_id,
+			record.system.saturation_channel_id,
+			record.system.intensity_channel_id,
+		].filter((id): id is string => Boolean(id));
+		if (new Set(references).size !== references.length) {
+			errors.push(
+				`${mode.name}: hue/saturation color channels must be distinct`,
+			);
+		}
+		if (
+			references.some(
+				(id) =>
+					!mode.channels.some(
+						(channel) =>
+							channel.id === id && channel.head_id === record.head_id,
+					),
+			)
+		) {
+			errors.push(
+				`${mode.name}: hue/saturation channels must belong to their head`,
+			);
+		}
+	}
+	for (const channel of mode.channels) {
+		if (
+			!["color.hue", "color.saturation", "color.brightness"].includes(
+				channel.attribute,
+			)
+		)
+			continue;
+		const bound = systems.some((record) => {
+			if (
+				record.system.type !== "hue_saturation" ||
+				record.head_id !== channel.head_id
+			)
+				return false;
+			if (channel.attribute === "color.hue")
+				return record.system.hue_channel_id === channel.id;
+			if (channel.attribute === "color.saturation")
+				return record.system.saturation_channel_id === channel.id;
+			return record.system.intensity_channel_id === channel.id;
+		});
+		if (!bound) {
+			errors.push(
+				`${mode.name}: ${channel.attribute} must be bound to a hue/saturation color system`,
+			);
+		}
+	}
 }
 
 export function validateProfile(profile: FixtureProfile) {

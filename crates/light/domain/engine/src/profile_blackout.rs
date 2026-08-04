@@ -34,6 +34,16 @@ pub(crate) fn blackout_raw(mode: &FixtureMode, channel: &FixtureChannel, raw: u3
                     channel.resolution.max_raw()
                 };
             }
+            light_fixture::ColorSystem::HueSaturation {
+                intensity_channel_id: Some(intensity_channel_id),
+                ..
+            } if *intensity_channel_id == channel.id => {
+                return if channel.invert {
+                    channel.resolution.max_raw()
+                } else {
+                    0
+                };
+            }
             _ => {}
         }
     }

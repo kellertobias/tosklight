@@ -256,6 +256,76 @@ describe("fixture profile model calibrated Highlight defaults", () => {
 			expected.get(reconciled.channels[2].id),
 		);
 	});
+
+	it("derives white Highlight for native hue, saturation, and optional intensity", () => {
+		const profile = blankFixtureProfile();
+		const mode = profile.modes[0];
+		mode.splits[0].footprint = 3;
+		mode.channels = ["color.hue", "color.saturation", "intensity"].map(
+			(attribute) => ({
+				...blankChannel(mode),
+				attribute,
+				fixture_attribute: `fixture.${attribute}`,
+				highlight_raw: 17,
+			}),
+		);
+		mode.channels[1].invert = true;
+		const values = semanticHighlightDefaultsForMode({
+			...mode,
+			color_systems: [
+				{
+					head_id: mode.heads[0].id,
+					correction_matrix: [
+						[1, 0, 0],
+						[0, 1, 0],
+						[0, 0, 1],
+					],
+					system: {
+						type: "hue_saturation",
+						hue_channel_id: mode.channels[0].id,
+						saturation_channel_id: mode.channels[1].id,
+						intensity_channel_id: mode.channels[2].id,
+					},
+				},
+			],
+		});
+		expect(values.get(mode.channels[0].id)).toBe(0);
+		expect(values.get(mode.channels[1].id)).toBe(255);
+		expect(values.get(mode.channels[2].id)).toBe(255);
+	});
+
+	it("rejects projection-only color channels until one same-head system binds them", () => {
+		const profile = blankFixtureProfile();
+		profile.manufacturer = "Acme";
+		profile.name = "HS Wash";
+		const mode = profile.modes[0];
+		mode.splits[0].footprint = 2;
+		mode.channels = ["color.hue", "color.saturation"].map((attribute) => ({
+			...blankChannel(mode),
+			attribute,
+			fixture_attribute: `fixture.${attribute}`,
+		}));
+		expect(validateProfile(profile)).toContain(
+			"Default: color.hue must be bound to a hue/saturation color system",
+		);
+		mode.color_systems = [
+			{
+				head_id: mode.heads[0].id,
+				correction_matrix: [
+					[1, 0, 0],
+					[0, 1, 0],
+					[0, 0, 1],
+				],
+				system: {
+					type: "hue_saturation",
+					hue_channel_id: mode.channels[0].id,
+					saturation_channel_id: mode.channels[1].id,
+					intensity_channel_id: null,
+				},
+			},
+		];
+		expect(validateProfile(profile)).toEqual([]);
+	});
 });
 
 describe("fixture profile model addressing and geometry", () => {

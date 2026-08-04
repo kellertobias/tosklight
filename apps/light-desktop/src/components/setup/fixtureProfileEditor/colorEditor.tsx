@@ -1,13 +1,14 @@
+import { FormLayout, NumberField, SelectField } from "@tosklight/ui";
 import type {
 	ColorSystem,
 	FixtureMode,
 	HeadColorSystem,
 } from "../../../api/types";
-import { FormLayout, NumberField, SelectField } from "@tosklight/ui";
 import { reconcileColorSystemHighlightDefaults } from "../fixtureProfileModel";
 import {
 	AdditiveColorEditor,
 	DiscreteColorEditor,
+	HueSaturationColorEditor,
 	SubtractiveColorEditor,
 } from "./colorFields";
 
@@ -34,6 +35,22 @@ export function removeColorChannel(
 		].includes(channelId)
 	)
 		return null;
+	if (
+		system.system.type === "hue_saturation" &&
+		[
+			system.system.hue_channel_id,
+			system.system.saturation_channel_id,
+		].includes(channelId)
+	)
+		return null;
+	if (
+		system.system.type === "hue_saturation" &&
+		system.system.intensity_channel_id === channelId
+	)
+		return {
+			...system,
+			system: { ...system.system, intensity_channel_id: null },
+		};
 	if (
 		system.system.type === "discrete_wheel" &&
 		system.system.channel_id === channelId
@@ -138,6 +155,7 @@ export function ColorEditor({
 									{ value: "none", label: "No abstraction" },
 									{ value: "additive", label: "Additive emitters" },
 									{ value: "subtractive", label: "Subtractive CMY" },
+									{ value: "hue_saturation", label: "Hue / saturation" },
 									{ value: "discrete_wheel", label: "Discrete color wheel" },
 								]}
 								onChange={(next) => {
@@ -151,6 +169,13 @@ export function ColorEditor({
 											cyan_channel_id: first,
 											magenta_channel_id: first,
 											yellow_channel_id: first,
+										});
+									if (next === "hue_saturation")
+										return setSystem(head.id, {
+											type: next,
+											hue_channel_id: first,
+											saturation_channel_id: channels[1]?.id ?? first,
+											intensity_channel_id: null,
 										});
 									setSystem(head.id, {
 										type: next,
@@ -207,6 +232,13 @@ export function ColorEditor({
 						)}
 						{record?.system.type === "discrete_wheel" && (
 							<DiscreteColorEditor
+								system={record.system}
+								options={options}
+								onChange={(system) => setSystem(head.id, system)}
+							/>
+						)}
+						{record?.system.type === "hue_saturation" && (
+							<HueSaturationColorEditor
 								system={record.system}
 								options={options}
 								onChange={(system) => setSystem(head.id, system)}

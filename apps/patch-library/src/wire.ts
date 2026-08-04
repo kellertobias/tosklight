@@ -251,6 +251,12 @@ export type ColorSystem =
 			magenta_channel_id: string;
 			yellow_channel_id: string;
 	  }
+	| {
+			type: "hue_saturation";
+			hue_channel_id: string;
+			saturation_channel_id: string;
+			intensity_channel_id?: string | null;
+	  }
 	| { type: "discrete_wheel"; channel_id: string; slots: ColorWheelSlot[] };
 
 export interface EmitterBinding {

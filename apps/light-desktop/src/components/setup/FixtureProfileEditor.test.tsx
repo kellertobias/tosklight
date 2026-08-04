@@ -363,6 +363,38 @@ describe("FixtureProfileEditor canonical attribute registry", () => {
 });
 
 describe("FixtureProfileEditor color calibration", () => {
+	it("authors a native hue and saturation system", () => {
+		const profile = validProfile();
+		const mode = profile.modes[0];
+		mode.splits[0].footprint = 3;
+		mode.channels = ["color.hue", "color.saturation", "intensity"].map(
+			(attribute) => ({
+				...blankChannel(mode),
+				attribute,
+				fixture_attribute: `fixture.${attribute}`,
+			}),
+		);
+		render(
+			<FixtureProfileEditor
+				initialProfile={profile}
+				manufacturers={[]}
+				onSave={vi.fn()}
+				onClose={vi.fn()}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
+		openModeEditor("Color");
+		choose("Color system", "Hue / saturation");
+
+		expect(screen.getByText("Hue", { selector: "label" })).toBeInTheDocument();
+		expect(
+			screen.getByText("Saturation", { selector: "label" }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText("Color intensity", { selector: "label" }),
+		).toBeInTheDocument();
+	});
+
 	it("preserves a head's color correction matrix while changing its color system", () => {
 		const correctionMatrix: HeadColorSystem["correction_matrix"] = [
 			[1.1, 0.1, -0.1],

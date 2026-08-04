@@ -85,7 +85,9 @@ impl FixtureMode {
         let mut color_values = HashMap::new();
         for system in &self.color_systems {
             match &system.system {
-                ColorSystem::Additive { .. } | ColorSystem::Subtractive { .. } => {
+                ColorSystem::Additive { .. }
+                | ColorSystem::Subtractive { .. }
+                | ColorSystem::HueSaturation { .. } => {
                     color_values.extend(self.resolve_color(system.head_id, SEMANTIC_WHITE_XYZ)?);
                 }
                 ColorSystem::DiscreteWheel { channel_id, slots } => {

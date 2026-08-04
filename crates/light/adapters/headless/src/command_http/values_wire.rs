@@ -2,7 +2,7 @@ use light_application as application;
 use light_core::{AttributeKey, AttributeValue, FixtureId, Xyz};
 use light_wire::v2::{events::EventSnapshotCursor, programming as wire};
 
-use super::color_attributes::{COLOR_CHANNELS, ColorAttributeIndex};
+use super::color_attributes::{COLOR_CHANNELS, ColorAttributeIndex, ColorTarget};
 
 pub(crate) fn values_command(
     action: wire::ProgrammingValuesAction,
@@ -402,7 +402,7 @@ fn color_range_mutations(
         .enumerate()
         .flat_map(|(index, fixture_id)| {
             let fixture_id = FixtureId(fixture_id);
-            let Some(supported) = colors.get(&fixture_id).filter(|list| !list.is_empty()) else {
+            let Some(target) = colors.get(&fixture_id) else {
                 return Vec::new();
             };
             let color = light_core::color_range_color(
@@ -414,23 +414,33 @@ fn color_range_mutations(
                 count,
             );
             let rgb = light_core::hsv_to_rgb(color);
-            COLOR_CHANNELS
-                .iter()
-                .filter(|(attribute, _, _)| supported.contains(attribute))
-                .map(|(attribute, component, inverted)| {
-                    let value = if *inverted {
-                        1.0 - rgb[*component]
-                    } else {
-                        rgb[*component]
-                    };
-                    application::ProgrammingValueMutation::SetFixture {
-                        fixture_id,
-                        attribute: AttributeKey((*attribute).into()),
-                        value: AttributeValue::Normalized(value),
-                        timing,
-                    }
-                })
-                .collect()
+            match target {
+                ColorTarget::Canonical => vec![application::ProgrammingValueMutation::SetFixture {
+                    fixture_id,
+                    attribute: AttributeKey("color".into()),
+                    value: AttributeValue::ColorXyz(light_fixture::srgb_to_xyz(
+                        rgb[0], rgb[1], rgb[2],
+                    )),
+                    timing,
+                }],
+                ColorTarget::Direct(supported) => COLOR_CHANNELS
+                    .iter()
+                    .filter(|(attribute, _, _)| supported.contains(attribute))
+                    .map(|(attribute, component, inverted)| {
+                        let value = if *inverted {
+                            1.0 - rgb[*component]
+                        } else {
+                            rgb[*component]
+                        };
+                        application::ProgrammingValueMutation::SetFixture {
+                            fixture_id,
+                            attribute: AttributeKey((*attribute).into()),
+                            value: AttributeValue::Normalized(value),
+                            timing,
+                        }
+                    })
+                    .collect(),
+            }
         })
         .collect())
 }

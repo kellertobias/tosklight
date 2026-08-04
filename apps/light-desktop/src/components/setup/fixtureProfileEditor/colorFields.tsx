@@ -1,4 +1,3 @@
-import type { ColorSystem, FixtureChannel } from "../../../api/types";
 import {
 	Button,
 	CheckboxField,
@@ -7,6 +6,7 @@ import {
 	SelectField,
 	TextField,
 } from "@tosklight/ui";
+import type { ColorSystem, FixtureChannel } from "../../../api/types";
 import { xyyToXyz, xyzToXyy } from "../fixtureProfileModel";
 
 export function AdditiveColorEditor({
@@ -201,6 +201,49 @@ export function SubtractiveColorEditor({
 					onChange={(value) => onChange({ ...system, [key]: value })}
 				/>
 			))}
+		</FormLayout>
+	);
+}
+
+export function HueSaturationColorEditor({
+	system,
+	options,
+	onChange,
+}: {
+	system: Extract<ColorSystem, { type: "hue_saturation" }>;
+	options: Array<{ value: string; label: string }>;
+	onChange: (system: Extract<ColorSystem, { type: "hue_saturation" }>) => void;
+}) {
+	return (
+		<FormLayout columns={3}>
+			<SelectField
+				label="Hue"
+				value={system.hue_channel_id}
+				options={options}
+				onChange={(hue_channel_id) => onChange({ ...system, hue_channel_id })}
+			/>
+			<SelectField
+				label="Saturation"
+				value={system.saturation_channel_id}
+				options={options}
+				onChange={(saturation_channel_id) =>
+					onChange({ ...system, saturation_channel_id })
+				}
+			/>
+			<SelectField
+				label="Color intensity"
+				value={system.intensity_channel_id ?? ""}
+				options={[
+					{ value: "", label: "Independent fixture intensity" },
+					...options,
+				]}
+				onChange={(intensity_channel_id) =>
+					onChange({
+						...system,
+						intensity_channel_id: intensity_channel_id || null,
+					})
+				}
+			/>
 		</FormLayout>
 	);
 }

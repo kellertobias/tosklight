@@ -151,6 +151,111 @@ fn subtractive_color_uses_cmy_fallback_and_honors_continuous_inversion() {
 }
 
 #[test]
+fn hue_saturation_color_resolves_canonical_xyz_to_authored_hsi_channels() {
+    let mut profile = FixtureProfile::blank();
+    let mode = &mut profile.modes[0];
+    let head_id = mode.heads[0].id;
+    mode.splits[0].footprint = 3;
+    mode.channels = ["hue", "saturation", "intensity"]
+        .into_iter()
+        .map(|name| {
+            let mut channel = channel(head_id, ChannelResolution::U8, vec![]);
+            channel.fixture_attribute = AttributeKey(format!("fixture.{name}"));
+            channel.attribute = AttributeKey(if name == "intensity" {
+                "intensity".into()
+            } else {
+                format!("color.{name}")
+            });
+            channel
+        })
+        .collect();
+    let hue_channel_id = mode.channels[0].id;
+    let saturation_channel_id = mode.channels[1].id;
+    let intensity_channel_id = mode.channels[2].id;
+    mode.color_systems = vec![HeadColorSystem {
+        head_id,
+        correction_matrix: identity_color_correction(),
+        system: ColorSystem::HueSaturation {
+            hue_channel_id,
+            saturation_channel_id,
+            intensity_channel_id: Some(intensity_channel_id),
+        },
+    }];
+    mode.validate().unwrap();
+
+    let resolved = mode
+        .resolve_color(head_id, crate::srgb_to_xyz(0.0, 1.0, 0.0))
+        .unwrap();
+    assert_eq!(resolved[&hue_channel_id], 85);
+    assert_eq!(resolved[&saturation_channel_id], 255);
+    assert_eq!(resolved[&intensity_channel_id], 255);
+}
+
+#[test]
+fn hue_saturation_color_rejects_reused_or_cross_head_channels() {
+    let mut profile = FixtureProfile::blank();
+    let mode = &mut profile.modes[0];
+    let first_head = mode.heads[0].id;
+    let second_head = Uuid::new_v4();
+    mode.heads.push(FixtureHead {
+        id: second_head,
+        name: "Second".into(),
+        master_shared: false,
+    });
+    mode.splits[0].footprint = 2;
+    mode.channels = [first_head, second_head]
+        .into_iter()
+        .enumerate()
+        .map(|(index, head_id)| {
+            let mut channel = channel(head_id, ChannelResolution::U8, vec![]);
+            channel.attribute = AttributeKey(
+                if index == 0 {
+                    "color.hue"
+                } else {
+                    "color.saturation"
+                }
+                .into(),
+            );
+            channel
+        })
+        .collect();
+    assert!(
+        mode.validate()
+            .unwrap_err()
+            .to_string()
+            .contains("is not bound to its color system")
+    );
+    mode.color_systems = vec![HeadColorSystem {
+        head_id: first_head,
+        correction_matrix: identity_color_correction(),
+        system: ColorSystem::HueSaturation {
+            hue_channel_id: mode.channels[0].id,
+            saturation_channel_id: mode.channels[1].id,
+            intensity_channel_id: None,
+        },
+    }];
+    let error = mode.validate().unwrap_err();
+    assert!(
+        error.to_string().contains("must belong to its head"),
+        "{error}"
+    );
+
+    if let ColorSystem::HueSaturation {
+        saturation_channel_id,
+        ..
+    } = &mut mode.color_systems[0].system
+    {
+        *saturation_channel_id = mode.channels[0].id;
+    }
+    assert!(
+        mode.validate()
+            .unwrap_err()
+            .to_string()
+            .contains("must be distinct")
+    );
+}
+
+#[test]
 fn discrete_color_wheel_selects_measured_slot_as_an_exact_fixture_raw_value() {
     let mut profile = FixtureProfile::blank();
     let mode = &mut profile.modes[0];

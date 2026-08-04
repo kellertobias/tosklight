@@ -1,4 +1,4 @@
-use light_core::Xyz;
+use light_core::{PickerColor, Xyz};
 use light_fixture::{ColorSystem, FixtureMode, srgb_to_xyz};
 
 pub(crate) fn channel_visual_level(
@@ -57,6 +57,24 @@ pub(crate) fn profile_visual_color(
             1.0 - channel_visual_level(mode, channels, *magenta_channel_id).unwrap_or(0.0),
             1.0 - channel_visual_level(mode, channels, *yellow_channel_id).unwrap_or(0.0),
         )),
+        Some(ColorSystem::HueSaturation {
+            hue_channel_id,
+            saturation_channel_id,
+            intensity_channel_id,
+        }) => {
+            let hue = channel_visual_level(mode, channels, *hue_channel_id).unwrap_or(0.0);
+            let saturation =
+                channel_visual_level(mode, channels, *saturation_channel_id).unwrap_or(0.0);
+            let brightness = intensity_channel_id
+                .and_then(|id| channel_visual_level(mode, channels, id))
+                .unwrap_or(1.0);
+            let [red, green, blue] = light_core::hsv_to_rgb(PickerColor {
+                hue,
+                saturation,
+                brightness,
+            });
+            Some(srgb_to_xyz(red, green, blue))
+        }
         Some(ColorSystem::DiscreteWheel { channel_id, slots }) => {
             let raw = channels
                 .iter()

@@ -111,9 +111,7 @@ export function semanticHighlightRaw(
 		if (choice?.dmx_from != null) {
 			const midpoint =
 				choice.dmx_from +
-				Math.floor(
-					((choice.dmx_to ?? choice.dmx_from) - choice.dmx_from) / 2,
-				);
+				Math.floor(((choice.dmx_to ?? choice.dmx_from) - choice.dmx_from) / 2);
 			return Math.round((Math.max(0, Math.min(255, midpoint)) * maximum) / 255);
 		}
 	}
@@ -150,8 +148,8 @@ function additiveWhiteLevels(
 		);
 	}
 	const target = correctedWhite(matrix);
-	const opticalLimits = visible.map((emitter) =>
-		Math.pow(emitter.maximum_level, emitter.response_curve),
+	const opticalLimits = visible.map(
+		(emitter) => emitter.maximum_level ** emitter.response_curve,
 	);
 	const levels = visible.map(() => 0);
 	const norm = Math.max(
@@ -232,9 +230,33 @@ function applyColorSystemHighlights(
 			applyAdditiveHighlights(mode, record, values);
 		} else if (record.system.type === "subtractive") {
 			applySubtractiveHighlights(mode, record, values);
+		} else if (record.system.type === "hue_saturation") {
+			applyHueSaturationHighlights(mode, record, values);
 		} else {
 			applyWheelHighlight(record, values);
 		}
+	}
+}
+
+function applyHueSaturationHighlights(
+	mode: FixtureMode,
+	record: HeadColorSystem,
+	values: Map<string, number>,
+) {
+	if (record.system.type !== "hue_saturation") return;
+	for (const [channelId, level] of [
+		[record.system.hue_channel_id, 0],
+		[record.system.saturation_channel_id, 0],
+		[record.system.intensity_channel_id, 1],
+	] as const) {
+		if (!channelId) continue;
+		const channel = mode.channels.find(
+			(candidate) => candidate.id === channelId,
+		);
+		if (!channel) continue;
+		const maximum = maxRaw(channel.resolution);
+		const raw = Math.round(level * maximum);
+		values.set(channel.id, channel.invert ? maximum - raw : raw);
 	}
 }
 
@@ -251,15 +273,13 @@ function applyAdditiveHighlights(
 			(candidate) => candidate.id === emitter.channel_id,
 		);
 		const level = levels[index];
-		if (!channel || !Number.isFinite(level) || emitter.response_curve <= 0) return;
+		if (!channel || !Number.isFinite(level) || emitter.response_curve <= 0)
+			return;
 		const drive = Math.max(
 			0,
 			Math.min(
 				emitter.maximum_level,
-				Math.pow(
-					Math.max(0, Math.min(1, level)),
-					1 / emitter.response_curve,
-				),
+				Math.max(0, Math.min(1, level)) ** (1 / emitter.response_curve),
 			),
 		);
 		const maximum = maxRaw(channel.resolution);
@@ -283,10 +303,7 @@ function applySubtractiveHighlights(
 			(candidate) => candidate.id === channelId,
 		);
 		if (channel) {
-			values.set(
-				channel.id,
-				channel.invert ? maxRaw(channel.resolution) : 0,
-			);
+			values.set(channel.id, channel.invert ? maxRaw(channel.resolution) : 0);
 		}
 	}
 }
@@ -303,11 +320,16 @@ function applyWheelHighlight(
 				identifiesOpenOrWhite(candidate.label),
 		) ??
 		record.system.slots
-			.filter((candidate) => candidate.measured_xyz)
+			.filter(
+				(
+					candidate,
+				): candidate is typeof candidate & { measured_xyz: XyzValue } =>
+					candidate.measured_xyz != null,
+			)
 			.sort(
 				(left, right) =>
-					distanceFromSemanticWhite(left.measured_xyz!) -
-					distanceFromSemanticWhite(right.measured_xyz!),
+					distanceFromSemanticWhite(left.measured_xyz) -
+					distanceFromSemanticWhite(right.measured_xyz),
 			)[0];
 	if (slot) {
 		values.set(

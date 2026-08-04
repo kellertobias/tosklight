@@ -76,7 +76,8 @@ function channelsFromDefinition(
 				(right.parameter.components[0]?.offset ?? 0),
 		);
 	return indexed.map(({ headIndex, parameter }) => {
-		const resolution = `u${Math.max(1, parameter.components.length) * 8}` as ChannelResolution;
+		const resolution =
+			`u${Math.max(1, parameter.components.length) * 8}` as ChannelResolution;
 		const maximum = maxRaw(resolution);
 		const defaultRaw = Math.round(parameter.default * maximum);
 		const invert = parameter.metadata?.invert ?? false;
@@ -119,9 +120,39 @@ function colorSystemsFromDefinition(
 	heads: FixtureHead[],
 	channels: FixtureChannel[],
 ): HeadColorSystem[] {
-	if (!definition.color_calibration) return [];
-	return heads.flatMap((head) => {
-		const emitters = definition.color_calibration!.emitters.flatMap(
+	return heads.flatMap<HeadColorSystem>((head) => {
+		const hue = channels.find(
+			(channel) =>
+				channel.head_id === head.id && channel.attribute === "color.hue",
+		);
+		const saturation = channels.find(
+			(channel) =>
+				channel.head_id === head.id && channel.attribute === "color.saturation",
+		);
+		const intensity = channels.find(
+			(channel) =>
+				channel.head_id === head.id && channel.attribute === "color.brightness",
+		);
+		if (hue && saturation) {
+			return [
+				{
+					head_id: head.id,
+					correction_matrix: [
+						[1, 0, 0],
+						[0, 1, 0],
+						[0, 0, 1],
+					] as HeadColorSystem["correction_matrix"],
+					system: {
+						type: "hue_saturation" as const,
+						hue_channel_id: hue.id,
+						saturation_channel_id: saturation.id,
+						intensity_channel_id: intensity?.id ?? null,
+					},
+				},
+			];
+		}
+		if (!definition.color_calibration) return [];
+		const emitters = definition.color_calibration.emitters.flatMap(
 			(emitter) => {
 				const name = emitter.name
 					.trim()
@@ -130,10 +161,9 @@ function colorSystemsFromDefinition(
 				const channel = channels.find(
 					(candidate) =>
 						candidate.head_id === head.id &&
-						[
-							`color.emitter.${name}`,
-							`color.${name}`,
-						].includes(candidate.attribute),
+						[`color.emitter.${name}`, `color.${name}`].includes(
+							candidate.attribute,
+						),
 				);
 				return channel
 					? [
@@ -143,9 +173,7 @@ function colorSystemsFromDefinition(
 								xyz: emitter.xyz,
 								maximum_level: emitter.limit,
 								response_curve: 1,
-								visible: !/^(uv|ir)$|ultraviolet|infrared/i.test(
-									emitter.name,
-								),
+								visible: !/^(uv|ir)$|ultraviolet|infrared/i.test(emitter.name),
 							},
 						]
 					: [];
@@ -155,7 +183,7 @@ function colorSystemsFromDefinition(
 			? [
 					{
 						head_id: head.id,
-						correction_matrix: definition.color_calibration!
+						correction_matrix: definition.color_calibration
 							.correction_matrix as HeadColorSystem["correction_matrix"],
 						system: { type: "additive" as const, emitters },
 					},
@@ -183,8 +211,7 @@ function modeFromDefinition(
 	const semanticDefaults = semanticHighlightDefaultsForMode(mode);
 	mode.channels = mode.channels.map((channel) => ({
 		...channel,
-		highlight_raw:
-			semanticDefaults.get(channel.id) ?? channel.highlight_raw,
+		highlight_raw: semanticDefaults.get(channel.id) ?? channel.highlight_raw,
 	}));
 	return mode;
 }

@@ -68,6 +68,9 @@ export function fixtureAttributeName(value: string) {
 		"color.sub_c": "color.cyan",
 		"color.sub_m": "color.magenta",
 		"color.sub_y": "color.yellow",
+		"color.hsb_hue": "color.hue",
+		"color.hsb_saturation": "color.saturation",
+		"color.hsb_brightness": "color.brightness",
 	};
 	const wheel = normalized.match(/^color(?:\.wheel)?_?(\d+)$/);
 	return (

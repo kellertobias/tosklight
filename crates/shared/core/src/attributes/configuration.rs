@@ -232,7 +232,10 @@ impl AttributeConfiguration {
             }
         }
         for id in descriptors.keys() {
-            if !built_in_attribute_is_retired(id) && !placements.contains_key(id) {
+            if !built_in_attribute_is_retired(id)
+                && !built_in_attribute_is_projection_only(id)
+                && !placements.contains_key(id)
+            {
                 return Err(AttributeConfigurationError::MissingPlacement(
                     (*id).to_owned(),
                 ));
@@ -531,6 +534,19 @@ pub const ATTRIBUTE_REGISTRY: &[AttributeDescriptor] = &[
         "K",
     ),
     continuous("color.tint", "Tint", AttributeClass::Color, "percent"),
+    projection_continuous("color.hue", "Hue", AttributeClass::Color, "deg"),
+    projection_continuous(
+        "color.saturation",
+        "Saturation",
+        AttributeClass::Color,
+        "percent",
+    ),
+    projection_continuous(
+        "color.brightness",
+        "Color Brightness",
+        AttributeClass::Color,
+        "percent",
+    ),
     indexed("color.wheel.1", "Color Wheel 1", AttributeClass::Color),
     continuous(
         "color.wheel.1.rotation",
@@ -769,6 +785,18 @@ const fn continuous(
         AttributeValueType::Continuous,
         Some(unit),
     )
+}
+
+const fn projection_continuous(
+    id: &'static str,
+    label: &'static str,
+    family: AttributeClass,
+    display_unit: &'static str,
+) -> AttributeDescriptor {
+    let mut descriptor = continuous(id, label, family, display_unit);
+    descriptor.recordable = false;
+    descriptor.normalized_bounds = None;
+    descriptor
 }
 
 const fn cyclic_continuous(

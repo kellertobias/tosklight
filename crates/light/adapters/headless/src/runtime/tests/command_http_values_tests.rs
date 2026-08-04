@@ -674,6 +674,62 @@ fn color_range_fixture(number: u32, attributes: &[&str]) -> light_fixture::Patch
     fixture
 }
 
+fn native_hsi_color_range_fixture(number: u32) -> light_fixture::PatchedFixture {
+    let mut profile = light_fixture::FixtureProfile::blank();
+    profile.manufacturer = "Test".into();
+    profile.name = "Native HSI".into();
+    profile.short_name = "HSI".into();
+    let mode = &mut profile.modes[0];
+    let mode_id = mode.id;
+    let head_id = mode.heads[0].id;
+    mode.splits[0].footprint = 3;
+    mode.channels = [
+        ("fixture.hue", "color.hue"),
+        ("fixture.saturation", "color.saturation"),
+        ("fixture.brightness", "color.brightness"),
+    ]
+    .into_iter()
+    .map(|(fixture_attribute, attribute)| light_fixture::FixtureChannel {
+        id: Uuid::new_v4(),
+        head_id,
+        split: 1,
+        fixture_attribute: light_core::AttributeKey(fixture_attribute.into()),
+        attribute: light_core::AttributeKey(attribute.into()),
+        canonical_transform: light_fixture::CanonicalTransform::Identity,
+        resolution: light_fixture::ChannelResolution::U8,
+        secondary_slots: vec![],
+        default_raw: 0,
+        highlight_raw: 255,
+        physical_min: None,
+        physical_max: None,
+        unit: None,
+        invert: false,
+        snap: false,
+        reacts_to_virtual_intensity: false,
+        reacts_to_sequence_master: false,
+        reacts_to_group_master: false,
+        reacts_to_grand_master: false,
+        behavior: light_fixture::ChannelBehavior::Controlled,
+        functions: vec![],
+    })
+    .collect();
+    mode.color_systems = vec![light_fixture::HeadColorSystem {
+        head_id,
+        correction_matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+        system: light_fixture::ColorSystem::HueSaturation {
+            hue_channel_id: mode.channels[0].id,
+            saturation_channel_id: mode.channels[1].id,
+            intensity_channel_id: Some(mode.channels[2].id),
+        },
+    }];
+    let mut fixture = schema_v2_direct_fixture().0;
+    fixture.fixture_number = Some(number);
+    fixture.name = "Native HSI".into();
+    fixture.definition = profile.resolved_definition(mode_id).unwrap();
+    fixture.address = Some(1 + (number as u16 - 1) * 3);
+    fixture
+}
+
 fn programmer_color_values(
     scenario: &CommandHttpScenario,
 ) -> impl Fn(light_core::FixtureId, &str) -> Option<f32> + use<> {
@@ -745,6 +801,92 @@ async fn color_range_resolves_rgb_and_cmy_channels_server_side_in_selection_orde
     assert_eq!(value(ids[2], "color.green"), Some(1.0));
     assert_eq!(value(ids[2], "color.blue"), Some(0.0));
     assert_eq!(value(absent, "color.red"), None);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn color_picker_persists_canonical_color_and_renders_native_hsi_channels() {
+    let scenario = CommandHttpScenario::new().await;
+    let fixture = native_hsi_color_range_fixture(1);
+    let fixture_id = fixture.fixture_id;
+    scenario
+        .state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+
+    let response = scenario
+        .values_action(serde_json::json!({
+            "request_id": "native-hsi",
+            "expected_revision": 0,
+            "expected_capture_mode_revision": 0,
+            "action": {
+                "type": "set_selection_color_range",
+                "fixture_ids": [fixture_id.0],
+                "start": {"hue": 1.0 / 3.0, "saturation": 1.0},
+                "end": {"hue": 1.0 / 3.0, "saturation": 1.0},
+                "hue_travel": 0.0,
+                "brightness": 0.5,
+                "timing": {"fade": false}
+            }
+        }))
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
+    assert_eq!(programmer.values.len(), 1);
+    assert_eq!(programmer.values[0].attribute.0, "color");
+    let light_core::AttributeValue::ColorXyz(stored) = programmer.values[0].value else {
+        panic!("whole-color picker must persist one canonical XYZ value")
+    };
+    let expected = light_fixture::srgb_to_xyz(0.0, 0.5, 0.0);
+    assert!((stored.x - expected.x).abs() < 0.000_001);
+    assert!((stored.y - expected.y).abs() < 0.000_001);
+    assert!((stored.z - expected.z).abs() < 0.000_001);
+
+    let rendered = scenario
+        .state
+        .output
+        .render(RenderOptions::default())
+        .unwrap();
+    assert_eq!(&rendered.universes[&1][0..3], &[85, 255, 128]);
+    let blacked_out = scenario
+        .state
+        .output
+        .render(RenderOptions {
+            blackout: true,
+            ..RenderOptions::default()
+        })
+        .unwrap();
+    assert_eq!(
+        blacked_out.universes[&1][2], 0,
+        "HSB brightness must reach its physical off endpoint during blackout"
+    );
+    let visual = scenario
+        .state
+        .output
+        .profile_visualization_values(
+            &scenario.state.output.resolved_values(),
+            RenderOptions::default(),
+        )
+        .unwrap();
+    let Some(light_core::AttributeValue::ColorXyz(projected)) =
+        visual.get(&(fixture_id, light_core::AttributeKey("color".into())))
+    else {
+        panic!("native HSI output must project back to canonical visible color")
+    };
+    let Some(light_core::AttributeValue::Normalized(projected_intensity)) =
+        visual.get(&(fixture_id, light_core::AttributeKey::intensity()))
+    else {
+        panic!("native HSI output must project its visible brightness")
+    };
+    assert!((projected.x * projected_intensity - expected.x).abs() < 0.01);
+    assert!((projected.y * projected_intensity - expected.y).abs() < 0.01);
+    assert!((projected.z * projected_intensity - expected.z).abs() < 0.01);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

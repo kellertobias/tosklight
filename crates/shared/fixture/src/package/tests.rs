@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
-    CanonicalTransform, ChannelResolution, EmitterLayout, FIXTURE_PROFILE_SCHEMA_VERSION,
-    FixtureProfile, FixtureSplit, ModelUnits, PatchPolicy,
+    CanonicalTransform, ChannelResolution, ColorSystem, EmitterLayout,
+    FIXTURE_PROFILE_SCHEMA_VERSION, FixtureProfile, FixtureSplit, ModelUnits, PatchPolicy,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use std::fs;
@@ -408,6 +408,89 @@ fn shipped_generic_cmy_retains_fixture_identity_and_maps_into_canonical_rgb() {
             } else {
                 assert_eq!(channel.fixture_attribute, channel.attribute);
                 assert_eq!(channel.canonical_transform, CanonicalTransform::Identity);
+            }
+        }
+    }
+}
+
+#[test]
+fn shipped_native_hsi_modes_bind_their_physical_coordinates_and_highlight_white() {
+    let expected = [
+        (
+            "chauvet-professional--colorado-1-solo.toskfixture",
+            vec![(
+                "HSIC",
+                "e73c1545-9a30-37db-046f-31a9af27a6c2",
+                "0e431711-e4b3-a87d-8911-fc518c2af61e",
+                "3ea9dc10-0fa0-77a2-4b4e-e28cb4af9901",
+            )],
+        ),
+        (
+            "etc--source-four-led-series-2-lustr.toskfixture",
+            vec![
+                (
+                    "HSI",
+                    "fb62238a-4b70-2872-56fe-f9392d5c5099",
+                    "35b4669a-85f4-029a-0f32-0e34a335d33f",
+                    "173b22d7-aa50-70ba-923b-f538631d48e5",
+                ),
+                (
+                    "HSIC",
+                    "3944d319-2fef-b619-cad8-f5ad72c8c100",
+                    "9a592c8d-e910-a7bf-8947-058feee4acc8",
+                    "06016ed1-03ef-e265-903b-92f45ea8e0cc",
+                ),
+                (
+                    "HSI Plus 7",
+                    "d3bf551a-e1fb-1fef-0ffb-4bc4907aaeba",
+                    "09af8b34-111d-4585-d123-7c1c76cdb7b2",
+                    "0061c934-7fd9-6e1f-bf13-c816082b6ce2",
+                ),
+                (
+                    "HSIC Plus 7",
+                    "9b226a1d-d655-833a-81e4-922c1da3fb31",
+                    "923e8b62-60d2-8132-45d0-90e263763947",
+                    "d6b870ba-62bf-bd62-2d29-76489826331d",
+                ),
+            ],
+        ),
+    ];
+
+    for (filename, modes) in expected {
+        let profile = shipped_profile(filename);
+        assert_eq!(profile.revision, 2);
+        for (mode_name, hue_id, saturation_id, intensity_id) in modes {
+            let mode = profile
+                .modes
+                .iter()
+                .find(|mode| mode.name == mode_name)
+                .unwrap();
+            assert_eq!(mode.color_systems.len(), 1);
+            let color = &mode.color_systems[0];
+            let ColorSystem::HueSaturation {
+                hue_channel_id,
+                saturation_channel_id,
+                intensity_channel_id,
+            } = &color.system
+            else {
+                panic!("{filename} / {mode_name} must remain native hue/saturation");
+            };
+            assert_eq!(hue_channel_id.to_string(), hue_id);
+            assert_eq!(saturation_channel_id.to_string(), saturation_id);
+            assert_eq!(intensity_channel_id.unwrap().to_string(), intensity_id);
+
+            for (channel_id, highlight) in [
+                (*hue_channel_id, 0),
+                (*saturation_channel_id, 0),
+                (*intensity_channel_id.as_ref().unwrap(), 255),
+            ] {
+                let channel = mode
+                    .channels
+                    .iter()
+                    .find(|channel| channel.id == channel_id)
+                    .unwrap();
+                assert_eq!(channel.head_id, color.head_id);
+                assert_eq!(channel.highlight_raw, highlight);
             }
         }
     }

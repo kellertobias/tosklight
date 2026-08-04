@@ -27,6 +27,15 @@ pub enum ColorSystem {
         magenta_channel_id: Uuid,
         yellow_channel_id: Uuid,
     },
+    /// A fixture-native hue/saturation coordinate system. Brightness is optional because many
+    /// fixtures expose H/S alongside an independent intensity channel while true HSI fixtures
+    /// carry the third coordinate in the color system itself.
+    HueSaturation {
+        hue_channel_id: Uuid,
+        saturation_channel_id: Uuid,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        intensity_channel_id: Option<Uuid>,
+    },
     DiscreteWheel {
         channel_id: Uuid,
         slots: Vec<ColorWheelSlot>,
