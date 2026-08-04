@@ -30,11 +30,29 @@ test.describe("TL-65 attributes, encoders, and screens", () => {
 		const browserScreen = await page.context().newPage();
 
 		try {
+			await expect(page.getByLabel("Command line")).toBeVisible();
 			await configureBrowserControlScreen(api, screenId);
 			await browserScreen.goto(`${bench.baseUrl}?screen=${screenId}`);
 			const commandLine = browserScreen.getByLabel("Command line");
 			await expect(commandLine).toHaveValue("FIXTURE", { timeout: 10_000 });
+			await expect(page.getByLabel("Command line")).toHaveCount(0);
 			expect(await sessionProgrammerCount(api, session)).toBe(1);
+
+			await updateProgrammerControlSurface(api, {
+				owner_screen_id: screenId,
+				visible_encoders: 6,
+			});
+			await expect(browserScreen.locator(".parameter-surfaces > *")).toHaveCount(
+				6,
+			);
+			await updateProgrammerControlSurface(api, { assign_to_main: true });
+			await expect(page.getByLabel("Command line")).toBeVisible();
+			await expect(browserScreen.getByLabel("Command line")).toHaveCount(0);
+			await updateProgrammerControlSurface(api, {
+				owner_screen_id: screenId,
+				visible_encoders: 4,
+			});
+			await expect(commandLine).toHaveValue("FIXTURE");
 
 			for (const key of ["1", "AT", "5", "0", "ENT"])
 				await browserScreen.locator(`[data-keypad-key="${key}"]`).click();
@@ -92,6 +110,18 @@ test.describe("TL-65 attributes, encoders, and screens", () => {
 				.poll(() => programmerCommand(api, session))
 				.toBe("GROUP 1 + F2");
 			expect(await sessionProgrammerCount(api, session)).toBe(1);
+
+			await browserScreen.reload();
+			await expect(browserScreen.getByLabel("Command line")).toHaveValue(
+				"GROUP 1 + F2",
+			);
+			expect(await sessionProgrammerCount(api, session)).toBe(1);
+
+			await deleteScreen(api, screenId);
+			await expect(browserScreen.getByRole("alert")).toContainText(
+				"Screen unavailable",
+			);
+			await expect(browserScreen.getByLabel("Command line")).toHaveCount(0);
 		} finally {
 			await hardware.close();
 			await browserScreen.close();
@@ -133,6 +163,28 @@ async function configureBrowserControlScreen(
 			type: "update_programmer_control_surface",
 			patch: { owner_screen_id: screenId, visible_encoders: 4 },
 		},
+	});
+}
+
+async function updateProgrammerControlSurface(
+	api: ApiDriver,
+	patch:
+		| { owner_screen_id: string; visible_encoders?: 4 | 6 }
+		| { assign_to_main: true },
+): Promise<void> {
+	await api.request("POST", "/api/v2/screens/actions", {
+		request_id: crypto.randomUUID(),
+		action: {
+			type: "update_programmer_control_surface",
+			patch,
+		},
+	});
+}
+
+async function deleteScreen(api: ApiDriver, screenId: string): Promise<void> {
+	await api.request("POST", "/api/v2/screens/actions", {
+		request_id: crypto.randomUUID(),
+		action: { type: "delete", screen_id: screenId },
 	});
 }
 
