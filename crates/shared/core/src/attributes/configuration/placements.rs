@@ -18,7 +18,6 @@ pub(super) fn recommended_builtin_placements() -> Vec<AttributePlacement> {
         ("color.indigo", Color, 2, 4),
         ("color.mint", Color, 2, 5),
         ("color.temperature", Color, 2, 6),
-        ("color.tint", Color, 3, 1),
         ("color", Color, 3, 2),
         ("color.wheel.1", Color, 3, 3),
         ("color.wheel.1.rotation", Color, 3, 4),

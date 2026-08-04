@@ -289,6 +289,7 @@ mod attribute_registry_tests {
                 .filter(|descriptor| {
                     !built_in_attribute_is_retired(descriptor.id)
                         && !built_in_attribute_is_projection_only(descriptor.id)
+                        && !built_in_attribute_is_special_dialog_only(descriptor.id)
                 })
                 .count()
         );
@@ -297,6 +298,14 @@ mod attribute_registry_tests {
             let descriptor = attribute_descriptor(&key);
             assert!(descriptor.built_in);
             assert!(!descriptor.recordable);
+            assert_eq!(configuration.placement_for(&key), None);
+            assert_eq!(configuration.activation_group_for(&key), None);
+        }
+        for id in SPECIAL_DIALOG_ONLY_BUILT_IN_ATTRIBUTES {
+            let key = AttributeKey((*id).into());
+            let descriptor = attribute_descriptor(&key);
+            assert!(descriptor.built_in);
+            assert!(descriptor.recordable);
             assert_eq!(configuration.placement_for(&key), None);
             assert_eq!(configuration.activation_group_for(&key), None);
         }
@@ -701,6 +710,34 @@ mod attribute_registry_tests {
             migrated.clone().migrate_canonical_attributes().unwrap(),
             migrated
         );
+    }
+
+    #[test]
+    fn tint_moves_from_the_legacy_default_encoder_to_its_semantic_dialog() {
+        let recommended = AttributeConfiguration::recommended();
+        let tint = AttributeKey("color.tint".into());
+        assert!(recommended.attribute_placement_for(&tint).is_none());
+        assert!(recommended.activation_group_for(&tint).is_none());
+        recommended.validate().unwrap();
+
+        let mut legacy = recommended.clone();
+        legacy.placements.push(AttributePlacement {
+            attribute: tint.clone(),
+            encoder: EncoderPlacement::new(EncoderGroup::Color, 3, 1),
+            push_turn_of: None,
+        });
+        legacy
+            .activation_groups
+            .iter_mut()
+            .find(|group| group.id == "color_mix")
+            .unwrap()
+            .members
+            .push(tint.clone());
+
+        let migrated = legacy.migrate_canonical_attributes().unwrap();
+        assert!(migrated.attribute_placement_for(&tint).is_none());
+        assert!(migrated.activation_group_for(&tint).is_none());
+        migrated.validate().unwrap();
     }
 
     #[test]

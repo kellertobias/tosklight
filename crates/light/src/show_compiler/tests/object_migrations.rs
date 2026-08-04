@@ -1291,6 +1291,20 @@ fn legacy_emitter_and_softness_controls_retire_with_values_and_preserve_unknown_
                 members: vec![light_core::AttributeKey(source.into())],
             });
     }
+    configuration
+        .placements
+        .push(light_core::AttributePlacement {
+            attribute: light_core::AttributeKey("color.tint".into()),
+            encoder: light_core::EncoderPlacement::new(light_core::EncoderGroup::Color, 3, 1),
+            push_turn_of: None,
+        });
+    configuration
+        .activation_groups
+        .iter_mut()
+        .find(|group| group.id == "color_mix")
+        .unwrap()
+        .members
+        .push(light_core::AttributeKey("color.tint".into()));
     for (source, encoder) in [
         (
             "color.cold_white",
@@ -1381,6 +1395,7 @@ fn legacy_emitter_and_softness_controls_retire_with_values_and_preserve_unknown_
         "color.warm_white",
         "frost.1",
         "beam.edge",
+        "color.tint",
     ] {
         assert!(
             migrated["placements"]

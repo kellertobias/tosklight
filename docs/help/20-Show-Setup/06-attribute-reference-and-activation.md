@@ -105,7 +105,6 @@ active attribute-group button cycles **Group 1 of N**, **Group 2 of N**, and so 
 | Color | P2/E4 | `color.indigo` | **Indigo** (`color.indigo`) | Color Mix |
 | Color | P2/E5 | `color.mint` | **Mint** (`color.mint`) | Color Mix |
 | Color | P2/E6 | `color.temperature` | **Color Temperature / CTO** (`color.temperature`) | Color Mix |
-| Color | P3/E1 | `color.tint` | **Tint** (`color.tint` or migrated `fixture.tint`) | Color Mix |
 | Color | P3/E2 | canonical RGB color state | **Hue + Saturation** (`color.hue` + `color.saturation`), converted as one paired color system | Color Mix |
 | Color | P3/E3 | `color.wheel.1` | **Color Wheel 1** (`color.wheel.1`) | Color Wheel |
 | Color | P3/E4 | `color.wheel.1.rotation` | **Color Wheel 1 Rotation** (`color.wheel.1.rotation`) | Color Wheel |
@@ -253,7 +252,7 @@ Activation groups decide which supported attributes become active together when 
 | Example group | Suggested members | Reason |
 |---|---|---|
 | Position | `pan`, `tilt` | A Cue that moves one axis usually needs a complete position. |
-| Color Mix | `color`, canonical Red, Green, Blue, Amber, White, UV, Lime, Indigo, Mint, Color Temperature, and Tint | Captures the complete supported mixed-color and white-point state. Physical CMY channels participate through their inverted RGB mappings; physical Cold White and Warm White channels participate through White and Amber. |
+| Color Mix | `color`, canonical Red, Green, Blue, Amber, White, UV, Lime, Indigo, Mint, and Color Temperature | Captures the supported mixed-color and white-point state. Physical CMY channels participate through their inverted RGB mappings; physical Cold White and Warm White channels participate through White and Amber. |
 | Color Wheel | Color Wheel 1/2 and their applicable rotation attributes | Keeps authored wheel selection/rotation coherent without activating the fixture's mixed-color channels. |
 | Media source | `media.folder`, `media.file` | Prevents a new folder from being stored with an absent or unrelated file. |
 | Media mask source | `media.mask.folder`, `media.mask.file` | Keeps a mask address coherent for the same reason. |
@@ -262,6 +261,9 @@ Activation groups decide which supported attributes become active together when 
 Intensity is normally a single-member group. Shutter and Strobe should not automatically activate together merely because they may share a physical channel.
 Color Mix and Color Wheel are deliberately separate recommended groups. A production can
 reconfigure them, but changing Red should not select or capture a wheel slot by default.
+Tint remains an independently recordable green–magenta adjustment, but it is edited in the Color
+special dialog only when the selected fixture or logical head supports it. It does not reserve a
+permanent encoder slot or activate merely because another Color Mix member changes.
 Focus, Zoom, Frost, Gobos, and Prisms remain independent recommended choices. Iris is the
 exception here because it belongs to the default Shapers activation group.
 

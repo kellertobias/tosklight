@@ -73,6 +73,7 @@ async fn attribute_configuration_defaults_persist_and_replay_without_eager_show_
             .filter(|descriptor| {
                 !light_core::built_in_attribute_is_retired(descriptor.id)
                     && !light_core::built_in_attribute_is_projection_only(descriptor.id)
+                    && !light_core::built_in_attribute_is_special_dialog_only(descriptor.id)
             })
             .count()
     );

@@ -1,11 +1,16 @@
+import { Button } from "@tosklight/ui";
 import { type PointerEvent, useRef, useState } from "react";
 import { useProgrammerFadeMillis } from "../../../features/configuration/ConfigurationState";
 import {
-	programmerValuesMutationKey,
+	normalizedFixtureMutations,
 	type ProgrammerValuesMutationQueueController,
+	programmerValuesMutationKey,
 } from "../../../features/programmerValues/useProgrammerValuesMutationQueue";
-import { Button } from "@tosklight/ui";
-import { colorRangeMutation, hsvToRgb, type PickerColor } from "../specialColor";
+import {
+	colorRangeMutation,
+	hsvToRgb,
+	type PickerColor,
+} from "../specialColor";
 import { normalizedPointerPosition } from "./pointer";
 
 interface ColorRangePreview {
@@ -20,10 +25,13 @@ interface ColorDialogController {
 	colorSheet: React.RefObject<HTMLDivElement | null>;
 	hue: number;
 	saturation: number;
+	tint: number;
+	tintAvailable: boolean;
 	swatch: string;
 	disabled: boolean;
 	cancelColor: (event: PointerEvent<HTMLDivElement>) => void;
 	changeBrightness: (delta: number) => void;
+	changeTint: (delta: number) => void;
 	completeColor: (event: PointerEvent<HTMLDivElement>) => void;
 	moveColor: (event: PointerEvent<HTMLDivElement>) => void;
 	startColor: (event: PointerEvent<HTMLDivElement>) => void;
@@ -33,11 +41,13 @@ export function useColorDialog(
 	selectedFixtureIds: readonly string[],
 	shiftArmed: boolean,
 	valueWrites: ProgrammerValuesMutationQueueController,
+	tintFixtureIds: readonly string[],
 ): ColorDialogController {
 	const programmerFadeMillis = useProgrammerFadeMillis() ?? undefined;
 	const [hue, setHue] = useState(0.52);
 	const [saturation, setSaturation] = useState(0.8);
 	const [brightness, setBrightness] = useState(0.85);
+	const [tint, setTint] = useState(0.5);
 	const [colorRangePreview, setColorRangePreview] =
 		useState<ColorRangePreview | null>(null);
 	const colorSheet = useRef<HTMLDivElement>(null);
@@ -141,6 +151,20 @@ export function useColorDialog(
 		const color = { hue, saturation, brightness: value };
 		void applyColorRange(color, color, 0, "barrier");
 	};
+	const changeTint = (delta: number) => {
+		if (!valueWrites.canWrite || !tintFixtureIds.length) return;
+		const value = Math.max(0, Math.min(1, tint + delta));
+		setTint(value);
+		const mutations = normalizedFixtureMutations(
+			tintFixtureIds.map((fixtureId) => ({
+				fixtureId,
+				attribute: "color.tint",
+				value,
+			})),
+			programmerFadeMillis,
+		);
+		void valueWrites.submitBarrier(mutations);
+	};
 
 	const color = hsvToRgb({ hue, saturation, brightness });
 	const swatch = `rgb(${color.map((channel) => Math.round(channel * 255)).join(",")})`;
@@ -150,10 +174,13 @@ export function useColorDialog(
 		colorSheet,
 		hue,
 		saturation,
+		tint,
+		tintAvailable: tintFixtureIds.length > 0,
 		swatch,
 		disabled: !valueWrites.canWrite,
 		cancelColor,
 		changeBrightness,
+		changeTint,
 		completeColor,
 		moveColor,
 		startColor,
@@ -170,11 +197,14 @@ export function ColorDialog({
 	colorSheet,
 	hue,
 	saturation,
+	tint,
+	tintAvailable,
 	swatch,
 	disabled,
 	shiftArmed,
 	cancelColor,
 	changeBrightness,
+	changeTint,
 	completeColor,
 	moveColor,
 	startColor,
@@ -224,9 +254,35 @@ export function ColorDialog({
 					+
 				</Button>
 			</div>
+			{tintAvailable && (
+				<div className="brightness-control">
+					<span>Tint</span>
+					<Button
+						aria-label="Shift tint toward green"
+						disabled={disabled}
+						onClick={() => changeTint(-0.05)}
+					>
+						−
+					</Button>
+					<b>{tintLabel(tint)}</b>
+					<Button
+						aria-label="Shift tint toward magenta"
+						disabled={disabled}
+						onClick={() => changeTint(0.05)}
+					>
+						+
+					</Button>
+				</div>
+			)}
 			<strong style={{ color: swatch }}>{swatch}</strong>
 		</div>
 	);
+}
+
+function tintLabel(value: number) {
+	const amount = Math.round(Math.abs(value - 0.5) * 200);
+	if (amount === 0) return "Neutral";
+	return `${value < 0.5 ? "Green" : "Magenta"} ${amount}%`;
 }
 
 function ColorRangeIndicator({ preview }: { preview: ColorRangePreview }) {

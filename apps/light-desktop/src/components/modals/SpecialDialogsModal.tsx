@@ -1,15 +1,16 @@
+import { Button, ModalPortal } from "@tosklight/ui";
 import { useMemo, useState } from "react";
 import { useProgrammerFadeMillis } from "../../features/configuration/ConfigurationState";
-import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
+import { useSelectedPatchedFixtures } from "../../features/patch/PatchState";
 import {
 	normalizedFixtureMutations,
 	programmerValuesMutationKey,
 	useProgrammerValuesMutationQueue,
 } from "../../features/programmerValues/useProgrammerValuesMutationQueue";
-import { ServerErrorNotice } from "../shell/ServerErrorNotice";
-import { useSelectedPatchedFixtures } from "../../features/patch/PatchState";
+import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../../state/AppContext";
-import { Button, ModalPortal } from "@tosklight/ui";
+import { ServerErrorNotice } from "../shell/ServerErrorNotice";
+import { selectedFixtureIdsSupportingAttribute } from "./specialColor";
 import {
 	availableSpecialDialogAttributes,
 	BeamShapersDialog,
@@ -43,14 +44,24 @@ export function SpecialDialogsModal() {
 		selectedFixtureIds,
 		valueWrites,
 	);
+	const selectedFixtures = useSelectedPatchedFixtures(
+		selectedFixtureIds,
+		state.specialDialogsOpen,
+	);
+	const tintFixtureIds = useMemo(
+		() =>
+			selectedFixtureIdsSupportingAttribute(
+				selectedFixtures,
+				selectedFixtureIds,
+				["color.tint", "fixture.tint"],
+			),
+		[selectedFixtures, selectedFixtureIds],
+	);
 	const colorDialog = useColorDialog(
 		selectedFixtureIds,
 		state.shiftArmed,
 		valueWrites,
-	);
-	const selectedFixtures = useSelectedPatchedFixtures(
-		selectedFixtureIds,
-		state.specialDialogsOpen,
+		tintFixtureIds,
 	);
 	const available = useMemo(
 		() =>

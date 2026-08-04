@@ -19,7 +19,6 @@ impl AttributeConfiguration {
                     "color.indigo",
                     "color.mint",
                     "color.temperature",
-                    "color.tint",
                 ],
             ),
             recommended_activation_group(
@@ -74,7 +73,9 @@ impl AttributeConfiguration {
             ATTRIBUTE_REGISTRY
                 .iter()
                 .filter(|descriptor| {
-                    descriptor.recordable && !built_in_attribute_is_retired(descriptor.id)
+                    descriptor.recordable
+                        && !built_in_attribute_is_retired(descriptor.id)
+                        && !built_in_attribute_is_special_dialog_only(descriptor.id)
                 })
                 .filter(|descriptor| !linked_members.contains(descriptor.id))
                 .map(|descriptor| {
@@ -158,7 +159,9 @@ impl AttributeConfiguration {
             }
         }
         for descriptor in ATTRIBUTE_REGISTRY.iter().filter(|descriptor| {
-            descriptor.recordable && !built_in_attribute_is_retired(descriptor.id)
+            descriptor.recordable
+                && !built_in_attribute_is_retired(descriptor.id)
+                && !built_in_attribute_is_special_dialog_only(descriptor.id)
         }) {
             let id = AttributeKey(descriptor.id.into());
             if assigned.insert(id.clone()) {
@@ -217,7 +220,27 @@ impl AttributeConfiguration {
         ] {
             self.migrate_canonical_configuration_pair(source, target, legacy_encoder)?;
         }
+        self.remove_legacy_default_tint_encoder();
         Ok(self)
+    }
+
+    fn remove_legacy_default_tint_encoder(&mut self) {
+        let tint = AttributeKey("color.tint".into());
+        if let Some(index) = self.placements.iter().position(|placement| {
+            placement.attribute == tint
+                && placement.encoder == EncoderPlacement::new(EncoderGroup::Color, 3, 1)
+                && placement.push_turn_of.is_none()
+        }) {
+            self.placements.remove(index);
+        }
+        if self.attribute_placement_for(&tint).is_some() {
+            return;
+        }
+        for group in &mut self.activation_groups {
+            group.members.retain(|member| member != &tint);
+        }
+        self.activation_groups
+            .retain(|group| !group.members.is_empty());
     }
 
     fn migrate_canonical_configuration_pair(
@@ -360,6 +383,7 @@ impl AttributeConfiguration {
         for id in descriptors.keys() {
             if !built_in_attribute_is_retired(id)
                 && !built_in_attribute_is_projection_only(id)
+                && !built_in_attribute_is_special_dialog_only(id)
                 && !placements.contains_key(id)
             {
                 return Err(AttributeConfigurationError::MissingPlacement(
@@ -445,7 +469,7 @@ impl AttributeConfiguration {
                 }
                 let member_encoder_group = placements
                     .get(id)
-                    .expect("every descriptor placement was validated")
+                    .ok_or_else(|| AttributeConfigurationError::MissingPlacement(id.to_owned()))?
                     .group;
                 if encoder_group
                     .replace(member_encoder_group)
@@ -465,6 +489,7 @@ impl AttributeConfiguration {
         }
         for (id, (value_type, recordable)) in descriptors {
             if !built_in_attribute_is_retired(id)
+                && !built_in_attribute_is_special_dialog_only(id)
                 && recordable
                 && value_type != AttributeValueType::Control
                 && !activated.contains(id)
