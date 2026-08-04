@@ -364,6 +364,8 @@ fn manual_xfade_uses_authoritative_alternating_progress_and_survives_restore() {
             let mut cue = Cue::new(index as f64 + 1.0);
             cue.fade_millis = 30_000;
             cue.delay_millis = 10_000;
+            cue.out_fade_millis = Some(60_000);
+            cue.out_delay_millis = Some(60_000);
             cue.changes.push(value(fixture, "intensity", level));
             cue
         })

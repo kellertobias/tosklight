@@ -97,7 +97,9 @@ async fn save_cue_list_preserves_extensions_and_returns_the_committed_projection
     let scenario = TopologyScenario::new("Playback topology Cuelist").await;
     let revision = scenario.show_revision();
     let cursor = scenario.state.events.latest_sequence();
-    let request = save_request("save-lossless", 0);
+    let mut request = save_request("save-lossless", 0);
+    request["action"]["body"]["cues"][0]["out_delay_millis"] = serde_json::json!(250);
+    request["action"]["body"]["cues"][0]["out_fade_millis"] = serde_json::json!(1_500);
     let cue_list_id = request["action"]["cue_list_id"]
         .as_str()
         .unwrap()
@@ -116,11 +118,21 @@ async fn save_cue_list_preserves_extensions_and_returns_the_committed_projection
         outcome["objects"][0]["body"]["future_topology"]["retained"],
         true
     );
+    assert_eq!(
+        outcome["objects"][0]["body"]["cues"][0]["out_delay_millis"],
+        250
+    );
+    assert_eq!(
+        outcome["objects"][0]["body"]["cues"][0]["out_fade_millis"],
+        1_500
+    );
     assert_one_topology_event(&scenario.state, cursor, 1);
     {
         let document = scenario.document();
         let stored = document.object("cue_list", &cue_list_id).unwrap();
         assert_eq!(stored.body()["future_topology"]["retained"], true);
+        assert_eq!(stored.body()["cues"][0]["out_delay_millis"], 250);
+        assert_eq!(stored.body()["cues"][0]["out_fade_millis"], 1_500);
     }
 
     let mut wrong_identity = request;

@@ -200,7 +200,7 @@ fn interrupted_go_fades_from_the_current_resolved_intensity() {
     let id = cue_list.id;
     let started = Utc::now();
     let mut engine = PlaybackEngine::default();
-    engine.register(cue_list).unwrap();
+    engine.register(cue_list.clone()).unwrap();
     engine.go_at(id, started).unwrap();
     engine.go_at(id, started).unwrap();
 
@@ -211,6 +211,21 @@ fn interrupted_go_fades_from_the_current_resolved_intensity() {
     assert!(
         (contribution_level(
             &engine,
+            interrupted_at + ChronoDuration::seconds(5),
+            fixture,
+        ) - 0.25)
+            .abs()
+            < 0.01
+    );
+
+    let persisted = serde_json::to_value(engine.runtime()).unwrap();
+    let runtime: Vec<ActivePlayback> = serde_json::from_value(persisted).unwrap();
+    let mut restored = PlaybackEngine::default();
+    restored.register(cue_list).unwrap();
+    restored.restore_active(runtime);
+    assert!(
+        (contribution_level(
+            &restored,
             interrupted_at + ChronoDuration::seconds(5),
             fixture,
         ) - 0.25)
@@ -314,6 +329,43 @@ fn cue_changes_keep_independent_fade_and_delay_times() {
             .abs()
             < 0.01
     );
+}
+
+#[test]
+fn per_value_force_and_disable_precedence_apply_to_outgoing_intensity() {
+    let fixture = FixtureId::new();
+    let mut first = Cue::new(1.0);
+    first.changes.push(value(fixture, "intensity", 1.0));
+    let mut second = Cue::new(2.0);
+    second.out_delay_millis = Some(1_000);
+    second.out_fade_millis = Some(4_000);
+    let mut outgoing = value(fixture, "intensity", 0.0);
+    outgoing.delay_millis = Some(0);
+    outgoing.fade_millis = Some(500);
+    second.changes.push(outgoing);
+    let base = list(vec![first, second]);
+    let started = Utc::now();
+
+    let level_for = |cue_list: CueList, elapsed_millis| {
+        let id = cue_list.id;
+        let mut engine = PlaybackEngine::default();
+        engine.register(cue_list).unwrap();
+        engine.go_at(id, started).unwrap();
+        engine.go_at(id, started).unwrap();
+        contribution_level(
+            &engine,
+            started + ChronoDuration::milliseconds(elapsed_millis),
+            fixture,
+        )
+    };
+
+    assert!((level_for(base.clone(), 250) - 0.5).abs() < 0.01);
+    let mut forced = base.clone();
+    forced.force_cue_timing = true;
+    assert_eq!(level_for(forced, 500), 1.0);
+    let mut disabled = base;
+    disabled.disable_cue_timing = true;
+    assert_eq!(level_for(disabled, 0), 0.0);
 }
 
 #[test]
