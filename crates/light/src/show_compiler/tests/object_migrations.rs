@@ -405,9 +405,21 @@ fn group_master_migration_reconciles_assignments_strips_groups_and_is_idempotent
                 "future_group": {"kept": true}
             }),
         ),
+        (
+            "group",
+            "broken-assigned",
+            json!({
+                "name": "Broken assigned legacy master",
+                "fixtures": [],
+                "master": "malformed but retired",
+                "playback_fader": 88,
+                "future_group": {"kept": true}
+            }),
+        ),
         ("playback", "9", playback(9, "front", Some(0.75))),
         ("playback", "2", playback(2, "front", Some(0.25))),
         ("playback", "3", playback(3, "back", None)),
+        ("playback", "4", playback(4, "broken-assigned", None)),
         (
             "playback_page",
             "1",
@@ -432,7 +444,7 @@ fn group_master_migration_reconciles_assignments_strips_groups_and_is_idempotent
     stage_candidate_migrations(&document, &mut transaction).unwrap();
     let candidate = document.candidate(&transaction).unwrap();
 
-    for group_id in ["front", "back", "orphan"] {
+    for group_id in ["front", "back", "orphan", "broken-assigned"] {
         let body = candidate.object("group", group_id).unwrap().body();
         assert!(body.get("master").is_none());
         assert!(body.get("playback_fader").is_none());
@@ -446,6 +458,12 @@ fn group_master_migration_reconciles_assignments_strips_groups_and_is_idempotent
     assert_eq!(
         candidate.object("playback", "3").unwrap().body()["target"]["initial_master"],
         0.625
+    );
+    assert!(
+        candidate.object("playback", "4").unwrap().body()["target"]
+            .get("initial_master")
+            .is_none(),
+        "a malformed retired Group master must not invent a Playback seed"
     );
     let page = candidate.object("playback_page", "1").unwrap().body();
     assert_eq!(

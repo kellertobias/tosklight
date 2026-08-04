@@ -527,16 +527,18 @@ fn reconcile_group_master_levels(
         }
         if let Some(value) = object.body().get("master") {
             let Some(level) = value.as_f64() else {
-                if levels.contains_key(group_id) {
-                    continue;
-                }
-                return Err(invalid_object(object, "master must be a number"));
+                tracing::warn!(
+                    %group_id,
+                    "ignored malformed retired Group-owned master during Playback-owned migration"
+                );
+                continue;
             };
             if !level.is_finite() || !(0.0..=1.0).contains(&level) {
-                if levels.contains_key(group_id) {
-                    continue;
-                }
-                return Err(invalid_object(object, "master must be within 0-1"));
+                tracing::warn!(
+                    %group_id,
+                    "ignored out-of-range retired Group-owned master during Playback-owned migration"
+                );
+                continue;
             }
             let level = level as f32;
             if let Some(chosen) = levels.get(group_id) {
