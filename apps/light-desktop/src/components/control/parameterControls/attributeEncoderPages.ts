@@ -20,6 +20,9 @@ export interface AttributeEncoderPlacement {
 	encoder_slot: number;
 	/** Controls with the same key are packed together on width-derived pages. */
 	compound_group?: string | null;
+	push_turn_of?: string | null;
+	push_turn_attribute?: string | null;
+	push_turn_label?: string | null;
 }
 
 export interface AttributeEncoderPage<
@@ -35,6 +38,29 @@ export interface AttributeEncoderGroup<
 	id: AttributeEncoderGroupId;
 	label: string;
 	pages: Array<AttributeEncoderPage<Descriptor>>;
+}
+
+export function projectPushTurnPlacements<
+	Descriptor extends AttributeEncoderPlacement,
+>(registry: readonly Descriptor[]) {
+	const companions = new Map(
+		registry.flatMap((descriptor) =>
+			descriptor.push_turn_of
+				? [[descriptor.push_turn_of, descriptor] as const]
+				: [],
+		),
+	);
+	return registry.flatMap((descriptor) => {
+		if (descriptor.push_turn_of) return [];
+		const companion = companions.get(descriptor.id);
+		return [
+			{
+				...descriptor,
+				push_turn_attribute: companion?.id ?? null,
+				push_turn_label: companion?.label ?? null,
+			},
+		];
+	});
 }
 
 export function resolveAnchoredEncoderPage<
@@ -77,7 +103,7 @@ export function attributeEncoderGroups<
 		for (const descriptor of placements) {
 			if (
 				descriptor.encoder_group !== id ||
-				!supportedAttributes.has(descriptor.id)
+				!descriptorIsSupported(descriptor, supportedAttributes)
 			) {
 				continue;
 			}
@@ -125,7 +151,7 @@ function repackedEncoderGroups<Descriptor extends AttributeEncoderPlacement>(
 			.map((pageSlots, index) => ({
 				number: index + 1,
 				slots: pageSlots.map((descriptor) =>
-					descriptor && supportedAttributes.has(descriptor.id)
+					descriptor && descriptorIsSupported(descriptor, supportedAttributes)
 						? descriptor
 						: null,
 				),
@@ -133,6 +159,19 @@ function repackedEncoderGroups<Descriptor extends AttributeEncoderPlacement>(
 			.filter((page) => page.slots.some(Boolean));
 		return { id, label, pages };
 	});
+}
+
+function descriptorIsSupported(
+	descriptor: AttributeEncoderPlacement,
+	supportedAttributes: ReadonlySet<string>,
+) {
+	return (
+		supportedAttributes.has(descriptor.id) ||
+		Boolean(
+			descriptor.push_turn_attribute &&
+				supportedAttributes.has(descriptor.push_turn_attribute),
+		)
+	);
 }
 
 function compoundUnits<Descriptor extends AttributeEncoderPlacement>(

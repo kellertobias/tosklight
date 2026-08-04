@@ -3,6 +3,7 @@ import {
 	ATTRIBUTE_ENCODER_GROUPS,
 	type AttributeEncoderPlacement,
 	attributeEncoderGroups,
+	projectPushTurnPlacements,
 	resolveAnchoredEncoderPage,
 } from "./attributeEncoderPages";
 
@@ -178,6 +179,33 @@ describe("attribute encoder pages", () => {
 		expect(resolveAnchoredEncoderPage(six, 1, "e")).toBe(1);
 		expect(resolveAnchoredEncoderPage(four, 1, "e")).toBe(2);
 		expect(resolveAnchoredEncoderPage(four, 9, "missing")).toBe(2);
+	});
+
+	it("projects a push-turn companion onto one encoder without losing companion-only applicability", () => {
+		const primary = descriptor("prism.1", "Prism 1", "beam", 1, 5);
+		const rotation = {
+			...descriptor("prism.1.rotation", "Prism 1 Rotation", "beam", 1, 6),
+			push_turn_of: "prism.1",
+		};
+		const controls = projectPushTurnPlacements([primary, rotation]);
+
+		expect(controls).toEqual([
+			{
+				...primary,
+				push_turn_attribute: "prism.1.rotation",
+				push_turn_label: "Prism 1 Rotation",
+			},
+		]);
+		const beam = attributeEncoderGroups(
+			controls,
+			new Set(["prism.1.rotation"]),
+			4,
+		).find((group) => group.id === "beam");
+		expect(beam?.pages[0]?.slots[0]).toMatchObject({
+			id: "prism.1",
+			push_turn_attribute: "prism.1.rotation",
+		});
+		expect(beam?.pages[0]?.slots.filter(Boolean)).toHaveLength(1);
 	});
 
 	it("omits unsupported unknown IDs unless the registry gives them a valid placement", () => {

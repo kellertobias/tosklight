@@ -16,6 +16,7 @@ import { useApp } from "../../../state/AppContext";
 import {
 	type AttributeEncoderPlacement,
 	attributeEncoderGroups,
+	projectPushTurnPlacements,
 	resolveAnchoredEncoderPage,
 } from "./attributeEncoderPages";
 import { type ParameterFamily, parameterFamilies } from "./model";
@@ -109,7 +110,7 @@ const FAMILY_GROUPS: Record<
 function placedRegistry(
 	registry: ReturnType<typeof useAttributeRegistry>,
 ): AttributeEncoderPlacement[] {
-	return (registry ?? []).flatMap((descriptor) =>
+	const placed = (registry ?? []).flatMap((descriptor) =>
 		descriptor.encoder_group &&
 		descriptor.encoder_page != null &&
 		descriptor.encoder_slot != null
@@ -123,6 +124,7 @@ function placedRegistry(
 				]
 			: [],
 	);
+	return projectPushTurnPlacements(placed);
 }
 
 export function useParameterProjection(
@@ -202,6 +204,11 @@ export function useParameterProjection(
 				{ length: visibleEncoderCount },
 				(_, index) => fallbackAttributes[index] ?? null,
 			);
+	const encoderPushTurnSlots = hasConfiguredFamily
+		? (configuredPage?.slots.map(
+				(descriptor) => descriptor?.push_turn_attribute ?? null,
+			) ?? Array.from<null>({ length: visibleEncoderCount }).fill(null))
+		: Array.from<null>({ length: visibleEncoderCount }).fill(null);
 	const attributeLabels = new Map(
 		(registry ?? []).map((descriptor) => [descriptor.id, descriptor.label]),
 	);
@@ -229,6 +236,7 @@ export function useParameterProjection(
 		encoderPage: resolvedPage,
 		encoderPageCount: Math.max(1, configuredGroup?.pages.length ?? 0),
 		encoderSlots,
+		encoderPushTurnSlots,
 		visibleEncoderCount,
 		attributeLabels,
 		hardwareConnected,

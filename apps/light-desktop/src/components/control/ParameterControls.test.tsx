@@ -69,7 +69,7 @@ const preloadProgrammerValues = vi.hoisted(() => ({
 }));
 const normalValuesActions = vi.hoisted(() => ({
 	batch: vi.fn(async () => null),
-	applyIntent: vi.fn(async () => null),
+	applyIntent: vi.fn(async (_intent: unknown) => null),
 	applyIndexedPreset: vi.fn(async () => null),
 }));
 const commandLine = vi.hoisted(() => ({
@@ -473,6 +473,91 @@ describe("ParameterControls projection lifecycle", () => {
 		expect(screen.getByRole("button", { name: "Color 2 of 2" })).toHaveClass(
 			"is-active",
 		);
+	});
+
+	it("renders and routes a Prism rotation as the push-turn value of one encoder", async () => {
+		attributeRegistry.current = [
+			{
+				...attributeDescriptor("prism.1", "Prism 1", 1, 5),
+				family: "beam",
+				encoder_group: "beam",
+			},
+			{
+				...attributeDescriptor("prism.1.rotation", "Prism 1 Rotation", 1, 6),
+				family: "beam",
+				encoder_group: "beam",
+				push_turn_of: "prism.1",
+			},
+		];
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [
+			{
+				fixture_id: "fixture-1",
+				logical_heads: [],
+				definition: {
+					heads: [
+						{
+							shared: true,
+							parameters: [
+								{ attribute: "prism.1", capabilities: [] },
+								{ attribute: "prism.1.rotation", capabilities: [] },
+							],
+						},
+					],
+				},
+			},
+		];
+
+		const rendered = render(<ParameterControls />);
+		fireEvent.click(screen.getByRole("button", { name: "Beam" }));
+		expect(
+			screen.getByRole("button", { name: "Turn · Prism 1" }),
+		).toBeVisible();
+		expect(
+			screen.getByRole("group", { name: "Enc 5 · Prism 1" }),
+		).toBeVisible();
+		expect(
+			screen.queryByRole("group", { name: "Enc 6 · Prism 1 Rotation" }),
+		).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Turn · Prism 1" }));
+		expect(
+			screen.getByRole("group", { name: "Enc 5 · Prism 1 Rotation" }),
+		).toBeVisible();
+
+		rendered.unmount();
+		server.bootstrap.hardware_connected = true;
+		render(<ParameterControls />);
+		fireEvent.click(screen.getByRole("button", { name: "Beam" }));
+		window.dispatchEvent(
+			new CustomEvent("light:encoder-action", {
+				detail: { control: "encode/5", value: "up", request_id: "turn" },
+			}),
+		);
+		window.dispatchEvent(
+			new CustomEvent("light:encoder-action", {
+				detail: {
+					control: "encode/5",
+					value: "right",
+					request_id: "push-turn",
+				},
+			}),
+		);
+
+		await vi.waitFor(() =>
+			expect(normalValuesActions.applyIntent).toHaveBeenCalledTimes(2),
+		);
+		expect(
+			normalValuesActions.applyIntent.mock.calls.map(([intent]) => intent),
+		).toEqual([
+			expect.objectContaining({
+				requestId: "turn",
+				attribute: "prism.1",
+			}),
+			expect.objectContaining({
+				requestId: "push-turn",
+				attribute: "prism.1.rotation",
+			}),
+		]);
 	});
 
 	it("keeps the operator Dimmer label when the registry exposes canonical Intensity metadata", () => {

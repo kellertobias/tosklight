@@ -12,7 +12,10 @@ import type {
 	ConfiguredAttributeDescriptor,
 	CustomAttributeDescriptor,
 } from "../../api/client/attributeConfiguration";
-import { attributeEncoderGroups } from "../../components/control/parameterControls/attributeEncoderPages";
+import {
+	attributeEncoderGroups,
+	projectPushTurnPlacements,
+} from "../../components/control/parameterControls/attributeEncoderPages";
 import type { SetupWindowController } from "./controller";
 
 const ENCODER_GROUPS: Array<{
@@ -131,9 +134,12 @@ function EncoderGroupsPreview({
 }) {
 	const [width, setWidth] = useState<4 | 6>(6);
 	const allDescriptors = projectedDescriptors(snapshot);
-	const descriptors = allDescriptors.filter((descriptor) => !descriptor.retired);
+	const descriptors = allDescriptors.filter(
+		(descriptor) => !descriptor.retired,
+	);
+	const encoderControls = projectPushTurnPlacements(descriptors);
 	const groups = attributeEncoderGroups(
-		descriptors,
+		encoderControls,
 		new Set(descriptors.map(({ id }) => id)),
 		width,
 	).filter((group) => group.pages.length);
@@ -174,6 +180,9 @@ function EncoderGroupsPreview({
 									>
 										<small>E{index + 1}</small>
 										<strong>{descriptor?.label ?? "Unassigned"}</strong>
+										{descriptor?.push_turn_label && (
+											<small>Push-turn · {descriptor.push_turn_label}</small>
+										)}
 										{descriptor && (
 											<>
 												<small>
@@ -214,7 +223,9 @@ function AttributeOrderActions({
 	onChange(configuration: AttributeConfiguration): void;
 }) {
 	const move = (delta: -1 | 1) =>
-		onChange(reorderAttribute(configuration, descriptors, descriptor.id, delta));
+		onChange(
+			reorderAttribute(configuration, descriptors, descriptor.id, delta),
+		);
 	return (
 		<div className="attribute-layout-order-actions">
 			<Button
@@ -239,7 +250,9 @@ function descriptorsInGroup(
 	descriptors: ConfiguredAttributeDescriptor[],
 	attribute: string,
 ) {
-	const descriptor = descriptors.find((candidate) => candidate.id === attribute);
+	const descriptor = descriptors.find(
+		(candidate) => candidate.id === attribute,
+	);
 	return descriptor
 		? descriptors.filter(
 				(candidate) => candidate.encoder_group === descriptor.encoder_group,

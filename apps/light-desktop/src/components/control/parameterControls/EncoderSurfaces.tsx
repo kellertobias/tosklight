@@ -1,4 +1,6 @@
+import { Button } from "@tosklight/ui";
 import { TouchEncoder } from "@tosklight/ui/encoders";
+import { useState } from "react";
 import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
 import {
 	useProgrammingCommandLineActions,
@@ -144,16 +146,19 @@ function applyIndexedPresetChoice(
 function EncoderSurface({
 	controller,
 	attribute,
+	pushTurnAttribute,
 	index,
 	deleteArmed,
 	resetCommandLine,
 }: {
 	controller: ParameterController;
 	attribute: string | null;
+	pushTurnAttribute: string | null;
 	index: number;
 	deleteArmed: boolean;
 	resetCommandLine(): Promise<boolean>;
 }) {
+	const [pushTurnActive, setPushTurnActive] = useState(false);
 	if (!attribute)
 		return (
 			<UnassignedEncoder
@@ -161,77 +166,79 @@ function EncoderSurface({
 				index={index}
 			/>
 		);
+	const activeAttribute =
+		pushTurnActive && pushTurnAttribute ? pushTurnAttribute : attribute;
 	const value =
-		controller.programmerTarget(attribute) ??
-		controller.normalized.get(attribute) ??
+		controller.programmerTarget(activeAttribute) ??
+		controller.normalized.get(activeAttribute) ??
 		0;
-	const discrete = controller.encoderDiscreteDisplay(attribute);
+	const discrete = controller.encoderDiscreteDisplay(activeAttribute);
 	const display =
-		controller.encoderNormalizedDisplay(attribute) ??
+		controller.encoderNormalizedDisplay(activeAttribute) ??
 		formatNormalizedValue(value);
-	const hasScopedValue = controller.hasProgrammerValue(attribute);
+	const hasScopedValue = controller.hasProgrammerValue(activeAttribute);
 	const label =
-		parameterLabels[attribute] ??
-		controller.attributeLabels.get(attribute) ??
-		attribute.replaceAll(".", " ");
+		parameterLabels[activeAttribute] ??
+		controller.attributeLabels.get(activeAttribute) ??
+		activeAttribute.replaceAll(".", " ");
 	const indexedPresets = indexedPresetChoices(
 		controller.selectedFixtures,
 		controller.selectedFixtureIds,
-		attribute,
+		activeAttribute,
 	);
 	const presetConfig = indexedPresetConfiguration(indexedPresets);
 	const selectIndexedPreset = (id: string) => {
 		const choice = indexedPresets.find((candidate) => candidate.id === id);
-		if (choice) applyIndexedPresetChoice(controller, attribute, choice);
+		if (choice) applyIndexedPresetChoice(controller, activeAttribute, choice);
 	};
-	if (controller.hardwareConnected)
-		return (
-			<HardwareEncoderDisplay
-				slot={index + 1}
-				activateOnHardwarePress
-				target={{ label, value: discrete ?? display }}
-				editValue={discrete ? undefined : value * 100}
-				canRelease={hasScopedValue}
-				presets={presetConfig}
-				onPresetSelect={selectIndexedPreset}
-				onEdit={
-					discrete || !controller.canWriteValues
-						? undefined
-						: (next) =>
-								void controller.applyParameter(
-									attribute,
-									Math.max(0, Math.min(100, next)) / 100,
-								)
+	const surface = controller.hardwareConnected ? (
+		<HardwareEncoderDisplay
+			slot={index + 1}
+			activateOnHardwarePress
+			target={{ label, value: discrete ?? display }}
+			editValue={discrete ? undefined : value * 100}
+			canRelease={hasScopedValue}
+			presets={presetConfig}
+			onPresetSelect={selectIndexedPreset}
+			onEdit={
+				discrete || !controller.canWriteValues
+					? undefined
+					: (next) =>
+							void controller.applyParameter(
+								activeAttribute,
+								Math.max(0, Math.min(100, next)) / 100,
+							)
+			}
+			onEditRange={
+				discrete || !controller.canWriteValues
+					? undefined
+					: (points) =>
+							void controller.applyParameterRange(activeAttribute, points)
+			}
+			onRelease={
+				hasScopedValue && controller.canWriteValues
+					? () =>
+							controller.releaseParameter(activeAttribute).then(() => undefined)
+					: undefined
+			}
+			onHardwarePress={() => {
+				if (!deleteArmed) return false;
+				if (hasScopedValue && controller.canWriteValues) {
+					void controller
+						.releaseParameter(activeAttribute)
+						.then(() => resetCommandLine());
 				}
-				onEditRange={
-					discrete || !controller.canWriteValues
-						? undefined
-						: (points) => void controller.applyParameterRange(attribute, points)
-				}
-				onRelease={
-					hasScopedValue && controller.canWriteValues
-						? () => controller.releaseParameter(attribute).then(() => undefined)
-						: undefined
-				}
-				onHardwarePress={() => {
-					if (!deleteArmed) return false;
-					if (hasScopedValue && controller.canWriteValues) {
-						void controller
-							.releaseParameter(attribute)
-							.then(() => resetCommandLine());
-					}
-					return true;
-				}}
-			/>
-		);
-	return (
+				return true;
+			}}
+		/>
+	) : (
 		<TouchEncoder
 			label={`Enc ${index + 1} · ${label}`}
 			slot={index + 1}
 			attributeLabel={label}
 			value={value}
 			display={discrete ?? display}
-			accentColor={attributeColor(attribute)}
+			accentColor={attributeColor(activeAttribute)}
 			mode={controller.dynamicsMode ? "Dynamics" : undefined}
 			disabled={!controller.canWriteValues}
 			indexed={Boolean(discrete)}
@@ -239,16 +246,40 @@ function EncoderSurface({
 			presets={presetConfig}
 			onPresetSelect={selectIndexedPreset}
 			onStep={(delta, undoGroup) =>
-				void controller.stepParameter(attribute, delta, undoGroup)
+				void controller.stepParameter(activeAttribute, delta, undoGroup)
 			}
-			onSet={(next) => void controller.applyParameter(attribute, next)}
+			onSet={(next) => void controller.applyParameter(activeAttribute, next)}
 			onSetRange={
 				discrete || !controller.canWriteValues
 					? undefined
-					: (points) => void controller.applyParameterRange(attribute, points)
+					: (points) =>
+							void controller.applyParameterRange(activeAttribute, points)
 			}
-			onRelease={() => void controller.releaseParameter(attribute)}
+			onRelease={() => void controller.releaseParameter(activeAttribute)}
 		/>
+	);
+	if (!pushTurnAttribute) return surface;
+	const primaryLabel =
+		parameterLabels[attribute] ??
+		controller.attributeLabels.get(attribute) ??
+		attribute.replaceAll(".", " ");
+	const pushTurnLabel =
+		parameterLabels[pushTurnAttribute] ??
+		controller.attributeLabels.get(pushTurnAttribute) ??
+		pushTurnAttribute.replaceAll(".", " ");
+	return (
+		<div className="compound-encoder-surface">
+			<Button
+				size="compact"
+				aria-pressed={pushTurnActive}
+				onClick={() => setPushTurnActive((current) => !current)}
+			>
+				{pushTurnActive
+					? `Push-turn · ${pushTurnLabel}`
+					: `Turn · ${primaryLabel}`}
+			</Button>
+			{surface}
+		</div>
 	);
 }
 
@@ -287,6 +318,7 @@ export function EncoderSurfaces({
 					key={attribute ?? `empty-${index}`}
 					controller={controller}
 					attribute={attribute}
+					pushTurnAttribute={controller.encoderPushTurnSlots[index] ?? null}
 					index={index}
 					deleteArmed={deleteArmed}
 					resetCommandLine={() =>

@@ -92,8 +92,13 @@ export function useHardwareParameterEncoders(
 					request_id?: string;
 				}>
 			).detail;
+			const slot = Number(control.split("/")[1]) - 1;
+			const primaryAttribute = projection.encoderSlots[slot];
+			const pushTurnAttribute = projection.encoderPushTurnSlots[slot];
 			const attribute =
-				projection.encoderSlots[Number(control.split("/")[1]) - 1];
+				pushTurnAttribute && (value === "left" || value === "right")
+					? pushTurnAttribute
+					: primaryAttribute;
 			const delta = encoderDelta(value);
 			if (!attribute || delta == null) return;
 			if (

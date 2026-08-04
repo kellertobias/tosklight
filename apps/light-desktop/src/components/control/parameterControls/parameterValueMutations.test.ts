@@ -33,6 +33,7 @@ function projection(
 		encoderPage: 1,
 		encoderPageCount: 1,
 		encoderSlots: Array.from({ length: 6 }, () => "intensity"),
+		encoderPushTurnSlots: Array.from({ length: 6 }, () => null),
 		visibleEncoderCount: 6,
 		attributeLabels: new Map(),
 		hardwareConnected: false,
