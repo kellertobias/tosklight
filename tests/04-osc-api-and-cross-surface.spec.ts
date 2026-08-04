@@ -604,17 +604,64 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     }
   });
 
-  test("OSC-004 @osc › malformed and unsubscribed input leaves authoritative state unchanged", async ({ api, bench }) => {
+  test("OSC-004 @api › invalid UDP input is isolated and client-ID reuse atomically replaces the old route", async ({ api, bench }) => {
     await loadCanonicalCopy(api, bench, "osc-004-wire");
     const hardware = await bench.osc();
+    const replacement = await bench.osc();
+    const unsubscribed = await bench.osc();
+    const alias = api.session!.desk.osc_alias;
+    const authoritativeState = async () => ({
+      programmers: await api.request<any[]>("GET", "/api/v2/programmers"),
+      playbacks: await api.request<any>("GET", "/api/v2/playback-overview"),
+    });
+    const expectUnchangedAfter = async (action: () => Promise<void>) => {
+      const before = await authoritativeState();
+      const auditBefore = (await audit(api)).at(-1)?.revision ?? 0;
+      await action();
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(await authoritativeState()).toEqual(before);
+      const newAudit = await api.request<any[]>("GET", `/api/v2/audit?after=${auditBefore}`);
+      expect(newAudit.length).toBeGreaterThan(0);
+      expect(newAudit.some((event) => ["command_applied", "programmer_changed"].includes(event.kind))).toBe(false);
+    };
     try {
-      await hardware.send("/light/subscribe", ["bad", "missing-desk", "wrong-port"]);
-      await hardware.send("/light/main/programmer/unknown", [true]);
-      await hardware.send("/light/main/programmer/digit-1", [true]);
+      await expectUnchangedAfter(() => hardware.send("/light/subscribe", ["missing-alias", "missing-desk", hardware.feedbackPort]));
+      await expectUnchangedAfter(() => hardware.send("/light/subscribe", ["wrong-port", alias, "wrong-port"]));
+      await expectUnchangedAfter(() => hardware.send(`/light/${alias}/programmer`, [true]));
+      await expectUnchangedAfter(() => hardware.send(`/light/${alias}/programmer/unknown`, [true]));
+
+      await hardware.subscribe("osc-004-reused", alias);
+      await expectUnchangedAfter(() => hardware.sendFloat(`/light/${alias}/page-playback/1/fader`, -0.25));
+      await expectUnchangedAfter(() => hardware.sendFloat(`/light/${alias}/page-playback/1/fader`, 1.25));
+      await expectUnchangedAfter(() => hardware.send(`/light/${alias}/page-playback/1/fader`, ["wrong-type"]));
+
+      await replacement.subscribe("osc-004-reused", alias);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const oldRouteMark = hardware.mark();
+      const replacementMark = replacement.mark();
       await bench.tick(0);
+      await replacement.expectAfter(replacementMark, `/light/${alias}/feedback/page`);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(hardware.messages.slice(oldRouteMark)).toHaveLength(0);
+
+      await expectUnchangedAfter(() => hardware.send("/light/subscribe", ["osc-004-unbound", alias, 9]));
+      const stateBeforeUnreachableTick = await authoritativeState();
+      const frame = await bench.tick(0);
+      expect(await authoritativeState()).toEqual(stateBeforeUnreachableTick);
+      expect(frame.universes.find((entry: any) => entry.universe === 1)!.slots.slice(0, 12)).toEqual(Array(12).fill(0));
+      await hardware.send("/light/unsubscribe", ["osc-004-unbound"]);
+
+      await expectUnchangedAfter(async () => {
+        await unsubscribed.send(`/light/${alias}/programmer/digit-1`, [true]);
+        await unsubscribed.send(`/light/${alias}/programmer/enter`, [true]);
+      });
+
       const states = await api.request<any[]>("GET", "/api/v2/programmers");
       expect(states.every((state) => !state.command_line && state.values.length === 0)).toBe(true);
-    } finally { await hardware.close(); }
+    } finally {
+      await replacement.unsubscribe("osc-004-reused").catch(() => undefined);
+      await Promise.all([hardware.close(), replacement.close(), unsubscribed.close()]);
+    }
   });
 
   test("OSC-005 @osc › two browser desks and their hardware share values but not interaction state", async ({ api, bench, desk, page, browser }) => {
