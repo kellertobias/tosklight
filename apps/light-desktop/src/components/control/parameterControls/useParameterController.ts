@@ -72,28 +72,58 @@ function useHardwareParameterNavigation(
 export function useParameterController(active = true) {
 	const { dispatch } = useApp();
 	const [family, setFamily] = useState<ParameterFamily>("Intensity");
-	const [encoderPage, setEncoderPage] = useState(1);
+	const [requestedEncoderPage, setRequestedEncoderPage] = useState(1);
+	const [encoderPageAnchor, setEncoderPageAnchor] = useState<string | null>(null);
 	const [alignMode, setAlignMode] = useState<AlignMode | null>(null);
 	const [dynamicsMode, setDynamicsMode] = useState(false);
-	const projection = useParameterProjection(family, encoderPage, active);
+	const projection = useParameterProjection(
+		family,
+		requestedEncoderPage,
+		active,
+		encoderPageAnchor,
+	);
 	const valueActions = useParameterValueActions(projection);
 	const actions = createParameterActions(projection, valueActions);
 	useHardwareParameterEncoders(projection, actions);
-	useHardwareParameterNavigation(projection.active, family, (next) => {
-		setFamily(next);
-		setEncoderPage(1);
-	});
 	const selectEncoderGroup = (next: ParameterFamily, page: number) => {
+		const group = projection.encoderGroups.find(
+			(candidate) => candidate.id === next.toLowerCase(),
+		);
+		const anchor = group?.pages[page - 1]?.slots.find(Boolean)?.id ?? null;
 		setFamily(next);
-		setEncoderPage(page);
+		setRequestedEncoderPage(page);
+		setEncoderPageAnchor(anchor);
 	};
+	useHardwareParameterNavigation(projection.active, family, (next) =>
+		selectEncoderGroup(next, 1),
+	);
+	useEffect(() => {
+		const group = projection.encoderGroups.find(
+			(candidate) => candidate.id === family.toLowerCase(),
+		);
+		const anchorStillPresent = group?.pages.some((page) =>
+			page.slots.some((descriptor) => descriptor?.id === encoderPageAnchor),
+		);
+		if (!anchorStillPresent) {
+			const anchor =
+				group?.pages[projection.encoderPage - 1]?.slots.find(Boolean)?.id ?? null;
+			setEncoderPageAnchor(anchor);
+		}
+		setRequestedEncoderPage(projection.encoderPage);
+	}, [
+		family,
+		projection.encoderGroups,
+		projection.encoderPage,
+		encoderPageAnchor,
+	]);
 	return {
 		...projection,
 		...actions,
 		dispatch,
 		family,
 		setFamily,
-		encoderPage,
+		encoderPage: projection.encoderPage,
+		encoderPageAnchor,
 		selectEncoderGroup,
 		alignMode,
 		setAlignMode,

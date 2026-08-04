@@ -3,6 +3,7 @@ import {
 	ATTRIBUTE_ENCODER_GROUPS,
 	type AttributeEncoderPlacement,
 	attributeEncoderGroups,
+	resolveAnchoredEncoderPage,
 } from "./attributeEncoderPages";
 
 function descriptor(
@@ -155,6 +156,28 @@ describe("attribute encoder pages", () => {
 				slots: [placements[4], null, null, null],
 			},
 		]);
+	});
+
+	it("keeps the active attribute anchored when width changes page boundaries", () => {
+		const placements = [
+			descriptor("a", "A", "color", 1, 1),
+			descriptor("b", "B", "color", 1, 2),
+			descriptor("c", "C", "color", 1, 3),
+			descriptor("d", "D", "color", 1, 4),
+			descriptor("e", "E", "color", 1, 5),
+			descriptor("f", "F", "color", 1, 6),
+		];
+		const supported = new Set(placements.map(({ id }) => id));
+		const six = attributeEncoderGroups(placements, supported, 6).find(
+			(group) => group.id === "color",
+		);
+		const four = attributeEncoderGroups(placements, supported, 4).find(
+			(group) => group.id === "color",
+		);
+
+		expect(resolveAnchoredEncoderPage(six, 1, "e")).toBe(1);
+		expect(resolveAnchoredEncoderPage(four, 1, "e")).toBe(2);
+		expect(resolveAnchoredEncoderPage(four, 9, "missing")).toBe(2);
 	});
 
 	it("omits unsupported unknown IDs unless the registry gives them a valid placement", () => {

@@ -37,6 +37,23 @@ export interface AttributeEncoderGroup<
 	pages: Array<AttributeEncoderPage<Descriptor>>;
 }
 
+export function resolveAnchoredEncoderPage<
+	Descriptor extends AttributeEncoderPlacement,
+>(
+	group: AttributeEncoderGroup<Descriptor> | undefined,
+	requestedPage: number,
+	anchor: string | null,
+) {
+	if (!group?.pages.length) return 1;
+	if (anchor) {
+		const anchored = group.pages.findIndex((page) =>
+			page.slots.some((descriptor) => descriptor?.id === anchor),
+		);
+		if (anchored >= 0) return anchored + 1;
+	}
+	return Math.max(1, Math.min(requestedPage, group.pages.length));
+}
+
 /**
  * Projects registry placement metadata into the eight stable encoder groups.
  *

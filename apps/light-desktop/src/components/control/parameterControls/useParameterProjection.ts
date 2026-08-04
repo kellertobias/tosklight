@@ -16,6 +16,7 @@ import { useApp } from "../../../state/AppContext";
 import {
 	type AttributeEncoderPlacement,
 	attributeEncoderGroups,
+	resolveAnchoredEncoderPage,
 } from "./attributeEncoderPages";
 import { type ParameterFamily, parameterFamilies } from "./model";
 import { useParameterPreloadValues } from "./useParameterPreloadValues";
@@ -128,6 +129,7 @@ export function useParameterProjection(
 	family: ParameterFamily,
 	page = 1,
 	active = true,
+	pageAnchor: string | null = null,
 ) {
 	const programmerActions = useProgrammerActions();
 	const hardwareAttached = useHardwareConnected();
@@ -183,7 +185,12 @@ export function useParameterProjection(
 	const configuredGroup = encoderGroups.find(
 		(group) => group.id === FAMILY_GROUPS[family],
 	);
-	const configuredPage = configuredGroup?.pages[page - 1];
+	const resolvedPage = resolveAnchoredEncoderPage(
+		configuredGroup,
+		page,
+		pageAnchor,
+	);
+	const configuredPage = configuredGroup?.pages[resolvedPage - 1];
 	const fallbackAttributes = parameterFamilies[family].filter((attribute) =>
 		supported.has(attribute),
 	);
@@ -219,7 +226,7 @@ export function useParameterProjection(
 			programmerValuesView?.groupValues ?? EMPTY_PROGRAMMER_VALUES,
 		...values,
 		encoderGroups,
-		encoderPage: page,
+		encoderPage: resolvedPage,
 		encoderPageCount: Math.max(1, configuredGroup?.pages.length ?? 0),
 		encoderSlots,
 		visibleEncoderCount,

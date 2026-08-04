@@ -18,6 +18,7 @@ import type {
 	ProgrammerGroupValue,
 } from "../../features/programmerValues/contracts";
 import { ParameterControls } from "./ParameterControls";
+import { VisibleEncoderCountProvider } from "./parameterControls/VisibleEncoderCount";
 
 function TestProviders({ children }: PropsWithChildren) {
 	return (
@@ -414,6 +415,64 @@ describe("ParameterControls projection lifecycle", () => {
 		expect(
 			screen.queryByRole("group", { name: "Enc 1 · Color Wheel" }),
 		).not.toBeInTheDocument();
+	});
+
+	it("restores the anchored logical page after encoder width changes", () => {
+		attributeRegistry.current = [
+			attributeDescriptor("color.red", "Red", 1, 1),
+			attributeDescriptor("color.green", "Green", 1, 2),
+			attributeDescriptor("color.blue", "Blue", 1, 3),
+			attributeDescriptor("color.white", "White", 1, 4),
+			attributeDescriptor("color.amber", "Amber", 1, 5),
+			attributeDescriptor("color.uv", "UV", 1, 6),
+		];
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [
+			{
+				fixture_id: "fixture-1",
+				logical_heads: [],
+				definition: {
+					heads: [
+						{
+							shared: true,
+							parameters: attributeRegistry.current.map(({ id }) => ({
+								attribute: id,
+								capabilities: [],
+							})),
+						},
+					],
+				},
+			},
+		];
+
+		const rendered = render(
+			<VisibleEncoderCountProvider count={4}>
+				<ParameterControls />
+			</VisibleEncoderCountProvider>,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Color 1 of 2" }));
+		fireEvent.click(screen.getByRole("button", { name: "Color 1 of 2" }));
+		expect(screen.getByRole("button", { name: "Color 2 of 2" })).toHaveClass(
+			"is-active",
+		);
+
+		rendered.rerender(
+			<VisibleEncoderCountProvider count={6}>
+				<ParameterControls />
+			</VisibleEncoderCountProvider>,
+		);
+		expect(screen.getByRole("button", { name: "Color" })).toHaveClass(
+			"is-active",
+		);
+
+		rendered.rerender(
+			<VisibleEncoderCountProvider count={4}>
+				<ParameterControls />
+			</VisibleEncoderCountProvider>,
+		);
+		expect(screen.getByRole("button", { name: "Color 2 of 2" })).toHaveClass(
+			"is-active",
+		);
 	});
 
 	it("keeps the operator Dimmer label when the registry exposes canonical Intensity metadata", () => {
