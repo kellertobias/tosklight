@@ -1105,3 +1105,188 @@ fn dynamics_persist_preset_fallbacks_losslessly_before_the_preset_is_deleted() {
     stage_candidate_migrations(&migrated_document, &mut idempotent).unwrap();
     assert!(idempotent.is_empty());
 }
+
+#[test]
+fn retired_strobe_identity_migrates_losslessly_across_show_value_owners() {
+    let fixture = light_core::FixtureId::new();
+    let strobe = light_core::AttributeKey("strobe".into());
+    let mut cue = Cue::new(1.0);
+    cue.changes.push(light_playback::CueChange::set(
+        fixture,
+        strobe.clone(),
+        light_core::AttributeValue::Normalized(0.6),
+    ));
+    let cue_list = CueList {
+        id: CueListId::new(),
+        name: "Legacy Strobe".into(),
+        priority: 0,
+        mode: CueListMode::Sequence,
+        looped: false,
+        chaser_step_millis: 1_000,
+        speed_group: None,
+        intensity_priority_mode: IntensityPriorityMode::Htp,
+        wrap_mode: Some(WrapMode::Tracking),
+        restart_mode: RestartMode::FirstCue,
+        force_cue_timing: false,
+        disable_cue_timing: false,
+        chaser_xfade_millis: 0,
+        chaser_xfade_percent: None,
+        speed_multiplier: 1.0,
+        cues: vec![cue],
+    };
+    let mut dynamic = targetless_dynamic(7);
+    dynamic.lanes.push(strobe_lane(strobe.clone()));
+    let mut dynamic_body = serde_json::to_value(dynamic).unwrap();
+    dynamic_body["future_dynamic"] = json!({"kept": true});
+    let objects = vec![
+        (
+            "group",
+            "front",
+            json!({
+                "name": "Front",
+                "programming": {"strobe": {"kind":"normalized","value":0.2}},
+                "future_group": {"kept": true}
+            }),
+        ),
+        (
+            "preset",
+            "1.1",
+            json!({
+                "name": "Legacy Strobe",
+                "family": "Intensity",
+                "number": 1,
+                "values": {fixture.0.to_string(): {
+                    "strobe": {"kind":"normalized","value":0.4}
+                }},
+                "group_values": {"front": {
+                    "strobe": {"kind":"normalized","value":0.5}
+                }},
+                "future_preset": {"kept": true}
+            }),
+        ),
+        ("cue_list", "main", serde_json::to_value(cue_list).unwrap()),
+        ("dynamic", "7", dynamic_body),
+    ];
+    let (store, document) = document_with_objects(&objects);
+    let mut transaction = document.transaction();
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+    let candidate = document.candidate(&transaction).unwrap();
+
+    let group = candidate.object("group", "front").unwrap().body();
+    assert_eq!(group["programming"]["shutter"]["value"], 0.2);
+    assert!(group["programming"].get("strobe").is_none());
+    assert_eq!(group["future_group"], json!({"kept": true}));
+    let preset = candidate.object("preset", "1.1").unwrap().body();
+    assert_eq!(
+        preset["values"][fixture.0.to_string()]["shutter"]["value"],
+        0.4
+    );
+    assert_eq!(preset["group_values"]["front"]["shutter"]["value"], 0.5);
+    assert_eq!(preset["future_preset"], json!({"kept": true}));
+    assert_eq!(
+        candidate.object("cue_list", "main").unwrap().body()["cues"][0]["changes"][0]["attribute"],
+        "shutter"
+    );
+    let dynamic = candidate.object("dynamic", "7").unwrap().body();
+    assert_eq!(dynamic["lanes"][0]["attribute"], "shutter");
+    assert_eq!(
+        dynamic["lanes"][0]["keyframes"]["points"][0]["source"]["attribute"],
+        "shutter"
+    );
+    assert_eq!(dynamic["future_dynamic"], json!({"kept": true}));
+    assert_eq!(
+        stored_body(&store, "group", "front")["programming"]["strobe"]["value"],
+        0.2
+    );
+
+    let migrated = candidate
+        .objects()
+        .map(|object| {
+            (
+                object.key().kind().to_owned(),
+                object.key().id().to_owned(),
+                object.body().clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let migrated_refs = migrated
+        .iter()
+        .map(|(kind, id, body)| (kind.as_str(), id.as_str(), body.clone()))
+        .collect::<Vec<_>>();
+    let (_, migrated_document) = document_with_objects(&migrated_refs);
+    let mut second_pass = migrated_document.transaction();
+    stage_candidate_migrations(&migrated_document, &mut second_pass).unwrap();
+    assert!(
+        second_pass.is_empty(),
+        "second pass changed {:?}",
+        second_pass
+            .changed_object_keys()
+            .map(|key| (key.kind(), key.id()))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn retired_strobe_identity_reports_an_actionable_address_conflict() {
+    let fixture = light_core::FixtureId::new();
+    let preset = json!({
+        "name": "Conflict",
+        "family": "Intensity",
+        "number": 1,
+        "values": {fixture.0.to_string(): {
+            "strobe": {"kind":"normalized","value":0.4},
+            "shutter": {"kind":"normalized","value":0.5}
+        }},
+        "group_values": {}
+    });
+    let (_, document) = document_with_objects(&[("preset", "1.1", preset)]);
+    let mut transaction = document.transaction();
+
+    let error = stage_candidate_migrations(&document, &mut transaction).unwrap_err();
+
+    assert!(error.message.contains("attribute migration conflict"));
+    assert!(error.message.contains("/values/"));
+    assert!(error.message.contains("shutter"));
+    assert!(
+        transaction.is_empty(),
+        "failed migrations remain side-effect free"
+    );
+}
+
+fn strobe_lane(attribute: light_core::AttributeKey) -> light_dynamics::DynamicLane {
+    light_dynamics::DynamicLane {
+        id: Uuid::new_v4(),
+        attribute: attribute.clone(),
+        mode: light_dynamics::DynamicLaneMode::Keyframes,
+        keyframes: light_dynamics::KeyframeConfiguration {
+            points: vec![light_dynamics::DynamicKeyframe {
+                position: 0.0,
+                source: light_dynamics::ScalarSource::Preset {
+                    preset_id: "1.1".into(),
+                    attribute,
+                    last_valid_by_target: Vec::new(),
+                },
+                interpolation: light_dynamics::ScalarInterpolation::Linear,
+            }],
+            size: 1.0,
+        },
+        max_min: light_dynamics::MaxMinConfiguration {
+            minimum: light_dynamics::ScalarSource::Value { value: 0.0 },
+            maximum: light_dynamics::ScalarSource::Value { value: 1.0 },
+            function: light_dynamics::PeriodicFunction::Sinus,
+            size: 1.0,
+            pwm: light_dynamics::PwmShape::default(),
+        },
+        middle_amplitude: light_dynamics::MiddleAmplitudeConfiguration {
+            middle: light_dynamics::ScalarSource::Current,
+            amplitude: 0.5,
+            function: light_dynamics::PeriodicFunction::Sinus,
+            size: 1.0,
+            pwm: light_dynamics::PwmShape::default(),
+        },
+        speed_multiplier: light_dynamics::Rational::ONE,
+        width: 1.0,
+        phase: None,
+        random_group_id: None,
+    }
+}

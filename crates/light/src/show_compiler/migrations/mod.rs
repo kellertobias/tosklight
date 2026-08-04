@@ -1,3 +1,4 @@
+mod attribute_aliases;
 mod objects;
 mod patch;
 mod patch_heads;

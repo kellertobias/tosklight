@@ -14,7 +14,9 @@ pub(super) fn collect(
     let presets = candidate
         .objects_of_kind("preset")
         .map(|object| {
-            serde_json::from_value::<Preset>(object.body().clone())
+            let mut body = object.body().clone();
+            super::attribute_aliases::migrate(object, &mut body)?;
+            serde_json::from_value::<Preset>(body)
                 .map(|preset| (object.key().id().to_owned(), preset))
                 .map_err(|error| invalid_object(object, error))
         })
@@ -22,7 +24,9 @@ pub(super) fn collect(
     let groups = candidate
         .objects_of_kind("group")
         .map(|object| {
-            serde_json::from_value::<GroupDefinition>(object.body().clone())
+            let mut body = object.body().clone();
+            super::attribute_aliases::migrate(object, &mut body)?;
+            serde_json::from_value::<GroupDefinition>(body)
                 .map(|mut group| {
                     group.id = object.key().id().to_owned();
                     (group.id.clone(), group)
@@ -48,8 +52,10 @@ fn migrate_dynamic_fallbacks(
     presets: &std::collections::HashMap<String, Preset>,
     groups: &std::collections::HashMap<String, GroupDefinition>,
 ) -> Result<Option<ObjectUpdate>, ActionError> {
+    let mut migrated = object.body().clone();
+    super::attribute_aliases::migrate(object, &mut migrated)?;
     let Ok(mut definition) =
-        serde_json::from_value::<light_dynamics::DynamicDefinition>(object.body().clone())
+        serde_json::from_value::<light_dynamics::DynamicDefinition>(migrated.clone())
     else {
         // Invalid Dynamics remain portable, repairable show content. Compilation already skips
         // them, so a best-effort fallback migration must not make the entire show unloadable.
@@ -58,7 +64,6 @@ fn migrate_dynamic_fallbacks(
     super::super::objects::hydrate_dynamic_preset_fallbacks(&mut definition, presets, groups);
     let canonical =
         serde_json::to_value(definition).map_err(|error| invalid_object(object, error))?;
-    let mut migrated = object.body().clone();
     copy_dynamic_fallbacks(&canonical, &mut migrated);
     migrate_embedded_dynamic_phase_orderings(&mut migrated);
     Ok((migrated != *object.body()).then(|| ObjectUpdate::from_object(object, migrated)))
@@ -134,6 +139,7 @@ fn migrate_with_group_masters(
         "stage_layout" => migrate_stage_layout(object)?,
         _ => return Ok(None),
     };
+    super::attribute_aliases::migrate(object, &mut migrated)?;
     migrate_embedded_dynamic_phase_orderings(&mut migrated);
     Ok((migrated != *object.body()).then(|| ObjectUpdate::from_object(object, migrated)))
 }
