@@ -1295,6 +1295,50 @@ fn legacy_position_movement_values_migrate_and_conflicting_axes_stop_atomically(
 }
 
 #[test]
+fn legacy_media_values_migrate_and_source_or_target_collisions_stop_atomically() {
+    let fixture = light_core::FixtureId::new();
+    let preset = json!({
+        "name": "Media",
+        "family": "Mixed",
+        "number": 1,
+        "values": {fixture.0.to_string(): {
+            "media.opacity": {"kind":"normalized","value":0.4},
+            "media.rotation": {"kind":"normalized","value":0.6}
+        }},
+        "group_values": {}
+    });
+    let (_, document) = document_with_objects(&[("preset", "0.1", preset)]);
+    let mut transaction = document.transaction();
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+    let candidate = document.candidate(&transaction).unwrap();
+    let values =
+        &candidate.object("preset", "0.1").unwrap().body()["values"][fixture.0.to_string()];
+    assert_eq!(values["intensity"]["value"], 0.4);
+    assert_eq!(values["position.rotation"]["value"], 0.6);
+    assert!(values.get("media.opacity").is_none());
+    assert!(values.get("media.rotation").is_none());
+
+    for conflicting_values in [json!({
+        "media.opacity": {"kind":"normalized","value":0.4},
+        "intensity": {"kind":"normalized","value":0.5}
+    })] {
+        let preset = json!({
+            "name": "Conflict",
+            "family": "Mixed",
+            "number": 2,
+            "values": {fixture.0.to_string(): conflicting_values},
+            "group_values": {}
+        });
+        let (_, document) = document_with_objects(&[("preset", "0.2", preset)]);
+        let mut transaction = document.transaction();
+        let error = stage_candidate_migrations(&document, &mut transaction).unwrap_err();
+        assert!(error.message.contains("attribute migration conflict"));
+        assert!(error.message.contains("intensity"));
+        assert!(transaction.is_empty());
+    }
+}
+
+#[test]
 fn legacy_emitter_and_softness_controls_retire_with_values_and_preserve_unknown_configuration_data()
 {
     let mut configuration = light_core::AttributeConfiguration::recommended();

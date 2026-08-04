@@ -152,6 +152,18 @@ mod canonical_migration_tests {
                 ))
             );
         }
+        for (source, target) in [
+            ("media.opacity", "intensity"),
+            ("media.rotation", "position.rotation"),
+        ] {
+            assert_eq!(
+                canonical_attribute_migration(&AttributeKey(source.into())),
+                Some((
+                    AttributeKey(target.into()),
+                    CanonicalAttributeTransform::Identity
+                ))
+            );
+        }
         assert_eq!(
             canonical_attribute_migration(&AttributeKey("strobe".into())),
             Some((
@@ -830,6 +842,169 @@ mod attribute_registry_tests {
                     .is_none()
             );
             assert!(attribute_descriptor(&AttributeKey(compatibility_only.into())).built_in);
+        }
+    }
+
+    #[test]
+    fn intensity_control_and_media_pages_use_the_accepted_geometry() {
+        let recommended = AttributeConfiguration::recommended();
+        for (attribute, group, slot) in [
+            ("intensity", EncoderGroup::Intensity, 1),
+            ("shutter", EncoderGroup::Intensity, 2),
+            ("media.mask.opacity", EncoderGroup::Intensity, 3),
+            ("volume", EncoderGroup::Intensity, 4),
+            ("control", EncoderGroup::Control, 1),
+            ("media.play_mode", EncoderGroup::Control, 2),
+            ("media.playback_speed", EncoderGroup::Control, 3),
+            ("media.playback_bpm", EncoderGroup::Control, 4),
+            ("media.scaling_mode", EncoderGroup::Control, 5),
+            ("media.folder", EncoderGroup::Media, 1),
+            ("media.file", EncoderGroup::Media, 2),
+            ("media.mask.folder", EncoderGroup::Media, 3),
+            ("media.mask.file", EncoderGroup::Media, 4),
+            ("media.mask.invert", EncoderGroup::Media, 5),
+        ] {
+            assert_eq!(
+                recommended.placement_for(&AttributeKey(attribute.into())),
+                Some(EncoderPlacement::new(group, 1, slot)),
+                "unexpected placement for {attribute}"
+            );
+        }
+        for compatibility_only in [
+            "control.mode",
+            "control.speed",
+            "media.opacity",
+            "media.rotation",
+        ] {
+            assert!(
+                recommended
+                    .placement_for(&AttributeKey(compatibility_only.into()))
+                    .is_none(),
+                "{compatibility_only} must not occupy a default encoder"
+            );
+        }
+        recommended.validate().unwrap();
+    }
+
+    #[test]
+    fn legacy_media_defaults_relocate_without_overwriting_custom_placements() {
+        let recommended = AttributeConfiguration::recommended();
+        let mut legacy = recommended.clone();
+        legacy.placements.retain(|placement| {
+            !matches!(
+                placement.attribute.0.as_str(),
+                "control"
+                    | "media.play_mode"
+                    | "media.playback_speed"
+                    | "media.playback_bpm"
+                    | "media.scaling_mode"
+                    | "media.mask.opacity"
+                    | "media.mask.invert"
+            )
+        });
+        for (attribute, group, page, slot) in [
+            ("control", EncoderGroup::Control, 2, 1),
+            ("media.play_mode", EncoderGroup::Media, 2, 1),
+            ("media.playback_speed", EncoderGroup::Media, 2, 2),
+            ("media.playback_bpm", EncoderGroup::Media, 2, 3),
+            ("media.scaling_mode", EncoderGroup::Media, 2, 5),
+            ("media.mask.opacity", EncoderGroup::Media, 3, 5),
+            ("media.mask.invert", EncoderGroup::Media, 3, 6),
+        ] {
+            legacy.placements.push(AttributePlacement {
+                attribute: AttributeKey(attribute.into()),
+                encoder: EncoderPlacement::new(group, page, slot),
+                push_turn_of: None,
+            });
+        }
+        for (attribute, group, slot) in [
+            ("control.mode", EncoderGroup::Control, 1),
+            ("control.speed", EncoderGroup::Control, 2),
+        ] {
+            legacy.placements.push(AttributePlacement {
+                attribute: AttributeKey(attribute.into()),
+                encoder: EncoderPlacement::new(group, 1, slot),
+                push_turn_of: None,
+            });
+        }
+        let migrated = legacy.migrate_canonical_attributes().unwrap();
+        for attribute in [
+            "control",
+            "media.play_mode",
+            "media.playback_speed",
+            "media.playback_bpm",
+            "media.scaling_mode",
+            "media.mask.opacity",
+            "media.mask.invert",
+        ] {
+            assert_eq!(
+                migrated.placement_for(&AttributeKey(attribute.into())),
+                recommended.placement_for(&AttributeKey(attribute.into()))
+            );
+        }
+        for removed in ["control.mode", "control.speed"] {
+            assert!(
+                migrated
+                    .placement_for(&AttributeKey(removed.into()))
+                    .is_none()
+            );
+        }
+        migrated.validate().unwrap();
+
+        let mut customized = recommended.clone();
+        customized
+            .placements
+            .iter_mut()
+            .find(|placement| placement.attribute.0 == "media.play_mode")
+            .unwrap()
+            .encoder = EncoderPlacement::new(EncoderGroup::Media, 9, 4);
+        let migrated = customized.migrate_canonical_attributes().unwrap();
+        assert_eq!(
+            migrated.placement_for(&AttributeKey("media.play_mode".into())),
+            Some(EncoderPlacement::new(EncoderGroup::Media, 9, 4))
+        );
+
+        for (source, target, legacy_encoder, expected_encoder) in [
+            (
+                "media.opacity",
+                "intensity",
+                EncoderPlacement::new(EncoderGroup::Media, 1, 5),
+                EncoderPlacement::new(EncoderGroup::Intensity, 1, 1),
+            ),
+            (
+                "media.rotation",
+                "position.rotation",
+                EncoderPlacement::new(EncoderGroup::Media, 2, 6),
+                EncoderPlacement::new(EncoderGroup::Position, 1, 4),
+            ),
+        ] {
+            let mut source_only = recommended.clone();
+            source_only
+                .placements
+                .retain(|placement| placement.attribute.0 != target);
+            source_only.placements.push(AttributePlacement {
+                attribute: AttributeKey(source.into()),
+                encoder: legacy_encoder,
+                push_turn_of: None,
+            });
+            for group in &mut source_only.activation_groups {
+                for member in &mut group.members {
+                    if member.0 == target {
+                        *member = AttributeKey(source.into());
+                    }
+                }
+            }
+            let migrated = source_only.migrate_canonical_attributes().unwrap();
+            assert_eq!(
+                migrated.placement_for(&AttributeKey(target.into())),
+                Some(expected_encoder)
+            );
+            assert!(
+                migrated
+                    .placement_for(&AttributeKey(source.into()))
+                    .is_none()
+            );
+            migrated.validate().unwrap();
         }
     }
 

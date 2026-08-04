@@ -103,6 +103,8 @@ pub const RETIRED_BUILT_IN_ATTRIBUTES: &[&str] = &[
     "media.effect.2",
     "media.effect.3",
     "media.effect.4",
+    "media.opacity",
+    "media.rotation",
     "frost.1",
     "frost.2",
     "pan.continuous",
@@ -392,6 +394,8 @@ pub fn canonical_attribute_migration_id(
         | "fixture.pan_tilt_speed_time"
         | "fixture.pan_tilt_time" => ("position.movement", CanonicalAttributeTransform::Identity),
         "frost" | "frost.1" | "beam.edge" => ("softness", CanonicalAttributeTransform::Identity),
+        "media.opacity" => ("intensity", CanonicalAttributeTransform::Identity),
+        "media.rotation" => ("position.rotation", CanonicalAttributeTransform::Identity),
         "pan.time" | "tilt.time" | "position.time" | "position.speed" => {
             ("position.movement", CanonicalAttributeTransform::Identity)
         }

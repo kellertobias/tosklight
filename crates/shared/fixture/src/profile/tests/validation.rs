@@ -483,6 +483,96 @@ fn primary_softness_migration_rejects_an_independent_second_mechanism() {
 }
 
 #[test]
+fn legacy_media_channels_migrate_to_shared_canonical_controls_without_losing_identity() {
+    for (source, target) in [
+        ("media.opacity", "intensity"),
+        ("media.rotation", "position.rotation"),
+    ] {
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Test".into();
+        profile.name = format!("Legacy {source}");
+        let mode = &mut profile.modes[0];
+        let mut legacy = channel(mode.heads[0].id, ChannelResolution::U8, vec![]);
+        legacy.fixture_attribute = AttributeKey(format!("Imported:{source}"));
+        legacy.attribute = AttributeKey(source.into());
+        legacy.functions[0].attribute = AttributeKey(source.into());
+        mode.channels = vec![legacy];
+
+        let migrated: FixtureProfile =
+            serde_json::from_value(serde_json::to_value(profile).unwrap()).unwrap();
+        let channel = &migrated.modes[0].channels[0];
+        assert_eq!(channel.fixture_attribute.0, format!("Imported:{source}"));
+        assert_eq!(channel.attribute.0, target);
+        assert_eq!(channel.functions[0].attribute.0, target);
+        assert_eq!(channel.canonical_transform, CanonicalTransform::Identity);
+        migrated.validate().unwrap();
+    }
+}
+
+#[test]
+fn legacy_media_aliases_reject_same_head_collisions_but_allow_distinct_heads() {
+    for (source, target) in [
+        ("media.opacity", "intensity"),
+        ("media.rotation", "position.rotation"),
+    ] {
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Test".into();
+        profile.name = format!("Ambiguous {source}");
+        let mode = &mut profile.modes[0];
+        mode.splits[0].footprint = 2;
+        let head_id = mode.heads[0].id;
+        mode.channels = [target, source]
+            .into_iter()
+            .map(|attribute| {
+                let mut channel = channel(head_id, ChannelResolution::U8, vec![]);
+                channel.fixture_attribute = AttributeKey(attribute.into());
+                channel.attribute = AttributeKey(attribute.into());
+                channel.functions[0].attribute = AttributeKey(attribute.into());
+                channel
+            })
+            .collect();
+        let migrated: FixtureProfile =
+            serde_json::from_value(serde_json::to_value(profile).unwrap()).unwrap();
+        let error = migrated.validate().unwrap_err();
+        assert!(error.to_string().contains(&format!(
+            "split 1 maps more than one channel on the same head to canonical attribute `{target}`"
+        )));
+
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Test".into();
+        profile.name = format!("Independent {source} heads");
+        let mode = &mut profile.modes[0];
+        mode.splits[0].footprint = 2;
+        let primary_head = mode.heads[0].id;
+        let secondary_head = Uuid::new_v4();
+        mode.heads.push(FixtureHead {
+            id: secondary_head,
+            name: "Layer 2".into(),
+            master_shared: false,
+        });
+        mode.channels = [(primary_head, target), (secondary_head, source)]
+            .into_iter()
+            .map(|(head_id, attribute)| {
+                let mut channel = channel(head_id, ChannelResolution::U8, vec![]);
+                channel.fixture_attribute = AttributeKey(attribute.into());
+                channel.attribute = AttributeKey(attribute.into());
+                channel.functions[0].attribute = AttributeKey(attribute.into());
+                channel
+            })
+            .collect();
+        let migrated: FixtureProfile =
+            serde_json::from_value(serde_json::to_value(profile).unwrap()).unwrap();
+        migrated.validate().unwrap();
+        assert!(
+            migrated.modes[0]
+                .channels
+                .iter()
+                .all(|channel| channel.attribute.0 == target)
+        );
+    }
+}
+
+#[test]
 fn schema_v2_strobe_migrates_to_canonical_shutter_without_losing_identity() {
     let mut profile = FixtureProfile::blank();
     profile.schema_version = 2;

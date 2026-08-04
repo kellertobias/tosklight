@@ -980,6 +980,42 @@ mod tests {
         assert_eq!(conflict, original);
     }
 
+    #[test]
+    fn legacy_media_programmer_values_migrate_and_conflicts_stay_atomic() {
+        let fixture = uuid::Uuid::new_v4();
+        let mut value = serde_json::json!({
+            "values": [{
+                "fixture_id": fixture,
+                "attribute": "media.opacity",
+                "value": {"kind":"normalized","value":0.25}
+            }],
+            "preload_pending": [{
+                "fixture_id": fixture,
+                "attribute": "media.rotation",
+                "value": {"kind":"normalized","value":0.75}
+            }]
+        });
+        migrate_retired_programmer_attributes(&mut value).unwrap();
+        assert_eq!(value["values"][0]["attribute"], "intensity");
+        assert_eq!(
+            value["preload_pending"][0]["attribute"],
+            "position.rotation"
+        );
+
+        for original in [serde_json::json!({
+            "values": [
+                {"fixture_id": fixture, "attribute": "media.opacity"},
+                {"fixture_id": fixture, "attribute": "intensity"}
+            ]
+        })] {
+            let mut conflict = original.clone();
+            let error = migrate_retired_programmer_attributes(&mut conflict).unwrap_err();
+            assert!(error.contains("attribute migration conflict"));
+            assert!(error.contains("intensity"));
+            assert_eq!(conflict, original);
+        }
+    }
+
     fn assert_migrated_number(value: &serde_json::Value, expected: f64) {
         let actual = value.as_f64().expect("expected JSON number");
         assert!((actual - expected).abs() < 1.0e-6, "{actual} != {expected}");

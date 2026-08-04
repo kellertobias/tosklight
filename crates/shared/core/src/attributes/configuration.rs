@@ -237,8 +237,63 @@ impl AttributeConfiguration {
                 "position.movement",
                 EncoderPlacement::new(EncoderGroup::Position, 2, 1),
             ),
+            (
+                "media.opacity",
+                "intensity",
+                EncoderPlacement::new(EncoderGroup::Media, 1, 5),
+            ),
+            (
+                "media.rotation",
+                "position.rotation",
+                EncoderPlacement::new(EncoderGroup::Media, 2, 6),
+            ),
         ] {
             self.migrate_canonical_configuration_pair(source, target, legacy_encoder)?;
+        }
+        for (attribute, group, page, slot) in [
+            ("control.mode", EncoderGroup::Control, 1, 1),
+            ("control.speed", EncoderGroup::Control, 1, 2),
+        ] {
+            self.remove_legacy_default_encoder(attribute, EncoderPlacement::new(group, page, slot));
+        }
+        for (attribute, from, to) in [
+            (
+                "control",
+                EncoderPlacement::new(EncoderGroup::Control, 2, 1),
+                EncoderPlacement::new(EncoderGroup::Control, 1, 1),
+            ),
+            (
+                "media.play_mode",
+                EncoderPlacement::new(EncoderGroup::Media, 2, 1),
+                EncoderPlacement::new(EncoderGroup::Control, 1, 2),
+            ),
+            (
+                "media.playback_speed",
+                EncoderPlacement::new(EncoderGroup::Media, 2, 2),
+                EncoderPlacement::new(EncoderGroup::Control, 1, 3),
+            ),
+            (
+                "media.playback_bpm",
+                EncoderPlacement::new(EncoderGroup::Media, 2, 3),
+                EncoderPlacement::new(EncoderGroup::Control, 1, 4),
+            ),
+            (
+                "media.scaling_mode",
+                EncoderPlacement::new(EncoderGroup::Media, 2, 5),
+                EncoderPlacement::new(EncoderGroup::Control, 1, 5),
+            ),
+            (
+                "media.mask.opacity",
+                EncoderPlacement::new(EncoderGroup::Media, 3, 5),
+                EncoderPlacement::new(EncoderGroup::Intensity, 1, 3),
+            ),
+            (
+                "media.mask.invert",
+                EncoderPlacement::new(EncoderGroup::Media, 3, 6),
+                EncoderPlacement::new(EncoderGroup::Media, 1, 5),
+            ),
+        ] {
+            self.move_legacy_default_encoder(attribute, from, to);
         }
         self.remove_legacy_default_whole_color_encoder();
         self.remove_legacy_default_tint_encoder();
@@ -253,6 +308,31 @@ impl AttributeConfiguration {
                 && placement.push_turn_of.is_none()
         }) {
             self.placements.remove(index);
+        }
+    }
+
+    fn remove_legacy_default_encoder(&mut self, attribute: &str, encoder: EncoderPlacement) {
+        if let Some(index) = self.placements.iter().position(|placement| {
+            placement.attribute.0 == attribute
+                && placement.encoder == encoder
+                && placement.push_turn_of.is_none()
+        }) {
+            self.placements.remove(index);
+        }
+    }
+
+    fn move_legacy_default_encoder(
+        &mut self,
+        attribute: &str,
+        from: EncoderPlacement,
+        to: EncoderPlacement,
+    ) {
+        if let Some(placement) = self.placements.iter_mut().find(|placement| {
+            placement.attribute.0 == attribute
+                && placement.encoder == from
+                && placement.push_turn_of.is_none()
+        }) {
+            placement.encoder = to;
         }
     }
 
@@ -305,8 +385,7 @@ impl AttributeConfiguration {
                 });
             }
             (Some(source_index), None)
-                if target == "position.movement"
-                    && self.placements[source_index].encoder == legacy_encoder
+                if self.placements[source_index].encoder == legacy_encoder
                     && self.placements[source_index].push_turn_of.is_none() =>
             {
                 let recommended = recommended_builtin_placements()

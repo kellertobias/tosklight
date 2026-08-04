@@ -95,8 +95,9 @@ through that same whole-color surface.
 |---|---:|---|---|---|
 | Intensity | P1/E1 | `intensity` | **Intensity** (`intensity`) | — |
 | Intensity | P1/E1 | `intensity` | **Fog Output** (`fog`) | — |
+| Intensity | P1/E1 | `intensity` | **Layer Opacity** (`media.opacity`) | — |
 | Intensity | P1/E2 | `shutter` | **Shutter** (`shutter`) | — |
-| Intensity | P1/E3 | `strobe` | **Strobe Rate** (`strobe`) | — |
+| Intensity | P1/E3 | `media.mask.opacity` | **Mask Opacity** (`media.mask.opacity`) | — |
 | Intensity | P1/E4 | `volume` | **Volume** (`media.volume`) | — |
 | Intensity | P1/E4 | `volume` | **Fan** (`fan`) when it is a recordable level rather than a typed action | — |
 | Color | P1/E1 | `color.red` | **Red** (`color.red`) | Color Mix |
@@ -121,7 +122,7 @@ through that same whole-color surface.
 | Position | P1/E1 | `pan` | **Pan** (`pan`) | Position |
 | Position | P1/E2 | `tilt` | **Tilt** (`tilt`) | Position |
 | Position | P1/E3 | `position.movement` | **Position Movement** (`position.movement`; fixture-authored speed, move-time, or speed/time representation) | — |
-| Position | P1/E4 | `position.rotation` | **Rotation** (`position.rotation`) | — |
+| Position | P1/E4 | `position.rotation` | **Rotation** (`position.rotation`, including `media.rotation`) | — |
 | Beam | P1/E1 | `gobo.1` | **Gobo 1** (`gobo.1` and migrated first-wheel gobo IDs) | — |
 | Beam | P1/E2 | `gobo.1.rotation` | **Gobo 1 Rotation** (`gobo.1.rotation`) | — |
 | Beam | P1/E3 | `gobo.2` | **Gobo 2** (`gobo.2` and migrated second-wheel gobo IDs) | — |
@@ -147,29 +148,22 @@ through that same whole-color surface.
 | Focus | P1/E1 | `focus` | **Focus** (`focus`) | — |
 | Focus | P1/E2 | `zoom` | **Zoom** (`zoom`) | — |
 | Focus | P1/E3 | `softness` | The profile's primary **Frost** (`frost` or `frost.1`) or **Beam Edge** (`beam.edge`) mechanism | — |
-| Control | P1/E1 | `control.mode` | **Fixture Mode** (`control.mode`) | — |
-| Control | P1/E2 | `control.speed` | **Fixture Control Speed** (`control.speed`) | — |
-| Control | P1/E3 | typed control action | **Fan Auto/Low/High/Max** (`fixture.fan_control`) | Not recordable |
-| Control | P1/E4 | typed control action | **Lamp On/Off** (`fixture.lamp_control`) | Not recordable |
-| Control | P1/E5 | typed control action | **Reset** (`fixture.reset`) | Not recordable |
+| Control | P1/E1 | `control` | **Control** (`control`) | — |
+| Control | P1/E2 | `media.play_mode` | **Play Mode** (`media.play_mode`) | — |
+| Control | P1/E3 | `media.playback_speed` | **Playback Speed** (`media.playback_speed`) | — |
+| Control | P1/E4 | `media.playback_bpm` | **Playback BPM** (`media.playback_bpm`) | — |
+| Control | P1/E5 | `media.scaling_mode` | **Scaling Mode** (`media.scaling_mode`) | — |
 | Media | P1/E1 | `media.folder` | **Media Folder** (`media.folder`) | Media Source |
 | Media | P1/E2 | `media.file` | **Media File** (`media.file`) | Media Source |
 | Media | P1/E3 | `media.mask.folder` | **Mask Folder** (`media.mask.folder`) | Mask Source |
 | Media | P1/E4 | `media.mask.file` | **Mask File** (`media.mask.file`) | Mask Source |
-| Media | P1/E5 | `media.opacity` | **Layer Opacity** (`media.opacity`) | — |
+| Media | P1/E5 | `media.mask.invert` | **Invert Mask** (`media.mask.invert`) | — |
 | Media | P1/E6 | `media.tint` | **Layer Tint** (`media.tint`) | — |
-| Media | P2/E1 | `media.play_mode` | **Play Mode** (`media.play_mode`) | — |
-| Media | P2/E2 | `media.playback_speed` | **Playback Speed** (`media.playback_speed`) | — |
-| Media | P2/E3 | `media.playback_bpm` | **Playback BPM** (`media.playback_bpm`) | — |
 | Media | P2/E4 | `media.grayscale` | **Grayscale** (`media.grayscale`) | — |
-| Media | P2/E5 | `media.scaling_mode` | **Scaling Mode** (`media.scaling_mode`) | — |
-| Media | P2/E6 | `media.rotation` | **Layer Rotation** (`media.rotation`) | — |
 | Media | P3/E1 | `media.position.x` | **Position X** (`media.position.x`) | — |
 | Media | P3/E2 | `media.position.y` | **Position Y** (`media.position.y`) | — |
 | Media | P3/E3 | `media.scale.x` | **Scale X** (`media.scale.x`) | — |
 | Media | P3/E4 | `media.scale.y` | **Scale Y** (`media.scale.y`) | — |
-| Media | P3/E5 | `media.mask.opacity` | **Mask Opacity** (`media.mask.opacity`) | — |
-| Media | P3/E6 | `media.mask.invert` | **Invert Mask** (`media.mask.invert`) | — |
 | Media | P4/E1–E4 | `media.effect.1` … `.4` | **Media/Plate Effect 1–4** (`media.effect.1` … `.4`; selected migrated `fixture.plate_fx_…` channels) | — |
 | Media | Following pages | `media.effect.<n>.parameter.<n>` | Advertised typed effect parameters | — |
 | Control | Direct action, not an encoder value | typed control action | **Reset Layer** (`media.reset`) | Not recordable |
