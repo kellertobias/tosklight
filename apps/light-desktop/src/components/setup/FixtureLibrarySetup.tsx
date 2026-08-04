@@ -105,6 +105,7 @@ export function FixtureLibrarySetup({
 				error={transfers.error}
 				modal={transfers.modal}
 				close={() => transfers.setModal(null)}
+				confirmGdtfMappings={transfers.confirmGdtfMappings}
 				confirmPackageMappings={transfers.confirmPackageMappings}
 				importGdtfFile={transfers.importGdtfFile}
 				importPackage={transfers.importPackage}

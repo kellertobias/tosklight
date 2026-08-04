@@ -5,17 +5,19 @@ import {
 	SwitchField,
 	TextField,
 } from "@tosklight/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
 	AttributeConfiguration,
 	AttributeEncoderGroup,
 	ConfiguredAttributeDescriptor,
 	CustomAttributeDescriptor,
 } from "../../api/client/attributeConfiguration";
+import type { FixtureSourceMapping } from "../../api/client/fixtures";
 import {
 	attributeEncoderGroups,
 	projectPushTurnPlacements,
 } from "../../components/control/parameterControls/attributeEncoderPages";
+import { useFixtureLibrary } from "../../features/fixtureLibrary/FixtureLibraryContext";
 import type { SetupWindowController } from "./controller";
 
 const ENCODER_GROUPS: Array<{
@@ -109,6 +111,7 @@ export function AttributeRegistrySettings({
 							built-in registry.
 						</small>
 					</header>
+					<SourceAttributeMappings descriptors={snapshot.descriptors} />
 					<AttributeGroups
 						snapshot={snapshot}
 						onChange={update}
@@ -122,6 +125,104 @@ export function AttributeRegistrySettings({
 				</p>
 			)}
 		</>
+	);
+}
+
+function SourceAttributeMappings({
+	descriptors,
+}: {
+	descriptors: ConfiguredAttributeDescriptor[];
+}) {
+	const fixtureLibrary = useFixtureLibrary();
+	const [mappings, setMappings] = useState<FixtureSourceMapping[]>([]);
+	const [error, setError] = useState<string | null>(null);
+	useEffect(() => {
+		let active = true;
+		void fixtureLibrary
+			?.fixtureSourceMappings?.()
+			.then((next) => active && setMappings(next))
+			.catch(
+				(reason) =>
+					active &&
+					setError(reason instanceof Error ? reason.message : String(reason)),
+			);
+		return () => {
+			active = false;
+		};
+	}, [fixtureLibrary]);
+	if (!fixtureLibrary?.fixtureSourceMappings || mappings.length === 0)
+		return null;
+	const setTarget = async (
+		sourceFormat: string,
+		sourceAttribute: string,
+		targetAttribute: string | null,
+	) => {
+		try {
+			const saved = await fixtureLibrary.rememberFixtureSourceMapping?.({
+				sourceFormat,
+				sourceAttribute,
+				targetAttribute,
+			});
+			setMappings((current) => [
+				...current.filter(
+					(mapping) =>
+						mapping.source_format !== sourceFormat ||
+						mapping.source_attribute !== sourceAttribute,
+				),
+				...(saved ? [saved] : []),
+			]);
+			setError(null);
+		} catch (reason) {
+			setError(reason instanceof Error ? reason.message : String(reason));
+		}
+	};
+	return (
+		<section className="attribute-registry-group">
+			<h3>Imported source mappings</h3>
+			<p>
+				These desk-local choices map stable fixture-source identities to
+				existing attributes. Fixture revisions retain their resolved mapping
+				independently.
+			</p>
+			<ul className="plain-list">
+				{mappings.map((mapping) => (
+					<li key={`${mapping.source_format}:${mapping.source_attribute}`}>
+						<code>
+							{mapping.source_format.toUpperCase()}:{mapping.source_attribute}
+						</code>
+						<SelectField
+							ariaLabel={`Map ${mapping.source_format.toUpperCase()}:${mapping.source_attribute} to existing attribute`}
+							value={mapping.target_attribute}
+							options={descriptors
+								.filter((descriptor) => !descriptor.retired)
+								.map((descriptor) => ({
+									value: descriptor.id,
+									label: `${descriptor.label} (${descriptor.id})`,
+								}))}
+							onChange={(target) =>
+								void setTarget(
+									mapping.source_format,
+									mapping.source_attribute,
+									target,
+								)
+							}
+						/>
+						<Button
+							onClick={() =>
+								void setTarget(
+									mapping.source_format,
+									mapping.source_attribute,
+									null,
+								)
+							}
+						>
+							Forget mapping
+						</Button>
+					</li>
+				))}
+			</ul>
+			{error && <p role="alert">{error}</p>}
+		</section>
 	);
 }
 

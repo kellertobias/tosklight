@@ -13,6 +13,8 @@ export function createFixtureLibraryActions(
 	| "saveFixtureProfileSourceGdtf"
 	| "importFixturePackage"
 	| "exportFixturePackage"
+	| "fixtureSourceMappings"
+	| "rememberFixtureSourceMapping"
 	| "gelCatalogs"
 	| "previewGelCatalogCsvImport"
 	| "confirmGelCatalogCsvImport"
@@ -105,6 +107,9 @@ export function createFixtureLibraryActions(
 		},
 		exportFixturePackage: (id, revision) =>
 			api.fixtures.exportFixturePackage(id, revision),
+		fixtureSourceMappings: () => api.fixtures.fixtureSourceMappings(),
+		rememberFixtureSourceMapping: (input) =>
+			api.fixtures.rememberFixtureSourceMapping(input),
 		gelCatalogs: (query) => api.fixtures.gelCatalogs(query),
 		previewGelCatalogCsvImport: (input) =>
 			api.fixtures.previewGelCatalogCsvImport(input),

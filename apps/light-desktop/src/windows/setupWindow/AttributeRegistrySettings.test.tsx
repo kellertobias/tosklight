@@ -2,6 +2,10 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AttributeConfigurationSnapshot } from "../../api/client/attributeConfiguration";
 import {
+	FixtureLibraryProvider,
+	type FixtureLibraryState,
+} from "../../features/fixtureLibrary/FixtureLibraryContext";
+import {
 	AttributeRegistrySettings,
 	updatePushTurnCompanion,
 } from "./AttributeRegistrySettings";
@@ -295,5 +299,50 @@ describe("Desk Setup attribute registry", () => {
 		expect(editAttributeConfiguration).toHaveBeenCalledWith(
 			updatePushTurnCompanion(configuration, "prism.1", "prism.1.rotation"),
 		);
+	});
+
+	it("lists and retargets remembered fixture-source mappings under Custom attributes", async () => {
+		const rememberFixtureSourceMapping = vi.fn(async (input) =>
+			input.targetAttribute
+				? {
+						source_format: input.sourceFormat,
+						source_attribute: input.sourceAttribute,
+						target_attribute: input.targetAttribute,
+					}
+				: null,
+		);
+		const library = {
+			fixtureSourceMappings: vi.fn(async () => [
+				{
+					source_format: "gdtf",
+					source_attribute: "Dimmer",
+					target_attribute: "intensity",
+				},
+			]),
+			rememberFixtureSourceMapping,
+		} as unknown as FixtureLibraryState;
+		render(
+			<FixtureLibraryProvider library={library}>
+				<AttributeRegistrySettings
+					controller={
+						{
+							attributeConfiguration: snapshot,
+							attributeConfigurationError: null,
+							editAttributeConfiguration: vi.fn(),
+						} as unknown as SetupWindowController
+					}
+				/>
+			</FixtureLibraryProvider>,
+		);
+
+		fireEvent.click(screen.getByRole("tab", { name: "Custom attributes" }));
+		expect(await screen.findByText("GDTF:Dimmer")).toBeVisible();
+		fireEvent.click(screen.getByRole("button", { name: "Forget mapping" }));
+
+		expect(rememberFixtureSourceMapping).toHaveBeenCalledWith({
+			sourceFormat: "gdtf",
+			sourceAttribute: "Dimmer",
+			targetAttribute: null,
+		});
 	});
 });

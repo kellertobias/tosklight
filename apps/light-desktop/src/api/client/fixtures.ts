@@ -7,6 +7,8 @@ import type {
 	FixtureLibraryWarningsSnapshot,
 	FixtureProfileRevisionsSnapshot,
 	FixtureProfilesSnapshot,
+	FixtureSourceMapping,
+	FixtureSourceMappingsSnapshot,
 	GelCatalog,
 	GelCatalogImportConfirmOutcome,
 	GelCatalogImportPreview,
@@ -32,7 +34,12 @@ export type FixturePackageImportOutcome =
 	| { type: "profile"; profile: FixtureProfile }
 	| { type: "import_required"; unknown_attributes: FixtureImportRequirement[] };
 
-export type { GelCatalog, GelCatalogImportPreview, GelCatalogImportTarget };
+export type {
+	FixtureSourceMapping,
+	GelCatalog,
+	GelCatalogImportPreview,
+	GelCatalogImportTarget,
+};
 
 export class FixtureApiClient {
 	constructor(private readonly transport: ClientTransport) {}
@@ -63,6 +70,33 @@ export class FixtureApiClient {
 				"/api/v2/fixture-library/warnings",
 			)
 			.then((snapshot) => snapshot.warnings);
+	}
+
+	fixtureSourceMappings(): Promise<FixtureSourceMapping[]> {
+		return this.transport
+			.request<FixtureSourceMappingsSnapshot>(
+				"/api/v2/fixture-library/source-mappings",
+			)
+			.then((snapshot) => snapshot.mappings);
+	}
+
+	async rememberFixtureSourceMapping(input: {
+		sourceFormat: string;
+		sourceAttribute: string;
+		targetAttribute: string | null;
+	}): Promise<FixtureSourceMapping | null> {
+		const result = await this.fixtureAction({
+			type: "remember_source_mapping",
+			source_format: input.sourceFormat,
+			source_attribute: input.sourceAttribute,
+			target_attribute: input.targetAttribute,
+		});
+		if (result.type !== "source_mapping") {
+			throw new Error(
+				`Expected source mapping result, received ${result.type}`,
+			);
+		}
+		return result.mapping;
 	}
 
 	gelCatalogs(query = ""): Promise<GelCatalog[]> {
