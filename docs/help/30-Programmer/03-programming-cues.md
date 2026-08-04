@@ -21,7 +21,7 @@ For a temporary change, hold `[REC]` to open **Record Settings** and enable **Cu
 
 ## Timing and triggers
 
-Cue master Fade and Delay provide fallbacks. Individual values can retain their own fade and start delay. Manual GO, Follow, timed delay, and timecode triggers determine when the next Cue runs. Pause freezes a running transition; release removes playback ownership according to its configured behavior.
+Cue **In Fade** and **In Delay** provide the existing timing fallbacks. For decreasing or released Intensity, optional **Out Fade** and **Out Delay** provide an independent fade and hold; when they have not been separated, they follow the effective In timing. Individual values can retain their own fade and start delay and remain authoritative unless **Force Cue Timing** is enabled. **Disable Cue Timing** snaps both directions. Chasers retain their single X-fade percentage timing. Manual GO, Follow, timed delay, and timecode triggers determine when the next Cue runs. Follow timing begins after the latest incoming or outgoing work settles. Pause freezes a running transition; release removes playback ownership immediately according to its configured behavior rather than applying Cue out timing to the whole playback.
 
 For exact commands and edge cases, see [Command Line Reference](01-command-line.md). For execution semantics, see [Cues and Playbacks](../40-Running-a-Show/01-cues-and-playbacks.md).
 

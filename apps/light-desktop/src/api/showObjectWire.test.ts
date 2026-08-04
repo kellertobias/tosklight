@@ -23,6 +23,8 @@ function cueListBody() {
 				name: "Opening",
 				fade_millis: 1000,
 				delay_millis: 0,
+				out_fade_millis: 2500,
+				out_delay_millis: 0,
 				trigger: { type: "manual" },
 				cue_only: false,
 				changes: [
@@ -56,6 +58,10 @@ describe("show-object wire decoders", () => {
 		expect(decoded.body.cues[0].changes[0].value).toEqual({
 			kind: "normalized",
 			value: 0.75,
+		});
+		expect(decoded.body.cues[0]).toMatchObject({
+			out_fade_millis: 2500,
+			out_delay_millis: 0,
 		});
 	});
 

@@ -135,42 +135,13 @@ fn effective_timing(
     timing: Option<(Option<u64>, Option<u64>)>,
     outgoing_intensity: bool,
 ) -> (u64, u64) {
-    let (fade_override, delay_override) = timing.unwrap_or((None, None));
-    if frame.cue_list.disable_cue_timing {
-        (0, 0)
-    } else if frame.cue_list.force_cue_timing {
-        cue_master_timing(frame, outgoing_intensity)
-    } else {
-        let (master_fade, master_delay) = cue_master_timing(frame, outgoing_intensity);
-        (
-            fade_override.unwrap_or(master_fade),
-            delay_override.unwrap_or(master_delay),
-        )
-    }
-}
-
-fn cue_master_timing(frame: &PlaybackFrame<'_>, outgoing_intensity: bool) -> (u64, u64) {
-    if outgoing_intensity && frame.cue_list.mode == CueListMode::Sequence {
-        (
-            frame.cue.out_fade_millis.unwrap_or(frame.cue_fade_millis),
-            frame.cue.out_delay_millis.unwrap_or(frame.cue.delay_millis),
-        )
-    } else {
-        (frame.cue_fade_millis, frame.cue.delay_millis)
-    }
-}
-
-pub(crate) fn is_outgoing_intensity(
-    attribute: &AttributeKey,
-    previous: Option<&AttributeValue>,
-    target: Option<&AttributeValue>,
-) -> bool {
-    if !attribute.is_intensity() {
-        return false;
-    }
-    let previous = previous.and_then(AttributeValue::normalized).unwrap_or(0.0);
-    let target = target.and_then(AttributeValue::normalized).unwrap_or(0.0);
-    target < previous
+    effective_attribute_timing(
+        frame.cue_list,
+        frame.cue,
+        frame.cue_fade_millis,
+        timing,
+        outgoing_intensity,
+    )
 }
 
 fn attribute_contribution(

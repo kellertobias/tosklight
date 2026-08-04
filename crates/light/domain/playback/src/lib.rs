@@ -45,7 +45,9 @@ type AttributeAddress = (FixtureId, AttributeKey);
 
 pub(crate) use compiled::{CompiledAttribute, CompiledCueList};
 pub(crate) use engine::DynamicFlashState;
-pub(crate) use model::cue::{cue_completion_millis, effective_chaser_step_millis};
+pub(crate) use model::cue::{
+    cue_completion_millis, effective_chaser_step_millis, effective_cue_fade_millis,
+};
 pub(crate) use model::runtime::{
     PlaybackKey, TemporaryPlaybackKind, advance_chaser_steps, new_active_playback,
     reset_manual_transition,

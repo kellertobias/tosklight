@@ -1,11 +1,11 @@
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use light_core::CueListId;
+use light_core::{CueListId, TimedValue};
 use uuid::Uuid;
 
 use super::{
-    ActivePlayback, Cue, CueList, CueListMode, CueTrigger, PlaybackEngine,
+    ActivePlayback, CompiledCueList, Cue, CueList, CueListMode, CueTrigger, PlaybackEngine,
     PlaybackMasterTransition, WrapMode, advance_chaser_steps, cue_completion_millis,
-    effective_chaser_step_millis,
+    effective_chaser_step_millis, effective_cue_fade_millis,
 };
 
 /// The scheduler-owned reason that advanced a playback without an operator action.
@@ -94,15 +94,21 @@ impl PlaybackEngine {
         let keys = self.active.keys().copied().collect::<Vec<_>>();
         let mut transitions = Vec::with_capacity(keys.len());
         for key in keys {
+            let transition_source = self.transition_source_at(key, now);
             let Some(playback) = self.active.get_mut(&key) else {
                 continue;
             };
             let Some(cue_list) = self.cue_lists.get(&playback.cue_list_id) else {
                 continue;
             };
+            let Some(compiled) = self.compiled_cue_lists.get(&playback.cue_list_id) else {
+                continue;
+            };
             let transition = advance_automatic_playback(
                 playback,
                 cue_list,
+                compiled,
+                transition_source.as_deref(),
                 AutomaticTiming {
                     now,
                     timecode_frame,
@@ -165,18 +171,20 @@ fn transition_progress(transition: &PlaybackMasterTransition, now: DateTime<Utc>
 fn advance_automatic_playback(
     playback: &mut ActivePlayback,
     cue_list: &CueList,
+    compiled: &CompiledCueList,
+    transition_source: Option<&[TimedValue]>,
     timing: AutomaticTiming,
 ) -> Option<AutomaticPlaybackTransition> {
     if !playback.enabled || playback.paused || chaser_is_paused(cue_list, &timing) {
         return None;
     }
-    if let Some(transition) = advance_timecode(playback, cue_list, &timing) {
+    if let Some(transition) = advance_timecode(playback, cue_list, transition_source, &timing) {
         return Some(transition);
     }
     if cue_list.mode == CueListMode::Chaser {
-        return advance_chaser(playback, cue_list, &timing);
+        return advance_chaser(playback, cue_list, transition_source, &timing);
     }
-    advance_follow_or_wait(playback, cue_list, &timing)
+    advance_follow_or_wait(playback, cue_list, compiled, transition_source, &timing)
 }
 
 fn chaser_is_paused(cue_list: &CueList, timing: &AutomaticTiming) -> bool {
@@ -200,6 +208,7 @@ fn speed_group_index(group: &str) -> usize {
 fn advance_timecode(
     playback: &mut ActivePlayback,
     cue_list: &CueList,
+    transition_source: Option<&[TimedValue]>,
     timing: &AutomaticTiming,
 ) -> Option<AutomaticPlaybackTransition> {
     let index = timecode_index(cue_list, timing.timecode_frame?)?;
@@ -207,7 +216,7 @@ fn advance_timecode(
         return None;
     }
     let previous_index = playback.cue_index;
-    playback.previous_index = Some(previous_index);
+    install_transition_source(playback, transition_source, previous_index);
     set_current_cue(playback, cue_list, index);
     playback.deleted_cue_hold = None;
     playback.activated_at = timing.now;
@@ -235,6 +244,7 @@ fn timecode_index(cue_list: &CueList, frame: u64) -> Option<usize> {
 fn advance_chaser(
     playback: &mut ActivePlayback,
     cue_list: &CueList,
+    transition_source: Option<&[TimedValue]>,
     timing: &AutomaticTiming,
 ) -> Option<AutomaticPlaybackTransition> {
     let elapsed = elapsed_since_activation(playback, timing.now);
@@ -245,6 +255,9 @@ fn advance_chaser(
     }
     let previous_index = playback.cue_index;
     let advanced_steps = advance_chaser_steps(playback, cue_list, requested_steps);
+    if advanced_steps > 0 {
+        playback.deleted_cue_transition_source = transition_source.map(<[TimedValue]>::to_vec);
+    }
     advance_chaser_clock(playback, step_millis, requested_steps);
     (advanced_steps > 0).then(|| {
         cue_transition(
@@ -266,12 +279,21 @@ fn advance_chaser_clock(playback: &mut ActivePlayback, step_millis: u64, steps: 
 fn advance_follow_or_wait(
     playback: &mut ActivePlayback,
     cue_list: &CueList,
+    compiled: &CompiledCueList,
+    transition_source: Option<&[TimedValue]>,
     timing: &AutomaticTiming,
 ) -> Option<AutomaticPlaybackTransition> {
     let next_index = next_cue_index(playback.cue_index, cue_list)?;
     let (cause, trigger_delay) = automatic_trigger(&cue_list.cues[next_index])?;
     let current = &cue_list.cues[playback.cue_index];
-    let completion = cue_completion_millis(cue_list, current, timing.sequence_master_fade_millis);
+    let cue_fade_millis = effective_cue_fade_millis(
+        cue_list,
+        current,
+        playback,
+        timing.sequence_master_fade_millis,
+        &timing.speed_groups_bpm,
+    );
+    let completion = cue_completion_millis(cue_list, compiled, playback, cue_fade_millis);
     let trigger_delay = if cue_list.disable_cue_timing {
         0
     } else {
@@ -281,14 +303,27 @@ fn advance_follow_or_wait(
         return None;
     }
     let previous_index = playback.cue_index;
-    playback.deleted_cue_transition_source = None;
-    playback.previous_index = Some(previous_index);
+    install_transition_source(playback, transition_source, previous_index);
     set_current_cue(playback, cue_list, next_index);
     if next_index == 0 {
         playback.tracking_wrap = cue_list.effective_wrap_mode() == WrapMode::Tracking;
     }
     playback.activated_at = timing.now;
     Some(cue_transition(playback, cue_list, previous_index, cause, 1))
+}
+
+fn install_transition_source(
+    playback: &mut ActivePlayback,
+    source: Option<&[TimedValue]>,
+    previous_index: usize,
+) {
+    if let Some(source) = source {
+        playback.deleted_cue_transition_source = Some(source.to_vec());
+        playback.previous_index = Some(previous_index);
+    } else {
+        playback.deleted_cue_transition_source = None;
+        playback.previous_index = Some(previous_index);
+    }
 }
 
 fn next_cue_index(current: usize, cue_list: &CueList) -> Option<usize> {

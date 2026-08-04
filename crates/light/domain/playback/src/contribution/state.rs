@@ -44,7 +44,13 @@ impl<'a> PlaybackFrame<'a> {
         let elapsed = (effective_now - playback.activated_at)
             .num_milliseconds()
             .max(0) as u64;
-        let cue_fade_millis = cue_fade_millis(context.engine, cue_list, cue, playback);
+        let cue_fade_millis = effective_cue_fade_millis(
+            cue_list,
+            cue,
+            playback,
+            context.engine.sequence_master_fade_millis,
+            &context.engine.speed_groups_bpm,
+        );
         Self {
             playback,
             cue_list,
@@ -150,23 +156,4 @@ fn normalized_deleted_value(timed: &TimedValue, intensity_scale: f32) -> Attribu
             })
         })
         .unwrap_or_else(|| timed.value.clone())
-}
-
-fn cue_fade_millis(
-    engine: &PlaybackEngine,
-    cue_list: &CueList,
-    cue: &Cue,
-    playback: &ActivePlayback,
-) -> u64 {
-    if cue_list.disable_cue_timing {
-        0
-    } else if cue_list.mode == CueListMode::Chaser {
-        effective_chaser_xfade_millis(cue_list, &engine.speed_groups_bpm)
-    } else if cue_list.mode == CueListMode::Sequence && cue.fade_millis == 0 {
-        playback
-            .transition_fade_fallback_millis
-            .unwrap_or(engine.sequence_master_fade_millis)
-    } else {
-        cue.fade_millis
-    }
 }

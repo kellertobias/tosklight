@@ -140,9 +140,9 @@ pub struct ActivePlayback {
     pub current_cue_number: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deleted_cue_hold: Option<DeletedCueHold>,
-    /// When navigation resolves a deleted-active Cue hold, this preserves the rendered held
-    /// contribution as the source of the destination Cue's normal fade. It is cleared by the
-    /// next navigation or activation operation and is never written into Cue data.
+    /// Resolved pre-master values captured at a navigation boundary. They keep an interrupted
+    /// GO/GOTO/BACK or deleted-Cue recovery continuous instead of reconstructing from a stored Cue
+    /// endpoint. This runtime snapshot is never written into Cue data.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deleted_cue_transition_source: Option<Vec<TimedValue>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

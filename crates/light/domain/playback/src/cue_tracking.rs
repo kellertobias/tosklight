@@ -39,6 +39,7 @@ impl PlaybackEngine {
         id: CueListId,
         now: DateTime<Utc>,
     ) -> Result<&ActivePlayback, String> {
+        let interrupted_source = self.transition_source_at(key, now);
         let cue_list = self.cue_lists.get(&id).ok_or("cue list does not exist")?;
         let playback = match self.active.entry(key) {
             std::collections::hash_map::Entry::Vacant(entry) => entry.insert(ActivePlayback {
@@ -84,6 +85,7 @@ impl PlaybackEngine {
                         .position(|cue| cue.id == loaded)
                         .ok_or("loaded cue no longer exists")?;
                     if playback.enabled && playback.current_cue_number.is_some() {
+                        playback.deleted_cue_transition_source = interrupted_source;
                         playback.previous_index = Some(playback.cue_index);
                     } else {
                         playback.previous_index = None;
@@ -92,7 +94,6 @@ impl PlaybackEngine {
                     playback.current_cue_id = Some(cue_list.cues[index].id);
                     playback.current_cue_number = Some(cue_list.cues[index].number);
                     playback.loaded_cue_number = None;
-                    playback.deleted_cue_transition_source = None;
                     playback.tracking_wrap = false;
                     playback.paused = false;
                     playback.paused_at = None;
@@ -117,7 +118,6 @@ impl PlaybackEngine {
                     reset_manual_transition(playback);
                     return Ok(playback);
                 }
-                playback.deleted_cue_transition_source = None;
                 let resumed = playback.paused;
                 if playback.paused {
                     if let Some(paused_at) = playback.paused_at.take() {
@@ -133,6 +133,9 @@ impl PlaybackEngine {
                     playback.tracking_wrap = cue_list.effective_wrap_mode() == WrapMode::Tracking;
                 }
                 if !resumed {
+                    if interrupted_source.is_some() {
+                        playback.deleted_cue_transition_source = interrupted_source;
+                    }
                     playback.activated_at = now;
                 }
                 playback.current_cue_number = Some(cue_list.cues[playback.cue_index].number);
@@ -165,6 +168,7 @@ impl PlaybackEngine {
         cue_number: f64,
         now: DateTime<Utc>,
     ) -> Result<&ActivePlayback, String> {
+        let interrupted_source = self.transition_source_at(key, now);
         let cue_list = self.cue_lists.get(&id).ok_or("cue list does not exist")?;
         let index = cue_list
             .cues
@@ -205,14 +209,16 @@ impl PlaybackEngine {
             loaded_cue_id: None,
             loaded_cue_number: None,
         });
-        if playback.cue_index != index {
+        if interrupted_source.is_some() {
+            playback.deleted_cue_transition_source = interrupted_source;
+            playback.previous_index = Some(playback.cue_index);
+        } else if playback.cue_index != index {
             playback.previous_index = Some(playback.cue_index);
         }
         playback.cue_index = index;
         playback.current_cue_id = Some(cue_list.cues[index].id);
         playback.current_cue_number = Some(cue_number);
         playback.deleted_cue_hold = None;
-        playback.deleted_cue_transition_source = None;
         playback.loaded_cue_id = None;
         playback.loaded_cue_number = None;
         playback.tracking_wrap = false;
@@ -240,6 +246,7 @@ impl PlaybackEngine {
         id: CueListId,
         now: DateTime<Utc>,
     ) -> Result<&ActivePlayback, String> {
+        let interrupted_source = self.transition_source_at(key, now);
         let playback = self.active.get_mut(&key).ok_or("cue list is not active")?;
         reset_manual_transition(playback);
         if let Some(hold) = playback.deleted_cue_hold.take() {
@@ -263,7 +270,7 @@ impl PlaybackEngine {
             }
             return Ok(playback);
         }
-        playback.deleted_cue_transition_source = None;
+        playback.deleted_cue_transition_source = interrupted_source;
         playback.previous_index = Some(playback.cue_index);
         playback.cue_index = playback.cue_index.saturating_sub(1);
         playback.current_cue_id = Some(self.cue_lists[&id].cues[playback.cue_index].id);

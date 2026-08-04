@@ -22,7 +22,7 @@ To rename the current page, press **SET** and then touch the **Page** control. E
 
 ## Run Cues
 
-GO advances to the next Cue and applies its tracking state with configured timing. GO minus reconstructs the previous Cue rather than relying on programmer residue. A playback button configured as **Pause** freezes a transition and changes to **Resume** while paused; pressing it again continues the same Cue without advancing. GO also continues a paused transition. Release removes the playback's ownership and permits lower-priority sources to become visible.
+GO advances to the next Cue and applies its tracking state with configured timing. Increasing Intensity uses the Cue's In delay/fade; decreasing or released Intensity can hold and fade with independent Out timing. The two directions may overlap or leave a black gap. If GO, GO minus, or Go To interrupts a running fade, the new transition starts from the currently resolved output rather than jumping to a stored Cue endpoint. GO minus reconstructs the previous Cue rather than relying on programmer residue. A playback button configured as **Pause** freezes a transition and changes to **Resume** while paused; pressing it again continues the same Cue without advancing. GO also continues a paused transition. Release removes the playback's ownership and permits lower-priority sources to become visible.
 
 The active playback is an explicit operator selection. Running another playback must not silently steal that selection. Cuelist View shows current/next state, Cue detail, and playback configuration.
 

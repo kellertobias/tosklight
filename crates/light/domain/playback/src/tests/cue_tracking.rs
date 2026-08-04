@@ -186,6 +186,40 @@ fn intensity_uses_independent_in_and_out_master_timing() {
 }
 
 #[test]
+fn interrupted_go_fades_from_the_current_resolved_intensity() {
+    let fixture = FixtureId::new();
+    let mut first = Cue::new(1.0);
+    first.changes.push(value(fixture, "intensity", 0.0));
+    let mut second = Cue::new(2.0);
+    second.fade_millis = 10_000;
+    second.changes.push(value(fixture, "intensity", 1.0));
+    let mut third = Cue::new(3.0);
+    third.out_fade_millis = Some(10_000);
+    third.changes.push(value(fixture, "intensity", 0.0));
+    let cue_list = list(vec![first, second, third]);
+    let id = cue_list.id;
+    let started = Utc::now();
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.go_at(id, started).unwrap();
+    engine.go_at(id, started).unwrap();
+
+    let interrupted_at = started + ChronoDuration::seconds(5);
+    assert!((contribution_level(&engine, interrupted_at, fixture) - 0.5).abs() < 0.01);
+    engine.go_at(id, interrupted_at).unwrap();
+    assert!((contribution_level(&engine, interrupted_at, fixture) - 0.5).abs() < 0.01);
+    assert!(
+        (contribution_level(
+            &engine,
+            interrupted_at + ChronoDuration::seconds(5),
+            fixture,
+        ) - 0.25)
+            .abs()
+            < 0.01
+    );
+}
+
+#[test]
 fn legacy_cue_out_timing_follows_existing_fade_and_delay() {
     let mut body = serde_json::to_value(Cue::new(1.0)).unwrap();
     let object = body.as_object_mut().unwrap();
@@ -224,18 +258,19 @@ fn absent_out_fade_follows_the_effective_sequence_master_but_explicit_zero_snaps
     engine.set_control_timing([120.0; 5], 3_000);
     engine.register(cue_list).unwrap();
     engine.go_at(id, started).unwrap();
-    engine.go_at(id, started).unwrap();
+    let second_at = started + ChronoDuration::seconds(3);
+    engine.go_at(id, second_at).unwrap();
     assert!(
         (contribution_level(
             &engine,
-            started + ChronoDuration::milliseconds(1_500),
+            second_at + ChronoDuration::milliseconds(1_500),
             inherited,
         ) - 0.5)
             .abs()
             < 0.01
     );
 
-    let third_at = started + ChronoDuration::seconds(3);
+    let third_at = second_at + ChronoDuration::seconds(3);
     engine.go_at(id, third_at).unwrap();
     let fourth_at = third_at + ChronoDuration::seconds(3);
     engine.go_at(id, fourth_at).unwrap();

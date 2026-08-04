@@ -20,6 +20,28 @@ impl PlaybackEngine {
         self.contributions_at_with_snap(now, |_, _| false)
     }
 
+    pub(crate) fn transition_source_at(
+        &self,
+        key: PlaybackKey,
+        now: DateTime<Utc>,
+    ) -> Option<Vec<TimedValue>> {
+        let playback = self.active.get(&key)?;
+        if !playback.enabled {
+            return None;
+        }
+        let values = self
+            .contributions_with_context_at(now, |_, _| false)
+            .into_iter()
+            .filter(|contribution| {
+                contribution.source.cue_list_id == playback.cue_list_id
+                    && contribution.source.playback_identity == playback.playback_identity
+                    && !contribution.source.temporary
+            })
+            .map(|contribution| contribution.value)
+            .collect::<Vec<_>>();
+        Some(values)
+    }
+
     pub fn contributions_at_with_snap(
         &self,
         now: DateTime<Utc>,

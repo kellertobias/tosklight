@@ -186,26 +186,59 @@ fn is_zero_u64(value: &u64) -> bool {
 
 pub(crate) fn cue_completion_millis(
     cue_list: &CueList,
-    cue: &Cue,
-    sequence_master_fade_millis: u64,
+    compiled: &CompiledCueList,
+    playback: &ActivePlayback,
+    cue_fade_millis: u64,
 ) -> u64 {
-    if cue_list.disable_cue_timing {
+    if cue_list.disable_cue_timing
+        || playback.transition_timing_bypassed
+        || playback.manual_xfade_from_index.is_some()
+    {
         return 0;
     }
-    let cue_fade_millis = if cue_list.mode == CueListMode::Sequence && cue.fade_millis == 0 {
-        sequence_master_fade_millis
-    } else {
-        cue.fade_millis
+    let target_index = playback.manual_xfade_to_index.unwrap_or(playback.cue_index);
+    let Some(cue) = cue_list.cues.get(target_index) else {
+        return 0;
     };
-    if cue_list.force_cue_timing {
-        return cue.delay_millis.saturating_add(cue_fade_millis);
-    }
-    let fixture_values = cue.changes.iter().map(|change| {
-        change
-            .delay_millis
-            .unwrap_or(cue.delay_millis)
-            .saturating_add(change.fade_millis.unwrap_or(cue_fade_millis))
-    });
+    let previous_index = playback.manual_xfade_from_index.or(playback.previous_index);
+    let transition_source = playback
+        .deleted_cue_transition_source
+        .as_ref()
+        .map(|values| {
+            values
+                .iter()
+                .map(|value| {
+                    (
+                        (value.fixture_id, value.attribute.clone()),
+                        completion_source_value(value, playback),
+                    )
+                })
+                .collect::<HashMap<_, _>>()
+        });
+    let latest_index = previous_index.map_or(target_index, |index| index.max(target_index));
+    let fixture_values = compiled
+        .attributes_through(latest_index)
+        .iter()
+        .filter_map(|attribute| {
+            let previous = transition_source
+                .as_ref()
+                .and_then(|source| {
+                    source.get(&(attribute.fixture_id(), attribute.attribute().clone()))
+                })
+                .or_else(|| previous_index.and_then(|index| attribute.value(index, false)));
+            let target = attribute.value(target_index, playback.tracking_wrap);
+            (previous != target).then(|| {
+                let outgoing = is_outgoing_intensity(attribute.attribute(), previous, target);
+                let (fade, delay) = effective_attribute_timing(
+                    cue_list,
+                    cue,
+                    cue_fade_millis,
+                    attribute.timing(target_index),
+                    outgoing,
+                );
+                delay.saturating_add(fade)
+            })
+        });
     let group_values = cue.group_changes.iter().map(|change| {
         change
             .delay_millis
@@ -229,7 +262,83 @@ pub(crate) fn cue_completion_millis(
         .chain(group_values)
         .chain(dynamic_values)
         .max()
-        .unwrap_or_else(|| cue.delay_millis.saturating_add(cue_fade_millis))
+        .unwrap_or(0)
+}
+
+pub(crate) fn effective_attribute_timing(
+    cue_list: &CueList,
+    cue: &Cue,
+    cue_fade_millis: u64,
+    timing: Option<(Option<u64>, Option<u64>)>,
+    outgoing_intensity: bool,
+) -> (u64, u64) {
+    if cue_list.disable_cue_timing {
+        return (0, 0);
+    }
+    let master = if outgoing_intensity && cue_list.mode == CueListMode::Sequence {
+        (
+            cue.out_fade_millis.unwrap_or(cue_fade_millis),
+            cue.out_delay_millis.unwrap_or(cue.delay_millis),
+        )
+    } else {
+        (cue_fade_millis, cue.delay_millis)
+    };
+    if cue_list.force_cue_timing {
+        return master;
+    }
+    let (fade, delay) = timing.unwrap_or((None, None));
+    (fade.unwrap_or(master.0), delay.unwrap_or(master.1))
+}
+
+pub(crate) fn is_outgoing_intensity(
+    attribute: &AttributeKey,
+    previous: Option<&AttributeValue>,
+    target: Option<&AttributeValue>,
+) -> bool {
+    if !attribute.is_intensity() {
+        return false;
+    }
+    let previous = previous.and_then(AttributeValue::normalized).unwrap_or(0.0);
+    let target = target.and_then(AttributeValue::normalized).unwrap_or(0.0);
+    target < previous
+}
+
+fn completion_source_value(value: &TimedValue, playback: &ActivePlayback) -> AttributeValue {
+    if !value.attribute.is_intensity() {
+        return value.value.clone();
+    }
+    let master = if playback.flash { 1.0 } else { playback.master };
+    value
+        .value
+        .normalized()
+        .map(|level| {
+            AttributeValue::Normalized(if master > 0.0 {
+                (level / master).clamp(0.0, 1.0)
+            } else {
+                0.0
+            })
+        })
+        .unwrap_or_else(|| value.value.clone())
+}
+
+pub(crate) fn effective_cue_fade_millis(
+    cue_list: &CueList,
+    cue: &Cue,
+    playback: &ActivePlayback,
+    sequence_master_fade_millis: u64,
+    speed_groups_bpm: &[f64; 5],
+) -> u64 {
+    if cue_list.disable_cue_timing {
+        0
+    } else if cue_list.mode == CueListMode::Chaser {
+        effective_chaser_xfade_millis(cue_list, speed_groups_bpm)
+    } else if cue.fade_millis == 0 {
+        playback
+            .transition_fade_fallback_millis
+            .unwrap_or(sequence_master_fade_millis)
+    } else {
+        cue.fade_millis
+    }
 }
 
 pub(crate) fn effective_chaser_step_millis(cue_list: &CueList, speed_groups_bpm: &[f64; 5]) -> u64 {

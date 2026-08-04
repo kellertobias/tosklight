@@ -36,6 +36,49 @@ fn follow_chaser_and_timecode_advance_without_manual_go() {
 }
 
 #[test]
+fn follow_waits_for_actual_outgoing_work_without_phantom_out_duration() {
+    let outgoing = FixtureId::new();
+    let incoming = FixtureId::new();
+    let mut first = Cue::new(1.0);
+    first.changes.push(value(outgoing, "intensity", 1.0));
+    first.changes.push(value(incoming, "intensity", 0.0));
+    let mut second = Cue::new(2.0);
+    second.fade_millis = 1_000;
+    second.out_delay_millis = Some(500);
+    second.out_fade_millis = Some(2_000);
+    second.changes.push(value(outgoing, "intensity", 0.0));
+    second.changes.push(value(incoming, "intensity", 1.0));
+    let mut third = Cue::new(3.0);
+    third.trigger = CueTrigger::Follow { delay_millis: 0 };
+    let cue_list = list(vec![first, second, third]);
+    let id = cue_list.id;
+    let started = Utc::now();
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.go_at(id, started).unwrap();
+    engine.go_at(id, started).unwrap();
+
+    engine.tick(started + ChronoDuration::milliseconds(2_499), None);
+    assert_eq!(engine.active()[0].cue_index, 1);
+    engine.tick(started + ChronoDuration::milliseconds(2_500), None);
+    assert_eq!(engine.active()[0].cue_index, 2);
+
+    let mut only_rises = Cue::new(1.0);
+    only_rises.fade_millis = 1_000;
+    only_rises.out_fade_millis = Some(10_000);
+    only_rises.changes.push(value(incoming, "intensity", 1.0));
+    let mut follows = Cue::new(2.0);
+    follows.trigger = CueTrigger::Follow { delay_millis: 0 };
+    let cue_list = list(vec![only_rises, follows]);
+    let id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.go_at(id, started).unwrap();
+    engine.tick(started + ChronoDuration::milliseconds(1_000), None);
+    assert_eq!(engine.active()[0].cue_index, 1);
+}
+
+#[test]
 fn legacy_looped_lists_migrate_to_tracking_wrap_defaults() {
     let mut encoded = serde_json::to_value(list(vec![Cue::new(1.0)])).unwrap();
     let object = encoded.as_object_mut().unwrap();

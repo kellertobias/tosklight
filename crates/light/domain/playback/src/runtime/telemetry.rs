@@ -65,7 +65,17 @@ impl PlaybackEngine {
         let Some(current) = current_telemetry_cue(playback, cue_list) else {
             return 1.0;
         };
-        let completion = cue_completion_millis(cue_list, current, self.sequence_master_fade_millis);
+        let Some(compiled) = self.compiled_cue_lists.get(&playback.cue_list_id) else {
+            return 1.0;
+        };
+        let cue_fade_millis = effective_cue_fade_millis(
+            cue_list,
+            current,
+            playback,
+            self.sequence_master_fade_millis,
+            &self.speed_groups_bpm,
+        );
+        let completion = cue_completion_millis(cue_list, compiled, playback, cue_fade_millis);
         if completion == 0 {
             return 1.0;
         }
