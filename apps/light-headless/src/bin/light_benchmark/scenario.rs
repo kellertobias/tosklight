@@ -21,8 +21,8 @@ use light_fixture::{
 use light_output::{DeliveryMode, OutputRoute};
 use light_playback::{
     Cue, CueList, CueListMode, CueTrigger, FlashReleaseMode, GroupCueChange, IntensityPriorityMode,
-    PlaybackButtonAction, PlaybackDefinition, PlaybackFaderMode, PlaybackTarget, RestartMode,
-    WrapMode,
+    PlaybackButtonAction, PlaybackDefinition, PlaybackFaderMode, PlaybackFootprint, PlaybackTarget,
+    RestartMode, WrapMode,
 };
 use light_programmer::{GroupDefinition, ProgrammerRegistry};
 use serde::Serialize;
@@ -397,6 +397,7 @@ fn playback(fixture_footprint: u16) -> (CueList, PlaybackDefinition) {
         number: 1,
         name: "Benchmark playback".into(),
         target: PlaybackTarget::CueList { cue_list_id },
+        footprint: PlaybackFootprint::Normal,
         buttons: [
             PlaybackButtonAction::GoMinus,
             PlaybackButtonAction::Go,

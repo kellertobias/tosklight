@@ -16,8 +16,8 @@ use light_fixture::{
 use light_output::{DeliveryMode, OutputRoute};
 use light_playback::{
     Cue, CueList, CueListMode, CueTrigger, FlashReleaseMode, GroupCueChange, IntensityPriorityMode,
-    PlaybackButtonAction, PlaybackDefinition, PlaybackFaderMode, PlaybackTarget, RestartMode,
-    WrapMode,
+    PlaybackButtonAction, PlaybackDefinition, PlaybackFaderMode, PlaybackFootprint, PlaybackTarget,
+    RestartMode, WrapMode,
 };
 use light_programmer::{GroupDefinition, MAX_GROUP_RESOLVED_FIXTURES, ProgrammerRegistry};
 use std::{fs, net::SocketAddr, path::Path, sync::Arc};
@@ -528,6 +528,7 @@ fn demo_playback_for_groups(group_ids: &[String]) -> (CueList, PlaybackDefinitio
         number: 1,
         name: "Sustained benchmark-show playback".into(),
         target: PlaybackTarget::CueList { cue_list_id },
+        footprint: PlaybackFootprint::Normal,
         buttons: [
             PlaybackButtonAction::GoMinus,
             PlaybackButtonAction::Go,
