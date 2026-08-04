@@ -85,6 +85,20 @@ pub enum AttributeValueType {
 pub const ATTRIBUTE_CONFIGURATION_VERSION: u16 = 1;
 pub const ENCODER_SLOTS_PER_PAGE: u8 = 6;
 
+/// Compatibility-only built-ins accepted in existing shows but not offered to new fixtures or
+/// placed on recommended encoder pages.
+pub const RETIRED_BUILT_IN_ATTRIBUTES: &[&str] = &[
+    "beam",
+    "media.effect.1",
+    "media.effect.2",
+    "media.effect.3",
+    "media.effect.4",
+];
+
+pub fn built_in_attribute_is_retired(attribute: &str) -> bool {
+    RETIRED_BUILT_IN_ATTRIBUTES.contains(&attribute)
+}
+
 /// The eight fixed programmer tabs. Pages add capacity without changing this hardware-facing
 /// vocabulary.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]

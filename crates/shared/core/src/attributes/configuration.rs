@@ -77,7 +77,9 @@ impl AttributeConfiguration {
         linked_groups.extend(
             ATTRIBUTE_REGISTRY
                 .iter()
-                .filter(|descriptor| descriptor.recordable)
+                .filter(|descriptor| {
+                    descriptor.recordable && !built_in_attribute_is_retired(descriptor.id)
+                })
                 .filter(|descriptor| !linked_members.contains(descriptor.id))
                 .map(|descriptor| {
                     recommended_activation_group(descriptor.id, descriptor.label, &[descriptor.id])
@@ -159,10 +161,9 @@ impl AttributeConfiguration {
                 assigned.extend(missing);
             }
         }
-        for descriptor in ATTRIBUTE_REGISTRY
-            .iter()
-            .filter(|descriptor| descriptor.recordable)
-        {
+        for descriptor in ATTRIBUTE_REGISTRY.iter().filter(|descriptor| {
+            descriptor.recordable && !built_in_attribute_is_retired(descriptor.id)
+        }) {
             let id = AttributeKey(descriptor.id.into());
             if assigned.insert(id.clone()) {
                 self.activation_groups.push(recommended_activation_group(
@@ -233,7 +234,7 @@ impl AttributeConfiguration {
             }
         }
         for id in descriptors.keys() {
-            if !placements.contains_key(id) {
+            if !built_in_attribute_is_retired(id) && !placements.contains_key(id) {
                 return Err(AttributeConfigurationError::MissingPlacement(
                     (*id).to_owned(),
                 ));
@@ -336,7 +337,11 @@ impl AttributeConfiguration {
             }
         }
         for (id, (value_type, recordable)) in descriptors {
-            if recordable && value_type != AttributeValueType::Control && !activated.contains(id) {
+            if !built_in_attribute_is_retired(id)
+                && recordable
+                && value_type != AttributeValueType::Control
+                && !activated.contains(id)
+            {
                 return Err(AttributeConfigurationError::MissingActivationGroup(
                     id.to_owned(),
                 ));

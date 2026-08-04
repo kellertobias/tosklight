@@ -245,6 +245,49 @@ async fn fixture_source_mapping_preferences_are_typed_replay_safe_and_installati
 }
 
 #[tokio::test]
+async fn fixture_import_requires_explicit_mapping_for_retired_placeholder_attributes() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let (fixture, _, _) = schema_v2_direct_fixture();
+    let mut profile = *fixture.definition.profile_snapshot.unwrap();
+    let retired = light_core::AttributeKey("beam".into());
+    profile.modes[0].channels[0].fixture_attribute = retired.clone();
+    profile.modes[0].channels[0].attribute = retired.clone();
+    for function in &mut profile.modes[0].channels[0].functions {
+        function.attribute = retired.clone();
+    }
+    let package = light_fixture::write_fixture_package(&profile).unwrap();
+
+    let response = app
+        .oneshot(
+            Request::post("/api/v2/fixture-library")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": "retired-beam-package",
+                        "action": {
+                            "type": "import_package",
+                            "package_base64": STANDARD.encode(&package),
+                            "attribute_mappings": []
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = json(response).await;
+    assert_eq!(response["result"]["type"], "import_required");
+    assert_eq!(response["result"]["unknown_attributes"][0]["attribute"], "beam");
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

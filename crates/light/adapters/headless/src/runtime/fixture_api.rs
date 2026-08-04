@@ -430,10 +430,9 @@ fn remember_source_mapping(
 }
 
 fn validate_source_mapping_target(state: &AppState, target: &str) -> Result<(), ApiError> {
-    if light_core::ATTRIBUTE_REGISTRY
-        .iter()
-        .any(|descriptor| descriptor.id == target)
-    {
+    if light_core::ATTRIBUTE_REGISTRY.iter().any(|descriptor| {
+        descriptor.id == target && !light_core::built_in_attribute_is_retired(descriptor.id)
+    }) {
         return Ok(());
     }
     let installed = state.attributes.snapshot();
@@ -715,10 +714,9 @@ fn unknown_canonical_attributes(
         .map(|descriptor| descriptor.id.0.as_str())
         .collect::<HashSet<_>>();
     let is_unknown = |attribute: &str| {
-        !light_core::ATTRIBUTE_REGISTRY
-            .iter()
-            .any(|descriptor| descriptor.id == attribute)
-            && !custom.contains(attribute)
+        !light_core::ATTRIBUTE_REGISTRY.iter().any(|descriptor| {
+            descriptor.id == attribute && !light_core::built_in_attribute_is_retired(descriptor.id)
+        }) && !custom.contains(attribute)
     };
     let mut unknown = HashMap::<String, light_core::AttributeValueType>::new();
     for channel in profile.modes.iter().flat_map(|mode| &mode.channels) {
@@ -799,6 +797,7 @@ fn apply_fixture_attribute_mappings(
     let installed = state.attributes.snapshot();
     let mut targets = light_core::ATTRIBUTE_REGISTRY
         .iter()
+        .filter(|descriptor| !light_core::built_in_attribute_is_retired(descriptor.id))
         .map(|descriptor| (descriptor.id, (descriptor.value_type, false)))
         .collect::<HashMap<_, _>>();
     targets.extend(

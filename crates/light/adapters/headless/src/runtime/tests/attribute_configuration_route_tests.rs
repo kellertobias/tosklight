@@ -68,7 +68,17 @@ async fn attribute_configuration_defaults_persist_and_replay_without_eager_show_
     assert_eq!(initial["configuration"]["version"], 1);
     assert_eq!(
         initial["descriptors"].as_array().unwrap().len(),
-        light_core::ATTRIBUTE_REGISTRY.len()
+        light_core::ATTRIBUTE_REGISTRY
+            .iter()
+            .filter(|descriptor| !light_core::built_in_attribute_is_retired(descriptor.id))
+            .count()
+    );
+    assert!(
+        initial["descriptors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|descriptor| descriptor["id"] != "beam")
     );
     let prism_rotation = initial["descriptors"]
         .as_array()

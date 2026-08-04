@@ -422,6 +422,7 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
     let mut prism_rotation_modes = 0;
     let mut generic_control_modes = 0;
     let mut continuous_pan_or_tilt = Vec::new();
+    let mut retired_placeholder_attributes = Vec::new();
 
     for entry in fs::read_dir(root).unwrap() {
         let path = entry.unwrap().path();
@@ -459,6 +460,17 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
                 generic_control_modes += 1;
             }
             for channel in &mode.channels {
+                for attribute in std::iter::once(&channel.attribute)
+                    .chain(std::iter::once(&channel.fixture_attribute))
+                    .chain(channel.functions.iter().map(|function| &function.attribute))
+                {
+                    if light_core::built_in_attribute_is_retired(&attribute.0) {
+                        retired_placeholder_attributes.push(format!(
+                            "{} / {} / {}",
+                            profile.name, mode.name, attribute.0
+                        ));
+                    }
+                }
                 if matches!(
                     channel.attribute.0.as_str(),
                     "pan.continuous" | "tilt.continuous"
@@ -478,6 +490,11 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
     assert!(
         continuous_pan_or_tilt.is_empty(),
         "continuous motion now needs a co-occurrence migration review: {continuous_pan_or_tilt:?}"
+    );
+    assert!(
+        retired_placeholder_attributes.is_empty(),
+        "shipped fixtures must map compatibility-only placeholder attributes before retirement: \
+         {retired_placeholder_attributes:?}"
     );
 }
 

@@ -205,7 +205,13 @@ mod attribute_registry_tests {
         let configuration = AttributeConfiguration::recommended();
         configuration.validate().unwrap();
         assert_eq!(configuration.version, ATTRIBUTE_CONFIGURATION_VERSION);
-        assert_eq!(configuration.placements.len(), ATTRIBUTE_REGISTRY.len());
+        assert_eq!(
+            configuration.placements.len(),
+            ATTRIBUTE_REGISTRY
+                .iter()
+                .filter(|descriptor| !built_in_attribute_is_retired(descriptor.id))
+                .count()
+        );
         assert_eq!(
             configuration.placement_for(&AttributeKey("color.red".into())),
             Some(EncoderPlacement::new(EncoderGroup::Color, 1, 1))
@@ -326,7 +332,7 @@ mod attribute_registry_tests {
         );
         assert_eq!(
             upgraded.placement_for(&AttributeKey("vendor.media_surface".into())),
-            Some(EncoderPlacement::new(EncoderGroup::Media, 5, 1))
+            Some(EncoderPlacement::new(EncoderGroup::Media, 4, 1))
         );
         assert_eq!(
             upgraded
@@ -353,6 +359,43 @@ mod attribute_registry_tests {
         assert_eq!(groups.len(), 8);
         let configuration = AttributeConfiguration::recommended();
         assert_eq!(configuration.clone(), configuration);
+    }
+
+    #[test]
+    fn retired_placeholder_built_ins_leave_new_pages_but_old_shows_remain_valid() {
+        let recommended = AttributeConfiguration::recommended();
+        for retired in RETIRED_BUILT_IN_ATTRIBUTES {
+            assert!(
+                ATTRIBUTE_REGISTRY
+                    .iter()
+                    .any(|descriptor| descriptor.id == *retired),
+                "{retired} remains decodable for compatibility"
+            );
+            assert!(
+                recommended
+                    .attribute_placement_for(&AttributeKey((*retired).into()))
+                    .is_none(),
+                "{retired} must not reserve a new encoder slot"
+            );
+        }
+
+        let mut legacy = recommended;
+        legacy.placements.push(AttributePlacement {
+            attribute: AttributeKey("beam".into()),
+            encoder: EncoderPlacement::new(EncoderGroup::Beam, 99, 1),
+            push_turn_of: None,
+        });
+        legacy.activation_groups.push(AttributeActivationGroup {
+            id: "legacy.beam".into(),
+            label: "Legacy Beam".into(),
+            members: vec![AttributeKey("beam".into())],
+        });
+        let upgraded = legacy.with_current_built_ins();
+        upgraded.validate().unwrap();
+        assert_eq!(
+            upgraded.placement_for(&AttributeKey("beam".into())),
+            Some(EncoderPlacement::new(EncoderGroup::Beam, 99, 1))
+        );
     }
 
     #[test]

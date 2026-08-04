@@ -97,6 +97,7 @@ pub(super) fn recommended_builtin_placements() -> Vec<AttributePlacement> {
         ("media.effect.4", Media, 4, 4),
     ]
     .into_iter()
+    .filter(|(id, _, _, _)| !built_in_attribute_is_retired(id))
     .map(|(id, group, page, slot)| AttributePlacement {
         attribute: AttributeKey(id.to_owned()),
         encoder: EncoderPlacement::new(group, page, slot),

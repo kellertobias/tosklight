@@ -280,7 +280,7 @@ pub(super) fn configured_descriptors(
                 cyclic: descriptor.cyclic,
                 recordable: descriptor.recordable,
                 built_in: true,
-                retired: false,
+                retired: light_core::built_in_attribute_is_retired(descriptor.id),
                 activation_group_id: configuration
                     .activation_group_for(&light_core::AttributeKey(descriptor.id.into()))
                     .map(|group| group.id.clone()),
