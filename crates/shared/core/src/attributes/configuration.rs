@@ -65,8 +65,6 @@ impl AttributeConfiguration {
                     "shaper.blade.3.angle",
                     "shaper.blade.4.position",
                     "shaper.blade.4.angle",
-                    "shaper.keystone.x",
-                    "shaper.keystone.y",
                 ],
             ),
         ];

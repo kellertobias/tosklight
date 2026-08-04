@@ -89,10 +89,16 @@ pub const ENCODER_SLOTS_PER_PAGE: u8 = 6;
 /// placed on recommended encoder pages.
 pub const RETIRED_BUILT_IN_ATTRIBUTES: &[&str] = &[
     "beam",
+    "control.mode",
+    "control.speed",
     "media.effect.1",
     "media.effect.2",
     "media.effect.3",
     "media.effect.4",
+    "pan.time",
+    "tilt.time",
+    "shaper.keystone.x",
+    "shaper.keystone.y",
 ];
 
 pub fn built_in_attribute_is_retired(attribute: &str) -> bool {

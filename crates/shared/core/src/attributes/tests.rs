@@ -399,6 +399,49 @@ mod attribute_registry_tests {
     }
 
     #[test]
+    fn retired_consolidation_placeholders_remain_decodable_in_old_shows() {
+        let retired = [
+            "control.mode",
+            "control.speed",
+            "pan.time",
+            "tilt.time",
+            "shaper.keystone.x",
+            "shaper.keystone.y",
+        ];
+        let mut legacy = AttributeConfiguration::recommended();
+        for (index, attribute) in retired.into_iter().enumerate() {
+            legacy.placements.push(AttributePlacement {
+                attribute: AttributeKey(attribute.into()),
+                encoder: EncoderPlacement::new(
+                    EncoderGroup::Control,
+                    90 + u16::try_from(index).unwrap(),
+                    1,
+                ),
+                push_turn_of: None,
+            });
+            legacy.activation_groups.push(AttributeActivationGroup {
+                id: format!("legacy.{attribute}"),
+                label: attribute.into(),
+                members: vec![AttributeKey(attribute.into())],
+            });
+        }
+
+        let upgraded = legacy.with_current_built_ins();
+        upgraded.validate().unwrap();
+        for (index, attribute) in retired.into_iter().enumerate() {
+            assert_eq!(
+                upgraded.placement_for(&AttributeKey(attribute.into())),
+                Some(EncoderPlacement::new(
+                    EncoderGroup::Control,
+                    90 + u16::try_from(index).unwrap(),
+                    1,
+                )),
+                "old shows retain the explicit {attribute} placement"
+            );
+        }
+    }
+
+    #[test]
     fn prism_and_animation_rotations_are_validated_push_turn_companions() {
         let recommended = AttributeConfiguration::recommended();
         for (companion, parent) in [
