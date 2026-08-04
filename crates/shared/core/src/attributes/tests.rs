@@ -529,6 +529,81 @@ mod attribute_registry_tests {
     }
 
     #[test]
+    fn legacy_default_cmy_controls_retire_into_existing_rgb_controls() {
+        let mut legacy = AttributeConfiguration::recommended();
+        for (source, encoder, label) in [
+            (
+                "color.cyan",
+                EncoderPlacement::new(EncoderGroup::Color, 4, 1),
+                "Cyan",
+            ),
+            (
+                "color.magenta",
+                EncoderPlacement::new(EncoderGroup::Color, 4, 2),
+                "Magenta",
+            ),
+            (
+                "color.yellow",
+                EncoderPlacement::new(EncoderGroup::Color, 4, 3),
+                "Yellow",
+            ),
+        ] {
+            legacy.placements.push(AttributePlacement {
+                attribute: AttributeKey(source.into()),
+                encoder,
+                push_turn_of: None,
+            });
+            legacy.activation_groups.push(AttributeActivationGroup {
+                id: source.into(),
+                label: label.into(),
+                members: vec![AttributeKey(source.into())],
+            });
+        }
+
+        let migrated = legacy.migrate_canonical_attributes().unwrap();
+        migrated.validate().unwrap();
+        for source in ["color.cyan", "color.magenta", "color.yellow"] {
+            assert!(
+                migrated
+                    .attribute_placement_for(&AttributeKey(source.into()))
+                    .is_none()
+            );
+            assert!(
+                migrated
+                    .activation_group_for(&AttributeKey(source.into()))
+                    .is_none()
+            );
+        }
+        assert_eq!(
+            migrated.clone().migrate_canonical_attributes().unwrap(),
+            migrated
+        );
+    }
+
+    #[test]
+    fn customized_cmy_and_rgb_controls_report_an_explicit_conflict() {
+        let mut legacy = AttributeConfiguration::recommended();
+        legacy.placements.push(AttributePlacement {
+            attribute: AttributeKey("color.cyan".into()),
+            encoder: EncoderPlacement::new(EncoderGroup::Color, 9, 1),
+            push_turn_of: None,
+        });
+        legacy.activation_groups.push(AttributeActivationGroup {
+            id: "authored.cmy".into(),
+            label: "Authored CMY".into(),
+            members: vec![AttributeKey("color.cyan".into())],
+        });
+
+        assert!(matches!(
+            legacy.migrate_canonical_attributes(),
+            Err(AttributeConfigurationError::CanonicalPlacementConflict {
+                legacy,
+                canonical,
+            }) if legacy == "color.cyan" && canonical == "color.red"
+        ));
+    }
+
+    #[test]
     fn prism_and_animation_rotations_are_validated_push_turn_companions() {
         let recommended = AttributeConfiguration::recommended();
         for (companion, parent) in [

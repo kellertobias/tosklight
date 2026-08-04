@@ -26,11 +26,6 @@ pub(super) fn recommended_builtin_placements() -> Vec<AttributePlacement> {
         ("color.wheel.1.rotation", Color, 3, 4),
         ("color.wheel.2", Color, 3, 5),
         ("color.wheel.2.rotation", Color, 3, 6),
-        // Legacy canonical CMY IDs remain distinct and lossless until the explicit compatible
-        // CMY-to-RGB show migration. They are not linked into the recommended Color Mix group.
-        ("color.cyan", Color, 4, 1),
-        ("color.magenta", Color, 4, 2),
-        ("color.yellow", Color, 4, 3),
         ("pan", Position, 1, 1),
         ("tilt", Position, 1, 2),
         ("pan.continuous", Position, 1, 3),

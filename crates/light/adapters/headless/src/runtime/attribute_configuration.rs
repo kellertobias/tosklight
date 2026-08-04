@@ -109,6 +109,11 @@ impl InstalledAttributeConfiguration {
         };
         let decoded =
             serde_json::from_value::<light_core::AttributeConfiguration>(object.body().clone())
+                .and_then(|configuration| {
+                    configuration
+                        .migrate_canonical_attributes()
+                        .map_err(<serde_json::Error as serde::de::Error>::custom)
+                })
                 .map(light_core::AttributeConfiguration::with_current_built_ins)
                 .and_then(|configuration| {
                     configuration

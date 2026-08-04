@@ -286,6 +286,12 @@
         "function": {
           "$ref": "#/$defs/DynamicPeriodicFunctionProjection"
         },
+        "invert_waveform": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "middle": {
           "$ref": "#/$defs/DynamicScalarSourceProjection"
         },

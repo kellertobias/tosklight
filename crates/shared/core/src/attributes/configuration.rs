@@ -174,6 +174,114 @@ impl AttributeConfiguration {
         self
     }
 
+    /// Rewrites retired CMY operator controls to their inverse RGB identities.
+    ///
+    /// Older recommended configurations contained both sets. Those untouched duplicate CMY
+    /// placements and singleton activation groups are removed. Authored layouts that assign a
+    /// different meaning to both identities are rejected so loading cannot silently choose one.
+    pub fn migrate_canonical_attributes(mut self) -> Result<Self, AttributeConfigurationError> {
+        for (source, target, legacy_encoder) in [
+            (
+                "color.cyan",
+                "color.red",
+                EncoderPlacement::new(EncoderGroup::Color, 4, 1),
+            ),
+            (
+                "color.magenta",
+                "color.green",
+                EncoderPlacement::new(EncoderGroup::Color, 4, 2),
+            ),
+            (
+                "color.yellow",
+                "color.blue",
+                EncoderPlacement::new(EncoderGroup::Color, 4, 3),
+            ),
+        ] {
+            self.migrate_canonical_configuration_pair(source, target, legacy_encoder)?;
+        }
+        Ok(self)
+    }
+
+    fn migrate_canonical_configuration_pair(
+        &mut self,
+        source: &str,
+        target: &str,
+        legacy_encoder: EncoderPlacement,
+    ) -> Result<(), AttributeConfigurationError> {
+        let source_key = AttributeKey(source.into());
+        let target_key = AttributeKey(target.into());
+        let source_placement = self
+            .placements
+            .iter()
+            .position(|placement| placement.attribute == source_key);
+        let target_placement = self
+            .placements
+            .iter()
+            .position(|placement| placement.attribute == target_key);
+        match (source_placement, target_placement) {
+            (Some(source_index), Some(_))
+                if self.placements[source_index].encoder == legacy_encoder
+                    && self.placements[source_index].push_turn_of.is_none() =>
+            {
+                self.placements.remove(source_index);
+            }
+            (Some(_), Some(_)) => {
+                return Err(AttributeConfigurationError::CanonicalPlacementConflict {
+                    legacy: source.into(),
+                    canonical: target.into(),
+                });
+            }
+            (Some(source_index), None) => {
+                self.placements[source_index].attribute = target_key.clone();
+            }
+            (None, _) => {}
+        }
+
+        for placement in &mut self.placements {
+            if placement.push_turn_of.as_ref() == Some(&source_key) {
+                placement.push_turn_of = Some(target_key.clone());
+            }
+        }
+
+        let source_group = self
+            .activation_groups
+            .iter()
+            .position(|group| group.members.contains(&source_key));
+        let target_group = self
+            .activation_groups
+            .iter()
+            .position(|group| group.members.contains(&target_key));
+        match (source_group, target_group) {
+            (Some(source_index), Some(target_index)) if source_index == target_index => {
+                let members = &mut self.activation_groups[source_index].members;
+                members.retain(|member| member != &source_key);
+            }
+            (Some(source_index), Some(_))
+                if legacy_singleton_group(&self.activation_groups[source_index], source) =>
+            {
+                self.activation_groups.remove(source_index);
+            }
+            (Some(_), Some(_)) => {
+                return Err(
+                    AttributeConfigurationError::CanonicalActivationGroupConflict {
+                        legacy: source.into(),
+                        canonical: target.into(),
+                    },
+                );
+            }
+            (Some(source_index), None) => {
+                let members = &mut self.activation_groups[source_index].members;
+                for member in members {
+                    if member == &source_key {
+                        *member = target_key.clone();
+                    }
+                }
+            }
+            (None, _) => {}
+        }
+        Ok(())
+    }
+
     pub fn validate(&self) -> Result<(), AttributeConfigurationError> {
         if self.version != ATTRIBUTE_CONFIGURATION_VERSION {
             return Err(AttributeConfigurationError::UnsupportedVersion {
@@ -389,6 +497,12 @@ impl AttributeConfiguration {
             })
             .collect()
     }
+}
+
+fn legacy_singleton_group(group: &AttributeActivationGroup, source: &str) -> bool {
+    group.id == source
+        && group.members.as_slice() == [AttributeKey(source.into())]
+        && group.label == attribute_descriptor(&AttributeKey(source.into())).label
 }
 
 fn next_custom_encoder_slot(

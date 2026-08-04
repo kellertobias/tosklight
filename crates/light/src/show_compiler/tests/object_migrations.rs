@@ -877,6 +877,7 @@ fn dynamics_compile_preset_sources_into_per_target_sampler_fallbacks() {
                 function: light_dynamics::PeriodicFunction::Sinus,
                 size: 1.0,
                 pwm: light_dynamics::PwmShape::default(),
+                invert_waveform: false,
             },
             speed_multiplier: light_dynamics::Rational::ONE,
             width: 1.0,
@@ -1008,6 +1009,7 @@ fn dynamics_persist_preset_fallbacks_losslessly_before_the_preset_is_deleted() {
                 function: light_dynamics::PeriodicFunction::Sinus,
                 size: 1.0,
                 pwm: light_dynamics::PwmShape::default(),
+                invert_waveform: false,
             },
             speed_multiplier: light_dynamics::Rational::ONE,
             width: 1.0,
@@ -1253,6 +1255,436 @@ fn retired_strobe_identity_reports_an_actionable_address_conflict() {
     );
 }
 
+#[test]
+fn legacy_cmy_attribute_controls_retire_with_values_and_preserve_unknown_configuration_data() {
+    let mut configuration = light_core::AttributeConfiguration::recommended();
+    for (source, encoder, label) in [
+        (
+            "color.cyan",
+            light_core::EncoderPlacement::new(light_core::EncoderGroup::Color, 4, 1),
+            "Cyan",
+        ),
+        (
+            "color.magenta",
+            light_core::EncoderPlacement::new(light_core::EncoderGroup::Color, 4, 2),
+            "Magenta",
+        ),
+        (
+            "color.yellow",
+            light_core::EncoderPlacement::new(light_core::EncoderGroup::Color, 4, 3),
+            "Yellow",
+        ),
+    ] {
+        configuration
+            .placements
+            .push(light_core::AttributePlacement {
+                attribute: light_core::AttributeKey(source.into()),
+                encoder,
+                push_turn_of: None,
+            });
+        configuration
+            .activation_groups
+            .push(light_core::AttributeActivationGroup {
+                id: source.into(),
+                label: label.into(),
+                members: vec![light_core::AttributeKey(source.into())],
+            });
+    }
+    let mut body = serde_json::to_value(configuration).unwrap();
+    body["future_configuration"] = json!({"kept": true});
+    let (_, document) = document_with_objects(&[("attribute_configuration", "default", body)]);
+    let mut transaction = document.transaction();
+
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+
+    let candidate = document.candidate(&transaction).unwrap();
+    let migrated = candidate
+        .object("attribute_configuration", "default")
+        .unwrap()
+        .body();
+    assert_eq!(migrated["future_configuration"], json!({"kept": true}));
+    for source in ["color.cyan", "color.magenta", "color.yellow"] {
+        assert!(
+            migrated["placements"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|placement| placement["attribute"] != source)
+        );
+        assert!(
+            migrated["activation_groups"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|group| group["members"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|member| member != source))
+        );
+    }
+    let decoded: light_core::AttributeConfiguration =
+        serde_json::from_value(migrated.clone()).unwrap();
+    decoded.validate().unwrap();
+
+    let migrated_objects = candidate
+        .objects()
+        .map(|object| {
+            (
+                object.key().kind().to_owned(),
+                object.key().id().to_owned(),
+                object.body().clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let migrated_refs = migrated_objects
+        .iter()
+        .map(|(kind, id, body)| (kind.as_str(), id.as_str(), body.clone()))
+        .collect::<Vec<_>>();
+    let (_, migrated_document) = document_with_objects(&migrated_refs);
+    let mut second_pass = migrated_document.transaction();
+    stage_candidate_migrations(&migrated_document, &mut second_pass).unwrap();
+    assert!(second_pass.is_empty());
+}
+
+#[test]
+fn legacy_cmy_static_values_migrate_inverse_to_rgb_without_losing_unknown_data() {
+    let fixture = light_core::FixtureId::new();
+    let cyan = light_core::AttributeKey("color.cyan".into());
+    let mut cue = Cue::new(1.0);
+    cue.changes.push(light_playback::CueChange::set(
+        fixture,
+        cyan.clone(),
+        light_core::AttributeValue::Normalized(0.2),
+    ));
+    cue.group_changes.push(light_playback::GroupCueChange {
+        group_id: "front".into(),
+        attribute: cyan.clone(),
+        value: Some(light_core::AttributeValue::Spread(vec![0.0, 0.25, 1.0])),
+        automatic_restore: false,
+        fade_millis: None,
+        delay_millis: None,
+    });
+    cue.dynamic_changes.push(light_playback::CueDynamicChange {
+        fixture_id: fixture,
+        attribute: cyan,
+        value: light_dynamics::DynamicSemanticValue::FixAt {
+            value: 0.3,
+            timing: light_dynamics::DynamicValueTiming::default(),
+        },
+        automatic_restore: false,
+    });
+    let cue_list = CueList {
+        id: CueListId::new(),
+        name: "Legacy CMY".into(),
+        priority: 0,
+        mode: CueListMode::Sequence,
+        looped: false,
+        chaser_step_millis: 1_000,
+        speed_group: None,
+        intensity_priority_mode: IntensityPriorityMode::Htp,
+        wrap_mode: Some(WrapMode::Tracking),
+        restart_mode: RestartMode::FirstCue,
+        force_cue_timing: false,
+        disable_cue_timing: false,
+        chaser_xfade_millis: 0,
+        chaser_xfade_percent: None,
+        speed_multiplier: 1.0,
+        cues: vec![cue],
+    };
+    let mut cue_body = serde_json::to_value(cue_list).unwrap();
+    cue_body["cues"][0]["future_cue"] = json!({"kept": true});
+    let objects = vec![
+        (
+            "group",
+            "front",
+            json!({
+                "name": "Front",
+                "programming": {"color.cyan": {
+                    "kind":"normalized", "value":0.1, "future_value":{"kept":true}
+                }}
+            }),
+        ),
+        (
+            "preset",
+            "2.1",
+            json!({
+                "name": "Legacy Cyan",
+                "family": "Color",
+                "number": 1,
+                "values": {fixture.0.to_string(): {
+                    "color.cyan": {"kind":"normalized","value":0.4}
+                }},
+                "group_values": {"front": {
+                    "color.cyan": {"kind":"spread","value":[0.0,0.5,1.0]}
+                }}
+            }),
+        ),
+        ("cue_list", "main", cue_body),
+    ];
+    let (_, document) = document_with_objects(&objects);
+    let mut transaction = document.transaction();
+
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+
+    let candidate = document.candidate(&transaction).unwrap();
+    let group = candidate.object("group", "front").unwrap().body();
+    assert_json_number(&group["programming"]["color.red"]["value"], 0.9);
+    assert_eq!(
+        group["programming"]["color.red"]["future_value"],
+        json!({"kept": true})
+    );
+    let preset = candidate.object("preset", "2.1").unwrap().body();
+    assert_json_number(
+        &preset["values"][fixture.0.to_string()]["color.red"]["value"],
+        0.6,
+    );
+    assert_json_numbers(
+        &preset["group_values"]["front"]["color.red"]["value"],
+        &[1.0, 0.5, 0.0],
+    );
+    let cue = &candidate.object("cue_list", "main").unwrap().body()["cues"][0];
+    assert_eq!(cue["changes"][0]["attribute"], "color.red");
+    assert_json_number(&cue["changes"][0]["value"]["value"], 0.8);
+    assert_eq!(cue["group_changes"][0]["attribute"], "color.red");
+    assert_json_numbers(
+        &cue["group_changes"][0]["value"]["value"],
+        &[1.0, 0.75, 0.0],
+    );
+    assert_eq!(cue["dynamic_changes"][0]["attribute"], "color.red");
+    assert_json_number(&cue["dynamic_changes"][0]["value"]["value"], 0.7);
+    assert_eq!(cue["future_cue"], json!({"kept": true}));
+}
+
+#[test]
+fn legacy_cmy_and_rgb_collision_stops_without_staging_partial_migration() {
+    let fixture = light_core::FixtureId::new();
+    let preset = json!({
+        "name": "Conflict",
+        "family": "Color",
+        "number": 1,
+        "values": {fixture.0.to_string(): {
+            "color.cyan": {"kind":"normalized","value":0.4},
+            "color.red": {"kind":"normalized","value":0.5}
+        }},
+        "group_values": {}
+    });
+    let (_, document) = document_with_objects(&[("preset", "2.1", preset)]);
+    let mut transaction = document.transaction();
+
+    let error = stage_candidate_migrations(&document, &mut transaction).unwrap_err();
+
+    assert!(error.message.contains("attribute migration conflict"));
+    assert!(error.message.contains("color.red"));
+    assert!(transaction.is_empty());
+}
+
+#[test]
+fn legacy_cmy_dynamic_waveforms_migrate_exactly_across_every_lane_mode() {
+    let target = light_core::FixtureId::new();
+    let random_group_id = Uuid::new_v4();
+    let mut legacy = targetless_dynamic(19);
+    legacy.target_binding = light_dynamics::DynamicTargetBinding::FrozenTargets {
+        targets: vec![target],
+    };
+    legacy.lanes = vec![
+        cmy_lane(
+            "color.cyan",
+            light_dynamics::DynamicLaneMode::Keyframes,
+            None,
+        ),
+        cmy_lane(
+            "color.magenta",
+            light_dynamics::DynamicLaneMode::MaxMin,
+            None,
+        ),
+        cmy_lane(
+            "color.yellow",
+            light_dynamics::DynamicLaneMode::MiddleAmplitude,
+            None,
+        ),
+        cmy_lane(
+            "color.cyan",
+            light_dynamics::DynamicLaneMode::Random,
+            Some(random_group_id),
+        ),
+    ];
+    legacy.random_groups = vec![light_dynamics::DynamicRandomGroup {
+        id: random_group_id,
+        seed: 7,
+        low: light_dynamics::ScalarSource::Value { value: 0.15 },
+        high: light_dynamics::ScalarSource::Value { value: 0.75 },
+        decision_interval_millis: 100,
+        start_probability: 1.0,
+        mean_duration_millis: 100,
+        duration_spread_millis: 0,
+        attack_ratio: 0.0,
+        decay_ratio: 0.0,
+    }];
+    light_dynamics::validate_definition(&legacy).unwrap();
+    let mut body = serde_json::to_value(&legacy).unwrap();
+    body["future_dynamic"] = json!({"kept": true});
+    let playback = serde_json::to_value(dynamic_playback(
+        3,
+        &legacy,
+        light_playback::DynamicPlaybackTargetScope::FrozenTargets {
+            targets: vec![target],
+        },
+    ))
+    .unwrap();
+    let (_, document) =
+        document_with_objects(&[("dynamic", "19", body), ("playback", "3", playback)]);
+    let mut transaction = document.transaction();
+
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+
+    let candidate = document.candidate(&transaction).unwrap();
+    let body = candidate.object("dynamic", "19").unwrap().body();
+    assert_eq!(body["future_dynamic"], json!({"kept": true}));
+    let migrated: light_dynamics::DynamicDefinition = serde_json::from_value(body.clone()).unwrap();
+    light_dynamics::validate_definition(&migrated).unwrap();
+    assert_eq!(
+        migrated
+            .lanes
+            .iter()
+            .map(|lane| lane.attribute.0.as_str())
+            .collect::<Vec<_>>(),
+        ["color.red", "color.green", "color.blue", "color.red"]
+    );
+    assert!(migrated.lanes[2].middle_amplitude.invert_waveform);
+    assert_ne!(
+        migrated.lanes[3].random_group_id,
+        Some(random_group_id),
+        "inverse random data gets a canonical clone instead of mutating a shared legacy group"
+    );
+    let fallback = migrated_dynamic_definition(candidate.object("playback", "3").unwrap().body());
+    assert_eq!(fallback["lanes"][0]["attribute"], "color.red");
+    assert_eq!(
+        fallback["lanes"][2]["middle_amplitude"]["invert_waveform"],
+        true
+    );
+
+    let sources = EmptyDynamicSources;
+    for elapsed_millis in [0, 125, 500, 875] {
+        for (legacy_lane, migrated_lane) in legacy.lanes.iter().zip(&migrated.lanes) {
+            let context = light_dynamics::DynamicEvaluationContext {
+                instance_id: Uuid::nil(),
+                target,
+                elapsed_millis,
+                cycle_duration_millis: 1_000,
+                phase_degrees: 0.0,
+                output_interval_millis: 25,
+                random_envelope: Some(0.35),
+                sources: &sources,
+            };
+            let before = light_dynamics::DynamicEvaluator::new(&legacy)
+                .sample_lane(legacy_lane, context)
+                .unwrap();
+            let after = light_dynamics::DynamicEvaluator::new(&migrated)
+                .sample_lane(migrated_lane, context)
+                .unwrap();
+            assert!(
+                (after - (1.0 - before)).abs() < 1.0e-5,
+                "{:?} at {elapsed_millis}: {before} did not migrate inversely to {after}",
+                legacy_lane.mode
+            );
+        }
+    }
+
+    let migrated_objects = candidate
+        .objects()
+        .map(|object| {
+            (
+                object.key().kind().to_owned(),
+                object.key().id().to_owned(),
+                object.body().clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let migrated_refs = migrated_objects
+        .iter()
+        .map(|(kind, id, body)| (kind.as_str(), id.as_str(), body.clone()))
+        .collect::<Vec<_>>();
+    let (_, migrated_document) = document_with_objects(&migrated_refs);
+    let mut second_pass = migrated_document.transaction();
+    stage_candidate_migrations(&migrated_document, &mut second_pass).unwrap();
+    assert!(second_pass.is_empty());
+}
+
+struct EmptyDynamicSources;
+
+impl light_dynamics::ScalarSourceResolver for EmptyDynamicSources {
+    fn current(
+        &self,
+        _target: light_core::FixtureId,
+        _attribute: &light_core::AttributeKey,
+    ) -> Option<f32> {
+        None
+    }
+
+    fn preset(
+        &self,
+        _preset_id: &str,
+        _target: light_core::FixtureId,
+        _attribute: &light_core::AttributeKey,
+    ) -> Option<f32> {
+        None
+    }
+}
+
+fn cmy_lane(
+    attribute: &str,
+    mode: light_dynamics::DynamicLaneMode,
+    random_group_id: Option<Uuid>,
+) -> light_dynamics::DynamicLane {
+    light_dynamics::DynamicLane {
+        id: Uuid::new_v4(),
+        attribute: light_core::AttributeKey(attribute.into()),
+        mode,
+        keyframes: light_dynamics::KeyframeConfiguration {
+            points: vec![
+                light_dynamics::DynamicKeyframe {
+                    position: 0.0,
+                    source: light_dynamics::ScalarSource::Value { value: 0.2 },
+                    interpolation: light_dynamics::ScalarInterpolation::EaseInOut,
+                },
+                light_dynamics::DynamicKeyframe {
+                    position: 0.5,
+                    source: light_dynamics::ScalarSource::Value { value: 0.8 },
+                    interpolation: light_dynamics::ScalarInterpolation::Linear,
+                },
+            ],
+            size: 0.8,
+        },
+        max_min: light_dynamics::MaxMinConfiguration {
+            minimum: light_dynamics::ScalarSource::Value { value: 0.1 },
+            maximum: light_dynamics::ScalarSource::Value { value: 0.9 },
+            function: light_dynamics::PeriodicFunction::Cosinus,
+            size: 0.7,
+            pwm: light_dynamics::PwmShape::default(),
+        },
+        middle_amplitude: light_dynamics::MiddleAmplitudeConfiguration {
+            middle: light_dynamics::ScalarSource::Value { value: 0.45 },
+            amplitude: 0.3,
+            function: light_dynamics::PeriodicFunction::Pwm,
+            size: 0.6,
+            pwm: light_dynamics::PwmShape {
+                attack: 0.1,
+                on: 0.35,
+                decay: 0.2,
+                off: 0.35,
+                attack_interpolation: light_dynamics::ScalarInterpolation::EaseIn,
+                decay_interpolation: light_dynamics::ScalarInterpolation::EaseOut,
+            },
+            invert_waveform: false,
+        },
+        speed_multiplier: light_dynamics::Rational::ONE,
+        width: 1.0,
+        phase: None,
+        random_group_id,
+    }
+}
+
 fn strobe_lane(attribute: light_core::AttributeKey) -> light_dynamics::DynamicLane {
     light_dynamics::DynamicLane {
         id: Uuid::new_v4(),
@@ -1283,10 +1715,24 @@ fn strobe_lane(attribute: light_core::AttributeKey) -> light_dynamics::DynamicLa
             function: light_dynamics::PeriodicFunction::Sinus,
             size: 1.0,
             pwm: light_dynamics::PwmShape::default(),
+            invert_waveform: false,
         },
         speed_multiplier: light_dynamics::Rational::ONE,
         width: 1.0,
         phase: None,
         random_group_id: None,
+    }
+}
+
+fn assert_json_number(value: &serde_json::Value, expected: f64) {
+    let actual = value.as_f64().expect("expected JSON number");
+    assert!((actual - expected).abs() < 1.0e-6, "{actual} != {expected}");
+}
+
+fn assert_json_numbers(value: &serde_json::Value, expected: &[f64]) {
+    let actual = value.as_array().expect("expected JSON number array");
+    assert_eq!(actual.len(), expected.len());
+    for (actual, expected) in actual.iter().zip(expected) {
+        assert_json_number(actual, *expected);
     }
 }

@@ -129,6 +129,7 @@ fn migrate_with_group_masters(
     group_master_levels: &std::collections::HashMap<String, f32>,
 ) -> Result<Option<ObjectUpdate>, ActionError> {
     let mut migrated = match object.key().kind() {
+        "attribute_configuration" => object.body().clone(),
         "cue_list" => migrate_cue_list(object)?,
         "dynamic" => object.body().clone(),
         "group" => migrate_group(object)?,

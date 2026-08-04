@@ -254,6 +254,15 @@ pub struct MiddleAmplitudeConfiguration {
     pub size: f32,
     #[serde(default)]
     pub pwm: PwmShape,
+    /// Compatibility polarity for inverse canonical migrations such as CMY to RGB. This remains
+    /// attached to the inactive configuration too, so switching lane modes cannot resurrect the
+    /// retired value direction.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub invert_waveform: bool,
+}
+
+const fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 const fn default_lane_size() -> f32 {

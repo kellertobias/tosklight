@@ -243,6 +243,7 @@ fn lane(value: &domain::DynamicLane) -> wire::DynamicLaneProjection {
             function: periodic_function(value.middle_amplitude.function),
             size: value.middle_amplitude.size,
             pwm: pwm(value.middle_amplitude.pwm),
+            invert_waveform: value.middle_amplitude.invert_waveform.then_some(true),
         },
         speed_multiplier: rational(value.speed_multiplier),
         width: value.width,

@@ -839,13 +839,19 @@ export function lanePreview(
 			const intervalPhase = (progress * repetitions) % 1;
 			const width = functionName === "pwm" ? 1 : clamp(lane.width, 0.05, 1);
 			const phase = clamp((intervalPhase - (1 - width) / 2) / width, 0, 1);
-			const shape = periodicPreviewValue(
+			let shape = periodicPreviewValue(
 				functionName,
 				phase,
 				lane.mode === "middle_amplitude"
 					? lane.middle_amplitude.pwm
 					: lane.max_min.pwm,
 			);
+			if (
+				lane.mode === "middle_amplitude" &&
+				lane.middle_amplitude.invert_waveform
+			) {
+				shape = 1 - shape;
+			}
 			const minimum =
 				lane.mode === "middle_amplitude"
 					? scalarSourceCurveValue(lane.middle_amplitude.middle) -

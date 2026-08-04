@@ -12,6 +12,7 @@ import {
 	createDefaultDynamicLane,
 	DynamicsWindow,
 } from "./DynamicsWindow";
+import { lanePreview } from "./dynamics/DynamicsEditor";
 
 let dynamics: Array<Record<string, unknown>> = [];
 let deleteArmed = false;
@@ -778,4 +779,17 @@ describe("DynamicsWindow", () => {
 			),
 		);
 	});
+});
+
+it("mirrors a migrated middle-amplitude waveform in the curve preview", () => {
+	const lane = createDefaultDynamicLane("intensity", "lane-preview");
+	lane.mode = "middle_amplitude";
+	lane.middle_amplitude.middle = { type: "value", value: 0.5 };
+	lane.middle_amplitude.amplitude = 0.25;
+	const ordinary = lanePreview(lane, [lane]);
+
+	lane.middle_amplitude.invert_waveform = true;
+	const inverted = lanePreview(lane, [lane]);
+
+	expect(inverted.primaryPath).not.toBe(ordinary.primaryPath);
 });

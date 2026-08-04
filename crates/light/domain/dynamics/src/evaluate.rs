@@ -112,6 +112,11 @@ impl<'a> DynamicEvaluator<'a> {
             lane.middle_amplitude.pwm,
         ) * 2.0
             - 1.0;
+        let amount = if lane.middle_amplitude.invert_waveform {
+            -amount
+        } else {
+            amount
+        };
         Some(middle + amount * lane.middle_amplitude.amplitude * lane.middle_amplitude.size)
     }
 

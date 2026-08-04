@@ -74,6 +74,7 @@ fn lane() -> DynamicLane {
             function: PeriodicFunction::Sinus,
             size: 1.0,
             pwm: PwmShape::default(),
+            invert_waveform: false,
         },
         speed_multiplier: Rational::ONE,
         width: 1.0,

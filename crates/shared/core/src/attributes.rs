@@ -91,6 +91,9 @@ pub const RETIRED_BUILT_IN_ATTRIBUTES: &[&str] = &[
     "beam",
     "control.mode",
     "control.speed",
+    "color.cyan",
+    "color.magenta",
+    "color.yellow",
     "media.effect.1",
     "media.effect.2",
     "media.effect.3",
@@ -277,6 +280,14 @@ pub enum AttributeConfigurationError {
     DuplicatePushTurnCompanion { parent: String },
     #[error("push-turn pair `{parent}` / `{attribute}` crosses encoder groups")]
     CrossEncoderPushTurn { parent: String, attribute: String },
+    #[error(
+        "legacy attribute `{legacy}` and canonical attribute `{canonical}` have conflicting encoder placements"
+    )]
+    CanonicalPlacementConflict { legacy: String, canonical: String },
+    #[error(
+        "legacy attribute `{legacy}` and canonical attribute `{canonical}` belong to incompatible activation groups"
+    )]
+    CanonicalActivationGroupConflict { legacy: String, canonical: String },
 }
 
 mod configuration;

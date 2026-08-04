@@ -222,6 +222,9 @@ pub struct DynamicMiddleAmplitudeConfigurationProjection {
     pub function: DynamicPeriodicFunctionProjection,
     pub size: f32,
     pub pwm: DynamicPwmShapeProjection,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub invert_waveform: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

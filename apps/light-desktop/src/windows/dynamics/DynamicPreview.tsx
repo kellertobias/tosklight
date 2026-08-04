@@ -4,7 +4,6 @@ import type {
 	DynamicDefinitionProjection,
 	DynamicLaneProjection,
 	DynamicPeriodicFunctionProjection,
-	DynamicPhaseOrderingProjection,
 	DynamicScalarSourceProjection,
 	SpeedGroupId,
 } from "../../api/types";
@@ -324,11 +323,12 @@ function lanePreviewValue(
 	);
 	if (lane.mode === "middle_amplitude") {
 		const middle = scalarSourceCurveValue(lane.middle_amplitude.middle);
+		const amount = lane.middle_amplitude.invert_waveform
+			? 1 - shape * 2
+			: shape * 2 - 1;
 		return clamp(
 			middle +
-				(shape * 2 - 1) *
-					lane.middle_amplitude.amplitude *
-					lane.middle_amplitude.size,
+				amount * lane.middle_amplitude.amplitude * lane.middle_amplitude.size,
 			0,
 			1,
 		);

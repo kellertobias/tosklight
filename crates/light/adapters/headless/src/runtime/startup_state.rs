@@ -372,8 +372,7 @@ fn migrate_programmer_value_records(
     values: &mut [serde_json::Value],
     path: &str,
 ) -> Result<(), String> {
-    let mut legacy = std::collections::HashSet::new();
-    let mut canonical = std::collections::HashSet::new();
+    let mut addresses = std::collections::HashMap::new();
     for (index, value) in values.iter().enumerate() {
         let Some(body) = value.as_object() else {
             continue;
@@ -381,23 +380,42 @@ fn migrate_programmer_value_records(
         let Some(fixture_id) = body.get("fixture_id").and_then(serde_json::Value::as_str) else {
             continue;
         };
-        match body.get("attribute").and_then(serde_json::Value::as_str) {
-            Some(attribute) if is_legacy_strobe_attribute(attribute) => {
-                legacy.insert(fixture_id.to_owned());
-            }
-            Some("shutter") => {
-                canonical.insert(fixture_id.to_owned());
-            }
-            _ => continue,
-        }
-        if legacy.contains(fixture_id) && canonical.contains(fixture_id) {
+        let Some(attribute) = body.get("attribute").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        let canonical = canonical_migration(attribute).map_or(attribute, |migration| migration.0);
+        let key = (fixture_id.to_owned(), canonical.to_owned());
+        if let Some(previous) = addresses.insert(key, attribute.to_owned())
+            && previous != attribute
+        {
             return Err(format!(
-                "attribute migration conflict at {path}/{index}: fixture {fixture_id} stores both legacy Strobe and canonical Shutter values"
+                "attribute migration conflict at {path}/{index}: fixture {fixture_id} stores both legacy {attribute} and canonical {canonical} values"
             ));
         }
     }
     for value in values {
-        migrate_programmer_attribute_field(value);
+        let Some(attribute) = value
+            .get("attribute")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+        else {
+            continue;
+        };
+        let Some((canonical, transform)) = canonical_migration(&attribute) else {
+            continue;
+        };
+        if let Some(stored) = value.get_mut("value") {
+            if path.contains("dynamic") {
+                migrate_programmer_dynamic_value(stored, transform, path)?;
+            } else {
+                migrate_programmer_attribute_value(stored, transform, path)?;
+            }
+        } else if transform == light_core::CanonicalAttributeTransform::InvertNormalized {
+            return Err(format!(
+                "attribute migration failed at {path}: value is missing"
+            ));
+        }
+        value["attribute"] = serde_json::Value::String(canonical.into());
     }
     Ok(())
 }
@@ -406,18 +424,87 @@ fn migrate_programmer_attribute_map(
     attributes: &mut serde_json::Map<String, serde_json::Value>,
     path: &str,
 ) -> Result<(), String> {
-    let legacy = attributes
+    let migrations = attributes
         .keys()
-        .find(|attribute| is_legacy_strobe_attribute(attribute))
-        .cloned();
-    if legacy.is_some() && attributes.contains_key("shutter") {
-        return Err(format!(
-            "attribute migration conflict at {path}: stored Group values contain both legacy Strobe and canonical Shutter"
-        ));
+        .filter_map(|source| {
+            canonical_migration(source)
+                .map(|(target, transform)| (source.clone(), target, transform))
+        })
+        .collect::<Vec<_>>();
+    for (source, target, _) in &migrations {
+        if source != target && attributes.contains_key(*target) {
+            return Err(format!(
+                "attribute migration conflict at {path}: stored Group values contain both legacy {source} and canonical {target}"
+            ));
+        }
     }
-    if let Some(value) = legacy.and_then(|attribute| attributes.remove(&attribute)) {
-        attributes.insert("shutter".into(), value);
+    for (source, target, transform) in migrations {
+        let mut stored = attributes
+            .remove(&source)
+            .expect("collected Programmer migration source remains present");
+        if stored.get("kind").is_some() {
+            migrate_programmer_attribute_value(&mut stored, transform, path)?;
+        } else if let Some(value) = stored.get_mut("value") {
+            migrate_programmer_attribute_value(value, transform, path)?;
+        } else if transform == light_core::CanonicalAttributeTransform::InvertNormalized {
+            return Err(format!(
+                "attribute migration failed at {path}/{source}: Group value payload is missing"
+            ));
+        }
+        attributes.insert(target.into(), stored);
     }
+    Ok(())
+}
+
+fn migrate_programmer_dynamic_value(
+    value: &mut serde_json::Value,
+    transform: light_core::CanonicalAttributeTransform,
+    path: &str,
+) -> Result<(), String> {
+    match value.get("type").and_then(serde_json::Value::as_str) {
+        Some("static") => {
+            let stored = value.get_mut("value").ok_or_else(|| {
+                format!("attribute migration failed at {path}: static value is missing")
+            })?;
+            migrate_programmer_attribute_value(stored, transform, path)
+        }
+        Some("fix_at")
+            if transform == light_core::CanonicalAttributeTransform::InvertNormalized =>
+        {
+            let stored = value
+                .get("value")
+                .and_then(serde_json::Value::as_f64)
+                .ok_or_else(|| {
+                    format!("attribute migration failed at {path}: Fix At value must be a number")
+                })?;
+            value["value"] = serde_json::to_value(light_core::transform_canonical_normalized(
+                stored as f32,
+                transform,
+            ))
+            .map_err(|error| error.to_string())?;
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn migrate_programmer_attribute_value(
+    value: &mut serde_json::Value,
+    transform: light_core::CanonicalAttributeTransform,
+    path: &str,
+) -> Result<(), String> {
+    if transform == light_core::CanonicalAttributeTransform::Identity {
+        return Ok(());
+    }
+    let stored = value.clone();
+    let mut typed = serde_json::from_value::<light_core::AttributeValue>(value.clone())
+        .map_err(|error| format!("attribute migration failed at {path}: {error}"))?;
+    let before = serde_json::to_value(&typed).map_err(|error| error.to_string())?;
+    light_core::transform_canonical_value(&mut typed, transform)
+        .map_err(|error| format!("attribute migration failed at {path}: {error}"))?;
+    let after = serde_json::to_value(typed).map_err(|error| error.to_string())?;
+    *value = stored;
+    light_application::lossless_json::apply_delta(value, &before, &after);
     Ok(())
 }
 
@@ -425,24 +512,18 @@ fn migrate_embedded_programmer_attributes(
     value: &mut serde_json::Value,
     path: &str,
 ) -> Result<(), String> {
+    let looks_like_dynamic = value.get("target_binding").is_some() && value.get("lanes").is_some();
+    if looks_like_dynamic
+        && let Ok(mut definition) =
+            serde_json::from_value::<light_dynamics::DynamicDefinition>(value.clone())
+        && light_dynamics::validate_definition(&definition).is_ok()
+    {
+        let before = serde_json::to_value(&definition).map_err(|error| error.to_string())?;
+        light_dynamics::migrate_canonical_attributes(&mut definition)?;
+        let after = serde_json::to_value(definition).map_err(|error| error.to_string())?;
+        light_application::lossless_json::apply_delta(value, &before, &after);
+    }
     if let Some(body) = value.as_object_mut() {
-        if body.get("target_binding").is_some()
-            && let Some(lanes) = body
-                .get_mut("lanes")
-                .and_then(serde_json::Value::as_array_mut)
-        {
-            let has_legacy = lanes.iter().any(|lane| {
-                lane.get("attribute")
-                    .and_then(serde_json::Value::as_str)
-                    .is_some_and(is_legacy_strobe_attribute)
-            });
-            let has_canonical = lanes.iter().any(|lane| lane["attribute"] == "shutter");
-            if has_legacy && has_canonical {
-                return Err(format!(
-                    "attribute migration conflict at {path}/lanes: Dynamic stores both legacy Strobe and canonical Shutter lanes"
-                ));
-            }
-        }
         if body
             .get("attribute")
             .and_then(serde_json::Value::as_str)
@@ -464,25 +545,17 @@ fn migrate_embedded_programmer_attributes(
     Ok(())
 }
 
-fn migrate_programmer_attribute_field(value: &mut serde_json::Value) {
-    if let Some(body) = value.as_object_mut()
-        && body
-            .get("attribute")
-            .and_then(serde_json::Value::as_str)
-            .is_some_and(is_legacy_strobe_attribute)
-    {
-        body.insert(
-            "attribute".into(),
-            serde_json::Value::String("shutter".into()),
-        );
-    }
-}
-
 fn is_legacy_strobe_attribute(attribute: &str) -> bool {
     matches!(
         light_core::canonical_attribute_migration_id(attribute),
         Some(("shutter", light_core::CanonicalAttributeTransform::Identity))
     )
+}
+
+fn canonical_migration(
+    attribute: &str,
+) -> Option<(&'static str, light_core::CanonicalAttributeTransform)> {
+    light_core::canonical_attribute_migration_id(attribute)
 }
 
 /// Programmers persisted before the DEGRP rework may carry the removed `frozen_group` selection
@@ -798,5 +871,63 @@ mod tests {
 
         assert!(error.contains("attribute migration conflict at values/1"));
         assert_eq!(value, original);
+    }
+
+    #[test]
+    fn legacy_cmy_programmer_values_migrate_inverse_across_normal_preload_and_dynamic_state() {
+        let fixture = uuid::Uuid::new_v4();
+        let mut value = serde_json::json!({
+            "values": [{
+                "fixture_id": fixture,
+                "attribute": "color.cyan",
+                "value": {"kind":"normalized","value":0.2}
+            }],
+            "dynamic_values": [{
+                "fixture_id": fixture,
+                "attribute": "color.magenta",
+                "value": {"type":"fix_at","value":0.3,"timing":{}}
+            }],
+            "preload_pending": [{
+                "fixture_id": fixture,
+                "attribute": "color.yellow",
+                "value": {"kind":"spread","value":[0.0,0.25,1.0]}
+            }],
+            "group_values": {"front": {"color.cyan": {
+                "value":{"kind":"normalized","value":0.4},
+                "changed_at":"2026-08-04T00:00:00Z"
+            }}},
+            "preload_group_active": {"front": {"color.magenta": {
+                "kind":"normalized","value":0.1
+            }}},
+            "future_programmer": {"kept":true}
+        });
+
+        migrate_retired_programmer_attributes(&mut value).unwrap();
+
+        assert_eq!(value["values"][0]["attribute"], "color.red");
+        assert_migrated_number(&value["values"][0]["value"]["value"], 0.8);
+        assert_eq!(value["dynamic_values"][0]["attribute"], "color.green");
+        assert_migrated_number(&value["dynamic_values"][0]["value"]["value"], 0.7);
+        assert_eq!(value["preload_pending"][0]["attribute"], "color.blue");
+        let spread = value["preload_pending"][0]["value"]["value"]
+            .as_array()
+            .unwrap();
+        for (actual, expected) in spread.iter().zip([1.0, 0.75, 0.0]) {
+            assert_migrated_number(actual, expected);
+        }
+        assert_migrated_number(
+            &value["group_values"]["front"]["color.red"]["value"]["value"],
+            0.6,
+        );
+        assert_migrated_number(
+            &value["preload_group_active"]["front"]["color.green"]["value"],
+            0.9,
+        );
+        assert_eq!(value["future_programmer"], serde_json::json!({"kept":true}));
+    }
+
+    fn assert_migrated_number(value: &serde_json::Value, expected: f64) {
+        let actual = value.as_f64().expect("expected JSON number");
+        assert!((actual - expected).abs() < 1.0e-6, "{actual} != {expected}");
     }
 }

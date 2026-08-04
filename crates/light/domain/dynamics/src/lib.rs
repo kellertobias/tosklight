@@ -4,6 +4,7 @@
 //! Every lane is evaluated independently. Shared instance clocks, phase maps, and Random-group
 //! streams coordinate scalar lanes without creating a multi-attribute value path.
 
+mod canonical_migration;
 mod evaluate;
 mod model;
 mod phase;
@@ -14,6 +15,7 @@ mod validation;
 #[cfg(test)]
 mod tests;
 
+pub use canonical_migration::migrate_canonical_attributes;
 pub use evaluate::{DynamicEvaluationContext, DynamicEvaluator, ScalarSourceResolver};
 pub use model::*;
 pub use phase::{PhasePosition, SpatialPosition, project_phase, project_ranked_phase};
