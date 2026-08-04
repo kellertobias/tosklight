@@ -3,7 +3,8 @@ use crate::{ActionContext, ActionError};
 use light_core::ShowId;
 use light_engine::EngineSnapshot;
 use light_show::{
-    PortableShowCommit, PortableShowDocument, PortableShowObjectUndo, PortableShowTransaction,
+    PortableShowCommit, PortableShowDocument, PortableShowObjectRedo, PortableShowObjectUndo,
+    PortableShowTransaction,
 };
 use std::sync::Arc;
 
@@ -66,6 +67,20 @@ pub trait ActiveShowPorts: Send + Sync {
         object_id: &str,
         expected_object_revision: light_core::Revision,
     ) -> Result<PortableShowObjectUndo, ActionError>;
+
+    /// Reads the exact next raw body from the already-open active-show boundary.
+    fn prepare_object_redo(
+        &self,
+        _unit: &Self::UnitOfWork,
+        _kind: &str,
+        _object_id: &str,
+        _expected_object_revision: light_core::Revision,
+    ) -> Result<PortableShowObjectRedo, ActionError> {
+        Err(ActionError::new(
+            crate::ActionErrorKind::Invalid,
+            "object redo is not supported by this active-show adapter",
+        ))
+    }
 
     fn prepare_runtime(
         &self,

@@ -431,6 +431,30 @@ describe("Playback topology v2 wire", () => {
 		});
 	});
 
+	it("encodes feature-owned Cuelist undo and redo", () => {
+		for (const type of ["undo_cue_list", "redo_cue_list"] as const) {
+			expect(
+				encodePlaybackTopologyRequest({
+					requestId: REQUEST_ID,
+					action: {
+						type,
+						cueListId: CUE_LIST_ID,
+						expectedRevision: 5,
+						expectedObjectId: "legacy-main-list",
+					},
+				}),
+			).toEqual({
+				request_id: REQUEST_ID,
+				action: {
+					type,
+					cue_list_id: CUE_LIST_ID,
+					expected_revision: 5,
+					expected_object_id: "legacy-main-list",
+				},
+			});
+		}
+	});
+
 	it("encodes exact Page create and rename actions", () => {
 		expect(encodePlaybackTopologyRequest(pageRequest("create_page"))).toEqual({
 			request_id: REQUEST_ID,

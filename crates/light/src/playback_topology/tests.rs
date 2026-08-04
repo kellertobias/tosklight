@@ -11,8 +11,8 @@ use light_playback::{
     PlaybackTarget, RestartMode, WrapMode,
 };
 use light_show::{
-    PortableShowCommit, PortableShowDocument, PortableShowObjectUndo, PortableShowTransaction,
-    ShowStore,
+    PortableShowCommit, PortableShowDocument, PortableShowObjectRedo, PortableShowObjectUndo,
+    PortableShowTransaction, ShowStore,
 };
 use parking_lot::Mutex;
 use serde_json::{Value, json};
@@ -85,6 +85,108 @@ fn save_cue_list_is_lossless_and_semantic_repetition_is_no_change() {
     ));
     assert_eq!(rig.steps(), ["authorize", "begin"]);
     assert_one_event(&rig, 1);
+}
+
+#[test]
+fn save_cue_list_out_timing_is_forward_compatible_and_reversible() {
+    let rig = TestRig::new();
+    let cue_list_id = CueListId::new();
+    let mut stored = serde_json::to_value(cue_list(cue_list_id, "Original")).unwrap();
+    stored["future_list"] = json!({"owner":"newer-desk"});
+    stored["cues"][0]["future_cue"] = json!({"shape":7});
+    stored["cues"][0]["out_fade_millis"] = json!(900);
+    stored["cues"][0]["out_delay_millis"] = json!(300);
+    rig.seed("cue_list", &cue_list_id.0.to_string(), &stored);
+
+    let mut omitted = stored.clone();
+    omitted["name"] = json!("Older Desk Rename");
+    omitted["cues"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("out_fade_millis");
+    omitted["cues"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("out_delay_millis");
+    let omitted_typed: CueList = serde_json::from_value(omitted.clone()).unwrap();
+    let saved = rig
+        .handle(
+            "timing-preserve",
+            rig.show_revision(),
+            PlaybackTopologyAction::SaveCueList {
+                cue_list_id,
+                expected_revision: 1,
+                expected_object_id: Some(cue_list_id.0.to_string()),
+                cue_list: omitted_typed,
+                raw_body: Arc::new(omitted),
+            },
+        )
+        .unwrap();
+    let preserved = saved.outcome.objects()[0].raw_body().unwrap();
+    assert_eq!(preserved["cues"][0]["out_fade_millis"], 900);
+    assert_eq!(preserved["cues"][0]["out_delay_millis"], 300);
+    assert_eq!(preserved["cues"][0]["future_cue"]["shape"], 7);
+
+    let mut tri_state = preserved.as_ref().clone();
+    tri_state["cues"][0]["out_fade_millis"] = Value::Null;
+    tri_state["cues"][0]["out_delay_millis"] = json!(0);
+    let tri_state_typed: CueList = serde_json::from_value(tri_state.clone()).unwrap();
+    let changed = rig
+        .handle(
+            "timing-tristate",
+            rig.show_revision(),
+            PlaybackTopologyAction::SaveCueList {
+                cue_list_id,
+                expected_revision: 2,
+                expected_object_id: Some(cue_list_id.0.to_string()),
+                cue_list: tri_state_typed,
+                raw_body: Arc::new(tri_state),
+            },
+        )
+        .unwrap();
+    let changed_body = changed.outcome.objects()[0].raw_body().unwrap();
+    assert!(changed_body["cues"][0].get("out_fade_millis").is_none());
+    assert_eq!(changed_body["cues"][0]["out_delay_millis"], 0);
+
+    let undone = rig
+        .handle(
+            "timing-undo",
+            rig.show_revision(),
+            PlaybackTopologyAction::UndoCueList {
+                cue_list_id,
+                expected_revision: 3,
+                expected_object_id: cue_list_id.0.to_string(),
+            },
+        )
+        .unwrap();
+    let undone_body = undone.outcome.objects()[0].raw_body().unwrap();
+    assert_eq!(undone_body["cues"][0]["out_fade_millis"], 900);
+    assert_eq!(undone_body["cues"][0]["out_delay_millis"], 300);
+
+    let redone = rig
+        .handle(
+            "timing-redo",
+            rig.show_revision(),
+            PlaybackTopologyAction::RedoCueList {
+                cue_list_id,
+                expected_revision: 4,
+                expected_object_id: cue_list_id.0.to_string(),
+            },
+        )
+        .unwrap();
+    let redone_body = redone.outcome.objects()[0].raw_body().unwrap();
+    assert!(redone_body["cues"][0].get("out_fade_millis").is_none());
+    assert_eq!(redone_body["cues"][0]["out_delay_millis"], 0);
+    assert_eq!(redone_body["future_list"]["owner"], "newer-desk");
+    let EventReplay::Events(events) = rig.service.events().replay(0, &EventFilter::default())
+    else {
+        panic!("expected retained events")
+    };
+    assert_eq!(events.len(), 4);
+    assert!(events.iter().all(|event| matches!(
+        &event.payload,
+        ApplicationEvent::Show(ShowEvent::ObjectsChanged(change)) if change.changes.len() == 1
+    )));
 }
 
 #[test]
@@ -899,12 +1001,26 @@ impl ActiveShowPorts for TestPorts {
 
     fn prepare_object_undo(
         &self,
-        _unit: &Self::UnitOfWork,
-        _kind: &str,
-        _object_id: &str,
-        _expected_object_revision: u64,
+        unit: &Self::UnitOfWork,
+        kind: &str,
+        object_id: &str,
+        expected_object_revision: u64,
     ) -> Result<PortableShowObjectUndo, ActionError> {
-        unreachable!("Playback topology does not use object Undo")
+        unit.store
+            .prepare_object_undo(kind, object_id, expected_object_revision)
+            .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error.to_string()))
+    }
+
+    fn prepare_object_redo(
+        &self,
+        unit: &Self::UnitOfWork,
+        kind: &str,
+        object_id: &str,
+        expected_object_revision: u64,
+    ) -> Result<PortableShowObjectRedo, ActionError> {
+        unit.store
+            .prepare_object_redo(kind, object_id, expected_object_revision)
+            .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error.to_string()))
     }
 
     fn prepare_runtime(&self, snapshot: EngineSnapshot) -> Result<EngineSnapshot, ActionError> {

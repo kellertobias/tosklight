@@ -227,6 +227,77 @@ fn prepared_undo_is_visible_to_compilation_and_pops_history_atomically() {
 }
 
 #[test]
+fn prepared_redo_restores_exact_forward_body_and_new_write_clears_it() {
+    let (path, show) = create("portable-redo");
+    let original = json!({"name":"Original","future":{"shape":[1,2,3]}});
+    let changed = json!({"name":"Changed","future":{"shape":[9]}});
+    show.put_object("group", "one", &original, 0).unwrap();
+    show.put_object("group", "one", &changed, 1).unwrap();
+
+    let document = show.portable_document().unwrap();
+    let mut undo = document.transaction();
+    undo.undo_object(show.prepare_object_undo("group", "one", 2).unwrap());
+    show.apply_portable_transaction(undo).unwrap();
+
+    let document = show.portable_document().unwrap();
+    let redo = show.prepare_object_redo("group", "one", 3).unwrap();
+    assert_eq!(redo.body(), &changed);
+    let mut transaction = document.transaction();
+    transaction.redo_object(redo);
+    let candidate = document.candidate(&transaction).unwrap();
+    assert_eq!(candidate.object("group", "one").unwrap().body(), &changed);
+    assert_eq!(candidate.object_revision("group", "one"), Some(4));
+    show.apply_portable_transaction(transaction).unwrap();
+    assert_eq!(show.objects("group").unwrap()[0].body, changed);
+
+    let document = show.portable_document().unwrap();
+    let mut undo = document.transaction();
+    undo.undo_object(show.prepare_object_undo("group", "one", 4).unwrap());
+    show.apply_portable_transaction(undo).unwrap();
+    show.put_object("group", "one", &json!({"name":"Branched"}), 5)
+        .unwrap();
+    assert!(matches!(
+        show.prepare_object_redo("group", "one", 6),
+        Err(StoreError::Invalid(message)) if message == "object has no redo history"
+    ));
+    drop(show);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn stale_prepared_redo_preserves_current_body_and_forward_history() {
+    let (path, show) = create("stale-portable-redo");
+    show.put_object("group", "one", &json!({"name":"Original"}), 0)
+        .unwrap();
+    show.put_object("group", "one", &json!({"name":"Changed"}), 1)
+        .unwrap();
+    let document = show.portable_document().unwrap();
+    let mut undo = document.transaction();
+    undo.undo_object(show.prepare_object_undo("group", "one", 2).unwrap());
+    show.apply_portable_transaction(undo).unwrap();
+
+    let stale_document = show.portable_document().unwrap();
+    let mut stale_redo = stale_document.transaction();
+    stale_redo.redo_object(show.prepare_object_redo("group", "one", 3).unwrap());
+    show.put_object("future", "unrelated", &json!({"opaque":true}), 0)
+        .unwrap();
+
+    assert!(matches!(
+        show.apply_portable_transaction(stale_redo),
+        Err(StoreError::DocumentRevisionConflict { expected, current })
+            if expected.value() == 3 && current.value() == 4
+    ));
+    assert_eq!(show.objects("group").unwrap()[0].body["name"], "Original");
+    let fresh_document = show.portable_document().unwrap();
+    let mut redo = fresh_document.transaction();
+    redo.redo_object(show.prepare_object_redo("group", "one", 3).unwrap());
+    show.apply_portable_transaction(redo).unwrap();
+    assert_eq!(show.objects("group").unwrap()[0].body["name"], "Changed");
+    drop(show);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
 fn stale_prepared_undo_preserves_current_body_and_history() {
     let (path, show) = create("stale-portable-undo");
     show.put_object("group", "one", &json!({"name":"Original"}), 0)

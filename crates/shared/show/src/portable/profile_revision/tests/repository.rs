@@ -34,7 +34,7 @@ fn old_show_migration_adds_profile_table_without_repurposing_embedded_fixtures()
         .conn
         .query_row("SELECT version FROM schema_info", [], |row| row.get(0))
         .unwrap();
-    assert_eq!((version, embedded.as_str()), (5, "{\"keep\":true}"));
+    assert_eq!((version, embedded.as_str()), (6, "{\"keep\":true}"));
     assert!(
         migrated
             .list_fixture_profile_revisions()

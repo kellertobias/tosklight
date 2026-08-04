@@ -1,4 +1,4 @@
-use super::{PortableShowObjectKey, PortableShowObjectUndo, bump_revision};
+use super::{PortableShowObjectKey, PortableShowObjectRedo, PortableShowObjectUndo, bump_revision};
 use crate::{AtomicObjectDelete, AtomicObjectWrite, StoreError};
 use chrono::Utc;
 use light_core::Revision;
@@ -61,12 +61,14 @@ pub(crate) fn undo_legacy_object(
     ensure_expected(Some(&current), expected)?;
     let previous = previous_history(&tx, kind, id)?;
     let revision = next_revision(expected)?;
-    restore_previous(
+    archive_redo(&tx, &PortableShowObjectKey::new(kind, id), current)?;
+    restore_history(
         &tx,
         &PortableShowObjectKey::new(kind, id),
         &previous,
         revision,
         &timestamp(),
+        "object_history",
     )?;
     bump_revision(&tx)?;
     tx.commit()?;
@@ -94,6 +96,27 @@ pub(crate) fn prepare_undo(
     Ok(undo)
 }
 
+pub(crate) fn prepare_redo(
+    conn: &Connection,
+    kind: &str,
+    id: &str,
+    expected: Revision,
+) -> Result<PortableShowObjectRedo, StoreError> {
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Deferred)?;
+    let current = current_object(&tx, kind, id)?
+        .ok_or_else(|| StoreError::Sql(rusqlite::Error::QueryReturnedNoRows))?;
+    ensure_expected(Some(&current), expected)?;
+    let next = next_redo(&tx, kind, id)?;
+    let redo = PortableShowObjectRedo::new(
+        PortableShowObjectKey::new(kind, id),
+        serde_json::from_str(&next.body_json)?,
+        expected,
+        next.row_id,
+    );
+    tx.commit()?;
+    Ok(redo)
+}
+
 pub(crate) fn restore_staged_undo(
     tx: &Transaction<'_>,
     key: &PortableShowObjectKey,
@@ -109,7 +132,28 @@ pub(crate) fn restore_staged_undo(
         return Err(StoreError::Invalid("object undo history changed".into()));
     }
     let revision = next_revision(expected_object_revision)?;
-    restore_previous(tx, key, &previous, revision, updated_at)?;
+    archive_redo(tx, key, current)?;
+    restore_history(tx, key, &previous, revision, updated_at, "object_history")?;
+    Ok(revision)
+}
+
+pub(crate) fn restore_staged_redo(
+    tx: &Transaction<'_>,
+    key: &PortableShowObjectKey,
+    expected_object_revision: Revision,
+    history_row_id: i64,
+    updated_at: &str,
+) -> Result<Revision, StoreError> {
+    let current = current_object(tx, key.kind(), key.id())?
+        .ok_or_else(|| StoreError::Sql(rusqlite::Error::QueryReturnedNoRows))?;
+    ensure_expected(Some(&current), expected_object_revision)?;
+    let next = next_redo(tx, key.kind(), key.id())?;
+    if next.row_id != history_row_id {
+        return Err(StoreError::Invalid("object redo history changed".into()));
+    }
+    let revision = next_revision(expected_object_revision)?;
+    archive_current(tx, key.kind(), key.id(), current)?;
+    restore_history(tx, key, &next, revision, updated_at, "object_redo")?;
     Ok(revision)
 }
 
@@ -150,10 +194,14 @@ pub(crate) fn delete_current(
     tx: &Transaction<'_>,
     key: &PortableShowObjectKey,
 ) -> Result<bool, StoreError> {
-    Ok(tx.execute(
+    let deleted = tx.execute(
         "DELETE FROM objects WHERE kind=?1 AND id=?2",
         params![key.kind(), key.id()],
-    )? == 1)
+    )? == 1;
+    if deleted {
+        clear_redo(tx, key.kind(), key.id())?;
+    }
+    Ok(deleted)
 }
 
 fn apply_checked_writes(
@@ -214,6 +262,7 @@ fn write_stored(
     if let Some(current) = current {
         archive_current(tx, kind, id, current)?;
     }
+    clear_redo(tx, kind, id)?;
     upsert_object(tx, kind, id, &body_json, revision, updated_at)?;
     Ok(revision)
 }
@@ -265,6 +314,32 @@ fn archive_current(
     Ok(())
 }
 
+fn archive_redo(
+    tx: &Transaction<'_>,
+    key: &PortableShowObjectKey,
+    current: StoredObject,
+) -> Result<(), StoreError> {
+    tx.execute(
+        "INSERT INTO object_redo(kind,id,revision,body_json,created_at) VALUES (?1,?2,?3,?4,?5)",
+        params![
+            key.kind(),
+            key.id(),
+            current.revision as i64,
+            current.body_json,
+            timestamp()
+        ],
+    )?;
+    Ok(())
+}
+
+fn clear_redo(tx: &Transaction<'_>, kind: &str, id: &str) -> Result<(), StoreError> {
+    tx.execute(
+        "DELETE FROM object_redo WHERE kind=?1 AND id=?2",
+        params![kind, id],
+    )?;
+    Ok(())
+}
+
 fn upsert_object(
     tx: &Transaction<'_>,
     kind: &str,
@@ -306,12 +381,28 @@ fn previous_history(conn: &Connection, kind: &str, id: &str) -> Result<HistoryEn
     .ok_or_else(|| StoreError::Invalid("object has no undo history".into()))
 }
 
-fn restore_previous(
+fn next_redo(conn: &Connection, kind: &str, id: &str) -> Result<HistoryEntry, StoreError> {
+    conn.query_row(
+        "SELECT rowid,body_json FROM object_redo WHERE kind=?1 AND id=?2 ORDER BY rowid DESC LIMIT 1",
+        params![kind, id],
+        |row| {
+            Ok(HistoryEntry {
+                row_id: row.get(0)?,
+                body_json: row.get(1)?,
+            })
+        },
+    )
+    .optional()?
+    .ok_or_else(|| StoreError::Invalid("object has no redo history".into()))
+}
+
+fn restore_history(
     tx: &Transaction<'_>,
     key: &PortableShowObjectKey,
     previous: &HistoryEntry,
     revision: Revision,
     updated_at: &str,
+    table: &str,
 ) -> Result<(), StoreError> {
     let updated = tx.execute(
         "UPDATE objects SET body_json=?3,revision=?4,updated_at=?5 WHERE kind=?1 AND id=?2",
@@ -326,10 +417,17 @@ fn restore_previous(
     if updated != 1 {
         return Err(StoreError::Invalid("object disappeared during undo".into()));
     }
-    tx.execute(
-        "DELETE FROM object_history WHERE rowid=?1",
-        [previous.row_id],
-    )?;
+    let deleted = match table {
+        "object_history" => tx.execute(
+            "DELETE FROM object_history WHERE rowid=?1",
+            [previous.row_id],
+        )?,
+        "object_redo" => tx.execute("DELETE FROM object_redo WHERE rowid=?1", [previous.row_id])?,
+        _ => unreachable!("history table is selected internally"),
+    };
+    if deleted != 1 {
+        return Err(StoreError::Invalid("object history changed".into()));
+    }
     Ok(())
 }
 

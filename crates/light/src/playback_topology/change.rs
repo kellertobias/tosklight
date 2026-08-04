@@ -6,7 +6,7 @@ use crate::active_show::PreparedActiveShowTransaction;
 use crate::show_compiler::prepare_show_candidate_exact_transaction;
 use crate::{ActionError, ActiveShowObjectChange, ActiveShowObjectKind};
 use light_playback::{PlaybackDefinition, PlaybackPage};
-use light_show::{PortableShowDocument, PortableShowRevision};
+use light_show::{PortableShowDocument, PortableShowRevision, PortableShowTransaction};
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -80,6 +80,31 @@ pub(super) fn changed_present(
             show_revision: candidate.revision(),
             resolution,
             objects: objects.into(),
+            changes,
+        },
+        prepared: Box::new(prepared),
+    })
+}
+
+pub(super) fn changed_cue_list_history(
+    document: &PortableShowDocument,
+    command: &PlaybackTopologyCommand,
+    resolution: PlaybackTopologyResolution,
+    transaction: PortableShowTransaction,
+    object_id: &str,
+) -> Result<PreparedActiveShowTransaction<PreparedTopology>, ActionError> {
+    let prepared = prepare_show_candidate_exact_transaction(document, transaction)?;
+    let candidate = document
+        .candidate(prepared.transaction())
+        .map_err(invalid)?;
+    let projection = candidate_projection(&candidate, ActiveShowObjectKind::CueList, object_id)?;
+    let changes = vec![object_change(&projection)];
+    Ok(PreparedActiveShowTransaction::PreparedCommit {
+        state: PreparedTopology {
+            show_id: command.show_id,
+            show_revision: candidate.revision(),
+            resolution,
+            objects: vec![projection].into(),
             changes,
         },
         prepared: Box::new(prepared),

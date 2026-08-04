@@ -128,6 +128,20 @@ export function decodePlaybackTopologyErrorResponse(
 }
 
 function encodeAction(action: PlaybackTopologyAction) {
+	if (action.type === "undo_cue_list" || action.type === "redo_cue_list")
+		return {
+			type: action.type,
+			cue_list_id: action.cueListId,
+			expected_revision: revisionAt(
+				action.expectedRevision,
+				"$.action.expectedRevision",
+			),
+			expected_object_id: printableStringAt(
+				action.expectedObjectId,
+				"$.action.expectedObjectId",
+				128,
+			),
+		};
 	if (action.type === "save_cue_list")
 		return {
 			type: action.type,
@@ -400,7 +414,12 @@ function decodeResolution(
 			resolution.cue_list_id,
 			"$.resolution.cue_list_id",
 		);
-		if (action.type !== "save_cue_list" || action.cueListId !== cueListId)
+		if (
+			(action.type !== "save_cue_list" &&
+				action.type !== "undo_cue_list" &&
+				action.type !== "redo_cue_list") ||
+			action.cueListId !== cueListId
+		)
 			invalid("$.resolution", "the requested Cuelist", resolution);
 		return { kind, cueListId };
 	}
@@ -466,6 +485,8 @@ function decodeResolution(
 				);
 	if (
 		action.type === "save_cue_list" ||
+		action.type === "undo_cue_list" ||
+		action.type === "redo_cue_list" ||
 		action.type === "create_page" ||
 		action.type === "rename_page" ||
 		action.type === "configure_virtual" ||

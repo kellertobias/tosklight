@@ -77,6 +77,42 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		);
 	}
 
+	undoCueList(
+		cueListId: string,
+		expectedRevision: number,
+		expectedObjectId: string,
+	) {
+		return this.lifecycle.enqueue((generation) =>
+			this.apply(
+				{
+					type: "undo_cue_list",
+					cueListId,
+					expectedRevision,
+					expectedObjectId,
+				},
+				generation,
+			),
+		);
+	}
+
+	redoCueList(
+		cueListId: string,
+		expectedRevision: number,
+		expectedObjectId: string,
+	) {
+		return this.lifecycle.enqueue((generation) =>
+			this.apply(
+				{
+					type: "redo_cue_list",
+					cueListId,
+					expectedRevision,
+					expectedObjectId,
+				},
+				generation,
+			),
+		);
+	}
+
 	configureSlot(
 		page: number,
 		slot: number,
@@ -550,7 +586,11 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 
 	private expectationsStillCurrent(action: PlaybackTopologyAction) {
 		const snapshot = this.options.store.getSnapshot();
-		if (action.type === "save_cue_list") {
+		if (
+			action.type === "save_cue_list" ||
+			action.type === "undo_cue_list" ||
+			action.type === "redo_cue_list"
+		) {
 			const current = snapshot.cueLists.find(
 				(object) => object.body.id === action.cueListId,
 			);
@@ -641,7 +681,11 @@ function assertOutcome(
 		throw new Error("Playback topology response request ID does not match");
 	const action = request.action;
 	const resolution = outcome.resolution;
-	if (action.type === "save_cue_list") {
+	if (
+		action.type === "save_cue_list" ||
+		action.type === "undo_cue_list" ||
+		action.type === "redo_cue_list"
+	) {
 		if (
 			resolution.kind !== "cue_list" ||
 			resolution.cueListId !== action.cueListId

@@ -1,14 +1,15 @@
 use super::{
     PlaybackTopologyCommand, PlaybackTopologyOutcome, PlaybackTopologyPorts,
     PlaybackTopologyResult,
-    candidate::prepare,
+    candidate::{CueListHistory, prepare, prepare_cue_list_history},
     change::PreparedTopology,
     replay::{ReplayCache, ReplayKey, fingerprint},
+    validation::validate_show,
 };
 use crate::active_show::CompletedActiveShowTransaction;
 use crate::{
-    ActionEnvelope, ActionError, ActionErrorKind, ActiveShowObjectsChange, ActiveShowService,
-    EventBus, EventDraft,
+    ActionEnvelope, ActionError, ActionErrorKind, ActiveShowObjectKind, ActiveShowObjectsChange,
+    ActiveShowService, ActiveShowUnitOfWork, EventBus, EventDraft,
 };
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -69,12 +70,53 @@ impl PlaybackTopologyService {
     ) -> Result<PlaybackTopologyResult, ActionError> {
         let context = envelope.context;
         let command = envelope.command;
-        let outcome = self.active_show.transact(
+        let outcome = self.active_show.transact_with_unit(
             &context,
             command.show_id,
             ports,
             "playback-topology",
-            |document| prepare(document, &command, expected_show_revision),
+            |unit| {
+                validate_show(unit.document(), &command, expected_show_revision)?;
+                match &command.action {
+                    super::PlaybackTopologyAction::UndoCueList {
+                        expected_revision,
+                        expected_object_id,
+                        ..
+                    } => {
+                        let undo = ports.prepare_object_undo(
+                            unit,
+                            ActiveShowObjectKind::CueList.as_str(),
+                            expected_object_id,
+                            *expected_revision,
+                        )?;
+                        prepare_cue_list_history(
+                            unit.document(),
+                            &command,
+                            expected_show_revision,
+                            CueListHistory::Undo(undo),
+                        )
+                    }
+                    super::PlaybackTopologyAction::RedoCueList {
+                        expected_revision,
+                        expected_object_id,
+                        ..
+                    } => {
+                        let redo = ports.prepare_object_redo(
+                            unit,
+                            ActiveShowObjectKind::CueList.as_str(),
+                            expected_object_id,
+                            *expected_revision,
+                        )?;
+                        prepare_cue_list_history(
+                            unit.document(),
+                            &command,
+                            expected_show_revision,
+                            CueListHistory::Redo(redo),
+                        )
+                    }
+                    _ => prepare(unit.document(), &command, expected_show_revision),
+                }
+            },
             complete,
         )?;
         Ok(PlaybackTopologyResult {

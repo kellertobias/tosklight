@@ -1106,6 +1106,66 @@
         {
           "type": "object",
           "properties": {
+            "cue_list_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_object_id": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            },
+            "expected_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "maximum": 9007199254740991,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "undo_cue_list"
+            }
+          },
+          "required": [
+            "type",
+            "cue_list_id",
+            "expected_revision",
+            "expected_object_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cue_list_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_object_id": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            },
+            "expected_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "maximum": 9007199254740991,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "redo_cue_list"
+            }
+          },
+          "required": [
+            "type",
+            "cue_list_id",
+            "expected_revision",
+            "expected_object_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "expected_page_object_id": {
               "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
             },

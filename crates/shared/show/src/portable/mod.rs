@@ -11,7 +11,7 @@ mod transaction;
 
 pub use document::{
     PortablePatchRevision, PortableShowDocument, PortableShowObject, PortableShowObjectKey,
-    PortableShowObjectUndo, PortableShowRevision,
+    PortableShowObjectRedo, PortableShowObjectUndo, PortableShowRevision,
 };
 pub use lossless_body::{LosslessBody, PortableJson};
 pub use lossless_json::{apply_delta, merge_typed, merge_typed_request, strip_zero_u64_echo};
@@ -29,7 +29,7 @@ pub use transaction::{PortableShowCommit, PortableShowTransaction};
 
 pub(crate) use migration::{SHOW_SCHEMA_VERSION, migrate_show, validate_show_connection};
 pub(crate) use repository::{
-    delete_legacy_object, mutate_legacy_objects, prepare_undo, put_legacy_object,
+    delete_legacy_object, mutate_legacy_objects, prepare_redo, prepare_undo, put_legacy_object,
     undo_legacy_object,
 };
 pub(crate) use store::{bump_revision, current_revision, initialise_revision};

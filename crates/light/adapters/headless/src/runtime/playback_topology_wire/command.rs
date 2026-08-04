@@ -9,6 +9,24 @@ pub(in crate::runtime) fn application_command(
         action @ wire::PlaybackTopologyAction::SaveCueList { .. } => {
             application_save_cue_list(action)?
         }
+        wire::PlaybackTopologyAction::UndoCueList {
+            cue_list_id,
+            expected_revision,
+            expected_object_id,
+        } => application::PlaybackTopologyAction::UndoCueList {
+            cue_list_id: CueListId(non_nil(cue_list_id, "cue_list_id")?),
+            expected_revision: input_revision(expected_revision, "expected_revision")?,
+            expected_object_id,
+        },
+        wire::PlaybackTopologyAction::RedoCueList {
+            cue_list_id,
+            expected_revision,
+            expected_object_id,
+        } => application::PlaybackTopologyAction::RedoCueList {
+            cue_list_id: CueListId(non_nil(cue_list_id, "cue_list_id")?),
+            expected_revision: input_revision(expected_revision, "expected_revision")?,
+            expected_object_id,
+        },
         wire::PlaybackTopologyAction::ConfigureSlot {
             page,
             slot,

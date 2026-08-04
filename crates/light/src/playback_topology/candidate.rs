@@ -1,7 +1,9 @@
 use super::{
     GroupMasterPlaybackAddress, PlaybackTopologyAction, PlaybackTopologyCommand,
     PlaybackTopologyResolution,
-    change::{PreparedTopology, changed_configure, changed_present, no_change},
+    change::{
+        PreparedTopology, changed_configure, changed_cue_list_history, changed_present, no_change,
+    },
     map_existing::map_existing_playback,
     page::configured_page,
     page_actions::{create_page, rename_page},
@@ -17,7 +19,7 @@ use crate::{ActionError, ActiveShowObjectKind, lossless_json};
 use light_playback::{
     CueList, FlashReleaseMode, PlaybackDefinition, PlaybackFaderMode, PlaybackTarget,
 };
-use light_show::PortableShowDocument;
+use light_show::{PortableShowDocument, PortableShowObjectRedo, PortableShowObjectUndo};
 use serde_json::Value;
 
 pub(super) fn prepare(
@@ -42,6 +44,11 @@ pub(super) fn prepare(
             cue_list,
             raw_body,
         ),
+        PlaybackTopologyAction::UndoCueList { .. } | PlaybackTopologyAction::RedoCueList { .. } => {
+            Err(invalid(
+                "Cuelist history actions require an active-show history boundary",
+            ))
+        }
         PlaybackTopologyAction::ConfigureSlot {
             page,
             slot,
@@ -161,6 +168,86 @@ pub(super) fn prepare(
             expected_page_object_id.as_deref(),
         ),
     }
+}
+
+pub(super) enum CueListHistory {
+    Undo(PortableShowObjectUndo),
+    Redo(PortableShowObjectRedo),
+}
+
+pub(super) fn prepare_cue_list_history(
+    document: &PortableShowDocument,
+    command: &PlaybackTopologyCommand,
+    expected_show_revision: u64,
+    history: CueListHistory,
+) -> Result<PreparedActiveShowTransaction<PreparedTopology>, ActionError> {
+    validate_show(document, command, expected_show_revision)?;
+    let (cue_list_id, expected_revision, expected_object_id, is_undo) = match &command.action {
+        PlaybackTopologyAction::UndoCueList {
+            cue_list_id,
+            expected_revision,
+            expected_object_id,
+        } => (
+            *cue_list_id,
+            *expected_revision,
+            expected_object_id.as_str(),
+            true,
+        ),
+        PlaybackTopologyAction::RedoCueList {
+            cue_list_id,
+            expected_revision,
+            expected_object_id,
+        } => (
+            *cue_list_id,
+            *expected_revision,
+            expected_object_id.as_str(),
+            false,
+        ),
+        _ => return Err(invalid("expected a Cuelist history action")),
+    };
+    let stored =
+        find_cue_list(document, cue_list_id)?.ok_or_else(|| not_found("Cuelist was not found"))?;
+    validate_identity(
+        Some(&stored),
+        Some(expected_object_id),
+        "Cuelist",
+        document.revision().value(),
+    )?;
+    validate_revision(
+        Some(&stored),
+        expected_revision,
+        "Cuelist",
+        document.revision().value(),
+    )?;
+    let (key, body) = match &history {
+        CueListHistory::Undo(value) => (value.key(), value.body()),
+        CueListHistory::Redo(value) => (value.key(), value.body()),
+    };
+    if key.kind() != ActiveShowObjectKind::CueList.as_str() || key.id() != expected_object_id {
+        return Err(invalid("Cuelist history identity changed"));
+    }
+    let restored: CueList = serde_json::from_value(body.clone()).map_err(invalid)?;
+    if restored.id != cue_list_id {
+        return Err(invalid("Cuelist history body has a different identity"));
+    }
+    restored.validate().map_err(invalid)?;
+    let mut transaction = document.transaction();
+    match history {
+        CueListHistory::Undo(value) if is_undo => {
+            transaction.undo_object(value);
+        }
+        CueListHistory::Redo(value) if !is_undo => {
+            transaction.redo_object(value);
+        }
+        _ => return Err(invalid("Cuelist history direction changed")),
+    }
+    changed_cue_list_history(
+        document,
+        command,
+        PlaybackTopologyResolution::CueList { cue_list_id },
+        transaction,
+        expected_object_id,
+    )
 }
 
 fn configure_virtual(
@@ -321,9 +408,11 @@ fn save_cue_list(
         "Cuelist",
         document.revision().value(),
     )?;
+    let (cue_list, raw_body) = preserve_omitted_out_timing(stored.as_ref(), cue_list, raw_body)?;
+    cue_list.validate().map_err(invalid)?;
     let resolution = PlaybackTopologyResolution::CueList { cue_list_id };
     if let Some(existing) = stored.as_ref()
-        && same_typed(&existing.typed, cue_list)?
+        && same_typed(&existing.typed, &cue_list)?
     {
         return Ok(no_change(
             document,
@@ -333,7 +422,7 @@ fn save_cue_list(
         ));
     }
     let object_id = cue_list_object_id(document, stored.as_ref(), cue_list_id)?;
-    let body = cue_list_body(stored.as_ref(), cue_list, raw_body)?;
+    let body = cue_list_body(stored.as_ref(), &cue_list, &raw_body)?;
     changed_present(
         document,
         command,
@@ -341,6 +430,63 @@ fn save_cue_list(
         vec![(ActiveShowObjectKind::CueList, object_id, body)],
         Vec::new(),
     )
+}
+
+fn preserve_omitted_out_timing(
+    stored: Option<&Stored<CueList>>,
+    requested: &CueList,
+    raw_body: &Value,
+) -> Result<(CueList, Value), ActionError> {
+    let Some(stored) = stored else {
+        return Ok((requested.clone(), raw_body.clone()));
+    };
+    let mut normalized = requested.clone();
+    let mut normalized_raw = raw_body.clone();
+    let raw_cues = normalized_raw
+        .get_mut("cues")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| invalid("Cuelist body cues must be an array"))?;
+    for (requested_cue, raw_cue) in normalized.cues.iter_mut().zip(raw_cues.iter_mut()) {
+        let Some(stored_cue) = stored
+            .typed
+            .cues
+            .iter()
+            .find(|candidate| candidate.id == requested_cue.id)
+        else {
+            continue;
+        };
+        let raw_cue = raw_cue
+            .as_object_mut()
+            .ok_or_else(|| invalid("Cuelist cues must be objects"))?;
+        preserve_optional_millis(
+            raw_cue,
+            "out_fade_millis",
+            &mut requested_cue.out_fade_millis,
+            stored_cue.out_fade_millis,
+        );
+        preserve_optional_millis(
+            raw_cue,
+            "out_delay_millis",
+            &mut requested_cue.out_delay_millis,
+            stored_cue.out_delay_millis,
+        );
+    }
+    Ok((normalized, normalized_raw))
+}
+
+fn preserve_optional_millis(
+    raw_cue: &mut serde_json::Map<String, Value>,
+    field: &str,
+    requested: &mut Option<u64>,
+    stored: Option<u64>,
+) {
+    if raw_cue.contains_key(field) {
+        return;
+    }
+    *requested = stored;
+    if let Some(value) = stored {
+        raw_cue.insert(field.to_owned(), Value::from(value));
+    }
 }
 
 fn configure_slot(
@@ -846,7 +992,24 @@ fn cue_list_body(
     )
     .map_err(invalid)?;
     lossless_json::strip_zero_u64_echo(&mut merged, "chaser_xfade_millis");
+    strip_inherited_out_timing_nulls(&mut merged);
     Ok(merged)
+}
+
+fn strip_inherited_out_timing_nulls(body: &mut Value) {
+    let Some(cues) = body.get_mut("cues").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for cue in cues {
+        let Some(cue) = cue.as_object_mut() else {
+            continue;
+        };
+        for field in ["out_fade_millis", "out_delay_millis"] {
+            if cue.get(field).is_some_and(Value::is_null) {
+                cue.remove(field);
+            }
+        }
+    }
 }
 
 fn typed_body<T: serde::Serialize>(

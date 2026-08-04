@@ -11,8 +11,8 @@ use light_application::{
 use light_core::{SessionId, ShowId};
 use light_engine::{EngineError, EngineSnapshot, PreparedEngineSnapshot};
 use light_show::{
-    PortableShowCommit, PortableShowDocument, PortableShowObjectUndo, PortableShowTransaction,
-    StoreError,
+    PortableShowCommit, PortableShowDocument, PortableShowObjectRedo, PortableShowObjectUndo,
+    PortableShowTransaction, StoreError,
 };
 use std::sync::Arc;
 
@@ -240,6 +240,17 @@ impl ServerActiveShowUnitOfWork {
             .prepare_object_undo(kind, object_id, expected_object_revision)
             .map_err(|error| store_error(error, None))
     }
+
+    pub(super) fn prepare_object_redo(
+        &self,
+        kind: &str,
+        object_id: &str,
+        expected_object_revision: light_core::Revision,
+    ) -> Result<PortableShowObjectRedo, ActionError> {
+        self.store
+            .prepare_object_redo(kind, object_id, expected_object_revision)
+            .map_err(|error| store_error(error, None))
+    }
 }
 
 impl ActiveShowUnitOfWork for ServerActiveShowUnitOfWork {
@@ -348,6 +359,16 @@ impl ActiveShowPorts for ServerActiveShowPorts {
         expected_object_revision: light_core::Revision,
     ) -> Result<PortableShowObjectUndo, ActionError> {
         unit.prepare_object_undo(kind, object_id, expected_object_revision)
+    }
+
+    fn prepare_object_redo(
+        &self,
+        unit: &Self::UnitOfWork,
+        kind: &str,
+        object_id: &str,
+        expected_object_revision: light_core::Revision,
+    ) -> Result<PortableShowObjectRedo, ActionError> {
+        unit.prepare_object_redo(kind, object_id, expected_object_revision)
     }
 
     fn prepare_runtime(

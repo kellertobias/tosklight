@@ -2,7 +2,7 @@ use super::profile_revision::materialize_legacy_fixture_profile_revisions;
 use crate::{StoreError, set_schema_version};
 use rusqlite::{Connection, TransactionBehavior};
 
-pub(crate) const SHOW_SCHEMA_VERSION: i64 = 5;
+pub(crate) const SHOW_SCHEMA_VERSION: i64 = 6;
 
 pub(crate) fn migrate_show(conn: &mut Connection) -> Result<(), StoreError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -77,6 +77,7 @@ const SHOW_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS schema_info(version INTEGE
   CREATE TABLE IF NOT EXISTS fixture_profile_revisions(profile_id TEXT NOT NULL CHECK(length(profile_id)>0),revision INTEGER NOT NULL CHECK(revision>=0),content_digest TEXT NOT NULL,profile_json TEXT NOT NULL,PRIMARY KEY(profile_id,revision));
   CREATE TABLE IF NOT EXISTS objects(kind TEXT NOT NULL,id TEXT NOT NULL,body_json TEXT NOT NULL,revision INTEGER NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(kind,id));
   CREATE TABLE IF NOT EXISTS object_history(kind TEXT NOT NULL,id TEXT NOT NULL,revision INTEGER NOT NULL,body_json TEXT NOT NULL,created_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS object_redo(kind TEXT NOT NULL,id TEXT NOT NULL,revision INTEGER NOT NULL,body_json TEXT NOT NULL,created_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS cues(cue_list_id TEXT NOT NULL,cue_number REAL NOT NULL,values_json TEXT NOT NULL,cue_only_restore_json TEXT,revision INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(cue_list_id,cue_number));
   CREATE TABLE IF NOT EXISTS schedule_occurrences(sequence INTEGER PRIMARY KEY AUTOINCREMENT,schedule_id TEXT NOT NULL,occurrence_id TEXT NOT NULL,scheduled_for TEXT NOT NULL,target_action_json TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('claimed','completed','failed','interrupted','skipped')),recorded_at TEXT NOT NULL,resolved_at TEXT,result_detail TEXT,UNIQUE(schedule_id,occurrence_id));
   CREATE INDEX IF NOT EXISTS objects_kind ON objects(kind);

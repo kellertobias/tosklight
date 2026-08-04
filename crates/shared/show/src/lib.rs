@@ -24,12 +24,12 @@ pub use portable::{
     LegacyInlineProfileSnapshot, LosslessBody, PortableJson, PortablePatchRevision,
     PortableShowCandidate, PortableShowCandidateObject, PortableShowCandidateObjects,
     PortableShowCandidateProfiles, PortableShowCommit, PortableShowDocument, PortableShowObject,
-    PortableShowObjectKey, PortableShowObjectUndo, PortableShowRevision, PortableShowTransaction,
-    ScheduleOccurrenceClaim, ScheduleOccurrenceClaimResult, ScheduleOccurrenceRecord,
-    ScheduleOccurrenceResolution, ScheduleOccurrenceStatus, SkippedScheduleOccurrence, apply_delta,
-    canonical_fixture_profile_json, canonicalize_legacy_inline_profile_snapshots,
-    discover_legacy_inline_profile_snapshots, merge_typed, merge_typed_request,
-    strip_zero_u64_echo,
+    PortableShowObjectKey, PortableShowObjectRedo, PortableShowObjectUndo, PortableShowRevision,
+    PortableShowTransaction, ScheduleOccurrenceClaim, ScheduleOccurrenceClaimResult,
+    ScheduleOccurrenceRecord, ScheduleOccurrenceResolution, ScheduleOccurrenceStatus,
+    SkippedScheduleOccurrence, apply_delta, canonical_fixture_profile_json,
+    canonicalize_legacy_inline_profile_snapshots, discover_legacy_inline_profile_snapshots,
+    merge_typed, merge_typed_request, strip_zero_u64_echo,
 };
 pub use show_store::{
     AtomicObjectDelete, AtomicObjectWrite, ShowStore, initialise_show, validate_show_file,

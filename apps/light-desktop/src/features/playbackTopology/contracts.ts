@@ -14,6 +14,18 @@ export type PlaybackTopologyAction =
 			body: CueList;
 	  }
 	| {
+			type: "undo_cue_list";
+			cueListId: string;
+			expectedRevision: number;
+			expectedObjectId: string;
+	  }
+	| {
+			type: "redo_cue_list";
+			cueListId: string;
+			expectedRevision: number;
+			expectedObjectId: string;
+	  }
+	| {
 			type: "configure_slot";
 			page: number;
 			slot: number;
@@ -158,6 +170,16 @@ export interface PlaybackTopologyActions {
 		expectedRevision: number,
 		expectedObjectId: string | null,
 		body: CueList,
+	): Promise<PlaybackTopologyOutcome | null>;
+	undoCueList(
+		cueListId: string,
+		expectedRevision: number,
+		expectedObjectId: string,
+	): Promise<PlaybackTopologyOutcome | null>;
+	redoCueList(
+		cueListId: string,
+		expectedRevision: number,
+		expectedObjectId: string,
 	): Promise<PlaybackTopologyOutcome | null>;
 	configureSlot(
 		page: number,

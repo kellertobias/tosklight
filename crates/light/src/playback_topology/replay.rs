@@ -144,6 +144,26 @@ pub(super) fn fingerprint(
             hash_json(&mut hasher, cue_list)?;
             hash_json(&mut hasher, raw_body)?;
         }
+        PlaybackTopologyAction::UndoCueList {
+            cue_list_id,
+            expected_revision,
+            expected_object_id,
+        } => {
+            hasher.update([9]);
+            hasher.update(cue_list_id.0.as_bytes());
+            hasher.update(expected_revision.to_le_bytes());
+            hash_json(&mut hasher, expected_object_id)?;
+        }
+        PlaybackTopologyAction::RedoCueList {
+            cue_list_id,
+            expected_revision,
+            expected_object_id,
+        } => {
+            hasher.update([10]);
+            hasher.update(cue_list_id.0.as_bytes());
+            hasher.update(expected_revision.to_le_bytes());
+            hash_json(&mut hasher, expected_object_id)?;
+        }
         PlaybackTopologyAction::ConfigureSlot {
             page,
             slot,

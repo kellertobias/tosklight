@@ -29,6 +29,16 @@ pub enum PlaybackTopologyAction {
         /// Exact request body retained so supplied extension fields survive a real typed change.
         raw_body: Arc<Value>,
     },
+    UndoCueList {
+        cue_list_id: CueListId,
+        expected_revision: Revision,
+        expected_object_id: String,
+    },
+    RedoCueList {
+        cue_list_id: CueListId,
+        expected_revision: Revision,
+        expected_object_id: String,
+    },
     ConfigureSlot {
         page: u8,
         slot: u8,

@@ -133,7 +133,11 @@ function changed(
 	eventSequence = 41,
 ): PlaybackTopologyOutcome {
 	const action = request.action;
-	if (action.type === "save_cue_list")
+	if (
+		action.type === "save_cue_list" ||
+		action.type === "undo_cue_list" ||
+		action.type === "redo_cue_list"
+	)
 		return {
 			status: "changed",
 			requestId: request.requestId,
@@ -279,6 +283,40 @@ describe("PlaybackTopologyWriter", () => {
 			id: "legacy-main-list",
 			revision: 2,
 			body: { id: CUE_LIST_ID, name: "Changed" },
+		});
+	});
+
+	it("serializes Cuelist undo and redo and installs each authoritative revision", async () => {
+		const apply = vi.fn(async (_show, _revision, request) =>
+			changed(request, [present(cueList(2, "legacy-main-list", "History"))]),
+		);
+		const { store, writer } = setup(apply);
+
+		await writer.undoCueList(CUE_LIST_ID, 1, "legacy-main-list");
+		expect(apply.mock.calls[0]?.[2].action).toEqual({
+			type: "undo_cue_list",
+			cueListId: CUE_LIST_ID,
+			expectedRevision: 1,
+			expectedObjectId: "legacy-main-list",
+		});
+		expect(store.getSnapshot().cueLists[0]).toMatchObject({
+			revision: 2,
+			body: { name: "History" },
+		});
+
+		apply.mockImplementationOnce(async (_show, _revision, request) =>
+			changed(
+				request,
+				[present(cueList(3, "legacy-main-list", "Forward"))],
+				13,
+				42,
+			),
+		);
+		await writer.redoCueList(CUE_LIST_ID, 2, "legacy-main-list");
+		expect(apply.mock.calls[1]?.[2].action.type).toBe("redo_cue_list");
+		expect(store.getSnapshot().cueLists[0]).toMatchObject({
+			revision: 3,
+			body: { name: "Forward" },
 		});
 	});
 

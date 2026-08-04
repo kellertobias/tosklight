@@ -7,9 +7,9 @@
 use light_core::{Revision, ShowId};
 use light_show::{
     AtomicObjectDelete, AtomicObjectWrite, PortableShowCommit, PortableShowDocument,
-    PortableShowObjectUndo, PortableShowRevision, PortableShowTransaction, RevisionCopySource,
-    ScheduleOccurrenceClaim, ScheduleOccurrenceClaimResult, ScheduleOccurrenceRecord,
-    ScheduleOccurrenceResolution, ShowStore, StoreError, VersionedObject,
+    PortableShowObjectRedo, PortableShowObjectUndo, PortableShowRevision, PortableShowTransaction,
+    RevisionCopySource, ScheduleOccurrenceClaim, ScheduleOccurrenceClaimResult,
+    ScheduleOccurrenceRecord, ScheduleOccurrenceResolution, ShowStore, StoreError, VersionedObject,
 };
 use std::path::Path;
 
@@ -76,6 +76,15 @@ impl ActiveShowRepository {
         expected: Revision,
     ) -> Result<PortableShowObjectUndo, StoreError> {
         self.store.prepare_object_undo(kind, object_id, expected)
+    }
+
+    pub(crate) fn prepare_object_redo(
+        &self,
+        kind: &str,
+        object_id: &str,
+        expected: Revision,
+    ) -> Result<PortableShowObjectRedo, StoreError> {
+        self.store.prepare_object_redo(kind, object_id, expected)
     }
 
     #[cfg(test)]

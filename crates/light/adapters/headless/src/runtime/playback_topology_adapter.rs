@@ -7,7 +7,7 @@ use light_application::{
 };
 use light_core::{SessionId, ShowId};
 use light_engine::{EngineSnapshot, PreparedEngineSnapshot};
-use light_show::PortableShowObjectUndo;
+use light_show::{PortableShowObjectRedo, PortableShowObjectUndo};
 
 #[derive(Clone)]
 pub(super) struct ServerPlaybackTopologyPorts {
@@ -108,6 +108,17 @@ impl ActiveShowPorts for ServerPlaybackTopologyPorts {
     ) -> Result<PortableShowObjectUndo, ActionError> {
         self.active
             .prepare_object_undo(unit, kind, object_id, expected_object_revision)
+    }
+
+    fn prepare_object_redo(
+        &self,
+        unit: &Self::UnitOfWork,
+        kind: &str,
+        object_id: &str,
+        expected_object_revision: light_core::Revision,
+    ) -> Result<PortableShowObjectRedo, ActionError> {
+        self.active
+            .prepare_object_redo(unit, kind, object_id, expected_object_revision)
     }
 
     fn prepare_runtime(

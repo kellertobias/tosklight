@@ -70,6 +70,8 @@ export function PlaybackTopologyProvider({
 				createPage: writer.createPage.bind(writer),
 				renamePage: writer.renamePage.bind(writer),
 				saveCueList: writer.saveCueList.bind(writer),
+				undoCueList: writer.undoCueList.bind(writer),
+				redoCueList: writer.redoCueList.bind(writer),
 				configureSlot: writer.configureSlot.bind(writer),
 				assignGroupMaster: writer.assignGroupMaster.bind(writer),
 				assignVirtualGroupMaster: writer.assignVirtualGroupMaster.bind(writer),

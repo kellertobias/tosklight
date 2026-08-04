@@ -26,7 +26,11 @@ export async function repairPlaybackTopologyConflict(
 			failure.currentRevision,
 			generation,
 		);
-	if (action.type === "save_cue_list")
+	if (
+		action.type === "save_cue_list" ||
+		action.type === "undo_cue_list" ||
+		action.type === "redo_cue_list"
+	)
 		return repairCueList(options, action, generation);
 	if (
 		action.type === "create_page" ||
@@ -102,7 +106,10 @@ export function playbackTopologyTransportFailure(reason: unknown) {
 
 async function repairCueList(
 	options: PlaybackTopologyRepairOptions,
-	action: Extract<PlaybackTopologyAction, { type: "save_cue_list" }>,
+	action: Extract<
+		PlaybackTopologyAction,
+		{ type: "save_cue_list" | "undo_cue_list" | "redo_cue_list" }
+	>,
 	generation: number,
 ) {
 	const stale = options.store

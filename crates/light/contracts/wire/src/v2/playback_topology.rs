@@ -49,6 +49,22 @@ pub enum PlaybackTopologyAction {
         #[ts(type = "unknown")]
         body: Value,
     },
+    UndoCueList {
+        cue_list_id: Uuid,
+        #[schemars(range(max = 9007199254740991_u64))]
+        #[ts(type = "number")]
+        expected_revision: u64,
+        #[schemars(length(min = 1, max = 128))]
+        expected_object_id: String,
+    },
+    RedoCueList {
+        cue_list_id: Uuid,
+        #[schemars(range(max = 9007199254740991_u64))]
+        #[ts(type = "number")]
+        expected_revision: u64,
+        #[schemars(length(min = 1, max = 128))]
+        expected_object_id: String,
+    },
     ConfigureSlot {
         #[schemars(range(min = 1, max = 127))]
         page: u8,

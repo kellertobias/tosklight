@@ -19,6 +19,8 @@ export function validatePlaybackTopologyObjects(
 ) {
 	if (action.type === "save_cue_list")
 		return validateSavedCueList(action, objects, status);
+	if (action.type === "undo_cue_list" || action.type === "redo_cue_list")
+		return validateCueListHistory(action, objects, status);
 	if (action.type === "create_page" || action.type === "rename_page") {
 		if (resolution.kind !== "page")
 			return invalid("Playback Page resolution", resolution);
@@ -279,6 +281,32 @@ function validateSavedCueList(
 	);
 	if (!sameKnownCueList(object.body as CueList, action.body))
 		invalid("the submitted Cuelist known fields", objects);
+}
+
+function validateCueListHistory(
+	action: Extract<
+		PlaybackTopologyAction,
+		{ type: "undo_cue_list" | "redo_cue_list" }
+	>,
+	objects: PlaybackTopologyObject[],
+	status: "changed" | "no_change",
+) {
+	if (status !== "changed" || objects.length !== 1)
+		return invalid("one changed authoritative Cuelist", objects);
+	const object = objects[0];
+	if (
+		object.kind !== "cue_list" ||
+		object.state !== "present" ||
+		(object.body as { id: string }).id !== action.cueListId ||
+		object.objectId !== action.expectedObjectId
+	)
+		return invalid("the authoritative requested Cuelist", objects);
+	validateExactRevision(
+		object.objectRevision,
+		action.expectedRevision,
+		status,
+		"Cuelist",
+	);
 }
 
 function validateConfiguredSlot(

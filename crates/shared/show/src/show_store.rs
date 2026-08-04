@@ -1,6 +1,6 @@
 use crate::{
-    PortableShowObjectUndo, PortableShowRevision, RevisionCopySource, StoreError, VersionedObject,
-    connection::configure, portable,
+    PortableShowObjectRedo, PortableShowObjectUndo, PortableShowRevision, RevisionCopySource,
+    StoreError, VersionedObject, connection::configure, portable,
 };
 use light_core::{Revision, ShowId, UserId};
 use rusqlite::{Connection, MAIN_DB, OpenFlags, OptionalExtension, params};
@@ -176,6 +176,16 @@ impl ShowStore {
         expected: Revision,
     ) -> Result<PortableShowObjectUndo, StoreError> {
         portable::prepare_undo(&self.conn, kind, id, expected)
+    }
+
+    /// Reads the exact next raw body and its compare-and-pop forward-history condition.
+    pub fn prepare_object_redo(
+        &self,
+        kind: &str,
+        id: &str,
+        expected: Revision,
+    ) -> Result<PortableShowObjectRedo, StoreError> {
+        portable::prepare_redo(&self.conn, kind, id, expected)
     }
 
     pub fn objects(&self, kind: &str) -> Result<Vec<VersionedObject>, StoreError> {
