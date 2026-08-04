@@ -514,6 +514,54 @@ fn value_intent_identity_and_injected_activation_expansion_are_atomic() {
 }
 
 #[test]
+fn relative_fixture_intent_starts_from_the_owned_programmer_value() {
+    let mut setup = ValuesSetup::new();
+    let fixture = setup.fixtures[0];
+    let intensity = AttributeKey::intensity();
+    setup.ports.environment.current_values = HashMap::from([(
+        (fixture, intensity.clone()),
+        AttributeValue::Normalized(0.0),
+    )]);
+
+    setup.handle(
+        "owned-relative-base",
+        0,
+        ProgrammingValuesCommand::ApplyIntent {
+            intent: ProgrammingValueIntent {
+                fixture_ids: vec![fixture],
+                group_id: None,
+                attribute: intensity.clone(),
+                operation: ProgrammingValueOperation::AbsoluteSet(AttributeValue::Normalized(0.5)),
+                undo_group: None,
+                timing: Default::default(),
+            },
+        },
+    );
+    let relative = setup.handle(
+        "owned-relative-step",
+        1,
+        ProgrammingValuesCommand::ApplyIntent {
+            intent: ProgrammingValueIntent {
+                fixture_ids: vec![fixture],
+                group_id: None,
+                attribute: intensity,
+                operation: ProgrammingValueOperation::RelativeStep(0.001),
+                undo_group: None,
+                timing: Default::default(),
+            },
+        },
+    );
+
+    let ProgrammingValuesOutcome::Changed { projection, .. } = relative.outcome else {
+        panic!("the relative intent should change the owned Programmer value")
+    };
+    assert_eq!(
+        projection.fixture_values[0].value,
+        AttributeValue::Normalized(0.501)
+    );
+}
+
+#[test]
 fn relative_group_intent_preserves_live_group_scope_and_mixed_member_values() {
     let mut setup = ValuesSetup::new();
     let attribute = AttributeKey::intensity();

@@ -7,7 +7,10 @@ use crate::{
 };
 use light_core::{AttributeValue, SessionId, UserId};
 use light_programmer::{NormalProgrammerValueMutation, NormalProgrammerValueTiming};
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use super::values_replay_fingerprint::{RequestFingerprint, values_request_fingerprint};
 use super::values_validation::{validate_request_id, validate_value_mutations};
@@ -87,7 +90,12 @@ impl ProgrammingService {
                 active_content
                     .fixture_values
                     .iter()
-                    .map(|value| (value.fixture_id, value.attribute.clone()))
+                    .map(|value| {
+                        (
+                            (value.fixture_id, value.attribute.clone()),
+                            value.value.clone(),
+                        )
+                    })
                     .collect(),
                 active_content
                     .group_values
@@ -284,11 +292,8 @@ impl ProgrammingService {
 pub(super) fn plan_value_intent(
     intent: &ProgrammingValueIntent,
     environment: &ProgrammingValuesEnvironment,
-    active_values: HashSet<(light_core::FixtureId, light_core::AttributeKey)>,
-    active_group_values: std::collections::HashMap<
-        (String, light_core::AttributeKey),
-        AttributeValue,
-    >,
+    active_values: HashMap<(light_core::FixtureId, light_core::AttributeKey), AttributeValue>,
+    active_group_values: HashMap<(String, light_core::AttributeKey), AttributeValue>,
 ) -> Result<Vec<ProgrammingValueMutation>, ActionError> {
     let count = validate_value_intent(intent, environment)?;
     if let Some(group_id) = intent.group_id.as_ref() {
@@ -368,11 +373,8 @@ fn plan_group_value_intent(
     intent: &ProgrammingValueIntent,
     environment: &ProgrammingValuesEnvironment,
     group_id: &str,
-    active_values: HashSet<(light_core::FixtureId, light_core::AttributeKey)>,
-    active_group_values: std::collections::HashMap<
-        (String, light_core::AttributeKey),
-        AttributeValue,
-    >,
+    active_values: HashMap<(light_core::FixtureId, light_core::AttributeKey), AttributeValue>,
+    active_group_values: HashMap<(String, light_core::AttributeKey), AttributeValue>,
 ) -> Result<Vec<ProgrammingValueMutation>, ActionError> {
     let requested = match &intent.operation {
         ProgrammingValueOperation::AbsoluteSet(value) => value.clone(),
@@ -415,7 +417,7 @@ fn plan_group_value_intent(
         for fixture_id in members {
             for linked in &linked_group_values {
                 let address = (*fixture_id, linked.clone());
-                if active_values.contains(&address)
+                if active_values.contains_key(&address)
                     || !environment
                         .supported_attributes
                         .get(fixture_id)
@@ -444,7 +446,7 @@ fn plan_fixture_value_intent(
     intent: &ProgrammingValueIntent,
     environment: &ProgrammingValuesEnvironment,
     count: usize,
-    active_values: HashSet<(light_core::FixtureId, light_core::AttributeKey)>,
+    active_values: HashMap<(light_core::FixtureId, light_core::AttributeKey), AttributeValue>,
 ) -> Result<Vec<ProgrammingValueMutation>, ActionError> {
     let mut mutations = Vec::new();
     let mut addresses = HashSet::new();
@@ -459,9 +461,13 @@ fn plan_fixture_value_intent(
             }
             ProgrammingValueOperation::AbsoluteSet(value) => value.clone(),
             ProgrammingValueOperation::RelativeStep(delta) => {
-                let current = environment
-                    .current_values
+                let current = active_values
                     .get(&(fixture_id, intent.attribute.clone()))
+                    .or_else(|| {
+                        environment
+                            .current_values
+                            .get(&(fixture_id, intent.attribute.clone()))
+                    })
                     .or_else(|| {
                         environment
                             .default_values
@@ -492,7 +498,7 @@ fn plan_fixture_value_intent(
             .flatten()
         {
             let address = (fixture_id, linked.clone());
-            if active_values.contains(&address)
+            if active_values.contains_key(&address)
                 || !environment
                     .supported_attributes
                     .get(&fixture_id)

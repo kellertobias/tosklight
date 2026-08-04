@@ -89,7 +89,12 @@ impl ProgrammingService {
                 active
                     .fixture_values
                     .iter()
-                    .map(|value| (value.fixture_id, value.attribute.clone()))
+                    .map(|value| {
+                        (
+                            (value.fixture_id, value.attribute.clone()),
+                            value.value.clone(),
+                        )
+                    })
                     .collect(),
                 active
                     .group_values

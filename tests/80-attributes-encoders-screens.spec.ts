@@ -36,12 +36,46 @@ test.describe("TL-65 attributes, encoders, and screens", () => {
 			await expect(commandLine).toHaveValue("FIXTURE", { timeout: 10_000 });
 			expect(await sessionProgrammerCount(api, session)).toBe(1);
 
-			await commandLine.fill("FIXTURE 1 AT 50");
-			await commandLine.press("Enter");
+			for (const key of ["1", "AT", "5", "0", "ENT"])
+				await browserScreen.locator(`[data-keypad-key="${key}"]`).click();
 			const fixtures = await fixtureIdsByNumber(api);
 			await expect
 				.poll(() => fixtureProgrammerValue(api, fixtures[1], "intensity"))
 				.toBeCloseTo(0.5, 4);
+
+			const encoder = browserScreen.getByRole("group", {
+				name: "Enc 1 · Dimmer",
+				exact: true,
+			});
+			await expect(encoder).toBeVisible();
+			await expect(
+				browserScreen.locator(".parameter-surfaces > *"),
+			).toHaveCount(4);
+			const encoderValue = encoder.getByRole("button", {
+				name: "Set Enc 1 · Dimmer value",
+			});
+			await expect(encoderValue).toHaveText("50%");
+
+			await encoder.locator(".touch-encoder-tap-positive").click();
+			await expect
+				.poll(() => fixtureProgrammerValue(api, fixtures[1], "intensity"))
+				.toBeCloseTo(0.501, 4);
+
+			await encoder.dispatchEvent("wheel", { deltaY: -1, shiftKey: true });
+			await expect
+				.poll(() => fixtureProgrammerValue(api, fixtures[1], "intensity"))
+				.toBeCloseTo(0.511, 4);
+
+			await encoderValue.click();
+			const editor = browserScreen.getByRole("dialog", {
+				name: "Enc 1 · Dimmer value",
+			});
+			await expect(editor).toBeVisible();
+			for (const key of ["7", "5", "ENTER"])
+				await editor.getByRole("button", { name: key, exact: true }).click();
+			await expect
+				.poll(() => fixtureProgrammerValue(api, fixtures[1], "intensity"))
+				.toBeCloseTo(0.75, 4);
 
 			await api.setCommandLineText("GROUP 1 +");
 			await expect(commandLine).toHaveValue("GROUP 1 +");
