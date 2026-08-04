@@ -47,7 +47,20 @@ describe("programmer control surface settings", () => {
 					visible_encoders: 6,
 				},
 			},
-			bootstrap: null,
+			bootstrap: {
+				attribute_registry: [
+					{
+						id: "red",
+						label: "Red",
+						family: "color",
+						value_type: "continuous",
+						default_unit: null,
+						encoder_group: "color",
+						encoder_page: 1,
+						encoder_slot: 1,
+					},
+				],
+			} as ScreensContextValue["bootstrap"],
 			session: null,
 			saveScreen: vi.fn(),
 			deleteScreen: vi.fn(),
@@ -67,6 +80,11 @@ describe("programmer control surface settings", () => {
 			screen.getByRole("heading", { name: "Programmer control surface" }),
 		).toBeInTheDocument();
 		expect(screen.getByText("Show controls on")).toBeInTheDocument();
+		const preview = screen.getByLabelText("6-encoder semantic layout preview");
+		expect(preview).toHaveTextContent("6-position semantic layout");
+		expect(preview).toHaveTextContent("Red");
+		expect(preview.querySelectorAll(".programmer-control-layout-slots > span"))
+			.toHaveLength(6);
 		fireEvent.click(screen.getByRole("button", { name: "Main screen" }));
 		expect(screen.getByRole("option", { name: "Screen 1" })).toBeVisible();
 		fireEvent.click(screen.getByRole("option", { name: "Screen 1" }));
@@ -452,6 +470,56 @@ describe("additional screen settings", () => {
 			expect(updateProgrammerOwner).toHaveBeenCalledWith({
 				assign_to_main: true,
 			}),
+		);
+	});
+
+	it("requires one confirmed owner reassignment action before removing its screen", async () => {
+		const updateProgrammerOwner = vi.fn().mockResolvedValue(undefined);
+		const remove = vi.fn().mockResolvedValue(undefined);
+		render(
+			<ScreenSettingsCard
+				screen={{
+					...configuredScreen,
+					content: { type: "control_surface" },
+					show_dock: false,
+				}}
+				displays={[]}
+				save={vi.fn().mockResolvedValue(undefined)}
+				remove={remove}
+				programmerOwner
+				updateProgrammerOwner={updateProgrammerOwner}
+			/>,
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Remove Screen" }));
+		expect(remove).not.toHaveBeenCalled();
+		const confirmation = screen.getByRole("dialog", {
+			name: "Remove Screen 1",
+		});
+		expect(confirmation).toHaveTextContent(
+			"reassign the controls to the main screen",
+		);
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Remove and use controls on main screen",
+			}),
+		);
+
+		await waitFor(() =>
+			expect(updateProgrammerOwner).toHaveBeenCalledWith({
+				assign_to_main: true,
+			}),
+		);
+		await waitFor(() =>
+			expect(remove).toHaveBeenCalledWith(
+				expect.objectContaining({
+					id: "screen-1",
+					content: { type: "control_surface" },
+				}),
+			),
+		);
+		expect(updateProgrammerOwner.mock.invocationCallOrder[0]).toBeLessThan(
+			remove.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
 		);
 	});
 

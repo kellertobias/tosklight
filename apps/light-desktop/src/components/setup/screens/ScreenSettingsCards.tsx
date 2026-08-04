@@ -758,6 +758,9 @@ export function ScreenSettingsCard({
 	const [draft, setDraft] = useState(screen);
 	const [playbackModalOpen, setPlaybackModalOpen] = useState(false);
 	const [browserLinkStatus, setBrowserLinkStatus] = useState<string | null>(null);
+	const [removeConfirmationOpen, setRemoveConfirmationOpen] = useState(false);
+	const [removeError, setRemoveError] = useState<string | null>(null);
+	const [removing, setRemoving] = useState(false);
 	const draftRef = useRef(screen);
 	const saveQueue = useRef(Promise.resolve());
 	const pending = useRef(0);
@@ -802,6 +805,20 @@ export function ScreenSettingsCard({
 			);
 		}
 	};
+	const confirmOwnerRemoval = async () => {
+		if (!updateProgrammerOwner || removing) return;
+		setRemoving(true);
+		setRemoveError(null);
+		try {
+			await updateProgrammerOwner({ assign_to_main: true });
+			await remove(draftRef.current);
+		} catch (error) {
+			setRemoveError(
+				error instanceof Error ? error.message : "Could not remove this screen.",
+			);
+			setRemoving(false);
+		}
+	};
 	return (
 		<article
 			className="screen-settings-card"
@@ -835,7 +852,14 @@ export function ScreenSettingsCard({
 					>
 						{draft.desired_open ? "Close Screen" : "Open Screen"}
 					</Button>
-					<Button variant="danger" onClick={() => void remove(draft)}>
+					<Button
+						variant="danger"
+						onClick={() =>
+							programmerOwner
+								? setRemoveConfirmationOpen(true)
+								: void remove(draft)
+						}
+					>
 						Remove Screen
 					</Button>
 				</div>
@@ -844,6 +868,37 @@ export function ScreenSettingsCard({
 				<small className="screen-browser-link-status" role="status">
 					{browserLinkStatus}
 				</small>
+			)}
+			{removeConfirmationOpen && (
+				<div
+					className="screen-owner-remove-confirmation"
+					role="dialog"
+					aria-label={`Remove ${draft.name}`}
+				>
+					<b>{draft.name} owns the Programmer controls.</b>
+					<p>
+						Removing it will reassign the controls to the main screen in the
+						same confirmed action.
+					</p>
+					<div>
+						<Button
+							variant="danger"
+							disabled={removing || !updateProgrammerOwner}
+							onClick={() => void confirmOwnerRemoval()}
+						>
+							{removing
+								? "Removing…"
+								: "Remove and use controls on main screen"}
+						</Button>
+						<Button
+							disabled={removing}
+							onClick={() => setRemoveConfirmationOpen(false)}
+						>
+							Cancel
+						</Button>
+					</div>
+					{removeError && <p role="alert">{removeError}</p>}
+				</div>
 			)}
 			<ScreenSettingsFields
 				draft={draft}
