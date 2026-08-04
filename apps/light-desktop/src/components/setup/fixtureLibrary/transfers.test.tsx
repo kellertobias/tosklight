@@ -1,12 +1,18 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, render, renderHook, screen } from "@testing-library/react";
+import { ModalProvider } from "@tosklight/ui/modals";
 import JSZip from "jszip";
 import type { PropsWithChildren } from "react";
 import { describe, expect, it, vi } from "vitest";
+import type {
+	AttributeConfigurationApiClient,
+	AttributeConfigurationSnapshot,
+} from "../../../api/client/attributeConfiguration";
+import { AttributeConfigurationActionsProvider } from "../../../features/attributeConfiguration/AttributeConfigurationActions";
 import {
 	FixtureLibraryProvider,
 	type FixtureLibraryState,
 } from "../../../features/fixtureLibrary/FixtureLibraryContext";
-import { useFixtureLibraryTransfers } from "./transfers";
+import { FixtureImportDialogs, useFixtureLibraryTransfers } from "./transfers";
 
 vi.mock("../../../features/deskSnapshot/DeskSnapshotState", () => ({
 	useAttributeRegistry: () => [
@@ -59,6 +65,191 @@ async function gdtfFile(attribute: string) {
 }
 
 describe("useFixtureLibraryTransfers", () => {
+	it("renders the complete imported custom-attribute authoring form", () => {
+		render(
+			<FixtureImportDialogs
+				busy={false}
+				error={null}
+				modal="package"
+				close={vi.fn()}
+				confirmGdtfMappings={vi.fn()}
+				confirmPackageMappings={vi.fn()}
+				importGdtfFile={vi.fn()}
+				importPackage={vi.fn()}
+				mappingCandidates={[]}
+				mappings={{}}
+				requirements={[
+					{ attribute: "vendor.test.feature", value_type: "indexed" },
+				]}
+				setMapping={vi.fn()}
+				activationGroupOptions={[
+					{ value: "activation.beam", label: "Beam mode" },
+				]}
+				beginCustomAttribute={vi.fn()}
+				cancelCustomAttribute={vi.fn()}
+				createCustomAttribute={vi.fn()}
+				customAttributeDraft={{
+					sourceAttribute: "vendor.test.feature",
+					label: "Vendor Feature",
+					valueType: "indexed",
+					encoderGroup: "beam",
+					encoderPage: 2,
+					encoderSlot: 3,
+					activationGroupId: "activation.beam",
+					displayUnit: "mode",
+					physicalUnit: "vendor-mode",
+				}}
+				editCustomAttribute={vi.fn()}
+				placementOptions={[{ value: "2:3", label: "Page 2, encoder 3" }]}
+			/>,
+			{ wrapper: ModalProvider },
+		);
+
+		expect(screen.getByLabelText("Display label")).toHaveValue(
+			"Vendor Feature",
+		);
+		expect(screen.getByLabelText("Attribute type")).toHaveTextContent(
+			"indexed",
+		);
+		expect(screen.getByLabelText("Encoder group")).toHaveTextContent("Beam");
+		expect(screen.getByLabelText("Semantic placement")).toHaveTextContent(
+			"Page 2, encoder 3",
+		);
+		expect(screen.getByLabelText("Activation group")).toHaveTextContent(
+			"Beam mode",
+		);
+		expect(screen.getByLabelText("Display unit")).toHaveValue("mode");
+		expect(screen.getByLabelText("Physical unit")).toHaveValue("vendor-mode");
+		expect(
+			screen.getByRole("button", { name: "Create and use attribute" }),
+		).toBeEnabled();
+	});
+
+	it("creates, places, and selects a compatible custom attribute inside import", async () => {
+		const requirement = {
+			attribute: "vendor.test.feature",
+			value_type: "indexed" as const,
+		};
+		const importFixturePackage = vi.fn().mockResolvedValueOnce({
+			type: "import_required",
+			unknown_attributes: [requirement],
+		});
+		const snapshot = attributeSnapshot();
+		const update = vi.fn(async (_showId, _snapshot, patch) => {
+			const custom = patch.custom_attributes.at(-1);
+			const placement = patch.placements.at(-1);
+			return {
+				snapshot: {
+					...snapshot,
+					configuration: {
+						...snapshot.configuration,
+						custom_attributes: patch.custom_attributes,
+						placements: patch.placements,
+						activation_groups: patch.activation_groups,
+					},
+					descriptors: [
+						{
+							id: custom.id,
+							label: custom.label,
+							encoder_group: placement.encoder_group,
+							encoder_page: placement.encoder_page,
+							encoder_slot: placement.encoder_slot,
+							value_type: custom.value_type,
+							display_unit: custom.display_unit,
+							physical_unit: custom.physical_unit,
+							normalized_min: null,
+							normalized_max: null,
+							domain_min: null,
+							domain_max: null,
+							cyclic: false,
+							recordable: true,
+							built_in: false,
+							retired: false,
+							activation_group_id: custom.id,
+							push_turn_of: null,
+						},
+					],
+				},
+			};
+		});
+		const attributeClient = {
+			snapshot: vi.fn(async () => snapshot),
+			update,
+		} as unknown as AttributeConfigurationApiClient;
+		const library = fixtureLibrary(importFixturePackage);
+		const wrapper = ({ children }: PropsWithChildren) => (
+			<AttributeConfigurationActionsProvider
+				client={attributeClient}
+				showId="show-1"
+				canWrite
+				onApplied={vi.fn(async () => undefined)}
+			>
+				<FixtureLibraryProvider library={library}>
+					{children}
+				</FixtureLibraryProvider>
+			</AttributeConfigurationActionsProvider>
+		);
+		const { result } = renderHook(
+			() =>
+				useFixtureLibraryTransfers({
+					selectedMode: null,
+					setSelectedFamilyKey: vi.fn(),
+					setSelectedModeKey: vi.fn(),
+				}),
+			{ wrapper },
+		);
+
+		act(() => result.current.setModal("package"));
+		await act(() =>
+			result.current.importPackage(
+				new File([new Uint8Array([1, 2, 3])], "unknown.toskfixture"),
+			),
+		);
+		await act(() => result.current.beginCustomAttribute(requirement));
+		act(() =>
+			result.current.editCustomAttribute({
+				label: "Vendor Feature",
+				encoderGroup: "control",
+				displayUnit: "mode",
+				physicalUnit: "vendor-mode",
+			}),
+		);
+		await act(() => result.current.createCustomAttribute());
+
+		const patch = update.mock.calls[0]?.[2];
+		const custom = patch.custom_attributes.at(-1);
+		expect(custom).toMatchObject({
+			label: "Vendor Feature",
+			value_type: "indexed",
+			display_unit: "mode",
+			physical_unit: "vendor-mode",
+			recordable: true,
+		});
+		expect(patch.placements.at(-1)).toMatchObject({
+			attribute: custom.id,
+			encoder_group: "control",
+			encoder_page: 1,
+			encoder_slot: 1,
+		});
+		expect(patch.activation_groups.at(-1)).toEqual({
+			id: custom.id,
+			label: "Vendor Feature",
+			members: [custom.id],
+		});
+		expect(result.current.mappings[requirement.attribute]).toBe(custom.id);
+
+		await act(() => result.current.confirmPackageMappings());
+		expect(importFixturePackage).toHaveBeenLastCalledWith(
+			expect.any(Uint8Array),
+			[
+				{
+					source_attribute: requirement.attribute,
+					target_attribute: custom.id,
+				},
+			],
+		);
+	});
+
 	it("keeps a package import open while the operator resolves unknown attributes", async () => {
 		const requirement = {
 			attribute: "vendor.test.feature",
@@ -204,3 +395,21 @@ describe("useFixtureLibraryTransfers", () => {
 		});
 	});
 });
+
+function attributeSnapshot(): AttributeConfigurationSnapshot {
+	const configuration = {
+		version: 1,
+		custom_attributes: [],
+		placements: [],
+		activation_groups: [],
+	};
+	return {
+		show_id: "show-1",
+		show_revision: 1,
+		object_revision: 1,
+		configuration,
+		recommended_configuration: configuration,
+		descriptors: [],
+		validation_error: null,
+	};
+}

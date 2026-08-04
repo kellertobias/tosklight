@@ -113,6 +113,13 @@ export function FixtureLibrarySetup({
 				mappings={transfers.mappings}
 				requirements={transfers.requirements}
 				setMapping={transfers.setMapping}
+				activationGroupOptions={transfers.activationGroupOptions}
+				beginCustomAttribute={transfers.beginCustomAttribute}
+				cancelCustomAttribute={transfers.cancelCustomAttribute}
+				createCustomAttribute={transfers.createCustomAttribute}
+				customAttributeDraft={transfers.customAttributeDraft}
+				editCustomAttribute={transfers.editCustomAttribute}
+				placementOptions={transfers.placementOptions}
 			/>
 			{revisions.history && (
 				<FixtureRevisionHistory

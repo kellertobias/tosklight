@@ -1,15 +1,24 @@
 import {
 	Button,
+	FormLayout,
 	ModalRegistration,
 	ModalTitleBar,
 	SelectField,
+	TextField,
 } from "@tosklight/ui";
 import { useState } from "react";
+import type { AttributeValueType } from "../../../api/attributeConfigurationModels";
+import type {
+	AttributeConfigurationSnapshot,
+	AttributeEncoderGroup,
+	ConfiguredAttributeDescriptor,
+} from "../../../api/client/attributeConfiguration";
 import type {
 	FixtureAttributeMapping,
 	FixtureImportRequirement,
 } from "../../../api/client/fixtures";
 import type { FixtureDefinition, FixtureProfile } from "../../../api/types";
+import { useAttributeConfigurationActions } from "../../../features/attributeConfiguration/AttributeConfigurationActions";
 import { useAttributeRegistry } from "../../../features/deskSnapshot/DeskSnapshotState";
 import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import { RootConfinedFilePickerButton } from "../../files/RootConfinedFilePickerButton";
@@ -28,6 +37,39 @@ interface PendingGdtfImport {
 	profile: FixtureProfile;
 	source: Uint8Array;
 }
+
+interface ImportedCustomAttributeDraft {
+	sourceAttribute: string;
+	label: string;
+	valueType: AttributeValueType;
+	encoderGroup: AttributeEncoderGroup;
+	encoderPage: number;
+	encoderSlot: number;
+	activationGroupId: string;
+	displayUnit: string;
+	physicalUnit: string;
+}
+
+interface AttributeMappingCandidate {
+	id: string;
+	label: string;
+	value_type: AttributeValueType;
+	retired?: boolean;
+}
+
+const ENCODER_GROUP_OPTIONS: Array<{
+	value: AttributeEncoderGroup;
+	label: string;
+}> = [
+	{ value: "intensity", label: "Intensity" },
+	{ value: "color", label: "Color" },
+	{ value: "position", label: "Position" },
+	{ value: "beam", label: "Beam" },
+	{ value: "shapers", label: "Shapers" },
+	{ value: "focus", label: "Focus" },
+	{ value: "control", label: "Control" },
+	{ value: "media", label: "Media" },
+];
 
 function gdtfValueType(
 	channel: FixtureProfile["modes"][number]["channels"][number],
@@ -117,6 +159,7 @@ export function useFixtureLibraryTransfers({
 	setSelectedModeKey,
 }: FixtureLibraryTransfersOptions) {
 	const server = useFixtureLibrary();
+	const attributeActions = useAttributeConfigurationActions();
 	const attributeRegistry = useAttributeRegistry() ?? [];
 	const [busy, setBusy] = useState(false);
 	const [modal, setModal] = useState<FixtureImportModal>(null);
@@ -129,6 +172,13 @@ export function useFixtureLibraryTransfers({
 		[],
 	);
 	const [mappings, setMappings] = useState<Record<string, string>>({});
+	const [createdAttributes, setCreatedAttributes] = useState<
+		ConfiguredAttributeDescriptor[]
+	>([]);
+	const [customAttributeSnapshot, setCustomAttributeSnapshot] =
+		useState<AttributeConfigurationSnapshot | null>(null);
+	const [customAttributeDraft, setCustomAttributeDraft] =
+		useState<ImportedCustomAttributeDraft | null>(null);
 
 	const selectModal = (next: FixtureImportModal) => {
 		setError(null);
@@ -136,7 +186,135 @@ export function useFixtureLibraryTransfers({
 		setPendingGdtf(null);
 		setRequirements([]);
 		setMappings({});
+		setCustomAttributeSnapshot(null);
+		setCustomAttributeDraft(null);
 		setModal(next);
+	};
+
+	const beginCustomAttribute = async (
+		requirement: FixtureImportRequirement,
+	) => {
+		if (!attributeActions?.canWrite) {
+			setError("The primary desk is not ready to create show attributes.");
+			return;
+		}
+		setError(null);
+		setBusy(true);
+		try {
+			const snapshot = await attributeActions.load();
+			const encoderGroup = defaultEncoderGroup(requirement.value_type);
+			setCustomAttributeSnapshot(snapshot);
+			setCustomAttributeDraft({
+				sourceAttribute: requirement.attribute,
+				label: importedAttributeLabel(requirement.attribute),
+				valueType: requirement.value_type,
+				encoderGroup,
+				...nextAvailablePlacement(snapshot, encoderGroup),
+				activationGroupId:
+					requirement.value_type === "control" ? "" : "__new__",
+				displayUnit: "",
+				physicalUnit: "",
+			});
+		} catch (reason) {
+			setError(reason instanceof Error ? reason.message : String(reason));
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const editCustomAttribute = (
+		patch: Partial<ImportedCustomAttributeDraft>,
+	) => {
+		setCustomAttributeDraft((current) => {
+			if (!current) return current;
+			if (
+				patch.encoderGroup &&
+				patch.encoderGroup !== current.encoderGroup &&
+				customAttributeSnapshot
+			)
+				return {
+					...current,
+					...patch,
+					...nextAvailablePlacement(
+						customAttributeSnapshot,
+						patch.encoderGroup,
+					),
+					activationGroupId: current.valueType === "control" ? "" : "__new__",
+				};
+			return { ...current, ...patch };
+		});
+	};
+
+	const createCustomAttribute = async () => {
+		const draft = customAttributeDraft;
+		const snapshot = customAttributeSnapshot;
+		if (!draft || !snapshot || !attributeActions?.canWrite) return;
+		if (!draft.label.trim()) {
+			setError("Enter a display label for the custom attribute.");
+			return;
+		}
+		setError(null);
+		setBusy(true);
+		try {
+			const id = customAttributeId(draft.label);
+			const custom = {
+				id,
+				label: draft.label.trim(),
+				value_type: draft.valueType,
+				display_unit: draft.displayUnit.trim() || null,
+				physical_unit: draft.physicalUnit.trim() || null,
+				normalized_bounds:
+					draft.valueType === "continuous" ? { min: 0, max: 1 } : null,
+				domain_bounds: null,
+				cyclic: false,
+				recordable: draft.valueType !== "control",
+				lifecycle: "active" as const,
+			};
+			const activationGroups =
+				draft.valueType === "control"
+					? snapshot.configuration.activation_groups
+					: draft.activationGroupId === "__new__"
+						? [
+								...snapshot.configuration.activation_groups,
+								{ id, label: custom.label, members: [id] },
+							]
+						: snapshot.configuration.activation_groups.map((group) =>
+								group.id === draft.activationGroupId
+									? { ...group, members: [...group.members, id] }
+									: group,
+							);
+			const updated = await attributeActions.update(snapshot, {
+				custom_attributes: [
+					...snapshot.configuration.custom_attributes,
+					custom,
+				],
+				placements: [
+					...snapshot.configuration.placements,
+					{
+						attribute: id,
+						encoder_group: draft.encoderGroup,
+						encoder_page: draft.encoderPage,
+						encoder_slot: draft.encoderSlot,
+						push_turn_of: null,
+					},
+				],
+				activation_groups: activationGroups,
+			});
+			const created = updated.descriptors.find(
+				(descriptor) => descriptor.id === id,
+			);
+			if (created) setCreatedAttributes((current) => [...current, created]);
+			setMappings((current) => ({
+				...current,
+				[draft.sourceAttribute]: id,
+			}));
+			setCustomAttributeSnapshot(null);
+			setCustomAttributeDraft(null);
+		} catch (reason) {
+			setError(reason instanceof Error ? reason.message : String(reason));
+		} finally {
+			setBusy(false);
+		}
 	};
 
 	const selectImportedProfile = (profile: {
@@ -314,15 +492,29 @@ export function useFixtureLibraryTransfers({
 	};
 
 	return {
+		activationGroupOptions: compatibleActivationGroups(
+			customAttributeSnapshot,
+			customAttributeDraft,
+		),
+		beginCustomAttribute,
 		busy,
+		cancelCustomAttribute: () => {
+			setCustomAttributeSnapshot(null);
+			setCustomAttributeDraft(null);
+		},
 		error,
+		createCustomAttribute,
+		customAttributeDraft,
+		editCustomAttribute,
 		exportSelectedPackage: () => downloadFixturePackage(server, selectedMode),
 		confirmPackageMappings,
 		confirmGdtfMappings,
 		importGdtfFile,
 		importPackage,
-		mappingCandidates: attributeRegistry.filter(
-			(descriptor) => !descriptor.retired,
+		mappingCandidates: [...attributeRegistry, ...createdAttributes].filter(
+			(descriptor, index, all) =>
+				!descriptor.retired &&
+				all.findIndex((candidate) => candidate.id === descriptor.id) === index,
 		),
 		mappings,
 		modal,
@@ -330,6 +522,10 @@ export function useFixtureLibraryTransfers({
 		setMapping: (source: string, target: string) =>
 			setMappings((current) => ({ ...current, [source]: target })),
 		setModal: selectModal,
+		placementOptions: customAttributePlacementOptions(
+			customAttributeSnapshot,
+			customAttributeDraft,
+		),
 	};
 }
 
@@ -342,10 +538,19 @@ interface FixtureImportDialogsProps {
 	confirmPackageMappings: () => Promise<void>;
 	importGdtfFile: (file?: File) => Promise<void>;
 	importPackage: (file?: File) => Promise<void>;
-	mappingCandidates: ReturnType<typeof useAttributeRegistry>;
+	mappingCandidates: AttributeMappingCandidate[];
 	mappings: Record<string, string>;
 	requirements: FixtureImportRequirement[];
 	setMapping: (source: string, target: string) => void;
+	activationGroupOptions: Array<{ value: string; label: string }>;
+	beginCustomAttribute: (
+		requirement: FixtureImportRequirement,
+	) => Promise<void>;
+	cancelCustomAttribute: () => void;
+	createCustomAttribute: () => Promise<void>;
+	customAttributeDraft: ImportedCustomAttributeDraft | null;
+	editCustomAttribute: (patch: Partial<ImportedCustomAttributeDraft>) => void;
+	placementOptions: Array<{ value: string; label: string }>;
 }
 
 function AttributeMappingFields({
@@ -353,37 +558,161 @@ function AttributeMappingFields({
 	mappingCandidates,
 	mappings,
 	setMapping,
+	activationGroupOptions,
+	beginCustomAttribute,
+	cancelCustomAttribute,
+	createCustomAttribute,
+	customAttributeDraft,
+	editCustomAttribute,
+	placementOptions,
+	busy,
 }: Pick<
 	FixtureImportDialogsProps,
-	"requirements" | "mappingCandidates" | "mappings" | "setMapping"
+	| "requirements"
+	| "mappingCandidates"
+	| "mappings"
+	| "setMapping"
+	| "activationGroupOptions"
+	| "beginCustomAttribute"
+	| "cancelCustomAttribute"
+	| "createCustomAttribute"
+	| "customAttributeDraft"
+	| "editCustomAttribute"
+	| "placementOptions"
+	| "busy"
 >) {
 	return (
 		<div className="fixture-package-attribute-mappings">
 			{requirements.map((requirement) => (
-				<SelectField
-					key={requirement.attribute}
-					label={
-						<span>
-							<code>{requirement.attribute}</code> ({requirement.value_type})
-						</span>
-					}
-					ariaLabel={`Map ${requirement.attribute}`}
-					value={mappings[requirement.attribute] ?? ""}
-					onChange={(value) => setMapping(requirement.attribute, value)}
-					options={[
-						{ value: "", label: "Choose descriptor…" },
-						...(mappingCandidates ?? [])
-							.filter(
-								(candidate) => candidate.value_type === requirement.value_type,
-							)
-							.map((candidate) => ({
-								value: candidate.id,
-								label: `${candidate.label} (${candidate.id})`,
-							})),
-					]}
-				/>
+				<div key={requirement.attribute} className="fixture-attribute-mapping">
+					<SelectField
+						label={
+							<span>
+								<code>{requirement.attribute}</code> ({requirement.value_type})
+							</span>
+						}
+						ariaLabel={`Map ${requirement.attribute}`}
+						value={mappings[requirement.attribute] ?? ""}
+						onChange={(value) => setMapping(requirement.attribute, value)}
+						options={[
+							{ value: "", label: "Choose descriptor…" },
+							...(mappingCandidates ?? [])
+								.filter(
+									(candidate) =>
+										candidate.value_type === requirement.value_type,
+								)
+								.map((candidate) => ({
+									value: candidate.id,
+									label: `${candidate.label} (${candidate.id})`,
+								})),
+						]}
+					/>
+					<Button
+						disabled={busy || Boolean(customAttributeDraft)}
+						onClick={() => void beginCustomAttribute(requirement)}
+					>
+						Create custom attribute
+					</Button>
+					{customAttributeDraft?.sourceAttribute === requirement.attribute && (
+						<CustomAttributeImportFields
+							draft={customAttributeDraft}
+							activationGroupOptions={activationGroupOptions}
+							placementOptions={placementOptions}
+							onChange={editCustomAttribute}
+							onCancel={cancelCustomAttribute}
+							onCreate={createCustomAttribute}
+							busy={busy}
+						/>
+					)}
+				</div>
 			))}
 		</div>
+	);
+}
+
+function CustomAttributeImportFields({
+	draft,
+	activationGroupOptions,
+	placementOptions,
+	onChange,
+	onCancel,
+	onCreate,
+	busy,
+}: {
+	draft: ImportedCustomAttributeDraft;
+	activationGroupOptions: Array<{ value: string; label: string }>;
+	placementOptions: Array<{ value: string; label: string }>;
+	onChange(patch: Partial<ImportedCustomAttributeDraft>): void;
+	onCancel(): void;
+	onCreate(): Promise<void>;
+	busy: boolean;
+}) {
+	return (
+		<FormLayout labelPlacement="side">
+			<TextField
+				label="Display label"
+				value={draft.label}
+				onChange={(event) => onChange({ label: event.target.value })}
+			/>
+			<SelectField
+				label="Attribute type"
+				ariaLabel="Attribute type"
+				value={draft.valueType}
+				options={[{ value: draft.valueType, label: draft.valueType }]}
+				onChange={() => undefined}
+			/>
+			<SelectField
+				label="Encoder group"
+				ariaLabel="Encoder group"
+				value={draft.encoderGroup}
+				options={ENCODER_GROUP_OPTIONS}
+				onChange={(value) =>
+					onChange({ encoderGroup: value as AttributeEncoderGroup })
+				}
+			/>
+			<SelectField
+				label="Semantic placement"
+				ariaLabel="Semantic placement"
+				value={`${draft.encoderPage}:${draft.encoderSlot}`}
+				options={placementOptions}
+				onChange={(value) => {
+					const [encoderPage, encoderSlot] = value.split(":").map(Number);
+					onChange({ encoderPage, encoderSlot });
+				}}
+			/>
+			{draft.valueType !== "control" && (
+				<SelectField
+					label="Activation group"
+					ariaLabel="Activation group"
+					value={draft.activationGroupId}
+					options={[
+						{ value: "__new__", label: "Own activation group" },
+						...activationGroupOptions,
+					]}
+					onChange={(activationGroupId) => onChange({ activationGroupId })}
+				/>
+			)}
+			<TextField
+				label="Display unit"
+				value={draft.displayUnit}
+				onChange={(event) => onChange({ displayUnit: event.target.value })}
+			/>
+			<TextField
+				label="Physical unit"
+				value={draft.physicalUnit}
+				onChange={(event) => onChange({ physicalUnit: event.target.value })}
+			/>
+			<div>
+				<Button onClick={onCancel}>Cancel</Button>
+				<Button
+					variant="primary"
+					disabled={busy || !draft.label.trim()}
+					onClick={() => void onCreate()}
+				>
+					{busy ? "Creating…" : "Create and use attribute"}
+				</Button>
+			</div>
+		</FormLayout>
 	);
 }
 
@@ -400,6 +729,13 @@ export function FixtureImportDialogs({
 	mappings,
 	requirements,
 	setMapping,
+	activationGroupOptions,
+	beginCustomAttribute,
+	cancelCustomAttribute,
+	createCustomAttribute,
+	customAttributeDraft,
+	editCustomAttribute,
+	placementOptions,
 }: FixtureImportDialogsProps) {
 	return (
 		<>
@@ -437,6 +773,14 @@ export function FixtureImportDialogs({
 										mappingCandidates={mappingCandidates}
 										mappings={mappings}
 										setMapping={setMapping}
+										activationGroupOptions={activationGroupOptions}
+										beginCustomAttribute={beginCustomAttribute}
+										cancelCustomAttribute={cancelCustomAttribute}
+										createCustomAttribute={createCustomAttribute}
+										customAttributeDraft={customAttributeDraft}
+										editCustomAttribute={editCustomAttribute}
+										placementOptions={placementOptions}
+										busy={busy}
 									/>
 									<Button
 										variant="primary"
@@ -482,16 +826,21 @@ export function FixtureImportDialogs({
 								<>
 									<p>
 										Map each package attribute to a compatible configured
-										descriptor. To preserve it as a new identity, first create
-										and place a custom descriptor under{" "}
-										<strong>Show → Desk Setup → Programmer → Attributes</strong>
-										, then choose the package again.
+										descriptor, or create and place a custom attribute here.
 									</p>
 									<AttributeMappingFields
 										requirements={requirements}
 										mappingCandidates={mappingCandidates}
 										mappings={mappings}
 										setMapping={setMapping}
+										activationGroupOptions={activationGroupOptions}
+										beginCustomAttribute={beginCustomAttribute}
+										cancelCustomAttribute={cancelCustomAttribute}
+										createCustomAttribute={createCustomAttribute}
+										customAttributeDraft={customAttributeDraft}
+										editCustomAttribute={editCustomAttribute}
+										placementOptions={placementOptions}
+										busy={busy}
 									/>
 									<Button
 										variant="primary"
@@ -513,4 +862,93 @@ export function FixtureImportDialogs({
 			)}
 		</>
 	);
+}
+
+function defaultEncoderGroup(
+	valueType: AttributeValueType,
+): AttributeEncoderGroup {
+	if (valueType === "color") return "color";
+	if (valueType === "control") return "control";
+	return "beam";
+}
+
+function importedAttributeLabel(source: string) {
+	return source
+		.replace(/^GDTF:/u, "")
+		.replace(/[._:-]+/gu, " ")
+		.trim();
+}
+
+function customAttributeId(label: string) {
+	const slug =
+		label
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/gu, ".")
+			.replace(/^\.+|\.+$/gu, "") || "attribute";
+	return `custom.${slug}.${crypto.randomUUID()}`;
+}
+
+function nextAvailablePlacement(
+	snapshot: AttributeConfigurationSnapshot,
+	encoderGroup: AttributeEncoderGroup,
+) {
+	const occupied = new Set(
+		snapshot.configuration.placements
+			.filter((placement) => placement.encoder_group === encoderGroup)
+			.map(
+				(placement) => `${placement.encoder_page}:${placement.encoder_slot}`,
+			),
+	);
+	for (let encoderPage = 1; ; encoderPage += 1)
+		for (let encoderSlot = 1; encoderSlot <= 6; encoderSlot += 1)
+			if (!occupied.has(`${encoderPage}:${encoderSlot}`))
+				return { encoderPage, encoderSlot };
+}
+
+function customAttributePlacementOptions(
+	snapshot: AttributeConfigurationSnapshot | null,
+	draft: ImportedCustomAttributeDraft | null,
+) {
+	if (!snapshot || !draft) return [];
+	const placements = snapshot.configuration.placements.filter(
+		(placement) => placement.encoder_group === draft.encoderGroup,
+	);
+	const occupied = new Set(
+		placements.map(
+			(placement) => `${placement.encoder_page}:${placement.encoder_slot}`,
+		),
+	);
+	const maximumPage = Math.max(
+		1,
+		...placements.map((placement) => placement.encoder_page),
+	);
+	const options: Array<{ value: string; label: string }> = [];
+	for (let page = 1; page <= maximumPage + 1; page += 1)
+		for (let slot = 1; slot <= 6; slot += 1) {
+			const value = `${page}:${slot}`;
+			if (!occupied.has(value))
+				options.push({ value, label: `Page ${page}, encoder ${slot}` });
+		}
+	return options;
+}
+
+function compatibleActivationGroups(
+	snapshot: AttributeConfigurationSnapshot | null,
+	draft: ImportedCustomAttributeDraft | null,
+) {
+	if (!snapshot || !draft || draft.valueType === "control") return [];
+	const placements = new Map(
+		snapshot.configuration.placements.map((placement) => [
+			placement.attribute,
+			placement,
+		]),
+	);
+	return snapshot.configuration.activation_groups
+		.filter((group) =>
+			group.members.every(
+				(member) =>
+					placements.get(member)?.encoder_group === draft.encoderGroup,
+			),
+		)
+		.map((group) => ({ value: group.id, label: group.label }));
 }
