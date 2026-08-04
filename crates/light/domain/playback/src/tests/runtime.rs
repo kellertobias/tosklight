@@ -134,6 +134,55 @@ fn ltp_intensity_can_select_a_newer_lower_value() {
 }
 
 #[test]
+fn equal_timestamp_transitions_receive_persistable_monotonic_order() {
+    let fixture = FixtureId::new();
+    let mut high = Cue::new(1.0);
+    high.changes.push(value(fixture, "pan", 0.8));
+    let mut low = Cue::new(1.0);
+    low.changes.push(value(fixture, "pan", 0.2));
+    let high = list(vec![high]);
+    let low = list(vec![low]);
+    let high_id = high.id;
+    let low_id = low.id;
+    let started = Utc::now();
+    let mut engine = PlaybackEngine::default();
+    engine.register(high.clone()).unwrap();
+    engine.register(low.clone()).unwrap();
+    engine.go_at(high_id, started).unwrap();
+    engine.go_at(low_id, started).unwrap();
+
+    let high_order = engine
+        .contributions_with_context_at(started, |_, _| false)
+        .into_iter()
+        .find(|value| value.source.cue_list_id == high_id)
+        .unwrap()
+        .transition_ordinal;
+    let low_order = engine
+        .contributions_with_context_at(started, |_, _| false)
+        .into_iter()
+        .find(|value| value.source.cue_list_id == low_id)
+        .unwrap()
+        .transition_ordinal;
+    assert!(low_order > high_order);
+
+    let persisted = engine.runtime();
+    let mut restored = PlaybackEngine::default();
+    restored.register(high).unwrap();
+    restored.register(low).unwrap();
+    restored.restore_active(persisted);
+    restored.jump_at(high_id, 1.0, started).unwrap();
+    assert!(
+        restored
+            .active()
+            .iter()
+            .find(|playback| playback.cue_list_id == high_id)
+            .unwrap()
+            .transition_ordinal
+            > low_order
+    );
+}
+
+#[test]
 fn concrete_playbacks_share_one_cuelist_runtime() {
     let fixture = FixtureId::new();
     let mut one = Cue::new(1.0);

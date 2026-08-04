@@ -5,7 +5,8 @@ use super::capability_resources::{
 };
 use super::visualization_frame::VisualizationFrameHub;
 use super::{
-    ActionTimingResource, AppState, OutputControl, PersistedOutputRuntime, playback_service,
+    ActionTimingResource, ApiError, AppState, DeskStore, OutputControl, PersistedOutputRuntime,
+    active_playbacks_setting, playback_service,
 };
 use light_application::{
     PlaybackOperation, PlaybackShowScope, PlaybackUnitOfWork, automatic_playback_events,
@@ -77,6 +78,7 @@ pub(super) struct Config {
     pub dynamic_auto_offs: Arc<Mutex<Vec<PlaybackIdentity>>>,
     pub visualization_frames: Arc<VisualizationFrameHub>,
     pub action_timing: ActionTimingResource,
+    pub data_dir: std::path::PathBuf,
 }
 
 pub(super) struct OutputScheduler {
@@ -91,6 +93,7 @@ struct SharedResources {
     pub(super) output: Arc<NetworkOutput>,
     pub(super) sequences: SharedSequences,
     pub(super) control: Arc<Mutex<OutputControl>>,
+    playback_desk: Arc<Mutex<DeskStore>>,
     programmer_reconciliation_cache: Arc<ProgrammerReconciliationCache>,
 }
 
@@ -112,6 +115,7 @@ struct Runtime {
     pub(super) visualization_frames: Arc<VisualizationFrameHub>,
     pub(super) action_timing: ActionTimingResource,
     pub(super) programmer_reconciliation_cache: Arc<ProgrammerReconciliationCache>,
+    pub(super) playback_desk: Arc<Mutex<DeskStore>>,
 }
 
 pub(super) async fn start(config: Config) -> anyhow::Result<OutputScheduler> {
@@ -232,6 +236,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
             &runtime.playback,
             options,
             &sampled,
+            Some(&runtime.playback_desk),
         )
         .map_err(io::Error::other)?;
         (
@@ -385,6 +390,7 @@ pub(super) fn render_with_playback_events(
     playback: &PlaybackRenderCapability,
     options: RenderOptions,
     sampled: &[ContributionBatch],
+    playback_desk: Option<&Mutex<DeskStore>>,
 ) -> Result<RenderResult, EngineError> {
     playback
         .run_unit_of_work(AutomaticRender {
@@ -393,6 +399,7 @@ pub(super) fn render_with_playback_events(
             options,
             playback,
             sampled,
+            playback_desk,
         })
         .output
 }
@@ -403,6 +410,7 @@ struct AutomaticRender<'a> {
     options: RenderOptions,
     playback: &'a PlaybackRenderCapability,
     sampled: &'a [ContributionBatch],
+    playback_desk: Option<&'a Mutex<DeskStore>>,
 }
 
 impl PlaybackUnitOfWork for AutomaticRender<'_> {
@@ -418,6 +426,12 @@ impl PlaybackUnitOfWork for AutomaticRender<'_> {
         };
         let transitions = std::mem::take(&mut rendered.automatic_playback_transitions);
         let show_id = self.active_show.current().as_ref().map(|show| show.id.0);
+        if !transitions.is_empty()
+            && let (Some(show_id), Some(desk)) = (show_id, self.playback_desk)
+            && let Err(error) = checkpoint_automatic_playback_runtime(self.engine, desk, show_id)
+        {
+            tracing::warn!(error = %error.message, "automatic Playback runtime persistence is pending");
+        }
         let mut events = show_id
             .map(|show_id| {
                 playback_service::automatic_projection_changes(
@@ -443,6 +457,20 @@ impl PlaybackUnitOfWork for AutomaticRender<'_> {
         }
         PlaybackOperation::with_events(Ok(rendered), events)
     }
+}
+
+fn checkpoint_automatic_playback_runtime(
+    engine: &Engine,
+    desk: &Mutex<DeskStore>,
+    show_id: Uuid,
+) -> Result<(), ApiError> {
+    let serialized = super::serialize_active_playbacks(&engine.playback_runtime())?;
+    desk.lock()
+        .set_setting(
+            &active_playbacks_setting(light_core::ShowId(show_id)),
+            &serialized,
+        )
+        .map_err(ApiError::store)
 }
 
 fn update_timecode(runtime: &Runtime) {
@@ -570,6 +598,9 @@ impl SharedResources {
             output: bind_output(config.bind_ip).await?,
             sequences: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             control: create_control(&config.persisted_runtime),
+            playback_desk: Arc::new(Mutex::new(DeskStore::open(
+                config.data_dir.join("desk.sqlite"),
+            )?)),
             programmer_reconciliation_cache: Arc::new(ProgrammerReconciliationCache::default()),
         })
     }
@@ -592,6 +623,7 @@ impl SharedResources {
             visualization_frames: Arc::clone(&config.visualization_frames),
             action_timing: config.action_timing.clone(),
             programmer_reconciliation_cache: Arc::clone(&self.programmer_reconciliation_cache),
+            playback_desk: Arc::clone(&self.playback_desk),
         }
     }
 

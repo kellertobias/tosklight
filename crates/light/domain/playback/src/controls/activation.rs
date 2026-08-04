@@ -15,15 +15,25 @@ impl PlaybackEngine {
                     );
                 };
                 let key = PlaybackKey::CueList(cue_list_id);
-                if !self.active.contains_key(&key) {
+                let had_runtime = self.active.contains_key(&key);
+                let was_enabled = self
+                    .active
+                    .get(&key)
+                    .is_some_and(|playback| playback.enabled);
+                if !had_runtime {
                     self.go_at_key(key, cue_list_id, self.clock.now())?;
                 }
+                let transition_ordinal =
+                    (had_runtime && !was_enabled).then(|| self.take_transition_ordinal());
                 let active = self
                     .active
                     .get_mut(&key)
                     .expect("virtual playback activation inserted runtime");
                 active.playback_identity = Some(identity);
                 activate_normal(active, address.number().get());
+                if let Some(transition_ordinal) = transition_ordinal {
+                    active.transition_ordinal = transition_ordinal;
+                }
                 self.retarget_physical_controls(cue_list_id, 1.0, None);
                 Ok(())
             }
@@ -57,15 +67,25 @@ impl PlaybackEngine {
         }
         let id = self.cue_list_for(number)?;
         let key = PlaybackKey::CueList(id);
+        let had_runtime = self.active.contains_key(&key);
+        let was_enabled = self
+            .active
+            .get(&key)
+            .is_some_and(|playback| playback.enabled);
         let mut changed = false;
-        if !self.active.contains_key(&key) {
+        if !had_runtime {
             self.go_at_key(key, id, self.clock.now())?;
             changed = true;
         }
         changed |= self.restart_first_cue_if_needed(key, id);
+        let transition_ordinal =
+            (had_runtime && (!was_enabled || changed)).then(|| self.take_transition_ordinal());
         let active = self.active.get_mut(&key).unwrap();
         active.playback_identity = None;
         changed |= activate_normal(active, number);
+        if let Some(transition_ordinal) = transition_ordinal {
+            active.transition_ordinal = transition_ordinal;
+        }
         let control_changed = self.retarget_physical_controls(id, 1.0, None);
         let addressed_effect = durable_effect(changed);
         let addressed_effect = addressed_effect.combine(if control_changed {

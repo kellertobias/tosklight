@@ -144,6 +144,7 @@ impl RuntimeResources {
             visualization_frames: Arc::clone(&visualization_frames),
             action_timing: action_timing.clone(),
             test_bench: startup.persistent.test_bench,
+            data_dir: startup.persistent.data_dir.clone(),
         })
         .await?;
         Ok(Self {

@@ -152,6 +152,7 @@ pub struct CueListRuntimeProjection {
     pub effective_next_is_loaded: bool,
     pub paused: bool,
     pub activated_at: DateTime<Utc>,
+    pub transition_ordinal: u64,
     pub master: f32,
     pub fader_position: f32,
     pub fader_pickup_required: bool,

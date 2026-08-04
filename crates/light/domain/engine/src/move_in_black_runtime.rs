@@ -130,20 +130,25 @@ impl MoveInBlackRuntime {
             )
     }
 
-    pub(crate) fn timed_values(&self) -> Vec<TimedValue> {
+    pub(crate) fn timed_values(&self) -> Vec<(TimedValue, u64)> {
         self.current
             .iter()
-            .map(|(attribute, value)| TimedValue {
-                fixture_id: self.candidate.fixture_id,
-                attribute: attribute.clone(),
-                value: value.clone(),
-                priority: self.candidate.priority,
-                changed_at: self.changed_at,
-                programmer_order: 0,
-                merge_mode: MergeMode::Ltp,
-                fade: false,
-                fade_millis: None,
-                delay_millis: None,
+            .map(|(attribute, value)| {
+                (
+                    TimedValue {
+                        fixture_id: self.candidate.fixture_id,
+                        attribute: attribute.clone(),
+                        value: value.clone(),
+                        priority: self.candidate.priority,
+                        changed_at: self.changed_at,
+                        programmer_order: 0,
+                        merge_mode: MergeMode::Ltp,
+                        fade: false,
+                        fade_millis: None,
+                        delay_millis: None,
+                    },
+                    self.candidate.transition_ordinal,
+                )
             })
             .collect()
     }

@@ -291,6 +291,7 @@ fn cue_transition(transition: &application::PlaybackCueTransition) -> wire::Play
         previous: transition.previous.as_ref().map(cue_reference),
         current: transition.current.as_ref().map(cue_reference),
         cause: transition_cause(transition.cause),
+        transition_ordinal: transition.transition_ordinal,
         advanced_steps: transition.advanced_steps,
     }
 }

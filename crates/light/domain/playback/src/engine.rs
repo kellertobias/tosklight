@@ -18,6 +18,7 @@ pub struct PlaybackEngine {
     pub(crate) virtual_definitions: HashMap<VirtualPlaybackAddress, PlaybackDefinition>,
     pub(crate) clock: SharedClock,
     pub(crate) next_activation_ordinal: u64,
+    pub(crate) next_transition_ordinal: u64,
 }
 
 impl Default for PlaybackEngine {
@@ -45,6 +46,7 @@ impl PlaybackEngine {
             virtual_definitions: HashMap::new(),
             clock,
             next_activation_ordinal: 1,
+            next_transition_ordinal: 1,
         }
     }
 

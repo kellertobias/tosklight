@@ -23,6 +23,7 @@ fn transition_draft(desk_id: Uuid, playback_number: u16, delivery: DeliveryPolic
             number: 2.0,
         }),
         cause: PlaybackTransitionCause::Chaser,
+        transition_ordinal: 41,
         advanced_steps: 1,
     };
     let mut draft = EventDraft::playback_runtime_changed(

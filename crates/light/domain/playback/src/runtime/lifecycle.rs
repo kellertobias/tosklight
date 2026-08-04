@@ -6,7 +6,7 @@ impl PlaybackEngine {
             .active
             .iter()
             .filter(|(_, p)| p.enabled && p.master >= 1.0 && !p.flash && !p.temporary)
-            .map(|(key, p)| (*key, p.cue_list_id, p.activated_at))
+            .map(|(key, p)| (*key, p.cue_list_id, p.activated_at, p.transition_ordinal))
             .collect();
         let mut release = Vec::new();
         for (own_key, playback) in &self.active {
@@ -25,27 +25,29 @@ impl PlaybackEngine {
             }
             let own_list = &self.cue_lists[&playback.cue_list_id];
             let covered = own.iter().all(|(address, own_value)| {
-                full.iter().any(|(other_key, other, changed)| {
-                    if other_key == own_key {
-                        return false;
-                    }
-                    let other_list = &self.cue_lists[other];
-                    let Some(other_value) = other_list
-                        .state_at_index(self.active[other_key].cue_index)
-                        .get(address)
-                        .cloned()
-                    else {
-                        return false;
-                    };
-                    if other_list.priority != own_list.priority {
-                        other_list.priority > own_list.priority
-                    } else if address.1.is_intensity() {
-                        other_value.normalized().unwrap_or(0.0)
-                            > own_value.normalized().unwrap_or(0.0)
-                    } else {
-                        *changed > playback.activated_at
-                    }
-                })
+                full.iter()
+                    .any(|(other_key, other, changed, transition_ordinal)| {
+                        if other_key == own_key {
+                            return false;
+                        }
+                        let other_list = &self.cue_lists[other];
+                        let Some(other_value) = other_list
+                            .state_at_index(self.active[other_key].cue_index)
+                            .get(address)
+                            .cloned()
+                        else {
+                            return false;
+                        };
+                        if other_list.priority != own_list.priority {
+                            other_list.priority > own_list.priority
+                        } else if address.1.is_intensity() {
+                            other_value.normalized().unwrap_or(0.0)
+                                > own_value.normalized().unwrap_or(0.0)
+                        } else {
+                            (*changed, *transition_ordinal)
+                                > (playback.activated_at, playback.transition_ordinal)
+                        }
+                    })
             });
             if covered {
                 release.push(*own_key);
@@ -122,6 +124,7 @@ impl PlaybackEngine {
                 playback.loaded_cue_number = None;
             }
             self.observe_restored_activation(playback.activation.as_ref());
+            self.observe_restored_transition_ordinal(playback.transition_ordinal);
             match self.active.entry(key) {
                 std::collections::hash_map::Entry::Vacant(entry) => {
                     entry.insert(playback);
@@ -345,6 +348,7 @@ impl PlaybackEngine {
                     virtual_definitions: self.virtual_definitions.clone(),
                     clock: Arc::clone(&self.clock),
                     next_activation_ordinal: self.next_activation_ordinal,
+                    next_transition_ordinal: self.next_transition_ordinal,
                 };
                 isolated.active.get_mut(key).unwrap().deleted_cue_hold = None;
                 isolated
@@ -381,6 +385,9 @@ fn restored_runtime_wins(candidate: &ActivePlayback, current: &ActivePlayback) -
     }
     if candidate.activated_at != current.activated_at {
         return candidate.activated_at > current.activated_at;
+    }
+    if candidate.transition_ordinal != current.transition_ordinal {
+        return candidate.transition_ordinal > current.transition_ordinal;
     }
     candidate.playback_identity < current.playback_identity
 }

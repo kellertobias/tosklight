@@ -135,6 +135,16 @@ pub(super) fn persist_active_playbacks(state: &AppState) -> Result<(), ApiError>
         return Ok(());
     };
     let runtime = state.output.playback_runtime();
+    let serialized = serialize_active_playbacks(&runtime)?;
+    state
+        .installation
+        .set_setting(&active_playbacks_setting(show.id), &serialized)
+        .map_err(ApiError::store)
+}
+
+pub(super) fn serialize_active_playbacks(
+    runtime: &[light_playback::ActivePlayback],
+) -> Result<String, ApiError> {
     let persisted_runtime = runtime
         .iter()
         .cloned()
@@ -154,6 +164,7 @@ pub(super) fn persist_active_playbacks(state: &AppState) -> Result<(), ApiError>
                 matches!(identity, light_playback::PlaybackIdentity::Virtual(_))
             }),
             activation: source.activation.as_ref(),
+            transition_ordinal: source.transition_ordinal,
         })
         .collect::<Vec<_>>();
     let serialized =
@@ -168,12 +179,7 @@ pub(super) fn persist_active_playbacks(state: &AppState) -> Result<(), ApiError>
         object.remove("fader_pickup_required");
         object.remove("fader_pickup_target");
     }
-    let serialized =
-        serde_json::to_string(&persisted).map_err(|error| ApiError::internal(error.to_string()))?;
-    state
-        .installation
-        .set_setting(&active_playbacks_setting(show.id), &serialized)
-        .map_err(ApiError::store)
+    serde_json::to_string(&persisted).map_err(|error| ApiError::internal(error.to_string()))
 }
 
 #[derive(serde::Serialize)]
@@ -186,6 +192,12 @@ struct PersistedActivePlayback<'a> {
     playback_identity: Option<&'a light_playback::PlaybackIdentity>,
     #[serde(skip_serializing_if = "Option::is_none")]
     activation: Option<&'a light_playback::PlaybackActivationProvenance>,
+    #[serde(skip_serializing_if = "is_zero")]
+    transition_ordinal: u64,
+}
+
+const fn is_zero(value: &u64) -> bool {
+    *value == 0
 }
 pub(super) fn emit(state: &AppState, kind: &str, payload: serde_json::Value) -> u64 {
     let revision = state.events.record_audit(kind, payload.clone());

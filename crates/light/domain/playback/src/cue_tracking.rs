@@ -40,12 +40,14 @@ impl PlaybackEngine {
         now: DateTime<Utc>,
     ) -> Result<&ActivePlayback, String> {
         let interrupted_source = self.transition_source_at(key, now);
+        let transition_ordinal = self.take_transition_ordinal();
         let cue_list = self.cue_lists.get(&id).ok_or("cue list does not exist")?;
         let playback = match self.active.entry(key) {
             std::collections::hash_map::Entry::Vacant(entry) => entry.insert(ActivePlayback {
                 playback_number: None,
                 playback_identity: None,
                 activation: None,
+                transition_ordinal,
                 cue_list_id: id,
                 cue_index: 0,
                 previous_index: None,
@@ -98,6 +100,7 @@ impl PlaybackEngine {
                     playback.paused = false;
                     playback.paused_at = None;
                     playback.activated_at = now;
+                    playback.transition_ordinal = transition_ordinal;
                     reset_manual_transition(playback);
                     return Ok(playback);
                 }
@@ -112,6 +115,7 @@ impl PlaybackEngine {
                         playback.current_cue_number = Some(next);
                         playback.tracking_wrap = false;
                         playback.activated_at = now;
+                        playback.transition_ordinal = transition_ordinal;
                     } else {
                         playback.deleted_cue_hold = Some(hold);
                     }
@@ -138,6 +142,7 @@ impl PlaybackEngine {
                     }
                     playback.activated_at = now;
                 }
+                playback.transition_ordinal = transition_ordinal;
                 playback.current_cue_number = Some(cue_list.cues[playback.cue_index].number);
                 playback.current_cue_id = Some(cue_list.cues[playback.cue_index].id);
                 playback
@@ -169,6 +174,7 @@ impl PlaybackEngine {
         now: DateTime<Utc>,
     ) -> Result<&ActivePlayback, String> {
         let interrupted_source = self.transition_source_at(key, now);
+        let transition_ordinal = self.take_transition_ordinal();
         let cue_list = self.cue_lists.get(&id).ok_or("cue list does not exist")?;
         let index = cue_list
             .cues
@@ -179,6 +185,7 @@ impl PlaybackEngine {
             playback_number: None,
             playback_identity: None,
             activation: None,
+            transition_ordinal,
             cue_list_id: id,
             cue_index: index,
             previous_index: None,
@@ -225,6 +232,7 @@ impl PlaybackEngine {
         playback.paused = false;
         playback.paused_at = None;
         playback.activated_at = now;
+        playback.transition_ordinal = transition_ordinal;
         reset_manual_transition(playback);
         Ok(playback)
     }
@@ -247,6 +255,7 @@ impl PlaybackEngine {
         now: DateTime<Utc>,
     ) -> Result<&ActivePlayback, String> {
         let interrupted_source = self.transition_source_at(key, now);
+        let transition_ordinal = self.take_transition_ordinal();
         let playback = self.active.get_mut(&key).ok_or("cue list is not active")?;
         reset_manual_transition(playback);
         if let Some(hold) = playback.deleted_cue_hold.take() {
@@ -263,6 +272,7 @@ impl PlaybackEngine {
                 playback.current_cue_number = Some(previous);
                 playback.tracking_wrap = false;
                 playback.activated_at = now;
+                playback.transition_ordinal = transition_ordinal;
                 playback.paused = false;
                 playback.paused_at = None;
             } else {
@@ -277,6 +287,7 @@ impl PlaybackEngine {
         playback.current_cue_number = Some(self.cue_lists[&id].cues[playback.cue_index].number);
         playback.tracking_wrap = false;
         playback.activated_at = now;
+        playback.transition_ordinal = transition_ordinal;
         playback.paused = false;
         playback.paused_at = None;
         Ok(playback)

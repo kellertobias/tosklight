@@ -21,6 +21,7 @@ pub struct PlaybackCueTransition {
     pub previous: Option<PlaybackCueReference>,
     pub current: Option<PlaybackCueReference>,
     pub cause: PlaybackTransitionCause,
+    pub transition_ordinal: u64,
     pub advanced_steps: u64,
 }
 
@@ -84,6 +85,9 @@ fn manual_transition(
         previous,
         current,
         cause,
+        transition_ordinal: after
+            .cue_list_runtime()
+            .map_or(0, |runtime| runtime.transition_ordinal),
         advanced_steps: 1,
     })
 }

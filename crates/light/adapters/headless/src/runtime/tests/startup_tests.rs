@@ -356,6 +356,20 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
         .unwrap()
         .unwrap();
     let persisted: Vec<light_playback::ActivePlayback> = serde_json::from_str(&persisted).unwrap();
+    let transition_ordinals = persisted
+        .iter()
+        .map(|playback| playback.transition_ordinal)
+        .collect::<HashSet<_>>();
+    assert_eq!(
+        transition_ordinals.len(),
+        persisted.len(),
+        "persisted transition ordinals: {:?}",
+        persisted
+            .iter()
+            .map(|playback| playback.transition_ordinal)
+            .collect::<Vec<_>>()
+    );
+    assert!(!transition_ordinals.contains(&0));
     assert!(
         persisted
             .iter()
@@ -370,6 +384,82 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
             .collect::<HashSet<_>>(),
         HashSet::from([1_003, 1_004])
     );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn automatic_chaser_transition_checkpoints_its_order_before_restart() {
+    let started = "2026-01-01T00:00:00Z".parse().unwrap();
+    let clock = Arc::new(ManualClock::new(started));
+    let engine = Engine::new(ProgrammerRegistry::with_clock(clock.clone()));
+    let (state, data_dir) = test_state();
+    let show = ShowEntry {
+        id: light_core::ShowId::new(),
+        name: "Automatic transition persistence".into(),
+        path: data_dir
+            .join("shows/automatic-transition.show")
+            .display()
+            .to_string(),
+        revision: 1,
+        updated_at: String::new(),
+        revision_copy: None,
+    };
+    state.active_show.replace_current(Some(show.clone()));
+    let cue_list = light_playback::CueList {
+        id: light_core::CueListId::new(),
+        name: "Automatic persistence Chaser".into(),
+        priority: 0,
+        mode: light_playback::CueListMode::Chaser,
+        looped: true,
+        chaser_step_millis: 100,
+        speed_group: None,
+        intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+        wrap_mode: Some(light_playback::WrapMode::Reset),
+        restart_mode: light_playback::RestartMode::FirstCue,
+        force_cue_timing: false,
+        disable_cue_timing: false,
+        chaser_xfade_millis: 0,
+        chaser_xfade_percent: Some(0),
+        speed_multiplier: 1.0,
+        cues: vec![light_playback::Cue::new(1.0), light_playback::Cue::new(2.0)],
+    };
+    let cue_list_id = cue_list.id;
+    engine
+        .replace_snapshot(EngineSnapshot {
+            cue_lists: vec![cue_list].into(),
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    engine
+        .execute_playback(EnginePlaybackCommand::CueList {
+            id: cue_list_id,
+            action: light_engine::CueListPlaybackAction::GoAt(started),
+        })
+        .unwrap();
+
+    clock.set(started + chrono::Duration::milliseconds(100));
+    let playback_desk = Mutex::new(DeskStore::open(data_dir.join("desk.sqlite")).unwrap());
+    let rendered = output_scheduler::render_with_playback_events(
+        &engine,
+        &state.active_show.output_projection(),
+        &state.playback.render_capability(),
+        RenderOptions::default(),
+        &[],
+        Some(&playback_desk),
+    )
+    .unwrap();
+    assert!(rendered.automatic_playback_transitions.is_empty());
+
+    let serialized = state
+        .installation
+        .setting(&active_playbacks_setting(show.id))
+        .unwrap()
+        .expect("automatic transition should be checkpointed");
+    let persisted: Vec<light_playback::ActivePlayback> =
+        serde_json::from_str(&serialized).unwrap();
+    assert_eq!(persisted.len(), 1);
+    assert_eq!(persisted[0].cue_index, 1);
+    assert!(persisted[0].transition_ordinal > 1);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

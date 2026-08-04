@@ -22,6 +22,7 @@ pub(crate) type ApplicableSequenceMaster = crate::ContributionSequenceMaster;
 
 pub(crate) struct EngineContribution {
     value: TimedValue,
+    transition_ordinal: Option<u64>,
     sequence_master: Option<ApplicableSequenceMaster>,
 }
 
@@ -44,6 +45,13 @@ impl<'a> IndexedContribution<'a> {
         match self {
             Self::Engine(contribution) => &contribution.value,
             Self::Sample(sample) => sample.value(),
+        }
+    }
+
+    fn transition_ordinal(self) -> Option<u64> {
+        match self {
+            Self::Engine(contribution) => contribution.transition_ordinal,
+            Self::Sample(sample) => sample.transition_ordinal(),
         }
     }
 }
@@ -81,10 +89,14 @@ impl<'a> ResolvedContributionIndex<'a> {
     fn add(&mut self, candidate: IndexedContribution<'a>) {
         let value = candidate.value();
         let key = (value.fixture_id, &value.attribute);
-        let replace = self
-            .winners
-            .get(&key)
-            .is_none_or(|current| contribution_wins(value, current.value()));
+        let replace = self.winners.get(&key).is_none_or(|current| {
+            contribution_wins(
+                value,
+                candidate.transition_ordinal(),
+                current.value(),
+                current.transition_ordinal(),
+            )
+        });
         if replace {
             self.winners.insert(key, candidate);
         }
@@ -95,15 +107,15 @@ impl EngineContribution {
     pub(crate) fn unscaled(value: TimedValue) -> Self {
         Self {
             value,
+            transition_ordinal: None,
             sequence_master: None,
         }
     }
-}
 
-impl EngineContribution {
     pub(crate) fn from_playback(contribution: PlaybackContribution) -> Self {
         Self {
             value: contribution.value,
+            transition_ordinal: Some(contribution.transition_ordinal),
             sequence_master: Some(ApplicableSequenceMaster::new(
                 contribution.source,
                 contribution.sequence_master,
@@ -137,8 +149,12 @@ impl EngineContributionResolver {
         }
     }
 
-    pub(crate) fn add_unscaled(&mut self, value: TimedValue) {
-        self.add(EngineContribution::unscaled(value));
+    pub(crate) fn add_playback_unscaled(&mut self, value: TimedValue, transition_ordinal: u64) {
+        self.add(EngineContribution {
+            value,
+            transition_ordinal: Some(transition_ordinal),
+            sequence_master: None,
+        });
     }
 
     pub(crate) fn extend_borrowed_samples<'a>(
@@ -154,6 +170,7 @@ impl EngineContributionResolver {
                 value.priority,
                 value.changed_at,
                 value.merge_mode,
+                sample.transition_ordinal(),
                 sample.sequence_master(),
             );
         }
@@ -169,7 +186,7 @@ impl EngineContributionResolver {
         merge_mode: MergeMode,
     ) {
         self.add_borrowed(
-            fixture_id, attribute, value, priority, changed_at, merge_mode, None,
+            fixture_id, attribute, value, priority, changed_at, merge_mode, None, None,
         );
     }
 
@@ -182,11 +199,19 @@ impl EngineContributionResolver {
         priority: i16,
         changed_at: DateTime<Utc>,
         merge_mode: MergeMode,
+        transition_ordinal: Option<u64>,
         sequence_master: Option<ApplicableSequenceMaster>,
     ) {
         let winners = self.winners.entry(fixture_id).or_default();
         let replace = winners.get(attribute).is_none_or(|current| {
-            borrowed_winner_wins(value, priority, changed_at, merge_mode, current)
+            borrowed_winner_wins(
+                value,
+                priority,
+                changed_at,
+                merge_mode,
+                transition_ordinal,
+                current,
+            )
         });
         if replace {
             winners.insert(
@@ -196,6 +221,7 @@ impl EngineContributionResolver {
                     priority,
                     changed_at,
                     merge_mode,
+                    transition_ordinal,
                     sequence_master,
                 },
             );
@@ -230,6 +256,7 @@ impl EngineContributionResolver {
     fn add(&mut self, candidate: EngineContribution) {
         let EngineContribution {
             value,
+            transition_ordinal,
             sequence_master,
         } = candidate;
         let TimedValue {
@@ -246,6 +273,7 @@ impl EngineContributionResolver {
             priority,
             changed_at,
             merge_mode,
+            transition_ordinal,
             sequence_master,
         };
         match self.winners.entry(fixture_id).or_default().entry(attribute) {
@@ -266,16 +294,27 @@ struct EngineWinner {
     priority: i16,
     changed_at: DateTime<Utc>,
     merge_mode: MergeMode,
+    transition_ordinal: Option<u64>,
     sequence_master: Option<ApplicableSequenceMaster>,
 }
 
-fn contribution_wins(candidate: &TimedValue, current: &TimedValue) -> bool {
+fn contribution_wins(
+    candidate: &TimedValue,
+    candidate_ordinal: Option<u64>,
+    current: &TimedValue,
+    current_ordinal: Option<u64>,
+) -> bool {
     if candidate.priority != current.priority {
         candidate.priority > current.priority
     } else if candidate.merge_mode == MergeMode::Htp {
         candidate.value.normalized().unwrap_or(0.0) > current.value.normalized().unwrap_or(0.0)
     } else {
-        candidate.changed_at > current.changed_at
+        ltp_wins(
+            candidate.changed_at,
+            candidate_ordinal,
+            current.changed_at,
+            current_ordinal,
+        )
     }
 }
 
@@ -285,7 +324,12 @@ fn winner_wins(candidate: &EngineWinner, current: &EngineWinner) -> bool {
     } else if candidate.merge_mode == MergeMode::Htp {
         candidate.value.normalized().unwrap_or(0.0) > current.value.normalized().unwrap_or(0.0)
     } else {
-        candidate.changed_at > current.changed_at
+        ltp_wins(
+            candidate.changed_at,
+            candidate.transition_ordinal,
+            current.changed_at,
+            current.transition_ordinal,
+        )
     }
 }
 
@@ -294,6 +338,7 @@ fn borrowed_winner_wins(
     priority: i16,
     changed_at: DateTime<Utc>,
     merge_mode: MergeMode,
+    transition_ordinal: Option<u64>,
     current: &EngineWinner,
 ) -> bool {
     if priority != current.priority {
@@ -301,6 +346,118 @@ fn borrowed_winner_wins(
     } else if merge_mode == MergeMode::Htp {
         value.normalized().unwrap_or(0.0) > current.value.normalized().unwrap_or(0.0)
     } else {
-        changed_at > current.changed_at
+        ltp_wins(
+            changed_at,
+            transition_ordinal,
+            current.changed_at,
+            current.transition_ordinal,
+        )
+    }
+}
+
+fn ltp_wins(
+    candidate_at: DateTime<Utc>,
+    candidate_ordinal: Option<u64>,
+    current_at: DateTime<Utc>,
+    current_ordinal: Option<u64>,
+) -> bool {
+    candidate_at > current_at
+        || (candidate_at == current_at
+            && matches!(
+                (candidate_ordinal, current_ordinal),
+                (Some(candidate), Some(current)) if candidate > current
+            ))
+}
+
+#[cfg(test)]
+mod transition_order_tests {
+    use super::*;
+    use light_core::CueListId;
+    use light_playback::SequenceMasterSource;
+
+    fn playback_value(
+        fixture_id: FixtureId,
+        value: f32,
+        merge_mode: MergeMode,
+        changed_at: DateTime<Utc>,
+        transition_ordinal: u64,
+    ) -> EngineContribution {
+        EngineContribution::from_playback(PlaybackContribution {
+            value: TimedValue {
+                fixture_id,
+                attribute: AttributeKey::intensity(),
+                value: AttributeValue::Normalized(value),
+                priority: 10,
+                changed_at,
+                programmer_order: 0,
+                merge_mode,
+                fade: false,
+                fade_millis: None,
+                delay_millis: None,
+            },
+            transition_ordinal,
+            sequence_master: 1.0,
+            source: SequenceMasterSource {
+                playback_number: None,
+                playback_identity: None,
+                cue_list_id: CueListId::new(),
+                temporary: false,
+            },
+        })
+    }
+
+    #[test]
+    fn equal_timestamp_playback_ltp_uses_transition_order() {
+        let fixture_id = FixtureId::new();
+        let at = Utc::now();
+        let resolved = EngineContributionResolver::new([
+            playback_value(fixture_id, 0.8, MergeMode::Ltp, at, 4),
+            playback_value(fixture_id, 0.2, MergeMode::Ltp, at, 5),
+        ])
+        .finish();
+        assert_eq!(
+            resolved.values[&(fixture_id, AttributeKey::intensity())],
+            AttributeValue::Normalized(0.2)
+        );
+    }
+
+    #[test]
+    fn equal_timestamp_playback_htp_ignores_transition_order() {
+        let fixture_id = FixtureId::new();
+        let at = Utc::now();
+        let resolved = EngineContributionResolver::new([
+            playback_value(fixture_id, 0.8, MergeMode::Htp, at, 4),
+            playback_value(fixture_id, 0.2, MergeMode::Htp, at, 5),
+        ])
+        .finish();
+        assert_eq!(
+            resolved.values[&(fixture_id, AttributeKey::intensity())],
+            AttributeValue::Normalized(0.8)
+        );
+    }
+
+    #[test]
+    fn equal_timestamp_non_playback_ltp_does_not_use_playback_order() {
+        let fixture_id = FixtureId::new();
+        let at = Utc::now();
+        let value = |normalized| {
+            EngineContribution::unscaled(TimedValue {
+                fixture_id,
+                attribute: AttributeKey("pan".into()),
+                value: AttributeValue::Normalized(normalized),
+                priority: 10,
+                changed_at: at,
+                programmer_order: 0,
+                merge_mode: MergeMode::Ltp,
+                fade: false,
+                fade_millis: None,
+                delay_millis: None,
+            })
+        };
+        let resolved = EngineContributionResolver::new([value(0.8), value(0.2)]).finish();
+        assert_eq!(
+            resolved.values[&(fixture_id, AttributeKey("pan".into()))],
+            AttributeValue::Normalized(0.8)
+        );
     }
 }

@@ -30,9 +30,12 @@ impl FakeAnimatedSource {
             sampled.fade_millis = None;
             sampled.delay_millis = None;
             match assignment.sequence_master {
-                Some(master) => {
-                    ContributionSample::replacing_playback(sampled, master.source(), master.scale())
-                }
+                Some(master) => ContributionSample::replacing_playback(
+                    sampled,
+                    master.source(),
+                    0,
+                    master.scale(),
+                ),
                 None => ContributionSample::replacing(sampled, assignment.source.clone()),
             }
         }))
@@ -305,7 +308,7 @@ fn a_sample_replaces_only_its_independent_playback() {
         value.value = AttributeValue::Normalized(0.1);
         value.priority = 0;
         let master = assignment.sequence_master.unwrap();
-        ContributionSample::replacing_playback(value, master.source(), master.scale())
+        ContributionSample::replacing_playback(value, master.source(), 0, master.scale())
     }));
 
     assert_normalized(&engine.resolved_values(), fixture_id, "tilt", 0.9);

@@ -99,6 +99,7 @@ impl ContributionSequenceMaster {
 #[derive(Clone, Debug)]
 pub struct ContributionSample {
     value: TimedValue,
+    transition_ordinal: Option<u64>,
     replacement_source: Option<ContributionSourceId>,
     sequence_master: Option<ContributionSequenceMaster>,
 }
@@ -108,6 +109,7 @@ impl ContributionSample {
     pub fn independent(value: TimedValue) -> Self {
         Self {
             value,
+            transition_ordinal: None,
             replacement_source: None,
             sequence_master: None,
         }
@@ -117,6 +119,7 @@ impl ContributionSample {
     pub fn replacing(value: TimedValue, source: ContributionSourceId) -> Self {
         Self {
             value,
+            transition_ordinal: None,
             replacement_source: Some(source),
             sequence_master: None,
         }
@@ -129,6 +132,7 @@ impl ContributionSample {
     pub fn replacing_playback(
         mut value: TimedValue,
         source: SequenceMasterSource,
+        transition_ordinal: u64,
         sequence_master: f32,
     ) -> Self {
         if value.attribute.is_intensity()
@@ -138,6 +142,7 @@ impl ContributionSample {
         }
         Self {
             value,
+            transition_ordinal: Some(transition_ordinal),
             replacement_source: Some(ContributionSourceId::playback(source)),
             sequence_master: Some(ContributionSequenceMaster::new(source, sequence_master)),
         }
@@ -150,6 +155,10 @@ impl ContributionSample {
 
     pub fn value(&self) -> &TimedValue {
         &self.value
+    }
+
+    pub const fn transition_ordinal(&self) -> Option<u64> {
+        self.transition_ordinal
     }
 
     pub fn replacement_source(&self) -> Option<&ContributionSourceId> {

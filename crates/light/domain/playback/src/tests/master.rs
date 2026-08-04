@@ -247,7 +247,7 @@ fn virtual_master_drives_faderless_manual_xfade_without_enabling_local_input() {
 }
 
 #[test]
-fn full_newer_playback_auto_offs_covered_playback_but_99_percent_does_not() {
+fn full_later_same_timestamp_playback_auto_offs_covered_playback_but_99_percent_does_not() {
     let fixture = FixtureId::new();
     let mut first = Cue::new(1.0);
     first.changes.push(value(fixture, "pan", 0.2));
@@ -257,7 +257,8 @@ fn full_newer_playback_auto_offs_covered_playback_but_99_percent_does_not() {
     let first_id = first.id;
     let second = list(vec![second]);
     let second_id = second.id;
-    let mut engine = PlaybackEngine::default();
+    let clock = Arc::new(light_core::ManualClock::new(Utc::now()));
+    let mut engine = PlaybackEngine::with_clock(clock);
     engine.register(first).unwrap();
     engine.register(second).unwrap();
     engine.register_definition(definition(1, first_id)).unwrap();
@@ -265,7 +266,6 @@ fn full_newer_playback_auto_offs_covered_playback_but_99_percent_does_not() {
         .register_definition(definition(2, second_id))
         .unwrap();
     engine.on(1).unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(2));
     engine.set_master(2, 0.99).unwrap();
     assert_eq!(engine.active().len(), 2);
     engine.set_master(2, 1.0).unwrap();

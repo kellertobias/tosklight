@@ -29,7 +29,7 @@ impl Engine {
         active: &[ActivePlayback],
         base_resolved: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
         now: DateTime<Utc>,
-    ) -> Vec<TimedValue> {
+    ) -> Vec<(TimedValue, u64)> {
         let mut runtimes = self.move_in_black.lock();
         let mut present = HashSet::new();
         for candidate in candidates {

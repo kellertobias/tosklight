@@ -788,6 +788,7 @@ impl OutputResource {
             playback,
             options,
             &sampled,
+            None,
         )?;
         Ok((
             rendered,

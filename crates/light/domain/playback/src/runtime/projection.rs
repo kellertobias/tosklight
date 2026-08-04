@@ -317,6 +317,7 @@ impl PlaybackEngine {
             target_cue_number: target_cue.number,
             fixture_id,
             priority: cue_list.priority,
+            transition_ordinal: playback.transition_ordinal,
             values,
         })
     }

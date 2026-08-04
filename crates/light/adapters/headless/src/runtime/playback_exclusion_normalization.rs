@@ -41,11 +41,14 @@ impl PlaybackUnitOfWork for RestoredExclusionNormalization<'_> {
 impl RestoredExclusionNormalization<'_> {
     fn apply(self) -> Result<(RestoredExclusionOutcome, Vec<EventDraft>), ApiError> {
         let provenance_migrated = migrate_activation_provenance(self.state)?;
+        let transition_order_migrated = migrate_transition_order(self.state)?;
         let candidates = restored_exclusion_losers(self.state)?;
         let before = projections(self.state, &self.context, &candidates)?;
         let released = release_candidates(self.state, candidates)?;
-        let persistence_pending =
-            persist_normalized_runtime(self.state, provenance_migrated || !released.is_empty());
+        let persistence_pending = persist_normalized_runtime(
+            self.state,
+            provenance_migrated || transition_order_migrated || !released.is_empty(),
+        );
         let after = projections(self.state, &self.context, &released)?;
         let events = changed_events(&self.context, before, after);
         Ok((
@@ -57,6 +60,38 @@ impl RestoredExclusionNormalization<'_> {
             events,
         ))
     }
+}
+
+fn migrate_transition_order(state: &AppState) -> Result<bool, ApiError> {
+    let mut runtime = state.output.playback_runtime();
+    let mut ordinals = HashSet::new();
+    if runtime.iter().all(|playback| {
+        playback.transition_ordinal > 0 && ordinals.insert(playback.transition_ordinal)
+    }) {
+        return Ok(false);
+    }
+    let mut ordered = runtime.iter().enumerate().collect::<Vec<_>>();
+    ordered.sort_by_key(|(_, playback)| {
+        (
+            playback.activated_at,
+            playback.playback_identity,
+            playback.playback_number,
+            playback.cue_list_id.0.as_u128(),
+        )
+    });
+    let migrated = ordered
+        .into_iter()
+        .enumerate()
+        .map(|(offset, (index, _))| (index, offset as u64 + 1))
+        .collect::<Vec<_>>();
+    for (index, ordinal) in migrated {
+        runtime[index].transition_ordinal = ordinal;
+    }
+    state
+        .output
+        .execute_playback(EnginePlaybackCommand::RestoreActive(runtime))
+        .map_err(ApiError::internal)?;
+    Ok(true)
 }
 
 fn migrate_activation_provenance(state: &AppState) -> Result<bool, ApiError> {

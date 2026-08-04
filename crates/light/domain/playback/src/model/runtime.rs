@@ -86,6 +86,10 @@ pub struct ActivePlayback {
     /// Internal restart authority. Public runtime payloads deliberately omit this field.
     #[serde(default, skip_serializing)]
     pub activation: Option<PlaybackActivationProvenance>,
+    /// Stable engine-owned order of the last transition which changed this Playback's LTP
+    /// contribution. This is persisted by the runtime adapter, but omitted from public status.
+    #[serde(default, skip_serializing)]
+    pub transition_ordinal: u64,
     pub cue_list_id: CueListId,
     pub cue_index: usize,
     pub previous_index: Option<usize>,
@@ -250,6 +254,7 @@ pub struct MoveInBlackCandidate {
     pub target_cue_number: f64,
     pub fixture_id: FixtureId,
     pub priority: i16,
+    pub transition_ordinal: u64,
     pub values: Vec<MoveInBlackTargetValue>,
 }
 
@@ -267,6 +272,7 @@ pub struct SequenceMasterSource {
 #[derive(Clone, Debug)]
 pub struct PlaybackContribution {
     pub value: TimedValue,
+    pub transition_ordinal: u64,
     pub sequence_master: f32,
     pub source: SequenceMasterSource,
 }
@@ -352,6 +358,7 @@ pub(crate) fn new_active_playback(
         playback_number,
         playback_identity: None,
         activation: None,
+        transition_ordinal: 0,
         cue_list_id: cue_list.id,
         cue_index: 0,
         previous_index: None,

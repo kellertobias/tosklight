@@ -151,6 +151,8 @@ pub struct CueListRuntimeProjection {
     pub effective_next_is_loaded: bool,
     pub paused: bool,
     pub activated_at: String,
+    #[ts(type = "number")]
+    pub transition_ordinal: u64,
     pub master: f32,
     pub fader_position: f32,
     pub fader_pickup_required: bool,
@@ -300,6 +302,8 @@ pub struct PlaybackCueTransition {
     pub previous: Option<PlaybackCueReference>,
     pub current: Option<PlaybackCueReference>,
     pub cause: PlaybackTransitionCause,
+    #[ts(type = "number")]
+    pub transition_ordinal: u64,
     #[ts(type = "number")]
     pub advanced_steps: u64,
 }

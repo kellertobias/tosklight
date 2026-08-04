@@ -397,6 +397,7 @@ fn inactive_playback(number: u16, cue_list_id: CueListId, now: DateTime<Utc>) ->
         playback_number: Some(number),
         playback_identity: None,
         activation: None,
+        transition_ordinal: 0,
         cue_list_id,
         cue_index: 0,
         previous_index: None,

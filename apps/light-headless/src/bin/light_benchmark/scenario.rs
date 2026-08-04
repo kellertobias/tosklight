@@ -232,6 +232,7 @@ fn sampled_batches(
         buckets[index % SAMPLED_BATCH_COUNT].push(ContributionSample::replacing_playback(
             contribution.value,
             contribution.source,
+            contribution.transition_ordinal,
             contribution.sequence_master,
         ));
         index += 1;

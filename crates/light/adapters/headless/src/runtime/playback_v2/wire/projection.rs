@@ -140,6 +140,7 @@ fn cue_list_runtime(
         effective_next_is_loaded: runtime.effective_next_is_loaded,
         paused: runtime.paused,
         activated_at: runtime.activated_at.to_rfc3339(),
+        transition_ordinal: runtime.transition_ordinal,
         master: runtime.master,
         fader_position: runtime.fader_position,
         fader_pickup_required: runtime.fader_pickup_required,

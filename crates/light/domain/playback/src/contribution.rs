@@ -109,7 +109,14 @@ impl ContributionContext<'_> {
         let source = source(playback);
         let (sequence_master, snap_sequence_master) = sequence_masters(playback);
         if let Some(hold) = &playback.deleted_cue_hold {
-            self.extend_hold(values, hold, source, sequence_master, snap_sequence_master);
+            self.extend_hold(
+                values,
+                hold,
+                source,
+                playback.transition_ordinal,
+                sequence_master,
+                snap_sequence_master,
+            );
             return;
         }
         let frame = PlaybackFrame::new(

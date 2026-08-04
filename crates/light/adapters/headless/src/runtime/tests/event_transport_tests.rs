@@ -938,6 +938,7 @@ fn transition_draft(playback_number: Option<u16>, cue_list_id: Uuid) -> EventDra
                     number: 2.0,
                 }),
                 cause: PlaybackTransitionCause::Chaser,
+                transition_ordinal: 73,
                 advanced_steps: 1,
             }),
         },

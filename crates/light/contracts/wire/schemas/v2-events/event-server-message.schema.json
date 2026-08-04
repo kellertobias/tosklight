@@ -268,6 +268,11 @@
           "type": "number",
           "format": "float"
         },
+        "transition_ordinal": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
         "transition_timing_bypassed": {
           "type": "boolean"
         }
@@ -282,6 +287,7 @@
         "effective_next_is_loaded",
         "paused",
         "activated_at",
+        "transition_ordinal",
         "master",
         "fader_position",
         "fader_pickup_required",
@@ -3963,6 +3969,11 @@
               "type": "null"
             }
           ]
+        },
+        "transition_ordinal": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
         }
       },
       "required": [
@@ -3971,6 +3982,7 @@
         "previous",
         "current",
         "cause",
+        "transition_ordinal",
         "advanced_steps"
       ]
     },

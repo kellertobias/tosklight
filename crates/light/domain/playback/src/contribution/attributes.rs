@@ -7,6 +7,7 @@ impl ContributionContext<'_> {
         values: &mut Vec<PlaybackContribution>,
         hold: &DeletedCueHold,
         source: SequenceMasterSource,
+        transition_ordinal: u64,
         sequence_master: f32,
         snap_sequence_master: f32,
     ) {
@@ -18,6 +19,7 @@ impl ContributionContext<'_> {
             };
             PlaybackContribution {
                 value,
+                transition_ordinal,
                 sequence_master,
                 source,
             }
@@ -155,6 +157,7 @@ fn attribute_contribution(
     let value = apply_intensity_master(value, &attribute, sequence_master);
     PlaybackContribution {
         value: timed_value(frame, fixture_id, attribute, value),
+        transition_ordinal: frame.playback.transition_ordinal,
         sequence_master,
         source: frame.source,
     }

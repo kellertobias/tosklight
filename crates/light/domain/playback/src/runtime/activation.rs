@@ -1,6 +1,18 @@
 use crate::*;
 
 impl PlaybackEngine {
+    pub(crate) fn take_transition_ordinal(&mut self) -> u64 {
+        let ordinal = self.next_transition_ordinal;
+        self.next_transition_ordinal = ordinal.saturating_add(1);
+        ordinal
+    }
+
+    pub(crate) fn observe_restored_transition_ordinal(&mut self, ordinal: u64) {
+        if let Some(next) = ordinal.checked_add(1) {
+            self.next_transition_ordinal = self.next_transition_ordinal.max(next);
+        }
+    }
+
     pub fn record_activation(&mut self, number: u16, origin: PlaybackActivationOrigin) {
         let Ok(identity) = PlaybackIdentity::physical(number) else {
             return;

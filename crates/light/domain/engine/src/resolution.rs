@@ -83,8 +83,8 @@ impl Engine {
             &base,
             now,
         );
-        for contribution in move_in_black {
-            resolver.add_unscaled(contribution);
+        for (contribution, transition_ordinal) in move_in_black {
+            resolver.add_playback_unscaled(contribution, transition_ordinal);
         }
         let mut resolved = resolver.finish();
         resolved.automatic_playback_transitions = playback.automatic_transitions;

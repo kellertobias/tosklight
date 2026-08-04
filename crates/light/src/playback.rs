@@ -85,6 +85,7 @@ fn automatic_playback_event(change: AutomaticPlaybackProjection) -> EventDraft {
                 previous: Some(cue_reference(transition.previous)),
                 current: Some(cue_reference(transition.current)),
                 cause: transition_cause(transition.cause),
+                transition_ordinal: transition.transition_ordinal,
                 advanced_steps: transition.advanced_steps,
             }),
         },
@@ -129,6 +130,7 @@ mod tests {
                 previous: domain_cue(2, 1.0),
                 current: domain_cue(3, 4.0),
                 cause: AutomaticPlaybackTransitionCause::Chaser,
+                transition_ordinal: 37,
                 advanced_steps: 7,
             })]);
 
@@ -142,6 +144,7 @@ mod tests {
         let event = change.transition.as_ref().unwrap();
         assert_eq!(event.cue_list_id, cue_list_id.0);
         assert_eq!(event.cause, PlaybackTransitionCause::Chaser);
+        assert_eq!(event.transition_ordinal, 37);
         assert_eq!(event.advanced_steps, 7);
         assert_eq!(event.previous.as_ref().map(|cue| cue.number), Some(1.0));
         assert_eq!(event.current.as_ref().map(|cue| cue.number), Some(4.0));
@@ -158,6 +161,7 @@ mod tests {
                 previous: domain_cue(1, 1.0),
                 current: domain_cue(2, 2.0),
                 cause: AutomaticPlaybackTransitionCause::Follow,
+                transition_ordinal: 38,
                 advanced_steps: 1,
             })],
         );

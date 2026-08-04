@@ -107,6 +107,10 @@ function decodeCueRuntime(
 		),
 		paused: booleanAt(runtime.paused, `${path}.paused`),
 		activated_at: stringAt(runtime.activated_at, `${path}.activated_at`),
+		transition_ordinal: integerAt(
+			runtime.transition_ordinal,
+			`${path}.transition_ordinal`,
+		),
 		master: numberAt(runtime.master, `${path}.master`),
 		fader_position: numberAt(runtime.fader_position, `${path}.fader_position`),
 		fader_pickup_required: booleanAt(

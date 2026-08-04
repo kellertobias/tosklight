@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use super::{
     ActivePlayback, CompiledCueList, Cue, CueList, CueListMode, CueTrigger, PlaybackEngine,
-    PlaybackMasterTransition, WrapMode, advance_chaser_steps, cue_completion_millis,
+    PlaybackKey, PlaybackMasterTransition, WrapMode, advance_chaser_steps, cue_completion_millis,
     effective_chaser_step_millis, effective_cue_fade_millis,
 };
 
@@ -32,6 +32,7 @@ pub struct AutomaticPlaybackTransition {
     pub previous: PlaybackCueReference,
     pub current: PlaybackCueReference,
     pub cause: AutomaticPlaybackTransitionCause,
+    pub transition_ordinal: u64,
     /// Number of semantic Cue steps consumed by this one final-state transition.
     pub advanced_steps: u64,
 }
@@ -91,7 +92,10 @@ impl PlaybackEngine {
         now: DateTime<Utc>,
         timecode_frame: Option<u64>,
     ) -> Vec<AutomaticPlaybackTransition> {
-        let keys = self.active.keys().copied().collect::<Vec<_>>();
+        let mut keys = self.active.keys().copied().collect::<Vec<_>>();
+        keys.sort_by_key(|key| match key {
+            PlaybackKey::CueList(id) => id.0.as_u128(),
+        });
         let mut transitions = Vec::with_capacity(keys.len());
         for key in keys {
             let transition_source = self.transition_source_at(key, now);
@@ -104,7 +108,7 @@ impl PlaybackEngine {
             let Some(compiled) = self.compiled_cue_lists.get(&playback.cue_list_id) else {
                 continue;
             };
-            let transition = advance_automatic_playback(
+            let mut transition = advance_automatic_playback(
                 playback,
                 cue_list,
                 compiled,
@@ -117,6 +121,12 @@ impl PlaybackEngine {
                     sequence_master_fade_millis: self.sequence_master_fade_millis,
                 },
             );
+            if let Some(transition) = transition.as_mut() {
+                let ordinal = self.next_transition_ordinal;
+                self.next_transition_ordinal = ordinal.saturating_add(1);
+                playback.transition_ordinal = ordinal;
+                transition.transition_ordinal = ordinal;
+            }
             transitions.extend(transition);
         }
         transitions
@@ -369,6 +379,7 @@ fn cue_transition(
         previous: cue_reference(&cue_list.cues[previous_index]),
         current: cue_reference(&cue_list.cues[playback.cue_index]),
         cause,
+        transition_ordinal: 0,
         advanced_steps,
     }
 }

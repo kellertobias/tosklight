@@ -48,6 +48,7 @@ fn runtime_projection(status: &PlaybackRuntimeStatus) -> CueListRuntimeProjectio
         effective_next_is_loaded: status.effective_next_is_loaded,
         paused: playback.paused,
         activated_at: playback.activated_at,
+        transition_ordinal: playback.transition_ordinal,
         master: playback.master,
         fader_position: playback.fader_position,
         fader_pickup_required: playback.fader_pickup_required,

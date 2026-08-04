@@ -609,6 +609,7 @@ fn runtime_projection(show_id: ShowId, playback: u16, cue_id: Uuid) -> PlaybackR
                 effective_next_is_loaded: false,
                 paused: false,
                 activated_at: Utc::now(),
+                transition_ordinal: 0,
                 master: 1.0,
                 fader_position: 1.0,
                 fader_pickup_required: false,
