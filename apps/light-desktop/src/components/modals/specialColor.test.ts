@@ -103,4 +103,33 @@ describe("independent whole-color attributes", () => {
 			),
 		).toEqual(["fixture-a"]);
 	});
+
+	it("targets media grayscale only at compatible selected logical heads", () => {
+		const fixture = {
+			fixture_id: "fixture-a",
+			definition: {
+				heads: [
+					{
+						parameters: [
+							{ attribute: "color" },
+							{ attribute: "media.grayscale" },
+						],
+					},
+					{ parameters: [{ attribute: "color" }] },
+				],
+			},
+			logical_heads: [
+				{ fixture_id: "fixture-a:head-1", head_index: 0 },
+				{ fixture_id: "fixture-a:head-2", head_index: 1 },
+			],
+		} as unknown as PatchedFixture;
+
+		expect(
+			selectedFixtureIdsSupportingAttribute(
+				[fixture],
+				["fixture-a:head-1", "fixture-a:head-2"],
+				["media.grayscale"],
+			),
+		).toEqual(["fixture-a:head-1"]);
+	});
 });

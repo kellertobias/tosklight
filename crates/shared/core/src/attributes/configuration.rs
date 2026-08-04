@@ -247,12 +247,18 @@ impl AttributeConfiguration {
                 "position.rotation",
                 EncoderPlacement::new(EncoderGroup::Media, 2, 6),
             ),
+            (
+                "media.tint",
+                "color",
+                EncoderPlacement::new(EncoderGroup::Media, 1, 6),
+            ),
         ] {
             self.migrate_canonical_configuration_pair(source, target, legacy_encoder)?;
         }
         for (attribute, group, page, slot) in [
             ("control.mode", EncoderGroup::Control, 1, 1),
             ("control.speed", EncoderGroup::Control, 1, 2),
+            ("media.grayscale", EncoderGroup::Media, 2, 4),
         ] {
             self.remove_legacy_default_encoder(attribute, EncoderPlacement::new(group, page, slot));
         }
@@ -456,9 +462,12 @@ impl AttributeConfiguration {
             {
                 let recommended = recommended_builtin_placements()
                     .into_iter()
-                    .find(|placement| placement.attribute == target_key)
-                    .expect("canonical migration target has a recommended placement");
-                self.placements[source_index] = recommended;
+                    .find(|placement| placement.attribute == target_key);
+                if let Some(recommended) = recommended {
+                    self.placements[source_index] = recommended;
+                } else {
+                    self.placements.remove(source_index);
+                }
             }
             (Some(source_index), None) => {
                 self.placements[source_index].attribute = target_key.clone();

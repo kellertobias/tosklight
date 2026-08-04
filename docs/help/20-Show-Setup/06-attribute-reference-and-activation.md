@@ -151,8 +151,6 @@ through that same whole-color surface.
 | Media | P1/E3 | `media.mask.folder` | **Mask Folder** (`media.mask.folder`) | Mask Source |
 | Media | P1/E4 | `media.mask.file` | **Mask File** (`media.mask.file`) | Mask Source |
 | Media | P1/E5 | `media.mask.invert` | **Invert Mask** (`media.mask.invert`) | — |
-| Media | P1/E6 | `media.tint` | **Layer Tint** (`media.tint`) | — |
-| Media | P2/E4 | `media.grayscale` | **Grayscale** (`media.grayscale`) | — |
 | Media | P3/E1 | `media.position.x` | **Position X** (`media.position.x`) | — |
 | Media | P3/E2 | `media.position.y` | **Position Y** (`media.position.y`) | — |
 | Media | P3/E3 | `media.scale.x` | **Scale X** (`media.scale.x`) | — |
@@ -168,6 +166,11 @@ recordable continuous Fan channel use the same programmer meaning. A profile mus
 map two independently controllable physical channels on the same logical head to one
 canonical attribute; it must use the narrower canonical descriptor, another logical
 head, or a preserved custom attribute instead.
+
+Media-layer tint uses the canonical whole **Color** value on the media logical head. **Grayscale**
+remains an independent media operation, but both are edited in **Color · Special Dialog** rather
+than reserving permanent Media encoders. Older `media.tint` values migrate to `color`; a show that
+stores both identities on the same target reports a migration conflict instead of choosing one.
 
 CMY inversion belongs to the fixture color-system mapping, not to the encoder or Cue.
 Canonical Red, Green, and Blue always increase toward more emitted red, green, and blue.

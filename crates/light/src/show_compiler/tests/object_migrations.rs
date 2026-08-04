@@ -1303,7 +1303,8 @@ fn legacy_media_values_migrate_and_source_or_target_collisions_stop_atomically()
         "number": 1,
         "values": {fixture.0.to_string(): {
             "media.opacity": {"kind":"normalized","value":0.4},
-            "media.rotation": {"kind":"normalized","value":0.6}
+            "media.rotation": {"kind":"normalized","value":0.6},
+            "media.tint": {"kind":"color_xyz","value":{"x":0.2,"y":0.3,"z":0.4}}
         }},
         "group_values": {}
     });
@@ -1315,13 +1316,27 @@ fn legacy_media_values_migrate_and_source_or_target_collisions_stop_atomically()
         &candidate.object("preset", "0.1").unwrap().body()["values"][fixture.0.to_string()];
     assert_eq!(values["intensity"]["value"], 0.4);
     assert_eq!(values["position.rotation"]["value"], 0.6);
+    assert_eq!(values["color"]["value"]["x"], 0.2);
     assert!(values.get("media.opacity").is_none());
     assert!(values.get("media.rotation").is_none());
+    assert!(values.get("media.tint").is_none());
 
-    for conflicting_values in [json!({
-        "media.opacity": {"kind":"normalized","value":0.4},
-        "intensity": {"kind":"normalized","value":0.5}
-    })] {
+    for (conflicting_values, target) in [
+        (
+            json!({
+                "media.opacity": {"kind":"normalized","value":0.4},
+                "intensity": {"kind":"normalized","value":0.5}
+            }),
+            "intensity",
+        ),
+        (
+            json!({
+                "media.tint": {"kind":"color_xyz","value":{"x":0.2,"y":0.3,"z":0.4}},
+                "color": {"kind":"color_xyz","value":{"x":0.4,"y":0.3,"z":0.2}}
+            }),
+            "color",
+        ),
+    ] {
         let preset = json!({
             "name": "Conflict",
             "family": "Mixed",
@@ -1333,7 +1348,7 @@ fn legacy_media_values_migrate_and_source_or_target_collisions_stop_atomically()
         let mut transaction = document.transaction();
         let error = stage_candidate_migrations(&document, &mut transaction).unwrap_err();
         assert!(error.message.contains("attribute migration conflict"));
-        assert!(error.message.contains("intensity"));
+        assert!(error.message.contains(target));
         assert!(transaction.is_empty());
     }
 }

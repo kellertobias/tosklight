@@ -155,6 +155,7 @@ mod canonical_migration_tests {
         for (source, target) in [
             ("media.opacity", "intensity"),
             ("media.rotation", "position.rotation"),
+            ("media.tint", "color"),
         ] {
             assert_eq!(
                 canonical_attribute_migration(&AttributeKey(source.into())),
@@ -1034,6 +1035,70 @@ mod attribute_registry_tests {
         assert!(migrated.attribute_placement_for(&tint).is_none());
         assert!(migrated.activation_group_for(&tint).is_none());
         migrated.validate().unwrap();
+    }
+
+    #[test]
+    fn media_color_operations_move_from_default_encoders_to_the_color_dialog() {
+        assert!(built_in_attribute_is_special_dialog_only("media.grayscale"));
+        let recommended = AttributeConfiguration::recommended();
+        for attribute in ["media.tint", "media.grayscale"] {
+            assert!(
+                recommended
+                    .attribute_placement_for(&AttributeKey(attribute.into()))
+                    .is_none(),
+                "{attribute} must not reserve an encoder"
+            );
+        }
+
+        let mut legacy = recommended.clone();
+        legacy.placements.push(AttributePlacement {
+            attribute: AttributeKey("media.tint".into()),
+            encoder: EncoderPlacement::new(EncoderGroup::Media, 1, 6),
+            push_turn_of: None,
+        });
+        legacy.placements.push(AttributePlacement {
+            attribute: AttributeKey("media.grayscale".into()),
+            encoder: EncoderPlacement::new(EncoderGroup::Media, 2, 4),
+            push_turn_of: None,
+        });
+        let migrated = legacy.migrate_canonical_attributes().unwrap();
+        assert!(
+            migrated
+                .attribute_placement_for(&AttributeKey("color".into()))
+                .is_none()
+        );
+        assert!(
+            migrated
+                .attribute_placement_for(&AttributeKey("media.tint".into()))
+                .is_none()
+        );
+        assert!(
+            migrated
+                .attribute_placement_for(&AttributeKey("media.grayscale".into()))
+                .is_none()
+        );
+        migrated.validate().unwrap();
+
+        let mut customized = recommended;
+        customized.placements.push(AttributePlacement {
+            attribute: AttributeKey("media.tint".into()),
+            encoder: EncoderPlacement::new(EncoderGroup::Media, 9, 1),
+            push_turn_of: None,
+        });
+        customized.placements.push(AttributePlacement {
+            attribute: AttributeKey("media.grayscale".into()),
+            encoder: EncoderPlacement::new(EncoderGroup::Media, 9, 2),
+            push_turn_of: None,
+        });
+        let customized = customized.migrate_canonical_attributes().unwrap();
+        assert_eq!(
+            customized.placement_for(&AttributeKey("color".into())),
+            Some(EncoderPlacement::new(EncoderGroup::Media, 9, 1))
+        );
+        assert_eq!(
+            customized.placement_for(&AttributeKey("media.grayscale".into())),
+            Some(EncoderPlacement::new(EncoderGroup::Media, 9, 2))
+        );
     }
 
     #[test]

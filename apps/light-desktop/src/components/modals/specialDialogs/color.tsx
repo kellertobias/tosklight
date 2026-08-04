@@ -27,11 +27,14 @@ interface ColorDialogController {
 	saturation: number;
 	tint: number;
 	tintAvailable: boolean;
+	grayscale: number;
+	grayscaleAvailable: boolean;
 	swatch: string;
 	disabled: boolean;
 	cancelColor: (event: PointerEvent<HTMLDivElement>) => void;
 	changeBrightness: (delta: number) => void;
 	changeTint: (delta: number) => void;
+	changeGrayscale: (delta: number) => void;
 	completeColor: (event: PointerEvent<HTMLDivElement>) => void;
 	moveColor: (event: PointerEvent<HTMLDivElement>) => void;
 	startColor: (event: PointerEvent<HTMLDivElement>) => void;
@@ -42,12 +45,14 @@ export function useColorDialog(
 	shiftArmed: boolean,
 	valueWrites: ProgrammerValuesMutationQueueController,
 	tintFixtureIds: readonly string[],
+	grayscaleFixtureIds: readonly string[],
 ): ColorDialogController {
 	const programmerFadeMillis = useProgrammerFadeMillis() ?? undefined;
 	const [hue, setHue] = useState(0.52);
 	const [saturation, setSaturation] = useState(0.8);
 	const [brightness, setBrightness] = useState(0.85);
 	const [tint, setTint] = useState(0.5);
+	const [grayscale, setGrayscale] = useState(0);
 	const [colorRangePreview, setColorRangePreview] =
 		useState<ColorRangePreview | null>(null);
 	const colorSheet = useRef<HTMLDivElement>(null);
@@ -165,6 +170,20 @@ export function useColorDialog(
 		);
 		void valueWrites.submitBarrier(mutations);
 	};
+	const changeGrayscale = (delta: number) => {
+		if (!valueWrites.canWrite || !grayscaleFixtureIds.length) return;
+		const value = Math.max(0, Math.min(1, grayscale + delta));
+		setGrayscale(value);
+		const mutations = normalizedFixtureMutations(
+			grayscaleFixtureIds.map((fixtureId) => ({
+				fixtureId,
+				attribute: "media.grayscale",
+				value,
+			})),
+			programmerFadeMillis,
+		);
+		void valueWrites.submitBarrier(mutations);
+	};
 
 	const color = hsvToRgb({ hue, saturation, brightness });
 	const swatch = `rgb(${color.map((channel) => Math.round(channel * 255)).join(",")})`;
@@ -176,11 +195,14 @@ export function useColorDialog(
 		saturation,
 		tint,
 		tintAvailable: tintFixtureIds.length > 0,
+		grayscale,
+		grayscaleAvailable: grayscaleFixtureIds.length > 0,
 		swatch,
 		disabled: !valueWrites.canWrite,
 		cancelColor,
 		changeBrightness,
 		changeTint,
+		changeGrayscale,
 		completeColor,
 		moveColor,
 		startColor,
@@ -199,12 +221,15 @@ export function ColorDialog({
 	saturation,
 	tint,
 	tintAvailable,
+	grayscale,
+	grayscaleAvailable,
 	swatch,
 	disabled,
 	shiftArmed,
 	cancelColor,
 	changeBrightness,
 	changeTint,
+	changeGrayscale,
 	completeColor,
 	moveColor,
 	startColor,
@@ -269,6 +294,26 @@ export function ColorDialog({
 						aria-label="Shift tint toward magenta"
 						disabled={disabled}
 						onClick={() => changeTint(0.05)}
+					>
+						+
+					</Button>
+				</div>
+			)}
+			{grayscaleAvailable && (
+				<div className="brightness-control">
+					<span>Grayscale</span>
+					<Button
+						aria-label="Decrease grayscale"
+						disabled={disabled}
+						onClick={() => changeGrayscale(-0.05)}
+					>
+						−
+					</Button>
+					<b>{Math.round(grayscale * 100)}%</b>
+					<Button
+						aria-label="Increase grayscale"
+						disabled={disabled}
+						onClick={() => changeGrayscale(0.05)}
 					>
 						+
 					</Button>

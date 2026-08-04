@@ -487,6 +487,7 @@ fn legacy_media_channels_migrate_to_shared_canonical_controls_without_losing_ide
     for (source, target) in [
         ("media.opacity", "intensity"),
         ("media.rotation", "position.rotation"),
+        ("media.tint", "color"),
     ] {
         let mut profile = FixtureProfile::blank();
         profile.manufacturer = "Test".into();
@@ -514,6 +515,7 @@ fn legacy_media_aliases_reject_same_head_collisions_but_allow_distinct_heads() {
     for (source, target) in [
         ("media.opacity", "intensity"),
         ("media.rotation", "position.rotation"),
+        ("media.tint", "color"),
     ] {
         let mut profile = FixtureProfile::blank();
         profile.manufacturer = "Test".into();

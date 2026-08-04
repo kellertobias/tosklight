@@ -105,6 +105,7 @@ pub const RETIRED_BUILT_IN_ATTRIBUTES: &[&str] = &[
     "media.effect.4",
     "media.opacity",
     "media.rotation",
+    "media.tint",
     "frost.1",
     "frost.2",
     "pan.continuous",
@@ -135,7 +136,8 @@ pub fn built_in_attribute_is_projection_only(attribute: &str) -> bool {
 
 /// Recordable built-ins edited through a dedicated semantic surface instead of occupying a
 /// permanent encoder slot.
-pub const SPECIAL_DIALOG_ONLY_BUILT_IN_ATTRIBUTES: &[&str] = &["color", "color.tint"];
+pub const SPECIAL_DIALOG_ONLY_BUILT_IN_ATTRIBUTES: &[&str] =
+    &["color", "color.tint", "media.grayscale"];
 
 pub fn built_in_attribute_is_special_dialog_only(attribute: &str) -> bool {
     SPECIAL_DIALOG_ONLY_BUILT_IN_ATTRIBUTES.contains(&attribute)
@@ -396,6 +398,7 @@ pub fn canonical_attribute_migration_id(
         "frost" | "frost.1" | "beam.edge" => ("softness", CanonicalAttributeTransform::Identity),
         "media.opacity" => ("intensity", CanonicalAttributeTransform::Identity),
         "media.rotation" => ("position.rotation", CanonicalAttributeTransform::Identity),
+        "media.tint" => ("color", CanonicalAttributeTransform::Identity),
         "pan.time" | "tilt.time" | "position.time" | "position.speed" => {
             ("position.movement", CanonicalAttributeTransform::Identity)
         }

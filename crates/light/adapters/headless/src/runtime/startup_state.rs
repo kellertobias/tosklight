@@ -993,6 +993,10 @@ mod tests {
                 "fixture_id": fixture,
                 "attribute": "media.rotation",
                 "value": {"kind":"normalized","value":0.75}
+            }, {
+                "fixture_id": fixture,
+                "attribute": "media.tint",
+                "value": {"kind":"color_xyz","value":{"x":0.2,"y":0.3,"z":0.4}}
             }]
         });
         migrate_retired_programmer_attributes(&mut value).unwrap();
@@ -1001,17 +1005,32 @@ mod tests {
             value["preload_pending"][0]["attribute"],
             "position.rotation"
         );
+        assert_eq!(value["preload_pending"][1]["attribute"], "color");
 
-        for original in [serde_json::json!({
-            "values": [
-                {"fixture_id": fixture, "attribute": "media.opacity"},
-                {"fixture_id": fixture, "attribute": "intensity"}
-            ]
-        })] {
+        for (original, target) in [
+            (
+                serde_json::json!({
+                    "values": [
+                        {"fixture_id": fixture, "attribute": "media.opacity"},
+                        {"fixture_id": fixture, "attribute": "intensity"}
+                    ]
+                }),
+                "intensity",
+            ),
+            (
+                serde_json::json!({
+                    "values": [
+                        {"fixture_id": fixture, "attribute": "media.tint"},
+                        {"fixture_id": fixture, "attribute": "color"}
+                    ]
+                }),
+                "color",
+            ),
+        ] {
             let mut conflict = original.clone();
             let error = migrate_retired_programmer_attributes(&mut conflict).unwrap_err();
             assert!(error.contains("attribute migration conflict"));
-            assert!(error.contains("intensity"));
+            assert!(error.contains(target));
             assert_eq!(conflict, original);
         }
     }

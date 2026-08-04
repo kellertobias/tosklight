@@ -65,8 +65,6 @@ pub(super) fn recommended_builtin_placements() -> Vec<AttributePlacement> {
         ("media.file", Media, 1, 2),
         ("media.mask.folder", Media, 1, 3),
         ("media.mask.file", Media, 1, 4),
-        ("media.tint", Media, 1, 6),
-        ("media.grayscale", Media, 2, 4),
         ("media.position.x", Media, 3, 1),
         ("media.position.y", Media, 3, 2),
         ("media.scale.x", Media, 3, 3),

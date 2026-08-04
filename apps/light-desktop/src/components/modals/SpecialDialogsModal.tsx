@@ -57,11 +57,21 @@ export function SpecialDialogsModal() {
 			),
 		[selectedFixtures, selectedFixtureIds],
 	);
+	const grayscaleFixtureIds = useMemo(
+		() =>
+			selectedFixtureIdsSupportingAttribute(
+				selectedFixtures,
+				selectedFixtureIds,
+				["media.grayscale"],
+			),
+		[selectedFixtures, selectedFixtureIds],
+	);
 	const colorDialog = useColorDialog(
 		selectedFixtureIds,
 		state.shiftArmed,
 		valueWrites,
 		tintFixtureIds,
+		grayscaleFixtureIds,
 	);
 	const available = useMemo(
 		() =>
