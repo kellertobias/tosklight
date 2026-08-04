@@ -433,6 +433,9 @@ describe("additional screen settings", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "Desktop" }));
 		fireEvent.click(screen.getByRole("option", { name: "Control surface" }));
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"Selecting it assigns that ownership when saved",
+		);
 
 		await waitFor(() => expect(save).toHaveBeenCalledOnce());
 		await waitFor(() =>
@@ -465,6 +468,9 @@ describe("additional screen settings", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "Control surface" }));
 		fireEvent.click(screen.getByRole("option", { name: "Desktop" }));
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"Separate Playbacks and Page Controls are hidden",
+		);
 
 		await waitFor(() =>
 			expect(updateProgrammerOwner).toHaveBeenCalledWith({

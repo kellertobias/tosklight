@@ -514,6 +514,9 @@ function ScreenLayoutFields({
 							: draft.content.type === "control_surface" ||
 									draft.content.type === "none"
 								? "Dock is unavailable without Desktop content."
+								: draft.content.type === "fixed_side_pane" &&
+										draft.content.base !== "desktop"
+									? "Dock is unavailable when a fixed side pane uses Control surface or None as its base content."
 							: undefined
 					}
 					onChange={(event) => update({ show_dock: event.target.checked })}
@@ -899,6 +902,24 @@ export function ScreenSettingsCard({
 					</div>
 					{removeError && <p role="alert">{removeError}</p>}
 				</div>
+			)}
+			{hasControlSurface(draft.content) && !programmerOwner && (
+				<p className="screen-settings-note" role="status">
+					This Control surface content becomes active when this screen owns the
+					Programmer controls. Selecting it assigns that ownership when saved.
+				</p>
+			)}
+			{programmerOwner && !hasControlSurface(draft.content) && (
+				<p className="screen-settings-note" role="status">
+					Programmer controls appear below this content. Separate Playbacks and
+					Page Controls are hidden so the lower controls appear once.
+				</p>
+			)}
+			{programmerOwner && hasControlSurface(draft.content) && (
+				<p className="screen-settings-note" role="status">
+					This control-only layout uses the shared Programmer lower controls;
+					separate Playbacks and Page Controls are not appended.
+				</p>
 			)}
 			<ScreenSettingsFields
 				draft={draft}
