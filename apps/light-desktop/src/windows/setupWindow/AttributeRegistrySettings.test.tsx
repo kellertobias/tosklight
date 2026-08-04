@@ -133,6 +133,7 @@ describe("Desk Setup attribute registry", () => {
 					encoder_group: "intensity",
 					encoder_page: 1,
 					encoder_slot: 2,
+					push_turn_of: null,
 				},
 			],
 			activation_groups: [

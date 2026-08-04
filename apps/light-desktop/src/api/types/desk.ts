@@ -184,6 +184,7 @@ export interface AttributeDescriptor {
 	built_in?: boolean;
 	retired?: boolean;
 	activation_group_id?: string | null;
+	push_turn_of?: string | null;
 }
 
 export interface SessionResponse {

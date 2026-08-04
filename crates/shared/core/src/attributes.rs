@@ -126,6 +126,10 @@ impl EncoderPlacement {
 pub struct AttributePlacement {
     pub attribute: AttributeKey,
     pub encoder: EncoderPlacement,
+    /// Attribute controlled by the encoder's ordinary turn when this attribute is its push-turn
+    /// companion. Both values remain independently recordable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push_turn_of: Option<AttributeKey>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -236,6 +240,12 @@ pub enum AttributeConfigurationError {
     MissingActivationGroup(String),
     #[error("attribute `{0}` belongs to overlapping activation groups")]
     OverlappingActivationGroup(String),
+    #[error("push-turn attribute `{attribute}` references invalid parent `{parent}`")]
+    InvalidPushTurnParent { attribute: String, parent: String },
+    #[error("encoder `{parent}` has more than one push-turn attribute")]
+    DuplicatePushTurnCompanion { parent: String },
+    #[error("push-turn pair `{parent}` / `{attribute}` crosses encoder groups")]
+    CrossEncoderPushTurn { parent: String, attribute: String },
 }
 
 mod configuration;

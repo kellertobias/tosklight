@@ -262,14 +262,14 @@ pub(super) fn configured_descriptors(
     let mut descriptors = light_core::ATTRIBUTE_REGISTRY
         .iter()
         .filter_map(|descriptor| {
-            let placement =
-                configuration.placement_for(&light_core::AttributeKey(descriptor.id.into()))?;
+            let placement = configuration
+                .attribute_placement_for(&light_core::AttributeKey(descriptor.id.into()))?;
             Some(wire::ConfiguredAttributeDescriptor {
                 id: descriptor.id.into(),
                 label: descriptor.label.into(),
-                encoder_group: wire_encoder_group(placement.group),
-                encoder_page: placement.page,
-                encoder_slot: placement.slot,
+                encoder_group: wire_encoder_group(placement.encoder.group),
+                encoder_page: placement.encoder.page,
+                encoder_slot: placement.encoder.slot,
                 value_type: wire_value_type(descriptor.value_type),
                 display_unit: descriptor.display_unit.map(str::to_owned),
                 physical_unit: descriptor.physical_unit.map(str::to_owned),
@@ -284,6 +284,10 @@ pub(super) fn configured_descriptors(
                 activation_group_id: configuration
                     .activation_group_for(&light_core::AttributeKey(descriptor.id.into()))
                     .map(|group| group.id.clone()),
+                push_turn_of: placement
+                    .push_turn_of
+                    .as_ref()
+                    .map(|attribute| attribute.0.clone()),
             })
         })
         .collect::<Vec<_>>();
@@ -292,13 +296,13 @@ pub(super) fn configured_descriptors(
             .custom_attributes
             .iter()
             .filter_map(|descriptor| {
-                let placement = configuration.placement_for(&descriptor.id)?;
+                let placement = configuration.attribute_placement_for(&descriptor.id)?;
                 Some(wire::ConfiguredAttributeDescriptor {
                     id: descriptor.id.0.clone(),
                     label: descriptor.label.clone(),
-                    encoder_group: wire_encoder_group(placement.group),
-                    encoder_page: placement.page,
-                    encoder_slot: placement.slot,
+                    encoder_group: wire_encoder_group(placement.encoder.group),
+                    encoder_page: placement.encoder.page,
+                    encoder_slot: placement.encoder.slot,
                     value_type: wire_value_type(descriptor.value_type),
                     display_unit: descriptor.display_unit.clone(),
                     physical_unit: descriptor.physical_unit.clone(),
@@ -313,6 +317,10 @@ pub(super) fn configured_descriptors(
                     activation_group_id: configuration
                         .activation_group_for(&descriptor.id)
                         .map(|group| group.id.clone()),
+                    push_turn_of: placement
+                        .push_turn_of
+                        .as_ref()
+                        .map(|attribute| attribute.0.clone()),
                 })
             }),
     );
@@ -363,6 +371,10 @@ fn wire_configuration(
                 encoder_group: wire_encoder_group(placement.encoder.group),
                 encoder_page: placement.encoder.page,
                 encoder_slot: placement.encoder.slot,
+                push_turn_of: placement
+                    .push_turn_of
+                    .as_ref()
+                    .map(|attribute| attribute.0.clone()),
             })
             .collect(),
         activation_groups: configuration
@@ -428,6 +440,7 @@ fn apply_patch(
                     placement.encoder_page,
                     placement.encoder_slot,
                 ),
+                push_turn_of: placement.push_turn_of.map(light_core::AttributeKey),
             })
             .collect();
     }

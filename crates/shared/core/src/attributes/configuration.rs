@@ -106,11 +106,14 @@ impl AttributeConfiguration {
             .map(|descriptor| descriptor.id)
             .collect::<HashSet<_>>();
         for placement in &recommended.placements {
-            if self
+            if let Some(existing) = self
                 .placements
-                .iter()
-                .any(|candidate| candidate.attribute == placement.attribute)
+                .iter_mut()
+                .find(|candidate| candidate.attribute == placement.attribute)
             {
+                if existing.push_turn_of.is_none() {
+                    existing.push_turn_of.clone_from(&placement.push_turn_of);
+                }
                 continue;
             }
             if let Some(occupied) = self
@@ -237,6 +240,42 @@ impl AttributeConfiguration {
             }
         }
 
+        let mut push_turn_parents = HashSet::new();
+        for placement in &self.placements {
+            let Some(parent_id) = placement.push_turn_of.as_ref() else {
+                continue;
+            };
+            let attribute = placement.attribute.0.as_str();
+            let parent = parent_id.0.as_str();
+            let Some(parent_placement) = self
+                .placements
+                .iter()
+                .find(|candidate| candidate.attribute == *parent_id)
+            else {
+                return Err(AttributeConfigurationError::InvalidPushTurnParent {
+                    attribute: attribute.to_owned(),
+                    parent: parent.to_owned(),
+                });
+            };
+            if attribute == parent || parent_placement.push_turn_of.is_some() {
+                return Err(AttributeConfigurationError::InvalidPushTurnParent {
+                    attribute: attribute.to_owned(),
+                    parent: parent.to_owned(),
+                });
+            }
+            if placement.encoder.group != parent_placement.encoder.group {
+                return Err(AttributeConfigurationError::CrossEncoderPushTurn {
+                    parent: parent.to_owned(),
+                    attribute: attribute.to_owned(),
+                });
+            }
+            if !push_turn_parents.insert(parent) {
+                return Err(AttributeConfigurationError::DuplicatePushTurnCompanion {
+                    parent: parent.to_owned(),
+                });
+            }
+        }
+
         let mut group_ids = HashSet::new();
         let mut activated = HashSet::new();
         for group in &self.activation_groups {
@@ -307,10 +346,14 @@ impl AttributeConfiguration {
     }
 
     pub fn placement_for(&self, attribute: &AttributeKey) -> Option<EncoderPlacement> {
+        self.attribute_placement_for(attribute)
+            .map(|placement| placement.encoder)
+    }
+
+    pub fn attribute_placement_for(&self, attribute: &AttributeKey) -> Option<&AttributePlacement> {
         self.placements
             .iter()
             .find(|placement| placement.attribute == *attribute)
-            .map(|placement| placement.encoder)
     }
 
     pub fn activation_group_for(

@@ -355,6 +355,88 @@ mod attribute_registry_tests {
         assert_eq!(configuration.clone(), configuration);
     }
 
+    #[test]
+    fn prism_and_animation_rotations_are_validated_push_turn_companions() {
+        let recommended = AttributeConfiguration::recommended();
+        for (companion, parent) in [
+            ("prism.1.rotation", "prism.1"),
+            ("prism.2.rotation", "prism.2"),
+            ("animation.1.rotation", "animation.1"),
+        ] {
+            assert_eq!(
+                recommended
+                    .attribute_placement_for(&AttributeKey(companion.into()))
+                    .and_then(|placement| placement.push_turn_of.as_ref())
+                    .map(|attribute| attribute.0.as_str()),
+                Some(parent)
+            );
+        }
+        recommended.validate().unwrap();
+
+        let mut legacy = recommended.clone();
+        for placement in &mut legacy.placements {
+            placement.push_turn_of = None;
+        }
+        assert!(
+            legacy
+                .placements
+                .iter()
+                .all(|placement| placement.push_turn_of.is_none())
+        );
+        assert_eq!(legacy.with_current_built_ins(), recommended);
+    }
+
+    #[test]
+    fn push_turn_companions_reject_missing_chained_cross_group_and_duplicate_parents() {
+        let companion_index = |configuration: &AttributeConfiguration| {
+            configuration
+                .placements
+                .iter()
+                .position(|placement| placement.attribute.0 == "prism.1.rotation")
+                .unwrap()
+        };
+
+        let mut missing = AttributeConfiguration::recommended();
+        let index = companion_index(&missing);
+        missing.placements[index].push_turn_of = Some(AttributeKey("missing".into()));
+        assert!(matches!(
+            missing.validate(),
+            Err(AttributeConfigurationError::InvalidPushTurnParent { .. })
+        ));
+
+        let mut chained = AttributeConfiguration::recommended();
+        let parent = chained
+            .placements
+            .iter_mut()
+            .find(|placement| placement.attribute.0 == "prism.1")
+            .unwrap();
+        parent.push_turn_of = Some(AttributeKey("gobo.1".into()));
+        assert!(matches!(
+            chained.validate(),
+            Err(AttributeConfigurationError::InvalidPushTurnParent { .. })
+        ));
+
+        let mut cross_group = AttributeConfiguration::recommended();
+        let index = companion_index(&cross_group);
+        cross_group.placements[index].push_turn_of = Some(AttributeKey("pan".into()));
+        assert!(matches!(
+            cross_group.validate(),
+            Err(AttributeConfigurationError::CrossEncoderPushTurn { .. })
+        ));
+
+        let mut duplicate = AttributeConfiguration::recommended();
+        let animation = duplicate
+            .placements
+            .iter_mut()
+            .find(|placement| placement.attribute.0 == "animation.1.rotation")
+            .unwrap();
+        animation.push_turn_of = Some(AttributeKey("prism.1".into()));
+        assert!(matches!(
+            duplicate.validate(),
+            Err(AttributeConfigurationError::DuplicatePushTurnCompanion { .. })
+        ));
+    }
+
     fn custom_descriptor(
         id: &str,
         value_type: AttributeValueType,
@@ -385,6 +467,7 @@ mod attribute_registry_tests {
         configuration.placements.push(AttributePlacement {
             attribute: id.clone(),
             encoder,
+            push_turn_of: None,
         });
         if configuration
             .custom_attributes

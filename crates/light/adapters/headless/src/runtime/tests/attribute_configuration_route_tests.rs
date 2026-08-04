@@ -70,6 +70,13 @@ async fn attribute_configuration_defaults_persist_and_replay_without_eager_show_
         initial["descriptors"].as_array().unwrap().len(),
         light_core::ATTRIBUTE_REGISTRY.len()
     );
+    let prism_rotation = initial["descriptors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|descriptor| descriptor["id"] == "prism.1.rotation")
+        .unwrap();
+    assert_eq!(prism_rotation["push_turn_of"], "prism.1");
 
     let request = serde_json::json!({
         "request_id": "attribute-configuration-1",
@@ -157,6 +164,9 @@ fn saved_configuration_from_an_older_catalog_is_upgraded_without_rewriting_the_s
     let show_path = data_dir.join("legacy-attribute-catalog.show");
     let (store, _) = ShowStore::create(&show_path, "Legacy Attribute catalog").unwrap();
     let mut legacy = light_core::AttributeConfiguration::recommended();
+    for placement in &mut legacy.placements {
+        placement.push_turn_of = None;
+    }
     legacy
         .placements
         .retain(|placement| !placement.attribute.0.starts_with("media."));
@@ -191,6 +201,27 @@ fn saved_configuration_from_an_older_catalog_is_upgraded_without_rewriting_the_s
             1,
             1
         ))
+    );
+    assert_eq!(
+        installed
+            .configuration
+            .attribute_placement_for(&light_core::AttributeKey("prism.1.rotation".into()))
+            .and_then(|placement| placement.push_turn_of.as_ref()),
+        Some(&light_core::AttributeKey("prism.1".into()))
+    );
+    assert!(
+        document
+            .object(
+                attribute_configuration::ATTRIBUTE_CONFIGURATION_KIND,
+                attribute_configuration::ATTRIBUTE_CONFIGURATION_ID,
+            )
+            .unwrap()
+            .body()["placements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|placement| placement.get("push_turn_of").is_none()),
+        "runtime compatibility must not eagerly persist new compound metadata"
     );
     assert!(
         document

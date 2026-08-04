@@ -280,6 +280,7 @@ export function reorderAttribute(
 				encoder_group: descriptor.encoder_group,
 				encoder_page: Math.floor(position / 6) + 1,
 				encoder_slot: (position % 6) + 1,
+				push_turn_of: descriptor.push_turn_of,
 			})),
 		],
 	};
@@ -322,7 +323,12 @@ function AttributeGroups({
 			custom_attributes: [...snapshot.configuration.custom_attributes, custom],
 			placements: [
 				...snapshot.configuration.placements,
-				{ attribute: id, encoder_group: group, ...placement },
+				{
+					attribute: id,
+					encoder_group: group,
+					...placement,
+					push_turn_of: null,
+				},
 			],
 			activation_groups: [
 				...snapshot.configuration.activation_groups,

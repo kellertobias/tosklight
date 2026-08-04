@@ -96,6 +96,7 @@ pub(super) fn attribute(
         built_in: descriptor.built_in,
         retired: descriptor.retired,
         activation_group_id: descriptor.activation_group_id,
+        push_turn_of: descriptor.push_turn_of,
     }
 }
 

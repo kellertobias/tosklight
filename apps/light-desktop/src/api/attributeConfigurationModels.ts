@@ -33,6 +33,7 @@ export interface AttributePlacement {
 	encoder_group: AttributeEncoderGroup;
 	encoder_page: number;
 	encoder_slot: number;
+	push_turn_of?: string | null;
 }
 
 export interface AttributeActivationGroup {
@@ -66,6 +67,7 @@ export interface ConfiguredAttributeDescriptor {
 	built_in: boolean;
 	retired: boolean;
 	activation_group_id: string | null;
+	push_turn_of?: string | null;
 }
 
 export interface AttributeConfigurationSnapshot {

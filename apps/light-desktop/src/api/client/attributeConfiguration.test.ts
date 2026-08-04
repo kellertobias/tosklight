@@ -46,6 +46,15 @@ describe("AttributeConfigurationApiClient", () => {
 
 		await client.snapshot("show-29");
 		await client.update("show-29", snapshot, {
+			placements: [
+				{
+					attribute: "prism.1.rotation",
+					encoder_group: "beam",
+					encoder_page: 1,
+					encoder_slot: 6,
+					push_turn_of: "prism.1",
+				},
+			],
 			activation_groups: [
 				{ id: "intensity", label: "Intensity", members: ["intensity"] },
 			],
@@ -64,6 +73,15 @@ describe("AttributeConfigurationApiClient", () => {
 			expected_show_revision: 8,
 			expected_object_revision: 3,
 			patch: {
+				placements: [
+					{
+						attribute: "prism.1.rotation",
+						encoder_group: "beam",
+						encoder_page: 1,
+						encoder_slot: 6,
+						push_turn_of: "prism.1",
+					},
+				],
 				activation_groups: [
 					{
 						id: "intensity",

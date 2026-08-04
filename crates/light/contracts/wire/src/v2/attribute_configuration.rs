@@ -60,6 +60,8 @@ pub struct AttributePlacement {
     pub encoder_group: AttributeEncoderGroup,
     pub encoder_page: u16,
     pub encoder_slot: u8,
+    #[serde(default)]
+    pub push_turn_of: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -96,6 +98,7 @@ pub struct ConfiguredAttributeDescriptor {
     pub built_in: bool,
     pub retired: bool,
     pub activation_group_id: Option<String>,
+    pub push_turn_of: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

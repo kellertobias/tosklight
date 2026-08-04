@@ -3,6 +3,7 @@ import type {
 	AttributeConfigurationSnapshot,
 } from "../attributeConfigurationModels";
 import type {
+	AttributeConfigurationPatch as WireAttributeConfigurationPatch,
 	AttributeConfigurationUpdateRequest,
 	AttributeConfigurationSnapshot as WireAttributeConfigurationSnapshot,
 	AttributeConfigurationUpdateOutcome as WireAttributeConfigurationUpdateOutcome,
@@ -36,11 +37,23 @@ export class AttributeConfigurationApiClient {
 		snapshot: AttributeConfigurationSnapshot,
 		patch: AttributeConfigurationPatch,
 	): Promise<{ snapshot: AttributeConfigurationSnapshot }> {
+		const { placements, ...otherChanges } = patch;
+		const wirePatch: WireAttributeConfigurationPatch = {
+			...otherChanges,
+			...(placements !== undefined
+				? {
+						placements: placements?.map((placement) => ({
+							...placement,
+							push_turn_of: placement.push_turn_of ?? null,
+						})),
+					}
+				: {}),
+		};
 		const request: AttributeConfigurationUpdateRequest = {
 			request_id: crypto.randomUUID(),
 			expected_show_revision: snapshot.show_revision,
 			expected_object_revision: snapshot.object_revision,
-			patch,
+			patch: wirePatch,
 		};
 		const init = jsonRequest("POST", request);
 		return this.transport

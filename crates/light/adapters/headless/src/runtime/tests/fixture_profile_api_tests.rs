@@ -289,6 +289,7 @@ async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
                     99,
                     1,
                 ),
+                push_turn_of: None,
             });
         installed.configuration.activation_groups.push(
             light_core::AttributeActivationGroup {

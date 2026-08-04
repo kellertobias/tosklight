@@ -153,6 +153,7 @@ pub struct RuntimeAttributeDescriptor {
     pub built_in: bool,
     pub retired: bool,
     pub activation_group_id: Option<String>,
+    pub push_turn_of: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

@@ -100,6 +100,12 @@ pub(super) fn recommended_builtin_placements() -> Vec<AttributePlacement> {
     .map(|(id, group, page, slot)| AttributePlacement {
         attribute: AttributeKey(id.to_owned()),
         encoder: EncoderPlacement::new(group, page, slot),
+        push_turn_of: match id {
+            "prism.1.rotation" => Some(AttributeKey("prism.1".into())),
+            "prism.2.rotation" => Some(AttributeKey("prism.2".into())),
+            "animation.1.rotation" => Some(AttributeKey("animation.1".into())),
+            _ => None,
+        },
     })
     .collect()
 }
