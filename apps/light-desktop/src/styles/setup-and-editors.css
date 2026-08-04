@@ -55,6 +55,15 @@
 .attribute-layout-slot > details {
 	color: var(--muted);
 }
+.attribute-layout-order-actions {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 4px;
+}
+.attribute-layout-order-actions > .ui-button {
+	min-height: 38px;
+	padding: 4px;
+}
 .setup-window main {
 	padding: 0;
 	overflow: hidden;

@@ -168,4 +168,65 @@ describe("Desk Setup attribute registry", () => {
 			activation_groups: snapshot.recommended_configuration.activation_groups,
 		});
 	});
+
+	it("reorders semantic controls from the visual encoder pages", () => {
+		const editAttributeConfiguration = vi.fn();
+		const second = {
+			...snapshot.descriptors[0],
+			id: "intensity.fade",
+			label: "Intensity Fade",
+			encoder_slot: 2,
+			activation_group_id: "intensity.fade",
+		};
+		const configured = {
+			...snapshot,
+			configuration: {
+				...snapshot.configuration,
+				placements: [
+					...snapshot.configuration.placements,
+					{
+						attribute: second.id,
+						encoder_group: "intensity" as const,
+						encoder_page: 1,
+						encoder_slot: 2,
+					},
+				],
+			},
+			descriptors: [...snapshot.descriptors, second],
+		};
+		render(
+			<AttributeRegistrySettings
+				controller={
+					{
+						attributeConfiguration: configured,
+						attributeConfigurationError: null,
+						editAttributeConfiguration,
+					} as unknown as SetupWindowController
+				}
+			/>,
+		);
+
+		expect(screen.getAllByText("Built-in")).toHaveLength(2);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Move Intensity Fade earlier" }),
+		);
+
+		expect(editAttributeConfiguration).toHaveBeenCalledWith({
+			...configured.configuration,
+			placements: [
+				{
+					attribute: "intensity.fade",
+					encoder_group: "intensity",
+					encoder_page: 1,
+					encoder_slot: 1,
+				},
+				{
+					attribute: "intensity",
+					encoder_group: "intensity",
+					encoder_page: 1,
+					encoder_slot: 2,
+				},
+			],
+		});
+	});
 });

@@ -82,7 +82,7 @@ export function AttributeRegistrySettings({
 							Browse the ordered controls that produce the desk's encoder pages.
 						</small>
 					</header>
-					<EncoderGroupsPreview snapshot={snapshot} />
+					<EncoderGroupsPreview snapshot={snapshot} onChange={update} />
 				</article>
 			)}
 			{activeTab === "activation-groups" && (
@@ -124,13 +124,14 @@ export function AttributeRegistrySettings({
 
 function EncoderGroupsPreview({
 	snapshot,
+	onChange,
 }: {
 	snapshot: NonNullable<SetupWindowController["attributeConfiguration"]>;
+	onChange(configuration: AttributeConfiguration): void;
 }) {
 	const [width, setWidth] = useState<4 | 6>(6);
-	const descriptors = projectedDescriptors(snapshot).filter(
-		(descriptor) => descriptor.built_in && !descriptor.retired,
-	);
+	const allDescriptors = projectedDescriptors(snapshot);
+	const descriptors = allDescriptors.filter((descriptor) => !descriptor.retired);
 	const groups = attributeEncoderGroups(
 		descriptors,
 		new Set(descriptors.map(({ id }) => id)),
@@ -174,10 +175,21 @@ function EncoderGroupsPreview({
 										<small>E{index + 1}</small>
 										<strong>{descriptor?.label ?? "Unassigned"}</strong>
 										{descriptor && (
-											<details>
-												<summary>Details</summary>
-												<code>{descriptor.id}</code>
-											</details>
+											<>
+												<small>
+													{descriptor.built_in ? "Built-in" : "Custom"}
+												</small>
+												<AttributeOrderActions
+													descriptor={descriptor}
+													descriptors={descriptors}
+													configuration={snapshot.configuration}
+													onChange={onChange}
+												/>
+												<details>
+													<summary>Details</summary>
+													<code>{descriptor.id}</code>
+												</details>
+											</>
 										)}
 									</div>
 								))}
@@ -188,6 +200,89 @@ function EncoderGroupsPreview({
 			))}
 		</section>
 	);
+}
+
+function AttributeOrderActions({
+	descriptor,
+	descriptors,
+	configuration,
+	onChange,
+}: {
+	descriptor: ConfiguredAttributeDescriptor;
+	descriptors: ConfiguredAttributeDescriptor[];
+	configuration: AttributeConfiguration;
+	onChange(configuration: AttributeConfiguration): void;
+}) {
+	const move = (delta: -1 | 1) =>
+		onChange(reorderAttribute(configuration, descriptors, descriptor.id, delta));
+	return (
+		<div className="attribute-layout-order-actions">
+			<Button
+				aria-label={`Move ${descriptor.label} earlier`}
+				disabled={isGroupBoundary(descriptors, descriptor.id, -1)}
+				onClick={() => move(-1)}
+			>
+				←
+			</Button>
+			<Button
+				aria-label={`Move ${descriptor.label} later`}
+				disabled={isGroupBoundary(descriptors, descriptor.id, 1)}
+				onClick={() => move(1)}
+			>
+				→
+			</Button>
+		</div>
+	);
+}
+
+function descriptorsInGroup(
+	descriptors: ConfiguredAttributeDescriptor[],
+	attribute: string,
+) {
+	const descriptor = descriptors.find((candidate) => candidate.id === attribute);
+	return descriptor
+		? descriptors.filter(
+				(candidate) => candidate.encoder_group === descriptor.encoder_group,
+			)
+		: [];
+}
+
+function isGroupBoundary(
+	descriptors: ConfiguredAttributeDescriptor[],
+	attribute: string,
+	delta: -1 | 1,
+) {
+	const ordered = descriptorsInGroup(descriptors, attribute);
+	const index = ordered.findIndex((descriptor) => descriptor.id === attribute);
+	return index < 0 || index + delta < 0 || index + delta >= ordered.length;
+}
+
+export function reorderAttribute(
+	configuration: AttributeConfiguration,
+	descriptors: ConfiguredAttributeDescriptor[],
+	attribute: string,
+	delta: -1 | 1,
+) {
+	const ordered = descriptorsInGroup(descriptors, attribute);
+	const index = ordered.findIndex((descriptor) => descriptor.id === attribute);
+	const target = index + delta;
+	if (index < 0 || target < 0 || target >= ordered.length) return configuration;
+	[ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+	const reorderedIds = new Set(ordered.map((descriptor) => descriptor.id));
+	return {
+		...configuration,
+		placements: [
+			...configuration.placements.filter(
+				(placement) => !reorderedIds.has(placement.attribute),
+			),
+			...ordered.map((descriptor, position) => ({
+				attribute: descriptor.id,
+				encoder_group: descriptor.encoder_group,
+				encoder_page: Math.floor(position / 6) + 1,
+				encoder_slot: (position % 6) + 1,
+			})),
+		],
+	};
 }
 
 function AttributeGroups({
