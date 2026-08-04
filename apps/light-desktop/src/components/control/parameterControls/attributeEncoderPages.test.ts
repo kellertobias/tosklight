@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	ATTRIBUTE_ENCODER_GROUPS,
+	type AttributeEncoderGroupId,
 	type AttributeEncoderPlacement,
 	attributeEncoderGroups,
 	projectPushTurnPlacements,
@@ -137,6 +138,145 @@ describe("attribute encoder pages", () => {
 		expect(
 			five?.pages.map((page) => page.slots.map((slot) => slot?.id ?? null)),
 		).toEqual([["a", "b", "c", "pair.a", "pair.b"]]);
+	});
+
+	it("packs the real protected mechanisms into the accepted four five and six-wide pages", () => {
+		const beam = [
+			descriptor("gobo.1", "Gobo 1", "beam", 1, 1),
+			descriptor("gobo.1.rotation", "Gobo 1 Rotation", "beam", 1, 2),
+			descriptor("gobo.2", "Gobo 2", "beam", 1, 3),
+			descriptor("gobo.2.rotation", "Gobo 2 Rotation", "beam", 1, 4),
+			descriptor("prism.1", "Prism 1", "beam", 1, 5),
+			descriptor("prism.2", "Prism 2", "beam", 1, 6),
+			descriptor("animation.1", "Animation", "beam", 2, 1),
+			{
+				...descriptor("prism.1.rotation", "Prism 1 Rotation", "beam", 2, 2),
+				push_turn_of: "prism.1",
+			},
+			{
+				...descriptor("prism.2.rotation", "Prism 2 Rotation", "beam", 2, 3),
+				push_turn_of: "prism.2",
+			},
+			{
+				...descriptor(
+					"animation.1.rotation",
+					"Animation Rotation",
+					"beam",
+					2,
+					4,
+				),
+				push_turn_of: "animation.1",
+			},
+		];
+		const shapers = [
+			descriptor("iris", "Iris", "shapers", 1, 1),
+			descriptor(
+				"shaper.blade.1.position",
+				"Blade 1 Position",
+				"shapers",
+				1,
+				2,
+			),
+			descriptor("shaper.blade.1.angle", "Blade 1 Angle", "shapers", 1, 3),
+			descriptor(
+				"shaper.blade.2.position",
+				"Blade 2 Position",
+				"shapers",
+				1,
+				4,
+			),
+			descriptor("shaper.blade.2.angle", "Blade 2 Angle", "shapers", 1, 5),
+			descriptor("shaper.rotation", "Shaper Rotation", "shapers", 1, 6),
+			descriptor(
+				"shaper.blade.3.position",
+				"Blade 3 Position",
+				"shapers",
+				2,
+				1,
+			),
+			descriptor("shaper.blade.3.angle", "Blade 3 Angle", "shapers", 2, 2),
+			descriptor(
+				"shaper.blade.4.position",
+				"Blade 4 Position",
+				"shapers",
+				2,
+				3,
+			),
+			descriptor("shaper.blade.4.angle", "Blade 4 Angle", "shapers", 2, 4),
+		];
+		const media = [
+			descriptor("media.folder", "Folder", "media", 1, 1),
+			descriptor("media.file", "File", "media", 1, 2),
+			descriptor("media.mask.folder", "Mask Folder", "media", 1, 3),
+			descriptor("media.mask.file", "Mask File", "media", 1, 4),
+			descriptor("media.mask.invert", "Mask Invert", "media", 1, 5),
+		];
+		const placements = projectPushTurnPlacements([
+			...beam,
+			...shapers,
+			...media,
+		]);
+		const supported = new Set(placements.map(({ id }) => id));
+		const ids = (group: AttributeEncoderGroupId, width: 4 | 5 | 6) =>
+			attributeEncoderGroups(placements, supported, width)
+				.find((candidate) => candidate.id === group)
+				?.pages.map((page) => page.slots.map((slot) => slot?.id ?? null));
+
+		expect(ids("beam", 4)).toEqual([
+			["gobo.1", "gobo.1.rotation", "gobo.2", "gobo.2.rotation"],
+			["prism.1", "prism.2", "animation.1", null],
+		]);
+		expect(ids("beam", 5)).toEqual([
+			["gobo.1", "gobo.1.rotation", "gobo.2", "gobo.2.rotation", null],
+			["prism.1", "prism.2", "animation.1", null, null],
+		]);
+		expect(ids("beam", 6)).toEqual([
+			[
+				"gobo.1",
+				"gobo.1.rotation",
+				"gobo.2",
+				"gobo.2.rotation",
+				"prism.1",
+				"prism.2",
+			],
+			["animation.1", null, null, null, null, null],
+		]);
+
+		expect(ids("shapers", 4)).toEqual([
+			[
+				"shaper.blade.1.position",
+				"shaper.blade.1.angle",
+				"shaper.blade.2.position",
+				"shaper.blade.2.angle",
+			],
+			[
+				"shaper.blade.3.position",
+				"shaper.blade.3.angle",
+				"shaper.blade.4.position",
+				"shaper.blade.4.angle",
+			],
+			["iris", "shaper.rotation", null, null],
+		]);
+		expect(ids("shapers", 5)).toEqual([
+			[
+				"iris",
+				"shaper.blade.1.position",
+				"shaper.blade.1.angle",
+				"shaper.blade.2.position",
+				"shaper.blade.2.angle",
+			],
+			[
+				"shaper.rotation",
+				"shaper.blade.3.position",
+				"shaper.blade.3.angle",
+				"shaper.blade.4.position",
+				"shaper.blade.4.angle",
+			],
+		]);
+		expect(ids("media", 4)).toEqual([
+			["media.folder", "media.file", "media.mask.folder", "media.mask.file"],
+			["media.mask.invert", null, null, null],
+		]);
 	});
 
 	it("keeps derived page identity stable while omitting wholly unsupported pages", () => {

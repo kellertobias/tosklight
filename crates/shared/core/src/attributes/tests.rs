@@ -1099,9 +1099,11 @@ mod attribute_registry_tests {
     }
 
     #[test]
-    fn prism_and_animation_rotations_are_validated_push_turn_companions() {
+    fn wheel_prism_and_animation_rotations_are_validated_push_turn_companions() {
         let recommended = AttributeConfiguration::recommended();
         for (companion, parent) in [
+            ("color.wheel.1.rotation", "color.wheel.1"),
+            ("color.wheel.2.rotation", "color.wheel.2"),
             ("prism.1.rotation", "prism.1"),
             ("prism.2.rotation", "prism.2"),
             ("animation.1.rotation", "animation.1"),
@@ -1127,6 +1129,109 @@ mod attribute_registry_tests {
                 .all(|placement| placement.push_turn_of.is_none())
         );
         assert_eq!(legacy.with_current_built_ins(), recommended);
+    }
+
+    #[test]
+    fn color_and_beam_pages_use_the_accepted_six_encoder_geometry() {
+        let recommended = AttributeConfiguration::recommended();
+        for (attribute, group, page, slot) in [
+            ("color.red", EncoderGroup::Color, 1, 1),
+            ("color.green", EncoderGroup::Color, 1, 2),
+            ("color.blue", EncoderGroup::Color, 1, 3),
+            ("color.white", EncoderGroup::Color, 1, 4),
+            ("color.amber", EncoderGroup::Color, 1, 5),
+            ("color.uv", EncoderGroup::Color, 1, 6),
+            ("color.lime", EncoderGroup::Color, 2, 1),
+            ("color.indigo", EncoderGroup::Color, 2, 2),
+            ("color.mint", EncoderGroup::Color, 2, 3),
+            ("color.temperature", EncoderGroup::Color, 2, 4),
+            ("color.wheel.1", EncoderGroup::Color, 2, 5),
+            ("color.wheel.2", EncoderGroup::Color, 2, 6),
+            ("gobo.1", EncoderGroup::Beam, 1, 1),
+            ("gobo.1.rotation", EncoderGroup::Beam, 1, 2),
+            ("gobo.2", EncoderGroup::Beam, 1, 3),
+            ("gobo.2.rotation", EncoderGroup::Beam, 1, 4),
+            ("prism.1", EncoderGroup::Beam, 1, 5),
+            ("prism.2", EncoderGroup::Beam, 1, 6),
+            ("animation.1", EncoderGroup::Beam, 2, 1),
+        ] {
+            assert_eq!(
+                recommended.placement_for(&AttributeKey(attribute.into())),
+                Some(EncoderPlacement::new(group, page, slot)),
+                "unexpected placement for {attribute}"
+            );
+        }
+        recommended.validate().unwrap();
+    }
+
+    #[test]
+    fn legacy_color_and_beam_defaults_migrate_to_the_accepted_geometry() {
+        let recommended = AttributeConfiguration::recommended();
+        let mut legacy = recommended.clone();
+        for (attribute, old_encoder) in [
+            (
+                "color.lime",
+                EncoderPlacement::new(EncoderGroup::Color, 2, 3),
+            ),
+            (
+                "color.indigo",
+                EncoderPlacement::new(EncoderGroup::Color, 2, 4),
+            ),
+            (
+                "color.mint",
+                EncoderPlacement::new(EncoderGroup::Color, 2, 5),
+            ),
+            (
+                "color.temperature",
+                EncoderPlacement::new(EncoderGroup::Color, 2, 6),
+            ),
+            (
+                "color.wheel.1",
+                EncoderPlacement::new(EncoderGroup::Color, 3, 3),
+            ),
+            (
+                "color.wheel.1.rotation",
+                EncoderPlacement::new(EncoderGroup::Color, 3, 4),
+            ),
+            (
+                "color.wheel.2",
+                EncoderPlacement::new(EncoderGroup::Color, 3, 5),
+            ),
+            (
+                "color.wheel.2.rotation",
+                EncoderPlacement::new(EncoderGroup::Color, 3, 6),
+            ),
+            (
+                "prism.1.rotation",
+                EncoderPlacement::new(EncoderGroup::Beam, 1, 6),
+            ),
+            ("prism.2", EncoderPlacement::new(EncoderGroup::Beam, 2, 1)),
+            (
+                "prism.2.rotation",
+                EncoderPlacement::new(EncoderGroup::Beam, 2, 2),
+            ),
+            (
+                "animation.1",
+                EncoderPlacement::new(EncoderGroup::Beam, 2, 3),
+            ),
+        ] {
+            let placement = legacy
+                .placements
+                .iter_mut()
+                .find(|placement| placement.attribute.0 == attribute)
+                .unwrap();
+            placement.encoder = old_encoder;
+            if attribute.starts_with("color.wheel") {
+                placement.push_turn_of = None;
+            }
+        }
+
+        let migrated = legacy.migrate_canonical_attributes().unwrap();
+        assert_eq!(migrated, recommended);
+        assert_eq!(
+            migrated.clone().migrate_canonical_attributes().unwrap(),
+            migrated
+        );
     }
 
     #[test]

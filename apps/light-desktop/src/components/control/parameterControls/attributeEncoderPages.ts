@@ -132,7 +132,7 @@ function repackedEncoderGroups<Descriptor extends AttributeEncoderPlacement>(
 		const ordered = placements
 			.filter((descriptor) => descriptor.encoder_group === id)
 			.sort(compareSemanticPlacement);
-		const units = compoundUnits(ordered);
+		const units = orderedPackingUnits(id, compoundUnits(ordered), slotCount);
 		const packed: Array<Array<Descriptor | null>> = [];
 		let slots: Array<Descriptor | null> = [];
 		for (const unit of units) {
@@ -161,6 +161,19 @@ function repackedEncoderGroups<Descriptor extends AttributeEncoderPlacement>(
 	});
 }
 
+function orderedPackingUnits<Descriptor extends AttributeEncoderPlacement>(
+	group: AttributeEncoderGroupId,
+	units: Descriptor[][],
+	slotCount: 4 | 5,
+) {
+	if (group !== "shapers" || slotCount !== 4) return units;
+	const blades = units.filter((unit) =>
+		/^shaper\.blade\.[1-4]\./.test(unit[0]?.id ?? ""),
+	);
+	const remaining = units.filter((unit) => !blades.includes(unit));
+	return [...blades, ...remaining];
+}
+
 function descriptorIsSupported(
 	descriptor: AttributeEncoderPlacement,
 	supportedAttributes: ReadonlySet<string>,
@@ -180,9 +193,13 @@ function compoundUnits<Descriptor extends AttributeEncoderPlacement>(
 	const units: Descriptor[][] = [];
 	for (const descriptor of ordered) {
 		const previous = units.at(-1);
+		const compoundGroup =
+			descriptor.compound_group ?? builtInPackingGroup(descriptor.id);
 		if (
-			descriptor.compound_group &&
-			previous?.[0]?.compound_group === descriptor.compound_group
+			previous &&
+			compoundGroup &&
+			(previous[0]?.compound_group ??
+				builtInPackingGroup(previous[0]?.id ?? "")) === compoundGroup
 		) {
 			previous.push(descriptor);
 		} else {
@@ -190,6 +207,21 @@ function compoundUnits<Descriptor extends AttributeEncoderPlacement>(
 		}
 	}
 	return units;
+}
+
+function builtInPackingGroup(attribute: string): string | null {
+	if (/^color\.wheel\.[12]$/.test(attribute)) return "color.wheels";
+	if (/^prism\.[12]$/.test(attribute)) return "beam.prisms";
+	const gobo = attribute.match(/^(gobo\.[12])(?:\.rotation)?$/)?.[1];
+	if (gobo) return gobo;
+	const blade = attribute.match(
+		/^(shaper\.blade\.[1-4])\.(?:position|angle)$/,
+	)?.[1];
+	if (blade) return blade;
+	if (/^media\.(?:folder|file)$/.test(attribute)) return "media.source";
+	if (/^media\.mask\.(?:folder|file)$/.test(attribute))
+		return "media.mask.source";
+	return null;
 }
 
 function compareSemanticPlacement(

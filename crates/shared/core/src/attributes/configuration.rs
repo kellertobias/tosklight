@@ -258,6 +258,66 @@ impl AttributeConfiguration {
         }
         for (attribute, from, to) in [
             (
+                "color.lime",
+                EncoderPlacement::new(EncoderGroup::Color, 2, 3),
+                EncoderPlacement::new(EncoderGroup::Color, 2, 1),
+            ),
+            (
+                "color.indigo",
+                EncoderPlacement::new(EncoderGroup::Color, 2, 4),
+                EncoderPlacement::new(EncoderGroup::Color, 2, 2),
+            ),
+            (
+                "color.mint",
+                EncoderPlacement::new(EncoderGroup::Color, 2, 5),
+                EncoderPlacement::new(EncoderGroup::Color, 2, 3),
+            ),
+            (
+                "color.temperature",
+                EncoderPlacement::new(EncoderGroup::Color, 2, 6),
+                EncoderPlacement::new(EncoderGroup::Color, 2, 4),
+            ),
+            (
+                "color.wheel.1",
+                EncoderPlacement::new(EncoderGroup::Color, 3, 3),
+                EncoderPlacement::new(EncoderGroup::Color, 2, 5),
+            ),
+            (
+                "color.wheel.2",
+                EncoderPlacement::new(EncoderGroup::Color, 3, 5),
+                EncoderPlacement::new(EncoderGroup::Color, 2, 6),
+            ),
+            (
+                "color.wheel.1.rotation",
+                EncoderPlacement::new(EncoderGroup::Color, 3, 4),
+                EncoderPlacement::new(EncoderGroup::Color, 3, 1),
+            ),
+            (
+                "color.wheel.2.rotation",
+                EncoderPlacement::new(EncoderGroup::Color, 3, 6),
+                EncoderPlacement::new(EncoderGroup::Color, 3, 2),
+            ),
+            (
+                "prism.1.rotation",
+                EncoderPlacement::new(EncoderGroup::Beam, 1, 6),
+                EncoderPlacement::new(EncoderGroup::Beam, 2, 2),
+            ),
+            (
+                "prism.2",
+                EncoderPlacement::new(EncoderGroup::Beam, 2, 1),
+                EncoderPlacement::new(EncoderGroup::Beam, 1, 6),
+            ),
+            (
+                "prism.2.rotation",
+                EncoderPlacement::new(EncoderGroup::Beam, 2, 2),
+                EncoderPlacement::new(EncoderGroup::Beam, 2, 3),
+            ),
+            (
+                "animation.1",
+                EncoderPlacement::new(EncoderGroup::Beam, 2, 3),
+                EncoderPlacement::new(EncoderGroup::Beam, 2, 1),
+            ),
+            (
                 "control",
                 EncoderPlacement::new(EncoderGroup::Control, 2, 1),
                 EncoderPlacement::new(EncoderGroup::Control, 1, 1),
@@ -327,12 +387,18 @@ impl AttributeConfiguration {
         from: EncoderPlacement,
         to: EncoderPlacement,
     ) {
+        let recommended_push_turn = recommended_builtin_placements()
+            .into_iter()
+            .find(|placement| placement.attribute.0 == attribute && placement.encoder == to)
+            .and_then(|placement| placement.push_turn_of);
         if let Some(placement) = self.placements.iter_mut().find(|placement| {
             placement.attribute.0 == attribute
                 && placement.encoder == from
-                && placement.push_turn_of.is_none()
+                && (placement.push_turn_of.is_none()
+                    || placement.push_turn_of.as_ref() == recommended_push_turn.as_ref())
         }) {
             placement.encoder = to;
+            placement.push_turn_of = recommended_push_turn;
         }
     }
 

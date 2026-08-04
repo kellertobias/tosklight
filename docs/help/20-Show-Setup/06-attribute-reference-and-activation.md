@@ -111,14 +111,12 @@ through that same whole-color surface.
 | Color | P1/E6 | `color.uv` | **UV** (`color.uv`) | Color Mix |
 | Color | P1/E4 | `color.white` | **Cold White** (`color.cold_white`), identity-mapped while retaining its physical channel name | Color Mix |
 | Color | P1/E5 | `color.amber` | **Warm White** (`color.warm_white`), identity-mapped while retaining its physical channel name | Color Mix |
-| Color | P2/E3 | `color.lime` | **Lime** (`color.lime`) | Color Mix |
-| Color | P2/E4 | `color.indigo` | **Indigo** (`color.indigo`) | Color Mix |
-| Color | P2/E5 | `color.mint` | **Mint** (`color.mint`) | Color Mix |
-| Color | P2/E6 | `color.temperature` | **Color Temperature / CTO** (`color.temperature`) | Color Mix |
-| Color | P3/E3 | `color.wheel.1` | **Color Wheel 1** (`color.wheel.1`) | Color Wheel |
-| Color | P3/E4 | `color.wheel.1.rotation` | **Color Wheel 1 Rotation** (`color.wheel.1.rotation`) | Color Wheel |
-| Color | P3/E5 | `color.wheel.2` | **Color Wheel 2** (`color.wheel.2`) | Color Wheel |
-| Color | P3/E6 | `color.wheel.2.rotation` | **Color Wheel 2 Rotation** (`color.wheel.2.rotation`) | Color Wheel |
+| Color | P2/E1 | `color.lime` | **Lime** (`color.lime`) | Color Mix |
+| Color | P2/E2 | `color.indigo` | **Indigo** (`color.indigo`) | Color Mix |
+| Color | P2/E3 | `color.mint` | **Mint** (`color.mint`) | Color Mix |
+| Color | P2/E4 | `color.temperature` | **Color Temperature / CTO** (`color.temperature`) | Color Mix |
+| Color | P2/E5 | `color.wheel.1` | **Color Wheel 1**; push-turn controls **Color Wheel 1 Rotation** (`color.wheel.1.rotation`) | Color Wheel |
+| Color | P2/E6 | `color.wheel.2` | **Color Wheel 2**; push-turn controls **Color Wheel 2 Rotation** (`color.wheel.2.rotation`) | Color Wheel |
 | Position | P1/E1 | `pan` | **Pan** (`pan`) | Position |
 | Position | P1/E2 | `tilt` | **Tilt** (`tilt`) | Position |
 | Position | P1/E3 | `position.movement` | **Position Movement** (`position.movement`; fixture-authored speed, move-time, or speed/time representation) | — |
@@ -127,12 +125,9 @@ through that same whole-color surface.
 | Beam | P1/E2 | `gobo.1.rotation` | **Gobo 1 Rotation** (`gobo.1.rotation`) | — |
 | Beam | P1/E3 | `gobo.2` | **Gobo 2** (`gobo.2` and migrated second-wheel gobo IDs) | — |
 | Beam | P1/E4 | `gobo.2.rotation` | **Gobo 2 Rotation** (`gobo.2.rotation`) | — |
-| Beam | P1/E5 | `prism.1` | **Prism 1** (`prism.1`, migrated from `prism.prism` or `prism.prism_insertion`) | — |
-| Beam | P1/E6 | `prism.1.rotation` | **Prism 1 Rotation** (`prism.1.rotation`, migrated from `prism.prism_rotation`) | — |
-| Beam | P2/E1 | `prism.2` | **Prism 2** (`prism.2`) | — |
-| Beam | P2/E2 | `prism.2.rotation` | **Prism 2 Rotation** (`prism.2.rotation`) | — |
-| Beam | P2/E3 | `animation.1` | **Animation Wheel 1** (`animation.1`) | — |
-| Beam | P2/E4 | `animation.1.rotation` | **Animation Rotation 1** (`animation.1.rotation`) | — |
+| Beam | P1/E5 | `prism.1` | **Prism 1** (`prism.1`, migrated from `prism.prism` or `prism.prism_insertion`); push-turn controls **Prism 1 Rotation** (`prism.1.rotation`, migrated from `prism.prism_rotation`) | — |
+| Beam | P1/E6 | `prism.2` | **Prism 2**; push-turn controls **Prism 2 Rotation** (`prism.2.rotation`) | — |
+| Beam | P2/E1 | `animation.1` | **Animation Wheel 1**; push-turn controls **Animation Rotation 1** (`animation.1.rotation`) | — |
 | Shapers | P1/E1 | `iris` | **Iris** (`iris`) | Shapers |
 | Shapers | P1/E2 | `shaper.blade.1.position` | **Blade 1 Position** (`shaper.blade.1.position`, migrated from `fixture.blade_1`) | Shapers |
 | Shapers | P1/E3 | `shaper.blade.1.angle` | **Blade 1 Angle** (`shaper.blade.1.angle`) | Shapers |
@@ -143,8 +138,6 @@ through that same whole-color surface.
 | Shapers | P2/E2 | `shaper.blade.3.angle` | **Blade 3 Angle** (`shaper.blade.3.angle`) | Shapers |
 | Shapers | P2/E3 | `shaper.blade.4.position` | **Blade 4 Position** (`shaper.blade.4.position`, migrated from `fixture.blade_4`) | Shapers |
 | Shapers | P2/E4 | `shaper.blade.4.angle` | **Blade 4 Angle** (`shaper.blade.4.angle`) | Shapers |
-| Shapers | P2/E5 | `shaper.keystone.x` | **Keystone X** (`shaper.keystone.x`) | Shapers |
-| Shapers | P2/E6 | `shaper.keystone.y` | **Keystone Y** (`shaper.keystone.y`) | Shapers |
 | Focus | P1/E1 | `focus` | **Focus** (`focus`) | — |
 | Focus | P1/E2 | `zoom` | **Zoom** (`zoom`) | — |
 | Focus | P1/E3 | `softness` | The profile's primary **Frost** (`frost` or `frost.1`) or **Beam Edge** (`beam.edge`) mechanism | — |
