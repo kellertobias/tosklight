@@ -59,7 +59,14 @@ impl ContributionContext<'_> {
         let fixture_id = attribute.fixture_id();
         let key = attribute.attribute();
         let snap = (self.is_snap)(fixture_id, key);
-        let progress = progress(frame, attribute.timing(frame.target_index), snap);
+        let progress = progress(
+            frame,
+            key,
+            previous,
+            target,
+            attribute.timing(frame.target_index),
+            snap,
+        );
         let Some(value) = interpolate(previous, target, progress) else {
             return;
         };
@@ -81,7 +88,7 @@ impl ContributionContext<'_> {
         previous: &AttributeValue,
     ) {
         let snap = (self.is_snap)(fixture_id, attribute);
-        let progress = progress(frame, None, snap);
+        let progress = progress(frame, attribute, Some(previous), None, None, snap);
         let Some(value) = interpolate(Some(previous), None, progress) else {
             return;
         };
@@ -97,10 +104,14 @@ impl ContributionContext<'_> {
 
 fn progress(
     frame: &PlaybackFrame<'_>,
+    attribute: &AttributeKey,
+    previous: Option<&AttributeValue>,
+    target: Option<&AttributeValue>,
     timing: Option<(Option<u64>, Option<u64>)>,
     snap: bool,
 ) -> f32 {
-    let (fade_millis, delay_millis) = effective_timing(frame, timing);
+    let outgoing_intensity = is_outgoing_intensity(attribute, previous, target);
+    let (fade_millis, delay_millis) = effective_timing(frame, timing, outgoing_intensity);
     if frame.playback.manual_xfade_from_index.is_some() {
         return if snap {
             1.0
@@ -122,18 +133,44 @@ fn progress(
 fn effective_timing(
     frame: &PlaybackFrame<'_>,
     timing: Option<(Option<u64>, Option<u64>)>,
+    outgoing_intensity: bool,
 ) -> (u64, u64) {
     let (fade_override, delay_override) = timing.unwrap_or((None, None));
     if frame.cue_list.disable_cue_timing {
         (0, 0)
     } else if frame.cue_list.force_cue_timing {
-        (frame.cue_fade_millis, frame.cue.delay_millis)
+        cue_master_timing(frame, outgoing_intensity)
     } else {
+        let (master_fade, master_delay) = cue_master_timing(frame, outgoing_intensity);
         (
-            fade_override.unwrap_or(frame.cue_fade_millis),
-            delay_override.unwrap_or(frame.cue.delay_millis),
+            fade_override.unwrap_or(master_fade),
+            delay_override.unwrap_or(master_delay),
         )
     }
+}
+
+fn cue_master_timing(frame: &PlaybackFrame<'_>, outgoing_intensity: bool) -> (u64, u64) {
+    if outgoing_intensity && frame.cue_list.mode == CueListMode::Sequence {
+        (
+            frame.cue.out_fade_millis.unwrap_or(frame.cue_fade_millis),
+            frame.cue.out_delay_millis.unwrap_or(frame.cue.delay_millis),
+        )
+    } else {
+        (frame.cue_fade_millis, frame.cue.delay_millis)
+    }
+}
+
+pub(crate) fn is_outgoing_intensity(
+    attribute: &AttributeKey,
+    previous: Option<&AttributeValue>,
+    target: Option<&AttributeValue>,
+) -> bool {
+    if !attribute.is_intensity() {
+        return false;
+    }
+    let previous = previous.and_then(AttributeValue::normalized).unwrap_or(0.0);
+    let target = target.and_then(AttributeValue::normalized).unwrap_or(0.0);
+    target < previous
 }
 
 fn attribute_contribution(

@@ -86,6 +86,8 @@ function decodeCue(value: unknown, path: string): Cue {
 		name: plainStringAt(cue.name, `${path}.name`),
 		fade_millis: integerAt(cue.fade_millis, `${path}.fade_millis`),
 		delay_millis: integerAt(cue.delay_millis, `${path}.delay_millis`),
+		...decodeOptionalMillis(cue, "out_fade_millis", path),
+		...decodeOptionalMillis(cue, "out_delay_millis", path),
 		trigger: decodeTrigger(cue.trigger, `${path}.trigger`),
 		cue_only: optionalBoolean(cue, "cue_only", path, false),
 		changes: arrayAt(cue.changes, `${path}.changes`).map((change, index) =>

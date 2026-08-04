@@ -75,7 +75,7 @@ function CompactCueProperties({
 	actions: CueDraftActions;
 	setArmed: boolean;
 	onDisarm: () => void;
-	onOpenInput: (field: "title" | "fade" | "delay" | "triggerTime") => void;
+	onOpenInput: (field: CueKeyboardField) => void;
 	onOpenTrigger: () => void;
 }) {
 	const kind = cueTriggerKind(actions.draft);
@@ -100,20 +100,44 @@ function CompactCueProperties({
 					<b>{actions.draft.name || "Untitled"}</b>
 				</Button>
 				<Button
-					aria-label="Set Cue Fade"
+					aria-label="Set Cue Intensity In Fade"
 					active={setArmed}
 					onClick={() => onOpenInput("fade")}
 				>
-					<small>Fade</small>
+					<small>In Fade</small>
 					<b>{formatCueSeconds(actions.draft.fade_millis)}</b>
 				</Button>
 				<Button
-					aria-label="Set Cue Delay"
+					aria-label="Set Cue Intensity In Delay"
 					active={setArmed}
 					onClick={() => onOpenInput("delay")}
 				>
-					<small>Delay</small>
+					<small>In Delay</small>
 					<b>{formatCueSeconds(actions.draft.delay_millis)}</b>
+				</Button>
+				<Button
+					aria-label="Set Cue Intensity Out Fade"
+					active={setArmed}
+					onClick={() => onOpenInput("outFade")}
+				>
+					<small>Out Fade</small>
+					<b>
+						{formatCueSeconds(
+							actions.draft.out_fade_millis ?? actions.draft.fade_millis,
+						)}
+					</b>
+				</Button>
+				<Button
+					aria-label="Set Cue Intensity Out Delay"
+					active={setArmed}
+					onClick={() => onOpenInput("outDelay")}
+				>
+					<small>Out Delay</small>
+					<b>
+						{formatCueSeconds(
+							actions.draft.out_delay_millis ?? actions.draft.delay_millis,
+						)}
+					</b>
 				</Button>
 				<Button
 					aria-label="Set Cue Trigger"
@@ -213,6 +237,8 @@ export function CueProperties({
 		title: useRef<HTMLInputElement>(null),
 		fade: useRef<HTMLInputElement>(null),
 		delay: useRef<HTMLInputElement>(null),
+		outFade: useRef<HTMLInputElement>(null),
+		outDelay: useRef<HTMLInputElement>(null),
 		triggerTime: useRef<HTMLInputElement>(null),
 		triggerPicker: useRef<HTMLDivElement>(null),
 		grid: useRef<HTMLDivElement>(null),

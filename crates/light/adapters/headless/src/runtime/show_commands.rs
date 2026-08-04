@@ -18,6 +18,8 @@ fn merge_recorded_cue(
             cue.group_changes = incoming.group_changes;
             cue.fade_millis = incoming.fade_millis;
             cue.delay_millis = incoming.delay_millis;
+            cue.out_fade_millis = incoming.out_fade_millis;
+            cue.out_delay_millis = incoming.out_delay_millis;
             cue.trigger = incoming.trigger;
             cue.cue_only = incoming.cue_only;
         }

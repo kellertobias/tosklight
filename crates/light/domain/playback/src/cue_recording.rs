@@ -181,6 +181,8 @@ fn overwrite(
     cue.dynamic_changes = content.dynamic_changes;
     cue.fade_millis = content.timing.fade_millis.unwrap_or(0);
     cue.delay_millis = 0;
+    cue.out_fade_millis = None;
+    cue.out_delay_millis = None;
     cue.trigger = trigger(content.timing.delay_millis);
     cue.cue_only = content.cue_only;
     Ok(stored_target(cue, false))

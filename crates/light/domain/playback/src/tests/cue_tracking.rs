@@ -155,6 +155,94 @@ fn fades_from_zero_and_between_tracked_states() {
 }
 
 #[test]
+fn intensity_uses_independent_in_and_out_master_timing() {
+    let incoming = FixtureId::new();
+    let outgoing = FixtureId::new();
+    let mut first = Cue::new(1.0);
+    first.changes.push(value(incoming, "intensity", 0.0));
+    first.changes.push(value(outgoing, "intensity", 1.0));
+    let mut second = Cue::new(2.0);
+    second.fade_millis = 1_000;
+    second.delay_millis = 0;
+    second.out_fade_millis = Some(2_000);
+    second.out_delay_millis = Some(500);
+    second.changes.push(value(incoming, "intensity", 1.0));
+    second.changes.push(value(outgoing, "intensity", 0.0));
+    let cue_list = list(vec![first, second]);
+    let id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    let started = Utc::now();
+    engine.go_at(id, started).unwrap();
+    engine.go_at(id, started).unwrap();
+
+    let halfway_in = started + ChronoDuration::milliseconds(500);
+    assert!((contribution_level(&engine, halfway_in, incoming) - 0.5).abs() < 0.01);
+    assert!((contribution_level(&engine, halfway_in, outgoing) - 1.0).abs() < 0.01);
+
+    let halfway_out = started + ChronoDuration::milliseconds(1_500);
+    assert_eq!(contribution_level(&engine, halfway_out, incoming), 1.0);
+    assert!((contribution_level(&engine, halfway_out, outgoing) - 0.5).abs() < 0.01);
+}
+
+#[test]
+fn legacy_cue_out_timing_follows_existing_fade_and_delay() {
+    let mut body = serde_json::to_value(Cue::new(1.0)).unwrap();
+    let object = body.as_object_mut().unwrap();
+    object.remove("out_fade_millis");
+    object.remove("out_delay_millis");
+    object.insert("fade_millis".into(), serde_json::json!(1_250));
+    object.insert("delay_millis".into(), serde_json::json!(300));
+
+    let cue: Cue = serde_json::from_value(body).unwrap();
+    assert_eq!(cue.out_fade_millis, None);
+    assert_eq!(cue.out_delay_millis, None);
+}
+
+#[test]
+fn absent_out_fade_follows_the_effective_sequence_master_but_explicit_zero_snaps() {
+    let inherited = FixtureId::new();
+    let snapped = FixtureId::new();
+    let mut first = Cue::new(1.0);
+    first.changes.push(value(inherited, "intensity", 1.0));
+    first.changes.push(value(snapped, "intensity", 1.0));
+    let mut second = Cue::new(2.0);
+    second.changes.push(value(inherited, "intensity", 0.0));
+    second.changes.push(value(snapped, "intensity", 0.0));
+    let mut third = Cue::new(3.0);
+    third.out_fade_millis = Some(0);
+    third.changes.push(value(inherited, "intensity", 1.0));
+    third.changes.push(value(snapped, "intensity", 1.0));
+    let mut fourth = Cue::new(4.0);
+    fourth.out_fade_millis = Some(0);
+    fourth.changes.push(value(inherited, "intensity", 0.0));
+    fourth.changes.push(value(snapped, "intensity", 0.0));
+    let cue_list = list(vec![first, second, third, fourth]);
+    let id = cue_list.id;
+    let started = Utc::now();
+    let mut engine = PlaybackEngine::default();
+    engine.set_control_timing([120.0; 5], 3_000);
+    engine.register(cue_list).unwrap();
+    engine.go_at(id, started).unwrap();
+    engine.go_at(id, started).unwrap();
+    assert!(
+        (contribution_level(
+            &engine,
+            started + ChronoDuration::milliseconds(1_500),
+            inherited,
+        ) - 0.5)
+            .abs()
+            < 0.01
+    );
+
+    let third_at = started + ChronoDuration::seconds(3);
+    engine.go_at(id, third_at).unwrap();
+    let fourth_at = third_at + ChronoDuration::seconds(3);
+    engine.go_at(id, fourth_at).unwrap();
+    assert_eq!(contribution_level(&engine, fourth_at, snapped), 0.0);
+}
+
+#[test]
 fn cue_changes_keep_independent_fade_and_delay_times() {
     let first = FixtureId::new();
     let second = FixtureId::new();

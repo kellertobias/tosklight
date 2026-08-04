@@ -41,6 +41,14 @@ pub struct Cue {
     pub changes: Vec<CueChange>,
     pub fade_millis: u64,
     pub delay_millis: u64,
+    /// Independent master fade for Intensity values leaving the previous look. `None` preserves
+    /// legacy behavior by following the effective in fade, including the Cue Fade fallback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out_fade_millis: Option<u64>,
+    /// Independent master hold before Intensity values leave the previous look. `None` preserves
+    /// legacy Cue behavior by following `delay_millis` until explicitly separated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out_delay_millis: Option<u64>,
     pub trigger: CueTrigger,
     /// Marks an operator-recorded Cue-only Cue so an appended following Cue can generate the
     /// required automatic restore/release delta after a save, refresh, or reopen.
@@ -85,6 +93,8 @@ impl Cue {
             changes: Vec::new(),
             fade_millis: 0,
             delay_millis: 0,
+            out_fade_millis: None,
+            out_delay_millis: None,
             trigger: CueTrigger::Manual,
             cue_only: false,
             group_changes: Vec::new(),

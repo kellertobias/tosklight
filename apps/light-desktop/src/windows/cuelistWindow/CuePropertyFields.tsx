@@ -19,6 +19,8 @@ export interface CueFieldRefs {
 	title: RefObject<HTMLInputElement | null>;
 	fade: RefObject<HTMLInputElement | null>;
 	delay: RefObject<HTMLInputElement | null>;
+	outFade: RefObject<HTMLInputElement | null>;
+	outDelay: RefObject<HTMLInputElement | null>;
 	triggerTime: RefObject<HTMLInputElement | null>;
 	triggerPicker: RefObject<HTMLDivElement | null>;
 	grid: RefObject<HTMLDivElement | null>;
@@ -32,7 +34,11 @@ export interface CueDraftActions {
 
 function updateMillis(
 	actions: CueDraftActions,
-	key: "fade_millis" | "delay_millis",
+	key:
+		| "fade_millis"
+		| "delay_millis"
+		| "out_fade_millis"
+		| "out_delay_millis",
 	seconds: string,
 	commit: boolean,
 ) {
@@ -52,18 +58,28 @@ function CueTimingFields({
 }) {
 	return (
 		<>
-			{(["fade_millis", "delay_millis"] as const).map((key) => (
+			{(
+				[
+					["delay_millis", "In Delay", refs.delay, "delay"],
+					["fade_millis", "In Fade", refs.fade, "fade"],
+					["out_delay_millis", "Out Delay", refs.outDelay, "outDelay"],
+					["out_fade_millis", "Out Fade", refs.outFade, "outFade"],
+				] as const
+			).map(([key, label, ref, keyboardField]) => (
 				<NumberField
 					key={key}
-					ref={key === "fade_millis" ? refs.fade : refs.delay}
-					keyboardRequest={
-						keyboardRequests[key === "fade_millis" ? "fade" : "delay"]
-					}
-					label={key === "fade_millis" ? "Fade" : "Delay"}
+					ref={ref}
+					keyboardRequest={keyboardRequests[keyboardField]}
+					label={label}
 					unit="s"
 					allowDecimal
 					min="0"
-					value={actions.draft[key] / 1000}
+					value={
+						(actions.draft[key] ??
+							(key === "out_fade_millis"
+								? actions.draft.fade_millis
+								: actions.draft.delay_millis)) / 1000
+					}
 					onKeyboardCommit={(value) => updateMillis(actions, key, value, true)}
 					onChange={(event) =>
 						updateMillis(actions, key, event.target.value, false)
@@ -217,4 +233,10 @@ export function CuePropertyFields({
 	);
 }
 
-export type CueKeyboardField = "title" | "fade" | "delay" | "triggerTime";
+export type CueKeyboardField =
+	| "title"
+	| "fade"
+	| "delay"
+	| "outFade"
+	| "outDelay"
+	| "triggerTime";

@@ -311,15 +311,22 @@ describe("CuelistWindow Cue settings", () => {
 					".cue-settings-grid-measure > .ui-form-field > label",
 				),
 			].map((label) => label.textContent),
-		).toEqual(["Title", "Fade", "Delay", "Trigger"]);
+		).toEqual([
+			"Title",
+			"In Delay",
+			"In Fade",
+			"Out Delay",
+			"Out Fade",
+			"Trigger",
+		]);
 		expect(
 			screen.getByLabelText("Title").closest(".ui-form-field"),
 		).toContainElement(screen.getByRole("button", { name: "Open keyboard" }));
 		expect(
-			screen.getByLabelText("Fade").closest(".ui-form-field"),
-		).toContainElement(
-			screen.getAllByRole("button", { name: "Open number pad" })[0],
-		);
+			within(
+				screen.getByLabelText("In Fade").closest(".ui-form-field")!,
+			).getByRole("button", { name: "Open number pad" }),
+		).toBeInTheDocument();
 		expect(
 			screen.getByRole("button", { name: "Open Trigger picker" }),
 		).toBeInTheDocument();
@@ -353,9 +360,11 @@ describe("CuelistWindow Cue settings", () => {
 		expect(
 			screen.getByText("SET is active. Press an attribute value to edit it."),
 		).toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Set Cue Fade" }));
-		expect(screen.getByRole("dialog", { name: "Fade" })).toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Close Fade" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Cue Intensity In Fade" }),
+		);
+		expect(screen.getByRole("dialog", { name: "In Fade" })).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Close In Fade" }));
 		vi.unstubAllGlobals();
 	});
 });
@@ -750,7 +759,7 @@ describe("CuelistWindow Cue draft validation", () => {
 		const view = render(<CuelistWindow />);
 		const ui = within(view.container);
 		fireEvent.click(ui.getByText("Main").closest("button")!);
-		const fade = ui.getByLabelText("Fade");
+		const fade = ui.getByLabelText("In Fade");
 		fireEvent.change(fade, { target: { value: "-1" } });
 
 		mocks.cueObjects = [
@@ -761,9 +770,9 @@ describe("CuelistWindow Cue draft validation", () => {
 			},
 		];
 		view.rerender(<CuelistWindow />);
-		expect(ui.getByLabelText("Fade")).toHaveValue("-1");
+		expect(ui.getByLabelText("In Fade")).toHaveValue("-1");
 
-		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
+		fireEvent.keyDown(ui.getByLabelText("In Fade"), { key: "Enter" });
 		expect(await ui.findByRole("alert")).toHaveTextContent(
 			"Cue edit was not saved",
 		);
@@ -775,7 +784,7 @@ describe("CuelistWindow Cue draft validation", () => {
 		const view = render(<CuelistWindow />);
 		const ui = within(view.container);
 		fireEvent.click(ui.getByText("Main").closest("button")!);
-		fireEvent.change(ui.getByLabelText("Fade"), { target: { value: "3" } });
+		fireEvent.change(ui.getByLabelText("In Fade"), { target: { value: "3" } });
 
 		mocks.cueObjects = [
 			{
@@ -785,7 +794,7 @@ describe("CuelistWindow Cue draft validation", () => {
 			},
 		];
 		view.rerender(<CuelistWindow />);
-		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
+		fireEvent.keyDown(ui.getByLabelText("In Fade"), { key: "Enter" });
 
 		await waitFor(() =>
 			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
@@ -830,14 +839,14 @@ describe("CuelistWindow Cue draft validation", () => {
 		const view = render(<CuelistWindow />);
 		const ui = within(view.container);
 		fireEvent.click(ui.getByText("Main").closest("button")!);
-		fireEvent.change(ui.getByLabelText("Fade"), { target: { value: "3" } });
-		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
+		fireEvent.change(ui.getByLabelText("In Fade"), { target: { value: "3" } });
+		fireEvent.keyDown(ui.getByLabelText("In Fade"), { key: "Enter" });
 		await waitFor(() =>
 			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
 		);
 
-		fireEvent.change(ui.getByLabelText("Delay"), { target: { value: "2" } });
-		fireEvent.keyDown(ui.getByLabelText("Delay"), { key: "Enter" });
+		fireEvent.change(ui.getByLabelText("In Delay"), { target: { value: "2" } });
+		fireEvent.keyDown(ui.getByLabelText("In Delay"), { key: "Enter" });
 		expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce();
 		const firstBody = mocks.saveTopologyCueList.mock.calls[0][3] as CueList;
 		act(() => resolveFirst(savedCueListOutcome("legacy-main", 4, firstBody)));
@@ -883,13 +892,13 @@ describe("CuelistWindow Cue draft validation", () => {
 		const view = render(<CuelistWindow />);
 		const ui = within(view.container);
 		fireEvent.click(ui.getByText("Main").closest("button")!);
-		fireEvent.change(ui.getByLabelText("Fade"), { target: { value: "3" } });
-		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
+		fireEvent.change(ui.getByLabelText("In Fade"), { target: { value: "3" } });
+		fireEvent.keyDown(ui.getByLabelText("In Fade"), { key: "Enter" });
 		await waitFor(() =>
 			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
 		);
-		fireEvent.change(ui.getByLabelText("Delay"), { target: { value: "2" } });
-		fireEvent.keyDown(ui.getByLabelText("Delay"), { key: "Enter" });
+		fireEvent.change(ui.getByLabelText("In Delay"), { target: { value: "2" } });
+		fireEvent.keyDown(ui.getByLabelText("In Delay"), { key: "Enter" });
 
 		mocks.cueObjects = [
 			{
@@ -905,7 +914,7 @@ describe("CuelistWindow Cue draft validation", () => {
 		);
 		expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce();
 
-		fireEvent.keyDown(ui.getByLabelText("Delay"), { key: "Enter" });
+		fireEvent.keyDown(ui.getByLabelText("In Delay"), { key: "Enter" });
 		await waitFor(() =>
 			expect(mocks.saveTopologyCueList).toHaveBeenCalledTimes(2),
 		);
@@ -937,8 +946,8 @@ describe("CuelistWindow Cue draft validation", () => {
 		const view = render(<CuelistWindow />);
 		const ui = within(view.container);
 		fireEvent.click(ui.getByText("Main").closest("button")!);
-		fireEvent.change(ui.getByLabelText("Fade"), { target: { value: "3" } });
-		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
+		fireEvent.change(ui.getByLabelText("In Fade"), { target: { value: "3" } });
+		fireEvent.keyDown(ui.getByLabelText("In Fade"), { key: "Enter" });
 		await waitFor(() =>
 			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
 		);
@@ -956,8 +965,8 @@ describe("CuelistWindow Cue draft validation", () => {
 		);
 		mocks.activeSaveTopologyCueList = replacementWriter;
 		view.rerender(<CuelistWindow />);
-		fireEvent.change(ui.getByLabelText("Delay"), { target: { value: "2" } });
-		fireEvent.keyDown(ui.getByLabelText("Delay"), { key: "Enter" });
+		fireEvent.change(ui.getByLabelText("In Delay"), { target: { value: "2" } });
+		fireEvent.keyDown(ui.getByLabelText("In Delay"), { key: "Enter" });
 		await waitFor(() => expect(replacementWriter).toHaveBeenCalledOnce());
 
 		act(() => resolveOld(null));
@@ -985,10 +994,10 @@ describe("CuelistWindow Cue draft validation", () => {
 		const view = render(<CuelistWindow />);
 		const ui = within(view.container);
 		fireEvent.click(ui.getByText("Main").closest("button")!);
-		fireEvent.change(ui.getByLabelText("Fade"), { target: { value: "3" } });
-		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
+		fireEvent.change(ui.getByLabelText("In Fade"), { target: { value: "3" } });
+		fireEvent.keyDown(ui.getByLabelText("In Fade"), { key: "Enter" });
 		await ui.findByRole("alert");
-		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
+		fireEvent.keyDown(ui.getByLabelText("In Fade"), { key: "Enter" });
 		await waitFor(() =>
 			expect(mocks.saveTopologyCueList).toHaveBeenCalledTimes(2),
 		);
@@ -996,7 +1005,7 @@ describe("CuelistWindow Cue draft validation", () => {
 		const retriedBody = mocks.saveTopologyCueList.mock.calls[1][3] as CueList;
 		mocks.cueObjects = [{ id: "legacy-main", revision: 4, body: retriedBody }];
 		view.rerender(<CuelistWindow />);
-		fireEvent.change(ui.getByLabelText("Delay"), { target: { value: "2" } });
+		fireEvent.change(ui.getByLabelText("In Delay"), { target: { value: "2" } });
 		mocks.cueObjects = [
 			{
 				id: "legacy-main",
@@ -1005,7 +1014,7 @@ describe("CuelistWindow Cue draft validation", () => {
 			},
 		];
 		view.rerender(<CuelistWindow />);
-		fireEvent.keyDown(ui.getByLabelText("Delay"), { key: "Enter" });
+		fireEvent.keyDown(ui.getByLabelText("In Delay"), { key: "Enter" });
 
 		await waitFor(() =>
 			expect(mocks.saveTopologyCueList).toHaveBeenCalledTimes(3),

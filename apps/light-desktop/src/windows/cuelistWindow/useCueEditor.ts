@@ -198,7 +198,7 @@ async function queueCueWrite(
 	if (!nextCue || !writeBase) return;
 	if (!hasValidTimings(nextCue)) {
 		controls.setCueEditError(
-			"Cue edit was not saved. Fade, Delay, and Trigger time must be zero or greater.",
+			"Cue edit was not saved. In/Out Fade, In/Out Delay, and Trigger time must be zero or greater.",
 		);
 		return;
 	}
@@ -353,7 +353,13 @@ function hasValidTimings(cue: Cue) {
 			: typeof cue.trigger.delay_millis === "number"
 				? cue.trigger.delay_millis
 				: Number.NaN;
-	return [cue.fade_millis, cue.delay_millis, triggerDelay].every(
+	return [
+		cue.fade_millis,
+		cue.delay_millis,
+		cue.out_fade_millis ?? 0,
+		cue.out_delay_millis ?? 0,
+		triggerDelay,
+	].every(
 		(value) => Number.isSafeInteger(value) && value >= 0,
 	);
 }

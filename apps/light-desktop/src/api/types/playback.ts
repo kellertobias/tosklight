@@ -8,6 +8,8 @@ export interface Cue {
 	name: string;
 	fade_millis: number;
 	delay_millis: number;
+	out_fade_millis?: number;
+	out_delay_millis?: number;
 	trigger: { type: string; [key: string]: unknown };
 	changes: Array<{
 		fixture_id: string;
