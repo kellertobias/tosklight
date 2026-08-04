@@ -654,6 +654,7 @@ fn benchmark_dynamic_definition(
             function: PeriodicFunction::Sinus,
             size: 1.0,
             pwm: PwmShape::default(),
+            invert_waveform: false,
         },
         speed_multiplier: Rational::ONE,
         width: 1.0,
