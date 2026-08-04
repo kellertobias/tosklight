@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ControlSection } from "../control/ControlSection";
+import { ProgrammerControlSurfaceRegion } from "../../features/screens/ProgrammerControlSurfaceRegion";
 import { CommandChoiceModal } from "../modals/CommandChoiceModal";
 import { DebugModal } from "../modals/DebugModal";
 import { PreloadStoreModal } from "../modals/PreloadStoreModal";
@@ -27,7 +27,7 @@ export function AppShell() {
 			screenWindowManager={<ScreenWindowManager />}
 			dock={<LeftDock />}
 			workspace={<WorkspaceView />}
-			control={<ControlSection />}
+			control={<ProgrammerControlSurfaceRegion />}
 			modals={
 				<>
 					<QuickSetupModal />

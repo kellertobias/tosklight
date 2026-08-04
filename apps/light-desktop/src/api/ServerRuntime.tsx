@@ -104,6 +104,7 @@ function useProviderDataSources(
 		saveScreen: value.saveScreen,
 		deleteScreen: value.deleteScreen,
 		setScreenPage: value.setScreenPage,
+		updateProgrammerControlSurface: value.updateProgrammerControlSurface,
 		updateControlDesk: value.updateControlDesk,
 		selectControlDesk: value.selectControlDesk,
 		removeClient: value.removeClient,

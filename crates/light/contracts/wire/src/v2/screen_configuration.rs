@@ -166,6 +166,21 @@ pub struct ScreenConfigurationSnapshot {
     pub screens: Vec<ScreenConfiguration>,
     #[ts(type = "Record<string, number>")]
     pub active_pages: BTreeMap<Uuid, u8>,
+    pub programmer_control_surface: ProgrammerControlSurfaceConfiguration,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ProgrammerControlSurfaceConfiguration {
+    pub owner_screen_id: Option<Uuid>,
+    pub visible_encoders: u8,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ProgrammerControlSurfacePatch {
+    pub owner_screen_id: Option<Uuid>,
+    #[serde(default)]
+    pub assign_to_main: bool,
+    pub visible_encoders: Option<u8>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -213,6 +228,9 @@ pub enum ScreenConfigurationAction {
         #[schemars(range(min = 1, max = 127))]
         page: u8,
     },
+    UpdateProgrammerControlSurface {
+        patch: ProgrammerControlSurfacePatch,
+    },
 }
 
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -248,4 +266,5 @@ pub struct ScreenConfigurationActionOutcome {
     pub replayed: bool,
     pub screen: Option<ScreenConfiguration>,
     pub active_page: Option<u8>,
+    pub programmer_control_surface: Option<ProgrammerControlSurfaceConfiguration>,
 }

@@ -142,6 +142,57 @@ async fn screen_configuration_v2_is_sparse_replay_safe_tolerant_and_retires_v1()
     let snapshot = json(snapshot).await;
     assert_eq!(snapshot["screens"][0]["name"], "Renamed");
     assert_eq!(snapshot["active_pages"][screen_id.to_string()], 1);
+    assert_eq!(
+        snapshot["programmer_control_surface"],
+        serde_json::json!({"owner_screen_id":null,"visible_encoders":6})
+    );
+
+    let assigned = post_screen_action(
+        &app,
+        &token,
+        serde_json::json!({
+            "request_id":"screen-programmer-owner",
+            "action":{
+                "type":"update_programmer_control_surface",
+                "patch":{"owner_screen_id":screen_id,"visible_encoders":4}
+            }
+        }),
+    )
+    .await;
+    assert_eq!(assigned.status(), StatusCode::OK);
+    assert_eq!(
+        json(assigned).await["programmer_control_surface"],
+        serde_json::json!({"owner_screen_id":screen_id,"visible_encoders":4})
+    );
+
+    let invalid_width = post_screen_action(
+        &app,
+        &token,
+        serde_json::json!({
+            "request_id":"screen-programmer-invalid-width",
+            "action":{
+                "type":"update_programmer_control_surface",
+                "patch":{"visible_encoders":5}
+            }
+        }),
+    )
+    .await;
+    assert_eq!(invalid_width.status(), StatusCode::BAD_REQUEST);
+
+    let deleted = post_screen_action(
+        &app,
+        &token,
+        serde_json::json!({
+            "request_id":"screen-programmer-owner-delete",
+            "action":{"type":"delete","screen_id":screen_id}
+        }),
+    )
+    .await;
+    assert_eq!(deleted.status(), StatusCode::OK);
+    assert_eq!(
+        json(deleted).await["programmer_control_surface"],
+        serde_json::json!({"owner_screen_id":null,"visible_encoders":4})
+    );
 
     let _ = std::fs::remove_dir_all(data_dir);
 }

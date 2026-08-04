@@ -819,14 +819,16 @@ export type ScreenPlaybackSurfaceRow = { first_playback_slot: number, has_fader:
 export type ScreenPlaybackSurfaceLayout = { playbacks_per_row: number, rows: Array<ScreenPlaybackSurfaceRow>, };
 export type ScreenPageMode = "follow_main" | "independent";
 export type ScreenConfiguration = { id: string, name: string, layout: unknown, show_dock: boolean, show_playbacks: boolean, playback_count: number, playback_rows: number, first_playback_slot: number, page_mode: ScreenPageMode, show_page_controls: boolean, desired_open: boolean, display_id: string | null, bounds: unknown, fullscreen: boolean, playback_layout: ScreenPlaybackSurfaceLayout | null, content: ScreenContent, };
-export type ScreenConfigurationSnapshot = { screens: Array<ScreenConfiguration>, active_pages: Record<string, number>, };
+export type ScreenConfigurationSnapshot = { screens: Array<ScreenConfiguration>, active_pages: Record<string, number>, programmer_control_surface: ProgrammerControlSurfaceConfiguration, };
+export type ProgrammerControlSurfaceConfiguration = { owner_screen_id: string | null, visible_encoders: number, };
+export type ProgrammerControlSurfacePatch = { owner_screen_id: string | null, assign_to_main: boolean, visible_encoders: number | null, };
 export type ScreenConfigurationActionRequest = { request_id: string, action: ScreenConfigurationAction, };
 export type ScreenConfigurationCreateRequest = { request_id: string, configuration: ScreenConfiguration, };
 export type ScreenConfigurationUpdateRequest = { request_id: string, patch: ScreenConfigurationPatch, };
 export type ScreenConfigurationDeleteRequest = { request_id: string, };
-export type ScreenConfigurationAction = { "type": "create", configuration: ScreenConfiguration, } | { "type": "update", screen_id: string, patch: ScreenConfigurationPatch, } | { "type": "delete", screen_id: string, } | { "type": "set_page", screen_id: string, page: number, };
+export type ScreenConfigurationAction = { "type": "create", configuration: ScreenConfiguration, } | { "type": "update", screen_id: string, patch: ScreenConfigurationPatch, } | { "type": "delete", screen_id: string, } | { "type": "set_page", screen_id: string, page: number, } | { "type": "update_programmer_control_surface", patch: ProgrammerControlSurfacePatch, };
 export type ScreenConfigurationPatch = { name: string | null, layout: unknown, show_dock: boolean | null, show_playbacks: boolean | null, playback_count: number | null, playback_rows: number | null, first_playback_slot: number | null, page_mode: ScreenPageMode | null, show_page_controls: boolean | null, desired_open: boolean | null, display_id: string | null, clear_display_id: boolean, bounds: unknown, clear_bounds: boolean, fullscreen: boolean | null, playback_layout: ScreenPlaybackSurfaceLayout | null, clear_playback_layout: boolean, content: ScreenContent | null, };
-export type ScreenConfigurationActionOutcome = { request_id: string, replayed: boolean, screen: ScreenConfiguration | null, active_page: number | null, };
+export type ScreenConfigurationActionOutcome = { request_id: string, replayed: boolean, screen: ScreenConfiguration | null, active_page: number | null, programmer_control_surface: ProgrammerControlSurfaceConfiguration | null, };
 export type VirtualPlaybackExclusionZone = { id: string, name: string,
 /**
  * Stable show-owned Virtual Playback numbers, independent of panes and desks.

@@ -28,7 +28,14 @@ function bootstrap(): BootstrapSnapshot {
 
 function createHarness() {
 	const initial = bootstrap();
-	const screens = { screens: [], active_pages: {} } as ScreenSnapshot;
+	const screens: ScreenSnapshot = {
+		screens: [],
+		active_pages: {},
+		programmer_control_surface: {
+			owner_screen_id: null,
+			visible_encoders: 6,
+		},
+	};
 	const unexpectedLegacyPlaybackRead = vi.fn();
 	const clientMethods = {
 		bootstrap: vi.fn().mockResolvedValue(initial),

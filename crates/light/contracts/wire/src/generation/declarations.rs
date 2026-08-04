@@ -336,6 +336,8 @@ fn screen_configuration(config: &Config) -> Vec<String> {
         ScreenPageMode::decl(config),
         ScreenConfiguration::decl(config),
         ScreenConfigurationSnapshot::decl(config),
+        ProgrammerControlSurfaceConfiguration::decl(config),
+        ProgrammerControlSurfacePatch::decl(config),
         ScreenConfigurationActionRequest::decl(config),
         ScreenConfigurationCreateRequest::decl(config),
         ScreenConfigurationUpdateRequest::decl(config),

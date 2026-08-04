@@ -39,6 +39,7 @@ const screens: ScreensContextValue = {
 	saveScreen: async () => undefined,
 	deleteScreen: async () => undefined,
 	setScreenPage: async () => undefined,
+	updateProgrammerControlSurface: async () => undefined,
 	updateControlDesk: async () => undefined,
 	selectControlDesk: () => undefined,
 	removeClient: async () => false,

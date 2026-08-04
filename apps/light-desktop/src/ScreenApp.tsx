@@ -10,6 +10,7 @@ import { NativeDragStrip } from "./components/shell/NativeDragStrip";
 import { WorkspaceView } from "./components/shell/WorkspaceView";
 import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
 import { FixedScreenPane } from "./features/screens/FixedScreenPane";
+import { ProgrammerControlSurfaceRegion } from "./features/screens/ProgrammerControlSurfaceRegion";
 import { ScreenPlaybackSection } from "./features/screens/ScreenPlaybackSection";
 import { useScreens } from "./features/screens/ScreensContext";
 import { useScreenWindowPersistence } from "./platform/desktop";
@@ -25,7 +26,11 @@ function DesktopScreenSurface({
 	closing: MutableRefObject<boolean>;
 }) {
 	const { state, dispatch } = useApp();
-	const showScreenControls = screen.show_playbacks || screen.show_page_controls;
+	const programmerOwner =
+		useScreens().screens?.programmer_control_surface?.owner_screen_id ===
+		screen.id;
+	const showScreenControls =
+		!programmerOwner && (screen.show_playbacks || screen.show_page_controls);
 	const hydrated = useRef(false);
 	const [layoutReady, setLayoutReady] = useState(false);
 	const screenRef = useRef(screen);
@@ -64,26 +69,36 @@ function DesktopScreenSurface({
 		);
 	return (
 		<div
-			className={`screen-shell ${screen.show_dock ? "with-dock" : ""} ${showScreenControls ? "with-playbacks" : ""}`}
+			className={`screen-shell ${screen.show_dock ? "with-dock" : ""} ${showScreenControls ? "with-playbacks" : ""} ${programmerOwner ? "with-control" : ""}`}
 		>
 			<NativeDragStrip />
 			{screen.show_dock && <LeftDock />}
 			<WorkspaceView />
 			{showScreenControls && <ScreenPlaybackSection screen={screen} />}
+			{programmerOwner && (
+				<ProgrammerControlSurfaceRegion screenId={screen.id} />
+			)}
 		</div>
 	);
 }
 
 function FixedScreenSurface({ screen }: { screen: ScreenConfiguration }) {
+	const programmerOwner =
+		useScreens().screens?.programmer_control_surface?.owner_screen_id ===
+		screen.id;
 	if (screen.content.type !== "fixed_pane") return null;
-	const showScreenControls = screen.show_playbacks || screen.show_page_controls;
+	const showScreenControls =
+		!programmerOwner && (screen.show_playbacks || screen.show_page_controls);
 	return (
 		<div
-			className={`screen-shell fixed-content ${showScreenControls ? "with-playbacks" : ""}`}
+			className={`screen-shell fixed-content ${showScreenControls ? "with-playbacks" : ""} ${programmerOwner ? "with-control" : ""}`}
 		>
 			<NativeDragStrip />
 			<FixedScreenPane pane={screen.content.pane} />
 			{showScreenControls && <ScreenPlaybackSection screen={screen} />}
+			{programmerOwner && (
+				<ProgrammerControlSurfaceRegion screenId={screen.id} />
+			)}
 		</div>
 	);
 }

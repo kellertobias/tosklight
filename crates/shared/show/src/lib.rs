@@ -14,8 +14,8 @@ pub use model::{
     ClientDesk, ControlDesk, DeskUser, FixedScreenFixtureColumn, FixedScreenFixtureCompactMode,
     FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder, FixedScreenPane,
     FixedScreenStageRenderQuality, FixedScreenTextMode, PersistedSession, PlaybackSurfaceLayout,
-    PlaybackSurfaceRow, RevisionCopySource, ScreenConfiguration, ScreenContent, ShowEntry,
-    ShowRevision, VersionedObject,
+    PlaybackSurfaceRow, ProgrammerControlSurfaceConfiguration, RevisionCopySource,
+    ScreenConfiguration, ScreenContent, ShowEntry, ShowRevision, VersionedObject,
 };
 pub use portable::{
     FixtureProfileDigest, FixtureProfileRevision, FixtureProfileRevisionId,

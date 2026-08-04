@@ -1,6 +1,7 @@
 import type {
 	BootstrapSnapshot,
 	ControlDesk,
+	ProgrammerControlSurfacePatch,
 	ScreenConfiguration,
 	ScreenSnapshot,
 	SessionResponse,
@@ -11,6 +12,9 @@ export interface ScreenCapabilities {
 	saveScreen: (screen: ScreenConfiguration) => Promise<void>;
 	deleteScreen: (id: string) => Promise<void>;
 	setScreenPage: (id: string, page: number) => Promise<void>;
+	updateProgrammerControlSurface: (
+		patch: ProgrammerControlSurfacePatch,
+	) => Promise<void>;
 }
 
 export interface ScreensContextValue extends ScreenCapabilities {

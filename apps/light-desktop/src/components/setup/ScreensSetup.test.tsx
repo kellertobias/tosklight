@@ -7,7 +7,13 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ClientSummary, ScreenConfiguration } from "../../api/types";
-import { DefaultScreenPicker, ScreenSettingsCard } from "./ScreensSetup";
+import { ScreensProvider } from "../../features/screens/ScreensContext";
+import type { ScreensContextValue } from "../../features/screens/types";
+import {
+	DefaultScreenPicker,
+	ProgrammerControlSurfaceSettings,
+	ScreenSettingsCard,
+} from "./ScreensSetup";
 
 const configuredScreen: ScreenConfiguration = {
 	id: "screen-1",
@@ -28,6 +34,54 @@ const configuredScreen: ScreenConfiguration = {
 };
 
 afterEach(cleanup);
+
+describe("programmer control surface settings", () => {
+	it("offers exactly main or named screen ownership and four or six encoders", () => {
+		const updateProgrammerControlSurface = vi.fn();
+		const source: ScreensContextValue = {
+			screens: {
+				screens: [configuredScreen],
+				active_pages: {},
+				programmer_control_surface: {
+					owner_screen_id: null,
+					visible_encoders: 6,
+				},
+			},
+			bootstrap: null,
+			session: null,
+			saveScreen: vi.fn(),
+			deleteScreen: vi.fn(),
+			setScreenPage: vi.fn(),
+			updateProgrammerControlSurface,
+			updateControlDesk: vi.fn(),
+			selectControlDesk: vi.fn(),
+			removeClient: vi.fn(),
+		};
+		render(
+			<ScreensProvider source={source}>
+				<ProgrammerControlSurfaceSettings />
+			</ScreensProvider>,
+		);
+
+		expect(
+			screen.getByRole("heading", { name: "Programmer control surface" }),
+		).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Main screen" }));
+		expect(screen.getByRole("option", { name: "Screen 1" })).toBeVisible();
+		fireEvent.click(screen.getByRole("option", { name: "Screen 1" }));
+		expect(updateProgrammerControlSurface).toHaveBeenCalledWith({
+			owner_screen_id: "screen-1",
+		});
+
+		fireEvent.click(screen.getByRole("button", { name: "Six" }));
+		expect(screen.getByRole("option", { name: "Four" })).toBeVisible();
+		expect(screen.getByRole("option", { name: "Six" })).toBeVisible();
+		fireEvent.click(screen.getByRole("option", { name: "Four" }));
+		expect(updateProgrammerControlSurface).toHaveBeenCalledWith({
+			visible_encoders: 4,
+		});
+	});
+});
 
 describe("additional screen settings", () => {
 	it("updates fields immediately and serializes the saved configurations", async () => {

@@ -130,7 +130,7 @@ fn execute_action(
                 .put_screen(domain_screen(configuration)?)
                 .map_err(ApiError::store)?;
             emit_screen_changed(state, &screen);
-            outcome(Some(screen), None)
+            outcome(Some(screen), None, None)
         }
         wire::ScreenConfigurationAction::Update { screen_id, patch } => {
             let existing = state
@@ -143,7 +143,7 @@ fn execute_action(
                 .put_screen(apply_patch(existing, patch)?)
                 .map_err(ApiError::store)?;
             emit_screen_changed(state, &screen);
-            outcome(Some(screen), None)
+            outcome(Some(screen), None, None)
         }
         wire::ScreenConfigurationAction::Delete { screen_id } => {
             if state
@@ -163,7 +163,11 @@ fn execute_action(
                 "screen_configuration_changed",
                 serde_json::json!({"screen_id":screen_id,"deleted":true}),
             );
-            outcome(None, None)
+            let programmer_control_surface = state
+                .installation
+                .programmer_control_surface()
+                .map_err(ApiError::store)?;
+            outcome(None, None, Some(programmer_control_surface))
         }
         wire::ScreenConfigurationAction::SetPage { screen_id, page } => {
             let show = state
@@ -197,7 +201,31 @@ fn execute_action(
                 "screen_page_changed",
                 serde_json::json!({"screen_id":screen_id,"show_id":show.id,"page":page}),
             );
-            outcome(Some(screen), Some(page))
+            outcome(Some(screen), Some(page), None)
+        }
+        wire::ScreenConfigurationAction::UpdateProgrammerControlSurface { patch } => {
+            let mut configuration = state
+                .installation
+                .programmer_control_surface()
+                .map_err(ApiError::store)?;
+            if patch.assign_to_main {
+                configuration.owner_screen_id = None;
+            } else if let Some(owner_screen_id) = patch.owner_screen_id {
+                configuration.owner_screen_id = Some(owner_screen_id);
+            }
+            if let Some(visible_encoders) = patch.visible_encoders {
+                configuration.visible_encoders = visible_encoders;
+            }
+            let configuration = state
+                .installation
+                .put_programmer_control_surface(configuration)
+                .map_err(ApiError::store)?;
+            emit(
+                state,
+                "screen_configuration_changed",
+                serde_json::json!({"programmer_control_surface":configuration}),
+            );
+            outcome(None, None, Some(configuration))
         }
     }
 }
@@ -226,7 +254,22 @@ fn screen_snapshot(
             .map(wire_screen)
             .collect::<Result<_, _>>()?,
         active_pages,
+        programmer_control_surface: wire_programmer_control_surface(
+            state
+                .installation
+                .programmer_control_surface()
+                .map_err(ApiError::store)?,
+        ),
     })
+}
+
+fn wire_programmer_control_surface(
+    configuration: light_show::ProgrammerControlSurfaceConfiguration,
+) -> wire::ProgrammerControlSurfaceConfiguration {
+    wire::ProgrammerControlSurfaceConfiguration {
+        owner_screen_id: configuration.owner_screen_id,
+        visible_encoders: configuration.visible_encoders,
+    }
 }
 
 fn apply_patch(
@@ -612,12 +655,14 @@ fn emit_screen_changed(state: &AppState, screen: &ScreenConfiguration) {
 fn outcome(
     screen: Option<ScreenConfiguration>,
     active_page: Option<u8>,
+    programmer_control_surface: Option<light_show::ProgrammerControlSurfaceConfiguration>,
 ) -> Result<wire::ScreenConfigurationActionOutcome, ApiError> {
     Ok(wire::ScreenConfigurationActionOutcome {
         request_id: String::new(),
         replayed: false,
         screen: screen.map(wire_screen).transpose()?,
         active_page,
+        programmer_control_surface: programmer_control_surface.map(wire_programmer_control_surface),
     })
 }
 

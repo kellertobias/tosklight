@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { Button } from "@tosklight/ui";
 import { memo } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { Button } from "@tosklight/ui";
 import { ScreensProvider, useScreens } from "./ScreensContext";
 import type { ScreensContextValue } from "./types";
 
@@ -13,6 +13,7 @@ function screensSource(setScreenPage = vi.fn()): ScreensContextValue {
 		saveScreen: vi.fn(),
 		deleteScreen: vi.fn(),
 		setScreenPage,
+		updateProgrammerControlSurface: vi.fn(),
 		updateControlDesk: vi.fn(),
 		selectControlDesk: vi.fn(),
 		removeClient: vi.fn(),

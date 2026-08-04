@@ -725,6 +725,9 @@
 .screen-shell.with-playbacks {
 	grid-template-rows: minmax(0, 1fr) minmax(220px, 34vh);
 }
+.screen-shell.with-control {
+	grid-template-rows: minmax(0, 1fr) minmax(300px, 42vh);
+}
 .screen-shell > .left-dock {
 	grid-row: 1 / -1;
 }

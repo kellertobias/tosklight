@@ -16,6 +16,9 @@ export function ScreensProvider({
 	const saveScreen = useStableCallback(source.saveScreen);
 	const deleteScreen = useStableCallback(source.deleteScreen);
 	const setScreenPage = useStableCallback(source.setScreenPage);
+	const updateProgrammerControlSurface = useStableCallback(
+		source.updateProgrammerControlSurface,
+	);
 	const updateControlDesk = useStableCallback(source.updateControlDesk);
 	const selectControlDesk = useStableCallback(source.selectControlDesk);
 	const removeClient = useStableCallback(source.removeClient);
@@ -27,6 +30,7 @@ export function ScreensProvider({
 			saveScreen,
 			deleteScreen,
 			setScreenPage,
+			updateProgrammerControlSurface,
 			updateControlDesk,
 			selectControlDesk,
 			removeClient,
@@ -38,6 +42,7 @@ export function ScreensProvider({
 			saveScreen,
 			deleteScreen,
 			setScreenPage,
+			updateProgrammerControlSurface,
 			updateControlDesk,
 			selectControlDesk,
 			removeClient,

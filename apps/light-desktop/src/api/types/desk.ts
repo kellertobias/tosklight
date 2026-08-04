@@ -304,4 +304,16 @@ export interface ScreenConfiguration {
 export interface ScreenSnapshot {
 	screens: ScreenConfiguration[];
 	active_pages: Record<string, number>;
+	programmer_control_surface: ProgrammerControlSurfaceConfiguration;
+}
+
+export interface ProgrammerControlSurfaceConfiguration {
+	owner_screen_id: string | null;
+	visible_encoders: 4 | 6;
+}
+
+export interface ProgrammerControlSurfacePatch {
+	owner_screen_id?: string;
+	assign_to_main?: boolean;
+	visible_encoders?: 4 | 6;
 }

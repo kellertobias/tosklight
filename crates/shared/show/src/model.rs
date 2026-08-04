@@ -170,6 +170,12 @@ pub struct ScreenConfiguration {
     pub content: ScreenContent,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ProgrammerControlSurfaceConfiguration {
+    pub owner_screen_id: Option<Uuid>,
+    pub visible_encoders: u8,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ShowEntry {
     pub id: ShowId,

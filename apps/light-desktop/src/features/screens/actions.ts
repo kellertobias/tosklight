@@ -40,5 +40,14 @@ export function createScreenActions(
 				setError(reason instanceof Error ? reason.message : String(reason));
 			}
 		},
+		updateProgrammerControlSurface: async (patch) => {
+			try {
+				await api.playback.updateProgrammerControlSurface(patch);
+				setScreens(await api.playback.screens());
+				setError(null);
+			} catch (reason) {
+				setError(reason instanceof Error ? reason.message : String(reason));
+			}
+		},
 	};
 }

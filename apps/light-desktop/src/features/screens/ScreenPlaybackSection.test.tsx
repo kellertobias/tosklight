@@ -91,6 +91,7 @@ function source(
 		saveScreen: vi.fn(),
 		deleteScreen: vi.fn(),
 		setScreenPage: vi.fn(async () => undefined),
+		updateProgrammerControlSurface: vi.fn(async () => undefined),
 		updateControlDesk: vi.fn(),
 		selectControlDesk: vi.fn(),
 		removeClient: vi.fn(async () => true),
@@ -99,7 +100,14 @@ function source(
 }
 
 function snapshot(activePages: Record<string, number>): ScreenSnapshot {
-	return { screens: [], active_pages: activePages };
+	return {
+		screens: [],
+		active_pages: activePages,
+		programmer_control_surface: {
+			owner_screen_id: null,
+			visible_encoders: 6,
+		},
+	};
 }
 
 function mount(value: ScreensContextValue, screenConfig: ScreenConfiguration) {

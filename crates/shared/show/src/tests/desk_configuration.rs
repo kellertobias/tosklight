@@ -2,8 +2,8 @@ use super::temporary;
 use crate::{
     DeskStore, FixedScreenFixtureColumn, FixedScreenFixtureCompactMode,
     FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder, FixedScreenPane,
-    FixedScreenStageRenderQuality, PlaybackSurfaceLayout, PlaybackSurfaceRow, ScreenConfiguration,
-    ScreenContent,
+    FixedScreenStageRenderQuality, PlaybackSurfaceLayout, PlaybackSurfaceRow,
+    ProgrammerControlSurfaceConfiguration, ScreenConfiguration, ScreenContent,
 };
 use light_core::ShowId;
 use rusqlite::Connection;
@@ -293,11 +293,103 @@ fn legacy_screens_migrate_to_desktop_content() {
     let screen = store.screens().unwrap().remove(0);
     assert_eq!(screen.content, ScreenContent::Desktop);
     assert!(screen.show_dock);
+    assert_eq!(
+        store.programmer_control_surface().unwrap(),
+        ProgrammerControlSurfaceConfiguration {
+            owner_screen_id: None,
+            visible_encoders: 6,
+        }
+    );
     let version: i64 = store
         .conn
         .query_row("SELECT version FROM schema_info", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 10);
+    assert_eq!(version, 11);
+    drop(store);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn programmer_control_surface_defaults_to_main_with_six_encoders() {
+    let path = temporary("programmer-control-default");
+    let store = DeskStore::open(&path).unwrap();
+    assert_eq!(
+        store.programmer_control_surface().unwrap(),
+        ProgrammerControlSurfaceConfiguration {
+            owner_screen_id: None,
+            visible_encoders: 6,
+        }
+    );
+    drop(store);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn programmer_control_surface_persists_one_screen_owner_and_reassigns_deleted_owner_to_main() {
+    let path = temporary("programmer-control-owner");
+    let store = DeskStore::open(&path).unwrap();
+    let screen = store
+        .put_screen(ScreenConfiguration {
+            id: Uuid::new_v4(),
+            name: "Programmer wing".into(),
+            layout: serde_json::json!({}),
+            show_dock: false,
+            show_playbacks: false,
+            playback_count: 8,
+            playback_rows: 1,
+            first_playback_slot: 1,
+            page_mode: "follow_main".into(),
+            show_page_controls: false,
+            desired_open: true,
+            display_id: None,
+            bounds: None,
+            fullscreen: false,
+            playback_layout: None,
+            content: ScreenContent::Desktop,
+        })
+        .unwrap();
+    assert_eq!(
+        store
+            .put_programmer_control_surface(ProgrammerControlSurfaceConfiguration {
+                owner_screen_id: Some(screen.id),
+                visible_encoders: 4,
+            })
+            .unwrap()
+            .owner_screen_id,
+        Some(screen.id)
+    );
+    store.delete_screen(screen.id).unwrap();
+    assert_eq!(
+        store.programmer_control_surface().unwrap(),
+        ProgrammerControlSurfaceConfiguration {
+            owner_screen_id: None,
+            visible_encoders: 4,
+        }
+    );
+    drop(store);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn programmer_control_surface_rejects_unknown_owners_and_unsupported_widths() {
+    let path = temporary("programmer-control-validation");
+    let store = DeskStore::open(&path).unwrap();
+    assert!(
+        store
+            .put_programmer_control_surface(ProgrammerControlSurfaceConfiguration {
+                owner_screen_id: Some(Uuid::new_v4()),
+                visible_encoders: 6,
+            })
+            .is_err()
+    );
+    assert!(
+        store
+            .put_programmer_control_surface(ProgrammerControlSurfaceConfiguration {
+                owner_screen_id: None,
+                visible_encoders: 5,
+            })
+            .is_err()
+    );
     drop(store);
     let _ = fs::remove_file(path);
 }

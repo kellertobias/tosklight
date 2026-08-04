@@ -1,4 +1,4 @@
-import { Button } from "@tosklight/ui";
+import { Button, FormLayout, SelectField } from "@tosklight/ui";
 import { useCallback, useEffect, useState } from "react";
 import type {
 	PlaybackSurfaceLayout,
@@ -101,6 +101,58 @@ function useScreenResourceOptions() {
 	return { desktop, displays, textFiles };
 }
 
+export function ProgrammerControlSurfaceSettings() {
+	const server = useScreens();
+	const configuration = server.screens?.programmer_control_surface;
+	if (!configuration) return null;
+	return (
+		<section className="screen-settings-card programmer-control-surface-settings">
+			<header>
+				<div>
+					<h3>Programmer control surface</h3>
+					<p>
+						Choose the one on-screen owner and how many software encoders it
+						shows. Attached hardware remains six encoders.
+					</p>
+				</div>
+			</header>
+			<FormLayout columns={2} minColumnWidth={180}>
+				<SelectField
+					label="Control surface"
+					value={configuration.owner_screen_id ?? "main"}
+					onChange={(owner) =>
+						void server.updateProgrammerControlSurface(
+							owner === "main"
+								? { assign_to_main: true }
+								: { owner_screen_id: owner },
+						)
+					}
+					options={[
+						{ value: "main", label: "Main screen" },
+						...(server.screens?.screens ?? []).map((screen) => ({
+							value: screen.id,
+							label: screen.name,
+						})),
+					]}
+				/>
+				<SelectField
+					label="Visible encoders"
+					value={String(configuration.visible_encoders)}
+					onChange={(value) =>
+						void server.updateProgrammerControlSurface({
+							visible_encoders: value === "4" ? 4 : 6,
+						})
+					}
+					options={[
+						{ value: "4", label: "Four" },
+						{ value: "6", label: "Six" },
+					]}
+				/>
+			</FormLayout>
+		</section>
+	);
+}
+
 export function ScreensSetup({
 	undoRef,
 	onUndoAvailabilityChange,
@@ -157,6 +209,7 @@ export function ScreensSetup({
 				onCreate={create}
 			/>
 			<div className="screens-setup-list">
+				<ProgrammerControlSurfaceSettings />
 				<DefaultScreenSettings
 					deskName={defaultScreen.draft?.name ?? ""}
 					deskAlias={defaultScreen.draft?.osc_alias ?? ""}

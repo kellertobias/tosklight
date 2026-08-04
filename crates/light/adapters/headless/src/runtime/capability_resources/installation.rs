@@ -339,6 +339,21 @@ impl InstallationResource {
         self.desk.lock().delete_screen(id)
     }
 
+    pub(in crate::runtime) fn programmer_control_surface(
+        &self,
+    ) -> Result<light_show::ProgrammerControlSurfaceConfiguration, light_show::StoreError> {
+        self.desk.lock().programmer_control_surface()
+    }
+
+    pub(in crate::runtime) fn put_programmer_control_surface(
+        &self,
+        configuration: light_show::ProgrammerControlSurfaceConfiguration,
+    ) -> Result<light_show::ProgrammerControlSurfaceConfiguration, light_show::StoreError> {
+        self.desk
+            .lock()
+            .put_programmer_control_surface(configuration)
+    }
+
     pub(in crate::runtime) fn screen_page(
         &self,
         screen_id: Uuid,

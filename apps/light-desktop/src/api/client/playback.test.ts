@@ -260,6 +260,47 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		});
 	});
 
+	it("updates the programmer owner and encoder count as one replay-safe screen intent", async () => {
+		const request = vi.fn().mockResolvedValueOnce({
+			request_id: "programmer-control-surface",
+			replayed: false,
+			screen: null,
+			active_page: null,
+			programmer_control_surface: {
+				owner_screen_id: SCREEN_ID,
+				visible_encoders: 4,
+			},
+		});
+		const client = new PlaybackApiClient({
+			request,
+			blob: vi.fn(),
+			absoluteUrl: vi.fn(),
+			sendAction: vi.fn(),
+		} as unknown as LiveClientTransport);
+
+		await expect(
+			client.updateProgrammerControlSurface({
+				owner_screen_id: SCREEN_ID,
+				visible_encoders: 4,
+			}),
+		).resolves.toEqual({ owner_screen_id: SCREEN_ID, visible_encoders: 4 });
+		expect(request).toHaveBeenCalledWith(
+			"/api/v2/screens/actions",
+			expect.objectContaining({
+				method: "POST",
+				body: expect.stringContaining(
+					'"type":"update_programmer_control_surface"',
+				),
+			}),
+		);
+		const body = JSON.parse(request.mock.calls[0][1].body as string);
+		expect(body.action.patch).toEqual({
+			owner_screen_id: SCREEN_ID,
+			assign_to_main: false,
+			visible_encoders: 4,
+		});
+	});
+
 	it("requires an existing Page for scoped desk selection", async () => {
 		const { client, request } = clientReturning({
 			request_id: "desk-page",

@@ -1,5 +1,8 @@
 use super::{DeskStore, validate_playback_surface};
-use crate::{FixedScreenPane, ScreenConfiguration, ScreenContent, StoreError};
+use crate::{
+    FixedScreenPane, ProgrammerControlSurfaceConfiguration, ScreenConfiguration, ScreenContent,
+    StoreError,
+};
 use light_core::ShowId;
 use rusqlite::{OptionalExtension, params};
 use std::collections::HashSet;
@@ -114,6 +117,49 @@ impl DeskStore {
         self.conn
             .execute("DELETE FROM screens WHERE id=?1", [id.to_string()])?;
         Ok(())
+    }
+
+    pub fn programmer_control_surface(
+        &self,
+    ) -> Result<ProgrammerControlSurfaceConfiguration, StoreError> {
+        let (owner_screen_id, visible_encoders) = self.conn.query_row(
+            "SELECT owner_screen_id,visible_encoders FROM programmer_control_surface WHERE singleton=1",
+            [],
+            |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, u8>(1)?)),
+        )?;
+        let owner_screen_id = owner_screen_id
+            .map(|value| Uuid::parse_str(&value))
+            .transpose()?;
+        Ok(ProgrammerControlSurfaceConfiguration {
+            owner_screen_id,
+            visible_encoders,
+        })
+    }
+
+    pub fn put_programmer_control_surface(
+        &self,
+        configuration: ProgrammerControlSurfaceConfiguration,
+    ) -> Result<ProgrammerControlSurfaceConfiguration, StoreError> {
+        if !matches!(configuration.visible_encoders, 4 | 6) {
+            return Err(StoreError::Invalid(
+                "visible encoder count must be 4 or 6".into(),
+            ));
+        }
+        if let Some(owner_screen_id) = configuration.owner_screen_id
+            && self.screen(owner_screen_id)?.is_none()
+        {
+            return Err(StoreError::Invalid(
+                "programmer control owner screen does not exist".into(),
+            ));
+        }
+        self.conn.execute(
+            "UPDATE programmer_control_surface SET owner_screen_id=?1,visible_encoders=?2 WHERE singleton=1",
+            params![
+                configuration.owner_screen_id.map(|id| id.to_string()),
+                configuration.visible_encoders
+            ],
+        )?;
+        self.programmer_control_surface()
     }
 
     pub fn screen_page(&self, screen: Uuid, show: ShowId) -> Result<u8, StoreError> {

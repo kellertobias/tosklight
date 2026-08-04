@@ -14,11 +14,15 @@ import type {
 	ScreenConfigurationDeleteRequest,
 	ScreenConfigurationPatch,
 	ScreenConfigurationUpdateRequest,
+	ProgrammerControlSurfaceConfiguration as WireProgrammerControlSurfaceConfiguration,
+	ProgrammerControlSurfacePatch as WireProgrammerControlSurfacePatch,
 	ScreenConfiguration as WireScreenConfiguration,
 } from "../generated/light-wire";
 import { decodePlaybackOutcome, decodePlaybackSnapshot } from "../playbackWire";
 import type {
 	ControlDesk,
+	ProgrammerControlSurfaceConfiguration,
+	ProgrammerControlSurfacePatch,
 	ScreenConfiguration,
 	ScreenSnapshot,
 } from "../types";
@@ -133,6 +137,36 @@ export class PlaybackApiClient {
 		await this.screenAction({ type: "set_page", screen_id: id, page });
 	}
 
+	async updateProgrammerControlSurface(
+		patch: ProgrammerControlSurfacePatch,
+	): Promise<ProgrammerControlSurfaceConfiguration> {
+		const wirePatch: WireProgrammerControlSurfacePatch = {
+			owner_screen_id: patch.owner_screen_id ?? null,
+			assign_to_main: patch.assign_to_main ?? false,
+			visible_encoders: patch.visible_encoders ?? null,
+		};
+		const outcome = await this.screenAction({
+			type: "update_programmer_control_surface",
+			patch: wirePatch,
+		});
+		const configuration =
+			outcome.programmer_control_surface as WireProgrammerControlSurfaceConfiguration | null;
+		if (!configuration)
+			throw new Error(
+				"Programmer control surface update returned no configuration",
+			);
+		if (
+			configuration.visible_encoders !== 4 &&
+			configuration.visible_encoders !== 6
+		)
+			throw new WireValidationError(
+				"$.programmer_control_surface.visible_encoders",
+				"4 or 6",
+				configuration.visible_encoders,
+			);
+		return configuration as ProgrammerControlSurfaceConfiguration;
+	}
+
 	async setPlaybackPage(
 		deskId: string,
 		page: number,
@@ -193,6 +227,7 @@ export class PlaybackApiClient {
 				request = { request_id: requestId };
 				break;
 			case "set_page":
+			case "update_programmer_control_surface":
 				path = "/api/v2/screens/actions";
 				request = { request_id: requestId, action };
 				break;
