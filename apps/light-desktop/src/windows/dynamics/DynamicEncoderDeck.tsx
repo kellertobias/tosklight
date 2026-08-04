@@ -54,6 +54,10 @@ import type {
 	SpeedGroupId,
 } from "../../api/types";
 import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
+import {
+	resolveVisibleEncoderCount,
+	useVisibleEncoderCount,
+} from "../../components/control/parameterControls/VisibleEncoderCount";
 import { monotonicEpochMillis } from "../../components/control/soundToLightAnalyzer";
 import { useSoundToLight } from "../../components/control/useSoundToLight";
 import {
@@ -78,7 +82,7 @@ import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
 import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/SpeedGroupRuntimeView";
 import { useApp } from "../../state/AppContext";
 import { useStageLayout } from "../stageWindow/useStageLayout";
-
+import type { DynamicEditorView } from "./DynamicsEditor";
 import {
 	clamp,
 	defaultRandomGroup,
@@ -94,7 +98,6 @@ import {
 	sourceCurrent,
 	wrappedIndex,
 } from "./DynamicsEditor";
-import type { DynamicEditorView } from "./DynamicsEditor";
 
 type PresetObject = ShowObject<"preset">;
 
@@ -125,6 +128,11 @@ export function DynamicEncoderDeck({
 	onMutate,
 }: DynamicEncoderDeckProps) {
 	const hardwareConnected = useDynamicsHardwareConnected();
+	const softwareEncoderCount = useVisibleEncoderCount();
+	const visibleEncoderCount = resolveVisibleEncoderCount(
+		softwareEncoderCount,
+		hardwareConnected,
+	);
 	const hardwareDisplays = useRef<Array<HardwareEncoderDisplayHandle | null>>(
 		[],
 	);
@@ -142,7 +150,7 @@ export function DynamicEncoderDeck({
 		onLaneChange,
 		onMutate,
 	);
-	const slots =
+	const allSlots =
 		view === "curves"
 			? curveEditorEncoderSlots(
 					lane,
@@ -155,6 +163,15 @@ export function DynamicEncoderDeck({
 			: view === "phase"
 				? phaseEncoderSlots(phase, applyPhase)
 				: speedEncoderSlots(dynamic, onMutate);
+	const pageCount = Math.max(
+		1,
+		Math.ceil(allSlots.length / visibleEncoderCount),
+	);
+	const visiblePage = Math.min(Math.max(1, page), pageCount);
+	const slots = allSlots.slice(
+		(visiblePage - 1) * visibleEncoderCount,
+		visiblePage * visibleEncoderCount,
+	);
 	const items = encoderSectionItems(slots);
 	const slotsRef = useRef(slots);
 	slotsRef.current = slots;
@@ -237,7 +254,7 @@ export function DynamicEncoderDeck({
 			<EncoderSection
 				showHeader={false}
 				model={{
-					id: `dynamics-${view}-${page}`,
+					id: `dynamics-${view}-${visiblePage}`,
 					label: `${view === "curves" ? "Lanes" : view === "phase" ? "Phase" : "Speed"} encoders`,
 					description: "Turn fine · press-turn coarse · center Set Value",
 					encoders: items,
@@ -493,7 +510,9 @@ export {
 	normalizePwmLane,
 	scalarSourceEncoderDisplay,
 } from "./CurveEncoderSlots";
+
 import { curveEditorEncoderSlots } from "./CurveEncoderSlots";
+
 function phaseWithExplicitRange(
 	phase: DynamicDefinitionProjection["phase"],
 	values: number[],

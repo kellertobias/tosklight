@@ -11,33 +11,45 @@ import { ParameterControls } from "./ParameterControls";
 import { PatchParameterControls } from "./PatchParameterControls";
 import { PlaybackFaderBank } from "./PlaybackFaderBank";
 import { PlaybackTools } from "./PlaybackTools";
+import {
+	resolveVisibleEncoderCount,
+	useVisibleEncoderCount,
+	VisibleEncoderCountProvider,
+} from "./parameterControls/VisibleEncoderCount";
 
 export function ControlSection() {
 	const { state } = useApp();
 	const hardwareConnected = useHardwareConnected();
 	const session = useSessionSnapshot();
 	const hardware = Boolean(hardwareConnected || state.midiProfile);
+	const configuredEncoderCount = useVisibleEncoderCount();
+	const visibleEncoderCount = resolveVisibleEncoderCount(
+		configuredEncoderCount,
+		hardware,
+	);
 	return (
-		<CommandSection
-			mode={state.controlMode}
-			hardware={hardware}
-			commandLine={<CommandLineBar />}
-			programmer={
-				state.builtIn === "patch" ? (
-					<PatchParameterControls hardwareConnected={hardware} />
-				) : (
-					<ParameterControls />
-				)
-			}
-			playbacks={
-				<PlaybackFaderBank
-					playbackLayout={session?.desk.playback_layout}
-					hardwareConnected={hardwareConnected}
-				/>
-			}
-			programmerTools={<NumericPad />}
-			playbackTools={<PlaybackTools />}
-			hardwareTools={<HardwareControlSummary />}
-		/>
+		<VisibleEncoderCountProvider count={visibleEncoderCount}>
+			<CommandSection
+				mode={state.controlMode}
+				hardware={hardware}
+				commandLine={<CommandLineBar />}
+				programmer={
+					state.builtIn === "patch" ? (
+						<PatchParameterControls hardwareConnected={hardware} />
+					) : (
+						<ParameterControls />
+					)
+				}
+				playbacks={
+					<PlaybackFaderBank
+						playbackLayout={session?.desk.playback_layout}
+						hardwareConnected={hardwareConnected}
+					/>
+				}
+				programmerTools={<NumericPad />}
+				playbackTools={<PlaybackTools />}
+				hardwareTools={<HardwareControlSummary />}
+			/>
+		</VisibleEncoderCountProvider>
 	);
 }

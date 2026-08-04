@@ -91,7 +91,7 @@ describe("DynamicEditorTaskTabs", () => {
 				/>
 			</DynamicEditorSessionProvider>,
 		);
-		fireEvent.click(screen.getByRole("button", { name: "Phase" }));
+		fireEvent.click(screen.getByRole("button", { name: "Phase (1/2)" }));
 		expect(onTask).toHaveBeenLastCalledWith("phase");
 		expect(onPage).toHaveBeenLastCalledWith(1);
 	});

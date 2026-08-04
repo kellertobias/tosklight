@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProvider } from "../../../state/AppContext";
 import { createDefaultDynamicDefinition } from "../../../windows/DynamicsWindow";
 import { DynamicDefinitionEncoderSurface } from "./ProgrammerDynamicsSurface";
+import { VisibleEncoderCountProvider } from "./VisibleEncoderCount";
 
 let hardwareConnected = false;
 
@@ -84,6 +85,65 @@ describe("DynamicDefinitionEncoderSurface", () => {
 			container.querySelectorAll(".hardware-encoder-display"),
 		).toHaveLength(6);
 		expect(screen.getByLabelText("Encoder 1: Top, 100%")).toBeInTheDocument();
+	});
+
+	it("repaginates the Dynamics deck into four visible software positions", () => {
+		const dynamic = createDefaultDynamicDefinition(201, "intensity", {
+			definition: "dynamic-201",
+			lane: "lane-intensity",
+		});
+		const props = {
+			dynamic,
+			lane: dynamic.lanes[0] ?? null,
+			view: "curves" as const,
+			onLaneChange: vi.fn().mockResolvedValue(undefined),
+			onMutate: vi.fn().mockResolvedValue(undefined),
+		};
+		const { container, rerender } = render(
+			<ModalProvider>
+				<AppProvider>
+					<VisibleEncoderCountProvider count={4}>
+						<DynamicDefinitionEncoderSurface {...props} page={1} />
+					</VisibleEncoderCountProvider>
+				</AppProvider>
+			</ModalProvider>,
+		);
+
+		expect(container.querySelectorAll(".touch-encoder")).toHaveLength(4);
+		expect(
+			screen.getByRole("group", { name: "Enc 4 · Unassigned" }),
+		).toBeInTheDocument();
+		rerender(
+			<ModalProvider>
+				<AppProvider>
+					<VisibleEncoderCountProvider count={4}>
+						<DynamicDefinitionEncoderSurface {...props} page={2} />
+					</VisibleEncoderCountProvider>
+				</AppProvider>
+			</ModalProvider>,
+		);
+
+		expect(container.querySelectorAll(".touch-encoder")).toHaveLength(2);
+		expect(
+			screen.getByRole("group", { name: "Enc 1 · Curve width" }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("group", { name: "Enc 2 · Speed" }),
+		).toBeInTheDocument();
+
+		hardwareConnected = true;
+		rerender(
+			<ModalProvider>
+				<AppProvider>
+					<VisibleEncoderCountProvider count={4}>
+						<DynamicDefinitionEncoderSurface {...props} page={2} />
+					</VisibleEncoderCountProvider>
+				</AppProvider>
+			</ModalProvider>,
+		);
+		expect(
+			container.querySelectorAll(".hardware-encoder-display"),
+		).toHaveLength(6);
 	});
 
 	it("puts every PWM parameter on the single Lanes encoder page", () => {

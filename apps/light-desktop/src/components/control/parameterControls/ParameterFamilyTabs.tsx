@@ -13,6 +13,7 @@ import {
 	specialParameterFamilies,
 } from "./model";
 import type { ParameterController } from "./useParameterController";
+import { useVisibleEncoderCount } from "./VisibleEncoderCount";
 
 function FamilyLabel({ full, compact }: { full: string; compact: string }) {
 	return (
@@ -147,7 +148,7 @@ export function DynamicEditorTaskTabs({
 	onLane,
 	page: controlledPage,
 	onPage,
-	pageCount = 1,
+	pageCount: configuredPageCount,
 }: {
 	task?: DynamicEditorTask;
 	onTask?(task: DynamicEditorTask): void;
@@ -159,6 +160,8 @@ export function DynamicEditorTaskTabs({
 	pageCount?: number;
 } = {}) {
 	const editor = useDynamicEditorSession();
+	const visibleEncoderCount = useVisibleEncoderCount();
+	const pageCount = configuredPageCount ?? (visibleEncoderCount === 4 ? 2 : 1);
 	const activeTask = task ?? editor.session?.task;
 	if (!activeTask) return null;
 	const page = controlledPage ?? editor.session?.encoderPage ?? 1;
@@ -254,8 +257,9 @@ function DynamicEditorTaskTabsView({
 					id: "phase",
 					label: "Phase",
 					compactLabel: "Phase",
+					pageCount,
 				},
-				{ id: "speed", label: "Speed" },
+				{ id: "speed", label: "Speed", pageCount },
 			]}
 			activeGroup={activeTask}
 			page={page}
