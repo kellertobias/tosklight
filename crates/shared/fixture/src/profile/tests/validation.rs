@@ -456,6 +456,33 @@ fn canonical_cct_migration_rejects_two_physical_channels_for_the_same_control() 
 }
 
 #[test]
+fn primary_softness_migration_rejects_an_independent_second_mechanism() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Test".into();
+    profile.name = "Independent frost and edge".into();
+    let mode = &mut profile.modes[0];
+    mode.splits[0].footprint = 2;
+    let head_id = mode.heads[0].id;
+    mode.channels = ["frost.1", "beam.edge"]
+        .into_iter()
+        .map(|attribute| {
+            let mut channel = channel(head_id, ChannelResolution::U8, vec![]);
+            channel.fixture_attribute = AttributeKey(attribute.into());
+            channel.attribute = AttributeKey(attribute.into());
+            channel.functions[0].attribute = AttributeKey(attribute.into());
+            channel
+        })
+        .collect();
+
+    let migrated: FixtureProfile =
+        serde_json::from_value(serde_json::to_value(profile).unwrap()).unwrap();
+    let error = migrated.validate().unwrap_err();
+    assert!(error.to_string().contains(
+        "split 1 maps more than one channel on the same head to canonical attribute `softness`"
+    ));
+}
+
+#[test]
 fn schema_v2_strobe_migrates_to_canonical_shutter_without_losing_identity() {
     let mut profile = FixtureProfile::blank();
     profile.schema_version = 2;
@@ -496,7 +523,7 @@ fn schema_v2_named_aliases_are_limited_to_documented_unambiguous_mappings() {
         ("fixture.blade_4", "shaper.blade.4.position"),
         ("fixture.framing_module_rotation", "shaper.rotation"),
         ("fixture.barndoor_module_rotation", "shaper.rotation"),
-        ("frost", "frost.1"),
+        ("frost", "softness"),
     ] {
         assert_eq!(
             legacy_canonical_mapping(&AttributeKey(legacy.into())),

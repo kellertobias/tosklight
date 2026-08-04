@@ -1128,6 +1128,41 @@ mod model_tests {
         assert!(colour.warm_white.is_none());
     }
 
+    #[test]
+    fn canonical_softness_alias_binds_the_physical_frost_channel_once() {
+        let mut fixture = patched("profile", ProfileOptics::default());
+        let profile = Arc::get_mut(&mut fixture.profile).expect("sole owner");
+        let mode = &mut profile.modes[0];
+        mode.splits[0].footprint = 1;
+        let head_id = mode.heads[0].id;
+        mode.channels = vec![FixtureChannel {
+            id: Uuid::new_v4(),
+            head_id,
+            split: 1,
+            fixture_attribute: AttributeKey("frost".into()),
+            attribute: AttributeKey("softness".into()),
+            canonical_transform: CanonicalTransform::Identity,
+            resolution: ChannelResolution::U8,
+            secondary_slots: Vec::new(),
+            default_raw: 0,
+            highlight_raw: 0,
+            physical_min: Some(0.0),
+            physical_max: Some(1.0),
+            unit: None,
+            invert: false,
+            snap: false,
+            reacts_to_virtual_intensity: false,
+            reacts_to_sequence_master: false,
+            reacts_to_group_master: false,
+            reacts_to_grand_master: false,
+            behavior: ChannelBehavior::Controlled,
+            functions: Vec::new(),
+        }];
+
+        let plan = compile(&[fixture]);
+        assert!(plan.bindings[0].frost.is_some());
+    }
+
     fn optics_of(fixture: PatchedFixture) -> viz_scene::EmitterOptics {
         let plan = compile(&[fixture]);
         plan.scene

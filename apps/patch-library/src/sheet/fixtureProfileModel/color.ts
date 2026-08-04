@@ -129,6 +129,9 @@ export function canonicalAttributeProjection(attribute: string): {
 			"color.yellow": ["color.blue", "invert_normalized"],
 			"color.cold_white": ["color.white", "identity"],
 			"color.warm_white": ["color.amber", "identity"],
+			frost: ["softness", "identity"],
+			"frost.1": ["softness", "identity"],
+			"beam.edge": ["softness", "identity"],
 			strobe: ["shutter", "identity"],
 		};
 	const [canonical, canonicalTransform] = migration[attribute] ?? [

@@ -35,9 +35,9 @@ chapter is the complete encoder and activation reference.
 | `color.wheel.2` | Color Wheel 2 | Color | Indexed | — | Second profile-defined wheel. |
 | `pan` | Pan | Position | Continuous | Degrees | Uses the profile's physical Pan range. |
 | `tilt` | Tilt | Position | Continuous | Degrees | Uses the profile's physical Tilt range. |
-| `beam` | Beam | Beam | Continuous | Percent | Generic beam attribute retained for profiles without a narrower semantic. |
 | `focus` | Focus | Focus | Continuous | Percent | Near/far direction comes from the profile's authored physical range. |
 | `zoom` | Zoom | Focus | Continuous | Degrees | Beam angle or zoom range. |
+| `softness` | Softness | Focus | Continuous | Percent | Primary optical diffusion, frost, or beam-edge softening chosen by the fixture profile. |
 | `iris` | Iris | Shapers | Continuous | Percent | Aperture and the first member of the default Shapers activation group. |
 | `gobo.1` | Gobo 1 | Beam | Indexed | — | First indexed gobo wheel or selector. |
 | `gobo.2` | Gobo 2 | Beam | Indexed | — | Second indexed gobo wheel or selector. |
@@ -145,9 +145,7 @@ active attribute-group button cycles **Group 1 of N**, **Group 2 of N**, and so 
 | Shapers | P2/E6 | `shaper.keystone.y` | **Keystone Y** (`shaper.keystone.y`) | Shapers |
 | Focus | P1/E1 | `focus` | **Focus** (`focus`) | — |
 | Focus | P1/E2 | `zoom` | **Zoom** (`zoom`) | — |
-| Focus | P1/E3 | `frost.1` | **Frost 1** (`frost.1`, migrated from `frost`) | — |
-| Focus | P1/E4 | `frost.2` | **Frost 2** (`frost.2`) | — |
-| Focus | P1/E5 | `beam.edge` | **Beam Edge / Softness** (`beam.edge`) | — |
+| Focus | P1/E3 | `softness` | The profile's primary **Frost** (`frost` or `frost.1`) or **Beam Edge** (`beam.edge`) mechanism | — |
 | Control | P1/E1 | `control.mode` | **Fixture Mode** (`control.mode`) | — |
 | Control | P1/E2 | `control.speed` | **Fixture Control Speed** (`control.speed`) | — |
 | Control | P1/E3 | typed control action | **Fan Auto/Low/High/Max** (`fixture.fan_control`) | Not recordable |
@@ -266,5 +264,11 @@ Color Mix and Color Wheel are deliberately separate recommended groups. A produc
 reconfigure them, but changing Red should not select or capture a wheel slot by default.
 Focus, Zoom, Frost, Gobos, and Prisms remain independent recommended choices. Iris is the
 exception here because it belongs to the default Shapers activation group.
+
+Softness is the manufacturer-independent amount of optical diffusion or edge softening. A fixture
+profile chooses one primary Frost or Beam Edge mechanism for this canonical control. If a fixture
+has a second independently controllable frost, diffusion, or edge mechanism, that channel keeps a
+separate custom attribute; it is never silently merged into Softness. Compatibility-only
+`frost.2` remains readable in older shows but is not offered as a new built-in control.
 
 When one member changes, linked values are captured once from the authoritative current Normal, Blind, or Preload context and then remain fixed in the Programmer. Changing the Desk Setup grouping affects future activations only and never rewrites recorded Cues.

@@ -89,6 +89,7 @@ pub const ENCODER_SLOTS_PER_PAGE: u8 = 6;
 /// placed on recommended encoder pages.
 pub const RETIRED_BUILT_IN_ATTRIBUTES: &[&str] = &[
     "beam",
+    "beam.edge",
     "control.mode",
     "control.speed",
     "color.cyan",
@@ -100,6 +101,8 @@ pub const RETIRED_BUILT_IN_ATTRIBUTES: &[&str] = &[
     "media.effect.2",
     "media.effect.3",
     "media.effect.4",
+    "frost.1",
+    "frost.2",
     "pan.time",
     "tilt.time",
     "shaper.keystone.x",
@@ -369,6 +372,7 @@ pub fn canonical_attribute_migration_id(
         "color.yellow" => ("color.blue", CanonicalAttributeTransform::InvertNormalized),
         "color.cold_white" => ("color.white", CanonicalAttributeTransform::Identity),
         "color.warm_white" => ("color.amber", CanonicalAttributeTransform::Identity),
+        "frost" | "frost.1" | "beam.edge" => ("softness", CanonicalAttributeTransform::Identity),
         "strobe" => ("shutter", CanonicalAttributeTransform::Identity),
         _ => return None,
     };

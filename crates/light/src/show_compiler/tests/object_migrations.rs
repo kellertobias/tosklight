@@ -1256,7 +1256,8 @@ fn retired_strobe_identity_reports_an_actionable_address_conflict() {
 }
 
 #[test]
-fn legacy_emitter_attribute_controls_retire_with_values_and_preserve_unknown_configuration_data() {
+fn legacy_emitter_and_softness_controls_retire_with_values_and_preserve_unknown_configuration_data()
+{
     let mut configuration = light_core::AttributeConfiguration::recommended();
     for (source, encoder, label) in [
         (
@@ -1315,6 +1316,33 @@ fn legacy_emitter_attribute_controls_retire_with_values_and_preserve_unknown_con
             .members
             .push(light_core::AttributeKey(source.into()));
     }
+    for (source, encoder, label) in [
+        (
+            "frost.1",
+            light_core::EncoderPlacement::new(light_core::EncoderGroup::Focus, 1, 3),
+            "Frost 1",
+        ),
+        (
+            "beam.edge",
+            light_core::EncoderPlacement::new(light_core::EncoderGroup::Focus, 1, 5),
+            "Beam Edge",
+        ),
+    ] {
+        configuration
+            .placements
+            .push(light_core::AttributePlacement {
+                attribute: light_core::AttributeKey(source.into()),
+                encoder,
+                push_turn_of: None,
+            });
+        configuration
+            .activation_groups
+            .push(light_core::AttributeActivationGroup {
+                id: source.into(),
+                label: label.into(),
+                members: vec![light_core::AttributeKey(source.into())],
+            });
+    }
     let mut body = serde_json::to_value(configuration).unwrap();
     body["future_configuration"] = json!({"kept": true});
     let cct_group = json!({
@@ -1324,9 +1352,16 @@ fn legacy_emitter_attribute_controls_retire_with_values_and_preserve_unknown_con
             "color.warm_white": {"kind":"normalized","value":0.75}
         }
     });
+    let softness_group = json!({
+        "name": "Legacy Frost",
+        "programming": {
+            "frost.1": {"kind":"normalized","value":0.45,"future_value":"kept"}
+        }
+    });
     let (_, document) = document_with_objects(&[
         ("attribute_configuration", "default", body),
         ("group", "cct", cct_group),
+        ("group", "softness", softness_group),
     ]);
     let mut transaction = document.transaction();
 
@@ -1344,6 +1379,8 @@ fn legacy_emitter_attribute_controls_retire_with_values_and_preserve_unknown_con
         "color.yellow",
         "color.cold_white",
         "color.warm_white",
+        "frost.1",
+        "beam.edge",
     ] {
         assert!(
             migrated["placements"]
@@ -1371,6 +1408,9 @@ fn legacy_emitter_attribute_controls_retire_with_values_and_preserve_unknown_con
     assert_eq!(group["programming"]["color.white"]["value"], 0.25);
     assert_eq!(group["programming"]["color.white"]["future_value"], "kept");
     assert_eq!(group["programming"]["color.amber"]["value"], 0.75);
+    let softness = candidate.object("group", "softness").unwrap().body();
+    assert_eq!(softness["programming"]["softness"]["value"], 0.45);
+    assert_eq!(softness["programming"]["softness"]["future_value"], "kept");
 
     let migrated_objects = candidate
         .objects()

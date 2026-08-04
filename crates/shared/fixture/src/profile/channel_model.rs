@@ -70,7 +70,7 @@ pub(super) fn legacy_canonical_mapping(
         "fixture.framing_module_rotation" | "fixture.barndoor_module_rotation" => {
             ("shaper.rotation", CanonicalTransform::Identity)
         }
-        "frost" => ("frost.1", CanonicalTransform::Identity),
+        "frost" => ("softness", CanonicalTransform::Identity),
         _ => return None,
     };
     Some((AttributeKey(canonical.into()), transform))

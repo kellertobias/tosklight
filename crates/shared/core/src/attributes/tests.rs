@@ -120,6 +120,15 @@ mod canonical_migration_tests {
                 CanonicalAttributeTransform::Identity
             ))
         );
+        for source in ["frost", "frost.1", "beam.edge"] {
+            assert_eq!(
+                canonical_attribute_migration(&AttributeKey(source.into())),
+                Some((
+                    AttributeKey("softness".into()),
+                    CanonicalAttributeTransform::Identity
+                ))
+            );
+        }
         assert_eq!(
             canonical_attribute_migration(&AttributeKey("strobe".into())),
             Some((
@@ -635,6 +644,59 @@ mod attribute_registry_tests {
                     .is_none()
             );
         }
+        assert_eq!(
+            migrated.clone().migrate_canonical_attributes().unwrap(),
+            migrated
+        );
+    }
+
+    #[test]
+    fn legacy_primary_frost_and_edge_controls_join_canonical_softness() {
+        let mut legacy = AttributeConfiguration::recommended();
+        for (source, encoder, label) in [
+            (
+                "frost.1",
+                EncoderPlacement::new(EncoderGroup::Focus, 1, 3),
+                "Frost 1",
+            ),
+            (
+                "beam.edge",
+                EncoderPlacement::new(EncoderGroup::Focus, 1, 5),
+                "Beam Edge",
+            ),
+        ] {
+            legacy.placements.push(AttributePlacement {
+                attribute: AttributeKey(source.into()),
+                encoder,
+                push_turn_of: None,
+            });
+            legacy.activation_groups.push(AttributeActivationGroup {
+                id: source.into(),
+                label: label.into(),
+                members: vec![AttributeKey(source.into())],
+            });
+        }
+
+        let migrated = legacy.migrate_canonical_attributes().unwrap();
+        migrated.validate().unwrap();
+        for source in ["frost.1", "beam.edge"] {
+            assert!(
+                migrated
+                    .attribute_placement_for(&AttributeKey(source.into()))
+                    .is_none()
+            );
+            assert!(
+                migrated
+                    .activation_group_for(&AttributeKey(source.into()))
+                    .is_none()
+            );
+        }
+        assert_eq!(
+            migrated
+                .placement_for(&AttributeKey("softness".into()))
+                .unwrap(),
+            EncoderPlacement::new(EncoderGroup::Focus, 1, 3)
+        );
         assert_eq!(
             migrated.clone().migrate_canonical_attributes().unwrap(),
             migrated

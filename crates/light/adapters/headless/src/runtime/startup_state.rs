@@ -885,6 +885,10 @@ mod tests {
                 "fixture_id": fixture,
                 "attribute": "color.cold_white",
                 "value": {"kind":"normalized","value":0.35,"future_value":"kept"}
+            }, {
+                "fixture_id": fixture,
+                "attribute": "frost.1",
+                "value": {"kind":"normalized","value":0.55}
             }],
             "dynamic_values": [{
                 "fixture_id": fixture,
@@ -917,6 +921,8 @@ mod tests {
         assert_eq!(value["values"][1]["attribute"], "color.white");
         assert_migrated_number(&value["values"][1]["value"]["value"], 0.35);
         assert_eq!(value["values"][1]["value"]["future_value"], "kept");
+        assert_eq!(value["values"][2]["attribute"], "softness");
+        assert_migrated_number(&value["values"][2]["value"]["value"], 0.55);
         assert_eq!(value["dynamic_values"][0]["attribute"], "color.green");
         assert_migrated_number(&value["dynamic_values"][0]["value"]["value"], 0.7);
         assert_eq!(value["preload_pending"][0]["attribute"], "color.blue");

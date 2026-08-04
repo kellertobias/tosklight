@@ -155,10 +155,14 @@ impl FixtureMode {
             channel.validate()?;
         }
         for channel in &self.channels {
-            if !matches!(
-                channel.fixture_attribute.0.as_str(),
-                "color.cold_white" | "color.warm_white"
-            ) {
+            let Some((canonical, transform)) =
+                light_core::canonical_attribute_migration(&channel.fixture_attribute)
+            else {
+                continue;
+            };
+            if transform != light_core::CanonicalAttributeTransform::Identity
+                || canonical == channel.fixture_attribute
+            {
                 continue;
             }
             if self.channels.iter().any(|candidate| {

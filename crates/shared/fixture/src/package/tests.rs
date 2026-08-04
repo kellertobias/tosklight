@@ -560,6 +560,39 @@ fn shipped_strobe_channels_keep_fixture_identity_and_program_canonical_shutter()
 }
 
 #[test]
+fn shipped_primary_frost_channels_program_canonical_softness() {
+    let mut affected_modes = 0;
+    for filename in [
+        "claypaky--sharpy.toskfixture",
+        "robe--robin-dls-profile.toskfixture",
+    ] {
+        let profile = shipped_profile(filename);
+        for mode in &profile.modes {
+            let channels = mode
+                .channels
+                .iter()
+                .filter(|channel| channel.fixture_attribute.0 == "frost")
+                .collect::<Vec<_>>();
+            if channels.is_empty() {
+                continue;
+            }
+            affected_modes += 1;
+            assert_eq!(channels.len(), 1, "{filename} / {}", mode.name);
+            let channel = channels[0];
+            assert_eq!(channel.attribute.0, "softness");
+            assert_eq!(channel.canonical_transform, CanonicalTransform::Identity);
+            assert!(
+                channel
+                    .functions
+                    .iter()
+                    .all(|function| function.attribute.0 == "softness")
+            );
+        }
+    }
+    assert_eq!(affected_modes, 5);
+}
+
+#[test]
 fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")

@@ -112,7 +112,7 @@ fn assign(binding: &mut EmitterBinding, attribute: &AttributeKey, reference: &Ch
         "zoom" => slot(&mut binding.zoom),
         "iris" => slot(&mut binding.iris),
         "focus" => slot(&mut binding.focus),
-        "frost" => slot(&mut binding.frost),
+        "frost" | "softness" => slot(&mut binding.frost),
         "shutter" => slot(&mut binding.shutter),
         "strobe" => slot(&mut binding.strobe),
         // Only the first wheel of each kind drives the picture. A fixture with two gobo wheels

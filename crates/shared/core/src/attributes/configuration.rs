@@ -204,6 +204,16 @@ impl AttributeConfiguration {
                 "color.amber",
                 EncoderPlacement::new(EncoderGroup::Color, 2, 2),
             ),
+            (
+                "frost.1",
+                "softness",
+                EncoderPlacement::new(EncoderGroup::Focus, 1, 3),
+            ),
+            (
+                "beam.edge",
+                "softness",
+                EncoderPlacement::new(EncoderGroup::Focus, 1, 5),
+            ),
         ] {
             self.migrate_canonical_configuration_pair(source, target, legacy_encoder)?;
         }
@@ -819,6 +829,7 @@ pub const ATTRIBUTE_REGISTRY: &[AttributeDescriptor] = &[
     ),
     continuous("focus", "Focus", AttributeClass::Focus, "percent"),
     continuous("zoom", "Zoom", AttributeClass::Focus, "deg"),
+    continuous("softness", "Softness", AttributeClass::Focus, "percent"),
     continuous("frost.1", "Frost 1", AttributeClass::Focus, "percent"),
     continuous("frost.2", "Frost 2", AttributeClass::Focus, "percent"),
     continuous("beam.edge", "Beam Edge", AttributeClass::Focus, "percent"),

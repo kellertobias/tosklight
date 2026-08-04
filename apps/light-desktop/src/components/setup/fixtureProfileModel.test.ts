@@ -93,6 +93,7 @@ describe("fixture profile model Highlight defaults", () => {
 			"color.magenta",
 			"color.yellow",
 			"color.wheel.1",
+			"frost",
 			"pan",
 		];
 		const imported = fixtureProfileFromDefinition(
@@ -148,6 +149,7 @@ describe("fixture profile model Highlight defaults", () => {
 			"color.magenta": 0,
 			"color.yellow": 0,
 			"color.wheel.1": 15,
+			frost: 0,
 			pan: 128,
 		});
 		expect(
@@ -163,6 +165,7 @@ describe("fixture profile model Highlight defaults", () => {
 			"color.yellow": ["color.blue", "invert_normalized"],
 			"color.cold_white": ["color.white", "identity"],
 			"color.warm_white": ["color.amber", "identity"],
+			frost: ["softness", "identity"],
 		});
 	});
 
