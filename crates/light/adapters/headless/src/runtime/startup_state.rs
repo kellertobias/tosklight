@@ -289,12 +289,12 @@ fn application_clock(manual_clock: Option<&Arc<ManualClock>>) -> SharedClock {
 }
 
 fn restore_programmer(programmers: &ProgrammerRegistry, session: light_show::PersistedSession) {
-    let parsed = serde_json::from_str::<serde_json::Value>(&session.programmer_json)
-        .map(|mut value| {
-            migrate_frozen_group_selection(&mut value);
-            value
-        })
-        .and_then(serde_json::from_value::<light_programmer::ProgrammerState>);
+    let parsed = (|| -> anyhow::Result<light_programmer::ProgrammerState> {
+        let mut value = serde_json::from_str::<serde_json::Value>(&session.programmer_json)?;
+        migrate_frozen_group_selection(&mut value);
+        migrate_retired_programmer_attributes(&mut value).map_err(anyhow::Error::msg)?;
+        Ok(serde_json::from_value(value)?)
+    })();
     match parsed {
         Ok(mut programmer) => {
             programmer.connected = false;
@@ -303,6 +303,163 @@ fn restore_programmer(programmers: &ProgrammerRegistry, session: light_show::Per
         Err(error) => {
             tracing::warn!(session_id=%session.id.0, %error, "ignoring invalid persisted programmer")
         }
+    }
+}
+
+/// Normalizes retired canonical identities in durable Programmer and Preload state. This stays a
+/// scoped JSON migration instead of changing `AttributeKey` deserialization globally: fixture
+/// profiles deliberately retain their fixture-facing source identity.
+fn migrate_retired_programmer_attributes(value: &mut serde_json::Value) -> Result<(), String> {
+    let mut migrated = value.clone();
+    migrate_retired_programmer_attributes_in_place(&mut migrated)?;
+    *value = migrated;
+    Ok(())
+}
+
+fn migrate_retired_programmer_attributes_in_place(
+    value: &mut serde_json::Value,
+) -> Result<(), String> {
+    let Some(programmer) = value.as_object_mut() else {
+        return Ok(());
+    };
+    for field in [
+        "values",
+        "dynamic_values",
+        "preload_pending",
+        "preload_active",
+        "preload_dynamic_pending",
+        "preload_dynamic_active",
+    ] {
+        if let Some(values) = programmer
+            .get_mut(field)
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            migrate_programmer_value_records(values, field)?;
+        }
+    }
+    for field in [
+        "group_values",
+        "preload_group_pending",
+        "preload_group_active",
+    ] {
+        if let Some(groups) = programmer
+            .get_mut(field)
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            for (group_id, attributes) in groups {
+                let Some(attributes) = attributes.as_object_mut() else {
+                    continue;
+                };
+                migrate_programmer_attribute_map(attributes, &format!("{field}/{group_id}"))?;
+            }
+        }
+    }
+    for history in ["undo", "redo"] {
+        if let Some(snapshots) = programmer
+            .get_mut(history)
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            for snapshot in snapshots {
+                migrate_retired_programmer_attributes_in_place(snapshot)?;
+            }
+        }
+    }
+    migrate_embedded_programmer_attributes(value, "programmer")?;
+    Ok(())
+}
+
+fn migrate_programmer_value_records(
+    values: &mut [serde_json::Value],
+    path: &str,
+) -> Result<(), String> {
+    let mut legacy = std::collections::HashSet::new();
+    let mut canonical = std::collections::HashSet::new();
+    for (index, value) in values.iter().enumerate() {
+        let Some(body) = value.as_object() else {
+            continue;
+        };
+        let Some(fixture_id) = body.get("fixture_id").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        match body.get("attribute").and_then(serde_json::Value::as_str) {
+            Some("strobe") => {
+                legacy.insert(fixture_id.to_owned());
+            }
+            Some("shutter") => {
+                canonical.insert(fixture_id.to_owned());
+            }
+            _ => continue,
+        }
+        if legacy.contains(fixture_id) && canonical.contains(fixture_id) {
+            return Err(format!(
+                "attribute migration conflict at {path}/{index}: fixture {fixture_id} stores both legacy Strobe and canonical Shutter values"
+            ));
+        }
+    }
+    for value in values {
+        migrate_programmer_attribute_field(value);
+    }
+    Ok(())
+}
+
+fn migrate_programmer_attribute_map(
+    attributes: &mut serde_json::Map<String, serde_json::Value>,
+    path: &str,
+) -> Result<(), String> {
+    if attributes.contains_key("strobe") && attributes.contains_key("shutter") {
+        return Err(format!(
+            "attribute migration conflict at {path}: stored Group values contain both legacy Strobe and canonical Shutter"
+        ));
+    }
+    if let Some(value) = attributes.remove("strobe") {
+        attributes.insert("shutter".into(), value);
+    }
+    Ok(())
+}
+
+fn migrate_embedded_programmer_attributes(
+    value: &mut serde_json::Value,
+    path: &str,
+) -> Result<(), String> {
+    if let Some(body) = value.as_object_mut() {
+        if body.get("target_binding").is_some()
+            && let Some(lanes) = body
+                .get_mut("lanes")
+                .and_then(serde_json::Value::as_array_mut)
+        {
+            let has_legacy = lanes.iter().any(|lane| lane["attribute"] == "strobe");
+            let has_canonical = lanes.iter().any(|lane| lane["attribute"] == "shutter");
+            if has_legacy && has_canonical {
+                return Err(format!(
+                    "attribute migration conflict at {path}/lanes: Dynamic stores both legacy Strobe and canonical Shutter lanes"
+                ));
+            }
+        }
+        if body.get("attribute").and_then(serde_json::Value::as_str) == Some("strobe") {
+            body.insert(
+                "attribute".into(),
+                serde_json::Value::String("shutter".into()),
+            );
+        }
+        for (field, value) in body {
+            migrate_embedded_programmer_attributes(value, &format!("{path}/{field}"))?;
+        }
+    } else if let Some(values) = value.as_array_mut() {
+        for (index, value) in values.iter_mut().enumerate() {
+            migrate_embedded_programmer_attributes(value, &format!("{path}/{index}"))?;
+        }
+    }
+    Ok(())
+}
+
+fn migrate_programmer_attribute_field(value: &mut serde_json::Value) {
+    if let Some(body) = value.as_object_mut()
+        && body.get("attribute").and_then(serde_json::Value::as_str) == Some("strobe")
+    {
+        body.insert(
+            "attribute".into(),
+            serde_json::Value::String("shutter".into()),
+        );
     }
 }
 
@@ -484,7 +641,7 @@ fn create_speed_groups(configuration: &DeskConfiguration) -> Arc<Mutex<[SpeedGro
 
 #[cfg(test)]
 mod tests {
-    use super::migrate_frozen_group_selection;
+    use super::{migrate_frozen_group_selection, migrate_retired_programmer_attributes};
 
     /// Restart recovery of a durable programmer persisted before the DEGRP rework: the removed
     /// `frozen_group` selection expression (top level and inside undo/redo snapshots) must map to
@@ -534,5 +691,90 @@ mod tests {
                 light_core::FixtureId(fixture_b)
             ]
         );
+    }
+
+    #[test]
+    fn retired_strobe_programmer_values_migrate_across_normal_preload_dynamic_and_history_state() {
+        let fixture = uuid::Uuid::new_v4();
+        let mut value = serde_json::json!({
+            "values": [{"fixture_id": fixture, "attribute": "strobe", "value": 0.4}],
+            "dynamic_values": [{
+                "fixture_id": fixture,
+                "attribute": "strobe",
+                "value": {"type": "dynamic_on", "dynamic": {
+                    "embedded_fallback": {"definition": {
+                        "target_binding": {"type": "targetless"},
+                        "lanes": [{
+                            "id": uuid::Uuid::new_v4(),
+                            "attribute": "strobe",
+                            "keyframes": {"points": [{"source": {
+                                "type": "preset", "attribute": "strobe"
+                            }}]}
+                        }],
+                        "phase": {},
+                        "speed": {}
+                    }}
+                }}
+            }],
+            "preload_pending": [{"fixture_id": fixture, "attribute": "strobe"}],
+            "group_values": {"front": {"strobe": {"value": 0.5}}},
+            "preload_group_active": {"front": {"strobe": {"value": 0.6}}},
+            "undo": [{
+                "values": [{"fixture_id": fixture, "attribute": "strobe"}],
+                "group_values": {"front": {"strobe": {"value": 0.3}}}
+            }],
+            "future_programmer": {"kept": true}
+        });
+
+        migrate_retired_programmer_attributes(&mut value).unwrap();
+
+        assert_eq!(value["values"][0]["attribute"], "shutter");
+        assert_eq!(value["dynamic_values"][0]["attribute"], "shutter");
+        assert_eq!(
+            value["dynamic_values"][0]["value"]["dynamic"]["embedded_fallback"]["definition"]["lanes"]
+                [0]["attribute"],
+            "shutter"
+        );
+        assert_eq!(
+            value["dynamic_values"][0]["value"]["dynamic"]["embedded_fallback"]["definition"]["lanes"]
+                [0]["keyframes"]["points"][0]["source"]["attribute"],
+            "shutter"
+        );
+        assert_eq!(value["preload_pending"][0]["attribute"], "shutter");
+        assert_eq!(value["group_values"]["front"]["shutter"]["value"], 0.5);
+        assert_eq!(
+            value["preload_group_active"]["front"]["shutter"]["value"],
+            0.6
+        );
+        assert_eq!(value["undo"][0]["values"][0]["attribute"], "shutter");
+        assert_eq!(
+            value["undo"][0]["group_values"]["front"]["shutter"]["value"],
+            0.3
+        );
+        assert_eq!(
+            value["future_programmer"],
+            serde_json::json!({"kept": true})
+        );
+
+        let once = value.clone();
+        migrate_retired_programmer_attributes(&mut value).unwrap();
+        assert_eq!(value, once, "Programmer migration must be idempotent");
+    }
+
+    #[test]
+    fn retired_strobe_programmer_conflict_preserves_the_original_json() {
+        let fixture = uuid::Uuid::new_v4();
+        let original = serde_json::json!({
+            "values": [
+                {"fixture_id": fixture, "attribute": "strobe"},
+                {"fixture_id": fixture, "attribute": "shutter"}
+            ]
+        });
+        let mut value = original.clone();
+
+        let error = migrate_retired_programmer_attributes(&mut value).unwrap_err();
+
+        assert!(error.contains("attribute migration conflict at values/1"));
+        assert_eq!(value, original);
     }
 }
