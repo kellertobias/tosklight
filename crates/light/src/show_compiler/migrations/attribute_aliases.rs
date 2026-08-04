@@ -3,7 +3,6 @@ use light_show::PortableShowCandidateObject;
 use serde_json::{Map, Value};
 use std::collections::HashSet;
 
-const LEGACY_STROBE: &str = "strobe";
 const CANONICAL_SHUTTER: &str = "shutter";
 
 pub(super) fn migrate(
@@ -76,7 +75,7 @@ fn migrate_attributed_records(
             continue;
         };
         let address = address.to_owned();
-        if attribute == LEGACY_STROBE {
+        if is_legacy_strobe(attribute) {
             legacy_addresses.insert(address.clone());
         } else if attribute == CANONICAL_SHUTTER {
             canonical_addresses.insert(address.clone());
@@ -110,7 +109,7 @@ fn migrate_dynamic_definition(
         let Some(attribute) = lane.get("attribute").and_then(Value::as_str) else {
             continue;
         };
-        has_legacy |= attribute == LEGACY_STROBE;
+        has_legacy |= is_legacy_strobe(attribute);
         has_canonical |= attribute == CANONICAL_SHUTTER;
         if has_legacy && has_canonical {
             return Err(conflict(
@@ -199,10 +198,11 @@ fn migrate_attribute_map_value(
     let Some(values) = values.as_object_mut() else {
         return Ok(());
     };
-    if values.contains_key(LEGACY_STROBE) && values.contains_key(CANONICAL_SHUTTER) {
+    let legacy = values.keys().find(|key| is_legacy_strobe(key)).cloned();
+    if legacy.is_some() && values.contains_key(CANONICAL_SHUTTER) {
         return Err(conflict(object, path, "stored values", CANONICAL_SHUTTER));
     }
-    if let Some(value) = values.remove(LEGACY_STROBE) {
+    if let Some(value) = legacy.and_then(|key| values.remove(&key)) {
         values.insert(CANONICAL_SHUTTER.into(), value);
     }
     Ok(())
@@ -215,9 +215,23 @@ fn migrate_attribute_field(value: &mut Value, field: &str) {
 }
 
 fn migrate_attribute_field_in_map(body: &mut Map<String, Value>, field: &str) {
-    if body.get(field).and_then(Value::as_str) == Some(LEGACY_STROBE) {
+    if body
+        .get(field)
+        .and_then(Value::as_str)
+        .is_some_and(is_legacy_strobe)
+    {
         body.insert(field.into(), Value::String(CANONICAL_SHUTTER.into()));
     }
+}
+
+fn is_legacy_strobe(attribute: &str) -> bool {
+    matches!(
+        light_core::canonical_attribute_migration_id(attribute),
+        Some((
+            CANONICAL_SHUTTER,
+            light_core::CanonicalAttributeTransform::Identity
+        ))
+    )
 }
 
 fn conflict(

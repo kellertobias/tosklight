@@ -88,6 +88,60 @@ mod color_range_tests {
 }
 
 #[cfg(test)]
+mod canonical_migration_tests {
+    use super::*;
+
+    #[test]
+    fn canonical_migration_table_covers_inverse_cmy_and_identity_strobe() {
+        for (source, target) in [
+            ("color.cyan", "color.red"),
+            ("color.magenta", "color.green"),
+            ("color.yellow", "color.blue"),
+        ] {
+            assert_eq!(
+                canonical_attribute_migration(&AttributeKey(source.into())),
+                Some((
+                    AttributeKey(target.into()),
+                    CanonicalAttributeTransform::InvertNormalized
+                ))
+            );
+        }
+        assert_eq!(
+            canonical_attribute_migration(&AttributeKey("strobe".into())),
+            Some((
+                AttributeKey("shutter".into()),
+                CanonicalAttributeTransform::Identity
+            ))
+        );
+        assert_eq!(
+            canonical_attribute_migration(&AttributeKey("vendor.strobe".into())),
+            None,
+            "custom identities never migrate by label"
+        );
+    }
+
+    #[test]
+    fn inverse_transform_handles_scalar_and_spread_values_without_double_inversion() {
+        let mut scalar = AttributeValue::Normalized(0.2);
+        transform_canonical_value(&mut scalar, CanonicalAttributeTransform::InvertNormalized)
+            .unwrap();
+        assert_eq!(scalar, AttributeValue::Normalized(0.8));
+
+        let mut spread = AttributeValue::Spread(vec![0.0, 0.25, 1.0]);
+        transform_canonical_value(&mut spread, CanonicalAttributeTransform::InvertNormalized)
+            .unwrap();
+        assert_eq!(spread, AttributeValue::Spread(vec![1.0, 0.75, 0.0]));
+
+        let mut discrete = AttributeValue::Discrete("open".into());
+        assert!(
+            transform_canonical_value(&mut discrete, CanonicalAttributeTransform::InvertNormalized)
+                .is_err()
+        );
+        assert_eq!(discrete, AttributeValue::Discrete("open".into()));
+    }
+}
+
+#[cfg(test)]
 mod spread_tests {
     use super::{resolve_spread, spread_position};
 

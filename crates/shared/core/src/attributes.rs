@@ -331,6 +331,70 @@ pub enum AttributeValue {
     RawDmxExact(u32),
 }
 
+/// Versioned canonical identity migration used at fixture and persisted-value boundaries. Source
+/// fixture identities remain untouched; only their canonical projection and stored desk/show
+/// values use this table.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CanonicalAttributeTransform {
+    Identity,
+    InvertNormalized,
+}
+
+pub fn canonical_attribute_migration(
+    attribute: &AttributeKey,
+) -> Option<(AttributeKey, CanonicalAttributeTransform)> {
+    canonical_attribute_migration_id(attribute.0.as_str())
+        .map(|(canonical, transform)| (AttributeKey(canonical.into()), transform))
+}
+
+pub fn canonical_attribute_migration_id(
+    attribute: &str,
+) -> Option<(&'static str, CanonicalAttributeTransform)> {
+    let migration = match attribute {
+        "color.cyan" => ("color.red", CanonicalAttributeTransform::InvertNormalized),
+        "color.magenta" => ("color.green", CanonicalAttributeTransform::InvertNormalized),
+        "color.yellow" => ("color.blue", CanonicalAttributeTransform::InvertNormalized),
+        "strobe" => ("shutter", CanonicalAttributeTransform::Identity),
+        _ => return None,
+    };
+    Some(migration)
+}
+
+pub fn transform_canonical_normalized(value: f32, transform: CanonicalAttributeTransform) -> f32 {
+    match transform {
+        CanonicalAttributeTransform::Identity => value,
+        CanonicalAttributeTransform::InvertNormalized => 1.0 - value,
+    }
+}
+
+pub fn transform_canonical_value(
+    value: &mut AttributeValue,
+    transform: CanonicalAttributeTransform,
+) -> Result<(), &'static str> {
+    match (transform, value) {
+        (CanonicalAttributeTransform::Identity, _) => Ok(()),
+        (CanonicalAttributeTransform::InvertNormalized, AttributeValue::Normalized(value)) => {
+            *value = transform_canonical_normalized(
+                *value,
+                CanonicalAttributeTransform::InvertNormalized,
+            );
+            Ok(())
+        }
+        (CanonicalAttributeTransform::InvertNormalized, AttributeValue::Spread(values)) => {
+            for value in values {
+                *value = transform_canonical_normalized(
+                    *value,
+                    CanonicalAttributeTransform::InvertNormalized,
+                );
+            }
+            Ok(())
+        }
+        (CanonicalAttributeTransform::InvertNormalized, _) => {
+            Err("inverse canonical migration requires a normalized or spread value")
+        }
+    }
+}
+
 // @tour value-spreading:30 Resolve control points over selection order
 // This deterministic anchor and interpolation rule is the semantic oracle shared by live Group
 // recall, frozen values, and ordinary ordered selections.

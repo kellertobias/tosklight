@@ -52,11 +52,16 @@ pub enum CanonicalTransform {
 pub(super) fn legacy_canonical_mapping(
     attribute: &AttributeKey,
 ) -> Option<(AttributeKey, CanonicalTransform)> {
+    if let Some((canonical, transform)) = light_core::canonical_attribute_migration(attribute) {
+        let transform = match transform {
+            light_core::CanonicalAttributeTransform::Identity => CanonicalTransform::Identity,
+            light_core::CanonicalAttributeTransform::InvertNormalized => {
+                CanonicalTransform::InvertNormalized
+            }
+        };
+        return Some((canonical, transform));
+    }
     let (canonical, transform) = match attribute.0.as_str() {
-        "color.cyan" => ("color.red", CanonicalTransform::InvertNormalized),
-        "color.magenta" => ("color.green", CanonicalTransform::InvertNormalized),
-        "color.yellow" => ("color.blue", CanonicalTransform::InvertNormalized),
-        "strobe" => ("shutter", CanonicalTransform::Identity),
         "fog" => ("intensity", CanonicalTransform::Identity),
         "media.volume" => ("volume", CanonicalTransform::Identity),
         "fixture.tint" => ("color.tint", CanonicalTransform::Identity),

@@ -382,7 +382,7 @@ fn migrate_programmer_value_records(
             continue;
         };
         match body.get("attribute").and_then(serde_json::Value::as_str) {
-            Some("strobe") => {
+            Some(attribute) if is_legacy_strobe_attribute(attribute) => {
                 legacy.insert(fixture_id.to_owned());
             }
             Some("shutter") => {
@@ -406,12 +406,16 @@ fn migrate_programmer_attribute_map(
     attributes: &mut serde_json::Map<String, serde_json::Value>,
     path: &str,
 ) -> Result<(), String> {
-    if attributes.contains_key("strobe") && attributes.contains_key("shutter") {
+    let legacy = attributes
+        .keys()
+        .find(|attribute| is_legacy_strobe_attribute(attribute))
+        .cloned();
+    if legacy.is_some() && attributes.contains_key("shutter") {
         return Err(format!(
             "attribute migration conflict at {path}: stored Group values contain both legacy Strobe and canonical Shutter"
         ));
     }
-    if let Some(value) = attributes.remove("strobe") {
+    if let Some(value) = legacy.and_then(|attribute| attributes.remove(&attribute)) {
         attributes.insert("shutter".into(), value);
     }
     Ok(())
@@ -427,7 +431,11 @@ fn migrate_embedded_programmer_attributes(
                 .get_mut("lanes")
                 .and_then(serde_json::Value::as_array_mut)
         {
-            let has_legacy = lanes.iter().any(|lane| lane["attribute"] == "strobe");
+            let has_legacy = lanes.iter().any(|lane| {
+                lane.get("attribute")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(is_legacy_strobe_attribute)
+            });
             let has_canonical = lanes.iter().any(|lane| lane["attribute"] == "shutter");
             if has_legacy && has_canonical {
                 return Err(format!(
@@ -435,7 +443,11 @@ fn migrate_embedded_programmer_attributes(
                 ));
             }
         }
-        if body.get("attribute").and_then(serde_json::Value::as_str) == Some("strobe") {
+        if body
+            .get("attribute")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(is_legacy_strobe_attribute)
+        {
             body.insert(
                 "attribute".into(),
                 serde_json::Value::String("shutter".into()),
@@ -454,13 +466,23 @@ fn migrate_embedded_programmer_attributes(
 
 fn migrate_programmer_attribute_field(value: &mut serde_json::Value) {
     if let Some(body) = value.as_object_mut()
-        && body.get("attribute").and_then(serde_json::Value::as_str) == Some("strobe")
+        && body
+            .get("attribute")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(is_legacy_strobe_attribute)
     {
         body.insert(
             "attribute".into(),
             serde_json::Value::String("shutter".into()),
         );
     }
+}
+
+fn is_legacy_strobe_attribute(attribute: &str) -> bool {
+    matches!(
+        light_core::canonical_attribute_migration_id(attribute),
+        Some(("shutter", light_core::CanonicalAttributeTransform::Identity))
+    )
 }
 
 /// Programmers persisted before the DEGRP rework may carry the removed `frozen_group` selection
