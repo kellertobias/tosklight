@@ -474,6 +474,27 @@ impl InstallationResource {
             .collect()
     }
 
+    pub(in crate::runtime) fn fixture_source_mapping_preferences(
+        &self,
+    ) -> Result<Vec<light_fixture::FixtureSourceMappingPreference>, light_fixture::FixtureError>
+    {
+        self.fixture_library.lock().source_mapping_preferences()
+    }
+
+    pub(in crate::runtime) fn set_fixture_source_mapping_preference(
+        &self,
+        source_format: &str,
+        source_attribute: &str,
+        target_attribute: Option<&str>,
+    ) -> Result<Option<light_fixture::FixtureSourceMappingPreference>, light_fixture::FixtureError>
+    {
+        self.fixture_library.lock().set_source_mapping_preference(
+            source_format,
+            source_attribute,
+            target_attribute,
+        )
+    }
+
     pub(in crate::runtime) fn save_fixture_profile(
         &self,
         profile: light_fixture::FixtureProfile,

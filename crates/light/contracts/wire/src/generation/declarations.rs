@@ -305,6 +305,8 @@ fn fixture_library(config: &Config) -> Vec<String> {
         FixtureLibraryActionRequest::decl(config),
         FixtureLibraryAction::decl(config),
         FixtureAttributeMapping::decl(config),
+        FixtureSourceMapping::decl(config),
+        FixtureSourceMappingsSnapshot::decl(config),
         FixtureImportRequirement::decl(config),
         FixtureLibraryActionOutcome::decl(config),
         FixtureLibraryActionResult::decl(config),

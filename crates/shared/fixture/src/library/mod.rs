@@ -1,8 +1,10 @@
+mod attribute_mapping;
 mod gel_catalog;
 mod migration;
 mod package_io;
 mod profiles;
 
+pub use attribute_mapping::*;
 pub use gel_catalog::*;
 
 use crate::FixtureError;
@@ -43,6 +45,7 @@ impl FixtureLibrary {
              CREATE TABLE IF NOT EXISTS fixture_library_warnings(id INTEGER PRIMARY KEY AUTOINCREMENT,message TEXT NOT NULL UNIQUE);
              CREATE TABLE IF NOT EXISTS library_metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
              CREATE TABLE IF NOT EXISTS fixture_package_installations(package_path TEXT PRIMARY KEY,package_digest TEXT NOT NULL,profile_id TEXT NOT NULL,installed_revision INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS fixture_attribute_mapping_preferences(source_format TEXT NOT NULL,source_attribute TEXT NOT NULL,target_attribute TEXT NOT NULL,PRIMARY KEY(source_format,source_attribute));
              CREATE TABLE IF NOT EXISTS gel_catalogs(id TEXT PRIMARY KEY,name TEXT NOT NULL,revision INTEGER NOT NULL);
              CREATE TABLE IF NOT EXISTS gel_catalog_entries(catalog_id TEXT NOT NULL,entry_id TEXT NOT NULL,number TEXT NOT NULL,name TEXT NOT NULL,display_srgb TEXT NOT NULL,visualizer_srgb TEXT NOT NULL,sort_order INTEGER NOT NULL,PRIMARY KEY(catalog_id,entry_id),UNIQUE(catalog_id,number),FOREIGN KEY(catalog_id) REFERENCES gel_catalogs(id) ON DELETE CASCADE);",
         )?;

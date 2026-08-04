@@ -164,6 +164,87 @@ async fn gel_catalog_csv_preview_confirm_replay_and_search_are_typed() {
 }
 
 #[tokio::test]
+async fn fixture_source_mapping_preferences_are_typed_replay_safe_and_installation_local() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let remember = serde_json::json!({
+        "request_id": "remember-gdtf-gobo",
+        "action": {
+            "type": "remember_source_mapping",
+            "source_format": "GDTF",
+            "source_attribute": "Gobo",
+            "target_attribute": "gobo.1"
+        }
+    });
+
+    for replayed in [false, true] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v2/fixture-library")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(remember.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let outcome = json(response).await;
+        assert_eq!(outcome["replayed"], replayed);
+        assert_eq!(outcome["result"]["mapping"]["source_format"], "gdtf");
+        assert_eq!(outcome["result"]["mapping"]["source_attribute"], "Gobo");
+        assert_eq!(outcome["result"]["mapping"]["target_attribute"], "gobo.1");
+    }
+
+    let snapshot = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v2/fixture-library/source-mappings")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(snapshot.status(), StatusCode::OK);
+    assert_eq!(
+        json(snapshot).await["mappings"],
+        serde_json::json!([{
+            "source_format": "gdtf",
+            "source_attribute": "Gobo",
+            "target_attribute": "gobo.1"
+        }])
+    );
+
+    let invalid = app
+        .oneshot(
+            Request::post("/api/v2/fixture-library")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": "remember-unknown-target",
+                        "action": {
+                            "type": "remember_source_mapping",
+                            "source_format": "gdtf",
+                            "source_attribute": "Mystery",
+                            "target_attribute": "missing.attribute"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

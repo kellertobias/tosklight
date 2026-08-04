@@ -267,3 +267,40 @@ fn transferable_package_retires_matching_unmarked_legacy_generic_rows() {
     drop(library);
     let _ = fs::remove_dir_all(root);
 }
+
+#[test]
+fn source_mapping_preferences_are_installation_local_and_replaceable() {
+    let root = std::env::temp_dir().join(format!("fixture-source-mappings-{}", Uuid::new_v4()));
+    fs::create_dir_all(&root).unwrap();
+    let database_path = root.join("fixtures.sqlite");
+    let library = FixtureLibrary::open(&database_path).unwrap();
+
+    assert_eq!(library.source_mapping_preferences().unwrap(), vec![]);
+    library
+        .set_source_mapping_preference("gdtf", "Gobo", Some("gobo.1"))
+        .unwrap();
+    library
+        .set_source_mapping_preference("gdtf", "Gobo", Some("gobo.2"))
+        .unwrap();
+    assert_eq!(
+        library.source_mapping_preferences().unwrap(),
+        vec![FixtureSourceMappingPreference {
+            source_format: "gdtf".into(),
+            source_attribute: "Gobo".into(),
+            target_attribute: "gobo.2".into(),
+        }]
+    );
+    drop(library);
+
+    let reopened = FixtureLibrary::open(&database_path).unwrap();
+    assert_eq!(reopened.source_mapping_preferences().unwrap().len(), 1);
+    assert_eq!(
+        reopened
+            .set_source_mapping_preference("gdtf", "Gobo", None)
+            .unwrap(),
+        None
+    );
+    assert!(reopened.source_mapping_preferences().unwrap().is_empty());
+    drop(reopened);
+    let _ = fs::remove_dir_all(root);
+}

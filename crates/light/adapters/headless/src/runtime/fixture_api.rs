@@ -21,6 +21,10 @@ pub(super) fn router() -> Router<AppState> {
             get(fixture_library_warnings_snapshot),
         )
         .route(
+            "/api/v2/fixture-library/source-mappings",
+            get(fixture_source_mappings_snapshot),
+        )
+        .route(
             "/api/v2/fixture-library/profiles/{id}/revisions",
             get(fixture_profile_revisions),
         )
@@ -207,6 +211,21 @@ async fn fixture_library_warnings_snapshot(
     }))
 }
 
+async fn fixture_source_mappings_snapshot(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<wire::FixtureSourceMappingsSnapshot>, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    let mappings = state
+        .installation
+        .fixture_source_mapping_preferences()
+        .map_err(ApiError::fixture)?
+        .into_iter()
+        .map(fixture_source_mapping)
+        .collect();
+    Ok(Json(wire::FixtureSourceMappingsSnapshot { mappings }))
+}
+
 async fn fixture_profile_revisions(
     State(state): State<AppState>,
     Path(id): Path<light_core::FixtureId>,
@@ -315,6 +334,11 @@ fn execute_action(
                 revision,
             })
         }
+        Action::RememberSourceMapping {
+            source_format,
+            source_attribute,
+            target_attribute,
+        } => remember_source_mapping(state, source_format, source_attribute, target_attribute),
         Action::SaveDefinition { definition } => {
             let definition: light_fixture::FixtureDefinition =
                 serde_json::from_value(definition)
@@ -356,6 +380,88 @@ fn execute_action(
                 revision,
             })
         }
+    }
+}
+
+fn remember_source_mapping(
+    state: &AppState,
+    source_format: String,
+    source_attribute: String,
+    target_attribute: Option<String>,
+) -> Result<wire::FixtureLibraryActionResult, ApiError> {
+    let source_format = source_format.trim().to_ascii_lowercase();
+    let source_attribute = source_attribute.trim();
+    if source_format.is_empty()
+        || source_format.len() > 32
+        || !source_format
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+    {
+        return Err(ApiError::bad_request(
+            "source format must contain 1-32 ASCII letters, numbers, hyphens, or underscores",
+        ));
+    }
+    if source_attribute.is_empty()
+        || source_attribute.len() > 256
+        || source_attribute.chars().any(char::is_control)
+    {
+        return Err(ApiError::bad_request(
+            "source attribute must contain 1-256 printable bytes",
+        ));
+    }
+    if let Some(target) = target_attribute.as_deref() {
+        validate_source_mapping_target(state, target)?;
+    }
+    let mapping = state
+        .installation
+        .set_fixture_source_mapping_preference(
+            &source_format,
+            source_attribute,
+            target_attribute.as_deref(),
+        )
+        .map_err(ApiError::fixture)?
+        .map(fixture_source_mapping);
+    emit(
+        state,
+        "fixture_source_mapping_changed",
+        serde_json::json!({"source_format":source_format,"source_attribute":source_attribute,"target_attribute":target_attribute}),
+    );
+    Ok(wire::FixtureLibraryActionResult::SourceMapping { mapping })
+}
+
+fn validate_source_mapping_target(state: &AppState, target: &str) -> Result<(), ApiError> {
+    if light_core::ATTRIBUTE_REGISTRY
+        .iter()
+        .any(|descriptor| descriptor.id == target)
+    {
+        return Ok(());
+    }
+    let installed = state.attributes.snapshot();
+    let custom = installed
+        .configuration
+        .custom_attributes
+        .iter()
+        .find(|descriptor| descriptor.id.0 == target)
+        .ok_or_else(|| {
+            ApiError::bad_request(format!(
+                "source mapping target `{target}` is not configured"
+            ))
+        })?;
+    if custom.lifecycle == light_core::CustomAttributeLifecycle::Retired {
+        return Err(ApiError::bad_request(format!(
+            "source mapping target `{target}` is retired"
+        )));
+    }
+    Ok(())
+}
+
+fn fixture_source_mapping(
+    mapping: light_fixture::FixtureSourceMappingPreference,
+) -> wire::FixtureSourceMapping {
+    wire::FixtureSourceMapping {
+        source_format: mapping.source_format,
+        source_attribute: mapping.source_attribute,
+        target_attribute: mapping.target_attribute,
     }
 }
 

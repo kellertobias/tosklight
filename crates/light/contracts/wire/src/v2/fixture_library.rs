@@ -168,6 +168,11 @@ pub enum FixtureLibraryAction {
         revision: u32,
         source_base64: String,
     },
+    RememberSourceMapping {
+        source_format: String,
+        source_attribute: String,
+        target_attribute: Option<String>,
+    },
     SaveDefinition {
         #[ts(type = "unknown")]
         definition: Value,
@@ -189,6 +194,18 @@ pub struct FixtureLibraryActionOutcome {
 pub struct FixtureAttributeMapping {
     pub source_attribute: String,
     pub target_attribute: String,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureSourceMapping {
+    pub source_format: String,
+    pub source_attribute: String,
+    pub target_attribute: String,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureSourceMappingsSnapshot {
+    pub mappings: Vec<FixtureSourceMapping>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -216,6 +233,9 @@ pub enum FixtureLibraryActionResult {
     GdtfAttached {
         profile_id: Uuid,
         revision: u32,
+    },
+    SourceMapping {
+        mapping: Option<FixtureSourceMapping>,
     },
     ImportRequired {
         unknown_attributes: Vec<FixtureImportRequirement>,
