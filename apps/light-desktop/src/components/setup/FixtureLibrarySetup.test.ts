@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { importGdtfData, parseHeadDrafts } from "./FixtureLibrarySetup";
+import { fixtureAttributeName } from "./fixtureLibrary/definitions";
 import { fixtureProfileFromDefinition } from "./fixtureProfileModel";
 
 describe("fixture library editor", () => {
+  it("maps physical strobe into the canonical Shutter / Strobe control", () => {
+    expect(fixtureAttributeName("Strobe")).toBe("shutter");
+  });
+
   it("builds sequential multi-head channels with physical and gobo metadata", () => {
     const result = parseHeadDrafts([
       { name: "Master", master: true, channels: "dimmer,pan:16[-270,270,deg]" },

@@ -343,6 +343,30 @@ fn schema_v2_cmy_channels_migrate_to_inverted_canonical_rgb_without_losing_ident
 }
 
 #[test]
+fn schema_v2_strobe_migrates_to_canonical_shutter_without_losing_identity() {
+    let mut profile = FixtureProfile::blank();
+    profile.schema_version = 2;
+    let mode = &mut profile.modes[0];
+    mode.splits[0].footprint = 1;
+    let mut strobe = channel(mode.heads[0].id, ChannelResolution::U8, vec![]);
+    strobe.fixture_attribute = AttributeKey("strobe".into());
+    strobe.attribute = AttributeKey("strobe".into());
+    strobe.functions[0].attribute = AttributeKey("strobe".into());
+    mode.channels = vec![strobe];
+    let mut encoded = serde_json::to_value(profile).unwrap();
+    encoded["modes"][0]["channels"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("fixture_attribute");
+    let migrated: FixtureProfile = serde_json::from_value(encoded).unwrap();
+    let channel = &migrated.modes[0].channels[0];
+    assert_eq!(channel.fixture_attribute.0, "strobe");
+    assert_eq!(channel.attribute.0, "shutter");
+    assert_eq!(channel.canonical_transform, CanonicalTransform::Identity);
+    assert_eq!(channel.functions[0].attribute.0, "shutter");
+}
+
+#[test]
 fn schema_v2_named_aliases_are_limited_to_documented_unambiguous_mappings() {
     for (legacy, canonical) in [
         ("fog", "intensity"),

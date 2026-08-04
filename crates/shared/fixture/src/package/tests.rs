@@ -497,6 +497,31 @@ fn shipped_native_hsi_modes_bind_their_physical_coordinates_and_highlight_white(
 }
 
 #[test]
+fn shipped_strobe_channels_keep_fixture_identity_and_program_canonical_shutter() {
+    for filename in ["generic--strobe.toskfixture", "generic--laser.toskfixture"] {
+        let profile = shipped_profile(filename);
+        let channels = profile
+            .modes
+            .iter()
+            .flat_map(|mode| &mode.channels)
+            .filter(|channel| channel.fixture_attribute.0 == "strobe")
+            .collect::<Vec<_>>();
+        assert!(
+            !channels.is_empty(),
+            "{filename} must retain physical strobe"
+        );
+        assert!(channels.iter().all(|channel| {
+            channel.attribute.0 == "shutter"
+                && channel.canonical_transform == CanonicalTransform::Identity
+                && channel
+                    .functions
+                    .iter()
+                    .all(|function| function.attribute.0 == "shutter")
+        }));
+    }
+}
+
+#[test]
 fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
@@ -544,7 +569,6 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
             }
             for channel in &mode.channels {
                 for attribute in std::iter::once(&channel.attribute)
-                    .chain(std::iter::once(&channel.fixture_attribute))
                     .chain(channel.functions.iter().map(|function| &function.attribute))
                 {
                     if light_core::built_in_attribute_is_retired(&attribute.0) {
@@ -553,6 +577,14 @@ fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit()
                             profile.name, mode.name, attribute.0
                         ));
                     }
+                }
+                if channel.fixture_attribute == channel.attribute
+                    && light_core::built_in_attribute_is_retired(&channel.fixture_attribute.0)
+                {
+                    retired_placeholder_attributes.push(format!(
+                        "{} / {} / {}",
+                        profile.name, mode.name, channel.fixture_attribute.0
+                    ));
                 }
                 if matches!(
                     channel.attribute.0.as_str(),

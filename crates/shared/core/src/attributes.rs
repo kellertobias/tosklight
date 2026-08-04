@@ -99,6 +99,7 @@ pub const RETIRED_BUILT_IN_ATTRIBUTES: &[&str] = &[
     "tilt.time",
     "shaper.keystone.x",
     "shaper.keystone.y",
+    "strobe",
 ];
 
 pub fn built_in_attribute_is_retired(attribute: &str) -> bool {

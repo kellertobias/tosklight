@@ -56,6 +56,7 @@ pub(super) fn legacy_canonical_mapping(
         "color.cyan" => ("color.red", CanonicalTransform::InvertNormalized),
         "color.magenta" => ("color.green", CanonicalTransform::InvertNormalized),
         "color.yellow" => ("color.blue", CanonicalTransform::InvertNormalized),
+        "strobe" => ("shutter", CanonicalTransform::Identity),
         "fog" => ("intensity", CanonicalTransform::Identity),
         "media.volume" => ("volume", CanonicalTransform::Identity),
         "fixture.tint" => ("color.tint", CanonicalTransform::Identity),

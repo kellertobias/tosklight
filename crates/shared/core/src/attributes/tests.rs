@@ -453,6 +453,28 @@ mod attribute_registry_tests {
     }
 
     #[test]
+    fn retired_strobe_keeps_an_explicit_old_show_placement() {
+        let mut legacy = AttributeConfiguration::recommended();
+        legacy.placements.push(AttributePlacement {
+            attribute: AttributeKey("strobe".into()),
+            encoder: EncoderPlacement::new(EncoderGroup::Intensity, 99, 1),
+            push_turn_of: None,
+        });
+        legacy.activation_groups.push(AttributeActivationGroup {
+            id: "legacy.strobe".into(),
+            label: "Legacy Strobe".into(),
+            members: vec![AttributeKey("strobe".into())],
+        });
+
+        let upgraded = legacy.with_current_built_ins();
+        upgraded.validate().unwrap();
+        assert_eq!(
+            upgraded.placement_for(&AttributeKey("strobe".into())),
+            Some(EncoderPlacement::new(EncoderGroup::Intensity, 99, 1))
+        );
+    }
+
+    #[test]
     fn prism_and_animation_rotations_are_validated_push_turn_companions() {
         let recommended = AttributeConfiguration::recommended();
         for (companion, parent) in [

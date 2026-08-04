@@ -1,5 +1,5 @@
 export const parameterFamilies = {
-	Intensity: ["intensity", "shutter", "strobe", "master"],
+	Intensity: ["intensity", "shutter", "master"],
 	Color: [
 		"color.red",
 		"color.green",
@@ -48,8 +48,7 @@ export const compactFamilyLabels: Record<ParameterFamily, string> = {
 
 export const parameterLabels: Record<string, string> = {
 	intensity: "Dimmer",
-	shutter: "Shutter",
-	strobe: "Strobe",
+	shutter: "Shutter / Strobe",
 	master: "Master",
 	pan: "Pan",
 	tilt: "Tilt",

@@ -71,6 +71,7 @@ export function fixtureAttributeName(value: string) {
 		"color.hsb_hue": "color.hue",
 		"color.hsb_saturation": "color.saturation",
 		"color.hsb_brightness": "color.brightness",
+		strobe: "shutter",
 	};
 	const wheel = normalized.match(/^color(?:\.wheel)?_?(\d+)$/);
 	return (

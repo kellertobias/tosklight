@@ -499,7 +499,7 @@ pub const ATTRIBUTE_REGISTRY: &[AttributeDescriptor] = &[
         AttributeClass::Intensity,
         "percent",
     ),
-    indexed("shutter", "Shutter", AttributeClass::Intensity),
+    indexed("shutter", "Shutter / Strobe", AttributeClass::Intensity),
     continuous("strobe", "Strobe", AttributeClass::Intensity, "hz"),
     continuous("volume", "Volume", AttributeClass::Intensity, "percent"),
     color("color", "Color", AttributeClass::Color),
