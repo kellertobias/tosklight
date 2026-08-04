@@ -99,8 +99,8 @@ active attribute-group button cycles **Group 1 of N**, **Group 2 of N**, and so 
 | Color | P1/E4 | `color.white` | **White** (`color.white`) | Color Mix |
 | Color | P1/E5 | `color.amber` | **Amber** (`color.amber`) | Color Mix |
 | Color | P1/E6 | `color.uv` | **UV** (`color.uv`) | Color Mix |
-| Color | P2/E1 | `color.cold_white` | **Cold White** (`color.cold_white`) | Color Mix |
-| Color | P2/E2 | `color.warm_white` | **Warm White** (`color.warm_white`) | Color Mix |
+| Color | P1/E4 | `color.white` | **Cold White** (`color.cold_white`), identity-mapped while retaining its physical channel name | Color Mix |
+| Color | P1/E5 | `color.amber` | **Warm White** (`color.warm_white`), identity-mapped while retaining its physical channel name | Color Mix |
 | Color | P2/E3 | `color.lime` | **Lime** (`color.lime`) | Color Mix |
 | Color | P2/E4 | `color.indigo` | **Indigo** (`color.indigo`) | Color Mix |
 | Color | P2/E5 | `color.mint` | **Mint** (`color.mint`) | Color Mix |
@@ -189,6 +189,12 @@ The profile retains the physical Cyan, Magenta, and Yellow channel identities an
 authored raw ranges, while programmer state, Presets, Cues, feedback, Highlight, and
 Stage use the canonical RGB result.
 
+Cold White and Warm White likewise remain the fixture-facing identities of their physical
+channels, but they program canonical White and Amber respectively. Existing show values and Desk
+Setup placements migrate to those canonical controls. A fixture profile cannot map a separate
+White plus Cold White channel, or a separate Amber plus Warm White channel, on the same logical
+head and split: that collision must be resolved by a narrower custom descriptor or another head.
+
 Lamp On, Lamp Off, Reset, Fan Auto, Fan Low, Fan High, and Fan Max already exist as typed control-action meanings. They are actions, not ordinary recordable continuous attributes.
 
 ## Semantic special values
@@ -239,7 +245,8 @@ project to the canonical IDs in the table above. Existing Programmer, Preset, Cu
 data remains byte-for-byte portable: the renderer accepts an old fixture-facing value as a fallback
 until a canonical value for that channel exists. For CMY, that fallback retains the old physical
 filtration amount, while new Red, Green, and Blue values use the inverted canonical mapping. An
-ambiguous legacy name stays an identity mapping instead of being guessed.
+old Cold White or Warm White value keeps the same normalized amount as canonical White or Amber.
+An ambiguous legacy name stays an identity mapping instead of being guessed.
 
 ## Recommended activation groups
 
@@ -248,7 +255,7 @@ Activation groups decide which supported attributes become active together when 
 | Example group | Suggested members | Reason |
 |---|---|---|
 | Position | `pan`, `tilt` | A Cue that moves one axis usually needs a complete position. |
-| Color Mix | `color`, canonical Red, Green, Blue, Amber, White, UV, Cold White, Warm White, Lime, Indigo, Mint, Color Temperature, and Tint | Captures the complete supported mixed-color and white-point state. Physical CMY channels participate through their inverted RGB mappings instead of forming another group. |
+| Color Mix | `color`, canonical Red, Green, Blue, Amber, White, UV, Lime, Indigo, Mint, Color Temperature, and Tint | Captures the complete supported mixed-color and white-point state. Physical CMY channels participate through their inverted RGB mappings; physical Cold White and Warm White channels participate through White and Amber. |
 | Color Wheel | Color Wheel 1/2 and their applicable rotation attributes | Keeps authored wheel selection/rotation coherent without activating the fixture's mixed-color channels. |
 | Media source | `media.folder`, `media.file` | Prevents a new folder from being stored with an absent or unrelated file. |
 | Media mask source | `media.mask.folder`, `media.mask.file` | Keeps a mask address coherent for the same reason. |

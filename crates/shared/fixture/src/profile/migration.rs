@@ -158,10 +158,17 @@ impl FixtureMode {
                     }
                 };
                 let max = resolution.max_raw();
-                let attribute = parameter.attribute.clone();
+                let fixture_attribute = parameter.attribute.clone();
+                let (attribute, canonical_transform) =
+                    super::legacy_canonical_mapping(&fixture_attribute).unwrap_or_else(|| {
+                        (
+                            fixture_attribute.clone(),
+                            super::CanonicalTransform::Identity,
+                        )
+                    });
                 let default_raw = (parameter.default.clamp(0.0, 1.0) * max as f32).round() as u32;
                 let highlight_raw = semantic_highlight_raw(
-                    &attribute,
+                    &fixture_attribute,
                     resolution,
                     default_raw,
                     parameter.metadata.invert,
@@ -174,9 +181,9 @@ impl FixtureMode {
                     )),
                     head_id: heads[head_index].id,
                     split: 1,
-                    fixture_attribute: attribute.clone(),
+                    fixture_attribute: fixture_attribute.clone(),
                     attribute: attribute.clone(),
-                    canonical_transform: super::CanonicalTransform::Identity,
+                    canonical_transform,
                     resolution,
                     secondary_slots: parameter
                         .components

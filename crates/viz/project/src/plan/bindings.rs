@@ -7,7 +7,9 @@
 use super::{ChannelRef, ColourBinding, EmitterBinding, PhysicalInstance, millimetres};
 use glam::Vec3;
 use light_core::AttributeKey;
-use light_fixture::{EmitterLayout, FixtureChannel, FixtureMode, GeometryEmitter};
+use light_fixture::{
+    CanonicalTransform, EmitterLayout, FixtureChannel, FixtureMode, GeometryEmitter,
+};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -71,7 +73,14 @@ pub(super) fn build_binding(
         // A hazer, for example, exposes its fog output as canonical `intensity` while keeping
         // `fog` as its fixture attribute, so both have to be consulted.
         assign(&mut binding, &channel.attribute, reference);
-        if channel.fixture_attribute != channel.attribute {
+        let canonical_identity_alias = channel.canonical_transform == CanonicalTransform::Identity
+            && light_core::canonical_attribute_migration(&channel.fixture_attribute).is_some_and(
+                |(canonical, transform)| {
+                    canonical == channel.attribute
+                        && transform == light_core::CanonicalAttributeTransform::Identity
+                },
+            );
+        if channel.fixture_attribute != channel.attribute && !canonical_identity_alias {
             assign(&mut binding, &channel.fixture_attribute, reference);
         }
     }

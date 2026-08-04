@@ -414,6 +414,44 @@ fn shipped_generic_cmy_retains_fixture_identity_and_maps_into_canonical_rgb() {
 }
 
 #[test]
+fn shipped_cct_emitters_retain_physical_identity_and_map_to_white_and_amber() {
+    for filename in [
+        "generic--cct-led.toskfixture",
+        "generic--rgbcct-led.toskfixture",
+    ] {
+        let profile = shipped_profile(filename);
+        for mode in &profile.modes {
+            for (fixture_attribute, canonical) in [
+                ("color.cold_white", "color.white"),
+                ("color.warm_white", "color.amber"),
+            ] {
+                let channels = mode
+                    .channels
+                    .iter()
+                    .filter(|channel| channel.fixture_attribute.0 == fixture_attribute)
+                    .collect::<Vec<_>>();
+                assert_eq!(channels.len(), 1, "{filename} / {}", mode.name);
+                let channel = channels[0];
+                assert_eq!(channel.attribute.0, canonical);
+                assert_eq!(channel.canonical_transform, CanonicalTransform::Identity);
+                assert!(
+                    channel
+                        .functions
+                        .iter()
+                        .all(|function| function.attribute.0 == canonical)
+                );
+            }
+            assert!(
+                mode.channels
+                    .iter()
+                    .all(|channel| channel.attribute.0 != "color.cold_white"
+                        && channel.attribute.0 != "color.warm_white")
+            );
+        }
+    }
+}
+
+#[test]
 fn shipped_native_hsi_modes_bind_their_physical_coordinates_and_highlight_white() {
     let expected = [
         (

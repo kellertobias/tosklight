@@ -92,7 +92,9 @@ pub const RETIRED_BUILT_IN_ATTRIBUTES: &[&str] = &[
     "control.mode",
     "control.speed",
     "color.cyan",
+    "color.cold_white",
     "color.magenta",
+    "color.warm_white",
     "color.yellow",
     "media.effect.1",
     "media.effect.2",
@@ -365,6 +367,8 @@ pub fn canonical_attribute_migration_id(
         "color.cyan" => ("color.red", CanonicalAttributeTransform::InvertNormalized),
         "color.magenta" => ("color.green", CanonicalAttributeTransform::InvertNormalized),
         "color.yellow" => ("color.blue", CanonicalAttributeTransform::InvertNormalized),
+        "color.cold_white" => ("color.white", CanonicalAttributeTransform::Identity),
+        "color.warm_white" => ("color.amber", CanonicalAttributeTransform::Identity),
         "strobe" => ("shutter", CanonicalAttributeTransform::Identity),
         _ => return None,
     };

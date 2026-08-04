@@ -988,7 +988,11 @@ use bindings::{build_binding, cell_bindings, group_by_head, layout_cells};
 #[cfg(test)]
 mod model_tests {
     use super::*;
-    use light_fixture::{GelAssignment, ProfileLightSource};
+    use light_core::AttributeKey;
+    use light_fixture::{
+        CanonicalTransform, ChannelBehavior, ChannelResolution, FixtureChannel, GelAssignment,
+        ProfileLightSource,
+    };
 
     /// One patched fixture of a named type, for the optics questions below.
     fn patched(fixture_type: &str, optics: ProfileOptics) -> PatchedFixture {
@@ -1077,6 +1081,51 @@ mod model_tests {
         );
         assert_eq!(plan.scene.fixtures[1].installed_colour[1], 0.0);
         assert_eq!(plan.scene.fixtures[1].installed_colour[2], 0.0);
+    }
+
+    #[test]
+    fn canonical_cct_identity_aliases_bind_each_physical_channel_once() {
+        let mut fixture = patched("wash", ProfileOptics::default());
+        let profile = Arc::get_mut(&mut fixture.profile).expect("sole owner");
+        let mode = &mut profile.modes[0];
+        mode.splits[0].footprint = 2;
+        let head_id = mode.heads[0].id;
+        mode.channels = [
+            ("color.cold_white", "color.white"),
+            ("color.warm_white", "color.amber"),
+        ]
+        .into_iter()
+        .map(|(fixture_attribute, attribute)| FixtureChannel {
+            id: Uuid::new_v4(),
+            head_id,
+            split: 1,
+            fixture_attribute: AttributeKey(fixture_attribute.into()),
+            attribute: AttributeKey(attribute.into()),
+            canonical_transform: CanonicalTransform::Identity,
+            resolution: ChannelResolution::U8,
+            secondary_slots: Vec::new(),
+            default_raw: 0,
+            highlight_raw: 255,
+            physical_min: Some(0.0),
+            physical_max: Some(1.0),
+            unit: None,
+            invert: false,
+            snap: false,
+            reacts_to_virtual_intensity: false,
+            reacts_to_sequence_master: false,
+            reacts_to_group_master: false,
+            reacts_to_grand_master: false,
+            behavior: ChannelBehavior::Controlled,
+            functions: Vec::new(),
+        })
+        .collect();
+
+        let plan = compile(&[fixture]);
+        let colour = &plan.bindings[0].colour;
+        assert!(colour.white.is_some());
+        assert!(colour.amber.is_some());
+        assert!(colour.cold_white.is_none());
+        assert!(colour.warm_white.is_none());
     }
 
     fn optics_of(fixture: PatchedFixture) -> viz_scene::EmitterOptics {

@@ -881,6 +881,10 @@ mod tests {
                 "fixture_id": fixture,
                 "attribute": "color.cyan",
                 "value": {"kind":"normalized","value":0.2}
+            }, {
+                "fixture_id": fixture,
+                "attribute": "color.cold_white",
+                "value": {"kind":"normalized","value":0.35,"future_value":"kept"}
             }],
             "dynamic_values": [{
                 "fixture_id": fixture,
@@ -891,6 +895,10 @@ mod tests {
                 "fixture_id": fixture,
                 "attribute": "color.yellow",
                 "value": {"kind":"spread","value":[0.0,0.25,1.0]}
+            }, {
+                "fixture_id": fixture,
+                "attribute": "color.warm_white",
+                "value": {"kind":"normalized","value":0.65}
             }],
             "group_values": {"front": {"color.cyan": {
                 "value":{"kind":"normalized","value":0.4},
@@ -906,6 +914,9 @@ mod tests {
 
         assert_eq!(value["values"][0]["attribute"], "color.red");
         assert_migrated_number(&value["values"][0]["value"]["value"], 0.8);
+        assert_eq!(value["values"][1]["attribute"], "color.white");
+        assert_migrated_number(&value["values"][1]["value"]["value"], 0.35);
+        assert_eq!(value["values"][1]["value"]["future_value"], "kept");
         assert_eq!(value["dynamic_values"][0]["attribute"], "color.green");
         assert_migrated_number(&value["dynamic_values"][0]["value"]["value"], 0.7);
         assert_eq!(value["preload_pending"][0]["attribute"], "color.blue");
@@ -915,6 +926,8 @@ mod tests {
         for (actual, expected) in spread.iter().zip([1.0, 0.75, 0.0]) {
             assert_migrated_number(actual, expected);
         }
+        assert_eq!(value["preload_pending"][1]["attribute"], "color.amber");
+        assert_migrated_number(&value["preload_pending"][1]["value"]["value"], 0.65);
         assert_migrated_number(
             &value["group_values"]["front"]["color.red"]["value"]["value"],
             0.6,

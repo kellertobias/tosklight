@@ -92,7 +92,7 @@ mod canonical_migration_tests {
     use super::*;
 
     #[test]
-    fn canonical_migration_table_covers_inverse_cmy_and_identity_strobe() {
+    fn canonical_migration_table_covers_inverse_cmy_and_identity_consolidations() {
         for (source, target) in [
             ("color.cyan", "color.red"),
             ("color.magenta", "color.green"),
@@ -106,6 +106,20 @@ mod canonical_migration_tests {
                 ))
             );
         }
+        assert_eq!(
+            canonical_attribute_migration(&AttributeKey("color.cold_white".into())),
+            Some((
+                AttributeKey("color.white".into()),
+                CanonicalAttributeTransform::Identity
+            ))
+        );
+        assert_eq!(
+            canonical_attribute_migration(&AttributeKey("color.warm_white".into())),
+            Some((
+                AttributeKey("color.amber".into()),
+                CanonicalAttributeTransform::Identity
+            ))
+        );
         assert_eq!(
             canonical_attribute_migration(&AttributeKey("strobe".into())),
             Some((
@@ -563,6 +577,53 @@ mod attribute_registry_tests {
         let migrated = legacy.migrate_canonical_attributes().unwrap();
         migrated.validate().unwrap();
         for source in ["color.cyan", "color.magenta", "color.yellow"] {
+            assert!(
+                migrated
+                    .attribute_placement_for(&AttributeKey(source.into()))
+                    .is_none()
+            );
+            assert!(
+                migrated
+                    .activation_group_for(&AttributeKey(source.into()))
+                    .is_none()
+            );
+        }
+        assert_eq!(
+            migrated.clone().migrate_canonical_attributes().unwrap(),
+            migrated
+        );
+    }
+
+    #[test]
+    fn legacy_cold_and_warm_white_controls_join_existing_white_and_amber_controls() {
+        let mut legacy = AttributeConfiguration::recommended();
+        for (source, encoder) in [
+            (
+                "color.cold_white",
+                EncoderPlacement::new(EncoderGroup::Color, 2, 1),
+            ),
+            (
+                "color.warm_white",
+                EncoderPlacement::new(EncoderGroup::Color, 2, 2),
+            ),
+        ] {
+            legacy.placements.push(AttributePlacement {
+                attribute: AttributeKey(source.into()),
+                encoder,
+                push_turn_of: None,
+            });
+            legacy
+                .activation_groups
+                .iter_mut()
+                .find(|group| group.id == "color_mix")
+                .unwrap()
+                .members
+                .push(AttributeKey(source.into()));
+        }
+
+        let migrated = legacy.migrate_canonical_attributes().unwrap();
+        migrated.validate().unwrap();
+        for source in ["color.cold_white", "color.warm_white"] {
             assert!(
                 migrated
                     .attribute_placement_for(&AttributeKey(source.into()))

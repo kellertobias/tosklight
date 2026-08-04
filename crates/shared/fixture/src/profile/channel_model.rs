@@ -52,14 +52,8 @@ pub enum CanonicalTransform {
 pub(super) fn legacy_canonical_mapping(
     attribute: &AttributeKey,
 ) -> Option<(AttributeKey, CanonicalTransform)> {
-    if let Some((canonical, transform)) = light_core::canonical_attribute_migration(attribute) {
-        let transform = match transform {
-            light_core::CanonicalAttributeTransform::Identity => CanonicalTransform::Identity,
-            light_core::CanonicalAttributeTransform::InvertNormalized => {
-                CanonicalTransform::InvertNormalized
-            }
-        };
-        return Some((canonical, transform));
+    if let Some(mapping) = canonical_attribute_mapping(attribute) {
+        return Some(mapping);
     }
     let (canonical, transform) = match attribute.0.as_str() {
         "fog" => ("intensity", CanonicalTransform::Identity),
@@ -80,6 +74,20 @@ pub(super) fn legacy_canonical_mapping(
         _ => return None,
     };
     Some((AttributeKey(canonical.into()), transform))
+}
+
+pub(super) fn canonical_attribute_mapping(
+    attribute: &AttributeKey,
+) -> Option<(AttributeKey, CanonicalTransform)> {
+    light_core::canonical_attribute_migration(attribute).map(|(canonical, transform)| {
+        let transform = match transform {
+            light_core::CanonicalAttributeTransform::Identity => CanonicalTransform::Identity,
+            light_core::CanonicalAttributeTransform::InvertNormalized => {
+                CanonicalTransform::InvertNormalized
+            }
+        };
+        (canonical, transform)
+    })
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

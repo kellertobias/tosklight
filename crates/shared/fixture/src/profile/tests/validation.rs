@@ -218,7 +218,7 @@ fn legacy_migration_derives_invert_aware_full_white_and_open_wheel_highlight() {
     let highlights = mode
         .channels
         .iter()
-        .map(|channel| (channel.attribute.0.as_str(), channel.highlight_raw))
+        .map(|channel| (channel.fixture_attribute.0.as_str(), channel.highlight_raw))
         .collect::<HashMap<_, _>>();
     assert_eq!(highlights["intensity"], 255);
     assert_eq!(highlights["color.red"], 255);
@@ -340,6 +340,119 @@ fn schema_v2_cmy_channels_migrate_to_inverted_canonical_rgb_without_losing_ident
         AttributeKey("color.red".into())
     );
     migrated.validate().unwrap();
+}
+
+#[test]
+fn schema_v2_cct_emitters_migrate_to_white_and_amber_without_losing_identity() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Test".into();
+    profile.name = "Legacy CCT mapping".into();
+    let mode = &mut profile.modes[0];
+    mode.splits[0].footprint = 2;
+    let head_id = mode.heads[0].id;
+    mode.channels = [
+        ("color.cold_white", "Cold White"),
+        ("color.warm_white", "Warm White"),
+    ]
+    .into_iter()
+    .map(|(attribute, name)| {
+        let mut emitter = channel(head_id, ChannelResolution::U8, vec![]);
+        emitter.fixture_attribute = AttributeKey(attribute.into());
+        emitter.attribute = AttributeKey(attribute.into());
+        emitter.functions = vec![ChannelFunction::continuous(
+            name,
+            AttributeKey(attribute.into()),
+            255,
+        )];
+        emitter
+    })
+    .collect();
+    let mut value = serde_json::to_value(&profile).unwrap();
+    value["schema_version"] = serde_json::json!(2);
+    for channel in value["modes"][0]["channels"].as_array_mut().unwrap() {
+        let channel = channel.as_object_mut().unwrap();
+        channel.remove("fixture_attribute");
+        channel.remove("canonical_transform");
+    }
+
+    let migrated: FixtureProfile = serde_json::from_value(value).unwrap();
+    for (channel, fixture_attribute, canonical) in [
+        (
+            &migrated.modes[0].channels[0],
+            "color.cold_white",
+            "color.white",
+        ),
+        (
+            &migrated.modes[0].channels[1],
+            "color.warm_white",
+            "color.amber",
+        ),
+    ] {
+        assert_eq!(
+            channel.fixture_attribute,
+            AttributeKey(fixture_attribute.into())
+        );
+        assert_eq!(channel.attribute, AttributeKey(canonical.into()));
+        assert_eq!(channel.canonical_transform, CanonicalTransform::Identity);
+        assert_eq!(
+            channel.functions[0].attribute,
+            AttributeKey(canonical.into())
+        );
+    }
+    migrated.validate().unwrap();
+}
+
+#[test]
+fn schema_v3_cct_channels_from_existing_installations_migrate_idempotently() {
+    let mut profile = FixtureProfile::blank();
+    let mode = &mut profile.modes[0];
+    let mut emitter = channel(mode.heads[0].id, ChannelResolution::U8, vec![]);
+    emitter.fixture_attribute = AttributeKey("Imported:ColdWhite".into());
+    emitter.attribute = AttributeKey("color.cold_white".into());
+    emitter.functions[0].attribute = AttributeKey("color.cold_white".into());
+    mode.channels = vec![emitter];
+
+    let migrated: FixtureProfile =
+        serde_json::from_value(serde_json::to_value(profile).unwrap()).unwrap();
+    let channel = &migrated.modes[0].channels[0];
+    assert_eq!(channel.fixture_attribute.0, "Imported:ColdWhite");
+    assert_eq!(channel.attribute.0, "color.white");
+    assert_eq!(channel.functions[0].attribute.0, "color.white");
+    assert_eq!(channel.canonical_transform, CanonicalTransform::Identity);
+
+    let second: FixtureProfile =
+        serde_json::from_value(serde_json::to_value(&migrated).unwrap()).unwrap();
+    assert_eq!(
+        serde_json::to_value(second).unwrap(),
+        serde_json::to_value(migrated).unwrap()
+    );
+}
+
+#[test]
+fn canonical_cct_migration_rejects_two_physical_channels_for_the_same_control() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Test".into();
+    profile.name = "Ambiguous white emitters".into();
+    let mode = &mut profile.modes[0];
+    mode.splits[0].footprint = 2;
+    let head_id = mode.heads[0].id;
+    mode.channels = ["color.white", "color.cold_white"]
+        .into_iter()
+        .map(|attribute| {
+            let mut emitter = channel(head_id, ChannelResolution::U8, vec![]);
+            emitter.fixture_attribute = AttributeKey(attribute.into());
+            emitter.attribute = AttributeKey(attribute.into());
+            emitter.functions[0].attribute = AttributeKey(attribute.into());
+            emitter
+        })
+        .collect();
+
+    let migrated: FixtureProfile =
+        serde_json::from_value(serde_json::to_value(profile).unwrap()).unwrap();
+    let error = migrated.validate().unwrap_err();
+    assert!(error.to_string().contains(
+        "split 1 maps more than one channel on the same head to canonical attribute `color.white`"
+    ));
 }
 
 #[test]

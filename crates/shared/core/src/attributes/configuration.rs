@@ -15,8 +15,6 @@ impl AttributeConfiguration {
                     "color.amber",
                     "color.white",
                     "color.uv",
-                    "color.cold_white",
-                    "color.warm_white",
                     "color.lime",
                     "color.indigo",
                     "color.mint",
@@ -174,7 +172,7 @@ impl AttributeConfiguration {
         self
     }
 
-    /// Rewrites retired CMY operator controls to their inverse RGB identities.
+    /// Rewrites retired emitter/operator controls to their canonical identities.
     ///
     /// Older recommended configurations contained both sets. Those untouched duplicate CMY
     /// placements and singleton activation groups are removed. Authored layouts that assign a
@@ -195,6 +193,16 @@ impl AttributeConfiguration {
                 "color.yellow",
                 "color.blue",
                 EncoderPlacement::new(EncoderGroup::Color, 4, 3),
+            ),
+            (
+                "color.cold_white",
+                "color.white",
+                EncoderPlacement::new(EncoderGroup::Color, 2, 1),
+            ),
+            (
+                "color.warm_white",
+                "color.amber",
+                EncoderPlacement::new(EncoderGroup::Color, 2, 2),
             ),
         ] {
             self.migrate_canonical_configuration_pair(source, target, legacy_encoder)?;

@@ -87,6 +87,8 @@ describe("fixture profile model Highlight defaults", () => {
 			"color.green",
 			"color.blue",
 			"color.white",
+			"color.cold_white",
+			"color.warm_white",
 			"color.cyan",
 			"color.magenta",
 			"color.yellow",
@@ -130,7 +132,7 @@ describe("fixture profile model Highlight defaults", () => {
 		expect(
 			Object.fromEntries(
 				imported.modes[0].channels.map((channel) => [
-					channel.attribute,
+					channel.fixture_attribute,
 					channel.highlight_raw,
 				]),
 			),
@@ -140,12 +142,78 @@ describe("fixture profile model Highlight defaults", () => {
 			"color.green": 255,
 			"color.blue": 255,
 			"color.white": 255,
+			"color.cold_white": 255,
+			"color.warm_white": 255,
 			"color.cyan": 0,
 			"color.magenta": 0,
 			"color.yellow": 0,
 			"color.wheel.1": 15,
 			pan: 128,
 		});
+		expect(
+			Object.fromEntries(
+				imported.modes[0].channels.map((channel) => [
+					channel.fixture_attribute,
+					[channel.attribute, channel.canonical_transform],
+				]),
+			),
+		).toMatchObject({
+			"color.cyan": ["color.red", "invert_normalized"],
+			"color.magenta": ["color.green", "invert_normalized"],
+			"color.yellow": ["color.blue", "invert_normalized"],
+			"color.cold_white": ["color.white", "identity"],
+			"color.warm_white": ["color.amber", "identity"],
+		});
+	});
+
+	it("keeps Cold White and Warm White emitter calibration bound after canonical projection", () => {
+		const profile = fixtureProfileFromDefinition(
+			legacyDefinition({
+				footprint: 2,
+				heads: [
+					{
+						index: 0,
+						name: "Main",
+						shared: true,
+						parameters: ["color.cold_white", "color.warm_white"].map(
+							(attribute, offset) => ({
+								attribute,
+								components: [{ offset, byte_order: "msb_first" as const }],
+								default: 0,
+								virtual_dimmer: false,
+								capabilities: [],
+							}),
+						),
+					},
+				],
+				color_calibration: {
+					emitters: [
+						{ name: "Cold White", xyz: { x: 0.9, y: 1, z: 1.1 }, limit: 1 },
+						{ name: "Warm White", xyz: { x: 1.1, y: 1, z: 0.7 }, limit: 0.8 },
+					],
+					correction_matrix: [
+						[1, 0, 0],
+						[0, 1, 0],
+						[0, 0, 1],
+					],
+				},
+			}),
+		);
+		const mode = profile.modes[0];
+		const emitters = mode.color_systems[0]?.system;
+		expect(emitters?.type).toBe("additive");
+		if (emitters?.type !== "additive")
+			throw new Error("expected additive color system");
+		expect(
+			emitters.emitters.map((emitter) => [
+				emitter.name,
+				mode.channels.find((channel) => channel.id === emitter.channel_id)
+					?.attribute,
+			]),
+		).toEqual([
+			["Cold White", "color.white"],
+			["Warm White", "color.amber"],
+		]);
 	});
 });
 

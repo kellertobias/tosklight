@@ -118,6 +118,26 @@ export function semanticHighlightRaw(
 	return Math.max(0, Math.min(maximum, Math.round(defaultRaw)));
 }
 
+export function canonicalAttributeProjection(attribute: string): {
+	attribute: string;
+	canonicalTransform: "identity" | "invert_normalized";
+} {
+	const migration: Record<string, [string, "identity" | "invert_normalized"]> =
+		{
+			"color.cyan": ["color.red", "invert_normalized"],
+			"color.magenta": ["color.green", "invert_normalized"],
+			"color.yellow": ["color.blue", "invert_normalized"],
+			"color.cold_white": ["color.white", "identity"],
+			"color.warm_white": ["color.amber", "identity"],
+			strobe: ["shutter", "identity"],
+		};
+	const [canonical, canonicalTransform] = migration[attribute] ?? [
+		attribute,
+		"identity",
+	];
+	return { attribute: canonical, canonicalTransform };
+}
+
 function correctedWhite(
 	matrix: HeadColorSystem["correction_matrix"],
 ): XyzValue {
@@ -194,6 +214,13 @@ function additiveWhiteLevels(
 export function semanticHighlightDefaultsForMode(mode: FixtureMode) {
 	const values = new Map(
 		mode.channels.map((channel) => {
+			const fixtureProjection = canonicalAttributeProjection(
+				channel.fixture_attribute,
+			);
+			const highlightAttribute =
+				fixtureProjection.attribute !== channel.fixture_attribute
+					? channel.fixture_attribute
+					: channel.attribute;
 			const choices = channel.functions.flatMap((fn) =>
 				fn.behavior.type === "fixed" || fn.behavior.type === "indexed"
 					? [
@@ -208,7 +235,7 @@ export function semanticHighlightDefaultsForMode(mode: FixtureMode) {
 			return [
 				channel.id,
 				semanticHighlightRaw(
-					channel.attribute,
+					highlightAttribute,
 					channel.resolution,
 					channel.default_raw,
 					channel.invert,

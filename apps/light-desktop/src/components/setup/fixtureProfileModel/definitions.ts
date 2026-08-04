@@ -10,6 +10,7 @@ import type {
 } from "../../../api/types";
 import { derivePrimarySlots } from "./channels";
 import {
+	canonicalAttributeProjection,
 	semanticHighlightDefaultsForMode,
 	semanticHighlightRaw,
 } from "./color";
@@ -21,6 +22,7 @@ import { uuid } from "./utilities";
 function channelFunctions(
 	parameter: FixtureDefinition["heads"][number]["parameters"][number],
 	maximum: number,
+	canonicalAttribute: string,
 ): ChannelFunction[] {
 	return parameter.capabilities.map((capability) => {
 		const dmxFrom = Math.round(
@@ -43,7 +45,7 @@ function channelFunctions(
 			name: label,
 			dmx_from: dmxFrom,
 			dmx_to: dmxTo,
-			attribute: parameter.attribute,
+			attribute: canonicalAttribute,
 			priority: 100,
 			behavior: indexed
 				? {
@@ -76,6 +78,7 @@ function channelsFromDefinition(
 				(right.parameter.components[0]?.offset ?? 0),
 		);
 	return indexed.map(({ headIndex, parameter }) => {
+		const projection = canonicalAttributeProjection(parameter.attribute);
 		const resolution =
 			`u${Math.max(1, parameter.components.length) * 8}` as ChannelResolution;
 		const maximum = maxRaw(resolution);
@@ -86,8 +89,8 @@ function channelsFromDefinition(
 			head_id: heads[headIndex].id,
 			split: 1,
 			fixture_attribute: parameter.source_attribute ?? parameter.attribute,
-			attribute: parameter.attribute,
-			canonical_transform: "identity",
+			attribute: projection.attribute,
+			canonical_transform: projection.canonicalTransform,
 			resolution,
 			secondary_slots: parameter.components
 				.slice(1)
@@ -110,7 +113,7 @@ function channelsFromDefinition(
 			reacts_to_group_master: /intensity/.test(parameter.attribute),
 			reacts_to_grand_master: /intensity/.test(parameter.attribute),
 			behavior: "controlled",
-			functions: channelFunctions(parameter, maximum),
+			functions: channelFunctions(parameter, maximum, projection.attribute),
 		};
 	});
 }
@@ -158,13 +161,23 @@ function colorSystemsFromDefinition(
 					.trim()
 					.toLowerCase()
 					.replaceAll(/[^a-z0-9]+/g, "_");
-				const channel = channels.find(
+				const fixtureAttributes = [`color.emitter.${name}`, `color.${name}`];
+				const fixtureChannel = channels.find(
 					(candidate) =>
 						candidate.head_id === head.id &&
-						[`color.emitter.${name}`, `color.${name}`].includes(
-							candidate.attribute,
-						),
+						fixtureAttributes.includes(candidate.fixture_attribute),
 				);
+				const canonicalAttribute = canonicalAttributeProjection(
+					`color.${name}`,
+				).attribute;
+				const canonicalChannels = channels.filter(
+					(candidate) =>
+						candidate.head_id === head.id &&
+						candidate.attribute === canonicalAttribute,
+				);
+				const channel =
+					fixtureChannel ??
+					(canonicalChannels.length === 1 ? canonicalChannels[0] : undefined);
 				return channel
 					? [
 							{

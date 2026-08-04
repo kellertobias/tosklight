@@ -154,6 +154,25 @@ impl FixtureMode {
             }
             channel.validate()?;
         }
+        for channel in &self.channels {
+            if !matches!(
+                channel.fixture_attribute.0.as_str(),
+                "color.cold_white" | "color.warm_white"
+            ) {
+                continue;
+            }
+            if self.channels.iter().any(|candidate| {
+                candidate.id != channel.id
+                    && candidate.split == channel.split
+                    && candidate.head_id == channel.head_id
+                    && candidate.attribute == channel.attribute
+            }) {
+                return Err(ProfileError::Invalid(format!(
+                    "split {} maps more than one channel on the same head to canonical attribute `{}`",
+                    channel.split, channel.attribute.0
+                )));
+            }
+        }
         self.primary_slots()?;
         for head in &self.heads {
             if !head_ids.contains(&head.id) {

@@ -109,14 +109,19 @@ impl<'de> Deserialize<'de> for FixtureProfile {
         D: serde::Deserializer<'de>,
     {
         let mut canonical = FixtureProfileCanonical::deserialize(deserializer)?;
-        if canonical.schema_version == 2 {
+        if matches!(canonical.schema_version, 2 | FIXTURE_PROFILE_SCHEMA_VERSION) {
             for channel in canonical
                 .modes
                 .iter_mut()
                 .flat_map(|mode| &mut mode.channels)
             {
                 let legacy = channel.attribute.clone();
-                let Some((attribute, transform)) = super::legacy_canonical_mapping(&legacy) else {
+                let migration = if canonical.schema_version == 2 {
+                    super::legacy_canonical_mapping(&legacy)
+                } else {
+                    super::canonical_attribute_mapping(&legacy)
+                };
+                let Some((attribute, transform)) = migration else {
                     continue;
                 };
                 channel.attribute = attribute.clone();

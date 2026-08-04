@@ -1256,7 +1256,7 @@ fn retired_strobe_identity_reports_an_actionable_address_conflict() {
 }
 
 #[test]
-fn legacy_cmy_attribute_controls_retire_with_values_and_preserve_unknown_configuration_data() {
+fn legacy_emitter_attribute_controls_retire_with_values_and_preserve_unknown_configuration_data() {
     let mut configuration = light_core::AttributeConfiguration::recommended();
     for (source, encoder, label) in [
         (
@@ -1290,9 +1290,44 @@ fn legacy_cmy_attribute_controls_retire_with_values_and_preserve_unknown_configu
                 members: vec![light_core::AttributeKey(source.into())],
             });
     }
+    for (source, encoder) in [
+        (
+            "color.cold_white",
+            light_core::EncoderPlacement::new(light_core::EncoderGroup::Color, 2, 1),
+        ),
+        (
+            "color.warm_white",
+            light_core::EncoderPlacement::new(light_core::EncoderGroup::Color, 2, 2),
+        ),
+    ] {
+        configuration
+            .placements
+            .push(light_core::AttributePlacement {
+                attribute: light_core::AttributeKey(source.into()),
+                encoder,
+                push_turn_of: None,
+            });
+        configuration
+            .activation_groups
+            .iter_mut()
+            .find(|group| group.id == "color_mix")
+            .unwrap()
+            .members
+            .push(light_core::AttributeKey(source.into()));
+    }
     let mut body = serde_json::to_value(configuration).unwrap();
     body["future_configuration"] = json!({"kept": true});
-    let (_, document) = document_with_objects(&[("attribute_configuration", "default", body)]);
+    let cct_group = json!({
+        "name": "Legacy CCT",
+        "programming": {
+            "color.cold_white": {"kind":"normalized","value":0.25,"future_value":"kept"},
+            "color.warm_white": {"kind":"normalized","value":0.75}
+        }
+    });
+    let (_, document) = document_with_objects(&[
+        ("attribute_configuration", "default", body),
+        ("group", "cct", cct_group),
+    ]);
     let mut transaction = document.transaction();
 
     stage_candidate_migrations(&document, &mut transaction).unwrap();
@@ -1303,7 +1338,13 @@ fn legacy_cmy_attribute_controls_retire_with_values_and_preserve_unknown_configu
         .unwrap()
         .body();
     assert_eq!(migrated["future_configuration"], json!({"kept": true}));
-    for source in ["color.cyan", "color.magenta", "color.yellow"] {
+    for source in [
+        "color.cyan",
+        "color.magenta",
+        "color.yellow",
+        "color.cold_white",
+        "color.warm_white",
+    ] {
         assert!(
             migrated["placements"]
                 .as_array()
@@ -1326,6 +1367,10 @@ fn legacy_cmy_attribute_controls_retire_with_values_and_preserve_unknown_configu
     let decoded: light_core::AttributeConfiguration =
         serde_json::from_value(migrated.clone()).unwrap();
     decoded.validate().unwrap();
+    let group = candidate.object("group", "cct").unwrap().body();
+    assert_eq!(group["programming"]["color.white"]["value"], 0.25);
+    assert_eq!(group["programming"]["color.white"]["future_value"], "kept");
+    assert_eq!(group["programming"]["color.amber"]["value"], 0.75);
 
     let migrated_objects = candidate
         .objects()
