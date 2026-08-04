@@ -7,7 +7,13 @@ import { ScreenApp } from "./ScreenApp";
 const mocks = vi.hoisted(() => ({
 	dispatch: vi.fn(),
 	saveScreen: vi.fn(async () => undefined),
-	screens: null as { screens: ScreenConfiguration[] } | null,
+	screens: null as {
+		screens: ScreenConfiguration[];
+		programmer_control_surface?: {
+			owner_screen_id: string | null;
+			visible_encoders: 4 | 6;
+		};
+	} | null,
 }));
 
 vi.mock("./api/ServerRuntime", () => ({
@@ -63,6 +69,11 @@ vi.mock("./features/screens/ScreenPlaybackSection", () => ({
 vi.mock("./features/screens/FixedScreenPane", () => ({
 	FixedScreenPane: ({ pane }: { pane: { type: string } }) => (
 		<div data-testid="fixed-pane" data-pane-type={pane.type} />
+	),
+}));
+vi.mock("./features/screens/ProgrammerControlSurfaceRegion", () => ({
+	ProgrammerControlSurfaceRegion: () => (
+		<div data-testid="programmer-controls" />
 	),
 }));
 
@@ -176,6 +187,25 @@ describe("ScreenApp", () => {
 			"--fixed-side-pane-width": "480px",
 		});
 		expect(mocks.dispatch).toHaveBeenCalledWith(
+			expect.objectContaining({ type: "HYDRATE_LAYOUT" }),
+		);
+	});
+
+	it("renders an assigned control-only screen without hydrating Desktop", () => {
+		mocks.screens = {
+			screens: [configuredScreen({ content: { type: "control_surface" } })],
+			programmer_control_surface: {
+				owner_screen_id: "screen-1",
+				visible_encoders: 4,
+			},
+		};
+
+		render(<ScreenApp id="screen-1" />);
+
+		expect(screen.getByTestId("programmer-controls")).toBeInTheDocument();
+		expect(screen.queryByTestId("workspace")).not.toBeInTheDocument();
+		expect(screen.queryByTestId("screen-playbacks")).not.toBeInTheDocument();
+		expect(mocks.dispatch).not.toHaveBeenCalledWith(
 			expect.objectContaining({ type: "HYDRATE_LAYOUT" }),
 		);
 	});

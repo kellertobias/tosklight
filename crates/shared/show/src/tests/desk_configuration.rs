@@ -514,6 +514,45 @@ fn fixed_side_pane_round_trips_with_pixel_width_and_keeps_dock() {
 }
 
 #[test]
+fn control_and_empty_screen_content_round_trip_without_desktop_dock() {
+    let path = temporary("utility-screen-content");
+    let store = DeskStore::open(&path).unwrap();
+    let base = ScreenConfiguration {
+        id: Uuid::new_v4(),
+        name: "Utility".into(),
+        layout: serde_json::json!({"desks":[],"activeDeskId":"main"}),
+        show_dock: true,
+        show_playbacks: true,
+        playback_count: 8,
+        playback_rows: 1,
+        first_playback_slot: 1,
+        page_mode: "follow_main".into(),
+        show_page_controls: true,
+        desired_open: true,
+        display_id: None,
+        bounds: None,
+        fullscreen: false,
+        playback_layout: None,
+        content: ScreenContent::ControlSurface,
+    };
+
+    let control = store.put_screen(base.clone()).unwrap();
+    assert!(!control.show_dock);
+    assert_eq!(control.content, ScreenContent::ControlSurface);
+    let empty = store
+        .put_screen(ScreenConfiguration {
+            id: Uuid::new_v4(),
+            content: ScreenContent::None,
+            ..base
+        })
+        .unwrap();
+    assert!(!empty.show_dock);
+    assert_eq!(empty.content, ScreenContent::None);
+    drop(store);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
 fn fixed_screen_content_rejects_invalid_display_settings_without_resolving_references() {
     let path = temporary("fixed-screen-validation");
     let store = DeskStore::open(&path).unwrap();

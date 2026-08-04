@@ -147,4 +147,14 @@ describe("Add Screen action", () => {
 
 		expect(side.show_dock).toBe(true);
 	});
+
+	it("removes Desktop Dock from Control surface and None base content", () => {
+		for (const type of ["control_surface", "none"] as const)
+			expect(
+				updateScreenConfiguration(
+					{ ...configuredScreen, show_dock: true },
+					{ content: { type } },
+				),
+			).toMatchObject({ content: { type }, show_dock: false });
+	});
 });

@@ -186,6 +186,10 @@ impl DeskStore {
 fn normalize_screen(screen: &mut ScreenConfiguration) -> Result<(), StoreError> {
     let pane = match &screen.content {
         ScreenContent::Desktop => return Ok(()),
+        ScreenContent::ControlSurface | ScreenContent::None => {
+            screen.show_dock = false;
+            return Ok(());
+        }
         ScreenContent::FixedPane { pane } => {
             screen.show_dock = false;
             pane

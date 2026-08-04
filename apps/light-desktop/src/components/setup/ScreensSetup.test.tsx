@@ -344,6 +344,61 @@ describe("additional screen settings", () => {
 		});
 	});
 
+	it("assigns the single Programmer owner when Control surface is selected", async () => {
+		const updateProgrammerOwner = vi.fn().mockResolvedValue(undefined);
+		const save = vi.fn().mockResolvedValue(undefined);
+		render(
+			<ScreenSettingsCard
+				screen={configuredScreen}
+				displays={[]}
+				save={save}
+				remove={vi.fn()}
+				updateProgrammerOwner={updateProgrammerOwner}
+			/>,
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Desktop" }));
+		fireEvent.click(screen.getByRole("option", { name: "Control surface" }));
+
+		await waitFor(() => expect(save).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(updateProgrammerOwner).toHaveBeenCalledWith({
+				owner_screen_id: "screen-1",
+			}),
+		);
+		expect(save.mock.calls[0][0]).toMatchObject({
+			content: { type: "control_surface" },
+			show_dock: false,
+		});
+	});
+
+	it("returns Programmer ownership to main when leaving Control surface", async () => {
+		const updateProgrammerOwner = vi.fn().mockResolvedValue(undefined);
+		render(
+			<ScreenSettingsCard
+				screen={{
+					...configuredScreen,
+					content: { type: "control_surface" },
+					show_dock: false,
+				}}
+				displays={[]}
+				save={vi.fn().mockResolvedValue(undefined)}
+				remove={vi.fn()}
+				programmerOwner
+				updateProgrammerOwner={updateProgrammerOwner}
+			/>,
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Control surface" }));
+		fireEvent.click(screen.getByRole("option", { name: "Desktop" }));
+
+		await waitFor(() =>
+			expect(updateProgrammerOwner).toHaveBeenCalledWith({
+				assign_to_main: true,
+			}),
+		);
+	});
+
 	it("keeps missing fixed objects configured and leaves Dock off after returning to Desktop", async () => {
 		const fixed: ScreenConfiguration = {
 			...configuredScreen,

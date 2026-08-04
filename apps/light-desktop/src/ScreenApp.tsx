@@ -125,6 +125,31 @@ function FixedScreenSurface({ screen }: { screen: ScreenConfiguration }) {
 	);
 }
 
+function UtilityScreenSurface({ screen }: { screen: ScreenConfiguration }) {
+	const programmerOwner =
+		useScreens().screens?.programmer_control_surface?.owner_screen_id ===
+		screen.id;
+	const showScreenControls =
+		!programmerOwner && (screen.show_playbacks || screen.show_page_controls);
+	return (
+		<div
+			className={`screen-shell utility-content ${showScreenControls ? "with-playbacks" : ""} ${programmerOwner ? "with-control" : ""}`}
+		>
+			<NativeDragStrip />
+			{screen.content.type === "control_surface" && !programmerOwner ? (
+				<div className="parameter-empty" role="status">
+					<b>Control surface is assigned elsewhere</b>
+					<small>Assign this screen in Screens & playback.</small>
+				</div>
+			) : null}
+			{showScreenControls && <ScreenPlaybackSection screen={screen} />}
+			{programmerOwner && (
+				<ProgrammerControlSurfaceRegion screenId={screen.id} />
+			)}
+		</div>
+	);
+}
+
 function ScreenSurface({ id }: { id: string }) {
 	const server = useScreens();
 	const screen = server.screens?.screens.find((item) => item.id === id);
@@ -140,6 +165,11 @@ function ScreenSurface({ id }: { id: string }) {
 		);
 	if (screen.content.type === "fixed_pane")
 		return <FixedScreenSurface screen={screen} />;
+	if (
+		screen.content.type === "control_surface" ||
+		screen.content.type === "none"
+	)
+		return <UtilityScreenSurface screen={screen} />;
 	return (
 		<DesktopScreenSurface
 			screen={screen}

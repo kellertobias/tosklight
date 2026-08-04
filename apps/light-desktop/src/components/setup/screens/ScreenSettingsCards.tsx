@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import type {
 	FixedScreenPane,
 	PlaybackSurfaceLayout,
+	ProgrammerControlSurfacePatch,
 	ScreenConfiguration,
 } from "../../../api/types";
 import type { DeskModel } from "../../../types";
@@ -408,7 +409,10 @@ function ScreenLayoutFields({
 	update,
 }: Pick<ScreenSettingsFieldsProps, "draft" | "desks" | "update">) {
 	const fixedPane =
-		draft.content.type === "desktop" ? null : draft.content.pane;
+		draft.content.type === "fixed_pane" ||
+		draft.content.type === "fixed_side_pane"
+			? draft.content.pane
+			: null;
 	return (
 		<section>
 			<h3>Layout</h3>
@@ -428,7 +432,9 @@ function ScreenLayoutFields({
 											type,
 											pane: fixedPane ?? DEFAULT_FIXED_SCREEN_PANE,
 										}
-									: type === "fixed_side_pane_left"
+									: type === "control_surface" || type === "none"
+										? { type }
+										: type === "fixed_side_pane_left"
 										? {
 												type: "fixed_side_pane",
 												pane: fixedPane ?? DEFAULT_FIXED_SCREEN_PANE,
@@ -453,12 +459,15 @@ function ScreenLayoutFields({
 					}
 					options={[
 						{ value: "desktop", label: "Desktop" },
+						{ value: "control_surface", label: "Control surface" },
+						{ value: "none", label: "None" },
 						{ value: "fixed_pane", label: "Fixed full-screen pane" },
 						{ value: "fixed_side_pane_left", label: "Fixed left pane" },
 						{ value: "fixed_side_pane_right", label: "Fixed right pane" },
 					]}
 				/>
-				{draft.content.type !== "fixed_pane" && (
+				{(draft.content.type === "desktop" ||
+					draft.content.type === "fixed_side_pane") && (
 					<SelectField
 						label="Desktop"
 						value={draft.layout.activeDeskId}
@@ -476,10 +485,17 @@ function ScreenLayoutFields({
 					offLabel="Hidden"
 					onLabel="Visible"
 					checked={draft.show_dock}
-					disabled={draft.content.type === "fixed_pane"}
+					disabled={
+						draft.content.type === "fixed_pane" ||
+						draft.content.type === "control_surface" ||
+						draft.content.type === "none"
+					}
 					description={
 						draft.content.type === "fixed_pane"
 							? "Dock is unavailable with a fixed full-screen pane."
+							: draft.content.type === "control_surface" ||
+									draft.content.type === "none"
+								? "Dock is unavailable without Desktop content."
 							: undefined
 					}
 					onChange={(event) => update({ show_dock: event.target.checked })}
@@ -515,7 +531,10 @@ function ScreenPaneSettings({
 	"draft" | "cueLists" | "textFiles" | "update"
 >) {
 	const fixedContent =
-		draft.content.type === "desktop" ? null : draft.content;
+		draft.content.type === "fixed_pane" ||
+		draft.content.type === "fixed_side_pane"
+			? draft.content
+			: null;
 	const fixedPane = fixedContent?.pane ?? null;
 	const sideContent =
 		draft.content.type === "fixed_side_pane" ? draft.content : null;
@@ -689,6 +708,8 @@ export function ScreenSettingsCard({
 	textFiles = [],
 	save,
 	remove,
+	programmerOwner = false,
+	updateProgrammerOwner,
 }: {
 	screen: ScreenConfiguration;
 	desks?: DeskModel[];
@@ -697,6 +718,10 @@ export function ScreenSettingsCard({
 	textFiles?: readonly TextFileOption[];
 	save: (screen: ScreenConfiguration) => Promise<void>;
 	remove: (screen: ScreenConfiguration) => Promise<void>;
+	programmerOwner?: boolean;
+	updateProgrammerOwner?: (
+		patch: ProgrammerControlSurfacePatch,
+	) => Promise<void>;
 }) {
 	const [draft, setDraft] = useState(screen);
 	const [playbackModalOpen, setPlaybackModalOpen] = useState(false);
@@ -710,12 +735,26 @@ export function ScreenSettingsCard({
 		}
 	}, [screen]);
 	const update = (changes: Partial<ScreenConfiguration>) => {
-		const next = updateScreenConfiguration(draftRef.current, changes);
+		const previous = draftRef.current;
+		const next = updateScreenConfiguration(previous, changes);
 		draftRef.current = next;
 		setDraft(next);
 		pending.current += 1;
 		saveQueue.current = saveQueue.current
-			.then(() => save(next))
+			.then(async () => {
+				await save(next);
+				if (
+					next.content.type === "control_surface" &&
+					previous.content.type !== "control_surface"
+				)
+					await updateProgrammerOwner?.({ owner_screen_id: next.id });
+				else if (
+					programmerOwner &&
+					previous.content.type === "control_surface" &&
+					next.content.type !== "control_surface"
+				)
+					await updateProgrammerOwner?.({ assign_to_main: true });
+			})
 			.finally(() => {
 				pending.current -= 1;
 			});

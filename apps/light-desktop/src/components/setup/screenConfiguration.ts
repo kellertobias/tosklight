@@ -48,7 +48,12 @@ export function updateScreenConfiguration(
 	changes: Partial<ScreenConfiguration>,
 ): ScreenConfiguration {
 	const next = { ...screen, ...changes };
-	if (next.content.type === "fixed_pane") next.show_dock = false;
+	if (
+		next.content.type === "fixed_pane" ||
+		next.content.type === "control_surface" ||
+		next.content.type === "none"
+	)
+		next.show_dock = false;
 	return next;
 }
 

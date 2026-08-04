@@ -280,6 +280,8 @@ export type FixedScreenPane =
 
 export type ScreenContent =
 	| { type: "desktop" }
+	| { type: "control_surface" }
+	| { type: "none" }
 	| { type: "fixed_pane"; pane: FixedScreenPane }
 	| {
 			type: "fixed_side_pane";

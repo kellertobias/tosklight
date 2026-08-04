@@ -366,6 +366,8 @@ fn wire_screen(screen: ScreenConfiguration) -> Result<wire::ScreenConfiguration,
 fn domain_content(content: wire::ScreenContent) -> light_show::ScreenContent {
     match content {
         wire::ScreenContent::Desktop => light_show::ScreenContent::Desktop,
+        wire::ScreenContent::ControlSurface => light_show::ScreenContent::ControlSurface,
+        wire::ScreenContent::None => light_show::ScreenContent::None,
         wire::ScreenContent::FixedPane { pane } => light_show::ScreenContent::FixedPane {
             pane: domain_fixed_pane(pane),
         },
@@ -500,6 +502,8 @@ fn domain_fixture_column(
 fn wire_content(content: light_show::ScreenContent) -> wire::ScreenContent {
     match content {
         light_show::ScreenContent::Desktop => wire::ScreenContent::Desktop,
+        light_show::ScreenContent::ControlSurface => wire::ScreenContent::ControlSurface,
+        light_show::ScreenContent::None => wire::ScreenContent::None,
         light_show::ScreenContent::FixedPane { pane } => wire::ScreenContent::FixedPane {
             pane: wire_fixed_pane(pane),
         },

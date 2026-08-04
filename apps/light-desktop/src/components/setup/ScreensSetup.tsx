@@ -266,6 +266,11 @@ export function ScreensSetup({
 								name: cueList.body.name,
 							}))}
 							textFiles={textFiles}
+							programmerOwner={
+								server.screens?.programmer_control_surface.owner_screen_id ===
+								screen.id
+							}
+							updateProgrammerOwner={server.updateProgrammerControlSurface}
 							save={server.saveScreen}
 							remove={remove}
 						/>

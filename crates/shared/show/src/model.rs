@@ -104,6 +104,8 @@ pub enum FixedScreenPane {
 pub enum ScreenContent {
     #[default]
     Desktop,
+    ControlSurface,
+    None,
     FixedPane {
         pane: FixedScreenPane,
     },
