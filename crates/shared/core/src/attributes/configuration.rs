@@ -240,8 +240,20 @@ impl AttributeConfiguration {
         ] {
             self.migrate_canonical_configuration_pair(source, target, legacy_encoder)?;
         }
+        self.remove_legacy_default_whole_color_encoder();
         self.remove_legacy_default_tint_encoder();
         Ok(self)
+    }
+
+    fn remove_legacy_default_whole_color_encoder(&mut self) {
+        let color = AttributeKey("color".into());
+        if let Some(index) = self.placements.iter().position(|placement| {
+            placement.attribute == color
+                && placement.encoder == EncoderPlacement::new(EncoderGroup::Color, 3, 2)
+                && placement.push_turn_of.is_none()
+        }) {
+            self.placements.remove(index);
+        }
     }
 
     fn remove_legacy_default_tint_encoder(&mut self) {
@@ -500,8 +512,9 @@ impl AttributeConfiguration {
                 }
                 let member_encoder_group = placements
                     .get(id)
-                    .ok_or_else(|| AttributeConfigurationError::MissingPlacement(id.to_owned()))?
-                    .group;
+                    .map(|placement| placement.group)
+                    .or_else(|| (id == "color").then_some(EncoderGroup::Color))
+                    .ok_or_else(|| AttributeConfigurationError::MissingPlacement(id.to_owned()))?;
                 if encoder_group
                     .replace(member_encoder_group)
                     .is_some_and(|expected| expected != member_encoder_group)

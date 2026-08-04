@@ -330,7 +330,16 @@ mod attribute_registry_tests {
             assert!(descriptor.built_in);
             assert!(descriptor.recordable);
             assert_eq!(configuration.placement_for(&key), None);
-            assert_eq!(configuration.activation_group_for(&key), None);
+            if *id == "color" {
+                assert_eq!(
+                    configuration
+                        .activation_group_for(&key)
+                        .map(|group| group.id.as_str()),
+                    Some("color_mix")
+                );
+            } else {
+                assert_eq!(configuration.activation_group_for(&key), None);
+            }
         }
         assert_eq!(
             configuration.placement_for(&AttributeKey("color.red".into())),
@@ -850,6 +859,45 @@ mod attribute_registry_tests {
         assert!(migrated.attribute_placement_for(&tint).is_none());
         assert!(migrated.activation_group_for(&tint).is_none());
         migrated.validate().unwrap();
+    }
+
+    #[test]
+    fn whole_color_moves_from_the_legacy_encoder_to_the_color_dialog() {
+        assert!(built_in_attribute_is_special_dialog_only("color"));
+        let recommended = AttributeConfiguration::recommended();
+        let color = AttributeKey("color".into());
+        assert!(recommended.attribute_placement_for(&color).is_none());
+        assert_eq!(
+            recommended
+                .activation_group_for(&color)
+                .map(|group| group.id.as_str()),
+            Some("color_mix"),
+            "whole-color writes must still replace conflicting emitter values"
+        );
+        recommended.validate().unwrap();
+
+        let mut legacy = recommended.clone();
+        legacy.placements.push(AttributePlacement {
+            attribute: color.clone(),
+            encoder: EncoderPlacement::new(EncoderGroup::Color, 3, 2),
+            push_turn_of: None,
+        });
+        let migrated = legacy.migrate_canonical_attributes().unwrap();
+        assert!(migrated.attribute_placement_for(&color).is_none());
+        assert!(migrated.activation_group_for(&color).is_some());
+        migrated.validate().unwrap();
+
+        let mut customized = recommended;
+        customized.placements.push(AttributePlacement {
+            attribute: color.clone(),
+            encoder: EncoderPlacement::new(EncoderGroup::Color, 9, 1),
+            push_turn_of: None,
+        });
+        let customized = customized.migrate_canonical_attributes().unwrap();
+        assert_eq!(
+            customized.placement_for(&color),
+            Some(EncoderPlacement::new(EncoderGroup::Color, 9, 1))
+        );
     }
 
     #[test]

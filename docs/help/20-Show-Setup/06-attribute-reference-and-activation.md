@@ -87,6 +87,9 @@ These are stable preferred slots, not a promise that every page is always visibl
 Pages with no supported attribute in the current selection are omitted, while an empty
 slot on a visible page remains empty so later controls do not move. Pressing an already
 active attribute-group button cycles **Group 1 of N**, **Group 2 of N**, and so on.
+The complete visible `color` value remains recordable through **Set Value** and the Color special
+dialog, but it does not reserve a rotary encoder; native Hue/Saturation fixture channels project
+through that same whole-color surface.
 
 | Default desk group | Preferred encoder | Canonical mapping-layer attribute | Fixture-package attribute name and ID | Suggested activation group |
 |---|---:|---|---|---|
@@ -111,7 +114,6 @@ active attribute-group button cycles **Group 1 of N**, **Group 2 of N**, and so 
 | Color | P2/E4 | `color.indigo` | **Indigo** (`color.indigo`) | Color Mix |
 | Color | P2/E5 | `color.mint` | **Mint** (`color.mint`) | Color Mix |
 | Color | P2/E6 | `color.temperature` | **Color Temperature / CTO** (`color.temperature`) | Color Mix |
-| Color | P3/E2 | canonical RGB color state | **Hue + Saturation** (`color.hue` + `color.saturation`), converted as one paired color system | Color Mix |
 | Color | P3/E3 | `color.wheel.1` | **Color Wheel 1** (`color.wheel.1`) | Color Wheel |
 | Color | P3/E4 | `color.wheel.1.rotation` | **Color Wheel 1 Rotation** (`color.wheel.1.rotation`) | Color Wheel |
 | Color | P3/E5 | `color.wheel.2` | **Color Wheel 2** (`color.wheel.2`) | Color Wheel |

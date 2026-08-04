@@ -133,7 +133,7 @@ pub fn built_in_attribute_is_projection_only(attribute: &str) -> bool {
 
 /// Recordable built-ins edited through a dedicated semantic surface instead of occupying a
 /// permanent encoder slot.
-pub const SPECIAL_DIALOG_ONLY_BUILT_IN_ATTRIBUTES: &[&str] = &["color.tint"];
+pub const SPECIAL_DIALOG_ONLY_BUILT_IN_ATTRIBUTES: &[&str] = &["color", "color.tint"];
 
 pub fn built_in_attribute_is_special_dialog_only(attribute: &str) -> bool {
     SPECIAL_DIALOG_ONLY_BUILT_IN_ATTRIBUTES.contains(&attribute)
