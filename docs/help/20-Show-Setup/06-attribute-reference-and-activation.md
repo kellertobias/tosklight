@@ -188,6 +188,9 @@ White plus Cold White channel, or a separate Amber plus Warm White channel, on t
 head and split: that collision must be resolved by a narrower custom descriptor or another head.
 
 Lamp On, Lamp Off, Reset, Fan Auto, Fan Low, Fan High, and Fan Max already exist as typed control-action meanings. They are actions, not ordinary recordable continuous attributes.
+Legacy `control.mode` and `control.speed` values remain readable for old-show compatibility but are
+not offered in current fallback catalogs or encoder pages. New fixture modes use one canonical
+**Control** surface with typed/indexed functions, while a speed belongs to the feature it times.
 
 ## Semantic special values
 

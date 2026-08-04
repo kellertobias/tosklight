@@ -18,8 +18,20 @@ export const parameterFamilies = {
 		"shaper.rotation",
 	],
 	Focus: ["focus", "zoom", "frost", "edge"],
-	Control: ["control.reset", "control.lamp", "control.fan", "control.mode"],
-	Media: ["media.layer", "media.clip", "media.opacity", "media.speed"],
+	Control: [
+		"control",
+		"media.play_mode",
+		"media.playback_speed",
+		"media.playback_bpm",
+		"media.scaling_mode",
+	],
+	Media: [
+		"media.folder",
+		"media.file",
+		"media.mask.folder",
+		"media.mask.file",
+		"media.mask.invert",
+	],
 } as const;
 
 export type ParameterFamily = keyof typeof parameterFamilies;
@@ -62,6 +74,16 @@ export const parameterLabels: Record<string, string> = {
 	zoom: "Zoom",
 	frost: "Frost",
 	edge: "Edge",
+	control: "Control",
+	"media.play_mode": "Play Mode",
+	"media.playback_speed": "Playback Speed",
+	"media.playback_bpm": "Playback BPM",
+	"media.scaling_mode": "Scaling Mode",
+	"media.folder": "Media Folder",
+	"media.file": "Media File",
+	"media.mask.folder": "Mask Folder",
+	"media.mask.file": "Mask File",
+	"media.mask.invert": "Invert Mask",
 };
 
 export const specialParameterFamilies = new Set<SpecialParameterFamily>([

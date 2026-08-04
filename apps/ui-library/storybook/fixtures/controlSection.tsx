@@ -72,8 +72,20 @@ function ProgrammerSurface({ hardware }: { hardware: boolean }) {
 			"shaper.rotation",
 		],
 		Focus: ["focus", "zoom", "frost", "edge"],
-		Control: ["control.reset", "control.lamp", "control.fan", "control.mode"],
-		Media: ["media.layer", "media.clip", "media.opacity", "media.speed"],
+		Control: [
+			"control",
+			"media.play_mode",
+			"media.playback_speed",
+			"media.playback_bpm",
+			"media.scaling_mode",
+		],
+		Media: [
+			"media.folder",
+			"media.file",
+			"media.mask.folder",
+			"media.mask.file",
+			"media.mask.invert",
+		],
 	};
 	const update = (attribute: string, value: number) =>
 		setNormalized((current) => new Map(current).set(attribute, value));

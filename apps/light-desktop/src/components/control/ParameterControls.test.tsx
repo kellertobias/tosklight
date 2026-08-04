@@ -1230,7 +1230,7 @@ describe("ParameterControls hardware feedback values", () => {
 					heads: [
 						{
 							shared: true,
-							parameters: [{ attribute: "control.reset", capabilities: [] }],
+							parameters: [{ attribute: "media.play_mode", capabilities: [] }],
 						},
 					],
 				},
@@ -1239,8 +1239,8 @@ describe("ParameterControls hardware feedback values", () => {
 		programmerValues.view.fixtureValues = [
 			{
 				fixtureId: "fixture-1",
-				attribute: "control.reset",
-				value: { kind: "discrete", value: "fixture.reset.safe" },
+				attribute: "media.play_mode",
+				value: { kind: "discrete", value: "loop" },
 				programmerOrder: 1,
 				fade: false,
 				fadeMillis: null,
@@ -1250,10 +1250,10 @@ describe("ParameterControls hardware feedback values", () => {
 		render(<ParameterControls />);
 		fireEvent.click(screen.getByRole("button", { name: "Control" }));
 		expect(
-			screen.getByLabelText("Encoder 1: control reset, fixture.reset.safe"),
+			screen.getByLabelText("Encoder 1: Play Mode, loop"),
 		).not.toHaveTextContent("Built-in");
 		expect(
-			screen.queryByRole("button", { name: "Set value for control reset" }),
+			screen.queryByRole("button", { name: "Set value for Play Mode" }),
 		).not.toBeInTheDocument();
 		fireEvent(
 			window,
