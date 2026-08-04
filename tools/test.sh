@@ -4,13 +4,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tools/artifact-paths.sh"
 source "$ROOT/tools/artifact-maintenance.sh"
+source "$ROOT/tools/cargo-command-lock.sh"
 light_init_artifact_paths "$ROOT"
 UI="$ROOT/apps/light-desktop"
 HARDWARE_UI="$ROOT/apps/light-hardware-controls"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 
 # Backs the root package.json test scripts; invoke via `npm run test:<name>`.
-usage(){ echo "Usage: npm run test:{unit|architecture|ui-package|patch-package|viz-editor|storybook|e2e-build|e2e|e2e-api|e2e-ui|e2e-performance|app-icons|artifact-paths|documentation-screenshots|marketing-screenshots|help-screenshots|help-screenshots-live|record|demo|all}"; }
+usage(){ echo "Usage: npm run test:{unit|verify|architecture|ui-package|patch-package|viz-editor|storybook|e2e-build|e2e|e2e-api|e2e-ui|e2e-performance|app-icons|artifact-paths|documentation-screenshots|marketing-screenshots|help-screenshots|help-screenshots-live|record|demo|all}"; }
 build_e2e(){
   if [[ "${LIGHT_REUSE_E2E_BUILD:-0}" == "1" ]]; then
     local server="${LIGHT_E2E_SERVER:-$LIGHT_CARGO_TARGET_DIR/debug/light-headless}"
@@ -23,7 +24,8 @@ build_e2e(){
   (cd "$UI" && npm run build)
   # Playwright shards reuse this debug executable on separate runners. rust-embed normally reads
   # assets from disk in debug builds, so opt into a self-contained UI for the transferable binary.
-  cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --no-default-features --features e2e-embedded-ui
+  light_with_cargo_command_lock "npm run test:e2e build" \
+    cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --no-default-features --features e2e-embedded-ui
 }
 architecture(){
   "$ROOT/tools/test-artifact-paths.sh"
@@ -38,11 +40,40 @@ architecture(){
   node "$ROOT/tools/test-app-icons.mjs"
   node --test "$ROOT/tools/source-size/source-size.test.mjs"
   node --test "$ROOT/tools/test-command-boundaries.test.mjs"
+  node --test "$ROOT/tools/build-command-boundaries.test.mjs"
   node --test "$ROOT/tools/test-private-boundaries.test.mjs"
   node --test "$ROOT/tools/test-semantic-world-boundaries.test.mjs"
   node "$ROOT/tools/check-source-size.mjs"
 }
-unit(){ architecture; (cd "$ROOT" && npm run test:bench-types); (cd "$ROOT" && npm run test:bench-unit); (cd "$ROOT" && npm run test:ui-package); (cd "$ROOT" && npm run test:patch-package); (cd "$ROOT" && npm run test:viz-editor); (cd "$UI" && npm run build); (cd "$HARDWARE_UI" && npm run build); cargo test --manifest-path "$ROOT/Cargo.toml" --workspace --exclude light-desktop --exclude light-hardware-controls --no-default-features; (cd "$UI" && npm test); (cd "$HARDWARE_UI" && npm test); }
+typescript_unit(){
+  (cd "$ROOT" && npm run test:bench-types)
+  (cd "$ROOT" && npm run test:bench-unit)
+  (cd "$ROOT" && npm run test:ui-package)
+  (cd "$ROOT" && npm run test:patch-package)
+  (cd "$ROOT" && npm run test:viz-editor)
+  (cd "$UI" && npm test)
+  (cd "$HARDWARE_UI" && npm test)
+}
+rust_unit(){
+  # macOS native-process launch overhead can dominate tiny Rust test binaries. Keep the local lane to one
+  # broad application test binary; comprehensive verification still executes every workspace
+  # crate, integration test, and generated-contract check below.
+  light_with_cargo_command_lock "npm run test:unit Rust application library" \
+    cargo test --manifest-path "$ROOT/Cargo.toml" --no-default-features --lib -p light-application
+}
+rust_workspace(){
+  light_with_cargo_command_lock "npm run test:verify Rust workspace" \
+    cargo test --manifest-path "$ROOT/Cargo.toml" --workspace \
+      --exclude light-desktop --exclude light-hardware-controls --no-default-features
+}
+unit(){ typescript_unit; rust_unit; }
+verify(){
+  architecture
+  typescript_unit
+  (cd "$UI" && npm run build)
+  (cd "$HARDWARE_UI" && npm run build)
+  rust_workspace
+}
 e2e(){ build_e2e; (cd "$UI" && npm run test:e2e -- "$@"); }
 e2e_api(){ e2e --grep '@api' "$@"; }
 e2e_ui(){ e2e --grep '@ui' --grep-invert '@(demo|docs|performance)\b' "$@"; }
@@ -94,6 +125,7 @@ case "$command" in
   architecture) architecture ;;
   artifact-paths) "$ROOT/tools/test-artifact-paths.sh" ;;
   unit) unit ;;
+  verify) verify ;;
   e2e-build) build_e2e ;;
   e2e) e2e "$@" ;;
   e2e-api) e2e_api "$@" ;;
@@ -109,6 +141,6 @@ case "$command" in
   storybook) storybook "$@" ;;
   record) record "$@" ;;
   demo) demo "$@" ;;
-  all) unit; e2e "$@" ;;
+  all) verify; e2e "$@" ;;
   *) usage >&2; exit 2 ;;
 esac

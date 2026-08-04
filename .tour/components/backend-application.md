@@ -97,7 +97,7 @@ Ports are injected via the `*Ports` trait family, using associated types where s
 5. A thin adapter in `crates/light/adapters/headless/` mapping DTO to command and event to wire.
 6. A feature slice in the control UI.
 
-`docs/engineering/extension-recipes.md` has the full recipe. Do not add a field to a shared struct
+The [Architecture Boundaries](../tours/02-architecture-boundaries.md) guide defines the full boundary contract. Do not add a field to a shared struct
 or a branch to a broad refresh path.
 
 ## Read first

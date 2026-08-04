@@ -543,7 +543,7 @@ test("CLI check rejects stale alternate outputs and accepts a subsequent write",
 	assert.equal(check.status, 0, check.stderr);
 });
 
-test("CLI refuses run-specific results in the canonical documentation directory", () => {
+test("CLI refuses run-specific results in the agent documentation directory", () => {
 	const fixture = fs.mkdtempSync(
 		path.join(artifactPaths.tmp, "light-doc-results-"),
 	);

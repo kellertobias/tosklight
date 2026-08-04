@@ -4,7 +4,6 @@ Choose the smallest test that observes the boundary you changed, then widen in p
 Passing a private reducer test is not proof of an OSC path, persisted show, rendered frame, visible
 gesture, or packaged desktop lifecycle.
 
-The historical pre-migration inventory is [Refactoring test-boundary inventory](refactoring-test-boundaries.md).
 This document is the current routing map. For what each command runs — and what
 `npm run test:architecture` enforces — see
 [Build and test commands](build-and-test-commands.md).

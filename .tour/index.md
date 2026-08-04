@@ -88,6 +88,15 @@ The completed history is under `docs/plans/refactoring/done/`; the durable hando
 | State Ownership to Pixels | How do snapshots, events, overlays, gaps, and replacement reach React? |
 | Rust and Tauri for TypeScript Developers | Which Rust/native concepts matter in this repository? |
 
+## Developer reference guides
+
+These guides are Code Safari source and are published with the tour:
+
+- [Architecture overview](tours/01-architecture-overview.md)
+- [Architecture boundaries](tours/02-architecture-boundaries.md)
+- [State ownership](tours/19-state-ownership.md)
+- [Selective Show Import](tours/23-selective-show-import.md)
+
 ## Authorities
 
 These outrank this tour. It links into them rather than restating them.
@@ -97,7 +106,8 @@ These outrank this tour. It links into them rather than restating them.
 | `AGENTS.md` | Working agreements, operator semantics, scope |
 | `docs/help/` | Operator behavior; source for the manual and in-app help |
 | `docs/testing/` | Acceptance contracts and stable scenario IDs |
-| `docs/engineering/` | Architecture rules, state ownership, boundaries, extension recipes, test map |
+| `.tour/tours/` | Developer architecture, state ownership, and import guides published by Code Safari |
+| `docs/engineering/` | Agent-facing API, build, model, performance, and test contracts |
 | `docs/acceptance-criteria.md` | Persisted show and desk data |
 
 ## Verification

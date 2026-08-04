@@ -18,7 +18,7 @@ authority.
 
 Portable show, desk installation, desk interaction, user Programmer, connection/session, and
 transient runtime have different owners. React receives immutable projections of those owners; it
-does not merge them into one browser authority. `docs/engineering/state-ownership.md` is the
+does not merge them into one browser authority. [State Ownership](19-state-ownership.md) is the
 normative matrix.
 
 ## contracts.ts

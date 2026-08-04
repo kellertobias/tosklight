@@ -136,6 +136,18 @@ light_clean_reproducible() {
   echo "Removed generated artifacts; preserved runtime at $LIGHT_RUNTIME_DATA_DIR and root-cleanup recovery under $LIGHT_ARTIFACTS_DIR/cleanup"
 }
 
+light_clean_cargo_incremental() {
+  local target="$CARGO_TARGET_DIR/debug/incremental"
+  light_assert_safe_cleanup_target "$target" "$LIGHT_ARTIFACTS_DIR" || return 1
+  if [[ ! -e "$target" ]]; then
+    echo "Cargo incremental cache is already empty: $target"
+    return 0
+  fi
+  [[ ! -L "$target" ]] || { echo "error: refusing symlinked Cargo incremental cache: $target" >&2; return 1; }
+  rm -rf -- "$target"
+  echo "Removed reproducible Cargo incremental cache: $target"
+}
+
 light_clean_runtime() {
   local confirmation="${1:-}"
   light_assert_safe_cleanup_target "$LIGHT_RUNTIME_DATA_DIR" "$LIGHT_ARTIFACTS_DIR" || return 1

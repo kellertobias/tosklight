@@ -137,5 +137,5 @@ per-fixture values.
   parallel in-memory persistence system without removing the dominant compile cost.
 - Events, revisions, replay windows, undo, runtime installation, and the WAL commit retain one
   ordered mutation boundary. The completed write-behind investigation is retained in the
-  [major-refactoring execution record](../plans/major-refactoring.md#consolidated-execution-record);
+  current architecture and migration records;
   its detailed incremental decision document remains available in git history.

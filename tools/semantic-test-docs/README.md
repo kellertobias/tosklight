@@ -12,11 +12,10 @@ npm run docs:semantic-tests:check
 npm run test:semantic-test-docs
 ```
 
-The write command updates:
+The write command generates, outside source-controlled documentation:
 
-- `docs/engineering/semantic-test-catalog.v1.json`, the versioned machine-readable
-  contract;
-- `docs/engineering/semantic-test-catalog.html`, the self-contained searchable view.
+- `.artifacts/semantic-tests/semantic-test-catalog.v1.json`, the machine-readable catalog;
+- `.artifacts/semantic-tests/semantic-test-catalog.html`, the self-contained searchable view.
 
 `npm run pages:generate` also compiles both files into
 `semantic-tests/` inside the assembled GitHub Pages artifact and links the HTML

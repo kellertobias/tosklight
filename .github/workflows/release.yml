@@ -136,7 +136,7 @@ jobs:
       - name: Install workspace dependencies
         run: npm ci
 
-      - run: npm run test:unit
+      - run: npm run test:verify
 
   e2e-build:
     name: Tests / Build Playwright application

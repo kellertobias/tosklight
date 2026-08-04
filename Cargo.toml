@@ -104,3 +104,11 @@ unsafe_code = "forbid"
 # development and acceptance runs can sustain the configured DMX cadence.
 [profile.dev]
 opt-level = 1
+incremental = false
+
+# This repository's shared target has many feature combinations and macOS can spend minutes asleep
+# in filesystem operations over Cargo's fine-grained incremental trees. Ordinary Cargo fingerprints
+# still make unchanged crates instant; disabling incremental objects keeps both dev and test paths
+# bounded and avoids thousands of obsolete per-feature directories.
+[profile.test]
+incremental = false

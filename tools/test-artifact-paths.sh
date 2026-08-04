@@ -91,6 +91,12 @@ rm -rf -- "$LIGHT_LEGACY_DATA_DIR"
 mkdir -p "$LIGHT_ARTIFACTS_DIR"/{build,cache,generated,legacy,performance,release,test,tmp} "$LIGHT_RUNTIME_DATA_DIR"
 printf keep > "$LIGHT_RUNTIME_DATA_DIR/sentinel"
 printf recovery > "$LIGHT_ARTIFACTS_DIR/cleanup/recovery-sentinel"
+mkdir -p "$CARGO_TARGET_DIR/debug/incremental/stale-work" "$CARGO_TARGET_DIR/debug/deps"
+printf stale > "$CARGO_TARGET_DIR/debug/incremental/stale-work/object.o"
+printf keep > "$CARGO_TARGET_DIR/debug/deps/library.rlib"
+light_clean_cargo_incremental >/dev/null
+[[ ! -e "$CARGO_TARGET_DIR/debug/incremental" ]]
+[[ "$(<"$CARGO_TARGET_DIR/debug/deps/library.rlib")" == keep ]]
 light_clean_reproducible >/dev/null
 [[ "$(<"$LIGHT_RUNTIME_DATA_DIR/sentinel")" == keep ]]
 [[ ! -e "$LIGHT_ARTIFACTS_DIR/build" && ! -e "$LIGHT_ARTIFACTS_DIR/test" ]]

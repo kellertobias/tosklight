@@ -1,3 +1,10 @@
+---
+slug: state-ownership
+title: State Ownership
+components: [backend, control-ui]
+order: 19
+---
+
 # State Ownership
 
 Every state field belongs to exactly one lifetime. Before adding a field, record its owner,

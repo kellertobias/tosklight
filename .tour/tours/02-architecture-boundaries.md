@@ -1,7 +1,13 @@
+---
+slug: architecture-boundaries
+title: Architecture Boundaries
+components: [backend, engine, control-ui]
+order: 2
+---
+
 # Architecture Boundaries
 
-This document is the dependency and state-ownership contract established by the
-[major architecture refactor](../plans/major-refactoring.md). It describes rules every new module
+This document is the dependency and state-ownership contract. It describes rules every new module
 must satisfy.
 
 Start with the [architecture overview](architecture-overview.md) for the end-to-end system shape,

@@ -17,16 +17,17 @@ if (options.results && !options.outputDirectory)
 	throw new Error(
 		"--results requires --output-dir so run-specific data cannot overwrite the deterministic checked catalog",
 	);
-const canonicalOutputDirectory = path.join(root, "docs/engineering");
+const documentationDirectory = path.join(root, "docs/engineering");
+const defaultOutputDirectory = path.join(root, ".artifacts/semantic-tests");
 const outputDirectory = options.outputDirectory
 	? path.resolve(options.outputDirectory)
-	: canonicalOutputDirectory;
+	: defaultOutputDirectory;
 if (
 	options.results &&
-	isWithinDirectory(canonicalOutputDirectory, outputDirectory)
+	isWithinDirectory(documentationDirectory, outputDirectory)
 )
 	throw new Error(
-		"--results output must be outside docs/engineering so run-specific data cannot overwrite or pollute the deterministic checked catalog",
+		"--results output must be outside docs/engineering so run-specific data cannot overwrite agent documentation",
 	);
 const jsonFile = path.join(outputDirectory, "semantic-test-catalog.v1.json");
 const htmlFile = path.join(outputDirectory, "semantic-test-catalog.html");

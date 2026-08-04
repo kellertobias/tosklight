@@ -7,7 +7,8 @@ order: 30
 
 # Add a Capability
 
-The canonical recipe is `docs/engineering/extension-recipes.md`. This page shows the same steps as
+The canonical rules are [Architecture Boundaries](02-architecture-boundaries.md) and
+[State Ownership](19-state-ownership.md). This page shows the corresponding steps in
 shipped code, plus the checklist a slice has to pass.
 
 ## Reference slice

@@ -26,7 +26,10 @@ if (
 }
 const config = {
   ...(releaseVersion ? { version: releaseVersion } : {}),
-  build: { frontendDist },
+  // Repository build commands create the frontend exactly once before invoking Tauri. The
+  // checked-in config retains beforeBuildCommand for direct Tauri use; this generated overlay
+  // disables it only for the prebuilt repository workflow.
+  build: { frontendDist, beforeBuildCommand: "" },
 };
 fs.mkdirSync(path.dirname(destination), { recursive: true });
 fs.writeFileSync(destination, `${JSON.stringify(config, null, 2)}\n`);

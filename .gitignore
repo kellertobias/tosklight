@@ -1,6 +1,9 @@
 # Canonical repository-local development artifacts
 /.artifacts/
 /docs/help/assets/icon-contact-sheets/
+# Generated semantic-test catalog output belongs in the published site artifact, never source docs.
+/docs/engineering/semantic-test-catalog.html
+/docs/engineering/semantic-test-catalog.v1.json
 /.next/*
 # Rust
 /target/

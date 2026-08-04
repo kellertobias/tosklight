@@ -103,9 +103,8 @@ or visualization work.
 - `apps/ui-library/` contains shared operator components and deterministic Storybook surfaces.
 - `tests/` contains the semantic Playwright acceptance suite and shared test bench.
 
-Read the [architecture overview](docs/engineering/architecture-overview.md) for the dependency
-rules or open the generated [Code Safari](https://kellertobias.github.io/tosklight/safari/) for a
-guided route through the codebase.
+Read the [Code Safari](https://kellertobias.github.io/tosklight/safari/) for the dependency rules
+and a guided route through the codebase.
 
 ### Show files and desk data
 
@@ -138,8 +137,8 @@ generation, packaged desktop checks, and release performance evidence.
   — searchable, human-readable contracts compiled statically from the Playwright suite.
 - [Code Safari](https://kellertobias.github.io/tosklight/safari/) — guided architecture,
   operator-action, persistence, testing, and Rust/Tauri tours.
-- [Engineering documentation](docs/engineering/) — API, architecture, build, performance, and
-  compatibility rules.
+- [Agent engineering runbooks](docs/engineering/) — API, build, model, performance, and test
+  contracts used while changing the repository.
 - [Human-readable acceptance scenarios](docs/testing/) — operator-facing behavior and surface
   parity.
 

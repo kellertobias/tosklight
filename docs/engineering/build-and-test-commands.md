@@ -22,16 +22,18 @@ npm run dev                        # Light headless + Tauri app with UI hot relo
 npm run storybook                  # shared operator components, no Light server
 npm run storybook:build            # deterministic static Storybook artifact
 npm run screenshots:marketing      # regenerate the marketing screenshot gallery
-npm run open                 # debug builds, stop old instances, open the app
-npm run manual               # PDF and HTML manuals from docs/help
-npm run bundle [install]    # release artifacts for macOS, Windows, Linux
-npm run clean                # remove reproducible artifacts
+npm run open                       # incremental main-desk build, then open the app
+npm run manual                     # PDF and HTML manuals from docs/help
+npm run bundle [install]           # release artifacts for macOS, Windows, Linux
+npm run clean                      # remove reproducible artifacts
+npm run clean:cargo-incremental    # discard only Cargo's debug incremental objects
 npm run artifact-path -- NAME            # resolve an artifact path
 
 npm run test:architecture          # dependency direction + source size
 npm run test:ui-package            # shared UI typecheck + component tests
 npm run test:storybook             # static Storybook + serial Chrome gate
-npm run test:unit                  # architecture + tsc/vite + cargo + vitest
+npm run test:unit                  # fast TS/Vitest + application Rust library tests
+npm run test:verify                # architecture + frontend builds + full Rust workspace
 npm run test:e2e-api               # Playwright @api, no browser
 npm run test:e2e-ui                # Playwright @ui, real Chrome
 npm run test:e2e -- [spec]            # everything, or one focused spec
@@ -59,7 +61,7 @@ Open `http://127.0.0.1:5000`. A new desk contains one enabled `Operator` user.
 
 | Command | What it does |
 | --- | --- |
-| `npm run open` | The authoritative desktop path. Checks runtime migration, stops running instances (launchd + `light-headless`/`ToskLight`/vite), writes Tauri configs, runs the root workspace install, builds the control UI, builds `light-headless`, builds both Tauri debug bundles, copies the headless binary into `ToskLight.app/Contents/MacOS/light-headless`, submits it as launchd job `de.tokenet.tosklight.dev-server`, waits for readiness, **verifies the launchd PID owns that readiness**, and opens the app. |
+| `npm run open` | The authoritative desktop path. Checks runtime migration, stops running instances, reuses `node_modules` when its lockfile signature is current, reuses the control UI bundle when its source-content signature is current, builds `light-headless` and the main Tauri debug bundle, copies the headless binary into the app, submits it as launchd job `de.tokenet.tosklight.dev-server`, verifies readiness belongs to that PID, and opens the app. It no longer builds icon contact sheets or the separate Hardware Controls app. Set `LIGHT_FORCE_NPM_CI=1` or `LIGHT_FORCE_FRONTEND_BUILD=1` to force the corresponding clean step. |
 | `npm run storybook` | Serves the tracked `@tosklight/ui` package and its deterministic mock stories at `http://127.0.0.1:6006`, without a Light server or mutable show. |
 | `npm run storybook:build` | Builds the static review artifact under `.artifacts/build/storybook/ui`. |
 | `npm run screenshots:marketing` | Builds static Storybook and recreates every manifest-owned marketing PNG under `docs/marketing/assets/screenshots`; CI publishes this directory as the `marketing-screenshots` artifact consumed by the Pages build. |
@@ -68,6 +70,7 @@ Open `http://127.0.0.1:5000`. A new desk contains one enabled `Operator` user.
 | `npm run bundle:install` | The above, then install into `~/Applications` and open. |
 | `npm run migrate-artifacts` | Explicitly moves legacy `./light-data` into `.artifacts/runtime/light-data`. Never implicit; stops without merging if both exist. |
 | `npm run clean` | Removes reproducible artifacts, preserving the active development runtime. |
+| `npm run clean:cargo-incremental` | Removes only `.artifacts/build/cargo/debug/incremental`. Use this when old feature/build variants have made filesystem scans slow; ordinary compiled dependencies remain cached. |
 | `npm run clean -- runtime PATH` | Removes runtime data. Deliberately separate and requires the exact absolute path, because it includes local shows and desk state. |
 | `npm run artifact-path -- NAME` | Prints a resolved path: `root, cargo, manual-pdf, manual-html, release, runtime, test-results, playwright-report, visual-inspection`. |
 
@@ -91,7 +94,8 @@ code.**
 | `npm run test:architecture` | `tools/check-architecture.mjs`, the source-size unit tests, and `tools/check-source-size.mjs`. See [below](#what-test-architecture-actually-checks). |
 | `npm run test:ui-package` | Typechecks `@tosklight/ui` and runs its focused Vitest component suite. |
 | `npm run test:storybook` | Builds static Storybook, serves it locally, and enumerates every story in serial real Chrome. It rejects blank or unstable stories, browser errors, REST/WebSocket dependencies, invalid modal stacking, and invalid 24×18 desktop geometry. |
-| `npm run test:unit` | `architecture` → root bench type/unit tests → shared UI type/component tests → both Light frontends' `tsc`/Vite builds → `cargo test --workspace --exclude light-desktop --exclude light-hardware-controls --no-default-features` → both Light frontends' Vitest suites. |
+| `npm run test:unit` | Fast local loop: root bench type/unit tests, shared UI and patch-package tests, Viz editor tests, both frontend Vitest suites, and the broad `light-application` Rust library test binary. It skips architecture scans, frontend production builds, the many per-crate/integration test processes, and the Viz Rust workspace. |
+| `npm run test:verify` | Comprehensive pre-merge gate: architecture and artifact checks, all fast TypeScript tests, both frontend production builds, and the full non-Tauri Rust workspace test suite. Release CI runs this command. |
 | `npm run test:bench-unit` | Root Vitest coverage for the reusable helpers under `tests/bench`. |
 | `npm run test:e2e -- [args]` | Builds the UI and server, then Playwright with the root config. |
 | `npm run test:e2e-api` | Playwright `--grep '@api'`. API-only contracts and constructed failure, persistence, concurrency, and wire conditions that cannot be driven truthfully through UI. |
@@ -103,7 +107,14 @@ code.**
 | `npm run test:demo` | The product walkthrough; refreshes `assets/demo.show`. |
 | `npm run test:app-icons` | Asserts the required Tauri icon set for both apps. |
 | `npm run test:artifact-paths` | Self-test of the artifact path bindings across bash, Node, and Python. |
-| `npm run test:all` | `unit` then `e2e`. |
+| `npm run test:all` | `verify` then `e2e`. |
+
+Repository build and test scripts serialize Cargo access through a shared lock under
+`.artifacts/tmp`. If another command owns Cargo, the waiting command prints the owner PID, label,
+and start time instead of appearing frozen behind Cargo's internal lock. Rust dev- and test-profile
+incremental objects are disabled because the repository's many feature combinations can grow a
+filesystem-heavy cache that makes macOS compiler processes sleep for minutes. Cargo's normal
+whole-crate fingerprints and dependency outputs remain cached, so unchanged crates remain instant.
 
 Test layering:
 
@@ -122,7 +133,8 @@ application-owned adapters while migration is in progress. The supported package
 ```sh
 npm run test:ui-package  # component types and behavior
 npm run test:storybook   # deterministic real-browser presentation and interaction
-npm run test:unit        # all package/application/unit integration
+npm run test:unit        # fast package/application library loop
+npm run test:verify      # comprehensive package/application verification
 npm run test:e2e-ui      # real application composition and operator workflows
 ```
 
@@ -213,9 +225,9 @@ Start with the smallest relevant check, then widen by risk.
 | You changed | Run |
 | --- | --- |
 | Module boundaries, crate deps, file sizes | `npm run test:architecture` |
-| Rust domain or application logic | `cargo test -p <crate>`, then `npm run test:unit` |
-| Wire DTOs | regenerate contracts, then `npm run test:unit` |
-| Frontend logic | `npm test` in `apps/light-desktop`, then `npm run test:unit` |
+| Rust domain or application logic | `cargo test -p <crate>`, then `npm run test:unit`; use `npm run test:verify` before merging |
+| Wire DTOs | regenerate contracts, then `npm run test:verify` |
+| Frontend logic | `npm test` in `apps/light-desktop`, then `npm run test:unit`; use `npm run test:verify` before merging |
 | Operator-visible behaviour, including OSC and attached hardware | `npm run test:e2e-ui`, or `npm run test:e2e -- tests/<spec>.spec.ts` |
 | API-only failure construction, restart, migration, or wire behaviour | `npm run test:e2e-api` |
 | Desktop lifecycle, native windows, server supervision | Focused Rust/Tauri tests locally; the GitHub Actions release build probes the newly built desktop process on macOS, Linux, and Windows |

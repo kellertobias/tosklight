@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tools/artifact-paths.sh"
 source "$ROOT/tools/artifact-maintenance.sh"
+source "$ROOT/tools/cargo-command-lock.sh"
 light_init_artifact_paths "$ROOT"
 UI_DIR="$ROOT/apps/light-desktop"
 HARDWARE_DIR="$ROOT/apps/light-hardware-controls"
@@ -42,10 +43,12 @@ tools/build.sh is invoked by the root package.json scripts:
   npm run migrate-artifacts    Move legacy ./light-data to the canonical development runtime directory
   npm run clean:root           Move unexpected root directories into recoverable artifact storage
   npm run clean:artifacts      Remove generated artifacts while preserving runtime and root-cleanup recovery
+  npm run clean:cargo-incremental
+                               Remove only stale Cargo incremental objects
   npm run artifact-path NAME   Print a resolved artifact path (for CI and tooling)
 
 Direct subcommands: open | open-viz [ARGS...] | build-viz | open-viz-editor [ARGS...] | build-viz-editor | manual | icon-contact-sheets | models [verify|render|open] | safari | pages | pages-serve [PORT] | codesafari |
-  archive [install] | migrate-artifacts | clean-root | clean-artifacts [runtime PATH] | path NAME
+  archive [install] | migrate-artifacts | clean-root | clean-cargo-incremental | clean-artifacts [runtime PATH] | path NAME
 EOF
 }
 
@@ -313,24 +316,18 @@ start_server() {
 }
 
 build_debug_and_open() {
+  require node
   require cargo
   require npm
   require curl
   require open
 
-  build_icon_contact_sheets
   light_check_runtime_migration
   stop_running
   write_tauri_configs
-  echo "Installing workspace dependencies..."
-  (cd "$ROOT" && npm ci)
-  echo "Building control UI assets for the Light headless bundle..."
-  (cd "$UI_DIR" && npm run build)
-  echo "Building Light headless for the app bundle..."
-  cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --bin light-headless
-  echo "Building debug Tauri app..."
-  (cd "$HARDWARE_DIR" && npm run tauri:build -- --debug --bundles app --config "$HARDWARE_TAURI_CONFIG")
-  (cd "$UI_DIR" && npm run tauri:build -- --debug --bundles app --config "$CONTROL_TAURI_CONFIG")
+  node "$ROOT/tools/ensure-workspace-dependencies.mjs"
+  node "$ROOT/tools/ensure-control-frontend.mjs"
+  light_with_cargo_command_lock "npm run open" build_debug_app_bundle
   cp "$TARGET_DIR/debug/light-headless" "$TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-headless"
   echo "Starting development Light headless service..."
   launchctl submit -l "$DEV_SERVER_LABEL" -o "$DATA_DIR/light-headless.log" -e "$DATA_DIR/light-headless.log" -- "$TARGET_DIR/debug/light-headless" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR"
@@ -339,7 +336,14 @@ build_debug_and_open() {
   echo "ToskLight is open. Server log: $DATA_DIR/light-headless.log"
 }
 
-archive_release() {
+build_debug_app_bundle() {
+  echo "Building Light headless for the app bundle..."
+  cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --bin light-headless
+  echo "Building debug Tauri app..."
+  (cd "$UI_DIR" && npm run tauri:build -- --debug --bundles app --config "$CONTROL_TAURI_CONFIG")
+}
+
+archive_release_locked() {
   local install="${1:-false}"
   local version app_path hardware_app_path artifact_dir app_zip hardware_app_zip universal_server
 
@@ -387,6 +391,7 @@ archive_release() {
   cargo zigbuild --manifest-path "$ROOT/Cargo.toml" --release --no-default-features --target aarch64-unknown-linux-musl -p light-headless --bin light-headless
 
   echo "Building release Tauri app..."
+  (cd "$HARDWARE_DIR" && npm run build)
   (cd "$HARDWARE_DIR" && npm run tauri:build -- --bundles app --config "$HARDWARE_TAURI_CONFIG")
   (cd "$UI_DIR" && npm run tauri:build -- --bundles app --config "$CONTROL_TAURI_CONFIG")
 
@@ -416,6 +421,10 @@ archive_release() {
     open "$HOME/Applications/ToskLight.app"
     echo "Installed and opened $HOME/Applications/ToskLight.app"
   fi
+}
+
+archive_release() {
+  light_with_cargo_command_lock "npm run bundle" archive_release_locked "$@"
 }
 
 ensure_rust_target() {
@@ -657,6 +666,10 @@ case "${1:-}" in
   clean-root)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
     light_clean_repository_root
+    ;;
+  clean-cargo-incremental)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    light_with_cargo_command_lock "npm run clean:cargo-incremental" light_clean_cargo_incremental
     ;;
   clean|clean-artifacts)
     case "${2:-}" in

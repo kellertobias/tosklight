@@ -588,14 +588,6 @@ function semanticWorldBoundaries() {
   } catch (error) {
     fail(error?.stderr?.toString().trim() || error.message);
   }
-  try {
-    execFileSync("node", [
-      path.join(repositoryRoot, "tools/semantic-test-docs/cli.mjs"),
-      "--check",
-    ], { cwd: repositoryRoot, stdio: ["ignore", "pipe", "pipe"] });
-  } catch (error) {
-    fail(error?.stderr?.toString().trim() || error.message);
-  }
 }
 
 function capabilityStateOwnershipBoundaries() {

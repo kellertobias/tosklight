@@ -1,3 +1,10 @@
+---
+slug: architecture-overview
+title: Architecture Overview
+components: [backend, engine, control-ui]
+order: 1
+---
+
 # Architecture Overview
 
 This is the starting point for engineering work in ToskLight. It describes the architecture
@@ -8,10 +15,8 @@ Read these companion documents for detail:
 - [Architecture boundaries](architecture-boundaries.md) defines dependency, action, concurrency,
   event-delivery, and compatibility rules.
 - [State ownership](state-ownership.md) assigns every state field to one of six lifetimes.
-- [Code tour](code-tour.md) explains where the implementation lives.
-- [Extension recipes](extension-recipes.md) gives repeatable end-to-end change sequences.
-- [Test map](test-map.md) maps a change to the smallest useful verification.
-- [Frontend performance baseline](frontend-performance-baseline.md) records the request pressure
+- [Test map](../../docs/engineering/test-map.md) maps a change to the smallest useful verification.
+- [Frontend performance baseline](../../docs/engineering/frontend-performance-baseline.md) records the request pressure
   that the view-scoped stores replace.
 - [Selective Show Import](selective-show-import.md) documents the cross-show object workflow.
 

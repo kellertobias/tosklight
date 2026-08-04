@@ -1,3 +1,10 @@
+---
+slug: selective-show-import
+title: Selective Show Import
+components: [backend, control-ui]
+order: 23
+---
+
 # Selective Show Import
 
 Selective Show Import is the application-owned path for copying portable objects from another

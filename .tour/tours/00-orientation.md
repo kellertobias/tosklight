@@ -83,7 +83,8 @@ frontend projection, and focused tests. No served `/api/v1` route or production 
 consumer remains. The contract-only `api/ServerContext.ts` exists for legacy test mocks and is not
 an extension point.
 
-The summary is `REFACTORING-SUMMARY.md`; living rules are under `docs/engineering/`.
+The summary is `REFACTORING-SUMMARY.md`; developer architecture lives in this Code Safari and
+agent-facing operational contracts are under `docs/engineering/`.
 
 ## Verification
 
