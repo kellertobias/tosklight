@@ -29,6 +29,13 @@ fn shipped_profile(filename: &str) -> FixtureProfile {
     read_fixture_package(&fs::read(path).unwrap()).unwrap()
 }
 
+fn compatibility_profile(filename: &str) -> FixtureProfile {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(filename);
+    read_fixture_package(&fs::read(path).unwrap()).unwrap()
+}
+
 #[test]
 fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
     let blinder = shipped_profile("generic--blinder.toskfixture");
@@ -591,6 +598,166 @@ fn shipped_primary_frost_channels_program_canonical_softness() {
         }
     }
     assert_eq!(affected_modes, 5);
+}
+
+#[test]
+fn rare_capability_profiles_remain_independent_and_round_trip() {
+    let expected = [
+        (
+            "generic--endless-pan-tilt.toskfixture",
+            "Endless Pan Tilt",
+            "Endless Pan/Tilt 16-bit",
+            4,
+        ),
+        (
+            "generic--beam-size-edge.toskfixture",
+            "Beam Size and Edge",
+            "Intensity, Beam Size, Edge",
+            3,
+        ),
+        (
+            "generic--media-positioning.toskfixture",
+            "Media Positioning",
+            "Position X/Y",
+            2,
+        ),
+    ];
+    for (filename, name, mode_name, footprint) in expected {
+        let profile = shipped_profile(filename);
+        assert_eq!(profile.manufacturer, "Generic");
+        assert_eq!(profile.name, name);
+        assert_eq!(profile.reserved_source, None);
+        assert_eq!(profile.modes.len(), 1);
+        assert_eq!(profile.modes[0].name, mode_name);
+        assert_eq!(
+            profile.modes[0].splits,
+            [FixtureSplit {
+                number: 1,
+                footprint
+            }]
+        );
+        let exported = write_fixture_package(&profile).unwrap();
+        let restored = read_fixture_package(&exported).unwrap();
+        assert_eq!(
+            serde_json::to_value(&restored).unwrap(),
+            serde_json::to_value(&profile).unwrap(),
+            "{filename}"
+        );
+    }
+
+    let frost = compatibility_profile("generic--dual-frost.toskfixture");
+    assert!(frost.notes.contains("compatibility"));
+    let channels = &frost.modes[0].channels;
+    assert_eq!(
+        channels
+            .iter()
+            .map(|channel| (
+                channel.fixture_attribute.0.as_str(),
+                channel.attribute.0.as_str(),
+                channel.default_raw,
+                channel.highlight_raw,
+            ))
+            .collect::<Vec<_>>(),
+        [
+            ("intensity", "intensity", 0, 255),
+            ("frost.1", "softness", 0, 0),
+            ("frost.2", "frost.2", 0, 0),
+        ]
+    );
+    let mut frost_frame = [0_u8; 512];
+    for (channel, raw) in channels.iter().zip([255, 128, 64]) {
+        frost.modes[0]
+            .encode_channel(&mut frost_frame, 1, channel, raw)
+            .unwrap();
+    }
+    assert_eq!(&frost_frame[..3], &[255, 128, 64]);
+
+    let endless = shipped_profile("generic--endless-pan-tilt.toskfixture");
+    let mode = &endless.modes[0];
+    assert_eq!(
+        mode.channels
+            .iter()
+            .map(|channel| (
+                channel.fixture_attribute.0.as_str(),
+                channel.attribute.0.as_str(),
+                channel.resolution,
+                channel.secondary_slots.as_slice(),
+            ))
+            .collect::<Vec<_>>(),
+        [
+            ("pan.continuous", "pan", ChannelResolution::U16, &[2][..]),
+            ("tilt.continuous", "tilt", ChannelResolution::U16, &[4][..]),
+        ]
+    );
+    let definition = endless.resolved_definition(mode.id).unwrap();
+    assert!(definition.heads[0].parameters.iter().all(|parameter| {
+        matches!(
+            parameter.metadata.position_axis_representation,
+            Some(crate::PositionAxisRepresentation::Endless)
+        )
+    }));
+    let mut endless_frame = [0_u8; 512];
+    mode.encode_channel(&mut endless_frame, 1, &mode.channels[0], 0x1234)
+        .unwrap();
+    mode.encode_channel(&mut endless_frame, 1, &mode.channels[1], 0xabcd)
+        .unwrap();
+    assert_eq!(&endless_frame[..4], &[0x12, 0x34, 0xab, 0xcd]);
+
+    let beam = shipped_profile("generic--beam-size-edge.toskfixture");
+    assert_eq!(
+        beam.modes[0]
+            .channels
+            .iter()
+            .map(|channel| (
+                channel.fixture_attribute.0.as_str(),
+                channel.attribute.0.as_str(),
+            ))
+            .collect::<Vec<_>>(),
+        [
+            ("intensity", "intensity"),
+            ("zoom", "zoom"),
+            ("beam.edge", "softness"),
+        ]
+    );
+    let mut beam_frame = [0_u8; 512];
+    for (channel, raw) in beam.modes[0].channels.iter().zip([255, 96, 160]) {
+        beam.modes[0]
+            .encode_channel(&mut beam_frame, 1, channel, raw)
+            .unwrap();
+    }
+    assert_eq!(&beam_frame[..3], &[255, 96, 160]);
+
+    let media = shipped_profile("generic--media-positioning.toskfixture");
+    assert_eq!(
+        media.modes[0]
+            .channels
+            .iter()
+            .map(|channel| channel.attribute.0.as_str())
+            .collect::<Vec<_>>(),
+        ["media.position.x", "media.position.y"]
+    );
+    let mut media_frame = [0_u8; 512];
+    media.modes[0]
+        .encode_channel(&mut media_frame, 1, &media.modes[0].channels[0], 32)
+        .unwrap();
+    media.modes[0]
+        .encode_channel(&mut media_frame, 1, &media.modes[0].channels[1], 224)
+        .unwrap();
+    assert_eq!(&media_frame[..2], &[32, 224]);
+
+    let source_four = shipped_profile("etc--source-four-led-series-2-lustr.toskfixture");
+    let studio = source_four
+        .modes
+        .iter()
+        .find(|mode| mode.name == "Studio")
+        .unwrap();
+    assert!(studio.channels.iter().any(|channel| {
+        channel.fixture_attribute.0 == "color.temperature"
+            && channel.attribute.0 == "color.temperature"
+    }));
+    assert!(studio.channels.iter().any(|channel| {
+        channel.fixture_attribute.0 == "fixture.tint" && channel.attribute.0 == "color.tint"
+    }));
 }
 
 #[test]
