@@ -183,6 +183,7 @@ fn defaults_are_raw_preserving_side_effect_free_and_compile_equivalent() {
     let playback = candidate.object("playback", "1").unwrap().body();
     assert_eq!(playback["fader"], "learned_percentage");
     assert_eq!(playback["buttons"], json!(["double", "half", "learn"]));
+    assert_eq!(playback["footprint"], json!({"type": "normal"}));
     assert_eq!(playback["target"]["future_target"], json!({"kept": true}));
     let route = candidate.object("route", "one").unwrap().body();
     assert_eq!(route["delivery_mode"], "broadcast");
@@ -834,6 +835,7 @@ fn dynamic_playback(
         button_count: 3,
         fader: light_playback::PlaybackFaderMode::Master,
         has_fader: true,
+        footprint: light_playback::PlaybackFootprint::Normal,
         go_activates: true,
         auto_off: true,
         xfade_millis: 0,

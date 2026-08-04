@@ -397,6 +397,7 @@ fn migrate_playback(
         "button_count",
         "fader",
         "has_fader",
+        "footprint",
         "go_activates",
         "auto_off",
         "xfade_millis",

@@ -115,6 +115,7 @@ pub enum PlaybackAction {
     Crossfade { enabled: bool },
     Temporary { enabled: bool, pressed: bool },
     ConfiguredButton { number: u8, pressed: bool },
+    ConfiguredFader { number: u8, level: f32 },
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

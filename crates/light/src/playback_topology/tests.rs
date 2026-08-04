@@ -941,6 +941,7 @@ fn playback(number: u16, name: &str) -> PlaybackDefinition {
         target,
         button_count: 3,
         has_fader: true,
+        footprint: light_playback::PlaybackFootprint::Normal,
         go_activates: true,
         auto_off: true,
         xfade_millis: 0,

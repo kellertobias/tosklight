@@ -189,14 +189,62 @@ fn send_runtime_feedback(
     }
 }
 
-fn send_slot_feedback(feedback: &OscPlaybackFeedback<'_>, slot: u8, number: Option<u16>) {
-    let definition = number.and_then(|number| {
+fn send_slot_feedback(feedback: &OscPlaybackFeedback<'_>, slot: u8, direct_number: Option<u16>) {
+    let binding = direct_number
+        .is_none()
+        .then(|| expanded_osc_binding(feedback.snapshot, feedback.page, feedback.desk, slot))
+        .flatten();
+    let number = direct_number.or_else(|| {
+        let anchor = binding?.anchor_slot;
+        feedback
+            .snapshot
+            .playback_pages
+            .iter()
+            .find(|page| page.number == feedback.page)?
+            .slots
+            .get(&anchor)
+            .copied()
+    });
+    let source_definition = number.and_then(|number| {
         feedback
             .snapshot
             .playbacks
             .iter()
             .find(|definition| definition.number == number)
     });
+    let mut projected_definition = source_definition.cloned();
+    if let (Some(binding), Some(definition)) = (binding, projected_definition.as_mut()) {
+        match (binding.position, definition.footprint) {
+            (
+                ExpandedOscPosition::TallerUpper,
+                light_playback::PlaybackFootprint::Taller { upper_button },
+            ) => {
+                definition.buttons = [
+                    upper_button,
+                    light_playback::PlaybackButtonAction::None,
+                    light_playback::PlaybackButtonAction::None,
+                ];
+                definition.button_count = 1;
+                definition.has_fader = false;
+            }
+            (
+                ExpandedOscPosition::WiderRight,
+                light_playback::PlaybackFootprint::Wider {
+                    right_buttons,
+                    right_fader,
+                },
+            ) => {
+                definition.buttons = right_buttons;
+                definition.fader = right_fader;
+            }
+            _ => {}
+        }
+    }
+    let definition = if binding.is_some() {
+        projected_definition.as_ref()
+    } else {
+        source_definition
+    };
     let running = number.and_then(|number| {
         feedback
             .runtime
@@ -207,6 +255,23 @@ fn send_slot_feedback(feedback: &OscPlaybackFeedback<'_>, slot: u8, number: Opti
         "/light/{}/feedback/page-playback/{slot}",
         feedback.subscriber.desk_alias
     );
+    if let Some(binding) = binding {
+        send_osc(
+            feedback.state,
+            feedback.subscriber.target,
+            format!("{prefix}/owner"),
+            vec![
+                OscArgument::Int(i32::from(binding.anchor_slot)),
+                OscArgument::String(
+                    match binding.position {
+                        ExpandedOscPosition::TallerUpper => "taller_upper",
+                        ExpandedOscPosition::WiderRight => "wider_right",
+                    }
+                    .into(),
+                ),
+            ],
+        );
+    }
     let level = definition
         .map(|definition| {
             playback_level(feedback.state, definition, running, feedback.speed_groups)
@@ -248,12 +313,27 @@ pub(super) fn send_playback_osc_feedback(feedback: OscPlaybackFeedback<'_>) {
         .playback_pages
         .iter()
         .find(|definition| definition.number == feedback.page);
-    for slot in 1..=feedback
-        .desk
-        .columns
-        .saturating_mul(feedback.desk.rows)
-        .clamp(1, 96)
-    {
+    let slots = feedback.desk.playback_layout.as_ref().map_or_else(
+        || {
+            (1..=feedback
+                .desk
+                .columns
+                .saturating_mul(feedback.desk.rows)
+                .clamp(1, 96))
+                .collect::<Vec<_>>()
+        },
+        |layout| {
+            layout
+                .rows
+                .iter()
+                .flat_map(|row| {
+                    (0..layout.playbacks_per_row)
+                        .map(|column| row.first_playback_slot.saturating_add(column))
+                })
+                .collect()
+        },
+    );
+    for slot in slots {
         send_slot_feedback(
             &feedback,
             slot,

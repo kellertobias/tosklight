@@ -21,8 +21,9 @@ export function pressPlaybackSlot(
 	event: KeyboardEvent,
 	slot: number,
 ) {
-	const definition = context.authority.slotPlayback(slot);
-	const action = definition?.buttons[0];
+	const control = context.authority.slotControl?.(slot);
+	const definition = control?.playback ?? context.authority.slotPlayback(slot);
+	const action = control?.action ?? definition?.buttons[0];
 	if (!definition || !action || action === "none") return;
 	if (!isHeldAction(action)) {
 		if (event.repeat) return;

@@ -284,6 +284,21 @@ fn validate_address_action(
     address: &PlaybackAddress,
     action: super::PlaybackAction,
 ) -> Result<(), ActionError> {
+    match action {
+        super::PlaybackAction::ConfiguredButton { number, .. } if !(1..=6).contains(&number) => {
+            return Err(ActionError::new(
+                ActionErrorKind::Invalid,
+                "configured button number must be within 1-6",
+            ));
+        }
+        super::PlaybackAction::ConfiguredFader { number, .. } if !(1..=2).contains(&number) => {
+            return Err(ActionError::new(
+                ActionErrorKind::Invalid,
+                "configured fader number must be within 1-2",
+            ));
+        }
+        _ => {}
+    }
     if matches!(address, PlaybackAddress::Group(_))
         && !matches!(
             action,

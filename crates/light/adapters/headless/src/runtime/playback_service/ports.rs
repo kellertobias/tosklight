@@ -169,6 +169,13 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
                 Some(playback_definition(self.state, number)?)
             }
         };
+        let (definition, semantic_action) = match definition {
+            Some(definition) => {
+                let (definition, action) = configured_control_definition(&definition, action)?;
+                (Some(definition), action)
+            }
+            None => (None, action),
+        };
         enum SharedTarget {
             CueList(light_core::CueListId),
             Dynamic(uuid::Uuid),
@@ -232,7 +239,7 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
                     }),
             );
         }
-        if semantics::may_activate_playback(action) {
+        if semantics::may_activate_playback(semantic_action) {
             if let ResolvedPlaybackAddress::Virtual(activated) = address {
                 related.extend(
                     self.exclusion_context(address)
@@ -248,7 +255,7 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
         }
         if definition
             .as_ref()
-            .is_some_and(|definition| semantics::may_trigger_auto_off(action, definition))
+            .is_some_and(|definition| semantics::may_trigger_auto_off(semantic_action, definition))
         {
             related.extend(
                 self.state
@@ -300,6 +307,7 @@ impl ServerPlaybackPorts<'_> {
         surface: PlaybackSurface,
     ) -> Result<PlaybackExecution, ActionError> {
         let definition = virtual_playback_definition(self.state, address)?;
+        let (definition, action) = configured_control_definition(&definition, action)?;
         let (action_name, input) = legacy_action(action);
         if captures_preload(context.source)
             && let Some(pending) = self.capture(
@@ -472,6 +480,7 @@ impl ServerPlaybackPorts<'_> {
             unreachable!("pool Playback address was validated")
         };
         let definition = playback_definition(self.state, number)?;
+        let (definition, action) = configured_control_definition(&definition, action)?;
         if let PlaybackAction::MasterTransition {
             level,
             duration_millis,

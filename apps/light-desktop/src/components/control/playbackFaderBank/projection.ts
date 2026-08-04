@@ -3,9 +3,10 @@ import type {
 	PlaybackSurfaceLayout,
 	PlaybackSurfaceRow,
 } from "../../../api/types";
-import { playbackSlotNumbers } from "../playbackProjection";
-import type { PlaybackGroup, PlaybackSlotProjection } from "./types";
 import type { ShowObject } from "../../../features/showObjects/contracts";
+import { playbackSlotNumbers } from "../playbackProjection";
+import { projectPlaybackFootprints } from "./footprints";
+import type { PlaybackGroup, PlaybackSlotProjection } from "./types";
 
 export function playbackRowUnits(row: PlaybackSurfaceRow, hardware: boolean) {
 	if (hardware) return row.has_fader ? 2 : 1;
@@ -44,13 +45,24 @@ export function projectPlaybackSlots({
 				row: null,
 				rowIndex: Math.floor(index / columns),
 			}));
-	return cells.map(({ slot, row, rowIndex }) => {
+	const footprints = projectPlaybackFootprints({
+		playbackDefinitions,
+		page,
+		playbackLayout,
+		columns,
+		firstSlot,
+		pageSize,
+	});
+	const footprintBySlot = new Map(
+		footprints.cells.map((footprint) => [footprint.slot, footprint]),
+	);
+	return cells.flatMap(({ slot, row, rowIndex }) => {
+		const footprint = footprintBySlot.get(slot);
+		if (footprint?.state === "claimed") return [];
 		const number = page?.slots[String(slot)];
 		const playback =
-			playbackDefinitions.find(
-				(candidate) => candidate.body.number === number,
-			)?.body ??
-			null;
+			playbackDefinitions.find((candidate) => candidate.body.number === number)
+				?.body ?? null;
 		const cueListId =
 			playback?.target.type === "cue_list" ? playback.target.cue_list_id : null;
 		const cue = cueListId
@@ -62,6 +74,16 @@ export function projectPlaybackSlots({
 		const group = groupId
 			? (groups.find((candidate) => candidate.id === groupId) ?? null)
 			: null;
-		return { playback, cue, group, slot, row, rowIndex };
+		return [
+			{
+				playback,
+				cue,
+				group,
+				slot,
+				row,
+				rowIndex,
+				footprint: footprint?.state === "anchor" ? footprint : null,
+			},
+		];
 	});
 }

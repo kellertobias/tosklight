@@ -700,6 +700,7 @@ fn playback(number: u16, cue_list_id: CueListId) -> PlaybackDefinition {
         button_count: 3,
         fader: PlaybackFaderMode::Master,
         has_fader: true,
+        footprint: light_playback::PlaybackFootprint::Normal,
         go_activates: true,
         auto_off: false,
         xfade_millis: 0,

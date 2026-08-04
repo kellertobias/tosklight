@@ -197,6 +197,9 @@ pub struct PlaybackTopologyPlaybackDefinition {
     pub button_count: u8,
     pub fader: PlaybackTopologyFaderMode,
     pub has_fader: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub footprint: Option<PlaybackTopologyFootprint>,
     pub go_activates: bool,
     pub auto_off: bool,
     #[ts(type = "number")]
@@ -328,6 +331,20 @@ pub enum PlaybackTopologyFaderMode {
     DirectBpm,
     CenteredRelative,
     LearnedPercentage,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PlaybackTopologyFootprint {
+    #[default]
+    Normal,
+    Taller {
+        upper_button: PlaybackTopologyButtonAction,
+    },
+    Wider {
+        right_buttons: [PlaybackTopologyButtonAction; 3],
+        right_fader: PlaybackTopologyFaderMode,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

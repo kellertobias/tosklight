@@ -35,6 +35,37 @@ fn all_semantic_actions_have_strict_readable_discriminants() {
 }
 
 #[test]
+fn playback_footprints_default_legacy_requests_and_round_trip_typed_extra_controls() {
+    let legacy =
+        serde_json::from_value::<PlaybackTopologyActionRequest>(configure_request()).unwrap();
+    let PlaybackTopologyAction::ConfigureSlot { playback, .. } = legacy.action else {
+        panic!("expected configure-slot action")
+    };
+    assert_eq!(playback.footprint, None);
+
+    let mut taller = configure_request();
+    taller["action"]["playback"]["footprint"] = json!({"type":"taller","upper_button":"pause"});
+    let taller: PlaybackTopologyActionRequest = serde_json::from_value(taller.clone()).unwrap();
+    assert_eq!(
+        serde_json::to_value(taller).unwrap()["action"]["playback"]["footprint"],
+        json!({"type":"taller","upper_button":"pause"})
+    );
+
+    let mut wider = configure_request();
+    wider["action"]["playback"]["footprint"] = json!({
+        "type":"wider",
+        "right_buttons":["go","pause","flash"],
+        "right_fader":"x_fade"
+    });
+    let expected = wider["action"]["playback"]["footprint"].clone();
+    let wider: PlaybackTopologyActionRequest = serde_json::from_value(wider).unwrap();
+    assert_eq!(
+        serde_json::to_value(wider).unwrap()["action"]["playback"]["footprint"],
+        expected
+    );
+}
+
+#[test]
 fn unknown_fields_are_tolerated_while_required_authority_stays_typed() {
     for forged in [
         "show_id",

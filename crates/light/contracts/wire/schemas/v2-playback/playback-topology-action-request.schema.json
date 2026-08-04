@@ -1633,6 +1633,63 @@
         "release_intensity_only"
       ]
     },
+    "PlaybackTopologyFootprint": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "normal"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "taller"
+            },
+            "upper_button": {
+              "$ref": "#/$defs/PlaybackTopologyButtonAction"
+            }
+          },
+          "required": [
+            "type",
+            "upper_button"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "right_buttons": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PlaybackTopologyButtonAction"
+              },
+              "maxItems": 3,
+              "minItems": 3
+            },
+            "right_fader": {
+              "$ref": "#/$defs/PlaybackTopologyFaderMode"
+            },
+            "type": {
+              "type": "string",
+              "const": "wider"
+            }
+          },
+          "required": [
+            "type",
+            "right_buttons",
+            "right_fader"
+          ]
+        }
+      ]
+    },
     "PlaybackTopologyGroupMasterAddress": {
       "oneOf": [
         {
@@ -1760,6 +1817,16 @@
         },
         "flash_release": {
           "$ref": "#/$defs/PlaybackTopologyFlashReleaseMode"
+        },
+        "footprint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackTopologyFootprint"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "go_activates": {
           "type": "boolean"

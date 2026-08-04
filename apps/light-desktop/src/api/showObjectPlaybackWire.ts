@@ -81,6 +81,7 @@ export function decodePlaybackBody(
 		],
 		defaultFader(target),
 	);
+	const footprint = decodeFootprint(playback.footprint, `${path}.footprint`);
 	return {
 		...playback,
 		number,
@@ -95,6 +96,7 @@ export function decodePlaybackBody(
 				? "learned_percentage"
 				: fader,
 		has_fader: optionalBoolean(playback, "has_fader", path, true),
+		footprint,
 		go_activates: optionalBoolean(playback, "go_activates", path, true),
 		auto_off: optionalBoolean(playback, "auto_off", path, true),
 		xfade_millis: optionalInteger(playback, "xfade_millis", path, 0),
@@ -123,6 +125,47 @@ export function decodePlaybackBody(
 			path,
 		),
 	} as PlaybackDefinition;
+}
+
+function decodeFootprint(
+	value: unknown,
+	path: string,
+): NonNullable<PlaybackDefinition["footprint"]> {
+	if (value == null) return { type: "normal" };
+	const footprint = recordAt(value, path);
+	const type = enumAt(footprint.type, `${path}.type`, [
+		"normal",
+		"taller",
+		"wider",
+	]);
+	if (type === "normal") return { type };
+	if (type === "taller")
+		return {
+			type,
+			upper_button: enumAt(
+				footprint.upper_button,
+				`${path}.upper_button`,
+				BUTTON_ACTIONS,
+			),
+		};
+	const buttons = arrayAt(footprint.right_buttons, `${path}.right_buttons`);
+	if (buttons.length !== 3)
+		invalid(`${path}.right_buttons`, "three actions", buttons);
+	return {
+		type,
+		right_buttons: buttons.map((button, index) =>
+			enumAt(button, `${path}.right_buttons[${index}]`, BUTTON_ACTIONS),
+		) as PlaybackDefinition["buttons"],
+		right_fader: enumAt(footprint.right_fader, `${path}.right_fader`, [
+			"master",
+			"temp",
+			"speed",
+			"x_fade",
+			"direct_bpm",
+			"centered_relative",
+			"learned_percentage",
+		]),
+	};
 }
 
 export function decodePlaybackPageBody(

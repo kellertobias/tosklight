@@ -148,10 +148,24 @@ fn application_action(action: wire::PlaybackAction) -> Result<application::Playb
         Wire::Load { .. } => return Err("cue_number must be finite and greater than zero".into()),
         Wire::Crossfade { enabled } => App::Crossfade { enabled },
         Wire::Temporary { enabled, pressed } => App::Temporary { enabled, pressed },
-        Wire::ConfiguredButton { number, pressed } if (1..=3).contains(&number) => {
+        Wire::ConfiguredButton { number, pressed } if (1..=6).contains(&number) => {
             App::ConfiguredButton { number, pressed }
         }
-        Wire::ConfiguredButton { .. } => return Err("button number must be within 1-3".into()),
+        Wire::ConfiguredButton { .. } => return Err("button number must be within 1-6".into()),
+        Wire::ConfiguredFader { number, level }
+            if (1..=2).contains(&number) && level.is_finite() && (0.0..=1.0).contains(&level) =>
+        {
+            App::ConfiguredFader {
+                number,
+                level: application::PlaybackLevel::new(level),
+            }
+        }
+        Wire::ConfiguredFader { number, .. } if !(1..=2).contains(&number) => {
+            return Err("fader number must be within 1-2".into());
+        }
+        Wire::ConfiguredFader { .. } => {
+            return Err("fader level must be finite and within 0-1".into());
+        }
     })
 }
 

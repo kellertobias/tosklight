@@ -401,6 +401,7 @@ fn new_cuelist_and_playback_record_conflict_cannot_leave_a_partial_cuelist() {
         button_count: 3,
         fader: light_playback::PlaybackFaderMode::Master,
         has_fader: true,
+        footprint: light_playback::PlaybackFootprint::Normal,
         go_activates: true,
         auto_off: false,
         xfade_millis: 0,

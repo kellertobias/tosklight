@@ -12,6 +12,7 @@ import type {
 } from "react";
 import type { PlaybackRuntimeProjection } from "../../../api/types";
 import type { PlaybackBankController } from "./controller";
+import { ExpandedPlaybackControls } from "./ExpandedPlaybackControls";
 import {
 	playbackFaderDisplay,
 	playbackFaderLabel,
@@ -95,6 +96,10 @@ export function TouchPlaybackCard({
 			slots={{
 				overlays: (
 					<>
+						<ExpandedPlaybackControls
+							controller={controller}
+							slotData={slotData}
+						/>
 						<PlaybackAssignmentTarget controller={controller} slot={slot} />
 						<PlaybackConfigurationTarget
 							controller={controller}

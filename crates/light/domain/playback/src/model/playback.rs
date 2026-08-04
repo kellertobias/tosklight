@@ -271,6 +271,20 @@ pub enum PlaybackFaderMode {
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PlaybackFootprint {
+    #[default]
+    Normal,
+    Taller {
+        upper_button: PlaybackButtonAction,
+    },
+    Wider {
+        right_buttons: [PlaybackButtonAction; 3],
+        right_fader: PlaybackFaderMode,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FlashReleaseMode {
     #[default]
@@ -291,6 +305,8 @@ pub struct PlaybackDefinition {
     pub fader: PlaybackFaderMode,
     #[serde(default = "default_true")]
     pub has_fader: bool,
+    #[serde(default)]
+    pub footprint: PlaybackFootprint,
     #[serde(default = "default_true")]
     pub go_activates: bool,
     #[serde(default = "default_true")]
@@ -368,6 +384,20 @@ impl PlaybackDefinition {
         }
         self.buttons = Self::default_buttons(&self.target);
         self.fader = Self::default_fader(&self.target);
+        self.footprint = if self.number > MAX_PLAYBACKS {
+            PlaybackFootprint::Normal
+        } else {
+            match self.footprint {
+                PlaybackFootprint::Normal => PlaybackFootprint::Normal,
+                PlaybackFootprint::Taller { .. } => PlaybackFootprint::Taller {
+                    upper_button: PlaybackButtonAction::None,
+                },
+                PlaybackFootprint::Wider { .. } => PlaybackFootprint::Wider {
+                    right_buttons: Self::default_buttons(&self.target),
+                    right_fader: Self::default_fader(&self.target),
+                },
+            }
+        };
     }
 
     pub fn layout_is_compatible(&self) -> bool {
@@ -375,76 +405,84 @@ impl PlaybackDefinition {
             if index >= usize::from(self.button_count) {
                 return *action == PlaybackButtonAction::None;
             }
-            match &self.target {
-                PlaybackTarget::CueList { .. } => matches!(
-                    action,
-                    PlaybackButtonAction::On
-                        | PlaybackButtonAction::Off
-                        | PlaybackButtonAction::Toggle
-                        | PlaybackButtonAction::Go
-                        | PlaybackButtonAction::GoMinus
-                        | PlaybackButtonAction::FastForward
-                        | PlaybackButtonAction::FastRewind
-                        | PlaybackButtonAction::Pause
-                        | PlaybackButtonAction::Flash
-                        | PlaybackButtonAction::Temp
-                        | PlaybackButtonAction::Swap
-                        | PlaybackButtonAction::Select
-                        | PlaybackButtonAction::SelectContents
-                        | PlaybackButtonAction::None
-                ),
-                PlaybackTarget::Dynamic { .. } => matches!(
-                    action,
-                    PlaybackButtonAction::On
-                        | PlaybackButtonAction::Off
-                        | PlaybackButtonAction::Toggle
-                        | PlaybackButtonAction::Pause
-                        | PlaybackButtonAction::Flash
-                        | PlaybackButtonAction::DynamicRestart
-                        | PlaybackButtonAction::DynamicDoubleSpeed
-                        | PlaybackButtonAction::DynamicHalfSpeed
-                        | PlaybackButtonAction::DynamicLearnSpeed
-                        | PlaybackButtonAction::None
-                ),
-                PlaybackTarget::Group { .. } => matches!(
-                    action,
-                    PlaybackButtonAction::Select
-                        | PlaybackButtonAction::SelectDereferenced
-                        | PlaybackButtonAction::Flash
-                        | PlaybackButtonAction::None
-                ),
-                PlaybackTarget::SpeedGroup { .. } => matches!(
-                    action,
-                    PlaybackButtonAction::Learn
-                        | PlaybackButtonAction::Double
-                        | PlaybackButtonAction::Half
-                        | PlaybackButtonAction::Pause
-                        | PlaybackButtonAction::None
-                ),
-                PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => matches!(
-                    action,
-                    PlaybackButtonAction::Double
-                        | PlaybackButtonAction::Half
-                        | PlaybackButtonAction::Off
-                        | PlaybackButtonAction::None
-                ),
-                PlaybackTarget::GrandMaster => matches!(
-                    action,
-                    PlaybackButtonAction::Blackout
-                        | PlaybackButtonAction::Flash
-                        | PlaybackButtonAction::PauseDynamics
-                        | PlaybackButtonAction::None
-                ),
-            }
+            self.button_is_compatible(*action)
         });
-        let fader_compatible = match &self.target {
+        buttons_compatible && self.fader_is_compatible(self.fader) && self.footprint_is_compatible()
+    }
+
+    fn button_is_compatible(&self, action: PlaybackButtonAction) -> bool {
+        match &self.target {
             PlaybackTarget::CueList { .. } => matches!(
-                self.fader,
+                action,
+                PlaybackButtonAction::On
+                    | PlaybackButtonAction::Off
+                    | PlaybackButtonAction::Toggle
+                    | PlaybackButtonAction::Go
+                    | PlaybackButtonAction::GoMinus
+                    | PlaybackButtonAction::FastForward
+                    | PlaybackButtonAction::FastRewind
+                    | PlaybackButtonAction::Pause
+                    | PlaybackButtonAction::Flash
+                    | PlaybackButtonAction::Temp
+                    | PlaybackButtonAction::Swap
+                    | PlaybackButtonAction::Select
+                    | PlaybackButtonAction::SelectContents
+                    | PlaybackButtonAction::None
+            ),
+            PlaybackTarget::Dynamic { .. } => matches!(
+                action,
+                PlaybackButtonAction::On
+                    | PlaybackButtonAction::Off
+                    | PlaybackButtonAction::Toggle
+                    | PlaybackButtonAction::Pause
+                    | PlaybackButtonAction::Flash
+                    | PlaybackButtonAction::DynamicRestart
+                    | PlaybackButtonAction::DynamicDoubleSpeed
+                    | PlaybackButtonAction::DynamicHalfSpeed
+                    | PlaybackButtonAction::DynamicLearnSpeed
+                    | PlaybackButtonAction::None
+            ),
+            PlaybackTarget::Group { .. } => matches!(
+                action,
+                PlaybackButtonAction::Select
+                    | PlaybackButtonAction::SelectDereferenced
+                    | PlaybackButtonAction::Flash
+                    | PlaybackButtonAction::None
+            ),
+            PlaybackTarget::SpeedGroup { .. } => matches!(
+                action,
+                PlaybackButtonAction::Learn
+                    | PlaybackButtonAction::Double
+                    | PlaybackButtonAction::Half
+                    | PlaybackButtonAction::Pause
+                    | PlaybackButtonAction::None
+            ),
+            PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => matches!(
+                action,
+                PlaybackButtonAction::Double
+                    | PlaybackButtonAction::Half
+                    | PlaybackButtonAction::Off
+                    | PlaybackButtonAction::None
+            ),
+            PlaybackTarget::GrandMaster => matches!(
+                action,
+                PlaybackButtonAction::Blackout
+                    | PlaybackButtonAction::Flash
+                    | PlaybackButtonAction::PauseDynamics
+                    | PlaybackButtonAction::None
+            ),
+        }
+    }
+
+    fn fader_is_compatible(&self, fader: PlaybackFaderMode) -> bool {
+        match &self.target {
+            PlaybackTarget::CueList { .. } => matches!(
+                fader,
                 PlaybackFaderMode::Master | PlaybackFaderMode::Temp | PlaybackFaderMode::XFade
             ),
-            PlaybackTarget::Dynamic { .. } => self.fader == PlaybackFaderMode::Master,
+            PlaybackTarget::Dynamic { .. } => fader == PlaybackFaderMode::Master,
             PlaybackTarget::SpeedGroup { .. } => matches!(
-                self.fader,
+                fader,
                 PlaybackFaderMode::DirectBpm
                     | PlaybackFaderMode::CenteredRelative
                     | PlaybackFaderMode::LearnedPercentage
@@ -452,9 +490,27 @@ impl PlaybackDefinition {
             PlaybackTarget::Group { .. }
             | PlaybackTarget::ProgrammerFade
             | PlaybackTarget::CueFade
-            | PlaybackTarget::GrandMaster => self.fader == PlaybackFaderMode::Master,
-        };
-        buttons_compatible && fader_compatible
+            | PlaybackTarget::GrandMaster => fader == PlaybackFaderMode::Master,
+        }
+    }
+
+    fn footprint_is_compatible(&self) -> bool {
+        match self.footprint {
+            PlaybackFootprint::Normal => true,
+            PlaybackFootprint::Taller { upper_button } => {
+                self.number <= MAX_PLAYBACKS && self.button_is_compatible(upper_button)
+            }
+            PlaybackFootprint::Wider {
+                right_buttons,
+                right_fader,
+            } => {
+                self.number <= MAX_PLAYBACKS
+                    && right_buttons
+                        .into_iter()
+                        .all(|action| self.button_is_compatible(action))
+                    && self.fader_is_compatible(right_fader)
+            }
+        }
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -553,6 +609,8 @@ impl<'de> Deserialize<'de> for PlaybackDefinition {
             fader: Option<PlaybackFaderMode>,
             #[serde(default = "default_true")]
             has_fader: bool,
+            #[serde(default)]
+            footprint: PlaybackFootprint,
             #[serde(default = "default_true")]
             go_activates: bool,
             #[serde(default = "default_true")]
@@ -591,6 +649,7 @@ impl<'de> Deserialize<'de> for PlaybackDefinition {
             button_count: stored.button_count,
             fader,
             has_fader: stored.has_fader,
+            footprint: stored.footprint,
             go_activates: stored.go_activates,
             auto_off: stored.auto_off,
             xfade_millis: stored.xfade_millis,

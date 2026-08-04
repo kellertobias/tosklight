@@ -12,8 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaybackDefinition } from "../../api/types";
 import {
 	normalizePlaybackTopology,
-	playbackImageDataUrl,
 	PlaybackConfigurationDialog,
+	playbackImageDataUrl,
 	withFunctionDefaults,
 } from "./PlaybackConfigurationModal";
 
@@ -637,9 +637,39 @@ describe("PlaybackConfigurationModal topology defaults", () => {
 				false,
 			),
 		).toMatchObject({
+			footprint: { type: "normal" },
 			button_count: 2,
 			has_fader: false,
 			buttons: ["go_minus", "go", "none"],
 		});
+	});
+
+	it("preserves dormant expanded controls when the ordinary surface is smaller", () => {
+		const footprint = {
+			type: "wider" as const,
+			right_buttons: ["go", "pause", "flash"] as PlaybackDefinition["buttons"],
+			right_fader: "x_fade" as const,
+		};
+		expect(
+			normalizePlaybackTopology(
+				{ ...base, footprint, button_count: undefined, has_fader: undefined },
+				1,
+				false,
+			),
+		).toMatchObject({ footprint });
+	});
+
+	it("authors every control in a mutually exclusive wider footprint", () => {
+		show();
+		fireEvent.click(screen.getByRole("button", { name: "Layout" }));
+		fireEvent.click(screen.getByRole("radio", { name: "Wider" }));
+
+		expect(selectTrigger("Right top button")).toHaveTextContent("GO −");
+		expect(selectTrigger("Right middle button")).toHaveTextContent("GO +");
+		expect(selectTrigger("Right bottom button")).toHaveTextContent("Flash");
+		expect(selectTrigger("Right fader")).toHaveTextContent("Master");
+		expect(
+			screen.queryByText("Additional upper button"),
+		).not.toBeInTheDocument();
 	});
 });

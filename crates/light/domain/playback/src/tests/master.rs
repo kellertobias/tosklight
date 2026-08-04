@@ -353,6 +353,7 @@ fn legacy_layout_defaults_are_target_specific_and_invalid_layouts_are_rejected()
     assert_eq!(definition.fader, PlaybackFaderMode::Master);
     assert_eq!(definition.button_count, 3);
     assert!(definition.has_fader);
+    assert_eq!(definition.footprint, PlaybackFootprint::Normal);
 
     let mut pausable = definition.clone();
     pausable.buttons[2] = PlaybackButtonAction::Pause;
@@ -402,6 +403,62 @@ fn legacy_layout_defaults_are_target_specific_and_invalid_layouts_are_rejected()
     assert!(incompatible.validate().is_ok());
     incompatible.presentation_image = Some("asset://background".into());
     assert!(incompatible.validate().is_err());
+}
+
+#[test]
+fn expanded_footprints_round_trip_typed_controls_and_reject_incompatible_or_virtual_layouts() {
+    let mut definition = definition(1, CueListId::new());
+    definition.footprint = PlaybackFootprint::Taller {
+        upper_button: PlaybackButtonAction::Pause,
+    };
+    definition.validate().unwrap();
+    let taller = serde_json::to_value(&definition).unwrap();
+    assert_eq!(taller["footprint"]["type"], "taller");
+    assert_eq!(taller["footprint"]["upper_button"], "pause");
+    assert_eq!(
+        serde_json::from_value::<PlaybackDefinition>(taller)
+            .unwrap()
+            .footprint,
+        definition.footprint
+    );
+
+    definition.footprint = PlaybackFootprint::Wider {
+        right_buttons: [
+            PlaybackButtonAction::Go,
+            PlaybackButtonAction::Pause,
+            PlaybackButtonAction::Flash,
+        ],
+        right_fader: PlaybackFaderMode::XFade,
+    };
+    definition.validate().unwrap();
+    let wider = serde_json::to_value(&definition).unwrap();
+    assert_eq!(wider["footprint"]["type"], "wider");
+    assert_eq!(
+        wider["footprint"]["right_buttons"],
+        serde_json::json!(["go", "pause", "flash"])
+    );
+    assert_eq!(wider["footprint"]["right_fader"], "x_fade");
+
+    definition.footprint = PlaybackFootprint::Taller {
+        upper_button: PlaybackButtonAction::Blackout,
+    };
+    assert_eq!(
+        definition.validate().unwrap_err(),
+        "playback layout is incompatible with its function"
+    );
+
+    definition.number = MAX_PLAYBACKS + 1;
+    definition.footprint = PlaybackFootprint::Wider {
+        right_buttons: PlaybackDefinition::default_buttons(&definition.target),
+        right_fader: PlaybackDefinition::default_fader(&definition.target),
+    };
+    assert_eq!(
+        definition.validate().unwrap_err(),
+        "playback layout is incompatible with its function"
+    );
+    definition.reset_incompatible_layout();
+    assert_eq!(definition.footprint, PlaybackFootprint::Normal);
+    definition.validate().unwrap();
 }
 
 #[test]

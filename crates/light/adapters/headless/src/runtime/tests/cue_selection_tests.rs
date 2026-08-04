@@ -35,6 +35,7 @@ fn cue_selection_snapshot(list_id: light_core::CueListId) -> EngineSnapshot {
         button_count: 3,
         fader: light_playback::PlaybackFaderMode::Master,
         has_fader: true,
+        footprint: light_playback::PlaybackFootprint::Normal,
         go_activates: true,
         auto_off: false,
         xfade_millis: 0,

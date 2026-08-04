@@ -582,6 +582,7 @@ async fn group_master_runtime_restores_and_persists_only_assigned_targets() {
                 button_count: 3,
                 fader: light_playback::PlaybackDefinition::default_fader(&target),
                 has_fader: true,
+                footprint: light_playback::PlaybackFootprint::Normal,
                 go_activates: true,
                 auto_off: false,
                 xfade_millis: 0,

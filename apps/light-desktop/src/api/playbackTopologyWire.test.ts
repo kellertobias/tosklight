@@ -225,6 +225,7 @@ describe("Playback topology v2 wire", () => {
 				expected_playback_object_id: "legacy-playback-seven",
 				playback: {
 					...playback(),
+					footprint: { type: "normal" },
 					presentation_icon: null,
 					presentation_image: null,
 				},
@@ -258,6 +259,24 @@ describe("Playback topology v2 wire", () => {
 		};
 		expect(encodePlaybackTopologyRequest(virtual)).toMatchObject({
 			action: { playback: { target } },
+		});
+	});
+
+	it("encodes every independently assigned wider control", () => {
+		const expanded = request();
+		if (expanded.action.type !== "configure_slot")
+			throw new Error("physical configure fixture");
+		expanded.action.playback = {
+			...expanded.action.playback,
+			footprint: {
+				type: "wider",
+				right_buttons: ["go_minus", "pause", "flash"],
+				right_fader: "x_fade",
+			},
+		};
+
+		expect(encodePlaybackTopologyRequest(expanded)).toMatchObject({
+			action: { playback: { footprint: expanded.action.playback.footprint } },
 		});
 	});
 

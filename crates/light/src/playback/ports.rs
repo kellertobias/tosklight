@@ -44,7 +44,8 @@ pub trait PlaybackPorts: Send + Sync {
     }
 
     /// Resolves configuration-dependent navigation semantics before execution. Most commands
-    /// carry their meaning directly; configured buttons need the authoritative Playback layout.
+    /// carry their meaning directly; configured controls need the authoritative Playback layout,
+    /// including any expanded footprint control selected by their typed number.
     fn transition_cause(
         &self,
         _context: &ActionContext,

@@ -637,6 +637,7 @@ fn playback(number: u16) -> light_playback::PlaybackDefinition {
         button_count: 3,
         fader: light_playback::PlaybackFaderMode::Master,
         has_fader: true,
+        footprint: light_playback::PlaybackFootprint::Normal,
         go_activates: true,
         auto_off: true,
         xfade_millis: 0,

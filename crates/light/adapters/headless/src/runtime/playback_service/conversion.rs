@@ -53,6 +53,15 @@ pub(super) fn parse_action(
                 .ok_or_else(|| ApiError::bad_request("button number is required"))?,
             pressed,
         },
+        "configured-fader" => PlaybackAction::ConfiguredFader {
+            number: input
+                .button
+                .ok_or_else(|| ApiError::bad_request("fader number is required"))?,
+            level: input
+                .value
+                .map(PlaybackLevel::new)
+                .ok_or_else(|| ApiError::bad_request("fader value is required"))?,
+        },
         _ => return Err(ApiError::not_found("playback action")),
     };
     Ok(action)
@@ -102,6 +111,9 @@ fn structured_action(
         PlaybackAction::GoTo(number) => ("go-to", None, Some(number.value()), None),
         PlaybackAction::Load(number) => ("load", None, Some(number.value()), None),
         PlaybackAction::ConfiguredButton { number, .. } => ("button", None, None, Some(number)),
+        PlaybackAction::ConfiguredFader { .. } => {
+            unreachable!("configured faders are resolved before legacy dispatch")
+        }
         _ => (simple_action_name(action), None, None, None),
     }
 }
@@ -141,7 +153,8 @@ fn simple_action_name(action: PlaybackAction) -> &'static str {
         | PlaybackAction::MasterTransition { .. }
         | PlaybackAction::GoTo(_)
         | PlaybackAction::Load(_)
-        | PlaybackAction::ConfiguredButton { .. } => unreachable!("structured action"),
+        | PlaybackAction::ConfiguredButton { .. }
+        | PlaybackAction::ConfiguredFader { .. } => unreachable!("structured action"),
     }
 }
 
@@ -189,7 +202,9 @@ pub(super) fn parse_pending(
 pub(super) fn action_touched(action: PlaybackAction) -> bool {
     matches!(
         action,
-        PlaybackAction::Master(_) | PlaybackAction::MasterTransition { .. }
+        PlaybackAction::Master(_)
+            | PlaybackAction::MasterTransition { .. }
+            | PlaybackAction::ConfiguredFader { .. }
     ) || action.pressed().unwrap_or(true)
 }
 

@@ -17,6 +17,8 @@ use light_engine::{
 
 #[path = "playback_service/capture.rs"]
 mod capture;
+#[path = "playback_service/configured_controls.rs"]
+mod configured_controls;
 #[path = "playback_service/conversion.rs"]
 mod conversion;
 #[path = "playback_service/desk.rs"]
@@ -36,6 +38,7 @@ pub(super) use desk::ChangePage;
 use ports::ServerPlaybackPorts;
 pub(super) use projection::automatic_changes as automatic_projection_changes;
 
+use configured_controls::configured_control_definition;
 use conversion::{
     action_touched, activation_surface, legacy_action, parse_action, parse_pending, source_name,
     surface_name,

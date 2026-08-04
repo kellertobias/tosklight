@@ -144,7 +144,7 @@ export function PlaybackConfigurationDialog({ playback, page, slot, empty = fals
       <div className="playback-configuration-body">
         {tab === "function" && <PlaybackFunctionTab family={family} draft={draft} virtual={virtual} presentation={presentation} cueLists={cueLists} dynamics={dynamics} groups={groups} onFamilyChange={chooseFamily} onSpecialChange={chooseSpecial} onPresentationChange={setPresentation} onDraftChange={setDraft}/>}
         {tab === "behavior" && <WindowScrollArea className="playback-tab-scroll"><div className="playback-tab-scroll-content">{family === "none" ? <InactivePlaybackDetail/> : <PlaybackBehaviorTab draft={draft} dynamics={dynamics} groups={groups} onDraftChange={setDraft}/>}</div></WindowScrollArea>}
-        {tab === "layout" && <WindowScrollArea className="playback-tab-scroll"><div className="playback-tab-scroll-content">{family === "none" ? <InactivePlaybackDetail/> : <PlaybackLayoutTab draft={draft} options={options} onDraftChange={setDraft}/>}</div></WindowScrollArea>}
+        {tab === "layout" && <WindowScrollArea className="playback-tab-scroll"><div className="playback-tab-scroll-content">{family === "none" ? <InactivePlaybackDetail/> : <PlaybackLayoutTab draft={draft} virtual={virtual} options={options} onDraftChange={setDraft}/>}</div></WindowScrollArea>}
         {failure && <p role="alert" className="modal-error">{failure}</p>}
       </div>
     </section>
@@ -257,11 +257,23 @@ function PlaybackBehaviorTab({ draft, dynamics, groups, onDraftChange }: { draft
   </FormLayout>;
 }
 
-function PlaybackLayoutTab({ draft, options, onDraftChange }: { draft: PlaybackDefinition; options: Array<{ value: PlaybackButtonAction; label: string; description: string }>; onDraftChange: (playback: PlaybackDefinition) => void }) {
+function PlaybackLayoutTab({ draft, virtual, options, onDraftChange }: { draft: PlaybackDefinition; virtual: boolean; options: Array<{ value: PlaybackButtonAction; label: string; description: string }>; onDraftChange: (playback: PlaybackDefinition) => void }) {
+  const footprint = draft.footprint ?? { type: "normal" as const };
+  const chooseFootprint = (type: "normal" | "taller" | "wider") => {
+    if (type === "normal") onDraftChange({ ...draft, footprint: { type } });
+    else if (type === "taller") onDraftChange({ ...draft, footprint: { type, upper_button: "none" } });
+    else onDraftChange({ ...draft, footprint: { type, right_buttons: defaultButtons(draft.target.type), right_fader: defaultFader(draft.target.type) } });
+  };
   return <FormLayout labelPlacement="side">
+    <MultiValueToggleField label="Footprint" value={virtual ? "normal" : footprint.type} onChange={(value) => chooseFootprint(value as "normal" | "taller" | "wider")} options={virtual ? [{ value: "normal", label: "Normal" }] : [{ value: "normal", label: "Normal" }, { value: "taller", label: "Taller" }, { value: "wider", label: "Wider" }]} description={virtual ? "Virtual Playbacks use one grid position." : "Expanded controls remain saved when this surface cannot expose them."}/>
     {Array.from({ length: draft.button_count ?? 3 }, (_, index) => <LayoutChoiceField kind="button" key={index} label={["Top button", "Middle button", "Bottom button"][index]} value={draft.buttons[index]} options={options} onChange={(value) => { const next = [...draft.buttons] as PlaybackDefinition["buttons"]; next[index] = value as PlaybackButtonAction; onDraftChange({ ...draft, buttons: next }); }}/>) }
     {draft.button_count === 0 && <p className="playback-topology-note">This playback has no buttons.</p>}
     {draft.has_fader ? <LayoutChoiceField kind="fader" label="Fader" value={draft.fader} disabled={fixedFader(draft)} onChange={(fader) => onDraftChange({ ...draft, fader: fader as PlaybackDefinition["fader"] })} options={faderModes(draft).map((value) => ({ value, label: fixedFaderLabel(draft) ?? faderLabels[value], description: fixedFaderDescription(draft) ?? faderDescriptions[value] }))}/> : <p className="playback-topology-note">No fader on this playback.</p>}
+    {footprint.type === "taller" && <LayoutChoiceField kind="button" label="Additional upper button" value={footprint.upper_button} options={options} onChange={(upper_button) => onDraftChange({ ...draft, footprint: { type: "taller", upper_button: upper_button as PlaybackButtonAction } })}/>}
+    {footprint.type === "wider" && <>
+      {footprint.right_buttons.map((value, index) => <LayoutChoiceField kind="button" key={`right-${index}`} label={`Right ${["top", "middle", "bottom"][index]} button`} value={value} options={options} onChange={(button) => { const right_buttons = [...footprint.right_buttons] as typeof footprint.right_buttons; right_buttons[index] = button as PlaybackButtonAction; onDraftChange({ ...draft, footprint: { ...footprint, right_buttons } }); }}/>) }
+      <LayoutChoiceField kind="fader" label="Right fader" value={footprint.right_fader} disabled={fixedFader(draft)} onChange={(right_fader) => onDraftChange({ ...draft, footprint: { ...footprint, right_fader: right_fader as PlaybackDefinition["fader"] } })} options={faderModes(draft).map((value) => ({ value, label: fixedFaderLabel(draft) ?? faderLabels[value], description: fixedFaderDescription(draft) ?? faderDescriptions[value] }))}/>
+    </>}
     {draft.target.type === "speed_group" && draft.fader === "centered_relative" && <p className="playback-topology-note">50% is exactly 1× the learned speed; lower travel slows and higher travel speeds up.</p>}
   </FormLayout>;
 }
@@ -304,7 +316,7 @@ function InactivePlaybackDetail() { return <div className="playback-cleared-mess
 export function normalizePlaybackTopology(playback: PlaybackDefinition, fallbackButtons: number, fallbackFader: boolean): PlaybackDefinition {
   const buttonCount = Math.max(0, Math.min(3, playback.button_count ?? fallbackButtons)) as 0 | 1 | 2 | 3;
   const buttons = playback.buttons.map((action, index) => index < buttonCount ? action : "none") as PlaybackDefinition["buttons"];
-  return { ...playback, buttons, button_count: buttonCount, has_fader: playback.has_fader ?? fallbackFader, color: playback.color ?? "#20c997", flash_release: playback.flash_release ?? "release_all", protect_from_swap: Boolean(playback.protect_from_swap) };
+  return { ...playback, buttons, footprint: playback.footprint ?? { type: "normal" }, button_count: buttonCount, has_fader: playback.has_fader ?? fallbackFader, color: playback.color ?? "#20c997", flash_release: playback.flash_release ?? "release_all", protect_from_swap: Boolean(playback.protect_from_swap) };
 }
 
 export function withFunctionDefaults(playback: PlaybackDefinition, type: string, cueListId: string, groupId: string, dynamic?: ReturnType<typeof useDynamics>[number]): PlaybackDefinition {
@@ -318,7 +330,25 @@ export function withFunctionDefaults(playback: PlaybackDefinition, type: string,
   else if (type === "programmer_fade") { target = { type }; buttons = ["double", "half", "off"]; fader = "master"; }
   else if (type === "cue_fade") { target = { type }; buttons = ["double", "half", "off"]; fader = "master"; }
   else { target = { type: "grand_master" }; buttons = ["blackout", "pause_dynamics", "flash"]; fader = "master"; }
-  return normalizePlaybackTopology({ ...playback, target, buttons, fader }, playback.button_count ?? 3, Boolean(playback.has_fader));
+  const footprint = playback.footprint?.type === "taller"
+    ? { type: "taller" as const, upper_button: "none" as const }
+    : playback.footprint?.type === "wider"
+      ? { type: "wider" as const, right_buttons: buttons, right_fader: fader }
+      : { type: "normal" as const };
+  return normalizePlaybackTopology({ ...playback, target, buttons, fader, footprint }, playback.button_count ?? 3, Boolean(playback.has_fader));
+}
+
+function defaultButtons(type: PlaybackDefinition["target"]["type"]): PlaybackDefinition["buttons"] {
+  if (type === "cue_list") return ["go_minus", "go", "flash"];
+  if (type === "dynamic") return ["off", "pause", "flash"];
+  if (type === "group") return ["select", "select_dereferenced", "flash"];
+  if (type === "speed_group") return ["double", "half", "learn"];
+  if (type === "grand_master") return ["blackout", "pause_dynamics", "flash"];
+  return ["double", "half", "off"];
+}
+
+function defaultFader(type: PlaybackDefinition["target"]["type"]): PlaybackDefinition["fader"] {
+  return type === "speed_group" ? "learned_percentage" : "master";
 }
 
 function familyFromTarget(type: PlaybackDefinition["target"]["type"]): PlaybackFamily { return isSpecial(type) ? "special" : type; }

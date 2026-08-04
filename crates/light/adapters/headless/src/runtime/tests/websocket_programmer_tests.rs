@@ -286,6 +286,7 @@ async fn group_master_rejects_exclusive_show_change_but_not_output_read_permit()
                 button_count: 3,
                 fader: light_playback::PlaybackDefinition::default_fader(&target),
                 has_fader: true,
+        footprint: light_playback::PlaybackFootprint::Normal,
                 go_activates: true,
                 auto_off: false,
                 xfade_millis: 0,

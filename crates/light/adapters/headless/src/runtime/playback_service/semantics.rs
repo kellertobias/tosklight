@@ -13,13 +13,12 @@ pub(super) fn transition_cause(
     address: ResolvedPlaybackAddress,
     action: PlaybackAction,
 ) -> Result<Option<PlaybackTransitionCause>, ActionError> {
-    let PlaybackAction::ConfiguredButton {
-        number: button,
-        pressed: true,
-    } = action
-    else {
+    if !matches!(
+        action,
+        PlaybackAction::ConfiguredButton { pressed: true, .. }
+    ) {
         return Ok(None);
-    };
+    }
     let ResolvedPlaybackAddress::Pool { number, .. } = address else {
         return Ok(None);
     };
@@ -32,17 +31,32 @@ pub(super) fn transition_cause(
         .find(|definition| definition.number == number)
         .cloned()
         .ok_or_else(|| ActionError::new(ActionErrorKind::NotFound, "playback"))?;
+    let (definition, action) = super::configured_control_definition(&definition, action)?;
+    Ok(configured_transition_cause(&definition, action))
+}
+
+pub(super) fn configured_transition_cause(
+    definition: &light_playback::PlaybackDefinition,
+    action: PlaybackAction,
+) -> Option<PlaybackTransitionCause> {
+    let PlaybackAction::ConfiguredButton {
+        number: button,
+        pressed: true,
+    } = action
+    else {
+        return None;
+    };
     let configured = definition
         .buttons
         .get(usize::from(button.saturating_sub(1)))
         .filter(|_| button > 0 && button <= definition.button_count);
-    Ok(configured.and_then(|action| match action {
+    configured.and_then(|action| match action {
         light_playback::PlaybackButtonAction::Go
         | light_playback::PlaybackButtonAction::FastForward => Some(PlaybackTransitionCause::Go),
         light_playback::PlaybackButtonAction::GoMinus
         | light_playback::PlaybackButtonAction::FastRewind => Some(PlaybackTransitionCause::Back),
         _ => None,
-    }))
+    })
 }
 
 pub(super) fn may_activate_playback(action: PlaybackAction) -> bool {
@@ -62,7 +76,8 @@ pub(super) fn may_activate_playback(action: PlaybackAction) -> bool {
         | PlaybackAction::ConfiguredButton { .. }
         // A zero fader value still activates an inactive manual-XFade Playback.
         | PlaybackAction::Master(_)
-        | PlaybackAction::MasterTransition { .. } => true,
+        | PlaybackAction::MasterTransition { .. }
+        | PlaybackAction::ConfiguredFader { .. } => true,
         PlaybackAction::GoTo(_) => true,
         PlaybackAction::Crossfade { enabled } | PlaybackAction::Temporary { enabled, .. } => {
             enabled

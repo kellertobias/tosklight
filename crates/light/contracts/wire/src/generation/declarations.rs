@@ -779,6 +779,7 @@ fn playback_topology(config: &Config) -> Vec<String> {
         PlaybackTopologyTarget::decl(config),
         PlaybackTopologyButtonAction::decl(config),
         PlaybackTopologyFaderMode::decl(config),
+        PlaybackTopologyFootprint::decl(config),
         PlaybackTopologyFlashReleaseMode::decl(config),
         PlaybackTopologyDynamicAssignment::decl(config),
         PlaybackTopologyDynamicTargetScope::decl(config),

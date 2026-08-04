@@ -160,6 +160,10 @@ pub enum PlaybackAction {
         number: u8,
         pressed: bool,
     },
+    ConfiguredFader {
+        number: u8,
+        level: PlaybackLevel,
+    },
 }
 
 impl PlaybackAction {
@@ -169,7 +173,8 @@ impl PlaybackAction {
             | Self::Master(_)
             | Self::MasterTransition { .. }
             | Self::GoTo(_)
-            | Self::Load(_) => None,
+            | Self::Load(_)
+            | Self::ConfiguredFader { .. } => None,
             Self::Crossfade { .. } => None,
             Self::Temporary { pressed, .. }
             | Self::ConfiguredButton { pressed, .. }

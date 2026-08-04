@@ -12,6 +12,7 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
         button_count: 3,
         fader,
         has_fader,
+        footprint: light_playback::PlaybackFootprint::Normal,
         go_activates: true,
         auto_off: false,
         xfade_millis: 0,

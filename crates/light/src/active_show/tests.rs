@@ -253,6 +253,7 @@ fn playback_and_page_batch_prepares_backs_up_commits_and_installs_once() {
         button_count: 3,
         fader: light_playback::PlaybackFaderMode::Master,
         has_fader: true,
+        footprint: light_playback::PlaybackFootprint::Normal,
         go_activates: true,
         auto_off: true,
         xfade_millis: 0,

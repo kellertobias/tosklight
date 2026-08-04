@@ -62,6 +62,7 @@ fn application_playback(
         button_count: value.button_count,
         fader,
         has_fader: value.has_fader,
+        footprint: application_footprint(value.footprint.unwrap_or_default()),
         go_activates: value.go_activates,
         auto_off: value.auto_off,
         xfade_millis: value.xfade_millis,
@@ -279,6 +280,24 @@ fn application_fader(value: wire::PlaybackTopologyFaderMode) -> playback::Playba
         Input::DirectBpm => Output::DirectBpm,
         Input::CenteredRelative => Output::CenteredRelative,
         Input::LearnedPercentage => Output::LearnedPercentage,
+    }
+}
+
+fn application_footprint(value: wire::PlaybackTopologyFootprint) -> playback::PlaybackFootprint {
+    match value {
+        wire::PlaybackTopologyFootprint::Normal => playback::PlaybackFootprint::Normal,
+        wire::PlaybackTopologyFootprint::Taller { upper_button } => {
+            playback::PlaybackFootprint::Taller {
+                upper_button: application_button(upper_button),
+            }
+        }
+        wire::PlaybackTopologyFootprint::Wider {
+            right_buttons,
+            right_fader,
+        } => playback::PlaybackFootprint::Wider {
+            right_buttons: right_buttons.map(application_button),
+            right_fader: application_fader(right_fader),
+        },
     }
 }
 

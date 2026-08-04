@@ -7,6 +7,7 @@ import type {
 
 export type PoolPlaybackAction =
 	| "button"
+	| "configured-fader"
 	| "on"
 	| "off"
 	| "toggle"
@@ -38,6 +39,7 @@ export interface PoolPlaybackInput {
 	value?: number;
 	pressed?: boolean;
 	button?: number;
+	fader?: number;
 	cue_number?: number;
 	surface?: PlaybackSurface;
 }
@@ -88,6 +90,12 @@ function structuredAction(
 		};
 	if (action === "master")
 		return { type: "master", value: required(input.value, "master value") };
+	if (action === "configured-fader")
+		return {
+			type: "configured_fader",
+			number: required(input.fader, "fader number"),
+			level: required(input.value, "fader value"),
+		};
 	if (action === "go-to" || action === "load")
 		return {
 			type: action === "go-to" ? "go_to" : "load",

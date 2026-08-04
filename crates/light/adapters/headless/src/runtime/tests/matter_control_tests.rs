@@ -387,6 +387,7 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
         button_count: 3,
         fader,
         has_fader: false,
+        footprint: light_playback::PlaybackFootprint::Normal,
         go_activates: true,
         auto_off: false,
         xfade_millis: 0,

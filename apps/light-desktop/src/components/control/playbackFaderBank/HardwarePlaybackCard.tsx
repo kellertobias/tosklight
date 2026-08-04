@@ -13,6 +13,7 @@ import type {
 import type { PlaybackRuntimeProjection } from "../../../api/types";
 import { activateHardwareCard } from "./actions";
 import type { PlaybackBankController } from "./controller";
+import { ExpandedPlaybackControls } from "./ExpandedPlaybackControls";
 import { playbackFaderDisplay } from "./feedback";
 import { HardwareCueRows } from "./HardwareCueRows";
 import { playbackRowUnits } from "./projection";
@@ -99,6 +100,10 @@ export function HardwarePlaybackCard({
 			slots={{
 				overlays: (
 					<>
+						<ExpandedPlaybackControls
+							controller={controller}
+							slotData={slotData}
+						/>
 						<PlaybackAssignmentTarget controller={controller} slot={slot} />
 						<PlaybackConfigurationTarget
 							controller={controller}

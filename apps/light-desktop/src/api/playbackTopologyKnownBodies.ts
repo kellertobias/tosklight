@@ -96,6 +96,7 @@ function knownPlayback(playback: PlaybackDefinition, number: number) {
 		button_count: playback.button_count ?? 3,
 		fader,
 		has_fader: playback.has_fader ?? true,
+		footprint: playback.footprint ?? { type: "normal" },
 		go_activates: playback.go_activates,
 		auto_off: playback.auto_off,
 		xfade_millis: playback.xfade_millis,

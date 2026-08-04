@@ -120,9 +120,20 @@ export function PlaybackSlot({
 	const cardStyle = playback
 		? ({
 				"--playback-color": playbackColor,
+				...(slotData.footprint
+					? {
+							gridColumn: `${slotData.footprint.columnStart} / span ${slotData.footprint.columnSpan}`,
+							gridRow: `${slotData.footprint.rowStart} / span ${slotData.footprint.rowSpan}`,
+						}
+					: {}),
 				...presentation?.style,
 			} as CSSProperties)
-		: undefined;
+		: slotData.footprint
+			? ({
+					gridColumn: `${slotData.footprint.columnStart} / span ${slotData.footprint.columnSpan}`,
+					gridRow: `${slotData.footprint.rowStart} / span ${slotData.footprint.rowSpan}`,
+				} as CSSProperties)
+			: undefined;
 	if (controller.hardware)
 		return (
 			<HardwarePlaybackCard

@@ -2331,6 +2331,41 @@ textarea,
 .playback-fader-bank {
 	padding: 0 1px;
 }
+.expanded-playback-controls {
+	position: absolute;
+	z-index: 3;
+	display: grid;
+	gap: 0.25rem;
+	margin: 0;
+	min-width: 0;
+	padding: 0.35rem;
+	background: color-mix(in srgb, var(--playback-color, #20c997) 18%, #111 82%);
+	border: 1px solid color-mix(in srgb, var(--playback-color, #20c997) 55%, white 15%);
+	border-radius: 0.35rem;
+}
+.expanded-playback-controls.taller {
+	top: 0.35rem;
+	right: 0.35rem;
+}
+.expanded-playback-controls.wider {
+	top: 0.35rem;
+	right: 0.35rem;
+	bottom: 0.35rem;
+	width: calc(50% - 0.7rem);
+}
+.expanded-playback-controls > button {
+	min-height: 2rem;
+}
+.expanded-playback-fader {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	justify-content: space-between;
+	font-size: 0.7rem;
+}
+.expanded-playback-fader input {
+	width: 100%;
+}
 .playback-fader-bank article:not(.playback-card) {
 	position: relative;
 	min-width: 0;

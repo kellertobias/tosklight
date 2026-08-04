@@ -197,6 +197,27 @@ describe("useCommandLineShortcuts playback keys", () => {
 		});
 	});
 
+	it("routes a claimed wider shortcut position to the anchor's right control", () => {
+		pages = [page(2, { "1": 10 })];
+		playbacks = [
+			{
+				...playback(10, "go"),
+				footprint: {
+					type: "wider",
+					right_buttons: ["go_minus", "none", "none"],
+					right_fader: "master",
+				},
+			},
+		];
+		mount();
+
+		press("F2");
+
+		expect(poolPlaybackAction).toHaveBeenCalledWith(10, "go-minus", {
+			surface: "physical",
+		});
+	});
+
 	it("does not repeat a one-shot Playback action while a key is held", () => {
 		mount();
 

@@ -318,6 +318,7 @@ function encodePlayback(playback: PlaybackDefinition, maximum = 1_000) {
 		button_count: playback.button_count ?? 3,
 		fader: playback.fader,
 		has_fader: playback.has_fader ?? true,
+		footprint: playback.footprint ?? { type: "normal" },
 		go_activates: playback.go_activates,
 		auto_off: playback.auto_off,
 		xfade_millis: revisionAt(

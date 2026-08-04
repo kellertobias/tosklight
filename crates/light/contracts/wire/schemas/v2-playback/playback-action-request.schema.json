@@ -535,6 +535,30 @@
             "number",
             "pressed"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "level": {
+              "type": "number",
+              "format": "float"
+            },
+            "number": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "configured_fader"
+            }
+          },
+          "required": [
+            "type",
+            "number",
+            "level"
+          ]
         }
       ]
     },

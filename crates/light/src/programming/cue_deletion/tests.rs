@@ -293,6 +293,7 @@ fn seed_show(store: &ShowStore, cue_list_id: CueListId, cue_count: usize) {
         button_count: 3,
         fader: PlaybackFaderMode::Master,
         has_fader: true,
+        footprint: light_playback::PlaybackFootprint::Normal,
         go_activates: true,
         auto_off: false,
         xfade_millis: 0,

@@ -199,6 +199,19 @@ export interface PlaybackDefinition {
 		| { type: "cue_fade" }
 		| { type: "grand_master" };
 	buttons: [PlaybackButtonAction, PlaybackButtonAction, PlaybackButtonAction];
+	/** Show-persisted expanded footprint; surface topology only affects whether it is effective. */
+	footprint?:
+		| { type: "normal" }
+		| { type: "taller"; upper_button: PlaybackButtonAction }
+		| {
+				type: "wider";
+				right_buttons: [
+					PlaybackButtonAction,
+					PlaybackButtonAction,
+					PlaybackButtonAction,
+				];
+				right_fader: PlaybackDefinition["fader"];
+		  };
 	/** Missing only on legacy show files; every save writes an explicit topology. */
 	button_count?: 0 | 1 | 2 | 3;
 	fader:

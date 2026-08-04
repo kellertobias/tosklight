@@ -504,6 +504,43 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		).toHaveLength(3);
 	});
 
+	it("renders one wider anchor, suppresses the claimed slot, and routes its extra controls", () => {
+		assignPlayback({
+			footprint: {
+				type: "wider",
+				right_buttons: ["go", "pause", "flash"],
+				right_fader: "x_fade",
+			},
+		});
+		const { container } = render(
+			<PlaybackFaderBank
+				playbackLayout={{
+					playbacks_per_row: 2,
+					rows: [{ first_playback_slot: 1, has_fader: true, button_count: 3 }],
+				}}
+			/>,
+		);
+
+		const cards = container.querySelectorAll("[data-playback-slot]");
+		expect(cards).toHaveLength(1);
+		expect(cards[0]).toHaveAttribute("data-playback-slot", "1");
+		expect(cards[0]).toHaveStyle({ gridColumn: "1 / span 2" });
+		expect(
+			screen.getByLabelText("Right controls for Playback 1"),
+		).toBeInTheDocument();
+		const extraButton = container.querySelector(
+			'[data-playback-button-index="4"]',
+		);
+		expect(extraButton).not.toBeNull();
+		if (extraButton) fireEvent.click(extraButton);
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "button", {
+			button: 4,
+			pressed: true,
+			surface: "physical",
+		});
+		expect(screen.getAllByRole("slider")).toHaveLength(2);
+	});
+
 	it("fills hardware height with faderless and fader row weights", () => {
 		mocks.hardwareConnected = true;
 		Object.assign(mocks.state, {

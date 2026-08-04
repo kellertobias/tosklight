@@ -583,6 +583,72 @@ fn configured_button_uses_the_authoritative_resolved_navigation_cause() {
 }
 
 #[test]
+fn configured_control_numbers_are_validated_before_ports_execute() {
+    let service = PlaybackService::default();
+    let ports = FakePorts::default();
+
+    for action in [
+        PlaybackAction::ConfiguredButton {
+            number: 0,
+            pressed: true,
+        },
+        PlaybackAction::ConfiguredButton {
+            number: 7,
+            pressed: true,
+        },
+        PlaybackAction::ConfiguredFader {
+            number: 0,
+            level: PlaybackLevel::new(0.5),
+        },
+        PlaybackAction::ConfiguredFader {
+            number: 3,
+            level: PlaybackLevel::new(0.5),
+        },
+    ] {
+        let mut request = envelope(ActionSource::Http, PlaybackAddress::Pool(8), None);
+        request.command.action = action;
+        assert_eq!(
+            service.handle(request, &ports).unwrap_err().kind,
+            ActionErrorKind::Invalid
+        );
+    }
+
+    assert!(ports.actions().is_empty());
+
+    for action in [
+        PlaybackAction::ConfiguredButton {
+            number: 6,
+            pressed: true,
+        },
+        PlaybackAction::ConfiguredFader {
+            number: 2,
+            level: PlaybackLevel::new(0.5),
+        },
+    ] {
+        let mut request = envelope(ActionSource::Http, PlaybackAddress::Pool(8), None);
+        request.command.action = action;
+        service.handle(request, &ports).unwrap();
+    }
+    assert_eq!(
+        ports
+            .actions()
+            .iter()
+            .map(|observed| observed.action)
+            .collect::<Vec<_>>(),
+        vec![
+            PlaybackAction::ConfiguredButton {
+                number: 6,
+                pressed: true,
+            },
+            PlaybackAction::ConfiguredFader {
+                number: 2,
+                level: PlaybackLevel::new(0.5),
+            },
+        ]
+    );
+}
+
+#[test]
 fn no_change_and_captured_preload_do_not_publish_runtime_events() {
     for (execution, expected) in [
         (
