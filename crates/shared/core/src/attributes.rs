@@ -90,6 +90,8 @@ pub const ENCODER_SLOTS_PER_PAGE: u8 = 6;
 pub const RETIRED_BUILT_IN_ATTRIBUTES: &[&str] = &[
     "beam",
     "beam.edge",
+    "beam.effect.1",
+    "beam.effect.2",
     "control.mode",
     "control.speed",
     "color.cyan",

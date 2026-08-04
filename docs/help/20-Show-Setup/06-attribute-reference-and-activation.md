@@ -69,6 +69,9 @@ This list describes the current shipped library, not a recommendation to standar
 `fixture.*` name. Generic Frost, Prism, Pan/Tilt Speed, and Shaper blade concepts map to their
 canonical descriptors. Manufacturer-specific macros, reserved slots, and unusual effects remain
 typed fixture functions or custom attributes.
+The retired generic `beam.effect.1` and `beam.effect.2` placeholders are still readable in older
+shows but are not offered for new programming: a source Beam FX channel must map to its actual
+mechanism or retain an explicit custom attribute.
 
 ## Default attribute vocabulary and encoder placement
 
@@ -128,8 +131,6 @@ active attribute-group button cycles **Group 1 of N**, **Group 2 of N**, and so 
 | Beam | P2/E2 | `prism.2.rotation` | **Prism 2 Rotation** (`prism.2.rotation`) | — |
 | Beam | P2/E3 | `animation.1` | **Animation Wheel 1** (`animation.1`) | — |
 | Beam | P2/E4 | `animation.1.rotation` | **Animation Rotation 1** (`animation.1.rotation`) | — |
-| Beam | P2/E5 | `beam.effect.1` | **Beam Effect 1** (`beam.effect.1`; selected migrated `fixture.beam_fx_…` or `fixture.effect_…` channels) | — |
-| Beam | P2/E6 | `beam.effect.2` | **Beam Effect 2** (`beam.effect.2`) | — |
 | Shapers | P1/E1 | `iris` | **Iris** (`iris`) | Shapers |
 | Shapers | P1/E2 | `shaper.blade.1.position` | **Blade 1 Position** (`shaper.blade.1.position`, migrated from `fixture.blade_1`) | Shapers |
 | Shapers | P1/E3 | `shaper.blade.1.angle` | **Blade 1 Angle** (`shaper.blade.1.angle`) | Shapers |
