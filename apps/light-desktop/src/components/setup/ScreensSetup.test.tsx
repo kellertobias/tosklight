@@ -81,6 +81,44 @@ describe("programmer control surface settings", () => {
 			visible_encoders: 4,
 		});
 	});
+
+	it("reports a closed owner and explicitly recovers controls to main", () => {
+		const updateProgrammerControlSurface = vi.fn();
+		const source: ScreensContextValue = {
+			screens: {
+				screens: [{ ...configuredScreen, desired_open: false }],
+				active_pages: {},
+				programmer_control_surface: {
+					owner_screen_id: configuredScreen.id,
+					visible_encoders: 4,
+				},
+			},
+			bootstrap: null,
+			session: null,
+			saveScreen: vi.fn(),
+			deleteScreen: vi.fn(),
+			setScreenPage: vi.fn(),
+			updateProgrammerControlSurface,
+			updateControlDesk: vi.fn(),
+			selectControlDesk: vi.fn(),
+			removeClient: vi.fn(),
+		};
+		render(
+			<ScreensProvider source={source}>
+				<ProgrammerControlSurfaceSettings />
+			</ScreensProvider>,
+		);
+
+		expect(screen.getByRole("alert")).toHaveTextContent("Screen 1 is closed");
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Return controls to main screen",
+			}),
+		);
+		expect(updateProgrammerControlSurface).toHaveBeenCalledWith({
+			assign_to_main: true,
+		});
+	});
 });
 
 describe("additional screen settings", () => {

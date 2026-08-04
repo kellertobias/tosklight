@@ -105,6 +105,10 @@ export function ProgrammerControlSurfaceSettings() {
 	const server = useScreens();
 	const configuration = server.screens?.programmer_control_surface;
 	if (!configuration) return null;
+	const owner = server.screens?.screens.find(
+		(screen) => screen.id === configuration.owner_screen_id,
+	);
+	const ownerClosed = Boolean(owner && !owner.desired_open);
 	return (
 		<section className="screen-settings-card programmer-control-surface-settings">
 			<header>
@@ -149,6 +153,24 @@ export function ProgrammerControlSurfaceSettings() {
 					]}
 				/>
 			</FormLayout>
+			{ownerClosed && (
+				<div className="programmer-control-owner-warning" role="alert">
+					<span>
+						{owner?.name} is closed, so its Programmer control surface is not
+						currently visible.
+					</span>
+					<Button
+						variant="warning"
+						onClick={() =>
+							void server.updateProgrammerControlSurface({
+								assign_to_main: true,
+							})
+						}
+					>
+						Return controls to main screen
+					</Button>
+				</div>
+			)}
 		</section>
 	);
 }

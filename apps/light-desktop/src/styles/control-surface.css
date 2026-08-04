@@ -728,6 +728,9 @@
 .screen-shell.with-control {
 	grid-template-rows: minmax(0, 1fr) minmax(300px, 42vh);
 }
+.app-shell:not(:has(> .control-section)) {
+	grid-template-rows: minmax(0, 1fr);
+}
 .screen-shell > .left-dock {
 	grid-row: 1 / -1;
 }
@@ -866,6 +869,17 @@
 }
 .screen-settings-card {
 	min-width: 0;
+}
+.programmer-control-owner-warning {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-top: 10px;
+	padding: 8px;
+	border: 1px solid var(--amber);
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--amber) 12%, var(--panel));
 }
 .screen-settings-header {
 	display: grid !important;
