@@ -24,6 +24,10 @@ import {
 	selectedGroupSupportedAttributes,
 	useSelectedPortableGroup,
 } from "./useSelectedPortableGroup";
+import {
+	resolveVisibleEncoderCount,
+	useVisibleEncoderCount,
+} from "./VisibleEncoderCount";
 
 const EMPTY_FIXTURE_IDS: readonly string[] = [];
 const EMPTY_PROGRAMMER_VALUES: readonly never[] = [];
@@ -128,6 +132,12 @@ export function useParameterProjection(
 	const programmerActions = useProgrammerActions();
 	const hardwareAttached = useHardwareConnected();
 	const { state } = useApp();
+	const softwareEncoderCount = useVisibleEncoderCount();
+	const hardwareConnected = Boolean(hardwareAttached || state.midiProfile);
+	const visibleEncoderCount = resolveVisibleEncoderCount(
+		softwareEncoderCount,
+		hardwareConnected,
+	);
 	const selection = useProgrammingSelectionView(active);
 	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
 	const selectedGroup = selectedGroupId(selection);
@@ -162,8 +172,13 @@ export function useParameterProjection(
 	const registry = useAttributeRegistry();
 	const values = useResolvedValues(visualization, selectedFixtureIds);
 	const encoderGroups = useMemo(
-		() => attributeEncoderGroups(placedRegistry(registry), supported),
-		[registry, supported],
+		() =>
+			attributeEncoderGroups(
+				placedRegistry(registry),
+				supported,
+				visibleEncoderCount,
+			),
+		[registry, supported, visibleEncoderCount],
 	);
 	const configuredGroup = encoderGroups.find(
 		(group) => group.id === FAMILY_GROUPS[family],
@@ -175,9 +190,9 @@ export function useParameterProjection(
 	const hasConfiguredFamily = Boolean(configuredGroup?.pages.length);
 	const encoderSlots = hasConfiguredFamily
 		? (configuredPage?.slots.map((descriptor) => descriptor?.id ?? null) ??
-			Array.from<null>({ length: 6 }).fill(null))
+			Array.from<null>({ length: visibleEncoderCount }).fill(null))
 		: Array.from(
-				{ length: 6 },
+				{ length: visibleEncoderCount },
 				(_, index) => fallbackAttributes[index] ?? null,
 			);
 	const attributeLabels = new Map(
@@ -207,8 +222,9 @@ export function useParameterProjection(
 		encoderPage: page,
 		encoderPageCount: Math.max(1, configuredGroup?.pages.length ?? 0),
 		encoderSlots,
+		visibleEncoderCount,
 		attributeLabels,
-		hardwareConnected: Boolean(hardwareAttached || state.midiProfile),
+		hardwareConnected,
 	};
 }
 

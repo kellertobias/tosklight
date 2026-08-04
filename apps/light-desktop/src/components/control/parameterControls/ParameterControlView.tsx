@@ -10,7 +10,12 @@ export function ParameterControlView({
 	return (
 		<div className="parameter-controls">
 			<ParameterFamilyTabs controller={controller} />
-			<div className="parameter-surfaces">
+			<div
+				className="parameter-surfaces"
+				style={{
+					gridTemplateColumns: `repeat(${controller.visibleEncoderCount}, minmax(0, 1fr))`,
+				}}
+			>
 				<EncoderSurfaces controller={controller} />
 			</div>
 		</div>
