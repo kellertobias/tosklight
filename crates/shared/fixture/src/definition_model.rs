@@ -53,6 +53,10 @@ pub struct ParameterMetadata {
     /// never implies a numeric speed/time conversion.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub position_movement_representation: Option<PositionMovementRepresentation>,
+    /// Fixture-authored operating mode for canonical Pan or Tilt. Absolute and endless channels
+    /// share one Programmer identity while retaining the representation used by the fixture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_axis_representation: Option<PositionAxisRepresentation>,
 }
 impl Default for ParameterMetadata {
     fn default() -> Self {
@@ -64,6 +68,7 @@ impl Default for ParameterMetadata {
             wrap: false,
             curve: DmxCurve::Linear,
             position_movement_representation: None,
+            position_axis_representation: None,
         }
     }
 }
@@ -74,6 +79,13 @@ pub enum PositionMovementRepresentation {
     Speed,
     Time,
     SpeedOrTime,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PositionAxisRepresentation {
+    Absolute,
+    Endless,
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

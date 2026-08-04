@@ -20,7 +20,10 @@ import {
 	resolveAnchoredEncoderPage,
 } from "./attributeEncoderPages";
 import { type ParameterFamily, parameterFamilies } from "./model";
-import { positionMovementRepresentation } from "./positionMovement";
+import {
+	positionAxisRepresentation,
+	positionMovementRepresentation,
+} from "./positionMovement";
 import { useParameterPreloadValues } from "./useParameterPreloadValues";
 import { useParameterProgrammerValues } from "./useParameterProgrammerValues";
 import {
@@ -154,6 +157,14 @@ export function useParameterProjection(
 		() => positionMovementRepresentation(selectedFixtures),
 		[selectedFixtures],
 	);
+	const panRepresentation = useMemo(
+		() => positionAxisRepresentation(selectedFixtures, "pan"),
+		[selectedFixtures],
+	);
+	const tiltRepresentation = useMemo(
+		() => positionAxisRepresentation(selectedFixtures, "tilt"),
+		[selectedFixtures],
+	);
 	const captureMode = useProgrammerCaptureModeView(active);
 	const preloadCaptureActive = capturesProgrammerWrites(captureMode);
 	const normalValuesView = useParameterProgrammerValues(
@@ -245,6 +256,8 @@ export function useParameterProjection(
 		visibleEncoderCount,
 		attributeLabels,
 		movementRepresentation,
+		panRepresentation,
+		tiltRepresentation,
 		hardwareConnected,
 	};
 }

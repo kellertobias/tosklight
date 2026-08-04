@@ -144,6 +144,8 @@ export function canonicalAttributeProjection(attribute: string): {
 			"media.opacity": ["intensity", "identity"],
 			"media.rotation": ["position.rotation", "identity"],
 			"media.tint": ["color", "identity"],
+			"pan.continuous": ["pan", "identity"],
+			"tilt.continuous": ["tilt", "identity"],
 		};
 	const [canonical, canonicalTransform] = migration[attribute] ?? [
 		attribute,

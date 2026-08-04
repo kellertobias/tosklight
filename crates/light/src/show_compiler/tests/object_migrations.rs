@@ -1354,6 +1354,50 @@ fn legacy_media_values_migrate_and_source_or_target_collisions_stop_atomically()
 }
 
 #[test]
+fn legacy_endless_axis_values_migrate_and_absolute_collisions_stop_atomically() {
+    let fixture = light_core::FixtureId::new();
+    let preset = json!({
+        "name": "Endless position",
+        "family": "Position",
+        "number": 3,
+        "values": {fixture.0.to_string(): {
+            "pan.continuous": {"kind":"normalized","value":0.4},
+            "tilt.continuous": {"kind":"normalized","value":0.6}
+        }},
+        "group_values": {}
+    });
+    let (_, document) = document_with_objects(&[("preset", "3.3", preset)]);
+    let mut transaction = document.transaction();
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+    let candidate = document.candidate(&transaction).unwrap();
+    let values =
+        &candidate.object("preset", "3.3").unwrap().body()["values"][fixture.0.to_string()];
+    assert_eq!(values["pan"]["value"], 0.4);
+    assert_eq!(values["tilt"]["value"], 0.6);
+    assert!(values.get("pan.continuous").is_none());
+    assert!(values.get("tilt.continuous").is_none());
+
+    for (source, target) in [("pan.continuous", "pan"), ("tilt.continuous", "tilt")] {
+        let preset = json!({
+            "name": "Conflict",
+            "family": "Position",
+            "number": 4,
+            "values": {fixture.0.to_string(): {
+                (source): {"kind":"normalized","value":0.4},
+                (target): {"kind":"normalized","value":0.5}
+            }},
+            "group_values": {}
+        });
+        let (_, document) = document_with_objects(&[("preset", "3.4", preset)]);
+        let mut transaction = document.transaction();
+        let error = stage_candidate_migrations(&document, &mut transaction).unwrap_err();
+        assert!(error.message.contains("attribute migration conflict"));
+        assert!(error.message.contains(target));
+        assert!(transaction.is_empty());
+    }
+}
+
+#[test]
 fn legacy_emitter_and_softness_controls_retire_with_values_and_preserve_unknown_configuration_data()
 {
     let mut configuration = light_core::AttributeConfiguration::recommended();

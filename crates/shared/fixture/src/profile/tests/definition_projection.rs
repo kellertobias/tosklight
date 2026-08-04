@@ -83,6 +83,49 @@ fn position_movement_projection_retains_fixture_authored_representation() {
     }
 }
 
+#[test]
+fn pan_and_tilt_projection_retain_absolute_or_endless_representation() {
+    for (canonical, source, expected) in [
+        ("pan", "pan", crate::PositionAxisRepresentation::Absolute),
+        (
+            "pan",
+            "pan.continuous",
+            crate::PositionAxisRepresentation::Endless,
+        ),
+        ("tilt", "tilt", crate::PositionAxisRepresentation::Absolute),
+        (
+            "tilt",
+            "tilt.continuous",
+            crate::PositionAxisRepresentation::Endless,
+        ),
+    ] {
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Position Test".into();
+        profile.name = "Typed Position".into();
+        profile.short_name = "Position".into();
+        profile.fixture_type = "moving_head".into();
+        let mode_id = {
+            let mode = &mut profile.modes[0];
+            mode.splits[0].footprint = 1;
+            let mut axis = channel(mode.heads[0].id, ChannelResolution::U8, Vec::new());
+            axis.fixture_attribute = AttributeKey(source.into());
+            axis.attribute = AttributeKey(canonical.into());
+            axis.functions[0].attribute = axis.attribute.clone();
+            mode.channels = vec![axis];
+            mode.id
+        };
+
+        let definition = profile.resolved_definition(mode_id).unwrap();
+        assert_eq!(
+            definition.heads[0].parameters[0]
+                .metadata
+                .position_axis_representation,
+            Some(expected),
+            "{source}"
+        );
+    }
+}
+
 fn large_profile() -> FixtureProfile {
     let mut profile = FixtureProfile::blank();
     profile.manufacturer = "Projection Test".into();

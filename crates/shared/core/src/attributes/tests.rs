@@ -156,6 +156,8 @@ mod canonical_migration_tests {
             ("media.opacity", "intensity"),
             ("media.rotation", "position.rotation"),
             ("media.tint", "color"),
+            ("pan.continuous", "pan"),
+            ("tilt.continuous", "tilt"),
         ] {
             assert_eq!(
                 canonical_attribute_migration(&AttributeKey(source.into())),
@@ -843,6 +845,52 @@ mod attribute_registry_tests {
                     .is_none()
             );
             assert!(attribute_descriptor(&AttributeKey(compatibility_only.into())).built_in);
+        }
+    }
+
+    #[test]
+    fn legacy_endless_axes_join_pan_and_tilt_without_overwriting_authored_layouts() {
+        let recommended = AttributeConfiguration::recommended();
+        for (source, target, legacy_encoder) in [
+            (
+                "pan.continuous",
+                "pan",
+                EncoderPlacement::new(EncoderGroup::Position, 1, 3),
+            ),
+            (
+                "tilt.continuous",
+                "tilt",
+                EncoderPlacement::new(EncoderGroup::Position, 1, 4),
+            ),
+        ] {
+            let mut legacy = recommended.clone();
+            legacy.placements.push(AttributePlacement {
+                attribute: AttributeKey(source.into()),
+                encoder: legacy_encoder,
+                push_turn_of: None,
+            });
+            let migrated = legacy.migrate_canonical_attributes().unwrap();
+            assert!(
+                migrated
+                    .attribute_placement_for(&AttributeKey(source.into()))
+                    .is_none()
+            );
+            assert_eq!(
+                migrated.placement_for(&AttributeKey(target.into())),
+                recommended.placement_for(&AttributeKey(target.into()))
+            );
+
+            let mut customized = recommended.clone();
+            customized.placements.push(AttributePlacement {
+                attribute: AttributeKey(source.into()),
+                encoder: EncoderPlacement::new(EncoderGroup::Position, 9, 1),
+                push_turn_of: None,
+            });
+            assert!(matches!(
+                customized.migrate_canonical_attributes(),
+                Err(AttributeConfigurationError::CanonicalPlacementConflict { legacy, canonical })
+                    if legacy == source && canonical == target
+            ));
         }
     }
 

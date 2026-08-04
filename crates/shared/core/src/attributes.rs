@@ -399,10 +399,12 @@ pub fn canonical_attribute_migration_id(
         "media.opacity" => ("intensity", CanonicalAttributeTransform::Identity),
         "media.rotation" => ("position.rotation", CanonicalAttributeTransform::Identity),
         "media.tint" => ("color", CanonicalAttributeTransform::Identity),
+        "pan.continuous" => ("pan", CanonicalAttributeTransform::Identity),
         "pan.time" | "tilt.time" | "position.time" | "position.speed" => {
             ("position.movement", CanonicalAttributeTransform::Identity)
         }
         "strobe" => ("shutter", CanonicalAttributeTransform::Identity),
+        "tilt.continuous" => ("tilt", CanonicalAttributeTransform::Identity),
         _ => return None,
     };
     Some(migration)

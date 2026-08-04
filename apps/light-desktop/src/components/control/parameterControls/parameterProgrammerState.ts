@@ -5,7 +5,7 @@ import {
 	formatNormalizedValue,
 	normalizedProgrammerTarget,
 } from "./model";
-import { formatPositionMovement } from "./positionMovement";
+import { formatPositionAxis, formatPositionMovement } from "./positionMovement";
 import type { ParameterProjection } from "./useParameterProjection";
 
 function fixtureEntry(
@@ -57,10 +57,15 @@ export function normalizedParameterDisplay(
 	projection: ParameterProjection,
 	attribute: string,
 ) {
-	const format = (value: string) =>
-		attribute === "position.movement"
-			? formatPositionMovement(value, projection.movementRepresentation)
-			: value;
+	const format = (value: string) => {
+		if (attribute === "position.movement")
+			return formatPositionMovement(value, projection.movementRepresentation);
+		if (attribute === "pan")
+			return formatPositionAxis(value, projection.panRepresentation);
+		if (attribute === "tilt")
+			return formatPositionAxis(value, projection.tiltRepresentation);
+		return value;
+	};
 	if (projection.selectedGroupId) {
 		const target = normalizedParameterTarget(projection, attribute);
 		return target == null ? undefined : format(formatNormalizedValue(target));

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+	formatPositionAxis,
 	formatPositionMovement,
+	positionAxisRepresentation,
 	positionMovementRepresentation,
 } from "./positionMovement";
 
@@ -38,6 +40,48 @@ describe("Position Movement representation", () => {
 		).toBe("mixed");
 		expect(formatPositionMovement("25%...75%", "mixed")).toBe(
 			"25%...75% mixed representation",
+		);
+	});
+});
+
+describe("Pan and Tilt representation", () => {
+	const axisFixture = (
+		attribute: "pan" | "tilt",
+		representation: "absolute" | "endless",
+	) => ({
+		definition: {
+			heads: [
+				{
+					parameters: [
+						{
+							attribute,
+							metadata: { position_axis_representation: representation },
+						},
+					],
+				},
+			],
+		},
+	});
+
+	it("keeps absolute and endless operation on the same canonical axis", () => {
+		expect(
+			positionAxisRepresentation([axisFixture("pan", "absolute")], "pan"),
+		).toBe("absolute");
+		expect(
+			positionAxisRepresentation([axisFixture("pan", "endless")], "pan"),
+		).toBe("endless");
+		expect(formatPositionAxis("40%", "endless")).toBe("40% endless");
+	});
+
+	it("reports mixed selected-fixture modes without converting them", () => {
+		expect(
+			positionAxisRepresentation(
+				[axisFixture("tilt", "absolute"), axisFixture("tilt", "endless")],
+				"tilt",
+			),
+		).toBe("mixed");
+		expect(formatPositionAxis("10%...90%", "mixed")).toBe(
+			"10%...90% mixed mode",
 		);
 	});
 });

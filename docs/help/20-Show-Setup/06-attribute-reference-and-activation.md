@@ -72,9 +72,12 @@ typed fixture functions or custom attributes.
 The retired generic `beam.effect.1` and `beam.effect.2` placeholders are still readable in older
 shows but are not offered for new programming: a source Beam FX channel must map to its actual
 mechanism or retain an explicit custom attribute.
-Separate Continuous Pan and Continuous Tilt IDs remain readable in older shows but no longer reserve
-default encoder positions. Absolute and endless operation still require an explicit typed fixture
-mapping; they are not silently identity-aliased together.
+Separate Continuous Pan and Continuous Tilt IDs remain readable in older shows but migrate to the
+canonical Pan and Tilt controls and no longer reserve default encoder positions. Fixture projection
+retains whether each selected axis is absolute or endless, and the encoder display states that mode;
+mixed selections are labeled rather than numerically converted. A fixture profile cannot map two
+independent channels on one logical head to the same axis, and an old show containing both stable
+IDs reports a migration conflict instead of discarding one value.
 
 ## Default attribute vocabulary and encoder placement
 

@@ -1035,6 +1035,34 @@ mod tests {
         }
     }
 
+    #[test]
+    fn legacy_endless_axis_programmer_values_migrate_and_conflicts_stay_atomic() {
+        let fixture = uuid::Uuid::new_v4();
+        let mut value = serde_json::json!({
+            "values": [
+                {"fixture_id": fixture, "attribute": "pan.continuous"},
+                {"fixture_id": fixture, "attribute": "tilt.continuous"}
+            ]
+        });
+        migrate_retired_programmer_attributes(&mut value).unwrap();
+        assert_eq!(value["values"][0]["attribute"], "pan");
+        assert_eq!(value["values"][1]["attribute"], "tilt");
+
+        for (source, target) in [("pan.continuous", "pan"), ("tilt.continuous", "tilt")] {
+            let original = serde_json::json!({
+                "values": [
+                    {"fixture_id": fixture, "attribute": source},
+                    {"fixture_id": fixture, "attribute": target}
+                ]
+            });
+            let mut conflict = original.clone();
+            let error = migrate_retired_programmer_attributes(&mut conflict).unwrap_err();
+            assert!(error.contains("attribute migration conflict"));
+            assert!(error.contains(target));
+            assert_eq!(conflict, original);
+        }
+    }
+
     fn assert_migrated_number(value: &serde_json::Value, expected: f64) {
         let actual = value.as_f64().expect("expected JSON number");
         assert!((actual - expected).abs() < 1.0e-6, "{actual} != {expected}");

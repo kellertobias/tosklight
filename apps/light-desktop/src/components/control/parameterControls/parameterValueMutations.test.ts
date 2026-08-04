@@ -37,6 +37,8 @@ function projection(
 		visibleEncoderCount: 6,
 		attributeLabels: new Map(),
 		movementRepresentation: "movement",
+		panRepresentation: "position",
+		tiltRepresentation: "position",
 		hardwareConnected: false,
 		...overrides,
 	};

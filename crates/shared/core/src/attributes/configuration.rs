@@ -252,6 +252,16 @@ impl AttributeConfiguration {
                 "color",
                 EncoderPlacement::new(EncoderGroup::Media, 1, 6),
             ),
+            (
+                "pan.continuous",
+                "pan",
+                EncoderPlacement::new(EncoderGroup::Position, 1, 3),
+            ),
+            (
+                "tilt.continuous",
+                "tilt",
+                EncoderPlacement::new(EncoderGroup::Position, 1, 4),
+            ),
         ] {
             self.migrate_canonical_configuration_pair(source, target, legacy_encoder)?;
         }

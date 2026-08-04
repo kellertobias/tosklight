@@ -4,6 +4,7 @@ type MovementParameter = {
 	attribute: string;
 	metadata?: {
 		position_movement_representation?: AuthoredMovementRepresentation;
+		position_axis_representation?: "absolute" | "endless";
 	};
 };
 
@@ -33,6 +34,47 @@ function authoredRepresentation(
 		default:
 			return "movement" as const;
 	}
+}
+
+export type PositionAxisRepresentation =
+	| "absolute"
+	| "endless"
+	| "mixed"
+	| "position";
+
+export function positionAxisRepresentation(
+	fixtures: readonly MovementFixture[],
+	attribute: "pan" | "tilt",
+): PositionAxisRepresentation {
+	const representations = new Set(
+		fixtures.flatMap((fixture) =>
+			(fixture.definition.heads ?? []).flatMap((head) =>
+				head.parameters
+					.filter((parameter) => parameter.attribute === attribute)
+					.flatMap((parameter) =>
+						parameter.metadata?.position_axis_representation
+							? [parameter.metadata.position_axis_representation]
+							: [],
+					),
+			),
+		),
+	);
+	if (representations.size === 0) return "position";
+	if (representations.size > 1) return "mixed";
+	return [...representations][0] ?? "position";
+}
+
+export function formatPositionAxis(
+	normalized: string,
+	representation: PositionAxisRepresentation,
+) {
+	const suffix = {
+		absolute: "absolute",
+		endless: "endless",
+		mixed: "mixed mode",
+		position: "position",
+	}[representation];
+	return `${normalized} ${suffix}`;
 }
 
 export function positionMovementRepresentation(

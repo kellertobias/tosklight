@@ -194,7 +194,26 @@ fn parameter_metadata(channel: &FixtureChannel) -> ParameterMetadata {
         unit: channel.unit.clone(),
         invert: channel.invert,
         position_movement_representation: position_movement_representation(channel),
+        position_axis_representation: position_axis_representation(channel),
         ..Default::default()
+    }
+}
+
+fn position_axis_representation(
+    channel: &FixtureChannel,
+) -> Option<crate::PositionAxisRepresentation> {
+    match channel.attribute.0.as_str() {
+        "pan" => Some(if channel.fixture_attribute.0 == "pan.continuous" {
+            crate::PositionAxisRepresentation::Endless
+        } else {
+            crate::PositionAxisRepresentation::Absolute
+        }),
+        "tilt" => Some(if channel.fixture_attribute.0 == "tilt.continuous" {
+            crate::PositionAxisRepresentation::Endless
+        } else {
+            crate::PositionAxisRepresentation::Absolute
+        }),
+        _ => None,
     }
 }
 
