@@ -137,6 +137,7 @@ export function CuelistDetail(props: CuelistDetailProps) {
 							setDraft: editor.setCueDraft,
 							save: editor.saveCue,
 						}}
+						cues={cues}
 						thumbnail={thumbnails[editor.selectedCue]}
 						editError={editor.cueEditError}
 						active={props.active}

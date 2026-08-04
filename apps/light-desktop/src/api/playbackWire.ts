@@ -3,6 +3,7 @@ import type {
 	EventServerMessage,
 	PlaybackActionOutcome,
 	PlaybackAddress,
+	PlaybackCueTransition,
 	PlaybackDurability,
 	PlaybackOutcome,
 	PlaybackRuntimeSnapshot,
@@ -90,7 +91,11 @@ function assertPlaybackRoute(
 	routes: Array<{ capability: string; id: string }>,
 	expected: string,
 ) {
-	if (routes.some((route) => route.capability === "playback" && route.id === expected))
+	if (
+		routes.some(
+			(route) => route.capability === "playback" && route.id === expected,
+		)
+	)
 		return;
 	throw new WireValidationError(
 		"$.event.object",
@@ -113,11 +118,16 @@ function decodeEvent(
 			change.projection,
 			"$.event.payload.change.projection",
 		);
+		const transition = nullable(
+			change.transition,
+			"$.event.payload.change.transition",
+			decodePlaybackTransition,
+		);
 		assertRuntimeRoute(routes, projection);
 		return {
 			type: "event",
 			sequence,
-			payload: { type: "runtime", projection },
+			payload: { type: "runtime", projection, transition },
 		};
 	}
 	if (type === "playback_telemetry_sampled") {
@@ -146,6 +156,48 @@ function decodeEvent(
 		return { type: "event", sequence, payload: { type: "desk", projection } };
 	}
 	return null;
+}
+
+function decodePlaybackTransition(
+	value: unknown,
+	path: string,
+): PlaybackCueTransition {
+	const transition = recordAt(value, path);
+	const cueReference = (candidate: unknown, cuePath: string) => {
+		const cue = recordAt(candidate, cuePath);
+		return {
+			id: stringAt(cue.id, `${cuePath}.id`),
+			number: numberAt(cue.number, `${cuePath}.number`),
+		};
+	};
+	return {
+		playback_number: nullable(
+			transition.playback_number,
+			`${path}.playback_number`,
+			positiveIntegerAt,
+		),
+		cue_list_id: stringAt(transition.cue_list_id, `${path}.cue_list_id`),
+		previous: nullable(transition.previous, `${path}.previous`, cueReference),
+		current: nullable(transition.current, `${path}.current`, cueReference),
+		cause: enumAt(transition.cause, `${path}.cause`, [
+			"go",
+			"back",
+			"jump",
+			"chaser",
+			"follow",
+			"wait",
+			"timecode",
+			"link",
+		]),
+		transition_ordinal: integerAt(
+			transition.transition_ordinal,
+			`${path}.transition_ordinal`,
+		),
+		advanced_steps: integerAt(
+			transition.advanced_steps,
+			`${path}.advanced_steps`,
+		),
+	};
 }
 
 function decodeTelemetryTick(
@@ -252,7 +304,10 @@ export function decodePlaybackSnapshot(
 
 export function decodePlaybackOutcome(value: unknown): PlaybackActionOutcome {
 	const outcome = recordAt(value, "$");
-	const projection = decodePlaybackProjection(outcome.projection, "$.projection");
+	const projection = decodePlaybackProjection(
+		outcome.projection,
+		"$.projection",
+	);
 	const related = arrayAt(outcome.related, "$.related").map((item, index) =>
 		decodeRelatedOutcome(item, `$.related[${index}]`),
 	);
@@ -331,10 +386,7 @@ function decodeRelatedOutcome(value: unknown, path: string) {
 			related.projection,
 			`${path}.projection`,
 		),
-		event_sequence: integerAt(
-			related.event_sequence,
-			`${path}.event_sequence`,
-		),
+		event_sequence: integerAt(related.event_sequence, `${path}.event_sequence`),
 	};
 }
 

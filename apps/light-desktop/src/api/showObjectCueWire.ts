@@ -1,4 +1,3 @@
-import type { Cue, CueList } from "./types";
 import {
 	arrayAt,
 	booleanAt,
@@ -9,6 +8,7 @@ import {
 	stringAt,
 } from "./playbackWirePrimitives";
 import { decodeAttributeValue } from "./programmerValuesWireProjection";
+import type { Cue, CueList } from "./types";
 import { WireValidationError } from "./wireValidation";
 
 export function decodeCueListBody(
@@ -52,18 +52,8 @@ export function decodeCueListBody(
 			path,
 			false,
 		),
-		chaser_step_millis: optionalInteger(
-			body,
-			"chaser_step_millis",
-			path,
-			1000,
-		),
-		chaser_xfade_millis: optionalInteger(
-			body,
-			"chaser_xfade_millis",
-			path,
-			0,
-		),
+		chaser_step_millis: optionalInteger(body, "chaser_step_millis", path, 1000),
+		chaser_xfade_millis: optionalInteger(body, "chaser_xfade_millis", path, 0),
 		chaser_xfade_percent: optionalIntegerOrUndefined(
 			body,
 			"chaser_xfade_percent",
@@ -93,9 +83,11 @@ function decodeCue(value: unknown, path: string): Cue {
 		changes: arrayAt(cue.changes, `${path}.changes`).map((change, index) =>
 			decodeCueChange(change, `${path}.changes[${index}]`, "fixture_id"),
 		),
-		group_changes: arrayAt(cue.group_changes ?? [], `${path}.group_changes`).map(
-			(change, index) =>
-				decodeCueChange(change, `${path}.group_changes[${index}]`, "group_id"),
+		group_changes: arrayAt(
+			cue.group_changes ?? [],
+			`${path}.group_changes`,
+		).map((change, index) =>
+			decodeCueChange(change, `${path}.group_changes[${index}]`, "group_id"),
 		),
 	} as Cue;
 }
@@ -132,10 +124,22 @@ function decodeTrigger(value: unknown, path: string) {
 		"follow",
 		"wait",
 		"timecode",
+		"link",
 	]);
 	if (type === "manual") return { ...trigger, type };
 	if (type === "timecode")
-		return { ...trigger, type, frame: integerAt(trigger.frame, `${path}.frame`) };
+		return {
+			...trigger,
+			type,
+			frame: integerAt(trigger.frame, `${path}.frame`),
+		};
+	if (type === "link")
+		return {
+			...trigger,
+			type,
+			cue_id: stringAt(trigger.cue_id, `${path}.cue_id`),
+			delay_millis: integerAt(trigger.delay_millis, `${path}.delay_millis`),
+		};
 	return {
 		...trigger,
 		type,
@@ -184,7 +188,9 @@ function optionalBoolean(
 	path: string,
 	fallback: boolean,
 ) {
-	return object[key] == null ? fallback : booleanAt(object[key], `${path}.${key}`);
+	return object[key] == null
+		? fallback
+		: booleanAt(object[key], `${path}.${key}`);
 }
 
 function optionalInteger(
@@ -193,7 +199,9 @@ function optionalInteger(
 	path: string,
 	fallback: number,
 ) {
-	return object[key] == null ? fallback : integerAt(object[key], `${path}.${key}`);
+	return object[key] == null
+		? fallback
+		: integerAt(object[key], `${path}.${key}`);
 }
 
 function optionalIntegerOrUndefined(
@@ -201,7 +209,9 @@ function optionalIntegerOrUndefined(
 	key: string,
 	path: string,
 ) {
-	return object[key] == null ? undefined : integerAt(object[key], `${path}.${key}`);
+	return object[key] == null
+		? undefined
+		: integerAt(object[key], `${path}.${key}`);
 }
 
 function optionalNumber(
@@ -210,7 +220,9 @@ function optionalNumber(
 	path: string,
 	fallback: number,
 ) {
-	return object[key] == null ? fallback : numberAt(object[key], `${path}.${key}`);
+	return object[key] == null
+		? fallback
+		: numberAt(object[key], `${path}.${key}`);
 }
 
 function optionalEnum<const T extends string>(
@@ -231,7 +243,9 @@ function optionalNullableEnum<const T extends string>(
 	path: string,
 	values: readonly T[],
 ) {
-	return object[key] == null ? undefined : enumAt(object[key], `${path}.${key}`, values);
+	return object[key] == null
+		? undefined
+		: enumAt(object[key], `${path}.${key}`, values);
 }
 
 function invalid(path: string, expected: string, actual: unknown): never {

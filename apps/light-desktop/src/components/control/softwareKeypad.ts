@@ -33,6 +33,7 @@ const pristineRootTokens: Partial<Record<SoftwareKey, string>> = {
 	SET: "SET",
 	AT: "AT",
 	TIME: "TIME",
+	LINK: "LINK",
 	SELECT: "SELECT",
 	"+": "+",
 	"-": "-",
@@ -84,6 +85,7 @@ export function softwareKeyFromKeyboard(
 	if (event.code === "Home") return "SET";
 	if (event.code === "End") return "REC";
 	if (event.shiftKey && event.key.toLowerCase() === "z") return "SELECT";
+	if (event.shiftKey && event.key.toLowerCase() === "l") return "LINK";
 
 	// Physical positions on a German keyboard. Using code keeps the shortcuts
 	// stable when the browser reports shifted glyphs such as *, ?, or °.
@@ -182,6 +184,7 @@ export function editTargetedCommandWithSoftwareKey(
 				SET: "SET",
 				AT: "AT",
 				TIME: "TIME",
+				LINK: "LINK",
 				SELECT: "SELECT",
 				"+": "+",
 				"-": "-",
@@ -198,6 +201,7 @@ export function editTargetedCommandWithSoftwareKey(
 		"SET",
 		"AT",
 		"TIME",
+		"LINK",
 		"SELECT",
 		"+",
 		"-",
@@ -230,9 +234,10 @@ export function editTargetedCommandWithSoftwareKey(
 	return {
 		// Command-line spaces are cosmetic separators only; the text never carries a
 		// trailing space.
-		command: `${command}${digitContinuation || spaced ? ` ${nextToken}` : nextToken}`
-			.replace(/\s+/g, " ")
-			.trim(),
+		command:
+			`${command}${digitContinuation || spaced ? ` ${nextToken}` : nextToken}`
+				.replace(/\s+/g, " ")
+				.trim(),
 		execute: false,
 		pristine: false,
 	};

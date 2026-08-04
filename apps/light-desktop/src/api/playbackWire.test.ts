@@ -199,6 +199,44 @@ describe("Playback wire validation", () => {
 		);
 	});
 
+	it("retains the exact Link transition cause and stable Cue references", () => {
+		const projection = cueProjection();
+		const decoded = decodePlaybackEventMessage({
+			type: "event",
+			event: {
+				sequence: 14,
+				object: { capability: "playback", id: "playback:1" },
+				related_objects: [],
+				payload: {
+					type: "playback_runtime_changed",
+					change: {
+						projection,
+						transition: {
+							playback_number: 1,
+							cue_list_id: CUE_LIST_ID,
+							previous: { id: "cue-source", number: 1 },
+							current: { id: "cue-destination", number: 12 },
+							cause: "link",
+							transition_ordinal: 9,
+							advanced_steps: 1,
+						},
+					},
+				},
+			},
+		});
+		expect(decoded).toMatchObject({
+			type: "event",
+			payload: {
+				type: "runtime",
+				transition: {
+					cause: "link",
+					previous: { id: "cue-source", number: 1 },
+					current: { id: "cue-destination", number: 12 },
+				},
+			},
+		});
+	});
+
 	it.each([
 		"",
 		"front\n",

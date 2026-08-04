@@ -68,7 +68,8 @@ impl<'a> ServerProgrammingPorts<'a> {
         command: &str,
         policy: ExecutionPolicy,
     ) -> Option<ProgrammingExecution> {
-        self.record_group_command(programmers, context, command)
+        self.link_cue_command(programmers, context, command)
+            .or_else(|| self.record_group_command(programmers, context, command))
             .or_else(|| self.record_preset_command(programmers, context, command))
             .or_else(|| self.record_cue_command(programmers, context, command))
             .or_else(|| self.delete_cue_command(programmers, context, command, policy))

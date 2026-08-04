@@ -284,3 +284,40 @@ fn loaded_feedback_tracks_stable_identity_through_renumber_and_deletion() {
     assert!(!status.effective_next_is_loaded);
     assert_eq!(status.effective_next_cue_number, Some(1.0));
 }
+
+#[test]
+fn link_feedback_uses_stable_effective_next_and_load_overrides_it() {
+    let mut source = Cue::new(1.0);
+    let sequential = Cue::new(2.0);
+    let destination = Cue::new(3.0);
+    source.trigger = CueTrigger::Link {
+        cue_id: destination.id,
+        delay_millis: 0,
+    };
+    let mut cue_list = list(vec![source, sequential, destination.clone()]);
+    let id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list.clone()).unwrap();
+    engine.register_definition(definition(1, id)).unwrap();
+    engine.go_playback(1).unwrap();
+    let status = engine.runtime_status().remove(0);
+    assert_eq!(status.normal_next_cue_number, Some(2.0));
+    assert_eq!(status.effective_next_cue_id, Some(destination.id));
+
+    engine.load_playback(1, 2.0).unwrap();
+    let status = engine.runtime_status().remove(0);
+    assert_eq!(status.effective_next_cue_number, Some(2.0));
+    assert!(status.effective_next_is_loaded);
+
+    cue_list.cues[2].number = 30.0;
+    let active = engine.active_for_snapshot(&[cue_list.clone()], Utc::now());
+    let mut restored = PlaybackEngine::default();
+    restored.register(cue_list).unwrap();
+    restored.register_definition(definition(1, id)).unwrap();
+    restored.restore_active(active);
+    restored.off(1).unwrap();
+    restored.go_playback(1).unwrap();
+    let status = restored.runtime_status().remove(0);
+    assert_eq!(status.effective_next_cue_id, Some(destination.id));
+    assert_eq!(status.effective_next_cue_number, Some(30.0));
+}

@@ -83,6 +83,10 @@ pub enum CommandKey {
     Shift,
     #[serde(rename = "TIME")]
     Time,
+    #[serde(rename = "DELAY")]
+    Delay,
+    #[serde(rename = "LINK")]
+    Link,
     #[serde(rename = "SELECT")]
     Select,
     #[serde(rename = "+")]

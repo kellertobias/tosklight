@@ -31,6 +31,7 @@ export type SoftwareKey =
 	| "ESC"
 	| "SHIFT"
 	| "TIME"
+	| "LINK"
 	| "SELECT"
 	| "+"
 	| "-"

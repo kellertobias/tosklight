@@ -137,7 +137,21 @@ impl PlaybackEngine {
                         .loaded_cue_id
                         .and_then(|id| list.cues.iter().find(|cue| cue.id == id))
                 });
-                let effective = loaded.or(normal);
+                let linked = cue_list.and_then(|list| {
+                    let current = playback
+                        .current_cue_id
+                        .and_then(|id| list.cues.iter().find(|cue| cue.id == id))
+                        .or_else(|| {
+                            playback.current_cue_number.and_then(|number| {
+                                list.cues.iter().find(|cue| cue.number == number)
+                            })
+                        })?;
+                    let CueTrigger::Link { cue_id, .. } = current.trigger else {
+                        return None;
+                    };
+                    list.cues.iter().find(|cue| cue.id == cue_id)
+                });
+                let effective = loaded.or(linked).or(normal);
                 PlaybackRuntimeStatus {
                     normal_next_cue_id: normal.map(|cue| cue.id),
                     normal_next_cue_number: normal.map(|cue| cue.number),

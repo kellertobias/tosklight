@@ -1,3 +1,4 @@
+import type { PlaybackCueTransition } from "../../api/generated/light-wire";
 import type {
 	PlaybackActionOutcome,
 	PlaybackDeskProjection,
@@ -22,7 +23,11 @@ export type PlaybackRuntimeEventMessage =
 			type: "event";
 			sequence: number;
 			payload:
-				| { type: "runtime"; projection: PlaybackProjection }
+				| {
+						type: "runtime";
+						projection: PlaybackProjection;
+						transition?: PlaybackCueTransition | null;
+				  }
 				| { type: "desk"; projection: PlaybackDesk }
 				| { type: "telemetry"; tick: PlaybackTelemetryTick };
 	  }

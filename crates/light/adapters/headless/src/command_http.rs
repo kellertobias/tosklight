@@ -17,6 +17,10 @@ mod cue_deletion_programming_ports;
 mod cue_deletion_routes;
 #[path = "command_http/cue_deletion_wire.rs"]
 mod cue_deletion_wire;
+#[path = "command_http/cue_link_command.rs"]
+mod cue_link_command;
+#[path = "command_http/cue_link_programming_ports.rs"]
+mod cue_link_programming_ports;
 #[path = "command_http/cue_navigation_action.rs"]
 mod cue_navigation_action;
 #[path = "command_http/cue_navigation_command.rs"]

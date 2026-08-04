@@ -175,6 +175,8 @@ pub(super) const fn command_key(key: WireCommandKey) -> CommandKey {
         WireCommandKey::Escape => CommandKey::Escape,
         WireCommandKey::Shift => CommandKey::Shift,
         WireCommandKey::Time => CommandKey::Time,
+        WireCommandKey::Delay => CommandKey::Delay,
+        WireCommandKey::Link => CommandKey::Link,
         WireCommandKey::Select => CommandKey::Select,
         WireCommandKey::Plus => CommandKey::Plus,
         WireCommandKey::Minus => CommandKey::Minus,

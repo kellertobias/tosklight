@@ -107,6 +107,7 @@ fn transition_cause(cause: AutomaticPlaybackTransitionCause) -> PlaybackTransiti
         AutomaticPlaybackTransitionCause::Follow => PlaybackTransitionCause::Follow,
         AutomaticPlaybackTransitionCause::Wait => PlaybackTransitionCause::Wait,
         AutomaticPlaybackTransitionCause::Timecode => PlaybackTransitionCause::Timecode,
+        AutomaticPlaybackTransitionCause::Link => PlaybackTransitionCause::Link,
     }
 }
 

@@ -27,6 +27,15 @@ export function CueTable({
 	onSelectCue: (index: number) => void;
 	interactive?: boolean;
 }) {
+	const triggerLabel = (cue: Cue) => {
+		if (cue.trigger.type !== "link") return cueTriggerKind(cue).toUpperCase();
+		const destination = cues.find(
+			(candidate) => candidate.id === cue.trigger.cue_id,
+		);
+		return destination
+			? `LINK → Cue ${destination.number}${destination.name ? ` · ${destination.name}` : ""}`
+			: "LINK → Missing Cue";
+	};
 	return (
 		<div className="cue-editor">
 			<WindowScrollArea
@@ -60,7 +69,7 @@ export function CueTable({
 										}
 									}}
 									key={cue.number}
-									className={`${active?.cue_index === index ? "current" : active?.cue_index === index - 1 ? "next" : ""} ${interactive && selectedCue === index ? "selected" : ""}`}
+									className={`${active?.cue_index === index ? "current" : active?.effective_next_cue_number === cue.number ? "next" : ""} ${interactive && selectedCue === index ? "selected" : ""}`}
 								>
 									<td>
 										{thumbnails[index] && (
@@ -83,7 +92,7 @@ export function CueTable({
 											</small>
 										)}
 									</td>
-									<td>{cueTriggerKind(cue).toUpperCase()}</td>
+									<td>{triggerLabel(cue)}</td>
 									<td>
 										{(cue.fade_millis / 1000).toFixed(3).replace(/\.?0+$/, "")}{" "}
 										{"s"}

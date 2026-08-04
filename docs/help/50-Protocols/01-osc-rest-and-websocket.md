@@ -6,7 +6,7 @@ Use this interface only on a trusted lighting network. One ToskLight application
 
 An OSC client subscribes with `/light/subscribe` and the arguments `client ID`, `desk alias`, and feedback port. Unsubscribe with `/light/unsubscribe` and the client ID. A successful subscription returns feedback under `/light/{desk}/feedback/...`, including the current page, command line, keys, playbacks, Speed Groups, and lock state.
 
-Keypad input uses `/light/{desk}/programmer/{key}` with a pressed value. Digits are `digit-0` through `digit-9`; command names include `group`, `at`, `plus`, `minus`, `time`, `shift`, `set`, `record`, `enter`, `clear`, and `backspace`. The [Command Line Reference](../30-Programmer/01-command-line.md) defines their operator semantics.
+Keypad input uses `/light/{desk}/programmer/{key}` with a pressed value. Digits are `digit-0` through `digit-9`; command names include `group`, `at`, `plus`, `minus`, `time`, `delay`, `link`, `shift`, `set`, `record`, `enter`, `clear`, and `backspace`. The [Command Line Reference](../30-Programmer/01-command-line.md) defines their operator semantics. A successful Link transition is published through the ordinary playback event with cause `link`, previous/current stable Cue references, and transition ordinal. Playback `effective-next-cue` feedback resolves a current Link destination unless an explicit loaded Cue overrides it.
 
 Playback addresses deliberately distinguish current-page and explicit-page operation:
 

@@ -339,6 +339,8 @@ Update Settings stores desk workflow preferences, not show programming. It contr
 
 Cuelist and Cue selection uses one unambiguous address grammar. A playback is the page slot containing the fader and buttons; a Cuelist is the ordered collection of Cues assigned to that playback.
 
+The logical `[LINK]` command key is available to attached OSC control surfaces as `programmer/link`; on a computer keyboard press `[KBD:SHIFT]` + `[KBD:L]`.
+
 Press `[KBD:SHIFT]` + `[KBD:Z]` to enter `SELECT`, then touch a playback to make it the selected playback. The selection is retained for that desk and show: another session attached to the same desk sees the same selection, while another desk used by the same operator may select a different playback. Running a different playback never changes it implicitly. The selected playback supplies the default Cuelist whenever a command omits both a playback address and a Cuelist Pool number. It is also the playback whose Cue details open with `[SHIFT] 4`.
 
 - `[SET] <Cuelist-number>` selects a Cuelist.
@@ -360,6 +362,8 @@ Press `[KBD:SHIFT]` + `[KBD:Z]` to enter `SELECT`, then touch a playback to make
 | Cue with explicit fade | `[REC] [SET] <Cuelist-number> [CUE] <Cue-number> [TIME] 3 [ENTER]` | Record the Cue with a three-second default fade while retaining per-value timing overrides. |
 | Cue with FOLLOW trigger | `[REC] [SET] <Cuelist-number> [CUE] <Cue-number> [TIME] [TIME] 0 [ENTER]` | The second consecutive Time becomes `DELAY`; zero, or `DELAY` confirmed without a number, stores FOLLOW. This Cue starts when the preceding Cue has finished all value delays and fades. |
 | Cue with TIME trigger | `[REC] [SET] <Cuelist-number> [CUE] <Cue-number> [TIME] [TIME] 4 [ENTER]` | Store `DELAY 4`, displayed as a TIME trigger of four seconds. This Cue starts four seconds after the preceding Cue has completely finished. |
+| Link from one Cue | `[LINK] [SET] <Cuelist-number> [CUE] <source-Cue> [AT] [CUE] <destination-Cue> [ENTER]` | Store the destination Cue's stable identity on the source Cue. After the source completes, playback jumps to that identity. Omit SET and the Cuelist number to use the selected playback. Page form: `[LINK] [SET] <page> [ . ] <playback> [CUE] <source> [AT] [CUE] <destination> [ENTER]`. |
+| Delayed Link | `[LINK] [SET] <Cuelist-number> [CUE] <source-Cue> [AT] [CUE] <destination-Cue> [TIME] [TIME] 2 [ENTER]` | Add a two-second Link delay after the source Cue's latest actual incoming/outgoing completion. |
 | Merge into a Cue | `[REC] [+] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` | Add the programmer's fixture/group attribute addresses to the existing Cue; an incoming address replaces the value already stored at that same address. |
 | Subtract from a Cue | `[REC] [-] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` | Remove the fixture/group attribute addresses currently present in the programmer from that Cue. Values at all other addresses remain unchanged. |
 | Delete a Cue with Record-minus | `[REC] [-] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` with no programmer values | Delete that Cue. The only Cue in a Cuelist cannot be deleted this way. |
@@ -369,6 +373,8 @@ Dots after `[CUE]` form decimal Cue numbers. For example, `[REC] [SET] 1 [CUE] 2
 The two initial Cue keys are the operation: one means Go To and two consecutive keys mean Load. The later Cue key after `SET ...` is only the address separator. Load is transient and visibly replaces the ordinary next Cue; GO minus preserves it, while Off or release clears it. Renumbering follows the Cue's stable identity, deleting the loaded Cue clears the override, and reopening the show does not persist a Load. A missing selection, missing Cue, incomplete address, unassigned target, or ambiguous Cuelist assignment is rejected without moving any playback or fader.
 
 A Cue-record command without `DELAY` stores the Cue with a **GO** trigger, so it waits indefinitely for GO. Bare `DELAY` and `DELAY 0` normalize to **FOLLOW**. A positive `DELAY <seconds>` stores **TIME** with that duration. The trigger belongs to the Cue being recorded: if Cue 1 takes two seconds to finish and Cue 2 is TIME 4, Cue 2 starts six seconds after Cue 1's GO. FOLLOW and TIME always measure from the latest value `start delay + fade` endpoint of the preceding Cue.
+
+LINK is an explicit Cue edit and captures no programmer values. Its source and destination numbers are resolved inside one Cuelist when Enter is pressed; the stored destination is the Cue's stable identity. Renumbering keeps the Link, while a missing destination, self-link, or cycle rejects the complete command without changing the show or output. LINK timing starts after the source Cue's latest actual incoming/outgoing completion. A delayed Link uses the same `DELAY` entry produced by pressing Time twice. Live Timecode is authoritative and suppresses Link execution until Timecode is absent.
 
 The Cuelist setting **Force Cue Timing** makes each Cue's master Fade and Delay authoritative for every value during playback, ignoring stored per-value fades and start delays without deleting them. When the setting is disabled again, the original per-value timing applies on the next execution.
 

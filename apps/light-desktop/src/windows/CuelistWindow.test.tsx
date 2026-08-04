@@ -367,6 +367,34 @@ describe("CuelistWindow Cue settings", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Close In Fade" }));
 		vi.unstubAllGlobals();
 	});
+
+	it("shows a Link destination by stable Cue identity in the table and editor", () => {
+		const destination = {
+			id: "cue-blackout",
+			number: 12,
+			name: "Blackout",
+			fade_millis: 0,
+			delay_millis: 0,
+			trigger: { type: "manual" },
+			changes: [],
+		};
+		const cueList = editableCueList();
+		cueList.cues[0].trigger = {
+			type: "link",
+			cue_id: destination.id,
+			delay_millis: 250,
+		};
+		cueList.cues.push(destination);
+		showEditableCueList(cueList);
+		const view = render(<CuelistWindow />);
+		const ui = within(view.container);
+		fireEvent.click(ui.getByText("Main").closest("button")!);
+
+		expect(ui.getByText("LINK → Cue 12 · Blackout")).toBeInTheDocument();
+		expect(ui.getByText("Link Cue")).toBeInTheDocument();
+		expect(ui.getByText("Link delay")).toBeInTheDocument();
+		expect(ui.getAllByText("Cue 12 · Blackout").length).toBeGreaterThan(0);
+	});
 });
 
 describe("CuelistWindow pane selection", () => {

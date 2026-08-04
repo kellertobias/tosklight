@@ -15,6 +15,7 @@ pub enum AutomaticPlaybackTransitionCause {
     Follow,
     Wait,
     Timecode,
+    Link,
 }
 
 /// Stable Cue identity captured at an automatic transition boundary.
@@ -194,7 +195,63 @@ fn advance_automatic_playback(
     if cue_list.mode == CueListMode::Chaser {
         return advance_chaser(playback, cue_list, transition_source, &timing);
     }
+    if let Some(transition) = advance_link(playback, cue_list, compiled, transition_source, &timing)
+    {
+        return Some(transition);
+    }
     advance_follow_or_wait(playback, cue_list, compiled, transition_source, &timing)
+}
+
+fn advance_link(
+    playback: &mut ActivePlayback,
+    cue_list: &CueList,
+    compiled: &CompiledCueList,
+    transition_source: Option<&[TimedValue]>,
+    timing: &AutomaticTiming,
+) -> Option<AutomaticPlaybackTransition> {
+    // A live timecode source remains authoritative. Allowing Link to move away from the latest
+    // eligible timecode Cue would make the level-selected timecode move it back on the next tick.
+    if timing.timecode_frame.is_some() {
+        return None;
+    }
+    let current = cue_list.cues.get(playback.cue_index)?;
+    let CueTrigger::Link {
+        cue_id,
+        delay_millis,
+    } = current.trigger
+    else {
+        return None;
+    };
+    let target_index = cue_list.cues.iter().position(|cue| cue.id == cue_id)?;
+    let cue_fade_millis = effective_cue_fade_millis(
+        cue_list,
+        current,
+        playback,
+        timing.sequence_master_fade_millis,
+        &timing.speed_groups_bpm,
+    );
+    let completion = cue_completion_millis(cue_list, compiled, playback, cue_fade_millis);
+    let delay_millis = if cue_list.disable_cue_timing {
+        0
+    } else {
+        delay_millis
+    };
+    if elapsed_since_activation(playback, timing.now) < completion.saturating_add(delay_millis) {
+        return None;
+    }
+    let previous_index = playback.cue_index;
+    install_transition_source(playback, transition_source, previous_index);
+    set_current_cue(playback, cue_list, target_index);
+    playback.tracking_wrap = false;
+    playback.deleted_cue_hold = None;
+    playback.activated_at = timing.now;
+    Some(cue_transition(
+        playback,
+        cue_list,
+        previous_index,
+        AutomaticPlaybackTransitionCause::Link,
+        1,
+    ))
 }
 
 fn chaser_is_paused(cue_list: &CueList, timing: &AutomaticTiming) -> bool {

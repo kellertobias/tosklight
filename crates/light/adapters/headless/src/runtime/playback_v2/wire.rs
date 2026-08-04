@@ -313,6 +313,7 @@ fn transition_cause(cause: application::PlaybackTransitionCause) -> wire::Playba
         App::Follow => wire::PlaybackTransitionCause::Follow,
         App::Wait => wire::PlaybackTransitionCause::Wait,
         App::Timecode => wire::PlaybackTransitionCause::Timecode,
+        App::Link => wire::PlaybackTransitionCause::Link,
     }
 }
 

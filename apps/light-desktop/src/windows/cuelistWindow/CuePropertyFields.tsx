@@ -34,11 +34,7 @@ export interface CueDraftActions {
 
 function updateMillis(
 	actions: CueDraftActions,
-	key:
-		| "fade_millis"
-		| "delay_millis"
-		| "out_fade_millis"
-		| "out_delay_millis",
+	key: "fade_millis" | "delay_millis" | "out_fade_millis" | "out_delay_millis",
 	seconds: string,
 	commit: boolean,
 ) {
@@ -99,23 +95,30 @@ function CueTimingFields({
 
 function CueTriggerFields({
 	actions,
+	cues,
 	refs,
 	keyboardRequests,
 }: {
 	actions: CueDraftActions;
+	cues: Cue[];
 	refs: CueFieldRefs;
 	keyboardRequests: Partial<Record<CueKeyboardField, number>>;
 }) {
 	const kind = cueTriggerKind(actions.draft);
 	const triggerMillis = Number(actions.draft.trigger.delay_millis ?? 0);
+	const linkCandidates = cues.filter(
+		(cue) => cue.id && cue.id !== actions.draft.id,
+	);
+	const linkedCueId = String(actions.draft.trigger.cue_id ?? "");
+	const timecodeFrame = Number(actions.draft.trigger.frame ?? 0);
 	const [triggerOpenRequest, setTriggerOpenRequest] = useState(0);
 	const updateTriggerTime = (seconds: string, commit: boolean) => {
 		const next = {
 			...actions.draft,
-			trigger: {
-				type: "wait",
-				delay_millis: Math.round(Number(seconds) * 1000),
-			},
+			trigger:
+				kind === "link"
+					? cueTrigger("link", Math.round(Number(seconds) * 1000), linkedCueId)
+					: cueTrigger("time", Math.round(Number(seconds) * 1000)),
 		};
 		actions.setDraft(next);
 		if (commit) void actions.save(next);
@@ -130,7 +133,12 @@ function CueTriggerFields({
 						onChange={(value) => {
 							const next = {
 								...actions.draft,
-								trigger: cueTrigger(value, triggerMillis),
+								trigger: cueTrigger(
+									value,
+									triggerMillis,
+									linkedCueId || linkCandidates[0]?.id,
+									timecodeFrame,
+								),
 							};
 							actions.setDraft(next);
 							void actions.save(next);
@@ -139,6 +147,10 @@ function CueTriggerFields({
 							{ value: "go", label: "GO" },
 							{ value: "follow", label: "FOLLOW" },
 							{ value: "time", label: "TIME" },
+							{ value: "timecode", label: "TIMECODE" },
+							...(linkCandidates.length > 0
+								? [{ value: "link" as const, label: "LINK" }]
+								: []),
 						]}
 					/>
 					<Button
@@ -153,11 +165,29 @@ function CueTriggerFields({
 					</Button>
 				</div>
 			</FormField>
-			{kind === "time" && (
+			{kind === "link" && (
+				<SelectField
+					label="Link Cue"
+					value={linkedCueId}
+					onChange={(cueId) => {
+						const next = {
+							...actions.draft,
+							trigger: cueTrigger("link", triggerMillis, cueId),
+						};
+						actions.setDraft(next);
+						void actions.save(next);
+					}}
+					options={linkCandidates.map((cue) => ({
+						value: cue.id as string,
+						label: `Cue ${cue.number}${cue.name ? ` · ${cue.name}` : ""}`,
+					}))}
+				/>
+			)}
+			{(kind === "time" || kind === "link") && (
 				<NumberField
 					ref={refs.triggerTime}
 					keyboardRequest={keyboardRequests.triggerTime}
-					label="Trigger time"
+					label={kind === "link" ? "Link delay" : "Trigger time"}
 					unit="s"
 					allowDecimal
 					min="0"
@@ -171,16 +201,50 @@ function CueTriggerFields({
 					}}
 				/>
 			)}
+			{kind === "timecode" && (
+				<NumberField
+					label="Timecode frame"
+					min="0"
+					value={timecodeFrame}
+					onChange={(event) => {
+						const next = {
+							...actions.draft,
+							trigger: cueTrigger(
+								"timecode",
+								0,
+								undefined,
+								Math.max(0, Math.round(Number(event.target.value))),
+							),
+						};
+						actions.setDraft(next);
+					}}
+					onBlur={(event) => {
+						const next = {
+							...actions.draft,
+							trigger: cueTrigger(
+								"timecode",
+								0,
+								undefined,
+								Math.max(0, Math.round(Number(event.currentTarget.value))),
+							),
+						};
+						actions.setDraft(next);
+						void actions.save(next);
+					}}
+				/>
+			)}
 		</>
 	);
 }
 
 export function CuePropertyFields({
 	actions,
+	cues,
 	refs,
 	keyboardRequests = {},
 }: {
 	actions: CueDraftActions;
+	cues: Cue[];
 	refs: CueFieldRefs;
 	keyboardRequests?: Partial<Record<CueKeyboardField, number>>;
 }) {
@@ -225,6 +289,7 @@ export function CuePropertyFields({
 				/>
 				<CueTriggerFields
 					actions={actions}
+					cues={cues}
 					refs={refs}
 					keyboardRequests={keyboardRequests}
 				/>

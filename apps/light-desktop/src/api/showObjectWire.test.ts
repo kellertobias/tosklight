@@ -65,6 +65,24 @@ describe("show-object wire decoders", () => {
 		});
 	});
 
+	it("decodes a Link trigger with its stable destination identity", () => {
+		const body = cueListBody();
+		(body.cues[0] as { trigger: Record<string, unknown> }).trigger = {
+			type: "link",
+			cue_id: "44444444-4444-4444-8444-444444444444",
+			delay_millis: 250,
+		};
+		const decoded = decodeShowObject(
+			versioned("cue_list", CUE_LIST_ID, body),
+			"cue_list",
+		);
+		expect(decoded.body.cues[0].trigger).toEqual({
+			type: "link",
+			cue_id: "44444444-4444-4444-8444-444444444444",
+			delay_millis: 250,
+		});
+	});
+
 	it("keeps a legacy Cuelist storage key separate from its semantic ID", () => {
 		const decoded = decodeShowObject(
 			versioned("cue_list", "legacy-main-list", cueListBody()),

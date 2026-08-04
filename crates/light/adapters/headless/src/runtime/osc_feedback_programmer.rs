@@ -2,8 +2,8 @@ use super::*;
 
 fn send_command_key_feedback(state: &AppState, subscriber: &OscSubscriber, command_line: &str) {
     for key in [
-        "group", "at", "thru", "plus", "minus", "time", "delay", "cue", "record", "clear", "enter",
-        "preload",
+        "group", "at", "thru", "plus", "minus", "time", "delay", "link", "cue", "record", "clear",
+        "enter", "preload",
     ] {
         let token = match key {
             "group" => "GROUP".to_owned(),

@@ -79,6 +79,145 @@ fn follow_waits_for_actual_outgoing_work_without_phantom_out_duration() {
 }
 
 #[test]
+fn link_uses_stable_destination_identity_after_source_completion() {
+    let outgoing = FixtureId::new();
+    let incoming = FixtureId::new();
+    let mut first = Cue::new(1.0);
+    first.changes.push(value(outgoing, "intensity", 1.0));
+    first.changes.push(value(incoming, "intensity", 0.0));
+    let mut source = Cue::new(2.0);
+    source.fade_millis = 1_000;
+    source.out_delay_millis = Some(500);
+    source.out_fade_millis = Some(2_000);
+    source.changes.push(value(outgoing, "intensity", 0.0));
+    source.changes.push(value(incoming, "intensity", 1.0));
+    let skipped = Cue::new(3.0);
+    let mut destination = Cue::new(30.0);
+    destination.changes.push(value(incoming, "intensity", 0.4));
+    source.trigger = CueTrigger::Link {
+        cue_id: destination.id,
+        delay_millis: 250,
+    };
+    let cue_list = list(vec![first, source, skipped, destination.clone()]);
+    let id = cue_list.id;
+    let started = Utc::now();
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.go_at(id, started).unwrap();
+    engine.go_at(id, started).unwrap();
+
+    engine.tick(started + ChronoDuration::milliseconds(2_749), None);
+    assert_eq!(engine.active()[0].cue_index, 1);
+    let result = engine.tick(started + ChronoDuration::milliseconds(2_750), None);
+    assert_eq!(engine.active()[0].current_cue_id, Some(destination.id));
+    assert_eq!(engine.active()[0].current_cue_number, Some(30.0));
+    assert_eq!(
+        result.transitions[0].cause,
+        AutomaticPlaybackTransitionCause::Link
+    );
+}
+
+#[test]
+fn link_validation_rejects_dangling_self_and_cycles() {
+    let mut dangling = Cue::new(1.0);
+    dangling.trigger = CueTrigger::Link {
+        cue_id: Uuid::new_v4(),
+        delay_millis: 0,
+    };
+    assert!(
+        list(vec![dangling])
+            .validate()
+            .unwrap_err()
+            .contains("missing")
+    );
+
+    let mut self_link = Cue::new(1.0);
+    self_link.trigger = CueTrigger::Link {
+        cue_id: self_link.id,
+        delay_millis: 0,
+    };
+    assert!(
+        list(vec![self_link])
+            .validate()
+            .unwrap_err()
+            .contains("itself")
+    );
+
+    let mut first = Cue::new(1.0);
+    let mut second = Cue::new(2.0);
+    first.trigger = CueTrigger::Link {
+        cue_id: second.id,
+        delay_millis: 0,
+    };
+    second.trigger = CueTrigger::Link {
+        cue_id: first.id,
+        delay_millis: 0,
+    };
+    assert!(
+        list(vec![first, second])
+            .validate()
+            .unwrap_err()
+            .contains("cycle")
+    );
+}
+
+#[test]
+fn live_timecode_suppresses_link_and_disable_timing_makes_it_immediate() {
+    let mut source = Cue::new(1.0);
+    let destination = Cue::new(2.0);
+    source.trigger = CueTrigger::Link {
+        cue_id: destination.id,
+        delay_millis: 10_000,
+    };
+    let mut cue_list = list(vec![source, destination]);
+    let id = cue_list.id;
+    let started = Utc::now();
+    let mut timed = PlaybackEngine::default();
+    timed.register(cue_list.clone()).unwrap();
+    timed.go_at(id, started).unwrap();
+    timed.tick(started + ChronoDuration::seconds(20), Some(0));
+    assert_eq!(timed.active()[0].cue_index, 0);
+
+    cue_list.disable_cue_timing = true;
+    let mut immediate = PlaybackEngine::default();
+    immediate.register(cue_list).unwrap();
+    immediate.go_at(id, started).unwrap();
+    immediate.tick(started, None);
+    assert_eq!(immediate.active()[0].cue_index, 1);
+}
+
+#[test]
+fn link_identity_and_pending_deadline_survive_restart() {
+    let started = Utc::now();
+    let mut source = Cue::new(1.0);
+    let destination = Cue::new(8.0);
+    source.trigger = CueTrigger::Link {
+        cue_id: destination.id,
+        delay_millis: 500,
+    };
+    let cue_list = list(vec![source, destination.clone()]);
+    let decoded: CueList =
+        serde_json::from_value(serde_json::to_value(&cue_list).unwrap()).unwrap();
+    assert!(matches!(
+        decoded.cues[0].trigger,
+        CueTrigger::Link { cue_id, .. } if cue_id == destination.id
+    ));
+    let id = cue_list.id;
+    let mut before_restart = PlaybackEngine::default();
+    before_restart.register(cue_list).unwrap();
+    before_restart.go_at(id, started).unwrap();
+    let active = before_restart.active_for_snapshot(&[decoded.clone()], started);
+
+    let mut restarted = PlaybackEngine::default();
+    restarted.register(decoded).unwrap();
+    restarted.restore_active(active);
+    restarted.tick(started + ChronoDuration::milliseconds(499), None);
+    assert_eq!(restarted.active()[0].cue_index, 0);
+    restarted.tick(started + ChronoDuration::milliseconds(500), None);
+    assert_eq!(restarted.active()[0].current_cue_id, Some(destination.id));
+}
+
+#[test]
 fn legacy_looped_lists_migrate_to_tracking_wrap_defaults() {
     let mut encoded = serde_json::to_value(list(vec![Cue::new(1.0)])).unwrap();
     let object = encoded.as_object_mut().unwrap();

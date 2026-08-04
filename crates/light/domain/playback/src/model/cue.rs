@@ -107,9 +107,20 @@ impl Cue {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum CueTrigger {
     Manual,
-    Follow { delay_millis: u64 },
-    Wait { delay_millis: u64 },
-    Timecode { frame: u64 },
+    Follow {
+        delay_millis: u64,
+    },
+    Wait {
+        delay_millis: u64,
+    },
+    Timecode {
+        frame: u64,
+    },
+    /// After this Cue has completed, jump to the Cue with this stable identity.
+    Link {
+        cue_id: Uuid,
+        delay_millis: u64,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -416,6 +427,12 @@ impl CueList {
         if self.cues.is_empty() {
             return Err("a cue list must contain at least one cue".into());
         }
+        let mut cue_ids = HashSet::new();
+        for cue in &self.cues {
+            if !cue_ids.insert(cue.id) {
+                return Err("cue identities must be unique within a cue list".into());
+            }
+        }
         let mut previous = f64::NEG_INFINITY;
         for cue in &self.cues {
             if !cue.number.is_finite() || cue.number <= previous {
@@ -430,6 +447,40 @@ impl CueList {
                         cue.number
                     ));
                 }
+            }
+            if let CueTrigger::Link { cue_id, .. } = cue.trigger {
+                if cue_id == cue.id {
+                    return Err(format!("cue {} cannot link to itself", cue.number));
+                }
+                if !cue_ids.contains(&cue_id) {
+                    return Err(format!(
+                        "cue {} links to a missing cue identity",
+                        cue.number
+                    ));
+                }
+            }
+        }
+        self.validate_link_cycles()?;
+        Ok(())
+    }
+
+    fn validate_link_cycles(&self) -> Result<(), String> {
+        let links = self
+            .cues
+            .iter()
+            .filter_map(|cue| match cue.trigger {
+                CueTrigger::Link { cue_id, .. } => Some((cue.id, cue_id)),
+                _ => None,
+            })
+            .collect::<HashMap<_, _>>();
+        for cue in &self.cues {
+            let mut visited = HashSet::new();
+            let mut current = cue.id;
+            while let Some(next) = links.get(&current).copied() {
+                if !visited.insert(current) {
+                    return Err("cue link cycle is not allowed".into());
+                }
+                current = next;
             }
         }
         Ok(())

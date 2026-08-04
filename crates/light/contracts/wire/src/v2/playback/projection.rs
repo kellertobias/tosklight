@@ -318,4 +318,5 @@ pub enum PlaybackTransitionCause {
     Follow,
     Wait,
     Timecode,
+    Link,
 }

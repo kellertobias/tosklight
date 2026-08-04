@@ -4480,7 +4480,8 @@
         "chaser",
         "follow",
         "wait",
-        "timecode"
+        "timecode",
+        "link"
       ]
     },
     "ProgrammerPriorityChange": {

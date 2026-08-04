@@ -1,5 +1,6 @@
 import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { Cue } from "../../api/types";
 import { useControlSurfaceTarget } from "../../features/controlSurfaceInteraction/useControlSurfaceTarget";
 import {
 	type CueDraftActions,
@@ -67,12 +68,14 @@ function useCuePropertiesLayout(active: boolean, dependencies: unknown[]) {
 
 function CompactCueProperties({
 	actions,
+	cues,
 	setArmed,
 	onDisarm,
 	onOpenInput,
 	onOpenTrigger,
 }: {
 	actions: CueDraftActions;
+	cues: Cue[];
 	setArmed: boolean;
 	onDisarm: () => void;
 	onOpenInput: (field: CueKeyboardField) => void;
@@ -151,13 +154,32 @@ function CompactCueProperties({
 					<small>Trigger</small>
 					<b>{kind.toUpperCase()}</b>
 				</Button>
-				{kind === "time" && (
+				{kind === "link" && (
 					<Button
-						aria-label="Set Cue Trigger time"
+						aria-label="Set Cue Link destination"
+						active={setArmed}
+						onClick={() => {
+							if (!setArmed) return;
+							onDisarm();
+							onOpenTrigger();
+						}}
+					>
+						<small>Link Cue</small>
+						<b>
+							{cues.find((cue) => cue.id === actions.draft.trigger.cue_id)
+								?.number ?? "Missing"}
+						</b>
+					</Button>
+				)}
+				{(kind === "time" || kind === "link") && (
+					<Button
+						aria-label={
+							kind === "link" ? "Set Cue Link delay" : "Set Cue Trigger time"
+						}
 						active={setArmed}
 						onClick={() => onOpenInput("triggerTime")}
 					>
-						<small>Trigger time</small>
+						<small>{kind === "link" ? "Link delay" : "Trigger time"}</small>
 						<b>{formatCueSeconds(triggerMillis)}</b>
 					</Button>
 				)}
@@ -168,17 +190,36 @@ function CompactCueProperties({
 
 function CueTriggerModal({
 	actions,
+	cues,
 	close,
 }: {
 	actions: CueDraftActions;
+	cues: Cue[];
 	close: () => void;
 }) {
 	const kind = cueTriggerKind(actions.draft);
 	const triggerMillis = Number(actions.draft.trigger.delay_millis ?? 0);
-	const choose = (value: "go" | "follow" | "time") => {
+	const linkCandidates = cues.filter(
+		(cue) => cue.id && cue.id !== actions.draft.id,
+	);
+	const choose = (value: "go" | "follow" | "time" | "timecode" | "link") => {
 		const next = {
 			...actions.draft,
-			trigger: cueTrigger(value, triggerMillis),
+			trigger: cueTrigger(
+				value,
+				triggerMillis,
+				String(actions.draft.trigger.cue_id ?? linkCandidates[0]?.id ?? ""),
+				Number(actions.draft.trigger.frame ?? 0),
+			),
+		};
+		actions.setDraft(next);
+		close();
+		void actions.save(next);
+	};
+	const chooseDestination = (cueId: string) => {
+		const next = {
+			...actions.draft,
+			trigger: cueTrigger("link", triggerMillis, cueId),
 		};
 		actions.setDraft(next);
 		close();
@@ -204,7 +245,15 @@ function CueTriggerModal({
 						onClose={close}
 					/>
 					<div className="cue-trigger-options">
-						{(["go", "follow", "time"] as const).map((value) => (
+						{(
+							[
+								"go",
+								"follow",
+								"time",
+								"timecode",
+								...(linkCandidates.length > 0 ? (["link"] as const) : []),
+							] as const
+						).map((value) => (
 							<Button
 								key={value}
 								active={kind === value}
@@ -214,6 +263,23 @@ function CueTriggerModal({
 							</Button>
 						))}
 					</div>
+					{kind === "link" && (
+						<div
+							className="cue-trigger-options"
+							role="group"
+							aria-label="Link destination"
+						>
+							{linkCandidates.map((cue) => (
+								<Button
+									key={cue.id}
+									active={cue.id === actions.draft.trigger.cue_id}
+									onClick={() => chooseDestination(cue.id as string)}
+								>
+									{`Cue ${cue.number}${cue.name ? ` · ${cue.name}` : ""}`}
+								</Button>
+							))}
+						</div>
+					)}
 				</section>
 			</div>
 		</ModalPortal>
@@ -222,12 +288,14 @@ function CueTriggerModal({
 
 export function CueProperties({
 	actions,
+	cues,
 	thumbnail,
 	editError,
 	active,
 	layoutDependencies,
 }: {
 	actions: CueDraftActions;
+	cues: Cue[];
 	thumbnail: string | undefined;
 	editError: string;
 	active: boolean;
@@ -277,12 +345,14 @@ export function CueProperties({
 				</section>
 				<CuePropertyFields
 					actions={actions}
+					cues={cues}
 					refs={refs}
 					keyboardRequests={keyboardRequests}
 				/>
 				{!layout.fieldsFit && (
 					<CompactCueProperties
 						actions={actions}
+						cues={cues}
 						setArmed={layout.setArmed}
 						onDisarm={() => layout.setSetArmed(false)}
 						onOpenInput={openInput}
@@ -298,6 +368,7 @@ export function CueProperties({
 			{triggerModalOpen && (
 				<CueTriggerModal
 					actions={actions}
+					cues={cues}
 					close={() => setTriggerModalOpen(false)}
 				/>
 			)}

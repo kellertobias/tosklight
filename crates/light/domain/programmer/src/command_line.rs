@@ -47,6 +47,7 @@ pub enum CommandKey {
     Shift,
     Time,
     Delay,
+    Link,
     Select,
     Plus,
     Minus,
@@ -84,6 +85,7 @@ impl TryFrom<&str> for CommandKey {
             "SHIFT" => Ok(Self::Shift),
             "TIME" => Ok(Self::Time),
             "DELAY" => Ok(Self::Delay),
+            "LINK" => Ok(Self::Link),
             "SELECT" => Ok(Self::Select),
             "+" => Ok(Self::Plus),
             "-" => Ok(Self::Minus),
@@ -271,6 +273,7 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
             | CommandKey::At
             | CommandKey::Time
             | CommandKey::Delay
+            | CommandKey::Link
             | CommandKey::Select
             | CommandKey::Plus
             | CommandKey::Minus
@@ -337,6 +340,7 @@ fn root_token(key: CommandKey) -> Option<&'static str> {
         CommandKey::Set => Some("SET"),
         CommandKey::At => Some("AT"),
         CommandKey::Time => Some("TIME"),
+        CommandKey::Link => Some("LINK"),
         CommandKey::Select => Some("SELECT"),
         CommandKey::Plus => Some("+"),
         CommandKey::Minus => Some("-"),
@@ -358,6 +362,7 @@ fn command_token(key: CommandKey) -> String {
         CommandKey::At => "AT".into(),
         CommandKey::Time => "TIME".into(),
         CommandKey::Delay => "DELAY".into(),
+        CommandKey::Link => "LINK".into(),
         CommandKey::Select => "SELECT".into(),
         CommandKey::Plus => "+".into(),
         CommandKey::Minus => "-".into(),

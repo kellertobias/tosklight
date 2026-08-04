@@ -572,3 +572,56 @@ fn typed_speed_execution_resets_the_authoritative_command_line() {
     assert_eq!(scenario.state.installation.configuration().speed_groups_bpm[0], 120.0);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
+
+#[test]
+fn typed_link_command_stores_the_destination_cue_identity() {
+    let scenario = CommandContractScenario::new();
+    execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50").unwrap();
+    scenario.verify_cue_creation_and_timing();
+    let command = "LINK SET 25 CUE 1 AT CUE 7 DELAY 0.25";
+    assert!(
+        scenario
+            .state
+            .programming
+            .set_command_line(scenario.session.id, command.into())
+    );
+
+    let response = dispatch_live_action(
+        &scenario.state,
+        &scenario.session,
+        live_action_frame(
+            &scenario.session,
+            "link-cue",
+            light_wire::v2::live_action::LiveAction::CommandLineExecute(
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                    value: command.into(),
+                },
+            ),
+        ),
+    );
+
+    assert!(response.ok, "{:?}", response.error);
+    let (_, _, cue_list) = cue_list_for_playback(
+        &ActiveShowRepository::open(&scenario.show_path).unwrap(),
+        &scenario.state.output.snapshot(),
+        25,
+    )
+    .unwrap();
+    let source = cue_list.cues.iter().find(|cue| cue.number == 1.0).unwrap();
+    let destination = cue_list.cues.iter().find(|cue| cue.number == 7.0).unwrap();
+    assert!(matches!(
+        source.trigger,
+        light_playback::CueTrigger::Link {
+            cue_id,
+            delay_millis: 250
+        } if cue_id == destination.id
+    ));
+    let command_line = scenario
+        .state
+        .programming
+        .command_line_state(scenario.session.id)
+        .unwrap();
+    assert_eq!(command_line.visible_text(), "FIXTURE");
+    assert!(command_line.pristine);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}

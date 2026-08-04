@@ -233,6 +233,7 @@ pub(super) fn compatibility_only_family(command: &str) -> Result<Option<&'static
     if preset_record_address(command)?.is_some()
         || group_record_command(command)?.is_some()
         || super::cue_recording_command::parse(command)?.is_some()
+        || super::cue_link_command::parse(command)?.is_some()
         || super::cue_deletion_command::is_cue_deletion(command)
         || super::cue_navigation_command::parse(command)?.is_some()
         || super::speed_group_command::parse(command)?.is_some()
@@ -373,6 +374,7 @@ pub(crate) fn osc_command_key(action: &str) -> Option<CommandKey> {
         "preload" => CommandKey::Preload,
         "time" => CommandKey::Time,
         "delay" => CommandKey::Delay,
+        "link" => CommandKey::Link,
         "select" => CommandKey::Select,
         "plus" | "add" => CommandKey::Plus,
         "minus" | "subtract" => CommandKey::Minus,

@@ -46,6 +46,51 @@ fn render_returns_automatic_transitions_after_releasing_playback_state() {
     assert_eq!(engine.active_playbacks().len(), 1);
 }
 
+#[test]
+fn render_applies_a_link_destination_in_the_same_output_frame() {
+    let started = Utc::now();
+    let clock = Arc::new(ManualClock::new(started));
+    let engine = Engine::new(ProgrammerRegistry::with_clock(clock.clone()));
+    let mut source = Cue::new(1.0);
+    let skipped = Cue::new(2.0);
+    let destination = Cue::new(12.0);
+    source.trigger = CueTrigger::Link {
+        cue_id: destination.id,
+        delay_millis: 50,
+    };
+    let cue_list = cue_list(vec![source, skipped, destination.clone()]);
+    let id = cue_list.id;
+    engine
+        .replace_snapshot(EngineSnapshot {
+            cue_lists: vec![cue_list].into(),
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    engine
+        .execute_playback(EnginePlaybackCommand::CueList {
+            id,
+            action: CueListPlaybackAction::GoAt(started),
+        })
+        .unwrap();
+    clock.set(started + ChronoDuration::milliseconds(50));
+
+    let result = engine.render(RenderOptions::default()).unwrap();
+
+    assert_eq!(result.automatic_playback_transitions.len(), 1);
+    assert_eq!(
+        result.automatic_playback_transitions[0].cause,
+        AutomaticPlaybackTransitionCause::Link
+    );
+    assert_eq!(
+        result.automatic_playback_transitions[0].current.id,
+        destination.id
+    );
+    assert_eq!(
+        engine.active_playbacks()[0].current_cue_id,
+        Some(destination.id)
+    );
+}
+
 fn cue_list(cues: Vec<Cue>) -> CueList {
     CueList {
         id: CueListId::new(),

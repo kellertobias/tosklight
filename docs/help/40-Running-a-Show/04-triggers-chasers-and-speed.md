@@ -1,10 +1,16 @@
 # Triggers, Chasers, and Speed Groups
 
-Cuelists can advance manually, after a follow delay, at a timed delay, or from configured timecode.
+Cuelists can advance manually, after a follow delay, at a timed delay, through a Link, or from configured timecode.
 
 ## Follow and timed triggers
 
 Follow starts its delay from the preceding Cue's execution and advances automatically. Timed triggers use the stored timing rule. Confirm pause, release, loop, and end-of-list behavior for every automatic sequence.
+
+## Link triggers
+
+LINK belongs to the source Cue. After that Cue's latest real incoming or outgoing value has finished, the stored Link delay runs and playback jumps to the destination Cue. The destination is stored by stable Cue identity, so renumbering is safe. The desk rejects missing destinations, self-links, and direct or indirect Link cycles instead of guessing a fallback Cue. An explicitly loaded Cue remains the displayed effective next Cue and is retained for the next manual GO.
+
+**Disable Cue Timing** treats both Cue completion and Link delay as zero without rewriting either value. A live configured Timecode source remains authoritative and suppresses Link execution; this prevents a held timecode frame and a Link from repeatedly moving playback back and forth. Link resumes when authoritative timecode is absent.
 
 ## Timecode
 
