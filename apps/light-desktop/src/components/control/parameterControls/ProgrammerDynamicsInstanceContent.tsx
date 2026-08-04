@@ -14,6 +14,7 @@ import {
 } from "../../../windows/DynamicsWindow";
 import { HardwareEncoderDisplay } from "../HardwareEncoderDisplay";
 import type { ParameterController } from "./useParameterController";
+import { useVisibleEncoderCount } from "./VisibleEncoderCount";
 
 export interface DynamicControllerChoice {
 	instance: DynamicRuntimeInstanceProjection;
@@ -86,6 +87,7 @@ export function ProgrammerDynamicsInstanceContent(props: InstanceContentProps) {
 }
 
 function DynamicsToolbar({
+	controller,
 	choices,
 	selected,
 	selectedLane,
@@ -95,6 +97,8 @@ function DynamicsToolbar({
 	onController,
 	onLane,
 }: InstanceContentProps) {
+	const visibleEncoderCount = useVisibleEncoderCount();
+	const instancePage = controller.encoderPage === 2 ? 2 : 1;
 	return (
 		<div className="programmer-dynamics-toolbar">
 			<SelectField
@@ -130,6 +134,27 @@ function DynamicsToolbar({
 								: candidate[0].toUpperCase() + candidate.slice(1)}
 				</Button>
 			))}
+			{view === "instance" &&
+			visibleEncoderCount === 4 &&
+			!controller.hardwareConnected ? (
+				<div className="programmer-dynamics-instance-pages">
+					<Button
+						aria-label="Previous instance encoder page"
+						disabled={instancePage === 1}
+						onClick={() => controller.selectEncoderGroup(controller.family, 1)}
+					>
+						Previous
+					</Button>
+					<span>Page {instancePage} of 2</span>
+					<Button
+						aria-label="Next instance encoder page"
+						disabled={instancePage === 2}
+						onClick={() => controller.selectEncoderGroup(controller.family, 2)}
+					>
+						Next
+					</Button>
+				</div>
+			) : null}
 		</div>
 	);
 }
@@ -218,6 +243,7 @@ function HardwareInstanceControls({
 }
 
 function TouchInstanceControls({
+	controller,
 	choices,
 	selected,
 	selectedLane,
@@ -232,6 +258,15 @@ function TouchInstanceControls({
 	onUpdate,
 	onOff,
 }: InstanceContentProps & { dynamicLabel: string; status: string }) {
+	const visibleEncoderCount = useVisibleEncoderCount();
+	const page = visibleEncoderCount === 4 && controller.encoderPage === 2 ? 2 : 1;
+	if (page === 2)
+		return (
+			<>
+				<InstancePhaseEncoder selected={selected} onUpdate={onUpdate} slot={1} />
+				<DynamicOffControl error={error} onOff={onOff} />
+			</>
+		);
 	return (
 		<>
 			<TouchEncoder
@@ -268,65 +303,97 @@ function TouchInstanceControls({
 					if (lane) onLane(lane.id);
 				}}
 			/>
-			<ControllerValueEncoders selected={selected} onUpdate={onUpdate} />
-			<div className="parameter-placeholder programmer-dynamics-off">
-				<b>Dynamic Off</b>
-				<small>{error ?? "Stops only this exact instance."}</small>
-				<Button onClick={() => void onOff()}>Off</Button>
-			</div>
+			<InstanceSizeEncoder selected={selected} onUpdate={onUpdate} slot={3} />
+			<InstanceSpeedEncoder selected={selected} onUpdate={onUpdate} slot={4} />
+			{visibleEncoderCount === 6 ? (
+				<>
+					<InstancePhaseEncoder selected={selected} onUpdate={onUpdate} slot={5} />
+					<DynamicOffControl error={error} onOff={onOff} />
+				</>
+			) : null}
 		</>
 	);
 }
 
-function ControllerValueEncoders({
+function InstanceSizeEncoder({
 	selected,
 	onUpdate,
-}: Pick<InstanceContentProps, "selected" | "onUpdate">) {
+	slot,
+}: Pick<InstanceContentProps, "selected" | "onUpdate"> & { slot: number }) {
 	return (
-		<>
-			<TouchEncoder
-				label="Enc 3 · Instance Size"
-				slot={3}
-				attributeLabel="Instance Size"
-				value={selected.controller.size}
-				display={`${Math.round(selected.controller.size * 100)}%`}
-				mode="Dynamics"
-				onStep={(delta) =>
-					void onUpdate("size", clamp(selected.controller.size + delta, 0, 2))
-				}
-				onSet={(value) => void onUpdate("size", clamp(value, 0, 2))}
-			/>
-			<TouchEncoder
-				label="Enc 4 · Instance Speed"
-				slot={4}
-				attributeLabel="Instance Speed"
-				value={selected.controller.speed_multiplier}
-				display={`${selected.controller.speed_multiplier.toFixed(2)}×`}
-				mode="Dynamics"
-				onStep={(delta) =>
-					void onUpdate(
-						"speed",
-						clamp(selected.controller.speed_multiplier + delta, 0.0625, 16),
-					)
-				}
-				onSet={(value) => void onUpdate("speed", clamp(value, 0.0625, 16))}
-			/>
-			<TouchEncoder
-				label="Enc 5 · Instance Phase"
-				slot={5}
-				attributeLabel="Instance Phase"
-				value={selected.controller.phase_offset_degrees}
-				display={`${selected.controller.phase_offset_degrees.toFixed(0)}°`}
-				mode="Dynamics"
-				onStep={(delta) =>
-					void onUpdate(
-						"phase",
-						clamp(selected.controller.phase_offset_degrees + delta, -360, 360),
-					)
-				}
-				onSet={(value) => void onUpdate("phase", clamp(value, -360, 360))}
-			/>
-		</>
+		<TouchEncoder
+			label={`Enc ${slot} · Instance Size`}
+			slot={slot}
+			attributeLabel="Instance Size"
+			value={selected.controller.size}
+			display={`${Math.round(selected.controller.size * 100)}%`}
+			mode="Dynamics"
+			onStep={(delta) =>
+				void onUpdate("size", clamp(selected.controller.size + delta, 0, 2))
+			}
+			onSet={(value) => void onUpdate("size", clamp(value, 0, 2))}
+		/>
+	);
+}
+
+function InstanceSpeedEncoder({
+	selected,
+	onUpdate,
+	slot,
+}: Pick<InstanceContentProps, "selected" | "onUpdate"> & { slot: number }) {
+	return (
+		<TouchEncoder
+			label={`Enc ${slot} · Instance Speed`}
+			slot={slot}
+			attributeLabel="Instance Speed"
+			value={selected.controller.speed_multiplier}
+			display={`${selected.controller.speed_multiplier.toFixed(2)}×`}
+			mode="Dynamics"
+			onStep={(delta) =>
+				void onUpdate(
+					"speed",
+					clamp(selected.controller.speed_multiplier + delta, 0.0625, 16),
+				)
+			}
+			onSet={(value) => void onUpdate("speed", clamp(value, 0.0625, 16))}
+		/>
+	);
+}
+
+function InstancePhaseEncoder({
+	selected,
+	onUpdate,
+	slot,
+}: Pick<InstanceContentProps, "selected" | "onUpdate"> & { slot: number }) {
+	return (
+		<TouchEncoder
+			label={`Enc ${slot} · Instance Phase`}
+			slot={slot}
+			attributeLabel="Instance Phase"
+			value={selected.controller.phase_offset_degrees}
+			display={`${selected.controller.phase_offset_degrees.toFixed(0)}°`}
+			mode="Dynamics"
+			onStep={(delta) =>
+				void onUpdate(
+					"phase",
+					clamp(selected.controller.phase_offset_degrees + delta, -360, 360),
+				)
+			}
+			onSet={(value) => void onUpdate("phase", clamp(value, -360, 360))}
+		/>
+	);
+}
+
+function DynamicOffControl({
+	error,
+	onOff,
+}: Pick<InstanceContentProps, "error" | "onOff">) {
+	return (
+		<div className="parameter-placeholder programmer-dynamics-off">
+			<b>Dynamic Off</b>
+			<small>{error ?? "Stops only this exact instance."}</small>
+			<Button onClick={() => void onOff()}>Off</Button>
+		</div>
 	);
 }
 
