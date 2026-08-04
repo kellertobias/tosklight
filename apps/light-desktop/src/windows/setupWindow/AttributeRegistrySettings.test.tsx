@@ -1,7 +1,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AttributeConfigurationSnapshot } from "../../api/client/attributeConfiguration";
-import { AttributeRegistrySettings } from "./AttributeRegistrySettings";
+import {
+	AttributeRegistrySettings,
+	updatePushTurnCompanion,
+} from "./AttributeRegistrySettings";
 import type { SetupWindowController } from "./controller";
 
 afterEach(cleanup);
@@ -229,5 +232,68 @@ describe("Desk Setup attribute registry", () => {
 				},
 			],
 		});
+	});
+
+	it("edits a compound push-turn relationship from the visual encoder page", () => {
+		const configuration = {
+			...snapshot.configuration,
+			placements: [
+				{
+					attribute: "prism.1",
+					encoder_group: "beam" as const,
+					encoder_page: 1,
+					encoder_slot: 1,
+				},
+				{
+					attribute: "prism.1.rotation",
+					encoder_group: "beam" as const,
+					encoder_page: 1,
+					encoder_slot: 2,
+				},
+			],
+		};
+		const descriptors = [
+			{
+				...snapshot.descriptors[0],
+				id: "prism.1",
+				label: "Prism 1",
+				encoder_group: "beam" as const,
+				encoder_slot: 1,
+			},
+			{
+				...snapshot.descriptors[0],
+				id: "prism.1.rotation",
+				label: "Prism 1 Rotation",
+				encoder_group: "beam" as const,
+				encoder_slot: 2,
+			},
+		];
+		const editAttributeConfiguration = vi.fn();
+		render(
+			<AttributeRegistrySettings
+				controller={
+					{
+						attributeConfiguration: {
+							...snapshot,
+							configuration,
+							descriptors,
+						},
+						attributeConfigurationError: null,
+						editAttributeConfiguration,
+					} as unknown as SetupWindowController
+				}
+			/>,
+		);
+
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Prism 1 push-turn companion",
+			}),
+		);
+		fireEvent.click(screen.getByRole("option", { name: "Prism 1 Rotation" }));
+
+		expect(editAttributeConfiguration).toHaveBeenCalledWith(
+			updatePushTurnCompanion(configuration, "prism.1", "prism.1.rotation"),
+		);
 	});
 });

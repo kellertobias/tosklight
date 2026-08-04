@@ -226,24 +226,79 @@ function AttributeOrderActions({
 		onChange(
 			reorderAttribute(configuration, descriptors, descriptor.id, delta),
 		);
-	return (
-		<div className="attribute-layout-order-actions">
-			<Button
-				aria-label={`Move ${descriptor.label} earlier`}
-				disabled={isGroupBoundary(descriptors, descriptor.id, -1)}
-				onClick={() => move(-1)}
-			>
-				←
-			</Button>
-			<Button
-				aria-label={`Move ${descriptor.label} later`}
-				disabled={isGroupBoundary(descriptors, descriptor.id, 1)}
-				onClick={() => move(1)}
-			>
-				→
-			</Button>
-		</div>
+	const companion = descriptors.find(
+		(candidate) => candidate.push_turn_of === descriptor.id,
 	);
+	const companionOptions = descriptors
+		.filter(
+			(candidate) =>
+				candidate.id !== descriptor.id &&
+				candidate.encoder_group === descriptor.encoder_group &&
+				!descriptors.some(
+					(other) =>
+						other.push_turn_of === candidate.id && other.id !== descriptor.id,
+				) &&
+				(!candidate.push_turn_of || candidate.push_turn_of === descriptor.id),
+		)
+		.map((candidate) => ({ value: candidate.id, label: candidate.label }));
+	return (
+		<>
+			<div className="attribute-layout-order-actions">
+				<Button
+					aria-label={`Move ${descriptor.label} earlier`}
+					disabled={isGroupBoundary(descriptors, descriptor.id, -1)}
+					onClick={() => move(-1)}
+				>
+					←
+				</Button>
+				<Button
+					aria-label={`Move ${descriptor.label} later`}
+					disabled={isGroupBoundary(descriptors, descriptor.id, 1)}
+					onClick={() => move(1)}
+				>
+					→
+				</Button>
+			</div>
+			{companionOptions.length > 0 && (
+				<SelectField
+					ariaLabel={`${descriptor.label} push-turn companion`}
+					value={companion?.id ?? ""}
+					options={[
+						{ value: "", label: "No push-turn companion" },
+						...companionOptions,
+					]}
+					onChange={(value) =>
+						onChange(
+							updatePushTurnCompanion(
+								configuration,
+								descriptor.id,
+								value || null,
+							),
+						)
+					}
+				/>
+			)}
+		</>
+	);
+}
+
+export function updatePushTurnCompanion(
+	configuration: AttributeConfiguration,
+	primaryAttribute: string,
+	companionAttribute: string | null,
+) {
+	return {
+		...configuration,
+		placements: configuration.placements.map((placement) => {
+			if (placement.attribute === companionAttribute) {
+				return { ...placement, push_turn_of: primaryAttribute };
+			}
+			if (placement.push_turn_of === primaryAttribute) {
+				return { ...placement, push_turn_of: null };
+			}
+			return placement;
+		}),
+	};
 }
 
 function descriptorsInGroup(
