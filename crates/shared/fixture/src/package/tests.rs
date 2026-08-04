@@ -413,6 +413,74 @@ fn shipped_generic_cmy_retains_fixture_identity_and_maps_into_canonical_rgb() {
     }
 }
 
+#[test]
+fn shipped_library_keeps_compound_prism_and_motion_migration_evidence_explicit() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join("assets/fixture-library");
+    let mut prism_selection_modes = 0;
+    let mut prism_rotation_modes = 0;
+    let mut generic_control_modes = 0;
+    let mut continuous_pan_or_tilt = Vec::new();
+
+    for entry in fs::read_dir(root).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("toskfixture") {
+            continue;
+        }
+        let profile = read_fixture_package(&fs::read(&path).unwrap()).unwrap();
+        for mode in &profile.modes {
+            let prism_selection = mode
+                .channels
+                .iter()
+                .find(|channel| channel.attribute.0 == "prism.1");
+            let prism_rotation = mode
+                .channels
+                .iter()
+                .find(|channel| channel.attribute.0 == "prism.1.rotation");
+            if prism_selection.is_some() {
+                prism_selection_modes += 1;
+            }
+            if let Some(rotation) = prism_rotation {
+                prism_rotation_modes += 1;
+                assert_eq!(
+                    prism_selection.map(|channel| channel.head_id),
+                    Some(rotation.head_id),
+                    "{} / {} must keep Prism 1 selection and rotation on one logical head",
+                    profile.name,
+                    mode.name
+                );
+            }
+            if mode
+                .channels
+                .iter()
+                .any(|channel| channel.fixture_attribute.0 == "fixture.control")
+            {
+                generic_control_modes += 1;
+            }
+            for channel in &mode.channels {
+                if matches!(
+                    channel.attribute.0.as_str(),
+                    "pan.continuous" | "tilt.continuous"
+                ) {
+                    continuous_pan_or_tilt.push(format!(
+                        "{} / {} / {}",
+                        profile.name, mode.name, channel.attribute.0
+                    ));
+                }
+            }
+        }
+    }
+
+    assert_eq!(prism_selection_modes, 7);
+    assert_eq!(prism_rotation_modes, 5);
+    assert_eq!(generic_control_modes, 5);
+    assert!(
+        continuous_pan_or_tilt.is_empty(),
+        "continuous motion now needs a co-occurrence migration review: {continuous_pan_or_tilt:?}"
+    );
+}
+
 fn minimal_glb(external_uri: bool) -> Vec<u8> {
     let json = if external_uri {
         br#"{"asset":{"version":"2.0"},"buffers":[{"byteLength":0,"uri":"outside.bin"}]}"#.to_vec()
