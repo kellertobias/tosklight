@@ -357,6 +357,8 @@ fn playback(fixture_footprint: u16) -> (CueList, PlaybackDefinition) {
         changes: vec![],
         fade_millis: 0,
         delay_millis: 0,
+        out_fade_millis: None,
+        out_delay_millis: None,
         trigger: CueTrigger::Manual,
         cue_only: false,
         dynamic_changes: vec![],

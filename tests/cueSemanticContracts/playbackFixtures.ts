@@ -1,8 +1,5 @@
 import type { ApiDriver } from "../bench/core/api";
-import {
-	type BenchContractContext,
-	expect,
-} from "../bench/core/fixtures";
+import { type BenchContractContext, expect } from "../bench/core/fixtures";
 import {
 	fixtureIdsByNumber,
 	object,
@@ -147,6 +144,8 @@ export type ValueOptions = {
 export type CueOptions = {
 	fade_millis?: number;
 	delay_millis?: number;
+	out_fade_millis?: number;
+	out_delay_millis?: number;
 	trigger?: any;
 };
 export type FixtureValue = readonly [string, string, number, ValueOptions?];
@@ -176,6 +175,12 @@ export function fixtureCue(
 		group_changes: [],
 		fade_millis: options.fade_millis ?? 0,
 		delay_millis: options.delay_millis ?? 0,
+		...(options.out_fade_millis == null
+			? {}
+			: { out_fade_millis: options.out_fade_millis }),
+		...(options.out_delay_millis == null
+			? {}
+			: { out_delay_millis: options.out_delay_millis }),
 		trigger: options.trigger ?? { type: "manual" },
 	};
 }
