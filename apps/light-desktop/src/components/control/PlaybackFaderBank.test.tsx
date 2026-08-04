@@ -235,13 +235,23 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => {
 			};
 		if (playback.target.type === "cue_list")
 			return cueListProjection(number, playback);
+		const active = mocks.playbacks.active.find(
+			(candidate) => candidate.playback_number === number,
+		);
 		return {
 			scope: { show_id: "show-1", show_revision: 9 },
 			requested: { kind: "playback", playback_number: number },
 			playback_number: number,
 			target: playback.target.type,
 			...(playback.target.type === "group"
-				? { group_id: playback.target.group_id, master: 1, flash_level: 1 }
+				? {
+						group_id: playback.target.group_id,
+						master: active?.master ?? 1,
+						flash_level: 1,
+						fader_position: active?.fader_position ?? 0,
+						fader_pickup_required: Boolean(active?.fader_pickup_required),
+						fader_pickup_target: active?.fader_pickup_target ?? null,
+					}
 				: {}),
 		};
 	};
@@ -1249,6 +1259,27 @@ describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 			document.querySelector(".hardware-fader-pickup-difference"),
 		).not.toBeInTheDocument();
 		expect(screen.queryByText(/Physical/)).not.toBeInTheDocument();
+	});
+
+	it("shows authoritative pickup feedback for a physical Group Master", () => {
+		assignPlayback({ target: { type: "group", group_id: "group-front" } });
+		mocks.hardwareConnected = true;
+		mocks.playbacks.active = [
+			{
+				playback_number: 7,
+				master: 0.75,
+				fader_position: 0.2,
+				fader_pickup_required: true,
+				fader_pickup_target: 0.75,
+			},
+		];
+
+		render(<PlaybackFaderBank count={1} />);
+
+		const fader = document.querySelector(".hardware-fader");
+		expect(fader).toHaveAttribute("data-pickup-physical", "0.2");
+		expect(fader).toHaveAttribute("data-pickup-target", "0.75");
+		expect(fader).toHaveAttribute("data-pickup-direction", "raise");
 	});
 
 	it("routes a playback right-click directly to that card", () => {

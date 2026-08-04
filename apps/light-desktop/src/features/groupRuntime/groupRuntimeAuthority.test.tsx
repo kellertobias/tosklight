@@ -132,6 +132,9 @@ function projection(
 		group_id: identity.group_id,
 		master,
 		flash_level: identity.group_id === "1" ? 0.1 : 0,
+		fader_position: 0,
+		fader_pickup_required: false,
+		fader_pickup_target: null,
 		...override,
 	};
 }

@@ -1,6 +1,72 @@
 use super::*;
 
 #[test]
+fn shared_group_master_faders_require_pickup_and_retarget_peers() {
+    let target = PlaybackTarget::Group {
+        group_id: "front".into(),
+        initial_master: Some(0.75),
+    };
+    let mut first = definition(1, CueListId::new());
+    first.target = target.clone();
+    first.buttons = PlaybackDefinition::default_buttons(&target);
+    first.fader = PlaybackDefinition::default_fader(&target);
+    let mut second = first.clone();
+    second.number = 2;
+    second.name = "Playback 2".into();
+    let mut engine = PlaybackEngine::default();
+    engine.register_definition(first).unwrap();
+    engine.register_definition(second).unwrap();
+
+    let held = engine
+        .set_group_master_fader_mutation(1, 0.2, 0.75)
+        .unwrap();
+    assert_eq!(held.effect, PlaybackRuntimeEffect::Transient);
+    assert_eq!(
+        engine.control_state_at(PlaybackIdentity::physical(1).unwrap()),
+        PlaybackControlState {
+            fader_position: 0.2,
+            fader_pickup_required: true,
+            fader_pickup_target: Some(0.75),
+            observed: true,
+        }
+    );
+
+    engine
+        .set_group_master_fader_mutation(1, 0.8, 0.75)
+        .unwrap();
+    assert!(
+        !engine
+            .control_state_at(PlaybackIdentity::physical(1).unwrap())
+            .fader_pickup_required
+    );
+    assert_eq!(
+        engine
+            .control_state_at(PlaybackIdentity::physical(2).unwrap())
+            .fader_pickup_target,
+        Some(0.8)
+    );
+
+    engine.set_group_master_fader_mutation(2, 0.3, 0.8).unwrap();
+    assert!(
+        engine
+            .control_state_at(PlaybackIdentity::physical(2).unwrap())
+            .fader_pickup_required
+    );
+    engine.set_group_master_fader_mutation(2, 0.9, 0.8).unwrap();
+    assert!(
+        !engine
+            .control_state_at(PlaybackIdentity::physical(2).unwrap())
+            .fader_pickup_required
+    );
+    assert_eq!(
+        engine
+            .control_state_at(PlaybackIdentity::physical(1).unwrap())
+            .fader_pickup_target,
+        Some(0.9)
+    );
+}
+
+#[test]
 fn preload_transition_uses_one_timestamp_and_programmer_fade_only_as_fallback() {
     let fixture = FixtureId::new();
     let mut first = Cue::new(1.0);

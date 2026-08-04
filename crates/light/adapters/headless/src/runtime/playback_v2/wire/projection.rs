@@ -102,10 +102,16 @@ pub(super) fn target_projection(
             group_id,
             master,
             flash_level,
+            fader_position,
+            fader_pickup_required,
+            fader_pickup_target,
         } => wire::PlaybackTargetProjection::Group {
             group_id: group_id.clone(),
             master: *master,
             flash_level: *flash_level,
+            fader_position: *fader_position,
+            fader_pickup_required: *fader_pickup_required,
+            fader_pickup_target: *fader_pickup_target,
         },
         App::SpeedGroup { group, runtime } => wire::PlaybackTargetProjection::SpeedGroup {
             group: group.clone(),

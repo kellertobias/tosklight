@@ -73,6 +73,9 @@ export function groupProjection(
 		group_id: groupId,
 		master,
 		flash_level: 0,
+		fader_position: 0,
+		fader_pickup_required: false,
+		fader_pickup_target: null,
 	};
 }
 

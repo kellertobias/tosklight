@@ -7,10 +7,43 @@ pub(super) fn apply_specialized_master(
     definition: &light_playback::PlaybackDefinition,
     input: &PoolPlaybackInput,
     value: f32,
+    physical: bool,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     match &definition.target {
-        PlaybackTarget::Group { group_id, .. } => set_group_playback_master(state, group_id, value)
-            .map(PlaybackTargetOutcome::output_runtime),
+        PlaybackTarget::Group { group_id, .. } => {
+            if !physical {
+                return set_group_playback_master(state, group_id, value)
+                    .map(PlaybackTargetOutcome::output_runtime);
+            }
+            let authoritative = state
+                .output
+                .group_master(group_id)
+                .ok_or_else(|| ApiError::conflict("group has no assigned Group Master"))?;
+            let outcome = state
+                .output
+                .execute_playback(EnginePlaybackCommand::Pool {
+                    number: definition.number,
+                    action: PoolPlaybackAction::SetGroupMasterFader {
+                        value,
+                        authoritative,
+                    },
+                })
+                .map_err(ApiError::bad_request)?;
+            let EnginePlaybackOutcome::Changed(effect) = outcome else {
+                return Err(ApiError::internal("unexpected Group Master fader outcome"));
+            };
+            let identity = light_playback::PlaybackIdentity::physical(definition.number)
+                .map_err(ApiError::bad_request)?;
+            let control = state.output.playback_control_state_at(identity);
+            let mut pickup = PlaybackTargetOutcome::changed(effect.changed());
+            pickup.addressed_event_required = effect.addressed.changed();
+            if control.fader_pickup_required {
+                return Ok(pickup);
+            }
+            set_group_playback_master(state, group_id, value)
+                .map(PlaybackTargetOutcome::output_runtime)
+                .map(|output| pickup.combine(output))
+        }
         PlaybackTarget::SpeedGroup { group } => {
             apply_speed_group_playback_action(state, group, "master", input, definition.fader)
                 .map(PlaybackTargetOutcome::changed)

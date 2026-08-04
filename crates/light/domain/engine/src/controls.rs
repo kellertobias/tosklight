@@ -21,13 +21,19 @@ impl Engine {
             outcome.set(update);
             generation
         });
-        match outcome.get() {
+        let changed = match outcome.get() {
             GroupMasterGenerationUpdate::Missing => Err(EngineError::Invalid(format!(
                 "group {group_id} does not exist"
             ))),
             GroupMasterGenerationUpdate::Unchanged => Ok(false),
             GroupMasterGenerationUpdate::Changed => Ok(true),
-        }
+        }?;
+        self.generation
+            .load()
+            .playback()
+            .write()
+            .retarget_group_physical_controls(group_id, value, None);
+        Ok(changed)
     }
 
     pub fn set_group_master_transition(

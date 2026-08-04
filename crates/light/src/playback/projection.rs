@@ -43,6 +43,9 @@ pub enum PlaybackTargetProjection {
         group_id: String,
         master: f32,
         flash_level: f32,
+        fader_position: f32,
+        fader_pickup_required: bool,
+        fader_pickup_target: Option<f32>,
     },
     SpeedGroup {
         group: String,

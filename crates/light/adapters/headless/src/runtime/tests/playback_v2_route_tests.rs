@@ -1337,6 +1337,59 @@ async fn playback_originated_group_change_uses_the_same_group_event_route() {
 }
 
 #[tokio::test]
+async fn physical_group_master_fader_holds_until_pickup_and_tracks_virtual_changes() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+
+    let mut below = action_request(
+        "physical-group-master-below-pickup",
+        2,
+        serde_json::json!({"type":"master","value":0.2}),
+    );
+    below["surface"] = serde_json::json!("physical");
+    let below = json(post_action(&app, Some(&token), desk_id, below).await).await;
+    assert_eq!(below["projection"]["master"], 0.75);
+    assert_eq!(below["projection"]["fader_position"], 0.2);
+    assert_eq!(below["projection"]["fader_pickup_required"], true);
+    assert_eq!(below["projection"]["fader_pickup_target"], 0.75);
+
+    let virtual_change = json(
+        post_action(
+            &app,
+            Some(&token),
+            desk_id,
+            action_request(
+                "virtual-group-master-change",
+                2,
+                serde_json::json!({"type":"master","value":0.4}),
+            ),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(virtual_change["projection"]["master"], 0.4);
+    assert_eq!(virtual_change["projection"]["fader_pickup_required"], true);
+    assert_eq!(virtual_change["projection"]["fader_pickup_target"], 0.4);
+
+    let mut crossing = action_request(
+        "physical-group-master-crosses-pickup",
+        2,
+        serde_json::json!({"type":"master","value":0.5}),
+    );
+    crossing["surface"] = serde_json::json!("physical");
+    let crossing = json(post_action(&app, Some(&token), desk_id, crossing).await).await;
+    assert_eq!(crossing["projection"]["master"], 0.5);
+    assert_eq!(crossing["projection"]["fader_position"], 0.5);
+    assert_eq!(crossing["projection"]["fader_pickup_required"], false);
+    assert!(crossing["projection"]["fader_pickup_target"].is_null());
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_group_runtime_preserves_peer_desk_scope_and_rejects_stale_show() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

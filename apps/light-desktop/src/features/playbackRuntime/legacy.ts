@@ -6,6 +6,33 @@ export type LegacyPlaybackRuntime = PlaybackSnapshot["active"][number];
 export function legacyPlaybackRuntime(
 	projection: PlaybackProjection | null | undefined,
 ): LegacyPlaybackRuntime | undefined {
+	if (projection?.target === "group") {
+		return {
+			playback_number: projection.playback_number,
+			cue_list_id: "",
+			cue_index: -1,
+			previous_index: null,
+			paused: false,
+			master: projection.master,
+			fader_position: projection.fader_position,
+			fader_pickup_required: projection.fader_pickup_required,
+			fader_pickup_target: projection.fader_pickup_target,
+			flash: projection.flash_level > 0,
+			transition_timing_bypassed: false,
+			manual_xfade_position: 0,
+			manual_xfade_direction: undefined,
+			manual_xfade_progress: 0,
+			temporary_active: false,
+			temporary_master: 0,
+			swap_active: false,
+			enabled: true,
+			current_cue_number: null,
+			loaded_cue_number: null,
+			normal_next_cue_number: null,
+			effective_next_cue_number: null,
+			effective_next_is_loaded: false,
+		};
+	}
 	if (projection?.target === "dynamic" && projection.runtime) {
 		const runtime = projection.runtime;
 		return {

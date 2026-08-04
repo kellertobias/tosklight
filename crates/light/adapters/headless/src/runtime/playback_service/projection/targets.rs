@@ -74,6 +74,7 @@ pub(super) fn group_projection(
     ports: &ServerPlaybackPorts<'_>,
     snapshot: &EngineSnapshot,
     group_id: &str,
+    identity: Option<light_playback::PlaybackIdentity>,
 ) -> Result<PlaybackTargetProjection, ActionError> {
     snapshot
         .groups
@@ -85,10 +86,16 @@ pub(super) fn group_projection(
         .output
         .group_master(group_id)
         .ok_or_else(|| invalid("group has no assigned Group Master"))?;
+    let control = identity
+        .map(|identity| ports.state.output.playback_control_state_at(identity))
+        .unwrap_or_default();
     Ok(PlaybackTargetProjection::Group {
         group_id: group_id.to_owned(),
         master,
         flash_level: ports.state.output.group_master_flash(group_id),
+        fader_position: control.fader_position,
+        fader_pickup_required: control.fader_pickup_required,
+        fader_pickup_target: control.fader_pickup_target,
     })
 }
 

@@ -658,6 +658,20 @@
         {
           "type": "object",
           "properties": {
+            "fader_pickup_required": {
+              "type": "boolean"
+            },
+            "fader_pickup_target": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "float"
+            },
+            "fader_position": {
+              "type": "number",
+              "format": "float"
+            },
             "flash_level": {
               "type": "number",
               "format": "float"
@@ -678,7 +692,10 @@
             "target",
             "group_id",
             "master",
-            "flash_level"
+            "flash_level",
+            "fader_position",
+            "fader_pickup_required",
+            "fader_pickup_target"
           ]
         },
         {

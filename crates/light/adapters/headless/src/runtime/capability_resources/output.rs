@@ -700,6 +700,13 @@ impl OutputResource {
         self.engine.execute_playback(command)
     }
 
+    pub(in crate::runtime) fn playback_control_state_at(
+        &self,
+        identity: light_playback::PlaybackIdentity,
+    ) -> light_playback::PlaybackControlState {
+        self.engine.playback_control_state_at(identity)
+    }
+
     pub(in crate::runtime) fn execute_pool_playback_with_activation(
         &self,
         number: u16,

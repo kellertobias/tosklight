@@ -392,6 +392,19 @@ function decodeTarget(
 			group_id: opaqueStringAt(projection.group_id, `${path}.group_id`, 256),
 			master: numberAt(projection.master, `${path}.master`),
 			flash_level: numberAt(projection.flash_level, `${path}.flash_level`),
+			fader_position: numberAt(
+				projection.fader_position,
+				`${path}.fader_position`,
+			),
+			fader_pickup_required: booleanAt(
+				projection.fader_pickup_required,
+				`${path}.fader_pickup_required`,
+			),
+			fader_pickup_target: nullable(
+				projection.fader_pickup_target,
+				`${path}.fader_pickup_target`,
+				numberAt,
+			),
 		};
 	}
 	if (target === "speed_group") {

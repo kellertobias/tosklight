@@ -267,6 +267,114 @@ impl PlaybackEngine {
         }
         changed
     }
+
+    pub fn retarget_group_physical_controls(
+        &mut self,
+        group_id: &str,
+        target: f32,
+        controlling: Option<PlaybackIdentity>,
+    ) -> bool {
+        let identities = self
+            .definitions
+            .values()
+            .filter_map(|definition| match &definition.target {
+                PlaybackTarget::Group {
+                    group_id: candidate,
+                    ..
+                } if candidate == group_id && definition.has_fader => {
+                    PlaybackIdentity::physical(definition.number).ok()
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let mut changed = false;
+        for identity in identities {
+            let state = self.control_states.entry(identity).or_default();
+            let satisfied =
+                controlling == Some(identity) || (state.observed && state.fader_position == target);
+            let required = !satisfied;
+            let pickup_target = required.then_some(target);
+            changed |= state.fader_pickup_required != required
+                || state.fader_pickup_target != pickup_target;
+            state.fader_pickup_required = required;
+            state.fader_pickup_target = pickup_target;
+        }
+        changed
+    }
+
+    pub fn set_group_master_fader_mutation(
+        &mut self,
+        number: u16,
+        value: f32,
+        authoritative: f32,
+    ) -> Result<PlaybackMutation<()>, String> {
+        if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+            return Err("Group Master fader must be within 0-1".into());
+        }
+        if !authoritative.is_finite() || !(0.0..=1.0).contains(&authoritative) {
+            return Err("authoritative Group Master must be within 0-1".into());
+        }
+        let definition = self
+            .definitions
+            .get(&number)
+            .ok_or("playback does not exist")?;
+        if !definition.has_fader {
+            return Err("playback does not have a fader".into());
+        }
+        let PlaybackTarget::Group { group_id, .. } = &definition.target else {
+            return Err("Playback is not assigned to a Group Master".into());
+        };
+        let group_id = group_id.clone();
+        let identity = PlaybackIdentity::physical(number)?;
+        let mut control_changed = false;
+        if !self.control_states.contains_key(&identity) {
+            self.control_states.insert(
+                identity,
+                PlaybackControlState {
+                    fader_pickup_required: true,
+                    fader_pickup_target: Some(authoritative),
+                    ..PlaybackControlState::default()
+                },
+            );
+            control_changed = true;
+        }
+        let state = self.control_states.entry(identity).or_default();
+        let previous = state.fader_position;
+        let was_observed = state.observed;
+        control_changed |= !was_observed || previous != value;
+        state.fader_position = value;
+        state.observed = true;
+        if state.fader_pickup_required {
+            let target = state.fader_pickup_target.unwrap_or(authoritative);
+            let crossed = value == target
+                || (was_observed && previous == target)
+                || (was_observed
+                    && ((previous < target && value > target)
+                        || (previous > target && value < target)));
+            if !crossed {
+                return Ok(PlaybackMutation::new(
+                    (),
+                    if control_changed {
+                        PlaybackRuntimeEffect::Transient
+                    } else {
+                        PlaybackRuntimeEffect::None
+                    },
+                ));
+            }
+            state.fader_pickup_required = false;
+            state.fader_pickup_target = None;
+            control_changed = true;
+        }
+        control_changed |= self.retarget_group_physical_controls(&group_id, value, Some(identity));
+        Ok(PlaybackMutation::new(
+            (),
+            if control_changed {
+                PlaybackRuntimeEffect::Transient
+            } else {
+                PlaybackRuntimeEffect::None
+            },
+        ))
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
