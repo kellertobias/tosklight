@@ -41,6 +41,18 @@ describe("fixture library editor", () => {
     expect(definitions[0].model_asset).toMatch(/^data:model\/gltf-binary;base64,/);
     expect((definitions[0].color_calibration as { emitters: unknown[] }).emitters).toHaveLength(3);
     const profile = fixtureProfileFromDefinition(definitions[0]);
+    expect(
+      Object.fromEntries(
+        profile.modes[0].channels.map((channel) => [
+          channel.attribute,
+          channel.fixture_attribute,
+        ]),
+      ),
+    ).toMatchObject({
+      pan: "GDTF:Pan",
+      gobo1: "GDTF:Gobo1",
+      "color.cyan": "GDTF:ColorSub_C",
+    });
     const highlights = Object.fromEntries(profile.modes[0].channels.map((channel) => [channel.attribute, channel.highlight_raw]));
     expect(highlights).toMatchObject({
       "color.cyan": 0,

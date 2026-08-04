@@ -346,6 +346,8 @@ export interface FixtureDefinition {
 		name: string;
 		shared: boolean;
 		parameters: Array<{
+			/** Stable manufacturer/source identity retained separately from canonical programming. */
+			source_attribute?: string;
 			attribute: string;
 			components: Array<{
 				offset: number;

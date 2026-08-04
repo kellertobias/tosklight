@@ -125,15 +125,16 @@ function parseGdtfChannel(
 	);
 	const logical = channel.querySelector("LogicalChannel");
 	const fn = logical?.querySelector("ChannelFunction");
-	const attribute = fixtureAttributeName(
+	const sourceAttribute =
 		logical?.getAttribute("Attribute") ||
 			fn?.getAttribute("Attribute") ||
 			channel.getAttribute("Name") ||
-			`channel.${offsets[0] + 1}`,
-	);
+			`channel.${offsets[0] + 1}`;
+	const attribute = fixtureAttributeName(sourceAttribute);
 	const physicalFrom = Number(fn?.getAttribute("PhysicalFrom") ?? 0);
 	const physicalTo = Number(fn?.getAttribute("PhysicalTo") ?? 1);
 	return {
+		source_attribute: `GDTF:${sourceAttribute}`,
 		attribute,
 		components: offsets.map((offset) => ({
 			offset,
