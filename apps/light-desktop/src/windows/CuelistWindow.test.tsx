@@ -785,6 +785,12 @@ describe("CuelistWindow Cue draft validation", () => {
 		const ui = within(view.container);
 		fireEvent.click(ui.getByText("Main").closest("button")!);
 		fireEvent.change(ui.getByLabelText("In Fade"), { target: { value: "3" } });
+		fireEvent.change(ui.getByLabelText("Out Delay"), {
+			target: { value: "0.5" },
+		});
+		fireEvent.change(ui.getByLabelText("Out Fade"), {
+			target: { value: "4" },
+		});
 
 		mocks.cueObjects = [
 			{
@@ -794,7 +800,7 @@ describe("CuelistWindow Cue draft validation", () => {
 			},
 		];
 		view.rerender(<CuelistWindow />);
-		fireEvent.keyDown(ui.getByLabelText("In Fade"), { key: "Enter" });
+		fireEvent.keyDown(ui.getByLabelText("Out Fade"), { key: "Enter" });
 
 		await waitFor(() =>
 			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
@@ -806,7 +812,14 @@ describe("CuelistWindow Cue draft validation", () => {
 			expect.objectContaining({
 				id: "main",
 				name: "Main",
-				cues: [expect.objectContaining({ id: "cue-1", fade_millis: 3_000 })],
+				cues: [
+					expect.objectContaining({
+						id: "cue-1",
+						fade_millis: 3_000,
+						out_delay_millis: 500,
+						out_fade_millis: 4_000,
+					}),
+				],
 			}),
 		);
 		expect(mocks.refresh).not.toHaveBeenCalled();
