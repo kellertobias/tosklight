@@ -381,6 +381,72 @@ mod tests {
         }
     }
 
+    /// The determinism the demo video depends on.
+    ///
+    /// CI composites a video from separate capture runs, so the same commit and the same arguments
+    /// have to produce the same picture. Everything that could vary is stated rather than measured
+    /// — resolution, camera, time step, haze — and auto-exposure adapts over time, which is why a
+    /// capture settles first.
+    ///
+    /// It is not bit-exact, and measuring showed why: two runs differ on a few dozen bytes of a
+    /// 230,400-byte frame, each by a single value. Settling longer shrinks it (38 bytes at 8
+    /// frames, 13 at 60) without reaching zero, so it is not exposure converging — it is the GPU
+    /// resolving multisampled coverage in whatever order it likes. So the guarantee is stated as
+    /// what the video actually needs: nothing moves perceptibly between runs.
+    #[test]
+    fn two_capture_runs_of_the_same_frame_are_identical() {
+        let scene = demo_scene("determinism");
+        let mut view = ViewConfiguration::default();
+        view.mode = ViewMode::Full3d;
+        view.camera = viz_scene::Camera::framed(ViewMode::Full3d, scene.bounds);
+        let overlay = viz_render::Overlay::default();
+        let mut values = SceneValues::default();
+        values.resize(scene.emitters.len());
+        values.atmosphere.density = viz_scene::DEFAULT_DENSITY;
+
+        let capture_once = || {
+            let mut renderer = viz_render::Renderer::headless(320, 180)
+                .expect("a headless renderer; this machine has no GPU or software adapter");
+            for frame in 0..60 {
+                renderer
+                    .capture(&scene, &values, &view, &overlay, frame as f32 / 30.0)
+                    .expect("settling frame");
+            }
+            renderer
+                .capture(&scene, &values, &view, &overlay, 60.0 / 30.0)
+                .expect("recorded frame")
+                .rgba
+        };
+
+        let first = capture_once();
+        let second = capture_once();
+        assert_eq!(first.len(), second.len(), "the two runs differ in size");
+        let deltas: Vec<u8> = first
+            .iter()
+            .zip(&second)
+            .map(|(left, right)| left.abs_diff(*right))
+            .filter(|delta| *delta > 0)
+            .collect();
+        let worst = deltas.iter().copied().max().unwrap_or(0);
+        // Not bit-exact, and it cannot be: a GPU is free to vary the order it resolves
+        // multisampled coverage in, so a handful of pixels land a single value apart between runs.
+        // What matters for a composited video is that nothing moves perceptibly, so the bound is
+        // stated in those terms instead of pretending to an exactness the hardware does not offer.
+        assert!(
+            worst <= 1,
+            "{} bytes differ between two runs of the same frame, the worst by {worst}; that is \
+             more than rounding and a composited demo video would flicker",
+            deltas.len()
+        );
+        assert!(
+            deltas.len() * 1_000 < first.len(),
+            "{} of {} bytes differ between two runs — under a tenth of a percent is rounding, \
+             this is something moving",
+            deltas.len(),
+            first.len()
+        );
+    }
+
     /// Where the fixture models actually stand today.
     ///
     /// TL-68 consolidates fixture-model ownership on the premise that an exact model belongs in
