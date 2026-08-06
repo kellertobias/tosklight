@@ -112,6 +112,7 @@ pub(super) fn spatial_mapping(
 
 fn wire_projection(value: &domain::SpatialProjection) -> wire::DynamicSpatialProjectionProjection {
     use light_wire::v2::group_management as group_wire;
+    let is_planar = value.kind == domain::ProjectionKind::Planar;
     wire::DynamicSpatialProjectionProjection {
         anchor: wire::DynamicSpatialPosition3dProjection {
             x: value.anchor.x,
@@ -124,6 +125,24 @@ fn wire_projection(value: &domain::SpatialProjection) -> wire::DynamicSpatialPro
             z: value.view_direction.z,
         },
         rotation_degrees: value.rotation_degrees,
+        // A planar projection omits all four, so its payload stays exactly what it was before
+        // the other kinds existed.
+        kind: match value.kind {
+            domain::ProjectionKind::Planar => None,
+            domain::ProjectionKind::Cylindrical => {
+                Some(group_wire::GroupMappingProjectionKind::Cylindrical)
+            }
+            domain::ProjectionKind::Spherical => {
+                Some(group_wire::GroupMappingProjectionKind::Spherical)
+            }
+        },
+        axis_rotation: (!is_planar).then(|| wire::DynamicSpatialVector3Projection {
+            x: value.axis_rotation.x,
+            y: value.axis_rotation.y,
+            z: value.axis_rotation.z,
+        }),
+        start_angle_degrees: (!is_planar).then_some(value.start_angle_degrees),
+        elevation_degrees: (!is_planar).then_some(value.elevation_degrees),
         preset: value.preset.map(|preset| match preset {
             domain::ProjectionPreset::Top => group_wire::GroupMappingProjectionPreset::Top,
             domain::ProjectionPreset::Front => group_wire::GroupMappingProjectionPreset::Front,

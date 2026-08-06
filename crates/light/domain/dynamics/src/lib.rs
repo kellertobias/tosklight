@@ -27,8 +27,8 @@ pub use runtime::{
 };
 pub use spatial::{
     DynamicSelectionShape, DynamicSpatialMappingOverride, OverrideStage, Position3d,
-    ProjectedSpatialPosition, ProjectionPreset, RadarSweep, RadialDirection, RankDirection,
-    RankedSelection, SpatialMappingError, SpatialMappingWarning, SpatialProjection,
+    ProjectedSpatialPosition, ProjectionKind, ProjectionPreset, RadarSweep, RadialDirection,
+    RankDirection, RankedSelection, SpatialMappingError, SpatialMappingWarning, SpatialProjection,
     SpatialSelectionMapping, SpatialSelectionShape, SpatialTarget, Vector3,
     evaluate_dynamic_spatial_mapping, evaluate_spatial_mapping, project_spatial_positions,
 };

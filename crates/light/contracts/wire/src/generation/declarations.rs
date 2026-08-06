@@ -623,6 +623,7 @@ fn programming(config: &Config) -> Vec<String> {
         GroupMappingPosition3d::decl(config),
         GroupMappingVector3::decl(config),
         GroupMappingProjectionPreset::decl(config),
+        GroupMappingProjectionKind::decl(config),
         GroupMappingRankDirection::decl(config),
         GroupMappingRadialDirection::decl(config),
         GroupMappingRadarSweep::decl(config),

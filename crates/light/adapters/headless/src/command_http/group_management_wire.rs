@@ -51,6 +51,30 @@ fn spatial_mapping(
                 z: value.projection.view_direction.z,
             },
             rotation_degrees: value.projection.rotation_degrees,
+            kind: value
+                .projection
+                .kind
+                .map_or(light_dynamics::ProjectionKind::Planar, |kind| match kind {
+                    wire::GroupMappingProjectionKind::Planar => {
+                        light_dynamics::ProjectionKind::Planar
+                    }
+                    wire::GroupMappingProjectionKind::Cylindrical => {
+                        light_dynamics::ProjectionKind::Cylindrical
+                    }
+                    wire::GroupMappingProjectionKind::Spherical => {
+                        light_dynamics::ProjectionKind::Spherical
+                    }
+                }),
+            axis_rotation: value.projection.axis_rotation.map_or_else(
+                light_dynamics::Vector3::default,
+                |rotation| light_dynamics::Vector3 {
+                    x: rotation.x,
+                    y: rotation.y,
+                    z: rotation.z,
+                },
+            ),
+            start_angle_degrees: value.projection.start_angle_degrees.unwrap_or(0.0),
+            elevation_degrees: value.projection.elevation_degrees.unwrap_or(0.0),
             preset: value.projection.preset.map(|preset| match preset {
                 wire::GroupMappingProjectionPreset::Top => light_dynamics::ProjectionPreset::Top,
                 wire::GroupMappingProjectionPreset::Front => {
@@ -240,6 +264,7 @@ pub(super) fn resolved_spatial(
 fn wire_spatial_mapping(
     value: light_dynamics::SpatialSelectionMapping,
 ) -> wire::GroupSpatialSelectionMapping {
+    let is_planar = value.projection.kind == light_dynamics::ProjectionKind::Planar;
     wire::GroupSpatialSelectionMapping {
         projection: wire::GroupMappingProjection {
             anchor: wire::GroupMappingPosition3d {
@@ -253,6 +278,24 @@ fn wire_spatial_mapping(
                 z: value.projection.view_direction.z,
             },
             rotation_degrees: value.projection.rotation_degrees,
+            // A planar projection omits all four, so its payload stays exactly what it was
+            // before the other kinds existed.
+            kind: match value.projection.kind {
+                light_dynamics::ProjectionKind::Planar => None,
+                light_dynamics::ProjectionKind::Cylindrical => {
+                    Some(wire::GroupMappingProjectionKind::Cylindrical)
+                }
+                light_dynamics::ProjectionKind::Spherical => {
+                    Some(wire::GroupMappingProjectionKind::Spherical)
+                }
+            },
+            axis_rotation: (!is_planar).then(|| wire::GroupMappingVector3 {
+                x: value.projection.axis_rotation.x,
+                y: value.projection.axis_rotation.y,
+                z: value.projection.axis_rotation.z,
+            }),
+            start_angle_degrees: (!is_planar).then_some(value.projection.start_angle_degrees),
+            elevation_degrees: (!is_planar).then_some(value.projection.elevation_degrees),
             preset: value.projection.preset.map(|preset| match preset {
                 light_dynamics::ProjectionPreset::Top => wire::GroupMappingProjectionPreset::Top,
                 light_dynamics::ProjectionPreset::Front => {

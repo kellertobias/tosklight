@@ -1,9 +1,9 @@
 //! Portable Dynamic definitions and transport-safe reference projections.
 
 use super::group_management::{
-    GroupMappingProjectionPreset, GroupMappingProvenanceProjection, GroupMappingRadarSweep,
-    GroupMappingRadialDirection, GroupMappingRankDirection, GroupSpatialRankProjection,
-    GroupSpatialSelectionMapping, GroupSpatialWarningProjection,
+    GroupMappingProjectionKind, GroupMappingProjectionPreset, GroupMappingProvenanceProjection,
+    GroupMappingRadarSweep, GroupMappingRadialDirection, GroupMappingRankDirection,
+    GroupSpatialRankProjection, GroupSpatialSelectionMapping, GroupSpatialWarningProjection,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -52,7 +52,7 @@ pub struct DynamicSpatialPosition3dProjection {
     pub z: f64,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct DynamicSpatialVector3Projection {
     pub x: f64,
     pub y: f64,
@@ -66,6 +66,21 @@ pub struct DynamicSpatialProjectionProjection {
     pub rotation_degrees: f64,
     #[ts(optional = nullable)]
     pub preset: Option<GroupMappingProjectionPreset>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub kind: Option<GroupMappingProjectionKind>,
+    /// Euler degrees about X, Y then Z turning world +Z into the cylinder axis. Cylindrical only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub axis_rotation: Option<DynamicSpatialVector3Projection>,
+    /// Cylindrical: where the spread starts around the axis. Spherical: the centre's azimuth.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub start_angle_degrees: Option<f64>,
+    /// Spherical only: the centre's elevation above the plane perpendicular to world +Z.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub elevation_degrees: Option<f64>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
