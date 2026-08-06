@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Embedded Renderer Pane</title>
+    <style>
+      /*
+       * The webview is transparent and sits on top of the native surface. Anything with a
+       * background here is therefore drawing over the rendered image, which is the claim being
+       * tested — and the pane itself paints nothing at all, so what shows through it is the GPU.
+       */
+      :root {
+        color-scheme: dark;
+        --chrome: #16181d;
+        --edge: #2c3038;
+        --text: #e6e8ec;
+        --dim: #8b93a1;
+        --accent: #5aa9ff;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: transparent;
+        color: var(--text);
+        font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        overflow: hidden;
+      }
+      #shell {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        grid-template-columns: 224px 1fr;
+        grid-template-areas: "bar bar" "side pane" "status status";
+        height: 100%;
+      }
+      #bar {
+        grid-area: bar;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: var(--chrome);
+        border-bottom: 1px solid var(--edge);
+      }
+      #bar h1 {
+        font-size: 13px;
+        font-weight: 600;
+        margin: 0 12px 0 0;
+      }
+      #side {
+        grid-area: side;
+        background: var(--chrome);
+        border-right: 1px solid var(--edge);
+        padding: 10px 12px;
+        overflow: auto;
+      }
+      #side h2 {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--dim);
+        margin: 0 0 8px;
+      }
+      #side li {
+        list-style: none;
+        padding: 4px 0;
+        border-bottom: 1px solid #22252b;
+      }
+      #side ul {
+        margin: 0;
+        padding: 0;
+      }
+      /*
+       * The pane paints nothing. It is a hole in the chrome, and the renderer scissors itself to
+       * exactly this rectangle.
+       */
+      #pane {
+        grid-area: pane;
+        position: relative;
+        background: transparent;
+      }
+      #status {
+        grid-area: status;
+        display: flex;
+        gap: 18px;
+        padding: 6px 12px;
+        background: var(--chrome);
+        border-top: 1px solid var(--edge);
+        color: var(--dim);
+        font-variant-numeric: tabular-nums;
+      }
+      button {
+        font: inherit;
+        color: var(--text);
+        background: #22262e;
+        border: 1px solid var(--edge);
+        border-radius: 5px;
+        padding: 4px 10px;
+      }
+      button:hover {
+        border-color: var(--accent);
+      }
+
+      /* The three things that have to be able to draw above the rendered image. */
+      #menu {
+        position: absolute;
+        z-index: 10;
+        min-width: 210px;
+        background: #1d2027;
+        border: 1px solid var(--edge);
+        border-radius: 6px;
+        box-shadow: 0 12px 32px rgb(0 0 0 / 55%);
+        padding: 4px;
+      }
+      #menu div {
+        padding: 6px 10px;
+        border-radius: 4px;
+      }
+      #menu div:hover {
+        background: var(--accent);
+        color: #07131f;
+      }
+      #scrim {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        background: rgb(6 8 12 / 62%);
+        display: grid;
+        place-items: center;
+      }
+      #dialog {
+        min-width: 340px;
+        background: #1d2027;
+        border: 1px solid var(--edge);
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 24px 60px rgb(0 0 0 / 60%);
+      }
+      /* Selection marquees, drawn over the pane exactly as the desk draws them. */
+      .selection {
+        position: absolute;
+        border: 1px dashed var(--accent);
+        background: rgb(90 169 255 / 12%);
+        border-radius: 3px;
+        font-size: 11px;
+        color: var(--accent);
+        padding: 1px 4px;
+      }
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="shell">
+      <header id="bar">
+        <h1>Embedded Renderer Pane</h1>
+        <button id="menu-button">Fixture ▾</button>
+        <button id="dialog-button">Open dialog</button>
+        <button id="overlay-button">Toggle selection</button>
+        <button id="layout-button">Narrow the pane</button>
+      </header>
+      <aside id="side">
+        <h2>Patch</h2>
+        <ul>
+          <li>1 · Beam 1</li>
+          <li>2 · Beam 2</li>
+          <li>3 · Beam 3</li>
+          <li>4 · Wash 1</li>
+          <li>5 · Wash 2</li>
+        </ul>
+        <p style="color: var(--dim)">
+          Drag inside the pane to orbit, scroll to zoom. The web side captures that input and
+          forwards it — the events cannot reach the surface underneath on their own.
+        </p>
+      </aside>
+      <main id="pane">
+        <div class="selection" id="selection-a" hidden style="left: 12%; top: 18%; width: 26%; height: 30%">
+          Beam 1
+        </div>
+        <div class="selection" id="selection-b" hidden style="left: 54%; top: 40%; width: 24%; height: 26%">
+          Wash 2
+        </div>
+      </main>
+      <footer id="status">
+        <span id="pane-readout">pane —</span>
+        <span id="input-readout">input —</span>
+        <span id="frame-readout">frames —</span>
+        <span id="camera-readout">camera —</span>
+      </footer>
+    </div>
+
+    <div id="menu" hidden></div>
+    <div id="scrim" hidden>
+      <div id="dialog">
+        <h2 style="margin-top: 0">Dialog over the pane</h2>
+        <p>
+          This is ordinary HTML in the webview. If it is legible over the rendered image, and the
+          image is still animating behind it, the overlay half of the pane contract holds.
+        </p>
+        <button id="dialog-close">Close</button>
+      </div>
+    </div>
+
+    <script>
+      const invoke = window.__TAURI__.core.invoke;
+      const pane = document.getElementById("pane");
+
+      /**
+       * Tell the renderer where the pane ended up.
+       *
+       * The web layout is the authority: the renderer draws where this element is, not the other
+       * way round. Reported on every layout change, which is what makes resizing and the pane
+       * toggle work without either side knowing the other's sizing rules.
+       */
+      function reportPane() {
+        const rect = pane.getBoundingClientRect();
+        invoke("set_pane", {
+          pane: {
+            x: rect.left,
+            y: rect.top,
+            width: rect.width,
+            height: rect.height,
+          },
+        });
+      }
+      new ResizeObserver(reportPane).observe(pane);
+      window.addEventListener("resize", reportPane);
+      reportPane();
+
+      // Pane input, captured here because a webview on top swallows it, and forwarded.
+      let dragging = null;
+      pane.addEventListener("pointerdown", (event) => {
+        dragging = { x: event.clientX, y: event.clientY };
+        pane.setPointerCapture(event.pointerId);
+      });
+      pane.addEventListener("pointermove", (event) => {
+        if (!dragging) return;
+        invoke("orbit", {
+          deltaX: event.clientX - dragging.x,
+          deltaY: event.clientY - dragging.y,
+        });
+        dragging = { x: event.clientX, y: event.clientY };
+      });
+      pane.addEventListener("pointerup", () => {
+        dragging = null;
+      });
+      pane.addEventListener(
+        "wheel",
+        (event) => {
+          event.preventDefault();
+          invoke("zoom", { delta: event.deltaY });
+        },
+        { passive: false },
+      );
+
+      // A menu that opens over the rendered image.
+      const menu = document.getElementById("menu");
+      document.getElementById("menu-button").addEventListener("click", (event) => {
+        if (!menu.hidden) {
+          menu.hidden = true;
+          return;
+        }
+        menu.innerHTML = ["Select all", "Highlight", "Clear", "Park", "Unpatch"]
+          .map((label) => `<div>${label}</div>`)
+          .join("");
+        const rect = event.currentTarget.getBoundingClientRect();
+        menu.style.left = `${rect.left}px`;
+        menu.style.top = `${rect.bottom + 4}px`;
+        menu.hidden = false;
+      });
+      document.addEventListener("click", (event) => {
+        if (!menu.hidden && !menu.contains(event.target) && event.target.id !== "menu-button") {
+          menu.hidden = true;
+        }
+      });
+
+      const scrim = document.getElementById("scrim");
+      document.getElementById("dialog-button").addEventListener("click", () => {
+        scrim.hidden = false;
+      });
+      document.getElementById("dialog-close").addEventListener("click", () => {
+        scrim.hidden = true;
+      });
+
+      const selections = [
+        document.getElementById("selection-a"),
+        document.getElementById("selection-b"),
+      ];
+      document.getElementById("overlay-button").addEventListener("click", () => {
+        for (const selection of selections) selection.hidden = !selection.hidden;
+      });
+
+      // Changing the layout proves the renderer follows the pane rather than the window.
+      const shell = document.getElementById("shell");
+      const layoutButton = document.getElementById("layout-button");
+      let narrow = false;
+      layoutButton.addEventListener("click", () => {
+        narrow = !narrow;
+        shell.style.gridTemplateColumns = narrow ? "224px 1fr 300px" : "224px 1fr";
+        shell.style.gridTemplateAreas = narrow
+          ? '"bar bar bar" "side pane inspector" "status status status"'
+          : '"bar bar" "side pane" "status status"';
+        layoutButton.textContent = narrow ? "Widen the pane" : "Narrow the pane";
+        reportPane();
+      });
+
+      // The readout, so the experiment's claims are visible in the window rather than asserted.
+      const readouts = {
+        pane: document.getElementById("pane-readout"),
+        input: document.getElementById("input-readout"),
+        frames: document.getElementById("frame-readout"),
+        camera: document.getElementById("camera-readout"),
+      };
+      setInterval(async () => {
+        const report = await invoke("report");
+        const round = (value) => Math.round(value);
+        readouts.pane.textContent = `pane ${round(report.pane.x)},${round(report.pane.y)} ${round(report.pane.width)}×${round(report.pane.height)}`;
+        readouts.input.textContent = `input ${report.input_events}`;
+        readouts.frames.textContent = `frames ${report.frames}`;
+        readouts.camera.textContent = `yaw ${report.yaw.toFixed(2)} pitch ${report.pitch.toFixed(2)} zoom ${report.distance.toFixed(2)}`;
+      }, 250);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Embedded Renderer Pane",
+  "version": "0.1.0",
+  "identifier": "de.tosklight.experiments.embedded-renderer-pane",
+  "build": {
+    "frontendDist": "web"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    },
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "active": false,
+    "icon": ["../../apps/light-desktop/src-tauri/icons/icon.png"]
+  }
+}

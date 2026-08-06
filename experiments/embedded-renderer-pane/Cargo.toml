@@ -1,0 +1,23 @@
+[package]
+name = "embedded-renderer-pane"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+bytemuck = { version = "1.24", features = ["derive"] }
+parking_lot = "0.12"
+pollster = "0.4"
+serde = { version = "1", features = ["derive"] }
+# `unstable` is what exposes `Window::add_child`, which is the whole point of this experiment: a
+# native window with a webview placed on top of it rather than a webview window.
+# `macos-private-api` is what allows a transparent webview on macOS, which is the arrangement being
+# tested. `unstable` exposes `Window::add_child`.
+tauri = { version = "2.11.5", features = ["unstable", "macos-private-api"] }
+wgpu = "30"
+
+# Isolated from ToskLight's production workspace, like every other experiment here.
+[workspace]
