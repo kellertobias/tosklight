@@ -178,8 +178,18 @@ function commandHarness() {
 		}),
 		keyboard: { press: keyboardPress },
 	};
+	// Authoritative command history, as the desk's own would grow. The UI route deliberately
+	// polls it rather than trusting the click, so a stub that never grows would hang the poll.
+	const history: { command: string; status: string; feedback: string }[] = [];
 	const click = vi.fn(async (target: FakeLocator) => {
 		if (target === escapeKey) commandLine.value = "FIXTURE";
+		if (target === ent) {
+			history.push({
+				command: commandLine.value,
+				status: "accepted",
+				feedback: "",
+			});
+		}
 	});
 	const record = vi.fn(async () => undefined);
 	const apiText = { value: "FIXTURE" };
@@ -192,10 +202,15 @@ function commandHarness() {
 		apiText.value = "FIXTURE";
 		return accepted("ESC");
 	});
+	const request = vi.fn(async (_method: string, path: string) => {
+		if (path.includes("command-history")) return history;
+		throw new Error(`the command harness has no stub for ${path}`);
+	});
 	const api = {
 		setCommandLineText,
 		executeCommandLine,
 		sendCommandKey,
+		request,
 		getCommandLine: vi.fn(async () => revisioned(apiText.value)),
 	} as unknown as ApiDriver;
 	const desk = {
@@ -217,6 +232,8 @@ function commandHarness() {
 		setCommandLineText,
 		executeCommandLine,
 		sendCommandKey,
+		request,
+		history,
 		keyboardPress,
 	};
 }
