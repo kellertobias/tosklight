@@ -103,6 +103,7 @@ fn patch_one(show_id: ShowId, profile: PatchedFixtureProfileReference) -> PatchF
         remove_fixture_ids: Vec::new(),
         placements: Vec::new(),
         vector_spreads: Vec::new(),
+        fixture_updates: Vec::new(),
     }
 }
 

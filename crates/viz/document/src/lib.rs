@@ -16,6 +16,7 @@
 
 mod mvr;
 mod ports;
+pub mod standalone;
 
 #[cfg(test)]
 mod tests;
@@ -68,6 +69,7 @@ impl From<light_fixture::FixtureError> for DocumentError {
 }
 
 /// An open planning document.
+
 pub struct PlanningDocument {
     path: PathBuf,
     show_id: ShowId,

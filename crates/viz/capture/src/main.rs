@@ -473,14 +473,18 @@ mod tests {
         );
     }
 
-    /// A scanner is a mirror-mover: the head does not move, the mirror does. The fallback only
-    /// calls a fixture moving when it has pan and tilt on the body, so a scanner draws as a static
-    /// lantern with a beam that swings off-axis from a box that never turns.
+    /// A scanner classifies as a lantern, and that is correct rather than a gap.
     ///
-    /// Pinned as the current behaviour rather than asserted as correct. TL-68 requires a scanner to
-    /// resolve to its intended body rather than to any visible proxy, and `BodyKind` has no scanner
-    /// case to resolve to — so the gap is in the model, and this is where it will be noticed if
-    /// somebody closes it.
+    /// `BodyKind` is assigned by whether pan and tilt are on the body, and a scanner is a
+    /// mirror-mover whose body is bolted down — so it is not `MovingHead`. That looked like a
+    /// defect until the drawing path settled it: `BodyKind` only selects the *procedural* geometry
+    /// used when a fixture has no model. The scanner has one — `lamps/scanner-mirror-spot.glb`,
+    /// matched by `default_model.rs` on "scanner" or "mirror" — and `push_model` articulates model
+    /// parts from the fixture's head angles by each part's own declared kind, whatever the body
+    /// says. So the mesh is right and the mirror moves.
+    ///
+    /// Pinned so that a scanner losing its model, and falling back to a procedural lantern that
+    /// cannot articulate, is caught here rather than seen in a demo video.
     #[test]
     fn a_scanner_has_no_body_of_its_own_yet() {
         assert_eq!(
