@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 /// Latest decoded state for every emitter in the current scene, parallel to
 /// [`crate::Scene::emitters`].
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct SceneValues {
     pub emitters: Vec<EmitterValues>,
     /// Scan paths, parallel to [`Self::emitters`]. Every entry exists; only laser emitters ever
@@ -86,7 +86,7 @@ impl SceneValues {
 }
 
 /// One emitter's decoded semantic parameters.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct EmitterValues {
     /// Dimmer after shutter and strobe gating, `0..=1`.
     pub intensity: f32,
@@ -331,7 +331,7 @@ mod tests {
 }
 
 /// One pixel cell's value.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct CellValue {
     pub intensity: f32,
     pub colour: [f32; 3],
@@ -354,7 +354,7 @@ impl Default for CellValue {
 ///
 /// Kept beside the emitter values rather than inside them because it is the one value that is a
 /// list rather than a number, and the decode path clones an emitter's values on every DMX frame.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct LaserScan {
     /// The path, in scan order. Fewer than two points draws nothing.
     pub points: Vec<ScanPoint>,
@@ -386,7 +386,7 @@ impl LaserScan {
 }
 
 /// One control point on a laser's scan path.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct ScanPoint {
     /// Deflection across the scanner's X axis, `-1..=1` of its half scan angle.
     pub x: f32,

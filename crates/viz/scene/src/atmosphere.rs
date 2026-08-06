@@ -1,7 +1,7 @@
 //! Participating-medium density, owned outright by the renderer.
 
 /// Effective atmosphere applied by the renderer.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Atmosphere {
     /// Normalised density `0..=1`. `0` is clear air.
     pub density: f32,

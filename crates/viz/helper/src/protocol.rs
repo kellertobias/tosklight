@@ -225,3 +225,58 @@ mod tests {
         assert!(!error.is_empty());
     }
 }
+
+#[cfg(test)]
+mod value_plane {
+    use super::*;
+
+    /// The message the desk sends most often, carrying what the rig is actually doing.
+    ///
+    /// Values are the high-frequency traffic on this channel — a scene arrives when the rig
+    /// changes, values arrive whenever the desk renders — so a round trip through the wire form
+    /// is worth pinning rather than assuming.
+    #[test]
+    fn live_values_survive_the_channel() {
+        let mut values = viz_scene::SceneValues::default();
+        values.resize(2);
+        values.emitters[0].intensity = 0.75;
+        values.emitters[0].colour = [1.0, 0.5, 0.25];
+        values.emitters[1].pan = 0.5;
+        values.emitters[1].tilt = 0.25;
+        values.atmosphere.density = 0.4;
+        values.frame = 17;
+
+        let carried = ToHelper::Values {
+            payload: serde_json::to_vec(&values).expect("values encode"),
+        };
+        let decoded: ToHelper = decode(&encode(&carried).expect("encodes")).expect("decodes");
+        let ToHelper::Values { payload } = decoded else {
+            panic!("the message changed shape crossing the channel");
+        };
+        let arrived: viz_scene::SceneValues =
+            serde_json::from_slice(&payload).expect("values decode");
+
+        assert_eq!(arrived.emitters.len(), 2);
+        assert_eq!(arrived.emitters[0].intensity, 0.75);
+        assert_eq!(arrived.emitters[0].colour, [1.0, 0.5, 0.25]);
+        assert_eq!(arrived.emitters[1].pan, 0.5);
+        assert_eq!(arrived.emitters[1].tilt, 0.25);
+        assert_eq!(arrived.atmosphere.density, 0.4);
+        assert_eq!(arrived.frame, 17);
+    }
+
+    /// A laser's scan path is part of what the helper draws, and it is the one part of the value
+    /// plane that is not a fixed-size number — so it gets its own check.
+    #[test]
+    fn a_laser_scan_path_survives_the_channel() {
+        let mut values = viz_scene::SceneValues::default();
+        values.resize(1);
+        values.laser_scans[0].points_per_second = 30_000.0;
+        values.laser_scans[0].slots = vec![1, 2, 3];
+
+        let payload = serde_json::to_vec(&values).expect("encodes");
+        let arrived: viz_scene::SceneValues = serde_json::from_slice(&payload).expect("decodes");
+        assert_eq!(arrived.laser_scans[0].points_per_second, 30_000.0);
+        assert_eq!(arrived.laser_scans[0].slots, vec![1, 2, 3]);
+    }
+}

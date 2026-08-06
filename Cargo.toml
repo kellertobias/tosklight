@@ -81,7 +81,7 @@ light-wire = { path = "crates/light/contracts/wire" }
 # ToskLight desk build must never require them.
 wgpu = "30"
 winit = "0.30"
-glam = { version = "0.30", features = ["bytemuck"] }
+glam = { version = "0.30", features = ["bytemuck", "serde"] }
 bytemuck = { version = "1.23", features = ["derive"] }
 pollster = "0.4"
 socket2 = { version = "0.6", features = ["all"] }
