@@ -41,6 +41,9 @@ export function App() {
 		documentSession.fixtureProfiles().then(setProfiles).catch(report);
 		loadLayers();
 		loadFixtures();
+		// Say the interface is on screen. `--verify` waits for this and exits with the verdict:
+		// a window that opens white reports nothing, which is exactly the failure to catch.
+		documentSession.surfaceReady().catch(() => undefined);
 	}, []);
 
 	/// The preview controls drive fixtures, so they need the rig the sheet is showing.

@@ -116,6 +116,13 @@ export const documentSession = {
 	clearPreview: (fixtures: readonly string[] = []) =>
 		invoke<void>("clear_preview", { fixtures }),
 	previewIsActive: () => invoke<boolean>("preview_is_active"),
+	/**
+	 * Report that the document surface is on screen.
+	 *
+	 * `--verify` waits for this and exits with the verdict, because a build that compiles is not
+	 * evidence of a window that drew — the editor once opened white on every locally built binary.
+	 */
+	surfaceReady: () => invoke<void>("surface_ready"),
 	current: () => invoke<DocumentSummary | null>("document_summary"),
 	saveAs: (path: string) => invoke<void>("save_document_as", { path }),
 	rename: (name: string) => invoke<void>("rename_document", { name }),

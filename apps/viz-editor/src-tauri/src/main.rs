@@ -11,9 +11,11 @@ mod demo;
 mod discovery;
 mod recent;
 mod session;
+mod verify;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tauri::Manager;
 
 /// Where to serve the open document for a visualizer that launched this window.
@@ -88,10 +90,12 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .manage(session::Session::default())
         .manage(discovery::Discovery::default())
+        .manage(Arc::new(verify::SurfaceReady::default()))
         .invoke_handler(tauri::generate_handler![
             session::create_document,
             session::open_document,
             demo::open_demo_show,
+            verify::surface_ready,
             session::document_summary,
             session::save_document_as,
             session::rename_document,
@@ -128,6 +132,11 @@ fn main() {
             }
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
+            }
+            // `--verify` opens the window, waits for the interface to report itself, and exits
+            // with the verdict. Nothing in the build catches a window that opens white.
+            if verify::requested() {
+                verify::watch(app.state::<Arc<verify::SurfaceReady>>().inner().clone());
             }
             Ok(())
         })
