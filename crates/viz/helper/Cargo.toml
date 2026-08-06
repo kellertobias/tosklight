@@ -1,0 +1,10 @@
+[package]
+name = "viz-helper"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

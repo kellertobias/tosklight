@@ -26,6 +26,7 @@ members = [
   "crates/viz/project",
   "crates/viz/capture",
   "crates/viz/desk",
+  "crates/viz/helper",
   "crates/viz/demo",
   "crates/viz/document",
   "crates/viz/planning",
