@@ -17,6 +17,11 @@ import type {
 	DynamicUpdateIntent,
 	SpeedGroupId,
 } from "../../api/types";
+import {
+	INHERIT_ORDERING,
+	inheritsOrdering,
+	spatialMappingForOrdering,
+} from "../../features/dynamics/phaseOrderingShape";
 import type { ShowObject } from "../../features/showObjects/contracts";
 
 import {
@@ -68,6 +73,16 @@ export function PhaseView({
 		}
 		onMutate(dynamic, { type: "set_phase", phase: nextPhase });
 	};
+	// The shape stage is what a Group is inherited from, so an ordering choice has to move it
+	// too; otherwise the Group's shape would keep winning over the operator's pick.
+	const applyOrderingShape = (ordering: DynamicPhaseOrderingProjection | null) =>
+		onMutate(dynamic, {
+			type: "set_spatial_mapping",
+			spatial_mapping: spatialMappingForOrdering(
+				dynamic.body.spatial_mapping,
+				ordering,
+			),
+		});
 	return (
 		<div className="dynamic-phase-view">
 			<PhaseControls
@@ -78,6 +93,7 @@ export function PhaseView({
 				spatialOrdering={spatialOrdering}
 				onSelectLane={onSelectLane}
 				onUpdate={update}
+				onOrderingShape={applyOrderingShape}
 			/>
 			<PhaseFooter
 				dynamic={dynamic}
@@ -388,6 +404,7 @@ function PhaseControls({
 	spatialOrdering,
 	onSelectLane,
 	onUpdate,
+	onOrderingShape,
 }: {
 	dynamic: DynamicObject;
 	lane?: DynamicLaneProjection;
@@ -396,7 +413,14 @@ function PhaseControls({
 	spatialOrdering: SpatialOrdering | null;
 	onSelectLane(id: string): void;
 	onUpdate(patch: Partial<DynamicPhase>): void;
+	onOrderingShape(ordering: DynamicPhaseOrderingProjection | null): void;
 }) {
+	// The Projection places fixtures in a plane; this orders that plane. Inheriting takes the
+	// Group's ordering, so the ordering's own fields have nothing to configure.
+	const inherited = inheritsOrdering(
+		dynamic.body.spatial_mapping,
+		dynamic.body.target_binding,
+	);
 	return (
 		<section className="dynamic-phase-controls">
 			{phaseMode === "per_lane" && lane && (
@@ -418,29 +442,40 @@ function PhaseControls({
 						className="dynamic-phase-ordering"
 						label="Ordering mode"
 						value={
-							phase.ordering.type === "radial_in"
-								? "radial_out"
-								: phase.ordering.type
+							inherited
+								? INHERIT_ORDERING
+								: phase.ordering.type === "radial_in"
+									? "radial_out"
+									: phase.ordering.type
 						}
 						options={[
+							...(dynamic.body.target_binding.type === "live_group"
+								? [{ value: INHERIT_ORDERING, label: "Inherit" }]
+								: []),
 							{ value: "selection", label: "Linear" },
 							{ value: "grid_linear", label: "Grid" },
 							{ value: "radial_out", label: "Radial" },
 							{ value: "axial", label: "Radar" },
 							{ value: "random_each_loop", label: "Random" },
 						]}
-						onChange={(ordering) =>
-							onUpdate({
-								ordering: orderingFor(ordering, phase.ordering),
-							})
-						}
+						onChange={(choice) => {
+							if (choice === INHERIT_ORDERING) {
+								onOrderingShape(null);
+								return;
+							}
+							const ordering = orderingFor(choice, phase.ordering);
+							onUpdate({ ordering });
+							onOrderingShape(ordering);
+						}}
 					/>
 				</div>
-				<PhaseOrderingFields
-					phase={phase}
-					spatialOrdering={spatialOrdering}
-					onUpdate={onUpdate}
-				/>
+				{!inherited && (
+					<PhaseOrderingFields
+						phase={phase}
+						spatialOrdering={spatialOrdering}
+						onUpdate={onUpdate}
+					/>
+				)}
 				<SharedPhaseFields phase={phase} onUpdate={onUpdate} />
 			</FormLayout>
 		</section>

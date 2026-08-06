@@ -11,6 +11,16 @@ import { WindowSettings } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useState } from "react";
 import { useGroupManagement } from "../../features/groupManagement/GroupManagementProvider";
 import type { ResolvedSpatialMapping } from "../../features/spatialMapping/contracts";
+import { ProjectionStagePreview } from "../../features/spatialMapping/ProjectionStagePreview";
+import type { ProjectionKind } from "../../features/spatialMapping/contracts";
+import {
+	PROJECTION_KINDS,
+	PROJECTION_PRESETS,
+	projectionFields,
+	projectionKind,
+	supportsPreset,
+	withProjectionKind,
+} from "../../features/spatialMapping/projectionKinds";
 import type { Group } from "./model";
 import {
 	defaultSpatialMapping,
@@ -521,74 +531,59 @@ function ProjectionEditor({
 	disabled: boolean;
 	onChange: (mapping: SpatialSelectionMapping) => void;
 }) {
-	const updateProjection = (
-		projection: SpatialSelectionMapping["projection"],
-	) => onChange({ ...mapping, projection });
+	// The same editor the Dynamics projection tab uses, so a Group and the Dynamics that
+	// inherit from it are configured the same way.
+	const projection = mapping.projection;
+	const kind = projectionKind(projection);
+	const updateProjection = (next: SpatialSelectionMapping["projection"]) =>
+		onChange({ ...mapping, projection: next });
 	return (
 		<fieldset disabled={disabled} className="group-mapping-fields">
 			<legend>Projection</legend>
-			<fieldset className="group-projection-presets">
-				<legend>Projection preset</legend>
-				{(["top", "front", "back", "left", "right"] as const).map((preset) => (
-					<Button
-						key={preset}
-						aria-pressed={mapping.projection.preset === preset}
-						onClick={() =>
-							updateProjection({
-								...projectionForPreset(preset),
-								anchor: mapping.projection.anchor,
-							})
-						}
-					>
-						{titleCase(preset)}
-					</Button>
-				))}
-			</fieldset>
+			<ProjectionStagePreview projection={projection} />
+			<SelectField
+				label="Projection"
+				value={kind}
+				options={PROJECTION_KINDS.map(
+					({ value, label }) => [value, label] as [string, string],
+				)}
+				onChange={(next) =>
+					updateProjection(withProjectionKind(projection, next as ProjectionKind))
+				}
+			/>
+			{supportsPreset(projection) && (
+				<fieldset className="group-projection-presets">
+					<legend>Projection preset</legend>
+					{PROJECTION_PRESETS.map(({ value, label }) => (
+						<Button
+							key={value}
+							aria-pressed={projection.preset === value}
+							onClick={() =>
+								updateProjection({
+									...projectionForPreset(value),
+									anchor: projection.anchor,
+								})
+							}
+						>
+							{label}
+						</Button>
+					))}
+				</fieldset>
+			)}
 			<div className="group-vector-fields">
-				{(["x", "y", "z"] as const).map((axis) => (
+				{projectionFields(projection).map((field) => (
 					<NumberField
-						key={`anchor-${axis}`}
-						label={`Anchor ${axis.toUpperCase()}`}
-						unit="m"
-						value={mapping.projection.anchor[axis]}
-						onCommit={(value) =>
-							updateProjection({
-								...mapping.projection,
-								anchor: { ...mapping.projection.anchor, [axis]: value },
-							})
-						}
+						key={field.key}
+						label={field.label}
+						unit={field.unit}
+						value={field.value}
+						onCommit={(value) => updateProjection(field.apply(value))}
 					/>
 				))}
-				{(["x", "y", "z"] as const).map((axis) => (
-					<NumberField
-						key={`direction-${axis}`}
-						label={`Direction ${axis.toUpperCase()}`}
-						value={mapping.projection.view_direction[axis]}
-						onCommit={(value) =>
-							updateProjection({
-								...mapping.projection,
-								preset: undefined,
-								view_direction: {
-									...mapping.projection.view_direction,
-									[axis]: value,
-								},
-							})
-						}
-					/>
-				))}
-				<NumberField
-					label="Rotation"
-					unit="°"
-					value={mapping.projection.rotation_degrees}
-					onCommit={(rotation_degrees) =>
-						updateProjection({
-							...mapping.projection,
-							preset: undefined,
-							rotation_degrees,
-						})
-					}
-				/>
 			</div>
+			<p className="group-mapping-help">
+				{PROJECTION_KINDS.find((entry) => entry.value === kind)?.detail}
+			</p>
 		</fieldset>
 	);
 }
