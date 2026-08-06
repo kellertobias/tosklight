@@ -1,5 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { FixtureProfile, PatchLayer, VersionedObject } from "@tosklight/patch";
+import type {
+	FixtureProfile,
+	PatchLayer,
+	PatchSnapshot,
+	VersionedObject,
+} from "@tosklight/patch";
 
 export interface DocumentSummary {
 	showId: string;
@@ -42,6 +47,37 @@ export interface MvrResolution {
 	address?: number;
 }
 
+/** The semantic parameters Simple mode offers. */
+export type PreviewParameter =
+	| "intensity"
+	| "pan"
+	| "tilt"
+	| "colour"
+	| "gobo";
+
+/**
+ * One thing the operator set in the preview controls.
+ *
+ * Mirrors `viz_planning::PreviewSet`. A raw slot is addressed against the fixture's own footprint
+ * rather than against a universe, so repatching moves its preview values with it.
+ */
+export type PreviewSet =
+	| {
+			kind: "semantic";
+			fixture_id: string;
+			parameter: PreviewParameter;
+			value: number;
+			/** Read for `colour` only, as red/green/blue in 0..=1. */
+			colour: [number, number, number];
+	  }
+	| {
+			kind: "slot";
+			fixture_id: string;
+			split: number;
+			offset: number;
+			value: number;
+	  };
+
 /** One ToskLight desk on the network, with the show it is running. */
 export interface DeskPeer {
 	instance: string;
@@ -69,6 +105,17 @@ export const documentSession = {
 	 * folder and opens that one, so nothing an operator does to a demo reaches the next one.
 	 */
 	openDemoShow: () => invoke<DocumentSummary>("open_demo_show"),
+	/**
+	 * Set one preview value.
+	 *
+	 * Session state of this window: it never reaches the show file and never becomes a preset or
+	 * a cue. The visualizer receives it exactly as it receives a universe from the network.
+	 */
+	setPreview: (set: PreviewSet) => invoke<void>("set_preview", { set }),
+	/** Return the named fixtures to their defaults, or every fixture when none are named. */
+	clearPreview: (fixtures: readonly string[] = []) =>
+		invoke<void>("clear_preview", { fixtures }),
+	previewIsActive: () => invoke<boolean>("preview_is_active"),
 	current: () => invoke<DocumentSummary | null>("document_summary"),
 	saveAs: (path: string) => invoke<void>("save_document_as", { path }),
 	rename: (name: string) => invoke<void>("rename_document", { name }),
@@ -81,6 +128,8 @@ export const documentSession = {
 	/** Take a copy of that desk's show and open it here. */
 	loadFromDesk: (instance: string) =>
 		invoke<DocumentSummary>("load_from_desk", { instance }),
+	/** The rig as it currently stands, for surfaces outside the sheet that need the fixtures. */
+	patchSnapshot: () => invoke<PatchSnapshot>("patch_snapshot"),
 	patchLayers: () => invoke<PatchLayer[]>("patch_layers"),
 	savePatchLayer: (layer: PatchLayer) =>
 		invoke<PatchLayer>("save_patch_layer", { layer }),

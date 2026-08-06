@@ -199,5 +199,11 @@ pub struct ProviderDiagnostics {
     pub inputs: Vec<InputMappingStatus>,
     /// One row per logical universe the show reads, ordered by universe number.
     pub universes: Vec<UniverseHealth>,
+    /// Universes a planning window is driving because no real source has ever delivered them.
+    ///
+    /// This is what lets the status surface say "nothing is arriving and the editor is driving
+    /// this" rather than the bare "waiting for DMX" that would otherwise be shown for a rig that
+    /// is visibly lit. Always empty for a lighting desk.
+    pub preview_universes: Vec<u16>,
     pub warnings: Vec<String>,
 }

@@ -255,3 +255,77 @@ body {
 	max-width: 46ch;
 	opacity: 0.7;
 }
+
+/*
+ * Preview controls: driving the rig from the planning window.
+ *
+ * A panel beside the sheet rather than a floating tool, because it is where an operator looks
+ * after selecting fixtures and it has to stay visible while they do.
+ */
+.viz-preview {
+	border-top: 1px solid var(--surface-border, #2c3038);
+	padding: 10px 14px;
+	display: grid;
+	gap: 10px;
+}
+
+.viz-preview-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.viz-preview-head h2 {
+	font-size: 13px;
+	margin: 0;
+}
+
+.viz-preview-modes {
+	display: flex;
+	gap: 6px;
+}
+
+.viz-preview-row {
+	display: grid;
+	grid-template-columns: 90px 1fr 64px;
+	align-items: center;
+	gap: 10px;
+}
+
+.viz-preview-row input[type="range"] {
+	width: 100%;
+}
+
+.viz-preview-row output {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.viz-preview-hint {
+	margin: 0;
+	color: var(--text-dim, #8b93a1);
+}
+
+.viz-preview-slots {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: 4px;
+	max-height: 40vh;
+	overflow: auto;
+}
+
+.viz-preview-slots label {
+	display: grid;
+	grid-template-columns: 36px 1fr 140px 52px;
+	align-items: center;
+	gap: 10px;
+}
+
+.viz-preview-slot-number {
+	font-variant-numeric: tabular-nums;
+	color: var(--text-dim, #8b93a1);
+	text-align: right;
+}

@@ -280,6 +280,35 @@ pub struct PatchLayerDto {
     pub order: i32,
 }
 
+/// Set one preview value: a Simple-mode parameter, or a raw slot from Full DMX mode.
+///
+/// Session state of this window. It never reaches the show file, never becomes a preset or a cue,
+/// and the visualizer receives it exactly as it receives a universe that arrived over the network.
+#[tauri::command]
+pub fn set_preview(
+    session: tauri::State<'_, Session>,
+    set: viz_planning::PreviewSet,
+) -> Answer<()> {
+    if !session.source.is_open() {
+        return Err("no document is open".to_owned());
+    }
+    session.source.set_preview(set);
+    Ok(())
+}
+
+/// Return fixtures to their defaults, or every fixture when none are named.
+#[tauri::command]
+pub fn clear_preview(session: tauri::State<'_, Session>, fixtures: Vec<Uuid>) -> Answer<()> {
+    session.source.clear_preview_fixtures(&fixtures);
+    Ok(())
+}
+
+/// Whether the window is currently driving anything, for the surface that says so.
+#[tauri::command]
+pub fn preview_is_active(session: tauri::State<'_, Session>) -> bool {
+    session.source.preview_is_active()
+}
+
 /// The fixtures the operator can patch from, for the sheet's fixture browser.
 #[tauri::command]
 pub fn library_profiles(session: tauri::State<'_, Session>) -> Answer<Vec<LibraryProfile>> {

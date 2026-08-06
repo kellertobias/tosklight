@@ -8,11 +8,13 @@
 //! Nothing here writes. Editing happens through the document's own patch boundary; this side only
 //! projects what is currently in it.
 
+pub mod preview;
 mod wire;
 
 #[cfg(test)]
 mod tests;
 
+pub use preview::{PreviewParameter, PreviewSet, PreviewSnapshot, PreviewState, PreviewUniverse};
 pub use wire::{ObjectCollection, ObjectRecord, PatchSnapshotDto};
 
 use axum::{
@@ -55,6 +57,13 @@ pub struct SceneSource {
     /// the renderer resynchronises on an edit instead of rediscovering it on a later reconnect.
     generation: Arc<AtomicU64>,
     changes: Arc<tokio::sync::watch::Sender<u64>>,
+    /// What the planning window is driving the rig with while no desk is.
+    ///
+    /// Session state of this window: it is never written into the document, and closing the
+    /// document drops it. Kept beside the document rather than inside it for exactly that reason.
+    preview: Arc<Mutex<preview::PreviewState>>,
+    preview_revision: Arc<AtomicU64>,
+    preview_changes: Arc<tokio::sync::watch::Sender<u64>>,
 }
 
 impl Default for SceneSource {
@@ -63,6 +72,9 @@ impl Default for SceneSource {
             document: Arc::new(Mutex::new(None)),
             generation: Arc::new(AtomicU64::new(0)),
             changes: Arc::new(tokio::sync::watch::Sender::new(0)),
+            preview: Arc::new(Mutex::new(preview::PreviewState::default())),
+            preview_revision: Arc::new(AtomicU64::new(0)),
+            preview_changes: Arc::new(tokio::sync::watch::Sender::new(0)),
         }
     }
 }
@@ -76,7 +88,53 @@ impl SceneSource {
 
     pub fn open(&self, document: PlanningDocument) {
         *self.document.lock() = Some(document);
+        // Preview values belong to the document that was open. Another show's fixtures are not
+        // this show's, and carrying a look across would light the wrong rig.
+        self.clear_preview();
         self.mark_changed();
+    }
+
+    /// Record one thing the operator set in the planning window.
+    pub fn set_preview(&self, set: preview::PreviewSet) {
+        self.preview.lock().apply(set);
+        self.mark_preview_changed();
+    }
+
+    /// Clear every preview value, or only those of the named fixtures.
+    pub fn clear_preview_fixtures(&self, fixtures: &[Uuid]) {
+        if fixtures.is_empty() {
+            self.preview.lock().clear();
+        } else {
+            self.preview.lock().clear_fixtures(fixtures);
+        }
+        self.mark_preview_changed();
+    }
+
+    pub fn clear_preview(&self) {
+        self.preview.lock().clear();
+        self.mark_preview_changed();
+    }
+
+    /// Whether the window is currently driving anything.
+    pub fn preview_is_active(&self) -> bool {
+        !self.preview.lock().is_empty()
+    }
+
+    /// The preview values projected onto universes, as the renderer reads them.
+    pub fn preview_snapshot(&self) -> preview::PreviewSnapshot {
+        let revision = self.preview_revision.load(Ordering::Relaxed);
+        let Some(Ok(patch)) = self.with(|document| document.patch_snapshot()) else {
+            return preview::PreviewSnapshot {
+                revision,
+                universes: Vec::new(),
+            };
+        };
+        preview::project(&self.preview.lock(), &patch, revision)
+    }
+
+    fn mark_preview_changed(&self) {
+        let revision = self.preview_revision.fetch_add(1, Ordering::Relaxed) + 1;
+        let _ = self.preview_changes.send(revision);
     }
 
     pub fn is_open(&self) -> bool {
@@ -110,6 +168,7 @@ pub fn router(source: SceneSource) -> Router {
         .route("/api/v2/sessions", post(open_session))
         .route("/api/v2/sessions/{id}", delete(close_session))
         .route("/api/v2/patch", get(patch))
+        .route("/api/v2/preview-values", get(preview_values))
         .route("/api/v2/objects/{kind}", get(objects))
         .route("/api/v2/document/download", get(download_document))
         .route("/api/v2/events", get(events))
@@ -248,6 +307,14 @@ async fn patch(
     Ok(Json(wire::patch_snapshot(snapshot)))
 }
 
+/// The preview values this window is driving the rig with.
+///
+/// Only the planning provider serves this. A lighting desk does not, and must not: live values
+/// from a desk arrive as real Art-Net or sACN, which is the MVP's two-plane rule and stays intact.
+async fn preview_values(State(source): State<SceneSource>) -> Json<preview::PreviewSnapshot> {
+    Json(source.preview_snapshot())
+}
+
 /// The configuration event stream.
 ///
 /// Without it the renderer's desk provider has nothing to wait on: it would finish reading and
@@ -262,26 +329,37 @@ async fn events(State(source): State<SceneSource>, upgrade: WebSocketUpgrade) ->
 
 async fn stream_events(mut socket: WebSocket, source: SceneSource) {
     let mut changes = source.changes.subscribe();
+    let mut preview_changes = source.preview_changes.subscribe();
     // Only changes from here on are news: the renderer has just read the document.
     let _ = changes.borrow_and_update();
+    let _ = preview_changes.borrow_and_update();
     let mut sequence = 0_u64;
     let mut revision = source
         .with(|document| document.patch_revision().ok())
         .flatten();
     loop {
-        let announced = tokio::select! {
+        // What, if anything, the renderer has to be told about. Preview values are announced
+        // separately from the patch so a fader move costs the renderer one small refetch rather
+        // than a whole scene resynchronisation.
+        let announced: Option<&'static str> = tokio::select! {
             changed = changes.changed() => {
                 if changed.is_err() {
                     return;
                 }
-                true
+                Some("show_patch_changed")
+            }
+            changed = preview_changes.changed() => {
+                if changed.is_err() {
+                    return;
+                }
+                Some("preview_values_changed")
             }
             // A renderer that has gone is noticed when it goes, not when the document next
             // changes: this stream outlives nothing.
             incoming = socket.recv() => {
                 match incoming {
                     None | Some(Err(_)) | Some(Ok(Message::Close(_))) => return,
-                    Some(Ok(_)) => false,
+                    Some(Ok(_)) => None,
                 }
             }
             _ = tokio::time::sleep(REVISION_POLL) => {
@@ -290,17 +368,17 @@ async fn stream_events(mut socket: WebSocket, source: SceneSource) {
                     .flatten();
                 let moved = current != revision;
                 revision = current;
-                moved
+                moved.then_some("show_patch_changed")
             }
         };
-        if !announced {
+        let Some(kind) = announced else {
             continue;
-        }
+        };
         revision = source
             .with(|document| document.patch_revision().ok())
             .flatten();
         sequence += 1;
-        let frame = format!("{{\"kind\":\"show_patch_changed\",\"sequence\":{sequence}}}");
+        let frame = format!("{{\"kind\":\"{kind}\",\"sequence\":{sequence}}}");
         if socket.send(Message::Text(frame.into())).await.is_err() {
             return;
         }

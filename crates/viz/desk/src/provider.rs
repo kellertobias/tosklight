@@ -76,6 +76,9 @@ enum Message {
         diagnostics: Box<ProviderDiagnostics>,
     },
     Diagnostics(Box<ProviderDiagnostics>),
+    /// What the planning window is driving the rig with, as read. Only a planning source ever
+    /// sends this.
+    Preview(Box<crate::wire::PreviewSnapshot>),
     /// The desk's own view for this target, as read. Converting it needs the scene, which lives
     /// on the render thread, so the raw reading travels and the conversion happens there.
     View(Box<DeskView>),
@@ -132,6 +135,17 @@ pub struct DeskProvider {
     /// Newest accepted packet already reported to the host.
     reported_input_micros: u64,
     value_frame: u64,
+    /// The planning window's preview values, and the revision of them already folded in.
+    ///
+    /// Empty for a lighting desk, which never serves them.
+    preview: crate::wire::PreviewSnapshot,
+    applied_preview_revision: Option<u64>,
+    /// Universes a real source has delivered at least one packet on, ever.
+    ///
+    /// Once a universe has had real DMX it keeps it: losing the source holds the last received
+    /// values rather than handing the universe back to the editor, because a rig that jumps back
+    /// to a preview look the moment a console is unplugged is worse than one that freezes.
+    real_universes: std::collections::BTreeSet<u16>,
 }
 
 impl DeskProvider {
@@ -164,6 +178,9 @@ impl DeskProvider {
             pending_view: false,
             reported_input_micros: 0,
             value_frame: 0,
+            preview: crate::wire::PreviewSnapshot::default(),
+            applied_preview_revision: None,
+            real_universes: std::collections::BTreeSet::new(),
         }
     }
 
@@ -255,6 +272,17 @@ impl DeskProvider {
 
     /// The mappings the receivers are actually started with: the show's own, the defaults when it
     /// configures none, and the operator's overrides on top of either.
+    /// The universes the planning window is currently driving.
+    ///
+    /// A universe the network has ever delivered is not one of them, and never becomes one again
+    /// while this connection lasts. That is the whole precedence rule: editor values apply where
+    /// no healthy input has ever delivered that universe, a real source takes it the moment one
+    /// arrives, and losing that source afterwards holds the last received values rather than
+    /// reverting. Nothing is merged per parameter — a universe has exactly one owner.
+    fn editor_driven_universes(&self) -> std::collections::BTreeSet<u16> {
+        editor_driven(&self.preview, &self.real_universes)
+    }
+
     fn resolved_mappings(
         &self,
         mappings: Vec<viz_dmx::InputMapping>,
@@ -314,6 +342,9 @@ impl SceneProvider for DeskProvider {
                 Ok(Message::Diagnostics(diagnostics)) => {
                     self.diagnostics = *diagnostics;
                 }
+                Ok(Message::Preview(preview)) => {
+                    self.preview = *preview;
+                }
                 Ok(Message::View(view)) => {
                     let changed = self
                         .view
@@ -364,7 +395,43 @@ impl SceneProvider for DeskProvider {
             events.push(ProviderEvent::SceneDelta(Box::new(scene.clone())));
         }
 
-        // Live values come only from the network.
+        // Live values come from the network, and — for a planning source only — from the preview
+        // plane on universes the network has never claimed.
+        // A universe that has ever accepted a real packet belongs to the network from then on.
+        if let Some(receivers) = &self.receivers {
+            let claimed: Vec<u16> = receivers
+                .universes()
+                .into_iter()
+                .filter(|universe| universe.accepted > 0)
+                .map(|universe| universe.universe)
+                .collect();
+            self.real_universes.extend(claimed);
+        }
+        // The editor's own frames, for the universes it still owns. Rebuilt every poll, and
+        // re-applied whenever the operator changes something — including when a real source has
+        // just taken a universe away, because the frame the decoder holds is a merge of everything
+        // applied so far and the remaining preview universes have to be re-asserted.
+        let preview_universes = self.editor_driven_universes();
+        let preview_moved = self.applied_preview_revision != Some(self.preview.revision);
+        let preview_now = self.epoch.elapsed().as_micros() as u64;
+        let preview_frames: Vec<viz_dmx::UniverseFrame> = self
+            .preview
+            .universes
+            .iter()
+            .filter(|universe| preview_universes.contains(&universe.universe))
+            .map(|universe| {
+                let mut slots = [0_u8; viz_dmx::DMX_SLOTS];
+                let length = universe.slots.len().min(viz_dmx::DMX_SLOTS);
+                slots[..length].copy_from_slice(&universe.slots[..length]);
+                viz_dmx::UniverseFrame {
+                    logical_universe: universe.universe,
+                    slots,
+                    received_micros: preview_now,
+                    stale: false,
+                }
+            })
+            .collect();
+
         if let (Some(receivers), Some(decoder), Some(scene)) =
             (&self.receivers, &mut self.decoder, &self.scene)
         {
@@ -373,6 +440,23 @@ impl SceneProvider for DeskProvider {
             if !frames.is_empty() {
                 decoder.apply(scene, &frames, &mut self.values, elapsed);
             }
+
+            if preview_moved && !preview_frames.is_empty() {
+                let now = preview_now;
+                decoder.apply(scene, &preview_frames, &mut self.values, elapsed);
+                self.applied_preview_revision = Some(self.preview.revision);
+                // A preview change is not a packet, so it gets its own frame stamp; without one
+                // the host would never present it, because nothing arrived from the network.
+                self.value_frame += 1;
+                self.values.newest_input_micros = now;
+                self.values.frame = self.value_frame;
+                events.push(ProviderEvent::Values(Box::new(self.values.clone())));
+            } else if preview_moved {
+                // Nothing to apply, but the revision is accounted for so a later change is still
+                // seen as one.
+                self.applied_preview_revision = Some(self.preview.revision);
+            }
+
             // A held look still arrives at full rate, so the newest accepted packet — not the
             // newest content change — is what the presented frame is measured against.
             let newest = receivers.newest_accepted_micros();
@@ -386,6 +470,7 @@ impl SceneProvider for DeskProvider {
             let mut diagnostics = self.diagnostics.clone();
             diagnostics.inputs = receivers.status();
             diagnostics.universes = receivers.universes();
+            diagnostics.preview_universes = preview_universes.into_iter().collect();
             self.diagnostics = diagnostics.clone();
             events.push(ProviderEvent::Diagnostics(Box::new(diagnostics)));
         }
@@ -531,6 +616,11 @@ async fn connect_once(
         endpoint: endpoint.clone(),
         revision,
     }));
+    // A planning window may already be driving the rig before the renderer ever connected, and
+    // reconnecting must not lose the look. A desk answers 404 here and nothing is merged.
+    if let Some(preview) = client.preview_values().await {
+        let _ = outbox.send(Message::Preview(Box::new(preview)));
+    }
 
     watch(&client, &endpoint, connection, outbox, orders, stop).await;
     client.close_session().await;
@@ -569,6 +659,7 @@ async fn read_scene(
             .unwrap_or_else(|| "all interfaces".into()),
         inputs: Vec::new(),
         universes: Vec::new(),
+        preview_universes: Vec::new(),
         warnings: plan.warnings.clone(),
     };
     if mappings.is_empty() {
@@ -704,6 +795,14 @@ async fn watch(
             let _ = outbox.send(Message::Resync(format!("{} changed the scene", frame.kind)));
             return;
         }
+        // A preview change is one small re-read, not a scene resynchronisation: the rig has not
+        // moved, only what it is being lit with.
+        if frame.kind == "preview_values_changed" {
+            if let Some(preview) = client.preview_values().await {
+                let _ = outbox.send(Message::Preview(Box::new(preview)));
+            }
+            continue;
+        }
         // The desk moving a camera is not a change of rig: nothing is re-read but the view.
         if view_affecting(&frame.kind) {
             if let Some(view) = read_view(client, connection).await {
@@ -741,6 +840,22 @@ async fn watch(
 /// the stream it is already following. Re-reading one small object on any desk-configuration
 /// change is cheaper than a second subscription, and the view is only applied when its revision
 /// actually moved.
+/// Which universes the planning window drives, given what the network has ever delivered.
+///
+/// Stated as a function of two values so the rule can be checked on its own: it is the whole of
+/// the precedence contract and the one thing here that is easy to get subtly wrong.
+fn editor_driven(
+    preview: &crate::wire::PreviewSnapshot,
+    real: &std::collections::BTreeSet<u16>,
+) -> std::collections::BTreeSet<u16> {
+    preview
+        .universes
+        .iter()
+        .map(|universe| universe.universe)
+        .filter(|universe| !real.contains(universe))
+        .collect()
+}
+
 fn view_affecting(kind: &str) -> bool {
     matches!(
         kind,
@@ -850,5 +965,60 @@ mod tests {
         assert!(view_affecting("visualizer_view_changed"));
         assert!(!view_affecting("show_patch_changed"));
         assert!(!view_affecting("output_frame"));
+    }
+}
+
+#[cfg(test)]
+mod preview_precedence {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    fn preview(universes: &[u16]) -> crate::wire::PreviewSnapshot {
+        crate::wire::PreviewSnapshot {
+            revision: 1,
+            universes: universes
+                .iter()
+                .map(|universe| crate::wire::PreviewUniverse {
+                    universe: *universe,
+                    slots: vec![0; viz_dmx::DMX_SLOTS],
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn the_editor_drives_every_universe_no_source_has_delivered() {
+        let driven = editor_driven(&preview(&[1, 2, 3]), &BTreeSet::new());
+        assert_eq!(driven, BTreeSet::from([1, 2, 3]));
+    }
+
+    /// A real source taking one universe takes only that one; the rest keep the editor's values.
+    #[test]
+    fn a_real_source_takes_its_own_universe_and_no_other() {
+        let driven = editor_driven(&preview(&[1, 2, 3]), &BTreeSet::from([2]));
+        assert_eq!(driven, BTreeSet::from([1, 3]));
+    }
+
+    /// Losing a source afterwards holds the last received values rather than handing the universe
+    /// back to the editor. `real` is what has *ever* arrived, so a universe never returns.
+    #[test]
+    fn a_universe_that_has_had_dmx_never_returns_to_the_editor() {
+        let ever_received = BTreeSet::from([2]);
+        // The source has stopped; nothing about that changes what has already been delivered.
+        let driven = editor_driven(&preview(&[1, 2, 3]), &ever_received);
+        assert!(
+            !driven.contains(&2),
+            "universe 2 went back to the editor after its source was lost"
+        );
+    }
+
+    /// A desk serves no preview plane at all, so nothing is ever editor-driven there.
+    #[test]
+    fn a_desk_has_no_editor_driven_universes() {
+        let driven = editor_driven(
+            &crate::wire::PreviewSnapshot::default(),
+            &BTreeSet::from([1, 2]),
+        );
+        assert!(driven.is_empty());
     }
 }

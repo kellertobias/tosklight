@@ -103,6 +103,9 @@ pub(super) enum SecondRowNote<'a> {
     Notice(&'a str, bool),
     EmptyRig,
     WaitingForDmx,
+    /// Nothing is arriving, but the planning window is driving the rig, so the picture is lit on
+    /// purpose. Saying "Waiting for DMX" over a rig that is visibly lit reads as a fault.
+    EditorDriving,
 }
 
 impl SecondRowNote<'_> {
@@ -111,6 +114,7 @@ impl SecondRowNote<'_> {
             Self::Notice(text, _) => text,
             Self::EmptyRig => EMPTY_RIG,
             Self::WaitingForDmx => "Waiting for DMX",
+            Self::EditorDriving => EDITOR_DRIVING,
         }
     }
 }
@@ -126,6 +130,11 @@ pub(super) fn second_row_note<'a>(model: &'a StatusModel<'a>) -> Option<SecondRo
     if model.connection.is_connected() && model.fixtures == 0 {
         return Some(SecondRowNote::EmptyRig);
     }
+    // Nothing has arrived from the network. Whether that is a problem depends entirely on whether
+    // anything else is driving the rig, so the two cases are named separately.
+    if !model.diagnostics.preview_universes.is_empty() {
+        return Some(SecondRowNote::EditorDriving);
+    }
     model
         .waiting_for_dmx
         .then_some(SecondRowNote::WaitingForDmx)
@@ -135,6 +144,10 @@ pub(super) fn second_row_note<'a>(model: &'a StatusModel<'a>) -> Option<SecondRo
 /// is otherwise an empty window with nothing to say for itself.
 pub(super) const EMPTY_RIG: &str =
     "No fixtures in this show \u{2014} patch a rig in the Viz editor";
+
+/// Shown when no DMX is arriving but the planning window's preview values are lighting the rig.
+pub(super) const EDITOR_DRIVING: &str =
+    "No DMX in \u{2014} the Viz editor is driving these fixtures";
 
 /// The shortcuts worth keeping in front of the operator, most important first.
 ///

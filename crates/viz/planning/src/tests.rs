@@ -460,3 +460,290 @@ async fn an_editor_with_no_document_has_nothing_to_download() {
         .expect("route");
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
+
+/// A profile with the channels Simple mode actually drives, so the projection is tested against
+/// fine bytes and colour rather than against a fixture that has neither.
+fn preview_profile() -> FixtureProfile {
+    let mut profile = FixtureProfile::blank();
+    profile.revision = 1;
+    profile.manufacturer = "Acme".into();
+    profile.name = "Preview Wash".into();
+    profile.short_name = "Preview".into();
+    profile.fixture_type = "wash".into();
+    let head_id = profile.modes[0].heads[0].id;
+    let channel =
+        |attribute: &str, resolution: light_fixture::ChannelResolution, secondary: Vec<u16>| {
+            light_fixture::FixtureChannel {
+                id: Uuid::new_v4(),
+                head_id,
+                split: 1,
+                fixture_attribute: light_core::AttributeKey(attribute.to_owned()),
+                attribute: light_core::AttributeKey(attribute.to_owned()),
+                canonical_transform: Default::default(),
+                resolution,
+                secondary_slots: secondary,
+                default_raw: 0,
+                highlight_raw: 0,
+                physical_min: None,
+                physical_max: None,
+                unit: None,
+                invert: false,
+                snap: false,
+                reacts_to_virtual_intensity: false,
+                reacts_to_sequence_master: false,
+                reacts_to_group_master: false,
+                reacts_to_grand_master: false,
+                behavior: Default::default(),
+                functions: Vec::new(),
+            }
+        };
+    profile.modes[0].splits[0].footprint = 6;
+    profile.modes[0].channels = vec![
+        // Intensity is 16-bit so the fine byte has to be written, not merely declared.
+        channel("intensity", light_fixture::ChannelResolution::U16, vec![2]),
+        channel("pan", light_fixture::ChannelResolution::U8, Vec::new()),
+        channel(
+            "color.red",
+            light_fixture::ChannelResolution::U8,
+            Vec::new(),
+        ),
+        channel(
+            "color.green",
+            light_fixture::ChannelResolution::U8,
+            Vec::new(),
+        ),
+        channel(
+            "color.blue",
+            light_fixture::ChannelResolution::U8,
+            Vec::new(),
+        ),
+    ];
+    profile
+}
+
+/// A document with one fixture of [`preview_profile`], patched at universe 1 address 1.
+fn preview_document(name: &str) -> (PlanningDocument, PathBuf, Uuid) {
+    let path = temp_path(name);
+    let document = PlanningDocument::create(&path, "Preview show").expect("create");
+    let profile = preview_profile();
+    let profile_id = profile.id;
+    let profile_revision = u64::from(profile.revision);
+    let mode_id = profile.modes[0].id;
+    let stored =
+        FixtureProfileRevision::from_profile(serde_json::to_value(profile).unwrap()).unwrap();
+    ShowStore::open(&path)
+        .unwrap()
+        .insert_fixture_profile_revision(&stored)
+        .expect("retain profile");
+    let fixture_id = Uuid::new_v4();
+    document
+        .patch_fixtures(PatchFixturesCommand {
+            show_id: document.show_id(),
+            fixtures: vec![PatchFixtureCandidate {
+                profile: PatchedFixtureProfileReference {
+                    profile_id,
+                    profile_revision,
+                    mode_id,
+                },
+                patch: PatchedFixturePatch {
+                    fixture_id: FixtureId(fixture_id),
+                    fixture_number: Some(1),
+                    virtual_fixture_number: None,
+                    name: "Preview 1".into(),
+                    universe: Some(1),
+                    address: Some(1),
+                    split_patches: vec![SplitPatch {
+                        split: 1,
+                        universe: Some(1),
+                        address: Some(1),
+                    }],
+                    layer_id: "default".into(),
+                    direct_control: None,
+                    location: FixtureLocation { x: 0, y: 0, z: 0 },
+                    rotation: FixtureVector {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                    logical_heads: Vec::new(),
+                    multipatch: Vec::new(),
+                    group_masters_enabled: true,
+                    grand_master_enabled: true,
+                    invert_pan: false,
+                    invert_tilt: false,
+                    bracket_angle: 0.0,
+                    shaper_angle: None,
+                    installed_appearance: Default::default(),
+                    move_in_black_enabled: true,
+                    move_in_black_delay_millis: 0,
+                    highlight_overrides: BTreeMap::new(),
+                },
+            }],
+            remove_fixture_ids: Vec::new(),
+            placements: Vec::new(),
+            vector_spreads: Vec::new(),
+            fixture_updates: Vec::new(),
+        })
+        .expect("patch one fixture");
+    (document, path, fixture_id)
+}
+
+fn only_universe(snapshot: &crate::PreviewSnapshot) -> Vec<u8> {
+    assert_eq!(snapshot.universes.len(), 1, "one patched universe");
+    assert_eq!(snapshot.universes[0].universe, 1);
+    snapshot.universes[0].slots.clone()
+}
+
+#[test]
+fn a_semantic_intensity_writes_its_coarse_and_fine_bytes() {
+    let (document, _path, fixture_id) = preview_document("semantic-intensity");
+    let source = SceneSource::new(document);
+    source.set_preview(crate::PreviewSet::Semantic {
+        fixture_id,
+        parameter: crate::PreviewParameter::Intensity,
+        value: 1.0,
+        colour: [0.0; 3],
+    });
+    let slots = only_universe(&source.preview_snapshot());
+    assert_eq!(slots[0], 255, "coarse");
+    assert_eq!(slots[1], 255, "fine");
+
+    // A level that lands between coarse steps is where the fine byte is the only way to be
+    // right: 10% of 16-bit full scale is 6554, which no 8-bit channel could express.
+    source.set_preview(crate::PreviewSet::Semantic {
+        fixture_id,
+        parameter: crate::PreviewParameter::Intensity,
+        value: 0.1,
+        colour: [0.0; 3],
+    });
+    let slots = only_universe(&source.preview_snapshot());
+    assert_eq!((u16::from(slots[0]) << 8) | u16::from(slots[1]), 6_554);
+    assert_ne!(slots[1], 0, "the fine byte carries the remainder");
+}
+
+#[test]
+fn a_colour_reaches_every_component_the_fixture_has() {
+    let (document, _path, fixture_id) = preview_document("semantic-colour");
+    let source = SceneSource::new(document);
+    source.set_preview(crate::PreviewSet::Semantic {
+        fixture_id,
+        parameter: crate::PreviewParameter::Colour,
+        value: 0.0,
+        colour: [1.0, 0.5, 0.0],
+    });
+    let slots = only_universe(&source.preview_snapshot());
+    assert_eq!(slots[3], 255, "red");
+    assert_eq!(slots[4], 128, "green");
+    assert_eq!(slots[5], 0, "blue");
+}
+
+/// Full DMX mode addresses a slot of the fixture's own footprint, not of the universe, so the
+/// values follow the fixture when it is repatched.
+#[test]
+fn a_raw_slot_is_written_at_the_fixtures_own_address() {
+    let (document, _path, fixture_id) = preview_document("raw-slot");
+    let source = SceneSource::new(document);
+    source.set_preview(crate::PreviewSet::Slot {
+        fixture_id,
+        split: 1,
+        offset: 3,
+        value: 200,
+    });
+    let slots = only_universe(&source.preview_snapshot());
+    assert_eq!(slots[2], 200, "offset 3 of a fixture at address 1");
+}
+
+/// A slot beyond the fixture's own footprint is refused rather than written into whatever is
+/// patched next door.
+#[test]
+fn a_raw_slot_outside_the_footprint_touches_nothing() {
+    let (document, _path, fixture_id) = preview_document("raw-slot-overrun");
+    let source = SceneSource::new(document);
+    source.set_preview(crate::PreviewSet::Slot {
+        fixture_id,
+        split: 1,
+        offset: 99,
+        value: 200,
+    });
+    assert!(
+        source.preview_snapshot().universes.is_empty(),
+        "nothing was written for a slot the fixture does not have"
+    );
+}
+
+#[test]
+fn clearing_returns_every_fixture_to_its_defaults() {
+    let (document, _path, fixture_id) = preview_document("clear");
+    let source = SceneSource::new(document);
+    source.set_preview(crate::PreviewSet::Semantic {
+        fixture_id,
+        parameter: crate::PreviewParameter::Intensity,
+        value: 1.0,
+        colour: [0.0; 3],
+    });
+    assert!(source.preview_is_active());
+    source.clear_preview();
+    assert!(!source.preview_is_active());
+    assert!(source.preview_snapshot().universes.is_empty());
+}
+
+/// Preview values are session state of the window, not of the show. Opening another document must
+/// not light its rig with the last one's look.
+#[test]
+fn opening_another_document_drops_the_preview_values() {
+    let (document, _path, fixture_id) = preview_document("preview-open-one");
+    let source = SceneSource::new(document);
+    source.set_preview(crate::PreviewSet::Semantic {
+        fixture_id,
+        parameter: crate::PreviewParameter::Intensity,
+        value: 1.0,
+        colour: [0.0; 3],
+    });
+    assert!(source.preview_is_active());
+
+    let (other, _other_path, _other_fixture) = preview_document("preview-open-two");
+    source.open(other);
+    assert!(!source.preview_is_active());
+}
+
+/// The revision has to move on every change, because it is the only thing telling the renderer
+/// that a look it already applied is no longer current.
+#[test]
+fn every_preview_change_moves_the_revision() {
+    let (document, _path, fixture_id) = preview_document("preview-revision");
+    let source = SceneSource::new(document);
+    let start = source.preview_snapshot().revision;
+    source.set_preview(crate::PreviewSet::Semantic {
+        fixture_id,
+        parameter: crate::PreviewParameter::Intensity,
+        value: 0.25,
+        colour: [0.0; 3],
+    });
+    let after_set = source.preview_snapshot().revision;
+    source.clear_preview();
+    let after_clear = source.preview_snapshot().revision;
+    assert!(after_set > start, "setting a value moved the revision");
+    assert!(after_clear > after_set, "clearing moved it again");
+}
+
+/// The show file is what the operator saves. A preview look must never reach it.
+#[tokio::test]
+async fn preview_values_never_enter_the_document() {
+    let (document, path, fixture_id) = preview_document("preview-not-persisted");
+    let source = SceneSource::new(document);
+    let before = std::fs::read(&path).expect("show bytes");
+    source.set_preview(crate::PreviewSet::Semantic {
+        fixture_id,
+        parameter: crate::PreviewParameter::Intensity,
+        value: 1.0,
+        colour: [0.0; 3],
+    });
+    // Read the plane back through the route the renderer uses, so the whole path has run.
+    let snapshot: crate::PreviewSnapshot = get(&source, "/api/v2/preview-values").await;
+    assert_eq!(snapshot.universes.len(), 1);
+    assert_eq!(
+        std::fs::read(&path).expect("show bytes"),
+        before,
+        "setting a preview value changed the show file"
+    );
+}

@@ -95,6 +95,17 @@ impl DeskClient {
             .ok()
     }
 
+    /// The preview values a planning window is driving, if this source has any.
+    ///
+    /// A lighting desk answers 404 and that is the correct answer, not a failure: the two-plane
+    /// rule says a desk's live values arrive as real Art-Net or sACN. So this is `None` for a desk
+    /// and the renderer simply never has a preview plane to merge.
+    pub async fn preview_values(&self) -> Option<crate::wire::PreviewSnapshot> {
+        self.get_json::<crate::wire::PreviewSnapshot>("/api/v2/preview-values", "preview values")
+            .await
+            .ok()
+    }
+
     pub async fn objects(&self, kind: &str) -> Result<ObjectCollection, ProviderError> {
         self.get_json(&format!("/api/v2/objects/{kind}"), "show objects")
             .await

@@ -25,6 +25,46 @@ The demo is built from the fixture packages this version of ToskLight ships, so 
 the same profile revisions, models and modes the fixture library does. It is the quickest way to
 see what the Visualizer draws, and the rig the product demonstration video is shot from.
 
+## Lighting the rig without a desk
+
+Select fixtures in the patch sheet and the editor's preview controls light them. No desk, no
+network route, no console: this is what makes a demo rig worth opening, and what lets you check a
+plan from every view before anyone rigs anything.
+
+**Simple** exposes Intensity, Pan, Tilt, Colour and Gobo. It sets them on every selected fixture at
+once, through the fixture's own profile — so one colour works on an RGB fixture and a CMY one
+without you having to know which you are looking at, and a 16-bit channel gets its fine byte.
+
+**Full DMX** is available when exactly one fixture is selected, and shows every slot of that
+fixture's complete mode: every logical head, every channel, coarse and fine bytes, named as the
+fixture library names them. It is a testing tool for one fixture, not a way to program a rig, so
+selecting none or several disables it visibly and leaves the values it already set alone.
+
+**Clear** returns the selected fixtures to their defaults.
+
+These are preview values, not programming. They are session state of the window: they never enter
+the show file, never become a preset, a cue or a stored look, and they are gone when the document
+is closed. The editor has no programmer, no command line, no playbacks and no cue stack — anything
+that starts to need cues, tracking or arbitration belongs on a desk, and the answer there is to
+connect to one.
+
+### When real DMX arrives
+
+Preview values apply to a fixture while no source has delivered that fixture's universe.
+
+* Start a real Art-Net or sACN source for one of the show's universes and the fixtures on it follow
+  the network immediately. Fixtures on other universes keep the editor's values.
+* Stop that source and the visualizer **holds the last values it received** rather than reverting to
+  the preview look. A universe that has had real DMX keeps it until you clear it or a source
+  resumes — a rig that jumped back to a preview the moment a console was unplugged would be worse
+  than one that froze.
+* Editor values and received DMX are never blended for the same parameter. A universe has one
+  owner at a time.
+
+The visualizer's status line says which is happening: **No DMX in — the Viz editor is driving these
+fixtures** when the preview plane is lighting the rig, and the ordinary **Waiting for DMX** when
+nothing is driving it at all.
+
 ## Load from Desk
 
 When a ToskLight desk with a show open is on the same network, the editor's file bar gains a

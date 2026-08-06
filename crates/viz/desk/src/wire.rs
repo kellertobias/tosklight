@@ -275,6 +275,26 @@ pub struct EventFrame {
     pub sequence: u64,
 }
 
+/// Preview values a planning window is driving the rig with.
+///
+/// Only the planning provider serves these; a lighting desk answers 404, and must, because a
+/// desk's live values have to arrive as real Art-Net or sACN. Declared here rather than imported
+/// so the renderer stays a client of an HTTP contract instead of depending on the editor's crate.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct PreviewSnapshot {
+    #[serde(default)]
+    pub revision: u64,
+    #[serde(default)]
+    pub universes: Vec<PreviewUniverse>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct PreviewUniverse {
+    pub universe: u16,
+    /// All 512 slots, as the planning window projected them.
+    pub slots: Vec<u8>,
+}
+
 /// A desk's typed event envelope, which names the change inside its payload.
 #[derive(Debug, Deserialize)]
 struct TypedEventMessage {

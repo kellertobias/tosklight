@@ -1,15 +1,17 @@
 import {
 	FixturePatchSetup,
-	noPatchSelection,
 	type PatchHost,
 	PatchHostProvider,
 	type PatchLayer,
 	PatchViewProvider,
 	type FixtureProfile,
+	type PatchFixtureProjection,
+	type PatchProfileRevision,
 	mergeFixtureDefinitions,
 } from "@tosklight/patch";
 import { useEffect, useMemo, useState } from "react";
 import { FileBar } from "./FileBar";
+import { PreviewControls } from "./PreviewControls";
 import { documentSession, sessionPatchLayers } from "./document/session";
 import type { DocumentSummary } from "./document/session";
 import { TauriPatchTransport } from "./document/transport";
@@ -24,13 +26,33 @@ export function App() {
 	// Bumped when something outside the sheet changed the document — an MVR import — so the sheet
 	// reads the new snapshot instead of showing the rig as it was before.
 	const [reload, setReload] = useState(0);
+	// What the patch sheet has selected, and what the preview controls therefore drive.
+	const [selected, setSelected] = useState<readonly string[]>([]);
+	// The rig itself, for the preview controls: the sheet owns the table, this owns the values.
+	const [fixtures, setFixtures] = useState<readonly PatchFixtureProjection[]>([]);
+	// The profile revisions the show embedded, which are what Full DMX reads its slots from.
+	const [profileRevisions, setProfileRevisions] = useState<
+		readonly PatchProfileRevision[]
+	>([]);
 	const transport = useMemo(() => new TauriPatchTransport(), []);
 
 	useEffect(() => {
 		documentSession.current().then(setDocument).catch(report);
 		documentSession.fixtureProfiles().then(setProfiles).catch(report);
 		loadLayers();
+		loadFixtures();
 	}, []);
+
+	/// The preview controls drive fixtures, so they need the rig the sheet is showing.
+	function loadFixtures() {
+		documentSession
+			.patchSnapshot()
+			.then((snapshot) => {
+				setFixtures(snapshot.fixtures);
+				setProfileRevisions(snapshot.profileRevisions);
+			})
+			.catch(report);
+	}
 
 	/// A document written on a desk arrives with its own layers, and its fixtures belong to them.
 	function loadLayers() {
@@ -72,13 +94,18 @@ export function App() {
 					return true;
 				},
 			},
-			// No programmer here: selecting a row moves the sheet's own cursor and nothing else.
-			selection: noPatchSelection,
+			// There is still no programmer here. What the sheet's selection drives is the preview
+			// controls and nothing else: no cues, no tracking, no arbitration.
+			selection: {
+				fixtureIds: new Set(selected),
+				orderedFixtureIds: selected,
+				replace: (intent) => setSelected(intent.resolvedFixtures),
+			},
 			// No `Set` key either, so editing a cell is always allowed.
 			editArmed: true,
 			setEditArmed: () => undefined,
 		}),
-		[profiles, layers],
+		[profiles, layers, selected],
 	);
 
 	const definitions = useMemo(
@@ -99,6 +126,7 @@ export function App() {
 					setReload((current) => current + 1);
 					documentSession.current().then(setDocument).catch(report);
 					loadLayers();
+					loadFixtures();
 				}}
 			/>
 			{error ? (
@@ -116,6 +144,12 @@ export function App() {
 					>
 						<FixturePatchSetup />
 					</PatchViewProvider>
+					<PreviewControls
+						fixtures={fixtures}
+						profileRevisions={profileRevisions}
+						selected={selected}
+						onError={report}
+					/>
 				</PatchHostProvider>
 			) : (
 				<section className="viz-editor-empty">
