@@ -12,6 +12,7 @@
 //! protocol on top, and are deliberately not here — supervision that can only be exercised through
 //! a GPU is supervision nobody tests.
 
+pub mod channel;
 pub mod framing;
 pub mod handshake;
 pub mod protocol;
