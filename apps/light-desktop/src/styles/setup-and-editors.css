@@ -27,13 +27,16 @@
 	background: #0a252b;
 	color: var(--cyan);
 }
-.attribute-layout-preview,
-.attribute-layout-group,
+/* Each encoder group is its own card in the page grid, so the editor itself is not a box. */
+.attribute-layout-preview {
+	display: contents;
+}
 .attribute-layout-page {
 	display: grid;
 	gap: 8px;
 }
-.attribute-layout-group {
+.programmer-setup-list .attribute-layout-group > .attribute-layout-page + .attribute-layout-page {
+	margin-top: 10px;
 	padding-top: 10px;
 	border-top: 1px solid var(--line);
 }
@@ -50,13 +53,47 @@
 	border: 1px solid var(--line);
 	border-radius: 6px;
 	background: var(--panel2);
+	transition:
+		border-color 120ms ease,
+		background 120ms ease,
+		opacity 120ms ease;
 }
 .attribute-layout-slot > small,
 .attribute-layout-slot > details {
 	color: var(--muted);
 }
-.attribute-layout-slot[draggable="true"] {
+/* A sideways drag reorders the encoders; an up/down swipe still scrolls the setup page. */
+.attribute-layout-slot.is-draggable {
 	cursor: grab;
+	touch-action: pan-y;
+}
+.attribute-layout-preview.is-dragging {
+	user-select: none;
+}
+.attribute-layout-preview.is-dragging .attribute-layout-slot {
+	cursor: grabbing;
+}
+/* The dragged tile is already redrawn in its previewed slot, so its origin only hints at it. */
+.attribute-layout-slot.is-dragging {
+	border-color: var(--cyan);
+	background: #0a252b;
+}
+.attribute-layout-slot.is-drop-target {
+	border-color: var(--cyan);
+	box-shadow: inset 0 0 0 1px var(--cyan);
+}
+.attribute-layout-drag-chip {
+	position: fixed;
+	z-index: 40;
+	transform: translate(-50%, -140%);
+	padding: 5px 10px;
+	border: 1px solid var(--cyan);
+	border-radius: 6px;
+	background: #0a252b;
+	color: var(--cyan);
+	font-size: 12px;
+	font-weight: 600;
+	pointer-events: none;
 }
 .attribute-layout-slot.is-unassigned {
 	border-style: dashed;
@@ -71,35 +108,57 @@
 	color: var(--muted);
 	font-size: 11px;
 }
-.activation-presets {
-	display: grid;
-	gap: 6px;
-	padding: 10px;
-	border: 1px solid var(--line);
-	border-radius: 7px;
-	background: var(--panel2);
-}
 .activation-preset-buttons {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
 }
-.activation-presets small {
-	color: var(--muted);
+.programmer-setup-list .activation-group {
+	padding: 10px 14px 14px;
 }
-.activation-group-list > li {
-	display: grid;
-	gap: 6px;
-	padding: 8px 0;
-	border-bottom: 1px solid var(--line);
-}
-.activation-group-header {
+.programmer-setup-list .activation-group > .activation-group-header {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 }
 .activation-group-header > :first-child {
 	flex: 1;
+}
+.attribute-registry-group .plain-list > li {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 0;
+	border-bottom: 1px solid var(--line);
+}
+.attribute-registry-group .plain-list > li:last-child {
+	border-bottom: 0;
+}
+.attribute-registry-group .plain-list > li > div {
+	min-width: 260px;
+	display: grid;
+	gap: 2px;
+}
+.attribute-registry-group .plain-list small {
+	color: var(--muted);
+}
+.attribute-registry-note {
+	margin: 0 0 10px;
+	max-width: 720px;
+	color: var(--muted);
+	font-size: 12px;
+}
+.attribute-mapping-list > li {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 0;
+	border-bottom: 1px solid var(--line);
+}
+.attribute-mapping-list > li > code {
+	min-width: 220px;
 }
 .activation-group-members {
 	display: flex;
@@ -142,21 +201,27 @@
 	max-width: 980px;
 	gap: 12px;
 }
-.programmer-setup-list > article {
+/* The attribute tabs render several sibling cards, so the panel itself must not become a box. */
+.attribute-tabpanel {
+	display: contents;
+}
+.programmer-setup-list article {
 	display: block;
 	padding: 14px;
 }
-.programmer-setup-list > article > header {
+.programmer-setup-list article > header {
 	display: flex;
 	align-items: baseline;
 	justify-content: space-between;
 	gap: 14px;
 	margin-bottom: 10px;
 }
-.programmer-setup-list > article > header b {
+.programmer-setup-list article > header b,
+.programmer-setup-list article > header h3 {
+	margin: 0;
 	font-size: 16px;
 }
-.programmer-setup-list > article > header small {
+.programmer-setup-list article > header small {
 	color: var(--muted);
 }
 .programmer-setup-list .ui-form-layout {

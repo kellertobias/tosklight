@@ -954,39 +954,6 @@
 	border-radius: 6px;
 	background: color-mix(in srgb, var(--amber) 12%, var(--panel));
 }
-.programmer-control-layout-preview {
-	display: grid;
-	gap: 10px;
-	margin-top: 10px;
-	padding: 10px;
-	border: 1px solid var(--line);
-	border-radius: 7px;
-	background: var(--panel2);
-}
-.programmer-control-layout-preview > div:first-child,
-.programmer-control-layout-group {
-	display: grid;
-	gap: 5px;
-}
-.programmer-control-layout-slots {
-	display: grid;
-	gap: 5px;
-}
-.programmer-control-layout-slots > span {
-	display: grid;
-	min-width: 0;
-	min-height: 58px;
-	align-content: space-between;
-	gap: 3px;
-	padding: 6px;
-	border: 1px solid var(--line);
-	border-radius: 5px;
-	background: var(--panel);
-}
-.programmer-control-layout-slots b {
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
 .screen-owner-remove-confirmation {
 	display: grid;
 	gap: 8px;

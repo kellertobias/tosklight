@@ -8,7 +8,6 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ClientSummary, ScreenConfiguration } from "../../api/types";
 import { ScreensProvider } from "../../features/screens/ScreensContext";
-import { EncoderLayoutPreview } from "./EncoderLayoutPreview";
 import type { ScreensContextValue } from "../../features/screens/types";
 import {
 	DefaultScreenPicker,
@@ -81,7 +80,7 @@ describe("programmer control surface settings", () => {
 			screen.getByRole("heading", { name: "Encoder placement" }),
 		).toBeInTheDocument();
 		expect(screen.getByText("Encoders on")).toBeInTheDocument();
-		// The semantic layout preview now belongs to Attributes & encoders.
+		// The semantic layout is edited in Attributes & encoders, never previewed here.
 		expect(
 			screen.queryByLabelText("6-encoder semantic layout preview"),
 		).not.toBeInTheDocument();
@@ -99,53 +98,6 @@ describe("programmer control surface settings", () => {
 		expect(updateProgrammerControlSurface).toHaveBeenCalledWith({
 			visible_encoders: 4,
 		});
-	});
-
-	it("previews the semantic encoder layout for Attributes & encoders", () => {
-		const source: ScreensContextValue = {
-			screens: {
-				screens: [configuredScreen],
-				active_pages: {},
-				programmer_control_surface: {
-					owner_screen_id: null,
-					visible_encoders: 6,
-				},
-			},
-			bootstrap: {
-				attribute_registry: [
-					{
-						id: "red",
-						label: "Red",
-						family: "color",
-						value_type: "continuous",
-						default_unit: null,
-						encoder_group: "color",
-						encoder_page: 1,
-						encoder_slot: 1,
-					},
-				],
-			} as ScreensContextValue["bootstrap"],
-			session: null,
-			saveScreen: vi.fn(),
-			deleteScreen: vi.fn(),
-			setScreenPage: vi.fn(),
-			updateProgrammerControlSurface: vi.fn(),
-			updateControlDesk: vi.fn(),
-			selectControlDesk: vi.fn(),
-			removeClient: vi.fn(),
-		};
-		render(
-			<ScreensProvider source={source}>
-				<EncoderLayoutPreview />
-			</ScreensProvider>,
-		);
-
-		const preview = screen.getByLabelText("6-encoder semantic layout preview");
-		expect(preview).toHaveTextContent("6-position semantic layout");
-		expect(preview).toHaveTextContent("Red");
-		expect(
-			preview.querySelectorAll(".programmer-control-layout-slots > span"),
-		).toHaveLength(6);
 	});
 
 	it("reports a closed owner and explicitly recovers controls to main", () => {

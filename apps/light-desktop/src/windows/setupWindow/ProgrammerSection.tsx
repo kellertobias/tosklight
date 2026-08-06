@@ -14,7 +14,6 @@ import {
 	RecordDefaultsFields,
 	UpdateDefaultsFields,
 } from "../../components/setup/ProgrammerDefaults";
-import { EncoderLayoutPreview } from "../../components/setup/EncoderLayoutPreview";
 import { PoolPaletteSettings } from "../../components/shared/PoolColorSettings";
 import { AttributeRegistrySettings } from "./AttributeRegistrySettings";
 import type { SetupWindowController } from "./controller";
@@ -380,7 +379,6 @@ export function AttributesEncodersSection({
 }) {
 	return (
 		<PreferencesPage title="Attributes & encoders" controller={controller}>
-			<EncoderLayoutPreview />
 			<AttributeRegistrySettings controller={controller} />
 		</PreferencesPage>
 	);
