@@ -11,10 +11,18 @@ A Group reference remains connected to its source; dereference it when a frozen 
 Plain-click a Group to select its live membership. Double-press it quickly to select the current
 members as frozen fixtures. Right-click, touch-hold, or enter `[SET] [GRP] <number> [ENTER]` to open
 the same Group settings modal. **General** contains only name, icon, and color. **Projection** maps
-Stage X/Y/Z positions into a 2D plane using an anchor, view direction, rotation, and the named
-Top/Front/Back/Left/Right presets. **Phase** ranks that plane as Grid, Radial, or Radar. Fixtures
-that share a rank receive the same point of a `THRU` spread; members without a valid Stage position
-remain visible and receive individual fallback ranks.
+Stage X/Y/Z positions into a 2D plane. **Phase** ranks that plane into the one-dimensional order
+each fixture takes its phase from, as Grid, Radial, or Radar. Fixtures that share a rank receive the
+same point of a `THRU` spread; members without a valid Stage position remain visible and receive
+individual fallback ranks.
+
+A projection is one of three kinds. **Planar** looks along a view direction and ranks across the
+viewing plane; it keeps the named Top/Front/Back/Left/Right presets. **Cylindrical** places a centre
+point, orients an axis through it with three rotations, and starts the spread at one angle around
+that axis; the spread leaves that angle in both directions and the two sides meet 180° away on the
+far side. **Spherical** places a centre point and names the spread's centre with two angles, azimuth
+and elevation, spreading outward to 180° at the opposite side. With every rotation at zero the
+cylinder axis is vertical and both start angles are measured from Stage +X.
 
 A Group can inherit mapping from referenced Groups, own one complete local mapping, copy inherited
 values as a local mapping, or remove its local mapping. Membership remains live when the mapping is

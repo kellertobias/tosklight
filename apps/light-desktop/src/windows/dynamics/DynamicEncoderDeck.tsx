@@ -83,6 +83,7 @@ import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/Speed
 import { useApp } from "../../state/AppContext";
 import { useStageLayout } from "../stageWindow/useStageLayout";
 import type { DynamicEditorView } from "./DynamicsEditor";
+import { projectionEncoderSlots } from "./ProjectionEncoderSlots";
 import {
 	clamp,
 	defaultRandomGroup,
@@ -160,9 +161,11 @@ export function DynamicEncoderDeck({
 					onLaneChange,
 					presets,
 				)
-			: view === "phase"
-				? phaseEncoderSlots(phase, applyPhase)
-				: speedEncoderSlots(dynamic, onMutate);
+			: view === "projection"
+				? projectionEncoderSlots(dynamic, visibleEncoderCount, onMutate)
+				: view === "phase"
+					? phaseEncoderSlots(phase, applyPhase)
+					: speedEncoderSlots(dynamic, onMutate);
 	const pageCount = Math.max(
 		1,
 		Math.ceil(allSlots.length / visibleEncoderCount),

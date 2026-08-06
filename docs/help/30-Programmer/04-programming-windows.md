@@ -17,12 +17,22 @@ Selections made in Stage, Fixtures, Groups, Presets, or the command line are the
 
 In the Dynamics Speed view, choose **Loop** to repeat until Off or **One-shot** to run one complete effective cycle and stop automatically. Run Mode is separate from Start now, Join sync now, and Next boundary, which determine when and where the cycle begins. A completed one-shot does not restart merely because its Cue, Programmer, or Playback value remains active; trigger it again with a new deliberate activation.
 
-The Dynamics editor separates target ordering from phase distribution. **Projection** starts with
-the saved live Group's mapping and can override projection, shape, or both without changing the
-Group. Returning either stage to **Inherit** reveals the current Group stage immediately. Frozen or
-targetless Dynamics instead show **Selection order (no Group mapping)**. **Random** ignores fixture
-positions and projection. Incomplete spatial overrides cannot be applied. **Phase** continues to
-own offset, span, anchors, blocks, repeats, wings, and uniform/per-lane phase behavior.
+The Dynamics editor separates target ordering from phase distribution. **Projection** places
+fixtures in a 2D plane and nothing else; **Phase** turns that plane into the one-dimensional order
+each lamp takes its phase from.
+
+**Projection** starts from the saved live Group's mapping. **Inherit** follows the Group;
+**Override** enables the local controls and a **Projection** dropdown choosing Planar, Cylindrical,
+or Spherical. Each kind offers only the values it uses, and a simplified Stage view shows the centre
+point, the axis, and where the spread starts. Changes are saved as they are made, so there is no
+Apply button; if the Dynamic changed elsewhere, authority reloads and your values are kept. Frozen
+or targetless Dynamics instead show **Selection order (no Group mapping)**. On the encoders,
+projection takes two pages: the kind and its position, then its orientation.
+
+**Phase** owns the ordering — **Inherit**, Linear, Grid, Radial, Radar, or Random — alongside
+offset, span, anchors, blocks, repeats, wings, and uniform/per-lane phase behavior. **Inherit**
+takes the Group's ordering and appears only for a Dynamic bound to a live Group, because anything
+else has nothing to inherit from. **Random** ignores fixture positions and projection.
 
 With an empty programmer selection, the first ordinary tap on a populated Preset selects every
 fixture or logical head for which that Preset stores a value; it does not recall values. Tap the
