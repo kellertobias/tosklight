@@ -158,7 +158,6 @@ export function DynamicProjectionView({
 					}))
 				}
 			/>
-			<ProjectionPreview loading={loading} preview={preview} />
 
 			{validation && (
 				<p className="dynamics-warning" role="alert">
@@ -225,49 +224,18 @@ function ProjectionControls({
 				/>
 			</div>
 			{draft.projection.type === "replace" ? (
-				<>
-					<ProjectionStagePreview projection={draft.projection.value} />
+				<div className="dynamic-projection-columns">
+					<div className="dynamic-projection-visual">
+						<ProjectionStagePreview projection={draft.projection.value} />
+						<small>Drag to orbit</small>
+					</div>
 					<ProjectionFields value={draft.projection.value} onChange={onChange} />
-				</>
+				</div>
 			) : (
 				<p className="dynamic-projection-help">
 					Uses the projection inherited from the Group.
 				</p>
 			)}
-		</section>
-	);
-}
-
-function ProjectionPreview({
-	loading,
-	preview,
-}: {
-	loading: boolean;
-	preview: DynamicSpatialPreviewResponse | null;
-}) {
-	return (
-		<section className="dynamic-projection-card dynamic-projection-preview">
-			<h3>Authoritative preview</h3>
-			{loading ? (
-				<p>Refreshing preview…</p>
-			) : preview?.ordered_fixture_ids.length ? (
-				<ol>
-					{preview.ordered_fixture_ids.map((id, index) => (
-						<li key={id}>
-							<code>{id}</code>
-							<span>rank {preview.ranks[index]?.rank ?? index + 1}</span>
-						</li>
-					))}
-				</ol>
-			) : (
-				<p>No saved targets to rank.</p>
-			)}
-			{preview?.warnings.map((warning, index) => (
-				<p className="dynamics-warning" key={`${warning.fixture_id}-${index}`}>
-					Fixture {warning.fixture_id} has no Stage position and follows saved
-					selection order.
-				</p>
-			))}
 		</section>
 	);
 }

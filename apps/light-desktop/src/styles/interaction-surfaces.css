@@ -1559,3 +1559,35 @@
 .ui-number-modal .ui-number-enter {
 	grid-column: span 2;
 }
+
+.group-projection-columns {
+	display: grid;
+	grid-template-columns: minmax(14rem, 1fr) minmax(15rem, 1fr);
+	gap: 1rem;
+	align-items: start;
+}
+
+.group-projection-visual {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.25rem;
+}
+
+.group-projection-visual small {
+	color: #85929d;
+	font-size: 0.68rem;
+}
+
+.group-projection-settings {
+	display: flex;
+	flex-direction: column;
+	gap: 0.55rem;
+	min-width: 0;
+}
+
+@media (width <= 58rem) {
+	.group-projection-columns {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}

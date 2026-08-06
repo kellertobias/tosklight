@@ -161,7 +161,9 @@ export function GroupsWindow({
 			)}
 			{settingsTarget && (
 				<GroupSettingsDialog
-					key={`${settingsTarget.id}:${settingsTarget.revision}`}
+					// Keyed on identity only: the dialog tracks the authoritative revision itself, and
+					// remounting on every edit threw the operator back to the first tab.
+					key={settingsTarget.id}
 					group={settingsTarget}
 					groups={model.groups}
 					onClose={() => setSettingsGroup(null)}

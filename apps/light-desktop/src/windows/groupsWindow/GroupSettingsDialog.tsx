@@ -2,6 +2,7 @@ import {
 	Button,
 	ColorPickerField,
 	FormLayout,
+	MultiValueToggleField,
 	IconPickerField,
 	TextField,
 	NumberField as UiNumberField,
@@ -392,7 +393,6 @@ function ProjectionSettingsPanel(
 		group,
 		mappingPresentation,
 		displayedMapping,
-		resolvedSpatial,
 		status,
 		saving,
 		canEditMapping,
@@ -430,11 +430,6 @@ function ProjectionSettingsPanel(
 					mapping.
 				</p>
 			)}
-			<MappingPreview
-				title="Projected-position preview"
-				fixtures={group.body.fixtures.length}
-				resolved={resolvedSpatial}
-			/>
 			<SaveStatus status={status} saving={saving} />
 		</section>
 	);
@@ -540,7 +535,12 @@ function ProjectionEditor({
 	return (
 		<fieldset disabled={disabled} className="group-mapping-fields">
 			<legend>Projection</legend>
-			<ProjectionStagePreview projection={projection} />
+			<div className="group-projection-columns">
+			<div className="group-projection-visual">
+				<ProjectionStagePreview projection={projection} />
+				<small>Drag to orbit</small>
+			</div>
+			<div className="group-projection-settings">
 			<SelectField
 				label="Projection"
 				value={kind}
@@ -584,6 +584,8 @@ function ProjectionEditor({
 			<p className="group-mapping-help">
 				{PROJECTION_KINDS.find((entry) => entry.value === kind)?.detail}
 			</p>
+			</div>
+			</div>
 		</fieldset>
 	);
 }
@@ -603,28 +605,25 @@ function PhaseEditor({
 	return (
 		<fieldset disabled={disabled} className="group-mapping-fields">
 			<legend>Phase ordering</legend>
-			<div
+			<MultiValueToggleField
 				className="group-shape-choices"
-				role="radiogroup"
-				aria-label="Ordering mode"
-			>
-				{(["grid", "radial", "radar"] as const).map((type) => (
-					<Button
-						key={type}
-						role="radio"
-						aria-checked={shape.type === type}
-						onClick={() => updateShape(defaultShape(type))}
-					>
-						{titleCase(type)}
-					</Button>
-				))}
-			</div>
+				label="Ordering mode"
+				value={shape.type}
+				options={[
+					{ value: "grid", label: "Grid" },
+					{ value: "radial", label: "Radial" },
+					{ value: "radar", label: "Radar" },
+				]}
+				onChange={(type) =>
+					updateShape(defaultShape(type as SpatialSelectionShape["type"]))
+				}
+			/>
 			<p className="group-mapping-help">
 				Orders the projected plane for every Dynamic inheriting from this Group.
 				Linear and Random order a Dynamic's own targets, so they are set per
 				Dynamic rather than here.
 			</p>
-			<div className="group-vector-fields">
+			<FormLayout labelPlacement="top">
 				{shape.type === "grid" && (
 					<>
 						<NumberField
@@ -707,7 +706,7 @@ function PhaseEditor({
 						/>
 					</>
 				)}
-			</div>
+			</FormLayout>
 		</fieldset>
 	);
 }

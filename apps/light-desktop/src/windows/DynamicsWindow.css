@@ -1245,12 +1245,66 @@
 	grid-column: 1 / -1;
 }
 
+.dynamic-projection-columns {
+	display: grid;
+	grid-template-columns: minmax(15rem, 1fr) minmax(16rem, 1fr);
+	gap: 1rem;
+	align-items: start;
+}
+
+.dynamic-projection-visual {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.25rem;
+}
+
+.dynamic-projection-visual small {
+	color: #85929d;
+	font-size: 0.68rem;
+}
+
+@media (width <= 60rem) {
+	.dynamic-projection-columns {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
 .projection-stage-preview {
 	width: 100%;
-	max-width: 260px;
+	max-width: 20rem;
 	height: auto;
-	margin: 0 auto;
 	display: block;
+	touch-action: none;
+	cursor: grab;
+	background: #0b1116;
+	border: 1px solid #25313b;
+	border-radius: 0.4rem;
+}
+
+.projection-stage-preview:active {
+	cursor: grabbing;
+}
+
+.projection-stage-preview:focus-visible {
+	outline: 2px solid var(--cyan);
+	outline-offset: 2px;
+}
+
+.projection-stage-surface {
+	fill: rgb(78 220 255 / 12%);
+	stroke: rgb(78 220 255 / 55%);
+	stroke-width: 1.5;
+}
+
+.projection-stage-surface-line {
+	fill: none;
+	stroke: rgb(78 220 255 / 50%);
+	stroke-width: 1.2;
+}
+
+.projection-stage-arrowhead {
+	fill: #f2b134;
 }
 
 .projection-stage-box line {
@@ -1258,18 +1312,14 @@
 	stroke-width: 1;
 }
 
-.projection-stage-sphere {
-	fill: none;
-	stroke: #3d4c57;
-	stroke-dasharray: 3 3;
-}
-
 .projection-stage-axis {
+	fill: none;
 	stroke: var(--cyan, #4fd1e0);
 	stroke-width: 2;
 }
 
 .projection-stage-start {
+	fill: none;
 	stroke: #f2b134;
 	stroke-width: 2;
 }

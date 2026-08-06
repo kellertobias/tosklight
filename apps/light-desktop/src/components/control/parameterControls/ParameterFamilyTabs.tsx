@@ -1,3 +1,5 @@
+import { dynamicSpatialDraft } from "../../../features/dynamics/dynamicSpatialDraft";
+import { projectionKind } from "../../../features/spatialMapping/projectionKinds";
 import { Button } from "@tosklight/ui";
 import { EncoderGroupTabs } from "@tosklight/ui/encoders";
 import type { DynamicDefinitionProjection } from "../../../api/types";
@@ -230,6 +232,7 @@ function ConnectedDynamicEditorTaskTabs({
 function DynamicEditorTaskTabsView({
 	activeTask,
 	onTask,
+	dynamic,
 	page,
 	onPage,
 	pageCount,
@@ -254,6 +257,14 @@ function DynamicEditorTaskTabsView({
 					pageCount,
 				},
 				{
+					id: "projection",
+					label: "Projection",
+					compactLabel: "Proj",
+					// Planar fits on one page; the angular kinds place on page one and
+					// orient on page two, whatever the encoder width.
+					pageCount: projectionPageCount(dynamic),
+				},
+				{
 					id: "phase",
 					label: "Phase",
 					compactLabel: "Phase",
@@ -269,4 +280,12 @@ function DynamicEditorTaskTabsView({
 			}}
 		/>
 	);
+}
+
+/** Two pages once a projection has an orientation to configure, one otherwise. */
+function projectionPageCount(dynamic?: DynamicDefinitionProjection) {
+	const stage = dynamicSpatialDraft(dynamic?.spatial_mapping).projection;
+	const kind =
+		stage.type === "replace" ? projectionKind(stage.value) : "planar";
+	return kind === "planar" ? 1 : 2;
 }

@@ -221,6 +221,35 @@ describe("GroupsWindow action routing", () => {
 		]);
 	});
 
+	it("stays on the open settings tab when an edit bumps the Group revision", () => {
+		vi.useFakeTimers();
+		const view = render(<GroupsWindow />);
+		const card = buttonForText("Stored Empty");
+		fireEvent.pointerDown(card);
+		act(() => vi.advanceTimersByTime(600));
+		fireEvent.pointerUp(card);
+
+		fireEvent.click(screen.getByRole("tab", { name: "Projection" }));
+		expect(screen.getByRole("tab", { name: "Projection" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		);
+
+		// Every mapping edit bumps the revision. Remounting on that threw the operator
+		// back to General mid-edit. Restored afterwards: these mocks are shared.
+		const original = mocks.groups[0].revision;
+		try {
+			mocks.groups[0].revision = original + 11;
+			view.rerender(<GroupsWindow />);
+			expect(screen.getByRole("tab", { name: "Projection" })).toHaveAttribute(
+				"aria-selected",
+				"true",
+			);
+		} finally {
+			mocks.groups[0].revision = original;
+		}
+	});
+
 	it("refuses every apparent empty-slot interaction while runtime loads", () => {
 		mocks.runtimeReady = false;
 		mocks.state.storeArmed = true;

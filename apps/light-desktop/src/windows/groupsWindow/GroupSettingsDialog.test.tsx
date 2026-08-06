@@ -113,6 +113,9 @@ describe("Group settings modal", () => {
 		await waitFor(() =>
 			expect(screen.getByText("Inherited from Group 2")).toBeInTheDocument(),
 		);
+		// Ranks belong to the ordering, so they are shown on Phase; the Projection tab
+		// shows the projection itself instead of a list of projected coordinates.
+		fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
 		expect(screen.getByText(/1 authoritative ranks/)).toBeInTheDocument();
 		expect(screen.getByText("U 1.25 · V -2.5")).toBeInTheDocument();
 		expect(settings).toHaveBeenCalledWith("4");

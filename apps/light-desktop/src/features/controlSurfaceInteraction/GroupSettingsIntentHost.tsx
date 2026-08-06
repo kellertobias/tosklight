@@ -35,7 +35,7 @@ export function GroupSettingsIntentHost() {
 	const group = groups.find((candidate) => candidate.id === objectId);
 	return group ? (
 		<GroupSettingsDialog
-			key={`${group.id}:${group.revision}`}
+			key={group.id}
 			group={group}
 			groups={groups}
 			onClose={() => setObjectId(null)}
