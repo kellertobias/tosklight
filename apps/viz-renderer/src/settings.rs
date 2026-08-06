@@ -984,11 +984,13 @@ mod launch_order {
     /// a remembered document, the planning window — may take precedence over what it is told.
     #[test]
     fn nothing_overrides_being_a_helper() {
-        let mut options = Options::default();
-        options.helper = true;
-        options.demo = true;
-        options.desk_requested = true;
-        options.show = Some(PathBuf::from("/shows/tour.show"));
+        let options = Options {
+            helper: true,
+            demo: true,
+            desk_requested: true,
+            show: Some(PathBuf::from("/shows/tour.show")),
+            ..Options::default()
+        };
         assert_eq!(options.startup(), Startup::Helper);
     }
 
