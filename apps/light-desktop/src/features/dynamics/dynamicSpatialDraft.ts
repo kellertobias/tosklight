@@ -115,7 +115,7 @@ function validateShape(shape: DynamicMappingShape) {
 				? [shape.center_u, shape.center_v]
 				: [shape.center_u, shape.center_v, shape.start_angle_degrees];
 	return values.some((value) => !Number.isFinite(value))
-		? "Every Phaser value must be finite."
+		? "Every Phase value must be finite."
 		: null;
 }
 

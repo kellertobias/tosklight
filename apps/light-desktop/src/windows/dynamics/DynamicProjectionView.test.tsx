@@ -105,9 +105,9 @@ describe("DynamicProjectionView", () => {
 		expect(
 			screen.getByRole("heading", { name: "Projection stage" }),
 		).toBeTruthy();
-		expect(screen.getByRole("heading", { name: "Phaser shape" })).toBeTruthy();
+		expect(screen.getByRole("heading", { name: "Phase shape" })).toBeTruthy();
 		const shape = screen
-			.getByRole("heading", { name: "Phaser shape" })
+			.getByRole("heading", { name: "Phase shape" })
 			.closest("section");
 		if (!shape) throw new Error("missing Shape section");
 		fireEvent.click(within(shape).getByRole("radio", { name: "Override" }));

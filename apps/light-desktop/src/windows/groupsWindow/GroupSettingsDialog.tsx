@@ -293,9 +293,9 @@ function GroupSettingsWindow({
 					),
 				},
 				{
-					id: "phaser",
-					label: "Phaser",
-					content: <PhaserSettingsPanel {...commonPanelProps} />,
+					id: "phase",
+					label: "Phase",
+					content: <PhaseSettingsPanel {...commonPanelProps} />,
 				},
 			]}
 		/>
@@ -430,7 +430,7 @@ function ProjectionSettingsPanel(
 	);
 }
 
-function PhaserSettingsPanel({
+function PhaseSettingsPanel({
 	group,
 	mappingPresentation,
 	displayedMapping,
@@ -447,13 +447,13 @@ function PhaserSettingsPanel({
 				source={groupSourceSummary(group.body)}
 			/>
 			{displayedMapping ? (
-				<PhaserEditor
+				<PhaseEditor
 					mapping={displayedMapping}
 					disabled={!canEditMapping || saving}
 					onChange={(next) => void commitMapping(next)}
 				/>
 			) : (
-				<p className="group-mapping-empty">No Phaser mapping is configured.</p>
+				<p className="group-mapping-empty">No Phase mapping is configured.</p>
 			)}
 			<MappingPreview
 				title="Ranked preview"
@@ -593,7 +593,7 @@ function ProjectionEditor({
 	);
 }
 
-function PhaserEditor({
+function PhaseEditor({
 	mapping,
 	disabled,
 	onChange,
@@ -607,7 +607,7 @@ function PhaserEditor({
 	const shape = mapping.shape;
 	return (
 		<fieldset disabled={disabled} className="group-mapping-fields">
-			<legend>Phaser mapping</legend>
+			<legend>Phase mapping</legend>
 			<div className="group-shape-choices" role="radiogroup" aria-label="Shape">
 				{(["grid", "radial", "radar"] as const).map((type) => (
 					<Button

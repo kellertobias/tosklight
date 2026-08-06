@@ -217,7 +217,7 @@ describe("GroupsWindow action routing", () => {
 		expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
 			"General",
 			"Projection",
-			"Phaser",
+			"Phase",
 		]);
 	});
 

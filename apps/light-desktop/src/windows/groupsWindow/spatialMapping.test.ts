@@ -91,7 +91,7 @@ describe("Group spatial mapping presentation", () => {
 			sweep: "clockwise",
 		};
 		expect(validateSpatialMapping(nonFinite)).toBe(
-			"Every projection and Phaser value must be a finite number.",
+			"Every projection and Phase value must be a finite number.",
 		);
 	});
 });

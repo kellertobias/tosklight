@@ -7,7 +7,7 @@ use std::{
 
 /// Opaque identity of the semantic source whose assignment produced a sampled value.
 ///
-/// This identifies ownership only. It deliberately does not describe a Dynamics, Phaser, or
+/// This identifies ownership only. It deliberately does not describe a Dynamics, Phase, or
 /// fixed-value product model.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ContributionSourceId(SourceIdentity);

@@ -118,14 +118,14 @@ describe("Group settings modal", () => {
 		expect(settings).toHaveBeenCalledWith("4");
 	});
 
-	it("has only General, Projection, and Phaser plus an X close control", () => {
+	it("has only General, Projection, and Phase plus an X close control", () => {
 		renderDialog();
 		const dialog = screen.getByRole("dialog", { name: "Group 4 settings" });
 		expect(
 			within(dialog)
 				.getAllByRole("tab")
 				.map((tab) => tab.textContent),
-		).toEqual(["General", "Projection", "Phaser"]);
+		).toEqual(["General", "Projection", "Phase"]);
 		expect(
 			within(dialog).getByRole("button", { name: "Close settings" }),
 		).toBeInTheDocument();
@@ -180,11 +180,11 @@ describe("Group settings modal", () => {
 		).toBeDisabled();
 	});
 
-	it("sends one complete revisioned mapping when a Phaser shape changes", async () => {
+	it("sends one complete revisioned mapping when a Phase shape changes", async () => {
 		const target = group({ mapping: defaultSpatialMapping() });
 		settings.mockResolvedValue(settingsSnapshot(target));
 		renderDialog(target);
-		fireEvent.click(screen.getByRole("tab", { name: "Phaser" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
 		fireEvent.click(screen.getByRole("radio", { name: "Radial" }));
 
 		await waitFor(() => expect(manage).toHaveBeenCalledOnce());

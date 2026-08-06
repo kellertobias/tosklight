@@ -77,7 +77,7 @@ test("GROUP-SPATIAL-010 @ui › Group settings author ranked output without reti
 	await expect(dialog.getByRole("tab")).toHaveText([
 		"General",
 		"Projection",
-		"Phaser",
+		"Phase",
 	]);
 	await expect(
 		dialog.getByRole("button", { name: "Close settings" }),
@@ -103,7 +103,7 @@ test("GROUP-SPATIAL-010 @ui › Group settings author ranked output without reti
 		)
 		.toBe("top");
 
-	await dialog.getByRole("tab", { name: "Phaser" }).click();
+	await dialog.getByRole("tab", { name: "Phase" }).click();
 	await dialog.getByRole("radio", { name: "Radial" }).click();
 	await expect
 		.poll(

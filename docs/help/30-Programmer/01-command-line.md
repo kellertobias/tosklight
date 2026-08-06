@@ -428,7 +428,7 @@ To configure an assigned page playback, press `[SET]` and then tap the playback,
 | Action | Command | Result |
 | --- | --- | --- |
 | Assign a Cuelist | `[SET] <Cuelist-number> [AT] <page> [ . ] <playback-number> [ENTER]` | Assign a Cuelist to a playback on a page. |
-| Open Group settings | `[SET] [GRP] <Group-number> [ENTER]` | Open General, Projection, and Phaser settings for that explicit Group. |
+| Open Group settings | `[SET] [GRP] <Group-number> [ENTER]` | Open General, Projection, and Phase settings for that explicit Group. |
 | Assign a Group Master | `[SET]`, choose the Group, then press the destination Playback | Create or replace that physical or Virtual Playback with a Group Master targeting the explicit Group. |
 | Configure a Cuelist | `[SET] <Cuelist-number> [ENTER]` | Open the Cuelist configuration. |
 | Configure a page playback | `[SET] <page> [ . ] <playback-number> [ENTER]` | Open the configuration for the playback at that page position. |

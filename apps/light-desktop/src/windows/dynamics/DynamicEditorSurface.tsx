@@ -136,7 +136,7 @@ function DynamicEditorHeader({
 					},
 					{
 						id: "phase",
-						label: "Phaser",
+						label: "Phase",
 						active: view === "phase",
 						onClick: () => onChangeView("phase"),
 					},

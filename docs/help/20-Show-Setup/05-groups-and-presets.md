@@ -12,7 +12,7 @@ Plain-click a Group to select its live membership. Double-press it quickly to se
 members as frozen fixtures. Right-click, touch-hold, or enter `[SET] [GRP] <number> [ENTER]` to open
 the same Group settings modal. **General** contains only name, icon, and color. **Projection** maps
 Stage X/Y/Z positions into a 2D plane using an anchor, view direction, rotation, and the named
-Top/Front/Back/Left/Right presets. **Phaser** ranks that plane as Grid, Radial, or Radar. Fixtures
+Top/Front/Back/Left/Right presets. **Phase** ranks that plane as Grid, Radial, or Radar. Fixtures
 that share a rank receive the same point of a `THRU` spread; members without a valid Stage position
 remain visible and receive individual fallback ranks.
 

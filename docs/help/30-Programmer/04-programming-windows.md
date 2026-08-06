@@ -7,7 +7,7 @@ Use the window that gives the clearest view of the current task; all of them ope
 | Stage | Spatial selection, 2D/3D visualization, and Preload following. |
 | Fixtures | Fixture/head rows, attributes, source ownership, ordering, and active/Cuelist filters. |
 | Channels | Channel-oriented value and source inspection. |
-| Groups | Reusable ordered selections, references, projection, and phaser ranking. |
+| Groups | Reusable ordered selections, references, projection, and phase ranking. |
 | Presets | Mixed, Intensity, Color, Position, and Beam pools. |
 | Dynamics | Numbered Dynamic pool, Lanes, Phase, Speed, targets, and running state. |
 | Cuelists / Cues | Cue content, order, timing, triggers, tracking, and execution. |
@@ -21,7 +21,7 @@ The Dynamics editor separates target ordering from phase distribution. **Project
 the saved live Group's mapping and can override projection, shape, or both without changing the
 Group. Returning either stage to **Inherit** reveals the current Group stage immediately. Frozen or
 targetless Dynamics instead show **Selection order (no Group mapping)**. **Random** ignores fixture
-positions and projection. Incomplete spatial overrides cannot be applied. **Phaser** continues to
+positions and projection. Incomplete spatial overrides cannot be applied. **Phase** continues to
 own offset, span, anchors, blocks, repeats, wings, and uniform/per-lane phase behavior.
 
 With an empty programmer selection, the first ordinary tap on a populated Preset selects every

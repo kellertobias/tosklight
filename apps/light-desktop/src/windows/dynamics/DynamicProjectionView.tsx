@@ -254,7 +254,7 @@ function ShapeControls({
 }) {
 	return (
 		<section className="dynamic-projection-card">
-			<h3>Phaser shape</h3>
+			<h3>Phase shape</h3>
 			<RadioField
 				label="Inherit"
 				stateLabel="Inherit"

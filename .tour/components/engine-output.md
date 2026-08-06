@@ -53,7 +53,7 @@ state, does not read the fixture library, and does not write persistence. CI ban
 
 ## crates/light/domain/playback
 
-Cue models, tracking, live runtime, automatic transitions, phasers, HTP/LTP arbitration.
+Cue models, tracking, live runtime, automatic transitions, phases, HTP/LTP arbitration.
 `PlaybackEngine`, `resolve`, `PlaybackMutation`, `PlaybackRuntimeEffect`,
 `AutomaticPlaybackTransition`, `PlaybackTickResult`.
 

@@ -252,12 +252,12 @@ describe("DynamicsWindow", () => {
 		).toBeInTheDocument();
 	});
 
-	it("uses the production selection preview and Phaser footer", () => {
+	it("uses the production selection preview and Phase footer", () => {
 		dynamics = [dynamicObject()];
 		const { container } = renderWindow();
 
 		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
-		fireEvent.click(screen.getByRole("button", { name: "Phaser" }));
+		fireEvent.click(screen.getByRole("button", { name: "Phase" }));
 
 		expect(
 			container.querySelector('aside[aria-label="Selection preview"]'),
@@ -551,7 +551,7 @@ describe("DynamicsWindow", () => {
 		dynamics = [dynamicObject({ multipleLanes: true })];
 		renderWindow();
 		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
-		fireEvent.click(screen.getByRole("button", { name: "Phaser" }));
+		fireEvent.click(screen.getByRole("button", { name: "Phase" }));
 
 		expect(
 			screen.getByRole("radiogroup", { name: "Ordering mode" }),
@@ -592,7 +592,7 @@ describe("DynamicsWindow", () => {
 		dynamics = [object];
 		renderWindow();
 		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
-		fireEvent.click(screen.getByRole("button", { name: "Phaser" }));
+		fireEvent.click(screen.getByRole("button", { name: "Phase" }));
 
 		const lanePicker = screen.getByLabelText("Dynamic phase lane");
 		expect(lanePicker).toHaveTextContent("Lane 1 · intensity");

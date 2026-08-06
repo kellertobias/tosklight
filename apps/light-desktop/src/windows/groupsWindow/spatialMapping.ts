@@ -173,7 +173,7 @@ export function validateSpatialMapping(mapping: SpatialSelectionMapping) {
 					]),
 	];
 	if (values.some((value) => !Number.isFinite(value)))
-		return "Every projection and Phaser value must be a finite number.";
+		return "Every projection and Phase value must be a finite number.";
 	const direction = mapping.projection.view_direction;
 	if (Math.hypot(direction.x, direction.y, direction.z) <= 1e-12)
 		return "View direction must not be zero.";
