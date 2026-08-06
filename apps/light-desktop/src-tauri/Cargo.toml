@@ -9,6 +9,7 @@ authors.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+viz-helper = { path = "../../../crates/viz/helper" }
 tauri = { version = "2", features = [] }
 serde.workspace = true
 serde_json.workspace = true

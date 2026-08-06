@@ -3335,6 +3335,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tokio",
+ "viz-helper",
 ]
 
 [[package]]

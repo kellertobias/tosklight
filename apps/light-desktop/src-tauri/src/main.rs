@@ -5,10 +5,12 @@ mod lifecycle;
 mod menu;
 mod packaged_benchmark;
 mod server;
+mod visualizer;
 mod windows;
 
 fn main() {
     tauri::Builder::default()
+        .manage(visualizer::Visualizer::default())
         .on_menu_event(menu::handle_event)
         .invoke_handler(tauri::generate_handler![
             windows::list_console_displays,
@@ -16,6 +18,9 @@ fn main() {
             windows::close_console_screen,
             windows::hide_console_screen,
             windows::open_stage_view_window,
+            visualizer::open_visualizer,
+            visualizer::close_visualizer,
+            visualizer::visualizer_state,
             lifecycle::exit_desktop_app,
             lifecycle::cancel_quit,
             lifecycle::frontend_ready,
