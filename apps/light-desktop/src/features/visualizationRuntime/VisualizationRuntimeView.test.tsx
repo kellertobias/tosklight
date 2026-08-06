@@ -237,7 +237,12 @@ describe("VisualizationRuntimeProvider", () => {
 		await waitFor(() =>
 			expect(screen.getByText("normal:ready:1")).toBeInTheDocument(),
 		);
-		expect(mirrorTransport.loadSnapshot).not.toHaveBeenCalled();
+		// One authoritative read per newly claimed lane is the deliberate bootstrap: a stream may
+		// legally stay silent until the first change, so without it a secondary window waits
+		// forever for an initial snapshot. It is a direct read from this window's own transport,
+		// which is the opposite of cloning the owner's state — that is what the assertion below
+		// pins, and it is the part that must never regress.
+		expect(mirrorTransport.loadSnapshot).toHaveBeenCalledTimes(1);
 		expect(
 			TestBroadcastChannel.messages.some(
 				(message) =>

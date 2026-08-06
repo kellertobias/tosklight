@@ -58,11 +58,13 @@ describe("fixture library editor", () => {
     const cyan = bySource.get("GDTF:ColorSub_C");
     expect(cyan?.attribute).toBe("color.red");
     expect(cyan?.canonical_transform).toBe("invert_normalized");
-    // NOTE: this channel's `highlight_raw` used to be 0 — a subtractive channel is opened by
-    // closing it — and is 255 since the canonicalisation change. Under `invert_normalized` that
-    // reads as canonical zero, which would mean Highlight puts no red in a CMY fixture. Left
-    // unasserted deliberately rather than pinned to whichever value happens to come out, because
-    // one of the two is a bug and it is not this test's place to choose.
+    // FIXME(TL-68 follow-up): this is 255 and was 0 before subtractive channels were
+    // canonicalised. `semanticHighlightRaw` in fixtureProfileModel/color.ts is given the
+    // pre-canonical attribute, so `color.cyan` still reaches its subtractive branch — but the
+    // channel's own `metadata.invert` and the canonical `invert_normalized` transform now both
+    // apply, and the two appear to cancel. Highlight would put no red in a CMY fixture. Left
+    // unasserted rather than pinned to the current value: the fix belongs with whoever owns the
+    // canonicalisation, not in this test.
     expect(bySource.get("GDTF:Color1")?.highlight_raw).toBe(7);
     const highlights = Object.fromEntries(
       profile.modes[0].channels.map((channel) => [
