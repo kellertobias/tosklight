@@ -21,7 +21,13 @@ pub trait PresentationSurface {
 pub struct Gpu {
     pub device: Arc<Device>,
     pub queue: Arc<Queue>,
-    pub surface: Surface<'static>,
+    /// The swapchain this renders into, or `None` when there is no window at all.
+    ///
+    /// A headless renderer still draws every pass exactly as an interactive one does — the frame
+    /// path already renders into a supplied texture view whenever a capture is requested, and
+    /// takes the swapchain only when one is not. So "headless" is the absence of a surface and
+    /// nothing else: same scene projection, same materials, same lighting, same quality tiers.
+    pub surface: Option<Surface<'static>>,
     pub config: SurfaceConfiguration,
     pub format: TextureFormat,
     pub adapter_name: String,
@@ -64,7 +70,65 @@ impl Gpu {
         Ok(Self {
             device: Arc::new(device),
             queue: Arc::new(queue),
-            surface,
+            surface: Some(surface),
+            config,
+            format,
+            adapter_name: info.name,
+            backend: format!("{:?}", info.backend),
+            timestamps,
+            samples,
+        })
+    }
+
+    /// A renderer with no window, for deterministic capture on a machine that has no display.
+    ///
+    /// The adapter is chosen without a compatible surface, and a software adapter is accepted when
+    /// no hardware one answers, because a build machine is exactly where that happens. It fails
+    /// loudly rather than quietly producing nothing: a capture that silently did not render is
+    /// indistinguishable from one that rendered a black stage.
+    pub fn headless(width: u32, height: u32) -> Result<Self, String> {
+        let mut descriptor = InstanceDescriptor::new_without_display_handle();
+        descriptor.backends = Backends::from_env().unwrap_or(Backends::PRIMARY);
+        let instance = Instance::new(descriptor);
+        let adapter = pollster::block_on(instance.request_adapter(&RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: None,
+            force_fallback_adapter: false,
+            ..Default::default()
+        }))
+        .or_else(|_| {
+            pollster::block_on(instance.request_adapter(&RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::LowPower,
+                compatible_surface: None,
+                force_fallback_adapter: true,
+                ..Default::default()
+            }))
+        })
+        .map_err(|error| {
+            format!("no GPU or software adapter is available for headless rendering: {error}")
+        })?;
+        let info = adapter.get_info();
+        let timestamps = adapter.features().contains(wgpu::Features::TIMESTAMP_QUERY);
+        let samples = preferred_sample_count(&adapter);
+        let (device, queue) = Self::open_device(&adapter, timestamps)?;
+        // Straight RGBA, so a capture is byte-identical wherever it runs rather than depending on
+        // whatever channel order a swapchain would have preferred on this machine.
+        let format = TextureFormat::Rgba8UnormSrgb;
+        let config = SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format,
+            width: width.max(1),
+            height: height.max(1),
+            present_mode: wgpu::PresentMode::Fifo,
+            desired_maximum_frame_latency: 1,
+            alpha_mode: wgpu::CompositeAlphaMode::Opaque,
+            view_formats: Vec::new(),
+            color_space: wgpu::SurfaceColorSpace::Auto,
+        };
+        Ok(Self {
+            device: Arc::new(device),
+            queue: Arc::new(queue),
+            surface: None,
             config,
             format,
             adapter_name: info.name,
@@ -101,12 +165,16 @@ impl Gpu {
         }
         self.config.width = width;
         self.config.height = height;
-        self.surface.configure(&self.device, &self.config);
+        if let Some(surface) = &self.surface {
+            surface.configure(&self.device, &self.config);
+        }
     }
 
-    /// Reconfigure after a recoverable surface loss.
+    /// Reconfigure after a recoverable surface loss. A headless renderer has nothing to lose.
     pub fn reconfigure(&self) {
-        self.surface.configure(&self.device, &self.config);
+        if let Some(surface) = &self.surface {
+            surface.configure(&self.device, &self.config);
+        }
     }
 
     pub fn aspect(&self) -> f32 {

@@ -9,7 +9,7 @@
 //! projects what is currently in it.
 
 pub mod preview;
-mod wire;
+pub mod wire;
 
 #[cfg(test)]
 mod tests;

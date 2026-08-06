@@ -1,0 +1,24 @@
+[package]
+name = "viz-capture"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[[bin]]
+name = "viz-capture"
+path = "src/main.rs"
+
+[dependencies]
+light-application = { path = "../../light" }
+png.workspace = true
+serde_json.workspace = true
+viz-desk = { path = "../desk" }
+viz-dmx.workspace = true
+viz-project.workspace = true
+viz-document = { path = "../document" }
+viz-planning = { path = "../planning" }
+viz-render = { path = "../render" }
+viz-scene = { path = "../scene" }
+
+[lints]
+workspace = true

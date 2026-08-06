@@ -191,13 +191,26 @@ impl Renderer {
         Self::with_icon(target, None)
     }
 
+    /// A renderer with no window, for deterministic capture on a machine with no display.
+    ///
+    /// Everything downstream of the device is identical to an interactive renderer — the same
+    /// scene projection, materials, lighting, fixture models and quality tiers — because the only
+    /// thing missing is the swapchain. Use [`Self::capture`] to get frames out of it;
+    /// [`Self::render`] has nowhere to present and says so rather than silently drawing nothing.
+    pub fn headless(width: u32, height: u32) -> Result<Self, String> {
+        Self::build(Gpu::headless(width, height)?, None)
+    }
+
     /// Build the renderer with the application icon the overlay draws in its corner. The icon is
     /// `RGBA8`, [`crate::overlay::ICON_SIZE`] square; anything else leaves the corner empty.
     pub fn with_icon(
         target: &dyn PresentationSurface,
         icon: Option<&[u8]>,
     ) -> Result<Self, String> {
-        let gpu = Gpu::new(target)?;
+        Self::build(Gpu::new(target)?, icon)
+    }
+
+    fn build(gpu: Gpu, icon: Option<&[u8]>) -> Result<Self, String> {
         let device = gpu.device.clone();
         // Timed only where the adapter can time a pass; elsewhere there is simply no reading.
         let timer = crate::timing::GpuTimer::new(&gpu.device, &gpu.queue, gpu.timestamps);
@@ -682,7 +695,13 @@ impl Renderer {
 
     /// Acquire the next presentable texture, recovering once from a lost or outdated surface.
     fn acquire(&mut self) -> Result<wgpu::SurfaceTexture, RenderError> {
-        match self.gpu.surface.get_current_texture() {
+        let Some(surface) = self.gpu.surface.as_ref() else {
+            return Err(RenderError::Surface(
+                "this renderer is headless and has no window to present to; capture instead"
+                    .to_owned(),
+            ));
+        };
+        match surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(texture)
             | wgpu::CurrentSurfaceTexture::Suboptimal(texture) => Ok(texture),
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
@@ -690,7 +709,7 @@ impl Renderer {
             }
             wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
                 self.gpu.reconfigure();
-                match self.gpu.surface.get_current_texture() {
+                match surface.get_current_texture() {
                     wgpu::CurrentSurfaceTexture::Success(texture)
                     | wgpu::CurrentSurfaceTexture::Suboptimal(texture) => Ok(texture),
                     other => Err(RenderError::Surface(format!("{other:?}"))),

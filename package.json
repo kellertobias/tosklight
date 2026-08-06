@@ -31,6 +31,7 @@
     "open:viz-editor": "bash tools/build.sh open-viz-editor",
     "build:viz-editor": "bash tools/build.sh build-viz-editor",
     "demo-show": "bash tools/build.sh demo-show",
+    "demo-capture": "bash tools/build.sh demo-capture",
     "bundle": "bash tools/build.sh archive",
     "bundle:install": "bash tools/build.sh archive install",
     "manual": "bash tools/build.sh manual",

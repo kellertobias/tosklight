@@ -30,6 +30,7 @@ tools/build.sh is invoked by the root package.json scripts:
   npm run open:viz-editor      Build the Viz rig-planning editor and open it
   npm run build:viz-editor     Build the Viz rig-planning editor only
   npm run demo-show            Generate the canonical demo show from the shipped fixture packages
+  npm run demo-capture         Render demo-show frames with the native core, with no window
   npm run manual               Build PDF and deployable HTML manuals from docs/help Markdown
   npm run icons:contact-sheets Refresh Help contact-sheet PNGs from assets/icons SVGs
   npm run models               Rebuild assets/models GLBs with Blender and check the import contract
@@ -48,7 +49,7 @@ tools/build.sh is invoked by the root package.json scripts:
                                Remove only stale Cargo incremental objects
   npm run artifact-path NAME   Print a resolved artifact path (for CI and tooling)
 
-Direct subcommands: open | open-viz [ARGS...] | build-viz | open-viz-editor [ARGS...] | build-viz-editor | demo-show | manual | icon-contact-sheets | models [verify|render|open] | safari | pages | pages-serve [PORT] | codesafari |
+Direct subcommands: open | open-viz [ARGS...] | build-viz | open-viz-editor [ARGS...] | build-viz-editor | demo-show | demo-capture | manual | icon-contact-sheets | models [verify|render|open] | safari | pages | pages-serve [PORT] | codesafari |
   archive [install] | migrate-artifacts | clean-root | clean-cargo-incremental | clean-artifacts [runtime PATH] | path NAME
 EOF
 }
@@ -503,6 +504,21 @@ build_demo_show() {
     --library "$LIGHT_TMP_DIR/demo-show-fixtures.sqlite"
 }
 
+# Frames of the demo show, rendered by the native core with no window.
+#
+# This is what the demo video is composited from. It opens no WebView and needs no display, so it
+# runs the same on a build machine as it does here.
+capture_demo() {
+  require cargo
+  build_demo_show
+  echo "Capturing the demo show..."
+  cargo build --release --manifest-path "$ROOT/Cargo.toml" -p viz-capture --bin viz-capture
+  "$TARGET_DIR/release/viz-capture" \
+    --show "$LIGHT_DEMO_SHOW_DIR/demo-show.show" \
+    --output "$LIGHT_DEMO_SHOW_DIR/frames" \
+    "$@"
+}
+
 # The Viz editor is the planning window for a standalone visualizer session: the desk's patch
 # sheet over a show file, with no desk running. Like the visualizer, it is a separate product and
 # opening ToskLight never builds it.
@@ -642,6 +658,10 @@ case "${1:-}" in
   demo-show)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
     build_demo_show
+    ;;
+  demo-capture)
+    shift
+    capture_demo "$@"
     ;;
   icon-contact-sheets)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
