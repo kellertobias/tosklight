@@ -18,7 +18,7 @@ pub fn euler_degrees(rotation: Vec3) -> Quat {
 ///
 /// `emitters` is flattened across every fixture so the renderer and the projection layer can
 /// address one light-producing head by a stable index without walking a tree per frame.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct Scene {
     pub revision: u64,
     pub show_id: Option<Uuid>,
@@ -89,7 +89,7 @@ impl Scene {
 /// Square and single-channel by the time it gets here. A gate is a disc a few hundred pixels
 /// across at most, so every piece of glass is resampled to one size on the way in and the
 /// renderer can hold the whole library of them in one array.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GoboArtwork {
     pub edge: u32,
     /// `edge * edge` transmission values, row by row.
@@ -98,7 +98,7 @@ pub struct GoboArtwork {
 
 /// One physical fixture instance. Multi-patch instances of one logical fixture each appear here
 /// with their own transform while sharing `fixture_id`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FixtureInstance {
     pub instance_id: Uuid,
     pub fixture_id: Uuid,
@@ -152,7 +152,7 @@ impl FixtureInstance {
 }
 
 /// Bounded proxy dimensions used when no model asset resolves.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FixtureBody {
     /// Metres.
     pub size: Vec3,
@@ -169,7 +169,7 @@ impl Default for FixtureBody {
 }
 
 /// Broad body silhouette. The renderer draws a matching procedural proxy.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum BodyKind {
     Generic,
     /// Static lantern on a hook clamp: profile, Fresnel, PAR, flood, cyc.
@@ -185,7 +185,7 @@ pub enum BodyKind {
 }
 
 /// One light-producing head projected into flat renderer form.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct EmitterInstance {
     /// Index into [`Scene::fixtures`].
     pub fixture_index: u32,
@@ -230,7 +230,7 @@ pub struct EmitterInstance {
 ///
 /// The scan engine works in a normalised square and knows nothing about the fixture it is running
 /// in; these are the numbers that turn its output into rays in the room.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct LaserOptics {
     /// The fixture's scan engine, as source text. Absent when the profile ships no script, which
     /// leaves the laser dark and diagnosed rather than guessing a pattern for it.
@@ -287,7 +287,7 @@ impl LaserOptics {
 /// soft halo, a Fresnel something in between. These are the numbers that carry that difference —
 /// the beam angle sits beside them on the emitter, and the desk's own controls (zoom, iris, focus,
 /// frost, shapers) are applied on top of them per frame.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct EmitterOptics {
     /// Relative output, `1.0` being an ordinary fixture of its class. A 400 W engine against a
     /// 100 W one, not a dimmer level.
@@ -322,7 +322,7 @@ impl Default for EmitterOptics {
 }
 
 /// One slot on a declared gobo wheel.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GoboSlot {
     /// Index into [`Scene::gobo_artwork`], or `None` for a slot that declares none — the open
     /// slot, and any slot whose artwork could not be read.
@@ -336,7 +336,7 @@ pub struct GoboSlot {
 /// This belongs to the fixture rather than to one patched instance: every Source Four of the same
 /// type has the same lens. A point-source spot has a small round one; a cyc flood a wide
 /// rectangular one; a PAR an oval.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct LightSource {
     pub form: SourceForm,
     /// Metres, across the head's own X axis.
@@ -372,7 +372,7 @@ impl Default for LightSource {
 }
 
 /// The outline of the emitting surface.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum SourceForm {
     #[default]
     Round,
@@ -393,7 +393,7 @@ impl EmitterInstance {
 }
 
 /// How an emitter is allowed to appear.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum EmitterKind {
     /// Projects a beam: aperture, aim, cone, surface hit, and volumetric shaft.
     Beam,
@@ -412,7 +412,7 @@ pub enum EmitterKind {
 }
 
 /// Resolved pixel-cell offsets, metres, fixture-local.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct EmitterLayoutCells {
     pub offsets: Vec<Vec3>,
 }
@@ -434,7 +434,7 @@ impl EmitterLayoutCells {
 }
 
 /// One rotation binding driven by a decoded fixture parameter.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct MotionAxis {
     /// Rotation axis in the parent node's space.
     pub axis: Vec3,
@@ -451,7 +451,7 @@ impl MotionAxis {
 }
 
 /// Visual-only stage object that occludes and receives light.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SceneryObject {
     pub id: Uuid,
     pub name: String,
@@ -467,7 +467,7 @@ pub struct SceneryObject {
     pub chords: u8,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum SceneryKind {
     Floor,
     Wall,
@@ -483,7 +483,7 @@ pub enum SceneryKind {
 }
 
 /// Axis-aligned bounds used for orthographic framing and volumetric bounds.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Aabb {
     pub min: Vec3,
     pub max: Vec3,

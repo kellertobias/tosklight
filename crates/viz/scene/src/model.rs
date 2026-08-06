@@ -14,7 +14,7 @@
 use glam::{Mat4, Quat, Vec3};
 
 /// One fixture model, already flattened into world-of-the-fixture space.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct FixtureModel {
     pub parts: Vec<ModelPart>,
     /// Bounding half-extent in metres, used to scale a model authored at another size.
@@ -69,7 +69,7 @@ impl FixtureModel {
 }
 
 /// Which moving part of a fixture a piece of geometry belongs to.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ModelPartKind {
     /// Bolted to the truss: never moves.
     #[default]
@@ -97,7 +97,7 @@ impl ModelPartKind {
 }
 
 /// One drawable piece of a model.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct ModelPart {
     pub name: String,
     pub kind: ModelPartKind,
@@ -118,7 +118,7 @@ pub struct ModelPart {
 }
 
 /// Why a model could not be read.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ModelError(pub String);
 
 impl std::fmt::Display for ModelError {

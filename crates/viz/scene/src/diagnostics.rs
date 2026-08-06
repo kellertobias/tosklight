@@ -4,7 +4,7 @@
 use std::fmt;
 
 /// Where the current connection stands. Every variant is presentable text.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ConnectionState {
     Idle,
     Resolving {
@@ -70,22 +70,24 @@ impl fmt::Display for ConnectionState {
 }
 
 /// Why a fixture, model, or optical attribute fell back to generic behaviour.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FallbackReason {
-    pub boundary: &'static str,
+    /// Owned rather than `&'static str` because this crosses the helper channel, and a borrowed
+    /// string cannot be read back out of a pipe. Constructed from a literal as before.
+    pub boundary: std::borrow::Cow<'static, str>,
     pub detail: String,
 }
 
 impl FallbackReason {
     pub fn new(boundary: &'static str, detail: impl Into<String>) -> Self {
         Self {
-            boundary,
+            boundary: std::borrow::Cow::Borrowed(boundary),
             detail: detail.into(),
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum SourceProtocol {
     ArtNet,
     Sacn,
@@ -101,7 +103,7 @@ impl SourceProtocol {
 }
 
 /// Health of one configured input mapping.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum InputHealth {
     /// Bound, but no valid frame has arrived yet.
     Waiting,
@@ -126,7 +128,7 @@ impl InputHealth {
 }
 
 /// Observable per-mapping counters.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct InputMappingStatus {
     pub mapping_id: String,
     pub protocol: SourceProtocol,
@@ -151,7 +153,18 @@ pub struct InputMappingStatus {
 ///
 /// This lives on the provider boundary rather than in the DMX crate because the render core shows
 /// it and a future source that is not Art-Net or sACN still has to answer the same question.
-#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum UniverseGrade {
     /// Bound, but nothing has arrived yet.
     #[default]
@@ -176,7 +189,7 @@ impl UniverseGrade {
 }
 
 /// Health of one logical universe, as the operator's status bar shows it.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct UniverseHealth {
     pub universe: u16,
     pub rate_hz: f32,
@@ -188,7 +201,7 @@ pub struct UniverseHealth {
 }
 
 /// Everything the connection surface must be able to show.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct ProviderDiagnostics {
     pub endpoint: String,
     pub resolved_address: String,

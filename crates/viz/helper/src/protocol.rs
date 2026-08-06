@@ -280,3 +280,65 @@ mod value_plane {
         assert_eq!(arrived.laser_scans[0].slots, vec![1, 2, 3]);
     }
 }
+
+#[cfg(test)]
+mod scene_plane {
+    use super::*;
+
+    /// The rig itself crossing the channel.
+    ///
+    /// Sent when the show changes rather than every frame, but it is the message everything else
+    /// is addressed against: values name emitters by position in this scene, so a scene that
+    /// arrived wrong lights the wrong fixtures rather than failing visibly.
+    #[test]
+    fn a_scene_with_real_bounds_survives_the_channel() {
+        let mut scene = viz_scene::Scene {
+            revision: 9,
+            show_name: "Demo Show".to_owned(),
+            source_identity: "the desk".to_owned(),
+            ..viz_scene::Scene::default()
+        };
+        // A rig with something in it has finite bounds. See below for why that matters.
+        scene.bounds = viz_scene::Aabb {
+            min: viz_scene::glam::Vec3::ZERO,
+            max: viz_scene::glam::Vec3::splat(4.0),
+        };
+
+        let carried = ToHelper::Scene {
+            payload: serde_json::to_vec(&scene).expect("the scene encodes"),
+        };
+        let decoded: ToHelper = decode(&encode(&carried).expect("encodes")).expect("decodes");
+        let ToHelper::Scene { payload } = decoded else {
+            panic!("the message changed shape crossing the channel");
+        };
+        let arrived: viz_scene::Scene = serde_json::from_slice(&payload).expect("decodes");
+
+        assert_eq!(arrived.revision, 9);
+        assert_eq!(arrived.show_name, "Demo Show");
+        assert_eq!(arrived.source_identity, "the desk");
+        assert!(arrived.fixtures.is_empty(), "an empty rig stays empty");
+    }
+
+    /// JSON cannot carry an empty scene, and this is where that is written down.
+    ///
+    /// An empty `Aabb` is infinities — that is how "nothing has been included yet" is represented,
+    /// and it is correct. JSON has no infinity: `serde_json` writes `null` and then refuses to
+    /// read it back as a number. So a desk that opened the visualizer before loading a show would
+    /// send a scene the helper cannot decode.
+    ///
+    /// The fix is a binary format for this channel rather than special-casing the bounds — it is a
+    /// private pipe between two processes of the same build, so JSON buys nothing here and cannot
+    /// represent the values the renderer actually uses. Pinned as a failing capability rather than
+    /// worked around, so the format decision is made deliberately.
+    #[test]
+    fn an_empty_scene_cannot_cross_a_json_channel() {
+        let scene = viz_scene::Scene::default();
+        let payload = serde_json::to_vec(&scene).expect("infinities encode, as null");
+        let refused = serde_json::from_slice::<viz_scene::Scene>(&payload);
+        assert!(
+            refused.is_err(),
+            "if this now round-trips, JSON grew infinity support or the bounds changed shape — \
+             either way the channel format decision can be revisited"
+        );
+    }
+}

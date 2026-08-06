@@ -4,7 +4,7 @@ use crate::scene::Aabb;
 use glam::Vec3;
 
 /// The eight named modes. Source-visible names and wire values map one to one.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ViewMode {
     TopDown,
     LeftToRight,
@@ -111,7 +111,9 @@ impl ViewMode {
 
 /// Bounded rendering cost tier. Independent from [`ViewMode`]; `Full3d` at `Draft` still renders
 /// volumetrics, just with a smaller budget.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(
+    Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
 pub enum RenderQuality {
     Draft,
     Standard,
@@ -196,7 +198,7 @@ impl RenderQuality {
 }
 
 /// Camera described without Euler-order ambiguity.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Camera {
     pub position: Vec3,
     pub target: Vec3,
@@ -261,7 +263,7 @@ impl Camera {
 ///
 /// A rendered stage is naturally light on dark. A stage plot is traditionally printed dark on
 /// light, and gets taken into a rehearsal room on paper, so both have to look deliberate.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Theme {
     LightOnDark,
     DarkOnLight,
@@ -337,7 +339,7 @@ impl Theme {
 }
 
 /// Complete view state applied by the renderer.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ViewConfiguration {
     pub mode: ViewMode,
     pub camera: Camera,
