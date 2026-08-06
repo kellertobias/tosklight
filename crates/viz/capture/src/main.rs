@@ -308,3 +308,122 @@ fn number(arguments: &mut impl Iterator<Item = String>, flag: &str) -> Result<u3
         .parse()
         .map_err(|_| format!("{flag} needs a whole number"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use viz_scene::BodyKind;
+
+    /// The generated demo show, built exactly as a capture builds it.
+    fn demo_scene(name: &str) -> Scene {
+        let directory = std::env::var_os("LIGHT_TMP_DIR").map_or_else(
+            || PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../.artifacts/tmp"),
+            PathBuf::from,
+        );
+        // One workspace per test: these run in parallel and each builds its own library.
+        let workspace = directory.join("viz-capture-golden").join(name);
+        let _ = std::fs::remove_dir_all(&workspace);
+        std::fs::create_dir_all(&workspace).expect("workspace");
+        let library = light_fixture::FixtureLibrary::open(workspace.join("fixtures.sqlite"))
+            .expect("library");
+        library
+            .load_fixture_package_directory(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../assets/fixture-library"),
+            )
+            .expect("the shipped packages load");
+        let show = workspace.join("demo-show.show");
+        viz_demo::generate(library, &show).expect("the demo generates");
+        let (scene, _bindings, _preview) = scene_from(&show).expect("the scene builds");
+        scene
+    }
+
+    fn body_of(scene: &Scene, name: &str) -> BodyKind {
+        scene
+            .fixtures
+            .iter()
+            .find(|fixture| fixture.name.starts_with(name))
+            .unwrap_or_else(|| panic!("the demo rig has no fixture named {name}"))
+            .body
+            .kind
+    }
+
+    /// The golden scene the plan asks for: every class the renderer has to draw, resolving to the
+    /// body it is meant to resolve to rather than merely to something visible.
+    ///
+    /// A fixture package that loses its type, or a fallback that starts answering `Generic`, turns
+    /// a Sunstrip into a box or a scanner into a lantern — visible in a capture, and invisible in
+    /// a test that only counted fixtures.
+    #[test]
+    fn every_demo_fixture_class_resolves_to_its_intended_body() {
+        let scene = demo_scene("bodies");
+        for (fixture, expected) in [
+            // Moving fixtures are bodies with a yoke, whatever else they are.
+            ("Wash", BodyKind::MovingHead),
+            ("Profile", BodyKind::MovingHead),
+            ("Beam", BodyKind::MovingHead),
+            // Bars of cells.
+            ("Sunstrip", BodyKind::Bar),
+            ("Blinder", BodyKind::Bar),
+            ("JDC1", BodyKind::Bar),
+            // Static lanterns on a clamp.
+            ("FOH", BodyKind::Lantern),
+            ("PAR", BodyKind::Lantern),
+            // Machines that make no light of their own, and the laser, which is its own thing.
+            ("Hazer", BodyKind::Machine),
+            ("Laser", BodyKind::Machine),
+        ] {
+            assert_eq!(
+                body_of(&scene, fixture),
+                expected,
+                "{fixture} resolved to the wrong body"
+            );
+        }
+    }
+
+    /// A scanner is a mirror-mover: the head does not move, the mirror does. The fallback only
+    /// calls a fixture moving when it has pan and tilt on the body, so a scanner draws as a static
+    /// lantern with a beam that swings off-axis from a box that never turns.
+    ///
+    /// Pinned as the current behaviour rather than asserted as correct. TL-68 requires a scanner to
+    /// resolve to its intended body rather than to any visible proxy, and `BodyKind` has no scanner
+    /// case to resolve to — so the gap is in the model, and this is where it will be noticed if
+    /// somebody closes it.
+    #[test]
+    fn a_scanner_has_no_body_of_its_own_yet() {
+        assert_eq!(
+            body_of(&demo_scene("scanner"), "Scanner"),
+            BodyKind::Lantern
+        );
+    }
+
+    /// Nothing in the demo rig may fall through to the shapeless default: `Generic` means the
+    /// projection could not tell what the fixture was, which is the failure this guards.
+    #[test]
+    fn no_demo_fixture_falls_through_to_a_shapeless_body() {
+        let scene = demo_scene("shapeless");
+        let shapeless: Vec<&str> = scene
+            .fixtures
+            .iter()
+            .filter(|fixture| fixture.body.kind == BodyKind::Generic)
+            .map(|fixture| fixture.name.as_str())
+            .collect();
+        assert!(
+            shapeless.is_empty(),
+            "these fixtures resolved to no recognisable body: {shapeless:?}"
+        );
+    }
+
+    /// A capture of the demo has to have something to light. An empty or unpatched rig renders a
+    /// dark stage, which is indistinguishable from a broken renderer in a still frame.
+    #[test]
+    fn the_demo_scene_carries_emitters_for_every_fixture() {
+        let scene = demo_scene("emitters");
+        assert!(!scene.fixtures.is_empty(), "the demo rig is empty");
+        assert!(
+            scene.emitters.len() >= scene.fixtures.len(),
+            "{} fixtures produced only {} emitters",
+            scene.fixtures.len(),
+            scene.emitters.len()
+        );
+    }
+}

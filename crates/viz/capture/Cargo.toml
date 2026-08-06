@@ -20,5 +20,9 @@ viz-planning = { path = "../planning" }
 viz-render = { path = "../render" }
 viz-scene = { path = "../scene" }
 
+[dev-dependencies]
+light-fixture = { path = "../../shared/fixture" }
+viz-demo = { path = "../demo" }
+
 [lints]
 workspace = true

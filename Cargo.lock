@@ -7480,8 +7480,10 @@ name = "viz-capture"
 version = "0.1.0"
 dependencies = [
  "light-application",
+ "light-fixture",
  "png 0.18.1",
  "serde_json",
+ "viz-demo",
  "viz-desk",
  "viz-dmx",
  "viz-document",
