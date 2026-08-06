@@ -263,8 +263,9 @@ pub(super) struct DeskConfiguration {
     /// Allow Show Patch's scoped Stage preview selection to identify fixtures on DMX.
     pub(super) patch_preview_highlight_dmx: bool,
     /// Installation-wide semantic Highlight contribution. A missing field means the installation
-    /// predates this ownership boundary and its portable raw overrides require review.
-    #[serde(default = "legacy_highlight_look")]
+    /// predates this ownership boundary and simply adopts the semantic default look; a show that
+    /// really carries raw overrides is still caught by the compatibility scanner when it opens.
+    #[serde(default)]
     pub(super) highlight_look: light_fixture::HighlightLook,
     /// An explicit installation-wide decision to ignore preserved legacy raw maps. This remains
     /// false for fresh defaults until a legacy show is actually encountered and reviewed.
@@ -360,6 +361,17 @@ impl DeskConfiguration {
         }
     }
 
+    /// An installation whose Highlight Look was only ever flagged for review, without an operator
+    /// ever confirming legacy raw output, adopts the semantic look. Nothing is lost: opening a
+    /// show that genuinely stores raw Highlight overrides raises the review requirement again.
+    pub(super) fn migrate_highlight_look(&mut self) {
+        if self.highlight_look.compatibility
+            == light_fixture::HighlightLookCompatibility::NeedsReview
+        {
+            self.highlight_look.compatibility = light_fixture::HighlightLookCompatibility::Semantic;
+        }
+    }
+
     pub(super) fn validate(&self) -> Result<(), ApiError> {
         if !(40..=60).contains(&self.frame_rate_hz) {
             return Err(ApiError::bad_request("frame_rate_hz must be 40-60"));
@@ -417,10 +429,6 @@ impl DeskConfiguration {
     }
 }
 
-fn legacy_highlight_look() -> light_fixture::HighlightLook {
-    light_fixture::HighlightLook::needs_review()
-}
-
 pub(super) fn wire_configuration_value(
     configuration: &DeskConfiguration,
 ) -> Result<serde_json::Value, ApiError> {
@@ -470,18 +478,42 @@ mod highlight_look_tests {
     use super::*;
 
     #[test]
-    fn fresh_configuration_is_semantic_but_missing_persisted_field_needs_review() {
+    fn fresh_and_legacy_configuration_use_the_semantic_white_default_look() {
+        let fresh = DeskConfiguration::default();
         assert_eq!(
-            DeskConfiguration::default().highlight_look.compatibility,
+            fresh.highlight_look.compatibility,
             light_fixture::HighlightLookCompatibility::Semantic
+        );
+        assert_eq!(fresh.highlight_look.intensity, 1.0);
+        assert_eq!(
+            fresh.highlight_look.color,
+            Some(light_fixture::HighlightColor::White)
         );
 
         let mut legacy = serde_json::to_value(DeskConfiguration::default()).unwrap();
         legacy.as_object_mut().unwrap().remove("highlight_look");
         let decoded: DeskConfiguration = serde_json::from_value(legacy).unwrap();
+        assert_eq!(decoded.highlight_look, fresh.highlight_look);
+    }
+
+    #[test]
+    fn an_unresolved_review_flag_migrates_to_the_semantic_look() {
+        let mut configuration = DeskConfiguration::default();
+        configuration.highlight_look.compatibility =
+            light_fixture::HighlightLookCompatibility::NeedsReview;
+        configuration.migrate_highlight_look();
         assert_eq!(
-            decoded.highlight_look.compatibility,
-            light_fixture::HighlightLookCompatibility::NeedsReview
+            configuration.highlight_look.compatibility,
+            light_fixture::HighlightLookCompatibility::Semantic
+        );
+
+        // A desk that really is running the legacy raw path keeps it until the operator decides.
+        configuration.highlight_look.compatibility =
+            light_fixture::HighlightLookCompatibility::LegacyRaw;
+        configuration.migrate_highlight_look();
+        assert_eq!(
+            configuration.highlight_look.compatibility,
+            light_fixture::HighlightLookCompatibility::LegacyRaw
         );
     }
 

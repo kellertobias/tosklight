@@ -84,7 +84,7 @@ impl Engine {
             group_master_flashes: RwLock::new(HashMap::new()),
             group_master_transitions: Mutex::new(HashMap::new()),
             highlighted_fixtures: RwLock::new(HashSet::new()),
-            highlight_look: RwLock::new(HighlightLook::needs_review()),
+            highlight_look: RwLock::new(HighlightLook::default()),
             clock,
         }
     }

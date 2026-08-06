@@ -21,12 +21,12 @@ import type { SetupWindowController } from "./controller";
 
 const DEFAULT_HIGHLIGHT_LOOK: HighlightLookConfiguration = {
 	intensity: 1,
-	color: null,
+	color: "white",
 	iris: null,
 	zoom: null,
 	focus: null,
 	frost: null,
-	compatibility: "needs_review",
+	compatibility: "semantic",
 };
 
 const COLOR_OPTIONS: Array<{

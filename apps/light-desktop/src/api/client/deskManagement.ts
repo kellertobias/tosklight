@@ -254,12 +254,12 @@ function configurationPatch(
 			configuration.patch_preview_highlight_dmx ?? false,
 		highlight_look: configuration.highlight_look ?? {
 			intensity: 1,
-			color: null,
+			color: "white",
 			iris: null,
 			zoom: null,
 			focus: null,
 			frost: null,
-			compatibility: "needs_review",
+			compatibility: "semantic",
 		},
 		matter_enabled: configuration.matter_enabled ?? false,
 		...(configuration.pool_presentation
