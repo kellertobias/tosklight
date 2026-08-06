@@ -10,7 +10,7 @@
 //! playback and the output engine with it. Run as a child it takes its own window and nothing
 //! else, and the desk says what happened.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use viz_helper::{HelperState, SupervisedHelper};
 
@@ -125,6 +125,7 @@ pub(crate) fn visualizer_state(visualizer: tauri::State<'_, Visualizer>) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn a_missing_visualizer_says_how_to_get_one() {

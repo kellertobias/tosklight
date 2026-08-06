@@ -105,6 +105,23 @@ impl SupervisedHelper {
         &self.state
     }
 
+    /// The channel to the running helper, taken once.
+    ///
+    /// Taken rather than borrowed because the two ends go to whatever drives them — typically a
+    /// reader thread and the desk's own loop — and two writers on one pipe would interleave halves
+    /// of different frames.
+    pub fn take_channel(
+        &mut self,
+    ) -> Option<(std::process::ChildStdin, std::process::ChildStdout)> {
+        let child = self.child.as_mut()?;
+        match (child.stdin.take(), child.stdout.take()) {
+            (Some(to_helper), Some(from_helper)) => Some((to_helper, from_helper)),
+            // Already taken, or the child was started without pipes. Either way there is no
+            // channel to hand out a second time.
+            _ => None,
+        }
+    }
+
     /// Start the helper, clearing any history of it having failed.
     ///
     /// This is the operator asking for it, so it is also how a helper that gave up is given
@@ -117,12 +134,14 @@ impl SupervisedHelper {
     }
 
     fn spawn(&mut self) -> Result<(), String> {
-        // The helper gets no inherited stdin and its output is its own: a child writing over the
-        // desk's console would be the desk's problem, which is the opposite of isolation.
+        // Stdin and stdout are the private channel: the desk writes scene, values and view down
+        // one and reads the helper's answers up the other. Stderr is discarded rather than
+        // inherited — a child writing over the desk's console would be the desk's problem, which
+        // is the opposite of isolation.
         let child = Command::new(&self.program)
             .args(&self.arguments)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
             .map_err(|error| format!("could not start {}: {error}", self.program.display()))?;
@@ -285,6 +304,38 @@ mod tests {
         let mut helper = sleeper();
         helper.start().expect("a fresh start");
         assert!(helper.state().is_running());
+    }
+
+    /// The channel is the whole reason the helper is a child rather than a thread, so a frame has
+    /// to survive the round trip through it. `cat` echoes whatever it is given.
+    #[test]
+    fn a_frame_survives_the_channel_to_a_running_helper() {
+        let mut helper = SupervisedHelper::new("/bin/cat", Vec::new());
+        helper.start().expect("cat starts");
+        let (mut to_helper, mut from_helper) = helper
+            .take_channel()
+            .expect("a channel to a running helper");
+
+        crate::framing::write_frame(&mut to_helper, b"a scene").expect("writes");
+        let echoed = crate::framing::read_frame(&mut from_helper).expect("reads");
+        assert_eq!(echoed, b"a scene");
+    }
+
+    #[test]
+    fn the_channel_is_handed_out_once() {
+        let mut helper = SupervisedHelper::new("/bin/cat", Vec::new());
+        helper.start().expect("cat starts");
+        assert!(helper.take_channel().is_some());
+        assert!(
+            helper.take_channel().is_none(),
+            "two writers on one pipe would interleave halves of different frames"
+        );
+    }
+
+    #[test]
+    fn a_helper_that_is_not_running_has_no_channel() {
+        let mut helper = sleeper();
+        assert!(helper.take_channel().is_none());
     }
 
     #[test]
