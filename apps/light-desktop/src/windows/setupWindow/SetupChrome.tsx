@@ -33,6 +33,20 @@ const SETUP_SECTIONS: ReadonlyArray<{
 	{ id: "preferences-others", label: "Others", group: "Preferences" },
 ];
 
+export type AttributeSettingsTab =
+	| "encoder-groups"
+	| "activation-groups"
+	| "attributes";
+
+export const ATTRIBUTE_SETTINGS_TABS: ReadonlyArray<{
+	id: AttributeSettingsTab;
+	label: string;
+}> = [
+	{ id: "encoder-groups", label: "Encoder groups" },
+	{ id: "activation-groups", label: "Attribute activation groups" },
+	{ id: "attributes", label: "Attributes" },
+];
+
 export function setupSectionLabel(section: SetupSection) {
 	return (
 		SETUP_SECTIONS.find((candidate) => candidate.id === section)?.label ??
@@ -67,6 +81,16 @@ export function SetupHeader({
 					],
 				]
 			: [
+					...(controller.section === "preferences-attributes"
+						? [
+								ATTRIBUTE_SETTINGS_TABS.map(({ id, label }) => ({
+									id: `attribute-tab-${id}`,
+									label,
+									active: controller.attributeTab === id,
+									onClick: () => controller.setAttributeTab(id),
+								})),
+							]
+						: []),
 					[
 						{
 							id: "save",

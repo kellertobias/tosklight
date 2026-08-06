@@ -17,7 +17,7 @@ import { useConfigurationActions } from "../../features/configuration/Configurat
 import { useDeskConfiguration } from "../../features/configuration/ConfigurationState";
 import { useDeskConnection } from "../../features/deskConnection/DeskConnectionContext";
 import { useProgrammingUpdate } from "../../features/programmingUpdate/ProgrammingUpdateProvider";
-import type { SetupSection } from "./SetupChrome";
+import type { AttributeSettingsTab, SetupSection } from "./SetupChrome";
 
 export function useSetupWindowController() {
 	const connection = useDeskConnection();
@@ -45,6 +45,8 @@ export function useSetupWindowController() {
 	const [fixtureLibraryOpen, setFixtureLibraryOpen] = useState(false);
 	const [deskLockSettingsOpen, setDeskLockSettingsOpen] = useState(false);
 	const [screenCanUndo, setScreenCanUndo] = useState(false);
+	const [attributeTab, setAttributeTab] =
+		useState<AttributeSettingsTab>("encoder-groups");
 	const screenUndo = useRef<(() => void) | null>(null);
 	const pendingSave = useRef<{
 		fields: DeskConfigurationField[];
@@ -158,6 +160,8 @@ export function useSetupWindowController() {
 	);
 
 	return {
+		attributeTab,
+		setAttributeTab,
 		deskLockSettingsOpen,
 		draft,
 		editDraft,

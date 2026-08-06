@@ -18,6 +18,19 @@ import {
 	projectPushTurnPlacements,
 } from "../../components/control/parameterControls/attributeEncoderPages";
 import { useFixtureLibrary } from "../../features/fixtureLibrary/FixtureLibraryContext";
+import { useScreensOptional } from "../../features/screens/ScreensContext";
+import {
+	ACTIVATION_PRESETS,
+	addActivationMember,
+	applyActivationPreset,
+	deleteActivationGroup,
+	removeActivationMember,
+	renameActivationGroup,
+} from "./activationPresets";
+import {
+	moveAttributeToSlot,
+	unplacedDescriptors,
+} from "./encoderLayoutModel";
 import type { SetupWindowController } from "./controller";
 
 const ENCODER_GROUPS: Array<{
@@ -39,9 +52,7 @@ export function AttributeRegistrySettings({
 }: {
 	controller: SetupWindowController;
 }) {
-	const [activeTab, setActiveTab] = useState<
-		"encoder-groups" | "activation-groups" | "custom-attributes"
-	>("encoder-groups");
+	const activeTab = controller.attributeTab;
 	const snapshot = controller.attributeConfiguration;
 	if (!snapshot)
 		return (
@@ -56,29 +67,6 @@ export function AttributeRegistrySettings({
 		controller.editAttributeConfiguration(configuration);
 	return (
 		<>
-			<div
-				className="attribute-settings-tabs"
-				role="tablist"
-				aria-label="Attributes & encoders"
-			>
-				{(
-					[
-						["encoder-groups", "Encoder groups"],
-						["activation-groups", "Attribute activation groups"],
-						["custom-attributes", "Custom attributes"],
-					] as const
-				).map(([id, label]) => (
-					<Button
-						key={id}
-						role="tab"
-						aria-selected={activeTab === id}
-						className={activeTab === id ? "active" : ""}
-						onClick={() => setActiveTab(id)}
-					>
-						{label}
-					</Button>
-				))}
-			</div>
 			{activeTab === "encoder-groups" && (
 				<article role="tabpanel">
 					<header>
@@ -87,7 +75,7 @@ export function AttributeRegistrySettings({
 							Browse the ordered controls that produce the desk's encoder pages.
 						</small>
 					</header>
-					<EncoderGroupsPreview snapshot={snapshot} onChange={update} />
+					<EncoderLayoutEditor snapshot={snapshot} onChange={update} />
 				</article>
 			)}
 			{activeTab === "activation-groups" && (
@@ -102,21 +90,17 @@ export function AttributeRegistrySettings({
 					<ActivationGroups snapshot={snapshot} onChange={update} />
 				</article>
 			)}
-			{activeTab === "custom-attributes" && (
+			{activeTab === "attributes" && (
 				<article role="tabpanel">
 					<header>
-						<b>Custom attributes</b>
+						<b>Attributes</b>
 						<small>
-							Create and edit show-owned attributes without mixing them into the
-							built-in registry.
+							Every attribute this show can program, grouped by encoder group.
+							Show-owned custom attributes are created and edited here too.
 						</small>
 					</header>
 					<SourceAttributeMappings descriptors={snapshot.descriptors} />
-					<AttributeGroups
-						snapshot={snapshot}
-						onChange={update}
-						mode="custom"
-					/>
+					<AttributeGroups snapshot={snapshot} onChange={update} mode="all" />
 				</article>
 			)}
 			{controller.attributeConfigurationError && (
@@ -226,14 +210,16 @@ function SourceAttributeMappings({
 	);
 }
 
-function EncoderGroupsPreview({
+function EncoderLayoutEditor({
 	snapshot,
 	onChange,
 }: {
 	snapshot: NonNullable<SetupWindowController["attributeConfiguration"]>;
 	onChange(configuration: AttributeConfiguration): void;
 }) {
-	const [width, setWidth] = useState<4 | 6>(6);
+	const screens = useScreensOptional();
+	const width = screens?.screens?.programmer_control_surface.visible_encoders ?? 6;
+	const [dragged, setDragged] = useState<string | null>(null);
 	const allDescriptors = projectedDescriptors(snapshot);
 	const descriptors = allDescriptors.filter(
 		(descriptor) => !descriptor.retired,
@@ -243,72 +229,164 @@ function EncoderGroupsPreview({
 		encoderControls,
 		new Set(descriptors.map(({ id }) => id)),
 		width,
-	).filter((group) => group.pages.length);
+	);
+	const unplaced = unplacedDescriptors(descriptors, snapshot.configuration);
+	const drop = (group: AttributeEncoderGroup, page: number, slot: number) => {
+		if (!dragged) return;
+		onChange(
+			moveAttributeToSlot(
+				snapshot.configuration,
+				descriptors,
+				dragged,
+				{ group, page, slot },
+				width,
+			),
+		);
+		setDragged(null);
+	};
 	return (
 		<section
 			className="attribute-layout-preview"
-			aria-label={`${width}-encoder layout preview`}
+			aria-label={`${width}-encoder layout editor`}
 		>
-			<fieldset className="attribute-layout-width">
-				<legend>Preview width</legend>
-				{([4, 6] as const).map((candidate) => (
-					<Button
-						key={candidate}
-						className={candidate === width ? "active" : ""}
-						aria-pressed={candidate === width}
-						onClick={() => setWidth(candidate)}
-					>
-						{candidate} encoders
-					</Button>
-				))}
-			</fieldset>
-			{groups.map((group) => (
-				<section key={group.id} className="attribute-layout-group">
-					<h3>{group.label}</h3>
-					{group.pages.map((page) => (
-						<div key={page.number} className="attribute-layout-page">
-							<b>Page {page.number}</b>
-							<div
-								className="attribute-layout-slots"
-								style={{
-									gridTemplateColumns: `repeat(${width}, minmax(0, 1fr))`,
-								}}
-							>
-								{page.slots.map((descriptor, index) => (
-									<div
-										key={descriptor?.id ?? `empty-${index}`}
-										className="attribute-layout-slot"
-									>
-										<small>E{index + 1}</small>
-										<strong>{descriptor?.label ?? "Unassigned"}</strong>
-										{descriptor?.push_turn_label && (
-											<small>Push-turn · {descriptor.push_turn_label}</small>
-										)}
-										{descriptor && (
-											<>
-												<small>
-													{descriptor.built_in ? "Built-in" : "Custom"}
-												</small>
-												<AttributeOrderActions
-													descriptor={descriptor}
-													descriptors={descriptors}
-													configuration={snapshot.configuration}
-													onChange={onChange}
-												/>
-												<details>
-													<summary>Details</summary>
-													<code>{descriptor.id}</code>
-												</details>
-											</>
-										)}
-									</div>
-								))}
+			<p className="attribute-layout-width-note">
+				{`${width} encoders per page, from Screens & playback → Encoder placement.`}
+			</p>
+			{ENCODER_GROUPS.map(({ id, label }) => {
+				const group = groups.find((candidate) => candidate.id === id);
+				const pages = group?.pages.length
+					? group.pages
+					: [{ number: 1, slots: Array.from({ length: width }, () => null) }];
+				return (
+					<section key={id} className="attribute-layout-group">
+						<h3>{label}</h3>
+						{pages.map((page) => (
+							<div key={page.number} className="attribute-layout-page">
+								<b>Page {page.number}</b>
+								<div
+									className="attribute-layout-slots"
+									style={{
+										gridTemplateColumns: `repeat(${width}, minmax(0, 1fr))`,
+									}}
+								>
+									{Array.from({ length: width }, (_, index) => {
+										const descriptor = page.slots[index] ?? null;
+										return (
+											<EncoderSlot
+												key={descriptor?.id ?? `${id}-${page.number}-${index}`}
+												descriptor={descriptor}
+												group={id}
+												page={page.number}
+												slot={index + 1}
+												descriptors={descriptors}
+												unplaced={unplaced}
+												configuration={snapshot.configuration}
+												width={width}
+												onChange={onChange}
+												onDragStart={setDragged}
+												onDrop={drop}
+											/>
+										);
+									})}
+								</div>
 							</div>
-						</div>
-					))}
-				</section>
-			))}
+						))}
+					</section>
+				);
+			})}
 		</section>
+	);
+}
+
+function EncoderSlot({
+	descriptor,
+	group,
+	page,
+	slot,
+	descriptors,
+	unplaced,
+	configuration,
+	width,
+	onChange,
+	onDragStart,
+	onDrop,
+}: {
+	descriptor:
+		| (ConfiguredAttributeDescriptor & { push_turn_label?: string | null })
+		| null;
+	group: AttributeEncoderGroup;
+	page: number;
+	slot: number;
+	descriptors: ConfiguredAttributeDescriptor[];
+	unplaced: ConfiguredAttributeDescriptor[];
+	configuration: AttributeConfiguration;
+	width: number;
+	onChange(configuration: AttributeConfiguration): void;
+	onDragStart(attribute: string | null): void;
+	onDrop(group: AttributeEncoderGroup, page: number, slot: number): void;
+}) {
+	return (
+		// biome-ignore lint/a11y/useSemanticElements: The slot is a drop target that already contains its own controls.
+		<div
+			className={`attribute-layout-slot ${descriptor ? "" : "is-unassigned"}`.trim()}
+			aria-label={`${group} page ${page} encoder ${slot}`}
+			draggable={Boolean(descriptor)}
+			onDragStart={() => descriptor && onDragStart(descriptor.id)}
+			onDragEnd={() => onDragStart(null)}
+			onDragOver={(event) => event.preventDefault()}
+			onDrop={(event) => {
+				event.preventDefault();
+				onDrop(group, page, slot);
+			}}
+		>
+			<small>E{slot}</small>
+			<strong>{descriptor?.label ?? "Unassigned"}</strong>
+			{descriptor?.push_turn_label && (
+				<small>Push-turn · {descriptor.push_turn_label}</small>
+			)}
+			{descriptor ? (
+				<>
+					<small>{descriptor.built_in ? "Built-in" : "Custom"}</small>
+					<AttributeOrderActions
+						descriptor={descriptor}
+						descriptors={descriptors}
+						configuration={configuration}
+						width={width}
+						onChange={onChange}
+					/>
+					<details>
+						<summary>Details</summary>
+						<code>{descriptor.id}</code>
+					</details>
+				</>
+			) : (
+				unplaced.length > 0 && (
+					<SelectField
+						ariaLabel={`Assign ${group} page ${page} encoder ${slot}`}
+						value=""
+						options={[
+							{ value: "", label: "Assign attribute" },
+							...unplaced.map((candidate) => ({
+								value: candidate.id,
+								label: candidate.label,
+							})),
+						]}
+						onChange={(value) =>
+							value &&
+							onChange(
+								moveAttributeToSlot(
+									configuration,
+									descriptors,
+									value,
+									{ group, page, slot },
+									width,
+								),
+							)
+						}
+					/>
+				)
+			)}
+		</div>
 	);
 }
 
@@ -316,16 +394,18 @@ function AttributeOrderActions({
 	descriptor,
 	descriptors,
 	configuration,
+	width = 6,
 	onChange,
 }: {
 	descriptor: ConfiguredAttributeDescriptor;
 	descriptors: ConfiguredAttributeDescriptor[];
 	configuration: AttributeConfiguration;
+	width?: number;
 	onChange(configuration: AttributeConfiguration): void;
 }) {
 	const move = (delta: -1 | 1) =>
 		onChange(
-			reorderAttribute(configuration, descriptors, descriptor.id, delta),
+			reorderAttribute(configuration, descriptors, descriptor.id, delta, width),
 		);
 	const companion = descriptors.find(
 		(candidate) => candidate.push_turn_of === descriptor.id,
@@ -431,6 +511,7 @@ export function reorderAttribute(
 	descriptors: ConfiguredAttributeDescriptor[],
 	attribute: string,
 	delta: -1 | 1,
+	width = 6,
 ) {
 	const ordered = descriptorsInGroup(descriptors, attribute);
 	const index = ordered.findIndex((descriptor) => descriptor.id === attribute);
@@ -447,8 +528,8 @@ export function reorderAttribute(
 			...ordered.map((descriptor, position) => ({
 				attribute: descriptor.id,
 				encoder_group: descriptor.encoder_group,
-				encoder_page: Math.floor(position / 6) + 1,
-				encoder_slot: (position % 6) + 1,
+				encoder_page: Math.floor(position / width) + 1,
+				encoder_slot: (position % width) + 1,
 				push_turn_of: descriptor.push_turn_of,
 			})),
 		],
@@ -462,13 +543,17 @@ function AttributeGroups({
 }: {
 	snapshot: NonNullable<SetupWindowController["attributeConfiguration"]>;
 	onChange(configuration: AttributeConfiguration): void;
-	mode: "built-in" | "custom";
+	mode: "built-in" | "custom" | "all";
 }) {
 	const [label, setLabel] = useState("");
 	const [group, setGroup] = useState<AttributeEncoderGroup>("intensity");
 	const descriptors = projectedDescriptors(snapshot);
 	const visibleDescriptors = descriptors.filter((descriptor) =>
-		mode === "built-in" ? descriptor.built_in : !descriptor.built_in,
+		mode === "all"
+			? true
+			: mode === "built-in"
+				? descriptor.built_in
+				: !descriptor.built_in,
 	);
 	const create = () => {
 		const trimmed = label.trim();
@@ -525,7 +610,7 @@ function AttributeGroups({
 					</ul>
 				</section>
 			))}
-			{mode === "custom" && (
+			{mode !== "built-in" && (
 				<>
 					<FormLayout labelPlacement="side">
 						<TextField
@@ -572,7 +657,7 @@ function AttributeRow({
 			<div>
 				<b>{custom?.label ?? descriptor.label}</b>
 				<small>
-					{descriptor.id} · page{" "}
+					{descriptor.built_in ? "Built-in" : "Custom"} · {descriptor.id} · page{" "}
 					{placement?.encoder_page ?? descriptor.encoder_page}, encoder{" "}
 					{placement?.encoder_slot ?? descriptor.encoder_slot}
 					{descriptor.retired ? " · Retired" : ""}
@@ -733,6 +818,15 @@ function ActivationGroups({
 	const descriptors = projectedDescriptors(snapshot);
 	const [name, setName] = useState("");
 	const [member, setMember] = useState(descriptors[0]?.id ?? "");
+	const label = (id: string) =>
+		descriptors.find((descriptor) => descriptor.id === id)?.label ?? id;
+	const unassigned = descriptors.filter(
+		(descriptor) =>
+			!descriptor.retired &&
+			!configuration.activation_groups.some((group) =>
+				group.members.includes(descriptor.id),
+			),
+	);
 	const create = () => {
 		const trimmed = name.trim();
 		if (!trimmed || !member) return;
@@ -754,16 +848,103 @@ function ActivationGroups({
 	};
 	return (
 		<>
-			<ul className="plain-list">
+			<div className="activation-presets">
+				<b>Start from a preset</b>
+				<div className="activation-preset-buttons">
+					{ACTIVATION_PRESETS.map((preset) => (
+						<Button
+							key={preset.id}
+							title={preset.detail}
+							onClick={() =>
+								onChange(
+									applyActivationPreset(
+										preset.id,
+										configuration,
+										descriptors,
+										restoreRecommendedActivationGroups(snapshot)
+											.activation_groups,
+									),
+								)
+							}
+						>
+							{preset.label}
+						</Button>
+					))}
+				</div>
+				<small>
+					A preset replaces the groups below; edit them freely afterwards.
+				</small>
+			</div>
+			<ul className="plain-list activation-group-list">
 				{configuration.activation_groups.map((group) => (
 					<li key={group.id}>
-						<div>
-							<b>{group.label}</b>
-							<small>{group.members.join(", ")}</small>
+						<div className="activation-group-header">
+							<TextField
+								aria-label={`${group.label} name`}
+								value={group.label}
+								onChange={(event) =>
+									onChange(
+										renameActivationGroup(
+											configuration,
+											group.id,
+											event.target.value,
+										),
+									)
+								}
+							/>
+							<Button
+								variant="danger"
+								aria-label={`Delete ${group.label}`}
+								onClick={() =>
+									onChange(deleteActivationGroup(configuration, group.id))
+								}
+							>
+								Delete
+							</Button>
+						</div>
+						<div className="activation-group-members">
+							{group.members.map((id) => (
+								<Button
+									key={id}
+									className="activation-member"
+									aria-label={`Remove ${label(id)} from ${group.label}`}
+									onClick={() =>
+										onChange(
+											removeActivationMember(configuration, group.id, id),
+										)
+									}
+								>
+									{label(id)} <span aria-hidden="true">×</span>
+								</Button>
+							))}
+							{unassigned.length > 0 && (
+								<SelectField
+									ariaLabel={`Add attribute to ${group.label}`}
+									value=""
+									options={[
+										{ value: "", label: "Add attribute" },
+										...unassigned.map((descriptor) => ({
+											value: descriptor.id,
+											label: descriptor.label,
+										})),
+									]}
+									onChange={(value) =>
+										value &&
+										onChange(
+											addActivationMember(configuration, group.id, value),
+										)
+									}
+								/>
+							)}
 						</div>
 					</li>
 				))}
 			</ul>
+			{!configuration.activation_groups.length && (
+				<p role="status">
+					No activation groups. Every attribute activates on its own.
+				</p>
+			)}
 			<FormLayout labelPlacement="side">
 				<TextField
 					label="New activation group"

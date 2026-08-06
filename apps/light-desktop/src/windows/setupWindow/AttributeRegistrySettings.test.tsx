@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AttributeConfigurationSnapshot } from "../../api/client/attributeConfiguration";
 import {
@@ -10,8 +11,46 @@ import {
 	updatePushTurnCompanion,
 } from "./AttributeRegistrySettings";
 import type { SetupWindowController } from "./controller";
+import { type AttributeSettingsTab, SetupHeader } from "./SetupChrome";
 
 afterEach(cleanup);
+
+/** The tabs live in the Desk Setup window title, so tests drive them from there. */
+function AttributeSettings({
+	controller,
+}: {
+	controller: Partial<SetupWindowController>;
+}) {
+	const [attributeTab, setAttributeTab] =
+		useState<AttributeSettingsTab>("encoder-groups");
+	const merged = {
+		section: "preferences-attributes",
+		...controller,
+		attributeTab,
+		setAttributeTab,
+	} as unknown as SetupWindowController;
+	return (
+		<>
+			<SetupHeader controller={merged} />
+			<AttributeRegistrySettings controller={merged} />
+		</>
+	);
+}
+
+function titleTabLabels() {
+	return screen
+		.getAllByRole("button")
+		.map((button) => button.textContent)
+		.filter((label): label is string =>
+			ATTRIBUTE_TAB_LABELS.includes(label ?? ""),
+		);
+}
+
+const ATTRIBUTE_TAB_LABELS = [
+	"Encoder groups",
+	"Attribute activation groups",
+	"Attributes",
+];
 
 const snapshot: AttributeConfigurationSnapshot = {
 	show_id: "show-29",
@@ -82,7 +121,7 @@ describe("Desk Setup attribute registry", () => {
 			"00000000-0000-4000-8000-000000000029",
 		);
 		render(
-			<AttributeRegistrySettings
+			<AttributeSettings
 				controller={
 					{
 						attributeConfiguration: snapshot,
@@ -96,19 +135,14 @@ describe("Desk Setup attribute registry", () => {
 		expect(
 			screen.getByText("intensity", { selector: "code" }),
 		).toBeInTheDocument();
-		expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
-			"Encoder groups",
-			"Attribute activation groups",
-			"Custom attributes",
-		]);
-		fireEvent.click(screen.getByRole("button", { name: "4 encoders" }));
-		const fourEncoderPreview = screen.getByLabelText(
-			"4-encoder layout preview",
-		);
+		expect(titleTabLabels()).toEqual(ATTRIBUTE_TAB_LABELS);
+		// The width now follows the configured encoder placement instead of a preview toggle.
+		expect(screen.queryByRole("button", { name: "4 encoders" })).toBeNull();
+		const layout = screen.getByLabelText("6-encoder layout editor");
 		expect(
-			fourEncoderPreview.querySelectorAll(".attribute-layout-slot"),
-		).toHaveLength(4);
-		fireEvent.click(screen.getByRole("tab", { name: "Custom attributes" }));
+			layout.querySelectorAll(".attribute-layout-slot.is-unassigned").length,
+		).toBeGreaterThan(0);
+		fireEvent.click(screen.getByRole("button", { name: "Attributes" }));
 		fireEvent.change(screen.getByLabelText("New custom attribute"), {
 			target: { value: "House Light" },
 		});
@@ -150,10 +184,111 @@ describe("Desk Setup attribute registry", () => {
 		});
 	});
 
+	it("assigns an unplaced attribute from an unassigned slot", () => {
+		const editAttributeConfiguration = vi.fn();
+		const spare = {
+			...snapshot.descriptors[0],
+			id: "haze",
+			label: "Haze",
+			encoder_group: "control" as const,
+			activation_group_id: "haze",
+		};
+		render(
+			<AttributeSettings
+				controller={
+					{
+						attributeConfiguration: {
+							...snapshot,
+							descriptors: [...snapshot.descriptors, spare],
+						},
+						attributeConfigurationError: null,
+						editAttributeConfiguration,
+					} as unknown as SetupWindowController
+				}
+			/>,
+		);
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "Assign control page 1 encoder 2" }),
+		);
+		fireEvent.click(screen.getByRole("option", { name: "Haze" }));
+		expect(editAttributeConfiguration).toHaveBeenCalledWith(
+			expect.objectContaining({
+				placements: expect.arrayContaining([
+					expect.objectContaining({
+						attribute: "haze",
+						encoder_group: "control",
+						encoder_page: 1,
+						encoder_slot: 1,
+					}),
+				]),
+			}),
+		);
+	});
+
+	it("moves a dragged encoder onto the dropped slot", () => {
+		const editAttributeConfiguration = vi.fn();
+		const second = {
+			...snapshot.descriptors[0],
+			id: "intensity.fade",
+			label: "Intensity Fade",
+			encoder_slot: 2,
+			activation_group_id: "intensity.fade",
+		};
+		render(
+			<AttributeSettings
+				controller={
+					{
+						attributeConfiguration: {
+							...snapshot,
+							configuration: {
+								...snapshot.configuration,
+								placements: [
+									...snapshot.configuration.placements,
+									{
+										attribute: second.id,
+										encoder_group: "intensity" as const,
+										encoder_page: 1,
+										encoder_slot: 2,
+									},
+								],
+							},
+							descriptors: [...snapshot.descriptors, second],
+						},
+						attributeConfigurationError: null,
+						editAttributeConfiguration,
+					} as unknown as SetupWindowController
+				}
+			/>,
+		);
+
+		const source = screen.getByLabelText("intensity page 1 encoder 2");
+		const target = screen.getByLabelText("intensity page 1 encoder 1");
+		fireEvent.dragStart(source);
+		fireEvent.drop(target);
+
+		expect(editAttributeConfiguration).toHaveBeenCalledWith(
+			expect.objectContaining({
+				placements: expect.arrayContaining([
+					expect.objectContaining({
+						attribute: "intensity.fade",
+						encoder_page: 1,
+						encoder_slot: 1,
+					}),
+					expect.objectContaining({
+						attribute: "intensity",
+						encoder_page: 1,
+						encoder_slot: 2,
+					}),
+				]),
+			}),
+		);
+	});
+
 	it("restores the server-projected recommended activation defaults", () => {
 		const editAttributeConfiguration = vi.fn();
 		render(
-			<AttributeRegistrySettings
+			<AttributeSettings
 				controller={
 					{
 						attributeConfiguration: snapshot,
@@ -165,7 +300,7 @@ describe("Desk Setup attribute registry", () => {
 		);
 
 		fireEvent.click(
-			screen.getByRole("tab", { name: "Attribute activation groups" }),
+			screen.getByRole("button", { name: "Attribute activation groups" }),
 		);
 		fireEvent.click(
 			screen.getByRole("button", { name: "Restore recommended defaults" }),
@@ -203,7 +338,7 @@ describe("Desk Setup attribute registry", () => {
 			descriptors: [...snapshot.descriptors, second],
 		};
 		render(
-			<AttributeRegistrySettings
+			<AttributeSettings
 				controller={
 					{
 						attributeConfiguration: configured,
@@ -274,7 +409,7 @@ describe("Desk Setup attribute registry", () => {
 		];
 		const editAttributeConfiguration = vi.fn();
 		render(
-			<AttributeRegistrySettings
+			<AttributeSettings
 				controller={
 					{
 						attributeConfiguration: {
@@ -301,7 +436,7 @@ describe("Desk Setup attribute registry", () => {
 		);
 	});
 
-	it("lists and retargets remembered fixture-source mappings under Custom attributes", async () => {
+	it("lists and retargets remembered fixture-source mappings under Attributes", async () => {
 		const rememberFixtureSourceMapping = vi.fn(async (input) =>
 			input.targetAttribute
 				? {
@@ -323,7 +458,7 @@ describe("Desk Setup attribute registry", () => {
 		} as unknown as FixtureLibraryState;
 		render(
 			<FixtureLibraryProvider library={library}>
-				<AttributeRegistrySettings
+				<AttributeSettings
 					controller={
 						{
 							attributeConfiguration: snapshot,
@@ -335,7 +470,7 @@ describe("Desk Setup attribute registry", () => {
 			</FixtureLibraryProvider>,
 		);
 
-		fireEvent.click(screen.getByRole("tab", { name: "Custom attributes" }));
+		fireEvent.click(screen.getByRole("button", { name: "Attributes" }));
 		expect(await screen.findByText("GDTF:Dimmer")).toBeVisible();
 		fireEvent.click(screen.getByRole("button", { name: "Forget mapping" }));
 

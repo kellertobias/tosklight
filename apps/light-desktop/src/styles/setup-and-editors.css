@@ -55,6 +55,64 @@
 .attribute-layout-slot > details {
 	color: var(--muted);
 }
+.attribute-layout-slot[draggable="true"] {
+	cursor: grab;
+}
+.attribute-layout-slot.is-unassigned {
+	border-style: dashed;
+	background: transparent;
+	color: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+.attribute-layout-slot.is-unassigned > strong {
+	font-weight: 500;
+}
+.attribute-layout-width-note {
+	margin: 0;
+	color: var(--muted);
+	font-size: 11px;
+}
+.activation-presets {
+	display: grid;
+	gap: 6px;
+	padding: 10px;
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	background: var(--panel2);
+}
+.activation-preset-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.activation-presets small {
+	color: var(--muted);
+}
+.activation-group-list > li {
+	display: grid;
+	gap: 6px;
+	padding: 8px 0;
+	border-bottom: 1px solid var(--line);
+}
+.activation-group-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.activation-group-header > :first-child {
+	flex: 1;
+}
+.activation-group-members {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+.activation-group-members > .activation-member {
+	min-height: 32px;
+	padding: 0 9px;
+	font-size: 12px;
+	font-weight: 500;
+}
 .attribute-layout-order-actions {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
