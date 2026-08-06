@@ -4,6 +4,27 @@ The ToskLight Viz Editor is a rig-planning window: the same patch sheet the desk
 show file rather than over a running desk. A rig planned there and a show running on a desk are
 the same rig, and neither side should have to go looking for a file to get from one to the other.
 
+## Open Demo Show
+
+The editor's file bar has an **Open Demo Show** button, and it needs nothing else: no file to find,
+no desk on the network, and no rig to patch first. It opens a full demonstration rig — front-of-house
+profiles and PAR cans, moving washes and profiles, beams, strobes, scanners, Sunstrips, blinders, a
+laser and a hazer — as an ordinary show of your own.
+
+What opens is always a **copy**. The demo that ships with ToskLight is a template and is never
+opened, never written to, and never changed by anything you do. The copy is written into this
+installation's own shows folder and named after the demo it came from: **Demo Show** the first
+time, **Demo Show 2** the next, and so on. The file bar's status line says which copy it is and
+where it was written.
+
+So a demo copy is yours. Patch it, repatch it, save it, rename it, delete it. Pressing **Open Demo
+Show** again gives you a fresh copy of the shipped rig rather than reopening whatever you did to
+the last one.
+
+The demo is built from the fixture packages this version of ToskLight ships, so its fixtures carry
+the same profile revisions, models and modes the fixture library does. It is the quickest way to
+see what the Visualizer draws, and the rig the product demonstration video is shot from.
+
 ## Load from Desk
 
 When a ToskLight desk with a show open is on the same network, the editor's file bar gains a

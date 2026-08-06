@@ -1,0 +1,19 @@
+[package]
+name = "viz-demo"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[[bin]]
+name = "viz-demo-show"
+path = "src/bin/viz-demo-show.rs"
+
+[dependencies]
+light-application = { path = "../../light" }
+light-core = { path = "../../shared/core" }
+light-fixture = { path = "../../shared/fixture" }
+uuid.workspace = true
+viz-document = { path = "../document" }
+
+[lints]
+workspace = true

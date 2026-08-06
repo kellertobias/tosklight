@@ -49,6 +49,7 @@ light_init_artifact_paths() {
   light_export_path LIGHT_PYTHON_CACHE_DIR "$repository_root" "${LIGHT_PYTHON_CACHE_DIR-$LIGHT_ARTIFACTS_DIR/$CACHE_PYTHON}" || return 1
   light_export_path LIGHT_MANUAL_ROOT "$repository_root" "${LIGHT_MANUAL_ROOT-$LIGHT_ARTIFACTS_DIR/$MANUAL_ROOT}" || return 1
   light_export_path LIGHT_ICON_CONTACT_SHEETS_DIR "$repository_root" "${LIGHT_ICON_CONTACT_SHEETS_DIR-$LIGHT_ARTIFACTS_DIR/$ICON_CONTACT_SHEETS}" || return 1
+  light_export_path LIGHT_DEMO_SHOW_DIR "$repository_root" "${LIGHT_DEMO_SHOW_DIR-$LIGHT_ARTIFACTS_DIR/$DEMO_SHOW}" || return 1
   light_export_path LIGHT_RELEASE_DIR "$repository_root" "${LIGHT_RELEASE_DIR-$LIGHT_ARTIFACTS_DIR/$RELEASE_ROOT}" || return 1
   light_export_path LIGHT_PERFORMANCE_DIR "$repository_root" "${LIGHT_PERFORMANCE_DIR-$LIGHT_ARTIFACTS_DIR/$PERFORMANCE_ROOT}" || return 1
   light_export_path LIGHT_RUNTIME_DATA_DIR "$repository_root" "${LIGHT_RUNTIME_DATA_DIR-$LIGHT_ARTIFACTS_DIR/$RUNTIME_DATA}" || return 1

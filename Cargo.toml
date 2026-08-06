@@ -25,6 +25,7 @@ members = [
   "crates/viz/dmx",
   "crates/viz/project",
   "crates/viz/desk",
+  "crates/viz/demo",
   "crates/viz/document",
   "crates/viz/planning",
   "crates/viz/render",

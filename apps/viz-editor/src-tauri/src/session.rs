@@ -28,7 +28,7 @@ pub struct Session {
 }
 
 /// What the window title bar and the file menu need to know.
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DocumentSummary {
     pub show_id: String,
@@ -77,6 +77,12 @@ impl Session {
     /// from a desk, for instance. It is the same open: one document at a time, and this is it.
     pub fn open(&self, path: &Path) -> Answer<DocumentSummary> {
         self.open_path(path, None)
+    }
+
+    /// Renames the open document, for a caller that opened it itself rather than through the
+    /// window's own rename command.
+    pub fn rename_to(&self, name: &str) -> Answer<()> {
+        self.change(|document| document.rename(name).map_err(|error| error.to_string()))
     }
 
     /// The open document's name, for the network record that says what this editor is holding.

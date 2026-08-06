@@ -49,6 +49,20 @@ export function FileBar({
 		return `Opened ${summary.name}`;
 	}
 
+	/**
+	 * The packaged demo, as a document of the operator's own.
+	 *
+	 * No file dialog: the whole point is that a rig appears without anyone having to know where a
+	 * show file lives. The copy is named after the demo it came from, and the status line says
+	 * where it was written so the operator can find it again.
+	 */
+	async function openDemoShow() {
+		const summary = await documentSession.openDemoShow();
+		onDocument(summary);
+		onReloadProfiles();
+		return `Opened ${summary.name}, a copy of the packaged Demo Show, at ${summary.path}`;
+	}
+
 	async function saveShowAs() {
 		const path = await save({ filters: SHOW_FILTER });
 		if (!path) return null;
@@ -111,6 +125,13 @@ export function FileBar({
 				</Button>
 				<Button disabled={busy} onClick={() => void run("Opening", openShow)}>
 					Open
+				</Button>
+				<Button
+					disabled={busy}
+					title="Open a fresh copy of the demo rig that ships with ToskLight"
+					onClick={() => void run("Opening", openDemoShow)}
+				>
+					Open Demo Show
 				</Button>
 				{desks.map((desk) => (
 					<Button

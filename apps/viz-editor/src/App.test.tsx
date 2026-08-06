@@ -1,3 +1,4 @@
+import * as dialog from "@tauri-apps/plugin-dialog";
 import { ModalProvider } from "@tosklight/ui/modals";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -126,7 +127,14 @@ describe("the Viz editor window", () => {
 	it("offers the file actions the planning workflow needs", async () => {
 		renderApp();
 		await screen.findByText("Show Patch");
-		for (const label of ["New", "Open", "Save As", "Import MVR", "Export MVR"]) {
+		for (const label of [
+			"New",
+			"Open",
+			"Open Demo Show",
+			"Save As",
+			"Import MVR",
+			"Export MVR",
+		]) {
 			expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
 		}
 	});
@@ -176,6 +184,40 @@ describe("the Viz editor window", () => {
 		);
 		expect(
 			await screen.findByText("Loaded Summer Tour from front-of-house"),
+		).toBeInTheDocument();
+	});
+
+	it("opens the packaged demo without asking the operator to find a file", async () => {
+		const copy = {
+			...document,
+			name: "Demo Show 2",
+			path: "/data/shows/demo-show-2.show",
+			fixtureCount: 59,
+		};
+		invoke.mockImplementation((command: string) => {
+			switch (command) {
+				case "open_demo_show":
+					return Promise.resolve(copy);
+				case "document_summary":
+					return Promise.resolve(document);
+				case "patch_snapshot":
+					return Promise.resolve(snapshot);
+				default:
+					return Promise.resolve([]);
+			}
+		});
+		renderApp();
+		fireEvent.click(await screen.findByRole("button", { name: "Open Demo Show" }));
+
+		// No file dialog is involved: the command is the whole interaction.
+		await waitFor(() => expect(invoke).toHaveBeenCalledWith("open_demo_show"));
+		expect(dialog.open).not.toHaveBeenCalled();
+		// The operator is told which copy this is and where it went, because the packaged demo
+		// itself is never what gets opened.
+		expect(
+			await screen.findByText(
+				"Opened Demo Show 2, a copy of the packaged Demo Show, at /data/shows/demo-show-2.show",
+			),
 		).toBeInTheDocument();
 	});
 

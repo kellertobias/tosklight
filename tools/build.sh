@@ -29,6 +29,7 @@ tools/build.sh is invoked by the root package.json scripts:
   npm run build:viz            Build the standalone visualizer only
   npm run open:viz-editor      Build the Viz rig-planning editor and open it
   npm run build:viz-editor     Build the Viz rig-planning editor only
+  npm run demo-show            Generate the canonical demo show from the shipped fixture packages
   npm run manual               Build PDF and deployable HTML manuals from docs/help Markdown
   npm run icons:contact-sheets Refresh Help contact-sheet PNGs from assets/icons SVGs
   npm run models               Rebuild assets/models GLBs with Blender and check the import contract
@@ -47,7 +48,7 @@ tools/build.sh is invoked by the root package.json scripts:
                                Remove only stale Cargo incremental objects
   npm run artifact-path NAME   Print a resolved artifact path (for CI and tooling)
 
-Direct subcommands: open | open-viz [ARGS...] | build-viz | open-viz-editor [ARGS...] | build-viz-editor | manual | icon-contact-sheets | models [verify|render|open] | safari | pages | pages-serve [PORT] | codesafari |
+Direct subcommands: open | open-viz [ARGS...] | build-viz | open-viz-editor [ARGS...] | build-viz-editor | demo-show | manual | icon-contact-sheets | models [verify|render|open] | safari | pages | pages-serve [PORT] | codesafari |
   archive [install] | migrate-artifacts | clean-root | clean-cargo-incremental | clean-artifacts [runtime PATH] | path NAME
 EOF
 }
@@ -471,6 +472,7 @@ print_artifact_path() {
     manual-html) printf '%s\n' "$LIGHT_MANUAL_HTML_ARCHIVE" ;;
     manual-html-dir) printf '%s\n' "$LIGHT_MANUAL_HTML_DIR" ;;
     icon-contact-sheets) printf '%s\n' "$LIGHT_ICON_CONTACT_SHEETS_DIR" ;;
+    demo-show) printf '%s\n' "$LIGHT_DEMO_SHOW_DIR" ;;
     pages) printf '%s\n' "$LIGHT_PAGES_DIR" ;;
     safari) printf '%s\n' "$LIGHT_SAFARI_DIR" ;;
     release) printf '%s\n' "$LIGHT_RELEASE_DIR" ;;
@@ -485,12 +487,30 @@ print_artifact_path() {
   esac
 }
 
+# The canonical demo show the editor offers and the demo video is shot from.
+#
+# It is generated rather than committed: the rig lives in `crates/viz/demo` and the fixtures come
+# from the packages this checkout ships, so a package that gains a model or a mode reaches the demo
+# by rebuilding it. Whatever this writes is what gets packaged into the Viz editor.
+build_demo_show() {
+  require cargo
+  echo "Generating the demo show..."
+  cargo build --release --manifest-path "$ROOT/Cargo.toml" -p viz-demo --bin viz-demo-show
+  mkdir -p "$LIGHT_DEMO_SHOW_DIR"
+  "$TARGET_DIR/release/viz-demo-show" \
+    --packages "$ROOT/assets/fixture-library" \
+    --output "$LIGHT_DEMO_SHOW_DIR/demo-show.show" \
+    --library "$LIGHT_TMP_DIR/demo-show-fixtures.sqlite"
+}
+
 # The Viz editor is the planning window for a standalone visualizer session: the desk's patch
 # sheet over a show file, with no desk running. Like the visualizer, it is a separate product and
 # opening ToskLight never builds it.
 build_viz_editor() {
   require cargo
   require npm
+  # The editor packages the demo as a resource, so it has to exist before the bundle is assembled.
+  build_demo_show
   echo "Building the Viz editor..."
   (cd "$ROOT/apps/viz-editor" && npm run build)
   # `custom-protocol` is what makes this a real application rather than a development one: without
@@ -505,7 +525,10 @@ build_viz_editor() {
 open_viz_editor() {
   build_viz_editor
   echo "Opening the Viz editor."
-  "$TARGET_DIR/release/viz-editor" "$@"
+  # A development build is not a bundle, so it has no resource directory to find the packaged demo
+  # in. The generated artefact is the same file a release packages, so it is named directly.
+  TOSKLIGHT_VIZ_DEMO_SHOW="$LIGHT_DEMO_SHOW_DIR/demo-show.show" \
+    "$TARGET_DIR/release/viz-editor" "$@"
 }
 
 # The visualizer is a separate product with its own build. Building or opening ToskLight never
@@ -594,6 +617,7 @@ open_visualizer() {
   fi
   TOSKLIGHT_VIZ_EDITOR="$TARGET_DIR/release/viz-editor" \
   TOSKLIGHT_VIZ_HEADLESS="$TARGET_DIR/release/light-headless" \
+  TOSKLIGHT_VIZ_DEMO_SHOW="$LIGHT_DEMO_SHOW_DIR/demo-show.show" \
   LIGHT_FIXTURE_LIBRARY="$library" \
     "$(visualizer_executable)" "$@"
 }
@@ -614,6 +638,10 @@ case "${1:-}" in
   build-viz)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
     build_visualizer
+    ;;
+  demo-show)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    build_demo_show
     ;;
   icon-contact-sheets)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }

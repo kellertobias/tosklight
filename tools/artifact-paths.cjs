@@ -40,6 +40,7 @@ const artifactPaths = Object.freeze({
   pythonCache: artifact("LIGHT_PYTHON_CACHE_DIR", "CACHE_PYTHON"),
   manual: artifact("LIGHT_MANUAL_ROOT", "MANUAL_ROOT"),
   iconContactSheets: artifact("LIGHT_ICON_CONTACT_SHEETS_DIR", "ICON_CONTACT_SHEETS"),
+  demoShow: artifact("LIGHT_DEMO_SHOW_DIR", "DEMO_SHOW"),
   release: artifact("LIGHT_RELEASE_DIR", "RELEASE_ROOT"),
   performance: artifact("LIGHT_PERFORMANCE_DIR", "PERFORMANCE_ROOT"),
   runtime: absolute(configured(

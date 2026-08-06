@@ -698,6 +698,14 @@ jobs:
           cargo build --release --locked --target ${{ matrix.target }}
           -p viz-renderer --bin viz-renderer
 
+      # The demo the editor offers is generated from this commit's rig and fixture packages, not
+      # copied from a file somebody exported once. It has to exist before the bundle is assembled,
+      # because the bundle packages it.
+      - name: Generate the packaged demo show
+        if: matrix.viz
+        shell: bash
+        run: npm run demo-show
+
       - name: Build the ToskLight Viz Editor application
         if: matrix.viz
         shell: bash

@@ -7,6 +7,7 @@
 //! the network.
 
 mod contract;
+mod demo;
 mod discovery;
 mod recent;
 mod session;
@@ -90,6 +91,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             session::create_document,
             session::open_document,
+            demo::open_demo_show,
             session::document_summary,
             session::save_document_as,
             session::rename_document,

@@ -62,6 +62,13 @@ export const documentSession = {
 	create: (path: string, name: string) =>
 		invoke<DocumentSummary>("create_document", { path, name }),
 	open: (path: string) => invoke<DocumentSummary>("open_document", { path }),
+	/**
+	 * Opens a fresh writable copy of the packaged demo show.
+	 *
+	 * The packaged file is a template: every call writes another copy into the operator's shows
+	 * folder and opens that one, so nothing an operator does to a demo reaches the next one.
+	 */
+	openDemoShow: () => invoke<DocumentSummary>("open_demo_show"),
 	current: () => invoke<DocumentSummary | null>("document_summary"),
 	saveAs: (path: string) => invoke<void>("save_document_as", { path }),
 	rename: (name: string) => invoke<void>("rename_document", { name }),
