@@ -1343,7 +1343,7 @@ button {
 	color: var(--green);
 }
 .network-settings-group {
-	margin-top: 10px;
+	margin-top: 18px;
 	padding: 12px;
 	border: 1px solid var(--line);
 	border-radius: 7px;

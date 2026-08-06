@@ -80,18 +80,57 @@ export function DeskSettingsModal() {
 						<Button className="large-action" onClick={clone}>
 							Clone current desktop
 						</Button>
-						{confirmDelete && (
-							<div className="delete-confirm">
-								<b>Delete desktop “{desk.name}”?</b>
-								<Button onClick={() => setConfirmDelete(false)}>Cancel</Button>
-								<Button
-									className="danger"
-									onClick={() => dispatch({ type: "DELETE_DESK", id: desk.id })}
-								>
-									Confirm delete
-								</Button>
-							</div>
-						)}
+					</div>
+				</section>
+				{confirmDelete && (
+					<DeleteDesktopDialog
+						name={desk.name}
+						onCancel={() => setConfirmDelete(false)}
+						onConfirm={() => dispatch({ type: "DELETE_DESK", id: desk.id })}
+					/>
+				)}
+			</div>
+		</ModalPortal>
+	);
+}
+
+/** Deleting a Desktop is destructive, so it owns a dialog instead of a panel inside settings. */
+function DeleteDesktopDialog({
+	name,
+	onCancel,
+	onConfirm,
+}: {
+	name: string;
+	onCancel: () => void;
+	onConfirm: () => void;
+}) {
+	return (
+		<ModalPortal onClose={onCancel}>
+			<div
+				className="stacked-modal-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onCancel()
+				}
+			>
+				<section
+					className="nested-modal delete-desktop-dialog"
+					role="alertdialog"
+					aria-modal="true"
+					aria-label="Delete desktop"
+				>
+					<ModalTitleBar
+						title="Delete desktop"
+						closeLabel="Cancel deleting this Desktop"
+						onClose={onCancel}
+					/>
+					<div className="delete-confirm">
+						<b>Delete desktop “{name}”?</b>
+						<Button autoFocus onClick={onCancel}>
+							Cancel
+						</Button>
+						<Button className="danger" onClick={onConfirm}>
+							Confirm delete
+						</Button>
 					</div>
 				</section>
 			</div>

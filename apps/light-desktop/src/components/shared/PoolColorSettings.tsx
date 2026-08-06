@@ -117,7 +117,6 @@ export function PoolPaletteSettings() {
 						["macro", "Macros", palette.macro_color],
 						["dynamic", "Dynamics", palette.dynamic],
 						["cuelist", "Cuelists", palette.cuelist],
-						["sequence", "Sequences", palette.sequence],
 					] as const
 				).map(([objectType, label, color]) => (
 					<ColorPickerField

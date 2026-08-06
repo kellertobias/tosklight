@@ -325,6 +325,13 @@
 .patch-stacked-editor {
 	display: block;
 	width: 100%;
+	text-align: left;
+}
+.patch-stacked-detail {
+	height: 15px;
+	color: var(--muted);
+	font-size: 10px;
+	font-weight: 500;
 }
 .patch-stacked-line {
 	display: flex;
@@ -346,15 +353,10 @@
 	margin-left: auto;
 	font-size: 11px;
 }
-.patch-stacked-line > small,
-.patch-shared-cell small {
+.patch-stacked-line > small {
 	color: var(--muted);
 	font-size: 9px;
 	font-style: italic;
-}
-.patch-shared-cell > span {
-	display: flex;
-	flex-direction: column;
 }
 .multipatch-branch {
 	display: block;

@@ -20,16 +20,8 @@ export function MatterBridgeSettings() {
 	};
 
 	return (
-		<article
-			className="matter-desk-settings"
-			aria-label="Matter bridge settings"
-		>
-			<header>
-				<div>
-					<b>Matter bridge</b>
-					<small>Desk installation · shared across shows and Desktops</small>
-				</div>
-			</header>
+		<div className="matter-desk-settings" aria-label="Matter bridge settings">
+			<small>Desk installation · shared across shows and Desktops</small>
 			<SwitchField
 				label="Matter server"
 				offLabel="Disabled"
@@ -76,6 +68,6 @@ export function MatterBridgeSettings() {
 					controls; empty slots are not advertised.
 				</small>
 			)}
-		</article>
+		</div>
 	);
 }

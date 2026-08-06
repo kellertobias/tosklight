@@ -6,6 +6,9 @@ import { fixtureDisplayId } from "./fixtureIds";
 import { beginMultipatchEdit } from "./multipatchActions";
 import { fixturePolicyApplicability } from "./patchModel";
 
+/** Multi-patch rows inherit fixture-level policy; repeating it adds no information. */
+const INHERITED = "—";
+
 export function FixtureModeCell({
 	fixture,
 	shared = false,
@@ -14,57 +17,57 @@ export function FixtureModeCell({
 	shared?: boolean;
 }) {
 	const controller = usePatchController();
-	const productMode = `${fixture.definition.name || fixture.definition.model} · ${fixture.definition.mode}`;
-	const manufacturer = fixture.definition.manufacturer;
+	const product = fixture.definition.name || fixture.definition.model;
+	const mode = `${fixture.definition.manufacturer} · ${fixture.definition.mode}`;
+	if (shared)
+		return (
+			<td className="patch-stacked-cell shared">
+				<span>{INHERITED}</span>
+			</td>
+		);
 	return (
-		<td className={`patch-stacked-cell${shared ? " shared" : ""}`}>
-			{shared ? (
-				<span className="patch-stacked-line" title={productMode}>
-					{productMode}
-				</span>
-			) : (
-				<Button
-					className="patch-value patch-stacked-line"
-					aria-label={`Fixture and mode ${fixtureDisplayId(fixture)}: ${productMode}`}
-					title={productMode}
-					onClick={() => armEdit(controller, fixture, "mode")}
-				>
-					{productMode}
-				</Button>
-			)}
-			<span className="patch-stacked-line patch-secondary" title={manufacturer}>
-				{manufacturer}
-			</span>
+		<td className="patch-stacked-cell">
+			<Button
+				className="patch-value patch-stacked-editor"
+				aria-label={`Fixture and mode ${fixtureDisplayId(fixture)}: ${product} · ${fixture.definition.mode}`}
+				title={`${product} · ${mode}`}
+				onClick={() => armEdit(controller, fixture, "mode")}
+			>
+				<span className="patch-stacked-line">{product}</span>
+				<span className="patch-stacked-line patch-stacked-detail">{mode}</span>
+			</Button>
 		</td>
 	);
 }
 
-function PolicyLine({
-	label,
-	state,
-	available,
-	shared,
-}: {
-	label: string;
-	state: string;
-	available: boolean;
-	shared: boolean;
-}) {
-	const content = (
-		<>
-			<span>{label}</span>
-			<strong>{available ? state : "Unavailable"}</strong>
-			{shared && available && <small>Shared</small>}
-		</>
-	);
-	return (
-		<span
-			className="patch-stacked-line"
-			title={`${label} ${available ? state : "unavailable"}${shared ? ", shared" : ""}`}
-		>
-			{content}
-		</span>
-	);
+/** "-" when no master applies, otherwise which masters still control the fixture. */
+function mastersSummary(fixture: PatchedFixture) {
+	const applicable = fixturePolicyApplicability(fixture.definition);
+	if (!applicable.groupMasters && !applicable.grandMaster) return "-";
+	const group =
+		applicable.groupMasters && (fixture.group_masters_enabled ?? true);
+	const grand = applicable.grandMaster && (fixture.grand_master_enabled ?? true);
+	if (group && grand) return "Both";
+	if (group) return "Group";
+	if (grand) return "Main";
+	return "none";
+}
+
+/** "-" when the fixture has neither axis, otherwise the inverted axes. */
+function panTiltSummary(
+	fixture: PatchedFixture,
+	instance?: MultiPatchInstance,
+) {
+	const applicable = fixturePolicyApplicability(fixture.definition);
+	if (!applicable.pan && !applicable.tilt) return "-";
+	const pan =
+		applicable.pan && (instance?.invert_pan ?? fixture.invert_pan ?? false);
+	const tilt =
+		applicable.tilt && (instance?.invert_tilt ?? fixture.invert_tilt ?? false);
+	if (pan && tilt) return "Invert Pan/Tilt";
+	if (pan) return "Invert Pan";
+	if (tilt) return "Invert Tilt";
+	return "none";
 }
 
 export function MastersCell({
@@ -75,44 +78,28 @@ export function MastersCell({
 	shared?: boolean;
 }) {
 	const controller = usePatchController();
-	const applicable = fixturePolicyApplicability(fixture.definition);
-	const content = (
-		<>
-			<PolicyLine
-				label="Group Masters"
-				state={
-					(fixture.group_masters_enabled ?? true)
-						? "Controlled"
-						: "Not controlled"
-				}
-				available={applicable.groupMasters}
-				shared={shared}
-			/>
-			<PolicyLine
-				label="Grand Master"
-				state={
-					(fixture.grand_master_enabled ?? true)
-						? "Controlled"
-						: "Not controlled"
-				}
-				available={applicable.grandMaster}
-				shared={shared}
-			/>
-		</>
-	);
+	if (shared)
+		return (
+			<td className="patch-stacked-cell shared">
+				<span>{INHERITED}</span>
+			</td>
+		);
+	const summary = mastersSummary(fixture);
+	if (summary === "-")
+		return (
+			<td>
+				<span>{summary}</span>
+			</td>
+		);
 	return (
-		<td className={`patch-stacked-cell${shared ? " shared" : ""}`}>
-			{shared || (!applicable.groupMasters && !applicable.grandMaster) ? (
-				<span>{content}</span>
-			) : (
-				<Button
-					className="patch-value patch-stacked-editor"
-					aria-label={`Masters ${fixtureDisplayId(fixture)}`}
-					onClick={() => armEdit(controller, fixture, "masters")}
-				>
-					{content}
-				</Button>
-			)}
+		<td>
+			<Button
+				className="patch-value"
+				aria-label={`Masters ${fixtureDisplayId(fixture)}`}
+				onClick={() => armEdit(controller, fixture, "masters")}
+			>
+				{summary}
+			</Button>
 		</td>
 	);
 }
@@ -125,53 +112,33 @@ export function PanTiltCell({
 	instance?: MultiPatchInstance;
 }) {
 	const controller = usePatchController();
-	const applicable = fixturePolicyApplicability(fixture.definition);
-	const edit = () => {
-		if (instance)
-			beginMultipatchEdit(controller, fixture, instance, "pan_tilt");
-		else armEdit(controller, fixture, "pan_tilt");
-	};
-	const content = (
-		<>
-			<PolicyLine
-				label="Invert Pan"
-				state={
-					(instance?.invert_pan ?? fixture.invert_pan ?? false)
-						? "Inverted"
-						: "Normal"
-				}
-				available={applicable.pan}
-				shared={false}
-			/>
-			<PolicyLine
-				label="Invert Tilt"
-				state={
-					(instance?.invert_tilt ?? fixture.invert_tilt ?? false)
-						? "Inverted"
-						: "Normal"
-				}
-				available={applicable.tilt}
-				shared={false}
-			/>
-		</>
-	);
+	const summary = panTiltSummary(fixture, instance);
+	/** Only an instance that deviates from its fixture carries new information. */
+	const inherited = Boolean(instance) && summary === panTiltSummary(fixture);
+	if (summary === "-")
+		return (
+			<td>
+				<span>{summary}</span>
+			</td>
+		);
 	return (
-		<td className="patch-stacked-cell">
-			{!applicable.pan && !applicable.tilt ? (
-				<span>{content}</span>
-			) : (
-				<Button
-					className="patch-value patch-stacked-editor"
-					aria-label={
-						instance
-							? `Pan and Tilt ${instance.name || "Multi-patch"}`
-							: `Pan and Tilt ${fixtureDisplayId(fixture)}`
-					}
-					onClick={edit}
-				>
-					{content}
-				</Button>
-			)}
+		<td className={inherited ? "patch-secondary" : undefined}>
+			<Button
+				className="patch-value"
+				aria-label={
+					instance
+						? `Pan and Tilt ${instance.name || "Multi-patch"}`
+						: `Pan and Tilt ${fixtureDisplayId(fixture)}`
+				}
+				title={summary}
+				onClick={() => {
+					if (instance)
+						beginMultipatchEdit(controller, fixture, instance, "pan_tilt");
+					else armEdit(controller, fixture, "pan_tilt");
+				}}
+			>
+				{inherited ? INHERITED : summary}
+			</Button>
 		</td>
 	);
 }
@@ -191,22 +158,21 @@ export function MibCell({
 }) {
 	const controller = usePatchController();
 	const value = formatMib(fixture);
+	if (shared)
+		return (
+			<td className="patch-secondary">
+				<span>{INHERITED}</span>
+			</td>
+		);
 	return (
-		<td className={shared ? "patch-shared-cell" : undefined}>
-			{shared ? (
-				<span title={`MIB ${value}, shared`}>
-					{value}
-					<small>Shared</small>
-				</span>
-			) : (
-				<Button
-					className="patch-value"
-					aria-label={`MIB ${fixtureDisplayId(fixture)}: ${value}`}
-					onClick={() => armEdit(controller, fixture, "mib")}
-				>
-					{value}
-				</Button>
-			)}
+		<td>
+			<Button
+				className="patch-value"
+				aria-label={`MIB ${fixtureDisplayId(fixture)}: ${value}`}
+				onClick={() => armEdit(controller, fixture, "mib")}
+			>
+				{value}
+			</Button>
 		</td>
 	);
 }

@@ -1391,11 +1391,12 @@ button.large-action:disabled {
 	color: var(--cyan);
 }
 .fixture-window .fixture-name {
-	grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-	column-gap: 4px;
+	grid-template-columns: minmax(0, 1fr);
+	row-gap: 1px;
 }
 .fixture-window .fixture-name small {
 	margin-left: 0;
+	font-size: 10px;
 }
 .fixture-window .fixture-name .fixture-group-master-status {
 	grid-column: 1 / -1;
@@ -1463,7 +1464,7 @@ button.large-action:disabled {
 }
 .fixture-sheet-mode-icon-only .fixture-name small,
 .fixture-sheet-mode-text-only .fixture-name small {
-	margin-left: 4px;
+	margin-left: 0;
 }
 .patch-window > .show-patch-layout {
 	flex: 1;

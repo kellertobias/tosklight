@@ -21,45 +21,6 @@ export function PatchHeader() {
 			}}
 			actions={[
 				[
-					...(props.onStagePreview
-						? [
-								{
-									id: "preview-stage",
-									label: "Preview Stage",
-									active: props.stagePreviewOpen,
-									onClick: props.onStagePreview,
-									onLongPress: props.onOpenStageWindow,
-								},
-							]
-						: []),
-				],
-				[
-					...(props.onMedia
-						? [
-								{
-									id: "fixtures",
-									label: "Fixtures",
-									active: true,
-									onClick: () => undefined,
-								},
-								{
-									id: "media",
-									label: "Media Servers",
-									onClick: props.onMedia,
-								},
-							]
-						: []),
-				],
-				[
-					...(selected && appState.patchSetArmed
-						? [
-								{
-									id: "fixture-number",
-									label: "Set fixture ID",
-									onClick: () => void setFixtureNumber(controller, selected),
-								},
-							]
-						: []),
 					{
 						id: "layer",
 						label: "+ Add layer",
@@ -83,6 +44,45 @@ export function PatchHeader() {
 						disabled: data.visible.length === 0,
 						onClick: () => ui.setDeleteArmed((armed) => !armed),
 					},
+					...(selected && appState.patchSetArmed
+						? [
+								{
+									id: "fixture-number",
+									label: "Set fixture ID",
+									onClick: () => void setFixtureNumber(controller, selected),
+								},
+							]
+						: []),
+				],
+				[
+					...(props.onMedia
+						? [
+								{
+									id: "fixtures",
+									label: "Fixtures",
+									active: true,
+									onClick: () => undefined,
+								},
+								{
+									id: "media",
+									label: "Media Servers",
+									onClick: props.onMedia,
+								},
+							]
+						: []),
+				],
+				[
+					...(props.onStagePreview
+						? [
+								{
+									id: "preview-stage",
+									label: "Preview Stage",
+									active: props.stagePreviewOpen,
+									onClick: props.onStagePreview,
+									onLongPress: props.onOpenStageWindow,
+								},
+							]
+						: []),
 				],
 			]}
 		/>

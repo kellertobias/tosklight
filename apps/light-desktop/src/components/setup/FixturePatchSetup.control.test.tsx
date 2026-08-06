@@ -386,10 +386,10 @@ describe("fixture output policy cells", () => {
 
 		expect(
 			screen.getByRole("button", { name: "Masters 17" }),
-		).toHaveTextContent("Controlled");
+		).toHaveTextContent("Both");
 		expect(
 			screen.getByRole("button", { name: "Pan and Tilt 17" }),
-		).toHaveTextContent("Normal");
+		).toHaveTextContent("none");
 
 		fireEvent.click(screen.getByRole("button", { name: "Masters 17" }));
 		expect(
@@ -437,14 +437,12 @@ describe("fixture output policy cells", () => {
 		const multiPatchRow = screen.getByRole("row", {
 			name: "Multi-patch Opposite hang",
 		}) as HTMLTableRowElement;
-		expect(multiPatchRow.cells[5]).toHaveTextContent(
-			"Group MastersControlledSharedGrand MasterControlledShared",
-		);
+		expect(multiPatchRow.cells[5]).toHaveTextContent(/^—$/);
 		expect(
 			screen.getByRole("button", {
 				name: "Pan and Tilt Opposite hang",
 			}),
-		).toHaveTextContent("Inverted");
+		).toHaveTextContent("Invert Tilt");
 
 		fireEvent.click(
 			screen.getByRole("button", { name: "Pan and Tilt Opposite hang" }),
@@ -1124,7 +1122,7 @@ describe("installed light-source appearance", () => {
 });
 
 describe("selected split selection and SET editing", () => {
-	it("places Preview Stage before existing title actions and supports additive and range selection", () => {
+	it("orders title actions edit-first through Preview Stage and supports additive and range selection", () => {
 		const second = splitFixture();
 		second.fixture_id = "fixture-18";
 		second.fixture_number = 18;
@@ -1149,9 +1147,17 @@ describe("selected split selection and SET editing", () => {
 		expect(
 			within(actions)
 				.getAllByRole("button")
-				.slice(0, 3)
+				.slice(0, 7)
 				.map((button) => button.textContent),
-		).toEqual(["Preview Stage", "Fixtures", "Media Servers"]);
+		).toEqual([
+			"+ Add layer",
+			"+ Add fixture",
+			"+ Add multi-patch",
+			"Delete",
+			"Fixtures",
+			"Media Servers",
+			"Preview Stage",
+		]);
 		expect(screen.getByRole("button", { name: "Preview Stage" })).toHaveClass(
 			"active",
 		);

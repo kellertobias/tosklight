@@ -73,7 +73,6 @@ describe("PoolColorSettings", () => {
 			"Macros",
 			"Dynamics",
 			"Cuelists",
-			"Sequences",
 			"Mixed Presets",
 			"Intensity Presets",
 			"Color Presets",
@@ -82,6 +81,8 @@ describe("PoolColorSettings", () => {
 		]) {
 			expect(screen.getByText(label)).toBeTruthy();
 		}
+		// A Sequence is a Cuelist in sequence mode, so it has no own pool color.
+		expect(screen.queryByText("Sequences")).toBeNull();
 		expect(
 			screen.getByRole("button", { name: "Reset all pool colors" }),
 		).toBeTruthy();

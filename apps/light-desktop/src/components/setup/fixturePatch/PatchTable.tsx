@@ -385,13 +385,8 @@ function MultiPatchRow({
 					</Button>
 				</td>
 			))}
-			<td className="patch-shared-cell">
-				<span>
-					{controller.data.layers.find(
-						(layer) => layer.id === (fixture.layer_id || "default"),
-					)?.name ?? "Default"}
-					<small>Shared</small>
-				</span>
+			<td className="patch-secondary">
+				<span>—</span>
 			</td>
 		</tr>
 	);

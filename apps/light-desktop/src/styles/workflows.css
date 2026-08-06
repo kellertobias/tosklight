@@ -1574,11 +1574,6 @@
 .matter-desk-settings {
 	display: grid;
 	gap: 8px;
-	margin: 14px 0;
-	padding: 12px;
-	border: 1px solid var(--line);
-	border-radius: 6px;
-	background: color-mix(in srgb, var(--panel) 88%, #142e34);
 }
 .matter-desk-settings h4,
 .matter-desk-settings p {

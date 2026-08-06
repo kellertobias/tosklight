@@ -215,18 +215,26 @@
 
 .scheduler-calendar {
 	grid-template-rows: minmax(0, 1fr);
-}
-
-.scheduler-calendar-body {
 	min-width: 0;
 	min-height: 0;
 	overflow: hidden;
 	padding: 12px;
 }
 
-.scheduler-calendar-body > .ui-calendar-month,
-.scheduler-calendar-body > .ui-calendar-month > .ui-calendar-month-grid {
+.scheduler-calendar > .ui-calendar-month {
+	min-height: 0;
+	display: grid;
+	grid-template-rows: minmax(0, 1fr);
 	height: 100%;
+}
+
+.scheduler-calendar > .ui-calendar-month > .ui-calendar-month-grid {
+	height: 100%;
+}
+
+.scheduler-calendar > .ui-calendar-year {
+	min-height: 0;
+	padding: 0;
 }
 
 .scheduler-settings {
@@ -545,7 +553,7 @@
 		grid-template-columns: minmax(0, 1fr);
 		grid-template-rows: minmax(220px, 0.8fr) minmax(260px, 1.2fr);
 	}
-	.scheduler-calendar-body {
+	.scheduler-calendar {
 		padding: 7px;
 	}
 	.scheduler-fixed-timing-row,

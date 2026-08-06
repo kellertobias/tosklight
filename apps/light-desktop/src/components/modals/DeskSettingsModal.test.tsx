@@ -48,9 +48,18 @@ describe("DeskSettingsModal", () => {
 	it("confirms deletion and preserves the existing clone actions", () => {
 		renderModal();
 		fireEvent.click(screen.getByRole("button", { name: "Delete desktop" }));
+		const prompt = screen.getByText("Delete desktop “Programming”?", {
+			selector: "b",
+		});
+		const confirmDialog = screen.getByRole("alertdialog", {
+			name: "Delete desktop",
+		});
+		expect(confirmDialog.contains(prompt)).toBe(true);
 		expect(
-			screen.getByText("Delete desktop “Programming”?", { selector: "b" }),
-		).toBeTruthy();
+			screen
+				.getByRole("dialog", { name: "Desktop settings" })
+				.contains(confirmDialog),
+		).toBe(false);
 		fireEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
 		expect(context.dispatch).toHaveBeenCalledWith({
 			type: "DELETE_DESK",
