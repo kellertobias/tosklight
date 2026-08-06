@@ -16,6 +16,7 @@ rfd.workspace = true
 uuid.workspace = true
 viz-desk.workspace = true
 viz-dmx.workspace = true
+viz-document = { path = "../../crates/viz/document" }
 viz-laser.workspace = true
 viz-project.workspace = true
 viz-render.workspace = true

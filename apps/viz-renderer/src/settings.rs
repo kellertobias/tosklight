@@ -266,6 +266,13 @@ impl Options {
         if self.desk_requested || desk_launched() {
             return Startup::Desk;
         }
+        // Nothing was named, so this is somebody opening the product on its own. Show them the rig
+        // they were last looking at rather than an empty picture: one application means the
+        // document the editor had open is this launch's document too. A record naming a show that
+        // has since been moved or deleted is no record at all, and falls through to the editor.
+        if let Some(recent) = viz_document::standalone::recent_show() {
+            return Startup::Show(recent);
+        }
         Startup::Planning
     }
 
@@ -944,5 +951,42 @@ mod source_precedence_tests {
         let mut preferences = Preferences::from_options(&options);
         preferences.adopt_file("source planning_software\n", &options);
         assert_eq!(preferences.source, ProviderKind::PlanningSoftware);
+    }
+}
+
+#[cfg(test)]
+mod launch_order {
+    use super::*;
+
+    fn bare() -> Options {
+        Options::default()
+    }
+
+    /// The order TL-68 settles on: an explicit argument first, then the document the product had
+    /// open last, and only then the editor. Everything above the recent document is asserted here;
+    /// the recent lookup itself reads the operator's own configuration directory, so it is covered
+    /// where that resolution lives rather than by a test that would depend on this machine.
+    #[test]
+    fn an_explicit_argument_beats_everything() {
+        let mut options = bare();
+        options.demo = true;
+        assert_eq!(options.startup(), Startup::Demo);
+
+        let mut options = bare();
+        options.show = Some(PathBuf::from("/shows/tour.show"));
+        options.desk_requested = true;
+        assert_eq!(
+            options.startup(),
+            Startup::Show(PathBuf::from("/shows/tour.show")),
+            "a named show wins over a named desk"
+        );
+
+        let mut options = bare();
+        options.desk_requested = true;
+        assert_eq!(
+            options.startup(),
+            Startup::Desk,
+            "a named desk wins over the last document"
+        );
     }
 }
