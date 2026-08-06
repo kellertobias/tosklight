@@ -280,6 +280,8 @@ mod tests {
             rotation_degrees: glam::Vec3::ZERO,
             bracket_degrees: 0.0,
             shaper_degrees: None,
+            installed_colour: [1.0; 3],
+            installed_shaper_angles_degrees: [0.0; 4],
             body: FixtureBody {
                 size: glam::Vec3::splat(0.3),
                 kind: BodyKind::Lantern,
@@ -308,6 +310,9 @@ mod tests {
                 script_key: script.map(script_key).unwrap_or(0),
                 ..LaserOptics::default()
             }),
+            live_shaper_angle_roles: [false; 4],
+            shaper_roles: [false; 4],
+            live_shaper_rotation_role: false,
         });
         scene
     }
