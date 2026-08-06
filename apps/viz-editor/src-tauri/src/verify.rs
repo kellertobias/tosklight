@@ -22,7 +22,9 @@ const MOUNT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Whether this launch is only checking that the window draws.
 pub fn requested() -> bool {
-    std::env::args().skip(1).any(|argument| argument == "--verify")
+    std::env::args()
+        .skip(1)
+        .any(|argument| argument == "--verify")
 }
 
 /// The frontend's report that it mounted, waited on by the verifying thread.
@@ -107,7 +109,10 @@ mod tests {
     fn a_mounted_surface_is_seen() {
         let ready = Arc::new(SurfaceReady::default());
         ready.mark_mounted();
-        assert!(ready.wait(), "a surface that mounted before the wait counts");
+        assert!(
+            ready.wait(),
+            "a surface that mounted before the wait counts"
+        );
     }
 
     #[test]
