@@ -1228,10 +1228,54 @@
 	color: #aebfca;
 }
 
+.dynamic-projection-source {
+	display: flex;
+	gap: 1rem;
+	padding-bottom: 0.5rem;
+	border-bottom: 1px solid var(--line);
+}
+
 .dynamic-projection-fields {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(8rem, 1fr));
 	gap: 0.55rem;
+}
+
+.dynamic-projection-fields .dynamic-projection-help {
+	grid-column: 1 / -1;
+}
+
+.projection-stage-preview {
+	width: 100%;
+	max-width: 260px;
+	height: auto;
+	margin: 0 auto;
+	display: block;
+}
+
+.projection-stage-box line {
+	stroke: #3d4c57;
+	stroke-width: 1;
+}
+
+.projection-stage-sphere {
+	fill: none;
+	stroke: #3d4c57;
+	stroke-dasharray: 3 3;
+}
+
+.projection-stage-axis {
+	stroke: var(--cyan, #4fd1e0);
+	stroke-width: 2;
+}
+
+.projection-stage-start {
+	stroke: #f2b134;
+	stroke-width: 2;
+}
+
+.projection-stage-centre {
+	fill: #f2b134;
 }
 
 .dynamic-projection-fields label {

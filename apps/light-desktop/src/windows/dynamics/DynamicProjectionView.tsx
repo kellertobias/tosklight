@@ -1,7 +1,6 @@
-import { Button, NumberField, RadioField, SelectField } from "@tosklight/ui";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { NumberField, RadioField, SelectField } from "@tosklight/ui";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
-	DynamicSelectionShapeProjection,
 	DynamicSpatialMappingOverrideProjection,
 	DynamicSpatialPreviewResponse,
 	GroupMappingProvenanceProjection,
@@ -13,7 +12,20 @@ import {
 	validateDynamicSpatialDraft,
 } from "../../features/dynamics/dynamicSpatialDraft";
 import type { ShowObject } from "../../features/showObjects/contracts";
+import { ProjectionStagePreview } from "../../features/spatialMapping/ProjectionStagePreview";
+import type { ProjectionKind } from "../../features/spatialMapping/contracts";
+import {
+	PROJECTION_KINDS,
+	PROJECTION_PRESETS,
+	projectionFields,
+	projectionKind,
+	supportsPreset,
+	withProjectionKind,
+} from "../../features/spatialMapping/projectionKinds";
 import { projectionForPreset } from "../groupsWindow/spatialMapping";
+
+/** Long enough that typing a multi-digit value is one save, short enough to feel immediate. */
+const APPLY_DEBOUNCE_MS = 400;
 
 type DynamicObject = ShowObject<"dynamic">;
 export type DynamicSpatialApplyResult = "applied" | "conflict";
@@ -30,11 +42,6 @@ interface DynamicProjectionViewProps {
 }
 
 const TOP_PROJECTION = projectionForPreset("top");
-const GRID_SHAPE: DynamicSelectionShapeProjection = {
-	type: "grid",
-	angle_degrees: 0,
-	direction: "ascending",
-};
 
 export function DynamicProjectionView({
 	dynamic,
@@ -106,31 +113,36 @@ export function DynamicProjectionView({
 					}
 				: { type: "inherit" },
 		}));
-	const changeShape = (override: boolean) =>
-		setDraft((current) => ({
-			...current,
-			shape: override
-				? { type: "replace", value: inherited?.shape ?? GRID_SHAPE }
-				: { type: "inherit" },
-		}));
-	const applyDraft = useCallback(async () => {
-		setMessage(null);
-		setApplying(true);
-		try {
-			const result = await apply(draft);
-			if (result === "conflict") {
-				setMessage(
-					"The Dynamic changed elsewhere. Authoritative values were reloaded; your draft is retained. Review it and Apply again.",
-				);
-				return;
-			}
-			setMessage("Spatial mapping applied.");
-		} catch (error) {
-			setMessage(error instanceof Error ? error.message : String(error));
-		} finally {
-			setApplying(false);
-		}
-	}, [apply, draft]);
+
+	// Changes persist as the operator makes them, so there is no Apply button and no
+	// half-entered state to lose. A conflict reloads authority and keeps the draft.
+	useEffect(() => {
+		if (!dirty || validation != null || preview == null || busy) return;
+		let cancelled = false;
+		const timer = setTimeout(() => {
+			setApplying(true);
+			apply(draft)
+				.then((result) => {
+					if (cancelled) return;
+					setMessage(
+						result === "conflict"
+							? "The Dynamic changed elsewhere. Authoritative values were reloaded; your change is retained."
+							: null,
+					);
+				})
+				.catch((error: unknown) => {
+					if (cancelled) return;
+					setMessage(error instanceof Error ? error.message : String(error));
+				})
+				.finally(() => {
+					if (!cancelled) setApplying(false);
+				});
+		}, APPLY_DEBOUNCE_MS);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	}, [draft, dirty, validation, preview, busy, apply]);
 
 	return (
 		<div className="dynamic-projection-view">
@@ -146,16 +158,6 @@ export function DynamicProjectionView({
 					}))
 				}
 			/>
-			<ShapeControls
-				draft={draft}
-				onOverride={changeShape}
-				onChange={(value) =>
-					setDraft((current) => ({
-						...current,
-						shape: { type: "replace", value },
-					}))
-				}
-			/>
 			<ProjectionPreview loading={loading} preview={preview} />
 
 			{validation && (
@@ -163,24 +165,9 @@ export function DynamicProjectionView({
 					{validation}
 				</p>
 			)}
-			{message && (
-				<p className="dynamic-projection-message" role="status">
-					{message}
-				</p>
-			)}
-			<Button
-				disabled={
-					busy ||
-					applying ||
-					loading ||
-					!dirty ||
-					validation != null ||
-					preview == null
-				}
-				onClick={() => void applyDraft()}
-			>
-				Apply
-			</Button>
+			<p className="dynamic-projection-message" role="status">
+				{message ?? (applying ? "Saving…" : dirty ? "" : "Saved")}
+			</p>
 		</div>
 	);
 }
@@ -221,56 +208,31 @@ function ProjectionControls({
 }) {
 	return (
 		<section className="dynamic-projection-card">
-			<h3>Projection stage</h3>
-			<RadioField
-				label="Inherit"
-				stateLabel="Inherit"
-				name="dynamic-projection-source"
-				checked={draft.projection.type === "inherit"}
-				onChange={() => onOverride(false)}
-			/>
-			<RadioField
-				label="Override"
-				stateLabel="Override"
-				name="dynamic-projection-source"
-				checked={draft.projection.type === "replace"}
-				onChange={() => onOverride(true)}
-			/>
-			{draft.projection.type === "replace" && (
-				<ProjectionFields value={draft.projection.value} onChange={onChange} />
-			)}
-		</section>
-	);
-}
-
-function ShapeControls({
-	draft,
-	onOverride,
-	onChange,
-}: {
-	draft: ReturnType<typeof dynamicSpatialDraft>;
-	onOverride(override: boolean): void;
-	onChange(value: DynamicSelectionShapeProjection): void;
-}) {
-	return (
-		<section className="dynamic-projection-card">
-			<h3>Phase shape</h3>
-			<RadioField
-				label="Inherit"
-				stateLabel="Inherit"
-				name="dynamic-shape-source"
-				checked={draft.shape.type === "inherit"}
-				onChange={() => onOverride(false)}
-			/>
-			<RadioField
-				label="Override"
-				stateLabel="Override"
-				name="dynamic-shape-source"
-				checked={draft.shape.type === "replace"}
-				onChange={() => onOverride(true)}
-			/>
-			{draft.shape.type === "replace" && (
-				<ShapeFields value={draft.shape.value} onChange={onChange} />
+			<div className="dynamic-projection-source">
+				<RadioField
+					label="Inherit"
+					stateLabel="Inherit"
+					name="dynamic-projection-source"
+					checked={draft.projection.type === "inherit"}
+					onChange={() => onOverride(false)}
+				/>
+				<RadioField
+					label="Override"
+					stateLabel="Override"
+					name="dynamic-projection-source"
+					checked={draft.projection.type === "replace"}
+					onChange={() => onOverride(true)}
+				/>
+			</div>
+			{draft.projection.type === "replace" ? (
+				<>
+					<ProjectionStagePreview projection={draft.projection.value} />
+					<ProjectionFields value={draft.projection.value} onChange={onChange} />
+				</>
+			) : (
+				<p className="dynamic-projection-help">
+					Uses the projection inherited from the Group.
+				</p>
 			)}
 		</section>
 	);
@@ -330,222 +292,53 @@ function ProjectionFields({
 	value: typeof TOP_PROJECTION;
 	onChange(value: typeof TOP_PROJECTION): void;
 }) {
-	const number = (
-		label: string,
-		current: number,
-		change: (next: number) => typeof TOP_PROJECTION,
-	) => (
-		<NumberField
-			label={label}
-			value={current}
-			allowDecimal
-			showStepButtons={false}
-			onValueChange={(next) => onChange(change(Number(next)))}
-		/>
-	);
+	const kind = projectionKind(value);
 	return (
 		<div className="dynamic-projection-fields">
 			<SelectField
-				label="View preset"
-				ariaLabel="View preset"
-				value={value.preset ?? "custom"}
-				options={[
-					{ value: "custom", label: "Custom" },
-					{ value: "top", label: "Top" },
-					{ value: "front", label: "Front" },
-					{ value: "back", label: "Back" },
-					{ value: "left", label: "Left" },
-					{ value: "right", label: "Right" },
-				]}
-				onChange={(preset) => {
-					if (preset === "custom") onChange({ ...value, preset: null });
-					else onChange(projectionForPreset(preset));
-				}}
+				label="Projection"
+				ariaLabel="Projection"
+				value={kind}
+				options={PROJECTION_KINDS.map(({ value: id, label }) => ({
+					value: id,
+					label,
+				}))}
+				onChange={(next) =>
+					onChange(withProjectionKind(value, next as ProjectionKind))
+				}
 			/>
-			{number("Anchor X", value.anchor.x, (x) => ({
-				...value,
-				anchor: { ...value.anchor, x },
-				preset: null,
-			}))}
-			{number("Anchor Y", value.anchor.y, (y) => ({
-				...value,
-				anchor: { ...value.anchor, y },
-				preset: null,
-			}))}
-			{number("Anchor Z", value.anchor.z, (z) => ({
-				...value,
-				anchor: { ...value.anchor, z },
-				preset: null,
-			}))}
-			{number("Direction X", value.view_direction.x, (x) => ({
-				...value,
-				view_direction: { ...value.view_direction, x },
-				preset: null,
-			}))}
-			{number("Direction Y", value.view_direction.y, (y) => ({
-				...value,
-				view_direction: { ...value.view_direction, y },
-				preset: null,
-			}))}
-			{number("Direction Z", value.view_direction.z, (z) => ({
-				...value,
-				view_direction: { ...value.view_direction, z },
-				preset: null,
-			}))}
-			{number("Rotation", value.rotation_degrees, (rotation_degrees) => ({
-				...value,
-				rotation_degrees,
-				preset: null,
-			}))}
+			{supportsPreset(value) && (
+				<SelectField
+					label="View preset"
+					ariaLabel="View preset"
+					value={value.preset ?? "custom"}
+					options={[
+						{ value: "custom", label: "Custom" },
+						...PROJECTION_PRESETS.map(({ value: id, label }) => ({
+							value: id,
+							label,
+						})),
+					]}
+					onChange={(preset) => {
+						if (preset === "custom") onChange({ ...value, preset: null });
+						else onChange(projectionForPreset(preset));
+					}}
+				/>
+			)}
+			{projectionFields(value).map((field) => (
+				<NumberField
+					key={field.key}
+					label={field.label}
+					value={field.value}
+					unit={field.unit}
+					allowDecimal
+					showStepButtons={false}
+					onValueChange={(next) => onChange(field.apply(Number(next)))}
+				/>
+			))}
+			<p className="dynamic-projection-help">
+				{PROJECTION_KINDS.find((entry) => entry.value === kind)?.detail}
+			</p>
 		</div>
-	);
-}
-
-function ShapeFields({
-	value,
-	onChange,
-}: {
-	value: DynamicSelectionShapeProjection;
-	onChange(value: DynamicSelectionShapeProjection): void;
-}) {
-	return (
-		<div className="dynamic-projection-fields">
-			<SelectField
-				label="Shape"
-				ariaLabel="Shape"
-				value={value.type}
-				options={[
-					{ value: "grid", label: "Grid" },
-					{ value: "radial", label: "Radial" },
-					{ value: "radar", label: "Radar" },
-					{ value: "random", label: "Random" },
-				]}
-				onChange={(type) => {
-					onChange(
-						type === "random"
-							? { type, seed: 0 }
-							: type === "radial"
-								? { type, center_u: 0.5, center_v: 0.5, direction: "outward" }
-								: type === "radar"
-									? {
-											type,
-											center_u: 0.5,
-											center_v: 0.5,
-											start_angle_degrees: 0,
-											sweep: "clockwise",
-										}
-									: GRID_SHAPE,
-					);
-				}}
-			/>
-			{value.type === "random" && (
-				<>
-					<NumberField
-						label="Seed"
-						min={0}
-						value={value.seed}
-						onValueChange={(seed) => onChange({ ...value, seed: Number(seed) })}
-					/>
-					<p>Random ignores fixture positions and the Projection stage.</p>
-				</>
-			)}
-			{value.type === "grid" && (
-				<>
-					<ShapeNumber
-						label="Angle"
-						value={value.angle_degrees}
-						onChange={(angle_degrees) => onChange({ ...value, angle_degrees })}
-					/>
-					<SelectField
-						label="Direction"
-						ariaLabel="Direction"
-						value={value.direction}
-						options={[
-							{ value: "ascending", label: "Ascending" },
-							{ value: "descending", label: "Descending" },
-						]}
-						onChange={(direction) => onChange({ ...value, direction })}
-					/>
-				</>
-			)}
-			{value.type === "radial" && (
-				<>
-					<ShapeNumber
-						label="Center U"
-						value={value.center_u}
-						onChange={(center_u) => onChange({ ...value, center_u })}
-					/>
-					<ShapeNumber
-						label="Center V"
-						value={value.center_v}
-						onChange={(center_v) => onChange({ ...value, center_v })}
-					/>
-					<SelectField
-						label="Direction"
-						ariaLabel="Direction"
-						value={value.direction}
-						options={[
-							{ value: "outward", label: "Outward" },
-							{ value: "inward", label: "Inward" },
-						]}
-						onChange={(direction) => onChange({ ...value, direction })}
-					/>
-				</>
-			)}
-			{value.type === "radar" && (
-				<>
-					<ShapeNumber
-						label="Center U"
-						value={value.center_u}
-						onChange={(center_u) => onChange({ ...value, center_u })}
-					/>
-					<ShapeNumber
-						label="Center V"
-						value={value.center_v}
-						onChange={(center_v) => onChange({ ...value, center_v })}
-					/>
-					<ShapeNumber
-						label="Start angle"
-						value={value.start_angle_degrees}
-						onChange={(start_angle_degrees) =>
-							onChange({ ...value, start_angle_degrees })
-						}
-					/>
-					<SelectField
-						label="Sweep"
-						ariaLabel="Sweep"
-						value={value.sweep}
-						options={[
-							{ value: "clockwise", label: "Clockwise" },
-							{
-								value: "counter_clockwise",
-								label: "Counter-clockwise",
-							},
-						]}
-						onChange={(sweep) => onChange({ ...value, sweep })}
-					/>
-				</>
-			)}
-		</div>
-	);
-}
-
-function ShapeNumber({
-	label,
-	value,
-	onChange,
-}: {
-	label: string;
-	value: number;
-	onChange(value: number): void;
-}) {
-	return (
-		<NumberField
-			label={label}
-			value={value}
-			allowDecimal
-			showStepButtons={false}
-			onValueChange={(next) => onChange(Number(next))}
-		/>
 	);
 }

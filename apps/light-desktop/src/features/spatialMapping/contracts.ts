@@ -11,11 +11,24 @@ export interface Position3d {
 	z: number;
 }
 
+/**
+ * How a Stage position becomes the pair the shape ranks on. Absent means `planar`, which is
+ * what every projection stored before the other two kinds existed is.
+ */
+export type ProjectionKind = "planar" | "cylindrical" | "spherical";
+
 export interface SpatialProjection {
 	anchor: Position3d;
 	view_direction: Position3d;
 	rotation_degrees: number;
 	preset?: ProjectionPreset | null;
+	kind?: ProjectionKind;
+	/** Euler degrees about X, Y then Z turning world +Z into the cylinder axis. Cylindrical only. */
+	axis_rotation?: Position3d;
+	/** Cylindrical: where the spread starts around the axis. Spherical: the centre's azimuth. */
+	start_angle_degrees?: number;
+	/** Spherical only: the centre's elevation above the plane perpendicular to world +Z. */
+	elevation_degrees?: number;
 }
 
 export type SpatialSelectionShape =
