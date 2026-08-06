@@ -164,6 +164,9 @@ vi.mock("../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
 	useBootstrapReady: () => true,
 	useActiveShowId: () => null,
+	// The sheet reads the desk's attribute registry now. Cuelist scoping does not depend on it,
+	// so this test states an empty one rather than a rig's worth of attributes.
+	useAttributeRegistry: () => [],
 }));
 vi.mock("../features/programmingInteraction/ProgrammingInteractionView", () => ({
 	useProgrammingSelectionView: () => ({ selected: [] }),
