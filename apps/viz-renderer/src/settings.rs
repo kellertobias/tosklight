@@ -26,6 +26,10 @@ pub enum Startup {
     Planning,
     /// The built-in deterministic scene.
     Demo,
+    /// Started by the desk as a supervised helper. The scene, values and view arrive over the
+    /// private channel on stdin rather than from a desk over HTTP, and this process draws them
+    /// and nothing else.
+    Helper,
 }
 
 #[derive(Clone, Debug)]
@@ -77,6 +81,8 @@ pub struct Options {
     pub laser_scripts: Option<PathBuf>,
     /// Take one snapshot once the scene has settled, print where it went, and exit.
     pub snapshot: bool,
+    /// Run as the desk's supervised renderer helper.
+    pub helper: bool,
 }
 
 /// The strongest lasers may be drawn at.
@@ -206,6 +212,7 @@ impl Default for Options {
             show: None,
             blender: None,
             snapshot: false,
+            helper: false,
         }
     }
 }
@@ -231,6 +238,7 @@ impl Options {
             "  --blender <path>  Blender to export snapshots with (found automatically otherwise)\n",
             "  --laser-scripts <dir>  Laser scan scripts overriding the ones fixtures ship\n",
             "  --snapshot        Take one snapshot once the scene settles, then exit\n",
+            "  --helper          Run as the desk's supervised renderer helper\n",
             "  --theme <name>    light_on_dark | dark_on_light\n",
             "  --ambient <pct>   Brightness of everything that is not a light source\n",
             "  --fog <pct>       Haze amount to render with (default 50)\n",
@@ -257,6 +265,11 @@ impl Options {
     /// bare launch is somebody opening the application on its own, with no console and no file in
     /// mind: that is the planning window's case, not an empty picture.
     pub fn startup(&self) -> Startup {
+        // The desk started this and owns it completely: it says what to draw over the channel, so
+        // nothing else — not a remembered document, not the planning window — may take over.
+        if self.helper {
+            return Startup::Helper;
+        }
         if self.demo {
             return Startup::Demo;
         }
@@ -284,6 +297,7 @@ impl Options {
                 "--help" | "-h" => options.help = true,
                 "--demo" => options.demo = true,
                 "--snapshot" => options.snapshot = true,
+                "--helper" => options.helper = true,
                 "--verify" => options.verify_only = true,
                 "--capture" => {
                     options.capture =
@@ -966,6 +980,18 @@ mod launch_order {
     /// open last, and only then the editor. Everything above the recent document is asserted here;
     /// the recent lookup itself reads the operator's own configuration directory, so it is covered
     /// where that resolution lives rather than by a test that would depend on this machine.
+    /// The desk owns a helper completely: nothing this process might otherwise have opened —
+    /// a remembered document, the planning window — may take precedence over what it is told.
+    #[test]
+    fn nothing_overrides_being_a_helper() {
+        let mut options = Options::default();
+        options.helper = true;
+        options.demo = true;
+        options.desk_requested = true;
+        options.show = Some(PathBuf::from("/shows/tour.show"));
+        assert_eq!(options.startup(), Startup::Helper);
+    }
+
     #[test]
     fn an_explicit_argument_beats_everything() {
         let mut options = bare();

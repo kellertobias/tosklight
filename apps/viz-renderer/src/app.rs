@@ -789,7 +789,9 @@ impl ApplicationHandler for Application {
                     }
                 }
             }
-            Startup::Desk | Startup::Demo => {}
+            // A helper is driven entirely over its channel: nothing is opened, connected to or
+            // hosted here. The channel loop is wired separately from this startup path.
+            Startup::Desk | Startup::Demo | Startup::Helper => {}
         }
         // The connection the session then makes has its own states to report, so the reason this
         // launch could not open what it was asked for is kept beside them until it is fixed.
