@@ -35,6 +35,21 @@ tracks the primary page. Choose **Dedicated Page** for an independent operator s
 Browser-only operation displays the default-screen controls but cannot create or claim support for
 native optional-screen windows.
 
+## Encoder placement
+
+**Encoder placement** decides which screen carries the encoder section, independently of the
+Playback controls. Choose **Encoders on** to select the main screen or any optional screen, and
+**Visible encoders** to show four or six software encoders; attached hardware always keeps its six.
+
+The main screen keeps its Playback controls whatever the placement is. While the encoders live on
+another screen, the main screen shows the Playback section alone and its Programmer/Playback toggle
+disappears, because there is nothing to switch to. If the chosen screen is closed, both surfaces
+offer **Use encoders on this screen** to take the encoders back in one explicit action.
+
+An optional screen that carries the encoders and also shows **Playbacks** or **Page Controls**
+displays a **Playback**/**Encoders** switch above its lower section and starts on **Encoders**. A
+screen that carries only one of the two shows that section without a switch.
+
 Playback rows share all available playback height according to their controls. With attached playback hardware, a row without faders uses one height unit and a row with faders uses two. On a touch surface, a one-button row uses one unit and makes the whole playback section its button, with the function label at bottom-right. A two- or three-button faderless row uses two units and places its buttons side by side. A fader row uses four units. The unit size adapts so the configured rows fill the playback area.
 
 ![Default screen and playback configuration](../assets/screenshots/workflows/desk-setup-screens.png)
@@ -45,7 +60,7 @@ Create separate Desktops for common jobs such as Programming, Playback, Patch, a
 
 Desktop layout controls arrange operator panes; they do not define fixture selection geometry.
 There is no built-in Layout pane or window. Use Stage to author fixture X/Y/Z positions, Group
-settings to define shared Projection and Phaser ranking, and a Dynamic's Projection tab for a local
+settings to define shared Projection and Phase ranking, and a Dynamic's Projection tab for a local
 override. Older Desktops that contained the retired Layout pane open without it and keep their
 remaining panes.
 

@@ -17,7 +17,7 @@ import { WorkspaceView } from "./components/shell/WorkspaceView";
 import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
 import { FixedScreenPane } from "./features/screens/FixedScreenPane";
 import { ProgrammerControlSurfaceRegion } from "./features/screens/ProgrammerControlSurfaceRegion";
-import { ScreenPlaybackSection } from "./features/screens/ScreenPlaybackSection";
+import { ScreenControlRegion } from "./features/screens/ScreenControlRegion";
 import { useScreens } from "./features/screens/ScreensContext";
 import { useScreenWindowPersistence } from "./platform/desktop";
 import { AppProvider, useApp } from "./state/AppContext";
@@ -36,7 +36,7 @@ function DesktopScreenSurface({
 		useScreens().screens?.programmer_control_surface?.owner_screen_id ===
 		screen.id;
 	const showScreenControls =
-		!programmerOwner && (screen.show_playbacks || screen.show_page_controls);
+		screen.show_playbacks || screen.show_page_controls;
 	const hydrated = useRef(false);
 	const sidePane =
 		screen.content.type === "fixed_side_pane" ? screen.content : null;
@@ -117,9 +117,8 @@ function DesktopScreenSurface({
 			) : (
 				<WorkspaceView />
 			)}
-			{showScreenControls && <ScreenPlaybackSection screen={screen} />}
-			{programmerOwner && !embeddedControl && (
-				<ProgrammerControlSurfaceRegion screenId={screen.id} />
+			{!embeddedControl && (showScreenControls || programmerOwner) && (
+				<ScreenControlRegion screen={screen} />
 			)}
 		</div>
 	);
@@ -130,17 +129,15 @@ function FixedScreenSurface({ screen }: { screen: ScreenConfiguration }) {
 		useScreens().screens?.programmer_control_surface?.owner_screen_id ===
 		screen.id;
 	if (screen.content.type !== "fixed_pane") return null;
-	const showScreenControls =
-		!programmerOwner && (screen.show_playbacks || screen.show_page_controls);
+	const showScreenControls = screen.show_playbacks || screen.show_page_controls;
 	return (
 		<div
 			className={`screen-shell fixed-content ${showScreenControls ? "with-playbacks" : ""} ${programmerOwner ? "with-control" : ""}`}
 		>
 			<NativeDragStrip />
 			<FixedScreenPane pane={screen.content.pane} />
-			{showScreenControls && <ScreenPlaybackSection screen={screen} />}
-			{programmerOwner && (
-				<ProgrammerControlSurfaceRegion screenId={screen.id} />
+			{(showScreenControls || programmerOwner) && (
+				<ScreenControlRegion screen={screen} />
 			)}
 		</div>
 	);
@@ -150,8 +147,7 @@ function UtilityScreenSurface({ screen }: { screen: ScreenConfiguration }) {
 	const programmerOwner =
 		useScreens().screens?.programmer_control_surface?.owner_screen_id ===
 		screen.id;
-	const showScreenControls =
-		!programmerOwner && (screen.show_playbacks || screen.show_page_controls);
+	const showScreenControls = screen.show_playbacks || screen.show_page_controls;
 	return (
 		<div
 			className={`screen-shell utility-content ${showScreenControls ? "with-playbacks" : ""} ${programmerOwner ? "with-control" : ""}`}
@@ -159,13 +155,12 @@ function UtilityScreenSurface({ screen }: { screen: ScreenConfiguration }) {
 			<NativeDragStrip />
 			{screen.content.type === "control_surface" && !programmerOwner ? (
 				<div className="parameter-empty" role="status">
-					<b>Control surface is assigned elsewhere</b>
+					<b>Encoders are assigned elsewhere</b>
 					<small>Assign this screen in Screens & playback.</small>
 				</div>
 			) : null}
-			{showScreenControls && <ScreenPlaybackSection screen={screen} />}
-			{programmerOwner && (
-				<ProgrammerControlSurfaceRegion screenId={screen.id} />
+			{(showScreenControls || programmerOwner) && (
+				<ScreenControlRegion screen={screen} />
 			)}
 		</div>
 	);

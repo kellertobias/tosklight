@@ -52,7 +52,8 @@ export interface CommandLineProps {
 	status: CommandStatus;
 	onReplace: (value: string, pristine?: boolean) => void;
 	onExecute: () => void | Promise<void>;
-	onToggleMode: () => void;
+	/** Omitted while the surface carries one section only, which hides the mode toggle. */
+	onToggleMode?: () => void;
 	onHistoryOpenChange: (open: boolean) => void;
 	onReuseHistory: (command: string) => void;
 	onOpenStatus: () => void;
@@ -99,18 +100,20 @@ function CommandInputSurface(
 ) {
 	return (
 		<>
-			<Button
-				className={`mode-toggle ${props.mode === "playbacks" ? "playbacks-active" : ""}`}
-				onClick={props.onToggleMode}
-			>
-				<span className="mode-icon">
-					{props.mode === "playbacks" ? "▶" : "⌨"}
-				</span>
-				<span>
-					<b>PROG.</b>
-					<small>PLAYBK</small>
-				</span>
-			</Button>
+			{props.onToggleMode && (
+				<Button
+					className={`mode-toggle ${props.mode === "playbacks" ? "playbacks-active" : ""}`}
+					onClick={props.onToggleMode}
+				>
+					<span className="mode-icon">
+						{props.mode === "playbacks" ? "▶" : "⌨"}
+					</span>
+					<span>
+						<b>PROG.</b>
+						<small>PLAYBK</small>
+					</span>
+				</Button>
+			)}
 			<div
 				className={`command-field ${props.historyOpen ? "command-history-open" : ""}`}
 			>

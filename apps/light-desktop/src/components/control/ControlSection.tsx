@@ -5,6 +5,7 @@ import {
 } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useApp } from "../../state/AppContext";
 import { CommandLineBar } from "./CommandLineBar";
+import { useControlSurfacePolicy } from "./ControlSurfaceMode";
 import { HardwareControlSummary } from "./HardwareControlSummary";
 import { NumericPad } from "./NumericPad";
 import { ParameterControls } from "./ParameterControls";
@@ -19,6 +20,8 @@ import {
 
 export function ControlSection() {
 	const { state } = useApp();
+	const policy = useControlSurfacePolicy();
+	const mode = policy?.mode ?? state.controlMode;
 	const hardwareConnected = useHardwareConnected();
 	const session = useSessionSnapshot();
 	const hardware = Boolean(hardwareConnected || state.midiProfile);
@@ -30,7 +33,7 @@ export function ControlSection() {
 	return (
 		<VisibleEncoderCountProvider count={visibleEncoderCount}>
 			<CommandSection
-				mode={state.controlMode}
+				mode={mode}
 				hardware={hardware}
 				commandLine={<CommandLineBar />}
 				programmer={

@@ -878,9 +878,9 @@ export function ScreenSettingsCard({
 					role="dialog"
 					aria-label={`Remove ${draft.name}`}
 				>
-					<b>{draft.name} owns the Programmer controls.</b>
+					<b>{draft.name} carries the encoders.</b>
 					<p>
-						Removing it will reassign the controls to the main screen in the
+						Removing it will move the encoders back to the main screen in the
 						same confirmed action.
 					</p>
 					<div>
@@ -891,7 +891,7 @@ export function ScreenSettingsCard({
 						>
 							{removing
 								? "Removing…"
-								: "Remove and use controls on main screen"}
+								: "Remove and use encoders on main screen"}
 						</Button>
 						<Button
 							disabled={removing}
@@ -905,20 +905,20 @@ export function ScreenSettingsCard({
 			)}
 			{hasControlSurface(draft.content) && !programmerOwner && (
 				<p className="screen-settings-note" role="status">
-					This Control surface content becomes active when this screen owns the
-					Programmer controls. Selecting it assigns that ownership when saved.
+					This Control surface content becomes active when this screen carries the
+					encoders. Selecting it assigns that placement when saved.
 				</p>
 			)}
 			{programmerOwner && !hasControlSurface(draft.content) && (
 				<p className="screen-settings-note" role="status">
-					Programmer controls appear below this content. Separate Playbacks and
-					Page Controls are hidden so the lower controls appear once.
+					The encoders appear below this content. When this screen also shows
+					Playbacks, a Playback/Encoders switch selects the lower section.
 				</p>
 			)}
 			{programmerOwner && hasControlSurface(draft.content) && (
 				<p className="screen-settings-note" role="status">
-					This control-only layout uses the shared Programmer lower controls;
-					separate Playbacks and Page Controls are not appended.
+					This control-only layout carries the encoders; when Playbacks are also
+					enabled, a Playback/Encoders switch selects the lower section.
 				</p>
 			)}
 			<ScreenSettingsFields

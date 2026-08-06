@@ -8,9 +8,23 @@ import { ProgrammerControlSurfaceRegion } from "./ProgrammerControlSurfaceRegion
 import { ScreensProvider } from "./ScreensContext";
 import type { ScreensContextValue } from "./types";
 
-vi.mock("../../components/control/ControlSection", () => ({
-	ControlSection: () => <div data-testid="control-surface" />,
-}));
+vi.mock("../../components/control/ControlSection", async () => {
+	const { useControlSurfacePolicy } = await import(
+		"../../components/control/ControlSurfaceMode"
+	);
+	return {
+		ControlSection: () => {
+			const policy = useControlSurfacePolicy();
+			return (
+				<div
+					data-testid="control-surface"
+					data-mode={policy?.mode ?? "follow"}
+					data-can-toggle={policy?.canToggle ? "true" : "false"}
+				/>
+			);
+		},
+	};
+});
 
 function source(
 	ownerScreenId: string | null,
@@ -53,21 +67,27 @@ function mount(
 describe("ProgrammerControlSurfaceRegion", () => {
 	afterEach(cleanup);
 
-	it("renders the one configured main-screen owner", () => {
+	it("keeps both sections and the toggle while the main screen holds the encoders", () => {
 		mount(null);
-		expect(screen.getByTestId("control-surface")).toBeInTheDocument();
+		const surface = screen.getByTestId("control-surface");
+		expect(surface).toHaveAttribute("data-mode", "follow");
+		expect(surface).toHaveAttribute("data-can-toggle", "true");
 	});
 
-	it("moves ownership from main to the named secondary screen", () => {
+	it("leaves Playbacks without a toggle on main once the encoders move to a screen", () => {
 		const main = mount("screen-2");
-		expect(screen.queryByTestId("control-surface")).toBeNull();
+		const mainSurface = screen.getByTestId("control-surface");
+		expect(mainSurface).toHaveAttribute("data-mode", "playbacks");
+		expect(mainSurface).toHaveAttribute("data-can-toggle", "false");
 		main.unmount();
 
 		mount("screen-2", "screen-2");
-		expect(screen.getByTestId("control-surface")).toBeInTheDocument();
+		const encoderSurface = screen.getByTestId("control-surface");
+		expect(encoderSurface).toHaveAttribute("data-mode", "programmer");
+		expect(encoderSurface).toHaveAttribute("data-can-toggle", "false");
 	});
 
-	it("lets the main surface explicitly recover controls from a closed owner", () => {
+	it("keeps main Playbacks and recovers the encoders from a closed screen", () => {
 		const configured = {
 			id: "screen-2",
 			name: "Stage manager",
@@ -81,10 +101,14 @@ describe("ProgrammerControlSurfaceRegion", () => {
 		);
 
 		expect(screen.getByRole("alert")).toHaveTextContent(
-			"Programmer controls unavailable — assigned to Stage manager",
+			"Encoders unavailable — assigned to Stage manager",
+		);
+		expect(screen.getByTestId("control-surface")).toHaveAttribute(
+			"data-mode",
+			"playbacks",
 		);
 		fireEvent.click(
-			screen.getByRole("button", { name: "Use controls on this screen" }),
+			screen.getByRole("button", { name: "Use encoders on this screen" }),
 		);
 		expect(context.updateProgrammerControlSurface).toHaveBeenCalledWith({
 			assign_to_main: true,

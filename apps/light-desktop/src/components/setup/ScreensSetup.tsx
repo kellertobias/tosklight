@@ -4,11 +4,6 @@ import type {
 	PlaybackSurfaceLayout,
 	ScreenConfiguration,
 } from "../../api/types";
-import {
-	attributeEncoderGroups,
-	type AttributeEncoderPlacement,
-	projectPushTurnPlacements,
-} from "../control/parameterControls/attributeEncoderPages";
 import { useFiles } from "../../features/files/FilesContext";
 import { useScreens } from "../../features/screens/ScreensContext";
 import { useCueLists } from "../../features/showObjects/ShowObjectsState";
@@ -114,44 +109,21 @@ export function ProgrammerControlSurfaceSettings() {
 		(screen) => screen.id === configuration.owner_screen_id,
 	);
 	const ownerClosed = Boolean(owner && !owner.desired_open);
-	const width = configuration.visible_encoders;
-	const placements = (server.bootstrap?.attribute_registry ?? []).flatMap(
-		(attribute): AttributeEncoderPlacement[] =>
-			attribute.encoder_group &&
-			attribute.encoder_page != null &&
-			attribute.encoder_slot != null &&
-			!attribute.retired
-				? [
-						{
-							id: attribute.id,
-							label: attribute.label,
-							encoder_group: attribute.encoder_group,
-							encoder_page: attribute.encoder_page,
-							encoder_slot: attribute.encoder_slot,
-							push_turn_of: attribute.push_turn_of,
-						},
-					]
-				: [],
-	);
-	const groups = attributeEncoderGroups(
-		projectPushTurnPlacements(placements),
-		new Set(placements.map(({ id }) => id)),
-		width,
-	).filter((group) => group.pages.length);
 	return (
 		<section className="screen-settings-card programmer-control-surface-settings">
 			<header>
 				<div>
-					<h3>Programmer control surface</h3>
+					<h3>Encoder placement</h3>
 					<p>
-						Choose the one on-screen owner and how many software encoders it
-						shows. Attached hardware remains six encoders.
+						Choose which screen carries the encoder section and how many software
+						encoders it shows. Playback controls stay on the main screen either
+						way, and attached hardware remains six encoders.
 					</p>
 				</div>
 			</header>
 			<FormLayout columns={2} minColumnWidth={180}>
 				<SelectField
-					label="Show controls on"
+					label="Encoders on"
 					value={configuration.owner_screen_id ?? "main"}
 					onChange={(owner) =>
 						void server.updateProgrammerControlSurface(
@@ -182,49 +154,13 @@ export function ProgrammerControlSurfaceSettings() {
 					]}
 				/>
 			</FormLayout>
-			<div
-				className="programmer-control-layout-preview"
-				aria-label={`${width}-encoder semantic layout preview`}
-			>
-				<div>
-					<b>{width}-position semantic layout</b>
-					<small>
-						Page boundaries adapt to the visible encoder count; semantic order
-						and push-turn companions stay together.
-					</small>
-				</div>
-				{groups.length ? (
-					groups.map((group) => (
-						<div className="programmer-control-layout-group" key={group.id}>
-							<strong>{group.label}</strong>
-							<div
-								className="programmer-control-layout-slots"
-								style={{
-									gridTemplateColumns: `repeat(${width}, minmax(0, 1fr))`,
-								}}
-							>
-								{group.pages[0]?.slots.map((attribute, index) => (
-									<span key={attribute?.id ?? `empty-${index}`}>
-										<small>E{index + 1}</small>
-										<b>{attribute?.label ?? "Unassigned"}</b>
-										{attribute?.push_turn_label && (
-											<small>Push-turn · {attribute.push_turn_label}</small>
-										)}
-									</span>
-								))}
-							</div>
-							{group.pages.length > 1 && (
-								<small>{group.pages.length} pages at this width</small>
-							)}
-						</div>
-					))
-				) : (
-					<small>The active show has no placed encoder attributes.</small>
-				)}
-			</div>
+			<small>
+				The semantic encoder layout at this width lives in Preferences →
+				Attributes &amp; encoders.
+			</small>
 			{ownerClosed && (
 				<div className="programmer-control-owner-warning" role="alert">
-					<span>{`Programmer controls unavailable — assigned to ${owner?.name}`}</span>
+					<span>{`Encoders unavailable — assigned to ${owner?.name}`}</span>
 					<Button
 						variant="warning"
 						onClick={() =>
@@ -233,7 +169,7 @@ export function ProgrammerControlSurfaceSettings() {
 							})
 						}
 					>
-						Use controls on this screen
+						Use encoders on this screen
 					</Button>
 				</div>
 			)}

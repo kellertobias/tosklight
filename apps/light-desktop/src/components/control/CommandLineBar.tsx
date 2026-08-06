@@ -13,6 +13,7 @@ import {
 	useContentErrorHistory,
 } from "../../features/commandHistory/useContentErrorHistory";
 import { useSetInteraction } from "../../features/controlSurfaceInteraction/SetInteractionProvider";
+import { useControlSurfacePolicy } from "./ControlSurfaceMode";
 import {
 	useActiveTimecode,
 	useFrameRateHz,
@@ -259,9 +260,10 @@ function useCommandLineBarModel() {
 
 export function CommandLineBar() {
 	const model = useCommandLineBarModel();
+	const policy = useControlSurfacePolicy();
 	return (
 		<CommandLine
-			mode={model.state.controlMode}
+			mode={policy?.mode ?? model.state.controlMode}
 			hardware={model.hardware}
 			ready={model.command.ready}
 			completed={model.completed}
@@ -290,7 +292,9 @@ export function CommandLineBar() {
 			status={model.status}
 			onReplace={model.replaceCommand}
 			onExecute={model.execute}
-			onToggleMode={model.toggleControlMode}
+			onToggleMode={
+				policy && !policy.canToggle ? undefined : model.toggleControlMode
+			}
 			onHistoryOpenChange={model.setHistoryOpen}
 			onReuseHistory={(command) => {
 				model.replaceCommand(command);

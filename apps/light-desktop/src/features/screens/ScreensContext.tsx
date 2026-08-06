@@ -59,3 +59,8 @@ export function useScreens() {
 		throw new Error("useScreens must be used inside ScreensProvider");
 	return context;
 }
+
+/** Null outside a provider, for surfaces that only decorate themselves with screen data. */
+export function useScreensOptional() {
+	return useContext(ScreensContext);
+}

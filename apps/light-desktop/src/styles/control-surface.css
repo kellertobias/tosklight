@@ -831,6 +831,27 @@
 .fixed-screen-unavailable b {
 	color: var(--text);
 }
+.screen-section-switch {
+	grid-column: -2 / -1;
+	display: flex;
+	gap: 5px;
+	padding: 5px 5px 0;
+	border-top: 1px solid var(--line);
+}
+.screen-section-switch > .ui-button {
+	min-height: 34px;
+	flex: 1;
+	font-size: 12px;
+}
+.screen-section-switch > .ui-button.active {
+	border-color: var(--cyan);
+	background: #0a252b;
+	color: var(--cyan);
+}
+.screen-section-switch + .screen-playbacks,
+.screen-section-switch + .control-section {
+	border-top: 0;
+}
 .screen-playbacks {
 	grid-column: -2 / -1;
 	grid-row: 2;
