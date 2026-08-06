@@ -464,6 +464,12 @@ async fn an_editor_with_no_document_has_nothing_to_download() {
 /// A profile with the channels Simple mode actually drives, so the projection is tested against
 /// fine bytes and colour rather than against a fixture that has neither.
 fn preview_profile() -> FixtureProfile {
+    preview_profile_with(light_fixture::CanonicalTransform::Identity)
+}
+
+/// The same profile, with `transform` on its colour channels, so a subtractive fixture can be
+/// tested against an additive one that is otherwise identical.
+fn preview_profile_with(transform: light_fixture::CanonicalTransform) -> FixtureProfile {
     let mut profile = FixtureProfile::blank();
     profile.revision = 1;
     profile.manufacturer = "Acme".into();
@@ -479,7 +485,11 @@ fn preview_profile() -> FixtureProfile {
                 split: 1,
                 fixture_attribute: light_core::AttributeKey(attribute.to_owned()),
                 attribute: light_core::AttributeKey(attribute.to_owned()),
-                canonical_transform: Default::default(),
+                canonical_transform: if attribute.starts_with("color.") {
+                    transform
+                } else {
+                    light_fixture::CanonicalTransform::Identity
+                },
                 resolution,
                 secondary_slots: secondary,
                 default_raw: 0,
@@ -523,9 +533,16 @@ fn preview_profile() -> FixtureProfile {
 
 /// A document with one fixture of [`preview_profile`], patched at universe 1 address 1.
 fn preview_document(name: &str) -> (PlanningDocument, PathBuf, Uuid) {
+    preview_document_with(name, light_fixture::CanonicalTransform::Identity)
+}
+
+fn preview_document_with(
+    name: &str,
+    transform: light_fixture::CanonicalTransform,
+) -> (PlanningDocument, PathBuf, Uuid) {
     let path = temp_path(name);
     let document = PlanningDocument::create(&path, "Preview show").expect("create");
-    let profile = preview_profile();
+    let profile = preview_profile_with(transform);
     let profile_id = profile.id;
     let profile_revision = u64::from(profile.revision);
     let mode_id = profile.modes[0].id;
@@ -745,5 +762,40 @@ async fn preview_values_never_enter_the_document() {
         std::fs::read(&path).expect("show bytes"),
         before,
         "setting a preview value changed the show file"
+    );
+}
+
+/// A subtractive fixture is canonically its additive opposite carrying an inverting transform — a
+/// CMY fixture's cyan is `color.red`, inverted. Ignoring that writes the complement of the colour
+/// the operator chose, which looks like a working colour picker doing the wrong thing.
+#[test]
+fn a_subtractive_colour_channel_is_inverted_before_it_is_written() {
+    let (additive, _path, additive_id) = preview_document("colour-additive");
+    let source = SceneSource::new(additive);
+    source.set_preview(crate::PreviewSet::Semantic {
+        fixture_id: additive_id,
+        parameter: crate::PreviewParameter::Colour,
+        value: 0.0,
+        colour: [1.0, 0.0, 0.0],
+    });
+    let slots = only_universe(&source.preview_snapshot());
+    assert_eq!((slots[3], slots[4]), (255, 0), "additive red, no green");
+
+    let (subtractive, _other, subtractive_id) = preview_document_with(
+        "colour-subtractive",
+        light_fixture::CanonicalTransform::InvertNormalized,
+    );
+    let source = SceneSource::new(subtractive);
+    source.set_preview(crate::PreviewSet::Semantic {
+        fixture_id: subtractive_id,
+        parameter: crate::PreviewParameter::Colour,
+        value: 0.0,
+        colour: [1.0, 0.0, 0.0],
+    });
+    let slots = only_universe(&source.preview_snapshot());
+    assert_eq!(
+        (slots[3], slots[4]),
+        (0, 255),
+        "the same red on a subtractive fixture opens green and magenta rather than red"
     );
 }

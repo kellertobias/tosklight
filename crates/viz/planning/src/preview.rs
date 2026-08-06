@@ -299,6 +299,13 @@ fn channels_for(
         let Some(fraction) = fraction else {
             continue;
         };
+        // A subtractive channel is canonically its additive opposite with an inverting transform —
+        // a CMY fixture's cyan is `color.red`, inverted — so the transform has to be applied or
+        // every such fixture takes the complement of the colour the operator chose.
+        let fraction = match channel.canonical_transform {
+            light_fixture::CanonicalTransform::Identity => fraction,
+            light_fixture::CanonicalTransform::InvertNormalized => 1.0 - fraction,
+        };
         resolved.push((channel.id, raw_for(channel.resolution, fraction)));
     }
     resolved
@@ -314,6 +321,7 @@ fn colour_fraction(key: &str, [red, green, blue]: [f32; 3]) -> Option<f32> {
         "color.red" => red,
         "color.green" => green,
         "color.blue" => blue,
+        // Retired spellings, still carried by profile revisions embedded in older shows.
         "color.cyan" => 1.0 - red,
         "color.magenta" => 1.0 - green,
         "color.yellow" => 1.0 - blue,
