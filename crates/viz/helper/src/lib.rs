@@ -12,6 +12,8 @@
 //! protocol on top, and are deliberately not here — supervision that can only be exercised through
 //! a GPU is supervision nobody tests.
 
+pub mod framing;
+
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
