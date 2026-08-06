@@ -602,8 +602,12 @@ function PhaseEditor({
 	const shape = mapping.shape;
 	return (
 		<fieldset disabled={disabled} className="group-mapping-fields">
-			<legend>Phase mapping</legend>
-			<div className="group-shape-choices" role="radiogroup" aria-label="Shape">
+			<legend>Phase ordering</legend>
+			<div
+				className="group-shape-choices"
+				role="radiogroup"
+				aria-label="Ordering mode"
+			>
 				{(["grid", "radial", "radar"] as const).map((type) => (
 					<Button
 						key={type}
@@ -615,6 +619,11 @@ function PhaseEditor({
 					</Button>
 				))}
 			</div>
+			<p className="group-mapping-help">
+				Orders the projected plane for every Dynamic inheriting from this Group.
+				Linear and Random order a Dynamic's own targets, so they are set per
+				Dynamic rather than here.
+			</p>
 			<div className="group-vector-fields">
 				{shape.type === "grid" && (
 					<>
