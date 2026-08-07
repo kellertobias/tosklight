@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod hardware_controls;
+mod host_window;
 mod lifecycle;
 mod menu;
 mod packaged_benchmark;
@@ -33,6 +34,9 @@ fn main() {
             packaged_benchmark::append_packaged_stage_benchmark_sample
         ])
         .setup(|app| {
+            // Before anything that looks for the main window: it is built here now rather than by
+            // the configuration, so a renderer has a surface to draw the Stage into.
+            host_window::install(app)?;
             lifecycle::setup(app);
             menu::install(app)?;
             server::setup(app)?;

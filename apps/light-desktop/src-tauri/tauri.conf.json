@@ -10,22 +10,11 @@
     "frontendDist": "../../../.artifacts/build/frontend/light-desktop"
   },
   "app": {
-    "windows": [
-      {
-        "title": "ToskLight",
-        "backgroundThrottling": "disabled",
-        "width": 1440,
-        "height": 900,
-        "minWidth": 1024,
-        "minHeight": 640,
-        "decorations": false,
-        "fullscreen": false,
-        "resizable": true
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
-    }
+    },
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,

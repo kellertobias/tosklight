@@ -10,7 +10,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 viz-helper = { path = "../../../crates/viz/helper" }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["unstable", "macos-private-api"] }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
