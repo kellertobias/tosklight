@@ -258,6 +258,27 @@ impl StageCompositor {
         Ok(())
     }
 
+    /// Adopt a surface the renderer handed over as a mach port right.
+    #[cfg(target_os = "macos")]
+    pub fn adopt_shared_port(
+        &mut self,
+        port: mach2::port::mach_port_t,
+        width: u32,
+        height: u32,
+    ) -> Result<(), String> {
+        let shared = viz_surface::import_from_port(&self.device, port, width, height)
+            .map_err(|error| error.to_string())?;
+        let texture = shared.texture().clone();
+        let bind_group = self.bind(&texture);
+        self.source = Some(Source {
+            shared: Some(shared),
+            texture,
+            bind_group,
+            size: (width, height),
+        });
+        Ok(())
+    }
+
     /// Take a frame that came through the pipe, uploading it into a texture of the desk's own.
     pub fn accept_copy(&mut self, width: u32, height: u32, rgba: &[u8]) -> Result<(), String> {
         let expected = (width as usize) * (height as usize) * 4;

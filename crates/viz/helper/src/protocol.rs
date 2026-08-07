@@ -39,19 +39,21 @@ pub enum FrameTransport {
 /// Both halves call this — the helper to announce, the desk to choose — so a platform can never end
 /// up with one side offering a transport the other was never built to speak.
 ///
-/// Only `Copy` today, on every platform, and deliberately.
+/// `Copy` everywhere, and `Shared` on macOS, where a surface can be handed over as a mach port
+/// right through a rendezvous the desk opens.
 ///
-/// macOS has everything a shared surface needs except a way to introduce one process's surface to
-/// another: `IOSurfaceLookup` by ID no longer resolves, and a mach send right cannot cross a pipe.
-/// Windows has no shared path anybody here has run at all. Announcing either would negotiate a
-/// desk into a transport that has never delivered a picture, and the failure would be a black pane
-/// rather than a slow one.
+/// Windows is absent from the shared list: it has no shared path anybody here has run, and
+/// announcing one would negotiate a desk into a transport that has never delivered a picture. The
+/// copy is a working picture there, at the cost of a readback and a re-upload per frame.
 ///
-/// The copy is a working picture on both, at the cost of a readback and a re-upload per frame.
-/// When a platform gains a real introduction this is the one line that changes — everything either
-/// side of it, including the surface round trip between two devices, is already proved.
+/// This is what a build *can* do. Whether a particular desk may actually open a rendezvous is a
+/// separate question it answers by trying, so a restricted process still negotiates the copy.
 pub fn supported_transports() -> Vec<FrameTransport> {
-    vec![FrameTransport::Copy]
+    let mut transports = vec![FrameTransport::Copy];
+    if cfg!(target_os = "macos") {
+        transports.push(FrameTransport::Shared);
+    }
+    transports
 }
 
 /// The transport both sides can manage, or `None` when they share nothing.
@@ -109,6 +111,13 @@ pub enum ToHelper {
         /// desk window is actually on rather than assuming one.
         scale: f32,
         transport: FrameTransport,
+        /// Where to hand the desk a surface, for [`FrameTransport::Shared`].
+        ///
+        /// A surface cannot be named down this channel: what a second process can resolve is a
+        /// port right, and a port name means nothing outside the task holding it. So the desk
+        /// opens a channel a right *can* cross, and names it here. `None` for the copy transport,
+        /// which needs no introduction because it carries the pixels themselves.
+        surface_service: Option<String>,
     },
     /// Pointer and camera intent picked up by the web layer over the pane.
     ///
@@ -193,16 +202,13 @@ pub enum FromHelper {
 /// a mismatched pair refuses rather than dereferences a number from the wrong world.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum SharedSurfaceHandle {
-    /// The machine-wide `IOSurfaceID`.
+    /// A marker that a surface is waiting, not a name that resolves.
     ///
-    /// **Not sufficient on its own, and measured to be so.** `IOSurfaceLookup` resolves an ID only
-    /// for a surface created as global, and modern macOS no longer honours that request — on
-    /// Darwin 25.5 the desk looking up a surface the renderer had just created found nothing. What
-    /// a second process actually needs is a mach send right, and a mach port name means nothing
-    /// outside the process holding it: transferring one takes a mach message, not a byte stream,
-    /// so this channel cannot carry it and the shared transport is not announced on macOS until
-    /// that exists. The variant stays because the arithmetic, the format agreement and the texture
-    /// wrapping either side of it are all proved; what is missing is only the introduction.
+    /// `IOSurfaceLookup` by ID resolves only a surface created as global, which modern macOS
+    /// ignores — measured on Darwin 25.5, where the desk looking up a surface the renderer had
+    /// just created found nothing. The right itself travels out of band, as a mach port in a mach
+    /// message over the rendezvous the desk named in [`ToHelper::Embed`]; this message only says
+    /// that one has been sent and how big it is.
     IoSurfaceId(u32),
     /// A shared handle to a D3D11 texture, as `IDXGIResource1::CreateSharedHandle` returns.
     DxgiSharedHandle(u64),
@@ -328,6 +334,7 @@ mod tests {
                 },
                 scale: 2.0,
                 transport: FrameTransport::Shared,
+                surface_service: Some("de.tokenet.tosklight.stage-pane.test".to_owned()),
             },
             ToHelper::Input {
                 input: PaneInput::Orbit { dx: -3.5, dy: 0.25 },

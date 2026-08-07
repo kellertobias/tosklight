@@ -120,6 +120,8 @@ struct PaneState {
     size: (u32, u32),
     /// The surface handed to the desk, while the transport is a shared one.
     shared: Option<viz_surface::SharedSurface>,
+    /// Where to hand the desk each surface, while the transport shares one.
+    surface_service: Option<String>,
     /// Camera intent accumulated from forwarded input.
     orbit: (f32, f32),
     zoom: f32,
@@ -138,6 +140,7 @@ impl PaneState {
             transport: embedding.transport,
             size,
             shared: None,
+            surface_service: embedding.surface_service.clone(),
             orbit: (0.0, 0.0),
             zoom: 0.0,
         })
@@ -188,6 +191,17 @@ impl PaneState {
         if self.shared.is_none() {
             let surface = viz_surface::create(self.renderer.device(), self.size.0, self.size.1)
                 .map_err(|error| error.to_string())?;
+            // The right first, then the message that says one is waiting: the desk reads the
+            // rendezvous when the message arrives, and a right already queued is one it finds
+            // rather than one it waits for.
+            #[cfg(target_os = "macos")]
+            {
+                let service = self
+                    .surface_service
+                    .as_deref()
+                    .ok_or("the desk asked for a shared surface without saying where to send it")?;
+                viz_surface::rendezvous::send_port(service, surface.mach_port())?;
+            }
             source.send_surface(surface.handle(), self.size.0, self.size.1);
             self.shared = Some(surface);
         }
@@ -273,6 +287,7 @@ mod tests {
             },
             scale,
             transport: FrameTransport::Copy,
+            surface_service: None,
         }
     }
 
@@ -300,6 +315,7 @@ mod tests {
             },
             scale: 1.0,
             transport: FrameTransport::Copy,
+            surface_service: None,
         };
         let (width, height) = pane_pixels(&four_k);
         assert!(
@@ -313,7 +329,7 @@ mod tests {
         // A shared surface never travels through the channel, so it is never shrunk.
         let shared = Embedding {
             transport: FrameTransport::Shared,
-            ..four_k
+            ..four_k.clone()
         };
         assert_eq!(pane_pixels(&shared), (3_840, 2_160));
     }

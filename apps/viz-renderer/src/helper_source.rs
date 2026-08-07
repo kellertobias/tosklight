@@ -35,11 +35,13 @@ enum FromChannel {
 }
 
 /// The desk's instruction to draw its Stage pane, and how to hand it back.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Embedding {
     pub pane: viz_helper::pane::PaneRect,
     pub scale: f32,
     pub transport: viz_helper::protocol::FrameTransport,
+    /// Where to hand the desk a surface, when the transport shares one.
+    pub surface_service: Option<String>,
 }
 
 pub struct HelperSource {
@@ -143,9 +145,9 @@ impl HelperSource {
     /// Carries the pane last sent, so a resize that arrived as a bare `Pane` message is reflected
     /// here too — the render loop reads one thing rather than reconciling two.
     pub fn embedding(&self) -> Option<Embedding> {
-        self.embedding.map(|embedding| Embedding {
+        self.embedding.as_ref().map(|embedding| Embedding {
             pane: self.pane.unwrap_or(embedding.pane),
-            ..embedding
+            ..embedding.clone()
         })
     }
 
@@ -211,10 +213,12 @@ fn read_channel(mut from_desk: impl Read, outbox: &Sender<FromChannel>) {
                 pane,
                 scale,
                 transport,
+                surface_service,
             } => outbox.send(FromChannel::Embed(Embedding {
                 pane,
                 scale,
                 transport,
+                surface_service,
             })),
             ToHelper::Input { input } => outbox.send(FromChannel::Input(input)),
             // Handled by the channel loop, which turns it into `Finished`.

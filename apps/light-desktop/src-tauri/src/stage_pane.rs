@@ -57,6 +57,9 @@ pub(crate) struct StagePane {
 
 struct Running {
     helper: SupervisedHelper,
+    /// Where the renderer hands over each surface, while the transport shares one.
+    #[cfg(target_os = "macos")]
+    rendezvous: Option<viz_surface::rendezvous::Rendezvous>,
     to_helper: Option<std::process::ChildStdin>,
     inbox: Receiver<FromRenderer>,
     compositor: StageCompositor,
@@ -99,9 +102,28 @@ impl StagePane {
                 return Err(error.to_string());
             }
         };
+        // A surface has no name this channel can carry, so a shared transport needs a channel a
+        // mach right can cross. Opening one is also the only honest test of whether this process
+        // may: a restricted process cannot register a name, and then the pair shares pixels
+        // instead. Opened before the transports are offered, so what is offered is what works.
+        #[cfg(target_os = "macos")]
+        let rendezvous = viz_surface::rendezvous::Rendezvous::open(&format!(
+            "{}-{}",
+            std::process::id(),
+            surface_service_counter()
+        ))
+        .ok();
+        #[cfg(target_os = "macos")]
+        let surface_service = rendezvous
+            .as_ref()
+            .map(|rendezvous| rendezvous.name().to_owned());
+        #[cfg(not(target_os = "macos"))]
+        let surface_service: Option<String> = None;
+
         // What both sides can do decides what happens next — including nothing at all, which is
         // the desk keeping its web renderer rather than an error anybody has to handle.
-        let Some(transport) = identity.embeddable_with(&desk_transports()) else {
+        let Some(transport) = identity.embeddable_with(&desk_transports(surface_service.is_some()))
+        else {
             helper.stop();
             return Err(
                 "this renderer and this desk share no way to move a picture between them"
@@ -126,6 +148,8 @@ impl StagePane {
 
         let mut running = Running {
             helper,
+            #[cfg(target_os = "macos")]
+            rendezvous,
             to_helper: Some(to_helper),
             inbox,
             compositor,
@@ -137,6 +161,7 @@ impl StagePane {
             pane,
             scale,
             transport,
+            surface_service,
         });
         *self.inner.lock().map_err(|_| "the Stage pane")? = Some(running);
         *self.trouble.lock().map_err(|_| "the Stage pane")? = None;
@@ -188,9 +213,9 @@ impl StagePane {
                     width,
                     height,
                 }) => {
-                    if let Err(detail) = running.compositor.adopt_shared(handle, width, height) {
-                        // A surface that cannot be opened is not the end of the pane: the renderer
-                        // replaces it on the next resize, and the last good picture stays up.
+                    // A surface that cannot be opened is not the end of the pane: the renderer
+                    // replaces it on the next resize, and the last good picture stays up.
+                    if let Err(detail) = running.adopt(handle, width, height) {
                         trouble = Some(detail);
                     }
                 }
@@ -268,6 +293,34 @@ impl StagePane {
 }
 
 impl Running {
+    /// Take the surface the renderer announced.
+    ///
+    /// The message only says one is waiting; the right itself came through the rendezvous, because
+    /// a mach port name means nothing outside the task holding it and so cannot travel down the
+    /// channel the message did.
+    fn adopt(
+        &mut self,
+        handle: SharedSurfaceHandle,
+        width: u32,
+        height: u32,
+    ) -> Result<(), String> {
+        #[cfg(target_os = "macos")]
+        {
+            let Some(rendezvous) = self.rendezvous.as_ref() else {
+                return Err("a surface arrived with nowhere to have come from".to_owned());
+            };
+            // Already queued: the renderer sends the right before the message that announces it.
+            let port = rendezvous
+                .receive(SURFACE_PATIENCE)?
+                .ok_or("the renderer announced a surface it never handed over")?;
+            return self.compositor.adopt_shared_port(port, width, height);
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.compositor.adopt_shared(handle, width, height)
+        }
+    }
+
     /// A renderer that has died is not an error to send to: the desk carries on either way, and
     /// the next thing it sends will find a channel again or report that it did not.
     fn send(&mut self, message: &ToHelper) {
@@ -283,16 +336,27 @@ impl Running {
     }
 }
 
-/// What the desk can receive on this platform.
+/// How long to wait for a right the renderer says it has already sent.
+///
+/// Short: the message announcing it is written after the right, so by the time this reads there is
+/// something queued. The wait exists for the scheduling gap between two processes, not for work.
+const SURFACE_PATIENCE: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// Names each rendezvous a desk opens, so two panes in one process never collide.
+fn surface_service_counter() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// What the desk can receive.
 ///
 /// Read from the same place the renderer reads its own list, so the two halves cannot end up with
-/// different ideas about what the platform offers.
-fn desk_transports() -> Vec<FrameTransport> {
+/// different ideas about what the platform offers — then narrowed by what this desk can actually
+/// do. A build without shared-surface support, or a process that was refused a rendezvous, takes
+/// the shared transport off the table rather than agreeing to one it cannot receive.
+fn desk_transports(has_rendezvous: bool) -> Vec<FrameTransport> {
     let mut transports = supported_transports();
-    // The renderer's list is what its build can produce; the desk's is what this build can take.
-    // They are the same list except where the desk has no shared-surface support compiled in at
-    // all, which is what this removes rather than assumes.
-    if !viz_surface::is_supported() {
+    if !viz_surface::is_supported() || !has_rendezvous {
         transports.retain(|transport| *transport != FrameTransport::Shared);
     }
     transports
@@ -481,15 +545,18 @@ mod tests {
     /// negotiation that succeeds and a pane that stays black.
     #[test]
     fn the_desk_offers_only_what_it_can_receive() {
-        let transports = desk_transports();
         assert!(
-            transports.contains(&FrameTransport::Copy),
+            desk_transports(true).contains(&FrameTransport::Copy),
             "copying needs nothing from the platform and is always available"
         );
         assert_eq!(
-            transports.contains(&FrameTransport::Shared),
+            desk_transports(true).contains(&FrameTransport::Shared),
             viz_surface::is_supported(),
             "a shared transport is offered exactly where one is compiled in"
+        );
+        assert!(
+            !desk_transports(false).contains(&FrameTransport::Shared),
+            "a desk refused a rendezvous has nowhere for a surface to arrive, and says so"
         );
     }
 

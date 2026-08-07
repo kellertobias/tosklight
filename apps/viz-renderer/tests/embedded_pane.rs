@@ -84,8 +84,39 @@ fn the_desk_asks_for_a_pane_and_the_renderer_draws_one() {
         "the renderer announces what this build can actually deliver, and nothing more"
     );
 
-    // What the desk picks, given both lists. On macOS this is the surface; elsewhere the copy.
-    let transport = *transports.iter().max().expect("at least one transport");
+    // What the desk picks, given both lists — and, for a shared surface, a rendezvous the right
+    // can actually cross. A process that may not register one negotiates the copy instead, which
+    // is exactly what the desk does.
+    #[cfg(target_os = "macos")]
+    let rendezvous =
+        viz_surface::rendezvous::Rendezvous::open(&format!("e2e-{}", std::process::id())).ok();
+    #[cfg(not(target_os = "macos"))]
+    let rendezvous: Option<()> = None;
+
+    let transport = if rendezvous.is_some() {
+        *transports.iter().max().expect("at least one transport")
+    } else {
+        FrameTransport::Copy
+    };
+    #[cfg(target_os = "macos")]
+    let surface_service = rendezvous
+        .as_ref()
+        .map(|rendezvous| rendezvous.name().to_owned());
+    #[cfg(not(target_os = "macos"))]
+    let surface_service: Option<String> = None;
+
+    eprintln!("negotiated transport: {transport:?}");
+    // Where a rendezvous opened, the shared surface is what the pair must agree on. Falling back
+    // to the copy there would be the fast path quietly never running.
+    #[cfg(target_os = "macos")]
+    if rendezvous.is_some() {
+        assert_eq!(
+            transport,
+            FrameTransport::Shared,
+            "a macOS pair that can open a rendezvous shares a surface"
+        );
+    }
+
     send(
         &mut to_renderer,
         &ToHelper::Embed {
@@ -97,6 +128,7 @@ fn the_desk_asks_for_a_pane_and_the_renderer_draws_one() {
             },
             scale: 2.0,
             transport,
+            surface_service,
         },
     );
 
@@ -108,11 +140,7 @@ fn the_desk_asks_for_a_pane_and_the_renderer_draws_one() {
             "the renderer never produced a picture within {PATIENCE:?}"
         );
         match next(&mut from_renderer) {
-            FromHelper::Surface {
-                width,
-                height,
-                handle,
-            } => {
+            FromHelper::Surface { width, height, .. } => {
                 assert_eq!(
                     transport,
                     FrameTransport::Shared,
@@ -120,10 +148,17 @@ fn the_desk_asks_for_a_pane_and_the_renderer_draws_one() {
                 );
                 // 640x360 points at 2x is the pane in the display's own pixels.
                 assert_eq!((width, height), (1_280, 720));
-                // And the desk can open what it was handed, which is the whole claim.
-                let device = test_device();
-                if let Some(device) = device {
-                    let opened = viz_surface::import(&device, handle, width, height);
+                // The right travels out of band, because a surface has no name this channel can
+                // carry. Opening it is the whole claim of the shared transport.
+                #[cfg(target_os = "macos")]
+                {
+                    let rendezvous = rendezvous.as_ref().expect("a rendezvous was opened");
+                    let port = rendezvous
+                        .receive(Duration::from_secs(5))
+                        .expect("receiving the right")
+                        .expect("the renderer sent one");
+                    let device = test_device().expect("a device to open it with");
+                    let opened = viz_surface::import_from_port(&device, port, width, height);
                     assert!(opened.is_ok(), "{:?}", opened.err());
                 }
                 return;

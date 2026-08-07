@@ -29,6 +29,9 @@
 //!
 //! [`FrameTransport::Shared`]: viz_helper::protocol::FrameTransport::Shared
 
+#[cfg(target_os = "macos")]
+pub mod rendezvous;
+
 use viz_helper::protocol::SharedSurfaceHandle;
 
 /// The texture format both sides use.
@@ -40,13 +43,12 @@ pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
 /// Whether this build can share a surface with another process here.
 ///
-/// False everywhere today, and not because the surface does not work: the round trip below proves
-/// a texture written on one device is read on another over the same `IOSurface`. What is missing is
-/// the introduction — naming that surface to a second *process*. `IOSurfaceLookup` by ID no longer
-/// resolves on modern macOS, and the mach send right that would work cannot cross the helper's
-/// pipe. Until one of those is solved the pane is carried by copied frames, which work.
+/// True on macOS, where the surface is an `IOSurface` and its right is handed over by
+/// [`rendezvous`]. Whether *this* process may open a rendezvous is a separate question — a
+/// restricted process may not register a bootstrap name — so the desk asks by opening one rather
+/// than by asking here.
 pub fn is_supported() -> bool {
-    false
+    cfg!(target_os = "macos")
 }
 
 /// A surface one process created and both can draw or sample.
@@ -104,6 +106,29 @@ impl SharedSurface {
     pub fn size(&self) -> (u32, u32) {
         (self.width, self.height)
     }
+
+    /// A send right to this surface, for handing to another process over a [`rendezvous`].
+    ///
+    /// A fresh right each call, which the caller sends and the kernel then owns. This is the only
+    /// name for a surface that a second process can actually resolve.
+    #[cfg(target_os = "macos")]
+    pub fn mach_port(&self) -> mach2::port::mach_port_t {
+        self._backing.0.create_mach_port()
+    }
+}
+
+/// Open a surface another process sent the right to.
+///
+/// The size is the sender's, so a right for a pane the layout has already moved past is refused
+/// rather than drawn at the wrong shape.
+#[cfg(target_os = "macos")]
+pub fn import_from_port(
+    device: &wgpu::Device,
+    port: mach2::port::mach_port_t,
+    width: u32,
+    height: u32,
+) -> Result<SharedSurface, SurfaceError> {
+    platform::import_from_port(device, port, width, height)
 }
 
 /// Create a surface this process draws into and another can sample.
@@ -177,8 +202,8 @@ mod platform {
     use super::{BYTES_PER_ELEMENT, Backing, FORMAT, SharedSurface, SurfaceError};
     use objc2_core_foundation::{CFDictionary, CFNumber, CFRetained, CFString};
     use objc2_io_surface::{
-        IOSurfaceRef, kIOSurfaceBytesPerElement, kIOSurfaceHeight, kIOSurfaceIsGlobal,
-        kIOSurfacePixelFormat, kIOSurfaceWidth,
+        IOSurfaceRef, kIOSurfaceBytesPerElement, kIOSurfaceHeight, kIOSurfacePixelFormat,
+        kIOSurfaceWidth,
     };
     use objc2_metal::{MTLDevice, MTLPixelFormat, MTLTextureDescriptor, MTLTextureUsage};
     use viz_helper::protocol::SharedSurfaceHandle;
@@ -202,6 +227,35 @@ mod platform {
             .ok_or_else(|| SurfaceError::Failed("IOSurfaceCreate returned nothing".to_owned()))?;
         let handle = SharedSurfaceHandle::IoSurfaceId(surface.id());
         wrap(device, surface, width, height, handle)
+    }
+
+    /// Open a surface from a right another process sent.
+    ///
+    /// This is the route that works. The ID route below is kept only for the handle a message
+    /// still carries, and is documented where it is defined as not resolving on its own.
+    pub(super) fn import_from_port(
+        device: &wgpu::Device,
+        port: mach2::port::mach_port_t,
+        width: u32,
+        height: u32,
+    ) -> Result<SharedSurface, SurfaceError> {
+        let surface = IOSurfaceRef::lookup_from_mach_port(port).ok_or_else(|| {
+            SurfaceError::Failed("the right the renderer sent names no surface".to_owned())
+        })?;
+        let found = (surface.width() as u32, surface.height() as u32);
+        if found != (width, height) {
+            return Err(SurfaceError::SizeMismatch {
+                expected: (width, height),
+                found,
+            });
+        }
+        wrap(
+            device,
+            surface,
+            width,
+            height,
+            SharedSurfaceHandle::IoSurfaceId(0),
+        )
     }
 
     pub(super) fn import(
@@ -232,18 +286,16 @@ mod platform {
     /// whatever the hardware wants — asking for a tighter row than the GPU accepts is a surface
     /// that fails to create for no visible reason.
     fn properties(width: u32, height: u32) -> CFRetained<CFDictionary> {
-        let keys: [&CFString; 5] = unsafe {
+        // Deliberately not `kIOSurfaceIsGlobal`. It would ask for a surface `IOSurfaceLookup` can
+        // find by ID, which modern macOS ignores anyway — measured on Darwin 25.5 — and a global
+        // surface is readable by anything on the machine that guesses a small integer. The right
+        // is handed to exactly one process instead, through the rendezvous.
+        let keys: [&CFString; 4] = unsafe {
             [
                 kIOSurfaceWidth,
                 kIOSurfaceHeight,
                 kIOSurfaceBytesPerElement,
                 kIOSurfacePixelFormat,
-                // Asks for a surface `IOSurfaceLookup` can find by ID. Modern macOS ignores it —
-                // measured on Darwin 25.5, where a lookup of a surface created with this still
-                // returns nothing — so it is not what makes the handle work. It is kept because it
-                // is the documented request and costs nothing; see [`SharedSurfaceHandle`] for what
-                // actually has to happen instead.
-                kIOSurfaceIsGlobal,
             ]
         };
         let values = [
@@ -251,7 +303,6 @@ mod platform {
             CFNumber::new_i32(height as i32),
             CFNumber::new_i32(BYTES_PER_ELEMENT),
             CFNumber::new_i32(PIXEL_FORMAT_RGBA),
-            CFNumber::new_i32(1),
         ];
         let mut key_pointers: Vec<*const std::ffi::c_void> = keys
             .iter()
