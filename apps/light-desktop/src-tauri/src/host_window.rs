@@ -13,6 +13,11 @@
 //! The arrangement is the one `experiments/embedded-renderer-pane` established and an operator
 //! confirmed: a transparent child webview over a native surface keeps its z-order, so web chrome
 //! draws above the rendered image rather than the other way round.
+//!
+//! The failure this can produce is silent — everything runs, the server comes ready, and the
+//! window is black because the webview never rendered. So it is checked rather than assumed:
+//! launching with `LIGHT_DESKTOP_TEST_READY_FILE` set writes the marker only once the frontend has
+//! mounted and called `frontend_ready`, which it cannot do from a window that did not draw.
 
 use tauri::{LogicalPosition, LogicalSize, WebviewUrl};
 
