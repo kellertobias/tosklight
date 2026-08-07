@@ -59,6 +59,21 @@ pub enum FromHelper {
     Error { detail: String },
     /// The helper is stopping of its own accord.
     Stopping { detail: String },
+    /// One rendered frame of the Stage pane, as straight RGBA.
+    ///
+    /// The plan allows either of two ways to get a native picture into the desk's window: attach a
+    /// helper-owned surface to the desk's viewport, or pass a render target into a desk-owned one.
+    /// This is the second, in the form that keeps the crash isolation intact — sharing a GPU
+    /// surface across processes means handing the desk a handle the helper's driver owns, which is
+    /// the coupling the separate process exists to avoid.
+    ///
+    /// It costs bandwidth: a pane is four bytes a pixel per frame. That is why the pane rectangle
+    /// is sent rather than the whole window, and why [`crate::framing::MAX_FRAME`] bounds it.
+    Frame {
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    },
 }
 
 /// Why a helper was refused.
@@ -178,6 +193,35 @@ mod tests {
             let decoded: ToHelper = decode(&encoded).expect("decodes");
             assert_eq!(decoded, message);
         }
+    }
+
+    /// A frame is the largest thing that crosses this channel, so its bound is worth stating.
+    #[test]
+    fn a_rendered_frame_crosses_the_channel() {
+        let frame = FromHelper::Frame {
+            width: 4,
+            height: 2,
+            rgba: vec![0xab; 4 * 2 * 4],
+        };
+        let decoded: FromHelper = decode(&encode(&frame).expect("encodes")).expect("decodes");
+        assert_eq!(decoded, frame);
+    }
+
+    /// The pane is sent rather than the whole window precisely because of this: a frame is four
+    /// bytes a pixel, and the framing refuses one that could not be a real message.
+    #[test]
+    fn a_frame_larger_than_the_channel_allows_is_refused() {
+        let pixels = crate::framing::MAX_FRAME / 4 + 1_024;
+        let frame = FromHelper::Frame {
+            width: pixels as u32,
+            height: 1,
+            rgba: vec![0; pixels * 4],
+        };
+        let encoded = encode(&frame).expect("encodes");
+        assert!(
+            crate::framing::write_frame(&mut Vec::new(), &encoded).is_err(),
+            "a frame this size is refused rather than sent"
+        );
     }
 
     #[test]

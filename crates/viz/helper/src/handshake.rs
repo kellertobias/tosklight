@@ -85,6 +85,11 @@ pub fn greet_helper(
         FromHelper::Error { detail } | FromHelper::Stopping { detail } => {
             Err(HandshakeError::Unexpected(detail))
         }
+        // A frame before the greeting is a helper drawing for somebody else, or a stream this desk
+        // has joined partway through. Either way it is not the answer this exchange is waiting for.
+        FromHelper::Frame { .. } => Err(HandshakeError::Unexpected(
+            "a rendered frame arrived before the helper said it was ready".to_owned(),
+        )),
     }
 }
 
