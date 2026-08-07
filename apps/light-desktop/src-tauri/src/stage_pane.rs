@@ -657,6 +657,7 @@ pub(crate) fn stage_pane_input(
     let input = match gesture.as_str() {
         "orbit" => PaneInput::Orbit { dx: x, dy: y },
         "pan" => PaneInput::Pan { dx: x, dy: y },
+        "truck" => PaneInput::Truck { dx: x, dy: y },
         "zoom" => PaneInput::Zoom { amount: y },
         other => return Err(format!("no such pane gesture: {other}")),
     };

@@ -154,7 +154,15 @@ fn drain(events: Vec<ProviderEvent>, state: &mut PaneState) -> bool {
             }
             ProviderEvent::SceneDelta(scene) => state.scene = *scene,
             ProviderEvent::Values(values) => state.values = *values,
-            ProviderEvent::View(view) => state.view = view,
+            ProviderEvent::View(view) => {
+                // The desk's view is adopted until the operator aims this pane themselves; after
+                // that only what it does not decide — quality, theme — keeps coming from the desk.
+                let camera = state.view.camera;
+                state.view = view;
+                if state.camera_is_local {
+                    state.view.camera = camera;
+                }
+            }
             ProviderEvent::Connection(connection) => {
                 finished |= matches!(connection, viz_scene::ConnectionState::Failed { .. });
             }
@@ -178,9 +186,10 @@ struct PaneState {
     shared: Option<viz_surface::SharedSurface>,
     /// Where to hand the desk each surface, while the transport shares one.
     surface_service: Option<String>,
-    /// Camera intent accumulated from forwarded input.
-    orbit: (f32, f32),
-    zoom: f32,
+    /// True once the operator has moved the camera here, after which the desk's own view no longer
+    /// takes it back. A camera that snapped home whenever the desk re-sent its view would be a
+    /// camera nobody could aim.
+    camera_is_local: bool,
 }
 
 impl PaneState {
@@ -197,8 +206,7 @@ impl PaneState {
             size,
             shared: None,
             surface_service: embedding.surface_service.clone(),
-            orbit: (0.0, 0.0),
-            zoom: 0.0,
+            camera_is_local: false,
         })
     }
 
@@ -218,19 +226,88 @@ impl PaneState {
         Ok(())
     }
 
+    /// Move the camera the way the operator asked.
+    ///
+    /// The same gestures the desk's own 3D Stage uses, so an operator switching between the two
+    /// renderers does not have to learn the pane twice: drag orbits about what is being looked at,
+    /// the wheel moves toward it. What the pane adds is the middle and secondary buttons, which
+    /// the desk's Stage has nowhere to put.
     fn apply(&mut self, input: PaneInput) {
+        use glam::Vec3;
+        self.camera_is_local = true;
+        let camera = &mut self.view.camera;
+        let to_eye = camera.position - camera.target;
+        let distance = to_eye.length().max(0.01);
+        let forward = (-to_eye).normalize_or_zero();
+        let right = forward.cross(camera.up).normalize_or_zero();
+        let up = right.cross(forward).normalize_or_zero();
+        // A drag across the pane is a fixed sweep whatever the pane's size, which is what makes it
+        // feel the same in a small pane and a large one.
+        let radians_per_point = std::f32::consts::PI / 360.0;
+        // Metres per point, scaled by how far away the subject is: a drag should move the picture
+        // by about as much whether the camera is on top of the rig or across the room from it.
+        let metres_per_point = distance * 0.0025;
+
         match input {
             PaneInput::Orbit { dx, dy } => {
-                self.orbit.0 += dx;
-                self.orbit.1 += dy;
+                let yaw = glam::Quat::from_axis_angle(up, -dx * radians_per_point);
+                // Pitch is clamped by rebuilding from the rotated vector rather than by tracking
+                // an angle, so no amount of dragging can put the camera through its own up axis.
+                let pitched = glam::Quat::from_axis_angle(right, -dy * radians_per_point);
+                let rotated = (yaw * pitched) * to_eye;
+                let level = Vec3::new(rotated.x, 0.0, rotated.z).length();
+                if level > distance * 0.05 {
+                    camera.position = camera.target + rotated;
+                }
             }
-            // Panning the Stage is the same gesture applied to the camera target, which the
-            // camera model expresses as an orbit around a moved centre.
             PaneInput::Pan { dx, dy } => {
-                self.orbit.0 += dx * 0.25;
-                self.orbit.1 += dy * 0.25;
+                let shift = right * (-dx * metres_per_point) + up * (dy * metres_per_point);
+                camera.position += shift;
+                camera.target += shift;
             }
-            PaneInput::Zoom { amount } => self.zoom += amount,
+            PaneInput::Truck { dx, dy } => {
+                // The camera alone, so the view turns as it walks.
+                camera.position += right * (-dx * metres_per_point) + up * (dy * metres_per_point);
+            }
+            PaneInput::Zoom { amount } => {
+                // Proportional, so each notch covers the same fraction of the remaining distance
+                // and the camera approaches the subject without ever reaching it.
+                let scaled = (distance * (0.9_f32).powf(amount)).clamp(0.05, 5_000.0);
+                camera.position = camera.target + to_eye.normalize_or_zero() * scaled;
+            }
+            PaneInput::Place {
+                x,
+                y,
+                z,
+                pan,
+                tilt,
+                distance: reach,
+            } => {
+                if let Some(x) = x {
+                    camera.position.x = x;
+                }
+                if let Some(y) = y {
+                    camera.position.y = y;
+                }
+                if let Some(z) = z {
+                    camera.position.z = z;
+                }
+                // Pan and tilt aim the camera from where it now is, so an encoder can address the
+                // two independently of the three positions above it.
+                let reach = reach.unwrap_or(distance).max(0.05);
+                if pan.is_some() || tilt.is_some() || reach != distance {
+                    let aimed = camera.target - camera.position;
+                    let current_pan = aimed.x.atan2(aimed.z);
+                    let current_tilt = (aimed.y / aimed.length().max(0.001)).asin();
+                    let pan = pan.map_or(current_pan, f32::to_radians);
+                    let tilt = tilt
+                        .map_or(current_tilt, f32::to_radians)
+                        .clamp(-1.55, 1.55);
+                    let direction =
+                        Vec3::new(pan.sin() * tilt.cos(), tilt.sin(), pan.cos() * tilt.cos());
+                    camera.target = camera.position + direction * reach;
+                }
+            }
         }
     }
 
@@ -390,6 +467,104 @@ mod tests {
             ..four_k.clone()
         };
         assert_eq!(pane_pixels(&shared), (3_840, 2_160));
+    }
+
+    fn aimed() -> Embedding {
+        embedding(640.0, 360.0, 1.0)
+    }
+
+    /// The camera has to end up somewhere an operator would predict. These are the properties that
+    /// hold whatever the arithmetic is: orbiting keeps the distance, panning keeps the direction,
+    /// trucking moves the eye and not the subject, and zoom never arrives at what it approaches.
+    #[test]
+    fn dragging_moves_the_camera_the_way_the_gesture_says() {
+        let Ok(mut state) = PaneState::new(&aimed()) else {
+            eprintln!("no GPU here; skipping the camera model");
+            return;
+        };
+        let start = state.view.camera;
+        let reach = |camera: &viz_scene::Camera| (camera.position - camera.target).length();
+
+        state.apply(PaneInput::Orbit { dx: 40.0, dy: 0.0 });
+        assert!(
+            (reach(&state.view.camera) - reach(&start)).abs() < 0.001,
+            "orbiting turns around the subject rather than approaching it"
+        );
+        assert!(state.view.camera.position.distance(start.position) > 0.01);
+        assert_eq!(state.view.camera.target, start.target);
+
+        let before = state.view.camera;
+        state.apply(PaneInput::Pan { dx: 25.0, dy: 10.0 });
+        let moved = state.view.camera;
+        assert!(
+            (moved.position - moved.target)
+                .normalize()
+                .distance((before.position - before.target).normalize())
+                < 0.001,
+            "panning slides the picture without turning it"
+        );
+        assert!(moved.target.distance(before.target) > 0.001);
+
+        let before = state.view.camera;
+        state.apply(PaneInput::Truck { dx: 25.0, dy: 0.0 });
+        assert_eq!(
+            state.view.camera.target, before.target,
+            "trucking walks the camera and leaves the subject alone"
+        );
+        assert!(state.view.camera.position.distance(before.position) > 0.001);
+
+        let before = reach(&state.view.camera);
+        state.apply(PaneInput::Zoom { amount: 3.0 });
+        let after = reach(&state.view.camera);
+        assert!(after < before, "a positive notch moves in");
+        assert!(after > 0.0, "and never arrives");
+    }
+
+    /// The camera an operator aimed is theirs. A desk re-sending its own view — which it does on
+    /// every reconnection — must not take it back.
+    #[test]
+    fn aiming_the_camera_makes_it_the_operators() {
+        let Ok(mut state) = PaneState::new(&aimed()) else {
+            return;
+        };
+        assert!(!state.camera_is_local);
+        state.apply(PaneInput::Orbit { dx: 10.0, dy: 0.0 });
+        assert!(state.camera_is_local);
+    }
+
+    /// An encoder addresses the camera by number, and each number must be settable alone.
+    #[test]
+    fn the_camera_can_be_placed_one_number_at_a_time() {
+        let Ok(mut state) = PaneState::new(&aimed()) else {
+            return;
+        };
+        state.apply(PaneInput::Place {
+            x: Some(4.0),
+            y: None,
+            z: None,
+            pan: None,
+            tilt: None,
+            distance: None,
+        });
+        assert!((state.view.camera.position.x - 4.0).abs() < 0.001);
+
+        let height = state.view.camera.position.y;
+        state.apply(PaneInput::Place {
+            x: None,
+            y: None,
+            z: None,
+            pan: Some(90.0),
+            tilt: Some(0.0),
+            distance: Some(10.0),
+        });
+        assert!(
+            (state.view.camera.position.y - height).abs() < 0.001,
+            "aiming does not move the camera"
+        );
+        let aimed_at = state.view.camera.target - state.view.camera.position;
+        assert!((aimed_at.length() - 10.0).abs() < 0.01);
+        assert!(aimed_at.y.abs() < 0.01, "a zero tilt looks level");
+        assert!(aimed_at.x > 0.0, "ninety degrees of pan looks along +X");
     }
 
     /// A layout that has not run yet reports nothing, which must not become a zero-sized texture.

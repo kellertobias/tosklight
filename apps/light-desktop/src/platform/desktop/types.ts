@@ -40,7 +40,7 @@ export interface StagePaneGeometry {
 	surfaceHeight: number;
 }
 
-export type StagePaneGesture = "orbit" | "pan" | "zoom";
+export type StagePaneGesture = "orbit" | "pan" | "truck" | "zoom";
 
 /** Everything the renderer draws the pane with, as the operator set it. */
 export interface StagePanePicture {

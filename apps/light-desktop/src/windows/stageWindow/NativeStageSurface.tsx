@@ -52,8 +52,16 @@ export function NativeStageSurface({
 				const dy = event.clientY - drag.y;
 				if (dx === 0 && dy === 0) return;
 				dragging.current = { ...drag, x: event.clientX, y: event.clientY };
-				// The secondary button pans, as it does in the visualizer's own window.
-				pane.send(drag.button === 2 ? "pan" : "orbit", dx, dy);
+				/*
+				 * The primary button orbits, which is what the desk's own 3D Stage does, so an
+				 * operator moving between the two renderers does not have to learn the pane twice.
+				 * The middle and secondary buttons are what the pane adds: the middle walks the
+				 * camera across its own axes and leaves what it looks at alone, the secondary
+				 * slides both together so the picture translates without turning.
+				 */
+				const gesture =
+					drag.button === 1 ? "truck" : drag.button === 2 ? "pan" : "orbit";
+				pane.send(gesture, dx, dy);
 			}}
 			onPointerUp={(event) => {
 				dragging.current = null;

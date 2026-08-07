@@ -184,12 +184,28 @@ pub struct DeskEndpoint {
 /// What the operator did over the pane, as intent rather than as events.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub enum PaneInput {
-    /// Accumulated orbit, in logical points of drag.
+    /// Rotate about the point being looked at, in logical points of drag.
     Orbit { dx: f32, dy: f32 },
-    /// Accumulated pan, in logical points of drag.
+    /// Slide the view: the camera and the point it looks at move together, so the picture
+    /// translates without turning.
     Pan { dx: f32, dy: f32 },
-    /// Accumulated zoom, in wheel notches; positive moves the camera in.
+    /// Move the camera itself across its own right and up axes, leaving what it looks at where it
+    /// was — so the view turns as the camera walks.
+    Truck { dx: f32, dy: f32 },
+    /// Toward or away from the point being looked at, in wheel notches; positive moves in.
     Zoom { amount: f32 },
+    /// Put the camera somewhere exactly, for a control surface that addresses it by number rather
+    /// than by dragging — an encoder, above all.
+    Place {
+        x: Option<f32>,
+        y: Option<f32>,
+        z: Option<f32>,
+        /// Degrees, absolute.
+        pan: Option<f32>,
+        tilt: Option<f32>,
+        /// Distance from the camera to what it looks at, in metres.
+        distance: Option<f32>,
+    },
 }
 
 /// What the helper sends back.
