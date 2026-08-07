@@ -7,6 +7,7 @@
 
 mod app;
 mod demo;
+mod helper_source;
 mod lasers;
 
 /// How many slots the renderer divides a gobo wheel into.

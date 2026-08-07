@@ -7715,6 +7715,7 @@ dependencies = [
  "viz-desk",
  "viz-dmx",
  "viz-document",
+ "viz-helper",
  "viz-laser",
  "viz-project",
  "viz-render",

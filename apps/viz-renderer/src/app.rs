@@ -96,6 +96,9 @@ pub struct Application {
     camera_is_local: bool,
     /// The private server started for a show file, when the operator opened one.
     hosted_show: Option<crate::showfile::HostedShow>,
+    /// The desk's channel, when this process was started as its helper. Held until the provider
+    /// is built, because the handshake happens before the window exists.
+    helper_source: Option<crate::helper_source::HelperSource>,
     /// The planning window opened when the visualizer was started with nothing to look at.
     planning_window: Option<crate::planner::PlanningWindow>,
     menu: Option<crate::menu::ApplicationMenu>,
@@ -194,6 +197,7 @@ impl Application {
             overlay: Overlay::default(),
             camera_is_local: false,
             hosted_show: None,
+            helper_source: None,
             planning_window: None,
             menu: None,
             framed_revision: None,
@@ -229,6 +233,15 @@ impl Application {
     /// Build the provider the current preferences select. The demo flag forces the deterministic
     /// built-in scene so the renderer can be inspected without a desk.
     fn build_provider(&mut self) -> (Box<dyn viz_scene::SceneProvider>, ProviderKind) {
+        // Started by the desk: everything drawn arrives over the channel on stdin, and this
+        // process chooses nothing. Taken once — the pipe cannot be read from twice — so a rebuild
+        // after the desk has gone falls through to the built-in scene rather than hanging on a
+        // channel nobody is writing to.
+        if self.options.helper
+            && let Some(source) = self.helper_source.take()
+        {
+            return (Box::new(source), ProviderKind::LightingDesk);
+        }
         if self.options.demo {
             return (
                 Box::new(DemoProvider::new()),
@@ -725,8 +738,15 @@ impl ApplicationHandler for Application {
         if self.window.is_some() {
             return;
         }
+        // A helper is the desk's window and wears the name the desk gave it, so the two never
+        // disagree about what the operator is looking at.
+        let title = self
+            .helper_source
+            .as_mut()
+            .and_then(crate::helper_source::HelperSource::take_title)
+            .unwrap_or_else(|| "ToskLight Visualizer".to_owned());
         let attributes = Window::default_attributes()
-            .with_title("ToskLight Visualizer")
+            .with_title(title)
             .with_inner_size(winit::dpi::LogicalSize::new(1600.0, 900.0));
         let window = match event_loop.create_window(attributes) {
             Ok(window) => Arc::new(window),
@@ -791,7 +811,22 @@ impl ApplicationHandler for Application {
             }
             // A helper is driven entirely over its channel: nothing is opened, connected to or
             // hosted here. The channel loop is wired separately from this startup path.
-            Startup::Desk | Startup::Demo | Startup::Helper => {}
+            // The greeting happens before the window: the desk names the title it wants, and a
+            // helper that cannot agree on the protocol must not open a window at all.
+            Startup::Helper => {
+                match crate::helper_source::HelperSource::start(
+                    std::io::stdin(),
+                    std::io::stdout(),
+                    "viz-renderer".to_owned(),
+                ) {
+                    Ok(source) => self.helper_source = Some(source),
+                    Err(error) => {
+                        eprintln!("the desk's channel: {error}");
+                        lasting_failure = Some(("the desk's channel".to_owned(), error));
+                    }
+                }
+            }
+            Startup::Desk | Startup::Demo => {}
         }
         // The connection the session then makes has its own states to report, so the reason this
         // launch could not open what it was asked for is kept beside them until it is fixed.
