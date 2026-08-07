@@ -85,17 +85,57 @@ fn set(emitter: &mut EmitterValues, attribute: &str, value: f32) -> bool {
 mod tests {
     use super::*;
 
+    /// Two fixtures, one emitter each. Only the identity and the link between them matter here:
+    /// the overlay is about which values land on which emitter, not about geometry.
     fn scene_with_two_fixtures() -> (Scene, uuid::Uuid, uuid::Uuid) {
+        use viz_scene::glam::Vec3;
+        use viz_scene::{
+            BodyKind, EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody,
+            FixtureInstance,
+        };
         let mut scene = Scene::default();
         let first = uuid::Uuid::new_v4();
         let second = uuid::Uuid::new_v4();
         for fixture_id in [first, second] {
-            let mut fixture = viz_scene::FixtureInstance::default();
-            fixture.fixture_id = fixture_id;
-            scene.fixtures.push(fixture);
-            let mut emitter = viz_scene::EmitterInstance::default();
-            emitter.fixture_index = (scene.fixtures.len() - 1) as u32;
-            scene.emitters.push(emitter);
+            scene.fixtures.push(FixtureInstance {
+                instance_id: uuid::Uuid::new_v4(),
+                fixture_id,
+                name: String::new(),
+                number: None,
+                position: Vec3::ZERO,
+                rotation_degrees: Vec3::ZERO,
+                bracket_degrees: 0.0,
+                shaper_degrees: None,
+                installed_colour: [1.0; 3],
+                installed_shaper_angles_degrees: [0.0; 4],
+                body: FixtureBody {
+                    size: Vec3::splat(0.3),
+                    kind: BodyKind::MovingHead,
+                },
+                patched: true,
+                address: None,
+                model: None,
+                fallback: None,
+            });
+            scene.emitters.push(EmitterInstance {
+                fixture_index: (scene.fixtures.len() - 1) as u32,
+                head_index: 0,
+                label: String::new(),
+                local_origin: Vec3::ZERO,
+                tilt_pivot: Vec3::ZERO,
+                local_orientation_degrees: Vec3::ZERO,
+                pan: None,
+                tilt: None,
+                beam_angle_degrees: 12.0,
+                field_angle_degrees: 36.0,
+                optics: EmitterOptics::default(),
+                kind: EmitterKind::Beam,
+                cells: EmitterLayoutCells::single(),
+                laser: None,
+                shaper_roles: [false; 4],
+                live_shaper_angle_roles: [false; 4],
+                live_shaper_rotation_role: false,
+            });
         }
         (scene, first, second)
     }
