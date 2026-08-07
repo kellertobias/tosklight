@@ -222,6 +222,12 @@ impl PaneState {
 ///
 /// Clamped to at least one pixel: a collapsed pane is a layout mid-flight, not a reason to fail,
 /// and a zero-sized texture is refused by every backend.
+///
+/// The copy transport is clamped further. A frame goes through the channel as RGBA, and the
+/// channel refuses anything past [`viz_helper::framing::MAX_FRAME`] — so a Stage pane filling a 4K
+/// display would be a frame nobody could send, every frame, silently. Rendering it slightly
+/// smaller and letting the desk scale it up is a softer picture; not rendering it is a black pane.
+/// A shared surface never travels through the channel and is never clamped.
 fn pane_pixels(embedding: &Embedding) -> (u32, u32) {
     let scale = if embedding.scale > 0.0 {
         embedding.scale
@@ -230,7 +236,26 @@ fn pane_pixels(embedding: &Embedding) -> (u32, u32) {
     };
     let width = (embedding.pane.width * scale).round().max(1.0) as u32;
     let height = (embedding.pane.height * scale).round().max(1.0) as u32;
-    (width.min(16_384), height.min(16_384))
+    let (width, height) = (width.min(16_384), height.min(16_384));
+    if embedding.transport == FrameTransport::Shared {
+        return (width, height);
+    }
+    fits_in_one_frame(width, height)
+}
+
+/// Shrink a pane, keeping its shape, until its pixels fit in one channel frame.
+fn fits_in_one_frame(width: u32, height: u32) -> (u32, u32) {
+    // The pixels plus the few bytes of message around them. Left generous rather than exact: the
+    // point is to stay clear of the limit, not to reach it.
+    const BUDGET: u64 = (viz_helper::framing::MAX_FRAME as u64) - 4_096;
+    let pixels = u64::from(width) * u64::from(height) * 4;
+    if pixels <= BUDGET {
+        return (width, height);
+    }
+    let ratio = (BUDGET as f64 / pixels as f64).sqrt();
+    let width = ((f64::from(width) * ratio).floor() as u32).max(1);
+    let height = ((f64::from(height) * ratio).floor() as u32).max(1);
+    (width, height)
 }
 
 #[cfg(test)]
@@ -259,6 +284,38 @@ mod tests {
         assert_eq!(pane_pixels(&embedding(640.0, 360.0, 2.0)), (1_280, 720));
         assert_eq!(pane_pixels(&embedding(640.0, 360.0, 1.0)), (640, 360));
         assert_eq!(pane_pixels(&embedding(100.5, 50.4, 1.5)), (151, 76));
+    }
+
+    /// The copy transport puts every frame through the channel, and a Stage pane filling a 4K
+    /// display is larger than the channel accepts. Sending nothing at all would be a black pane
+    /// on exactly the machines with the most pixels to fill.
+    #[test]
+    fn a_copied_pane_is_kept_inside_what_the_channel_carries() {
+        let four_k = Embedding {
+            pane: PaneRect {
+                x: 0.0,
+                y: 0.0,
+                width: 3_840.0,
+                height: 2_160.0,
+            },
+            scale: 1.0,
+            transport: FrameTransport::Copy,
+        };
+        let (width, height) = pane_pixels(&four_k);
+        assert!(
+            u64::from(width) * u64::from(height) * 4 < viz_helper::framing::MAX_FRAME as u64,
+            "{width}x{height} still fits in one frame"
+        );
+        // The shape is kept, so the desk scales it up rather than stretching it.
+        let aspect = f64::from(width) / f64::from(height);
+        assert!((aspect - 3_840.0 / 2_160.0).abs() < 0.01, "{aspect}");
+
+        // A shared surface never travels through the channel, so it is never shrunk.
+        let shared = Embedding {
+            transport: FrameTransport::Shared,
+            ..four_k
+        };
+        assert_eq!(pane_pixels(&shared), (3_840, 2_160));
     }
 
     /// A layout that has not run yet reports nothing, which must not become a zero-sized texture.
