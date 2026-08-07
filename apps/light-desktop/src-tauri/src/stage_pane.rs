@@ -349,6 +349,14 @@ impl StagePane {
         let mut guard = self.inner.lock().map_err(|_| "the Stage pane")?;
         if let Some(running) = guard.as_mut() {
             running.send(&ToHelper::Shutdown);
+            // One empty frame before anything is torn down.
+            //
+            // A swapchain keeps showing the last thing presented to it, and the interface above is
+            // transparent wherever it paints nothing — so a pane closed without this leaves its
+            // final Stage on the window for good. What that looks like is every built-in screen
+            // drawn over a Stage that is no longer there.
+            running.compositor.clear_source();
+            let _ = running.compositor.draw();
             running.helper.stop();
         }
         *guard = None;

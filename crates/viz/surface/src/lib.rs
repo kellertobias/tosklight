@@ -117,6 +117,26 @@ impl SharedSurface {
     }
 }
 
+/// Put a window's drawing layer behind everything the interface draws on top of it.
+///
+/// The whole arrangement depends on the web interface compositing *above* the rendered picture:
+/// menus, dialogs and the pane's own settings have to be able to open across the Stage. A layer
+/// added to the window sorts among its siblings, and by default it can land in front of the child
+/// webview — at which point everything the interface draws inside the pane rectangle disappears
+/// behind the picture, while everything outside it looks fine. That reads as "the pane settings
+/// button does nothing".
+///
+/// A negative `zPosition` sorts it behind its siblings whatever order they were added in.
+#[cfg(target_os = "macos")]
+pub fn send_surface_layer_to_back(surface: &wgpu::Surface<'static>) {
+    // SAFETY: reads the Metal layer this surface already owns and sets one of its properties. The
+    // layer outlives the call, and `zPosition` is a plain animatable property with no invariants
+    // tied to the swapchain.
+    if let Some(hal) = unsafe { surface.as_hal::<wgpu::hal::api::Metal>() } {
+        hal.render_layer().lock().setZPosition(-1.0);
+    }
+}
+
 /// Open a surface another process sent the right to.
 ///
 /// The size is the sender's, so a right for a pane the layout has already moved past is refused

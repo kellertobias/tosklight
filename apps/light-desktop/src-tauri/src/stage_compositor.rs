@@ -218,6 +218,11 @@ impl StageCompositor {
             scale: if scale > 0.0 { scale } else { 1.0 },
         };
         compositor.configure();
+        // Behind the interface, which is the whole point of drawing here rather than in a window
+        // of its own: a menu, a dialog or the pane's own settings must be able to open across the
+        // Stage. Done after configuring, so the layer exists to be ordered.
+        #[cfg(target_os = "macos")]
+        viz_surface::send_surface_layer_to_back(&compositor.surface);
         Ok(compositor)
     }
 
