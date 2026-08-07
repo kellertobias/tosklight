@@ -38,9 +38,15 @@ use viz_helper::protocol::SharedSurfaceHandle;
 /// the helper drew without a conversion in between.
 pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
-/// Whether this build can share a surface on the platform it is running on.
+/// Whether this build can share a surface with another process here.
+///
+/// False everywhere today, and not because the surface does not work: the round trip below proves
+/// a texture written on one device is read on another over the same `IOSurface`. What is missing is
+/// the introduction — naming that surface to a second *process*. `IOSurfaceLookup` by ID no longer
+/// resolves on modern macOS, and the mach send right that would work cannot cross the helper's
+/// pipe. Until one of those is solved the pane is carried by copied frames, which work.
 pub fn is_supported() -> bool {
-    cfg!(target_os = "macos")
+    false
 }
 
 /// A surface one process created and both can draw or sample.
@@ -171,8 +177,8 @@ mod platform {
     use super::{BYTES_PER_ELEMENT, Backing, FORMAT, SharedSurface, SurfaceError};
     use objc2_core_foundation::{CFDictionary, CFNumber, CFRetained, CFString};
     use objc2_io_surface::{
-        IOSurfaceRef, kIOSurfaceBytesPerElement, kIOSurfaceHeight, kIOSurfacePixelFormat,
-        kIOSurfaceWidth,
+        IOSurfaceRef, kIOSurfaceBytesPerElement, kIOSurfaceHeight, kIOSurfaceIsGlobal,
+        kIOSurfacePixelFormat, kIOSurfaceWidth,
     };
     use objc2_metal::{MTLDevice, MTLPixelFormat, MTLTextureDescriptor, MTLTextureUsage};
     use viz_helper::protocol::SharedSurfaceHandle;
@@ -226,12 +232,18 @@ mod platform {
     /// whatever the hardware wants — asking for a tighter row than the GPU accepts is a surface
     /// that fails to create for no visible reason.
     fn properties(width: u32, height: u32) -> CFRetained<CFDictionary> {
-        let keys: [&CFString; 4] = unsafe {
+        let keys: [&CFString; 5] = unsafe {
             [
                 kIOSurfaceWidth,
                 kIOSurfaceHeight,
                 kIOSurfaceBytesPerElement,
                 kIOSurfacePixelFormat,
+                // Asks for a surface `IOSurfaceLookup` can find by ID. Modern macOS ignores it —
+                // measured on Darwin 25.5, where a lookup of a surface created with this still
+                // returns nothing — so it is not what makes the handle work. It is kept because it
+                // is the documented request and costs nothing; see [`SharedSurfaceHandle`] for what
+                // actually has to happen instead.
+                kIOSurfaceIsGlobal,
             ]
         };
         let values = [
@@ -239,6 +251,7 @@ mod platform {
             CFNumber::new_i32(height as i32),
             CFNumber::new_i32(BYTES_PER_ELEMENT),
             CFNumber::new_i32(PIXEL_FORMAT_RGBA),
+            CFNumber::new_i32(1),
         ];
         let mut key_pointers: Vec<*const std::ffi::c_void> = keys
             .iter()
@@ -390,9 +403,10 @@ mod tests {
         assert_eq!(FORMAT.block_copy_size(None), Some(BYTES_PER_ELEMENT as u32));
     }
 
-    /// Support is a property of the platform, and the transport list must not claim more than it.
+    /// The list either side announces must never claim more than this crate can actually do. A
+    /// transport announced but not deliverable is a negotiation that succeeds and a black pane.
     #[test]
-    fn the_transport_list_matches_what_this_platform_can_share() {
+    fn the_transport_list_never_claims_more_than_this_crate_can_deliver() {
         let shared = viz_helper::protocol::supported_transports()
             .contains(&viz_helper::protocol::FrameTransport::Shared);
         assert_eq!(

@@ -36,20 +36,22 @@ pub enum FrameTransport {
 
 /// What this build can do on the platform it was compiled for.
 ///
-/// Both halves call this — the helper to announce, the desk to choose — so a platform can never
-/// end up with one side offering a transport the other was never built to speak. `Copy` is
-/// unconditional because it needs nothing from the platform beyond a pipe, which is exactly why it
-/// is kept: whatever a shared surface cannot cover, this does.
-/// Windows is deliberately absent from the shared list: the pane is embedded there over `Copy`,
-/// which is a working picture rather than a fast one. Claiming a transport nobody has run would
-/// make a Windows desk negotiate its way into a path that has never produced a frame — the copy
-/// costs a readback, and being honest about which platform has been proved costs nothing.
+/// Both halves call this — the helper to announce, the desk to choose — so a platform can never end
+/// up with one side offering a transport the other was never built to speak.
+///
+/// Only `Copy` today, on every platform, and deliberately.
+///
+/// macOS has everything a shared surface needs except a way to introduce one process's surface to
+/// another: `IOSurfaceLookup` by ID no longer resolves, and a mach send right cannot cross a pipe.
+/// Windows has no shared path anybody here has run at all. Announcing either would negotiate a
+/// desk into a transport that has never delivered a picture, and the failure would be a black pane
+/// rather than a slow one.
+///
+/// The copy is a working picture on both, at the cost of a readback and a re-upload per frame.
+/// When a platform gains a real introduction this is the one line that changes — everything either
+/// side of it, including the surface round trip between two devices, is already proved.
 pub fn supported_transports() -> Vec<FrameTransport> {
-    let mut transports = vec![FrameTransport::Copy];
-    if cfg!(target_os = "macos") {
-        transports.push(FrameTransport::Shared);
-    }
-    transports
+    vec![FrameTransport::Copy]
 }
 
 /// The transport both sides can manage, or `None` when they share nothing.
@@ -191,13 +193,16 @@ pub enum FromHelper {
 /// a mismatched pair refuses rather than dereferences a number from the wrong world.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum SharedSurfaceHandle {
-    /// The machine-wide `IOSurfaceID`, which `IOSurfaceLookup` turns back into the surface.
+    /// The machine-wide `IOSurfaceID`.
     ///
-    /// A mach send right would be the tighter answer — an ID is visible to anything on the machine
-    /// that guesses it — but a mach right cannot travel down a pipe as a number: a port name means
-    /// nothing outside the process that holds it, and transferring one needs a mach message rather
-    /// than a byte stream. The ID is what this channel can actually carry. What it exposes is one
-    /// Stage render of the show already on the operator's screen, for as long as the pane is open.
+    /// **Not sufficient on its own, and measured to be so.** `IOSurfaceLookup` resolves an ID only
+    /// for a surface created as global, and modern macOS no longer honours that request — on
+    /// Darwin 25.5 the desk looking up a surface the renderer had just created found nothing. What
+    /// a second process actually needs is a mach send right, and a mach port name means nothing
+    /// outside the process holding it: transferring one takes a mach message, not a byte stream,
+    /// so this channel cannot carry it and the shared transport is not announced on macOS until
+    /// that exists. The variant stays because the arithmetic, the format agreement and the texture
+    /// wrapping either side of it are all proved; what is missing is only the introduction.
     IoSurfaceId(u32),
     /// A shared handle to a D3D11 texture, as `IDXGIResource1::CreateSharedHandle` returns.
     DxgiSharedHandle(u64),

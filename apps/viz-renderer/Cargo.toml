@@ -28,3 +28,7 @@ winit.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+pollster.workspace = true
+wgpu.workspace = true
