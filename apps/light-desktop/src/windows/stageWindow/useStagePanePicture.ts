@@ -48,6 +48,7 @@ export function stageViewMode(
 export function useStagePanePicture(
 	pane: NativeStagePane,
 	mode = "full_3d",
+	followPreload = false,
 ) {
 	const bridge = useDesktopBridge();
 	const { state } = useApp();
@@ -71,11 +72,13 @@ export function useStagePanePicture(
 			laserBrightness: stageVizLaserBrightness,
 			showLabels: stageVizShowLabels,
 			mode,
+			followPreload,
 		});
 	}, [
 		active,
 		bridge,
 		mode,
+		followPreload,
 		stageVizAtmosphere,
 		stageEnvironmentBrightness,
 		stageVizQuality,

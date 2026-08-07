@@ -300,6 +300,7 @@ impl StagePane {
                     "simple_3d" => viz_helper::protocol::StageViewMode::Simple3d,
                     _ => viz_helper::protocol::StageViewMode::Full3d,
                 },
+                follow_preload: picture.follow_preload,
             });
         }
         Ok(())
@@ -798,6 +799,7 @@ pub(crate) struct Picture {
     show_labels: bool,
     /// Which way the Stage is being looked at, as the web layer names it.
     mode: String,
+    follow_preload: bool,
 }
 
 #[tauri::command]

@@ -46,13 +46,17 @@ export function Stage3dView({
 	 * picture between processes, or an installation missing its renderer.
 	 */
 	/*
-	 * Follow Preload stays with the desk's own renderer, because the native one cannot draw it
-	 * honestly: the desk has no preload output. Its live values are universes carrying every
-	 * attribute, but the preload lane exists only as a colour-and-intensity projection, so a
-	 * moving head would hold its live angle while its colour changed — a picture that looks
-	 * right and is not. Better the pane a Stage already has than a preload nobody can trust.
+	 * Follow Preload is drawn here too. The desk has no preload output to decode, so the renderer
+	 * takes the live rig from the desk's universes and lays the preload's own static values over
+	 * the fixtures that have them: a fixture with nothing preloaded goes on showing what it is
+	 * doing, and one that is preloaded shows what it is about to do, in every attribute the
+	 * preload names — where it will point included.
+	 *
+	 * Dynamics are not applied, so a preloaded dynamic shows its fixture's live state. That is the
+	 * honest answer: a dynamic is a running function rather than a value, and reproducing one here
+	 * would be a second implementation of something the desk already owns.
 	 */
-	const wantsNative = !options.followPreload;
+	const wantsNative = true;
 	const nativePane = useNativeStagePane(wantsNative);
 	/*
 	 * The renderer resolves what is under the pointer; this decides what that means. Selection is
@@ -67,6 +71,7 @@ export function Stage3dView({
 		// The plan projections belong to the 2D Stage, which is a different component and still the
 		// desk's own drawing; this one is only ever asked for a 3D view.
 		stageViewMode(options.view, options.renderQuality, ""),
+		options.followPreload,
 	);
 	return (
 		<div

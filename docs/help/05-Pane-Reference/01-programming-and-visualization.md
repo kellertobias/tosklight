@@ -59,6 +59,8 @@ During PREV/NEXT stepping, every row in the remembered base selection remains vi
 
 The **Columns** settings independently control ID, Icon, Name, Patch address, Intensity, Color, Position, Beam, Shapers, Focus, Control, and Media. At least one column remains visible. Existing saved **Dimmer** visibility migrates to **Intensity**; newly available group columns do not turn themselves on in an existing layout. Source styling distinguishes current Programmer, Playback, and profile-default bases.
 
+A column only reports attributes the lantern actually carries. A fixture without colour or without Position shows **—** in that column with no colour swatch and no position crosshair, so a frost-only or dimmer-only lantern is never given a preview it cannot honour. Where the lantern does carry the group and nothing drives it, the column shows the profile home value: physical white for colour and centre for absolute Pan and Tilt.
+
 **Pane configuration:** **Fixture Sheet → Compact mode** has exactly **Off**, **Icon only**, and **Text only**. Off keeps the detailed 43 px presentation. Icon only uses deterministic 32 px rows, retains graphical base/Preload summaries, and removes ordinary value text. Text only uses the same 32 px rows, retains concise semantic base/Preload text, and removes decorative value graphics. Both compact modes keep Dynamic identities, source ownership, Group-master/Highlight status, fixture type, selection, and step markers. Configured columns are never dropped at a breakpoint; a small pane scrolls horizontally when the selected set still cannot fit. Each pane, the full built-in, and each fixed external Fixture Sheet persist their own desk-local mode, defaulting to Off without changing portable show data.
 
 **Show active fixtures only** limits that pane to fixtures carrying Programmer values; this is useful beside a Cuelist Pool while recording looks. **Show group shortcuts** adds the Group strip. The common size and removal controls also apply. In the full Fixture Sheet window, open **Fixture Sheet** settings and use **View** for Compact mode, fixture heads, ordering, and filters; **Columns** for visible data and optional Name details; and **Groups** for the Group strip. **Included heads** defaults to **All**. Choose **No sub heads** to show only master rows with the fixture's bare ID, or **No master heads** to show only subhead rows without indentation. There is no per-row expand or collapse button. These full-sheet choices persist with the desk layout. Ordering can use Fixture ID or put active programmer fixtures first; filters can show only active fixtures or limit membership to one Cuelist.
@@ -103,11 +105,11 @@ Drag over the pane to orbit and scroll to zoom, whichever renderer is drawing it
 ToskLight renderer is drawing, the middle button also walks the camera across its own axes and the
 secondary button slides the view without turning it.
 
-**Follow Preload** is always drawn by the desk's own renderer, whichever view is selected. The desk
-resolves a preload to what an operator needs to see on a Stage — which fixtures are coming up, and
-in what colour — rather than to a complete lighting state, so the ToskLight renderer has nothing to
-point a moving head with. A pane set to **3D Viz** therefore returns to the desk's rendering while
-Follow Preload is on, and goes back when it is off.
+**Follow Preload** draws the preload over the rig rather than instead of it. A fixture with nothing
+preloaded goes on showing what it is doing now; one that is preloaded shows what it is about to do,
+in every attribute the preload names — where it will point included. A preloaded **Dynamic** shows
+its fixture's live state instead: a Dynamic is a running function rather than a value, and the Stage
+does not reproduce one to guess at it.
 
 ### Stage is a selection and viewing surface
 

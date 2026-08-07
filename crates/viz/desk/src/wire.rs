@@ -26,6 +26,45 @@ pub struct SessionResponse {
     pub role: Option<String>,
     #[serde(default)]
     pub desk: Option<serde_json::Value>,
+    /// Who the session belongs to. A preload is one operator's, so reading one needs this.
+    #[serde(default)]
+    pub user: Option<SessionUser>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SessionUser {
+    pub id: Uuid,
+}
+
+/// One operator's preload, as the desk projects it.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct PreloadProjection {
+    #[serde(default)]
+    pub fixture_values: Vec<PreloadFixtureValue>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct PreloadFixtureValue {
+    pub fixture_id: Uuid,
+    pub attribute: String,
+    pub value: PreloadAttributeValue,
+}
+
+/// Only the normalized form is drawn. A preload can also name a colour or a raw slot; those are
+/// carried for completeness and skipped, because the renderer's parameters are normalized and
+/// guessing at a conversion would put a value on screen nobody set.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum PreloadAttributeValue {
+    Normalized(f32),
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct PreloadSnapshot {
+    #[serde(default)]
+    pub projection: PreloadProjection,
 }
 
 /// Every renderer target the desk is driving.

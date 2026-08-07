@@ -105,6 +105,7 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
             laser_brightness,
             show_labels,
             mode,
+            follow_preload,
         }) = source.picture()
         {
             state.values.atmosphere = viz_scene::AtmospherePreference {
@@ -115,6 +116,15 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
             state.view.exposure = exposure.clamp(0.05, 4.0);
             state.view.laser_brightness = laser_brightness.clamp(0.0, 4.0);
             state.view.show_labels = *show_labels;
+            // The provider is what lays the preload over the live picture, so the flag goes to it
+            // rather than being kept here: the values are decoded there, and a second opinion about
+            // whether to overlay would eventually disagree with the first.
+            if state.following_preload != *follow_preload {
+                state.following_preload = *follow_preload;
+                if let Some(rig) = rig.as_mut() {
+                    rig.follow_preload(*follow_preload);
+                }
+            }
             state.view.mode = match mode {
                 viz_helper::protocol::StageViewMode::TopDown => viz_scene::ViewMode::TopDown,
                 viz_helper::protocol::StageViewMode::LeftToRight => {
@@ -215,6 +225,9 @@ struct PaneState {
     shared: Option<viz_surface::SharedSurface>,
     /// Where to hand the desk each surface, while the transport shares one.
     surface_service: Option<String>,
+    /// Whether the operator is following their preload, which the provider lays over the live
+    /// picture rather than replacing it with.
+    following_preload: bool,
     /// True once the operator has moved the camera here, after which the desk's own view no longer
     /// takes it back. A camera that snapped home whenever the desk re-sent its view would be a
     /// camera nobody could aim.
@@ -236,6 +249,7 @@ impl PaneState {
             shared: None,
             surface_service: embedding.surface_service.clone(),
             camera_is_local: false,
+            following_preload: false,
         })
     }
 

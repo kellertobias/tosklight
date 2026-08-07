@@ -11,6 +11,8 @@ pub struct DeskClient {
     base: String,
     token: Option<String>,
     session_id: Option<uuid::Uuid>,
+    /// Whose preload to read, once a session has said.
+    user_id: Option<uuid::Uuid>,
 }
 
 impl DeskClient {
@@ -25,6 +27,7 @@ impl DeskClient {
             base: format!("http://{host}:{port}"),
             token: None,
             session_id: None,
+            user_id: None,
         })
     }
 
@@ -64,6 +67,7 @@ impl DeskClient {
         let read_only = session.role.as_deref() == Some("visualizer");
         self.token = Some(session.token);
         self.session_id = Some(session.session_id);
+        self.user_id = session.user.map(|user| user.id);
         Ok(read_only)
     }
 
@@ -115,6 +119,18 @@ impl DeskClient {
         self.get_json::<crate::wire::OutputDmxSnapshot>("/api/v2/output/dmx", "desk output")
             .await
             .ok()
+    }
+
+    /// The operator's preload, for a renderer drawing their Stage.
+    pub async fn preload_projection(&self) -> Option<crate::wire::PreloadProjection> {
+        let user = self.user_id?;
+        self.get_json::<crate::wire::PreloadSnapshot>(
+            &format!("/api/v2/users/{user}/programmer-preload-values/snapshot"),
+            "preload values",
+        )
+        .await
+        .ok()
+        .map(|snapshot| snapshot.projection)
     }
 
     pub async fn objects(&self, kind: &str) -> Result<ObjectCollection, ProviderError> {

@@ -69,6 +69,8 @@ export interface StagePanePicture {
 	showLabels: boolean;
 	/** Which way the Stage is being looked at. */
 	mode: string;
+	/** Draw what the operator has preloaded, over what is currently lit. */
+	followPreload: boolean;
 }
 
 export interface DesktopBridge {

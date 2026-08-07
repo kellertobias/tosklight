@@ -94,6 +94,8 @@ enum Message {
     Preview(Box<crate::wire::PreviewSnapshot>),
     /// The desk's own output, for a renderer inside the desk's window.
     DeskOutput(Box<crate::wire::OutputDmxSnapshot>),
+    /// The operator's preload, laid over the live picture while they are following it.
+    Preload2(Box<crate::wire::PreloadProjection>),
     /// The desk's own view for this target, as read. Converting it needs the scene, which lives
     /// on the render thread, so the raw reading travels and the conversion happens there.
     View(Box<DeskView>),
@@ -156,6 +158,9 @@ pub struct DeskProvider {
     preview: crate::wire::PreviewSnapshot,
     /// The desk's own output, while a renderer in the desk's window is reading it.
     desk_output: Option<crate::wire::OutputDmxSnapshot>,
+    /// The operator's preload, and whether they are following it.
+    preload_projection: crate::wire::PreloadProjection,
+    following_preload: bool,
     applied_preview_revision: Option<u64>,
     /// Universes a real source has delivered at least one packet on, ever.
     ///
@@ -197,6 +202,8 @@ impl DeskProvider {
             value_frame: 0,
             preview: crate::wire::PreviewSnapshot::default(),
             desk_output: None,
+            preload_projection: crate::wire::PreloadProjection::default(),
+            following_preload: false,
             applied_preview_revision: None,
             real_universes: std::collections::BTreeSet::new(),
         }
@@ -305,6 +312,11 @@ impl DeskProvider {
         editor_driven(&self.preview, &self.real_universes)
     }
 
+    /// Follow the operator's preload, or show what is lit.
+    pub fn follow_preload(&mut self, following: bool) {
+        self.following_preload = following;
+    }
+
     /// Whether this renderer binds sockets and waits for real packets.
     ///
     /// A renderer running on its own does: a desk's live values arrive as Art-Net or sACN, and
@@ -380,6 +392,9 @@ impl SceneProvider for DeskProvider {
                 }
                 Ok(Message::DeskOutput(output)) => {
                     self.desk_output = Some(*output);
+                }
+                Ok(Message::Preload2(preload)) => {
+                    self.preload_projection = *preload;
                 }
                 Ok(Message::View(view)) => {
                     let changed = self
@@ -504,6 +519,26 @@ impl SceneProvider for DeskProvider {
                     &mut self.values,
                     self.epoch.elapsed().as_secs_f32(),
                 );
+                // The preload sits on top of the live picture rather than replacing it: a fixture
+                // nobody preloaded goes on showing what it is doing.
+                if self.following_preload {
+                    let overlay: Vec<crate::preload_overlay::PreloadValue> = self
+                        .preload_projection
+                        .fixture_values
+                        .iter()
+                        .filter_map(|entry| match entry.value {
+                            crate::wire::PreloadAttributeValue::Normalized(value) => {
+                                Some(crate::preload_overlay::PreloadValue {
+                                    fixture_id: entry.fixture_id,
+                                    attribute: entry.attribute.clone(),
+                                    value,
+                                })
+                            }
+                            crate::wire::PreloadAttributeValue::Other => None,
+                        })
+                        .collect();
+                    crate::preload_overlay::apply(scene, &overlay, &mut self.values);
+                }
                 // The desk changing its output is not a packet arriving, so it gets its own frame
                 // stamp; without one the host would never present it.
                 self.value_frame += 1;
@@ -853,10 +888,13 @@ async fn watch(
             }
             Err(TryRecvError::Empty) => {}
         }
-        if connection.values_from_desk_output
-            && let Some(output) = client.output_dmx().await
-        {
-            let _ = outbox.send(Message::DeskOutput(Box::new(output)));
+        if connection.values_from_desk_output {
+            if let Some(output) = client.output_dmx().await {
+                let _ = outbox.send(Message::DeskOutput(Box::new(output)));
+            }
+            if let Some(preload) = client.preload_projection().await {
+                let _ = outbox.send(Message::Preload2(Box::new(preload)));
+            }
         }
         let poll = if connection.values_from_desk_output {
             25

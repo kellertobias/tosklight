@@ -150,6 +150,8 @@ pub enum ToHelper {
         show_labels: bool,
         /// Which way the Stage is being looked at.
         mode: StageViewMode,
+        /// Draw what the operator has preloaded, over what is currently lit.
+        follow_preload: bool,
     },
     /// Pointer and camera intent picked up by the web layer over the pane.
     ///
@@ -483,6 +485,7 @@ mod tests {
                 laser_brightness: 1.0,
                 show_labels: false,
                 mode: StageViewMode::Full3d,
+                follow_preload: false,
             },
         ];
         for message in messages {
