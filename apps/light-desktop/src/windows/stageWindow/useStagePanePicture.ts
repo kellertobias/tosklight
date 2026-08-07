@@ -14,7 +14,41 @@ import type { NativeStagePane } from "./useNativeStagePane";
  * Sent whole rather than per control, so a renderer is never left holding a mixture of what the
  * operator chose and what it started with.
  */
-export function useStagePanePicture(pane: NativeStagePane) {
+/**
+ * Which way the renderer is asked to look, from the view the operator chose.
+ *
+ * The renderer has drawn every one of these all along — the plan projections, a lines-only 3D and
+ * a full one — so a Stage in any view can be its picture rather than the desk's. That is what lets
+ * the web layer stop being sent live values at all: it is no longer drawing the rig in any mode.
+ */
+export function stageViewMode(
+	view: string,
+	renderQuality: string,
+	projection: string,
+): string {
+	if (view === "2d") {
+		return (
+			{
+				top_to_bottom: "top_down",
+				bottom_to_top: "top_down",
+				left_to_right: "left_to_right",
+				right_to_left: "right_to_left",
+				front_to_back: "front_to_back",
+				back_to_front: "back_to_front",
+			}[projection] ?? "top_down"
+		);
+	}
+	// Lines only is a way of looking at the rig rather than a quality setting: it draws where the
+	// light goes without pretending to show what it looks like.
+	if (renderQuality === "none" || renderQuality === "lines_only") return "lines_3d";
+	if (renderQuality === "lines_and_beams") return "simple_3d";
+	return "full_3d";
+}
+
+export function useStagePanePicture(
+	pane: NativeStagePane,
+	mode = "full_3d",
+) {
 	const bridge = useDesktopBridge();
 	const { state } = useApp();
 	const active = pane.active;
@@ -36,10 +70,12 @@ export function useStagePanePicture(pane: NativeStagePane) {
 			exposure: stageVizExposure,
 			laserBrightness: stageVizLaserBrightness,
 			showLabels: stageVizShowLabels,
+			mode,
 		});
 	}, [
 		active,
 		bridge,
+		mode,
 		stageVizAtmosphere,
 		stageEnvironmentBrightness,
 		stageVizQuality,

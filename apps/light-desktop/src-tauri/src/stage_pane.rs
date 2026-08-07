@@ -290,6 +290,16 @@ impl StagePane {
                 exposure: picture.exposure,
                 laser_brightness: picture.laser_brightness,
                 show_labels: picture.show_labels,
+                mode: match picture.mode.as_str() {
+                    "top_down" => viz_helper::protocol::StageViewMode::TopDown,
+                    "left_to_right" => viz_helper::protocol::StageViewMode::LeftToRight,
+                    "right_to_left" => viz_helper::protocol::StageViewMode::RightToLeft,
+                    "front_to_back" => viz_helper::protocol::StageViewMode::FrontToBack,
+                    "back_to_front" => viz_helper::protocol::StageViewMode::BackToFront,
+                    "lines_3d" => viz_helper::protocol::StageViewMode::Lines3d,
+                    "simple_3d" => viz_helper::protocol::StageViewMode::Simple3d,
+                    _ => viz_helper::protocol::StageViewMode::Full3d,
+                },
             });
         }
         Ok(())
@@ -786,6 +796,8 @@ pub(crate) struct Picture {
     exposure: f32,
     laser_brightness: f32,
     show_labels: bool,
+    /// Which way the Stage is being looked at, as the web layer names it.
+    mode: String,
 }
 
 #[tauri::command]

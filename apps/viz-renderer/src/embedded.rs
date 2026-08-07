@@ -104,6 +104,7 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
             exposure,
             laser_brightness,
             show_labels,
+            mode,
         }) = source.picture()
         {
             state.values.atmosphere = viz_scene::AtmospherePreference {
@@ -114,6 +115,24 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
             state.view.exposure = exposure.clamp(0.05, 4.0);
             state.view.laser_brightness = laser_brightness.clamp(0.0, 4.0);
             state.view.show_labels = *show_labels;
+            state.view.mode = match mode {
+                viz_helper::protocol::StageViewMode::TopDown => viz_scene::ViewMode::TopDown,
+                viz_helper::protocol::StageViewMode::LeftToRight => {
+                    viz_scene::ViewMode::LeftToRight
+                }
+                viz_helper::protocol::StageViewMode::RightToLeft => {
+                    viz_scene::ViewMode::RightToLeft
+                }
+                viz_helper::protocol::StageViewMode::FrontToBack => {
+                    viz_scene::ViewMode::FrontToBack
+                }
+                viz_helper::protocol::StageViewMode::BackToFront => {
+                    viz_scene::ViewMode::BackToFront
+                }
+                viz_helper::protocol::StageViewMode::Lines3d => viz_scene::ViewMode::Lines3d,
+                viz_helper::protocol::StageViewMode::Simple3d => viz_scene::ViewMode::Simple3d,
+                viz_helper::protocol::StageViewMode::Full3d => viz_scene::ViewMode::Full3d,
+            };
             state.view.quality = match quality {
                 viz_helper::protocol::RenderQuality::Draft => viz_scene::RenderQuality::Draft,
                 viz_helper::protocol::RenderQuality::Standard => viz_scene::RenderQuality::Standard,

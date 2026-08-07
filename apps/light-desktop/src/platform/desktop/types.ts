@@ -67,6 +67,8 @@ export interface StagePanePicture {
 	exposure: number;
 	laserBrightness: number;
 	showLabels: boolean;
+	/** Which way the Stage is being looked at. */
+	mode: string;
 }
 
 export interface DesktopBridge {

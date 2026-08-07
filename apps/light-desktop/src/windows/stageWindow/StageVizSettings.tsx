@@ -43,21 +43,10 @@ export function StageVizSettings() {
 	}, [bridge]);
 
 	/*
-	 * Every setting is sent whole rather than one at a time: the renderer applies them together,
-	 * and sending only what moved would leave it guessing what the others still are.
+	 * Nothing is sent from here. The picture crosses whenever it changes and whenever a renderer
+	 * starts, from the one place that watches all of it — sending from each control as well would
+	 * mean two senders racing over the same settings.
 	 */
-	const send = (changed: Partial<StagePanePicture>) => {
-		void bridge.setStagePanePicture({
-			atmosphere: state.stageVizAtmosphere,
-			ambient: state.stageEnvironmentBrightness,
-			quality: state.stageVizQuality,
-			exposure: state.stageVizExposure,
-			laserBrightness: state.stageVizLaserBrightness,
-			showLabels: state.stageVizShowLabels,
-			...changed,
-		});
-	};
-
 	return (
 		<>
 			<SwitchField
@@ -82,7 +71,6 @@ export function StageVizSettings() {
 				display={`${Math.round(state.stageVizAtmosphere * 100)}%`}
 				onChange={(vizAtmosphere) => {
 					dispatch({ type: "SET_STAGE_OPTIONS", vizAtmosphere });
-					send({ atmosphere: vizAtmosphere });
 				}}
 			/>
 			<HorizontalFaderField
@@ -95,7 +83,6 @@ export function StageVizSettings() {
 				display={`${Math.round(state.stageEnvironmentBrightness * 100)}%`}
 				onChange={(environmentBrightness) => {
 					dispatch({ type: "SET_STAGE_OPTIONS", environmentBrightness });
-					send({ ambient: environmentBrightness });
 				}}
 			/>
 			<MultiValueToggleField
@@ -104,7 +91,6 @@ export function StageVizSettings() {
 				value={state.stageVizQuality}
 				onChange={(vizQuality) => {
 					dispatch({ type: "SET_STAGE_OPTIONS", vizQuality });
-					send({ quality: vizQuality });
 				}}
 				options={[
 					{ value: "draft", label: "Draft" },
@@ -123,7 +109,6 @@ export function StageVizSettings() {
 				display={`${state.stageVizExposure.toFixed(2)}×`}
 				onChange={(vizExposure) => {
 					dispatch({ type: "SET_STAGE_OPTIONS", vizExposure });
-					send({ exposure: vizExposure });
 				}}
 			/>
 			<HorizontalFaderField
@@ -136,7 +121,6 @@ export function StageVizSettings() {
 				display={`${state.stageVizLaserBrightness.toFixed(2)}×`}
 				onChange={(vizLaserBrightness) => {
 					dispatch({ type: "SET_STAGE_OPTIONS", vizLaserBrightness });
-					send({ laserBrightness: vizLaserBrightness });
 				}}
 			/>
 			<SwitchField
@@ -149,7 +133,6 @@ export function StageVizSettings() {
 						type: "SET_STAGE_OPTIONS",
 						vizShowLabels: event.target.checked,
 					});
-					send({ showLabels: event.target.checked });
 				}}
 			/>
 			<div className="stage-viz-status">

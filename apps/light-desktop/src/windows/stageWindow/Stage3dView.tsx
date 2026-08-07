@@ -3,7 +3,7 @@ import { Stage3dCanvas } from "../Stage3dCanvas";
 import { NativeStageSurface } from "./NativeStageSurface";
 import { useNativeStagePane } from "./useNativeStagePane";
 import { useStagePanePicks } from "./useStagePanePicks";
-import { useStagePanePicture } from "./useStagePanePicture";
+import { stageViewMode, useStagePanePicture } from "./useStagePanePicture";
 import type { Stage3dFixture } from "../stage3dScene";
 import type { StageOptionsModel, StageWindowProps } from "./types";
 import type { StageSelectionModel } from "./useStageSelection";
@@ -36,10 +36,14 @@ export function Stage3dView({
 	interactive?: boolean;
 }) {
 	/*
-	 * The operator chooses which renderer draws this, rather than the desk taking the better one
-	 * whenever it can: 3D is the desk's own picture and 3D Viz is the renderer's. The choice is
-	 * still only offered where the renderer can run, and if it cannot start after all, the pane
-	 * falls back to the desk's own drawing rather than showing nothing.
+	 * Every 3D view is the renderer's picture now — the full one and the
+	 * lines-only one. It has drawn both all along, and having it draw them here is
+	 * what lets the desk stop pushing live values into its web layer: nothing in the interface is
+	 * rendering the rig any more, so nothing in the interface needs to be told what the rig is
+	 * doing several dozen times a second.
+	 *
+	 * The desk's own drawing stays as the fallback, for a browser, a platform that cannot share a
+	 * picture between processes, or an installation missing its renderer.
 	 */
 	/*
 	 * Follow Preload stays with the desk's own renderer, because the native one cannot draw it
@@ -48,7 +52,7 @@ export function Stage3dView({
 	 * moving head would hold its live angle while its colour changed — a picture that looks
 	 * right and is not. Better the pane a Stage already has than a preload nobody can trust.
 	 */
-	const wantsNative = options.view === "3d-viz" && !options.followPreload;
+	const wantsNative = !options.followPreload;
 	const nativePane = useNativeStagePane(wantsNative);
 	/*
 	 * The renderer resolves what is under the pointer; this decides what that means. Selection is
@@ -58,7 +62,12 @@ export function Stage3dView({
 	 */
 	useStagePanePicks(nativePane, selection, interactive);
 	// The picture settings cross when the renderer starts, not only when one is moved.
-	useStagePanePicture(nativePane);
+	useStagePanePicture(
+		nativePane,
+		// The plan projections belong to the 2D Stage, which is a different component and still the
+		// desk's own drawing; this one is only ever asked for a 3D view.
+		stageViewMode(options.view, options.renderQuality, ""),
+	);
 	return (
 		<div
 			className="stage-canvas stage-canvas-3d"

@@ -148,6 +148,8 @@ pub enum ToHelper {
         laser_brightness: f32,
         /// Fixture numbers and patch addresses beside each fixture.
         show_labels: bool,
+        /// Which way the Stage is being looked at.
+        mode: StageViewMode,
     },
     /// Pointer and camera intent picked up by the web layer over the pane.
     ///
@@ -156,6 +158,24 @@ pub enum ToHelper {
     /// forwarded, already coalesced into a per-frame delta — one message per gesture step, never
     /// one per `pointermove`.
     Input { input: PaneInput },
+}
+
+/// Which way the Stage is being looked at.
+///
+/// The desk's own Stage offers plan projections, a lines-only 3D and a full one; the renderer has
+/// drawn every one of them all along. Naming them here lets a pane in any of those views be drawn
+/// by the renderer, which is what stops the desk having to push live values into its web layer at
+/// all.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum StageViewMode {
+    TopDown,
+    LeftToRight,
+    RightToLeft,
+    FrontToBack,
+    BackToFront,
+    Lines3d,
+    Simple3d,
+    Full3d,
 }
 
 /// How much the renderer is asked to do per frame.
@@ -462,6 +482,7 @@ mod tests {
                 exposure: 1.0,
                 laser_brightness: 1.0,
                 show_labels: false,
+                mode: StageViewMode::Full3d,
             },
         ];
         for message in messages {
