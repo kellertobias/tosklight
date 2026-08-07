@@ -218,7 +218,9 @@ impl DeskProvider {
         }
         let decoder = Decoder::new(bindings);
         let mappings = self.resolved_mappings(mappings, &decoder);
-        self.receivers = Some(DmxReceiver::start(mappings.clone(), self.epoch));
+        self.receivers = self
+            .listens_on_the_network()
+            .then(|| DmxReceiver::start(mappings.clone(), self.epoch));
         self.mappings = mappings;
         self.decoder = Some(decoder);
         self.values = SceneValues::default();
@@ -254,7 +256,9 @@ impl DeskProvider {
             if let Some(mut receivers) = self.receivers.take() {
                 receivers.shutdown();
             }
-            self.receivers = Some(DmxReceiver::start(mappings.clone(), self.epoch));
+            self.receivers = self
+                .listens_on_the_network()
+                .then(|| DmxReceiver::start(mappings.clone(), self.epoch));
             self.mappings = mappings;
             self.reported_input_micros = 0;
         } else if let Some(receivers) = &self.receivers {
@@ -302,6 +306,17 @@ impl DeskProvider {
     /// reverting. Nothing is merged per parameter — a universe has exactly one owner.
     fn editor_driven_universes(&self) -> std::collections::BTreeSet<u16> {
         editor_driven(&self.preview, &self.real_universes)
+    }
+
+    /// Whether this renderer binds sockets and waits for real packets.
+    ///
+    /// A renderer running on its own does: a desk's live values arrive as Art-Net or sACN, and
+    /// that is the whole of the two-plane rule. One inside the desk's own window does not — it is
+    /// handed the same numbers directly — and binding anyway would mean two processes on one
+    /// machine competing for the same multicast groups to learn something one of them already
+    /// knows.
+    fn listens_on_the_network(&self) -> bool {
+        !self.connection.values_from_desk_output
     }
 
     fn resolved_mappings(
@@ -1042,6 +1057,38 @@ mod tests {
         assert!(view_affecting("visualizer_view_changed"));
         assert!(!view_affecting("show_patch_changed"));
         assert!(!view_affecting("output_frame"));
+    }
+}
+
+#[cfg(test)]
+mod network_rule_tests {
+    use super::*;
+
+    /// The rule the embedded pane turns off, stated where it can be checked.
+    ///
+    /// A renderer on a network waits for real packets, because that is what a lighting rig sends.
+    /// One inside the desk's own window is handed the same numbers and must not bind sockets as
+    /// well: two processes on one machine competing for the same multicast groups, to learn
+    /// something one of them already knows, is a way to lose packets rather than gain values.
+    #[test]
+    fn only_a_renderer_on_its_own_waits_for_packets() {
+        let on_a_network = DeskProvider::start(DeskConnection::default(), Instant::now());
+        assert!(
+            on_a_network.listens_on_the_network(),
+            "a renderer on its own keeps the two-plane rule"
+        );
+
+        let in_the_desk = DeskProvider::start(
+            DeskConnection {
+                values_from_desk_output: true,
+                ..DeskConnection::default()
+            },
+            Instant::now(),
+        );
+        assert!(
+            !in_the_desk.listens_on_the_network(),
+            "one in the desk's window is handed its values instead"
+        );
     }
 }
 
