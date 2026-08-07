@@ -40,6 +40,11 @@ pub struct HelperSource {
     /// be values for a rig this process does not have.
     have_scene: bool,
     finished: bool,
+    /// The way back to the desk, kept after the greeting so rendered panes can be returned.
+    ///
+    /// A helper filling its own window presents to it and never uses this. One drawing the desk's
+    /// Stage pane has no window of its own to present to, so its frames go back up the channel.
+    to_desk: Box<dyn Write + Send>,
     /// The rectangle the desk's layout says is the Stage pane, when this helper is drawing one.
     ///
     /// `None` means the helper owns its whole window, which is the desk-opened case today. The
@@ -55,9 +60,7 @@ impl HelperSource {
     /// the operator asking why the picture is slow should not have to guess which GPU answered.
     pub fn start(
         mut from_desk: impl Read + Send + 'static,
-        // Only the reader crosses into the thread; the writer is used for the greeting and then
-        // finished with, so it need not outlive this call.
-        mut to_desk: impl Write,
+        mut to_desk: impl Write + Send + 'static,
         renderer: String,
     ) -> Result<Self, String> {
         let title = answer_desk(&mut from_desk, &mut to_desk, &renderer)
@@ -78,8 +81,24 @@ impl HelperSource {
             },
             have_scene: false,
             finished: false,
+            to_desk: Box::new(to_desk),
             pane: None,
         })
+    }
+
+    /// Hand a rendered pane back to the desk.
+    ///
+    /// Failure is not reported upwards: the desk has gone, and a helper without a desk is already
+    /// finishing for that reason. Saying so twice would not help anybody.
+    pub fn send_frame(&mut self, width: u32, height: u32, rgba: Vec<u8>) {
+        let message = viz_helper::protocol::FromHelper::Frame {
+            width,
+            height,
+            rgba,
+        };
+        if let Ok(payload) = viz_helper::protocol::encode(&message) {
+            let _ = viz_helper::framing::write_frame(&mut self.to_desk, &payload);
+        }
     }
 
     /// Where this helper may draw, if the desk has said. `None` means the whole window.
@@ -223,6 +242,31 @@ mod tests {
     use viz_helper::protocol::{FromHelper, PROTOCOL_MAJOR, PROTOCOL_MINOR, encode};
 
     /// A channel carrying a greeting followed by whatever the test wants to send.
+    /// A writer whose bytes a test can read back, standing in for the pipe to the desk.
+    #[derive(Clone)]
+    struct Recorder(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl Recorder {
+        fn new() -> Self {
+            Self(std::sync::Arc::new(std::sync::Mutex::new(Vec::new())))
+        }
+
+        fn written(&self) -> Vec<u8> {
+            self.0.lock().expect("writer").clone()
+        }
+    }
+
+    impl std::io::Write for Recorder {
+        fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().expect("writer").extend_from_slice(buffer);
+            Ok(buffer.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
     fn desk_channel(messages: &[ToHelper]) -> Vec<u8> {
         let mut buffer = Vec::new();
         let hello = ToHelper::Hello {
@@ -263,17 +307,18 @@ mod tests {
     #[test]
     fn the_greeting_yields_the_title_the_desk_asked_for() {
         let channel = desk_channel(&[]);
-        let mut answer = Vec::new();
+        let answer = Recorder::new();
         let mut source = HelperSource::start(
             std::io::Cursor::new(channel),
-            &mut answer,
+            answer.clone(),
             "test renderer".to_owned(),
         )
         .expect("the handshake completes");
         assert_eq!(source.take_title().as_deref(), Some("ToskLight Visualizer"));
         // And the desk was answered, so it knows what is drawing.
+        let written = answer.written();
         let ready: FromHelper = {
-            let mut reader = answer.as_slice();
+            let mut reader = written.as_slice();
             let frame = viz_helper::framing::read_frame(&mut reader).expect("reads");
             viz_helper::protocol::decode(&frame).expect("decodes")
         };
@@ -359,6 +404,38 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
         assert_eq!(source.pane(), Some(pane));
+    }
+
+    /// A pane the helper rendered goes back up the channel, because a helper drawing the desk's
+    /// Stage has no window of its own to present to.
+    #[test]
+    fn a_rendered_pane_is_returned_to_the_desk() {
+        use viz_helper::protocol::FromHelper;
+        let channel = desk_channel(&[]);
+        let returned = Recorder::new();
+        let mut source = HelperSource::start(
+            std::io::Cursor::new(channel),
+            returned.clone(),
+            "test".to_owned(),
+        )
+        .expect("the handshake completes");
+
+        source.send_frame(2, 1, vec![9; 2 * 4]);
+
+        // The greeting is first on the wire; the frame follows it.
+        let written = returned.written();
+        let mut reader = written.as_slice();
+        let _ready = viz_helper::framing::read_frame(&mut reader).expect("the greeting answer");
+        let frame = viz_helper::framing::read_frame(&mut reader).expect("the rendered pane");
+        let decoded: FromHelper = viz_helper::protocol::decode(&frame).expect("decodes");
+        assert_eq!(
+            decoded,
+            FromHelper::Frame {
+                width: 2,
+                height: 1,
+                rgba: vec![9; 8]
+            }
+        );
     }
 
     /// A helper never asks the desk for anything: it draws what it is sent.
