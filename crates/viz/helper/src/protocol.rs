@@ -13,7 +13,58 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol this build speaks.
 pub const PROTOCOL_MAJOR: u16 = 1;
-pub const PROTOCOL_MINOR: u16 = 0;
+pub const PROTOCOL_MINOR: u16 = 1;
+
+/// How a rendered pane gets from the helper to the desk.
+///
+/// Both processes are on one machine looking at one GPU, so the picture should never travel
+/// through system memory — but "should" depends on the platform offering a surface two processes
+/// can share, and on both sides agreeing on a texture format. Rather than assume, each side says
+/// what it can do and the desk picks: the shared surface where it is available, the copy where it
+/// is not, and neither when the helper cannot draw a pane at all — in which case the desk keeps
+/// its own web renderer and nothing is embedded.
+///
+/// Ordered worst-first so `max()` picks the best transport both sides named.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+pub enum FrameTransport {
+    /// RGBA8 through the pipe. Portable, and costs a GPU readback and a re-upload every frame.
+    Copy,
+    /// A surface both processes address on the GPU: `IOSurface` on macOS, a shared DXGI handle on
+    /// Windows. The helper draws into it and the desk samples it; nothing is copied.
+    Shared,
+}
+
+/// What this build can do on the platform it was compiled for.
+///
+/// Both halves call this — the helper to announce, the desk to choose — so a platform can never
+/// end up with one side offering a transport the other was never built to speak. `Copy` is
+/// unconditional because it needs nothing from the platform beyond a pipe, which is exactly why it
+/// is kept: whatever a shared surface cannot cover, this does.
+/// Windows is deliberately absent from the shared list: the pane is embedded there over `Copy`,
+/// which is a working picture rather than a fast one. Claiming a transport nobody has run would
+/// make a Windows desk negotiate its way into a path that has never produced a frame — the copy
+/// costs a readback, and being honest about which platform has been proved costs nothing.
+pub fn supported_transports() -> Vec<FrameTransport> {
+    let mut transports = vec![FrameTransport::Copy];
+    if cfg!(target_os = "macos") {
+        transports.push(FrameTransport::Shared);
+    }
+    transports
+}
+
+/// The transport both sides can manage, or `None` when they share nothing.
+///
+/// `None` is a real answer rather than a failure: it is what tells the desk to keep drawing the
+/// Stage with its own web renderer instead of embedding a pane it cannot receive.
+pub fn agreed_transport(
+    desk: &[FrameTransport],
+    helper: &[FrameTransport],
+) -> Option<FrameTransport> {
+    desk.iter()
+        .filter(|transport| helper.contains(transport))
+        .max()
+        .copied()
+}
 
 /// What the desk sends the helper.
 // Externally tagged, which is serde's default: a compact binary format identifies a variant by
@@ -42,6 +93,39 @@ pub enum ToHelper {
     Pane { pane: crate::pane::PaneRect },
     /// Close the window and exit. The desk waits briefly, then kills.
     Shutdown,
+    /// Draw the desk's Stage pane instead of a window of the helper's own.
+    ///
+    /// Sent once, after the desk has read the helper's [`FromHelper::Capabilities`] and picked a
+    /// transport both sides named. A helper that never receives this opens its own window, which
+    /// is the desk-opened visualizer an operator asks for from the Tools menu.
+    ///
+    /// Appended after `Shutdown` rather than folded into `Hello`: the greeting is decoded before
+    /// either side knows the other's version, so its shape is the one thing that cannot change.
+    Embed {
+        pane: crate::pane::PaneRect,
+        /// Physical pixels per logical point, so the helper sizes its texture for the display the
+        /// desk window is actually on rather than assuming one.
+        scale: f32,
+        transport: FrameTransport,
+    },
+    /// Pointer and camera intent picked up by the web layer over the pane.
+    ///
+    /// A `WKWebView` on top of a native surface wins AppKit hit-testing whatever CSS says, so pane
+    /// input cannot fall through to the surface underneath. It is captured in the web layer and
+    /// forwarded, already coalesced into a per-frame delta — one message per gesture step, never
+    /// one per `pointermove`.
+    Input { input: PaneInput },
+}
+
+/// What the operator did over the pane, as intent rather than as events.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub enum PaneInput {
+    /// Accumulated orbit, in logical points of drag.
+    Orbit { dx: f32, dy: f32 },
+    /// Accumulated pan, in logical points of drag.
+    Pan { dx: f32, dy: f32 },
+    /// Accumulated zoom, in wheel notches; positive moves the camera in.
+    Zoom { amount: f32 },
 }
 
 /// What the helper sends back.
@@ -83,6 +167,40 @@ pub enum FromHelper {
         height: u32,
         rgba: Vec<u8>,
     },
+    /// What this helper can do, sent once immediately after `Ready`.
+    ///
+    /// Separate from `Ready` because `Ready` is read by a desk that has not yet checked the
+    /// version, so its shape has to stay fixed. A desk one minor behind never asks for this and
+    /// never waits for it.
+    Capabilities { transports: Vec<FrameTransport> },
+    /// A surface the desk can sample, for [`FrameTransport::Shared`].
+    ///
+    /// Sent whenever the surface is created or replaced — which is every pane resize, since a
+    /// shared surface is a fixed size. The desk drops the previous one when this arrives.
+    Surface {
+        handle: SharedSurfaceHandle,
+        width: u32,
+        height: u32,
+    },
+}
+
+/// A GPU surface named in a way the other process can open.
+///
+/// Deliberately not a pointer. Both sides are separate processes, so what crosses is whatever the
+/// platform lets one process name to another, and the variant says which platform's rules apply so
+/// a mismatched pair refuses rather than dereferences a number from the wrong world.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum SharedSurfaceHandle {
+    /// The machine-wide `IOSurfaceID`, which `IOSurfaceLookup` turns back into the surface.
+    ///
+    /// A mach send right would be the tighter answer — an ID is visible to anything on the machine
+    /// that guesses it — but a mach right cannot travel down a pipe as a number: a port name means
+    /// nothing outside the process that holds it, and transferring one needs a mach message rather
+    /// than a byte stream. The ID is what this channel can actually carry. What it exposes is one
+    /// Stage render of the show already on the operator's screen, for as long as the pane is open.
+    IoSurfaceId(u32),
+    /// A shared handle to a D3D11 texture, as `IDXGIResource1::CreateSharedHandle` returns.
+    DxgiSharedHandle(u64),
 }
 
 /// Why a helper was refused.
@@ -196,12 +314,67 @@ mod tests {
                 },
             },
             ToHelper::Shutdown,
+            ToHelper::Embed {
+                pane: crate::pane::PaneRect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 640.0,
+                    height: 360.0,
+                },
+                scale: 2.0,
+                transport: FrameTransport::Shared,
+            },
+            ToHelper::Input {
+                input: PaneInput::Orbit { dx: -3.5, dy: 0.25 },
+            },
         ];
         for message in messages {
             let encoded = encode(&message).expect("encodes");
             let decoded: ToHelper = decode(&encoded).expect("decodes");
             assert_eq!(decoded, message);
         }
+    }
+
+    /// Everything the helper answers with, including the two messages a shared surface needs.
+    #[test]
+    fn every_answer_survives_the_round_trip() {
+        let answers = [
+            FromHelper::Capabilities {
+                transports: vec![FrameTransport::Copy, FrameTransport::Shared],
+            },
+            FromHelper::Surface {
+                handle: SharedSurfaceHandle::IoSurfaceId(4_919),
+                width: 1_920,
+                height: 1_080,
+            },
+            FromHelper::Surface {
+                handle: SharedSurfaceHandle::DxgiSharedHandle(0xdead_beef),
+                width: 640,
+                height: 360,
+            },
+        ];
+        for answer in answers {
+            let decoded: FromHelper = decode(&encode(&answer).expect("encodes")).expect("decodes");
+            assert_eq!(decoded, answer);
+        }
+    }
+
+    /// The transport is chosen, never assumed. Worst-first ordering is what makes `max` the pick.
+    #[test]
+    fn the_best_shared_transport_is_chosen_and_no_overlap_means_none() {
+        assert_eq!(
+            agreed_transport(
+                &[FrameTransport::Copy, FrameTransport::Shared],
+                &[FrameTransport::Copy, FrameTransport::Shared],
+            ),
+            Some(FrameTransport::Shared)
+        );
+        assert_eq!(
+            agreed_transport(&[FrameTransport::Copy], &[FrameTransport::Shared]),
+            None,
+            "naming different transports is the same as naming none"
+        );
+        assert!(FrameTransport::Shared > FrameTransport::Copy);
     }
 
     /// A frame is the largest thing that crosses this channel, so its bound is worth stating.

@@ -1,0 +1,35 @@
+[package]
+name = "viz-surface"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[dependencies]
+viz-helper = { path = "../helper" }
+wgpu.workspace = true
+
+[dev-dependencies]
+pollster.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-io-surface = { version = "0.3", features = ["IOSurfaceRef"] }
+objc2-metal = { version = "0.3", features = [
+  "MTLDevice",
+  "MTLPixelFormat",
+  "MTLResource",
+  "MTLTexture",
+  "objc2-io-surface",
+] }
+objc2-core-foundation = { version = "0.3", features = [
+  "CFDictionary",
+  "CFNumber",
+  "CFString",
+] }
+
+# The one crate in the workspace that may write `unsafe`. Importing a texture another process
+# created is a platform call with a raw handle on both sides, and there is no safe spelling of it.
+# The workspace forbids unsafe everywhere else precisely so that it is confined here, where it is
+# a few dozen reviewed lines rather than a habit.
+[lints.rust]
+unsafe_code = "allow"

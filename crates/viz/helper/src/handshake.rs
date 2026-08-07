@@ -7,7 +7,8 @@
 
 use crate::framing::{FramingError, read_frame, write_frame};
 use crate::protocol::{
-    FromHelper, Incompatible, PROTOCOL_MAJOR, PROTOCOL_MINOR, ToHelper, accepts, decode, encode,
+    FrameTransport, FromHelper, Incompatible, PROTOCOL_MAJOR, PROTOCOL_MINOR, ToHelper, accepts,
+    decode, encode,
 };
 use std::io::{Read, Write};
 
@@ -49,6 +50,18 @@ pub struct HelperIdentity {
     pub protocol: (u16, u16),
     /// Adapter and backend, for the desk's diagnostics.
     pub renderer: String,
+    /// How this helper can hand a rendered pane back.
+    ///
+    /// Empty from a helper one minor behind, which never sends the message. That is not a fault:
+    /// it means no pane can be embedded, and the desk keeps drawing the Stage itself.
+    pub transports: Vec<FrameTransport>,
+}
+
+impl HelperIdentity {
+    /// The transport to embed a pane with, or `None` to leave the Stage with the web renderer.
+    pub fn embeddable_with(&self, desk: &[FrameTransport]) -> Option<FrameTransport> {
+        crate::protocol::agreed_transport(desk, &self.transports)
+    }
 }
 
 /// The desk's half: announce, then wait to be accepted.
@@ -75,9 +88,17 @@ pub fn greet_helper(
             renderer,
         } => {
             accepts(protocol_major, protocol_minor).map_err(HandshakeError::Incompatible)?;
+            // A helper of this minor follows `Ready` with what it can do. One a minor behind does
+            // not, and must not be waited for — the read would block until it died.
+            let transports = if protocol_minor >= 1 {
+                read_capabilities(from_helper)?
+            } else {
+                Vec::new()
+            };
             Ok(HelperIdentity {
                 protocol: (protocol_major, protocol_minor),
                 renderer,
+                transports,
             })
         }
         // A helper that fails before it is ready says so rather than dying silently, and the desk
@@ -87,9 +108,23 @@ pub fn greet_helper(
         }
         // A frame before the greeting is a helper drawing for somebody else, or a stream this desk
         // has joined partway through. Either way it is not the answer this exchange is waiting for.
-        FromHelper::Frame { .. } => Err(HandshakeError::Unexpected(
-            "a rendered frame arrived before the helper said it was ready".to_owned(),
-        )),
+        other => Err(HandshakeError::Unexpected(format!(
+            "expected the helper to say it was ready, got {other:?}"
+        ))),
+    }
+}
+
+/// The message that follows `Ready` from a helper of this minor.
+fn read_capabilities(from_helper: &mut impl Read) -> Result<Vec<FrameTransport>, HandshakeError> {
+    let frame = read_frame(from_helper)?;
+    match decode::<FromHelper>(&frame).map_err(HandshakeError::Unexpected)? {
+        FromHelper::Capabilities { transports } => Ok(transports),
+        FromHelper::Error { detail } | FromHelper::Stopping { detail } => {
+            Err(HandshakeError::Unexpected(detail))
+        }
+        other => Err(HandshakeError::Unexpected(format!(
+            "expected the helper's capabilities, got {other:?}"
+        ))),
     }
 }
 
@@ -101,6 +136,7 @@ pub fn answer_desk(
     from_desk: &mut impl Read,
     to_desk: &mut impl Write,
     renderer: &str,
+    transports: &[FrameTransport],
 ) -> Result<String, HandshakeError> {
     let frame = read_frame(from_desk)?;
     let title = match decode::<ToHelper>(&frame).map_err(HandshakeError::Unexpected)? {
@@ -126,6 +162,13 @@ pub fn answer_desk(
     write_frame(
         to_desk,
         &encode(&ready).map_err(HandshakeError::Unexpected)?,
+    )?;
+    let capabilities = FromHelper::Capabilities {
+        transports: transports.to_vec(),
+    };
+    write_frame(
+        to_desk,
+        &encode(&capabilities).map_err(HandshakeError::Unexpected)?,
     )?;
     Ok(title)
 }
@@ -153,6 +196,7 @@ mod tests {
             &mut desk_to_helper.as_slice(),
             &mut helper_to_desk,
             "Apple M3 Pro (Metal)",
+            &[FrameTransport::Copy, FrameTransport::Shared],
         )
         .expect("the helper answers");
         assert_eq!(title, "ToskLight Visualizer");
@@ -167,6 +211,42 @@ mod tests {
         .expect("the desk accepts");
         assert_eq!(identity.protocol, (PROTOCOL_MAJOR, PROTOCOL_MINOR));
         assert_eq!(identity.renderer, "Apple M3 Pro (Metal)");
+        assert_eq!(
+            identity.embeddable_with(&[FrameTransport::Copy, FrameTransport::Shared]),
+            Some(FrameTransport::Shared),
+            "the best both sides named"
+        );
+    }
+
+    /// The case this whole negotiation exists for: a desk that can only copy, or a helper that can
+    /// only copy, still embeds — and a pair sharing nothing leaves the Stage to the web renderer.
+    #[test]
+    fn the_desk_falls_back_to_what_the_pair_actually_share() {
+        let identity = |transports: Vec<FrameTransport>| HelperIdentity {
+            protocol: (PROTOCOL_MAJOR, PROTOCOL_MINOR),
+            renderer: "test".to_owned(),
+            transports,
+        };
+        assert_eq!(
+            identity(vec![FrameTransport::Copy])
+                .embeddable_with(&[FrameTransport::Copy, FrameTransport::Shared]),
+            Some(FrameTransport::Copy)
+        );
+        assert_eq!(
+            identity(vec![FrameTransport::Copy, FrameTransport::Shared])
+                .embeddable_with(&[FrameTransport::Copy]),
+            Some(FrameTransport::Copy)
+        );
+        assert_eq!(
+            identity(Vec::new()).embeddable_with(&[FrameTransport::Copy]),
+            None,
+            "a helper a minor behind announces nothing, and nothing is embedded"
+        );
+        assert_eq!(
+            identity(vec![FrameTransport::Shared]).embeddable_with(&[]),
+            None,
+            "a desk that cannot receive a pane keeps its own renderer"
+        );
     }
 
     #[test]
@@ -213,8 +293,13 @@ mod tests {
         let mut channel = Vec::new();
         write_frame(&mut channel, &scene).expect("writes");
 
-        let error =
-            answer_desk(&mut channel.as_slice(), &mut Vec::new(), "renderer").expect_err("refused");
+        let error = answer_desk(
+            &mut channel.as_slice(),
+            &mut Vec::new(),
+            "renderer",
+            &[FrameTransport::Copy],
+        )
+        .expect_err("refused");
         assert!(matches!(error, HandshakeError::Unexpected(_)));
     }
 
