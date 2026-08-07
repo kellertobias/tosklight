@@ -4,6 +4,7 @@ import {
 	mountFixtureModel,
 	type Stage3dFixture,
 } from "../stage3dScene";
+import { fixtureModelSource } from "../defaultFixtureModels";
 import { refreshImprovedBeamLighting } from "../stage3dScene/improvedBeamLighting";
 import type { StageModelCache } from "./modelCache";
 
@@ -21,12 +22,14 @@ export function retainFixtureModel(
 	onMounted: () => void,
 ) {
 	const instanceId = item.instanceId ?? item.fixture.fixture_id;
-	const source = item.fixture.definition.model_asset;
+	const source = fixtureModelSource(item.fixture);
 	if (!source) return;
-	const lease = modelCache.retain(
-		source,
-		`${item.fixture.definition.id}:${item.fixture.definition.revision}`,
-	);
+	// Keyed by the profile revision for a package model, and by the shipped body's own source for a
+	// default — every fixture that resolves to the same body shares one upload rather than one each.
+	const key = item.fixture.definition.model_asset
+		? `${item.fixture.definition.id}:${item.fixture.definition.revision}`
+		: source;
+	const lease = modelCache.retain(source, key);
 	const token = Symbol(instanceId);
 	mountedModels.set(instanceId, { token, release: lease.release });
 	void lease.model.then(
@@ -90,7 +93,7 @@ export function updateMountedFixtureModels({
 	for (const item of changedFixtures) {
 		const instanceId = item.instanceId ?? item.fixture.fixture_id;
 		const previousModel = mountedModels.get(instanceId);
-		if (item.fixture.definition.model_asset) {
+		if (fixtureModelSource(item.fixture)) {
 			retainFixtureModel(
 				item,
 				fixtureObjects,

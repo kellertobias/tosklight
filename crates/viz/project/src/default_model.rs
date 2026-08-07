@@ -439,6 +439,64 @@ mod tests {
         );
     }
 
+    /// The cases the desk's own copy of this rule pins, so the two languages are checked against
+    /// one list rather than drifting apart quietly.
+    ///
+    /// The desk cannot call this function — it runs in a browser — so the rule is written twice.
+    /// What keeps the two honest is that both test files assert these same answers.
+    ///
+    /// @see apps/light-desktop/src/windows/defaultFixtureModels.test.ts
+    #[test]
+    fn the_desk_s_copy_of_this_rule_is_pinned_to_the_same_answers() {
+        let cases: [(&str, &[&str], &str); 11] = [
+            (
+                "blinder",
+                &["dimmer", "color.red", "color.green", "color.blue"],
+                BLINDER.name,
+            ),
+            ("profile", &["dimmer"], PROFILE_SPOT.name),
+            (
+                "profile moving head",
+                &["dimmer", "pan", "tilt"],
+                MOVING_PROFILE.name,
+            ),
+            (
+                "something new",
+                &["dimmer", "pan", "tilt", "gobo.1"],
+                MOVING_PROFILE.name,
+            ),
+            (
+                "something new",
+                &[
+                    "dimmer",
+                    "pan",
+                    "tilt",
+                    "color.cyan",
+                    "color.magenta",
+                    "color.yellow",
+                ],
+                MOVING_LED_WASH.name,
+            ),
+            ("laser", &["dimmer", "pan", "tilt"], SHOW_LASER.name),
+            ("hazer", &["fog"], HAZER.name),
+            ("scanner", &["dimmer", "pan"], SCANNER.name),
+            (
+                "strip light",
+                &["dimmer", "color.red", "color.green", "color.blue"],
+                LED_STRIP.name,
+            ),
+            ("par", &["dimmer"], PAR_CAN.name),
+            ("", &["dimmer"], FRESNEL.name),
+        ];
+        for (fixture_type, attributes, expected) in cases {
+            assert_eq!(
+                choose(fixture_type, traits(attributes)).name,
+                expected,
+                "{fixture_type} with {attributes:?}"
+            );
+        }
+    }
+
     #[test]
     fn a_type_nobody_shipped_still_lands_on_the_channel_rules() {
         let moving = traits(&["dimmer", "pan", "tilt", "gobo.1"]);
