@@ -73,6 +73,13 @@ export function controllableBrowserDesktopBridge(
 		closeConsoleScreen: (screenId) =>
 			perform({ type: "close_console_screen", screen_id: screenId }),
 		openStageViewWindow: () => perform({ type: "open_stage_view_window" }),
+		// Driven from a browser, so there is no window beneath the interface to draw a pane on.
+		stagePaneAvailable: async () => false,
+		openStagePane: async () => undefined,
+		setStagePane: async () => undefined,
+		closeStagePane: async () => undefined,
+		sendStagePaneInput: async () => undefined,
+		stagePaneStatus: async () => [null, null],
 		packagedStageBenchmarkConfig: async () => null,
 		packagedStageBenchmarkPrepared: async () => false,
 		focusPackagedStageBenchmarkWindow: async () => undefined,

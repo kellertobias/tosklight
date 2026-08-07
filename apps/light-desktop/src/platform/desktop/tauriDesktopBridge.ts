@@ -127,6 +127,19 @@ export const tauriDesktopBridge: DesktopBridge = {
 	closeConsoleScreen: (screenId) =>
 		invoke("close_console_screen", { screenId }),
 	openStageViewWindow: () => invoke("open_stage_view_window"),
+	stagePaneAvailable: async () => {
+		const api = await coreApi();
+		return api.invoke<boolean>("stage_pane_available");
+	},
+	openStagePane: (geometry) => invoke("open_stage_pane", { geometry }),
+	setStagePane: (geometry) => invoke("set_stage_pane", { geometry }),
+	closeStagePane: () => invoke("close_stage_pane"),
+	sendStagePaneInput: (gesture, x, y) =>
+		invoke("stage_pane_input", { gesture, x, y }),
+	stagePaneStatus: async () => {
+		const api = await coreApi();
+		return api.invoke<[string | null, string | null]>("stage_pane_status");
+	},
 	packagedStageBenchmarkConfig: async () => {
 		const api = await coreApi();
 		return api.invoke("packaged_stage_benchmark_config");

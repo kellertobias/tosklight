@@ -2484,3 +2484,18 @@ textarea,
 	height: 36px;
 	padding: 0 12px;
 }
+
+/*
+ * The hole the native renderer draws in. It paints nothing at all: the desk's window is
+ * transparent wherever the interface paints nothing, and the picture underneath shows through —
+ * which is what puts menus, dialogs and the sheet above the Stage rather than beneath it.
+ */
+.stage-native-pane {
+	position: absolute;
+	inset: 0;
+	background: transparent;
+	touch-action: none;
+}
+.stage-canvas-3d {
+	position: relative;
+}

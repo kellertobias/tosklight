@@ -1,0 +1,139 @@
+import { useEffect, useRef, useState } from "react";
+import { useDesktopBridge } from "../../platform/desktop";
+import type { StagePaneGesture } from "../../platform/desktop/types";
+
+/**
+ * The Stage drawn by the native renderer, in a rectangle of the desk's own window.
+ *
+ * The desk's window is a native window with the interface added on top as a transparent child, so
+ * there is a surface underneath everything drawn here. This hook owns the arrangement from the web
+ * side: it reports where the pane element is, and the desk draws the picture there, beneath the
+ * interface. Where the element is, is the only thing the web layer decides — the layout owns the
+ * geometry because the pane is an element in a layout, and the renderer is told.
+ *
+ * It is not always possible, and that is ordinary. A browser has no second process; a platform may
+ * have no way to move a picture between two of them; an installation may be missing its renderer.
+ * In every one of those the hook stays inactive and the caller keeps the web renderer, which is
+ * why `active` is the answer rather than an error.
+ */
+export interface NativeStagePane {
+	/** Attach to the element the pane should fill. */
+	ref: (element: HTMLElement | null) => void;
+	/** True while the native renderer is drawing this pane. */
+	active: boolean;
+	/** What went wrong, once the desk has something to say about it. */
+	trouble: string | null;
+	/** What is drawing, for the diagnostics an operator reads. */
+	renderer: string | null;
+	/** Forward a gesture the pane element captured. */
+	send: (gesture: StagePaneGesture, x: number, y: number) => void;
+}
+
+/** How often the desk is asked what the pane is doing. Diagnostics, not the picture. */
+const STATUS_INTERVAL = 2_000;
+
+export function useNativeStagePane(enabled = true): NativeStagePane {
+	const desktopBridge = useDesktopBridge();
+	const [element, setElement] = useState<HTMLElement | null>(null);
+	const [active, setActive] = useState(false);
+	const [trouble, setTrouble] = useState<string | null>(null);
+	const [renderer, setRenderer] = useState<string | null>(null);
+	const opened = useRef(false);
+
+	/*
+	 * Reported from the element rather than from any layout constant. The pane moves when a sheet
+	 * opens beside it, when the window resizes, when the operator changes the desk layout — and
+	 * none of those tell this hook anything. Measuring the element covers all of them without
+	 * either side knowing the other's sizing rules.
+	 */
+	useEffect(() => {
+		if (!enabled || !element || !desktopBridge.available) return;
+		let cancelled = false;
+		let observer: ResizeObserver | null = null;
+		let report: (() => void) | null = null;
+
+		const geometry = () => {
+			const rect = element.getBoundingClientRect();
+			const scale = window.devicePixelRatio || 1;
+			return {
+				x: rect.left,
+				y: rect.top,
+				width: rect.width,
+				height: rect.height,
+				scale,
+				surfaceWidth: Math.max(1, Math.round(window.innerWidth * scale)),
+				surfaceHeight: Math.max(1, Math.round(window.innerHeight * scale)),
+			};
+		};
+
+		void (async () => {
+			if (!(await desktopBridge.stagePaneAvailable())) return;
+			if (cancelled) return;
+			try {
+				await desktopBridge.openStagePane(geometry());
+			} catch (error) {
+				// The desk could not start or attach the renderer. The caller keeps its web
+				// renderer, and the reason is shown rather than swallowed.
+				if (!cancelled) setTrouble(String(error));
+				return;
+			}
+			if (cancelled) {
+				void desktopBridge.closeStagePane();
+				return;
+			}
+			opened.current = true;
+			setActive(true);
+
+			report = () => {
+				void desktopBridge.setStagePane(geometry());
+			};
+			observer = new ResizeObserver(report);
+			observer.observe(element);
+			window.addEventListener("resize", report);
+			window.addEventListener("scroll", report, true);
+			report();
+		})();
+
+		return () => {
+			cancelled = true;
+			observer?.disconnect();
+			if (report) {
+				window.removeEventListener("resize", report);
+				window.removeEventListener("scroll", report, true);
+			}
+			if (opened.current) {
+				opened.current = false;
+				setActive(false);
+				void desktopBridge.closeStagePane();
+			}
+		};
+	}, [element, enabled, desktopBridge]);
+
+	useEffect(() => {
+		if (!active) return;
+		let cancelled = false;
+		const poll = async () => {
+			const [description, detail] = await desktopBridge.stagePaneStatus();
+			if (cancelled) return;
+			setRenderer(description);
+			setTrouble(detail);
+		};
+		void poll();
+		const timer = window.setInterval(() => void poll(), STATUS_INTERVAL);
+		return () => {
+			cancelled = true;
+			window.clearInterval(timer);
+		};
+	}, [active, desktopBridge]);
+
+	return {
+		ref: setElement,
+		active,
+		trouble,
+		renderer,
+		send: (gesture, x, y) => {
+			if (!active) return;
+			void desktopBridge.sendStagePaneInput(gesture, x, y);
+		},
+	};
+}

@@ -29,6 +29,19 @@ export interface PackagedStageBenchmarkConfig {
 	fixtureSheet: boolean;
 }
 
+/** Where the Stage pane is, in the points the web layout works in. */
+export interface StagePaneGeometry {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	scale: number;
+	surfaceWidth: number;
+	surfaceHeight: number;
+}
+
+export type StagePaneGesture = "orbit" | "pan" | "zoom";
+
 export interface DesktopBridge {
 	readonly available: boolean;
 	frontendReady(): Promise<void>;
@@ -41,6 +54,18 @@ export interface DesktopBridge {
 	hideConsoleScreen(screenId: string): Promise<void>;
 	closeConsoleScreen(screenId: string): Promise<void>;
 	openStageViewWindow(): Promise<void>;
+	/**
+	 * Whether the desk can draw the Stage itself, with the native renderer, into a rectangle of
+	 * its own window. False keeps the web renderer, which is not a failure — it is what a browser,
+	 * a platform without a shared surface, and an installation missing its renderer all get.
+	 */
+	stagePaneAvailable(): Promise<boolean>;
+	openStagePane(geometry: StagePaneGeometry): Promise<void>;
+	setStagePane(geometry: StagePaneGeometry): Promise<void>;
+	closeStagePane(): Promise<void>;
+	sendStagePaneInput(gesture: StagePaneGesture, x: number, y: number): Promise<void>;
+	/** What is drawing the pane, and whatever last went wrong with it. */
+	stagePaneStatus(): Promise<[string | null, string | null]>;
 	packagedStageBenchmarkConfig(): Promise<PackagedStageBenchmarkConfig | null>;
 	packagedStageBenchmarkPrepared(): Promise<boolean>;
 	focusPackagedStageBenchmarkWindow(): Promise<void>;
