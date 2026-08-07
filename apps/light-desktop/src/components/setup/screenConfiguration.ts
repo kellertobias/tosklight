@@ -48,17 +48,7 @@ export function updateScreenConfiguration(
 	changes: Partial<ScreenConfiguration>,
 ): ScreenConfiguration {
 	const next = { ...screen, ...changes };
-	if (
-		next.content.type === "fixed_pane" ||
-		next.content.type === "control_surface" ||
-		next.content.type === "none"
-	)
-		next.show_dock = false;
-	if (
-		next.content.type === "fixed_side_pane" &&
-		next.content.base !== "desktop"
-	)
-		next.show_dock = false;
+	if (next.content.type !== "desktop") next.show_dock = false;
 	return next;
 }
 
@@ -132,6 +122,7 @@ export function createScreenConfiguration(
 		first_playback_slot: 41 + screens.length * 40,
 		page_mode: "follow_main",
 		show_page_controls: true,
+		show_programmer: false,
 		desired_open: desiredOpen,
 		display_id: null,
 		bounds: null,

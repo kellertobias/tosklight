@@ -282,14 +282,12 @@ export type FixedScreenPane =
 export type ScreenContent =
 	| { type: "desktop" }
 	| { type: "control_surface" }
-	| { type: "none" }
 	| { type: "fixed_pane"; pane: FixedScreenPane }
 	| {
 			type: "fixed_side_pane";
 			pane: FixedScreenPane;
 			side: "left" | "right";
 			width_px: number;
-			base: "desktop" | "control_surface" | "none";
 	  };
 
 export interface ScreenConfiguration {
@@ -304,6 +302,8 @@ export interface ScreenConfiguration {
 	first_playback_slot: number;
 	page_mode: "follow_main" | "independent";
 	show_page_controls: boolean;
+	/** Full programmer surface on this screen; off keeps the encoders alone. */
+	show_programmer: boolean;
 	desired_open: boolean;
 	display_id: string | null;
 	bounds: { x: number; y: number; width: number; height: number } | null;

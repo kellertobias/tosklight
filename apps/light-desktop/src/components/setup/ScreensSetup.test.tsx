@@ -27,6 +27,7 @@ const configuredScreen: ScreenConfiguration = {
 	first_playback_slot: 1,
 	page_mode: "follow_main",
 	show_page_controls: true,
+	show_programmer: false,
 	desired_open: true,
 	display_id: null,
 	bounds: null,
@@ -360,7 +361,7 @@ describe("additional screen settings", () => {
 		const width = screen.getByRole("textbox", { name: "Pane width (px)" });
 		expect(width).toHaveValue("420");
 		fireEvent.change(width, { target: { value: "480" } });
-		expect(screen.getByRole("switch", { name: "Dock" })).not.toBeDisabled();
+		expect(screen.getByRole("switch", { name: "Dock" })).toBeDisabled();
 
 		await waitFor(() => expect(saved.length).toBeGreaterThan(0));
 			expect(saved.at(-1)).toMatchObject({
@@ -368,27 +369,17 @@ describe("additional screen settings", () => {
 					type: "fixed_side_pane",
 					side: "right",
 					width_px: 480,
-					base: "desktop",
 				},
-				show_dock: true,
+				show_dock: false,
 			});
 		});
 
-		it("assigns Programmer ownership when a fixed side pane uses a Control surface base", async () => {
+		it("assigns Programmer ownership when a fixed side pane is selected", async () => {
 			const updateProgrammerOwner = vi.fn().mockResolvedValue(undefined);
 			const save = vi.fn().mockResolvedValue(undefined);
 			render(
 				<ScreenSettingsCard
-					screen={{
-						...configuredScreen,
-						content: {
-							type: "fixed_side_pane",
-							pane: { type: "cues", cue_list_id: "" },
-							side: "left",
-							width_px: 420,
-							base: "desktop",
-						},
-					}}
+					screen={configuredScreen}
 					displays={[]}
 					save={save}
 					remove={vi.fn()}
@@ -396,9 +387,8 @@ describe("additional screen settings", () => {
 				/>,
 			);
 
-			const desktopButtons = screen.getAllByRole("button", { name: "Desktop" });
-			fireEvent.click(desktopButtons.at(-1) as HTMLButtonElement);
-			fireEvent.click(screen.getByRole("option", { name: "Control surface" }));
+			fireEvent.click(screen.getByRole("button", { name: "Desktop" }));
+			fireEvent.click(screen.getByRole("option", { name: "Fixed left pane" }));
 
 			await waitFor(() => expect(save).toHaveBeenCalledOnce());
 			await waitFor(() =>
@@ -411,13 +401,12 @@ describe("additional screen settings", () => {
 					type: "fixed_side_pane",
 					side: "left",
 					width_px: 420,
-					base: "control_surface",
 				},
 				show_dock: false,
 			});
 		});
 
-	it("assigns the single Programmer owner when Control surface is selected", async () => {
+	it("assigns the single Programmer owner when Controls only is selected", async () => {
 		const updateProgrammerOwner = vi.fn().mockResolvedValue(undefined);
 		const save = vi.fn().mockResolvedValue(undefined);
 		render(
@@ -431,7 +420,7 @@ describe("additional screen settings", () => {
 		);
 
 		fireEvent.click(screen.getByRole("button", { name: "Desktop" }));
-		fireEvent.click(screen.getByRole("option", { name: "Control surface" }));
+		fireEvent.click(screen.getByRole("option", { name: "Controls only" }));
 		expect(screen.getByRole("status")).toHaveTextContent(
 			"Selecting it assigns that placement when saved",
 		);
@@ -448,7 +437,7 @@ describe("additional screen settings", () => {
 		});
 	});
 
-	it("returns Programmer ownership to main when leaving Control surface", async () => {
+	it("returns Programmer ownership to main when leaving Controls only", async () => {
 		const updateProgrammerOwner = vi.fn().mockResolvedValue(undefined);
 		render(
 			<ScreenSettingsCard
@@ -465,10 +454,10 @@ describe("additional screen settings", () => {
 			/>,
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: "Control surface" }));
+		fireEvent.click(screen.getByRole("button", { name: "Controls only" }));
 		fireEvent.click(screen.getByRole("option", { name: "Desktop" }));
 		expect(screen.getByRole("status")).toHaveTextContent(
-			"a Playback/Encoders switch selects the lower section",
+			"the Playback/Encoders switch sits beside the section's own controls",
 		);
 
 		await waitFor(() =>

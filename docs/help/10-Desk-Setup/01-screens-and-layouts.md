@@ -22,10 +22,27 @@ The fixed-pane choices are **Fixture Sheet**, **Stage - 2D**, **Stage - 3D**,
 stored with that optional screen. If configured content is missing, the screen shows an unavailable
 state and does not substitute another Cuelist or file.
 
-**Show Dock** is incompatible with **Fixed full-screen pane**. Selecting the mode turns the Dock
-off and keeps its control disabled. Returning to **Desktop** makes the Dock control available
-again, but does not silently turn it back on. **Playbacks** and **Page Controls** remain independent
-and reserve their normal screen space in either content mode.
+A screen's **Content** is **Desktop**, **Controls only**, **Fixed full-screen pane**, **Fixed left
+pane**, or **Fixed right pane**. Only **Desktop** and **Fixed full-screen pane** put pane content
+above the control region.
+
+**Controls only** gives the whole screen height to the control region: the encoders when this screen
+carries them, the Playback section otherwise. Nothing is reserved above it.
+
+**Fixed left pane** and **Fixed right pane** divide the entire screen, not just its upper part. The
+chosen widget keeps its configured **Pane width (px)** over the full height on that side, and the
+control region takes every remaining pixel on the other side. There is no empty region above either
+one. When the screen carries neither the encoders nor Playbacks, the remaining side stays empty.
+
+**Show Dock** needs **Desktop** content. Every other content mode turns the Dock off and keeps its
+control disabled. Returning to **Desktop** makes the Dock control available again, but does not
+silently turn it back on. **Playbacks** and **Page Controls** remain independent and reserve their
+normal screen space wherever a control region exists.
+
+**Programmer** decides how much of the programmer an optional screen shows while it carries the
+encoders. **Encoders only** — the default — keeps the encoder group tabs with their Align, Special
+Dialog and Dynamics controls and the encoders below them, and nothing else. **Full programmer** adds
+the command line and the programmer tool pane beside them, matching the main screen.
 
 Each optional screen can also select a physical display and enter native fullscreen. Native
 fullscreen controls the application window on the physical display; **Fixed full-screen pane**
@@ -35,6 +52,10 @@ tracks the primary page. Choose **Dedicated Page** for an independent operator s
 Browser-only operation displays the default-screen controls but cannot create or claim support for
 native optional-screen windows.
 
+Pressing **X** in an optional screen window closes that window and marks the screen closed, so it
+stays closed until you open it again from **Setup → Screens** or with its **Open Screen** action.
+The rest of the desk keeps running. Pressing **X** on the main window quits ToskLight.
+
 ## Encoder placement
 
 **Encoder placement** decides which screen carries the encoder section, independently of the
@@ -43,12 +64,19 @@ Playback controls. Choose **Encoders on** to select the main screen or any optio
 
 The main screen keeps its Playback controls whatever the placement is. While the encoders live on
 another screen, the main screen shows the Playback section alone and its Programmer/Playback toggle
-disappears, because there is nothing to switch to. If the chosen screen is closed, both surfaces
-offer **Use encoders on this screen** to take the encoders back in one explicit action.
+disappears, because there is nothing to switch to. It does not announce the placement anywhere else;
+the setting you made stays out of the way. If the chosen screen is closed, **Setup → Screens** shows
+the placement warning and offers **Use encoders on this screen** to take the encoders back in one
+explicit action.
 
 An optional screen that carries the encoders and also shows **Playbacks** or **Page Controls**
-displays a **Playback**/**Encoders** switch above its lower section and starts on **Encoders**. A
-screen that carries only one of the two shows that section without a switch.
+offers a **Playback**/**Encoders** switch and starts on **Encoders**. The switch has no row of its
+own: on the encoder view it sits at the end of the encoder group tabs, directly right of
+**Dynamics**; on the Playback view it sits in the page controls, directly above **PAGE UP**. Neither
+section loses height to it. It is a single button carrying both labels, the current section in blue
+and the other in white; pressing it changes section. The button keeps the same size and place in
+either view, so the row around it never moves. A screen that carries only one of the two shows that section without a
+switch.
 
 Playback rows share all available playback height according to their controls. With attached playback hardware, a row without faders uses one height unit and a row with faders uses two. On a touch surface, a one-button row uses one unit and makes the whole playback section its button, with the function label at bottom-right. A two- or three-button faderless row uses two units and places its buttons side by side. A fader row uses four units. The unit size adapts so the configured rows fill the playback area.
 

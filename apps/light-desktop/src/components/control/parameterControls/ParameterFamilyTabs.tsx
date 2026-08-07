@@ -5,6 +5,7 @@ import { EncoderGroupTabs } from "@tosklight/ui/encoders";
 import type { DynamicDefinitionProjection } from "../../../api/types";
 import type { DynamicEditorTask } from "../../../features/dynamics/DynamicEditorSessionContext";
 import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
+import { useLowerSectionSwitch } from "../../../features/screens/LowerSectionSwitch";
 import { useDynamics } from "../../../features/showObjects/ShowObjectsState";
 import {
 	alignModes,
@@ -106,6 +107,7 @@ export function ParameterFamilyTabs({
 	controller: ParameterController;
 }) {
 	const editor = useDynamicEditorSession();
+	const sectionSwitch = useLowerSectionSwitch();
 	if (editor.session) return <DynamicEditorTaskTabs />;
 	return (
 		<EncoderGroupTabs
@@ -136,6 +138,7 @@ export function ParameterFamilyTabs({
 					>
 						<FamilyLabel full="Dynamics" compact="Dyn" />
 					</Button>
+					{sectionSwitch}
 				</>
 			}
 		/>

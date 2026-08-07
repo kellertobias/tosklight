@@ -18,6 +18,7 @@ const screen: ScreenConfiguration = {
 	show_dock: true,
 	show_playbacks: true,
 	show_page_controls: true,
+	show_programmer: false,
 	page_mode: "follow_main",
 	first_playback_slot: 1,
 	playback_count: 10,

@@ -99,6 +99,7 @@ function configuredScreen(
 		first_playback_slot: 1,
 		page_mode: "follow_main",
 		show_page_controls: true,
+		show_programmer: false,
 		desired_open: true,
 		display_id: null,
 		bounds: null,
@@ -170,7 +171,7 @@ describe("ScreenApp", () => {
 		expect(screen.getByTestId("screen-playbacks")).toBeInTheDocument();
 	});
 
-	it("renders a pixel-sized fixed side pane beside the hydrated Desktop", () => {
+	it("gives a fixed side pane the full height beside the control region", () => {
 		mocks.screens = {
 			screens: [
 				configuredScreen({
@@ -178,7 +179,6 @@ describe("ScreenApp", () => {
 						type: "fixed_side_pane",
 						side: "right",
 						width_px: 480,
-						base: "desktop",
 						pane: {
 							type: "stage_2d",
 							follow_preload: false,
@@ -191,28 +191,27 @@ describe("ScreenApp", () => {
 
 		const { container } = render(<ScreenApp id="screen-1" />);
 
-		expect(screen.getByTestId("workspace")).toBeInTheDocument();
-		expect(screen.getByTestId("fixed-pane")).toBeInTheDocument();
-		expect(container.querySelector(".screen-main-composition")).toHaveClass(
-			"fixed-right",
-		);
-		expect(container.querySelector(".screen-main-composition")).toHaveStyle({
-			"--fixed-side-pane-width": "480px",
-		});
-		expect(mocks.dispatch).toHaveBeenCalledWith(
+		const shell = container.querySelector(".screen-shell");
+		expect(shell).toHaveClass("side-content", "fixed-right");
+		expect(shell).toHaveStyle({ "--fixed-side-pane-width": "480px" });
+		expect(shell).toContainElement(screen.getByTestId("fixed-pane"));
+		expect(shell).toContainElement(screen.getByTestId("screen-playbacks"));
+		expect(screen.queryByTestId("workspace")).not.toBeInTheDocument();
+		expect(mocks.dispatch).not.toHaveBeenCalledWith(
 			expect.objectContaining({ type: "HYDRATE_LAYOUT" }),
 		);
 	});
 
-	it("renders an assigned Control surface beside a fixed pane without hydrating Desktop", () => {
+	it("puts the encoders beside a fixed side pane over the full height", () => {
 		mocks.screens = {
 			screens: [
 				configuredScreen({
+					show_playbacks: false,
+					show_page_controls: false,
 					content: {
 						type: "fixed_side_pane",
 						side: "left",
 						width_px: 360,
-						base: "control_surface",
 						pane: {
 							type: "stage_2d",
 							follow_preload: false,
@@ -229,10 +228,10 @@ describe("ScreenApp", () => {
 
 		const { container } = render(<ScreenApp id="screen-1" />);
 
-		const composition = container.querySelector(".screen-main-composition");
-		expect(composition).toContainElement(screen.getByTestId("fixed-pane"));
-		expect(composition).toContainElement(
-			screen.getByTestId("programmer-controls"),
+		const base = container.querySelector(".screen-side-base");
+		expect(base).toContainElement(screen.getByTestId("programmer-controls"));
+		expect(container.querySelector(".screen-shell")).toContainElement(
+			screen.getByTestId("fixed-pane"),
 		);
 		expect(screen.queryByTestId("workspace")).not.toBeInTheDocument();
 		expect(mocks.dispatch).not.toHaveBeenCalledWith(

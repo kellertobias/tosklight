@@ -73,6 +73,7 @@ function screenConfiguration(
 		first_playback_slot: 1,
 		page_mode: "independent",
 		show_page_controls: true,
+		show_programmer: false,
 		desired_open: true,
 		display_id: null,
 		bounds: null,

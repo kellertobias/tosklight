@@ -214,6 +214,7 @@ async fn screen_configuration_v2_reads_existing_desk_store_rows_without_migratio
             first_playback_slot: 5,
             page_mode: "follow_main".into(),
             show_page_controls: false,
+            show_programmer: false,
             desired_open: true,
             display_id: Some("display-1".into()),
             bounds: Some(serde_json::json!({"x":1,"y":2,"width":800,"height":600})),

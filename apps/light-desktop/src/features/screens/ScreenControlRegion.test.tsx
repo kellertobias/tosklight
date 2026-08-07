@@ -8,12 +8,40 @@ import { ScreenControlRegion } from "./ScreenControlRegion";
 import { ScreensProvider } from "./ScreensContext";
 import type { ScreensContextValue } from "./types";
 
-vi.mock("../../components/control/ControlSection", () => ({
-	ControlSection: () => <div data-testid="encoders" />,
+/** Both sections host the switch where the operator's own controls already are. */
+vi.mock("../../components/control/ControlSection", async () => {
+	const { useLowerSectionSwitch } = await import("./LowerSectionSwitch");
+	return {
+		ControlSection: () => (
+			<div data-testid="encoders">{useLowerSectionSwitch()}</div>
+		),
+	};
+});
+
+vi.mock("../../components/control/ParameterControls", async () => {
+	const { useLowerSectionSwitch } = await import("./LowerSectionSwitch");
+	return {
+		ParameterControls: () => (
+			<div data-testid="encoders-only">{useLowerSectionSwitch()}</div>
+		),
+	};
+});
+
+vi.mock("./ScreenPlaybackSection", async () => {
+	const { useLowerSectionSwitch } = await import("./LowerSectionSwitch");
+	return {
+		ScreenPlaybackSection: () => (
+			<div data-testid="playbacks">{useLowerSectionSwitch()}</div>
+		),
+	};
+});
+
+vi.mock("../deskSnapshot/DeskSnapshotState", () => ({
+	useHardwareConnected: () => false,
 }));
 
-vi.mock("./ScreenPlaybackSection", () => ({
-	ScreenPlaybackSection: () => <div data-testid="playbacks" />,
+vi.mock("../../state/AppContext", () => ({
+	useApp: () => ({ state: { midiProfile: null }, dispatch: vi.fn() }),
 }));
 
 const screenTemplate = {
@@ -24,6 +52,7 @@ const screenTemplate = {
 	show_dock: false,
 	show_playbacks: true,
 	show_page_controls: false,
+	show_programmer: true,
 	playback_count: 8,
 	playback_rows: 1,
 	first_playback_slot: 1,
@@ -68,7 +97,7 @@ describe("ScreenControlRegion", () => {
 		mount(screenTemplate, null);
 		expect(screen.getByTestId("playbacks")).toBeInTheDocument();
 		expect(screen.queryByTestId("encoders")).toBeNull();
-		expect(screen.queryByRole("group", { name: "Lower section" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Lower section" })).toBeNull();
 	});
 
 	it("shows only the encoders when the screen carries no Playbacks", () => {
@@ -78,20 +107,42 @@ describe("ScreenControlRegion", () => {
 		);
 		expect(screen.getByTestId("encoders")).toBeInTheDocument();
 		expect(screen.queryByTestId("playbacks")).toBeNull();
-		expect(screen.queryByRole("group", { name: "Lower section" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Lower section" })).toBeNull();
 	});
 
-	it("switches between Playback and Encoders when the screen carries both", () => {
+	it("drops the programmer surface while the screen shows the encoders alone", () => {
+		mount(
+			{
+				...screenTemplate,
+				show_playbacks: false,
+				show_programmer: false,
+			} as ScreenConfiguration,
+			"screen-1",
+		);
+		expect(screen.getByTestId("encoders-only")).toBeInTheDocument();
+		expect(screen.queryByTestId("encoders")).toBeNull();
+	});
+
+	it("hands one switch button to whichever section is visible", () => {
 		mount(screenTemplate, "screen-1");
-		expect(screen.getByRole("group", { name: "Lower section" })).toBeVisible();
-		expect(screen.getByTestId("encoders")).toBeInTheDocument();
+		const encoders = screen.getByTestId("encoders");
+		const control = screen.getByRole("button", { name: "Lower section" });
+		expect(encoders).toContainElement(control);
 		expect(screen.queryByTestId("playbacks")).toBeNull();
 
-		fireEvent.click(screen.getByRole("button", { name: "Playback" }));
-		expect(screen.getByTestId("playbacks")).toBeInTheDocument();
+		/* Both labels are always present; only the active colour moves. */
+		expect(control).toHaveTextContent("Playback");
+		expect(control).toHaveTextContent("Encoders");
+		expect(control).toHaveAttribute("data-section", "encoders");
+
+		fireEvent.click(control);
+		const playbacks = screen.getByTestId("playbacks");
+		const moved = screen.getByRole("button", { name: "Lower section" });
+		expect(playbacks).toContainElement(moved);
+		expect(moved).toHaveAttribute("data-section", "playbacks");
 		expect(screen.queryByTestId("encoders")).toBeNull();
 
-		fireEvent.click(screen.getByRole("button", { name: "Encoders" }));
+		fireEvent.click(moved);
 		expect(screen.getByTestId("encoders")).toBeInTheDocument();
 	});
 });

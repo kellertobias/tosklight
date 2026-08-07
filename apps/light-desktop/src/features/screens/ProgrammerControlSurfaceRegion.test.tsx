@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ScreenConfiguration } from "../../api/types";
 import { ProgrammerControlSurfaceRegion } from "./ProgrammerControlSurfaceRegion";
@@ -87,7 +87,7 @@ describe("ProgrammerControlSurfaceRegion", () => {
 		expect(encoderSurface).toHaveAttribute("data-can-toggle", "false");
 	});
 
-	it("keeps main Playbacks and recovers the encoders from a closed screen", () => {
+	it("keeps main Playbacks silent about a closed encoder screen", () => {
 		const configured = {
 			id: "screen-2",
 			name: "Stage manager",
@@ -100,18 +100,29 @@ describe("ProgrammerControlSurfaceRegion", () => {
 			</ScreensProvider>,
 		);
 
-		expect(screen.getByRole("alert")).toHaveTextContent(
-			"Encoders unavailable — assigned to Stage manager",
-		);
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(
+			screen.queryByRole("button", { name: "Use encoders on this screen" }),
+		).toBeNull();
 		expect(screen.getByTestId("control-surface")).toHaveAttribute(
 			"data-mode",
 			"playbacks",
 		);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Use encoders on this screen" }),
+	});
+
+	it("renders nothing on a screen that does not hold the encoders", () => {
+		const configured = {
+			id: "screen-2",
+			name: "Stage manager",
+			desired_open: false,
+		} as ScreenConfiguration;
+		const context = source("screen-2", [configured]);
+		const { container } = render(
+			<ScreensProvider source={context}>
+				<ProgrammerControlSurfaceRegion screenId="screen-3" />
+			</ScreensProvider>,
 		);
-		expect(context.updateProgrammerControlSurface).toHaveBeenCalledWith({
-			assign_to_main: true,
-		});
+
+		expect(container).toBeEmptyDOMElement();
 	});
 });
