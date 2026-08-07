@@ -7722,6 +7722,7 @@ dependencies = [
  "glam",
  "muda",
  "png 0.18.1",
+ "pollster",
  "rfd 0.15.4",
  "uuid",
  "viz-desk",
@@ -7734,6 +7735,7 @@ dependencies = [
  "viz-scene",
  "viz-snapshot",
  "viz-surface",
+ "wgpu",
  "winit",
 ]
 
