@@ -10,7 +10,6 @@
 //! playback and the output engine with it. Run as a child it takes its own window and nothing
 //! else, and the desk says what happened.
 
-use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use viz_helper::framing::write_frame;
