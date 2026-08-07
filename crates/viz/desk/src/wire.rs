@@ -288,6 +288,19 @@ pub struct PreviewSnapshot {
     pub universes: Vec<PreviewUniverse>,
 }
 
+/// The desk's own live output, as universes.
+///
+/// Read only by a renderer the desk is running inside its own window. A renderer on the network
+/// gets its values as real Art-Net or sACN and this is none of its business — see
+/// [`crate::DeskConnection::values_from_desk_output`] for why the distinction is not a loophole.
+#[derive(Clone, Debug, Deserialize)]
+pub struct OutputDmxSnapshot {
+    #[serde(default)]
+    pub revision: u64,
+    #[serde(default)]
+    pub universes: Vec<PreviewUniverse>,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct PreviewUniverse {
     pub universe: u16,

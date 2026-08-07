@@ -41,6 +41,17 @@ pub struct DeskConnection {
     /// Which renderer this window is, for a desk driving more than one. The desk keeps a view per
     /// target, so two renderers side by side can show two different things.
     pub target: String,
+    /// Read live values from the desk's own output rather than from the network.
+    ///
+    /// Off for every renderer on a network, where the two-plane rule holds: a desk's live values
+    /// arrive as real Art-Net or sACN, and a visualizer that invented a second path would be
+    /// showing something no lighting rig would.
+    ///
+    /// On for a renderer drawing the desk's Stage inside the desk's own window, where the rule has
+    /// nothing to protect: the two processes are one product on one machine, the desk already
+    /// knows the values, and a desk with no output routes configured still has a Stage its
+    /// operator expects to see lit.
+    pub values_from_desk_output: bool,
 }
 
 impl Default for DeskConnection {
@@ -53,6 +64,8 @@ impl Default for DeskConnection {
             retry: Duration::from_secs(2),
             input_overrides: Vec::new(),
             target: "main".into(),
+            // The network rule is the default; the desk's own window opts out deliberately.
+            values_from_desk_output: false,
         }
     }
 }
@@ -79,6 +92,8 @@ enum Message {
     /// What the planning window is driving the rig with, as read. Only a planning source ever
     /// sends this.
     Preview(Box<crate::wire::PreviewSnapshot>),
+    /// The desk's own output, for a renderer inside the desk's window.
+    DeskOutput(Box<crate::wire::OutputDmxSnapshot>),
     /// The desk's own view for this target, as read. Converting it needs the scene, which lives
     /// on the render thread, so the raw reading travels and the conversion happens there.
     View(Box<DeskView>),
@@ -139,6 +154,10 @@ pub struct DeskProvider {
     ///
     /// Empty for a lighting desk, which never serves them.
     preview: crate::wire::PreviewSnapshot,
+    /// The desk's own output, while a renderer in the desk's window is reading it.
+    desk_output: Option<crate::wire::OutputDmxSnapshot>,
+    /// The output revision already decoded, so an unchanged read costs nothing.
+    applied_desk_output: Option<u64>,
     applied_preview_revision: Option<u64>,
     /// Universes a real source has delivered at least one packet on, ever.
     ///
@@ -179,6 +198,8 @@ impl DeskProvider {
             reported_input_micros: 0,
             value_frame: 0,
             preview: crate::wire::PreviewSnapshot::default(),
+            desk_output: None,
+            applied_desk_output: None,
             applied_preview_revision: None,
             real_universes: std::collections::BTreeSet::new(),
         }
@@ -345,6 +366,9 @@ impl SceneProvider for DeskProvider {
                 Ok(Message::Preview(preview)) => {
                     self.preview = *preview;
                 }
+                Ok(Message::DeskOutput(output)) => {
+                    self.desk_output = Some(*output);
+                }
                 Ok(Message::View(view)) => {
                     let changed = self
                         .view
@@ -431,6 +455,49 @@ impl SceneProvider for DeskProvider {
                 }
             })
             .collect();
+
+        // The desk's own output, for a renderer drawing inside the desk's window. Decoded through
+        // exactly the path a real packet takes, so nothing downstream can tell the difference —
+        // the numbers are the same numbers, read from the desk instead of heard from the wire.
+        if let (Some(output), Some(decoder), Some(scene)) =
+            (self.desk_output.as_ref(), &mut self.decoder, &self.scene)
+            && self.applied_desk_output != Some(output.revision)
+        {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|since| since.as_micros() as u64)
+                .unwrap_or_default();
+            let frames: Vec<viz_dmx::UniverseFrame> = output
+                .universes
+                .iter()
+                .map(|universe| {
+                    let mut slots = [0_u8; 512];
+                    let length = universe.slots.len().min(512);
+                    slots[..length].copy_from_slice(&universe.slots[..length]);
+                    viz_dmx::UniverseFrame {
+                        logical_universe: universe.universe,
+                        slots,
+                        received_micros: now,
+                        stale: false,
+                    }
+                })
+                .collect();
+            if !frames.is_empty() {
+                decoder.apply(
+                    scene,
+                    &frames,
+                    &mut self.values,
+                    self.epoch.elapsed().as_secs_f32(),
+                );
+                self.applied_desk_output = Some(output.revision);
+                // The desk changing its output is not a packet arriving, so it gets its own frame
+                // stamp; without one the host would never present it.
+                self.value_frame += 1;
+                self.values.newest_input_micros = now;
+                self.values.frame = self.value_frame;
+                events.push(ProviderEvent::Values(Box::new(self.values.clone())));
+            }
+        }
 
         if let (Some(receivers), Some(decoder), Some(scene)) =
             (&self.receivers, &mut self.decoder, &self.scene)
@@ -772,7 +839,17 @@ async fn watch(
             }
             Err(TryRecvError::Empty) => {}
         }
-        let next = tokio::time::timeout(Duration::from_millis(500), socket.next()).await;
+        if connection.values_from_desk_output
+            && let Some(output) = client.output_dmx().await
+        {
+            let _ = outbox.send(Message::DeskOutput(Box::new(output)));
+        }
+        let poll = if connection.values_from_desk_output {
+            25
+        } else {
+            500
+        };
+        let next = tokio::time::timeout(Duration::from_millis(poll), socket.next()).await;
         let Ok(Some(Ok(message))) = next else {
             if next.is_err() {
                 continue;

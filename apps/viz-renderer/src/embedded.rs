@@ -59,6 +59,9 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
                 port: desk.port,
                 user: desk.user.clone(),
                 target: desk.target.clone(),
+                // This renderer is inside the desk's own window, so it reads the desk's output
+                // rather than waiting for it on a network that may carry nothing at all.
+                values_from_desk_output: true,
                 ..DeskConnection::default()
             },
             epoch,
