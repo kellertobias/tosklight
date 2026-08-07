@@ -16,8 +16,9 @@ pub const PROTOCOL_MAJOR: u16 = 1;
 pub const PROTOCOL_MINOR: u16 = 0;
 
 /// What the desk sends the helper.
+// Externally tagged, which is serde's default: a compact binary format identifies a variant by
+// index rather than by a name inside the message, and cannot carry an internal tag at all.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToHelper {
     /// Always first. States the protocol and what to open.
     Hello {
@@ -39,7 +40,6 @@ pub enum ToHelper {
 
 /// What the helper sends back.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
 pub enum FromHelper {
     /// The helper is up and speaks this protocol. Sent once, in answer to `Hello`.
     Ready {
@@ -123,14 +123,19 @@ pub fn accepts_between(ours: (u16, u16), theirs: (u16, u16)) -> Result<(), Incom
 }
 
 /// Encode a message for [`crate::framing::write_frame`].
+///
+/// A compact binary form rather than JSON. This is a private pipe between two processes of the
+/// same build, so a self-describing text format buys nothing — and it cannot carry what the
+/// renderer actually uses: an empty scene's bounds are infinities, which JSON writes as null and
+/// then refuses to read back as a number.
 pub fn encode<T: Serialize>(message: &T) -> Result<Vec<u8>, String> {
-    serde_json::to_vec(message).map_err(|error| error.to_string())
+    postcard::to_allocvec(message).map_err(|error| error.to_string())
 }
 
 /// Decode a frame. A frame that will not decode is the other side being wrong, not this side, so
 /// it is reported rather than panicked on.
 pub fn decode<T: for<'a> Deserialize<'a>>(payload: &[u8]) -> Result<T, String> {
-    serde_json::from_slice(payload).map_err(|error| error.to_string())
+    postcard::from_bytes(payload).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
@@ -247,14 +252,13 @@ mod value_plane {
         values.frame = 17;
 
         let carried = ToHelper::Values {
-            payload: serde_json::to_vec(&values).expect("values encode"),
+            payload: encode(&values).expect("values encode"),
         };
         let decoded: ToHelper = decode(&encode(&carried).expect("encodes")).expect("decodes");
         let ToHelper::Values { payload } = decoded else {
             panic!("the message changed shape crossing the channel");
         };
-        let arrived: viz_scene::SceneValues =
-            serde_json::from_slice(&payload).expect("values decode");
+        let arrived: viz_scene::SceneValues = decode(&payload).expect("values decode");
 
         assert_eq!(arrived.emitters.len(), 2);
         assert_eq!(arrived.emitters[0].intensity, 0.75);
@@ -274,8 +278,8 @@ mod value_plane {
         values.laser_scans[0].points_per_second = 30_000.0;
         values.laser_scans[0].slots = vec![1, 2, 3];
 
-        let payload = serde_json::to_vec(&values).expect("encodes");
-        let arrived: viz_scene::SceneValues = serde_json::from_slice(&payload).expect("decodes");
+        let payload = encode(&values).expect("encodes");
+        let arrived: viz_scene::SceneValues = decode(&payload).expect("decodes");
         assert_eq!(arrived.laser_scans[0].points_per_second, 30_000.0);
         assert_eq!(arrived.laser_scans[0].slots, vec![1, 2, 3]);
     }
@@ -305,13 +309,13 @@ mod scene_plane {
         };
 
         let carried = ToHelper::Scene {
-            payload: serde_json::to_vec(&scene).expect("the scene encodes"),
+            payload: encode(&scene).expect("the scene encodes"),
         };
         let decoded: ToHelper = decode(&encode(&carried).expect("encodes")).expect("decodes");
         let ToHelper::Scene { payload } = decoded else {
             panic!("the message changed shape crossing the channel");
         };
-        let arrived: viz_scene::Scene = serde_json::from_slice(&payload).expect("decodes");
+        let arrived: viz_scene::Scene = decode(&payload).expect("decodes");
 
         assert_eq!(arrived.revision, 9);
         assert_eq!(arrived.show_name, "Demo Show");
@@ -319,26 +323,21 @@ mod scene_plane {
         assert!(arrived.fixtures.is_empty(), "an empty rig stays empty");
     }
 
-    /// JSON cannot carry an empty scene, and this is where that is written down.
+    /// An empty scene is the case that decided the channel's format.
     ///
-    /// An empty `Aabb` is infinities — that is how "nothing has been included yet" is represented,
-    /// and it is correct. JSON has no infinity: `serde_json` writes `null` and then refuses to
-    /// read it back as a number. So a desk that opened the visualizer before loading a show would
-    /// send a scene the helper cannot decode.
-    ///
-    /// The fix is a binary format for this channel rather than special-casing the bounds — it is a
-    /// private pipe between two processes of the same build, so JSON buys nothing here and cannot
-    /// represent the values the renderer actually uses. Pinned as a failing capability rather than
-    /// worked around, so the format decision is made deliberately.
+    /// An empty `Aabb` is infinities — that is how "nothing included yet" is represented, and it is
+    /// correct. JSON has no infinity: it wrote them as null and then refused to read them back as
+    /// numbers, so a desk that opened the visualizer before loading a show sent a scene the helper
+    /// could not decode. A binary format carries the bits as they are.
     #[test]
-    fn an_empty_scene_cannot_cross_a_json_channel() {
+    fn an_empty_scene_crosses_the_channel_infinities_and_all() {
         let scene = viz_scene::Scene::default();
-        let payload = serde_json::to_vec(&scene).expect("infinities encode, as null");
-        let refused = serde_json::from_slice::<viz_scene::Scene>(&payload);
+        let arrived: viz_scene::Scene =
+            decode(&encode(&scene).expect("encodes")).expect("an empty scene decodes");
         assert!(
-            refused.is_err(),
-            "if this now round-trips, JSON grew infinity support or the bounds changed shape — \
-             either way the channel format decision can be revisited"
+            arrived.bounds.min.x.is_infinite(),
+            "the empty bounds arrived as they were set"
         );
+        assert!(arrived.fixtures.is_empty());
     }
 }

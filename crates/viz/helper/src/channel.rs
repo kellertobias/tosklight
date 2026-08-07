@@ -101,7 +101,8 @@ mod tests {
     #[test]
     fn a_message_this_helper_does_not_understand_is_skipped() {
         let mut buffer = Vec::new();
-        write_frame(&mut buffer, br#"{"type":"something_newer"}"#).expect("writes");
+        // A variant index this build does not have: what a newer desk's message looks like here.
+        write_frame(&mut buffer, &[0xfe, 0xff, 0x01]).expect("writes");
         write_frame(
             &mut buffer,
             &encode(&ToHelper::Values { payload: vec![7] }).expect("encodes"),

@@ -5,6 +5,7 @@ edition.workspace = true
 license-file.workspace = true
 
 [dependencies]
+postcard.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

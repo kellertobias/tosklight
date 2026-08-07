@@ -82,6 +82,9 @@ light-wire = { path = "crates/light/contracts/wire" }
 wgpu = "30"
 winit = "0.30"
 glam = { version = "0.30", features = ["bytemuck", "serde"] }
+# The desk-to-helper channel. A private pipe between two processes of the same build, carrying
+# values JSON cannot represent: an empty scene's bounds are infinities.
+postcard = { version = "1", features = ["use-std"] }
 bytemuck = { version = "1.23", features = ["derive"] }
 pollster = "0.4"
 socket2 = { version = "0.6", features = ["all"] }
