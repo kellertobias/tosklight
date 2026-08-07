@@ -4,7 +4,7 @@
  * This surface deliberately fakes Timecode data, audio, and transport locally.
  * It is not a runtime, persistence, or backend contract.
  */
-import { Button, WindowHeader } from "@tosklight/ui";
+import { Button, Input, WindowHeader } from "@tosklight/ui";
 import {
 	type CSSProperties,
 	type PointerEvent as ReactPointerEvent,
@@ -607,7 +607,7 @@ export function TimecodeWindow({
 					],
 				]}
 			/>
-			<input
+			<Input
 				ref={audioInput}
 				className="timecode-hidden-file-input"
 				type="file"
@@ -792,13 +792,13 @@ export function TimecodeWindow({
 								>
 									{lane.kind === "cuelist" &&
 										(lane.instances?.length ?? 0) === 0 && (
-											<button
+											<Button
 												type="button"
 												className="timecode-empty-lane"
 												onClick={() => repeatCuelist(lane)}
 											>
 												+ Add {lane.label} at playhead
-											</button>
+											</Button>
 										)}
 									{lane.instances?.map((instance, instanceIndex) => (
 										<div
@@ -815,7 +815,7 @@ export function TimecodeWindow({
 											<legend className="visually-hidden">
 												{lane.label} timeline lane
 											</legend>
-											<button
+											<Button
 												type="button"
 												className="timecode-instance-grab"
 												onPointerDown={(event) =>
@@ -835,7 +835,7 @@ export function TimecodeWindow({
 													{formatTimecode(instance.start)} →{" "}
 													{formatTimecode(instance.end)}
 												</small>
-											</button>
+											</Button>
 											{instance.cues.map((cue) => {
 												const selected =
 													selection?.laneId === lane.id &&
@@ -853,7 +853,7 @@ export function TimecodeWindow({
 																width: Math.max(12, framePx(cue.fade)),
 															}}
 														/>
-														<button
+														<Button
 															type="button"
 															className="timecode-go-handle"
 															aria-label={`Cue ${cue.number} ${cue.name} Go at ${formatTimecode(instance.start + cue.go)}`}
@@ -874,8 +874,8 @@ export function TimecodeWindow({
 															}}
 														>
 															<span>{cue.number}</span>
-														</button>
-														<button
+														</Button>
+														<Button
 															type="button"
 															className="timecode-fade-handle"
 															style={{
@@ -897,7 +897,7 @@ export function TimecodeWindow({
 													</div>
 												);
 											})}
-											<button
+											<Button
 												type="button"
 												className="timecode-instance-end"
 												aria-label={`Resize end of ${lane.label}`}
@@ -934,7 +934,7 @@ export function TimecodeWindow({
 														style={{ width: framePx(point.fade) }}
 													/>
 												)}
-												<button
+												<Button
 													type="button"
 													className="timecode-automation-handle"
 													aria-label={`${lane.label} ${point.value}${lane.kind === "speed-group" ? " BPM" : "%"}`}
@@ -963,9 +963,9 @@ export function TimecodeWindow({
 																: "Keep running"
 															: `${(point.fade / TIMECODE_HZ).toFixed(1)}s fade`}
 													</small>
-												</button>
+												</Button>
 												{point.fade > 0 && (
-													<button
+													<Button
 														type="button"
 														className="timecode-automation-fade-handle"
 														style={{ left: framePx(point.fade) }}
@@ -1003,7 +1003,7 @@ export function TimecodeWindow({
 							className="timecode-playhead"
 							style={{ left: 196 + framePx(frame) }}
 						>
-							<button
+							<Button
 								type="button"
 								aria-label={`Playhead ${formatTimecode(frame)}`}
 								onPointerDown={(event) =>
@@ -1074,7 +1074,7 @@ export function TimecodeWindow({
 							{Math.abs(rate)}×
 						</Button>
 					</nav>
-					<button
+					<Button
 						type="button"
 						className="timecode-position"
 						onClick={() => {
@@ -1089,7 +1089,7 @@ export function TimecodeWindow({
 						<small>
 							Playhead · Frame {Math.round(frame)} · {TIMECODE_HZ} Hz
 						</small>
-					</button>
+					</Button>
 					<div className="timecode-loop-readout">
 						<strong>
 							{formatTimecode(loopStart)} → {formatTimecode(loopEnd)}

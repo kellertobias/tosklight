@@ -151,7 +151,7 @@ function Tile({
 	useEffect(() => clearHold, []);
 	const preset = presetById(cell.preset);
 	return (
-		<button
+		<Button
 			type="button"
 			className={`grid-dynamic-tile ${selected ? "is-selected" : ""} ${playhead ? "is-playhead" : ""} ${preset ? "has-preset" : ""}`}
 			style={
@@ -198,7 +198,7 @@ function Tile({
 					{cell.decay > 0 ? `D${cell.decay}` : ""}
 				</small>
 			)}
-		</button>
+		</Button>
 	);
 }
 
@@ -410,7 +410,7 @@ export function GridDynamicsWindow(props: GridDynamicsWindowProps) {
 						const beat = column / columnsPerBeat;
 						const beatStart = Number.isInteger(beat);
 						return (
-							<button
+							<Button
 								type="button"
 								key={column}
 								className={`${beatStart ? "is-beat" : ""} ${props.playhead === column ? "is-playhead" : ""}`}
@@ -418,7 +418,7 @@ export function GridDynamicsWindow(props: GridDynamicsWindowProps) {
 							>
 								<strong>{column + 1}</strong>
 								<small>{beatStart ? `Beat ${beat + 1}` : "·"}</small>
-							</button>
+							</Button>
 						);
 					})}
 				</div>

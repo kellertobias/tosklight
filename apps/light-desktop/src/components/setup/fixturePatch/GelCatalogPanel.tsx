@@ -1,4 +1,4 @@
-import { Button, Select, TextField } from "@tosklight/ui";
+import { Button, Input, Select, TextField } from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import type {
 	GelCatalog,
@@ -173,7 +173,7 @@ function GelCatalogImport({ model }: { model: GelCatalogModel }) {
 			/>
 			<label>
 				Catalog CSV
-				<input
+				<Input
 					type="file"
 					accept=".csv,text/csv"
 					onChange={(event) => model.selectFile(event.target.files?.[0])}

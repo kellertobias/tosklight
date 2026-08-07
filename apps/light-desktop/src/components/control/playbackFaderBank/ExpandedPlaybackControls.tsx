@@ -1,3 +1,4 @@
+import { Button, Input } from "@tosklight/ui";
 import type { PlaybackButtonAction } from "../../../api/types";
 import type { PlaybackBankController } from "./controller";
 import { isHeldAction, playbackButtonLabel } from "./feedback";
@@ -34,7 +35,7 @@ export function ExpandedPlaybackControls({
 			{stored.type === "wider" && (
 				<label className="expanded-playback-fader">
 					<span>Right fader · {stored.right_fader.replaceAll("_", " ")}</span>
-					<input
+					<Input
 						type="range"
 						min={0}
 						max={100}
@@ -76,7 +77,7 @@ function ExpandedButton({
 			{ button, pressed, surface: "physical" },
 		);
 	return (
-		<button
+		<Button
 			type="button"
 			data-playback-button-index={button}
 			disabled={!controller.runtimeActions || action === "none"}
@@ -91,6 +92,6 @@ function ExpandedButton({
 			onLostPointerCapture={() => isHeldAction(action) && send(false)}
 		>
 			{playbackButtonLabel(action)}
-		</button>
+		</Button>
 	);
 }
