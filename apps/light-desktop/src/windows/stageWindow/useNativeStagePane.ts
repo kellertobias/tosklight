@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSessionSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useDesktopBridge } from "../../platform/desktop";
 import type { StagePaneGesture } from "../../platform/desktop/types";
 
@@ -34,6 +35,9 @@ const STATUS_INTERVAL = 2_000;
 
 export function useNativeStagePane(enabled = true): NativeStagePane {
 	const desktopBridge = useDesktopBridge();
+	// The renderer joins the desk as this operator, so the desk keeps its view separate from
+	// anything else drawing the same show.
+	const user = useSessionSnapshot()?.user.name ?? "";
 	const [element, setElement] = useState<HTMLElement | null>(null);
 	const [active, setActive] = useState(false);
 	const [trouble, setTrouble] = useState<string | null>(null);
@@ -98,7 +102,7 @@ export function useNativeStagePane(enabled = true): NativeStagePane {
 		// between a question and its answer.
 		opened.current = true;
 		void desktopBridge
-			.openStagePane(geometry())
+			.openStagePane(geometry(), user)
 			.then(() => {
 				setActive(true);
 				report = () => {
@@ -130,7 +134,7 @@ export function useNativeStagePane(enabled = true): NativeStagePane {
 				void desktopBridge.closeStagePane();
 			}
 		};
-	}, [element, enabled, available, desktopBridge]);
+	}, [element, enabled, available, desktopBridge, user]);
 
 	useEffect(() => {
 		if (!active) return;

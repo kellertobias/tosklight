@@ -128,6 +128,9 @@ fn the_desk_asks_for_a_pane_and_the_renderer_draws_one() {
             },
             scale: 2.0,
             transport,
+            // No desk: this test is about the pane's own machinery, and a renderer with no rig
+            // still draws — an empty stage is a picture.
+            desk: None,
             surface_service,
         },
     );

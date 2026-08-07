@@ -60,7 +60,7 @@ export interface DesktopBridge {
 	 * a platform without a shared surface, and an installation missing its renderer all get.
 	 */
 	stagePaneAvailable(): Promise<boolean>;
-	openStagePane(geometry: StagePaneGeometry): Promise<void>;
+	openStagePane(geometry: StagePaneGeometry, user: string): Promise<void>;
 	setStagePane(geometry: StagePaneGeometry): Promise<void>;
 	closeStagePane(): Promise<void>;
 	sendStagePaneInput(gesture: StagePaneGesture, x: number, y: number): Promise<void>;

@@ -45,6 +45,8 @@ pub struct Embedding {
     pub pane: viz_helper::pane::PaneRect,
     pub scale: f32,
     pub transport: viz_helper::protocol::FrameTransport,
+    /// The desk's own server, which is where the rig comes from.
+    pub desk: Option<viz_helper::protocol::DeskEndpoint>,
     /// Where to hand the desk a surface, when the transport shares one.
     pub surface_service: Option<String>,
 }
@@ -226,11 +228,13 @@ fn read_channel(mut from_desk: impl Read, outbox: &Sender<FromChannel>) {
                 pane,
                 scale,
                 transport,
+                desk,
                 surface_service,
             } => outbox.send(FromChannel::Embed(Embedding {
                 pane,
                 scale,
                 transport,
+                desk,
                 surface_service,
             })),
             ToHelper::Input { input } => outbox.send(FromChannel::Input(input)),

@@ -111,6 +111,16 @@ pub enum ToHelper {
         /// desk window is actually on rather than assuming one.
         scale: f32,
         transport: FrameTransport,
+        /// The desk's own server, as `host:port`, and the user to join it as.
+        ///
+        /// The pane draws the rig the desk is running, and the rig is built from what that server
+        /// serves — the same way the standalone visualizer builds one, with the same code. The
+        /// alternative was to encode a scene in the desk and push it down this channel, which would
+        /// mean a second implementation of scene building living in the window shell.
+        ///
+        /// Geometry, transport, input and picture settings still come over this channel: those are
+        /// things only the desk knows. The rig is not one of them.
+        desk: Option<DeskEndpoint>,
         /// Where to hand the desk a surface, for [`FrameTransport::Shared`].
         ///
         /// A surface cannot be named down this channel: what a second process can resolve is a
@@ -136,6 +146,17 @@ pub enum ToHelper {
     /// forwarded, already coalesced into a per-frame delta — one message per gesture step, never
     /// one per `pointermove`.
     Input { input: PaneInput },
+}
+
+/// Where the desk serves the show the pane is to draw.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct DeskEndpoint {
+    pub host: String,
+    pub port: u16,
+    /// The user to join as, so the desk keeps one view per renderer rather than one for all.
+    pub user: String,
+    /// Which renderer this is, for a desk driving more than one.
+    pub target: String,
 }
 
 /// What the operator did over the pane, as intent rather than as events.
@@ -344,6 +365,12 @@ mod tests {
                 },
                 scale: 2.0,
                 transport: FrameTransport::Shared,
+                desk: Some(DeskEndpoint {
+                    host: "127.0.0.1".to_owned(),
+                    port: 5000,
+                    user: "Operator".to_owned(),
+                    target: "stage-pane".to_owned(),
+                }),
                 surface_service: Some("de.tokenet.tosklight.stage-pane.test".to_owned()),
             },
             ToHelper::Input {

@@ -22,8 +22,8 @@ use std::sync::{Arc, Mutex};
 use viz_helper::handshake::{HelperIdentity, greet_helper};
 use viz_helper::pane::PaneRect;
 use viz_helper::protocol::{
-    FrameTransport, FromHelper, PaneInput, SharedSurfaceHandle, ToHelper, decode, encode,
-    supported_transports,
+    DeskEndpoint, FrameTransport, FromHelper, PaneInput, SharedSurfaceHandle, ToHelper, decode,
+    encode, supported_transports,
 };
 use viz_helper::{SupervisedHelper, framing};
 
@@ -87,6 +87,7 @@ impl StagePane {
         surface_size: (u32, u32),
         pane: PaneRect,
         scale: f32,
+        user: String,
     ) -> Result<(), String>
     where
         T: raw_window_handle::HasWindowHandle
@@ -187,6 +188,16 @@ impl StagePane {
             pane,
             scale,
             transport,
+            // The rig comes from the desk's own server, which this process is the one that knows
+            // how to find. Nothing about the show travels down the channel.
+            desk: Some(DeskEndpoint {
+                host: crate::server::address().ip().to_string(),
+                port: crate::server::address().port(),
+                user,
+                // Named so a desk driving more than one renderer keeps a view per renderer, and so
+                // this pane's camera is not the standalone visualizer's.
+                target: "stage-pane".to_owned(),
+            }),
             surface_service,
         });
         eprintln!(
@@ -586,9 +597,9 @@ pub(crate) fn open_stage_pane(
     app: tauri::AppHandle,
     pane: tauri::State<'_, StagePane>,
     geometry: PaneGeometry,
+    user: String,
 ) -> Result<(), String> {
     use tauri::Manager;
-    eprintln!("stage pane: asked to open one");
     let window = app
         .get_window("main")
         .ok_or("the desk's window is not open")?;
@@ -597,6 +608,7 @@ pub(crate) fn open_stage_pane(
         (geometry.surface_width, geometry.surface_height),
         geometry.rect(),
         geometry.scale,
+        user,
     )
 }
 

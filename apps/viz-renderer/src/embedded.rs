@@ -22,6 +22,7 @@
 
 use crate::helper_source::{Embedding, HelperSource};
 use std::time::{Duration, Instant};
+use viz_desk::{DeskConnection, DeskProvider};
 use viz_helper::protocol::{FrameTransport, PaneInput};
 use viz_render::{Overlay, Renderer};
 use viz_scene::{ProviderEvent, Scene, SceneProvider, SceneValues, ViewConfiguration};
@@ -42,7 +43,33 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
     let mut state = PaneState::new(&embedding)?;
     let epoch = Instant::now();
 
+    /*
+     * The rig comes from the desk's own server, through the same provider the standalone
+     * visualizer uses. The channel carries what only the desk knows — where the pane is, how to
+     * hand a picture back, what the operator did over it — and not the show, which the server
+     * already serves to anything that asks.
+     *
+     * Without an endpoint the pane draws an empty stage, which is what a desk too old to send one
+     * would produce and is a picture rather than a failure.
+     */
+    let mut rig: Option<Box<DeskProvider>> = embedding.desk.as_ref().map(|desk| {
+        Box::new(DeskProvider::start(
+            DeskConnection {
+                host: desk.host.clone(),
+                port: desk.port,
+                user: desk.user.clone(),
+                target: desk.target.clone(),
+                ..DeskConnection::default()
+            },
+            epoch,
+        ))
+    });
+
     loop {
+        if let Some(rig) = rig.as_mut() {
+            let events = rig.poll();
+            drain(events, &mut state);
+        }
         let events = source.poll();
         if drain(events, &mut state) {
             // The desk's channel ended. Its window has gone or it asked this to stop; either way
@@ -296,6 +323,7 @@ mod tests {
             },
             scale,
             transport: FrameTransport::Copy,
+            desk: None,
             surface_service: None,
         }
     }
@@ -324,6 +352,7 @@ mod tests {
             },
             scale: 1.0,
             transport: FrameTransport::Copy,
+            desk: None,
             surface_service: None,
         };
         let (width, height) = pane_pixels(&four_k);
