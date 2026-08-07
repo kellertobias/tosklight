@@ -144,55 +144,61 @@ export function DynamicProjectionView({
 		};
 	}, [draft, dirty, validation, preview, busy, apply]);
 
+	// The projection being shown: the operator's override, or the Group's while inheriting,
+	// so the left column always depicts what this Dynamic actually ranks by.
+	const shown =
+		draft.projection.type === "replace"
+			? draft.projection.value
+			: (inherited?.projection ?? null);
+
 	return (
 		<div className="dynamic-projection-view">
-			<ProjectionHeader dynamic={dynamic} preview={preview} />
+			<section className="dynamic-projection-card dynamic-projection-columns">
+				<div className="dynamic-projection-visual">
+					{shown ? (
+						<>
+							<ProjectionStagePreview projection={shown} />
+							<small>Drag to orbit</small>
+						</>
+					) : (
+						<p className="dynamic-projection-help">
+							No projection to show. Targets keep their saved selection order.
+						</p>
+					)}
+				</div>
 
-			<ProjectionControls
-				draft={draft}
-				onOverride={changeProjection}
-				onChange={(value) =>
-					setDraft((current) => ({
-						...current,
-						projection: { type: "replace", value },
-					}))
-				}
-			/>
+				<div className="dynamic-projection-settings">
+					<h2>Projection</h2>
+					<strong>{dynamicMappingBaseLabel(dynamic.body.target_binding)}</strong>
+					{preview?.base.type === "live_group" && (
+						<p className="dynamic-projection-help">
+							Group mapping provenance:{" "}
+							{provenanceLabel(preview.base.mapping_provenance)}
+						</p>
+					)}
 
-			{validation && (
-				<p className="dynamics-warning" role="alert">
-					{validation}
-				</p>
-			)}
-			<p className="dynamic-projection-message" role="status">
-				{message ?? (applying ? "Saving…" : dirty ? "" : "Saved")}
-			</p>
+					<ProjectionControls
+						draft={draft}
+						onOverride={changeProjection}
+						onChange={(value) =>
+							setDraft((current) => ({
+								...current,
+								projection: { type: "replace", value },
+							}))
+						}
+					/>
+
+					{validation && (
+						<p className="dynamics-warning" role="alert">
+							{validation}
+						</p>
+					)}
+					<p className="dynamic-projection-message" role="status">
+						{message ?? (applying ? "Saving…" : dirty ? "" : "Saved")}
+					</p>
+				</div>
+			</section>
 		</div>
-	);
-}
-
-function ProjectionHeader({
-	dynamic,
-	preview,
-}: {
-	dynamic: DynamicObject;
-	preview: DynamicSpatialPreviewResponse | null;
-}) {
-	return (
-		<section className="dynamic-projection-card">
-			<h2>Projection</h2>
-			<strong>{dynamicMappingBaseLabel(dynamic.body.target_binding)}</strong>
-			{preview?.base.type === "live_group" && (
-				<p>
-					Group mapping provenance:{" "}
-					{provenanceLabel(preview.base.mapping_provenance)}
-				</p>
-			)}
-			<p className="dynamic-projection-help">
-				Preview uses this Dynamic’s saved target binding, never the current
-				Programmer selection.
-			</p>
-		</section>
 	);
 }
 
@@ -206,7 +212,7 @@ function ProjectionControls({
 	onChange(value: typeof TOP_PROJECTION): void;
 }) {
 	return (
-		<section className="dynamic-projection-card">
+		<>
 			<div className="dynamic-projection-source">
 				<RadioField
 					label="Inherit"
@@ -224,19 +230,13 @@ function ProjectionControls({
 				/>
 			</div>
 			{draft.projection.type === "replace" ? (
-				<div className="dynamic-projection-columns">
-					<div className="dynamic-projection-visual">
-						<ProjectionStagePreview projection={draft.projection.value} />
-						<small>Drag to orbit</small>
-					</div>
-					<ProjectionFields value={draft.projection.value} onChange={onChange} />
-				</div>
+				<ProjectionFields value={draft.projection.value} onChange={onChange} />
 			) : (
 				<p className="dynamic-projection-help">
 					Uses the projection inherited from the Group.
 				</p>
 			)}
-		</section>
+		</>
 	);
 }
 
