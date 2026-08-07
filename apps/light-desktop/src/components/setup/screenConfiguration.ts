@@ -32,7 +32,7 @@ export const DEFAULT_FIXED_SCREEN_PANE: FixedScreenPane = {
 	show_group_shortcuts: true,
 };
 
-export const DEFAULT_FIXED_SIDE_WIDTH_PX = 420;
+export const DEFAULT_FIXED_SIDE_WIDTH_PERCENT = 25;
 
 export function browserScreenUrl(screenId: string, currentHref: string) {
 	const url = new URL(currentHref);

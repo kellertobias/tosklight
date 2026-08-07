@@ -141,7 +141,7 @@ describe("Add Screen action", () => {
 					type: "fixed_side_pane",
 					pane: { type: "cues", cue_list_id: "" },
 					side: "left",
-					width_px: 420,
+					width_percent: 22,
 				},
 			},
 		);

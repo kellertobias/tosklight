@@ -358,9 +358,9 @@ describe("additional screen settings", () => {
 		await waitFor(() => expect(writeText).toHaveBeenCalledWith(browserHref));
 		expect(screen.getByRole("status")).toHaveTextContent("Browser link copied.");
 		fireEvent.click(screen.getByRole("option", { name: "Fixed right pane" }));
-		const width = screen.getByRole("textbox", { name: "Pane width (px)" });
-		expect(width).toHaveValue("420");
-		fireEvent.change(width, { target: { value: "480" } });
+		const width = screen.getByRole("textbox", { name: "Pane width (%)" });
+		expect(width).toHaveValue("25");
+		fireEvent.change(width, { target: { value: "40" } });
 		expect(screen.getByRole("switch", { name: "Dock" })).toBeDisabled();
 
 		await waitFor(() => expect(saved.length).toBeGreaterThan(0));
@@ -368,7 +368,7 @@ describe("additional screen settings", () => {
 				content: {
 					type: "fixed_side_pane",
 					side: "right",
-					width_px: 480,
+					width_percent: 40,
 				},
 				show_dock: false,
 			});
@@ -400,7 +400,7 @@ describe("additional screen settings", () => {
 				content: {
 					type: "fixed_side_pane",
 					side: "left",
-					width_px: 420,
+					width_percent: 25,
 				},
 				show_dock: false,
 			});

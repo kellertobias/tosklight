@@ -30,7 +30,8 @@ above the control region.
 carries them, the Playback section otherwise. Nothing is reserved above it.
 
 **Fixed left pane** and **Fixed right pane** divide the entire screen, not just its upper part. The
-chosen widget keeps its configured **Pane width (px)** over the full height on that side, and the
+chosen widget keeps its configured **Pane width (%)** — a share of the window width, so it holds its
+proportion on every display — over the full height on that side, and the
 control region takes every remaining pixel on the other side. There is no empty region above either
 one. When the screen carries neither the encoders nor Playbacks, the remaining side stays empty.
 
@@ -39,10 +40,18 @@ control disabled. Returning to **Desktop** makes the Dock control available agai
 silently turn it back on. **Playbacks** and **Page Controls** remain independent and reserve their
 normal screen space wherever a control region exists.
 
-**Programmer** decides how much of the programmer an optional screen shows while it carries the
-encoders. **Encoders only** — the default — keeps the encoder group tabs with their Align, Special
-Dialog and Dynamics controls and the encoders below them, and nothing else. **Full programmer** adds
-the command line and the programmer tool pane beside them, matching the main screen.
+The encoder section of an optional screen never carries the keypad, the programmer fader or the
+Delete and Move tools; those stay on the main screen. It keeps the encoder group tabs with their
+Align, Special Dialog and Dynamics controls and the encoders below them. **Command line** adds the
+programmer command line above them on that screen.
+
+While an optional screen carries both the encoders and Playbacks, one button toggles between the two
+sections. It sits at the top right of the command line where that screen shows it, and directly right
+of **Dynamics** on the encoder tab row where it does not. A screen without the encoders has nothing
+to toggle and shows no such button.
+
+On a **Desktop** screen the control region is the bottom band across the whole window width, as on
+the main screen: the Dock reaches down to it and no further.
 
 Each optional screen can also select a physical display and enter native fullscreen. Native
 fullscreen controls the application window on the physical display; **Fixed full-screen pane**
@@ -62,10 +71,11 @@ The rest of the desk keeps running. Pressing **X** on the main window quits Tosk
 Playback controls. Choose **Encoders on** to select the main screen or any optional screen, and
 **Visible encoders** to show four or six software encoders; attached hardware always keeps its six.
 
-The main screen keeps its Playback controls whatever the placement is. While the encoders live on
-another screen, the main screen shows the Playback section alone and its Programmer/Playback toggle
-disappears, because there is nothing to switch to. It does not announce the placement anywhere else;
-the setting you made stays out of the way. If the chosen screen is closed, **Setup → Screens** shows
+The main screen keeps its whole programmer whatever the placement is. While the encoders live on
+another screen, the main screen still carries its command line, its keypad and its Delete and Move
+tools, and its Programmer/Playback toggle stays available; only the encoder pane itself moves, and
+it names the screen the encoders went to. It does not announce the placement anywhere else; the
+setting you made stays out of the way. If the chosen screen is closed, **Setup → Screens** shows
 the placement warning and offers **Use encoders on this screen** to take the encoders back in one
 explicit action.
 

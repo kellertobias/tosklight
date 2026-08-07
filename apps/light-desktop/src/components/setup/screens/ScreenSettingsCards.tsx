@@ -17,7 +17,7 @@ import type { DeskModel } from "../../../types";
 import { PlaybackLayoutModal } from "../PlaybackLayoutModal";
 import {
 	DEFAULT_FIXED_SCREEN_PANE,
-	DEFAULT_FIXED_SIDE_WIDTH_PX,
+	DEFAULT_FIXED_SIDE_WIDTH_PERCENT,
 	browserScreenUrl,
 	playbackLayoutLegacyFields,
 	screenPlaybackLayout,
@@ -448,10 +448,10 @@ function ScreenLayoutFields({
 													pane: fixedPane ?? DEFAULT_FIXED_SCREEN_PANE,
 													side:
 														type === "fixed_side_pane_left" ? "left" : "right",
-													width_px:
+													width_percent:
 														draft.content.type === "fixed_side_pane"
-															? draft.content.width_px
-															: DEFAULT_FIXED_SIDE_WIDTH_PX,
+															? draft.content.width_percent
+															: DEFAULT_FIXED_SIDE_WIDTH_PERCENT,
 												}
 											: { type: "desktop" },
 						})
@@ -511,14 +511,14 @@ function ScreenLayoutFields({
 					}
 				/>
 				<SwitchField
-					label="Programmer"
-					offLabel="Encoders only"
-					onLabel="Full programmer"
+					label="Command line"
+					offLabel="Hidden"
+					onLabel="Visible"
 					checked={draft.show_programmer}
 					onChange={(event) =>
 						update({ show_programmer: event.target.checked })
 					}
-					description="Encoders only keeps the encoder group tabs and the encoders. Full programmer adds the command line and the programmer tools beside them."
+					description="The encoder section of this screen always keeps the keypad, the programmer fader and the Delete/Move tools on the main screen. Visible adds the command line above its encoders."
 				/>
 			</div>
 		</section>
@@ -579,15 +579,15 @@ function ScreenPaneSettings({
 						{sideContent ? (
 							<>
 								<NumberField
-									label="Pane width (px)"
-									min={240}
-									max={1200}
-									value={sideContent.width_px}
+									label="Pane width (%)"
+									min={10}
+									max={80}
+									value={sideContent.width_percent}
 									onChange={(event) =>
 										update({
 											content: {
 												...sideContent,
-												width_px: Number(event.target.value),
+												width_percent: Number(event.target.value),
 											},
 										})
 									}
