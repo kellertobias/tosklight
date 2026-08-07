@@ -764,6 +764,10 @@ pub(crate) fn stage_pane_input(
         "orbit" => PaneInput::Orbit { dx: x, dy: y },
         "pan" => PaneInput::Pan { dx: x, dy: y },
         "truck" => PaneInput::Truck { dx: x, dy: y },
+        "fly" => PaneInput::Fly {
+            forward: y,
+            right: x,
+        },
         "zoom" => PaneInput::Zoom { amount: y },
         other => return Err(format!("no such pane gesture: {other}")),
     };

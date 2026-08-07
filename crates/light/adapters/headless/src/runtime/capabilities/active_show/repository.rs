@@ -6,10 +6,11 @@
 
 use light_core::{Revision, ShowId};
 use light_show::{
-    AtomicObjectDelete, AtomicObjectWrite, PortableShowCommit, PortableShowDocument,
-    PortableShowObjectRedo, PortableShowObjectUndo, PortableShowRevision, PortableShowTransaction,
-    RevisionCopySource, ScheduleOccurrenceClaim, ScheduleOccurrenceClaimResult,
-    ScheduleOccurrenceRecord, ScheduleOccurrenceResolution, ShowStore, StoreError, VersionedObject,
+    AtomicObjectDelete, AtomicObjectWrite, CueThumbnail, CueThumbnailEntry, PortableShowCommit,
+    PortableShowDocument, PortableShowObjectRedo, PortableShowObjectUndo, PortableShowRevision,
+    PortableShowTransaction, RevisionCopySource, ScheduleOccurrenceClaim,
+    ScheduleOccurrenceClaimResult, ScheduleOccurrenceRecord, ScheduleOccurrenceResolution,
+    ShowStore, StoreError, VersionedObject,
 };
 use std::path::Path;
 
@@ -158,6 +159,28 @@ impl ActiveShowRepository {
         expected: Revision,
     ) -> Result<Revision, StoreError> {
         self.store.put_object(kind, object_id, body, expected)
+    }
+
+    pub(crate) fn cue_thumbnail_index(&self) -> Result<Vec<CueThumbnailEntry>, StoreError> {
+        self.store.cue_thumbnail_index()
+    }
+
+    pub(crate) fn cue_thumbnail(&self, cue_id: &str) -> Result<Option<CueThumbnail>, StoreError> {
+        self.store.cue_thumbnail(cue_id)
+    }
+
+    pub(crate) fn put_cue_thumbnails(
+        &self,
+        thumbnails: &[CueThumbnail],
+    ) -> Result<usize, StoreError> {
+        self.store.put_cue_thumbnails(thumbnails)
+    }
+
+    pub(crate) fn prune_cue_thumbnails(
+        &self,
+        live_cue_ids: &[String],
+    ) -> Result<usize, StoreError> {
+        self.store.prune_cue_thumbnails(live_cue_ids)
     }
 
     pub(crate) fn delete_object(&self, kind: &str, object_id: &str) -> Result<bool, StoreError> {

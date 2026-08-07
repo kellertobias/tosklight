@@ -5,6 +5,7 @@ pub mod command_line;
 pub mod control_desk_configuration;
 pub mod cue_deletion;
 pub mod cue_recording;
+pub mod cue_thumbnails;
 pub mod cue_transfer;
 pub mod desk_management;
 pub mod discovery;

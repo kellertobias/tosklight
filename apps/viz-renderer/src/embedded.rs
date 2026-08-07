@@ -283,6 +283,16 @@ impl PaneState {
                 // The camera alone, so the view turns as it walks.
                 camera.position += right * (-dx * metres_per_point) + up * (dy * metres_per_point);
             }
+            PaneInput::Fly {
+                forward: ahead,
+                right: across,
+            } => {
+                // Both move, so the view walks rather than turning — the camera keeps looking the
+                // way it was pointed and arrives somewhere else.
+                let step = forward * ahead + right * across;
+                camera.position += step;
+                camera.target += step;
+            }
             PaneInput::Zoom { amount } => {
                 // Proportional, so each notch covers the same fraction of the remaining distance
                 // and the camera approaches the subject without ever reaching it.
@@ -560,6 +570,24 @@ mod tests {
             "trucking walks the camera and leaves the subject alone"
         );
         assert!(state.view.camera.position.distance(before.position) > 0.001);
+
+        let before = state.view.camera;
+        state.apply(PaneInput::Fly {
+            forward: 2.0,
+            right: 0.0,
+        });
+        let flown = state.view.camera;
+        assert!(
+            (flown.position - flown.target)
+                .normalize()
+                .distance((before.position - before.target).normalize())
+                < 0.001,
+            "flying walks the view without turning it"
+        );
+        assert!(
+            (flown.position.distance(before.position) - 2.0).abs() < 0.01,
+            "and by the metres it was asked for"
+        );
 
         let before = reach(&state.view.camera);
         state.apply(PaneInput::Zoom { amount: 3.0 });

@@ -194,6 +194,9 @@ pub enum PaneInput {
     Truck { dx: f32, dy: f32 },
     /// Toward or away from the point being looked at, in wheel notches; positive moves in.
     Zoom { amount: f32 },
+    /// Walk the camera and what it looks at together, along the view's own forward and right axes,
+    /// in metres. What the keyboard drives, where a mouse drives the gestures above.
+    Fly { forward: f32, right: f32 },
     /// What is under the pointer, as a fraction of the pane's own size, `0..=1` from its top left.
     ///
     /// A fraction rather than points or pixels so no scale factor has to agree across the channel:

@@ -302,6 +302,23 @@ impl ReplayResource {
             .insert(key, fingerprint, outcome);
     }
 
+    pub(in crate::runtime) async fn lookup_cue_thumbnails(
+        &self,
+        key: &cue_thumbnails_http::ReplayKey,
+        thumbnails: &[light_wire::v2::cue_thumbnails::CueThumbnailUpload],
+    ) -> Result<Option<light_wire::v2::cue_thumbnails::CueThumbnailUpdateOutcome>, ApiError> {
+        self.cue_thumbnails.lock().get(key, thumbnails)
+    }
+
+    pub(in crate::runtime) async fn insert_cue_thumbnails(
+        &self,
+        key: cue_thumbnails_http::ReplayKey,
+        thumbnails: Vec<light_wire::v2::cue_thumbnails::CueThumbnailUpload>,
+        outcome: light_wire::v2::cue_thumbnails::CueThumbnailUpdateOutcome,
+    ) {
+        self.cue_thumbnails.lock().insert(key, thumbnails, outcome);
+    }
+
     pub(in crate::runtime) async fn lookup_stage_layout(
         &self,
         key: &stage_layout_http::ReplayKey,

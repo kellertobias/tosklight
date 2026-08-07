@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CueThumbnailIndex",
+  "type": "object",
+  "properties": {
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CueThumbnailEntry"
+      }
+    },
+    "show_id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "show_id",
+    "entries"
+  ],
+  "$defs": {
+    "CueThumbnailEntry": {
+      "description": "One entry in the stored-preview index. Deliberately carries no pixels so a desk can decide what\nto redraw without moving image data.",
+      "type": "object",
+      "properties": {
+        "cue_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "state_hash": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        },
+        "updated_at": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cue_id",
+        "state_hash",
+        "updated_at"
+      ]
+    }
+  }
+}

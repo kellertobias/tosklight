@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CueThumbnailUpdateRequest",
+  "description": "Editing an early Cue restages every Cue that tracks from it, so uploads arrive as one batch\nrather than one request per Cue.",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    },
+    "thumbnails": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CueThumbnailUpload"
+      },
+      "maxItems": 512,
+      "minItems": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "thumbnails"
+  ],
+  "$defs": {
+    "CueThumbnailUpload": {
+      "description": "One picture being stored. `image_base64` is the encoded picture exactly as the desk drew it;\nthe server stores the bytes without re-encoding.",
+      "type": "object",
+      "properties": {
+        "cue_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "height": {
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 1024,
+          "minimum": 1
+        },
+        "image_base64": {
+          "type": "string",
+          "maxLength": 700000,
+          "minLength": 1
+        },
+        "state_hash": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        },
+        "width": {
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 1024,
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cue_id",
+        "state_hash",
+        "image_base64",
+        "width",
+        "height"
+      ]
+    }
+  }
+}

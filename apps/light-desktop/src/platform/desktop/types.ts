@@ -54,6 +54,7 @@ export type StagePaneGesture =
 	| "orbit"
 	| "pan"
 	| "truck"
+	| "fly"
 	| "zoom"
 	| "pick"
 	| "pick-add";

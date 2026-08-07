@@ -211,3 +211,45 @@ fn assert_complete_snapshot(
         .collect::<Vec<_>>();
     assert_eq!(actual_mode_ids, expected_mode_ids);
 }
+
+/// `default_raw` is a physical DMX value, so the operator-facing home value has to be read back
+/// through the channel's own inversion and its canonical transform before it reaches the desk.
+#[test]
+fn projected_default_reads_the_home_value_in_canonical_space() {
+    for (fixture_attribute, canonical, invert, default_raw, expected) in [
+        ("color.red", "color.red", false, 255_u32, 1.0_f32),
+        ("color.cyan", "color.red", false, 0, 1.0),
+        ("color.cyan", "color.red", false, 255, 0.0),
+        ("color.red", "color.red", true, 0, 1.0),
+        ("color.cyan", "color.red", true, 0, 0.0),
+    ] {
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Home Test".into();
+        profile.name = "Home Value".into();
+        profile.short_name = "Home".into();
+        let mode_id = {
+            let mode = &mut profile.modes[0];
+            mode.splits[0].footprint = 1;
+            let mut emitter = channel(mode.heads[0].id, ChannelResolution::U8, Vec::new());
+            emitter.fixture_attribute = AttributeKey(fixture_attribute.into());
+            emitter.attribute = AttributeKey(canonical.into());
+            emitter.canonical_transform = if fixture_attribute == canonical {
+                CanonicalTransform::Identity
+            } else {
+                CanonicalTransform::InvertNormalized
+            };
+            emitter.functions[0].attribute = emitter.attribute.clone();
+            emitter.invert = invert;
+            emitter.default_raw = default_raw;
+            emitter.highlight_raw = default_raw;
+            mode.channels = vec![emitter];
+            mode.id
+        };
+
+        let definition = profile.resolved_definition(mode_id).unwrap();
+        assert_eq!(
+            definition.heads[0].parameters[0].default, expected,
+            "{fixture_attribute} invert {invert} raw {default_raw}"
+        );
+    }
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CueThumbnailUpdateOutcome",
+  "type": "object",
+  "properties": {
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "replayed": {
+      "type": "boolean"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "show_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "skipped_cue_ids": {
+      "description": "Uploads discarded because the Cue is no longer in the show. Not an error: an operator can\ndelete a Cue while its picture is still in flight.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    },
+    "stored": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "correlation_id",
+    "replayed",
+    "show_id",
+    "stored",
+    "skipped_cue_ids"
+  ]
+}

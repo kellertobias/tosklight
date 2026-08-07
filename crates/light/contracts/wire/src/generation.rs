@@ -16,6 +16,10 @@ use crate::v2::command_line::{
 };
 use crate::v2::cue_deletion::{CueDeletionErrorResponse, CueDeletionOutcome, CueDeletionRequest};
 use crate::v2::cue_recording::{CueRecordErrorResponse, CueRecordOutcome, CueRecordRequest};
+use crate::v2::cue_thumbnails::{
+    CueThumbnailErrorResponse, CueThumbnailIndex, CueThumbnailUpdateOutcome,
+    CueThumbnailUpdateRequest,
+};
 use crate::v2::cue_transfer::{CueTransferErrorResponse, CueTransferOutcome, CueTransferRequest};
 use crate::v2::dynamics::{DynamicSpatialPreviewRequest, DynamicSpatialPreviewResponse};
 use crate::v2::events::{EventClientMessage, EventServerMessage, OutputRuntimeSnapshot};
@@ -238,6 +242,10 @@ fn programming_artifacts() -> Vec<GeneratedArtifact> {
         programming_request_schema::<CueDeletionRequest>("cue-deletion-request"),
         programming_response_schema::<CueDeletionOutcome>("cue-deletion-outcome"),
         programming_response_schema::<CueDeletionErrorResponse>("cue-deletion-error-response"),
+        programming_request_schema::<CueThumbnailUpdateRequest>("cue-thumbnail-update-request"),
+        programming_response_schema::<CueThumbnailUpdateOutcome>("cue-thumbnail-update-outcome"),
+        programming_response_schema::<CueThumbnailIndex>("cue-thumbnail-index"),
+        programming_response_schema::<CueThumbnailErrorResponse>("cue-thumbnail-error-response"),
         programming_request_schema::<CueTransferRequest>("cue-transfer-request"),
         programming_response_schema::<CueTransferOutcome>("cue-transfer-outcome"),
         programming_response_schema::<CueTransferErrorResponse>("cue-transfer-error-response"),

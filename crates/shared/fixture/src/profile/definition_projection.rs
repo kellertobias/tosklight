@@ -1,6 +1,6 @@
 use super::{
-    ColorSystem, FIXTURE_PROFILE_SCHEMA_VERSION, FixtureChannel, FixtureMode, FixtureProfile,
-    ProfileError,
+    CanonicalTransform, ColorSystem, FIXTURE_PROFILE_SCHEMA_VERSION, FixtureChannel, FixtureMode,
+    FixtureProfile, ProfileError,
 };
 use crate::{
     ByteOrder, ChannelComponent, ColorCalibration, EmitterCalibration, FixtureDefinition,
@@ -171,7 +171,6 @@ fn abstract_virtual_dimmer_intensity() -> Parameter {
 fn parameter(channel: &FixtureChannel, primary_slots: &HashMap<Uuid, u16>) -> Parameter {
     let slots =
         std::iter::once(primary_slots[&channel.id]).chain(channel.secondary_slots.iter().copied());
-    let max = channel.resolution.max_raw();
     Parameter {
         attribute: channel.attribute.clone(),
         components: slots
@@ -180,10 +179,28 @@ fn parameter(channel: &FixtureChannel, primary_slots: &HashMap<Uuid, u16>) -> Pa
                 byte_order: ByteOrder::MsbFirst,
             })
             .collect(),
-        default: channel.default_raw as f32 / max as f32,
+        default: canonical_default(channel),
         virtual_dimmer: channel.reacts_to_virtual_intensity,
         metadata: parameter_metadata(channel),
         capabilities: Vec::new(),
+    }
+}
+
+/// The home value an operator sees for the canonical attribute when nothing drives the channel.
+/// `default_raw` is a physical DMX value, so it is read back through the channel's own physical
+/// inversion and then through the canonical transform: a subtractive Cyan channel parked at raw
+/// zero is canonical Red at full, which is why an unprogrammed CMY lantern reads as white.
+fn canonical_default(channel: &FixtureChannel) -> f32 {
+    let max = channel.resolution.max_raw();
+    let normalized = channel.default_raw.min(max) as f32 / max as f32;
+    let physical = if channel.invert {
+        1.0 - normalized
+    } else {
+        normalized
+    };
+    match channel.canonical_transform {
+        CanonicalTransform::Identity => physical,
+        CanonicalTransform::InvertNormalized => 1.0 - physical,
     }
 }
 

@@ -24,6 +24,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(discovery_http::router())
         .merge(programming_update_http::router())
         .merge(show_patch_http::router())
+        .merge(cue_thumbnails_http::router())
         .merge(stage_layout_http::router())
         .merge(selective_import_http::router())
         .merge(operator_routes())

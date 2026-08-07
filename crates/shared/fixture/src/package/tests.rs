@@ -1197,3 +1197,69 @@ fn rejects_unknown_manifest_fields_and_reserved_sources() {
     let manifest = serde_json::to_vec(&FixturePackageManifest::new(reserved)).unwrap();
     assert!(read_fixture_package(&archive(&[("fixture.json", &manifest)])).is_err());
 }
+
+fn shipped_profiles() -> Vec<(String, FixtureProfile)> {
+    let directory = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join("assets/fixture-library");
+    let mut names = fs::read_dir(directory)
+        .unwrap()
+        .filter_map(|entry| {
+            let name = entry.unwrap().file_name().into_string().unwrap();
+            name.ends_with(".toskfixture").then_some(name)
+        })
+        .collect::<Vec<_>>();
+    names.sort();
+    assert!(!names.is_empty(), "the shipped fixture library is empty");
+    names
+        .into_iter()
+        .map(|name| {
+            let profile = shipped_profile(&name);
+            (name, profile)
+        })
+        .collect()
+}
+
+/// Every shipped lantern parks at the desk home look while nothing drives it: physical white and
+/// centred position. The assertion runs against the projected canonical definition, so a
+/// subtractive CMY head parked at raw zero has to read as full canonical Red, Green and Blue.
+#[test]
+fn shipped_library_homes_to_white_and_centred_position() {
+    const WHITE: [&str; 6] = [
+        "color.red",
+        "color.green",
+        "color.blue",
+        "color.white",
+        "color.cold_white",
+        "color.warm_white",
+    ];
+    for (name, profile) in shipped_profiles() {
+        for mode in &profile.modes {
+            let definition = profile.resolved_definition(mode.id).unwrap();
+            for head in &definition.heads {
+                for parameter in &head.parameters {
+                    let attribute = parameter.attribute.0.as_str();
+                    let expected = if WHITE.contains(&attribute) {
+                        1.0
+                    } else if attribute == "color.saturation" {
+                        0.0
+                    } else if matches!(attribute, "pan" | "tilt")
+                        && parameter.metadata.position_axis_representation
+                            != Some(crate::PositionAxisRepresentation::Endless)
+                    {
+                        0.5
+                    } else {
+                        continue;
+                    };
+                    assert!(
+                        (parameter.default - expected).abs() <= 1.0 / 255.0,
+                        "{name} mode {} head {} parks {attribute} at {} instead of {expected}",
+                        mode.name,
+                        head.name,
+                        parameter.default
+                    );
+                }
+            }
+        }
+    }
+}

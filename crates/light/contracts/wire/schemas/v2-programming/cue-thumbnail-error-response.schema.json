@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CueThumbnailErrorResponse",
+  "type": "object",
+  "properties": {
+    "error": {
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/CueThumbnailErrorKind"
+    },
+    "retryable": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "error",
+    "retryable"
+  ],
+  "$defs": {
+    "CueThumbnailErrorKind": {
+      "type": "string",
+      "enum": [
+        "invalid",
+        "unauthorized",
+        "forbidden",
+        "not_found",
+        "conflict",
+        "unavailable",
+        "internal"
+      ]
+    }
+  }
+}
