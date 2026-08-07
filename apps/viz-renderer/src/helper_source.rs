@@ -23,6 +23,8 @@ enum FromChannel {
     Scene(Box<Scene>),
     Values(Box<SceneValues>),
     View(Box<ViewConfiguration>),
+    /// Where in the window this helper may draw.
+    Pane(viz_helper::pane::PaneRect),
     /// The channel ended, with the reason to show.
     Finished(String),
 }
@@ -38,6 +40,12 @@ pub struct HelperSource {
     /// be values for a rig this process does not have.
     have_scene: bool,
     finished: bool,
+    /// The rectangle the desk's layout says is the Stage pane, when this helper is drawing one.
+    ///
+    /// `None` means the helper owns its whole window, which is the desk-opened case today. The
+    /// embedded pane sets it, and the render loop scissors to it — until then it is carried so
+    /// the two sides are already agreed when the compositing lands.
+    pane: Option<viz_helper::pane::PaneRect>,
 }
 
 impl HelperSource {
@@ -70,7 +78,13 @@ impl HelperSource {
             },
             have_scene: false,
             finished: false,
+            pane: None,
         })
+    }
+
+    /// Where this helper may draw, if the desk has said. `None` means the whole window.
+    pub fn pane(&self) -> Option<viz_helper::pane::PaneRect> {
+        self.pane
     }
 
     /// The window title the desk asked for, taken once.
@@ -104,6 +118,7 @@ fn read_channel(mut from_desk: impl Read, outbox: &Sender<FromChannel>) {
                 Ok(view) => outbox.send(FromChannel::View(Box::new(view))),
                 Err(detail) => outbox.send(FromChannel::Finished(format!("view: {detail}"))),
             },
+            ToHelper::Pane { pane } => outbox.send(FromChannel::Pane(pane)),
             // Handled by the channel loop, which turns it into `Finished`.
             ToHelper::Hello { .. } | ToHelper::Shutdown => Ok(()),
         };
@@ -148,6 +163,9 @@ impl SceneProvider for HelperSource {
                     }
                 }
                 Ok(FromChannel::View(view)) => events.push(ProviderEvent::View(*view)),
+                // Geometry, not scene content: the render loop reads it when it draws rather than
+                // it being an event the host has to act on.
+                Ok(FromChannel::Pane(pane)) => self.pane = Some(pane),
                 Ok(FromChannel::Finished(reason)) => {
                     self.finished = true;
                     self.connection = ConnectionState::Failed {
@@ -308,6 +326,39 @@ mod tests {
                 .expect("the handshake completes");
         drain(&mut source);
         assert!(source.is_finished(), "the helper knows it is finished");
+    }
+
+    /// A helper owns its whole window until the desk says otherwise, which is the desk-opened
+    /// case today. The embedded pane is what sends one.
+    #[test]
+    fn a_helper_draws_the_whole_window_until_it_is_given_a_pane() {
+        let channel = desk_channel(&[]);
+        let mut source =
+            HelperSource::start(std::io::Cursor::new(channel), Vec::new(), "test".to_owned())
+                .expect("the handshake completes");
+        assert_eq!(source.pane(), None);
+    }
+
+    #[test]
+    fn a_pane_from_the_desk_is_remembered_for_the_render_loop() {
+        let pane = viz_helper::pane::PaneRect {
+            x: 224.0,
+            y: 40.0,
+            width: 960.0,
+            height: 540.0,
+        };
+        let channel = desk_channel(&[ToHelper::Pane { pane }]);
+        let mut source =
+            HelperSource::start(std::io::Cursor::new(channel), Vec::new(), "test".to_owned())
+                .expect("the handshake completes");
+        for _ in 0..200 {
+            source.poll();
+            if source.pane().is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert_eq!(source.pane(), Some(pane));
     }
 
     /// A helper never asks the desk for anything: it draws what it is sent.
