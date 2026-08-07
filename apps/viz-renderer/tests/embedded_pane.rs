@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use viz_helper::framing::{read_frame, write_frame};
 use viz_helper::pane::PaneRect;
 use viz_helper::protocol::{
-    FrameTransport, FromHelper, PROTOCOL_MAJOR, PROTOCOL_MINOR, ToHelper, decode, encode,
+    FrameTransport, FromHelper, PROTOCOL_MAJOR, PROTOCOL_MINOR, PaneInput, ToHelper, decode, encode,
 };
 
 /// Long enough for a cold process to open a device and draw once, short enough to fail a hang.
@@ -48,6 +48,149 @@ fn send(to: &mut impl Write, message: &ToHelper) {
 
 fn next(from: &mut impl Read) -> FromHelper {
     decode(&read_frame(from).expect("reads")).expect("decodes")
+}
+
+/// Everything the desk asks of a pane after it is drawing: aim the camera, walk it, and ask what is
+/// under the pointer. Driven against the real binary, because these are the operator's own gestures
+/// and the only way to know they arrive is to send them.
+#[test]
+fn the_pane_answers_what_the_operator_does_to_it() {
+    let mut renderer = start();
+    let mut to_renderer = renderer.child.stdin.take().expect("stdin");
+    let mut from_renderer = renderer.child.stdout.take().expect("stdout");
+    let Some(transport) = embed(&mut to_renderer, &mut from_renderer) else {
+        eprintln!("no GPU here; skipping the gesture exchange");
+        return;
+    };
+    let _ = transport;
+
+    // Put the camera somewhere exact, as an encoder does, and read back where it went.
+    send(
+        &mut to_renderer,
+        &ToHelper::Input {
+            input: PaneInput::Place {
+                x: Some(3.0),
+                y: Some(4.0),
+                z: Some(5.0),
+                pan: Some(0.0),
+                tilt: Some(0.0),
+                distance: Some(10.0),
+            },
+        },
+    );
+    let placed = wait_for_camera(&mut from_renderer);
+    assert!(
+        (placed[0] - 3.0).abs() < 0.01
+            && (placed[1] - 4.0).abs() < 0.01
+            && (placed[2] - 5.0).abs() < 0.01,
+        "the camera goes where the encoders put it: {placed:?}"
+    );
+    assert!(
+        (placed[5] - 10.0).abs() < 0.05,
+        "and looks the distance asked for: {placed:?}"
+    );
+
+    // Walk it, as WASD does. Forward moves it and leaves it pointing the same way.
+    send(
+        &mut to_renderer,
+        &ToHelper::Input {
+            input: PaneInput::Fly {
+                forward: 2.0,
+                right: 0.0,
+            },
+        },
+    );
+    let flown = wait_for_camera(&mut from_renderer);
+    assert!(
+        (flown[3] - placed[3]).abs() < 0.01 && (flown[4] - placed[4]).abs() < 0.01,
+        "flying walks the view without turning it: {flown:?}"
+    );
+    let travelled = ((flown[0] - placed[0]).powi(2)
+        + (flown[1] - placed[1]).powi(2)
+        + (flown[2] - placed[2]).powi(2))
+    .sqrt();
+    assert!(
+        (travelled - 2.0).abs() < 0.05,
+        "by the metres asked for: {travelled}"
+    );
+
+    // And ask what is under the middle of the pane. An empty rig answers nothing, which is how an
+    // operator clears a selection — the answer arriving at all is what this checks.
+    send(
+        &mut to_renderer,
+        &ToHelper::Input {
+            input: PaneInput::Pick {
+                x: 0.5,
+                y: 0.5,
+                additive: true,
+            },
+        },
+    );
+    let deadline = Instant::now() + PATIENCE;
+    loop {
+        assert!(Instant::now() < deadline, "no answer to a pick");
+        if let FromHelper::Picked { additive, .. } = next(&mut from_renderer) {
+            assert!(additive, "the modifier the operator held crosses with it");
+            return;
+        }
+    }
+}
+
+/// Greet, agree a transport and embed. `None` on a machine with no GPU.
+fn embed(to: &mut impl Write, from: &mut impl Read) -> Option<FrameTransport> {
+    send(
+        to,
+        &ToHelper::Hello {
+            protocol_major: PROTOCOL_MAJOR,
+            protocol_minor: PROTOCOL_MINOR,
+            title: "ToskLight Stage".to_owned(),
+        },
+    );
+    let FromHelper::Ready { .. } = next(from) else {
+        return None;
+    };
+    let FromHelper::Capabilities { transports } = next(from) else {
+        return None;
+    };
+    let transport = *transports.iter().max()?;
+    send(
+        to,
+        &ToHelper::Embed {
+            pane: PaneRect {
+                x: 0.0,
+                y: 0.0,
+                width: 640.0,
+                height: 360.0,
+            },
+            scale: 1.0,
+            transport,
+            desk: None,
+            surface_service: None,
+        },
+    );
+    Some(transport)
+}
+
+/// The next camera the renderer reports, ignoring frames on the way.
+fn wait_for_camera(from: &mut impl Read) -> [f32; 6] {
+    let deadline = Instant::now() + PATIENCE;
+    loop {
+        assert!(
+            Instant::now() < deadline,
+            "the renderer never said where its camera is"
+        );
+        if let FromHelper::Camera {
+            x,
+            y,
+            z,
+            pan,
+            tilt,
+            distance,
+        } = next(from)
+        {
+            return [x, y, z, pan, tilt, distance];
+        }
+    }
 }
 
 /// The desk's side of the exchange, up to the first picture.
