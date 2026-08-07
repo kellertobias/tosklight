@@ -9,14 +9,9 @@ import { ScreensProvider } from "./ScreensContext";
 import type { ScreensContextValue } from "./types";
 
 /** Both sections host the switch where the operator's own controls already are. */
-vi.mock("../../components/control/ControlSection", async () => {
-	const { useLowerSectionSwitch } = await import("./LowerSectionSwitch");
-	return {
-		ControlSection: () => (
-			<div data-testid="encoders">{useLowerSectionSwitch()}</div>
-		),
-	};
-});
+vi.mock("../../components/control/CommandLineBar", () => ({
+	CommandLineBar: () => <div data-testid="command-line" />,
+}));
 
 vi.mock("../../components/control/ParameterControls", async () => {
 	const { useLowerSectionSwitch } = await import("./LowerSectionSwitch");
@@ -105,12 +100,12 @@ describe("ScreenControlRegion", () => {
 			{ ...screenTemplate, show_playbacks: false } as ScreenConfiguration,
 			"screen-1",
 		);
-		expect(screen.getByTestId("encoders")).toBeInTheDocument();
+		expect(screen.getByTestId("encoders-only")).toBeInTheDocument();
 		expect(screen.queryByTestId("playbacks")).toBeNull();
 		expect(screen.queryByRole("button", { name: "Lower section" })).toBeNull();
 	});
 
-	it("drops the programmer surface while the screen shows the encoders alone", () => {
+	it("keeps the keypad and the programmer tools off an optional screen", () => {
 		mount(
 			{
 				...screenTemplate,
@@ -120,12 +115,21 @@ describe("ScreenControlRegion", () => {
 			"screen-1",
 		);
 		expect(screen.getByTestId("encoders-only")).toBeInTheDocument();
-		expect(screen.queryByTestId("encoders")).toBeNull();
+		expect(screen.queryByTestId("command-line")).toBeNull();
+	});
+
+	it("adds the command line only where the screen enables it", () => {
+		mount(
+			{ ...screenTemplate, show_playbacks: false } as ScreenConfiguration,
+			"screen-1",
+		);
+		expect(screen.getByTestId("command-line")).toBeInTheDocument();
+		expect(screen.getByTestId("encoders-only")).toBeInTheDocument();
 	});
 
 	it("hands one switch button to whichever section is visible", () => {
-		mount(screenTemplate, "screen-1");
-		const encoders = screen.getByTestId("encoders");
+		const { container } = mount(screenTemplate, "screen-1");
+		const encoders = container.querySelector(".screen-encoders-only");
 		const control = screen.getByRole("button", { name: "Lower section" });
 		expect(encoders).toContainElement(control);
 		expect(screen.queryByTestId("playbacks")).toBeNull();
@@ -140,9 +144,9 @@ describe("ScreenControlRegion", () => {
 		const moved = screen.getByRole("button", { name: "Lower section" });
 		expect(playbacks).toContainElement(moved);
 		expect(moved).toHaveAttribute("data-section", "playbacks");
-		expect(screen.queryByTestId("encoders")).toBeNull();
+		expect(screen.queryByTestId("encoders-only")).toBeNull();
 
 		fireEvent.click(moved);
-		expect(screen.getByTestId("encoders")).toBeInTheDocument();
+		expect(screen.getByTestId("encoders-only")).toBeInTheDocument();
 	});
 });

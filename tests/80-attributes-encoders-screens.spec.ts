@@ -35,27 +35,32 @@ test.describe("TL-65 attributes, encoders, and screens", () => {
 			await browserScreen.goto(`${bench.baseUrl}?screen=${screenId}`);
 			const commandLine = browserScreen.getByLabel("Command line");
 			await expect(commandLine).toHaveValue("FIXTURE", { timeout: 10_000 });
-			await expect(page.getByLabel("Command line")).toHaveCount(0);
+			/* The main screen keeps its own command line and keypad; only the encoders move. */
+			await expect(page.getByLabel("Command line")).toBeVisible();
 			expect(await sessionProgrammerCount(api, session)).toBe(1);
 
 			await updateProgrammerControlSurface(api, {
 				owner_screen_id: screenId,
 				visible_encoders: 6,
 			});
-			await expect(browserScreen.locator(".parameter-surfaces > *")).toHaveCount(
-				6,
-			);
+			/* Nothing is selected yet, so the encoder surface carries its empty state. */
+			await expect(browserScreen.locator(".parameter-surfaces")).toHaveCount(1);
+			await expect(browserScreen.locator(".parameter-empty")).toBeVisible();
 			await updateProgrammerControlSurface(api, { assign_to_main: true });
 			await expect(page.getByLabel("Command line")).toBeVisible();
-			await expect(browserScreen.getByLabel("Command line")).toHaveCount(0);
+			await expect(browserScreen.locator(".parameter-surfaces")).toHaveCount(0);
 			await updateProgrammerControlSurface(api, {
 				owner_screen_id: screenId,
 				visible_encoders: 4,
 			});
 			await expect(commandLine).toHaveValue("FIXTURE");
 
+			/* The keypad stays on the main screen wherever the encoders sit. */
+			await expect(
+				browserScreen.locator("[data-keypad-key]"),
+			).toHaveCount(0);
 			for (const key of ["1", "AT", "5", "0", "ENT"])
-				await browserScreen.locator(`[data-keypad-key="${key}"]`).click();
+				await page.locator(`[data-keypad-key="${key}"]`).click();
 			const fixtures = await fixtureIdsByNumber(api);
 			await expect
 				.poll(() => fixtureProgrammerValue(api, fixtures[1], "intensity"))
@@ -148,6 +153,7 @@ async function configureBrowserControlScreen(
 				first_playback_slot: 1,
 				page_mode: "follow_main",
 				show_page_controls: false,
+				show_programmer: true,
 				desired_open: false,
 				display_id: null,
 				bounds: null,

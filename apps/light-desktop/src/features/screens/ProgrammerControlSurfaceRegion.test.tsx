@@ -8,6 +8,18 @@ import { ProgrammerControlSurfaceRegion } from "./ProgrammerControlSurfaceRegion
 import { ScreensProvider } from "./ScreensContext";
 import type { ScreensContextValue } from "./types";
 
+vi.mock("../deskSnapshot/DeskSnapshotState", () => ({
+	useHardwareConnected: () => false,
+}));
+
+vi.mock("../../state/AppContext", () => ({
+	useApp: () => ({ state: { midiProfile: null }, dispatch: vi.fn() }),
+}));
+
+vi.mock("../../components/control/ParameterControls", () => ({
+	ParameterControls: () => <div data-testid="encoders-only" />,
+}));
+
 vi.mock("../../components/control/ControlSection", async () => {
 	const { useControlSurfacePolicy } = await import(
 		"../../components/control/ControlSurfaceMode"
@@ -74,20 +86,20 @@ describe("ProgrammerControlSurfaceRegion", () => {
 		expect(surface).toHaveAttribute("data-can-toggle", "true");
 	});
 
-	it("leaves Playbacks without a toggle on main once the encoders move to a screen", () => {
+	it("keeps the main programmer and its toggle once the encoders move to a screen", () => {
 		const main = mount("screen-2");
 		const mainSurface = screen.getByTestId("control-surface");
-		expect(mainSurface).toHaveAttribute("data-mode", "playbacks");
-		expect(mainSurface).toHaveAttribute("data-can-toggle", "false");
+		expect(mainSurface).toHaveAttribute("data-mode", "follow");
+		expect(mainSurface).toHaveAttribute("data-can-toggle", "true");
 		main.unmount();
 
+		/* The optional screen carries the encoders alone, never the whole surface. */
 		mount("screen-2", "screen-2");
-		const encoderSurface = screen.getByTestId("control-surface");
-		expect(encoderSurface).toHaveAttribute("data-mode", "programmer");
-		expect(encoderSurface).toHaveAttribute("data-can-toggle", "false");
+		expect(screen.queryByTestId("control-surface")).toBeNull();
+		expect(screen.getByTestId("encoders-only")).toBeInTheDocument();
 	});
 
-	it("keeps main Playbacks silent about a closed encoder screen", () => {
+	it("keeps main silent about a closed encoder screen", () => {
 		const configured = {
 			id: "screen-2",
 			name: "Stage manager",
@@ -106,7 +118,7 @@ describe("ProgrammerControlSurfaceRegion", () => {
 		).toBeNull();
 		expect(screen.getByTestId("control-surface")).toHaveAttribute(
 			"data-mode",
-			"playbacks",
+			"follow",
 		);
 	});
 
