@@ -115,8 +115,28 @@ pub enum ScreenContent {
     FixedSidePane {
         pane: FixedScreenPane,
         side: FixedScreenSide,
-        width_px: u16,
+        /// Share of the window width, so the pane keeps its proportion on every display.
+        #[serde(
+            alias = "width_px",
+            deserialize_with = "deserialize_side_width_percent"
+        )]
+        width_percent: u8,
     },
+}
+
+/// Desk data written before the pane width became proportional stored a pixel width.
+/// Anything above the percent range is read as those legacy pixels against a 1920 px
+/// reference window so an existing screen keeps roughly the width its operator chose.
+fn deserialize_side_width_percent<'de, D>(deserializer: D) -> Result<u8, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let stored = u16::deserialize(deserializer)?;
+    if stored <= 100 {
+        return Ok(stored as u8);
+    }
+    let percent = (f64::from(stored) / 1920.0 * 100.0).round() as u16;
+    Ok(percent.clamp(10, 80) as u8)
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -177,8 +197,7 @@ pub struct ScreenConfiguration {
     pub first_playback_slot: u8,
     pub page_mode: String,
     pub show_page_controls: bool,
-    /// Full programmer surface (command line, right-hand tools) on this optional screen.
-    /// Off keeps the encoder group tabs and the encoders alone.
+    /// Programmer command line above this optional screen's encoders.
     #[serde(default)]
     pub show_programmer: bool,
     pub desired_open: bool,

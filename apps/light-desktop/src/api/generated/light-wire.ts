@@ -843,13 +843,17 @@ export type FixedScreenStageRenderQuality = "lines_only" | "lines_and_beams" | "
 export type FixedScreenTextMode = "plain" | "markdown";
 export type FixedScreenPane = { "type": "fixture_sheet", included_heads: FixedScreenFixtureIncludedHeads, order: FixedScreenFixtureOrder, active_only: boolean, compact_mode: FixedScreenFixtureCompactMode, cue_list_id: string | null, columns: Array<FixedScreenFixtureColumn>, show_type: boolean, show_group_shortcuts: boolean, } | { "type": "stage_2d", follow_preload: boolean, show_floor_grid: boolean, } | { "type": "stage_3d", follow_preload: boolean, show_floor_grid: boolean, show_beam_guides: boolean, render_quality: FixedScreenStageRenderQuality, environment_brightness: number, } | { "type": "cues", cue_list_id: string, } | { "type": "text", root: string, path: string, mode: FixedScreenTextMode, };
 export type FixedScreenSide = "left" | "right";
-export type ScreenContent = { "type": "desktop" } | { "type": "control_surface" } | { "type": "fixed_pane", pane: FixedScreenPane, } | { "type": "fixed_side_pane", pane: FixedScreenPane, side: FixedScreenSide, width_px: number, };
+export type ScreenContent = { "type": "desktop" } | { "type": "control_surface" } | { "type": "fixed_pane", pane: FixedScreenPane, } | { "type": "fixed_side_pane", pane: FixedScreenPane, side: FixedScreenSide,
+/**
+ * Share of the window width, so the pane keeps its proportion on every display.
+ */
+width_percent: number, };
 export type ScreenPlaybackSurfaceRow = { first_playback_slot: number, has_fader: boolean, button_count: number, };
 export type ScreenPlaybackSurfaceLayout = { playbacks_per_row: number, rows: Array<ScreenPlaybackSurfaceRow>, };
 export type ScreenPageMode = "follow_main" | "independent";
 export type ScreenConfiguration = { id: string, name: string, layout: unknown, show_dock: boolean, show_playbacks: boolean, playback_count: number, playback_rows: number, first_playback_slot: number, page_mode: ScreenPageMode, show_page_controls: boolean,
 /**
- * Full programmer surface on this optional screen; off keeps the encoders alone.
+ * Programmer command line above this optional screen's encoders.
  */
 show_programmer: boolean, desired_open: boolean, display_id: string | null, bounds: unknown, fullscreen: boolean, playback_layout: ScreenPlaybackSurfaceLayout | null, content: ScreenContent, };
 export type ScreenConfigurationSnapshot = { screens: Array<ScreenConfiguration>, active_pages: Record<string, number>, programmer_control_surface: ProgrammerControlSurfaceConfiguration, };

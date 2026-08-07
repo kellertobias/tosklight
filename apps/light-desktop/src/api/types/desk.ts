@@ -287,7 +287,8 @@ export type ScreenContent =
 			type: "fixed_side_pane";
 			pane: FixedScreenPane;
 			side: "left" | "right";
-			width_px: number;
+			/** Share of the window width, 10–80. */
+			width_percent: number;
 	  };
 
 export interface ScreenConfiguration {
@@ -302,7 +303,7 @@ export interface ScreenConfiguration {
 	first_playback_slot: number;
 	page_mode: "follow_main" | "independent";
 	show_page_controls: boolean;
-	/** Full programmer surface on this screen; off keeps the encoders alone. */
+	/** Programmer command line above this screen's encoders. */
 	show_programmer: boolean;
 	desired_open: boolean;
 	display_id: string | null;

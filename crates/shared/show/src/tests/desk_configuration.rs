@@ -495,7 +495,7 @@ fn fixed_side_pane_round_trips_with_pixel_width_and_keeps_dock() {
                 cue_list_id: Uuid::new_v4().to_string(),
             },
             side: FixedScreenSide::Right,
-            width_px: 480,
+            width_percent: 25,
         },
     };
 
@@ -510,7 +510,7 @@ fn fixed_side_pane_round_trips_with_pixel_width_and_keeps_dock() {
                 cue_list_id: Uuid::new_v4().to_string(),
             },
             side: FixedScreenSide::Left,
-            width_px: 120,
+            width_percent: 4,
         },
         ..base
     };
@@ -537,7 +537,7 @@ fn fixed_side_pane_reads_legacy_base_discriminator_as_a_plain_side_pane() {
                 cue_list_id: String::new(),
             },
             side: FixedScreenSide::Left,
-            width_px: 420,
+            width_percent: 22,
         }
     );
 }
@@ -577,7 +577,7 @@ fn fixed_side_pane_turns_desktop_dock_off() {
                     cue_list_id: String::new(),
                 },
                 side: FixedScreenSide::Left,
-                width_px: 420,
+                width_percent: 22,
             },
         })
         .unwrap();

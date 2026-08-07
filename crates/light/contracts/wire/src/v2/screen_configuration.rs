@@ -124,7 +124,9 @@ pub enum ScreenContent {
     FixedSidePane {
         pane: FixedScreenPane,
         side: FixedScreenSide,
-        width_px: u16,
+        /// Share of the window width, so the pane keeps its proportion on every display.
+        #[schemars(range(min = 10, max = 80))]
+        width_percent: u8,
     },
 }
 
@@ -168,7 +170,7 @@ pub struct ScreenConfiguration {
     pub first_playback_slot: u8,
     pub page_mode: ScreenPageMode,
     pub show_page_controls: bool,
-    /// Full programmer surface on this optional screen; off keeps the encoders alone.
+    /// Programmer command line above this optional screen's encoders.
     #[serde(default)]
     pub show_programmer: bool,
     pub desired_open: bool,
