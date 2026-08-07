@@ -133,7 +133,41 @@ pub fn send_surface_layer_to_back(surface: &wgpu::Surface<'static>) {
     // layer outlives the call, and `zPosition` is a plain animatable property with no invariants
     // tied to the swapchain.
     if let Some(hal) = unsafe { surface.as_hal::<wgpu::hal::api::Metal>() } {
-        hal.render_layer().lock().setZPosition(-1.0);
+        // Ordered among its siblings rather than sunk beneath them. A negative position put it
+        // behind the window's own opaque backing as well, which is a picture nobody can see; zero
+        // leaves it where it was created, above the background and below whatever is raised over
+        // it.
+        hal.render_layer().lock().setZPosition(0.0);
+    }
+}
+
+/// Raise a view's layer above the siblings it shares a window with.
+///
+/// The desk's window holds two things: the surface the renderer draws the Stage into, and the
+/// interface as a transparent child on top. "On top" has to be true of the *layers*, not merely of
+/// the order they were added, or everything the interface draws inside the pane rectangle vanishes
+/// behind the picture — which is what an operator sees as the pane's settings button doing nothing.
+///
+/// Raising the interface is the right half of that sandwich to move. Sinking the picture instead
+/// puts it behind the window's own backing as well, and a layer behind that is a picture nobody
+/// can see.
+///
+/// `view` is an `NSView`; a null pointer is ignored.
+#[cfg(target_os = "macos")]
+pub fn raise_view_above_siblings(view: *mut std::ffi::c_void) {
+    if view.is_null() {
+        return;
+    }
+    // SAFETY: the caller hands over a live `NSView` for the lifetime of the call — Tauri's
+    // `with_webview` runs its closure on the main thread with the webview alive. `wantsLayer` and
+    // `zPosition` are plain properties with no invariants tied to what the view is drawing.
+    unsafe {
+        let view = view.cast::<objc2::runtime::AnyObject>();
+        let _: () = objc2::msg_send![view, setWantsLayer: true];
+        let layer: *mut objc2::runtime::AnyObject = objc2::msg_send![view, layer];
+        if !layer.is_null() {
+            let _: () = objc2::msg_send![layer, setZPosition: 1.0_f64];
+        }
     }
 }
 

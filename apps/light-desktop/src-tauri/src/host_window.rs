@@ -45,12 +45,30 @@ pub(crate) fn install(app: &mut tauri::App) -> tauri::Result<()> {
     // Transparent so the surface beneath shows through wherever the interface paints nothing,
     // which is what makes a Stage pane possible at all. `auto_resize` keeps it filling the window
     // without the desk having to follow every resize itself.
-    window.add_child(
+    let webview = window.add_child(
         tauri::webview::WebviewBuilder::new(LABEL, WebviewUrl::default())
             .transparent(true)
             .auto_resize(),
         LogicalPosition::new(0.0, 0.0),
         LogicalSize::new(logical.width, logical.height),
     )?;
+
+    // "On top" has to be true of the layers, not merely of the order they were added.
+    //
+    // The Stage is drawn into this window by another process, and everything the interface puts
+    // over it — a menu across the pane, a dialog, the pane's own settings — is drawn by this
+    // webview. Without raising it, all of that lands behind the picture inside the pane rectangle
+    // while looking correct everywhere else, which reads as those controls doing nothing at all.
+    //
+    // The interface is the half to raise. Sinking the picture instead puts it behind the window's
+    // own backing, and then there is no picture.
+    #[cfg(target_os = "macos")]
+    {
+        let _ = webview.with_webview(|webview| {
+            viz_surface::raise_view_above_siblings(webview.inner());
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = webview;
     Ok(())
 }
