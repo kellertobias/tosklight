@@ -123,7 +123,7 @@ impl Visualizer {
 /// Never one found on the machine at large: a visualizer from another install would be another
 /// build, and this desk supervises it and speaks a versioned protocol to it. The helper is ours or
 /// there is not one.
-fn helper_binary() -> Result<PathBuf, String> {
+pub(crate) fn helper_binary() -> Result<PathBuf, String> {
     let executable = std::env::current_exe().map_err(|error| error.to_string())?;
     let beside = executable.with_file_name(renderer_binary_name());
     if beside.is_file() {

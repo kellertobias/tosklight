@@ -10,6 +10,11 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 viz-helper = { path = "../../../crates/viz/helper" }
+viz-surface = { path = "../../../crates/viz/surface" }
+wgpu.workspace = true
+pollster.workspace = true
+bytemuck = "1"
+raw-window-handle = "0.6"
 tauri = { version = "2", features = ["unstable", "macos-private-api"] }
 serde.workspace = true
 serde_json.workspace = true
