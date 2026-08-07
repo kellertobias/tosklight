@@ -61,14 +61,23 @@ pub enum FromHelper {
     Stopping { detail: String },
     /// One rendered frame of the Stage pane, as straight RGBA.
     ///
-    /// The plan allows either of two ways to get a native picture into the desk's window: attach a
-    /// helper-owned surface to the desk's viewport, or pass a render target into a desk-owned one.
-    /// This is the second, in the form that keeps the crash isolation intact — sharing a GPU
-    /// surface across processes means handing the desk a handle the helper's driver owns, which is
-    /// the coupling the separate process exists to avoid.
+    /// **The fallback transport, not the intended one.** Both processes run on the same machine
+    /// and share a GPU, so the picture should not travel through system memory at all: the desk
+    /// should be handed a shared surface — `IOSurface` on macOS — and sample the helper's texture
+    /// directly.
     ///
-    /// It costs bandwidth: a pane is four bytes a pixel per frame. That is why the pane rectangle
-    /// is sent rather than the whole window, and why [`crate::framing::MAX_FRAME`] bounds it.
+    /// The cost of this path is not the pipe. Copying a pane between two processes on one machine
+    /// is around a hundredth of memory bandwidth, which is nothing. It is the round trip: reading
+    /// a frame back off the GPU stalls the render pipeline, and the desk then uploads it straight
+    /// back to the GPU for the webview to draw. Two transfers and a stall, every frame, to move an
+    /// image between two processes that were already looking at the same device.
+    ///
+    /// It is kept because it is portable and needs no platform-specific texture import, so it
+    /// covers whatever a shared surface cannot — and because a correct slow path is worth having
+    /// while the fast one is written.
+    ///
+    /// The pane rectangle is sent rather than the whole window partly for this reason, and
+    /// [`crate::framing::MAX_FRAME`] bounds what can cross.
     Frame {
         width: u32,
         height: u32,
