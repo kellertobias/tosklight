@@ -113,12 +113,12 @@ function FixedScreenSurface({ screen }: { screen: ScreenConfiguration }) {
  */
 function SideScreenSurface({ screen }: { screen: ScreenConfiguration }) {
 	if (screen.content.type !== "fixed_side_pane") return null;
-	const { side, width_px, pane } = screen.content;
+	const { side, width_percent, pane } = screen.content;
 	return (
 		<div
 			className={`screen-shell side-content fixed-${side}`}
 			style={
-				{ "--fixed-side-pane-width": `${width_px}px` } as CSSProperties
+				{ "--fixed-side-pane-width": `${width_percent}%` } as CSSProperties
 			}
 		>
 			<NativeDragStrip />

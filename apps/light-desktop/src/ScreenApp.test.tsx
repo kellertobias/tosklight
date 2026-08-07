@@ -178,7 +178,7 @@ describe("ScreenApp", () => {
 					content: {
 						type: "fixed_side_pane",
 						side: "right",
-						width_px: 480,
+						width_percent: 25,
 						pane: {
 							type: "stage_2d",
 							follow_preload: false,
@@ -193,7 +193,7 @@ describe("ScreenApp", () => {
 
 		const shell = container.querySelector(".screen-shell");
 		expect(shell).toHaveClass("side-content", "fixed-right");
-		expect(shell).toHaveStyle({ "--fixed-side-pane-width": "480px" });
+		expect(shell).toHaveStyle({ "--fixed-side-pane-width": "25%" });
 		expect(shell).toContainElement(screen.getByTestId("fixed-pane"));
 		expect(shell).toContainElement(screen.getByTestId("screen-playbacks"));
 		expect(screen.queryByTestId("workspace")).not.toBeInTheDocument();
@@ -211,7 +211,7 @@ describe("ScreenApp", () => {
 					content: {
 						type: "fixed_side_pane",
 						side: "left",
-						width_px: 360,
+						width_percent: 20,
 						pane: {
 							type: "stage_2d",
 							follow_preload: false,

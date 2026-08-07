@@ -741,12 +741,22 @@
 .app-shell:not(:has(> .control-section)) {
 	grid-template-rows: minmax(0, 1fr);
 }
+/*
+ * As on the main screen, the dock only reaches down to the control region: the Playback
+ * or encoder section is the bottom band of the window across its whole width.
+ */
 .screen-shell > .left-dock {
-	grid-row: 1 / -1;
+	grid-row: 1;
 }
 .screen-shell > .workspace-view {
 	grid-column: -2 / -1;
 	grid-row: 1;
+}
+.screen-shell > .screen-playbacks,
+.screen-shell > .control-section,
+.screen-shell > .screen-encoders-only {
+	grid-column: 1 / -1;
+	grid-row: 2;
 }
 /*
  * Controls-only and fixed-side-pane screens have no upper region: the control section
@@ -840,6 +850,20 @@
 	display: grid;
 	grid-template-columns: minmax(0, 1fr);
 	grid-template-rows: minmax(0, 1fr);
+}
+/* With the command line enabled it takes its own row above the encoders. */
+.control-section.screen-encoders-only.with-command-line {
+	grid-template-rows: auto minmax(0, 1fr);
+}
+.screen-command-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: stretch;
+	gap: 6px;
+	min-width: 0;
+}
+.screen-command-row > .screen-section-switch {
+	align-self: stretch;
 }
 
 /*
