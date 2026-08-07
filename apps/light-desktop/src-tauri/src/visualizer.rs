@@ -10,8 +10,12 @@
 //! playback and the output engine with it. Run as a child it takes its own window and nothing
 //! else, and the desk says what happened.
 
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use viz_helper::framing::write_frame;
+use viz_helper::handshake::{HelperIdentity, greet_helper};
+use viz_helper::protocol::{ToHelper, encode};
 use viz_helper::{HelperState, SupervisedHelper};
 
 /// The visualizer this desk has open, if any.
@@ -21,6 +25,10 @@ use viz_helper::{HelperState, SupervisedHelper};
 #[derive(Default)]
 pub(crate) struct Visualizer {
     helper: Mutex<Option<SupervisedHelper>>,
+    /// The writing end of the channel, once the helper has been greeted and accepted.
+    to_helper: Mutex<Option<std::process::ChildStdin>>,
+    /// What answered the greeting, for the desk's diagnostics.
+    identity: Mutex<Option<HelperIdentity>>,
 }
 
 impl Visualizer {
@@ -31,14 +39,64 @@ impl Visualizer {
         // takes its scene, values and view over the channel and opens nothing of its own.
         let mut helper = SupervisedHelper::new(program, vec!["--helper".to_owned()]);
         helper.start()?;
+
+        // Greet it before anything else. A helper this desk cannot talk to is stopped here rather
+        // than left with a window showing something nobody can vouch for.
+        let (mut to_helper, mut from_helper) = helper
+            .take_channel()
+            .ok_or("the visualizer started without a channel")?;
+        let identity = match greet_helper(&mut to_helper, &mut from_helper, "ToskLight Visualizer")
+        {
+            Ok(identity) => identity,
+            Err(error) => {
+                helper.stop();
+                return Err(error.to_string());
+            }
+        };
+
+        *self.to_helper.lock().map_err(|_| "visualizer state")? = Some(to_helper);
+        *self.identity.lock().map_err(|_| "visualizer state")? = Some(identity);
         *self.helper.lock().map_err(|_| "visualizer state")? = Some(helper);
         Ok(())
     }
 
+    /// Send the helper a message, if one is running.
+    ///
+    /// A helper that has died is not an error to send to: the supervisor is already restarting or
+    /// has given up, and the desk keeps running either way. The frame is dropped and the next
+    /// scene the desk sends will find a channel again.
+    pub(crate) fn send(&self, message: &ToHelper) -> Result<(), String> {
+        let mut channel = self.to_helper.lock().map_err(|_| "visualizer state")?;
+        let Some(to_helper) = channel.as_mut() else {
+            return Ok(());
+        };
+        let payload = encode(message)?;
+        if write_frame(to_helper, &payload).is_err() {
+            // The pipe has gone with the process. Drop the end so the next send does not retry a
+            // channel nothing is reading.
+            *channel = None;
+        }
+        Ok(())
+    }
+
+    /// What is drawing, once the helper has said. `None` before the greeting completes.
+    pub(crate) fn renderer(&self) -> Result<Option<String>, String> {
+        Ok(self
+            .identity
+            .lock()
+            .map_err(|_| "visualizer state")?
+            .as_ref()
+            .map(|identity| identity.renderer.clone()))
+    }
+
     pub(crate) fn close(&self) -> Result<(), String> {
+        // Ask first, so the helper closes its own window rather than being killed mid-frame.
+        let _ = self.send(&ToHelper::Shutdown);
         if let Some(helper) = self.helper.lock().map_err(|_| "visualizer state")?.as_mut() {
             helper.stop();
         }
+        *self.to_helper.lock().map_err(|_| "visualizer state")? = None;
+        *self.identity.lock().map_err(|_| "visualizer state")? = None;
         Ok(())
     }
 
@@ -116,6 +174,36 @@ pub(crate) fn close_visualizer(visualizer: tauri::State<'_, Visualizer>) -> Resu
 ///
 /// Polled here rather than pushed, so noticing a dead helper and reporting it are the same call
 /// and cannot disagree.
+/// Send the visualizer the rig to draw.
+///
+/// The payload is already encoded by whoever built it: the desk's scene comes from the render
+/// pipeline, not from this module, and re-encoding it here would be a second opinion about what
+/// the helper is looking at.
+#[tauri::command]
+pub(crate) fn send_visualizer_scene(
+    visualizer: tauri::State<'_, Visualizer>,
+    payload: Vec<u8>,
+) -> Result<(), String> {
+    visualizer.send(&ToHelper::Scene { payload })
+}
+
+/// Send the visualizer what the rig is currently doing.
+#[tauri::command]
+pub(crate) fn send_visualizer_values(
+    visualizer: tauri::State<'_, Visualizer>,
+    payload: Vec<u8>,
+) -> Result<(), String> {
+    visualizer.send(&ToHelper::Values { payload })
+}
+
+/// What the visualizer is drawing with, once it has said. Empty before the greeting completes.
+#[tauri::command]
+pub(crate) fn visualizer_renderer(
+    visualizer: tauri::State<'_, Visualizer>,
+) -> Result<Option<String>, String> {
+    visualizer.renderer()
+}
+
 #[tauri::command]
 pub(crate) fn visualizer_state(visualizer: tauri::State<'_, Visualizer>) -> Result<String, String> {
     visualizer.poll()?;
@@ -157,6 +245,18 @@ mod tests {
         visualizer.close().expect("closing is idempotent");
         visualizer.poll().expect("polling nothing is harmless");
         assert_eq!(visualizer.state().expect("state"), HelperState::Down);
+    }
+
+    /// Sending to a visualizer that is not running is not an error. The supervisor is already
+    /// restarting it or has given up, and the desk carries on either way — a show does not stop
+    /// because a window went.
+    #[test]
+    fn sending_to_a_visualizer_that_is_not_running_is_harmless() {
+        let visualizer = Visualizer::default();
+        visualizer
+            .send(&ToHelper::Shutdown)
+            .expect("sending into the void is not a failure");
+        assert_eq!(visualizer.renderer().expect("renderer"), None);
     }
 
     /// The desk supervises a helper it ships. Anything else would be another build speaking an
