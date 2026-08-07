@@ -39,7 +39,14 @@ export function Stage3dView({
 	 * still only offered where the renderer can run, and if it cannot start after all, the pane
 	 * falls back to the desk's own drawing rather than showing nothing.
 	 */
-	const wantsNative = options.view === "3d-viz";
+	/*
+	 * Follow Preload stays with the desk's own renderer, because the native one cannot draw it
+	 * honestly: the desk has no preload output. Its live values are universes carrying every
+	 * attribute, but the preload lane exists only as a colour-and-intensity projection, so a
+	 * moving head would hold its live angle while its colour changed — a picture that looks
+	 * right and is not. Better the pane a Stage already has than a preload nobody can trust.
+	 */
+	const wantsNative = options.view === "3d-viz" && !options.followPreload;
 	const nativePane = useNativeStagePane(wantsNative);
 	return (
 		<div

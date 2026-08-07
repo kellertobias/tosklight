@@ -99,8 +99,15 @@ and wherever the two processes have no way to move a picture between them. It is
 after a renderer stops: the pane goes back to the desk's own drawing rather than holding a still
 picture of a rig that has since moved.
 
-Drag over the pane to orbit, drag with the secondary button to pan, and scroll to zoom, whichever
-renderer is drawing it.
+Drag over the pane to orbit and scroll to zoom, whichever renderer is drawing it. Where the
+ToskLight renderer is drawing, the middle button also walks the camera across its own axes and the
+secondary button slides the view without turning it.
+
+**Follow Preload** is always drawn by the desk's own renderer, whichever view is selected. The desk
+resolves a preload to what an operator needs to see on a Stage — which fixtures are coming up, and
+in what colour — rather than to a complete lighting state, so the ToskLight renderer has nothing to
+point a moving head with. A pane set to **3D Viz** therefore returns to the desk's rendering while
+Follow Preload is on, and goes back when it is off.
 
 ### Stage is a selection and viewing surface
 

@@ -169,10 +169,9 @@ export function useCueThumbnails(cues: Cue[], active: boolean) {
 	const previews = useCueThumbnailActions();
 	const [result, setResult] = useState<ThumbnailResult | null>(null);
 	useEffect(() => {
-		setResult((previous) => {
-			for (const url of previous?.released ?? []) URL.revokeObjectURL(url);
-			return null;
-		});
+		// Object URLs are released by this effect's own cleanup, which has already run for the
+		// previous pass by the time this one starts.
+		setResult(null);
 		if (!active || !groupsReady || !cues.length || !stageFixtures.length)
 			return;
 		let cancelled = false;
