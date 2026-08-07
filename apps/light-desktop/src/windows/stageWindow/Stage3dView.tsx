@@ -14,6 +14,7 @@ export function Stage3dView({
 	options,
 	patchSelectionPreview,
 	patchPreviewFixtures,
+	projection,
 	highlightFixtures = [],
 	camera3d,
 	pixelRatioCap,
@@ -34,6 +35,8 @@ export function Stage3dView({
 	active?: boolean;
 	paneId?: string;
 	interactive?: boolean;
+	/** The plan the 2D Stage is arranged by, when this is drawing one. */
+	projection?: string;
 }) {
 	/*
 	 * Every 3D view is the renderer's picture now — the full one and the
@@ -70,7 +73,7 @@ export function Stage3dView({
 		nativePane,
 		// The plan projections belong to the 2D Stage, which is a different component and still the
 		// desk's own drawing; this one is only ever asked for a 3D view.
-		stageViewMode(options.view, options.renderQuality, ""),
+		stageViewMode(options.view, options.renderQuality, projection ?? ""),
 		options.followPreload,
 	);
 	return (

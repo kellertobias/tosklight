@@ -57,7 +57,18 @@ export function StageWindow(props: StageWindowProps) {
 					writable={!props.viewOnly}
 				/>
 			)}
-			{options.view === "3d" || options.view === "3d-viz" ? (
+			{/*
+			 * A 2D Stage joins the renderer only while its layout is Automatic — which means the
+			 * arrangement *is* the projection of the 3D positions, regenerated from them, so the
+			 * renderer's own plan view of the same rig is the same picture. A Manual layout is
+			 * somewhere an operator put every fixture by hand, and no projection reproduces that,
+			 * so it stays with the desk's own drawing. That is the distinction Regenerate 2D
+			 * layout exists to make deliberate, and it is not this pane's to make for them.
+			 */}
+			{options.view === "3d" ||
+			options.view === "3d-viz" ||
+			(options.view === "2d" &&
+				layout.positions2dConfig?.provenance === "automatic") ? (
 				<Stage3dView
 					fixtures={stage.fixtures3d}
 					visualization={stage.visualization}
@@ -71,6 +82,7 @@ export function StageWindow(props: StageWindowProps) {
 					active={active}
 					paneId={props.paneId}
 					interactive={!props.viewOnly}
+					projection={layout.positions2dConfig?.projection}
 				/>
 			) : (
 				<Stage2dView

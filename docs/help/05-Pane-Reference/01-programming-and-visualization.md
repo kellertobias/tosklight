@@ -88,10 +88,14 @@ The Stage is the spatial selection and visualization surface. In 2D it shows fix
 - **Show group shortcuts** adds the Group strip.
 - The common size and removal controls apply per pane.
 
-### Which renderer draws the 3D Stage
+### Which renderer draws the Stage
 
-On the desktop application the 3D Stage is drawn by the ToskLight renderer, in a separate process,
-into the pane where the Stage sits. It runs beside the desk rather than inside it, so a graphics
+On the desktop application the Stage is drawn by the ToskLight renderer, in a separate process,
+into the pane where the Stage sits. Every 3D view is drawn there, and a 2D view is too while its
+layout is **Automatic** — an Automatic layout is the projection of the 3D positions, so the
+renderer's own plan view of the same rig is the same picture. A **Manual** 2D layout is where an
+operator put each fixture by hand, which no projection reproduces, so it stays with the desk's own
+drawing. It runs beside the desk rather than inside it, so a graphics
 driver that takes the renderer down takes only the picture with it — the Programmer, playback and
 DMX output are untouched, and the Stage returns on its own.
 
