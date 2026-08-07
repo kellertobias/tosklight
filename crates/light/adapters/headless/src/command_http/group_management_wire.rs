@@ -254,7 +254,6 @@ pub(super) fn resolved_spatial(
 fn wire_spatial_mapping(
     value: light_dynamics::SpatialSelectionMapping,
 ) -> wire::GroupSpatialSelectionMapping {
-    let is_planar = value.projection.kind == light_dynamics::ProjectionKind::Planar;
     wire::GroupSpatialSelectionMapping {
         projection: wire::GroupMappingProjection {
             anchor: wire::GroupMappingPosition3d {

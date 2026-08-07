@@ -16,19 +16,23 @@ each fixture takes its phase from, as Grid, Radial, or Radar. Fixtures that shar
 same point of a `THRU` spread; members without a valid Stage position remain visible and receive
 individual fallback ranks.
 
-A projection is one of three kinds. **Planar** looks along a view direction and ranks across the
-viewing plane; it keeps the named Top/Front/Back/Left/Right presets. **Cylindrical** places a centre
-point, orients an axis through it with three rotations, and starts the spread at one angle around
+Every projection is placed by one position and one direction, whichever kind it is. **Planar** looks
+along the direction and ranks across the plane at right angles to it; Rotation turns that plane, the
+position is not read, and the named Top/Front/Back/Left/Right presets remain. **Cylindrical** runs
+its axis along the direction through the position, and Rotation is where the spread starts around
 that axis; the spread leaves that angle in both directions and the two sides meet 180° away on the
-far side. **Spherical** places a centre point and names the spread's centre with two angles, azimuth
-and elevation, spreading outward to 180° at the opposite side. With every rotation at zero the
-cylinder axis is vertical and both start angles are measured from Stage +X.
+far side. **Spherical** points the direction from the position to the centre of the spread, which
+reaches its opposite 180° away; a roll about that centre does not move it, so a sphere has no
+Rotation. With the direction along Stage +Z and no Rotation, a cylinder stands upright and starts
+its spread at Stage +X. Both tabs show what they set: **Projection** draws the shape in the Stage,
+drag to orbit it, and **Phase** plots the fixtures on the plane the projection ranks them in, shaded
+from black for the first rank to white for the last.
 
-A Group can inherit mapping from referenced Groups, own one complete local mapping, copy inherited
-values as a local mapping, or remove its local mapping. Membership remains live when the mapping is
-local. Mixed referenced mappings use visible source order until the Group receives a local mapping.
-There is no general Layout pane or selection grid: edit fixture positions in Stage, Group ordering
-here, and a Dynamic-only override in that Dynamic's **Projection** tab.
+A Group inherits its mapping from referenced Groups until it is given one of its own; changing
+anything on **Projection** or **Phase** makes the mapping this Group's own. Membership remains live
+either way. Mixed referenced mappings use visible source order until the Group receives its own
+mapping. There is no general Layout pane or selection grid: edit fixture positions in Stage, Group
+ordering here, and a Dynamic-only override in that Dynamic's **Projection** tab.
 
 Group settings never contain a master. To create a Group Master, press `[SET]`, choose the explicit
 Group, then press the destination physical or Virtual Playback. Every Playback targeting the same

@@ -22,12 +22,15 @@ fixtures in a 2D plane and nothing else; **Phase** turns that plane into the one
 each lamp takes its phase from.
 
 **Projection** starts from the saved live Group's mapping. **Inherit** follows the Group;
-**Override** enables the local controls and a **Projection** dropdown choosing Planar, Cylindrical,
-or Spherical. Each kind offers only the values it uses, and a simplified Stage view shows the centre
-point, the axis, and where the spread starts. Changes are saved as they are made, so there is no
-Apply button; if the Dynamic changed elsewhere, authority reloads and your values are kept. Frozen
-or targetless Dynamics instead show **Selection order (no Group mapping)**. On the encoders,
-projection takes two pages: the kind and its position, then its orientation.
+**Override** enables the local controls and a **Projection** toggle choosing Planar, Cylindrical,
+or Spherical. All three are placed by one position and one direction, and each offers only what it
+reads: Planar takes a direction and a Rotation, Cylindrical adds the position its axis runs through,
+and Spherical takes a position and a direction with no Rotation. A simplified Stage view beside the
+values shows the shape, its axis, and where the spread starts; drag it to orbit. Changes are saved
+as they are made, so there is no Apply button; if the Dynamic changed elsewhere, authority reloads
+and your values are kept. Frozen or targetless Dynamics instead show **Selection order (no Group
+mapping)**. On the encoders, projection takes two pages: the kind and its position, then its
+direction and rotation.
 
 **Phase** owns the ordering — **Inherit**, Linear, Grid, Radial, Radar, or Random — alongside
 offset, span, anchors, blocks, repeats, wings, and uniform/per-lane phase behavior. **Inherit**

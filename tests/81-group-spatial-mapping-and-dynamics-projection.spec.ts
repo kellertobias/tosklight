@@ -94,7 +94,8 @@ test("GROUP-SPATIAL-010 @ui › Group settings author ranked output without reti
 	await expect(page.getByText("Grid Settings", { exact: true })).toHaveCount(0);
 
 	await dialog.getByRole("tab", { name: "Projection" }).click();
-	await dialog.getByRole("button", { name: "Create local mapping" }).click();
+	// There is no button that only claims ownership: setting the projection is what takes it.
+	await dialog.getByRole("button", { name: "Top", exact: true }).click();
 	await expect
 		.poll(
 			async () =>
