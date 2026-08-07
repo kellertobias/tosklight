@@ -5,6 +5,22 @@ use thiserror::Error;
 
 const MIN_DIRECTION_LENGTH: f64 = 1.0e-12;
 
+const UNIT_X: Vector3 = Vector3 {
+    x: 1.0,
+    y: 0.0,
+    z: 0.0,
+};
+const UNIT_Y: Vector3 = Vector3 {
+    x: 0.0,
+    y: 1.0,
+    z: 0.0,
+};
+const UNIT_Z: Vector3 = Vector3 {
+    x: 0.0,
+    y: 0.0,
+    z: 1.0,
+};
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Position3d {
     pub x: f64,
@@ -52,12 +68,13 @@ impl ProjectionKind {
     }
 }
 
-impl Vector3 {
-    fn is_zero(&self) -> bool {
-        self.x == 0.0 && self.y == 0.0 && self.z == 0.0
-    }
-}
-
+/// Every kind is placed by one position and one direction, so the three of them share a shape.
+///
+/// `view_direction` is what the projection is oriented along: the viewing direction for planar,
+/// the central axis for cylindrical, the direction to the centre of the spread for spherical.
+/// `rotation_degrees` is the one remaining degree of freedom, the roll about that direction: the
+/// turn of the viewing plane for planar, the start angle around the axis for cylindrical. A
+/// spherical projection ranks by unsigned angle from its centre, so roll does not move it.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SpatialProjection {
     pub anchor: Position3d,
@@ -65,27 +82,9 @@ pub struct SpatialProjection {
     pub rotation_degrees: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preset: Option<ProjectionPreset>,
-    /// Each of the four is omitted at its default, so a planar projection persists exactly the
-    /// bytes it did before the other kinds existed and old Shows round-trip unchanged.
+    /// Omitted at its default, so a planar projection persists exactly the bytes it always did.
     #[serde(default, skip_serializing_if = "ProjectionKind::is_planar")]
     pub kind: ProjectionKind,
-    /// Euler degrees about X, Y then Z turning world +Z into the cylinder axis. Cylindrical only.
-    #[serde(default, skip_serializing_if = "Vector3::is_zero")]
-    pub axis_rotation: Vector3,
-    /// Cylindrical: where the spread starts around the axis. Spherical: the centre's azimuth.
-    #[serde(default, skip_serializing_if = "is_zero_degrees")]
-    pub start_angle_degrees: f64,
-    /// Spherical only: the centre's elevation above the plane perpendicular to world +Z.
-    #[serde(default, skip_serializing_if = "is_zero_degrees")]
-    pub elevation_degrees: f64,
-}
-
-#[expect(
-    clippy::trivially_copy_pass_by_ref,
-    reason = "serde skip_serializing_if"
-)]
-fn is_zero_degrees(value: &f64) -> bool {
-    *value == 0.0
 }
 
 impl<'de> Deserialize<'de> for SpatialProjection {
@@ -102,25 +101,42 @@ impl<'de> Deserialize<'de> for SpatialProjection {
             preset: Option<ProjectionPreset>,
             #[serde(default)]
             kind: ProjectionKind,
-            #[serde(default)]
-            axis_rotation: Vector3,
-            #[serde(default)]
-            start_angle_degrees: f64,
-            #[serde(default)]
-            elevation_degrees: f64,
+            // Shows written while the angular kinds carried their own angles. Their presence is
+            // what marks a projection as one of those, so they are read but never written back.
+            axis_rotation: Option<Vector3>,
+            start_angle_degrees: Option<f64>,
+            elevation_degrees: Option<f64>,
         }
 
         let stored = StoredProjection::deserialize(deserializer)?;
+        let legacy_angles = stored.axis_rotation.is_some()
+            || stored.start_angle_degrees.is_some()
+            || stored.elevation_degrees.is_some();
         let mut projection = Self {
             anchor: stored.anchor,
             view_direction: stored.view_direction,
             rotation_degrees: stored.rotation_degrees,
             preset: stored.preset,
             kind: stored.kind,
-            axis_rotation: stored.axis_rotation,
-            start_angle_degrees: stored.start_angle_degrees,
-            elevation_degrees: stored.elevation_degrees,
         };
+        if legacy_angles {
+            projection.migrate_legacy_angles(
+                stored.axis_rotation.unwrap_or_default(),
+                stored.start_angle_degrees.unwrap_or_default(),
+                stored.elevation_degrees.unwrap_or_default(),
+            );
+        }
+        // An angular kind used to ignore the direction entirely, so one could be stored with
+        // none at all. Its old frame is what it gets: a cylinder stood up, a sphere centred
+        // where both of its angles at zero put it.
+        if projection.kind != ProjectionKind::Planar
+            && normalize(projection.view_direction).is_err()
+        {
+            projection.view_direction = match projection.kind {
+                ProjectionKind::Spherical => UNIT_X,
+                _ => UNIT_Z,
+            };
+        }
         if projection
             .preset
             .is_some_and(|preset| !projection.matches_preset(preset))
@@ -139,9 +155,49 @@ impl SpatialProjection {
             rotation_degrees: 0.0,
             preset: Some(preset),
             kind: ProjectionKind::Planar,
-            axis_rotation: Vector3::default(),
-            start_angle_degrees: 0.0,
-            elevation_degrees: 0.0,
+        }
+    }
+
+    /// Rewrites a Show that stored an angular kind as Euler angles into the direction and roll
+    /// that replaced them, so it keeps ranking its fixtures in exactly the same order.
+    ///
+    /// A planar projection never used these, so it is left alone.
+    fn migrate_legacy_angles(
+        &mut self,
+        axis_rotation: Vector3,
+        start_angle_degrees: f64,
+        elevation_degrees: f64,
+    ) {
+        match self.kind {
+            ProjectionKind::Planar => {}
+            ProjectionKind::Cylindrical => {
+                let axis = rotate_euler(UNIT_Z, axis_rotation);
+                let Ok(axis) = normalize(axis) else { return };
+                // The old frame carried its own reference around the axis. The new frame derives
+                // one from the axis alone, so the turn between them folds into the roll.
+                let stored_start = normalize(reject(rotate_euler(UNIT_X, axis_rotation), axis));
+                let Ok(stored_start) = stored_start else {
+                    return;
+                };
+                let Ok((derived_start, derived_side)) = axis_reference(axis) else {
+                    return;
+                };
+                let offset = dot(stored_start, derived_side)
+                    .atan2(dot(stored_start, derived_start))
+                    .to_degrees();
+                self.view_direction = axis;
+                self.rotation_degrees = start_angle_degrees + offset;
+            }
+            ProjectionKind::Spherical => {
+                let azimuth = normalize_degrees(start_angle_degrees).to_radians();
+                let elevation = normalize_degrees(elevation_degrees).to_radians();
+                self.view_direction = Vector3 {
+                    x: elevation.cos() * azimuth.cos(),
+                    y: elevation.cos() * azimuth.sin(),
+                    z: elevation.sin(),
+                };
+                self.rotation_degrees = 0.0;
+            }
         }
     }
 
@@ -602,50 +658,19 @@ fn validate_mapping(mapping: &SpatialSelectionMapping) -> Result<(), SpatialMapp
 }
 
 fn validate_projection(projection: &SpatialProjection) -> Result<(), SpatialMappingError> {
+    // Every kind is oriented by the same direction, so every kind needs it to be usable.
     for (field, value) in [
         ("projection.anchor.x", projection.anchor.x),
         ("projection.anchor.y", projection.anchor.y),
         ("projection.anchor.z", projection.anchor.z),
         ("projection.rotation_degrees", projection.rotation_degrees),
+        ("projection.view_direction.x", projection.view_direction.x),
+        ("projection.view_direction.y", projection.view_direction.y),
+        ("projection.view_direction.z", projection.view_direction.z),
     ] {
         require_finite(field, value)?;
     }
-    match projection.kind {
-        // A planar projection is nothing without the direction it looks along.
-        ProjectionKind::Planar => {
-            for (field, value) in [
-                ("projection.view_direction.x", projection.view_direction.x),
-                ("projection.view_direction.y", projection.view_direction.y),
-                ("projection.view_direction.z", projection.view_direction.z),
-            ] {
-                require_finite(field, value)?;
-            }
-        }
-        ProjectionKind::Cylindrical => {
-            for (field, value) in [
-                ("projection.axis_rotation.x", projection.axis_rotation.x),
-                ("projection.axis_rotation.y", projection.axis_rotation.y),
-                ("projection.axis_rotation.z", projection.axis_rotation.z),
-                (
-                    "projection.start_angle_degrees",
-                    projection.start_angle_degrees,
-                ),
-            ] {
-                require_finite(field, value)?;
-            }
-        }
-        ProjectionKind::Spherical => {
-            for (field, value) in [
-                (
-                    "projection.start_angle_degrees",
-                    projection.start_angle_degrees,
-                ),
-                ("projection.elevation_degrees", projection.elevation_degrees),
-            ] {
-                require_finite(field, value)?;
-            }
-        }
-    }
+    normalize(projection.view_direction)?;
     Ok(())
 }
 
@@ -669,20 +694,10 @@ fn projection_basis(
         return Ok((Vector3::default(), Vector3::default()));
     }
     let direction = normalize(projection.view_direction)?;
-    let preferred_up = Vector3 {
-        x: 0.0,
-        y: 0.0,
-        z: 1.0,
-    };
-    let fallback_up = Vector3 {
-        x: 0.0,
-        y: 1.0,
-        z: 0.0,
-    };
-    let reference_up = if dot(direction, preferred_up).abs() > 1.0 - MIN_DIRECTION_LENGTH {
-        fallback_up
+    let reference_up = if dot(direction, UNIT_Z).abs() > 1.0 - MIN_DIRECTION_LENGTH {
+        UNIT_Y
     } else {
-        preferred_up
+        UNIT_Z
     };
     let right = normalize(cross(direction, reference_up))?;
     let up = normalize(cross(right, direction))?;
@@ -702,7 +717,7 @@ fn projection_basis(
     ))
 }
 
-/// Applies Euler degrees about X, then Y, then Z.
+/// Applies Euler degrees about X, then Y, then Z. Only the legacy angle migration still uses it.
 fn rotate_euler(vector: Vector3, degrees: Vector3) -> Vector3 {
     let (sx, cx) = degrees.x.to_radians().sin_cos();
     let (sy, cy) = degrees.y.to_radians().sin_cos();
@@ -724,33 +739,31 @@ fn rotate_euler(vector: Vector3, degrees: Vector3) -> Vector3 {
     }
 }
 
+/// A perpendicular pair spanning the plane at right angles to a unit `axis`, derived from the
+/// axis alone so that the direction is the only thing that places it.
+///
+/// World +X is the reference, which keeps an axis of world +Z measuring its angles from world +X.
+fn axis_reference(axis: Vector3) -> Result<(Vector3, Vector3), SpatialMappingError> {
+    let reference = if dot(axis, UNIT_X).abs() > 1.0 - MIN_DIRECTION_LENGTH {
+        UNIT_Z
+    } else {
+        UNIT_X
+    };
+    let start = normalize(reject(reference, axis))?;
+    Ok((start, cross(axis, start)))
+}
+
 /// The cylinder axis and the two perpendicular directions that place the start angle.
 ///
-/// With every rotation at zero the axis is world +Z and the start angle is measured from
-/// world +X.
+/// The axis is the projection's direction and the start angle is its roll about that axis, so an
+/// axis of world +Z with no roll starts at world +X.
 fn cylinder_frame(
     projection: &SpatialProjection,
 ) -> Result<(Vector3, Vector3, Vector3), SpatialMappingError> {
-    let axis = normalize(rotate_euler(
-        Vector3 {
-            x: 0.0,
-            y: 0.0,
-            z: 1.0,
-        },
-        projection.axis_rotation,
-    ))?;
-    let seed = rotate_euler(
-        Vector3 {
-            x: 1.0,
-            y: 0.0,
-            z: 0.0,
-        },
-        projection.axis_rotation,
-    );
-    let start = normalize(reject(seed, axis))?;
-    let radians = normalize_degrees(projection.start_angle_degrees).to_radians();
+    let axis = normalize(projection.view_direction)?;
+    let (start, side) = axis_reference(axis)?;
+    let radians = normalize_degrees(projection.rotation_degrees).to_radians();
     let (sin, cos) = radians.sin_cos();
-    let side = cross(axis, start);
     Ok((
         axis,
         Vector3 {
@@ -766,15 +779,9 @@ fn cylinder_frame(
     ))
 }
 
-/// The unit direction the spherical projection is centred on.
+/// The unit direction the spherical projection is centred on, which is simply its direction.
 fn spherical_center(projection: &SpatialProjection) -> Vector3 {
-    let azimuth = normalize_degrees(projection.start_angle_degrees).to_radians();
-    let elevation = normalize_degrees(projection.elevation_degrees).to_radians();
-    Vector3 {
-        x: elevation.cos() * azimuth.cos(),
-        y: elevation.cos() * azimuth.sin(),
-        z: elevation.sin(),
-    }
+    normalize(projection.view_direction).unwrap_or(UNIT_X)
 }
 
 /// The angle in degrees between two directions, `0` through `180`.
@@ -935,16 +942,30 @@ mod tests {
         }
     }
 
+    /// A cylinder's direction is its axis, so world +Z stands it up; a sphere's is the centre of
+    /// its spread, so world +X centres it there. Those are the two frames the tests measure in.
     fn centered(kind: ProjectionKind, anchor: Position3d) -> SpatialProjection {
+        directed(
+            kind,
+            anchor,
+            match kind {
+                ProjectionKind::Spherical => UNIT_X,
+                _ => UNIT_Z,
+            },
+        )
+    }
+
+    fn directed(
+        kind: ProjectionKind,
+        anchor: Position3d,
+        view_direction: Vector3,
+    ) -> SpatialProjection {
         SpatialProjection {
             anchor,
-            view_direction: Vector3::default(),
+            view_direction,
             rotation_degrees: 0.0,
             preset: None,
             kind,
-            axis_rotation: Vector3::default(),
-            start_angle_degrees: 0.0,
-            elevation_degrees: 0.0,
         }
     }
 
@@ -965,8 +986,11 @@ mod tests {
         let projection: SpatialProjection = serde_json::from_value(stored).unwrap();
         assert_eq!(projection.kind, ProjectionKind::Planar);
         assert_eq!(projection.preset, Some(ProjectionPreset::Top));
-        assert_eq!(projection.start_angle_degrees, 0.0);
-        assert_eq!(projection.axis_rotation, Vector3::default());
+        assert_eq!(projection.rotation_degrees, 0.0);
+        assert_eq!(
+            projection.view_direction,
+            ProjectionPreset::Top.view_direction()
+        );
     }
 
     #[test]
@@ -984,19 +1008,93 @@ mod tests {
     }
 
     #[test]
-    fn a_non_planar_projection_persists_its_own_fields() {
+    fn a_non_planar_projection_persists_only_the_shared_fields() {
         let mut projection = centered(ProjectionKind::Cylindrical, Position3d::default());
-        projection.start_angle_degrees = 45.0;
+        projection.rotation_degrees = 45.0;
         let encoded = serde_json::to_value(&projection).unwrap();
         assert_eq!(encoded["kind"], "cylindrical");
-        assert_eq!(encoded["start_angle_degrees"], 45.0);
-        // Still omitted at their defaults, and restored as such.
+        assert_eq!(encoded["rotation_degrees"], 45.0);
+        // The angles the angular kinds used to carry are gone, not merely defaulted.
         assert!(encoded.get("axis_rotation").is_none());
+        assert!(encoded.get("start_angle_degrees").is_none());
         assert!(encoded.get("elevation_degrees").is_none());
         assert_eq!(
             serde_json::from_value::<SpatialProjection>(encoded).unwrap(),
             projection
         );
+    }
+
+    #[test]
+    fn a_stored_cylindrical_projection_keeps_its_spread_after_the_angles_became_a_direction() {
+        // Written when a cylinder carried Euler angles and a start angle of its own: a quarter
+        // turn about X lays the axis onto world -Y, and the spread starts 30 degrees round.
+        let stored = serde_json::json!({
+            "anchor": { "x": 1.0, "y": 2.0, "z": 3.0 },
+            "view_direction": { "x": 0.0, "y": 0.0, "z": -1.0 },
+            "rotation_degrees": 0.0,
+            "kind": "cylindrical",
+            "axis_rotation": { "x": 90.0, "y": 0.0, "z": 0.0 },
+            "start_angle_degrees": 30.0,
+        });
+        let migrated: SpatialProjection = serde_json::from_value(stored).unwrap();
+
+        assert_eq!(migrated.kind, ProjectionKind::Cylindrical);
+        // The axis is now the direction itself.
+        assert!((migrated.view_direction.y.abs() - 1.0).abs() < 1.0e-9);
+        assert!(migrated.view_direction.x.abs() < 1.0e-9);
+        assert!(migrated.view_direction.z.abs() < 1.0e-9);
+        // And it ranks every fixture exactly where it used to: the spread is still centred 30
+        // degrees off world +X, so +X reads 30 and the 30-degree mark itself reads 0.
+        assert!((coordinates(&migrated, 4.0, 2.0, 3.0).0 - 30.0).abs() < 1.0e-9);
+        let (sin, cos) = 30f64.to_radians().sin_cos();
+        assert!(
+            coordinates(&migrated, 1.0 + 3.0 * cos, 2.0, 3.0 + 3.0 * sin)
+                .0
+                .abs()
+                < 1.0e-9
+        );
+        // Round-tripping it again writes none of the legacy angles back.
+        let encoded = serde_json::to_value(&migrated).unwrap();
+        assert!(encoded.get("axis_rotation").is_none());
+        assert!(encoded.get("start_angle_degrees").is_none());
+        assert_eq!(
+            serde_json::from_value::<SpatialProjection>(encoded).unwrap(),
+            migrated
+        );
+    }
+
+    #[test]
+    fn a_stored_angular_projection_with_no_direction_keeps_the_frame_it_had() {
+        // The angular kinds ignored the direction, so one could be saved without a usable one.
+        for (kind, x, y, z) in [("cylindrical", 0.0, 0.0, 3.0), ("spherical", 3.0, 0.0, 0.0)] {
+            let stored = serde_json::json!({
+                "anchor": { "x": 0.0, "y": 0.0, "z": 0.0 },
+                "view_direction": { "x": 0.0, "y": 0.0, "z": 0.0 },
+                "rotation_degrees": 0.0,
+                "kind": kind,
+            });
+            let migrated: SpatialProjection = serde_json::from_value(stored).unwrap();
+            // A cylinder stands up and a sphere centres on world +X, as both used to.
+            assert_eq!(coordinates(&migrated, x, y, z).0, 0.0);
+        }
+    }
+
+    #[test]
+    fn a_stored_spherical_projection_keeps_its_centre_after_the_angles_became_a_direction() {
+        let stored = serde_json::json!({
+            "anchor": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "view_direction": { "x": 0.0, "y": 0.0, "z": -1.0 },
+            "rotation_degrees": 0.0,
+            "kind": "spherical",
+            "start_angle_degrees": 90.0,
+            "elevation_degrees": 0.0,
+        });
+        let migrated: SpatialProjection = serde_json::from_value(stored).unwrap();
+
+        assert_eq!(migrated.kind, ProjectionKind::Spherical);
+        // Azimuth 90 with no elevation centred the spread on world +Y, and still does.
+        assert!(coordinates(&migrated, 0.0, 3.0, 0.0).0.abs() < 1.0e-9);
+        assert!((coordinates(&migrated, 0.0, -3.0, 0.0).0 - 180.0).abs() < 1.0e-9);
     }
 
     #[test]
@@ -1019,7 +1117,7 @@ mod tests {
     #[test]
     fn the_cylindrical_start_angle_moves_the_center_of_the_spread() {
         let mut projection = centered(ProjectionKind::Cylindrical, Position3d::default());
-        projection.start_angle_degrees = 90.0;
+        projection.rotation_degrees = 90.0;
 
         // The centre has moved onto +Y, so +X and -X are now the equidistant pair.
         assert!(coordinates(&projection, 0.0, 3.0, 0.0).0.abs() < 1.0e-9);
@@ -1029,14 +1127,17 @@ mod tests {
     }
 
     #[test]
-    fn rotating_the_cylinder_axis_reorients_the_spread() {
-        let mut projection = centered(ProjectionKind::Cylindrical, Position3d::default());
-        // A quarter turn about X lays the axis down onto world -Y.
-        projection.axis_rotation = Vector3 {
-            x: 90.0,
-            y: 0.0,
-            z: 0.0,
-        };
+    fn pointing_the_cylinder_axis_elsewhere_reorients_the_spread() {
+        // The axis is simply the direction, so laying it onto world -Y is one field.
+        let projection = directed(
+            ProjectionKind::Cylindrical,
+            Position3d::default(),
+            Vector3 {
+                x: 0.0,
+                y: -1.0,
+                z: 0.0,
+            },
+        );
 
         // The axis now runs along Y, so a Y offset is axial and reads on `v`, not on `u`.
         let (u, v) = coordinates(&projection, 0.0, 5.0, 0.0);
@@ -1086,32 +1187,32 @@ mod tests {
     }
 
     #[test]
-    fn the_two_spherical_angles_move_the_center_independently() {
-        let mut projection = centered(ProjectionKind::Spherical, Position3d::default());
-        projection.start_angle_degrees = 90.0;
-        assert!(coordinates(&projection, 0.0, 3.0, 0.0).0.abs() < 1.0e-9);
-        assert!((coordinates(&projection, 0.0, -3.0, 0.0).0 - 180.0).abs() < 1.0e-9);
+    fn the_spherical_direction_moves_the_center_in_both_axes() {
+        // What used to be an azimuth and an elevation is the direction to the centre.
+        let sideways = directed(ProjectionKind::Spherical, Position3d::default(), UNIT_Y);
+        assert!(coordinates(&sideways, 0.0, 3.0, 0.0).0.abs() < 1.0e-9);
+        assert!((coordinates(&sideways, 0.0, -3.0, 0.0).0 - 180.0).abs() < 1.0e-9);
 
-        projection.start_angle_degrees = 0.0;
-        projection.elevation_degrees = 90.0;
-        assert!(coordinates(&projection, 0.0, 0.0, 3.0).0.abs() < 1.0e-9);
-        assert!((coordinates(&projection, 0.0, 0.0, -3.0).0 - 180.0).abs() < 1.0e-9);
-        assert!((coordinates(&projection, 3.0, 0.0, 0.0).0 - 90.0).abs() < 1.0e-9);
+        let overhead = directed(ProjectionKind::Spherical, Position3d::default(), UNIT_Z);
+        assert!(coordinates(&overhead, 0.0, 0.0, 3.0).0.abs() < 1.0e-9);
+        assert!((coordinates(&overhead, 0.0, 0.0, -3.0).0 - 180.0).abs() < 1.0e-9);
+        assert!((coordinates(&overhead, 3.0, 0.0, 0.0).0 - 90.0).abs() < 1.0e-9);
     }
 
     #[test]
-    fn the_new_kinds_do_not_require_a_view_direction() {
-        // A cylindrical or spherical projection derives its own frame, so the zero view
-        // direction that would reject a planar projection is fine here.
-        for kind in [ProjectionKind::Cylindrical, ProjectionKind::Spherical] {
-            let projection = centered(kind, Position3d::default());
-            assert!(project_spatial_positions(&projection, &[target(1, 1.0, 1.0, 1.0)]).is_ok());
+    fn every_kind_needs_the_direction_that_orients_it() {
+        // One direction places all three kinds now, so none of them can do without it.
+        for kind in [
+            ProjectionKind::Planar,
+            ProjectionKind::Cylindrical,
+            ProjectionKind::Spherical,
+        ] {
+            let projection = directed(kind, Position3d::default(), Vector3::default());
+            assert!(matches!(
+                project_spatial_positions(&projection, &[target(1, 1.0, 1.0, 1.0)]),
+                Err(SpatialMappingError::InvalidViewDirection)
+            ));
         }
-        let planar = centered(ProjectionKind::Planar, Position3d::default());
-        assert!(matches!(
-            project_spatial_positions(&planar, &[target(1, 1.0, 1.0, 1.0)]),
-            Err(SpatialMappingError::InvalidViewDirection)
-        ));
     }
 
     #[test]
@@ -1430,9 +1531,6 @@ mod tests {
             rotation_degrees: f64::NAN,
             preset: None,
             kind: ProjectionKind::Planar,
-            axis_rotation: Vector3::default(),
-            start_angle_degrees: 0.0,
-            elevation_degrees: 0.0,
         });
 
         let base = evaluate_dynamic_spatial_mapping(None, &random, &targets, None).unwrap();

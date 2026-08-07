@@ -236,6 +236,11 @@ export interface AppState {
 	stageEnvironmentBrightness: number;
 	/** Haze the 3D Viz renderer draws its beams through, `0..=1`. */
 	stageVizAtmosphere: number;
+	/** How much the 3D Viz renderer is asked to do per frame. */
+	stageVizQuality: "draft" | "standard" | "high" | "ultra";
+	stageVizExposure: number;
+	stageVizLaserBrightness: number;
+	stageVizShowLabels: boolean;
 	layoutMigrationNotice: boolean;
 	dmxDotSize: DmxDotSize;
 	fixtureSheetOrder: FixtureSheetOrder;
@@ -294,6 +299,11 @@ export interface WindowSettings {
 	stageEnvironmentBrightness: number;
 	/** Haze the 3D Viz renderer draws its beams through, `0..=1`. */
 	stageVizAtmosphere: number;
+	/** How much the 3D Viz renderer is asked to do per frame. */
+	stageVizQuality: "draft" | "standard" | "high" | "ultra";
+	stageVizExposure: number;
+	stageVizLaserBrightness: number;
+	stageVizShowLabels: boolean;
 	/** Legacy Layout-window field retained only for tolerant persisted-layout decoding. */
 	layoutGroupId?: string;
 	dmxDotSize: DmxDotSize;

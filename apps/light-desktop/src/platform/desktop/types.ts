@@ -42,6 +42,16 @@ export interface StagePaneGeometry {
 
 export type StagePaneGesture = "orbit" | "pan" | "zoom";
 
+/** Everything the renderer draws the pane with, as the operator set it. */
+export interface StagePanePicture {
+	atmosphere: number;
+	ambient: number;
+	quality: "draft" | "standard" | "high" | "ultra";
+	exposure: number;
+	laserBrightness: number;
+	showLabels: boolean;
+}
+
 export interface DesktopBridge {
 	readonly available: boolean;
 	frontendReady(): Promise<void>;
@@ -64,8 +74,8 @@ export interface DesktopBridge {
 	setStagePane(geometry: StagePaneGeometry): Promise<void>;
 	closeStagePane(): Promise<void>;
 	sendStagePaneInput(gesture: StagePaneGesture, x: number, y: number): Promise<void>;
-	/** Haze and environment brightness, which belong to the renderer drawing the pane. */
-	setStagePanePicture(atmosphere: number, ambient: number): Promise<void>;
+	/** The picture settings, which belong to the renderer drawing the pane rather than the desk. */
+	setStagePanePicture(picture: StagePanePicture): Promise<void>;
 	/** What is drawing the pane, and whatever last went wrong with it. */
 	stagePaneStatus(): Promise<[string | null, string | null]>;
 	packagedStageBenchmarkConfig(): Promise<PackagedStageBenchmarkConfig | null>;

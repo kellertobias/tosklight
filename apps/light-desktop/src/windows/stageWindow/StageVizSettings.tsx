@@ -1,6 +1,11 @@
-import { HorizontalFaderField, SwitchField } from "@tosklight/ui";
+import {
+	HorizontalFaderField,
+	MultiValueToggleField,
+	SwitchField,
+} from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import { useDesktopBridge } from "../../platform/desktop";
+import type { StagePanePicture } from "../../platform/desktop/types";
 import { useApp } from "../../state/AppContext";
 
 /**
@@ -37,8 +42,20 @@ export function StageVizSettings() {
 		};
 	}, [bridge]);
 
-	const send = (atmosphere: number, ambient: number) => {
-		void bridge.setStagePanePicture(atmosphere, ambient);
+	/*
+	 * Every setting is sent whole rather than one at a time: the renderer applies them together,
+	 * and sending only what moved would leave it guessing what the others still are.
+	 */
+	const send = (changed: Partial<StagePanePicture>) => {
+		void bridge.setStagePanePicture({
+			atmosphere: state.stageVizAtmosphere,
+			ambient: state.stageEnvironmentBrightness,
+			quality: state.stageVizQuality,
+			exposure: state.stageVizExposure,
+			laserBrightness: state.stageVizLaserBrightness,
+			showLabels: state.stageVizShowLabels,
+			...changed,
+		});
 	};
 
 	return (
@@ -65,7 +82,7 @@ export function StageVizSettings() {
 				display={`${Math.round(state.stageVizAtmosphere * 100)}%`}
 				onChange={(vizAtmosphere) => {
 					dispatch({ type: "SET_STAGE_OPTIONS", vizAtmosphere });
-					send(vizAtmosphere, state.stageEnvironmentBrightness);
+					send({ atmosphere: vizAtmosphere });
 				}}
 			/>
 			<HorizontalFaderField
@@ -78,7 +95,61 @@ export function StageVizSettings() {
 				display={`${Math.round(state.stageEnvironmentBrightness * 100)}%`}
 				onChange={(environmentBrightness) => {
 					dispatch({ type: "SET_STAGE_OPTIONS", environmentBrightness });
-					send(state.stageVizAtmosphere, environmentBrightness);
+					send({ ambient: environmentBrightness });
+				}}
+			/>
+			<MultiValueToggleField
+				label="Render quality"
+				description="How much the renderer is asked to do per frame. Ultra is the most expensive and the least forgiving of a busy machine."
+				value={state.stageVizQuality}
+				onChange={(vizQuality) => {
+					dispatch({ type: "SET_STAGE_OPTIONS", vizQuality });
+					send({ quality: vizQuality });
+				}}
+				options={[
+					{ value: "draft", label: "Draft" },
+					{ value: "standard", label: "Standard" },
+					{ value: "high", label: "High" },
+					{ value: "ultra", label: "Ultra" },
+				]}
+			/>
+			<HorizontalFaderField
+				label="Exposure"
+				description="What the whole picture is scaled by before it is shown, as a camera's exposure would."
+				value={state.stageVizExposure}
+				minimum={0.05}
+				maximum={4}
+				step={0.05}
+				display={`${state.stageVizExposure.toFixed(2)}×`}
+				onChange={(vizExposure) => {
+					dispatch({ type: "SET_STAGE_OPTIONS", vizExposure });
+					send({ exposure: vizExposure });
+				}}
+			/>
+			<HorizontalFaderField
+				label="Laser brightness"
+				description="Lasers have no honest reference — how strong a beam looks depends on the haze, the room and the eye — so it is the operator's, like the fog."
+				value={state.stageVizLaserBrightness}
+				minimum={0}
+				maximum={4}
+				step={0.05}
+				display={`${state.stageVizLaserBrightness.toFixed(2)}×`}
+				onChange={(vizLaserBrightness) => {
+					dispatch({ type: "SET_STAGE_OPTIONS", vizLaserBrightness });
+					send({ laserBrightness: vizLaserBrightness });
+				}}
+			/>
+			<SwitchField
+				label="Fixture labels"
+				offLabel="Hidden"
+				onLabel="Visible"
+				checked={state.stageVizShowLabels}
+				onChange={(event) => {
+					dispatch({
+						type: "SET_STAGE_OPTIONS",
+						vizShowLabels: event.target.checked,
+					});
+					send({ showLabels: event.target.checked });
 				}}
 			/>
 			<div className="stage-viz-status">

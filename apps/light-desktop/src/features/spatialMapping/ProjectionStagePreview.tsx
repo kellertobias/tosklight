@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import type { Position3d, SpatialProjection } from "./contracts";
-import { axisRotation, projectionKind } from "./projectionKinds";
+import { projectionKind } from "./projectionKinds";
 
 /**
  * A simplified 3D view of the Stage showing the projection as the shape it actually is: a
@@ -8,6 +8,11 @@ import { axisRotation, projectionKind } from "./projectionKinds";
  *
  * Drag to orbit. Without that, a rotation about the viewing axis is invisible and the numbers
  * cannot be checked against anything.
+ *
+ * The camera is a perspective one, not the parallel projection the ranking itself uses. A
+ * parallel picture of a cube gives away nothing about where it is being looked at from, and
+ * whether the operator is above or below the shape is exactly what this view is for. What the
+ * projection ranks by is unaffected: this is the picture, not the maths.
  *
  * The Stage box is a fixed reference cube rather than the real Stage extents. It exists to
  * make orientation legible, not to measure it.
@@ -18,43 +23,45 @@ const TOP = HALF * 1.2;
 const SIZE = { width: 320, height: 260 };
 const DEFAULT_VIEW = { yaw: -35, pitch: 22 };
 
+/** The camera orbits the middle of the reference cube at a fixed distance. */
+const ORBIT_TARGET: Position3d = { x: 0, y: 0, z: TOP / 2 };
+const CAMERA_DISTANCE = 26;
+/** Chosen so the cube fills about as much of the frame as it did without perspective. */
+const FOCAL_LENGTH = 442;
+/** Keeps geometry that swings behind the camera from turning the picture inside out. */
+const MIN_DEPTH = 1;
+
 type View = { yaw: number; pitch: number };
 
 function radians(value: number) {
 	return (value * Math.PI) / 180;
 }
 
-/** World is Z-up: `Top` looks down -Z and `Front` looks +Y. */
+/**
+ * World is Z-up: `Top` looks down -Z and `Front` looks +Y.
+ *
+ * Yaw turns the camera about world Z, pitch lifts it above the horizon, and the perspective
+ * divide is what makes the near face of the cube read as the near one.
+ */
 function project(point: Position3d, view: View) {
 	const yaw = radians(view.yaw);
 	const pitch = radians(view.pitch);
-	const x = point.x * Math.cos(yaw) - point.y * Math.sin(yaw);
-	const y = point.x * Math.sin(yaw) + point.y * Math.cos(yaw);
-	const scale = 17;
-	return {
-		x: SIZE.width / 2 + x * scale,
-		y:
-			SIZE.height / 2 +
-			(y * Math.sin(pitch) - point.z * Math.cos(pitch)) * scale,
+	const [sinYaw, cosYaw] = [Math.sin(yaw), Math.cos(yaw)];
+	const [sinPitch, cosPitch] = [Math.sin(pitch), Math.cos(pitch)];
+	const relative = {
+		x: point.x - ORBIT_TARGET.x,
+		y: point.y - ORBIT_TARGET.y,
+		z: point.z - ORBIT_TARGET.z,
 	};
-}
-
-/** Euler degrees about X, then Y, then Z — the same order the engine applies. */
-function rotate(vector: Position3d, degrees: Position3d): Position3d {
-	const [sx, cx] = [Math.sin(radians(degrees.x)), Math.cos(radians(degrees.x))];
-	const [sy, cy] = [Math.sin(radians(degrees.y)), Math.cos(radians(degrees.y))];
-	const [sz, cz] = [Math.sin(radians(degrees.z)), Math.cos(radians(degrees.z))];
-	const ax = {
-		x: vector.x,
-		y: vector.y * cx - vector.z * sx,
-		z: vector.y * sx + vector.z * cx,
-	};
-	const ay = {
-		x: ax.x * cy + ax.z * sy,
-		y: ax.y,
-		z: -ax.x * sy + ax.z * cy,
-	};
-	return { x: ay.x * cz - ay.y * sz, y: ay.x * sz + ay.y * cz, z: ay.z };
+	const x = relative.x * cosYaw - relative.y * sinYaw;
+	const y = relative.x * sinYaw + relative.y * cosYaw;
+	const up = relative.z * cosPitch - y * sinPitch;
+	const depth = Math.max(
+		MIN_DEPTH,
+		CAMERA_DISTANCE - y * cosPitch - relative.z * sinPitch,
+	);
+	const scale = FOCAL_LENGTH / depth;
+	return { x: SIZE.width / 2 + x * scale, y: SIZE.height / 2 - up * scale };
 }
 
 function normalize(vector: Position3d): Position3d {
@@ -97,6 +104,22 @@ function basis(axis: Position3d) {
 		Math.abs(axis.z) > 0.9 ? { x: 1, y: 0, z: 0 } : { x: 0, y: 0, z: 1 };
 	const right = normalize(cross(axis, reference));
 	return [right, normalize(cross(axis, right))] as const;
+}
+
+/**
+ * Where a cylinder measures its start angle from, derived from the axis alone. Mirrors the
+ * engine's own reference so the drawn start direction is the one that ranks.
+ */
+function axisReference(axis: Position3d) {
+	const reference =
+		Math.abs(axis.x) > 1 - 1e-9 ? { x: 0, y: 0, z: 1 } : { x: 1, y: 0, z: 0 };
+	const along = axis.x * reference.x + axis.y * reference.y + axis.z * reference.z;
+	const start = normalize({
+		x: reference.x - axis.x * along,
+		y: reference.y - axis.y * along,
+		z: reference.z - axis.z * along,
+	});
+	return [start, cross(axis, start)] as const;
 }
 
 function ring(
@@ -175,15 +198,14 @@ function ProjectionBody({
 	}
 
 	if (kind === "cylindrical") {
-		const axis = normalize(rotate({ x: 0, y: 0, z: 1 }, axisRotation(projection)));
+		// The direction is the axis and the rotation is the start angle around it, exactly as
+		// the engine reads them.
+		const axis = normalize(projection.view_direction);
 		const [u, v] = basis(axis);
 		const top = add(centre, scaled(axis, HALF));
 		const bottom = add(centre, scaled(axis, -HALF));
-		const seed = normalize(
-			rotate({ x: 1, y: 0, z: 0 }, axisRotation(projection)),
-		);
-		const start = radians(projection.start_angle_degrees ?? 0);
-		const side = cross(axis, seed);
+		const [seed, side] = axisReference(axis);
+		const start = radians(projection.rotation_degrees);
 		const startDirection = normalize(
 			add(scaled(seed, Math.cos(start)), scaled(side, Math.sin(start))),
 		);
@@ -226,14 +248,9 @@ function ProjectionBody({
 		);
 	}
 
-	// Spherical: three great circles read as a sphere, plus the ray to the spread's centre.
-	const azimuth = radians(projection.start_angle_degrees ?? 0);
-	const elevation = radians(projection.elevation_degrees ?? 0);
-	const direction = {
-		x: Math.cos(elevation) * Math.cos(azimuth),
-		y: Math.cos(elevation) * Math.sin(azimuth),
-		z: Math.sin(elevation),
-	};
+	// Spherical: three great circles read as a sphere, plus the ray to the spread's centre,
+	// which is simply the direction.
+	const direction = normalize(projection.view_direction);
 	return (
 		<>
 			{[

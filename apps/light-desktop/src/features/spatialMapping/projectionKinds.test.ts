@@ -24,7 +24,8 @@ describe("projection kinds", () => {
 		expect(supportsPreset(planar)).toBe(true);
 	});
 
-	it("offers only the fields the chosen kind uses", () => {
+	it("offers a position and a direction, and nothing else", () => {
+		// Planar reads no position, so it is not offered one.
 		expect(labels(planar)).toEqual([
 			"Direction X",
 			"Direction Y",
@@ -37,29 +38,40 @@ describe("projection kinds", () => {
 			"Position X",
 			"Position Y",
 			"Position Z",
-			"Rotation X",
-			"Rotation Y",
-			"Rotation Z",
-			"Start angle",
+			"Direction X",
+			"Direction Y",
+			"Direction Z",
+			"Rotation",
 		]);
 
-		// A sphere has no axis, so it takes two angles instead of three rotations.
+		// A roll about the centre of a spherical spread does not move it, so there is none.
 		const spherical = withProjectionKind(planar, "spherical");
 		expect(labels(spherical)).toEqual([
 			"Position X",
 			"Position Y",
 			"Position Z",
-			"Centre azimuth",
-			"Centre elevation",
+			"Direction X",
+			"Direction Y",
+			"Direction Z",
 		]);
 	});
 
-	it("carries the centre point across a kind change and drops the preset", () => {
+	it("carries the position and direction across a kind change and drops the preset", () => {
 		const cylindrical = withProjectionKind(planar, "cylindrical");
 		expect(cylindrical.anchor).toEqual({ x: 1, y: 2, z: 3 });
+		expect(cylindrical.view_direction).toEqual({ x: 0, y: 0, z: -1 });
 		expect(cylindrical.preset).toBeNull();
 		// Only a planar projection looks along a direction.
 		expect(supportsPreset(cylindrical)).toBe(false);
+	});
+
+	it("never leaves a projection without a direction to orient it", () => {
+		const flat = { ...planar, view_direction: { x: 0, y: 0, z: 0 } };
+		expect(withProjectionKind(flat, "spherical").view_direction).toEqual({
+			x: 0,
+			y: 0,
+			z: -1,
+		});
 	});
 
 	it("returns the same projection when the kind is unchanged", () => {
@@ -69,9 +81,13 @@ describe("projection kinds", () => {
 	it("edits the value the field names", () => {
 		const cylindrical = withProjectionKind(planar, "cylindrical");
 		const fields = projectionFields(cylindrical);
-		const startAngle = fields.find((field) => field.label === "Start angle");
-		expect(startAngle?.apply(45).start_angle_degrees).toBe(45);
-		const rotationY = fields.find((field) => field.label === "Rotation Y");
-		expect(rotationY?.apply(90).axis_rotation).toEqual({ x: 0, y: 90, z: 0 });
+		const rotation = fields.find((field) => field.label === "Rotation");
+		expect(rotation?.apply(45).rotation_degrees).toBe(45);
+		const directionY = fields.find((field) => field.label === "Direction Y");
+		expect(directionY?.apply(0.5).view_direction).toEqual({
+			x: 0,
+			y: 0.5,
+			z: -1,
+		});
 	});
 });

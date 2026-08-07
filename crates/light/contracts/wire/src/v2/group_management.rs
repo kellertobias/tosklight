@@ -67,6 +67,12 @@ pub enum GroupMappingRadarSweep {
     CounterClockwise,
 }
 
+/// One position and one direction place every projection kind.
+///
+/// `view_direction` is the viewing direction for planar, the central axis for cylindrical, and
+/// the direction to the centre of the spread for spherical. `rotation_degrees` is the roll about
+/// it: the turn of the viewing plane for planar and the start angle around the axis for
+/// cylindrical. `anchor` is the plane origin for planar and the centre point for the other two.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct GroupMappingProjection {
     pub anchor: GroupMappingPosition3d,
@@ -77,18 +83,6 @@ pub struct GroupMappingProjection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub kind: Option<GroupMappingProjectionKind>,
-    /// Euler degrees about X, Y then Z turning world +Z into the cylinder axis. Cylindrical only.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub axis_rotation: Option<GroupMappingVector3>,
-    /// Cylindrical: where the spread starts around the axis. Spherical: the centre's azimuth.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub start_angle_degrees: Option<f64>,
-    /// Spherical only: the centre's elevation above the plane perpendicular to world +Z.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub elevation_degrees: Option<f64>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

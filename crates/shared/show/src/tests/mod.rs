@@ -1,3 +1,4 @@
+mod cue_thumbnail;
 mod desk_configuration;
 mod show_library;
 mod show_store;

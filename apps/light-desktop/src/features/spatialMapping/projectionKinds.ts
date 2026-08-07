@@ -1,4 +1,5 @@
 import type {
+	Position3d,
 	ProjectionKind,
 	ProjectionPreset,
 	SpatialProjection,
@@ -12,18 +13,20 @@ export const PROJECTION_KINDS: ReadonlyArray<{
 	{
 		value: "planar",
 		label: "Planar",
-		detail: "Looks along one direction and ranks across the viewing plane.",
+		detail:
+			"Looks along the direction and ranks across the plane at right angles to it. Rotation turns that plane; the position is unused.",
 	},
 	{
 		value: "cylindrical",
 		label: "Cylindrical",
 		detail:
-			"Spreads around an axis, outward from the start angle to 180° on the far side.",
+			"The direction is the central axis through the position. The spread leaves the rotation angle both ways and meets itself 180° round.",
 	},
 	{
 		value: "spherical",
 		label: "Spherical",
-		detail: "Spreads outward from one point on the sphere to its opposite.",
+		detail:
+			"The direction points from the position to the centre of the spread, which reaches its opposite 180° away.",
 	},
 ];
 
@@ -38,47 +41,46 @@ export const PROJECTION_PRESETS: ReadonlyArray<{
 	{ value: "right", label: "Right" },
 ];
 
-const ZERO = { x: 0, y: 0, z: 0 };
+/** What a direction of nothing becomes, so a projection is never left unorientable. */
+const FALLBACK_DIRECTION: Position3d = { x: 0, y: 0, z: -1 };
 
 /** Absent means planar, so old Shows read as the kind they were stored as. */
 export function projectionKind(projection: SpatialProjection): ProjectionKind {
 	return projection.kind ?? "planar";
 }
 
-export function axisRotation(projection: SpatialProjection) {
-	return projection.axis_rotation ?? ZERO;
+function hasDirection(direction: Position3d) {
+	return direction.x !== 0 || direction.y !== 0 || direction.z !== 0;
 }
 
 /**
- * Switches kind while keeping what the two kinds share. The anchor is the centre point for
- * the two angular kinds and the plane origin for planar, so it always carries over.
+ * Switches kind while keeping the position and direction, because all three kinds are placed by
+ * the same two. Only what each kind reads from them changes.
  */
 export function withProjectionKind(
 	projection: SpatialProjection,
 	kind: ProjectionKind,
 ): SpatialProjection {
 	if (projectionKind(projection) === kind) return projection;
-	const base = { ...projection, kind, preset: null };
-	if (kind === "planar")
-		return {
-			anchor: base.anchor,
-			view_direction: base.view_direction,
-			rotation_degrees: base.rotation_degrees,
-			preset: null,
-			kind,
-		};
 	return {
-		...base,
-		axis_rotation: axisRotation(projection),
-		start_angle_degrees: projection.start_angle_degrees ?? 0,
-		elevation_degrees: projection.elevation_degrees ?? 0,
+		anchor: projection.anchor,
+		view_direction: hasDirection(projection.view_direction)
+			? projection.view_direction
+			: FALLBACK_DIRECTION,
+		rotation_degrees: projection.rotation_degrees,
+		preset: null,
+		kind,
 	};
 }
 
 /**
- * The numeric fields one kind actually uses. Planar keeps its anchor in the data because the
- * Radial and Radar shapes measure their centres from it, but the operator sets only a
- * direction, so the anchor is not offered here.
+ * The numeric fields one kind actually offers, ordered so the position comes first and the
+ * orientation after it.
+ *
+ * Planar keeps its position in the data because the Radial and Radar shapes measure their
+ * centres from it, but the projection itself does not read it, so it is not offered. A spherical
+ * projection ranks by unsigned angle from its centre, which a roll about that centre does not
+ * move, so it has no rotation to set.
  */
 export function projectionFields(projection: SpatialProjection): ReadonlyArray<{
 	key: string;
@@ -88,115 +90,50 @@ export function projectionFields(projection: SpatialProjection): ReadonlyArray<{
 	apply(next: number): SpatialProjection;
 }> {
 	const kind = projectionKind(projection);
-	const position = (
-		axis: "x" | "y" | "z",
-	): {
-		key: string;
-		label: string;
-		value: number;
-		apply(next: number): SpatialProjection;
-	} => ({
+	const position = (axis: "x" | "y" | "z") => ({
 		key: `position-${axis}`,
 		label: `Position ${axis.toUpperCase()}`,
 		value: projection.anchor[axis],
-		apply: (next) => ({
+		apply: (next: number) => ({
 			...projection,
 			anchor: { ...projection.anchor, [axis]: next },
 			preset: null,
 		}),
 	});
-	const rotation = (axis: "x" | "y" | "z") => ({
-		key: `rotation-${axis}`,
-		label: `Rotation ${axis.toUpperCase()}`,
-		value: axisRotation(projection)[axis],
+	const direction = (axis: "x" | "y" | "z") => ({
+		key: `direction-${axis}`,
+		label: `Direction ${axis.toUpperCase()}`,
+		value: projection.view_direction[axis],
+		apply: (next: number) => ({
+			...projection,
+			view_direction: { ...projection.view_direction, [axis]: next },
+			preset: null,
+		}),
+	});
+	const rotation = {
+		key: "rotation",
+		label: "Rotation",
+		value: projection.rotation_degrees,
 		unit: "°",
 		apply: (next: number) => ({
 			...projection,
-			axis_rotation: { ...axisRotation(projection), [axis]: next },
+			rotation_degrees: next,
+			preset: null,
 		}),
-	});
+	};
 
 	if (kind === "planar")
-		return [
-			{
-				key: "direction-x",
-				label: "Direction X",
-				value: projection.view_direction.x,
-				apply: (next) => ({
-					...projection,
-					view_direction: { ...projection.view_direction, x: next },
-					preset: null,
-				}),
-			},
-			{
-				key: "direction-y",
-				label: "Direction Y",
-				value: projection.view_direction.y,
-				apply: (next) => ({
-					...projection,
-					view_direction: { ...projection.view_direction, y: next },
-					preset: null,
-				}),
-			},
-			{
-				key: "direction-z",
-				label: "Direction Z",
-				value: projection.view_direction.z,
-				apply: (next) => ({
-					...projection,
-					view_direction: { ...projection.view_direction, z: next },
-					preset: null,
-				}),
-			},
-			{
-				key: "rotation",
-				label: "Rotation",
-				value: projection.rotation_degrees,
-				unit: "°",
-				apply: (next) => ({
-					...projection,
-					rotation_degrees: next,
-					preset: null,
-				}),
-			},
-		];
+		return [direction("x"), direction("y"), direction("z"), rotation];
 
-	if (kind === "cylindrical")
-		return [
-			position("x"),
-			position("y"),
-			position("z"),
-			rotation("x"),
-			rotation("y"),
-			rotation("z"),
-			{
-				key: "start-angle",
-				label: "Start angle",
-				value: projection.start_angle_degrees ?? 0,
-				unit: "°",
-				apply: (next) => ({ ...projection, start_angle_degrees: next }),
-			},
-		];
-
-	return [
+	const placed = [
 		position("x"),
 		position("y"),
 		position("z"),
-		{
-			key: "start-angle",
-			label: "Centre azimuth",
-			value: projection.start_angle_degrees ?? 0,
-			unit: "°",
-			apply: (next) => ({ ...projection, start_angle_degrees: next }),
-		},
-		{
-			key: "elevation",
-			label: "Centre elevation",
-			value: projection.elevation_degrees ?? 0,
-			unit: "°",
-			apply: (next) => ({ ...projection, elevation_degrees: next }),
-		},
+		direction("x"),
+		direction("y"),
+		direction("z"),
 	];
+	return kind === "cylindrical" ? [...placed, rotation] : placed;
 }
 
 /** Only a planar projection looks along a direction, so only it can carry a view preset. */

@@ -98,19 +98,7 @@ export type DynamicDefinitionProjection = { id: string, pool_number: number, rev
 export type DynamicSpatialProjectionStageProjection = { "type": "inherit", } | { "type": "replace", value: DynamicSpatialProjectionProjection, };
 export type DynamicSpatialPosition3dProjection = { x: number, y: number, z: number, };
 export type DynamicSpatialVector3Projection = { x: number, y: number, z: number, };
-export type DynamicSpatialProjectionProjection = { anchor: DynamicSpatialPosition3dProjection, view_direction: DynamicSpatialVector3Projection, rotation_degrees: number, preset?: GroupMappingProjectionPreset | null, kind?: GroupMappingProjectionKind,
-/**
- * Euler degrees about X, Y then Z turning world +Z into the cylinder axis. Cylindrical only.
- */
-axis_rotation?: DynamicSpatialVector3Projection,
-/**
- * Cylindrical: where the spread starts around the axis. Spherical: the centre's azimuth.
- */
-start_angle_degrees?: number,
-/**
- * Spherical only: the centre's elevation above the plane perpendicular to world +Z.
- */
-elevation_degrees?: number, };
+export type DynamicSpatialProjectionProjection = { anchor: DynamicSpatialPosition3dProjection, view_direction: DynamicSpatialVector3Projection, rotation_degrees: number, preset?: GroupMappingProjectionPreset | null, kind?: GroupMappingProjectionKind, };
 export type DynamicSelectionShapeProjection = { "type": "grid", angle_degrees: number, direction: GroupMappingRankDirection, } | { "type": "radial", center_u: number, center_v: number, direction: GroupMappingRadialDirection, } | { "type": "radar", center_u: number, center_v: number, start_angle_degrees: number, sweep: GroupMappingRadarSweep, } | { "type": "random", seed: number, };
 export type DynamicSpatialShapeStageProjection = { "type": "inherit", } | { "type": "replace", value: DynamicSelectionShapeProjection, };
 export type DynamicSpatialMappingOverrideProjection = { projection: DynamicSpatialProjectionStageProjection, shape: DynamicSpatialShapeStageProjection, };
@@ -304,19 +292,7 @@ export type GroupMappingProjectionKind = "planar" | "cylindrical" | "spherical";
 export type GroupMappingRankDirection = "ascending" | "descending";
 export type GroupMappingRadialDirection = "outward" | "inward";
 export type GroupMappingRadarSweep = "clockwise" | "counter_clockwise";
-export type GroupMappingProjection = { anchor: GroupMappingPosition3d, view_direction: GroupMappingVector3, rotation_degrees: number, preset?: GroupMappingProjectionPreset | null, kind?: GroupMappingProjectionKind,
-/**
- * Euler degrees about X, Y then Z turning world +Z into the cylinder axis. Cylindrical only.
- */
-axis_rotation?: GroupMappingVector3,
-/**
- * Cylindrical: where the spread starts around the axis. Spherical: the centre's azimuth.
- */
-start_angle_degrees?: number,
-/**
- * Spherical only: the centre's elevation above the plane perpendicular to world +Z.
- */
-elevation_degrees?: number, };
+export type GroupMappingProjection = { anchor: GroupMappingPosition3d, view_direction: GroupMappingVector3, rotation_degrees: number, preset?: GroupMappingProjectionPreset | null, kind?: GroupMappingProjectionKind, };
 export type GroupMappingShape = { "type": "grid", angle_degrees: number, direction: GroupMappingRankDirection, } | { "type": "radial", center_u: number, center_v: number, direction: GroupMappingRadialDirection, } | { "type": "radar", center_u: number, center_v: number, start_angle_degrees: number, sweep: GroupMappingRadarSweep, };
 export type GroupSpatialSelectionMapping = { projection: GroupMappingProjection, shape: GroupMappingShape, };
 export type GroupMappingProvenanceProjection = { "type": "none", } | { "type": "local", group_id: string, } | { "type": "inherited", source_group_ids: Array<string>, } | { "type": "mixed_source_mappings", };

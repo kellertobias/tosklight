@@ -1,4 +1,5 @@
 mod candidate;
+mod cue_thumbnail;
 mod document;
 mod lossless_body;
 mod lossless_json;
@@ -9,6 +10,7 @@ mod schedule_occurrence;
 mod store;
 mod transaction;
 
+pub use cue_thumbnail::{CueThumbnail, CueThumbnailEntry};
 pub use document::{
     PortablePatchRevision, PortableShowDocument, PortableShowObject, PortableShowObjectKey,
     PortableShowObjectRedo, PortableShowObjectUndo, PortableShowRevision,

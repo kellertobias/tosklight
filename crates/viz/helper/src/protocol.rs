@@ -138,6 +138,16 @@ pub enum ToHelper {
         atmosphere: f32,
         /// How brightly everything that is not a light source is lit, `0..=2`.
         ambient: f32,
+        /// Draft, Standard, High or Ultra, as the renderer names them.
+        quality: RenderQuality,
+        /// Operator-safe exposure multiplier.
+        exposure: f32,
+        /// What every laser is drawn at, `1.0` being the built-in strength. Lasers have no honest
+        /// reference — how strong a beam looks depends on the haze, the room and the eye — so it
+        /// is the operator's, like the fog.
+        laser_brightness: f32,
+        /// Fixture numbers and patch addresses beside each fixture.
+        show_labels: bool,
     },
     /// Pointer and camera intent picked up by the web layer over the pane.
     ///
@@ -146,6 +156,18 @@ pub enum ToHelper {
     /// forwarded, already coalesced into a per-frame delta — one message per gesture step, never
     /// one per `pointermove`.
     Input { input: PaneInput },
+}
+
+/// How much the renderer is asked to do per frame.
+///
+/// Named here rather than taken from `viz-scene` so the channel does not depend on the renderer's
+/// own types: this is a wire contract between two builds that must be able to differ.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum RenderQuality {
+    Draft,
+    Standard,
+    High,
+    Ultra,
 }
 
 /// Where the desk serves the show the pane is to draw.
@@ -379,6 +401,10 @@ mod tests {
             ToHelper::Picture {
                 atmosphere: 0.2,
                 ambient: 0.75,
+                quality: RenderQuality::High,
+                exposure: 1.0,
+                laser_brightness: 1.0,
+                show_labels: false,
             },
         ];
         for message in messages {

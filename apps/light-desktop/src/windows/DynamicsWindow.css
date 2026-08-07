@@ -1247,8 +1247,22 @@
 	gap: 0.55rem;
 }
 
-.dynamic-projection-fields .dynamic-projection-help {
+/* The two segmented choices are one control each, so they take the whole row. */
+.dynamic-projection-fields .dynamic-projection-help,
+.dynamic-projection-fields .dynamic-projection-kinds,
+.dynamic-projection-fields .dynamic-projection-presets {
 	grid-column: 1 / -1;
+}
+
+.dynamic-projection-kinds .ui-multi-value-toggle,
+.dynamic-projection-presets .ui-multi-value-toggle {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+}
+
+.dynamic-projection-kinds button {
+	flex: 1 1 6rem;
 }
 
 .dynamic-projection-columns {

@@ -12,6 +12,7 @@ import { WindowSettings } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useState } from "react";
 import { useGroupManagement } from "../../features/groupManagement/GroupManagementProvider";
 import type { ResolvedSpatialMapping } from "../../features/spatialMapping/contracts";
+import { PhaseOrderPreview } from "../../features/spatialMapping/PhaseOrderPreview";
 import { ProjectionStagePreview } from "../../features/spatialMapping/ProjectionStagePreview";
 import type { ProjectionKind } from "../../features/spatialMapping/contracts";
 import {
@@ -25,8 +26,6 @@ import {
 import type { Group } from "./model";
 import {
 	defaultSpatialMapping,
-	groupSourceSummary,
-	hasGroupReferenceSource,
 	projectionForPreset,
 	resolveMappingPresentation,
 	type SpatialSelectionMapping,
@@ -154,15 +153,12 @@ export function GroupSettingsDialog({
 		? "Spatial mapping editing is unavailable until the revisioned Group mapping action is connected."
 		: null;
 	const displayedMapping = mapping ?? mappingPresentation.mapping;
-	const canEditMapping = Boolean(groupManagement && mapping);
 	const commonPanelProps = {
-		group,
 		mappingPresentation,
 		displayedMapping,
 		resolvedSpatial,
-		status,
 		saving,
-		canEditMapping,
+		hasManagement: Boolean(groupManagement),
 		commitMapping,
 	};
 
@@ -181,7 +177,6 @@ export function GroupSettingsDialog({
 			saveProperties={saveProperties}
 			commonPanelProps={commonPanelProps}
 			editingUnavailable={editingUnavailable}
-			hasManagement={Boolean(groupManagement)}
 		/>
 	);
 }
@@ -249,7 +244,6 @@ function GroupSettingsWindow({
 	saveProperties,
 	commonPanelProps,
 	editingUnavailable,
-	hasManagement,
 }: {
 	group: Group;
 	onClose(): void;
@@ -268,7 +262,6 @@ function GroupSettingsWindow({
 	}): Promise<void>;
 	commonPanelProps: MappingPanelProps;
 	editingUnavailable: string | null;
-	hasManagement: boolean;
 }) {
 	return (
 		<WindowSettings
@@ -299,7 +292,6 @@ function GroupSettingsWindow({
 						<ProjectionSettingsPanel
 							{...commonPanelProps}
 							editingUnavailable={editingUnavailable}
-							hasManagement={hasManagement}
 						/>
 					),
 				},
@@ -373,157 +365,98 @@ function GeneralSettingsPanel({
 }
 
 interface MappingPanelProps {
-	group: Group;
 	mappingPresentation: ReturnType<typeof resolveMappingPresentation>;
 	displayedMapping: SpatialSelectionMapping | null;
 	resolvedSpatial: ResolvedSpatialMapping | null;
-	status: string | null;
 	saving: boolean;
-	canEditMapping: boolean;
+	hasManagement: boolean;
 	commitMapping(next: SpatialSelectionMapping | null): Promise<void>;
 }
 
+/**
+ * Two sections side by side: the preview on the left, everything that is set on the right.
+ *
+ * Mapping ownership is not offered here. Opening a Group's Projection is asking to set this
+ * Group's projection, so the first edit takes ownership on its own, and the operator is never
+ * asked to press a button before the numbers do anything.
+ */
 function ProjectionSettingsPanel(
-	props: MappingPanelProps & {
-		editingUnavailable: string | null;
-		hasManagement: boolean;
-	},
+	props: MappingPanelProps & { editingUnavailable: string | null },
 ) {
 	const {
-		group,
 		mappingPresentation,
 		displayedMapping,
-		status,
 		saving,
-		canEditMapping,
 		commitMapping,
 		editingUnavailable,
 		hasManagement,
 	} = props;
+	// An inherited mapping is edited by making it this Group's own, which is what changing it
+	// means. Until there is one to copy, the first edit starts from the default.
+	const editable = displayedMapping ?? defaultSpatialMapping();
 	return (
-		<section className="group-settings-panel">
-			<MappingIdentity
-				label={mappingPresentation.label}
-				source={groupSourceSummary(group.body)}
-			/>
-			<MappingOwnershipActions
-				presentation={mappingPresentation.type}
-				hasInheritedSource={hasGroupReferenceSource(group.body)}
-				disabled={!hasManagement || saving}
-				onCreate={() => void commitMapping(defaultSpatialMapping())}
-				onCopy={() =>
-					mappingPresentation.mapping &&
-					void commitMapping(structuredClone(mappingPresentation.mapping))
-				}
-				onRemove={() => void commitMapping(null)}
-			/>
-			{editingUnavailable && <p role="note">{editingUnavailable}</p>}
-			{displayedMapping ? (
+		<section className="group-settings-panel group-settings-split">
+			<div className="group-settings-visual" aria-label="Projection preview">
+				<h3>Projection preview</h3>
+				<ProjectionStagePreview projection={editable.projection} />
+				<small>Drag to orbit</small>
+			</div>
+			<div className="group-settings-controls">
+				{editingUnavailable && <p role="note">{editingUnavailable}</p>}
 				<ProjectionEditor
-					mapping={displayedMapping}
-					disabled={!canEditMapping || saving}
+					mapping={editable}
+					disabled={!hasManagement || saving}
+					inherited={mappingPresentation.type !== "local"}
 					onChange={(next) => void commitMapping(next)}
 				/>
-			) : (
-				<p className="group-mapping-empty">
-					Source order is used until this Group has an inherited or local
-					mapping.
-				</p>
-			)}
-			<SaveStatus status={status} saving={saving} />
+			</div>
 		</section>
 	);
 }
 
 function PhaseSettingsPanel({
-	group,
-	mappingPresentation,
 	displayedMapping,
 	resolvedSpatial,
-	status,
 	saving,
-	canEditMapping,
+	hasManagement,
 	commitMapping,
 }: MappingPanelProps) {
+	const editable = displayedMapping ?? defaultSpatialMapping();
 	return (
-		<section className="group-settings-panel">
-			<MappingIdentity
-				label={mappingPresentation.label}
-				source={groupSourceSummary(group.body)}
-			/>
-			{displayedMapping ? (
+		<section className="group-settings-panel group-settings-split">
+			<div className="group-settings-visual" aria-label="Phase preview">
+				<h3>Phase preview</h3>
+				{resolvedSpatial ? (
+					<PhaseOrderPreview
+						positions={resolvedSpatial.projected_positions}
+						ranks={resolvedSpatial.ranks}
+						rankCount={resolvedSpatial.rank_count}
+						unplaced={resolvedSpatial.warnings.length}
+					/>
+				) : (
+					<p className="phase-order-empty">Loading authoritative Stage ranks…</p>
+				)}
+			</div>
+			<div className="group-settings-controls">
 				<PhaseEditor
-					mapping={displayedMapping}
-					disabled={!canEditMapping || saving}
+					mapping={editable}
+					disabled={!hasManagement || saving}
 					onChange={(next) => void commitMapping(next)}
 				/>
-			) : (
-				<p className="group-mapping-empty">No Phase mapping is configured.</p>
-			)}
-			<MappingPreview
-				title="Ranked preview"
-				fixtures={group.body.fixtures.length}
-				resolved={resolvedSpatial}
-			/>
-			<SaveStatus status={status} saving={saving} />
+			</div>
 		</section>
-	);
-}
-
-function MappingIdentity({ label, source }: { label: string; source: string }) {
-	return (
-		<div className="group-mapping-identity" aria-live="polite">
-			<strong>{label}</strong>
-			<span>{source}</span>
-		</div>
-	);
-}
-
-function MappingOwnershipActions({
-	presentation,
-	hasInheritedSource,
-	disabled,
-	onCreate,
-	onCopy,
-	onRemove,
-}: {
-	presentation: "none" | "local" | "inherited" | "mixed";
-	hasInheritedSource: boolean;
-	disabled: boolean;
-	onCreate: () => void;
-	onCopy: () => void;
-	onRemove: () => void;
-}) {
-	return (
-		<fieldset className="group-mapping-actions">
-			<legend>Mapping ownership</legend>
-			{presentation === "local" ? (
-				<Button disabled={disabled} onClick={onRemove}>
-					{hasInheritedSource
-						? "Use inherited mapping"
-						: "Remove local mapping"}
-				</Button>
-			) : (
-				<Button disabled={disabled} onClick={onCreate}>
-					Create local mapping
-				</Button>
-			)}
-			{presentation === "inherited" && (
-				<Button disabled={disabled} onClick={onCopy}>
-					Copy inherited values as local
-				</Button>
-			)}
-		</fieldset>
 	);
 }
 
 function ProjectionEditor({
 	mapping,
 	disabled,
+	inherited,
 	onChange,
 }: {
 	mapping: SpatialSelectionMapping;
 	disabled: boolean;
+	inherited: boolean;
 	onChange: (mapping: SpatialSelectionMapping) => void;
 }) {
 	// The same editor the Dynamics projection tab uses, so a Group and the Dynamics that
@@ -535,20 +468,15 @@ function ProjectionEditor({
 	return (
 		<fieldset disabled={disabled} className="group-mapping-fields">
 			<legend>Projection</legend>
-			<div className="group-projection-columns">
-			<div className="group-projection-visual">
-				<ProjectionStagePreview projection={projection} />
-				<small>Drag to orbit</small>
-			</div>
-			<div className="group-projection-settings">
-			<SelectField
+			<MultiValueToggleField
+				className="group-projection-kinds"
 				label="Projection"
 				value={kind}
-				options={PROJECTION_KINDS.map(
-					({ value, label }) => [value, label] as [string, string],
-				)}
+				options={PROJECTION_KINDS.map(({ value, label }) => ({ value, label }))}
 				onChange={(next) =>
-					updateProjection(withProjectionKind(projection, next as ProjectionKind))
+					updateProjection(
+						withProjectionKind(projection, next as ProjectionKind),
+					)
 				}
 			/>
 			{supportsPreset(projection) && (
@@ -573,7 +501,7 @@ function ProjectionEditor({
 			<div className="group-vector-fields">
 				{projectionFields(projection).map((field) => (
 					<NumberField
-						key={field.key}
+						key={`${kind}-${field.key}`}
 						label={field.label}
 						unit={field.unit}
 						value={field.value}
@@ -583,9 +511,10 @@ function ProjectionEditor({
 			</div>
 			<p className="group-mapping-help">
 				{PROJECTION_KINDS.find((entry) => entry.value === kind)?.detail}
+				{inherited
+					? " Changing anything here makes this projection this Group's own."
+					: ""}
 			</p>
-			</div>
-			</div>
 		</fieldset>
 	);
 }
@@ -764,64 +693,6 @@ function SelectField({
 	);
 }
 
-function MappingPreview({
-	title,
-	fixtures,
-	resolved,
-}: {
-	title: string;
-	fixtures: number;
-	resolved: ResolvedSpatialMapping | null;
-}) {
-	return (
-		<section className="group-mapping-preview" aria-label={title}>
-			<strong>{title}</strong>
-			{resolved ? (
-				<>
-					<p>
-						{resolved.ordered_fixture_ids.length} source fixtures ·{" "}
-						{resolved.rank_count} authoritative ranks
-					</p>
-					<ol className="group-mapping-ranks">
-						{resolved.projected_positions.slice(0, 24).map((position) => {
-							const rank = resolved.ranks.find(
-								(candidate) => candidate.fixture_id === position.fixture_id,
-							);
-							return (
-								<li key={position.fixture_id}>
-									<code>{position.fixture_id}</code>
-									<span>
-										{position.u == null || position.v == null
-											? "U — · V —"
-											: `U ${formatCoordinate(position.u)} · V ${formatCoordinate(position.v)}`}
-									</span>
-									<span>{rank ? `Rank ${rank.rank + 1}` : "No rank"}</span>
-								</li>
-							);
-						})}
-					</ol>
-					{resolved.warnings.map((warning) => (
-						<p className="group-mapping-warning" key={warning.fixture_id}>
-							Fixture {warning.fixture_id} has no Stage position and uses its
-							own fallback rank.
-						</p>
-					))}
-				</>
-			) : (
-				<p>
-					{fixtures
-						? "Loading authoritative Stage ranks…"
-						: "This intentionally empty Group has no ranked positions."}
-				</p>
-			)}
-		</section>
-	);
-}
-
-function formatCoordinate(value: number) {
-	return value.toFixed(3).replace(/0+$/u, "").replace(/\.$/u, "");
-}
-
 function resolvedMappingPresentation(
 	resolved: ResolvedSpatialMapping,
 ): ReturnType<typeof resolveMappingPresentation> {
@@ -882,8 +753,4 @@ function defaultShape(
 			sweep: "clockwise",
 		};
 	return { type, angle_degrees: 0, direction: "ascending" };
-}
-
-function titleCase(value: string) {
-	return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }

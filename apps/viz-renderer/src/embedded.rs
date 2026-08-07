@@ -87,12 +87,29 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
         }
         // The picture settings are the renderer's own, and the desk sends them rather than
         // applying them: it is not the one drawing this.
-        if let Some((atmosphere, ambient)) = source.picture() {
+        if let Some(viz_helper::protocol::ToHelper::Picture {
+            atmosphere,
+            ambient,
+            quality,
+            exposure,
+            laser_brightness,
+            show_labels,
+        }) = source.picture()
+        {
             state.values.atmosphere = viz_scene::AtmospherePreference {
                 amount: atmosphere.clamp(0.0, 1.0),
             }
             .resolve();
             state.view.ambient = ambient.clamp(0.0, 2.0);
+            state.view.exposure = exposure.clamp(0.05, 4.0);
+            state.view.laser_brightness = laser_brightness.clamp(0.0, 4.0);
+            state.view.show_labels = *show_labels;
+            state.view.quality = match quality {
+                viz_helper::protocol::RenderQuality::Draft => viz_scene::RenderQuality::Draft,
+                viz_helper::protocol::RenderQuality::Standard => viz_scene::RenderQuality::Standard,
+                viz_helper::protocol::RenderQuality::High => viz_scene::RenderQuality::High,
+                viz_helper::protocol::RenderQuality::Ultra => viz_scene::RenderQuality::Ultra,
+            };
         }
         state.resize_for(&embedding)?;
         match state.draw(epoch, &mut source) {

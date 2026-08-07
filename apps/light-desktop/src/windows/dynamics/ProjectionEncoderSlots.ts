@@ -124,8 +124,8 @@ export function projectionEncoderSlots(
 			write(field.apply(value), group),
 	}));
 
-	// Page one places the projection; page two orients it. Planar has only a direction, so it
-	// keeps everything on page one when the deck is wide enough.
+	// Page one places the projection; page two orients it. Planar reads no position, so it has
+	// nothing to place and keeps everything on page one.
 	const placing = kind === "planar" ? fields : fields.slice(0, 3);
 	const orienting = kind === "planar" ? [] : fields.slice(3);
 	const first = [typeSlot, ...placing];

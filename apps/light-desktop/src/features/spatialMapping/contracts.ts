@@ -17,18 +17,20 @@ export interface Position3d {
  */
 export type ProjectionKind = "planar" | "cylindrical" | "spherical";
 
+/**
+ * One position and one direction place every kind; nothing else is needed to derive the rest.
+ *
+ * `view_direction` is the viewing direction for planar, the central axis for cylindrical, and
+ * the direction from the anchor to the centre of the spread for spherical. `rotation_degrees` is
+ * the roll about it: the turn of the viewing plane for planar, the start angle around the axis
+ * for cylindrical, and without effect for spherical.
+ */
 export interface SpatialProjection {
 	anchor: Position3d;
 	view_direction: Position3d;
 	rotation_degrees: number;
 	preset?: ProjectionPreset | null;
 	kind?: ProjectionKind;
-	/** Euler degrees about X, Y then Z turning world +Z into the cylinder axis. Cylindrical only. */
-	axis_rotation?: Position3d;
-	/** Cylindrical: where the spread starts around the axis. Spherical: the centre's azimuth. */
-	start_angle_degrees?: number;
-	/** Spherical only: the centre's elevation above the plane perpendicular to world +Z. */
-	elevation_degrees?: number;
 }
 
 export type SpatialSelectionShape =

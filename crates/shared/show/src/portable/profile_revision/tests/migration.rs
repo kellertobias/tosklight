@@ -15,7 +15,10 @@ fn schema_three_upgrade_deduplicates_nested_profiles_without_rewriting_objects()
 
     let migrated = ShowStore::open(&path).unwrap();
     let profiles = migrated.list_fixture_profile_revisions().unwrap();
-    assert_eq!(schema_version(&migrated.conn), 6);
+    assert_eq!(
+        schema_version(&migrated.conn),
+        crate::portable::SHOW_SCHEMA_VERSION
+    );
     assert_eq!(migrated.portable_revision().unwrap().value(), 0);
     assert_eq!(profiles.len(), 1);
     assert_eq!(profiles[0].profile()["future_asset"]["bytes"], "AAECAwQ=");
@@ -34,7 +37,10 @@ fn schema_three_upgrade_preserves_opaque_snapshot_names() {
     drop(show);
 
     let migrated = ShowStore::open(&path).unwrap();
-    assert_eq!(schema_version(&migrated.conn), 6);
+    assert_eq!(
+        schema_version(&migrated.conn),
+        crate::portable::SHOW_SCHEMA_VERSION
+    );
     assert_eq!(migrated.portable_revision().unwrap().value(), 0);
     assert!(
         migrated
@@ -107,7 +113,10 @@ fn reopening_a_migrated_show_is_idempotent() {
     drop(first_open);
     let reopened = ShowStore::open(&path).unwrap();
     assert_eq!(reopened.list_fixture_profile_revisions().unwrap(), before);
-    assert_eq!(schema_version(&reopened.conn), 6);
+    assert_eq!(
+        schema_version(&reopened.conn),
+        crate::portable::SHOW_SCHEMA_VERSION
+    );
     assert_eq!(raw_body(&reopened.conn, "fixture", "one"), body);
     drop(reopened);
     remove_show(&path);

@@ -84,36 +84,26 @@ function shapeStage(value: unknown): DynamicShapeStage {
 }
 
 function validateProjection(projection: SpatialProjection) {
-	const kind = projection.kind ?? "planar";
-	const rotation = projection.axis_rotation ?? { x: 0, y: 0, z: 0 };
 	const values = [
 		projection.anchor.x,
 		projection.anchor.y,
 		projection.anchor.z,
 		projection.rotation_degrees,
-		...(kind === "planar"
-			? [
-					projection.view_direction.x,
-					projection.view_direction.y,
-					projection.view_direction.z,
-				]
-			: [projection.start_angle_degrees ?? 0]),
-		...(kind === "cylindrical" ? [rotation.x, rotation.y, rotation.z] : []),
-		...(kind === "spherical" ? [projection.elevation_degrees ?? 0] : []),
+		projection.view_direction.x,
+		projection.view_direction.y,
+		projection.view_direction.z,
 	];
 	if (values.some((value) => !Number.isFinite(value)))
 		return "Every Projection value must be finite.";
-	// Only a planar projection looks along a direction; the other kinds derive their own
-	// frame from the centre point and their angles.
+	// One direction orients all three kinds, so none of them can do without it.
 	if (
-		kind === "planar" &&
 		Math.hypot(
 			projection.view_direction.x,
 			projection.view_direction.y,
 			projection.view_direction.z,
 		) <= 1e-12
 	)
-		return "View direction must not be zero.";
+		return "Direction must not be zero.";
 	return null;
 }
 

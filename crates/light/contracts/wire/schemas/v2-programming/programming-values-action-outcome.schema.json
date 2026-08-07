@@ -923,29 +923,11 @@
       ]
     },
     "DynamicSpatialProjectionProjection": {
+      "description": "One position and one direction place every projection kind.\n\n`view_direction` is the viewing direction for planar, the central axis for cylindrical, and\nthe direction to the centre of the spread for spherical. `rotation_degrees` is the roll about\nit: the turn of the viewing plane for planar and the start angle around the axis for\ncylindrical. `anchor` is the plane origin for planar and the centre point for the other two.",
       "type": "object",
       "properties": {
         "anchor": {
           "$ref": "#/$defs/DynamicSpatialPosition3dProjection"
-        },
-        "axis_rotation": {
-          "description": "Euler degrees about X, Y then Z turning world +Z into the cylinder axis. Cylindrical only.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/DynamicSpatialVector3Projection"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "elevation_degrees": {
-          "description": "Spherical only: the centre's elevation above the plane perpendicular to world +Z.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double"
         },
         "kind": {
           "anyOf": [
@@ -969,14 +951,6 @@
         },
         "rotation_degrees": {
           "type": "number",
-          "format": "double"
-        },
-        "start_angle_degrees": {
-          "description": "Cylindrical: where the spread starts around the axis. Spherical: the centre's azimuth.",
-          "type": [
-            "number",
-            "null"
-          ],
           "format": "double"
         },
         "view_direction": {

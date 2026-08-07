@@ -97,6 +97,19 @@ export function reduceWorkspace(
 					0,
 					1,
 				),
+				stageVizQuality: action.vizQuality ?? state.stageVizQuality,
+				stageVizExposure: clamp(
+					action.vizExposure ?? state.stageVizExposure,
+					0.05,
+					4,
+				),
+				stageVizLaserBrightness: clamp(
+					action.vizLaserBrightness ?? state.stageVizLaserBrightness,
+					0,
+					4,
+				),
+				stageVizShowLabels:
+					action.vizShowLabels ?? state.stageVizShowLabels,
 			};
 		case "SET_DMX_DOT_SIZE":
 			return { ...state, dmxDotSize: action.value };

@@ -31,10 +31,10 @@ enum FromChannel {
     /// events the surface would otherwise have received.
     Input(viz_helper::protocol::PaneInput),
     /// The operator's picture settings, which belong to this process rather than to the desk.
-    Picture {
-        atmosphere: f32,
-        ambient: f32,
-    },
+    ///
+    /// Carried whole rather than field by field: the renderer applies every one of them together,
+    /// and a message that grows should not need three places changed to reach the render loop.
+    Picture(viz_helper::protocol::ToHelper),
     /// The channel ended, with the reason to show.
     Finished(String),
 }
@@ -79,8 +79,8 @@ pub struct HelperSource {
     /// Forwarded pane input, coalesced into one step per gesture so the render loop applies a
     /// gesture rather than replaying a pointer track.
     input: Vec<viz_helper::protocol::PaneInput>,
-    /// The operator's haze and environment brightness, once the desk has said.
-    picture: Option<(f32, f32)>,
+    /// The operator's picture settings, once the desk has said.
+    picture: Option<viz_helper::protocol::ToHelper>,
 }
 
 impl HelperSource {
@@ -182,9 +182,9 @@ impl HelperSource {
         });
     }
 
-    /// The operator's haze and environment brightness, if they have set any.
-    pub fn picture(&self) -> Option<(f32, f32)> {
-        self.picture
+    /// The operator's picture settings, if they have set any.
+    pub fn picture(&self) -> Option<&viz_helper::protocol::ToHelper> {
+        self.picture.as_ref()
     }
 
     /// Take the pane input that arrived since the last frame.
@@ -238,13 +238,7 @@ fn read_channel(mut from_desk: impl Read, outbox: &Sender<FromChannel>) {
                 surface_service,
             })),
             ToHelper::Input { input } => outbox.send(FromChannel::Input(input)),
-            ToHelper::Picture {
-                atmosphere,
-                ambient,
-            } => outbox.send(FromChannel::Picture {
-                atmosphere,
-                ambient,
-            }),
+            picture @ ToHelper::Picture { .. } => outbox.send(FromChannel::Picture(picture)),
             // Handled by the channel loop, which turns it into `Finished`.
             ToHelper::Hello { .. } | ToHelper::Shutdown => Ok(()),
         };
@@ -297,10 +291,7 @@ impl SceneProvider for HelperSource {
                     self.embedding = Some(embedding);
                 }
                 Ok(FromChannel::Input(input)) => self.input.push(input),
-                Ok(FromChannel::Picture {
-                    atmosphere,
-                    ambient,
-                }) => self.picture = Some((atmosphere, ambient)),
+                Ok(FromChannel::Picture(picture)) => self.picture = Some(picture),
                 Ok(FromChannel::Finished(reason)) => {
                     self.finished = true;
                     self.connection = ConnectionState::Failed {

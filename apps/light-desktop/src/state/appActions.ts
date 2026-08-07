@@ -127,6 +127,10 @@ export type Action =
 			renderQuality?: AppState["stageRenderQuality"];
 			environmentBrightness?: number;
 			vizAtmosphere?: number;
+			vizQuality?: AppState["stageVizQuality"];
+			vizExposure?: number;
+			vizLaserBrightness?: number;
+			vizShowLabels?: boolean;
 	  }
 	| { type: "SET_DMX_DOT_SIZE"; value: AppState["dmxDotSize"] }
 	| {

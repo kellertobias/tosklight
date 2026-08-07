@@ -241,12 +241,21 @@ impl StagePane {
     }
 
     /// Send the operator's picture settings on to the renderer, which owns this picture.
-    pub(crate) fn send_picture(&self, atmosphere: f32, ambient: f32) -> Result<(), String> {
+    pub(crate) fn send_picture(&self, picture: Picture) -> Result<(), String> {
         let mut guard = self.inner.lock().map_err(|_| "the Stage pane")?;
         if let Some(running) = guard.as_mut() {
             running.send(&ToHelper::Picture {
-                atmosphere,
-                ambient,
+                atmosphere: picture.atmosphere,
+                ambient: picture.ambient,
+                quality: match picture.quality.as_str() {
+                    "draft" => viz_helper::protocol::RenderQuality::Draft,
+                    "standard" => viz_helper::protocol::RenderQuality::Standard,
+                    "ultra" => viz_helper::protocol::RenderQuality::Ultra,
+                    _ => viz_helper::protocol::RenderQuality::High,
+                },
+                exposure: picture.exposure,
+                laser_brightness: picture.laser_brightness,
+                show_labels: picture.show_labels,
             });
         }
         Ok(())
@@ -655,13 +664,25 @@ pub(crate) fn stage_pane_input(
 }
 
 /// The operator's picture settings for the pane, which belong to the renderer drawing it.
+///
+/// Named as the web layer names them, for the reason [`PaneGeometry`] is.
+#[derive(Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct Picture {
+    atmosphere: f32,
+    ambient: f32,
+    quality: String,
+    exposure: f32,
+    laser_brightness: f32,
+    show_labels: bool,
+}
+
 #[tauri::command]
 pub(crate) fn set_stage_pane_picture(
     pane: tauri::State<'_, StagePane>,
-    atmosphere: f32,
-    ambient: f32,
+    picture: Picture,
 ) -> Result<(), String> {
-    pane.send_picture(atmosphere, ambient)
+    pane.send_picture(picture)
 }
 
 /// What is drawing the pane and how it reaches the desk, plus whatever last went wrong.

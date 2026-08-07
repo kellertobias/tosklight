@@ -45,19 +45,19 @@ describe("projection encoder slots", () => {
 	it("places the projection on page one and orients it on page two", () => {
 		expect(pages(cylindrical)).toEqual([
 			["Projection", "Position X", "Position Y", "Position Z"],
-			["Rotation X", "Rotation Y", "Rotation Z", "Start angle"],
+			["Direction X", "Direction Y", "Direction Z", "Rotation"],
 		]);
 	});
 
 	it("keeps the two pages meaningful at a wider encoder layout", () => {
-		// Without padding the rotations would climb onto page one at width 10.
+		// Without padding the direction would climb onto page one at width 10.
 		expect(pages(cylindrical, 10)).toEqual([
 			["Projection", "Position X", "Position Y", "Position Z"],
-			["Rotation X", "Rotation Y", "Rotation Z", "Start angle"],
+			["Direction X", "Direction Y", "Direction Z", "Rotation"],
 		]);
 	});
 
-	it("gives a spherical projection two centre angles and no rotations", () => {
+	it("gives a spherical projection a direction and no rotation", () => {
 		const spherical = dynamic({
 			projection: {
 				type: "replace",
@@ -72,7 +72,7 @@ describe("projection encoder slots", () => {
 		});
 		expect(pages(spherical)).toEqual([
 			["Projection", "Position X", "Position Y", "Position Z"],
-			["Centre azimuth", "Centre elevation"],
+			["Direction X", "Direction Y", "Direction Z"],
 		]);
 	});
 

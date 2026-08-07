@@ -20,6 +20,13 @@ type DynamicObject = ShowObject<"dynamic">;
 
 afterEach(cleanup);
 
+/** The projection kind is a segmented toggle, so each kind is a radio inside its group. */
+function kindOption(name: string) {
+	return within(
+		screen.getByRole("radiogroup", { name: "Projection" }),
+	).getByRole("radio", { name });
+}
+
 const inheritedMapping = {
 	projection: {
 		anchor: { x: 0, y: 0, z: 0 },
@@ -107,27 +114,26 @@ describe("DynamicProjectionView", () => {
 		expect(screen.queryByRole("button", { name: "Apply" })).toBeNull();
 
 		fireEvent.click(screen.getByRole("radio", { name: "Override" }));
-		// Planar looks along a direction and takes a view preset.
-		expect(screen.getByRole("button", { name: "View preset" })).toBeTruthy();
+		// Planar looks along a direction and takes a view preset, and reads no position.
+		expect(screen.getByRole("radiogroup", { name: "View preset" })).toBeTruthy();
 		expect(screen.getByLabelText("Direction X")).toBeTruthy();
-		expect(screen.queryByLabelText("Start angle")).toBeNull();
+		expect(screen.queryByLabelText("Position X")).toBeNull();
 
-		fireEvent.click(screen.getByRole("button", { name: "Projection" }));
-		fireEvent.click(screen.getByRole("option", { name: "Cylindrical" }));
+		fireEvent.click(kindOption("Cylindrical"));
 
-		// A cylinder is placed and oriented, and has no viewing direction to preset.
-		expect(await screen.findByLabelText("Start angle")).toBeTruthy();
+		// A cylinder is placed and oriented by the same two, and has no view to preset.
+		expect(await screen.findByLabelText("Position X")).toBeTruthy();
+		expect(screen.getByLabelText("Direction X")).toBeTruthy();
+		expect(screen.getByLabelText("Rotation")).toBeTruthy();
+		expect(
+			screen.queryByRole("radiogroup", { name: "View preset" }),
+		).toBeNull();
+
+		fireEvent.click(kindOption("Spherical"));
+		// A roll about the centre of a spherical spread does not move it, so it has none.
+		expect(await screen.findByLabelText("Direction X")).toBeTruthy();
 		expect(screen.getByLabelText("Position X")).toBeTruthy();
-		expect(screen.getByLabelText("Rotation Y")).toBeTruthy();
-		expect(screen.queryByRole("button", { name: "View preset" })).toBeNull();
-		expect(screen.queryByLabelText("Direction X")).toBeNull();
-
-		fireEvent.click(screen.getByRole("button", { name: "Projection" }));
-		fireEvent.click(screen.getByRole("option", { name: "Spherical" }));
-		// A sphere has no axis, so two angles replace the three rotations.
-		expect(await screen.findByLabelText("Centre azimuth")).toBeTruthy();
-		expect(screen.getByLabelText("Centre elevation")).toBeTruthy();
-		expect(screen.queryByLabelText("Rotation Y")).toBeNull();
+		expect(screen.queryByLabelText("Rotation")).toBeNull();
 
 		const frozen = dynamic(
 			{ type: "frozen_targets", targets: ["fixture-1"] },
@@ -166,10 +172,9 @@ describe("DynamicProjectionView", () => {
 
 		await screen.findByText("Inherit group mapping \u00b7 Group front");
 		fireEvent.click(screen.getByRole("radio", { name: "Override" }));
-		const preset = screen.getByRole("button", { name: "View preset" });
-		expect(preset).toHaveTextContent("Top");
-		fireEvent.click(preset);
-		fireEvent.click(screen.getByRole("option", { name: "Front" }));
+		const presets = screen.getByRole("radiogroup", { name: "View preset" });
+		expect(within(presets).getByRole("radio", { name: "Top" })).toBeChecked();
+		fireEvent.click(within(presets).getByRole("radio", { name: "Front" }));
 
 		// No Apply: the change saves itself once the operator stops editing.
 		await waitFor(() => expect(apply).toHaveBeenCalled());
@@ -205,8 +210,7 @@ describe("DynamicProjectionView", () => {
 
 		await screen.findByText("Inherit group mapping \u00b7 Group front");
 		fireEvent.click(screen.getByRole("radio", { name: "Override" }));
-		fireEvent.click(screen.getByRole("button", { name: "Projection" }));
-		fireEvent.click(screen.getByRole("option", { name: "Cylindrical" }));
+		fireEvent.click(kindOption("Cylindrical"));
 
 		await waitFor(() => expect(apply).toHaveBeenCalled());
 		const sent = apply.mock.calls.at(-1)?.[0];

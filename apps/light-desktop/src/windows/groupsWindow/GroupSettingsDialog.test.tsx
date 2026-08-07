@@ -108,16 +108,17 @@ describe("Group settings modal", () => {
 			},
 		});
 		renderDialog();
-		fireEvent.click(screen.getByRole("tab", { name: "Projection" }));
-
-		await waitFor(() =>
-			expect(screen.getByText("Inherited from Group 2")).toBeInTheDocument(),
-		);
-		// Ranks belong to the ordering, so they are shown on Phase; the Projection tab
-		// shows the projection itself instead of a list of projected coordinates.
+		// The Phase preview plots the authoritative projected positions rather than listing
+		// them, so the snapshot is read through the picture the operator actually looks at.
 		fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
-		expect(screen.getByText(/1 authoritative ranks/)).toBeInTheDocument();
-		expect(screen.getByText("U 1.25 · V -2.5")).toBeInTheDocument();
+		const preview = await screen.findByRole("img", {
+			name: /Phase order across the projected plane/,
+		});
+		const plotted = preview.querySelectorAll("circle.phase-order-fixture");
+		expect(plotted).toHaveLength(1);
+		// One rank out of one, so the only fixture sits at the black end of the shading.
+		expect(plotted[0]?.getAttribute("fill")).toBe("hsl(0 0% 0.0%)");
+		expect(screen.getByText(/1 rank/)).toBeInTheDocument();
 		expect(settings).toHaveBeenCalledWith("4");
 	});
 
@@ -169,18 +170,17 @@ describe("Group settings modal", () => {
 		);
 	});
 
-	it("shows mapping state without enabling writes when the typed server action is absent", () => {
+	it("shows the projection without enabling writes when the typed server action is absent", () => {
 		managementAvailable = false;
 		renderDialog(group({ mapping: defaultSpatialMapping() }));
 		fireEvent.click(screen.getByRole("tab", { name: "Projection" }));
-		expect(screen.getByText("Local override")).toBeInTheDocument();
 		expect(
 			screen.getByText(/revisioned Group mapping action/),
 		).toBeInTheDocument();
+		// Everything that would write is unusable, but the values are still readable.
 		expect(screen.getByRole("button", { name: "Top" })).toBeDisabled();
-		expect(
-			screen.getByRole("button", { name: "Remove local mapping" }),
-		).toBeDisabled();
+		expect(screen.getByRole("radio", { name: "Cylindrical" })).toBeDisabled();
+		expect(screen.getByLabelText("Direction X")).toBeDisabled();
 	});
 
 	it("sends one complete revisioned mapping when a Phase shape changes", async () => {

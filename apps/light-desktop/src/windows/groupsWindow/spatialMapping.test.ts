@@ -79,7 +79,7 @@ describe("Group spatial mapping presentation", () => {
 		const zeroDirection = defaultSpatialMapping();
 		zeroDirection.projection.view_direction = { x: 0, y: 0, z: 0 };
 		expect(validateSpatialMapping(zeroDirection)).toBe(
-			"View direction must not be zero.",
+			"Direction must not be zero.",
 		);
 
 		const nonFinite = defaultSpatialMapping();

@@ -1,4 +1,4 @@
-import { NumberField, RadioField, SelectField } from "@tosklight/ui";
+import { MultiValueToggleField, NumberField, RadioField } from "@tosklight/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
 	DynamicSpatialMappingOverrideProjection,
@@ -13,7 +13,10 @@ import {
 } from "../../features/dynamics/dynamicSpatialDraft";
 import type { ShowObject } from "../../features/showObjects/contracts";
 import { ProjectionStagePreview } from "../../features/spatialMapping/ProjectionStagePreview";
-import type { ProjectionKind } from "../../features/spatialMapping/contracts";
+import type {
+	ProjectionKind,
+	ProjectionPreset,
+} from "../../features/spatialMapping/contracts";
 import {
 	PROJECTION_KINDS,
 	PROJECTION_PRESETS,
@@ -263,7 +266,9 @@ function ProjectionFields({
 	const kind = projectionKind(value);
 	return (
 		<div className="dynamic-projection-fields">
-			<SelectField
+			{/* The same toggle the Group's Projection uses, so the two read as one control. */}
+			<MultiValueToggleField
+				className="dynamic-projection-kinds"
 				label="Projection"
 				ariaLabel="Projection"
 				value={kind}
@@ -276,7 +281,8 @@ function ProjectionFields({
 				}
 			/>
 			{supportsPreset(value) && (
-				<SelectField
+				<MultiValueToggleField
+					className="dynamic-projection-presets"
 					label="View preset"
 					ariaLabel="View preset"
 					value={value.preset ?? "custom"}
@@ -289,13 +295,13 @@ function ProjectionFields({
 					]}
 					onChange={(preset) => {
 						if (preset === "custom") onChange({ ...value, preset: null });
-						else onChange(projectionForPreset(preset));
+						else onChange(projectionForPreset(preset as ProjectionPreset));
 					}}
 				/>
 			)}
 			{projectionFields(value).map((field) => (
 				<NumberField
-					key={field.key}
+					key={`${kind}-${field.key}`}
 					label={field.label}
 					value={field.value}
 					unit={field.unit}
