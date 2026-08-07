@@ -175,6 +175,11 @@ impl HelperSource {
         });
     }
 
+    /// Answer a pick with the fixture the operator pointed at.
+    pub fn send_picked(&mut self, fixture: Option<String>, additive: bool) {
+        self.send(&viz_helper::protocol::FromHelper::Picked { fixture, additive });
+    }
+
     /// Tell the desk about something the operator has to see, without stopping.
     pub fn report(&mut self, detail: &str) {
         self.send(&viz_helper::protocol::FromHelper::Error {

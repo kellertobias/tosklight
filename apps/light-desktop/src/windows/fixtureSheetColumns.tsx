@@ -216,7 +216,9 @@ function colorColumn(compactMode: FixtureSheetCompactMode): Column {
 						fixture.groupValues?.color.accessibleName ?? fixture.colorLabel
 					}
 				>
-					<FixtureColorDot color={fixture.color} />
+					{fixture.colorAvailable !== false && (
+						<FixtureColorDot color={fixture.color} />
+					)}
 					<span className="fixture-sheet-value-text">{fixture.colorLabel}</span>
 				</span>
 				{fixture.preloadColor && (
@@ -254,20 +256,22 @@ function positionColumn(compactMode: FixtureSheetCompactMode): Column {
 						`${fixture.pan}° / ${fixture.tilt}°`
 					}
 				>
-					<i className="position-glyph">
-						<i
-							style={{
-								left: `${fixture.pan % 75}%`,
-								top: `${fixture.tilt % 65}%`,
-							}}
-						/>
-					</i>
+					{fixture.positionAvailable !== false && (
+						<i className="position-glyph">
+							<i
+								style={{
+									left: `${fixture.pan % 75}%`,
+									top: `${fixture.tilt % 65}%`,
+								}}
+							/>
+						</i>
+					)}
 					<span className="fixture-sheet-value-text">
-						{fixture.groupValues?.position.members
-							.map((member) => member.text)
-							.join(" / ") ??
-							fixture.positionLabel ??
-							`${fixture.pan}° / ${fixture.tilt}°`}
+						{fixture.positionAvailable !== false
+							? (fixture.groupValues?.position.members
+									.map((member) => member.text)
+									.join(" / ") ?? `${fixture.pan}° / ${fixture.tilt}°`)
+							: (fixture.positionLabel ?? "—")}
 					</span>
 				</span>
 				{fixture.preloadPan != null && fixture.preloadTilt != null && (

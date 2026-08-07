@@ -15,6 +15,9 @@ import type { NativeStagePane } from "./useNativeStagePane";
  * arrive, and forwarded as intent — one message per gesture step rather than one per pointermove,
  * because every one of them is an IPC round trip.
  */
+/** Logical points of travel past which a press is aiming the camera rather than selecting. */
+const SELECT_SLOP = 4;
+
 export function NativeStageSurface({
 	pane,
 	interactive = true,
@@ -23,6 +26,8 @@ export function NativeStageSurface({
 	interactive?: boolean;
 }) {
 	const dragging = useRef<{ x: number; y: number; button: number } | null>(null);
+	/** How far the pointer travelled, so a drag to aim the camera is not read as a click to select. */
+	const travelled = useRef(0);
 	// While the renderer is still starting, the desk's own canvas is drawing underneath and this
 	// is only here to be measured. Taking its pointer events would make the Stage briefly dead.
 	const capturing = interactive && pane.active;
@@ -43,6 +48,7 @@ export function NativeStageSurface({
 					y: event.clientY,
 					button: event.button,
 				};
+				travelled.current = 0;
 				event.currentTarget.setPointerCapture(event.pointerId);
 			}}
 			onPointerMove={(event) => {
@@ -51,6 +57,7 @@ export function NativeStageSurface({
 				const dx = event.clientX - drag.x;
 				const dy = event.clientY - drag.y;
 				if (dx === 0 && dy === 0) return;
+				travelled.current += Math.abs(dx) + Math.abs(dy);
 				dragging.current = { ...drag, x: event.clientX, y: event.clientY };
 				/*
 				 * The primary button orbits, which is what the desk's own 3D Stage does, so an
@@ -64,7 +71,26 @@ export function NativeStageSurface({
 				pane.send(gesture, dx, dy);
 			}}
 			onPointerUp={(event) => {
+				const drag = dragging.current;
 				dragging.current = null;
+				/*
+				 * A primary press that barely moved is a click on a fixture, not an attempt to aim
+				 * the camera. The threshold is what separates them: an operator picking a fixture
+				 * on a touch surface never holds perfectly still, and one orbiting never means to
+				 * select what they started on.
+				 */
+				if (capturing && drag?.button === 0 && travelled.current < SELECT_SLOP) {
+					const rect = event.currentTarget.getBoundingClientRect();
+					if (rect.width > 0 && rect.height > 0) {
+						pane.send(
+							event.shiftKey || event.metaKey || event.ctrlKey
+								? "pick-add"
+								: "pick",
+							(event.clientX - rect.left) / rect.width,
+							(event.clientY - rect.top) / rect.height,
+						);
+					}
+				}
 				if (event.currentTarget.hasPointerCapture(event.pointerId))
 					event.currentTarget.releasePointerCapture(event.pointerId);
 			}}

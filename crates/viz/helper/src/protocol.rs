@@ -194,6 +194,20 @@ pub enum PaneInput {
     Truck { dx: f32, dy: f32 },
     /// Toward or away from the point being looked at, in wheel notches; positive moves in.
     Zoom { amount: f32 },
+    /// What is under the pointer, as a fraction of the pane's own size, `0..=1` from its top left.
+    ///
+    /// A fraction rather than points or pixels so no scale factor has to agree across the channel:
+    /// the renderer knows how many pixels it drew, and nothing else needs to.
+    ///
+    /// The renderer answers with [`FromHelper::Picked`] rather than acting: which fixtures are
+    /// selected is the desk's, and a renderer that decided it would be a second opinion about the
+    /// one thing an operator must be able to trust.
+    Pick {
+        x: f32,
+        y: f32,
+        /// Whether the operator was extending the selection rather than replacing it.
+        additive: bool,
+    },
     /// Put the camera somewhere exactly, for a control surface that addresses it by number rather
     /// than by dragging — an encoder, above all.
     Place {
@@ -246,6 +260,14 @@ pub enum FromHelper {
         width: u32,
         height: u32,
         rgba: Vec<u8>,
+    },
+    /// What the operator pointed at, in answer to [`ToHelper::Pick`].
+    ///
+    /// `None` for a click on nothing, which is how an operator clears a selection.
+    Picked {
+        /// The fixture's own id, as the desk knows it.
+        fixture: Option<String>,
+        additive: bool,
     },
     /// What this helper can do, sent once immediately after `Ready`.
     ///

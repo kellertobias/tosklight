@@ -83,7 +83,9 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
             return Ok(());
         };
         for input in source.take_input() {
-            state.apply(input);
+            if let Some((fixture, additive)) = state.apply(input) {
+                source.send_picked(fixture, additive);
+            }
         }
         // The picture settings are the renderer's own, and the desk sends them rather than
         // applying them: it is not the one drawing this.
@@ -232,8 +234,12 @@ impl PaneState {
     /// renderers does not have to learn the pane twice: drag orbits about what is being looked at,
     /// the wheel moves toward it. What the pane adds is the middle and secondary buttons, which
     /// the desk's Stage has nowhere to put.
-    fn apply(&mut self, input: PaneInput) {
+    /// Returns what the operator pointed at, when the gesture was a pick.
+    fn apply(&mut self, input: PaneInput) -> Option<(Option<String>, bool)> {
         use glam::Vec3;
+        if let PaneInput::Pick { x, y, additive } = input {
+            return Some((self.pick_at(x, y), additive));
+        }
         self.camera_is_local = true;
         let camera = &mut self.view.camera;
         let to_eye = camera.position - camera.target;
@@ -275,6 +281,9 @@ impl PaneState {
                 let scaled = (distance * (0.9_f32).powf(amount)).clamp(0.05, 5_000.0);
                 camera.position = camera.target + to_eye.normalize_or_zero() * scaled;
             }
+            // Answered above, before the camera is touched: pointing at a fixture must not move
+            // the view the operator is pointing with.
+            PaneInput::Pick { .. } => {}
             PaneInput::Place {
                 x,
                 y,
@@ -308,6 +317,37 @@ impl PaneState {
                     camera.target = camera.position + direction * reach;
                 }
             }
+        }
+        None
+    }
+
+    /// What is under a point in the pane's own logical coordinates.
+    ///
+    /// The renderer resolves the geometry and answers with a fixture; it does not decide what is
+    /// selected. Selection is the desk's, and a renderer holding a second opinion about it would
+    /// be a second answer to the one question an operator has to be able to trust.
+    fn pick_at(&self, x: f32, y: f32) -> Option<String> {
+        let (width, height) = (self.size.0 as f32, self.size.1 as f32);
+        let camera = viz_render::ResolvedCamera::resolve(
+            &self.view.camera,
+            self.view.mode,
+            width / height.max(1.0),
+            self.scene.bounds,
+        );
+        // The pane reports where the pointer was as a fraction of its own size, so no scale factor
+        // has to agree across the channel: the renderer knows how many pixels it drew and nothing
+        // else needs to.
+        let ray = camera.ray_through(x * width, y * height, width, height);
+        let reach = (self.view.camera.position - self.view.camera.target).length();
+        match viz_render::pick(&self.scene, &ray, reach).element {
+            viz_render::PickedElement::Fixture(index) => self
+                .scene
+                .fixtures
+                .get(index)
+                .map(|fixture| fixture.fixture_id.to_string()),
+            // Scenery is not selectable, and an empty click clears the selection — both are the
+            // same answer here: nothing.
+            _ => None,
         }
     }
 

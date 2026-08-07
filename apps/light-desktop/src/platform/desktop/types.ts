@@ -40,7 +40,13 @@ export interface StagePaneGeometry {
 	surfaceHeight: number;
 }
 
-export type StagePaneGesture = "orbit" | "pan" | "truck" | "zoom";
+export type StagePaneGesture =
+	| "orbit"
+	| "pan"
+	| "truck"
+	| "zoom"
+	| "pick"
+	| "pick-add";
 
 /** Everything the renderer draws the pane with, as the operator set it. */
 export interface StagePanePicture {
@@ -78,6 +84,11 @@ export interface DesktopBridge {
 	setStagePanePicture(picture: StagePanePicture): Promise<void>;
 	/** What is drawing the pane, and whatever last went wrong with it. */
 	stagePaneStatus(): Promise<[string | null, string | null]>;
+	/**
+	 * What the operator pointed at in the pane since this was last asked, as `[fixtureId, additive]`.
+	 * A null fixture is a click on nothing, which clears the selection.
+	 */
+	takeStagePanePicks(): Promise<Array<[string | null, boolean]>>;
 	packagedStageBenchmarkConfig(): Promise<PackagedStageBenchmarkConfig | null>;
 	packagedStageBenchmarkPrepared(): Promise<boolean>;
 	focusPackagedStageBenchmarkWindow(): Promise<void>;

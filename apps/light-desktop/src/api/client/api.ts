@@ -1,4 +1,5 @@
 import { AttributeConfigurationApiClient } from "./attributeConfiguration";
+import { CueThumbnailApiClient } from "./cueThumbnails";
 import { DeskManagementApiClient } from "./deskManagement";
 import { DiscoveryApiClient } from "./discovery";
 import { DynamicsApiClient } from "./dynamics";
@@ -29,6 +30,7 @@ export function createLightApi(baseUrl?: string) {
 	return {
 		runtime,
 		attributes: new AttributeConfigurationApiClient(transport),
+		cueThumbnails: new CueThumbnailApiClient(transport),
 		desk: new DeskManagementApiClient(transport),
 		discovery: new DiscoveryApiClient(transport),
 		dynamics: new DynamicsApiClient(transport),

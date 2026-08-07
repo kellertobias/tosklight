@@ -188,11 +188,13 @@ function fixtureSheetRow({
 		indented: target.indented,
 		dimmer: Math.round(intensity * 100),
 		color,
+		colorAvailable: groupValues.color.available,
 		colorLabel: groupValues.color.available
 			? groupValues.color.members.map((member) => member.text).join(" / ")
 			: "—",
 		pan: Math.round(pan * 100),
 		tilt: Math.round(tilt * 100),
+		positionAvailable: groupValues.position.available,
 		preloadDimmer:
 			preloadIntensity == null ? null : Math.round(preloadIntensity * 100),
 		preloadColor:
@@ -360,6 +362,8 @@ function demoFixtureSheetRows() {
 		patch: "",
 		icon: null,
 		fixtureId: "",
+		colorAvailable: true,
+		positionAvailable: true,
 		targetKind: "fixture" as const,
 		parentFixtureId: "",
 		childFixtureIds: [] as string[],
@@ -482,11 +486,18 @@ type OptionalFixtureSheetRuntime<T> = T extends {
 }
 	? Omit<
 			T,
-			"dynamicStack" | "groupValues" | "highlightBypassesGroupMaster"
+			| "dynamicStack"
+			| "groupValues"
+			| "highlightBypassesGroupMaster"
+			| "colorAvailable"
+			| "positionAvailable"
 		> & {
 			dynamicStack?: Stack;
 			groupValues?: Groups;
 			highlightBypassesGroupMaster?: HighlightBypass;
+			/** Omitted by presentation fixtures, which describe lanterns that carry the group. */
+			colorAvailable?: boolean;
+			positionAvailable?: boolean;
 		}
 	: T;
 

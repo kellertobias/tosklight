@@ -1,5 +1,6 @@
 import { type PropsWithChildren, useCallback } from "react";
 import { CommandHistoryStateProvider } from "../features/commandHistory/CommandHistoryState";
+import { CueThumbnailActionsProvider } from "../features/cueThumbnails/CueThumbnailActions";
 import { ConfigurationActionsProvider } from "../features/configuration/ConfigurationActionsProvider";
 import { ConfigurationStateProvider } from "../features/configuration/ConfigurationState";
 import { DeskLockActionsProvider } from "../features/deskLock/DeskLockActionsProvider";
@@ -86,7 +87,16 @@ export function ServerDeskBoundaries({
 												state.status === "connected"
 											}
 										>
-											{children}
+											<CueThumbnailActionsProvider
+												client={state.api.cueThumbnails}
+												showId={state.bootstrap?.active_show?.id ?? null}
+												canWrite={
+													sessionRole === "primary" &&
+													state.status === "connected"
+												}
+											>
+												{children}
+											</CueThumbnailActionsProvider>
 										</StageLayoutActionsProvider>
 									</StageLayoutStateProvider>
 								</ConfigurationActionsProvider>

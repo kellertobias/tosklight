@@ -41,6 +41,11 @@ enum FromRenderer {
         height: u32,
         rgba: Vec<u8>,
     },
+    /// What the operator pointed at in the pane.
+    Picked {
+        fixture: Option<String>,
+        additive: bool,
+    },
     /// Something the operator has to see. Not fatal on its own.
     Trouble(String),
     /// The channel ended, with the reason.
@@ -53,6 +58,11 @@ pub(crate) struct StagePane {
     inner: Mutex<Option<Running>>,
     /// The last thing that went wrong, for the interface to show and act on.
     trouble: Mutex<Option<String>>,
+    /// What the operator has pointed at since the interface last asked.
+    ///
+    /// Queued rather than pushed: the interface polls the pane already, and a selection that
+    /// arrived through a second mechanism could be applied out of order with the first.
+    picked: Mutex<Vec<(Option<String>, bool)>>,
     /// Whether anything is embedded, readable without taking the lock.
     ///
     /// The frame pump asks this before posting anything to the main thread. A desk with no pane —
@@ -270,6 +280,7 @@ impl StagePane {
         };
         let mut trouble = None;
         let mut ended = false;
+        let mut picked: Vec<(Option<String>, bool)> = Vec::new();
         loop {
             match running.inbox.try_recv() {
                 Ok(FromRenderer::Surface {
@@ -291,6 +302,12 @@ impl StagePane {
                     if let Err(detail) = running.compositor.accept_copy(width, height, &rgba) {
                         trouble = Some(detail);
                     }
+                }
+                Ok(FromRenderer::Picked { fixture, additive }) => {
+                    // Straight to the interface, which owns what is selected. The desk is only
+                    // carrying the answer between the renderer that resolved the geometry and the
+                    // one place allowed to decide what it means.
+                    picked.push((fixture, additive));
                 }
                 Ok(FromRenderer::Trouble(detail)) => trouble = Some(detail),
                 Ok(FromRenderer::Finished(detail)) => {
@@ -324,6 +341,12 @@ impl StagePane {
         }
         let result = running.compositor.draw();
         drop(guard);
+        for (fixture, additive) in picked {
+            self.picked
+                .lock()
+                .map_err(|_| "the Stage pane")?
+                .push((fixture, additive));
+        }
         if let Some(detail) = trouble.or_else(|| result.clone().err()) {
             *self.trouble.lock().map_err(|_| "the Stage pane")? = Some(detail);
         }
@@ -331,6 +354,13 @@ impl StagePane {
     }
 
     /// What went wrong most recently, if anything has.
+    /// Take what the operator pointed at since this was last asked.
+    pub(crate) fn take_picked(&self) -> Result<Vec<(Option<String>, bool)>, String> {
+        Ok(std::mem::take(
+            &mut *self.picked.lock().map_err(|_| "the Stage pane")?,
+        ))
+    }
+
     pub(crate) fn trouble(&self) -> Result<Option<String>, String> {
         Ok(self.trouble.lock().map_err(|_| "the Stage pane")?.clone())
     }
@@ -480,6 +510,9 @@ fn read_renderer(mut from_helper: impl std::io::Read, outbox: &Sender<FromRender
                 height,
                 rgba,
             }),
+            Ok(FromHelper::Picked { fixture, additive }) => {
+                outbox.send(FromRenderer::Picked { fixture, additive })
+            }
             Ok(FromHelper::Error { detail }) => outbox.send(FromRenderer::Trouble(detail)),
             Ok(FromHelper::Stopping { detail }) => outbox.send(FromRenderer::Finished(detail)),
             // The greeting is over; anything belonging to it arriving now is a stream out of step.
@@ -655,6 +688,17 @@ pub(crate) fn stage_pane_input(
     y: f32,
 ) -> Result<(), String> {
     let input = match gesture.as_str() {
+        // A pick carries where in the pane it happened, as a fraction of the pane's own size.
+        "pick" => PaneInput::Pick {
+            x,
+            y,
+            additive: false,
+        },
+        "pick-add" => PaneInput::Pick {
+            x,
+            y,
+            additive: true,
+        },
         "orbit" => PaneInput::Orbit { dx: x, dy: y },
         "pan" => PaneInput::Pan { dx: x, dy: y },
         "truck" => PaneInput::Truck { dx: x, dy: y },
@@ -690,6 +734,17 @@ pub(crate) fn set_stage_pane_picture(
 ///
 /// One call rather than two so the interface cannot show a renderer and a failure that were true
 /// at different moments.
+/// What the operator pointed at since this was last asked, and whether they were extending.
+///
+/// Drained by the interface, which owns what is selected. The renderer resolved the geometry; only
+/// the desk decides what pointing at a fixture means.
+#[tauri::command]
+pub(crate) fn take_stage_pane_picks(
+    pane: tauri::State<'_, StagePane>,
+) -> Result<Vec<(Option<String>, bool)>, String> {
+    pane.take_picked()
+}
+
 #[tauri::command]
 pub(crate) fn stage_pane_status(
     pane: tauri::State<'_, StagePane>,

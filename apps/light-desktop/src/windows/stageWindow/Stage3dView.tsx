@@ -2,6 +2,7 @@ import type { VisualizationSnapshot } from "../../api/types";
 import { Stage3dCanvas } from "../Stage3dCanvas";
 import { NativeStageSurface } from "./NativeStageSurface";
 import { useNativeStagePane } from "./useNativeStagePane";
+import { useStagePanePicks } from "./useStagePanePicks";
 import type { Stage3dFixture } from "../stage3dScene";
 import type { StageOptionsModel, StageWindowProps } from "./types";
 import type { StageSelectionModel } from "./useStageSelection";
@@ -48,6 +49,13 @@ export function Stage3dView({
 	 */
 	const wantsNative = options.view === "3d-viz" && !options.followPreload;
 	const nativePane = useNativeStagePane(wantsNative);
+	/*
+	 * The renderer resolves what is under the pointer; this decides what that means. Selection is
+	 * the desk's, and a renderer holding its own idea of it would be a second answer to the one
+	 * question an operator has to be able to trust — so what crosses back is a fixture, and the
+	 * gesture applied to it is the same one the desk's own Stage applies.
+	 */
+	useStagePanePicks(nativePane, selection, interactive);
 	return (
 		<div
 			className="stage-canvas stage-canvas-3d"

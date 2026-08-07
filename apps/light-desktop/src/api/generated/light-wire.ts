@@ -336,6 +336,18 @@ export type DeletedCueProjection = { id: string, number: number, };
 export type CueDeletionOutcome = { "status": "changed", request_id: string, correlation_id: string, replayed: boolean, show_id: string, show_revision: number, cue_list: CueDeletionObjectProjection, deleted_cue: DeletedCueProjection, show_event_sequence: number, persistence_warning?: string | null, } | { "status": "no_change", request_id: string, correlation_id: string, replayed: boolean, show_id: string, show_revision: number, cue_list: CueDeletionObjectProjection, deleted_cue: DeletedCueProjection, persistence_warning?: string | null, };
 export type CueDeletionErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
 export type CueDeletionErrorResponse = { kind: CueDeletionErrorKind, error: string, current_revision?: number | null, current_related_revision?: number | null, retryable: boolean, };
+export type CueThumbnailEntry = { cue_id: string, state_hash: string, updated_at: string, };
+export type CueThumbnailIndex = { show_id: string, entries: Array<CueThumbnailEntry>, };
+export type CueThumbnailUpload = { cue_id: string, state_hash: string, image_base64: string, width: number, height: number, };
+export type CueThumbnailUpdateRequest = { request_id: string, thumbnails: Array<CueThumbnailUpload>, };
+export type CueThumbnailUpdateOutcome = { request_id: string, correlation_id: string, replayed: boolean, show_id: string, stored: number,
+/**
+ * Uploads discarded because the Cue is no longer in the show. Not an error: an operator can
+ * delete a Cue while its picture is still in flight.
+ */
+skipped_cue_ids: Array<string>, };
+export type CueThumbnailErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+export type CueThumbnailErrorResponse = { kind: CueThumbnailErrorKind, error: string, retryable: boolean, };
 export type CueTransferMode = "plain" | "status";
 export type CueTransferRequest = { request_id: string, choice_id: string, mode: CueTransferMode, expected_command_line_revision: number, };
 export type CueTransferObjectProjection = { cue_list_id: string, object_id: string, object_revision: number, body: unknown, };
