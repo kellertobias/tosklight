@@ -146,6 +146,11 @@
 	border-radius: 0;
 }
 
+.ui-window-header-search .ui-text-control > .ui-input {
+	padding-top: 4px;
+	padding-bottom: 0;
+}
+
 .ui-modal-stack-layer > .search-filter-modal {
 	width: min(520px, calc(100vw - 30px));
 	padding: 0;
