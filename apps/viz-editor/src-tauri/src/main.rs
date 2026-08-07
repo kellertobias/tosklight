@@ -24,15 +24,39 @@ use tauri::Manager;
 /// no address the editor simply runs on its own, which is what happens when an operator opens it
 /// from the applications folder.
 fn scene_address() -> Option<SocketAddr> {
-    let mut arguments = std::env::args().skip(1);
+    served_address(std::env::args().skip(1)).or_else(|| {
+        std::env::var("TOSKLIGHT_VIZ_SCENE_ADDRESS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+    })
+}
+
+/// The address `--serve` names, read from arguments rather than from the process, so the rule can
+/// be checked without a process that has them.
+fn served_address(arguments: impl IntoIterator<Item = String>) -> Option<SocketAddr> {
+    let mut arguments = arguments.into_iter();
     while let Some(argument) = arguments.next() {
         if argument == "--serve" {
             return arguments.next().and_then(|value| value.parse().ok());
         }
     }
-    std::env::var("TOSKLIGHT_VIZ_SCENE_ADDRESS")
-        .ok()
-        .and_then(|value| value.parse().ok())
+    None
+}
+
+/// Whether the visualizer opened this window, rather than an operator opening the editor itself.
+///
+/// One product means one Dock tile. Opened on its own the editor is an application an operator
+/// chose and keeps its own tile; opened by the visualizer it is a window of that application, and a
+/// second tile for the same product is what an operator reads as two programs running.
+///
+/// Implied by `--serve`, which only the visualizer passes: it is how the visualizer says where to
+/// serve the document it is about to connect to, so nothing else has a reason to send it.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(dead_code, reason = "one Dock tile is a macOS idea")
+)]
+fn opened_by_the_visualizer() -> bool {
+    scene_address().is_some()
 }
 
 /// Where the shipped fixture packages live, so the fixture browser has something to offer.
@@ -114,6 +138,11 @@ fn main() {
             discovery::load_from_desk,
         ])
         .setup(|app| {
+            // Before the window is shown, so the tile never appears and then disappears.
+            #[cfg(target_os = "macos")]
+            if opened_by_the_visualizer() {
+                let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            }
             let library = fixture_library_path(app);
             let session = app.state::<session::Session>();
             session.set_library_path(library);
@@ -142,4 +171,38 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("failed to run the ToskLight Viz editor")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::served_address;
+
+    /// One product, one Dock tile. The editor keeps its own only when an operator opened it: what
+    /// distinguishes the two is the address the visualizer passes so it can connect to the
+    /// document, which nothing else has a reason to send.
+    #[test]
+    fn only_a_visualizer_launch_names_a_document_to_serve() {
+        fn arguments(values: &[&str]) -> Vec<String> {
+            values.iter().map(|value| (*value).to_owned()).collect()
+        }
+        assert_eq!(
+            served_address(arguments(&["--serve", "127.0.0.1:51234"])),
+            Some("127.0.0.1:51234".parse().expect("an address")),
+        );
+        assert_eq!(served_address(arguments(&[])), None, "opened on its own");
+        assert_eq!(
+            served_address(arguments(&["--verify"])),
+            None,
+            "a verification run is still the editor opened by itself"
+        );
+        assert_eq!(
+            served_address(arguments(&["--serve"])),
+            None,
+            "an address that was never given is no address"
+        );
+        assert_eq!(
+            served_address(arguments(&["--serve", "not an address"])),
+            None,
+        );
+    }
 }
