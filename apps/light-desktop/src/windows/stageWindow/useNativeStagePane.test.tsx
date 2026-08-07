@@ -3,7 +3,10 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DesktopBridge } from "../../platform/desktop/types";
+import type {
+	DesktopBridge,
+	StagePaneGeometry,
+} from "../../platform/desktop/types";
 import { useNativeStagePane } from "./useNativeStagePane";
 
 const bridge = vi.hoisted(() => ({ current: null as DesktopBridge | null }));
@@ -77,7 +80,7 @@ describe("useNativeStagePane", () => {
 	});
 
 	it("reports where the pane is and takes it back down again", async () => {
-		const openStagePane = vi.fn(async () => undefined);
+		const openStagePane = vi.fn(async (_geometry: StagePaneGeometry) => undefined);
 		const closeStagePane = vi.fn(async () => undefined);
 		bridge.current = stubBridge({ openStagePane, closeStagePane });
 		const { getByTestId, unmount } = render(<Probe />);
@@ -85,7 +88,7 @@ describe("useNativeStagePane", () => {
 			expect(getByTestId("pane")).toHaveAttribute("data-active", "yes"),
 		);
 		expect(openStagePane).toHaveBeenCalledOnce();
-		const geometry = openStagePane.mock.calls[0][0] as Record<string, number>;
+		const geometry = openStagePane.mock.calls[0][0];
 		expect(geometry).toMatchObject({
 			x: expect.any(Number),
 			y: expect.any(Number),
