@@ -331,6 +331,11 @@ build_debug_and_open() {
   node "$ROOT/tools/ensure-control-frontend.mjs"
   light_with_cargo_command_lock "npm run open" build_debug_app_bundle
   cp "$TARGET_DIR/debug/light-headless" "$TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-headless"
+  # The visualizer ships inside the desk, beside it, because the desk supervises it as a helper
+  # rather than launching a second application. It is built here rather than assumed present: a
+  # desk whose Open Visualizer cannot find its helper is a menu item that only ever fails.
+  cargo build --manifest-path "$ROOT/Cargo.toml" -p viz-renderer --bin viz-renderer
+  cp "$TARGET_DIR/debug/viz-renderer" "$TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/viz-renderer"
   echo "Starting development Light headless service..."
   launchctl submit -l "$DEV_SERVER_LABEL" -o "$DATA_DIR/light-headless.log" -e "$DATA_DIR/light-headless.log" -- "$TARGET_DIR/debug/light-headless" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR"
   wait_for_launchd_server

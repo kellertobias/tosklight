@@ -24,6 +24,22 @@ mod ui;
 use settings::Options;
 use winit::event_loop::{ControlFlow, EventLoop};
 
+/// The event loop, with the activation policy this launch should have.
+#[cfg(target_os = "macos")]
+fn build_event_loop(helper: bool) -> Result<EventLoop<()>, winit::error::EventLoopError> {
+    use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
+    let mut builder = EventLoop::builder();
+    if helper {
+        builder.with_activation_policy(ActivationPolicy::Accessory);
+    }
+    builder.build()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn build_event_loop(_helper: bool) -> Result<EventLoop<()>, winit::error::EventLoopError> {
+    EventLoop::builder().build()
+}
+
 fn main() {
     let options = match Options::from_arguments(std::env::args().skip(1)) {
         Ok(options) => options,
@@ -37,7 +53,11 @@ fn main() {
         return;
     }
 
-    let event_loop = match EventLoop::new() {
+    // A helper is the desk's window, not a second application. On macOS that means an accessory
+    // activation policy: it draws, it takes key input, and it is absent from the Dock and the App
+    // Switcher, so an operator sees one ToskLight rather than two. The standalone visualizer is a
+    // product in its own right and keeps its tile.
+    let event_loop = match build_event_loop(options.helper) {
         Ok(event_loop) => event_loop,
         Err(error) => {
             eprintln!("window system: {error}");
