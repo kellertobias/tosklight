@@ -39,6 +39,8 @@ export function useNativeStagePane(enabled = true): NativeStagePane {
 	const [trouble, setTrouble] = useState<string | null>(null);
 	const [renderer, setRenderer] = useState<string | null>(null);
 	const opened = useRef(false);
+	/** True once the desk has named a renderer, so a first poll cannot be read as a stop. */
+	const drew = useRef(false);
 
 	/*
 	 * Reported from the element rather than from any layout constant. The pane moves when a sheet
@@ -103,6 +105,7 @@ export function useNativeStagePane(enabled = true): NativeStagePane {
 			}
 			if (opened.current) {
 				opened.current = false;
+				drew.current = false;
 				setActive(false);
 				void desktopBridge.closeStagePane();
 			}
@@ -117,6 +120,15 @@ export function useNativeStagePane(enabled = true): NativeStagePane {
 			if (cancelled) return;
 			setRenderer(description);
 			setTrouble(detail);
+			// The desk takes the pane down when its renderer dies rather than holding a still
+			// picture of a rig that has since moved. Noticing that here is what returns the Stage
+			// to the web renderer instead of leaving a transparent hole where it was.
+			//
+			// Only after the desk has named a renderer at least once: the first poll can land
+			// before the desk has finished opening, and reading that as a stop would have the
+			// interface tear down a pane the desk is still holding.
+			if (description !== null) drew.current = true;
+			else if (drew.current) setActive(false);
 		};
 		void poll();
 		const timer = window.setInterval(() => void poll(), STATUS_INTERVAL);

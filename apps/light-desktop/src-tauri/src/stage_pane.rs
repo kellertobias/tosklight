@@ -179,7 +179,6 @@ impl StagePane {
         let Some(running) = guard.as_mut() else {
             return Ok(());
         };
-        running.helper.poll(std::time::Instant::now());
         let mut trouble = None;
         let mut ended = false;
         loop {
@@ -217,10 +216,20 @@ impl StagePane {
             }
         }
         if ended {
-            // Nothing is drawing any more. The pane goes back to being transparent rather than
-            // holding the last frame the renderer managed, which would be a still picture of a
-            // rig that has since moved.
+            // The renderer has gone. The supervisor would start another, but a fresh process has
+            // not been greeted and has never been told where the pane is, so it would draw
+            // nothing and the desk would hold a still picture of a rig that has since moved.
+            // Taking the pane down instead is what lets the interface see it stop and go back to
+            // the web renderer — which is the fallback existing for exactly this.
             running.compositor.clear_source();
+            let _ = running.compositor.draw();
+            running.helper.stop();
+            *guard = None;
+            drop(guard);
+            if let Some(detail) = trouble {
+                *self.trouble.lock().map_err(|_| "the Stage pane")? = Some(detail);
+            }
+            return Ok(());
         }
         let result = running.compositor.draw();
         drop(guard);
