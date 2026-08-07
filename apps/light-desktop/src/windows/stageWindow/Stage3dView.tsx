@@ -34,13 +34,12 @@ export function Stage3dView({
 	interactive?: boolean;
 }) {
 	/*
-	 * The native renderer draws this pane where the desk can run it: a desktop window with a
-	 * surface underneath the interface, a renderer beside the application, and a way to move a
-	 * picture between the two processes. Anywhere else — a browser, a platform without a shared
-	 * surface, an installation missing its renderer — the web renderer below draws the same Stage,
-	 * which is why this is a swap rather than a requirement.
+	 * The operator chooses which renderer draws this, rather than the desk taking the better one
+	 * whenever it can: 3D is the desk's own picture and 3D Viz is the renderer's. The choice is
+	 * still only offered where the renderer can run, and if it cannot start after all, the pane
+	 * falls back to the desk's own drawing rather than showing nothing.
 	 */
-	const nativePane = useNativeStagePane();
+	const nativePane = useNativeStagePane(options.view === "3d-viz");
 	return (
 		<div
 			className="stage-canvas stage-canvas-3d"

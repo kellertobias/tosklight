@@ -33,6 +33,7 @@ fn main() {
             stage_pane::set_stage_pane,
             stage_pane::close_stage_pane,
             stage_pane::stage_pane_input,
+            stage_pane::set_stage_pane_picture,
             stage_pane::stage_pane_status,
             lifecycle::exit_desktop_app,
             lifecycle::cancel_quit,

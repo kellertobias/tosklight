@@ -35,8 +35,25 @@ export type ControlMode = "programmer" | "playbacks";
 export type DockMode = "desks" | "builtins";
 export type ValueSource = "programmer" | "playback" | "default";
 export type StageMode = "select" | "navigate";
-export type StageView = "2d" | "3d";
+/**
+ * Which renderer draws the Stage, chosen by the operator rather than by what is available.
+ *
+ * `3d-viz` is the ToskLight renderer drawing into the desk's own window from its own process.
+ * `3d` is the desk drawing the same rig itself. Both stay: the renderer is not on every platform,
+ * and an operator who wants the desk's own picture should be able to ask for it.
+ */
+export type StageView = "2d" | "3d" | "3d-viz";
+/**
+ * How much of a beam the 3D Stage draws.
+ *
+ * `none` draws no beam at all — the lenses light and the heads move, and nothing leaves them.
+ * `lines_only` adds a thin direction line, and the volumetric styles add the cone.
+ *
+ * The last three are what the operator picks between; `lines_and_beams` and `beams` remain because
+ * saved layouts carry them, and a show that chose one must not silently become something else.
+ */
 export type StageRenderQuality =
+	| "none"
 	| "lines_only"
 	| "lines_and_beams"
 	| "beams"
@@ -217,6 +234,8 @@ export interface AppState {
 	stageShowBeamGuides: boolean;
 	stageRenderQuality: StageRenderQuality;
 	stageEnvironmentBrightness: number;
+	/** Haze the 3D Viz renderer draws its beams through, `0..=1`. */
+	stageVizAtmosphere: number;
 	layoutMigrationNotice: boolean;
 	dmxDotSize: DmxDotSize;
 	fixtureSheetOrder: FixtureSheetOrder;
@@ -273,6 +292,8 @@ export interface WindowSettings {
 	stageShowBeamGuides: boolean;
 	stageRenderQuality: StageRenderQuality;
 	stageEnvironmentBrightness: number;
+	/** Haze the 3D Viz renderer draws its beams through, `0..=1`. */
+	stageVizAtmosphere: number;
 	/** Legacy Layout-window field retained only for tolerant persisted-layout decoding. */
 	layoutGroupId?: string;
 	dmxDotSize: DmxDotSize;

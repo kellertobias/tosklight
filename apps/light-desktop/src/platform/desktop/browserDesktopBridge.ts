@@ -22,6 +22,7 @@ export const browserDesktopBridge: DesktopBridge = {
 	setStagePane: noAction,
 	closeStagePane: noAction,
 	sendStagePaneInput: noAction,
+	setStagePanePicture: noAction,
 	stagePaneStatus: async () => [null, null],
 	packagedStageBenchmarkConfig: async () => null,
 	packagedStageBenchmarkPrepared: async () => false,

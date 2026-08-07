@@ -30,6 +30,11 @@ enum FromChannel {
     /// What the operator did over the pane, forwarded because the webview above it takes the
     /// events the surface would otherwise have received.
     Input(viz_helper::protocol::PaneInput),
+    /// The operator's picture settings, which belong to this process rather than to the desk.
+    Picture {
+        atmosphere: f32,
+        ambient: f32,
+    },
     /// The channel ended, with the reason to show.
     Finished(String),
 }
@@ -72,6 +77,8 @@ pub struct HelperSource {
     /// Forwarded pane input, coalesced into one step per gesture so the render loop applies a
     /// gesture rather than replaying a pointer track.
     input: Vec<viz_helper::protocol::PaneInput>,
+    /// The operator's haze and environment brightness, once the desk has said.
+    picture: Option<(f32, f32)>,
 }
 
 impl HelperSource {
@@ -111,6 +118,7 @@ impl HelperSource {
             pane: None,
             embedding: None,
             input: Vec::new(),
+            picture: None,
         })
     }
 
@@ -172,6 +180,11 @@ impl HelperSource {
         });
     }
 
+    /// The operator's haze and environment brightness, if they have set any.
+    pub fn picture(&self) -> Option<(f32, f32)> {
+        self.picture
+    }
+
     /// Take the pane input that arrived since the last frame.
     pub fn take_input(&mut self) -> Vec<viz_helper::protocol::PaneInput> {
         std::mem::take(&mut self.input)
@@ -221,6 +234,13 @@ fn read_channel(mut from_desk: impl Read, outbox: &Sender<FromChannel>) {
                 surface_service,
             })),
             ToHelper::Input { input } => outbox.send(FromChannel::Input(input)),
+            ToHelper::Picture {
+                atmosphere,
+                ambient,
+            } => outbox.send(FromChannel::Picture {
+                atmosphere,
+                ambient,
+            }),
             // Handled by the channel loop, which turns it into `Finished`.
             ToHelper::Hello { .. } | ToHelper::Shutdown => Ok(()),
         };
@@ -273,6 +293,10 @@ impl SceneProvider for HelperSource {
                     self.embedding = Some(embedding);
                 }
                 Ok(FromChannel::Input(input)) => self.input.push(input),
+                Ok(FromChannel::Picture {
+                    atmosphere,
+                    ambient,
+                }) => self.picture = Some((atmosphere, ambient)),
                 Ok(FromChannel::Finished(reason)) => {
                     self.finished = true;
                     self.connection = ConnectionState::Failed {

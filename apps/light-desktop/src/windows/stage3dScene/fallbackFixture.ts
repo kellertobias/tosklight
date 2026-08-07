@@ -30,6 +30,7 @@ import type {
 	Stage3dFixture,
 	StageShaperState,
 } from "./types";
+import { drawsBeamLine, drawsBeamVolume } from "./renderStyle";
 
 type FallbackRenderState = {
 	intensity: number;
@@ -272,10 +273,10 @@ function addFallbackBeamVisuals(
 	beam.userData.stageBeamDistance = state.distance;
 	applyStageShaper(beam, state.shaper);
 	if (!directional) return;
-	const drawBeams = active && renderQuality !== "lines_only";
+	const drawBeams = active && drawsBeamVolume(renderQuality);
 	const drawLines =
 		active &&
-		(renderQuality === "lines_only" || renderQuality === "lines_and_beams");
+		drawsBeamLine(renderQuality);
 	const volume = createFallbackVolume(cone, state);
 	volume.visible = drawBeams && renderQuality !== "improved_beams";
 	beam.add(volume);
@@ -446,10 +447,10 @@ export function updateFallbackFixture(
 	beam.userData.stageBeamColor = `#${state.color.getHexString()}`;
 	beam.userData.stageBeamRadius = state.radius;
 	const active = state.intensity > 0.001;
-	const drawBeams = active && renderQuality !== "lines_only";
+	const drawBeams = active && drawsBeamVolume(renderQuality);
 	const drawLines =
 		active &&
-		(renderQuality === "lines_only" || renderQuality === "lines_and_beams");
+		drawsBeamLine(renderQuality);
 	const existingImproved = beam.getObjectByName("beam-improved-volume");
 	if (renderQuality === "improved_beams" && !existingImproved) {
 		const volume = beam.getObjectByName("beam-volume");

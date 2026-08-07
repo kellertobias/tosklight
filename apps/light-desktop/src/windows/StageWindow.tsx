@@ -57,7 +57,7 @@ export function StageWindow(props: StageWindowProps) {
 					writable={!props.viewOnly}
 				/>
 			)}
-			{options.view === "3d" ? (
+			{options.view === "3d" || options.view === "3d-viz" ? (
 				<Stage3dView
 					fixtures={stage.fixtures3d}
 					visualization={stage.visualization}

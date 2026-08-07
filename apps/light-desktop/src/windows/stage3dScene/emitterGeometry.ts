@@ -6,6 +6,7 @@ import type { StageProceduralResourceCache } from "./resources";
 import { emitterSurfaceMaterial, millimetres } from "./sceneObjects";
 import { applyStageShaper } from "./shaperAppearance";
 import type { FixtureAttributeValues, StageShaperState } from "./types";
+import { drawsBeamLine, drawsBeamVolume } from "./renderStyle";
 
 type BeamMetrics = {
 	distance: number;
@@ -233,10 +234,9 @@ function createEmitterSource(
 	beam.add(sourceSurface);
 	beam.userData.stageSourceSurface = sourceSurface;
 	if (!directional) return beam;
-	const drawBeams = context.renderQuality !== "lines_only" && active;
+	const drawBeams = drawsBeamVolume(context.renderQuality) && active;
 	const drawLines =
-		(context.renderQuality === "lines_only" ||
-			context.renderQuality === "lines_and_beams") &&
+		drawsBeamLine(context.renderQuality) &&
 		active;
 	const volume = createBeamMesh(
 		cone,
@@ -346,10 +346,10 @@ function updateSourceBeam(
 		source.getObjectByName("light-emitting-surface");
 	if (surface instanceof THREE.Mesh)
 		updateSourceSurface(surface, color, intensity, metrics.radius);
-	const drawBeams = active && renderQuality !== "lines_only";
+	const drawBeams = active && drawsBeamVolume(renderQuality);
 	const drawLines =
 		active &&
-		(renderQuality === "lines_only" || renderQuality === "lines_and_beams");
+		drawsBeamLine(renderQuality);
 	const existingImproved =
 		(source.userData.stageImprovedBeamVolume as THREE.Object3D | undefined) ??
 		source.getObjectByName("beam-improved-volume");

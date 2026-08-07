@@ -92,6 +92,11 @@ export function reduceWorkspace(
 					0,
 					2,
 				),
+				stageVizAtmosphere: clamp(
+					action.vizAtmosphere ?? state.stageVizAtmosphere,
+					0,
+					1,
+				),
 			};
 		case "SET_DMX_DOT_SIZE":
 			return { ...state, dmxDotSize: action.value };

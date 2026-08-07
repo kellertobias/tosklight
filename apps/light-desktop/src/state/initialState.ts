@@ -59,6 +59,8 @@ export const initialState: AppState = {
 	stageShowBeamGuides: true,
 	stageRenderQuality: "lines_and_beams",
 	stageEnvironmentBrightness: 1,
+	// Enough haze to see a beam without the rig disappearing into it.
+	stageVizAtmosphere: 0.12,
 	layoutMigrationNotice: false,
 	dmxDotSize:
 		typeof globalThis.matchMedia === "function" &&

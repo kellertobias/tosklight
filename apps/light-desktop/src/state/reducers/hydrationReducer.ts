@@ -12,7 +12,8 @@ import {
 function normalizeStageRenderQuality(
 	value: unknown,
 ): AppState["stageRenderQuality"] {
-	return value === "lines_only" ||
+	return value === "none" ||
+		value === "lines_only" ||
 		value === "lines_and_beams" ||
 		value === "beams" ||
 		value === "improved_beams"

@@ -119,6 +119,16 @@ pub enum ToHelper {
         /// which needs no introduction because it carries the pixels themselves.
         surface_service: Option<String>,
     },
+    /// The operator's picture settings for the pane.
+    ///
+    /// Sent as they are moved. These belong to the renderer rather than to the desk — the desk is
+    /// not drawing this picture — so they cross rather than being applied locally.
+    Picture {
+        /// Haze the beams are drawn through, `0..=1`. A beam is only visible in something.
+        atmosphere: f32,
+        /// How brightly everything that is not a light source is lit, `0..=2`.
+        ambient: f32,
+    },
     /// Pointer and camera intent picked up by the web layer over the pane.
     ///
     /// A `WKWebView` on top of a native surface wins AppKit hit-testing whatever CSS says, so pane
@@ -338,6 +348,10 @@ mod tests {
             },
             ToHelper::Input {
                 input: PaneInput::Orbit { dx: -3.5, dy: 0.25 },
+            },
+            ToHelper::Picture {
+                atmosphere: 0.2,
+                ambient: 0.75,
             },
         ];
         for message in messages {

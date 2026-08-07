@@ -20,6 +20,7 @@ import {
 import { StageProceduralResourceCache } from "./resources";
 import { setSelectionOutlineVisibility } from "./sceneObjects";
 import type { Stage3dFixture, StageSceneContext } from "./types";
+import { drawsBeamLine, drawsBeamVolume } from "./renderStyle";
 
 const footprintOrigin = new THREE.Vector3();
 const footprintRotation = new THREE.Quaternion();
@@ -302,7 +303,7 @@ function refreshGroundFootprints(
 		| THREE.Object3D[]
 		| undefined;
 	if (!footprints || !beams) return;
-	if (renderQuality !== "lines_only" && renderQuality !== "lines_and_beams") {
+	if (!drawsBeamLine(renderQuality)) {
 		for (const footprint of footprints.values()) footprint.visible = false;
 		return;
 	}
@@ -349,7 +350,7 @@ function addGroundFootprints(
 		updateGroundFootprint(footprint, beam);
 		footprint.visible =
 			footprint.visible &&
-			(renderQuality === "lines_only" || renderQuality === "lines_and_beams");
+			drawsBeamLine(renderQuality);
 	}
 	scene.userData.stageDirectionalBeams = beams;
 	scene.userData.stageGroundFootprints = footprints;

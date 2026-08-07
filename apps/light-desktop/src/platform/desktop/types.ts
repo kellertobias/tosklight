@@ -64,6 +64,8 @@ export interface DesktopBridge {
 	setStagePane(geometry: StagePaneGeometry): Promise<void>;
 	closeStagePane(): Promise<void>;
 	sendStagePaneInput(gesture: StagePaneGesture, x: number, y: number): Promise<void>;
+	/** Haze and environment brightness, which belong to the renderer drawing the pane. */
+	setStagePanePicture(atmosphere: number, ambient: number): Promise<void>;
 	/** What is drawing the pane, and whatever last went wrong with it. */
 	stagePaneStatus(): Promise<[string | null, string | null]>;
 	packagedStageBenchmarkConfig(): Promise<PackagedStageBenchmarkConfig | null>;

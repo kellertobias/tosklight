@@ -55,6 +55,15 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
         for input in source.take_input() {
             state.apply(input);
         }
+        // The picture settings are the renderer's own, and the desk sends them rather than
+        // applying them: it is not the one drawing this.
+        if let Some((atmosphere, ambient)) = source.picture() {
+            state.values.atmosphere = viz_scene::AtmospherePreference {
+                amount: atmosphere.clamp(0.0, 1.0),
+            }
+            .resolve();
+            state.view.ambient = ambient.clamp(0.0, 2.0);
+        }
         state.resize_for(&embedding)?;
         match state.draw(epoch, &mut source) {
             Ok(()) => {}

@@ -126,6 +126,7 @@ export type Action =
 			showBeamGuides?: boolean;
 			renderQuality?: AppState["stageRenderQuality"];
 			environmentBrightness?: number;
+			vizAtmosphere?: number;
 	  }
 	| { type: "SET_DMX_DOT_SIZE"; value: AppState["dmxDotSize"] }
 	| {

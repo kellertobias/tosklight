@@ -12,6 +12,8 @@ import type { StageProjection2d } from "../../api/client/stageLayout";
 import { useStageLayoutActions } from "../../features/stageLayout/StageLayoutActions";
 import { useDesktopBridge } from "../../platform/desktop";
 import { useApp } from "../../state/AppContext";
+import type { AppState } from "../../types";
+import { StageVizSettings } from "./StageVizSettings";
 import type { StageLayoutModel, StageOptionsModel } from "./types";
 
 function StageSettings({
@@ -28,7 +30,22 @@ function StageSettings({
 	writable: boolean;
 }) {
 	const { state, dispatch } = useApp();
-	const tauri = useDesktopBridge().available;
+	const bridge = useDesktopBridge();
+	const tauri = bridge.available;
+	// The renderer draws in its own process into the desk's window, which a browser cannot host.
+	const [vizAvailable, setVizAvailable] = useState(false);
+	useEffect(() => {
+		let cancelled = false;
+		void bridge
+			.stagePaneAvailable()
+			.then((available) => {
+				if (!cancelled) setVizAvailable(available);
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, [bridge]);
 	const actions = useStageLayoutActions();
 	const [projection, setProjection] = useState(
 		layout.positions2dConfig.projection,
@@ -98,42 +115,38 @@ function StageSettings({
 								options={[
 									{ value: "2d", label: "2D" },
 									{ value: "3d", label: "3D", disabled: !tauri },
+									{
+										value: "3d-viz",
+										label: "3D Viz",
+										disabled: !vizAvailable,
+									},
 								]}
 							/>
-							<div className="stage-2d-layout-status">
-								<strong>2D layout</strong>
-								<span>
-									{layout.positions2dConfig.provenance === "automatic"
-										? "Automatic"
-										: "Manual"}{" "}
-									· {PROJECTION_LABELS[layout.positions2dConfig.projection]}
-								</span>
-							</div>
-							{canRegenerate && (
-								<>
-									<SelectField
-										label="Regenerate from 3D"
-										value={projection}
-										disabled={regenerating}
-										onChange={setProjection}
-										options={PROJECTION_OPTIONS}
-									/>
-									<Button
-										disabled={regenerating}
-										onClick={() => void regenerate()}
-									>
-										{regenerating
-											? "Regenerating 2D layout…"
-											: "Regenerate 2D layout"}
-									</Button>
-								</>
+						</FormLayout>
+					),
+				},
+				{
+					id: "detail",
+					// Named for what it holds rather than "Advanced": the operator switched the view
+					// on the first tab, and this is that view's own settings.
+					label: DETAIL_LABELS[options.view],
+					content: (
+						<FormLayout labelPlacement="side">
+							{options.view === "2d" && (
+								<Stage2dSettings
+									layout={layout}
+									projection={projection}
+									setProjection={setProjection}
+									canRegenerate={canRegenerate}
+									regenerating={regenerating}
+									regenerationError={regenerationError}
+									regenerate={regenerate}
+								/>
 							)}
-							{regenerationError && (
-								<div className="stage-2d-layout-error" role="alert">
-									{regenerationError}
-								</div>
+							{options.view === "3d" && (
+								<Stage3dSettings options={options} conesAvailable={!vizAvailable} />
 							)}
-							{options.view === "3d" && <Stage3dSettings options={options} />}
+							{options.view === "3d-viz" && <StageVizSettings />}
 						</FormLayout>
 					),
 				},
@@ -142,7 +155,90 @@ function StageSettings({
 	);
 }
 
-function Stage3dSettings({ options }: { options: StageOptionsModel }) {
+/**
+ * The three styles an operator picks between, over the five the state can hold.
+ *
+ * Saved layouts carry `lines_and_beams` and `beams` from before the picker had three entries, and
+ * a show that chose one keeps drawing it — it simply reads as the nearest of the three here.
+ */
+type RenderStyle = "none" | "lines" | "cones";
+
+const RENDER_STYLE_VALUES: Record<RenderStyle, AppState["stageRenderQuality"]> = {
+	none: "none",
+	lines: "lines_only",
+	cones: "improved_beams",
+};
+
+function renderStyle(quality: AppState["stageRenderQuality"]): RenderStyle {
+	if (quality === "none") return "none";
+	return quality === "lines_only" ? "lines" : "cones";
+}
+
+const DETAIL_LABELS: Record<StageOptionsModel["view"], string> = {
+	"2d": "2D",
+	"3d": "3D",
+	"3d-viz": "3D Viz",
+};
+
+/** The 2D layout, which has nothing to say once the Stage is showing a 3D view. */
+function Stage2dSettings({
+	layout,
+	projection,
+	setProjection,
+	canRegenerate,
+	regenerating,
+	regenerationError,
+	regenerate,
+}: {
+	layout: StageLayoutModel;
+	projection: StageProjection2d;
+	setProjection: (value: StageProjection2d) => void;
+	canRegenerate: boolean;
+	regenerating: boolean;
+	regenerationError: string | null;
+	regenerate: () => Promise<void>;
+}) {
+	return (
+		<>
+			<div className="stage-2d-layout-status">
+				<strong>2D layout</strong>
+				<span>
+					{layout.positions2dConfig.provenance === "automatic"
+						? "Automatic"
+						: "Manual"}{" "}
+					· {PROJECTION_LABELS[layout.positions2dConfig.projection]}
+				</span>
+			</div>
+			{canRegenerate && (
+				<>
+					<SelectField
+						label="Regenerate from 3D"
+						value={projection}
+						disabled={regenerating}
+						onChange={setProjection}
+						options={PROJECTION_OPTIONS}
+					/>
+					<Button disabled={regenerating} onClick={() => void regenerate()}>
+						{regenerating ? "Regenerating 2D layout…" : "Regenerate 2D layout"}
+					</Button>
+				</>
+			)}
+			{regenerationError && (
+				<div className="stage-2d-layout-error" role="alert">
+					{regenerationError}
+				</div>
+			)}
+		</>
+	);
+}
+
+function Stage3dSettings({
+	options,
+	conesAvailable,
+}: {
+	options: StageOptionsModel;
+	conesAvailable: boolean;
+}) {
 	const { state, dispatch } = useApp();
 	return (
 		<>
@@ -173,7 +269,7 @@ function Stage3dSettings({ options }: { options: StageOptionsModel }) {
 				}
 			/>
 			<SwitchField
-				label="Beam direction guidelines"
+				label="Beam Guidelines"
 				offLabel="Hidden"
 				onLabel="Visible"
 				checked={state.stageShowBeamGuides}
@@ -185,20 +281,25 @@ function Stage3dSettings({ options }: { options: StageOptionsModel }) {
 				}
 			/>
 			<MultiValueToggleField
-				label="Render quality"
-				description="Improved beams adds feathered falloff. Up to eight highest-contributing directional sources also light opaque Stage surfaces, stop at the first opaque intersection, and cast bounded soft shadows; other sources retain their feathered volume."
-				value={options.renderQuality}
-				onChange={(renderQuality) =>
+				label="Render Style"
+				description={
+					conesAvailable
+						? "No Beams still lights the lenses and moves the heads; it draws nothing leaving them. Cones are volumetric and the most expensive."
+						: "No Beams still lights the lenses and moves the heads; it draws nothing leaving them. Cones are drawn by the 3D Viz view on this machine."
+				}
+				value={renderStyle(options.renderQuality)}
+				onChange={(style) =>
 					dispatch({
 						type: "SET_STAGE_OPTIONS",
-						renderQuality,
+						renderQuality: RENDER_STYLE_VALUES[style],
 					})
 				}
 				options={[
-					{ value: "lines_only", label: "Lines only" },
-					{ value: "lines_and_beams", label: "Lines + beams" },
-					{ value: "beams", label: "Beams" },
-					{ value: "improved_beams", label: "Improved beams" },
+					{ value: "none", label: "No Beams" },
+					{ value: "lines", label: "Lines" },
+					// The desk's own cones are the expensive path, and where the renderer can draw
+					// this Stage it draws them better. Offering both would be offering the worse one.
+					{ value: "cones", label: "Cones", disabled: !conesAvailable },
 				]}
 			/>
 			<HorizontalFaderField

@@ -197,6 +197,18 @@ impl StagePane {
         Ok(())
     }
 
+    /// Send the operator's picture settings on to the renderer, which owns this picture.
+    pub(crate) fn send_picture(&self, atmosphere: f32, ambient: f32) -> Result<(), String> {
+        let mut guard = self.inner.lock().map_err(|_| "the Stage pane")?;
+        if let Some(running) = guard.as_mut() {
+            running.send(&ToHelper::Picture {
+                atmosphere,
+                ambient,
+            });
+        }
+        Ok(())
+    }
+
     /// Take what has arrived and draw. Driven from the desk's own loop, on the thread that owns
     /// the window, because that is where a surface may be presented.
     pub(crate) fn tick(&self) -> Result<(), String> {
@@ -524,6 +536,16 @@ pub(crate) fn stage_pane_input(
         other => return Err(format!("no such pane gesture: {other}")),
     };
     pane.send_input(input)
+}
+
+/// The operator's picture settings for the pane, which belong to the renderer drawing it.
+#[tauri::command]
+pub(crate) fn set_stage_pane_picture(
+    pane: tauri::State<'_, StagePane>,
+    atmosphere: f32,
+    ambient: f32,
+) -> Result<(), String> {
+    pane.send_picture(atmosphere, ambient)
 }
 
 /// What is drawing the pane and how it reaches the desk, plus whatever last went wrong.
