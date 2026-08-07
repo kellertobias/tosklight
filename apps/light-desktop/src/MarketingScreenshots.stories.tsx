@@ -111,7 +111,7 @@ function FullApplicationComposition() {
 			<MarketingViewport>
 				<div style={{ width: "100%", height: "100%" }}>
 					<AppShellView
-						nativeDragStrip={<NativeDragStrip />}
+						nativeDragStrip={<NativeDragStrip closes="application" />}
 						dock={
 							<LeftDock
 								presentation={{

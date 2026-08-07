@@ -2,9 +2,18 @@ import { useEffect, useState } from "react";
 import { useDesktopBridge } from "../../platform/desktop";
 import { Button } from "@tosklight/ui";
 
-export function NativeDragStrip() {
+/**
+ * `closes` says what the strip's X owns: the main window is the desk itself, so closing it
+ * quits the application, while every screen window only closes itself.
+ */
+export function NativeDragStrip({
+  closes = "window",
+}: {
+  closes?: "window" | "application";
+} = {}) {
   const desktop = useDesktopBridge();
   const [fullscreen, setFullscreen] = useState(false);
+  const closeLabel = closes === "application" ? "Quit ToskLight" : "Close window";
 
   useEffect(() => {
     if (!desktop.available) return;
@@ -16,7 +25,10 @@ export function NativeDragStrip() {
   }, [desktop]);
 
   const closeWindow = () => {
-    if (desktop.available) void desktop.closeCurrentWindow();
+    if (!desktop.available) return;
+    void (closes === "application"
+      ? desktop.exitApplication()
+      : desktop.closeCurrentWindow());
   };
   const toggleFullscreen = () => {
     if (!desktop.available) return;
@@ -32,7 +44,7 @@ export function NativeDragStrip() {
     void desktop.startCurrentWindowDrag();
   };
   return <div className="native-drag-strip">
-    <Button className="native-window-close" aria-label="Close window" title="Close window" onClick={closeWindow}>
+    <Button className="native-window-close" aria-label={closeLabel} title={closeLabel} onClick={closeWindow}>
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
     </Button>
     <Button aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"} aria-pressed={fullscreen} title={fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={toggleFullscreen}>

@@ -86,4 +86,38 @@ describe("screen window persistence", () => {
 		expect(save).toHaveBeenLastCalledWith({ ...screen, desired_open: false });
 		expect(destroy).toHaveBeenCalledOnce();
 	});
+
+	it("destroys the window even when the desired-open save is refused", async () => {
+		vi.useFakeTimers();
+		let close: (() => void | Promise<void>) | undefined;
+		const destroy = vi.fn().mockResolvedValue(undefined);
+		const bridge: DesktopBridge = {
+			...browserDesktopBridge,
+			available: true,
+			currentWindowState: vi.fn().mockResolvedValue({
+				displayId: null,
+				bounds: { x: 0, y: 0, width: 800, height: 600 },
+				fullscreen: false,
+			}),
+			destroyCurrentWindow: destroy,
+			onCurrentWindowCloseRequested: async (handler) => {
+				close = handler;
+				return () => undefined;
+			},
+		};
+		const save = vi.fn().mockRejectedValue(new Error("desk refused the screen update"));
+		render(
+			<DesktopProvider bridge={bridge}>
+				<Harness save={save} />
+			</DesktopProvider>,
+		);
+		await act(async () => {
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+		expect(close).toBeTypeOf("function");
+		await act(async () => close?.());
+		expect(save).toHaveBeenCalledWith({ ...screen, desired_open: false });
+		expect(destroy).toHaveBeenCalledOnce();
+	});
 });

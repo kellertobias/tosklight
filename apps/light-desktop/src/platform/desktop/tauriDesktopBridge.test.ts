@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import desktopCapability from "../../../src-tauri/capabilities/default.json";
 
 const mocks = vi.hoisted(() => ({
 	invoke: vi.fn(),
@@ -82,5 +83,22 @@ describe("Tauri desktop bridge", () => {
 		nativeHandler?.({ preventDefault });
 		expect(preventDefault).toHaveBeenCalledOnce();
 		expect(requested).toHaveBeenCalledOnce();
+	});
+
+	// Every native window command the bridge issues is rejected at runtime unless the desktop
+	// capability grants it, and a rejected destroy leaves a screen window that cannot be closed.
+	it("runs on capabilities that grant every native window command it issues", () => {
+		expect(desktopCapability.permissions).toEqual(
+			expect.arrayContaining([
+				"core:window:allow-close",
+				"core:window:allow-destroy",
+				"core:window:allow-is-fullscreen",
+				"core:window:allow-set-fullscreen",
+				"core:window:allow-start-dragging",
+			]),
+		);
+		expect(desktopCapability.windows).toEqual(
+			expect.arrayContaining(["main", "screen-*"]),
+		);
 	});
 });

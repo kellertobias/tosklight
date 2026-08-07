@@ -41,8 +41,13 @@ class ScreenWindowPersistence {
 		this.closing.current = true;
 		window.clearTimeout(this.timer);
 		const screen = this.screen.current;
-		if (!this.shuttingDown && screen)
-			await this.save({ ...screen, desired_open: false });
+		try {
+			if (!this.shuttingDown && screen)
+				await this.save({ ...screen, desired_open: false });
+		} catch {
+			// The desk reports save failures on its own surfaces. The close request was already
+			// prevented, so a refused save must not strand this window on the display.
+		}
 		await this.desktop.destroyCurrentWindow();
 	};
 

@@ -1287,6 +1287,9 @@ button {
 .setup-window nav {
 	padding: 6px;
 	border-right: 1px solid var(--line);
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
 }
 .setup-window nav button {
 	width: 100%;
