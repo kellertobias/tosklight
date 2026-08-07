@@ -7,6 +7,7 @@
 
 mod app;
 mod demo;
+mod embedded;
 mod helper_source;
 mod lasers;
 
@@ -40,6 +41,28 @@ fn build_event_loop(_helper: bool) -> Result<EventLoop<()>, winit::error::EventL
     EventLoop::builder().build()
 }
 
+/// The embedded pane: answer the desk, then draw its Stage until the channel ends.
+fn run_embedded() -> i32 {
+    let source = match helper_source::HelperSource::start(
+        std::io::stdin(),
+        std::io::stdout(),
+        "viz-renderer".to_owned(),
+    ) {
+        Ok(source) => source,
+        Err(error) => {
+            eprintln!("the desk's channel: {error}");
+            return 1;
+        }
+    };
+    match embedded::run(source) {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("the embedded pane: {error}");
+            1
+        }
+    }
+}
+
 fn main() {
     let options = match Options::from_arguments(std::env::args().skip(1)) {
         Ok(options) => options,
@@ -51,6 +74,13 @@ fn main() {
     if options.help {
         println!("{}", Options::usage());
         return;
+    }
+
+    // An embedded pane has no window at all: the desk owns the window, the pane is a rectangle
+    // inside it, and the chrome above the picture is the desk's own web interface. So this launch
+    // never reaches the window system — no event loop, no activation policy, nothing to activate.
+    if options.embed {
+        std::process::exit(run_embedded());
     }
 
     // A helper is the desk's window, not a second application. On macOS that means an accessory

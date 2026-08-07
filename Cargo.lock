@@ -3384,12 +3384,17 @@ dependencies = [
 name = "light-desktop"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
+ "pollster",
+ "raw-window-handle",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tokio",
  "viz-helper",
+ "viz-surface",
+ "wgpu",
 ]
 
 [[package]]
@@ -7728,6 +7733,7 @@ dependencies = [
  "viz-render",
  "viz-scene",
  "viz-snapshot",
+ "viz-surface",
  "winit",
 ]
 

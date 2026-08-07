@@ -53,8 +53,31 @@ pub struct SharedSurface {
     /// Kept alive for as long as the texture refers to its memory. Dropping the surface while a
     /// texture still points into it is exactly the crash this field exists to prevent.
     #[cfg(target_os = "macos")]
-    _backing: objc2_core_foundation::CFRetained<objc2_io_surface::IOSurfaceRef>,
+    _backing: Backing,
 }
+
+/// The surface's own memory, held so it outlives the texture over it.
+///
+/// `CFRetained<IOSurfaceRef>` is neither `Send` nor `Sync` in the bindings, because the generated
+/// `IOSurfaceRef` is an opaque type the generator cannot make claims about. `IOSurface` itself is
+/// documented as usable from any thread — that is the entire point of a surface two *processes*
+/// share — and this holds nothing but a retain count that Core Foundation manages atomically. The
+/// desk keeps its compositor behind a mutex and hands it to the thread that owns the window, which
+/// needs the whole thing to cross a thread boundary, so the claim is made here rather than by
+/// giving up and copying pixels.
+#[cfg(target_os = "macos")]
+struct Backing(
+    #[allow(dead_code, reason = "held for its lifetime, not read")]
+    objc2_core_foundation::CFRetained<objc2_io_surface::IOSurfaceRef>,
+);
+
+// SAFETY: an `IOSurface` may be used from any thread, and this owns only a retain on one.
+#[cfg(target_os = "macos")]
+unsafe impl Send for Backing {}
+// SAFETY: as above. Sharing a reference exposes no interior mutability of its own; the pixels are
+// written through Metal textures, whose own synchronisation is the GPU's.
+#[cfg(target_os = "macos")]
+unsafe impl Sync for Backing {}
 
 impl SharedSurface {
     /// The texture, for a caller that wants to sample or copy it.
@@ -145,7 +168,7 @@ const BYTES_PER_ELEMENT: i32 = 4;
 
 #[cfg(target_os = "macos")]
 mod platform {
-    use super::{BYTES_PER_ELEMENT, FORMAT, SharedSurface, SurfaceError};
+    use super::{BYTES_PER_ELEMENT, Backing, FORMAT, SharedSurface, SurfaceError};
     use objc2_core_foundation::{CFDictionary, CFNumber, CFRetained, CFString};
     use objc2_io_surface::{
         IOSurfaceRef, kIOSurfaceBytesPerElement, kIOSurfaceHeight, kIOSurfacePixelFormat,
@@ -326,7 +349,7 @@ mod platform {
             handle,
             width,
             height,
-            _backing: surface,
+            _backing: Backing(surface),
         })
     }
 }

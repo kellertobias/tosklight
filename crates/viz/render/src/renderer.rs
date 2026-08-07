@@ -353,6 +353,39 @@ impl Renderer {
         self.rebuild_targets();
     }
 
+    /// The device this renderer draws with, for a caller that has to build a texture it will then
+    /// be asked to draw into — a surface shared with another process, above all.
+    pub fn device(&self) -> &wgpu::Device {
+        &self.gpu.device
+    }
+
+    pub fn queue(&self) -> &wgpu::Queue {
+        &self.gpu.queue
+    }
+
+    /// The format the frame path writes. A texture handed to [`Self::render_into`] must match it.
+    pub fn output_format(&self) -> wgpu::TextureFormat {
+        self.gpu.format
+    }
+
+    /// Render one frame into a texture the caller owns instead of into a swapchain.
+    ///
+    /// [`Self::capture`] does this and then reads the result back to the CPU. Embedding the Stage
+    /// in the desk's window wants the first half and not the second: the texture is one the desk
+    /// can already see, so pulling it through system memory would undo the point of sharing it.
+    pub fn render_into(
+        &mut self,
+        target: &wgpu::TextureView,
+        scene: &Scene,
+        values: &SceneValues,
+        view: &ViewConfiguration,
+        overlay: &crate::overlay::Overlay,
+        time_seconds: f32,
+    ) -> Result<FrameStats, RenderError> {
+        self.capture_request = Some(target.clone());
+        self.render(scene, values, view, overlay, time_seconds)
+    }
+
     /// Adopt the quality tier's render scale. Rebuilding every target is far too expensive to do
     /// per frame, so it happens only when the scale actually changes — a quality change or a
     /// resize, both of which an operator does deliberately.

@@ -83,6 +83,8 @@ pub struct Options {
     pub snapshot: bool,
     /// Run as the desk's supervised renderer helper.
     pub helper: bool,
+    /// Draw the desk's Stage pane with no window of this process's own.
+    pub embed: bool,
 }
 
 /// The strongest lasers may be drawn at.
@@ -213,6 +215,7 @@ impl Default for Options {
             blender: None,
             snapshot: false,
             helper: false,
+            embed: false,
         }
     }
 }
@@ -298,6 +301,12 @@ impl Options {
                 "--demo" => options.demo = true,
                 "--snapshot" => options.snapshot = true,
                 "--helper" => options.helper = true,
+                // Implies `--helper`: an embedded pane is by definition the desk's, and naming it
+                // alone would otherwise start a standalone visualizer with nowhere to send frames.
+                "--embed" => {
+                    options.helper = true;
+                    options.embed = true;
+                }
                 "--verify" => options.verify_only = true,
                 "--capture" => {
                     options.capture =

@@ -25,8 +25,21 @@ enum FromChannel {
     View(Box<ViewConfiguration>),
     /// Where in the window this helper may draw.
     Pane(viz_helper::pane::PaneRect),
+    /// Draw the desk's Stage pane rather than a window of this process's own.
+    Embed(Embedding),
+    /// What the operator did over the pane, forwarded because the webview above it takes the
+    /// events the surface would otherwise have received.
+    Input(viz_helper::protocol::PaneInput),
     /// The channel ended, with the reason to show.
     Finished(String),
+}
+
+/// The desk's instruction to draw its Stage pane, and how to hand it back.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Embedding {
+    pub pane: viz_helper::pane::PaneRect,
+    pub scale: f32,
+    pub transport: viz_helper::protocol::FrameTransport,
 }
 
 pub struct HelperSource {
@@ -51,6 +64,12 @@ pub struct HelperSource {
     /// embedded pane sets it, and the render loop scissors to it — until then it is carried so
     /// the two sides are already agreed when the compositing lands.
     pane: Option<viz_helper::pane::PaneRect>,
+    /// Set once the desk has asked for its Stage pane. `None` is the desk-opened visualizer, which
+    /// owns its window and presents to it.
+    embedding: Option<Embedding>,
+    /// Forwarded pane input, coalesced into one step per gesture so the render loop applies a
+    /// gesture rather than replaying a pointer track.
+    input: Vec<viz_helper::protocol::PaneInput>,
 }
 
 impl HelperSource {
@@ -63,8 +82,13 @@ impl HelperSource {
         mut to_desk: impl Write + Send + 'static,
         renderer: String,
     ) -> Result<Self, String> {
-        let title = answer_desk(&mut from_desk, &mut to_desk, &renderer)
-            .map_err(|error| error.to_string())?;
+        let title = answer_desk(
+            &mut from_desk,
+            &mut to_desk,
+            &renderer,
+            &viz_helper::protocol::supported_transports(),
+        )
+        .map_err(|error| error.to_string())?;
         let (outbox, inbox) = channel();
         std::thread::Builder::new()
             .name("viz-helper-channel".into())
@@ -83,6 +107,8 @@ impl HelperSource {
             finished: false,
             to_desk: Box::new(to_desk),
             pane: None,
+            embedding: None,
+            input: Vec::new(),
         })
     }
 
@@ -96,7 +122,13 @@ impl HelperSource {
             height,
             rgba,
         };
-        if let Ok(payload) = viz_helper::protocol::encode(&message) {
+        self.send(&message);
+    }
+
+    /// Failure is not reported upwards: the desk has gone, and a helper without a desk is already
+    /// finishing for that reason.
+    fn send(&mut self, message: &viz_helper::protocol::FromHelper) {
+        if let Ok(payload) = viz_helper::protocol::encode(message) {
             let _ = viz_helper::framing::write_frame(&mut self.to_desk, &payload);
         }
     }
@@ -104,6 +136,43 @@ impl HelperSource {
     /// Where this helper may draw, if the desk has said. `None` means the whole window.
     pub fn pane(&self) -> Option<viz_helper::pane::PaneRect> {
         self.pane
+    }
+
+    /// The desk's Stage pane, if this helper is drawing one rather than a window of its own.
+    ///
+    /// Carries the pane last sent, so a resize that arrived as a bare `Pane` message is reflected
+    /// here too — the render loop reads one thing rather than reconciling two.
+    pub fn embedding(&self) -> Option<Embedding> {
+        self.embedding.map(|embedding| Embedding {
+            pane: self.pane.unwrap_or(embedding.pane),
+            ..embedding
+        })
+    }
+
+    /// Announce a surface the desk can sample, replacing whatever it held before.
+    pub fn send_surface(
+        &mut self,
+        handle: viz_helper::protocol::SharedSurfaceHandle,
+        width: u32,
+        height: u32,
+    ) {
+        self.send(&viz_helper::protocol::FromHelper::Surface {
+            handle,
+            width,
+            height,
+        });
+    }
+
+    /// Tell the desk about something the operator has to see, without stopping.
+    pub fn report(&mut self, detail: &str) {
+        self.send(&viz_helper::protocol::FromHelper::Error {
+            detail: detail.to_owned(),
+        });
+    }
+
+    /// Take the pane input that arrived since the last frame.
+    pub fn take_input(&mut self) -> Vec<viz_helper::protocol::PaneInput> {
+        std::mem::take(&mut self.input)
     }
 
     /// The window title the desk asked for, taken once.
@@ -138,6 +207,16 @@ fn read_channel(mut from_desk: impl Read, outbox: &Sender<FromChannel>) {
                 Err(detail) => outbox.send(FromChannel::Finished(format!("view: {detail}"))),
             },
             ToHelper::Pane { pane } => outbox.send(FromChannel::Pane(pane)),
+            ToHelper::Embed {
+                pane,
+                scale,
+                transport,
+            } => outbox.send(FromChannel::Embed(Embedding {
+                pane,
+                scale,
+                transport,
+            })),
+            ToHelper::Input { input } => outbox.send(FromChannel::Input(input)),
             // Handled by the channel loop, which turns it into `Finished`.
             ToHelper::Hello { .. } | ToHelper::Shutdown => Ok(()),
         };
@@ -185,6 +264,11 @@ impl SceneProvider for HelperSource {
                 // Geometry, not scene content: the render loop reads it when it draws rather than
                 // it being an event the host has to act on.
                 Ok(FromChannel::Pane(pane)) => self.pane = Some(pane),
+                Ok(FromChannel::Embed(embedding)) => {
+                    self.pane = Some(embedding.pane);
+                    self.embedding = Some(embedding);
+                }
+                Ok(FromChannel::Input(input)) => self.input.push(input),
                 Ok(FromChannel::Finished(reason)) => {
                     self.finished = true;
                     self.connection = ConnectionState::Failed {
@@ -226,11 +310,12 @@ impl SceneProvider for HelperSource {
 impl HelperSource {
     /// Whether the desk has ended this helper's channel.
     ///
-    /// The application does not read this: a finished channel already reports itself as a failed
-    /// connection, which is what the window shows and what the host acts on. It exists so a test
-    /// can assert the state directly rather than inferring it from an event.
-    #[cfg(test)]
-    fn is_finished(&self) -> bool {
+    /// True once the desk's channel has ended.
+    ///
+    /// The windowed application does not read this — a finished channel already reports itself as
+    /// a failed connection, which is what the window shows. The embedded pane has no window to
+    /// show anything in, so it asks directly.
+    pub fn is_finished(&self) -> bool {
         self.finished
     }
 }
@@ -422,10 +507,20 @@ mod tests {
 
         source.send_frame(2, 1, vec![9; 2 * 4]);
 
-        // The greeting is first on the wire; the frame follows it.
+        // The greeting is first on the wire — the answer and then what this helper can do — and
+        // the frame follows both.
         let written = returned.written();
         let mut reader = written.as_slice();
         let _ready = viz_helper::framing::read_frame(&mut reader).expect("the greeting answer");
+        let capabilities =
+            viz_helper::framing::read_frame(&mut reader).expect("what this helper can do");
+        assert_eq!(
+            viz_helper::protocol::decode::<FromHelper>(&capabilities).expect("decodes"),
+            FromHelper::Capabilities {
+                transports: viz_helper::protocol::supported_transports(),
+            },
+            "the desk cannot choose a transport it was never told about"
+        );
         let frame = viz_helper::framing::read_frame(&mut reader).expect("the rendered pane");
         let decoded: FromHelper = viz_helper::protocol::decode(&frame).expect("decodes");
         assert_eq!(

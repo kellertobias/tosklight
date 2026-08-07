@@ -17,6 +17,7 @@ uuid.workspace = true
 viz-desk.workspace = true
 viz-dmx.workspace = true
 viz-helper = { path = "../../crates/viz/helper" }
+viz-surface = { path = "../../crates/viz/surface" }
 viz-document = { path = "../../crates/viz/document" }
 viz-laser.workspace = true
 viz-project.workspace = true
