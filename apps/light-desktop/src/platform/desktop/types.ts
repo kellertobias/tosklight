@@ -40,6 +40,16 @@ export interface StagePaneGeometry {
 	surfaceHeight: number;
 }
 
+/** The camera addressed by number rather than by dragging. */
+export interface StagePaneCameraPlacement {
+	x: number;
+	y: number;
+	z: number;
+	pan: number;
+	tilt: number;
+	distance: number;
+}
+
 export type StagePaneGesture =
 	| "orbit"
 	| "pan"
@@ -89,6 +99,10 @@ export interface DesktopBridge {
 	 * A null fixture is a click on nothing, which clears the selection.
 	 */
 	takeStagePanePicks(): Promise<Array<[string | null, boolean]>>;
+	/** Where the renderer's camera is, as `[x, y, z, pan, tilt, distance]`. */
+	stagePaneCamera(): Promise<[number, number, number, number, number, number] | null>;
+	/** Put the camera at numbers. Anything omitted is left where it is. */
+	placeStagePaneCamera(place: Partial<StagePaneCameraPlacement>): Promise<void>;
 	packagedStageBenchmarkConfig(): Promise<PackagedStageBenchmarkConfig | null>;
 	packagedStageBenchmarkPrepared(): Promise<boolean>;
 	focusPackagedStageBenchmarkWindow(): Promise<void>;

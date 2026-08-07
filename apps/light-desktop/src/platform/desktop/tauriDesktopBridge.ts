@@ -137,6 +137,13 @@ export const tauriDesktopBridge: DesktopBridge = {
 	sendStagePaneInput: (gesture, x, y) =>
 		invoke("stage_pane_input", { gesture, x, y }),
 	setStagePanePicture: (picture) => invoke("set_stage_pane_picture", { picture }),
+	stagePaneCamera: async () => {
+		const api = await coreApi();
+		return api.invoke<[number, number, number, number, number, number] | null>(
+			"stage_pane_camera",
+		);
+	},
+	placeStagePaneCamera: (place) => invoke("place_stage_pane_camera", place),
 	takeStagePanePicks: async () => {
 		const api = await coreApi();
 		return api.invoke<Array<[string | null, boolean]>>("take_stage_pane_picks");
