@@ -426,3 +426,34 @@ fn the_shipped_laser_becomes_a_scanning_emitter_carrying_its_own_engine() {
     assert_eq!(optics.points_per_second, 30_000.0);
     assert!((optics.optical_power_watts - 0.5).abs() < 1e-4);
 }
+
+/// Model ownership, from the side that can be tested without authoring geometry.
+///
+/// TL-68 settles that an exact model belongs in the fixture's own transferable package, with one
+/// audited generic set for everything else. `model_asset` names an asset carried *inside* the
+/// package, so a real preference test needs a package that ships one — and none do yet.
+///
+/// What can be pinned now is the other half of the rule, and it is the half that goes wrong
+/// quietly: a package that names a model nobody can read.
+/// A package that names a model nobody can read still draws, and says why.
+///
+/// Silently falling back would leave an operator wondering why their fixture looks wrong; refusing
+/// to draw would lose the rig over a missing file. It does both: the built-in body, and a warning.
+#[test]
+fn a_model_that_cannot_be_read_falls_back_and_says_so() {
+    let mut profile = shipped_profile("claypaky--sharpy");
+    profile["model_asset"] = json!("lamps/there-is-no-such-model.glb");
+    let plan = scene_build::build(&models(profile, StageLayoutBody::default()));
+
+    assert!(
+        plan.warnings
+            .iter()
+            .any(|warning| warning.contains("built-in body")),
+        "the operator is told why the model they chose is not what they see: {:?}",
+        plan.warnings
+    );
+    assert!(
+        !plan.scene.fixtures.is_empty(),
+        "the rig is still drawn rather than lost over a missing file"
+    );
+}
