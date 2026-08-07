@@ -86,6 +86,22 @@ The Stage is the spatial selection and visualization surface. In 2D it shows fix
 - **Show group shortcuts** adds the Group strip.
 - The common size and removal controls apply per pane.
 
+### Which renderer draws the 3D Stage
+
+On the desktop application the 3D Stage is drawn by the ToskLight renderer, in a separate process,
+into the pane where the Stage sits. It runs beside the desk rather than inside it, so a graphics
+driver that takes the renderer down takes only the picture with it — the Programmer, playback and
+DMX output are untouched, and the Stage returns on its own.
+
+Where that is not possible the desk draws the same Stage itself and nothing about the pane changes
+for the operator. That is what happens in a browser, on an installation whose renderer is missing,
+and wherever the two processes have no way to move a picture between them. It is also what happens
+after a renderer stops: the pane goes back to the desk's own drawing rather than holding a still
+picture of a rig that has since moved.
+
+Drag over the pane to orbit, drag with the secondary button to pan, and scroll to zoom, whichever
+renderer is drawing it.
+
 ### Stage is a selection and viewing surface
 
 Only the full Stage window exposes **Select fixtures** and **Navigate**. A Stage pane reflects the global mode, but it does not contain the controls that switch it.
