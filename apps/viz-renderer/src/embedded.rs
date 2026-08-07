@@ -82,10 +82,18 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
         let Some(embedding) = source.embedding() else {
             return Ok(());
         };
+        let mut moved = false;
         for input in source.take_input() {
             if let Some((fixture, additive)) = state.apply(input) {
                 source.send_picked(fixture, additive);
+            } else {
+                moved = true;
             }
+        }
+        // Only when it changed, and only from here: the camera the desk shows on its encoders is
+        // the one the renderer is actually using, however it came to be there.
+        if moved {
+            source.send_camera(&state.view.camera);
         }
         // The picture settings are the renderer's own, and the desk sends them rather than
         // applying them: it is not the one drawing this.

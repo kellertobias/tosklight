@@ -36,6 +36,8 @@ fn main() {
             stage_pane::set_stage_pane_picture,
             stage_pane::stage_pane_status,
             stage_pane::take_stage_pane_picks,
+            stage_pane::stage_pane_camera,
+            stage_pane::place_stage_pane_camera,
             lifecycle::exit_desktop_app,
             lifecycle::cancel_quit,
             lifecycle::frontend_ready,

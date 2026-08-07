@@ -175,6 +175,24 @@ impl HelperSource {
         });
     }
 
+    /// Where the camera is, for a desk showing it on encoders.
+    ///
+    /// The renderer owns the camera — it is the side that drags, orbits and clamps it — so the desk
+    /// reads rather than tracks one of its own, which would drift the moment a mouse touched the
+    /// pane and leave the encoders showing numbers nobody is looking at.
+    pub fn send_camera(&mut self, camera: &viz_scene::Camera) {
+        let aimed = camera.target - camera.position;
+        let distance = aimed.length().max(0.001);
+        self.send(&viz_helper::protocol::FromHelper::Camera {
+            x: camera.position.x,
+            y: camera.position.y,
+            z: camera.position.z,
+            pan: aimed.x.atan2(aimed.z).to_degrees(),
+            tilt: (aimed.y / distance).asin().to_degrees(),
+            distance,
+        });
+    }
+
     /// Answer a pick with the fixture the operator pointed at.
     pub fn send_picked(&mut self, fixture: Option<String>, additive: bool) {
         self.send(&viz_helper::protocol::FromHelper::Picked { fixture, additive });

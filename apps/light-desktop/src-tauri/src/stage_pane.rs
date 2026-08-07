@@ -41,6 +41,8 @@ enum FromRenderer {
         height: u32,
         rgba: Vec<u8>,
     },
+    /// Where the camera now is.
+    Camera([f32; 6]),
     /// What the operator pointed at in the pane.
     Picked {
         fixture: Option<String>,
@@ -63,6 +65,11 @@ pub(crate) struct StagePane {
     /// Queued rather than pushed: the interface polls the pane already, and a selection that
     /// arrived through a second mechanism could be applied out of order with the first.
     picked: Mutex<Vec<(Option<String>, bool)>>,
+    /// Where the renderer's camera is, as it last reported.
+    ///
+    /// Read rather than tracked: the renderer owns the camera, so a desk keeping its own copy would
+    /// drift the moment a mouse touched the pane.
+    camera: Mutex<Option<[f32; 6]>>,
     /// Whether anything is embedded, readable without taking the lock.
     ///
     /// The frame pump asks this before posting anything to the main thread. A desk with no pane —
@@ -210,6 +217,23 @@ impl StagePane {
             }),
             surface_service,
         });
+        // A renderer starts looking wherever its defaults put it. An operator who aimed this pane,
+        // switched to another built-in and came back should find their view, not a reset one — so
+        // the camera the last renderer reported is given straight back to this one.
+        if let Some([x, y, z, pan, tilt, distance]) =
+            *self.camera.lock().map_err(|_| "the Stage pane")?
+        {
+            running.send(&ToHelper::Input {
+                input: PaneInput::Place {
+                    x: Some(x),
+                    y: Some(y),
+                    z: Some(z),
+                    pan: Some(pan),
+                    tilt: Some(tilt),
+                    distance: Some(distance),
+                },
+            });
+        }
         eprintln!(
             "stage pane: embedded with {} over {transport:?}",
             running.identity.renderer
@@ -281,6 +305,7 @@ impl StagePane {
         let mut trouble = None;
         let mut ended = false;
         let mut picked: Vec<(Option<String>, bool)> = Vec::new();
+        let mut latest_camera = None;
         loop {
             match running.inbox.try_recv() {
                 Ok(FromRenderer::Surface {
@@ -303,6 +328,7 @@ impl StagePane {
                         trouble = Some(detail);
                     }
                 }
+                Ok(FromRenderer::Camera(camera)) => latest_camera = Some(camera),
                 Ok(FromRenderer::Picked { fixture, additive }) => {
                     // Straight to the interface, which owns what is selected. The desk is only
                     // carrying the answer between the renderer that resolved the geometry and the
@@ -341,6 +367,9 @@ impl StagePane {
         }
         let result = running.compositor.draw();
         drop(guard);
+        if let Some(camera) = latest_camera {
+            *self.camera.lock().map_err(|_| "the Stage pane")? = Some(camera);
+        }
         for (fixture, additive) in picked {
             self.picked
                 .lock()
@@ -354,6 +383,31 @@ impl StagePane {
     }
 
     /// What went wrong most recently, if anything has.
+    /// Where the renderer's camera is, if it has said.
+    pub(crate) fn camera(&self) -> Result<Option<[f32; 6]>, String> {
+        Ok(*self.camera.lock().map_err(|_| "the Stage pane")?)
+    }
+
+    /// Put the camera at numbers rather than by dragging. `None` leaves that one alone.
+    pub(crate) fn place_camera(
+        &self,
+        x: Option<f32>,
+        y: Option<f32>,
+        z: Option<f32>,
+        pan: Option<f32>,
+        tilt: Option<f32>,
+        distance: Option<f32>,
+    ) -> Result<(), String> {
+        self.send_input(PaneInput::Place {
+            x,
+            y,
+            z,
+            pan,
+            tilt,
+            distance,
+        })
+    }
+
     /// Take what the operator pointed at since this was last asked.
     pub(crate) fn take_picked(&self) -> Result<Vec<(Option<String>, bool)>, String> {
         Ok(std::mem::take(
@@ -510,6 +564,14 @@ fn read_renderer(mut from_helper: impl std::io::Read, outbox: &Sender<FromRender
                 height,
                 rgba,
             }),
+            Ok(FromHelper::Camera {
+                x,
+                y,
+                z,
+                pan,
+                tilt,
+                distance,
+            }) => outbox.send(FromRenderer::Camera([x, y, z, pan, tilt, distance])),
             Ok(FromHelper::Picked { fixture, additive }) => {
                 outbox.send(FromRenderer::Picked { fixture, additive })
             }
@@ -743,6 +805,28 @@ pub(crate) fn take_stage_pane_picks(
     pane: tauri::State<'_, StagePane>,
 ) -> Result<Vec<(Option<String>, bool)>, String> {
     pane.take_picked()
+}
+
+/// Where the renderer's camera is, as `[x, y, z, pan, tilt, distance]`.
+#[tauri::command]
+pub(crate) fn stage_pane_camera(
+    pane: tauri::State<'_, StagePane>,
+) -> Result<Option<[f32; 6]>, String> {
+    pane.camera()
+}
+
+/// Put the camera at numbers, for a control surface that addresses it that way.
+#[tauri::command]
+pub(crate) fn place_stage_pane_camera(
+    pane: tauri::State<'_, StagePane>,
+    x: Option<f32>,
+    y: Option<f32>,
+    z: Option<f32>,
+    pan: Option<f32>,
+    tilt: Option<f32>,
+    distance: Option<f32>,
+) -> Result<(), String> {
+    pane.place_camera(x, y, z, pan, tilt, distance)
 }
 
 #[tauri::command]

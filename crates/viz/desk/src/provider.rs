@@ -156,8 +156,6 @@ pub struct DeskProvider {
     preview: crate::wire::PreviewSnapshot,
     /// The desk's own output, while a renderer in the desk's window is reading it.
     desk_output: Option<crate::wire::OutputDmxSnapshot>,
-    /// The output revision already decoded, so an unchanged read costs nothing.
-    applied_desk_output: Option<u64>,
     applied_preview_revision: Option<u64>,
     /// Universes a real source has delivered at least one packet on, ever.
     ///
@@ -199,7 +197,6 @@ impl DeskProvider {
             value_frame: 0,
             preview: crate::wire::PreviewSnapshot::default(),
             desk_output: None,
-            applied_desk_output: None,
             applied_preview_revision: None,
             real_universes: std::collections::BTreeSet::new(),
         }
@@ -474,9 +471,12 @@ impl SceneProvider for DeskProvider {
         // The desk's own output, for a renderer drawing inside the desk's window. Decoded through
         // exactly the path a real packet takes, so nothing downstream can tell the difference —
         // the numbers are the same numbers, read from the desk instead of heard from the wire.
+        // Applied on every read rather than when a revision moves. The desk's output revision
+        // counts structural changes, not frames: it sits still while every level in the show is
+        // moving, so gating on it showed the rig as it was at the moment the pane opened and never
+        // again.
         if let (Some(output), Some(decoder), Some(scene)) =
-            (self.desk_output.as_ref(), &mut self.decoder, &self.scene)
-            && self.applied_desk_output != Some(output.revision)
+            (self.desk_output.take(), &mut self.decoder, &self.scene)
         {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -504,7 +504,6 @@ impl SceneProvider for DeskProvider {
                     &mut self.values,
                     self.epoch.elapsed().as_secs_f32(),
                 );
-                self.applied_desk_output = Some(output.revision);
                 // The desk changing its output is not a packet arriving, so it gets its own frame
                 // stamp; without one the host would never present it.
                 self.value_frame += 1;

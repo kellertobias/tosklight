@@ -261,6 +261,22 @@ pub enum FromHelper {
         height: u32,
         rgba: Vec<u8>,
     },
+    /// Where the camera now is, whenever it moves.
+    ///
+    /// The renderer owns the camera — it is the side that drags, orbits and clamps it — so the desk
+    /// reads rather than tracks. A desk keeping its own copy would drift the moment an operator
+    /// touched the pane with a mouse, and the encoders would then be showing numbers that are not
+    /// what anybody is looking at.
+    Camera {
+        x: f32,
+        y: f32,
+        z: f32,
+        /// Degrees, absolute.
+        pan: f32,
+        tilt: f32,
+        /// Metres from the camera to what it is looking at.
+        distance: f32,
+    },
     /// What the operator pointed at, in answer to [`ToHelper::Pick`].
     ///
     /// `None` for a click on nothing, which is how an operator clears a selection.

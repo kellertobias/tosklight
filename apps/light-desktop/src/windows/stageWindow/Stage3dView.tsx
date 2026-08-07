@@ -3,6 +3,7 @@ import { Stage3dCanvas } from "../Stage3dCanvas";
 import { NativeStageSurface } from "./NativeStageSurface";
 import { useNativeStagePane } from "./useNativeStagePane";
 import { useStagePanePicks } from "./useStagePanePicks";
+import { useStagePanePicture } from "./useStagePanePicture";
 import type { Stage3dFixture } from "../stage3dScene";
 import type { StageOptionsModel, StageWindowProps } from "./types";
 import type { StageSelectionModel } from "./useStageSelection";
@@ -56,6 +57,8 @@ export function Stage3dView({
 	 * gesture applied to it is the same one the desk's own Stage applies.
 	 */
 	useStagePanePicks(nativePane, selection, interactive);
+	// The picture settings cross when the renderer starts, not only when one is moved.
+	useStagePanePicture(nativePane);
 	return (
 		<div
 			className="stage-canvas stage-canvas-3d"
