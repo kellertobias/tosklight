@@ -34,6 +34,12 @@ pub enum ToHelper {
     Values { payload: Vec<u8> },
     /// The view — mode, camera, quality.
     View { payload: Vec<u8> },
+    /// Where in the window the helper may draw, in the logical points the web layout works in.
+    ///
+    /// A helper filling its own window never receives this. One drawing the desk's Stage pane
+    /// receives it whenever the layout moves, and scissors itself to it — the surrounding chrome
+    /// belongs to the webview, and a renderer that overshot would paint over the sheet.
+    Pane { pane: crate::pane::PaneRect },
     /// Close the window and exit. The desk waits briefly, then kills.
     Shutdown,
 }
@@ -157,6 +163,14 @@ mod tests {
                 payload: Vec::new(),
             },
             ToHelper::View { payload: vec![9] },
+            ToHelper::Pane {
+                pane: crate::pane::PaneRect {
+                    x: 224.0,
+                    y: 40.0,
+                    width: 960.0,
+                    height: 540.0,
+                },
+            },
             ToHelper::Shutdown,
         ];
         for message in messages {

@@ -15,6 +15,7 @@
 pub mod channel;
 pub mod framing;
 pub mod handshake;
+pub mod pane;
 pub mod protocol;
 
 use std::process::{Child, Command, Stdio};
