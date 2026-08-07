@@ -324,11 +324,31 @@ function ConnectedDynamicEditor({
 		async (spatialMapping: DynamicSpatialMappingOverrideProjection) => {
 			if (!showId || showRevision == null)
 				throw new Error("No authoritative show revision");
-			return api.showObjects.previewDynamicSpatialMapping(showId, selected.id, {
-				expected_dynamic_revision: selected.revision,
-				expected_show_revision: showRevision,
-				spatial_mapping: spatialMapping,
-			});
+			const request = (dynamicRevision: number, revision: number) =>
+				api.showObjects.previewDynamicSpatialMapping(showId, selected.id, {
+					expected_dynamic_revision: dynamicRevision,
+					expected_show_revision: revision,
+					spatial_mapping: spatialMapping,
+				});
+			try {
+				return await request(selected.revision, showRevision);
+			} catch (error) {
+				// The preview only reads, but it is revision-guarded, so any concurrent edit
+				// anywhere in the Show invalidates it. Refetch authority and ask once more
+				// rather than reporting a conflict the operator can do nothing about.
+				if (!(error instanceof ApiRequestError) || error.status !== 409)
+					throw error;
+				const snapshot = await api.showObjects.collectionSnapshot<
+					DynamicObject["body"]
+				>(showId, "dynamic");
+				const authoritative = snapshot.objects.find(
+					(candidate) => candidate.id === selected.id,
+				);
+				return request(
+					authoritative?.revision ?? selected.revision,
+					snapshot.showRevision,
+				);
+			}
 		},
 		[api.showObjects, selected.id, selected.revision, showId, showRevision],
 	);

@@ -1200,11 +1200,10 @@
 }
 
 .dynamic-projection-view {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 0.75rem;
+	display: flex;
+	min-height: 0;
+	height: 100%;
 	padding: 0.9rem;
-	overflow: auto;
 }
 
 .dynamic-projection-card {
@@ -1215,6 +1214,13 @@
 	border: 1px solid #2b3944;
 	border-radius: 0.45rem;
 	background: #0d1319;
+}
+
+/* The one pane fills the workspace so both its columns get the whole height. */
+.dynamic-projection-card.dynamic-projection-columns {
+	align-content: stretch;
+	width: 100%;
+	min-height: 0;
 }
 
 .dynamic-projection-card h2,
@@ -1249,14 +1255,31 @@
 	display: grid;
 	grid-template-columns: minmax(15rem, 1fr) minmax(16rem, 1fr);
 	gap: 1rem;
-	align-items: start;
+	/* Both columns take the pane's height: the preview grows with it, the settings scroll. */
+	align-items: stretch;
+	min-height: 0;
+	flex: 1;
 }
 
 .dynamic-projection-visual {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+	justify-content: center;
 	gap: 0.25rem;
+	min-height: 0;
+}
+
+.dynamic-projection-settings {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.dynamic-projection-settings h2 {
+	margin: 0;
 }
 
 .dynamic-projection-visual small {
@@ -1272,8 +1295,9 @@
 
 .projection-stage-preview {
 	width: 100%;
-	max-width: 20rem;
-	height: auto;
+	max-width: 100%;
+	min-height: 0;
+	flex: 1;
 	display: block;
 	touch-action: none;
 	cursor: grab;
@@ -1355,7 +1379,7 @@
 }
 
 @media (max-width: 900px) {
-	.dynamic-projection-view {
-		grid-template-columns: 1fr;
+	.dynamic-projection-columns {
+		grid-template-columns: minmax(0, 1fr);
 	}
 }

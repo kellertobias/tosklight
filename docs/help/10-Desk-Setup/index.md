@@ -19,20 +19,36 @@ Work through these pages in order:
 activation groups**, and **Attributes**.
 
 **Encoder groups** edits the live encoder layout at the width configured in Screens & playback →
-Encoder placement, not a fixed preview. Every encoder group has its own section, and each page shows
-one slot per encoder. An empty slot is drawn dimmed and dashed; choose **Assign attribute** on it to
-place an attribute that currently has no encoder. Drag an assigned encoder onto any slot to reorder
-it, move it to another page, or move it into another encoder group — both affected groups are
-renumbered so no slot is left with a hole. The arrow buttons remain for keyboard and touch use.
+Encoder placement. There is no separate read-only preview: this page is the layout. Every encoder
+group has its own section, headed with how many encoders and pages it holds, and each page inside it
+shows one slot per encoder. An empty slot is drawn dimmed and dashed; choose **Assign attribute** on
+it to place an attribute that currently has no encoder.
+
+Drag an assigned encoder — with a mouse or a finger — onto any slot to reorder it, move it to
+another page, or move it into another encoder group. The layout follows the pointer: the encoders
+behind the drag snap into the slots they would take, so the arrangement you see before you let go is
+the one that is kept. Both affected groups are renumbered so no slot is left with a hole. Release
+outside every slot to leave the layout as it was. The arrow buttons remain for keyboard use.
 
 **Attribute activation groups** starts from a preset — **None**, **All**, **By Encoder Group**, or
-**Intelligent** (the server-projected recommendation). A preset replaces the groups outright; every
-group stays editable afterwards, so you can rename it, delete it, remove a member, or add an
-unassigned attribute. An attribute belongs to at most one activation group, so adding it to a group
-moves it out of its previous one, and a group disappears once its last member leaves.
+**Intelligent** (the server-projected recommendation) — in its own section, alongside **Restore
+recommended defaults**. A preset replaces the groups outright. Each activation group then gets its
+own section, so you can rename it, delete it, remove a member, or add an unassigned attribute
+without losing your place. An attribute belongs to at most one activation group, so adding it to a
+group moves it out of its previous one, and a group disappears once its last member leaves.
 
-**Attributes** lists every attribute this show can program, grouped by encoder group, each showing
-whether it is Built-in or Custom and where it sits. Custom attributes are still created and edited
-from that same page.
+**Attributes** gives every encoder group its own section listing the attributes this show can
+program, each showing whether it is Built-in or Custom and where it sits.
+
+**New custom attribute** creates a show-owned control for something the desk does not have yet — a
+Media Group, say — with your own name and the encoder group it belongs to. It is placed on the first
+free encoder slot of that group and can be dragged elsewhere from **Encoder groups**.
+
+**Imported attribute names** is for the other case: a fixture file that spells an attribute the desk
+already has differently. Enter the name as the GDTF file writes it and choose the attribute it
+means — a GDTF `MediaRank` onto `media.folder`, `MediaPosition` onto `media.file` — instead of
+adding a second control for the same thing. Imports record their own choices here too, and every
+entry stays editable or can be forgotten. These mappings belong to the desk, not to the show file,
+and a fixture revision that already resolved keeps its mapping.
 
 Saving some server settings reports **Restart required**. Finish the configuration, restart once, then recheck the status and output diagnostics.

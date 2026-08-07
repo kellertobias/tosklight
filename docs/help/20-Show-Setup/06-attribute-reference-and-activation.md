@@ -225,7 +225,14 @@ Preset, Cue, and revision data remains resolvable.
 
 Use a namespaced ID such as `vendor.feature` or `custom.feature` and avoid reusing a built-in ID for
 a different meaning. Manufacturer-specific control ranges should remain fixture functions or custom
-attributes rather than being forced into an unrelated built-in. **Restore recommended defaults**
+attributes rather than being forced into an unrelated built-in.
+
+A different name for the same meaning is not a custom attribute. **Imported attribute names** on that
+same page maps a fixture-source name onto an attribute this desk already programs, so a GDTF that
+calls Media Folder `MediaRank` and Media File `MediaPosition` resolves to `media.folder` and
+`media.file` instead of creating duplicates. An import records the same choice when it meets an
+unknown channel. These mappings are desk-local and are not written into the show file; a fixture
+revision keeps the mapping it already resolved. **Restore recommended defaults**
 restores the server-projected built-in activation groups while retaining custom-only groups and
 giving any formerly mixed custom member a safe single-member group.
 

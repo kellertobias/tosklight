@@ -16,7 +16,6 @@ import { NativeDragStrip } from "./components/shell/NativeDragStrip";
 import { WorkspaceView } from "./components/shell/WorkspaceView";
 import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
 import { FixedScreenPane } from "./features/screens/FixedScreenPane";
-import { ProgrammerControlSurfaceRegion } from "./features/screens/ProgrammerControlSurfaceRegion";
 import { ScreenControlRegion } from "./features/screens/ScreenControlRegion";
 import { useScreens } from "./features/screens/ScreensContext";
 import { useScreenWindowPersistence } from "./platform/desktop";
@@ -38,20 +37,10 @@ function DesktopScreenSurface({
 	const showScreenControls =
 		screen.show_playbacks || screen.show_page_controls;
 	const hydrated = useRef(false);
-	const sidePane =
-		screen.content.type === "fixed_side_pane" ? screen.content : null;
-	const hasDesktop = !sidePane || sidePane.base === "desktop";
-	const embeddedControl =
-		sidePane?.base === "control_surface" && programmerOwner;
-	const [layoutReady, setLayoutReady] = useState(!hasDesktop);
+	const [layoutReady, setLayoutReady] = useState(false);
 	const screenRef = useRef(screen);
 	screenRef.current = screen;
 	useEffect(() => {
-		if (!hasDesktop) {
-			hydrated.current = false;
-			setLayoutReady(true);
-			return;
-		}
 		if (hydrated.current) return;
 		setLayoutReady(false);
 		dispatch({
@@ -61,9 +50,8 @@ function DesktopScreenSurface({
 		});
 		hydrated.current = true;
 		setLayoutReady(true);
-	}, [screen, dispatch, hasDesktop]);
+	}, [screen, dispatch]);
 	useEffect(() => {
-		if (!hasDesktop) return;
 		const currentScreen = screenRef.current;
 		if (!currentScreen || !hydrated.current || closing.current) return;
 		const timer = window.setTimeout(() => {
@@ -75,8 +63,8 @@ function DesktopScreenSurface({
 				});
 		}, 600);
 		return () => window.clearTimeout(timer);
-	}, [state.desks, state.activeDeskId, hasDesktop]);
-	if (hasDesktop && (!layoutReady || !hydrated.current))
+	}, [state.desks, state.activeDeskId]);
+	if (!layoutReady || !hydrated.current)
 		return (
 			<LoadingSurface
 				className="connection-cover"
@@ -87,37 +75,12 @@ function DesktopScreenSurface({
 		);
 	return (
 		<div
-			className={`screen-shell ${screen.show_dock ? "with-dock" : ""} ${showScreenControls ? "with-playbacks" : ""} ${programmerOwner && !embeddedControl ? "with-control" : ""}`}
+			className={`screen-shell ${screen.show_dock ? "with-dock" : ""} ${showScreenControls ? "with-playbacks" : ""} ${programmerOwner ? "with-control" : ""}`}
 		>
 			<NativeDragStrip />
 			{screen.show_dock && <LeftDock />}
-			{sidePane ? (
-				<div
-					className={`screen-main-composition fixed-${sidePane.side}`}
-					style={
-						{
-							"--fixed-side-pane-width": `${sidePane.width_px}px`,
-						} as CSSProperties
-					}
-				>
-					<FixedScreenPane pane={sidePane.pane} />
-					{sidePane.base === "desktop" ? (
-						<WorkspaceView />
-					) : embeddedControl ? (
-						<div className="screen-main-base">
-							<ProgrammerControlSurfaceRegion screenId={screen.id} />
-						</div>
-					) : sidePane.base === "control_surface" && !programmerOwner ? (
-						<div className="screen-main-base parameter-empty" role="status">
-							<b>Control surface is assigned elsewhere</b>
-							<small>Assign this screen in Screens & playback.</small>
-						</div>
-					) : null}
-				</div>
-			) : (
-				<WorkspaceView />
-			)}
-			{!embeddedControl && (showScreenControls || programmerOwner) && (
+			<WorkspaceView />
+			{(showScreenControls || programmerOwner) && (
 				<ScreenControlRegion screen={screen} />
 			)}
 		</div>
@@ -143,25 +106,36 @@ function FixedScreenSurface({ screen }: { screen: ScreenConfiguration }) {
 	);
 }
 
-function UtilityScreenSurface({ screen }: { screen: ScreenConfiguration }) {
-	const programmerOwner =
-		useScreens().screens?.programmer_control_surface?.owner_screen_id ===
-		screen.id;
-	const showScreenControls = screen.show_playbacks || screen.show_page_controls;
+/**
+ * A fixed side pane divides the whole screen: the widget keeps its configured width
+ * over the full height and the control region takes every remaining pixel, so nothing
+ * is reserved for an empty region above it.
+ */
+function SideScreenSurface({ screen }: { screen: ScreenConfiguration }) {
+	if (screen.content.type !== "fixed_side_pane") return null;
+	const { side, width_px, pane } = screen.content;
 	return (
 		<div
-			className={`screen-shell utility-content ${showScreenControls ? "with-playbacks" : ""} ${programmerOwner ? "with-control" : ""}`}
+			className={`screen-shell side-content fixed-${side}`}
+			style={
+				{ "--fixed-side-pane-width": `${width_px}px` } as CSSProperties
+			}
 		>
 			<NativeDragStrip />
-			{screen.content.type === "control_surface" && !programmerOwner ? (
-				<div className="parameter-empty" role="status">
-					<b>Encoders are assigned elsewhere</b>
-					<small>Assign this screen in Screens & playback.</small>
-				</div>
-			) : null}
-			{(showScreenControls || programmerOwner) && (
+			<FixedScreenPane pane={pane} />
+			<div className="screen-side-base">
 				<ScreenControlRegion screen={screen} />
-			)}
+			</div>
+		</div>
+	);
+}
+
+/** Controls only: the control region owns the full screen height. */
+function ControlScreenSurface({ screen }: { screen: ScreenConfiguration }) {
+	return (
+		<div className="screen-shell utility-content">
+			<NativeDragStrip />
+			<ScreenControlRegion screen={screen} />
 		</div>
 	);
 }
@@ -191,11 +165,10 @@ function ScreenSurface({ id }: { id: string }) {
 		);
 	if (screen.content.type === "fixed_pane")
 		return <FixedScreenSurface screen={screen} />;
-	if (
-		screen.content.type === "control_surface" ||
-		screen.content.type === "none"
-	)
-		return <UtilityScreenSurface screen={screen} />;
+	if (screen.content.type === "fixed_side_pane")
+		return <SideScreenSurface screen={screen} />;
+	if (screen.content.type === "control_surface")
+		return <ControlScreenSurface screen={screen} />;
 	return (
 		<DesktopScreenSurface
 			screen={screen}

@@ -285,6 +285,7 @@ function screenPatch(
 			current.show_page_controls,
 			next.show_page_controls,
 		),
+		show_programmer: changed(current.show_programmer, next.show_programmer),
 		desired_open: changed(current.desired_open, next.desired_open),
 		display_id:
 			next.display_id == null

@@ -8,6 +8,11 @@ The left dock switches between **DESKTOPS** and **BUILT-INS**. Desktops are save
 
 The Show menu contains show creation/loading, MVR exchange, Desk Setup, Help, development tools, system controls, and desk shutdown. Help itself is a split workspace: topics on the left and the selected Markdown page on the right.
 
+Every desk window carries the same window strip with **X**, fullscreen, and move controls. On the
+main window the **X** quits ToskLight, because that window is the desk itself. On an optional screen
+window the **X** closes only that screen; the screen keeps its configuration and reopens from
+**Desk Setup → Screens**.
+
 Title-bar buttons within one action group use a single gray divider. The boundary between action groups uses a gray, light-blue, gray divider, making related controls visible without inserting a black gap.
 
 ## Search bars

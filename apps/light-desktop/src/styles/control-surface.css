@@ -748,47 +748,51 @@
 	grid-column: -2 / -1;
 	grid-row: 1;
 }
-.screen-main-composition {
-	grid-column: -2 / -1;
-	grid-row: 1;
-	display: grid;
-	min-width: 0;
-	min-height: 0;
+/*
+ * Controls-only and fixed-side-pane screens have no upper region: the control section
+ * owns every remaining pixel of height, and a fixed side pane keeps its configured
+ * width over the full height beside it.
+ */
+.screen-shell.utility-content,
+.screen-shell.side-content {
+	grid-template-rows: minmax(0, 1fr);
 }
-.screen-main-composition.fixed-left {
+.screen-shell.side-content.fixed-left {
 	grid-template-columns: var(--fixed-side-pane-width) minmax(0, 1fr);
 }
-.screen-main-composition.fixed-right {
+.screen-shell.side-content.fixed-right {
 	grid-template-columns: minmax(0, 1fr) var(--fixed-side-pane-width);
 }
-.screen-main-composition.fixed-left > .fixed-screen-pane {
+.screen-shell.side-content.fixed-left > .fixed-screen-pane {
 	grid-column: 1;
 }
-.screen-main-composition.fixed-left > .workspace-view {
+.screen-shell.side-content.fixed-left > .screen-side-base {
 	grid-column: 2;
 }
-.screen-main-composition.fixed-left > .screen-main-base {
+.screen-shell.side-content.fixed-right > .fixed-screen-pane {
 	grid-column: 2;
 }
-.screen-main-composition.fixed-right > .workspace-view {
+.screen-shell.side-content.fixed-right > .screen-side-base {
 	grid-column: 1;
 }
-.screen-main-composition.fixed-right > .screen-main-base {
-	grid-column: 1;
-}
-.screen-main-composition.fixed-right > .fixed-screen-pane {
-	grid-column: 2;
-}
-.screen-main-composition > .fixed-screen-pane,
-.screen-main-composition > .workspace-view,
-.screen-main-composition > .screen-main-base {
+.screen-shell.side-content > .fixed-screen-pane,
+.screen-shell.side-content > .screen-side-base {
 	grid-row: 1;
 	min-width: 0;
 	min-height: 0;
 	overflow: hidden;
 }
-.screen-main-composition > .screen-main-base {
+.screen-side-base {
 	display: grid;
+	grid-template-rows: minmax(0, 1fr);
+}
+.screen-shell.utility-content > .screen-playbacks,
+.screen-shell.utility-content > .control-section,
+.screen-side-base > .screen-playbacks,
+.screen-side-base > .control-section {
+	grid-column: 1 / -1;
+	grid-row: 1;
+	border-top: 0;
 }
 .screen-shell > .fixed-screen-pane {
 	grid-column: 1;
@@ -831,26 +835,47 @@
 .fixed-screen-unavailable b {
 	color: var(--text);
 }
+/* Encoders only: the group tabs and the encoders fill the section on their own. */
+.control-section.screen-encoders-only {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	grid-template-rows: minmax(0, 1fr);
+}
+
+/*
+ * The Playback/Encoders switch is placed inside the visible section: after Dynamics on
+ * the encoder tab row, above PAGE UP on the page controls. It never claims its own row.
+ * One button carries both labels and only recolours, so its box is identical in either
+ * view and the surrounding row never reflows.
+ */
 .screen-section-switch {
-	grid-column: -2 / -1;
 	display: flex;
 	gap: 5px;
-	padding: 5px 5px 0;
-	border-top: 1px solid var(--line);
+	align-items: center;
+	justify-content: center;
+	white-space: nowrap;
 }
-.screen-section-switch > .ui-button {
-	min-height: 34px;
-	flex: 1;
+.screen-section-switch > span {
+	color: var(--text);
 	font-size: 12px;
 }
-.screen-section-switch > .ui-button.active {
-	border-color: var(--cyan);
-	background: #0a252b;
+.screen-section-switch > span.active {
 	color: var(--cyan);
 }
-.screen-section-switch + .screen-playbacks,
-.screen-section-switch + .control-section {
-	border-top: 0;
+.family-tabs > .screen-section-switch {
+	min-height: 42px;
+	height: 42px;
+}
+.screen-page-controls > .screen-section-switch {
+	flex-direction: column;
+	gap: 2px;
+	min-height: 42px;
+}
+.screen-page-controls > .screen-section-switch > span {
+	font-size: 11px;
+}
+.screen-page-controls.switch-only {
+	align-content: start;
 }
 .screen-playbacks {
 	grid-column: -2 / -1;
@@ -953,39 +978,6 @@
 	border: 1px solid var(--amber);
 	border-radius: 6px;
 	background: color-mix(in srgb, var(--amber) 12%, var(--panel));
-}
-.programmer-control-layout-preview {
-	display: grid;
-	gap: 10px;
-	margin-top: 10px;
-	padding: 10px;
-	border: 1px solid var(--line);
-	border-radius: 7px;
-	background: var(--panel2);
-}
-.programmer-control-layout-preview > div:first-child,
-.programmer-control-layout-group {
-	display: grid;
-	gap: 5px;
-}
-.programmer-control-layout-slots {
-	display: grid;
-	gap: 5px;
-}
-.programmer-control-layout-slots > span {
-	display: grid;
-	min-width: 0;
-	min-height: 58px;
-	align-content: space-between;
-	gap: 3px;
-	padding: 6px;
-	border: 1px solid var(--line);
-	border-radius: 5px;
-	background: var(--panel);
-}
-.programmer-control-layout-slots b {
-	overflow: hidden;
-	text-overflow: ellipsis;
 }
 .screen-owner-remove-confirmation {
 	display: grid;

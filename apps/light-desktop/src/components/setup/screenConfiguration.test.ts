@@ -21,6 +21,7 @@ const configuredScreen: ScreenConfiguration = {
 	first_playback_slot: 9,
 	page_mode: "independent",
 	show_page_controls: false,
+	show_programmer: false,
 	desired_open: false,
 	display_id: "display-2",
 	bounds: { x: 10, y: 20, width: 900, height: 700 },
@@ -132,7 +133,7 @@ describe("Add Screen action", () => {
 		});
 	});
 
-	it("keeps Dock available for pixel-sized side panes", () => {
+	it("removes Desktop Dock from a pixel-sized side pane", () => {
 		const side = updateScreenConfiguration(
 			{ ...configuredScreen, show_dock: true },
 			{
@@ -141,24 +142,6 @@ describe("Add Screen action", () => {
 					pane: { type: "cues", cue_list_id: "" },
 					side: "left",
 					width_px: 420,
-					base: "desktop",
-				},
-			},
-		);
-
-		expect(side.show_dock).toBe(true);
-	});
-
-	it("removes Desktop Dock from a side pane with a non-Desktop base", () => {
-		const side = updateScreenConfiguration(
-			{ ...configuredScreen, show_dock: true },
-			{
-				content: {
-					type: "fixed_side_pane",
-					pane: { type: "cues", cue_list_id: "" },
-					side: "right",
-					width_px: 420,
-					base: "control_surface",
 				},
 			},
 		);
@@ -166,13 +149,12 @@ describe("Add Screen action", () => {
 		expect(side.show_dock).toBe(false);
 	});
 
-	it("removes Desktop Dock from Control surface and None base content", () => {
-		for (const type of ["control_surface", "none"] as const)
-			expect(
-				updateScreenConfiguration(
-					{ ...configuredScreen, show_dock: true },
-					{ content: { type } },
-				),
-			).toMatchObject({ content: { type }, show_dock: false });
+	it("removes Desktop Dock from controls-only content", () => {
+		expect(
+			updateScreenConfiguration(
+				{ ...configuredScreen, show_dock: true },
+				{ content: { type: "control_surface" } },
+			),
+		).toMatchObject({ content: { type: "control_surface" }, show_dock: false });
 	});
 });

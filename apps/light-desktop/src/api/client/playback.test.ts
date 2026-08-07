@@ -27,6 +27,7 @@ const screen: ScreenConfiguration = {
 	first_playback_slot: 1,
 	page_mode: "follow_main",
 	show_page_controls: true,
+	show_programmer: false,
 	desired_open: false,
 	display_id: null,
 	bounds: null,

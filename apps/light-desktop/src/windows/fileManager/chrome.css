@@ -21,7 +21,22 @@
 	overflow: hidden;
 }
 
+/*
+ * The window toolbar is portaled into the pane header ahead of the Settings
+ * action, so a toolbar that refuses to shrink pushes Settings past the header's
+ * hidden overflow and the pane can no longer be configured or removed. The
+ * toolbar gives way instead: it shrinks, then clips its own trailing controls.
+ */
 .pane-chrome-toolbar-target {
+	flex: 0 1 auto;
+	overflow: hidden;
+}
+
+.ui-window-header:has(.pane-chrome-toolbar-target) .console-search {
+	min-width: 0;
+}
+
+.ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-action-groups {
 	flex: none;
 }
 

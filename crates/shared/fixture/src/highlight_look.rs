@@ -30,7 +30,7 @@ impl Default for HighlightLook {
         Self {
             intensity: 1.0,
             shutter: HighlightShutterPolicy::Open,
-            color: None,
+            color: Some(HighlightColor::White),
             iris: None,
             zoom: None,
             focus: None,
@@ -41,15 +41,6 @@ impl Default for HighlightLook {
 }
 
 impl HighlightLook {
-    /// Compatibility default for installation configuration written before Highlight Look became
-    /// desk-owned. The persisted show remains authoritative until an operator reviews migration.
-    pub fn needs_review() -> Self {
-        Self {
-            compatibility: HighlightLookCompatibility::NeedsReview,
-            ..Self::default()
-        }
-    }
-
     pub fn validate(&self) -> Result<(), HighlightLookValidationError> {
         validate_normalized("intensity", self.intensity)?;
         for (field, value) in [
@@ -79,9 +70,9 @@ pub enum HighlightShutterPolicy {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HighlightLookCompatibility {
+    #[default]
     Semantic,
     LegacyRaw,
-    #[default]
     NeedsReview,
 }
 
@@ -135,14 +126,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fresh_look_is_semantic_and_optional_parts_are_ignored() {
+    fn fresh_look_is_semantic_white_and_optional_parts_are_ignored() {
         let look = HighlightLook::default();
         assert_eq!(look.compatibility, HighlightLookCompatibility::Semantic);
         assert_eq!(look.shutter, HighlightShutterPolicy::Open);
         assert_eq!(look.intensity, 1.0);
+        assert_eq!(look.color, Some(HighlightColor::White));
         assert_eq!(
-            (look.color, look.iris, look.zoom, look.focus, look.frost),
-            (None, None, None, None, None)
+            (look.iris, look.zoom, look.focus, look.frost),
+            (None, None, None, None)
         );
         assert_eq!(look.validate(), Ok(()));
     }

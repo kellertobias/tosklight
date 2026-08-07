@@ -7,6 +7,7 @@ import {
 } from "../../components/control/PlaybackPageDialogs";
 import { usePlaybackTopologyActions } from "../playbackTopology/PlaybackTopologyProvider";
 import { usePlaybackPagesView } from "../playbackTopology/PlaybackTopologyView";
+import { useLowerSectionSwitch } from "./LowerSectionSwitch";
 import { useScreens } from "./ScreensContext";
 
 /**
@@ -22,6 +23,7 @@ export function ScreenPageControls({
 	page: number;
 }) {
 	const { setScreenPage } = useScreens();
+	const sectionSwitch = useLowerSectionSwitch();
 	const topology = usePlaybackPagesView();
 	const actions = usePlaybackTopologyActions();
 	const [picker, setPicker] = useState(false);
@@ -56,6 +58,7 @@ export function ScreenPageControls({
 
 	return (
 		<div className="screen-page-controls">
+			{sectionSwitch}
 			<Button disabled={!writable || page <= 1} onClick={() => setPage(page - 1)}>
 				▲ PAGE UP
 			</Button>

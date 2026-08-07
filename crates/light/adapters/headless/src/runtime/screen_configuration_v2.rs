@@ -294,6 +294,7 @@ fn apply_patch(
         screen.page_mode = page_mode_string(page_mode).to_owned();
     }
     patch!(show_page_controls);
+    patch!(show_programmer);
     patch!(desired_open);
     if patch.clear_display_id {
         screen.display_id = None;
@@ -329,6 +330,7 @@ fn domain_screen(screen: wire::ScreenConfiguration) -> Result<ScreenConfiguratio
         first_playback_slot: screen.first_playback_slot,
         page_mode: page_mode_string(screen.page_mode).to_owned(),
         show_page_controls: screen.show_page_controls,
+        show_programmer: screen.show_programmer,
         desired_open: screen.desired_open,
         display_id: screen.display_id,
         bounds: screen.bounds,
@@ -354,6 +356,7 @@ fn wire_screen(screen: ScreenConfiguration) -> Result<wire::ScreenConfiguration,
             _ => return Err(ApiError::internal("stored screen has an invalid page mode")),
         },
         show_page_controls: screen.show_page_controls,
+        show_programmer: screen.show_programmer,
         desired_open: screen.desired_open,
         display_id: screen.display_id,
         bounds: screen.bounds,
@@ -367,7 +370,6 @@ fn domain_content(content: wire::ScreenContent) -> light_show::ScreenContent {
     match content {
         wire::ScreenContent::Desktop => light_show::ScreenContent::Desktop,
         wire::ScreenContent::ControlSurface => light_show::ScreenContent::ControlSurface,
-        wire::ScreenContent::None => light_show::ScreenContent::None,
         wire::ScreenContent::FixedPane { pane } => light_show::ScreenContent::FixedPane {
             pane: domain_fixed_pane(pane),
         },
@@ -375,7 +377,6 @@ fn domain_content(content: wire::ScreenContent) -> light_show::ScreenContent {
             pane,
             side,
             width_px,
-            base,
         } => light_show::ScreenContent::FixedSidePane {
             pane: domain_fixed_pane(pane),
             side: match side {
@@ -383,13 +384,6 @@ fn domain_content(content: wire::ScreenContent) -> light_show::ScreenContent {
                 wire::FixedScreenSide::Right => light_show::FixedScreenSide::Right,
             },
             width_px,
-            base: match base {
-                wire::ScreenBaseContent::Desktop => light_show::ScreenBaseContent::Desktop,
-                wire::ScreenBaseContent::ControlSurface => {
-                    light_show::ScreenBaseContent::ControlSurface
-                }
-                wire::ScreenBaseContent::None => light_show::ScreenBaseContent::None,
-            },
         },
     }
 }
@@ -511,7 +505,6 @@ fn wire_content(content: light_show::ScreenContent) -> wire::ScreenContent {
     match content {
         light_show::ScreenContent::Desktop => wire::ScreenContent::Desktop,
         light_show::ScreenContent::ControlSurface => wire::ScreenContent::ControlSurface,
-        light_show::ScreenContent::None => wire::ScreenContent::None,
         light_show::ScreenContent::FixedPane { pane } => wire::ScreenContent::FixedPane {
             pane: wire_fixed_pane(pane),
         },
@@ -519,7 +512,6 @@ fn wire_content(content: light_show::ScreenContent) -> wire::ScreenContent {
             pane,
             side,
             width_px,
-            base,
         } => wire::ScreenContent::FixedSidePane {
             pane: wire_fixed_pane(pane),
             side: match side {
@@ -527,13 +519,6 @@ fn wire_content(content: light_show::ScreenContent) -> wire::ScreenContent {
                 light_show::FixedScreenSide::Right => wire::FixedScreenSide::Right,
             },
             width_px,
-            base: match base {
-                light_show::ScreenBaseContent::Desktop => wire::ScreenBaseContent::Desktop,
-                light_show::ScreenBaseContent::ControlSurface => {
-                    wire::ScreenBaseContent::ControlSurface
-                }
-                light_show::ScreenBaseContent::None => wire::ScreenBaseContent::None,
-            },
         },
     }
 }

@@ -264,8 +264,14 @@ describe("Desk Setup attribute registry", () => {
 
 		const source = screen.getByLabelText("intensity page 1 encoder 2");
 		const target = screen.getByLabelText("intensity page 1 encoder 1");
-		fireEvent.dragStart(source);
-		fireEvent.drop(target);
+		fireEvent.pointerDown(source, { clientX: 200, clientY: 100 });
+		fireEvent.pointerMove(window, { clientX: 100, clientY: 100 });
+		fireEvent.pointerEnter(target, { clientX: 100, clientY: 100 });
+		// The layout already shows the pending move before the pointer is released.
+		expect(
+			screen.getByLabelText("intensity page 1 encoder 1"),
+		).toHaveTextContent("Intensity Fade");
+		fireEvent.pointerUp(window);
 
 		expect(editAttributeConfiguration).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -434,6 +440,87 @@ describe("Desk Setup attribute registry", () => {
 		expect(editAttributeConfiguration).toHaveBeenCalledWith(
 			updatePushTurnCompanion(configuration, "prism.1", "prism.1.rotation"),
 		);
+	});
+
+	it("gives the preset and every activation group its own section", () => {
+		render(
+			<AttributeSettings
+				controller={
+					{
+						attributeConfiguration: {
+							...snapshot,
+							configuration: {
+								...snapshot.configuration,
+								activation_groups: [
+									...snapshot.configuration.activation_groups,
+									{ id: "position", label: "Position", members: [] },
+								],
+							},
+						},
+						attributeConfigurationError: null,
+						editAttributeConfiguration: vi.fn(),
+					} as unknown as SetupWindowController
+				}
+			/>,
+		);
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "Attribute activation groups" }),
+		);
+		const panel = screen.getByRole("tabpanel");
+		expect(
+			[...panel.querySelectorAll("article")].map((article) =>
+				article.className.includes("activation-presets")
+					? "presets"
+					: article.className.includes("activation-group")
+						? "group"
+						: "create",
+			),
+		).toEqual(["presets", "group", "group", "create"]);
+	});
+
+	it("declares a GDTF name as another spelling of an existing attribute", async () => {
+		const rememberFixtureSourceMapping = vi.fn(async (input) => ({
+			source_format: input.sourceFormat,
+			source_attribute: input.sourceAttribute,
+			target_attribute: input.targetAttribute,
+		}));
+		const library = {
+			fixtureSourceMappings: vi.fn(async () => []),
+			rememberFixtureSourceMapping,
+		} as unknown as FixtureLibraryState;
+		render(
+			<FixtureLibraryProvider library={library}>
+				<AttributeSettings
+					controller={
+						{
+							attributeConfiguration: snapshot,
+							attributeConfigurationError: null,
+							editAttributeConfiguration: vi.fn(),
+						} as unknown as SetupWindowController
+					}
+				/>
+			</FixtureLibraryProvider>,
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Attributes" }));
+		fireEvent.change(await screen.findByLabelText("GDTF attribute name"), {
+			target: { value: " MediaRank " },
+		});
+		fireEvent.click(
+			screen.getByRole("button", { name: "Means this attribute" }),
+		);
+		fireEvent.click(
+			screen.getByRole("option", { name: "Intensity (intensity)" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Map imported name" }));
+
+		expect(rememberFixtureSourceMapping).toHaveBeenCalledWith({
+			sourceFormat: "gdtf",
+			sourceAttribute: "MediaRank",
+			targetAttribute: "intensity",
+		});
+		expect(await screen.findByText("GDTF:MediaRank")).toBeVisible();
 	});
 
 	it("lists and retargets remembered fixture-source mappings under Attributes", async () => {

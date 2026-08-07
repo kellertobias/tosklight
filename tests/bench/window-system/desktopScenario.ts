@@ -115,6 +115,7 @@ export class PaneHandle<T extends PaneType> {
 	readonly expect = {
 		geometry: (geometry: PaneGeometry) =>
 			this.desktops.expectGeometry(this, geometry),
+		settingsReachable: () => this.desktops.expectSettingsReachable(this),
 		visible: () => expect(this.desktops.locatorFor(this)).toBeVisible(),
 		maximized: (value = true) =>
 			expect(this.desktops.locatorFor(this)).toHaveAttribute(
@@ -341,6 +342,34 @@ export class BrowserDesktops {
 			.click();
 		await expect(pane).toHaveCount(0);
 		this.bindings.delete(handle.slug);
+	}
+
+	/**
+	 * Settings is the only route to a pane's geometry and to removing it, and the
+	 * pane header clips whatever a crowded window toolbar pushes past its edge. A
+	 * button that merely exists in the DOM is not proof, so this measures that the
+	 * operator can still see and hit it inside the pane.
+	 */
+	async expectSettingsReachable<T extends PaneType>(
+		handle: PaneHandle<T>,
+	): Promise<void> {
+		const pane = this.locatorFor(handle);
+		const settings = pane.getByRole("button", { name: "Settings", exact: true });
+		await expect(settings).toBeVisible();
+		const paneBox = await pane.boundingBox();
+		const settingsBox = await settings.boundingBox();
+		if (!paneBox || !settingsBox)
+			throw new Error(`Pane "${handle.slug}" has no measurable Settings button`);
+		expect(
+			Math.round(settingsBox.x - paneBox.x),
+			`Settings of the "${handle.slug}" pane is clipped by its left edge`,
+		).toBeGreaterThanOrEqual(0);
+		expect(
+			Math.round(
+				paneBox.x + paneBox.width - (settingsBox.x + settingsBox.width),
+			),
+			`Settings of the "${handle.slug}" pane is clipped by its right edge`,
+		).toBeGreaterThanOrEqual(0);
 	}
 
 	async screenshot<T extends PaneType>(

@@ -12,7 +12,7 @@ scenario(
 		await t.app.open();
 		await t.app.expect.ready();
 		const desktop = t.desktop.configure("File Manager editing");
-		desktop.addPane(PaneType.FileManager, {
+		const files = desktop.addPane(PaneType.FileManager, {
 			slug: "files",
 			column: 1,
 			row: 1,
@@ -21,6 +21,11 @@ scenario(
 		});
 		await desktop.apply();
 		await t.files.expectManagerEditsText();
+		// The File Manager toolbar shares the pane header with Settings, so a pane
+		// narrow enough to crowd that toolbar must still be configurable and removable.
+		await files.resize({ width: 8, height: 9 });
+		await files.expect.settingsReachable();
+		await files.remove();
 	},
 );
 

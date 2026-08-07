@@ -14,19 +14,18 @@ import {
 	RecordDefaultsFields,
 	UpdateDefaultsFields,
 } from "../../components/setup/ProgrammerDefaults";
-import { EncoderLayoutPreview } from "../../components/setup/EncoderLayoutPreview";
 import { PoolPaletteSettings } from "../../components/shared/PoolColorSettings";
 import { AttributeRegistrySettings } from "./AttributeRegistrySettings";
 import type { SetupWindowController } from "./controller";
 
 const DEFAULT_HIGHLIGHT_LOOK: HighlightLookConfiguration = {
 	intensity: 1,
-	color: null,
+	color: "white",
 	iris: null,
 	zoom: null,
 	focus: null,
 	frost: null,
-	compatibility: "needs_review",
+	compatibility: "semantic",
 };
 
 const COLOR_OPTIONS: Array<{
@@ -380,7 +379,6 @@ export function AttributesEncodersSection({
 }) {
 	return (
 		<PreferencesPage title="Attributes & encoders" controller={controller}>
-			<EncoderLayoutPreview />
 			<AttributeRegistrySettings controller={controller} />
 		</PreferencesPage>
 	);

@@ -3,7 +3,7 @@ use crate::{
     DeskStore, FixedScreenFixtureColumn, FixedScreenFixtureCompactMode,
     FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder, FixedScreenPane, FixedScreenSide,
     FixedScreenStageRenderQuality, PlaybackSurfaceLayout, PlaybackSurfaceRow,
-    ProgrammerControlSurfaceConfiguration, ScreenBaseContent, ScreenConfiguration, ScreenContent,
+    ProgrammerControlSurfaceConfiguration, ScreenConfiguration, ScreenContent,
 };
 use light_core::ShowId;
 use rusqlite::Connection;
@@ -27,6 +27,7 @@ fn screens_persist_and_keep_independent_pages_per_show() {
         first_playback_slot: 20,
         page_mode: "independent".into(),
         show_page_controls: false,
+        show_programmer: false,
         desired_open: true,
         display_id: Some("display".into()),
         bounds: Some(serde_json::json!({"x":1,"y":2,"width":800,"height":600})),
@@ -77,6 +78,7 @@ fn screen_playback_range_must_fit_page_slots() {
         first_playback_slot: 120,
         page_mode: "follow_main".into(),
         show_page_controls: true,
+        show_programmer: false,
         desired_open: false,
         display_id: None,
         bounds: None,
@@ -199,6 +201,7 @@ fn removing_a_client_cleans_only_its_desk_owned_installation_state() {
         first_playback_slot: 1,
         page_mode: "follow_main".into(),
         show_page_controls: true,
+        show_programmer: false,
         desired_open: false,
         display_id: None,
         bounds: None,
@@ -340,6 +343,7 @@ fn programmer_control_surface_persists_one_screen_owner_and_reassigns_deleted_ow
             first_playback_slot: 1,
             page_mode: "follow_main".into(),
             show_page_controls: false,
+            show_programmer: false,
             desired_open: true,
             display_id: None,
             bounds: None,
@@ -412,6 +416,7 @@ fn fixed_screen_content_round_trips_and_forces_dock_off() {
             first_playback_slot: 1,
             page_mode: "follow_main".into(),
             show_page_controls: true,
+            show_programmer: false,
             desired_open: true,
             display_id: None,
             bounds: None,
@@ -479,6 +484,7 @@ fn fixed_side_pane_round_trips_with_pixel_width_and_keeps_dock() {
         first_playback_slot: 1,
         page_mode: "follow_main".into(),
         show_page_controls: true,
+        show_programmer: false,
         desired_open: true,
         display_id: None,
         bounds: None,
@@ -490,12 +496,11 @@ fn fixed_side_pane_round_trips_with_pixel_width_and_keeps_dock() {
             },
             side: FixedScreenSide::Right,
             width_px: 480,
-            base: ScreenBaseContent::Desktop,
         },
     };
 
     let saved = store.put_screen(base.clone()).unwrap();
-    assert!(saved.show_dock);
+    assert!(!saved.show_dock);
     assert_eq!(saved.content, base.content);
 
     let invalid = ScreenConfiguration {
@@ -506,7 +511,6 @@ fn fixed_side_pane_round_trips_with_pixel_width_and_keeps_dock() {
             },
             side: FixedScreenSide::Left,
             width_px: 120,
-            base: ScreenBaseContent::Desktop,
         },
         ..base
     };
@@ -516,26 +520,38 @@ fn fixed_side_pane_round_trips_with_pixel_width_and_keeps_dock() {
 }
 
 #[test]
-fn fixed_side_pane_defaults_legacy_base_to_desktop() {
+fn fixed_side_pane_reads_legacy_base_discriminator_as_a_plain_side_pane() {
     let content: ScreenContent = serde_json::from_value(serde_json::json!({
         "type": "fixed_side_pane",
         "pane": { "type": "cues", "cue_list_id": "" },
         "side": "left",
-        "width_px": 420
+        "width_px": 420,
+        "base": "control_surface"
     }))
     .unwrap();
 
-    assert!(matches!(
+    assert_eq!(
         content,
         ScreenContent::FixedSidePane {
-            base: ScreenBaseContent::Desktop,
-            ..
+            pane: FixedScreenPane::Cues {
+                cue_list_id: String::new(),
+            },
+            side: FixedScreenSide::Left,
+            width_px: 420,
         }
-    ));
+    );
 }
 
 #[test]
-fn fixed_side_pane_with_control_base_turns_desktop_dock_off() {
+fn legacy_empty_screen_content_reads_as_controls_only() {
+    let content: ScreenContent =
+        serde_json::from_value(serde_json::json!({ "type": "none" })).unwrap();
+
+    assert_eq!(content, ScreenContent::ControlSurface);
+}
+
+#[test]
+fn fixed_side_pane_turns_desktop_dock_off() {
     let path = temporary("fixed-side-control-base");
     let store = DeskStore::open(&path).unwrap();
     let saved = store
@@ -550,6 +566,7 @@ fn fixed_side_pane_with_control_base_turns_desktop_dock_off() {
             first_playback_slot: 1,
             page_mode: "follow_main".into(),
             show_page_controls: true,
+            show_programmer: false,
             desired_open: true,
             display_id: None,
             bounds: None,
@@ -561,7 +578,6 @@ fn fixed_side_pane_with_control_base_turns_desktop_dock_off() {
                 },
                 side: FixedScreenSide::Left,
                 width_px: 420,
-                base: ScreenBaseContent::ControlSurface,
             },
         })
         .unwrap();
@@ -586,6 +602,7 @@ fn control_and_empty_screen_content_round_trip_without_desktop_dock() {
         first_playback_slot: 1,
         page_mode: "follow_main".into(),
         show_page_controls: true,
+        show_programmer: false,
         desired_open: true,
         display_id: None,
         bounds: None,
@@ -600,12 +617,12 @@ fn control_and_empty_screen_content_round_trip_without_desktop_dock() {
     let empty = store
         .put_screen(ScreenConfiguration {
             id: Uuid::new_v4(),
-            content: ScreenContent::None,
+            content: ScreenContent::ControlSurface,
             ..base
         })
         .unwrap();
     assert!(!empty.show_dock);
-    assert_eq!(empty.content, ScreenContent::None);
+    assert_eq!(empty.content, ScreenContent::ControlSurface);
     drop(store);
     let _ = fs::remove_file(path);
 }
@@ -625,6 +642,7 @@ fn fixed_screen_content_rejects_invalid_display_settings_without_resolving_refer
         first_playback_slot: 1,
         page_mode: "follow_main".into(),
         show_page_controls: true,
+        show_programmer: false,
         desired_open: false,
         display_id: None,
         bounds: None,

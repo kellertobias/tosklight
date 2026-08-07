@@ -21,7 +21,7 @@ import { WorkspaceView } from "./WorkspaceView";
 export function AppShell() {
 	return (
 		<AppShellView
-			nativeDragStrip={<NativeDragStrip />}
+			nativeDragStrip={<NativeDragStrip closes="application" />}
 			sectionNameMap={<SectionNameMap />}
 			layoutPersistence={<LayoutPersistence />}
 			screenWindowManager={<ScreenWindowManager />}

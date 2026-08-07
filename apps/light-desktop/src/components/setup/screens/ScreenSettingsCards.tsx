@@ -32,10 +32,10 @@ type TextFileOption = {
 	name: string;
 };
 
+/** Content that dedicates its whole layout to the control region. */
 function hasControlSurface(content: ScreenConfiguration["content"]) {
 	return (
-		content.type === "control_surface" ||
-		(content.type === "fixed_side_pane" && content.base === "control_surface")
+		content.type === "control_surface" || content.type === "fixed_side_pane"
 	);
 }
 
@@ -439,31 +439,15 @@ function ScreenLayoutFields({
 											type,
 											pane: fixedPane ?? DEFAULT_FIXED_SCREEN_PANE,
 										}
-									: type === "control_surface" || type === "none"
+									: type === "control_surface"
 										? { type }
-										: type === "fixed_side_pane_left"
-										? {
-												type: "fixed_side_pane",
-												pane: fixedPane ?? DEFAULT_FIXED_SCREEN_PANE,
-												side: "left",
-												base:
-													draft.content.type === "fixed_side_pane"
-														? draft.content.base
-														: "desktop",
-												width_px:
-													draft.content.type === "fixed_side_pane"
-														? draft.content.width_px
-														: DEFAULT_FIXED_SIDE_WIDTH_PX,
-											}
-										: type === "fixed_side_pane_right"
+										: type === "fixed_side_pane_left" ||
+												type === "fixed_side_pane_right"
 											? {
 													type: "fixed_side_pane",
 													pane: fixedPane ?? DEFAULT_FIXED_SCREEN_PANE,
-													side: "right",
-													base:
-														draft.content.type === "fixed_side_pane"
-															? draft.content.base
-															: "desktop",
+													side:
+														type === "fixed_side_pane_left" ? "left" : "right",
 													width_px:
 														draft.content.type === "fixed_side_pane"
 															? draft.content.width_px
@@ -474,16 +458,13 @@ function ScreenLayoutFields({
 					}
 					options={[
 						{ value: "desktop", label: "Desktop" },
-						{ value: "control_surface", label: "Control surface" },
-						{ value: "none", label: "None" },
+						{ value: "control_surface", label: "Controls only" },
 						{ value: "fixed_pane", label: "Fixed full-screen pane" },
 						{ value: "fixed_side_pane_left", label: "Fixed left pane" },
 						{ value: "fixed_side_pane_right", label: "Fixed right pane" },
 					]}
 				/>
-				{(draft.content.type === "desktop" ||
-					(draft.content.type === "fixed_side_pane" &&
-						draft.content.base === "desktop")) && (
+				{draft.content.type === "desktop" && (
 					<SelectField
 						label="Desktop"
 						value={draft.layout.activeDeskId}
@@ -501,22 +482,14 @@ function ScreenLayoutFields({
 					offLabel="Hidden"
 					onLabel="Visible"
 					checked={draft.show_dock}
-					disabled={
-						draft.content.type === "fixed_pane" ||
-						draft.content.type === "control_surface" ||
-						draft.content.type === "none" ||
-						(draft.content.type === "fixed_side_pane" &&
-							draft.content.base !== "desktop")
-					}
+					disabled={draft.content.type !== "desktop"}
 					description={
 						draft.content.type === "fixed_pane"
 							? "Dock is unavailable with a fixed full-screen pane."
-							: draft.content.type === "control_surface" ||
-									draft.content.type === "none"
-								? "Dock is unavailable without Desktop content."
-								: draft.content.type === "fixed_side_pane" &&
-										draft.content.base !== "desktop"
-									? "Dock is unavailable when a fixed side pane uses Control surface or None as its base content."
+							: draft.content.type === "fixed_side_pane"
+								? "Dock is unavailable with a fixed side pane."
+								: draft.content.type === "control_surface"
+									? "Dock is unavailable without Desktop content."
 							: undefined
 					}
 					onChange={(event) => update({ show_dock: event.target.checked })}
@@ -536,6 +509,16 @@ function ScreenLayoutFields({
 					onChange={(event) =>
 						update({ show_page_controls: event.target.checked })
 					}
+				/>
+				<SwitchField
+					label="Programmer"
+					offLabel="Encoders only"
+					onLabel="Full programmer"
+					checked={draft.show_programmer}
+					onChange={(event) =>
+						update({ show_programmer: event.target.checked })
+					}
+					description="Encoders only keeps the encoder group tabs and the encoders. Full programmer adds the command line and the programmer tools beside them."
 				/>
 			</div>
 		</section>
@@ -595,18 +578,6 @@ function ScreenPaneSettings({
 						/>
 						{sideContent ? (
 							<>
-								<SelectField
-									label="Base content"
-									value={sideContent.base}
-									options={[
-										{ value: "desktop", label: "Desktop" },
-										{ value: "control_surface", label: "Control surface" },
-										{ value: "none", label: "None" },
-									]}
-									onChange={(base) =>
-										update({ content: { ...sideContent, base } })
-									}
-								/>
 								<NumberField
 									label="Pane width (px)"
 									min={240}
@@ -905,20 +876,22 @@ export function ScreenSettingsCard({
 			)}
 			{hasControlSurface(draft.content) && !programmerOwner && (
 				<p className="screen-settings-note" role="status">
-					This Control surface content becomes active when this screen carries the
+					This control layout becomes active when this screen carries the
 					encoders. Selecting it assigns that placement when saved.
 				</p>
 			)}
 			{programmerOwner && !hasControlSurface(draft.content) && (
 				<p className="screen-settings-note" role="status">
 					The encoders appear below this content. When this screen also shows
-					Playbacks, a Playback/Encoders switch selects the lower section.
+					Playbacks, the Playback/Encoders switch sits beside the section's own
+					controls.
 				</p>
 			)}
 			{programmerOwner && hasControlSurface(draft.content) && (
 				<p className="screen-settings-note" role="status">
-					This control-only layout carries the encoders; when Playbacks are also
-					enabled, a Playback/Encoders switch selects the lower section.
+					This control layout carries the encoders over the full screen height.
+					When Playbacks are also enabled, the Playback/Encoders switch sits
+					beside the section's own controls.
 				</p>
 			)}
 			<ScreenSettingsFields

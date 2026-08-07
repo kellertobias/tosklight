@@ -104,27 +104,19 @@ pub enum FixedScreenPane {
 pub enum ScreenContent {
     #[default]
     Desktop,
+    /// Controls only. Older desk data stored the equivalent empty screen as `none`.
+    #[serde(alias = "none")]
     ControlSurface,
-    None,
     FixedPane {
         pane: FixedScreenPane,
     },
+    /// A full-height fixed widget on one side; the control region fills the rest.
+    /// Older desk data carried a `base` discriminator here, which is now ignored.
     FixedSidePane {
         pane: FixedScreenPane,
         side: FixedScreenSide,
         width_px: u16,
-        #[serde(default)]
-        base: ScreenBaseContent,
     },
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ScreenBaseContent {
-    #[default]
-    Desktop,
-    ControlSurface,
-    None,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -185,6 +177,10 @@ pub struct ScreenConfiguration {
     pub first_playback_slot: u8,
     pub page_mode: String,
     pub show_page_controls: bool,
+    /// Full programmer surface (command line, right-hand tools) on this optional screen.
+    /// Off keeps the encoder group tabs and the encoders alone.
+    #[serde(default)]
+    pub show_programmer: bool,
     pub desired_open: bool,
     pub display_id: Option<String>,
     pub bounds: Option<serde_json::Value>,
