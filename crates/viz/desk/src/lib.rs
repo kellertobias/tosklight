@@ -5,6 +5,7 @@
 //! Art-Net or sACN packets on the lighting network. Those planes never cross.
 
 mod client;
+mod preload_overlay;
 mod provider;
 mod routes;
 mod scene_build;

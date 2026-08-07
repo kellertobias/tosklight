@@ -29,7 +29,13 @@ body,
 	height: 100%;
 	margin: 0;
 	overflow: hidden;
-	background: var(--bg);
+	/*
+	 * Deliberately unpainted. The desk's window carries this colour itself, so everything here
+	 * looks the same — and the Stage the renderer draws beneath this layer is visible only where
+	 * the interface paints nothing at all. A root background is painted over the whole window, and
+	 * would hide that picture however the layers beneath it are ordered.
+	 */
+	background: transparent;
 	color: var(--text);
 }
 button,

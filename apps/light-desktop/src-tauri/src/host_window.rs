@@ -36,6 +36,14 @@ pub(crate) fn install(app: &mut tauri::App) -> tauri::Result<()> {
         .min_inner_size(1024.0, 640.0)
         .decorations(false)
         .resizable(true)
+        // The desk's own background, painted by the window rather than by the page.
+        //
+        // The interface has to be see-through for the Stage beneath it to be visible at all, and a
+        // page that paints its background over the whole window can never be. Moving that colour
+        // down here means the interface can stop painting it without anything looking different:
+        // every part of the window the interface does not draw shows this instead of the desktop,
+        // which is exactly what the page used to put there.
+        .background_color(tauri::window::Color(0x07, 0x09, 0x0c, 0xff))
         .build()?;
 
     let size = window.inner_size()?;

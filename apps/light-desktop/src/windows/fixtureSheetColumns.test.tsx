@@ -1,0 +1,92 @@
+import { cleanup, render } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { fixtureSheetColumns } from "./fixtureSheetColumns";
+import type { FixtureSheetRow } from "./fixtureSheetProjection";
+import type { FixtureStepPresenter } from "./fixtureSheetStep";
+
+const present: FixtureStepPresenter = () => ({
+	current: false,
+	containedCurrent: false,
+	base: false,
+	containedBase: false,
+});
+
+function row(overrides: Partial<FixtureSheetRow>): FixtureSheetRow {
+	return {
+		id: 1,
+		name: "Front Frost 1",
+		type: "Fresnel",
+		fixtureType: "Generic · Fresnel",
+		patch: "U1.1",
+		icon: null,
+		fixtureId: "fixture-1",
+		targetKind: "fixture",
+		parentFixtureId: "fixture-1",
+		childFixtureIds: [],
+		indented: false,
+		dimmer: 0,
+		color: "transparent",
+		colorAvailable: false,
+		colorLabel: "—",
+		pan: 50,
+		tilt: 50,
+		positionAvailable: false,
+		positionLabel: "—",
+		preloadDimmer: null,
+		preloadColor: null,
+		preloadPan: null,
+		preloadTilt: null,
+		beam: "—",
+		focus: "—",
+		limitingGroups: [],
+		sources: {
+			dimmer: "default",
+			color: "default",
+			position: "default",
+			beam: "default",
+			focus: "default",
+		},
+		...overrides,
+	} as FixtureSheetRow;
+}
+
+function renderColumn(id: string, fixture: FixtureSheetRow) {
+	const column = fixtureSheetColumns(false, present).find(
+		(candidate) => candidate.id === id,
+	);
+	if (!column?.render) throw new Error(`the ${id} column has no renderer`);
+	return render(<>{column.render(fixture, 0)}</>).container;
+}
+
+afterEach(cleanup);
+
+describe("Fixture Sheet colour and position previews", () => {
+	it("shows no preview for a lantern without the attribute", () => {
+		const lantern = row({});
+
+		const color = renderColumn("color", lantern);
+		const position = renderColumn("position", lantern);
+
+		expect(color.querySelector(".color-dot")).toBeNull();
+		expect(color.textContent).toContain("—");
+		expect(position.querySelector(".position-glyph")).toBeNull();
+		expect(position.textContent).toContain("—");
+	});
+
+	it("keeps the preview for a lantern that carries the attribute", () => {
+		const lantern = row({
+			color: "rgb(255, 255, 255)",
+			colorAvailable: true,
+			colorLabel: "100% / 100% / 100%",
+			positionAvailable: true,
+			positionLabel: undefined,
+		});
+
+		const color = renderColumn("color", lantern);
+		const position = renderColumn("position", lantern);
+
+		expect(color.querySelector(".color-dot")).not.toBeNull();
+		expect(position.querySelector(".position-glyph")).not.toBeNull();
+		expect(position.textContent).toContain("50");
+	});
+});

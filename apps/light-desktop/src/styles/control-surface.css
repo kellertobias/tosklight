@@ -2499,3 +2499,21 @@ textarea,
 .stage-canvas-3d {
 	position: relative;
 }
+
+/*
+ * A hole in the interface, where the renderer's picture shows through.
+ *
+ * The Stage the renderer draws is beneath this window's web layer, so it is visible only where the
+ * interface paints nothing at all. The 3D Stage normally paints its own dark background and a
+ * grid; while the renderer is drawing, both would sit on top of the picture and hide it — the
+ * symptom being a Stage that is black however well the renderer is running.
+ *
+ * Only while it is drawing. Before that the desk's own canvas is underneath and needs its
+ * background, or the pane would be a see-through hole in the window instead.
+ */
+.stage-canvas-3d[data-stage-renderer="native"],
+.stage-canvas-3d[data-stage-renderer="native"] .stage-canvas,
+.stage-canvas:has(> .stage-canvas-3d[data-stage-renderer="native"]) {
+	background: transparent;
+	background-image: none;
+}

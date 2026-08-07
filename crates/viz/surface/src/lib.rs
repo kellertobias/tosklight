@@ -163,11 +163,17 @@ pub fn raise_view_above_siblings(view: *mut std::ffi::c_void) {
     // `zPosition` are plain properties with no invariants tied to what the view is drawing.
     unsafe {
         let view = view.cast::<objc2::runtime::AnyObject>();
-        let _: () = objc2::msg_send![view, setWantsLayer: true];
+        // Only the ordering is touched. Asking for a backing layer here instead would give a
+        // `WKWebView` — already layer-backed — a fresh opaque one, and an opaque interface covers
+        // the very picture this is trying to reveal.
         let layer: *mut objc2::runtime::AnyObject = objc2::msg_send![view, layer];
-        if !layer.is_null() {
-            let _: () = objc2::msg_send![layer, setZPosition: 1.0_f64];
+        if layer.is_null() {
+            return;
         }
+        let _: () = objc2::msg_send![layer, setZPosition: 1.0_f64];
+        // And it must stay see-through: everything outside what the interface paints is where the
+        // Stage shows through.
+        let _: () = objc2::msg_send![layer, setOpaque: false];
     }
 }
 
