@@ -39,17 +39,24 @@ export function Stage3dView({
 	 * still only offered where the renderer can run, and if it cannot start after all, the pane
 	 * falls back to the desk's own drawing rather than showing nothing.
 	 */
-	const nativePane = useNativeStagePane(options.view === "3d-viz");
+	const wantsNative = options.view === "3d-viz";
+	const nativePane = useNativeStagePane(wantsNative);
 	return (
 		<div
 			className="stage-canvas stage-canvas-3d"
 			data-stage-render-quality={options.renderQuality}
 			data-stage-renderer={nativePane.active ? "native" : "web"}
 		>
-			{nativePane.active ? (
+			{/*
+			 * Mounted as soon as the view asks for the renderer, not once the renderer answers.
+			 * This element is what reports where the pane is, and the desk cannot start a renderer
+			 * for a rectangle nobody has measured — waiting for `active` to mount it meant waiting
+			 * for something that could then never happen.
+			 */}
+			{wantsNative ? (
 				<NativeStageSurface pane={nativePane} interactive={interactive} />
 			) : null}
-			{nativePane.active ? null : (
+			{wantsNative && nativePane.active ? null : (
 			<Stage3dCanvas
 				fixtures={fixtures}
 				visualization={visualization}

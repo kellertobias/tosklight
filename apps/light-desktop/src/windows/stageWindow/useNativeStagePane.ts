@@ -48,9 +48,35 @@ export function useNativeStagePane(enabled = true): NativeStagePane {
 	 * none of those tell this hook anything. Measuring the element covers all of them without
 	 * either side knowing the other's sizing rules.
 	 */
+	/*
+	 * Whether the desk can embed at all, asked once.
+	 *
+	 * Deliberately separate from opening. Asking is asynchronous, and when the two were one effect
+	 * every re-render tore down the pending question before it was answered — so the answer arrived
+	 * to a run that had already been cancelled, and the pane was never opened at all.
+	 */
+	const [available, setAvailable] = useState<boolean | null>(null);
 	useEffect(() => {
-		if (!enabled || !element || !desktopBridge.available) return;
+		if (!desktopBridge.available) {
+			setAvailable(false);
+			return;
+		}
 		let cancelled = false;
+		void desktopBridge
+			.stagePaneAvailable()
+			.then((answer) => {
+				if (!cancelled) setAvailable(answer);
+			})
+			.catch(() => {
+				if (!cancelled) setAvailable(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [desktopBridge]);
+
+	useEffect(() => {
+		if (!enabled || !element || !available) return;
 		let observer: ResizeObserver | null = null;
 		let report: (() => void) | null = null;
 
@@ -68,36 +94,30 @@ export function useNativeStagePane(enabled = true): NativeStagePane {
 			};
 		};
 
-		void (async () => {
-			if (!(await desktopBridge.stagePaneAvailable())) return;
-			if (cancelled) return;
-			try {
-				await desktopBridge.openStagePane(geometry());
-			} catch (error) {
+		// Opening is started without awaiting anything first, so a re-render cannot cancel it
+		// between a question and its answer.
+		opened.current = true;
+		void desktopBridge
+			.openStagePane(geometry())
+			.then(() => {
+				setActive(true);
+				report = () => {
+					void desktopBridge.setStagePane(geometry());
+				};
+				observer = new ResizeObserver(report);
+				observer.observe(element);
+				window.addEventListener("resize", report);
+				window.addEventListener("scroll", report, true);
+				report();
+			})
+			.catch((error) => {
 				// The desk could not start or attach the renderer. The caller keeps its web
 				// renderer, and the reason is shown rather than swallowed.
-				if (!cancelled) setTrouble(String(error));
-				return;
-			}
-			if (cancelled) {
-				void desktopBridge.closeStagePane();
-				return;
-			}
-			opened.current = true;
-			setActive(true);
-
-			report = () => {
-				void desktopBridge.setStagePane(geometry());
-			};
-			observer = new ResizeObserver(report);
-			observer.observe(element);
-			window.addEventListener("resize", report);
-			window.addEventListener("scroll", report, true);
-			report();
-		})();
+				opened.current = false;
+				setTrouble(String(error));
+			});
 
 		return () => {
-			cancelled = true;
 			observer?.disconnect();
 			if (report) {
 				window.removeEventListener("resize", report);
@@ -110,7 +130,7 @@ export function useNativeStagePane(enabled = true): NativeStagePane {
 				void desktopBridge.closeStagePane();
 			}
 		};
-	}, [element, enabled, desktopBridge]);
+	}, [element, enabled, available, desktopBridge]);
 
 	useEffect(() => {
 		if (!active) return;

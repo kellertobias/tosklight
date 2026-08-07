@@ -53,6 +53,13 @@ pub(crate) struct StagePane {
     inner: Mutex<Option<Running>>,
     /// The last thing that went wrong, for the interface to show and act on.
     trouble: Mutex<Option<String>>,
+    /// Whether anything is embedded, readable without taking the lock.
+    ///
+    /// The frame pump asks this before posting anything to the main thread. A desk with no pane —
+    /// which is most desks, most of the time — must not put work on the thread the interface
+    /// paints on, and posting a task every few milliseconds from startup competes with the
+    /// webview's own first paint.
+    drawing: std::sync::atomic::AtomicBool,
 }
 
 struct Running {
@@ -72,6 +79,8 @@ impl StagePane {
     ///
     /// The window is the desk's own native window; the compositor draws beneath the interface on
     /// it. Failure here is reported rather than fatal: the caller keeps its web renderer.
+    /// Log every refusal on the way in. The interface falls back to its own renderer either way,
+    /// so without this a Stage that could not embed is indistinguishable from one that did not try.
     pub(crate) fn open<T>(
         &self,
         window: Arc<T>,
@@ -87,18 +96,29 @@ impl StagePane {
             + 'static,
     {
         self.close()?;
-        let program = crate::visualizer::helper_binary()?;
+        let program = match crate::visualizer::helper_binary() {
+            Ok(program) => program,
+            Err(error) => {
+                eprintln!("stage pane: no renderer beside the application: {error}");
+                return Err(error);
+            }
+        };
         // `--embed` implies `--helper` and opens no window: the desk owns the window, and this
         // process only ever draws the rectangle it is given.
         let mut helper = SupervisedHelper::new(program, vec!["--embed".to_owned()]);
-        helper.start()?;
+        if let Err(error) = helper.start() {
+            eprintln!("stage pane: the renderer would not start: {error}");
+            return Err(error);
+        }
         let (mut to_helper, mut from_helper) = helper
             .take_channel()
             .ok_or("the renderer started without a channel")?;
+        eprintln!("stage pane: renderer started, greeting it");
         let identity = match greet_helper(&mut to_helper, &mut from_helper, "ToskLight Stage") {
             Ok(identity) => identity,
             Err(error) => {
                 helper.stop();
+                eprintln!("stage pane: the renderer would not agree a protocol: {error}");
                 return Err(error.to_string());
             }
         };
@@ -125,6 +145,11 @@ impl StagePane {
         let Some(transport) = identity.embeddable_with(&desk_transports(surface_service.is_some()))
         else {
             helper.stop();
+            eprintln!(
+                "stage pane: no shared transport; desk offers {:?}, renderer offers {:?}",
+                desk_transports(surface_service.is_some()),
+                identity.transports
+            );
             return Err(
                 "this renderer and this desk share no way to move a picture between them"
                     .to_owned(),
@@ -136,6 +161,7 @@ impl StagePane {
                 Ok(compositor) => compositor,
                 Err(error) => {
                     helper.stop();
+                    eprintln!("stage pane: nothing can draw on the desk's window: {error}");
                     return Err(error);
                 }
             };
@@ -163,7 +189,13 @@ impl StagePane {
             transport,
             surface_service,
         });
+        eprintln!(
+            "stage pane: embedded with {} over {transport:?}",
+            running.identity.renderer
+        );
         *self.inner.lock().map_err(|_| "the Stage pane")? = Some(running);
+        self.drawing
+            .store(true, std::sync::atomic::Ordering::Release);
         *self.trouble.lock().map_err(|_| "the Stage pane")? = None;
         Ok(())
     }
@@ -262,6 +294,8 @@ impl StagePane {
             let _ = running.compositor.draw();
             running.helper.stop();
             *guard = None;
+            self.drawing
+                .store(false, std::sync::atomic::Ordering::Release);
             drop(guard);
             if let Some(detail) = trouble {
                 *self.trouble.lock().map_err(|_| "the Stage pane")? = Some(detail);
@@ -293,7 +327,14 @@ impl StagePane {
         }))
     }
 
+    /// True while a renderer is drawing, without taking the lock the frame does.
+    pub(crate) fn is_drawing(&self) -> bool {
+        self.drawing.load(std::sync::atomic::Ordering::Acquire)
+    }
+
     pub(crate) fn close(&self) -> Result<(), String> {
+        self.drawing
+            .store(false, std::sync::atomic::Ordering::Release);
         let mut guard = self.inner.lock().map_err(|_| "the Stage pane")?;
         if let Some(running) = guard.as_mut() {
             running.send(&ToHelper::Shutdown);
@@ -423,34 +464,72 @@ fn read_renderer(mut from_helper: impl std::io::Read, outbox: &Sender<FromRender
     }
 }
 
-/// How often the desk draws its pane.
+/// How often the desk draws its pane, while it has one.
 ///
 /// The surface is presented with vsync, so this only has to be at least as fast as the display;
 /// the swapchain does the actual pacing and this loop blocks in `present` rather than spinning.
 const TICK: std::time::Duration = std::time::Duration::from_millis(8);
+
+/// How often the pump looks for a pane to start drawing, while there is none.
+///
+/// Deliberately far slower, and it costs the main thread nothing: with no pane there is nothing to
+/// draw, and a task posted to the main thread every few milliseconds from startup competes with
+/// the interface's own first paint on the one thread that can do either.
+const IDLE: std::time::Duration = std::time::Duration::from_millis(250);
+
+/// How long to wait for a posted frame before deciding the main thread is busy with something else.
+const FRAME_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// Always yielded between frames, so the interface's own work is never starved by a renderer that
+/// happens to be keeping up perfectly.
+const MINIMUM_YIELD: std::time::Duration = std::time::Duration::from_millis(2);
 
 /// Drive the pane from the thread that owns the window.
 ///
 /// A surface may only be presented on the main thread on macOS, and the frame has to be drawn
 /// whether or not the interface is doing anything, so the desk paces it rather than the web layer
 /// asking for each frame across an IPC boundary.
+///
+/// Each frame is waited for before the next is posted. Posting on a fixed interval instead looks
+/// equivalent and is not: a frame blocks in `present` until the display is ready, so posting
+/// faster than the display retires them queues work on the one thread the interface also draws
+/// on, without bound. What the operator sees is a beachball over a window that is busy drawing.
 pub(crate) fn drive(app: &tauri::AppHandle) {
     let handle = app.clone();
     std::thread::Builder::new()
         .name("stage-pane".into())
         .spawn(move || {
+            use tauri::Manager;
             loop {
-                std::thread::sleep(TICK);
+                // Asked off the main thread, and without the lock a frame takes, so a desk with no
+                // pane never reaches the interface's thread at all.
+                if !handle.state::<StagePane>().is_drawing() {
+                    std::thread::sleep(IDLE);
+                    continue;
+                }
+                let started = std::time::Instant::now();
+                let (done, wait) = std::sync::mpsc::channel();
                 let handle = handle.clone();
                 let posted = handle.clone().run_on_main_thread(move || {
-                    use tauri::Manager;
                     let pane = handle.state::<StagePane>();
                     let _ = pane.tick();
+                    // Tells this thread the main thread is free again, so the next frame is not
+                    // stacked on top of one still waiting for the display.
+                    let _ = done.send(());
                 });
                 if posted.is_err() {
                     // The application is going away, which is the only reason posting fails.
                     return;
                 }
+                if wait.recv_timeout(FRAME_TIMEOUT).is_err() {
+                    // The main thread is busy with something else entirely. Backing off is better
+                    // than adding to it.
+                    std::thread::sleep(IDLE);
+                    continue;
+                }
+                // Whatever is left of the frame after drawing it, and never nothing: a frame that
+                // took longer than the interval still yields the thread before the next.
+                std::thread::sleep(TICK.saturating_sub(started.elapsed()).max(MINIMUM_YIELD));
             }
         })
         .ok();
@@ -459,11 +538,27 @@ pub(crate) fn drive(app: &tauri::AppHandle) {
 /// Whether the desk can draw the Stage itself, or has to keep using its web renderer.
 #[tauri::command]
 pub(crate) fn stage_pane_available() -> bool {
-    embedding_possible()
+    let available = embedding_possible();
+    eprintln!("stage pane: asked whether one can be embedded -> {available}");
+    if !available {
+        // Said once, where an operator or a log can find it. A Stage that quietly stays on the web
+        // renderer looks identical to one that chose to.
+        eprintln!(
+            "stage pane: no renderer to embed: {}",
+            crate::visualizer::helper_binary().err().unwrap_or_default()
+        );
+    }
+    available
 }
 
 /// The pane the interface laid out, in the points the web layout works in.
+///
+/// Named as the web layer names things. Tauri converts a command's own arguments from camelCase,
+/// but not the fields inside one — so a struct spelled in snake_case here is rejected during
+/// deserialization, before the command body runs, and the only sign is a rejected promise on the
+/// other side of the boundary.
 #[derive(Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct PaneGeometry {
     x: f32,
     y: f32,
@@ -493,6 +588,7 @@ pub(crate) fn open_stage_pane(
     geometry: PaneGeometry,
 ) -> Result<(), String> {
     use tauri::Manager;
+    eprintln!("stage pane: asked to open one");
     let window = app
         .get_window("main")
         .ok_or("the desk's window is not open")?;

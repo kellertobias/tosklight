@@ -23,6 +23,9 @@ export function NativeStageSurface({
 	interactive?: boolean;
 }) {
 	const dragging = useRef<{ x: number; y: number; button: number } | null>(null);
+	// While the renderer is still starting, the desk's own canvas is drawing underneath and this
+	// is only here to be measured. Taking its pointer events would make the Stage briefly dead.
+	const capturing = interactive && pane.active;
 
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: the pane is a camera surface, and its
@@ -32,8 +35,9 @@ export function NativeStageSurface({
 			className="stage-native-pane"
 			ref={pane.ref}
 			data-native-stage={pane.active ? "drawing" : "waiting"}
+			style={{ pointerEvents: capturing ? "auto" : "none" }}
 			onPointerDown={(event) => {
-				if (!interactive) return;
+				if (!capturing) return;
 				dragging.current = {
 					x: event.clientX,
 					y: event.clientY,
@@ -43,7 +47,7 @@ export function NativeStageSurface({
 			}}
 			onPointerMove={(event) => {
 				const drag = dragging.current;
-				if (!interactive || !drag) return;
+				if (!capturing || !drag) return;
 				const dx = event.clientX - drag.x;
 				const dy = event.clientY - drag.y;
 				if (dx === 0 && dy === 0) return;
@@ -60,7 +64,7 @@ export function NativeStageSurface({
 				dragging.current = null;
 			}}
 			onWheel={(event) => {
-				if (!interactive) return;
+				if (!capturing) return;
 				// Normalized to notches: a trackpad reports pixels and a mouse reports lines, and
 				// the renderer should not have to know which one the operator has.
 				const notches = event.deltaMode === 0 ? event.deltaY / 100 : event.deltaY;
