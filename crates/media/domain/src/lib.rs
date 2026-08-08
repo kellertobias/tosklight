@@ -25,6 +25,7 @@ pub mod playback;
 pub mod speed;
 pub mod state;
 pub mod tempo;
+pub mod timeline;
 
 pub use address::{AddressClass, MediaAddress};
 pub use clock::{MeasuredCadence, RenderClock};
@@ -39,3 +40,4 @@ pub use playback::{OnceEndState, PlayMode};
 pub use speed::SpeedMultiplier;
 pub use state::{Applied, MediaState, OutputState, apply};
 pub use tempo::{SpeedGroupId, TempoSource};
+pub use timeline::{MediaTiming, Presentation};
