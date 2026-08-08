@@ -6,7 +6,9 @@
 //! See `docs/engineering/media-playback-codec-decision.md` for why.
 
 pub mod cache;
+pub mod container;
 pub mod hap;
 
 pub use cache::{AdmissionError, ClipCache, Residency, ResidentClip};
+pub use container::{ClipHeader, ClipReader, ClipWriter, ContainerError, FrameEntry};
 pub use hap::{BC3_BLOCK_BYTES, FrameError, TEXTURE_FORMAT, block_bytes, decode_blocks, encode};
