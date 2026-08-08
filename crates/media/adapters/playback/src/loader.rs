@@ -48,13 +48,53 @@ pub struct LoadedClip {
 #[derive(Debug)]
 pub struct ClipLoader {
     cache: ClipCache,
+    /// Readers kept open for clips too large to be resident, so a streaming frame costs one seek
+    /// and one read rather than reopening the file every time.
+    streaming: std::collections::HashMap<AssetId, StreamingClip>,
+}
+
+/// A clip that did not fit the cache and is read from storage as it plays.
+#[derive(Debug)]
+struct StreamingClip {
+    reader: ClipReader<std::fs::File>,
+    /// The last frame handed out, kept so repeating a frame — a pause, a hold, a completed Once —
+    /// costs nothing.
+    last: Option<(usize, Arc<[u8]>)>,
 }
 
 impl ClipLoader {
     pub fn new(cache_budget_bytes: u64) -> Self {
         Self {
             cache: ClipCache::new(cache_budget_bytes),
+            streaming: std::collections::HashMap::new(),
         }
+    }
+
+    /// A frame, wherever it lives.
+    ///
+    /// Resident clips answer from memory. A clip too large for the budget is read from storage
+    /// instead — slower, and still correct, so a big clip plays rather than being refused. The
+    /// last streamed frame is held, so a pause or a completed Once costs no read at all.
+    pub fn frame(&mut self, asset: AssetId, index: usize) -> Option<Arc<[u8]>> {
+        if let Some(frame) = self.cache.frame(asset, index) {
+            return Some(frame);
+        }
+        let streaming = self.streaming.get_mut(&asset)?;
+        if let Some((held, frame)) = &streaming.last
+            && *held == index
+        {
+            return Some(frame.clone());
+        }
+        let payload = streaming.reader.frame(index).ok().flatten()?;
+        let frame: Arc<[u8]> = Arc::from(payload.into_boxed_slice());
+        streaming.last = Some((index, frame.clone()));
+        Some(frame)
+    }
+
+    /// Forgets a clip entirely, resident or streaming.
+    pub fn release(&mut self, asset: AssetId) {
+        self.cache.remove(asset);
+        self.streaming.remove(&asset);
     }
 
     pub const fn cache(&self) -> &ClipCache {
@@ -113,6 +153,18 @@ impl ClipLoader {
                     needed,
                     budget,
                     "the clip is larger than the whole cache budget; it will stream from storage"
+                );
+                // Keep the reader open so streaming is a seek and a read rather than a reopen.
+                let handle = std::fs::File::open(path).map_err(|source| LoadError::Unreadable {
+                    path: path.to_path_buf(),
+                    source,
+                })?;
+                self.streaming.insert(
+                    asset,
+                    StreamingClip {
+                        reader: ClipReader::open(handle)?,
+                        last: None,
+                    },
                 );
             }
             Err(error) => return Err(error.into()),
@@ -218,6 +270,111 @@ mod tests {
             media_codec::Residency::Absent
         );
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn every_frame_of_a_streamed_clip_is_readable_in_any_order() {
+        let path = write_temp("streamed-order.toskclip", &clip_bytes(10));
+        // A budget far smaller than the clip, so nothing is resident.
+        let mut loader = ClipLoader::new(8);
+        let asset = AssetId::new();
+        loader.load(asset, &path, &mut |_| {}).unwrap();
+        assert_eq!(
+            loader.cache().residency(asset),
+            media_codec::Residency::Absent
+        );
+
+        for index in [0usize, 9, 4, 9, 0, 7] {
+            assert!(loader.frame(asset, index).is_some(), "frame {index}");
+        }
+        assert!(loader.frame(asset, 10).is_none(), "past the end");
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn repeating_a_streamed_frame_does_not_read_it_again() {
+        let path = write_temp("held-frame.toskclip", &clip_bytes(4));
+        let mut loader = ClipLoader::new(8);
+        let asset = AssetId::new();
+        loader.load(asset, &path, &mut |_| {}).unwrap();
+
+        // A pause, a hold, or a completed Once asks for the same frame on every tick.
+        let first = loader.frame(asset, 1).unwrap();
+        let again = loader.frame(asset, 1).unwrap();
+        assert!(
+            Arc::ptr_eq(&first, &again),
+            "the held frame was reused, not re-read"
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn a_resident_clip_still_answers_from_memory() {
+        let path = write_temp("resident-frames.toskclip", &clip_bytes(4));
+        let mut loader = ClipLoader::new(1_000_000);
+        let asset = AssetId::new();
+        loader.load(asset, &path, &mut |_| {}).unwrap();
+
+        assert_ne!(
+            loader.cache().residency(asset),
+            media_codec::Residency::Absent
+        );
+        assert_eq!(loader.frame(asset, 2).unwrap().len(), 32);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn releasing_forgets_a_clip_whether_it_was_resident_or_streaming() {
+        for budget in [8u64, 1_000_000] {
+            let path = write_temp(&format!("released-{budget}.toskclip"), &clip_bytes(4));
+            let mut loader = ClipLoader::new(budget);
+            let asset = AssetId::new();
+            loader.load(asset, &path, &mut |_| {}).unwrap();
+            assert!(loader.frame(asset, 0).is_some(), "budget {budget}");
+
+            loader.release(asset);
+            assert!(loader.frame(asset, 0).is_none(), "budget {budget}");
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    /// The long-running layer-switch stress the contract asks for: a clip is selected, played,
+    /// deselected, and reselected many times over, both resident and streaming, and every frame
+    /// it hands out stays valid.
+    #[test]
+    fn switching_between_clips_repeatedly_stays_correct() {
+        let paths: Vec<PathBuf> = (0..4)
+            .map(|index| write_temp(&format!("stress-{index}.toskclip"), &clip_bytes(10 + index)))
+            .collect();
+        // Room for two of the four, so eviction runs constantly.
+        let mut loader = ClipLoader::new(700);
+        let assets: Vec<AssetId> = (0..4).map(|_| AssetId::new()).collect();
+
+        for round in 0..200usize {
+            let which = round % assets.len();
+            let loaded = loader
+                .load(assets[which], &paths[which], &mut |_| {})
+                .unwrap();
+            let frames = loaded.presentation_micros.len();
+
+            for step in 0..frames {
+                let frame = loader.frame(assets[which], step);
+                assert!(frame.is_some(), "round {round}, clip {which}, frame {step}");
+                assert_eq!(frame.unwrap().len(), 32);
+            }
+            assert!(
+                loader.frame(assets[which], frames).is_none(),
+                "round {round}: nothing past the end"
+            );
+            assert!(
+                loader.cache().used() <= loader.cache().budget(),
+                "round {round}: over budget"
+            );
+        }
+
+        for path in paths {
+            let _ = std::fs::remove_file(path);
+        }
     }
 
     #[test]
