@@ -12,6 +12,7 @@
 //! reducer only compares timestamps.
 
 pub mod address;
+pub mod audio;
 pub mod authored_tempo;
 pub mod catalog;
 pub mod clock;
@@ -31,6 +32,7 @@ pub mod text;
 pub mod timeline;
 
 pub use address::{AddressClass, AssetId, MediaAddress};
+pub use audio::{Analysis, BeatDetector, Tuning};
 pub use catalog::{CatalogError, CatalogFolder, CatalogItem, CatalogSnapshot, ItemKind};
 pub use clock::{MeasuredCadence, RenderClock};
 pub use color::{FlipMirror, Tint};
