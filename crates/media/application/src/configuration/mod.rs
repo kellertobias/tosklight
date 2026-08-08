@@ -23,6 +23,7 @@ pub use service::{
 pub use validate::ConfigurationError;
 
 use media_domain::OutputId;
+use media_domain::text_catalog::TextCatalog;
 use media_domain::visualizer::GeneratedCatalog;
 use serde::{Deserialize, Serialize};
 
@@ -73,6 +74,9 @@ pub struct MediaConfiguration {
     /// their show depends on — a new build must never renumber what a cue already points at.
     #[serde(default)]
     pub visualizers: GeneratedCatalog,
+    /// Which text entry answers at which address, and how it is drawn.
+    #[serde(default)]
+    pub text: TextCatalog,
     /// One or more logical outputs. The first release ships one; the collection is never
     /// collapsed into singleton state.
     pub outputs: Vec<OutputConfiguration>,
@@ -87,6 +91,7 @@ impl Default for MediaConfiguration {
             audio: AudioConfiguration::default(),
             playback: PlaybackConfiguration::default(),
             visualizers: GeneratedCatalog::default(),
+            text: TextCatalog::default(),
             outputs: vec![OutputConfiguration::new("Main")],
         }
     }

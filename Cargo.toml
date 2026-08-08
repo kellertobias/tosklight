@@ -25,6 +25,7 @@ members = [
   "crates/media/adapters/playback",
   "crates/media/adapters/render",
   "crates/media/adapters/runtime",
+  "crates/media/adapters/text",
   "crates/media/application",
   "crates/media/domain",
   "crates/shared/core",

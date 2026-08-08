@@ -1,0 +1,19 @@
+[package]
+name = "media-text"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+
+# Turning a text entry into pixels. The entry's content and its lifecycle are the domain's; this
+# owns the part that needs a machine's fonts — finding a family, falling back when it is absent,
+# and rasterizing a line.
+[dependencies]
+fontdb = "0.23"
+fontdue = "0.9"
+media-domain = { path = "../../domain" }
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

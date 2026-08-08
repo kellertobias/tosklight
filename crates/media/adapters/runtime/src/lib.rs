@@ -15,6 +15,7 @@ mod logging;
 pub mod presentation;
 mod shutdown;
 mod startup;
+mod text_sources;
 
 pub use dmx::SharedState;
 pub use layer_sources::LayerSources;

@@ -29,6 +29,7 @@ pub mod speed;
 pub mod state;
 pub mod tempo;
 pub mod text;
+pub mod text_catalog;
 pub mod timeline;
 pub mod visualizer;
 
@@ -50,6 +51,7 @@ pub use tempo::{
     ResolvedTempo, SpeedGroupId, SpeedGroupSnapshot, TempoSource, effective_rate, resolve_tempo,
 };
 pub use text::{Countdown, TextEntry, TextKind, Visibility};
+pub use text_catalog::{Alignment, TextCatalog, TextCatalogError, TextSlot, TextStyle};
 pub use timeline::{MediaTiming, Presentation};
 pub use visualizer::{
     ALL_KINDS, GeneratedCatalog, GeneratedCatalogError, GeneratedEntry, Parameter,

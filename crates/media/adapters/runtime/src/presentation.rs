@@ -316,6 +316,7 @@ impl PresentationHost {
                     catalog: &catalog,
                     configuration: &self.configuration,
                     analysis: &heard.analysis,
+                    now_unix_millis: unix_millis(),
                     beat: heard.beat,
                     bpm: heard.bpm,
                     beat_phase: heard.beat_phase,
@@ -368,6 +369,13 @@ impl PresentationHost {
             self.state.store(Arc::new(next));
         }
     }
+}
+
+/// Wall-clock time, which only a clock and a target countdown consult.
+fn unix_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_millis() as i64)
 }
 
 /// Presents one frame, keeping a lost surface from becoming a lost output.

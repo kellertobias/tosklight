@@ -17,6 +17,7 @@ use media_playback::{ClipLoader, LayerSessions};
 use media_render::{Gpu, LayerDraw, SourceTexture, VisualizerFrame, VisualizerRenderer};
 
 use crate::layer_sources::LayerSources;
+use crate::text_sources::TextSources;
 
 /// Where the mask sessions keep the output-level mask, above every layer index.
 const MASTER_MASK_SLOT: usize = media_render::MAX_LAYERS;
@@ -30,6 +31,8 @@ pub enum Slot {
     Mask(usize),
     /// A visualizer rendered into this layer's generated target.
     Generated(usize),
+    /// A text source rasterized for this layer.
+    Text(usize),
 }
 
 /// One layer that will draw this frame.
@@ -50,6 +53,9 @@ pub struct FrameContext<'a> {
     pub catalog: &'a CatalogSnapshot,
     pub configuration: &'a MediaConfiguration,
     pub analysis: &'a Analysis,
+    /// Wall-clock time, which a clock and a target countdown consult. Kept separate from
+    /// `now`, so a clock change cannot make a running countdown jump.
+    pub now_unix_millis: i64,
     /// `1.0` on the frame a beat landed, fading afterwards.
     pub beat: f32,
     pub bpm: f32,
@@ -76,6 +82,7 @@ pub struct LayerPipeline {
     masks: LayerSessions,
     mask_uploads: LayerSources,
     visualizers: VisualizerRenderer,
+    text: TextSources,
 }
 
 impl LayerPipeline {
@@ -91,6 +98,7 @@ impl LayerPipeline {
             masks: LayerSessions::new(output, storage),
             mask_uploads: LayerSources::new(gpu, size),
             visualizers: VisualizerRenderer::new(gpu, size),
+            text: TextSources::new(gpu.clone(), size),
         }
     }
 
@@ -129,10 +137,8 @@ impl LayerPipeline {
                 AddressClass::GeneratedVisualizer => {
                     self.generated(index, layer, frame, &mut prepared)
                 }
-                // Text banks resolve once text sources have a renderer; until then the address is
-                // kept and the layer reports that it selected something that is not there, which
-                // is the truth rather than a silent blank.
-                AddressClass::TextBank | AddressClass::Library => {
+                AddressClass::TextBank => self.text(index, layer, frame, &mut prepared),
+                AddressClass::Library => {
                     self.media(index, layer, catalog, loader, now, &mut prepared)
                 }
             };
@@ -155,6 +161,7 @@ impl LayerPipeline {
             Slot::Media(layer) => self.uploads.texture(layer),
             Slot::Mask(layer) => self.mask_uploads.texture(layer),
             Slot::Generated(layer) => self.visualizers.target(layer),
+            Slot::Text(layer) => self.text.texture(layer),
         }
     }
 
@@ -177,6 +184,7 @@ impl LayerPipeline {
         self.uploads.resize(size);
         self.mask_uploads.resize(size);
         self.visualizers.resize(size);
+        self.text.resize(size);
     }
 
     fn media(
@@ -241,6 +249,30 @@ impl LayerPipeline {
                         failure: media_domain::SourceFailure::GpuUploadFailed,
                     },
                 ));
+                None
+            }
+        }
+    }
+
+    /// Draws a text entry for a layer that selected one.
+    fn text(
+        &mut self,
+        index: usize,
+        layer: &LayerState,
+        context: FrameContext<'_>,
+        prepared: &mut Prepared,
+    ) -> Option<Slot> {
+        match self.text.prepare(index, layer, context) {
+            Ok(drawn) => {
+                prepared
+                    .statuses
+                    .push((index, media_domain::SourceStatus::Ready));
+                drawn.then_some(Slot::Text(index))
+            }
+            Err(failure) => {
+                prepared
+                    .statuses
+                    .push((index, media_domain::SourceStatus::Failed { failure }));
                 None
             }
         }
