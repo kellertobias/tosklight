@@ -1,0 +1,17 @@
+[package]
+name = "media-citp"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+
+# Media's CITP/MSEX server: discovery, library publication, thumbnails, layer status, and preview
+# sending. Light's CITP *client* stays in `crates/light/adapters/media`; a shared wire codec is
+# extracted only once both sides prove identical types, not on speculation.
+[dependencies]
+media-domain = { path = "../../domain" }
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

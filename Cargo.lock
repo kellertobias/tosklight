@@ -3740,6 +3740,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "media-citp"
+version = "0.1.0"
+dependencies = [
+ "media-domain",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
 name = "media-codec"
 version = "0.1.0"
 dependencies = [
