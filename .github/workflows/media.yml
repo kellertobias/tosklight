@@ -40,7 +40,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-14, windows-2022]
+        # The supported matrix: macOS on Apple Silicon, Windows on x86_64, and Linux on both
+        # x86_64 and aarch64. A Raspberry Pi is a nice-to-have target and is not gated here.
+        os: [ubuntu-22.04, ubuntu-22.04-arm, macos-14, windows-2022]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -62,16 +64,16 @@ jobs:
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
 
       - name: Format
-        run: cargo fmt --check -p media-domain -p media-application -p media-render -p media-runtime -p media-server
+        run: cargo fmt --check -p media-domain -p media-application -p media-codec -p media-render -p media-runtime -p media-server
 
       - name: Lint
         run: >-
           cargo clippy --all-targets
-          -p media-domain -p media-application -p media-render -p media-runtime -p media-server
+          -p media-domain -p media-application -p media-codec -p media-render -p media-runtime -p media-server
           -- -D warnings
 
       - name: Test
-        run: cargo test -p media-domain -p media-application -p media-render -p media-runtime -p media-server
+        run: cargo test -p media-domain -p media-application -p media-codec -p media-render -p media-runtime -p media-server
 
       # A packaged smoke test exercises the real executable rather than a test harness, so a
       # platform cannot pass by compiling alone.
