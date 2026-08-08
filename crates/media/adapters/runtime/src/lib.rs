@@ -69,6 +69,8 @@ pub fn run() -> anyhow::Result<()> {
         }
     }
 
+    warn_about_legacy_personalities(&configuration);
+
     if arguments
         .iter()
         .any(|argument| argument == CHECK_CONFIGURATION_ARGUMENT)
@@ -195,6 +197,29 @@ pub fn run() -> anyhow::Result<()> {
     // stream that vanished.
     drop(audio);
     presented
+}
+
+/// Says so when an output was migrated from the legacy personality.
+///
+/// A migrated output stores `v1-legacy` to record the layout its show was programmed against, but
+/// the DMX reader speaks v2 and only v2: layers are 34 slots rather than 32, and the play-mode
+/// channel was renumbered, so the same universe means different things. Reading such an output as
+/// v2 without saying so would let a desk replay its cues and quietly get different looks.
+///
+/// This is a warning rather than a refusal because an operator who has already repatched to v2 has
+/// a working server, and stopping them would be worse than telling them.
+fn warn_about_legacy_personalities(configuration: &MediaConfiguration) {
+    for output in &configuration.outputs {
+        if output.personality_version == media_domain::PersonalityVersion::V1Legacy {
+            tracing::warn!(
+                output = %output.name,
+                "this output was migrated from the previous Media Server's channel layout, and \
+                 this server reads DMX as v2 only: a layer is 34 slots rather than 32 and the \
+                 play-mode channel was renumbered, so a desk sending the old patch will produce \
+                 different looks. Repatch the desk from the generated GDTF fixture."
+            );
+        }
+    }
 }
 
 /// Milliseconds since the Unix epoch, for a migration that has to resolve a time of day.

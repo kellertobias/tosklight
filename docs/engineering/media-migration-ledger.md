@@ -37,7 +37,44 @@ fixture evidence, any deliberate difference, the target commit, and who accepted
 | Slice 6 — HTTP API and React UI | `WebServer.*`, `apps/web-ui` | — | — | — | — | — |
 | Slice 7 — generated sources and compositing | `TextSourceManager.*`, `AudioAnalyzer.*`, `visualizers/` | — | — | — | — | — |
 | Slice 8 — CITP server and GDTF | `CITPResponder.*`, `GDTFGenerator.*`, `GDTFTemplates.h` | — | — | — | — | — |
-| Phase 4 — integration and cutover | — | — | — | — | — | — |
+| Phase 4 — integration and cutover | `ofApp` multi-output lifecycle, `WebServer` settings and log routes | `media-runtime` (`presentation`, `off_screen`, `log_buffer`), `media-http` (`routes/{network,text,audio,logs,telemetry}`), `@tosklight/media` settings, text, audio, and log surfaces | Two outputs at different refresh rates in one process; the editors driven against a running server; the legacy text document migrated on a copy of a real installation; the release follow-up decided against real tags | Media packages through its own release follow-up rather than `release.yml` (D19); the configuration document is shared with the outputs so a stored edit is live on the next frame (D20); listen addresses and destinations are separately configurable and a rebind waits for a restart | see branch history | pending review |
+
+## Side-by-side comparison, 2026-08-09
+
+Both servers were run at once on one machine — the reference application from
+`build/bin/server-core.app` on its own ports, this one on `6455/5569/4812/8081` — each with its own
+copy of the same real library, and each sent the identical Art-Net frame (universe 0, folder `1`,
+file `4`, play mode `128`, and one dimmer slot at full).
+
+They disagree, as designed, and the disagreements are worth stating plainly because a migrated
+installation meets all of them at once:
+
+| | Reference | This server |
+| --- | --- | --- |
+| Play mode `128` | `Once` — five bands over the channel | `Reverse Synced` — the v2 three-block layout (D1) |
+| Layer pitch | 32 slots | 34 slots, so every channel after the third differs |
+| Dimmer at slot 13 | layer 1's dimmer | a different channel of layer 1 |
+| CITP port | TCP/UDP **4809** | TCP **4811**, the port `docs/citp-media-servers.md` settles on |
+| GDTF attributes | standard names (`Gobo2` for Folder, `Shutter1` for Play mode, `Pan`/`Tilt` for position) | Media's own attributes, so a console cannot apply unrelated semantics (D13) |
+| Text addressing | folder `200`, file = slot − 200, so slot `200` was file `0` | file `0` is a blank sentinel; slot `200`'s content is moved and the move is reported |
+
+**The open question this raises.** The Phase 2 migration stores `personalityVersion: v1-legacy` on a
+migrated output, recording the layout the show was programmed against — but nothing reads it: the
+DMX decoder speaks v2 only. So a migrated installation's existing cues produce different looks, and
+until 2026-08-09 they did so in silence. A migrated output now says at startup that the desk must be
+repatched from the generated GDTF fixture.
+
+That warning makes the behaviour honest; it does not decide the policy. Cutover needs one of:
+
+1. **Repatch on cutover.** v1 stays read-only metadata, an operator repatches from the generated
+   fixture, and the stored version exists only to trigger the warning. Cheapest, and it matches
+   "moving to v2 is a deliberate operator action".
+2. **Read v1 as v1.** The decoder honours the stored version — 32-slot layers, five play-mode bands
+   — so an untouched desk keeps working. A second decode path and a second GDTF fixture, and the
+   personality stops being one canonical table.
+
+A console's port also has to be moved from 4809 to 4811, or the port made configurable per output
+rather than per process.
 
 ## Acceptance rule
 
