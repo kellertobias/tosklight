@@ -1,0 +1,20 @@
+[package]
+name = "media-runtime"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+
+# The Media Server's lifecycle adapter: configuration loading, logging, subsystem startup, and
+# structured shutdown. `apps/media` is a thin process entry point over this crate.
+[dependencies]
+anyhow.workspace = true
+media-application = { path = "../../application" }
+media-domain = { path = "../../domain" }
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true

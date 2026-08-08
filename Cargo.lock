@@ -3710,6 +3710,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "media-application"
+version = "0.1.0"
+dependencies = [
+ "media-domain",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "media-domain"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "media-runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "media-application",
+ "media-domain",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "media-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "media-runtime",
+ "tokio",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

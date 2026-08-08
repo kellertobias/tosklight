@@ -67,6 +67,8 @@ function rustDependencyDirections() {
 
   for (const failure of workspaceLintInheritanceFailures(metadata)) fail(failure);
 
+  mediaDependencyDirections(workspacePackages);
+
   for (const packageMetadata of workspacePackages) {
     const manifest = relative(packageMetadata.manifest_path);
     const workspaceDependencies = new Set(
@@ -596,7 +598,122 @@ function capabilityStateOwnershipBoundaries() {
   )) fail(failure);
 }
 
+// The Media Server is a second product in this workspace. Its layering is the same shape as the
+// desk's — domain, application, adapters, composition root — and Light and Media meet only in
+// `crates/shared/*`. These checks keep that true as the rebuild fills the crates in.
+const MEDIA_ALLOWED_WORKSPACE_DEPENDENCIES = new Map([
+  ["media-domain", new Set()],
+  ["media-application", new Set(["media-domain"])],
+  ["media-runtime", new Set(["media-application", "media-domain"])],
+  ["media-server", new Set(["media-runtime"])],
+]);
+
+function mediaDependencyDirections(workspacePackages) {
+  const sharedNames = new Set(
+    workspacePackages
+      .filter((candidate) => relative(candidate.manifest_path).startsWith("crates/shared/"))
+      .map((candidate) => candidate.name),
+  );
+
+  for (const packageMetadata of workspacePackages) {
+    const dependencies = packageMetadata.dependencies
+      .map((dependency) => dependency.name)
+      .filter((name) => workspacePackages.some((candidate) => candidate.name === name));
+    const isMedia = MEDIA_ALLOWED_WORKSPACE_DEPENDENCIES.has(packageMetadata.name);
+
+    if (isMedia) {
+      const allowed = MEDIA_ALLOWED_WORKSPACE_DEPENDENCIES.get(packageMetadata.name);
+      const forbidden = dependencies.filter(
+        (name) => !allowed.has(name) && !sharedNames.has(name),
+      );
+      if (forbidden.length > 0) {
+        fail(
+          `${packageMetadata.name} may depend only on ${[...allowed].sort().join(", ") || "the shared kernel"}` +
+            `, not ${[...new Set(forbidden)].sort().join(", ")}`,
+        );
+      }
+      continue;
+    }
+
+    // Nothing outside Media may reach into it. Light's CITP client stays Light's.
+    const reachesIntoMedia = dependencies.filter((name) =>
+      MEDIA_ALLOWED_WORKSPACE_DEPENDENCIES.has(name),
+    );
+    if (reachesIntoMedia.length > 0) {
+      fail(
+        `${packageMetadata.name} depends on Media packages ${reachesIntoMedia.sort().join(", ")}; ` +
+          "Light and Media meet only through crates/shared",
+      );
+    }
+  }
+
+  for (const name of MEDIA_ALLOWED_WORKSPACE_DEPENDENCIES.keys()) {
+    if (!workspacePackages.some((candidate) => candidate.name === name))
+      fail(`${name} is missing from the Rust workspace`);
+  }
+}
+
+function mediaDomainIsPure() {
+  const domainRoot = path.join(repositoryRoot, "crates/media/domain/src");
+  if (!fs.existsSync(domainRoot)) {
+    fail("crates/media/domain/src is missing");
+    return;
+  }
+  // Protocol, HTTP, filesystem, decoder, GPU, and operating-system types never enter domain
+  // state; adapters translate them at the boundary.
+  const forbidden = [
+    ["std::net", "network types"],
+    ["std::fs", "filesystem types"],
+    ["std::path", "filesystem paths"],
+    ["std::process", "process control"],
+    ["std::env", "the process environment"],
+    ["std::thread", "threads"],
+  ];
+  for (const file of walk(domainRoot).filter((candidate) => candidate.endsWith(".rs"))) {
+    const source = withoutInlineRustTests(fs.readFileSync(file, "utf8"));
+    for (const [needle, description] of forbidden)
+      if (source.includes(needle))
+        fail(`${relative(file)} brings ${description} into the Media domain`);
+  }
+}
+
+function mediaEntrypointIsThin() {
+  const entrypoint = path.join(repositoryRoot, "apps/media/src/main.rs");
+  if (!fs.existsSync(entrypoint)) {
+    fail("apps/media/src/main.rs is missing");
+    return;
+  }
+  const source = fs.readFileSync(entrypoint, "utf8");
+  const nonEmptyLines = source.split(/\r?\n/u).filter((line) => line.trim()).length;
+  if (nonEmptyLines > 10) fail("apps/media/src/main.rs must remain a thin lifecycle entry point");
+  for (const forbidden of ["Router", "TcpListener", "tokio::spawn", "EnvFilter"])
+    if (source.includes(forbidden)) fail(`Media entry point must not own ${forbidden}`);
+  if (!source.includes("media_runtime::run().await"))
+    fail("Media entry point must delegate lifecycle ownership to the runtime adapter");
+}
+
+/// The migration into this repository is one-way. Nothing here may read the C++ application's
+/// checkout: not a path dependency, not a build step, not a runtime lookup.
+function noLegacyMediaCheckoutReferences() {
+  const legacyCheckout = ["/Users/keller/repos/", "media"].join("");
+  const roots = ["apps/media", "crates/media", "tools"].map((candidate) =>
+    path.join(repositoryRoot, candidate),
+  );
+  const scanned = /\.(?:mjs|rs|sh|toml|ts|tsx)$/u;
+  for (const root of roots) {
+    if (!fs.existsSync(root)) continue;
+    for (const file of walk(root).filter((candidate) => scanned.test(candidate))) {
+      if (path.resolve(file) === path.resolve(import.meta.filename)) continue;
+      if (fs.readFileSync(file, "utf8").includes(legacyCheckout))
+        fail(`${relative(file)} references the legacy Media checkout at ${legacyCheckout}`);
+    }
+  }
+}
+
 rustDependencyDirections();
+mediaDomainIsPure();
+mediaEntrypointIsThin();
+noLegacyMediaCheckoutReferences();
 serverEntrypointIsThin();
 desktopHostIsCompositionRoot();
 activeShowMutationDirections();

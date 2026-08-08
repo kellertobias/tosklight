@@ -1,0 +1,18 @@
+[package]
+name = "media-application"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+
+# Use cases, commands, state transitions, control-source ownership, and the versioned
+# configuration document. Adapters depend on this crate; it never depends on them.
+[dependencies]
+media-domain = { path = "../domain" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true
