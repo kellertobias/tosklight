@@ -53,6 +53,16 @@ const SHADOW_DRAW_STRIDE: u64 = 256;
 /// not enough to wash out a hazy stage.
 const BLOOM_MIX: f32 = 0.16;
 
+/// The exposure the picture is drawn at, before the operator's own trim multiplies it.
+///
+/// Fixed, and deliberately so. This used to adapt to how much light the rig was producing, the way
+/// an eye does, and the result was a Stage that fought the dimmer: taking a rig down opened the
+/// exposure by almost as much as the fixtures had closed, so the first tenth of a fade was the
+/// whole visible change and the rest of it did nothing. A lighting desk's Stage has to answer
+/// "how bright is this" with the same picture every time, which means one exposure, not a
+/// wandering one.
+const BASE_EXPOSURE: f32 = 0.85;
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
 struct Globals {
@@ -64,6 +74,7 @@ struct Globals {
     params: [f32; 4],
     params2: [f32; 4],
     params3: [f32; 4],
+    params4: [f32; 4],
 }
 
 /// Why a frame could not be presented.
@@ -179,11 +190,6 @@ pub struct Renderer {
     beam_overflow: bool,
     /// Times one frame at a time on the GPU, where the adapter supports it.
     timer: Option<crate::timing::GpuTimer>,
-    /// Smoothed automatic exposure. A show with a hundred simultaneous beams is physically far
-    /// brighter than one with four, so a fixed exposure either crushes the small rig or blows out
-    /// the large one. The operator's exposure remains a multiplier on top of this.
-    auto_exposure: f32,
-    last_frame_at: Option<std::time::Instant>,
 }
 
 impl Renderer {
@@ -320,8 +326,6 @@ impl Renderer {
             capture_request: None,
             beam_overflow: false,
             timer,
-            auto_exposure: 1.0,
-            last_frame_at: None,
         })
     }
 
@@ -604,32 +608,9 @@ impl Renderer {
         );
     }
 
-    /// Adapt exposure to how much light the scene is actually producing.
-    ///
-    /// The estimate comes from the light list rather than a GPU read-back, so it costs nothing and
-    /// adds no latency to the presented image. It behaves like eye adaptation: it moves towards
-    /// the target over `ADAPTATION_SECONDS` instead of stepping.
-    fn adapt_exposure(&mut self, delta_seconds: f32) {
-        const ADAPTATION_SECONDS: f32 = 0.6;
-        const REFERENCE: f32 = 2.6;
-        let total: f32 = self
-            .frame
-            .lights
-            .iter()
-            .map(|light| light.colour_intensity[3].clamp(0.0, 1.0))
-            .sum();
-        let target = (REFERENCE / (1.0 + total.max(0.0).sqrt())).clamp(0.05, 1.6);
-        let alpha = if ADAPTATION_SECONDS <= 0.0 {
-            1.0
-        } else {
-            1.0 - (-delta_seconds / ADAPTATION_SECONDS).exp()
-        };
-        self.auto_exposure += (target - self.auto_exposure) * alpha.clamp(0.0, 1.0);
-    }
-
     /// Effective exposure applied by the last frame, for the diagnostics surface.
     pub fn exposure(&self) -> f32 {
-        self.auto_exposure
+        BASE_EXPOSURE
     }
 
     /// Render one frame into an offscreen image and read it back as RGBA8.

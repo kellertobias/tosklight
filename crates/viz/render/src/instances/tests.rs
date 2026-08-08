@@ -362,6 +362,8 @@ fn a_lit_beam_emitter_produces_one_light_and_one_cone() {
         &values,
         &FrameStyle {
             draw_aim_lines: true,
+            // The ground grid is lines too, and this is counting the emitter's own.
+            floor_grid: false,
             ..FrameStyle::default()
         },
     );
@@ -402,7 +404,7 @@ fn installed_colour_tints_aperture_beam_light_and_semantic_export_once() {
         .expect("lit aperture");
     let aperture_colour = Vec3::from_slice(&aperture.emissive[..3]);
     assert!(
-        (aperture_colour - expected * 9.02).length() < 1e-5,
+        (aperture_colour - expected * (0.02 + super::APERTURE_RADIANCE)).length() < 1e-5,
         "aperture colour {aperture_colour:?}"
     );
 }
@@ -688,4 +690,214 @@ fn the_cells_of_a_bar_keep_their_own_lenses() {
         "a cell's lens has to fit between its neighbours, got {}",
         lens_radius(&beam)
     );
+}
+
+/// The lines view is a diagram, not a dim picture.
+///
+/// An operator on it is asking two questions — where are the lamps, and where are they pointed —
+/// and every other thing in the frame is between them and the answer. So the bodies become boxes
+/// the size of the fixtures, the rigging and the soft goods go, and the aim of every directional
+/// head is drawn whether or not anything is lit.
+mod lines_view {
+    use super::*;
+    use viz_scene::{SceneryKind, SceneryObject, ViewMode};
+
+    fn lines_style() -> FrameStyle {
+        FrameStyle {
+            draw_beams: false,
+            draw_aim_lines: true,
+            aim_guides: true,
+            fixture_models: false,
+            floor_grid: false,
+            scenery: |kind| ViewMode::Lines3d.draws_scenery(kind),
+            ..FrameStyle::default()
+        }
+    }
+
+    fn scenery(kind: SceneryKind) -> SceneryObject {
+        SceneryObject {
+            id: viz_scene::uuid::Uuid::nil(),
+            name: "Object".into(),
+            position: Vec3::new(0.0, 3.0, 0.0),
+            rotation_degrees: Vec3::ZERO,
+            size: Vec3::splat(2.0),
+            colour: [0.5; 3],
+            roughness: 0.6,
+            kind,
+            chords: 4,
+        }
+    }
+
+    /// A dark lamp still has an aim, and where a dark lamp is pointed is the whole reason to open
+    /// this view while focusing a rig.
+    #[test]
+    fn an_unlit_head_still_shows_where_it_is_pointed() {
+        let mut scene = Scene::default();
+        scene.fixtures.push(fixture());
+        scene.emitters.push(emitter());
+        let mut values = SceneValues::default();
+        values.resize(1);
+        values.emitters[0].intensity = 0.0;
+
+        let frame = build(&scene, &values, &lines_style());
+        assert!(
+            !frame.lines.is_empty(),
+            "an unlit head draws its guideline anyway"
+        );
+        assert!(frame.beams.is_empty(), "and no beam volume");
+    }
+
+    /// The guideline is dashed, so it never reads as a beam that is switched on.
+    #[test]
+    fn the_guideline_is_drawn_as_dashes_rather_than_one_line() {
+        let mut scene = Scene::default();
+        scene.fixtures.push(fixture());
+        scene.emitters.push(emitter());
+        let mut values = SceneValues::default();
+        values.resize(1);
+
+        let frame = build(&scene, &values, &lines_style());
+        assert!(
+            frame.lines.len() > 4,
+            "a dashed guide is many short segments, got {} vertices",
+            frame.lines.len()
+        );
+    }
+
+    /// Lit, the head gets its own coloured line over the guideline rather than instead of it, so
+    /// bringing a fixture up never looks like the fixture moving.
+    #[test]
+    fn a_lit_head_adds_its_own_line_over_the_guideline() {
+        let mut scene = Scene::default();
+        scene.fixtures.push(fixture());
+        scene.emitters.push(emitter());
+        let mut values = SceneValues::default();
+        values.resize(1);
+
+        let dark = build(&scene, &values, &lines_style()).lines.len();
+        values.emitters[0].intensity = 1.0;
+        values.emitters[0].held_intensity = 1.0;
+        let lit = build(&scene, &values, &lines_style()).lines.len();
+        assert_eq!(lit, dark + 2, "one more segment, and the guide still under it");
+    }
+
+    /// A truss drawn as a box is a wall across the picture hiding the lamps hanging off it.
+    #[test]
+    fn the_rigging_and_the_soft_goods_are_not_drawn() {
+        let mut scene = Scene::default();
+        scene.scenery.push(scenery(SceneryKind::Truss));
+        scene.scenery.push(scenery(SceneryKind::Curtain));
+        let values = SceneValues::default();
+
+        let frame = build(&scene, &values, &lines_style());
+        assert!(
+            frame.meshes.iter().all(|(_, entries)| entries.is_empty()),
+            "no truss and no drape in a lines view"
+        );
+    }
+
+    /// What the rig is arranged around stays: staging is what a fixture is aimed at. It is drawn
+    /// as an outline, because nothing in this view is lit and a solid box would be a black shape
+    /// in a black room.
+    #[test]
+    fn the_staging_is_drawn_as_an_outline_rather_than_a_solid() {
+        let mut scene = Scene::default();
+        scene.scenery.push(scenery(SceneryKind::Riser));
+        let values = SceneValues::default();
+
+        let frame = build(&scene, &values, &lines_style());
+        assert!(
+            frame.meshes.iter().all(|(_, entries)| entries.is_empty()),
+            "no solid geometry in an outline view"
+        );
+        assert_eq!(frame.lines.len(), 24, "twelve edges, two vertices each");
+    }
+
+    /// The fixture's box is the size of the fixture, so an operator can judge whether two heads
+    /// will foul each other from the diagram.
+    #[test]
+    fn a_fixture_outline_is_the_size_of_the_fixture() {
+        let mut scene = Scene::default();
+        let mut instance = fixture();
+        instance.body.size = Vec3::new(0.4, 0.9, 0.3);
+        instance.position = Vec3::ZERO;
+        scene.fixtures.push(instance);
+        let values = SceneValues::default();
+
+        let frame = build(&scene, &values, &lines_style());
+        assert_eq!(frame.lines.len(), 24, "one box outline, not a modelled body");
+        let extent = |axis: usize| {
+            let values = frame.lines.iter().map(|vertex| vertex.position[axis]);
+            let max = values.clone().fold(f32::MIN, f32::max);
+            let min = values.fold(f32::MAX, f32::min);
+            max - min
+        };
+        let measured = Vec3::new(extent(0), extent(1), extent(2));
+        assert!(
+            (measured - Vec3::new(0.4, 0.9, 0.3)).length() < 1e-5,
+            "the box is the fixture's own size, got {measured:?}"
+        );
+    }
+}
+
+/// The ground reference is lines on the floor, not a floor.
+///
+/// A filled plane is a surface: it takes light, it hides what is under it, and it turns the bottom
+/// of the picture into a large flat area competing with the rig. Lines give the scale and the
+/// centre without being lit at all.
+mod floor_grid {
+    use super::*;
+
+    #[test]
+    fn the_grid_is_drawn_as_lines_and_adds_no_geometry() {
+        let mut scene = Scene::default();
+        scene.fixtures.push(fixture());
+        scene.recompute_bounds();
+        let values = SceneValues::default();
+
+        let without = build(
+            &scene,
+            &values,
+            &FrameStyle {
+                floor_grid: false,
+                ..FrameStyle::default()
+            },
+        );
+        let with = build(&scene, &values, &FrameStyle::default());
+        assert!(
+            with.lines.len() > without.lines.len(),
+            "the grid arrives as lines"
+        );
+        let meshes = |frame: &FrameInstances| -> usize {
+            frame.meshes.iter().map(|(_, entries)| entries.len()).sum()
+        };
+        assert_eq!(
+            meshes(&with),
+            meshes(&without),
+            "and brings no surface with it"
+        );
+    }
+
+    /// A grid whose lines all look the same gives no answer to "where is centre".
+    #[test]
+    fn the_centre_lines_are_drawn_stronger_than_the_rest() {
+        let mut scene = Scene::default();
+        scene.fixtures.push(fixture());
+        scene.recompute_bounds();
+        let frame = build(&scene, &SceneValues::default(), &FrameStyle::default());
+        let brightest = frame
+            .lines
+            .iter()
+            .map(|vertex| vertex.colour[0])
+            .fold(0.0_f32, f32::max);
+        let dimmest = frame
+            .lines
+            .iter()
+            .map(|vertex| vertex.colour[0])
+            .fold(f32::MAX, f32::min);
+        assert!(
+            brightest > dimmest * 1.5,
+            "the centre lines stand out: {dimmest} to {brightest}"
+        );
+    }
 }

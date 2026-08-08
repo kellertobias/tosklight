@@ -23,7 +23,7 @@ const USAGE: &str = "viz-capture --show FILE --output DIR [options]
   --height N        Frame height in pixels (default 1080).
   --frames N        How many frames to write (default 1).
   --step SECONDS    Scene time between frames (default 1/30).
-  --settle N        Frames rendered and discarded first, so exposure has adapted (default 30).
+  --settle N        Frames rendered and discarded first, so time-based motion has run (default 30).
   --haze PERCENT    Haze the beams are drawn through (default 50).
   --view NAME       full3d | simple3d | lines3d | top-down | left-to-right |
                     right-to-left | front-to-back | back-to-front (default full3d).";
@@ -125,8 +125,10 @@ fn run(options: &Options) -> Result<u32, String> {
         );
     }
 
-    // Exposure adapts over time by design, so a capture settles first and only then records.
-    // Without this the first frame of every run is a different brightness from the rest.
+    // Anything the renderer runs on a clock — gobo rotation, prisms, persistence of vision — is
+    // given the same run-up every time, so the recorded frame does not depend on being the first.
+    // Exposure is not among them: it is fixed, so that a rig at half never records as a rig at
+    // full drawn dimmer.
     for frame in 0..options.settle {
         let seconds = frame as f32 * options.step;
         renderer
@@ -444,6 +446,71 @@ mod tests {
              this is something moving",
             deltas.len(),
             first.len()
+        );
+    }
+
+    /// The whole dimmer has to be worth moving.
+    ///
+    /// The Stage used to adapt its exposure to how much light the rig was producing, the way an
+    /// eye does. On a rig that is the wrong instinct: taking the fixtures down opened the exposure
+    /// by nearly as much as they had closed, so the first tenth of a fade was the entire visible
+    /// change and the top nine tenths drew the same picture. What an operator needs from a Stage
+    /// is the opposite — dim has to look dim, and the difference between half and full has to be
+    /// as plain as the difference between out and a tenth.
+    #[test]
+    fn the_picture_keeps_getting_brighter_all_the_way_up_the_dimmer() {
+        let scene = demo_scene("exposure");
+        let mut view = ViewConfiguration::default();
+        view.mode = ViewMode::Full3d;
+        view.camera = viz_scene::Camera::framed(ViewMode::Full3d, scene.bounds);
+        let overlay = viz_render::Overlay::default();
+        let mut renderer = viz_render::Renderer::headless(320, 180)
+            .expect("a headless renderer; this machine has no GPU or software adapter");
+
+        let mut brightness_at = |level: f32| {
+            let mut values = SceneValues::default();
+            values.resize(scene.emitters.len());
+            values.atmosphere.density = viz_scene::DEFAULT_DENSITY;
+            for emitter in &mut values.emitters {
+                emitter.intensity = level;
+                emitter.held_intensity = level;
+            }
+            let frame = renderer
+                .capture(&scene, &values, &view, &overlay, 1.0)
+                .expect("a captured frame");
+            let total: u64 = frame
+                .rgba
+                .chunks_exact(4)
+                .map(|pixel| u64::from(pixel[0]) + u64::from(pixel[1]) + u64::from(pixel[2]))
+                .sum();
+            total as f64 / (frame.rgba.len() / 4) as f64
+        };
+
+        let levels = [0.0_f32, 0.1, 0.25, 0.5, 1.0];
+        let measured: Vec<f64> = levels.iter().copied().map(&mut brightness_at).collect();
+        for pair in measured.windows(2) {
+            assert!(
+                pair[1] > pair[0],
+                "every step up the dimmer is brighter than the one below it: {measured:?}"
+            );
+        }
+
+        // The half-to-full step is the one that used to vanish. It has to be a real share of the
+        // range rather than the rounding it became.
+        let range = measured[4] - measured[0];
+        let top_step = measured[4] - measured[3];
+        assert!(
+            top_step > range * 0.12,
+            "half to full is {top_step:.2} of a {range:.2} range, which is a fader with nothing \
+             in its top half: {measured:?}"
+        );
+
+        // And the bottom of the fader must not already be most of the picture.
+        let bottom_step = measured[1] - measured[0];
+        assert!(
+            bottom_step < range * 0.5,
+            "out to a tenth is {bottom_step:.2} of a {range:.2} range, so the fade happens \
+             entirely in the bottom of the fader: {measured:?}"
         );
     }
 

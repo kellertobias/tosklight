@@ -147,18 +147,21 @@ impl Renderer {
             beam_ink: Vec3::from(view.theme.beam_ink()),
             ink: Vec3::from(view.theme.ink()),
             faint_ink: Vec3::from(view.theme.faint_ink()),
+            fixture_models: view.mode.draws_fixture_models(),
+            aim_guides: view.mode.always_draws_aim_guides(),
+            // The grid is a ground reference for a picture with a ground in it. A plan already
+            // has one — it is a drawing on a page with its own scale — so it is not drawn there.
+            floor_grid: view.floor_grid && !plot,
+            scenery: match view.mode {
+                viz_scene::ViewMode::Lines3d => |kind| viz_scene::ViewMode::Lines3d.draws_scenery(kind),
+                _ => |_| true,
+            },
         };
         let draw_beams = style.draw_beams && !plot;
         self.frame = crate::instances::build(scene, values, &style);
 
-        let now = std::time::Instant::now();
-        let frame_delta = self
-            .last_frame_at
-            .map(|previous| now.duration_since(previous).as_secs_f32())
-            .unwrap_or(1.0 / 60.0);
-        self.last_frame_at = Some(now);
-        self.adapt_exposure(frame_delta);
-        let exposure = (self.auto_exposure * view.exposure).clamp(0.02, 4.0);
+        // One exposure, the operator's trim over it, and nothing that watches the rig and moves.
+        let exposure = (super::BASE_EXPOSURE * view.exposure).clamp(0.02, 4.0);
         let bounds = if scene.bounds.is_empty() {
             Aabb {
                 min: Vec3::new(-6.0, 0.0, -6.0),
@@ -289,6 +292,12 @@ impl Renderer {
                 view.quality.fog_detail(),
                 time_seconds,
                 view.laser_brightness.clamp(0.0, 4.0),
+            ],
+            params4: [
+                f32::from(u8::from(view.quality.draws_gobos())),
+                f32::from(u8::from(view.quality.draws_beam_falloff())),
+                0.0,
+                0.0,
             ],
         };
         queue.write_buffer(&self.globals_buffer, 0, bytemuck::bytes_of(&globals));
@@ -491,7 +500,12 @@ impl Renderer {
 
     /// Bloom and the composite that puts the frame on screen.
     ///
-    /// A plan is ink on paper: no bloom, no filmic curve, no exposure adaptation.
+    /// A picture with no light in it gets no camera put in front of it.
+    ///
+    /// A plan is ink on paper, and an outline view is a diagram drawn in the same spirit: their
+    /// colours are already the final ones. Rolling them through an exposure and a filmic curve
+    /// greys the page, and blooming them turns every aim line into a lit beam — which is the one
+    /// thing an outline view exists not to claim.
     fn post_passes(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -500,9 +514,10 @@ impl Renderer {
         view: &ViewConfiguration,
         output: &wgpu::TextureView,
     ) {
-        let (plot, exposure) = (plan.plot, plan.exposure);
-        let bloom = view.quality.bloom_enabled() && !plot;
-        let composite_exposure = if plot { 1.0 } else { exposure };
+        let exposure = plan.exposure;
+        let drawn = plan.plot || !view.mode.simulates_light();
+        let bloom = view.quality.bloom_enabled() && !drawn;
+        let composite_exposure = if drawn { 1.0 } else { exposure };
         if bloom {
             queue.write_buffer(
                 &self.post_settings,
@@ -542,7 +557,7 @@ impl Renderer {
             bytemuck::cast_slice(&[
                 composite_exposure,
                 if bloom { BLOOM_MIX } else { 0.0 },
-                if plot { 0.0_f32 } else { 1.0 },
+                if drawn { 0.0_f32 } else { 1.0 },
                 0.0,
             ]),
         );
@@ -662,7 +677,7 @@ fn shadow_matrix(light: &GpuLight) -> Mat4 {
 }
 
 fn background_of(view: &ViewConfiguration) -> wgpu::Color {
-    let [red, green, blue] = view.theme.background();
+    let [red, green, blue] = view.background_colour();
     wgpu::Color {
         r: f64::from(red),
         g: f64::from(green),

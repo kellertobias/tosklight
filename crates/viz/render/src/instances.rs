@@ -204,6 +204,20 @@ impl FrameInstances {
         self.meshes.push((kind, Vec::new()));
         &mut self.meshes.last_mut().expect("just pushed").1
     }
+
+    /// One straight line between two points, each end with its own colour and opacity.
+    fn line(&mut self, from: Vec3, to: Vec3, near: glam::Vec4, far: glam::Vec4) {
+        self.lines.push(LineVertex {
+            position: from.to_array(),
+            _pad: 0.0,
+            colour: near.to_array(),
+        });
+        self.lines.push(LineVertex {
+            position: to.to_array(),
+            _pad: 0.0,
+            colour: far.to_array(),
+        });
+    }
 }
 
 /// Maximum beam throw used for the volumetric cone and the aim line.
@@ -217,6 +231,13 @@ const MAX_APEX_OFFSET: f32 = 12.0;
 /// glass in it and a panel has a real front, so neither is a flat sticker; neither is anywhere
 /// near as deep as it is wide.
 const SOURCE_THICKNESS: f32 = 0.16;
+
+/// Radiance a lit face reaches at full, before exposure and the filmic curve.
+///
+/// Chosen so a lamp at full sits a little past the knee of that curve — bright, and still with
+/// somewhere left to go — rather than far up its shoulder, where every level from about a tenth
+/// of the dimmer upwards flattens into the same white. The whole fader has to be worth moving.
+const APERTURE_RADIANCE: f32 = 2.2;
 
 /// The cone every fixture's intensity is measured against: a 40-degree field, which is an ordinary
 /// stage lantern. Narrower than this concentrates the same light and is brighter; wider spreads it
@@ -246,6 +267,14 @@ pub struct FrameStyle {
     pub faint_ink: Vec3,
     /// The one colour every beam is drawn in on a plan.
     pub beam_ink: Vec3,
+    /// Draw each fixture's own model, rather than a box standing where it is.
+    pub fixture_models: bool,
+    /// Draw an aim guideline for every directional emitter, lit or not.
+    pub aim_guides: bool,
+    /// Lay the reference grid on the ground plane.
+    pub floor_grid: bool,
+    /// Which scenery this view draws at all.
+    pub scenery: fn(viz_scene::SceneryKind) -> bool,
 }
 
 impl Default for FrameStyle {
@@ -260,6 +289,10 @@ impl Default for FrameStyle {
             beam_ink: Vec3::new(1.0, 0.82, 0.25),
             ink: Vec3::splat(0.85),
             faint_ink: Vec3::splat(0.35),
+            fixture_models: true,
+            aim_guides: false,
+            floor_grid: true,
+            scenery: |_| true,
         }
     }
 }
@@ -272,8 +305,11 @@ pub fn build(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> FrameIn
         plot::push_plot(&mut frame, scene, values, &head_angles, style);
         return frame;
     }
-    scenery::push_scenery(&mut frame, scene);
-    push_bodies(&mut frame, scene, &head_angles);
+    if style.floor_grid {
+        push_floor_grid(&mut frame, scene, style);
+    }
+    scenery::push_scenery(&mut frame, scene, style);
+    push_bodies(&mut frame, scene, &head_angles, style);
     push_emitters(
         &mut frame,
         scene,
@@ -281,8 +317,73 @@ pub fn build(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> FrameIn
         &head_angles,
         style.draw_beams,
         style.draw_aim_lines,
+        style.aim_guides,
+        style,
     );
     frame
+}
+
+/// The reference grid on the ground plane.
+///
+/// Lines on the floor, not a floor. A filled plane is a surface: it takes light, it hides whatever
+/// is under it, and it turns the bottom of the picture into a large flat area competing with the
+/// rig for attention. What an operator actually wants from it is a sense of scale and of where the
+/// centre line is, which is what a grid of dark lines gives without being lit at all.
+fn push_floor_grid(frame: &mut FrameInstances, scene: &Scene, style: &FrameStyle) {
+    /// Metres between lines. A metre is the unit a rig is measured and marked out in.
+    const SPACING: f32 = 1.0;
+    /// How far past the rig the grid runs, so it never stops at the edge of the fixtures.
+    const MARGIN: f32 = 4.0;
+    /// The largest grid worth drawing, so an accidentally enormous scene cannot fill the buffer.
+    const MAX_LINES: i32 = 200;
+
+    let bounds = scene.bounds;
+    let (min_x, max_x, min_z, max_z) = if bounds.is_empty() {
+        (-8.0, 8.0, -8.0, 8.0)
+    } else {
+        (
+            bounds.min.x - MARGIN,
+            bounds.max.x + MARGIN,
+            bounds.min.z - MARGIN,
+            bounds.max.z + MARGIN,
+        )
+    };
+    let first = |value: f32| (value / SPACING).floor() as i32;
+    let last = |value: f32| (value / SPACING).ceil() as i32;
+    let (x0, x1) = (first(min_x), last(max_x));
+    let (z0, z1) = (first(min_z), last(max_z));
+    if x1 - x0 > MAX_LINES || z1 - z0 > MAX_LINES {
+        return;
+    }
+
+    // Dark, and only just visible. The grid is a reference the eye can find when it looks for it
+    // and ignore when it does not; a bright one draws attention away from the only thing on the
+    // stage that is supposed to be bright.
+    let line = (style.faint_ink * 0.03).extend(1.0);
+    // The centre lines are the ones an operator counts from, so they are drawn a little stronger.
+    let centre = (style.faint_ink * 0.12).extend(1.0);
+    let y = FLOOR_HEIGHT + 0.002;
+
+    for step in x0..=x1 {
+        let x = step as f32 * SPACING;
+        let colour = if step == 0 { centre } else { line };
+        frame.line(
+            Vec3::new(x, y, min_z),
+            Vec3::new(x, y, max_z),
+            colour,
+            colour,
+        );
+    }
+    for step in z0..=z1 {
+        let z = step as f32 * SPACING;
+        let colour = if step == 0 { centre } else { line };
+        frame.line(
+            Vec3::new(min_x, y, z),
+            Vec3::new(max_x, y, z),
+            colour,
+            colour,
+        );
+    }
 }
 
 /// Pan and tilt in degrees for every emitter, resolved once and reused by bodies and beams so the
@@ -359,10 +460,24 @@ fn push_model(
 const BODY_COLOUR: Vec3 = Vec3::new(0.055, 0.06, 0.068);
 const YOKE_COLOUR: Vec3 = Vec3::new(0.08, 0.085, 0.095);
 
-fn push_bodies(frame: &mut FrameInstances, scene: &Scene, head_angles: &[(f32, f32)]) {
+fn push_bodies(
+    frame: &mut FrameInstances,
+    scene: &Scene,
+    head_angles: &[(f32, f32)],
+    style: &FrameStyle,
+) {
     for (fixture_index, fixture) in scene.fixtures.iter().enumerate() {
         let base = Mat4::from_rotation_translation(fixture.orientation(), fixture.position);
         let size = fixture.body.size;
+        // A view that draws no models draws the outline of a box the size of the fixture, standing
+        // and turned where the fixture does. Outline rather than a solid: this view simulates no
+        // light, so a solid box has nothing to reveal it and would be a black shape in a black
+        // room. It is the fixture's own footprint rather than a token, because an operator judging
+        // whether two heads will foul each other needs the box to be the size of the thing.
+        if !style.fixture_models {
+            push_box_outline(frame, base * Mat4::from_scale(size), style.ink, 0.9);
+            continue;
+        }
         // A fixture whose profile carries a model is drawn as that model. The proxy shapes below
         // are what a fixture gets when its library entry has no geometry to offer.
         if let Some(model_index) = fixture.model
@@ -565,6 +680,8 @@ fn push_emitters(
     head_angles: &[(f32, f32)],
     draw_beams: bool,
     draw_lines: bool,
+    draw_guides: bool,
+    style: &FrameStyle,
 ) {
     let fallback = EmitterValues::default();
     for (index, emitter) in scene.emitters.iter().enumerate() {
@@ -615,7 +732,17 @@ fn push_emitters(
                 cell_intensity,
                 cell_colour,
             );
-            if emitter.kind != EmitterKind::Beam || cell_intensity <= 0.002 {
+            if emitter.kind != EmitterKind::Beam {
+                continue;
+            }
+            // The guideline is drawn for a directional emitter whether or not it is lit, because
+            // where a dark lamp is pointed is exactly what an operator aiming a rig needs to see.
+            // The lit line below is added over it rather than instead of it, so a fixture coming
+            // up does not appear to move.
+            if draw_guides {
+                push_aim_guide(frame, origin, pose, style.faint_ink);
+            }
+            if cell_intensity <= 0.002 {
                 continue;
             }
             let light_index = frame.lights.len() as u32;
@@ -898,7 +1025,12 @@ fn push_aperture(
     colour: Vec3,
 ) {
     // The visible source stays present at zero intensity so a fixture never disappears.
-    let radiance = colour * (0.02 + intensity * 9.0);
+    //
+    // The gain lands a lamp at full just past the knee of the filmic curve rather than far up its
+    // shoulder. Driven ten times harder — which is what this was — a lens is fully white by about
+    // a tenth of the dimmer and every level above that draws the same, so an operator sees the
+    // whole fade happen in the bottom of the fader and nothing at all in the rest of it.
+    let radiance = colour * (0.02 + intensity * APERTURE_RADIANCE);
     // Light leaves a lamp through a face, and the face is what the operator recognises the lamp
     // by: a moving head's lens, a Fresnel's glass, the round lens of one blinder lamp, the front
     // of an LED strip. So the source is drawn as that face — round glass for a round or oval
@@ -1013,6 +1145,88 @@ fn push_aim_line(
         _pad: 0.0,
         colour: far.to_array(),
     });
+}
+
+/// The twelve edges of a unit cube carried through `transform`.
+///
+/// What an outline view is made of. A rig drawn as outlines stays readable however many fixtures
+/// are in it, because an outline hides nothing behind it: two heads at the same depth are both
+/// still visible, which is exactly what a solid box in an unlit room cannot manage.
+pub(crate) fn push_box_outline(
+    frame: &mut FrameInstances,
+    transform: Mat4,
+    ink: Vec3,
+    opacity: f32,
+) {
+    const CORNERS: [Vec3; 8] = [
+        Vec3::new(-0.5, -0.5, -0.5),
+        Vec3::new(0.5, -0.5, -0.5),
+        Vec3::new(0.5, -0.5, 0.5),
+        Vec3::new(-0.5, -0.5, 0.5),
+        Vec3::new(-0.5, 0.5, -0.5),
+        Vec3::new(0.5, 0.5, -0.5),
+        Vec3::new(0.5, 0.5, 0.5),
+        Vec3::new(-0.5, 0.5, 0.5),
+    ];
+    const EDGES: [(usize, usize); 12] = [
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 0),
+        (4, 5),
+        (5, 6),
+        (6, 7),
+        (7, 4),
+        (0, 4),
+        (1, 5),
+        (2, 6),
+        (3, 7),
+    ];
+    let colour = ink.extend(opacity);
+    let world: Vec<Vec3> = CORNERS
+        .iter()
+        .map(|corner| transform.transform_point3(*corner))
+        .collect();
+    for (from, to) in EDGES {
+        frame.line(world[from], world[to], colour, colour);
+    }
+}
+
+/// The dotted line showing where an emitter is aimed, lit or not.
+///
+/// Dotted rather than solid, and drawn in the faint ink, so it never reads as light: a solid line
+/// down the aim of every dark lamp in a rig is a picture of a hundred beams that are not on. It is
+/// dashed by emitting the dashes as separate segments, which is what a line list can express — a
+/// stipple pattern would be a whole pipeline for one kind of line.
+fn push_aim_guide(frame: &mut FrameInstances, origin: Vec3, pose: EmitterPose, ink: Vec3) {
+    /// Length of one dash and of the gap after it, in metres.
+    const DASH: f32 = 0.22;
+    const GAP: f32 = 0.28;
+    /// Most dashes worth drawing down one guide, so a long throw cannot flood the line buffer.
+    const MAX_DASHES: usize = 48;
+
+    let reach = beam_length(origin, pose.direction).min(BEAM_THROW_METRES * 0.55);
+    if reach <= DASH {
+        return;
+    }
+    let colour = (ink * 0.55).extend(0.85);
+    // Fading out along the throw keeps the far end of a long guide from cluttering the picture,
+    // and reads the way an aim does: certain at the lamp, less so where it lands.
+    let mut travelled = 0.0;
+    let mut drawn = 0;
+    while travelled < reach && drawn < MAX_DASHES {
+        let start = travelled;
+        let end = (travelled + DASH).min(reach);
+        let fade = |along: f32| colour * Vec3::ONE.extend(1.0 - (along / reach) * 0.75);
+        frame.line(
+            origin + pose.direction * start,
+            origin + pose.direction * end,
+            fade(start),
+            fade(end),
+        );
+        travelled = end + GAP;
+        drawn += 1;
+    }
 }
 
 mod laser;
