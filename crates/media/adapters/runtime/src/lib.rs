@@ -54,7 +54,20 @@ pub const PLAY_ARGUMENT: &str = "--play";
 pub fn run() -> anyhow::Result<()> {
     let log = install_logging();
     let arguments: Vec<String> = std::env::args().collect();
-    let configuration = load_configuration(&ConfigurationSource::from_environment())?;
+    let source = ConfigurationSource::from_environment();
+    let mut configuration = load_configuration(&source)?;
+
+    // A first run in an existing installation inherits what the previous Media Server had: its
+    // text sources are operator data, and cutover must not lose them. Once this server has a
+    // document of its own, the operator's catalog is theirs.
+    if startup::is_first_run(&source) {
+        startup::adopt_legacy_text(&mut configuration, true, unix_millis());
+        if !configuration.text.slots.is_empty()
+            && let Err(error) = startup::write_configuration(&source.path(), &configuration)
+        {
+            tracing::error!(%error, "the adopted text sources could not be stored");
+        }
+    }
 
     if arguments
         .iter()
@@ -182,6 +195,14 @@ pub fn run() -> anyhow::Result<()> {
     // stream that vanished.
     drop(audio);
     presented
+}
+
+/// Milliseconds since the Unix epoch, for a migration that has to resolve a time of day.
+fn unix_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_millis() as i64)
+        .unwrap_or_default()
 }
 
 /// The diagnostics an operator asked for on the command line.

@@ -63,6 +63,19 @@ pub fn discover(root: &Path) -> Result<CatalogSnapshot, DiscoveryError> {
                 tracing::warn!(%folder, %error, "skipping an item the catalog will not accept");
             }
         }
+        // A library from the legacy application is full of `.mp4` and `.png` files, which are
+        // import formats rather than playback ones. Finding none of them playable and saying
+        // nothing would leave an operator looking at an empty library with no idea why.
+        let waiting = count_awaiting_import(&path);
+        if waiting > 0 {
+            tracing::warn!(
+                %folder,
+                files = waiting,
+                path = %path.display(),
+                "this folder holds files that are not normalised media, so they cannot be played \
+                 yet; import them into the library to convert them"
+            );
+        }
         if let Some(name) = read_folder_name(&path) {
             let _ = catalog.rename_folder(folder, Some(&name));
         }
@@ -119,10 +132,56 @@ fn read_item(path: &Path, file: u8, name: &str) -> Option<CatalogItem> {
     })
 }
 
+/// How many files in a folder look like media this server could play once imported.
+///
+/// Counted rather than listed, because the point is to tell an operator that their library needs
+/// importing — not to enumerate a venue's whole archive into a log.
+fn count_awaiting_import(path: &Path) -> usize {
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .filter(|entry| entry.path().is_file())
+        .filter_map(|entry| entry.file_name().to_str().map(str::to_owned))
+        .filter(|filename| {
+            // A dotted file is the library's own bookkeeping, never media.
+            !filename.starts_with('.')
+                && naming::parse_item_filename(filename).is_none()
+                && looks_like_media(filename)
+        })
+        .count()
+}
+
+/// Whether a filename is one of the formats an import accepts.
+///
+/// Deliberately a short list of what the legacy application actually held and what an operator
+/// exports from an editor. Anything else in a folder is somebody's notes.
+fn looks_like_media(filename: &str) -> bool {
+    const IMPORTABLE: [&str; 8] = ["mp4", "mov", "m4v", "mkv", "png", "jpg", "jpeg", "tif"];
+    filename
+        .rsplit_once('.')
+        .is_some_and(|(_, extension)| IMPORTABLE.contains(&extension.to_ascii_lowercase().as_str()))
+}
+
+/// A folder's operator-given name.
+///
+/// This build writes the name as the file's whole contents. The legacy application wrote a JSON
+/// object — `{"name": "Video Files"}` — so both are read: an existing library must not come up with
+/// a folder called `{ "name": ... }`.
 fn read_folder_name(path: &Path) -> Option<String> {
     let contents = std::fs::read_to_string(path.join(naming::FOLDER_NAME_FILE)).ok()?;
-    let name = contents.trim();
-    (!name.is_empty()).then(|| name.to_owned())
+    let name = match serde_json::from_str::<serde_json::Value>(&contents) {
+        Ok(serde_json::Value::Object(document)) => document
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_owned(),
+        // Anything that is not a JSON object is this build's own format: the name itself.
+        _ => contents.trim().to_owned(),
+    };
+    (!name.is_empty()).then_some(name)
 }
 
 #[cfg(test)]
@@ -299,6 +358,48 @@ mod tests {
         let catalog = discover(&library.0).unwrap();
         assert_eq!(catalog.folder(1).unwrap().name.as_deref(), Some("Intros"));
         assert_eq!(catalog.folder(3).unwrap().name, None);
+    }
+
+    #[test]
+    fn a_legacy_folder_name_is_read_from_the_json_the_c_application_wrote() {
+        let library = Library::new("legacy-named");
+        library.put("001/001-Clip.toskclip", &clip(10, None));
+        library.put("001/.info", br#"{"name": "Video Files"}"#);
+        // An object with no name in it is not a name, and must not become one.
+        library.put("002/001-Clip.toskclip", &clip(10, None));
+        library.put("002/.info", br#"{"colour": "blue"}"#);
+
+        let catalog = discover(&library.0).unwrap();
+        assert_eq!(
+            catalog.folder(1).unwrap().name.as_deref(),
+            Some("Video Files"),
+            "an existing library must not come up with a folder called `{{ \"name\": ... }}`"
+        );
+        assert_eq!(catalog.folder(2).unwrap().name, None);
+    }
+
+    #[test]
+    fn a_library_of_files_that_need_importing_is_counted_rather_than_passed_over_in_silence() {
+        let library = Library::new("needs-import");
+        // What a legacy installation actually holds.
+        library.put("001/001.mp4", b"not a normalised clip");
+        library.put("001/004-LoopTest.mp4", b"not a normalised clip");
+        library.put("002/001-Unknown.png", b"not a normalised clip");
+        library.put("002/notes.txt", b"somebody's notes");
+        library.put("002/.thumbs/001-thumb.jpg", b"bookkeeping, not media");
+
+        let catalog = discover(&library.0).unwrap();
+        assert_eq!(catalog.item_count(), 0, "none of it is playable yet");
+        assert_eq!(
+            count_awaiting_import(&library.0.join("001")),
+            2,
+            "both clips are waiting"
+        );
+        assert_eq!(
+            count_awaiting_import(&library.0.join("002")),
+            1,
+            "the notes and the thumbnail are not media"
+        );
     }
 
     #[test]

@@ -109,9 +109,6 @@ export function TextSourceEditor({
 }: TextSourceEditorProps) {
 	const set = <K extends keyof TextDraft>(field: K, value: TextDraft[K]) =>
 		onChange({ ...draft, [field]: value });
-	const setStyle = <K extends keyof TextStyleView>(field: K, value: TextStyleView[K]) =>
-		onChange({ ...draft, style: { ...draft.style, [field]: value } });
-
 	return (
 		<form
 			className="media-text-editor"
@@ -193,59 +190,7 @@ export function TextSourceEditor({
 				onChange={(event) => set("enabled", event.target.checked)}
 			/>
 
-			<fieldset>
-				<legend>Appearance</legend>
-				<TextField
-					label="Font"
-					description="A family this machine has. An absent one falls back, and the server says it substituted."
-					value={draft.style.family}
-					onChange={(event) => setStyle("family", event.target.value)}
-				/>
-				<NumberField
-					label="Height"
-					description="A fraction of the output's height, so a look survives a change of resolution."
-					min={0.01}
-					max={2}
-					step={0.01}
-					value={String(draft.style.size)}
-					onChange={(event) => setStyle("size", Number(event.target.value))}
-				/>
-				<SelectField
-					label="Alignment"
-					value={draft.style.alignment}
-					options={ALIGNMENTS.map((alignment) => ({
-						value: alignment.value,
-						label: alignment.label,
-					}))}
-					onChange={(next) => setStyle("alignment", next)}
-				/>
-				<label className="media-text-colour">
-					Colour
-					<input
-						type="color"
-						value={toHex(draft.style.red, draft.style.green, draft.style.blue)}
-						onChange={(event) => {
-							const [red, green, blue] = fromHex(event.target.value);
-							onChange({
-								...draft,
-								style: { ...draft.style, red, green, blue },
-							});
-						}}
-					/>
-				</label>
-				<CheckboxField
-					label="Bold"
-					stateLabel="Draw in a heavier weight"
-					checked={draft.style.bold}
-					onChange={(event) => setStyle("bold", event.target.checked)}
-				/>
-				<CheckboxField
-					label="Italic"
-					stateLabel="Draw slanted"
-					checked={draft.style.italic}
-					onChange={(event) => setStyle("italic", event.target.checked)}
-				/>
-			</fieldset>
+			<Appearance draft={draft} onChange={onChange} />
 
 			<div className="media-settings-actions">
 				<Button type="submit" variant="primary" loading={busy}>
@@ -254,6 +199,75 @@ export function TextSourceEditor({
 				<Button onClick={onCancel}>Cancel</Button>
 			</div>
 		</form>
+	);
+}
+
+/// How the words look. Its own component because content and appearance are edited together but
+/// read separately, and because one form of twenty fields is not something anybody can follow.
+function Appearance({
+	draft,
+	onChange,
+}: {
+	draft: TextDraft;
+	onChange: (draft: TextDraft) => void;
+}) {
+	const setStyle = <K extends keyof TextStyleView>(field: K, value: TextStyleView[K]) =>
+		onChange({ ...draft, style: { ...draft.style, [field]: value } });
+
+	return (
+		<fieldset>
+			<legend>Appearance</legend>
+			<TextField
+				label="Font"
+				description="A family this machine has. An absent one falls back, and the server says it substituted."
+				value={draft.style.family}
+				onChange={(event) => setStyle("family", event.target.value)}
+			/>
+			<NumberField
+				label="Height"
+				description="A fraction of the output's height, so a look survives a change of resolution."
+				min={0.01}
+				max={2}
+				step={0.01}
+				value={String(draft.style.size)}
+				onChange={(event) => setStyle("size", Number(event.target.value))}
+			/>
+			<SelectField
+				label="Alignment"
+				value={draft.style.alignment}
+				options={ALIGNMENTS.map((alignment) => ({
+					value: alignment.value,
+					label: alignment.label,
+				}))}
+				onChange={(next) => setStyle("alignment", next)}
+			/>
+			<label className="media-text-colour">
+				Colour
+				<input
+					type="color"
+					value={toHex(draft.style.red, draft.style.green, draft.style.blue)}
+					onChange={(event) => {
+						const [red, green, blue] = fromHex(event.target.value);
+						onChange({
+							...draft,
+							style: { ...draft.style, red, green, blue },
+						});
+					}}
+				/>
+			</label>
+			<CheckboxField
+				label="Bold"
+				stateLabel="Draw in a heavier weight"
+				checked={draft.style.bold}
+				onChange={(event) => setStyle("bold", event.target.checked)}
+			/>
+			<CheckboxField
+				label="Italic"
+				stateLabel="Draw slanted"
+				checked={draft.style.italic}
+				onChange={(event) => setStyle("italic", event.target.checked)}
+			/>
+		</fieldset>
 	);
 }
 

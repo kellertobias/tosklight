@@ -4,12 +4,17 @@
 //! configuration prevents startup with an actionable error rather than silently choosing a
 //! dangerous or incompatible value.
 
+mod legacy_text;
 mod migration;
 mod network;
 mod output;
 mod service;
 mod validate;
 
+pub use legacy_text::{
+    LEGACY_TEXT_DOCUMENT, LegacyTextError, Migrated as MigratedText, Note as TextMigrationNote,
+    migrate as migrate_legacy_text,
+};
 pub use media_domain::output::MonitorSelector;
 pub use migration::{CURRENT_VERSION, MigrationError, migrate_to_current};
 pub use network::{
