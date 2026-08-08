@@ -12,6 +12,7 @@
 
 pub mod message;
 pub mod packet;
+pub mod server;
 
 pub use message::{
     ElementRequest, LayerStatus, LibraryElement, LibraryFolder, LibraryRequest, Presence,
@@ -22,6 +23,7 @@ pub use message::{
     status_flags, stream_frame, video_sources,
 };
 pub use packet::{FramingError, Message, content, parse, take_messages};
+pub use server::{Identity, Library, Sessions, announcement, greeting, negotiate, respond, status};
 
 /// The port CITP uses. Both the discovery socket and the request listener sit on it.
 pub const CITP_PORT: u16 = 4809;
