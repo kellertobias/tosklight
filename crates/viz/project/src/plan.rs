@@ -354,6 +354,9 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
         if fixture.profile.optics.light_source.is_none()
             && let Some(face) = mount.face
         {
+            // Never wider than the lantern it is set into, which is the rule the help states and
+            // the last guard against a model whose emitting geometry is modelled generously.
+            let face = face.min(glam::Vec2::new(body_size.x, body_size.y.max(body_size.z)));
             match optics.source.form {
                 // A round lens is one number, so a face measured a little off-square is taken at
                 // its mean rather than being drawn as an oval nobody built.

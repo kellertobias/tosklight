@@ -267,6 +267,9 @@ fn head_pivot(model: &FixtureModel) -> Vec3 {
 /// arrays of an LED fixture, `cell` the reflector cells of a blinder or a sunstrip, `diffuser` a
 /// milky pane, and `aperture` a laser window or a hazer nozzle. Nothing else in the shipped set
 /// contains any of them, so a body, a yoke and a colour frame stay out of it.
+/// Names that read as what *carries* the glass rather than the glass itself.
+const HOUSING_MARKERS: [&str; 5] = ["ring", "bezel", "housing", "frame", "holder"];
+
 const EMITTER_MARKERS: [&str; 6] = ["lens", "source", "diffuser", "emitter", "cell", "aperture"];
 
 /// The surface light leaves the model by: where it is, and which way it looks.
@@ -292,6 +295,9 @@ struct EmitterFace {
 /// Measured as a share of the body's own half-extent rather than in metres, or a wide fixture with
 /// a shallow lens would read as pointing out of its long side.
 fn emitter_face(model: &FixtureModel, bounds_min: Vec3, bounds_max: Vec3) -> Option<EmitterFace> {
+    // Every emitting part, kept apart rather than merged. Where they go together decides the anchor;
+    // how big *one* of them is decides the face, and those are different questions.
+    let mut parts: Vec<(Vec3, Vec3)> = Vec::new();
     let mut min = Vec3::splat(f32::INFINITY);
     let mut max = Vec3::splat(f32::NEG_INFINITY);
     for part in &model.parts {
@@ -299,11 +305,25 @@ fn emitter_face(model: &FixtureModel, bounds_min: Vec3, bounds_max: Vec3) -> Opt
         if !EMITTER_MARKERS.iter().any(|marker| folded.contains(marker)) {
             continue;
         }
+        // What holds the glass is not the glass. A ring, a bezel or a frame carrying a lens matches
+        // `lens` by name and is most of what a small lantern's front is made of, which is why
+        // measuring the assembly made an ACL's lit face half again too big.
+        if HOUSING_MARKERS.iter().any(|marker| folded.contains(marker)) {
+            continue;
+        }
+        let mut part_min = Vec3::splat(f32::INFINITY);
+        let mut part_max = Vec3::splat(f32::NEG_INFINITY);
         for position in &part.positions {
             let point = Vec3::from_array(*position);
-            min = min.min(point);
-            max = max.max(point);
+            part_min = part_min.min(point);
+            part_max = part_max.max(point);
         }
+        if part_min.x > part_max.x {
+            continue;
+        }
+        min = min.min(part_min);
+        max = max.max(part_max);
+        parts.push((part_min, part_max));
     }
     if min.x > max.x {
         return None;
@@ -315,12 +335,25 @@ fn emitter_face(model: &FixtureModel, bounds_min: Vec3, bounds_max: Vec3) -> Opt
     // the light goes, and the middle of it across the other two.
     let centre = (min + max) * 0.5;
     let front = if axis.max_element() > 0.0 { max } else { min };
-    // Across the aim, which is the two axes the light does not travel along.
-    let extent = max - min;
     let across = Vec3::ONE - axis.abs();
+
+    /*
+     * One emitting part, not the run of them.
+     *
+     * A strip's cells each match `cell`, so bounding them together measures the whole strip and
+     * every cell then draws at the size of all of them — which is how a row of lit faces came to
+     * hang off both ends of the extrusion. The smallest matching part is one cell on a strip and
+     * the glass on a lantern, which is the answer in both cases.
+     */
+    let span = |extent: Vec3| (extent * across).length();
+    let smallest = parts
+        .iter()
+        .map(|(part_min, part_max)| *part_max - *part_min)
+        .reduce(|best, extent| if span(extent) < span(best) { extent } else { best })
+        .unwrap_or(max - min);
     let spans: Vec<f32> = (0..3)
         .filter(|index| across[*index] > 0.5)
-        .map(|index| extent[index])
+        .map(|index| smallest[index])
         .collect();
     Some(EmitterFace {
         anchor: centre * across + front * axis.abs(),
