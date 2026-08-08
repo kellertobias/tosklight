@@ -2,13 +2,13 @@
 
 Stage provides an operator selection surface for the saved spatial model; the model itself is edited in **Show Patch**.
 
-When a show has 3D fixture positions but no manually authored 2D placement, ToskLight creates a deterministic 2D layout automatically. Open the full Stage settings to see whether the 2D layout is **Automatic** or **Manual**. The writable primary desk can deliberately choose one of the six named orthographic projections and press **Regenerate 2D layout**. This replaces the 2D placement; it does not move the fixtures in 3D. Manual 2D placement remains protected from later automatic updates until this command is used.
+There is one set of fixture positions, and it is the 3D one. A 2D Stage is the renderer's plan of those positions, projected from whichever side the operator chooses in the Stage settings — above the rig, from the house, from upstage, or from either wing. It is not a second arrangement to be authored or regenerated, so a fixture moved in **Show Patch** is in its new place in every view at once.
 
 ## Position fixtures
 
 Fixture positions and rotations are part of the patch: open **Show > Show Patch** and edit a fixture's placement for accurate meter-based values. Multi-patch instances can have their own physical positions while sharing logical programming.
 
-Press **Preview Stage** in the Show Patch title bar to check the result visually while patching. The overlay is movable — drag its top grip to reposition it over the Patch. On the desktop app, a long press on **Preview Stage** opens a dedicated **Stage View** window: a view-only 3D stage on its own OS window (for example on a second display). Clicking fixtures there selects them on the desk, so the matching Patch rows highlight in the main window.
+Press **Preview Stage** in the Show Patch title bar to check the result visually while patching. The overlay is movable — drag its top grip to reposition it over the Patch.
 
 ![Full Stage window](../assets/screenshots/workflows/stage-window-2d.png)
 

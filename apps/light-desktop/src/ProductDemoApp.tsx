@@ -16,7 +16,6 @@ import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
 import { DemoPlaybackControls } from "./features/productDemo/DemoPlaybackControls";
 import { useConnectionStatus } from "./features/shellStatus/ShellStatusState";
 import { AppProvider, useApp } from "./state/AppContext";
-import { DEFAULT_STAGE_CAMERA_3D } from "./windows/Stage3dCanvas";
 import { StageWindow } from "./windows/StageWindow";
 
 const DEMO_DMX_CHANNELS = 512;
@@ -277,13 +276,10 @@ function ProductDemoSurface() {
 					stageView="3d"
 					showGroupShortcuts={false}
 					followPreload={false}
-					stageRenderQuality="lines_and_beams"
 					showSelection
 					showFloorGrid={false}
-					showBeamGuides={state.builtIn === "patch"}
 					environmentBrightness={1}
-					camera3d={DEFAULT_STAGE_CAMERA_3D}
-				/>
+									/>
 			}
 			dmx={DEMO_DMX_UNIVERSES.map((universeNumber) => (
 				<DemoDmxGrid universeNumber={universeNumber} key={universeNumber} />

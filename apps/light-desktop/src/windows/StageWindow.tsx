@@ -1,111 +1,53 @@
 import type { HighlightState } from "../api/types";
 import { GroupStrip } from "../components/shared/GroupStrip";
 import { useHighlightSnapshot } from "../features/highlight/HighlightState";
-import { Stage2dView } from "./stageWindow/Stage2dView";
-import { Stage3dView } from "./stageWindow/Stage3dView";
 import { StageHeader } from "./stageWindow/StageHeader";
+import { StageRendererView } from "./stageWindow/StageRendererView";
 import type { StageWindowProps } from "./stageWindow/types";
-import { useStageLayout } from "./stageWindow/useStageLayout";
 import { useStageOptions } from "./stageWindow/useStageOptions";
 import { useStageSelection } from "./stageWindow/useStageSelection";
-import { useStageVisualization } from "./stageWindow/useStageVisualization";
 
+/**
+ * The Stage: a spatial selection surface with the renderer's picture in it.
+ *
+ * Nothing here is told what the rig is doing. The renderer reads the desk's own output universes
+ * and draws from those, so the interface is no longer sent live values several dozen times a
+ * second for a picture it does not draw. What this owns is the operator's side of the pane — which
+ * view, which fixtures are selected, whether the Group strip is up.
+ */
 export function StageWindow(props: StageWindowProps) {
 	const active = props.active ?? true;
 	const interactionActive = active && !props.viewOnly;
 	const options = useStageOptions(props);
-	const layout = useStageLayout();
 	const selection = useStageSelection(interactionActive);
 	const highlight = useHighlightSnapshot();
-	const patchSelectionPreview = props.patchSelectionPreview ?? false;
-	const stage = useStageVisualization(
-		active,
-		options.followPreload,
-		patchSelectionPreview,
-		layout,
-		selection.fixtureIdSet,
-		props.patchedFixtures,
-		false,
-		props.paneId ??
-			(props.compact
-				? `compact-stage-${options.followPreload ? "preload" : "live"}`
-				: `stage-window-${options.followPreload ? "preload" : "live"}`),
-		props.visualizationIntervalMillis,
-	);
 	const highlightFixtures = options.followPreload
 		? []
 		: stageHighlightFixtureIds(highlight);
 	return (
 		<div
 			className={`stage-window ${props.compact ? "compact" : ""}`}
-			data-visualization-state={
-				stage.visualizationError
-					? stage.visualization
-						? "stale"
-						: "unavailable"
-					: "ready"
-			}
-			data-live-visualization-state={stage.visualizationStatus}
 			data-visualization-lane={options.followPreload ? "preload" : "live"}
-			data-visualization-revision={stage.visualization?.revision}
 		>
 			{!props.compact && (
 				<StageHeader
-					layout={layout}
 					options={options}
 					selectedCount={selection.fixtureIds.length}
-					writable={!props.viewOnly}
 				/>
 			)}
 			{/*
-			 * A 2D Stage joins the renderer only while its layout is Automatic — which means the
-			 * arrangement *is* the projection of the 3D positions, regenerated from them, so the
-			 * renderer's own plan view of the same rig is the same picture. A Manual layout is
-			 * somewhere an operator put every fixture by hand, and no projection reproduces that,
-			 * so it stays with the desk's own drawing. That is the distinction Regenerate 2D
-			 * layout exists to make deliberate, and it is not this pane's to make for them.
+			 * Every Stage is the renderer's picture — the plan, the outline view and the full one
+			 * alike. A 2D Stage is one of the renderer's own orthographic views of the rig rather
+			 * than a second arrangement of it, which is why the operator chooses a side to look
+			 * from instead of a saved layout to look at.
 			 */}
-			{options.view === "3d" ||
-			options.view === "3d-viz" ||
-			(options.view === "2d" &&
-				layout.positions2dConfig?.provenance === "automatic") ? (
-				<Stage3dView
-					fixtures={stage.fixtures3d}
-					visualization={stage.visualization}
-					options={options}
-					patchSelectionPreview={patchSelectionPreview}
-					patchPreviewFixtures={stage.patchPreviewFixtures}
-					highlightFixtures={highlightFixtures}
-					camera3d={props.camera3d}
-					pixelRatioCap={props.pixelRatioCap}
-					selection={selection}
-					active={active}
-					paneId={props.paneId}
-					interactive={!props.viewOnly}
-					projection={layout.positions2dConfig?.projection}
-				/>
-			) : (
-				<Stage2dView
-					compact={props.compact}
-					fixtures={stage.fixtures}
-					layout={layout}
-					options={options}
-					selection={selection}
-					patchedFixtures={stage.stageFixtures}
-					patchSelectionPreview={patchSelectionPreview}
-					patchPreviewFixtures={stage.patchPreviewFixtures}
-					visualizationLane={options.followPreload ? "preload" : "normal"}
-					visualizationActive={active}
-					interactive={!props.viewOnly}
-				/>
-			)}
-			{active && stage.visualizationError && (
-				<div className="stage-visualization-state error" role="status">
-					{stage.visualization
-						? `${options.followPreload ? "Preload" : "Live"} visualization stale · reconnecting…`
-						: "Visualization unavailable · reconnecting…"}
-				</div>
-			)}
+			<StageRendererView
+				options={options}
+				selection={selection}
+				highlightFixtures={highlightFixtures}
+				active={active}
+				interactive={!props.viewOnly}
+			/>
 			{options.groupsVisible && <GroupStrip active={active} />}
 		</div>
 	);

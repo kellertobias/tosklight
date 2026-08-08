@@ -112,7 +112,6 @@ export function plannedDemoLayout() {
 						stageView: "3d",
 						followPreload: false,
 						showBeamGuides: true,
-						stageRenderQuality: "lines_and_beams",
 					}),
 					pane("programming-dmx", "dmx", "DMX Output", 13, 13, 12, 6),
 				],

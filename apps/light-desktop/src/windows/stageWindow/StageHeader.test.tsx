@@ -1,88 +1,60 @@
-import {
-	cleanup,
-	fireEvent,
-	render,
-	screen,
-	waitFor,
-	within,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { StageLayoutApiClient } from "../../api/client/stageLayout";
-import { StageLayoutActionsProvider } from "../../features/stageLayout/StageLayoutActions";
 import { StageHeader } from "./StageHeader";
-import type { StageLayoutModel, StageOptionsModel } from "./types";
+import type { StageOptionsModel } from "./types";
 
 const app = vi.hoisted(() => ({
 	state: {
 		stageShowSelection: true,
 		stageShowFloorGrid: true,
-		stageShowBeamGuides: true,
+		stage2dSide: "top",
 		stageEnvironmentBrightness: 1,
+		stageVizAtmosphere: 0.12,
+		stageVizQuality: "high",
+		stageVizExposure: 1,
+		stageVizLaserBrightness: 1,
+		stageVizShowLabels: false,
+		stageVizBackground: "#020304",
 	},
 	dispatch: vi.fn(),
 }));
 
 vi.mock("../../state/AppContext", () => ({ useApp: () => app }));
+vi.mock("../../platform/desktop", () => ({
+	useDesktopBridge: () => ({
+		available: true,
+		stagePaneStatus: async () => [null, null],
+	}),
+}));
 
 const options: StageOptionsModel = {
 	mode: "select",
 	setMode: vi.fn(),
 	view: "2d",
 	setView: vi.fn(),
+	side2d: "top",
+	setSide2d: vi.fn(),
 	followPreload: false,
 	toggleFollowPreload: vi.fn(),
 	groupsVisible: false,
 	showSelection: true,
 	showFloorGrid: true,
-	showBeamGuides: true,
-	renderQuality: "lines_and_beams",
 	environmentBrightness: 1,
 };
 
-const layout: StageLayoutModel = {
-	positions: {},
-	positions3d: {},
-	positions2dConfig: {
-		provenance: "automatic",
-		projection: "front_to_back",
-	},
-};
+function openSettings(stageOptions: StageOptionsModel = options) {
+	const view = render(
+		<StageHeader options={stageOptions} selectedCount={0} />,
+	);
+	fireEvent.click(screen.getByRole("button", { name: /settings/i }));
+	return view;
+}
 
-function renderHeader({
-	regenerate2d = vi.fn(async () => ({
-		request_id: "request",
-		revision: 2,
-		moved_fixture_ids: [],
-		replayed: false,
-		changed: true,
-	})),
-	writable = true,
-	canWrite = true,
-	stageOptions = options,
-}: {
-	regenerate2d?: StageLayoutApiClient["regenerate2d"];
-	writable?: boolean;
-	canWrite?: boolean;
-	stageOptions?: StageOptionsModel;
-} = {}) {
-	const client = { regenerate2d } as unknown as StageLayoutApiClient;
-	return {
-		regenerate2d,
-		...render(
-			<StageLayoutActionsProvider
-				client={client}
-				showId="show-26"
-				canWrite={canWrite}
-			>
-				<StageHeader
-					layout={layout}
-					options={stageOptions}
-					selectedCount={0}
-					writable={writable}
-				/>
-			</StageLayoutActionsProvider>,
-		),
-	};
+function detailTab() {
+	const tabs = screen.getAllByRole("tab");
+	const detail = tabs[tabs.length - 1];
+	fireEvent.click(detail);
+	return detail;
 }
 
 afterEach(() => {
@@ -90,114 +62,70 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-describe("Stage automatic 2D settings", () => {
-	/**
-	 * The first tab is the whole of what an operator changes without thinking about renderers:
-	 * shortcuts, selection, and which view. Everything a particular view needs is behind the
-	 * second tab, so switching view does not rearrange the panel they were just looking at.
+/**
+ * The settings an operator is offered have to be settings that do something.
+ *
+ * Every Stage is the renderer's picture now, and the three views are not the same kind of picture:
+ * the 2D plan is a projection, the 3D view is an unlit diagram, and only 3D Viz simulates light.
+ * Offering the same controls on all three would mean offering, twice, a control over something
+ * that is not happening.
+ */
+describe("Stage settings are split between the views", () => {
+	it("asks a 2D Stage only which side it is seen from", () => {
+		openSettings();
+		detailTab();
+		expect(screen.getByText(/viewed from/i)).toBeTruthy();
+		expect(screen.queryByText(/render style/i)).toBeNull();
+		expect(screen.queryByText(/environment brightness/i)).toBeNull();
+	});
+
+	/*
+	 * The 3D view draws boxes and aim lines and simulates no light, so a render style and an
+	 * environment brightness would both be controls over nothing. The guidelines are not offered
+	 * either: here they are the picture rather than an addition to it.
 	 */
-	it("keeps only shortcuts, selection and View on the first tab", () => {
-		renderHeader();
-		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-		const dialog = screen.getByRole("dialog", { name: "Stage Settings" });
-		const groups = within(dialog).getByText("Group shortcuts", {
-			selector: "label",
-		});
-		const selection = within(dialog).getByText("Show selection", {
-			selector: "label",
-		});
-		const view = within(dialog).getByText("View", { selector: "label" });
-		expect(
-			groups.compareDocumentPosition(view) & Node.DOCUMENT_POSITION_FOLLOWING,
-		).toBeTruthy();
-		expect(
-			selection.compareDocumentPosition(view) &
-				Node.DOCUMENT_POSITION_FOLLOWING,
-		).toBeTruthy();
-		for (const label of [
-			"Floor grid",
-			"Beam Guidelines",
-			"Render Style",
-			"Environment brightness",
-			"2D layout",
-		])
-			expect(within(dialog).queryByText(label)).not.toBeInTheDocument();
+	it("offers a 3D Stage no render style, no brightness and no guideline switch", () => {
+		openSettings({ ...options, view: "3d" });
+		detailTab();
+		expect(screen.getByText(/floor grid/i)).toBeTruthy();
+		expect(screen.queryByText(/render style/i)).toBeNull();
+		expect(screen.queryByText(/environment brightness/i)).toBeNull();
+		expect(screen.queryByText(/beam guidelines/i)).toBeNull();
 	});
 
-	/** The 2D layout belongs to the 2D view, and says nothing once the Stage is showing 3D. */
-	it("shows the 2D layout on the detail tab, and only in 2D", () => {
-		renderHeader();
-		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-		fireEvent.click(screen.getByRole("tab", { name: "2D" }));
-		expect(
-			within(screen.getByRole("dialog", { name: "Stage Settings" })).getByText(
-				"2D layout",
-			),
-		).toBeVisible();
-
-		cleanup();
-		renderHeader({ stageOptions: { ...options, view: "3d" } });
-		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-		fireEvent.click(screen.getByRole("tab", { name: "3D" }));
-		const settings = screen.getByRole("dialog", { name: "Stage Settings" });
-		expect(within(settings).queryByText("2D layout")).not.toBeInTheDocument();
-		for (const label of ["Beam Guidelines", "Render Style"])
-			expect(within(settings).getByText(label)).toBeVisible();
-		expect(
-			within(settings).getByRole("button", { name: "Reset 3D view" }),
-		).toBeVisible();
+	/*
+	 * The Viz view draws the beams themselves, so a dotted line down the middle of one says
+	 * nothing the beam did not.
+	 */
+	it("offers the Viz Stage its light settings but no beam guidelines", () => {
+		openSettings({ ...options, view: "3d-viz" });
+		detailTab();
+		expect(screen.getByText(/environment brightness/i)).toBeTruthy();
+		expect(screen.getByText(/render quality/i)).toBeTruthy();
+		expect(screen.getByText(/^Background$/)).toBeTruthy();
+		expect(screen.queryByText(/beam guidelines/i)).toBeNull();
 	});
 
-	it("shows provenance and intentionally regenerates with the selected projection", async () => {
-		const { regenerate2d } = renderHeader();
-		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-		fireEvent.click(screen.getByRole("tab", { name: "2D" }));
-		const dialog = screen.getByRole("dialog", { name: "Stage Settings" });
-		expect(within(dialog).getByText(/Automatic · Front to Back/)).toBeVisible();
-
-		fireEvent.click(within(dialog).getByRole("button", { name: "Front to Back" }));
-		fireEvent.click(screen.getByRole("option", { name: "Left to Right" }));
-		fireEvent.click(
-			within(dialog).getByRole("button", { name: "Regenerate 2D layout" }),
-		);
-
-		await waitFor(() =>
-			expect(regenerate2d).toHaveBeenCalledWith("show-26", "left_to_right"),
-		);
+	/*
+	 * Which GPU answered and which transport the picture came over is the renderer's business. A
+	 * Stage that is drawing correctly raises no question that naming the adapter answers.
+	 */
+	it("does not name the renderer or its transport", () => {
+		openSettings({ ...options, view: "3d-viz" });
+		detailTab();
+		expect(screen.queryByText(/shared surface/i)).toBeNull();
+		expect(screen.queryByText(/^Renderer$/)).toBeNull();
 	});
 
-	it("does not expose regeneration on a view-only or secondary surface", () => {
-		renderHeader({ writable: false });
-		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-		fireEvent.click(screen.getByRole("tab", { name: "2D" }));
-		expect(
-			screen.queryByRole("button", { name: "Regenerate 2D layout" }),
-		).not.toBeInTheDocument();
-		cleanup();
-
-		renderHeader({ canWrite: false });
-		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-		fireEvent.click(screen.getByRole("tab", { name: "2D" }));
-		expect(
-			screen.queryByRole("button", { name: "Regenerate 2D layout" }),
-		).not.toBeInTheDocument();
-	});
-
-	it("surfaces regeneration errors and restores the action", async () => {
-		renderHeader({
-			regenerate2d: vi.fn(async () => {
-				throw new Error("Stage layout revision changed");
-			}),
-		});
-		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-		fireEvent.click(screen.getByRole("tab", { name: "2D" }));
-		fireEvent.click(screen.getByRole("button", { name: "Regenerate 2D layout" }));
-
-		expect(await screen.findByRole("alert")).toHaveTextContent(
-			"Stage layout revision changed",
-		);
-		expect(
-			screen.getByRole("button", { name: "Regenerate 2D layout" }),
-		).toBeEnabled();
+	/*
+	 * All three are the renderer's picture, so disabling the ones it cannot draw would mean
+	 * disabling the Stage. The pane says what it cannot do instead.
+	 */
+	it("leaves every view selectable", () => {
+		openSettings();
+		for (const label of ["2D", "3D", "3D Viz"]) {
+			const option = screen.getByRole("radio", { name: label });
+			expect(option.hasAttribute("disabled")).toBe(false);
+		}
 	});
 });

@@ -56,9 +56,12 @@ export const initialState: AppState = {
 	stageGroupsVisible: true,
 	stageShowSelection: true,
 	stageShowFloorGrid: true,
-	stageShowBeamGuides: true,
-	stageRenderQuality: "lines_and_beams",
+	// Over the rig, which is the plan a paper stage plot is drawn as.
+	stage2dSide: "top",
 	stageEnvironmentBrightness: 1,
+	// Very dark, and blue rather than neutral: a stage seen from the house is never black and
+	// never grey.
+	stageVizBackground: "#020304",
 	// Enough haze to see a beam without the rig disappearing into it.
 	stageVizAtmosphere: 0.12,
 	stageVizQuality: "high",

@@ -15,7 +15,7 @@ vi.mock(
 		useVisualizationRuntimeRead: () => mocks.read,
 	}),
 );
-vi.mock("../stageWindow/useStageVisualization", () => ({
+vi.mock("./fixturePresentation", () => ({
 	fixturePresentation: vi.fn(),
 }));
 

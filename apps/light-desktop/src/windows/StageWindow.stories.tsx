@@ -1,3 +1,4 @@
+import { StageRendererView } from "./stageWindow/StageRendererView";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import {
@@ -13,9 +14,6 @@ import {
 	marketingStageVisualization,
 } from "../../../ui-library/storybook/fixtures/marketingApplication";
 import { ApplicationStateHarness } from "../../../ui-library/storybook/providers/ApplicationStateHarness";
-import { DEFAULT_STAGE_CAMERA_3D } from "./Stage3dCanvas";
-import { Stage2dView } from "./stageWindow/Stage2dView";
-import { Stage3dView } from "./stageWindow/Stage3dView";
 import { StageHeader } from "./stageWindow/StageHeader";
 
 const meta = {
@@ -32,12 +30,7 @@ export const Stage2D: Story = {
 	render: () => (
 		<ApplicationStateHarness>
 			<div className="stage-window" style={{ width: 1496, height: 761 }}>
-				<Stage2dView
-					fixtures={stagePresentations}
-					layout={stageLayout}
-					options={stageOptions}
-					selection={stageSelection}
-				/>
+				<StageRendererView options={stageOptions} selection={stageSelection} />
 			</div>
 		</ApplicationStateHarness>
 	),
@@ -47,13 +40,7 @@ export const Stage2DCompact: Story = {
 	render: () => (
 		<ApplicationStateHarness>
 			<div className="stage-window compact" style={{ width: 720, height: 460 }}>
-				<Stage2dView
-					compact
-					fixtures={stagePresentations}
-					layout={stageLayout}
-					options={stageOptions}
-					selection={stageSelection}
-				/>
+				<StageRendererView options={stageOptions} selection={stageSelection} />
 			</div>
 		</ApplicationStateHarness>
 	),
@@ -63,15 +50,7 @@ export const Stage3D: Story = {
 	render: () => (
 		<ApplicationStateHarness>
 			<div className="stage-window" style={{ width: 1496, height: 761 }}>
-				<Stage3dView
-					camera3d={DEFAULT_STAGE_CAMERA_3D}
-					fixtures={stage3dFixtures}
-					options={{ ...stageOptions, view: "3d" }}
-					patchPreviewFixtures={[]}
-					patchSelectionPreview={false}
-					selection={stageSelection}
-					visualization={stageVisualization}
-				/>
+				<StageRendererView options={{ ...stageOptions, view: "3d" }} selection={stageSelection} />
 			</div>
 		</ApplicationStateHarness>
 	),
@@ -93,19 +72,10 @@ export function MarketingStage3DWindow() {
 				style={{ width: "100%", height: "100%" }}
 			>
 				<StageHeader
-					layout={stageLayout}
 					options={options}
 					selectedCount={stageSelection.fixtureIds.length}
 				/>
-				<Stage3dView
-					camera3d={DEFAULT_STAGE_CAMERA_3D}
-					fixtures={marketingStage3dFixtures}
-					options={options}
-					patchPreviewFixtures={[]}
-					patchSelectionPreview={false}
-					selection={stageSelection}
-					visualization={marketingStageVisualization}
-				/>
+				<StageRendererView options={{ ...stageOptions, view: "3d" }} selection={stageSelection} />
 			</div>
 		</ApplicationStateHarness>
 	);

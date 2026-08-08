@@ -6,9 +6,8 @@ export function useStageOptions({
 	compact,
 	showGroupShortcuts,
 	stageView,
+	stage2dSide,
 	followPreload: paneFollowPreload,
-	showBeamGuides: forcedShowBeamGuides,
-	stageRenderQuality: forcedRenderQuality,
 	showSelection: forcedShowSelection,
 	showFloorGrid: forcedShowFloorGrid,
 	environmentBrightness: forcedEnvironmentBrightness,
@@ -27,6 +26,8 @@ export function useStageOptions({
 		setMode: (value) => dispatch({ type: "SET_STAGE_MODE", value }),
 		view: compact ? (stageView ?? state.stageView) : state.stageView,
 		setView: (value) => dispatch({ type: "SET_STAGE_VIEW", value }),
+		side2d: compact ? (stage2dSide ?? state.stage2dSide) : state.stage2dSide,
+		setSide2d: (side2d) => dispatch({ type: "SET_STAGE_OPTIONS", side2d }),
 		followPreload: compact
 			? Boolean(paneFollowPreload)
 			: dedicatedFollowPreload,
@@ -36,8 +37,6 @@ export function useStageOptions({
 			: state.stageGroupsVisible,
 		showSelection: forcedShowSelection ?? state.stageShowSelection,
 		showFloorGrid: forcedShowFloorGrid ?? state.stageShowFloorGrid,
-		showBeamGuides: forcedShowBeamGuides ?? state.stageShowBeamGuides,
-		renderQuality: forcedRenderQuality ?? state.stageRenderQuality,
 		environmentBrightness:
 			forcedEnvironmentBrightness ?? state.stageEnvironmentBrightness,
 	};

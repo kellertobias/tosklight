@@ -4,7 +4,7 @@ import {
 	fixtureProfileOutputValue,
 	fixtureValue,
 } from "./fixtureVisualization";
-import { fixturePresentation } from "./stageWindow/useStageVisualization";
+import { fixturePresentation } from "./layoutWindow/fixturePresentation";
 
 const fixture = {
 	fixture_id: "physical",

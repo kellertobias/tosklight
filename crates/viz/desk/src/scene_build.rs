@@ -186,7 +186,12 @@ fn build_scenery(scene: &viz_scene::Scene, venue: &[ObjectRecord]) -> Vec<Scener
         position: Vec3::new(centre.x, -0.05, centre.z),
         rotation_degrees: Vec3::ZERO,
         size: Vec3::new(width, 0.1, depth),
-        colour: [0.075, 0.075, 0.082],
+        // Nearly the colour of the room behind it. This surface exists so a beam has somewhere to
+        // land — take it away and the pools go with it — not so an operator looks at it, and a
+        // grey slab across the bottom of the picture is a large bright object competing with the
+        // rig. Where the ground is is said by the renderer's grid, which is lines rather than a
+        // plane and takes no light at all.
+        colour: [0.012, 0.013, 0.018],
         roughness: 0.85,
         kind: SceneryKind::Floor,
         chords: 0,

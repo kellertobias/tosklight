@@ -293,12 +293,11 @@ function StagePaneSettings({ pane }: { pane: PaneModel }) {
 		option:
 			| "stageView"
 			| "followPreload"
-			| "showBeamGuides"
-			| "stageRenderQuality",
+			| "stage2dSide",
 		value:
 			| boolean
 			| NonNullable<PaneModel["stageView"]>
-			| NonNullable<PaneModel["stageRenderQuality"]>,
+			| NonNullable<PaneModel["stage2dSide"]>,
 	) => dispatch({ type: "SET_PANE_STAGE_OPTION", id: pane.id, option, value });
 	return (
 		<FormLayout labelPlacement="side">
@@ -309,6 +308,7 @@ function StagePaneSettings({ pane }: { pane: PaneModel }) {
 				options={[
 					{ value: "2d", label: "2D" },
 					{ value: "3d", label: "3D" },
+					{ value: "3d-viz", label: "3D Viz" },
 				]}
 			/>
 			<SwitchField
@@ -318,43 +318,24 @@ function StagePaneSettings({ pane }: { pane: PaneModel }) {
 				checked={Boolean(pane.followPreload)}
 				onChange={(event) => setOption("followPreload", event.target.checked)}
 			/>
-			{(pane.stageView ?? "2d") === "3d" && (
-				<>
-					<Button
-						onClick={() =>
-							dispatch({
-								type: "SET_STAGE_NAVIGATION",
-								zoom: 1,
-								panX: 0,
-								panY: 0,
-								orbitX: 0,
-								orbitY: 0,
-							})
-						}
-					>
-						Reset 3D view
-					</Button>
-					<SwitchField
-						label="Beam direction guidelines"
-						offLabel="Hidden"
-						onLabel="Visible"
-						checked={pane.showBeamGuides ?? true}
-						onChange={(event) =>
-							setOption("showBeamGuides", event.target.checked)
-						}
-					/>
-					<MultiValueToggleField
-						label="Render quality"
-						value={pane.stageRenderQuality ?? "lines_and_beams"}
-						onChange={(value) => setOption("stageRenderQuality", value)}
-						options={[
-							{ value: "lines_only", label: "Lines only" },
-							{ value: "lines_and_beams", label: "Lines + beams" },
-							{ value: "beams", label: "Beams" },
-							{ value: "improved_beams", label: "Improved beams" },
-						]}
-					/>
-				</>
+			{/*
+			 * A 2D Stage is the renderer's plan of the rig, so the only thing it can be asked is
+			 * which side to look from. What is in a beam belongs to the view and to the render
+			 * quality, neither of which is a per-pane choice.
+			 */}
+			{(pane.stageView ?? "2d") === "2d" && (
+				<SelectField
+					label="Viewed from"
+					value={pane.stage2dSide ?? "top"}
+					onChange={(value) => setOption("stage2dSide", value)}
+					options={[
+						{ value: "top", label: "Above · plan" },
+						{ value: "front", label: "Front · from the house" },
+						{ value: "back", label: "Back · from upstage" },
+						{ value: "left", label: "Left · from stage left" },
+						{ value: "right", label: "Right · from stage right" },
+					]}
+				/>
 			)}
 		</FormLayout>
 	);

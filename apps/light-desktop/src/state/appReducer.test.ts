@@ -332,15 +332,13 @@ describe("appReducer Stage and Development pane settings", () => {
 			groupsVisible: false,
 			showSelection: false,
 			showFloorGrid: false,
-			showBeamGuides: false,
-			renderQuality: "beams",
+			side2d: "front",
 			environmentBrightness: 3,
 		});
 		expect(hidden.stageGroupsVisible).toBe(false);
 		expect(hidden.stageShowSelection).toBe(false);
 		expect(hidden.stageShowFloorGrid).toBe(false);
-		expect(hidden.stageShowBeamGuides).toBe(false);
-		expect(hidden.stageRenderQuality).toBe("beams");
+		expect(hidden.stage2dSide).toBe("front");
 		expect(hidden.stageEnvironmentBrightness).toBe(2);
 		expect(
 			appReducer(hidden, {
@@ -350,19 +348,19 @@ describe("appReducer Stage and Development pane settings", () => {
 		).toBe(0);
 	});
 
-	it("stores beam direction guides independently on a Stage pane", () => {
+	it("stores the 2D side independently on a Stage pane", () => {
 		const updated = appReducer(initialState, {
 			type: "SET_PANE_STAGE_OPTION",
 			id: "stage",
-			option: "showBeamGuides",
-			value: false,
+			option: "stage2dSide",
+			value: "left",
 		});
 		expect(
 			updated.desks
 				.find((desk) => desk.id === updated.activeDeskId)
-				?.panes.find((pane) => pane.id === "stage")?.showBeamGuides,
-		).toBe(false);
-		expect(updated.stageShowBeamGuides).toBe(true);
+				?.panes.find((pane) => pane.id === "stage")?.stage2dSide,
+		).toBe("left");
+		expect(updated.stage2dSide).toBe("top");
 	});
 
 	it("stores the Stage view independently on each Stage pane", () => {
@@ -378,21 +376,6 @@ describe("appReducer Stage and Development pane settings", () => {
 				?.panes.find((pane) => pane.id === "stage")?.stageView,
 		).toBe("3d");
 		expect(updated.stageView).toBe("2d");
-	});
-
-	it("stores Render quality independently on each Stage pane", () => {
-		const updated = appReducer(initialState, {
-			type: "SET_PANE_STAGE_OPTION",
-			id: "stage",
-			option: "stageRenderQuality",
-			value: "lines_only",
-		});
-		expect(
-			updated.desks
-				.find((desk) => desk.id === updated.activeDeskId)
-				?.panes.find((pane) => pane.id === "stage")?.stageRenderQuality,
-		).toBe("lines_only");
-		expect(updated.stageRenderQuality).toBe("lines_and_beams");
 	});
 
 	it("retires persisted Layout panes and built-ins with one actionable notice", () => {
@@ -919,8 +902,7 @@ describe("appReducer built-in window settings hydration", () => {
 		});
 		expect(legacy.stageView).toBe(initialState.stageView);
 		expect(legacy.stageShowFloorGrid).toBe(true);
-		expect(legacy.stageShowBeamGuides).toBe(true);
-		expect(legacy.stageRenderQuality).toBe("lines_and_beams");
+		expect(legacy.stage2dSide).toBe("top");
 		expect(legacy.fixtureSheetColumns).toEqual(
 			initialState.fixtureSheetColumns,
 		);
@@ -939,15 +921,18 @@ describe("appReducer built-in window settings hydration", () => {
 		expect(current.fixtureSheetIncludedHeads).toBe("no-master-heads");
 		expect(current.fixtureSheetCompactMode).toBe("off");
 
-		const futureQuality = appReducer(initialState, {
+		// A layout from before the renderer drew every Stage carries a render style rather than a
+		// side. There is nothing in one to convert, so it is dropped and the Stage opens on the
+		// plan, which is what a 2D Stage was.
+		const oldStageStyle = appReducer(initialState, {
 			type: "HYDRATE_LAYOUT",
 			desks: initialState.desks,
 			activeDeskId: initialState.activeDeskId,
 			windowSettings: {
-				stageRenderQuality: "future-quality" as never,
+				stageRenderQuality: "improved_beams",
 			},
 		});
-		expect(futureQuality.stageRenderQuality).toBe("lines_and_beams");
+		expect(oldStageStyle.stage2dSide).toBe("top");
 
 		const oldPatchDetail = appReducer(initialState, {
 			type: "HYDRATE_LAYOUT",

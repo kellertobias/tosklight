@@ -70,29 +70,6 @@ pub(crate) fn hide_console_screen(app: tauri::AppHandle, screen_id: String) -> R
 }
 
 #[tauri::command]
-pub(crate) fn open_stage_view_window(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("stage-view") {
-        if !window.is_visible().map_err(|error| error.to_string())? {
-            window.show().map_err(|error| error.to_string())?;
-        }
-        window.set_focus().map_err(|error| error.to_string())?;
-        return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(
-        &app,
-        "stage-view",
-        tauri::WebviewUrl::App("index.html?stage-view=1".into()),
-    )
-    .title("Stage View")
-    .inner_size(1000.0, 720.0)
-    .resizable(true)
-    .background_throttling(BackgroundThrottlingPolicy::Disabled)
-    .build()
-    .map_err(|error| error.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
 pub(crate) fn open_console_screen(
     app: tauri::AppHandle,
     screen_id: String,

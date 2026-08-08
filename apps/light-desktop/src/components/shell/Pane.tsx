@@ -176,9 +176,8 @@ function PaneContent({
 				cueListSource={pane.cueListSource ?? "fixed"}
 				fixedCueListNumber={pane.fixedCueListNumber}
 				stageView={pane.stageView ?? state.stageView}
+				stage2dSide={pane.stage2dSide ?? state.stage2dSide}
 				followPreload={Boolean(pane.followPreload)}
-				showBeamGuides={pane.showBeamGuides ?? true}
-				stageRenderQuality={pane.stageRenderQuality ?? "lines_and_beams"}
 				channelDisplayMode={pane.channelDisplayMode ?? "intensity"}
 				presetFamily={pane.presetFamily ?? state.presetFamily}
 				presetPoolColors={pane.presetPoolColors ?? true}

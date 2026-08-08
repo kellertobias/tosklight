@@ -863,7 +863,7 @@
 	min-width: 0;
 }
 .screen-command-row > .screen-section-switch {
-	align-self: stretch;
+	align-self: center;
 }
 
 /*
@@ -874,29 +874,28 @@
  */
 .screen-section-switch {
 	display: flex;
-	gap: 5px;
+	flex: none;
+	flex-direction: column;
+	gap: 1px;
 	align-items: center;
 	justify-content: center;
+	/* The same box as Preload and Dynamics, on every surface that places it. */
+	min-height: 42px;
+	height: 42px;
 	white-space: nowrap;
+	line-height: 1.05;
 }
 .screen-section-switch > span {
+	flex: none;
 	color: var(--text);
-	font-size: 12px;
+	font-size: 11px;
+	font-weight: 800;
 }
 .screen-section-switch > span.active {
 	color: var(--cyan);
 }
-.family-tabs > .screen-section-switch {
-	min-height: 42px;
-	height: 42px;
-}
 .screen-page-controls > .screen-section-switch {
-	flex-direction: column;
-	gap: 2px;
-	min-height: 42px;
-}
-.screen-page-controls > .screen-section-switch > span {
-	font-size: 11px;
+	align-self: start;
 }
 .screen-page-controls.switch-only {
 	align-content: start;
@@ -911,24 +910,29 @@
 	padding: 5px;
 	border-top: 1px solid var(--line);
 }
-.screen-playbacks.page-controls-only {
-	grid-template-columns: 110px;
-	justify-content: end;
+/* Nothing to put beside the faders: they take the whole section. */
+.screen-playbacks.playbacks-only {
+	grid-template-columns: minmax(0, 1fr);
 }
 .screen-playbacks > .playback-fader-bank {
 	min-height: 0;
 }
 .screen-page-controls {
 	display: grid;
+	/* PAGE UP and PAGE DOWN share one track size so they stay identical. */
 	grid-template-rows: 1fr 1.2fr 1fr;
 	gap: 5px;
+}
+/* The switch keeps its own 42px row instead of consuming a PAGE UP track. */
+.screen-page-controls:has(> .screen-section-switch) {
+	grid-template-rows: auto 1fr 1.2fr 1fr;
 }
 .screen-page-controls > button {
 	border: 1px solid var(--line2);
 	border-radius: 7px;
 	background: var(--panel2);
 }
-.screen-page-controls > button:nth-child(2) {
+.screen-page-controls > .screen-page-number {
 	display: grid;
 	color: var(--cyan);
 }
@@ -2504,16 +2508,51 @@ textarea,
  * A hole in the interface, where the renderer's picture shows through.
  *
  * The Stage the renderer draws is beneath this window's web layer, so it is visible only where the
- * interface paints nothing at all. The 3D Stage normally paints its own dark background and a
- * grid; while the renderer is drawing, both would sit on top of the picture and hide it — the
- * symptom being a Stage that is black however well the renderer is running.
- *
- * Only while it is drawing. Before that the desk's own canvas is underneath and needs its
- * background, or the pane would be a see-through hole in the window instead.
+ * interface paints nothing at all. Anything this pane painted would sit on top of the picture and
+ * hide it — the symptom being a Stage that is black however well the renderer is running.
  */
 .stage-canvas-3d[data-stage-renderer="native"],
 .stage-canvas-3d[data-stage-renderer="native"] .stage-canvas,
 .stage-canvas:has(> .stage-canvas-3d[data-stage-renderer="native"]) {
 	background: transparent;
 	background-image: none;
+}
+
+/*
+ * What a screen that cannot draw a Stage says.
+ *
+ * Stated rather than left blank, and stated in terms of what is unaffected: an operator who opens
+ * a Stage and sees nothing needs to know that the rig, the Programmer and the output are all still
+ * running and that it is only the picture that is missing here.
+ */
+.stage-unavailable {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.4rem;
+	padding: 1.5rem;
+	text-align: center;
+	color: var(--text-muted, #8a93a0);
+	pointer-events: none;
+}
+.stage-unavailable strong {
+	color: var(--text-primary, #d5dae2);
+	font-size: 0.95rem;
+}
+.stage-unavailable span {
+	max-width: 32rem;
+	font-size: 0.8rem;
+	line-height: 1.45;
+}
+
+.ui-color-input {
+	inline-size: 3rem;
+	block-size: 1.9rem;
+	padding: 0;
+	border: 1px solid var(--border-subtle, #2a3038);
+	border-radius: 4px;
+	background: none;
 }

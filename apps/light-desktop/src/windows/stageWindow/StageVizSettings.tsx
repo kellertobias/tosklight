@@ -1,4 +1,5 @@
 import {
+	ColorField,
 	HorizontalFaderField,
 	MultiValueToggleField,
 	SwitchField,
@@ -21,17 +22,20 @@ import { useApp } from "../../state/AppContext";
 export function StageVizSettings() {
 	const { state, dispatch } = useApp();
 	const bridge = useDesktopBridge();
-	const [renderer, setRenderer] = useState<string | null>(null);
 	const [trouble, setTrouble] = useState<string | null>(null);
 
-	// What is drawing and how the picture reaches the desk. An operator asking why the Stage is
-	// slow should not have to guess which GPU answered or which transport it is on.
+	/*
+	 * Only what went wrong. Which GPU answered and which transport the picture came over is the
+	 * renderer's business, not the operator's: a Stage that is drawing correctly raises no
+	 * question that naming the adapter answers, and a line of hardware detail sitting under the
+	 * settings is one more thing to read past every time. A failure still says so, because that
+	 * is something an operator can act on.
+	 */
 	useEffect(() => {
 		let cancelled = false;
 		const poll = async () => {
-			const [description, detail] = await bridge.stagePaneStatus();
+			const [, detail] = await bridge.stagePaneStatus();
 			if (cancelled) return;
-			setRenderer(description);
 			setTrouble(detail);
 		};
 		void poll();
@@ -49,18 +53,11 @@ export function StageVizSettings() {
 	 */
 	return (
 		<>
-			<SwitchField
-				label="Beam Guidelines"
-				offLabel="Hidden"
-				onLabel="Visible"
-				checked={state.stageShowBeamGuides}
-				onChange={(event) =>
-					dispatch({
-						type: "SET_STAGE_OPTIONS",
-						showBeamGuides: event.target.checked,
-					})
-				}
-			/>
+			{/*
+			 * No beam guidelines here. This view draws the beams themselves, and a dotted line
+			 * down the middle of a beam that is already on screen says nothing the beam did not.
+			 * They belong to the 3D view, which draws no beams and where they are the picture.
+			 */}
 			<HorizontalFaderField
 				label="Fog / haze"
 				description="How much haze the beams are drawn through. A beam is only visible in something."
@@ -123,6 +120,19 @@ export function StageVizSettings() {
 					dispatch({ type: "SET_STAGE_OPTIONS", vizLaserBrightness });
 				}}
 			/>
+			{/*
+			 * The colour behind the rig, which is the room rather than the show. Very dark and blue
+			 * by default: a stage seen from the house is never black and never grey. It applies to
+			 * every renderer-drawn Stage, because it is one room.
+			 */}
+			<ColorField
+				label="Background"
+				description="The colour behind the rig, in every Stage view."
+				value={state.stageVizBackground}
+				onChange={(vizBackground) =>
+					dispatch({ type: "SET_STAGE_OPTIONS", vizBackground })
+				}
+			/>
 			<SwitchField
 				label="Fixture labels"
 				offLabel="Hidden"
@@ -135,10 +145,6 @@ export function StageVizSettings() {
 					});
 				}}
 			/>
-			<div className="stage-viz-status">
-				<strong>Renderer</strong>
-				<span>{renderer ?? "Not drawing this Stage"}</span>
-			</div>
 			{trouble && (
 				<div className="stage-viz-trouble" role="alert">
 					{trouble}

@@ -38,19 +38,24 @@ export type StageMode = "select" | "navigate";
 /**
  * Which renderer draws the Stage, chosen by the operator rather than by what is available.
  *
- * `3d-viz` is the ToskLight renderer drawing into the desk's own window from its own process.
- * `3d` is the desk drawing the same rig itself. Both stay: the renderer is not on every platform,
- * and an operator who wants the desk's own picture should be able to ask for it.
+ * All three are drawn by the ToskLight renderer, in its own process: `2d` is its plan of the rig
+ * from a chosen side, `3d` its outline view, `3d-viz` the full picture. The desk draws none of
+ * them, so a screen the renderer cannot reach shows that rather than a second drawing of its own.
  */
 export type StageView = "2d" | "3d" | "3d-viz";
 /**
- * How much of a beam the 3D Stage draws.
+ * Which side a 2D Stage is the plan from.
  *
- * `none` draws no beam at all — the lenses light and the heads move, and nothing leaves them.
- * `lines_only` adds a thin direction line, and the volumetric styles add the cone.
+ * A 2D Stage is the renderer's own orthographic view of the rig, so the choice is where the
+ * operator is standing to look at it: over it, in the house, upstage, or in either wing.
+ */
+export type Stage2dSide = "top" | "front" | "back" | "left" | "right";
+/**
+ * How much of a beam the Stage used to draw, when the desk drew it itself.
  *
- * The last three are what the operator picks between; `lines_and_beams` and `beams` remain because
- * saved layouts carry them, and a show that chose one must not silently become something else.
+ * Nothing reads this any more: the renderer draws every Stage, and what is in a beam is decided by
+ * the view and the render quality. It remains only so a saved layout that carries one decodes
+ * without complaint.
  */
 export type StageRenderQuality =
 	| "none"
@@ -94,7 +99,9 @@ export interface PaneModel extends GridRect {
 	cueListSource?: "fixed" | "follow-selection";
 	fixedCueListNumber?: number;
 	stageView?: StageView;
+	stage2dSide?: Stage2dSide;
 	followPreload?: boolean;
+	/** Legacy Stage-pane fields retained only for tolerant persisted-layout decoding. */
 	showBeamGuides?: boolean;
 	stageRenderQuality?: StageRenderQuality;
 	/** Legacy Layout-pane field retained only for tolerant persisted-layout decoding. */
@@ -231,9 +238,11 @@ export interface AppState {
 	stageGroupsVisible: boolean;
 	stageShowSelection: boolean;
 	stageShowFloorGrid: boolean;
-	stageShowBeamGuides: boolean;
-	stageRenderQuality: StageRenderQuality;
+	/** Which side a 2D Stage is the plan from. */
+	stage2dSide: Stage2dSide;
 	stageEnvironmentBrightness: number;
+	/** The colour behind the rig in every renderer-drawn Stage, as `#rrggbb`. */
+	stageVizBackground: string;
 	/** Haze the 3D Viz renderer draws its beams through, `0..=1`. */
 	stageVizAtmosphere: number;
 	/** How much the 3D Viz renderer is asked to do per frame. */
@@ -294,9 +303,11 @@ export interface WindowSettings {
 	stageGroupsVisible: boolean;
 	stageShowSelection: boolean;
 	stageShowFloorGrid: boolean;
-	stageShowBeamGuides: boolean;
-	stageRenderQuality: StageRenderQuality;
+	/** Which side a 2D Stage is the plan from. */
+	stage2dSide: Stage2dSide;
 	stageEnvironmentBrightness: number;
+	/** The colour behind the rig in every renderer-drawn Stage, as `#rrggbb`. */
+	stageVizBackground: string;
 	/** Haze the 3D Viz renderer draws its beams through, `0..=1`. */
 	stageVizAtmosphere: number;
 	/** How much the 3D Viz renderer is asked to do per frame. */
@@ -304,7 +315,9 @@ export interface WindowSettings {
 	stageVizExposure: number;
 	stageVizLaserBrightness: number;
 	stageVizShowLabels: boolean;
-	/** Legacy Layout-window field retained only for tolerant persisted-layout decoding. */
+	/** Legacy fields retained only for tolerant persisted-layout decoding. */
+	stageShowBeamGuides?: boolean;
+	stageRenderQuality?: StageRenderQuality;
 	layoutGroupId?: string;
 	dmxDotSize: DmxDotSize;
 	fixtureSheetOrder: FixtureSheetOrder;

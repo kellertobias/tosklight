@@ -26,7 +26,6 @@ vi.mock("../../windows/StageWindow", () => ({
 			data-testid={`stage-${String(props.stageView)}`}
 			data-view-only={String(props.viewOnly)}
 			data-show-selection={String(props.showSelection)}
-			data-render-quality={String(props.stageRenderQuality ?? "")}
 		/>
 	),
 }));
@@ -104,10 +103,6 @@ describe("FixedScreenPane", () => {
 					environment_brightness: 0.4,
 				}}
 			/>,
-		);
-		expect(screen.getByTestId("stage-3d")).toHaveAttribute(
-			"data-render-quality",
-			"improved_beams",
 		);
 		expect(screen.getByTestId("stage-3d")).toHaveAttribute(
 			"data-view-only",

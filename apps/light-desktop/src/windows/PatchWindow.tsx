@@ -127,9 +127,6 @@ function PatchWindowContent({
 				stagePreviewOpen={stagePreviewOpen}
 				stagePreviewClearance={stagePreviewClearance}
 				onStagePreview={() => setStagePreviewOpen((open) => !open)}
-				onOpenStageWindow={
-					tauri ? () => void desktop.openStageViewWindow() : undefined
-				}
 			/>
 			{previewVisible && (
 				<aside
@@ -154,10 +151,8 @@ function PatchWindowContent({
 						stageView={tauri ? "3d" : "2d"}
 						showGroupShortcuts={false}
 						followPreload={false}
-						stageRenderQuality="lines_and_beams"
 						showSelection={false}
 						showFloorGrid
-						showBeamGuides
 						environmentBrightness={1}
 						patchSelectionPreview
 						patchedFixtures={patch.fixtures}

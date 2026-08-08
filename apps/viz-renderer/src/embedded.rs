@@ -104,6 +104,8 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
             exposure,
             laser_brightness,
             show_labels,
+            floor_grid,
+            background,
             mode,
             follow_preload,
         }) = source.picture()
@@ -116,6 +118,8 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
             state.view.exposure = exposure.clamp(0.05, 4.0);
             state.view.laser_brightness = laser_brightness.clamp(0.0, 4.0);
             state.view.show_labels = *show_labels;
+            state.view.floor_grid = *floor_grid;
+            state.view.background = Some(background.map(|channel| channel.clamp(0.0, 1.0)));
             // The provider is what lays the preload over the live picture, so the flag goes to it
             // rather than being kept here: the values are decoded there, and a second opinion about
             // whether to overlay would eventually disagree with the first.

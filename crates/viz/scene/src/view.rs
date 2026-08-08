@@ -81,6 +81,52 @@ impl ViewMode {
         matches!(self, Self::Lines3d) || self.is_orthographic()
     }
 
+    /// Whether this mode simulates light at all.
+    ///
+    /// [`Self::Lines3d`] does not. It is a diagram of a rig — where the lamps are and where they
+    /// are pointed — drawn as outlines, and an outline has no lighting to be right or wrong. That
+    /// is what makes it the cheap view: nothing in it depends on a render style or on how brightly
+    /// the room is lit, so neither setting is offered for it.
+    pub fn simulates_light(self) -> bool {
+        self.renders_beams()
+    }
+
+    /// Whether this mode draws each fixture's own model, or a box standing in for it.
+    ///
+    /// A box is the point of [`Self::Lines3d`], not a shortfall in it: an operator checking
+    /// coverage wants the position and the aim, and a hundred detailed bodies are in the way of
+    /// seeing them.
+    pub fn draws_fixture_models(self) -> bool {
+        !matches!(self, Self::Lines3d)
+    }
+
+    /// Whether this mode draws aim guidelines for every directional emitter, lit or not.
+    ///
+    /// In [`Self::Lines3d`] the guidelines are the picture, so they are always drawn rather than
+    /// being something to switch on. Everywhere else the beams say where the light goes and a
+    /// second set of lines over them is clutter.
+    pub fn always_draws_aim_guides(self) -> bool {
+        matches!(self, Self::Lines3d)
+    }
+
+    /// Whether this mode draws one kind of scenery at all.
+    ///
+    /// [`Self::Lines3d`] keeps what an operator stands a fixture on or aims one at — the staging,
+    /// the walls, the props — because those are what the rig is arranged around, and drops the
+    /// rigging and the soft goods. A truss drawn as a box is a wall across the picture hiding the
+    /// lamps hanging off it, and a drape is a box hiding the stage behind it; neither tells the
+    /// operator anything the aim lines were not already saying.
+    pub fn draws_scenery(self, kind: crate::scene::SceneryKind) -> bool {
+        use crate::scene::SceneryKind;
+        if !matches!(self, Self::Lines3d) {
+            return true;
+        }
+        matches!(
+            kind,
+            SceneryKind::Floor | SceneryKind::Wall | SceneryKind::Riser | SceneryKind::Prop
+        )
+    }
+
     /// Whether this mode is a drawn plan rather than a rendered picture.
     ///
     /// A plan view is outlines and labels on a plain page — a stage plot — not a shaded scene.
@@ -111,6 +157,14 @@ impl ViewMode {
 
 /// Bounded rendering cost tier. Independent from [`ViewMode`]; `Full3d` at `Draft` still renders
 /// volumetrics, just with a smaller budget.
+///
+/// The four tiers are a ladder of what is in the beam, and each one adds to the one below it:
+///
+/// - **Draft** — the light cones, and nothing in them.
+/// - **Standard** — and the gobos, so a projected pattern is a pattern rather than a plain cone.
+/// - **High** — and the fall-off: shaped edges, shadows where a beam meets something opaque.
+/// - **Ultra** — and the haze itself, drifting and uneven, so a beam through it varies along
+///   its length instead of running through a uniform slab.
 #[derive(
     Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize,
 )]
@@ -159,13 +213,32 @@ impl RenderQuality {
     }
 
     /// Maximum number of shadow-casting lights before the renderer degrades visibly.
+    ///
+    /// Shadows are part of beam fall-off — a beam stopping where it meets something opaque — so
+    /// they start at High, with the rest of it.
     pub fn shadow_budget(self) -> u32 {
         match self {
-            Self::Draft => 0,
-            Self::Standard => 3,
+            Self::Draft | Self::Standard => 0,
             Self::High => 6,
             Self::Ultra => 10,
         }
+    }
+
+    /// Whether a beam carries the pattern on its glass.
+    ///
+    /// Draft draws the cone alone: an operator checking where a rig is pointed does not need to
+    /// know which gobo is in it, and sampling one costs a texture lookup at every march step.
+    pub fn draws_gobos(self) -> bool {
+        !matches!(self, Self::Draft)
+    }
+
+    /// Whether a beam is drawn with its fall-off: a feathered field edge, the light dropping away
+    /// across the pool, and shadows where it meets something opaque.
+    ///
+    /// Below this a beam is an evenly filled cone. That reads clearly and costs almost nothing,
+    /// which is what the cheap tiers are for.
+    pub fn draws_beam_falloff(self) -> bool {
+        matches!(self, Self::High | Self::Ultra)
     }
 
     /// Render-target scale applied before the upscale/composite pass.
@@ -181,13 +254,12 @@ impl RenderQuality {
     /// How much the haze is allowed to vary through the room, `0..=1`.
     ///
     /// Real haze is never a uniform slab: it drifts, it is thicker where it was last pumped, and
-    /// a beam crossing it brightens and thins along its length. Cheap tiers keep the uniform
-    /// medium because the noise costs a lookup at every march step.
+    /// a beam crossing it brightens and thins along its length. Only Ultra pays for that. Every
+    /// tier below it keeps the uniform medium, because the noise costs a lookup at every march
+    /// step of every beam and it is the last thing an operator needs to see the rig.
     pub fn fog_detail(self) -> f32 {
         match self {
-            Self::Draft => 0.0,
-            Self::Standard => 0.0,
-            Self::High => 0.45,
+            Self::Draft | Self::Standard | Self::High => 0.0,
             Self::Ultra => 0.7,
         }
     }
@@ -359,7 +431,19 @@ pub struct ViewConfiguration {
     pub theme: Theme,
     /// Draw fixture numbers and patch addresses beside each fixture in the plan views.
     pub show_labels: bool,
+    /// The colour behind everything, linear RGB.
+    ///
+    /// `None` leaves it to the theme, which is what a stage plot wants: a plot is ink on paper and
+    /// the page is part of that choice. A rendered stage is a room, and what colour the far wall
+    /// of the room is belongs to whoever is looking at it.
+    pub background: Option<[f32; 3]>,
+    /// Draw the reference grid on the ground plane.
+    pub floor_grid: bool,
 }
+
+/// The room the rig hangs in, before anyone chooses otherwise: very dark, and blue rather than
+/// neutral, because a stage seen from the house is never black and never grey.
+pub const DEFAULT_BACKGROUND: [f32; 3] = [0.008, 0.010, 0.016];
 
 impl Default for ViewConfiguration {
     fn default() -> Self {
@@ -372,6 +456,19 @@ impl Default for ViewConfiguration {
             laser_brightness: 1.0,
             theme: Theme::LightOnDark,
             show_labels: true,
+            background: Some(DEFAULT_BACKGROUND),
+            floor_grid: true,
+        }
+    }
+}
+
+impl ViewConfiguration {
+    /// The colour to clear to: the operator's, where they have chosen one and the mode is a
+    /// rendered picture rather than a printed plan.
+    pub fn background_colour(&self) -> [f32; 3] {
+        match self.background {
+            Some(colour) if !self.mode.is_plot() => colour,
+            _ => self.theme.background(),
         }
     }
 }

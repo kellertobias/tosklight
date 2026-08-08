@@ -88,32 +88,39 @@ The Stage is the spatial selection and visualization surface. In 2D it shows fix
 - **Show group shortcuts** adds the Group strip.
 - The common size and removal controls apply per pane.
 
-### Which renderer draws the Stage
+### The renderer draws every Stage
 
-On the desktop application the Stage is drawn by the ToskLight renderer, in a separate process,
-into the pane where the Stage sits. Every 3D view is drawn there, and a 2D view is too while its
-layout is **Automatic** — an Automatic layout is the projection of the 3D positions, so the
-renderer's own plan view of the same rig is the same picture. A **Manual** 2D layout is where an
-operator put each fixture by hand, which no projection reproduces, so it stays with the desk's own
-drawing. It runs beside the desk rather than inside it, so a graphics
-driver that takes the renderer down takes only the picture with it — the Programmer, playback and
-DMX output are untouched, and the Stage returns on its own.
+Every Stage is drawn by the ToskLight renderer, in a separate process, into the pane where the
+Stage sits. It runs beside the desk rather than inside it, so a graphics driver that takes the
+renderer down takes only the picture with it — the Programmer, playback and DMX output are
+untouched, and the Stage returns on its own.
 
-Where that is not possible the desk draws the same Stage itself and nothing about the pane changes
-for the operator. That is what happens in a browser, on an installation whose renderer is missing,
-and wherever the two processes have no way to move a picture between them. It is also what happens
-after a renderer stops: the pane goes back to the desk's own drawing rather than holding a still
-picture of a rig that has since moved.
+Where that is not possible the pane says so. That is what happens in a browser, on an installation
+whose renderer is missing, and wherever the two processes have no way to move a picture between
+them. The desk draws no Stage of its own, so what an operator sees there is a stated "no Stage on
+this screen" rather than a second, quietly different picture of the same rig.
 
-Drag over the pane to orbit and scroll to zoom, whichever renderer is drawing it. Where the
-ToskLight renderer is drawing, the middle button also walks the camera across its own axes and the
-secondary button slides the view without turning it.
+Drag over the pane to orbit and scroll to zoom. The middle button walks the camera across its own
+axes and the secondary button slides the view without turning it.
 
 **Follow Preload** draws the preload over the rig rather than instead of it. A fixture with nothing
 preloaded goes on showing what it is doing now; one that is preloaded shows what it is about to do,
-in every attribute the preload names — where it will point included. A preloaded **Dynamic** shows
-its fixture's live state instead: a Dynamic is a running function rather than a value, and the Stage
-does not reproduce one to guess at it.
+in every attribute the preload names — where it will point, what colour it will be, what it will
+point through. A preloaded **Dynamic** shows its fixture's live state instead: a Dynamic is a
+running function rather than a value, and the Stage does not reproduce one to guess at it.
+
+### The three views
+
+- **2D** is the renderer's plan of the rig, projected from where the operator chooses to stand:
+  above it, from the house, from upstage, or from either wing. It is drawn from the fixtures' own
+  positions, so changing the side changes the picture and nothing in the show.
+- **3D** is an outline diagram. Every fixture is a box the size of the fixture, every stage,
+  platform and wall is the outline of its own box, and every directional emitter carries a dotted
+  aim guideline whether or not it is lit — a lit one adds its own line in its live colour over the
+  guideline. Truss and soft goods are not drawn: a truss as a box is a wall hiding the lamps
+  hanging off it. Nothing here is lit, which is what makes it the cheap view and why it offers no
+  render style and no environment brightness.
+- **3D Viz** is the full picture, with the fixture models and light cones.
 
 ### Stage is a selection and viewing surface
 
@@ -121,22 +128,32 @@ Only the full Stage window exposes **Select fixtures** and **Navigate**. A Stage
 
 Positions are edited in **Show Patch**: physical patch and multi-patch placement provides every fixture's location and rotation, with **Preview Stage** for visual feedback while patching. Add a truss, platform, curtain, or other scenery object from the **Venue** manufacturer in **Show Patch**; these visual-only fixtures receive `0.x` fixture IDs and no DMX address.
 
-The full Stage settings also control the 2D/3D view, Group shortcuts, selection visibility, 3D beam direction guides, the 3D floor grid, environment brightness, and **Render quality**. They identify whether the saved 2D layout is **Automatic** or **Manual** and show its current projection. On the writable primary desk, **Regenerate 2D layout** intentionally replaces the complete 2D layout from the saved 3D positions using **Top to Bottom**, **Bottom to Top**, **Front to Back**, **Back to Front**, **Left to Right**, or **Right to Left**. Ordinary 3D position changes keep an Automatic layout synchronized; once a 2D position is edited manually, later 3D edits preserve that manual placement until the operator explicitly regenerates it. Passive external screens and secondary desk surfaces can see the current provenance but cannot regenerate it.
+A Stage pane stores its own view and side independently, so a Live pane and a **Follow Preload**
+pane can look at the rig from different places.
 
-A Stage pane stores its own viewing settings independently, so a Live pane and a **Follow Preload** pane can use different views and qualities. The 2D fixture layout itself remains portable show data shared by every Stage surface.
+**Render quality** applies to the 3D Viz view and is a ladder of what is in the beam, each tier
+adding to the one below it:
 
-**Render quality** has four operational choices:
+- **Draft** — the light cones, and nothing in them.
+- **Standard** — and the gobos, so a projected pattern is a pattern rather than a plain cone.
+- **High** — and the fall-off: a feathered field edge, the light dropping away across the pool, and
+  shadows where a beam meets something opaque.
+- **Ultra** — and the haze itself, drifting and uneven, so a beam through it varies along its
+  length instead of running through a uniform slab.
 
-- **Lines only** draws each active directional source as a center line and a ground-footprint outline without a beam volume.
-- **Lines + beams** adds the normal beam volume to those aiming lines and is the default for new and older layouts.
-- **Beams** shows the normal beam volume without the active center line or footprint.
-- **Improved beams** uses a feathered beam edge. Up to eight highest-contributing directional sources also illuminate opaque Stage surfaces, stop at their first opaque intersection, and cast bounded soft shadows; stable ownership prevents the light budget from rapidly changing. Other active sources keep their feathered volume without allocating another Stage light or shadow map.
+**Floor grid** lays a dark reference grid of lines on the ground plane, a metre apart, with the
+centre lines drawn stronger. It is lines rather than a surface: it takes no light and hides nothing
+under it.
 
-The footprint shows where the authored field angle intersects the ground reference. It becomes elliptical when a beam strikes at an angle and stays visible when **Floor grid** is off. A beam aimed parallel to or away from the ground has a center line but no invented footprint.
+**Background** is the colour behind the rig — the room rather than the show — and applies to every
+Stage view. It is very dark and slightly blue by default.
 
-**Beam direction guides** is separate from Render quality. It shows a dotted off-state aim line for every emitter configured as directional, including fixed conventional fixtures; broad strobes and Sunstrip-style emitters have no guide. Turn **Floor grid** off when the neutral base plane and its reference lines should not be rendered.
+Exposure is fixed. The Stage does not adapt to how much light the rig is producing the way an eye
+does, because a desk has to answer "how bright is this" with the same picture every time: taking a
+rig down has to look like taking a rig down, across the whole of the fader rather than the bottom
+of it. The **Exposure** trim is the operator's own multiplier over that.
 
-Stage receives authoritative Live and Preload output from the engine. The desk sends current values at a bounded cadence and the view moves smoothly between samples without predicting past the newest value. A disconnected view freezes its last coherent state and reconnects without blocking Programmer, Playback, command handling, or physical output. The built-in view is intended for selection, aiming, and show preparation; realistic materials, haze, photometric rendering, volumetric occlusion, and richer optical or shadow work belong to the separate Viz application.
+Stage receives authoritative Live and Preload output from the engine. A disconnected view freezes its last coherent state and reconnects without blocking Programmer, Playback, command handling, or physical output.
 
 ![Stage pane](../assets/screenshots/panes/stage.png)
 

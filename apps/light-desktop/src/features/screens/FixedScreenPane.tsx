@@ -170,8 +170,6 @@ export function FixedScreenPane({
 					stageView="3d"
 					followPreload={pane.follow_preload}
 					showFloorGrid={pane.show_floor_grid}
-					showBeamGuides={pane.show_beam_guides}
-					stageRenderQuality={stageRenderQuality(pane.render_quality)}
 					environmentBrightness={pane.environment_brightness}
 					showSelection={false}
 				/>

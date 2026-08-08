@@ -36,7 +36,6 @@ export const DEFAULT_FIXED_SIDE_WIDTH_PERCENT = 25;
 
 export function browserScreenUrl(screenId: string, currentHref: string) {
 	const url = new URL(currentHref);
-	url.searchParams.delete("stage-view");
 	url.searchParams.delete("demo");
 	url.searchParams.set("screen", screenId);
 	url.hash = "";

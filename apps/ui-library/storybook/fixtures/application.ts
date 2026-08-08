@@ -83,13 +83,13 @@ export const stageOptions: StageOptionsModel = {
 	setMode: () => undefined,
 	view: "2d",
 	setView: () => undefined,
+	side2d: "top" as const,
+	setSide2d: () => undefined,
 	followPreload: false,
 	toggleFollowPreload: () => undefined,
 	groupsVisible: true,
 	showSelection: true,
 	showFloorGrid: true,
-	showBeamGuides: true,
-	renderQuality: "lines_and_beams",
 	environmentBrightness: 1,
 };
 

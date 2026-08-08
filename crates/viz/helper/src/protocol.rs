@@ -148,6 +148,10 @@ pub enum ToHelper {
         laser_brightness: f32,
         /// Fixture numbers and patch addresses beside each fixture.
         show_labels: bool,
+        /// Lay the reference grid on the ground plane.
+        floor_grid: bool,
+        /// The colour behind the rig, linear RGB.
+        background: [f32; 3],
         /// Which way the Stage is being looked at.
         mode: StageViewMode,
         /// Draw what the operator has preloaded, over what is currently lit.
@@ -484,6 +488,8 @@ mod tests {
                 exposure: 1.0,
                 laser_brightness: 1.0,
                 show_labels: false,
+                floor_grid: true,
+                background: [0.008, 0.010, 0.016],
                 mode: StageViewMode::Full3d,
                 follow_preload: false,
             },

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { VisualizationSnapshot } from "../../api/types";
 import { usePatchedFixturesView } from "../../features/patch/PatchState";
 import { useVisualizationRuntimeRead } from "../../features/visualizationRuntime/VisualizationRuntimeView";
-import { fixturePresentation } from "../stageWindow/useStageVisualization";
+import { fixturePresentation } from "./fixturePresentation";
 
 /**
  * Eventually-consistent, one-request-at-a-time Layout projection.

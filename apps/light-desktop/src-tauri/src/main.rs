@@ -21,7 +21,6 @@ fn main() {
             windows::open_console_screen,
             windows::close_console_screen,
             windows::hide_console_screen,
-            windows::open_stage_view_window,
             visualizer::open_visualizer,
             visualizer::close_visualizer,
             visualizer::visualizer_state,

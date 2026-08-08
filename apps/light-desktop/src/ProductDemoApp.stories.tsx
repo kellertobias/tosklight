@@ -1,3 +1,4 @@
+import { StageRendererView } from "./windows/stageWindow/StageRendererView";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { GridDesktop, PaneView } from "@tosklight/ui/desktop";
 import {
@@ -26,9 +27,6 @@ import {
 	ProductDemoSurfaceView,
 } from "./ProductDemoApp";
 import { DmxWindowView } from "./windows/DmxWindow";
-import { DEFAULT_STAGE_CAMERA_3D } from "./windows/Stage3dCanvas";
-import { Stage2dView } from "./windows/stageWindow/Stage2dView";
-import { Stage3dView } from "./windows/stageWindow/Stage3dView";
 
 const meta = {
 	title: "ToskLight/Marketing",
@@ -77,12 +75,7 @@ function MarketingShell() {
 							height: 18,
 						}}
 					>
-						<Stage2dView
-							fixtures={stagePresentations}
-							layout={stageLayout}
-							options={stageOptions}
-							selection={stageSelection}
-						/>
+						<StageRendererView options={stageOptions} selection={stageSelection} />
 					</PaneView>
 					<PaneView
 						pane={{
@@ -138,15 +131,7 @@ export const CompleteProductDemo: Story = {
 					</DemoApplicationScreenView>
 				}
 				stage={
-					<Stage3dView
-						camera3d={DEFAULT_STAGE_CAMERA_3D}
-						fixtures={stage3dFixtures}
-						options={{ ...stageOptions, view: "3d", showSelection: false }}
-						patchPreviewFixtures={[]}
-						patchSelectionPreview={false}
-						selection={{ ...stageSelection, fixtureIds: [] }}
-						visualization={stageVisualization}
-					/>
+					<StageRendererView options={{ ...stageOptions, view: "3d" }} selection={stageSelection} />
 				}
 				dmx={demoDmx}
 				playbackControls={

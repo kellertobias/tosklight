@@ -85,8 +85,8 @@ export function reduceWorkspace(
 				stageGroupsVisible: action.groupsVisible ?? state.stageGroupsVisible,
 				stageShowSelection: action.showSelection ?? state.stageShowSelection,
 				stageShowFloorGrid: action.showFloorGrid ?? state.stageShowFloorGrid,
-				stageShowBeamGuides: action.showBeamGuides ?? state.stageShowBeamGuides,
-				stageRenderQuality: action.renderQuality ?? state.stageRenderQuality,
+				stage2dSide: action.side2d ?? state.stage2dSide,
+				stageVizBackground: action.vizBackground ?? state.stageVizBackground,
 				stageEnvironmentBrightness: clamp(
 					action.environmentBrightness ?? state.stageEnvironmentBrightness,
 					0,

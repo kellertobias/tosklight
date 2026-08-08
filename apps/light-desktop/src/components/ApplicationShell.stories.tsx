@@ -1,3 +1,4 @@
+import { StageRendererView } from "../windows/stageWindow/StageRendererView";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { GridDesktop, PaneView } from "@tosklight/ui/desktop";
 import {
@@ -27,7 +28,6 @@ import { ApplicationStateHarness } from "../../../ui-library/storybook/providers
 import { useApp } from "../state/AppContext";
 import { DmxWindowView } from "../windows/DmxWindow";
 import { HelpWindowView } from "../windows/HelpWindow";
-import { Stage2dView } from "../windows/stageWindow/Stage2dView";
 import { NumericPad } from "./control/NumericPad";
 import { ProgrammerFadeFader } from "./control/ProgrammerFadeFader";
 import type { ParameterFamily } from "./control/parameterControls/model";
@@ -359,12 +359,7 @@ export const RepresentativeDesktopArrangement: Story = {
 							height: 11,
 						}}
 					>
-						<Stage2dView
-							fixtures={stagePresentations}
-							layout={stageLayout}
-							options={stageOptions}
-							selection={stageSelection}
-						/>
+						<StageRendererView options={stageOptions} selection={stageSelection} />
 					</PaneView>
 					<PaneView
 						pane={{

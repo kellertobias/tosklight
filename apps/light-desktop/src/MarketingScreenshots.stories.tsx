@@ -1,3 +1,4 @@
+import { StageRendererView } from "./windows/stageWindow/StageRendererView";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { GridDesktop, PaneView } from "@tosklight/ui/desktop";
 import { FixtureSheetTableView as FixtureSheetTable } from "@tosklight/ui/tables";
@@ -43,9 +44,7 @@ import {
 	MarketingSetupOutputsWindow,
 	marketingOutputRoutes,
 } from "./windows/SetupWindow.stories";
-import { DEFAULT_STAGE_CAMERA_3D } from "./windows/Stage3dCanvas";
 import { MarketingStage3DWindow } from "./windows/StageWindow.stories";
-import { Stage3dView } from "./windows/stageWindow/Stage3dView";
 import { MarketingTimecodeApplication } from "./windows/TimecodeWindow.stories";
 
 const meta = {
@@ -184,19 +183,7 @@ function FullApplicationComposition() {
 										onSettings={() => undefined}
 										onRectChange={() => undefined}
 									>
-										<Stage3dView
-											camera3d={DEFAULT_STAGE_CAMERA_3D}
-											fixtures={marketingStage3dFixtures}
-											options={{
-												...stageOptions,
-												view: "3d",
-												showSelection: false,
-											}}
-											patchPreviewFixtures={[]}
-											patchSelectionPreview={false}
-											selection={{ ...stageSelection, fixtureIds: [] }}
-											visualization={marketingStageVisualization}
-										/>
+										<StageRendererView options={{ ...stageOptions, view: "3d" }} selection={stageSelection} />
 									</PaneView>
 									<PaneView
 										pane={{

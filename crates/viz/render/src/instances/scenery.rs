@@ -5,14 +5,39 @@
 //! live: none of it moves with a DMX frame, which is why it is rebuilt only when the scene
 //! revision changes.
 
-use super::{FrameInstances, MeshInstance, MeshKind};
+use super::{FrameInstances, FrameStyle, MeshInstance, MeshKind};
 use glam::{Mat4, Quat, Vec3};
 use viz_scene::{Scene, SceneryKind, SceneryObject, euler_degrees};
 
-pub(super) fn push_scenery(frame: &mut FrameInstances, scene: &Scene) {
+pub(super) fn push_scenery(frame: &mut FrameInstances, scene: &Scene, style: &FrameStyle) {
     for object in &scene.scenery {
+        // Not every view draws every kind. A lines view keeps what the rig is arranged around and
+        // drops the rigging and the soft goods, which would only stand between the operator and
+        // the lamps hanging off them.
+        if !(style.scenery)(object.kind) {
+            continue;
+        }
         let orientation = euler_degrees(object.rotation_degrees);
         let colour = Vec3::from(object.colour);
+        // An outline view draws every object it keeps as the outline of its own box, for the same
+        // reason a fixture is one: nothing here is lit, so a solid is a black shape in a black
+        // room. The stage floor is the exception — the ground already has the grid on it, and a
+        // box around the ground is a box around everything.
+        if !style.fixture_models {
+            if object.kind != SceneryKind::Floor {
+                super::push_box_outline(
+                    frame,
+                    Mat4::from_scale_rotation_translation(
+                        object.size,
+                        orientation,
+                        object.position,
+                    ),
+                    style.faint_ink,
+                    0.8,
+                );
+            }
+            continue;
+        }
         match object.kind {
             SceneryKind::Truss => push_truss(frame, object, orientation, colour),
             SceneryKind::Curtain => push_curtain(frame, object, orientation, colour),

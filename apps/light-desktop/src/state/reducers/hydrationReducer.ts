@@ -9,16 +9,21 @@ import {
 	normalizeFixtureSheetIncludedHeads,
 } from "../reducerHelpers";
 
-function normalizeStageRenderQuality(
-	value: unknown,
-): AppState["stageRenderQuality"] {
-	return value === "none" ||
-		value === "lines_only" ||
-		value === "lines_and_beams" ||
-		value === "beams" ||
-		value === "improved_beams"
+/**
+ * Which side a saved layout is looking at the rig from.
+ *
+ * A layout from before the renderer drew every Stage carries a render style rather than a side.
+ * There is nothing in one to convert — a style said how much of a beam to draw, not where to
+ * stand — so it is dropped and the Stage opens on the plan, which is what a 2D Stage was.
+ */
+function normalizeStage2dSide(value: unknown): AppState["stage2dSide"] {
+	return value === "top" ||
+		value === "front" ||
+		value === "back" ||
+		value === "left" ||
+		value === "right"
 		? value
-		: "lines_and_beams";
+		: "top";
 }
 
 function normalizeChannelDisplayMode(
@@ -97,9 +102,11 @@ export function reduceHydration(
 					action.windowSettings?.stageMode === "navigate"
 						? action.windowSettings.stageMode
 						: state.stageMode,
-				stageRenderQuality: normalizeStageRenderQuality(
-					action.windowSettings?.stageRenderQuality,
-				),
+				stage2dSide: normalizeStage2dSide(action.windowSettings?.stage2dSide),
+				stageVizBackground:
+					typeof action.windowSettings?.stageVizBackground === "string"
+						? action.windowSettings.stageVizBackground
+						: state.stageVizBackground,
 				builtIn:
 					action.windowSettings?.builtIn == null
 						? (action.windowSettings?.builtIn ?? state.builtIn)
@@ -123,13 +130,6 @@ export function reduceHydration(
 								...activePane,
 								kind,
 								title: cueListWindowTitle(pane.title, kind),
-								...(kind === "stage"
-									? {
-											stageRenderQuality: normalizeStageRenderQuality(
-												pane.stageRenderQuality,
-											),
-										}
-									: {}),
 								...(kind === "scheduler" ? schedulerPaneLayout(pane) : {}),
 								...(kind === "channels"
 									? {

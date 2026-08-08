@@ -25,9 +25,8 @@ export interface WindowProps {
 	fixedCueListNumber?: number;
 	fixedCueListId?: string;
 	stageView?: StageView;
+	stage2dSide?: import("../types").Stage2dSide;
 	followPreload?: boolean;
-	showBeamGuides?: boolean;
-	stageRenderQuality?: import("../types").StageRenderQuality;
 	cueListTab?: "pool" | "cues";
 	presetFamily?: PresetFamily;
 	presetPoolColors?: boolean;

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useDesktopBridge } from "../../platform/desktop";
 import { useApp } from "../../state/AppContext";
+import type { Stage2dSide, StageView } from "../../types";
 import type { NativeStagePane } from "./useNativeStagePane";
 
 /**
@@ -17,32 +18,43 @@ import type { NativeStagePane } from "./useNativeStagePane";
 /**
  * Which way the renderer is asked to look, from the view the operator chose.
  *
- * The renderer has drawn every one of these all along — the plan projections, a lines-only 3D and
- * a full one — so a Stage in any view can be its picture rather than the desk's. That is what lets
- * the web layer stop being sent live values at all: it is no longer drawing the rig in any mode.
+ * Every Stage is the renderer's picture, so this is the whole mapping: a 2D Stage is one of its
+ * orthographic plans, chosen by which side the operator is looking from; a 3D Stage is its
+ * outline view; a 3D Viz Stage is the full one. Nothing else decides it — in particular no
+ * quality setting does, because how much a beam costs to draw is not a way of looking at a rig.
  */
-export function stageViewMode(
-	view: string,
-	renderQuality: string,
-	projection: string,
-): string {
+export function stageViewMode(view: StageView, side: Stage2dSide): string {
 	if (view === "2d") {
-		return (
-			{
-				top_to_bottom: "top_down",
-				bottom_to_top: "top_down",
-				left_to_right: "left_to_right",
-				right_to_left: "right_to_left",
-				front_to_back: "front_to_back",
-				back_to_front: "back_to_front",
-			}[projection] ?? "top_down"
-		);
+		return {
+			top: "top_down",
+			front: "front_to_back",
+			back: "back_to_front",
+			left: "left_to_right",
+			right: "right_to_left",
+		}[side];
 	}
-	// Lines only is a way of looking at the rig rather than a quality setting: it draws where the
-	// light goes without pretending to show what it looks like.
-	if (renderQuality === "none" || renderQuality === "lines_only") return "lines_3d";
-	if (renderQuality === "lines_and_beams") return "simple_3d";
-	return "full_3d";
+	return view === "3d" ? "lines_3d" : "full_3d";
+}
+
+/** `#rrggbb` as the three linear components the renderer wants. */
+export function backgroundColour(hex: string): [number, number, number] {
+	const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+	if (!match) return [0.008, 0.01, 0.016];
+	const value = Number.parseInt(match[1], 16);
+	// The operator picked the colour in a picker, which works in the sRGB the screen shows; the
+	// renderer clears to a linear value. Converting rather than passing it straight through is
+	// what makes a chosen colour arrive as the colour that was chosen.
+	const channel = (byte: number) => {
+		const scaled = byte / 255;
+		return scaled <= 0.04045
+			? scaled / 12.92
+			: ((scaled + 0.055) / 1.055) ** 2.4;
+	};
+	return [
+		channel((value >> 16) & 0xff),
+		channel((value >> 8) & 0xff),
+		channel(value & 0xff),
+	];
 }
 
 export function useStagePanePicture(
@@ -60,6 +72,8 @@ export function useStagePanePicture(
 		stageVizExposure,
 		stageVizLaserBrightness,
 		stageVizShowLabels,
+		stageShowFloorGrid,
+		stageVizBackground,
 	} = state;
 
 	useEffect(() => {
@@ -71,6 +85,8 @@ export function useStagePanePicture(
 			exposure: stageVizExposure,
 			laserBrightness: stageVizLaserBrightness,
 			showLabels: stageVizShowLabels,
+			floorGrid: stageShowFloorGrid,
+			background: backgroundColour(stageVizBackground),
 			mode,
 			followPreload,
 		});
@@ -85,5 +101,7 @@ export function useStagePanePicture(
 		stageVizExposure,
 		stageVizLaserBrightness,
 		stageVizShowLabels,
+		stageShowFloorGrid,
+		stageVizBackground,
 	]);
 }

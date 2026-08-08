@@ -40,12 +40,8 @@ export type Action =
 	| {
 			type: "SET_PANE_STAGE_OPTION";
 			id: string;
-			option:
-				| "stageView"
-				| "followPreload"
-				| "showBeamGuides"
-				| "stageRenderQuality";
-			value: AppState["stageView"] | AppState["stageRenderQuality"] | boolean;
+			option: "stageView" | "stage2dSide" | "followPreload";
+			value: AppState["stageView"] | AppState["stage2dSide"] | boolean;
 	  }
 	| {
 			type: "SET_PANE_PRESET_FAMILY";
@@ -123,8 +119,8 @@ export type Action =
 			groupsVisible?: boolean;
 			showSelection?: boolean;
 			showFloorGrid?: boolean;
-			showBeamGuides?: boolean;
-			renderQuality?: AppState["stageRenderQuality"];
+			side2d?: AppState["stage2dSide"];
+			vizBackground?: string;
 			environmentBrightness?: number;
 			vizAtmosphere?: number;
 			vizQuality?: AppState["stageVizQuality"];

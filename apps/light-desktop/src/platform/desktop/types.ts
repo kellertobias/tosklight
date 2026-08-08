@@ -67,6 +67,10 @@ export interface StagePanePicture {
 	exposure: number;
 	laserBrightness: number;
 	showLabels: boolean;
+	/** Lay the reference grid on the ground plane. */
+	floorGrid: boolean;
+	/** The colour behind the rig, as linear RGB. */
+	background: [number, number, number];
 	/** Which way the Stage is being looked at. */
 	mode: string;
 	/** Draw what the operator has preloaded, over what is currently lit. */
@@ -84,11 +88,12 @@ export interface DesktopBridge {
 	openConsoleScreen(screen: ConsoleScreenWindow): Promise<void>;
 	hideConsoleScreen(screenId: string): Promise<void>;
 	closeConsoleScreen(screenId: string): Promise<void>;
-	openStageViewWindow(): Promise<void>;
 	/**
-	 * Whether the desk can draw the Stage itself, with the native renderer, into a rectangle of
-	 * its own window. False keeps the web renderer, which is not a failure — it is what a browser,
-	 * a platform without a shared surface, and an installation missing its renderer all get.
+	 * Whether the renderer can draw the Stage into a rectangle of the desk's own window.
+	 *
+	 * False is what a browser, a platform without a shared surface, and an installation missing
+	 * its renderer all get. There is no second drawing behind it any more, so the Stage says it
+	 * cannot be drawn here rather than quietly showing a different picture of the same rig.
 	 */
 	stagePaneAvailable(): Promise<boolean>;
 	openStagePane(geometry: StagePaneGeometry, user: string): Promise<void>;

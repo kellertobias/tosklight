@@ -9,7 +9,19 @@ struct Globals {
     params: vec4<f32>,            // exposure, fog density, near, far
     params2: vec4<f32>,           // light count, volumetric steps, ambient, tiles_x
     params3: vec4<f32>,           // plot flag, fog detail, time, laser brightness
+    params4: vec4<f32>,           // gobos flag, beam fall-off flag, spare, spare
 };
+
+// What the quality tier has paid for. The tiers are a ladder of what is in the beam: Draft draws
+// the cone, Standard puts the glass in it, High gives it its fall-off, Ultra makes the haze itself
+// uneven. Asking here rather than branching on a tier number keeps the tiers a renderer concern.
+fn gobos_enabled() -> bool {
+    return globals.params4.x > 0.5;
+}
+
+fn beam_falloff_enabled() -> bool {
+    return globals.params4.y > 0.5;
+}
 
 struct Light {
     position_range: vec4<f32>,
@@ -227,11 +239,20 @@ fn beam_profile(light: Light, to_light: vec3<f32>) -> f32 {
     let uniformity = clamp(light.params.z, 0.0, 1.0);
     let hot_spot = 0.35 + 2.4 * pow(1.0 - radial, 2.5);
     let core = mix(hot_spot, 1.0, uniformity);
-    var profile = edge * core;
+    // Fall-off is the field ending softly and the light dropping away across the pool. Without it
+    // the cone is evenly filled and cut square at its rim, which reads perfectly clearly and is
+    // what the cheap tiers draw.
+    //
+    // Anything past the field edge has already returned zero above, so without fall-off the cone
+    // is simply full to its own rim.
+    var profile = 1.0;
+    if (beam_falloff_enabled()) {
+        profile = edge * core;
+    }
 
-    let gobo_slot = u32(light.optics.x);
+    let gobo_slot = select(0u, u32(light.optics.x), gobos_enabled());
     let facets = light.optics.z;
-    let shaped = light.shapers.x + light.shapers.y + light.shapers.z + light.shapers.w;
+    let shaped = select(0.0, light.shapers.x + light.shapers.y + light.shapers.z + light.shapers.w, gobos_enabled());
     if (gobo_slot == 0u && facets < 2.0 && shaped <= 0.001) {
         return profile;
     }

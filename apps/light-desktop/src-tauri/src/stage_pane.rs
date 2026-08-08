@@ -290,6 +290,8 @@ impl StagePane {
                 exposure: picture.exposure,
                 laser_brightness: picture.laser_brightness,
                 show_labels: picture.show_labels,
+                floor_grid: picture.floor_grid,
+                background: picture.background,
                 mode: match picture.mode.as_str() {
                     "top_down" => viz_helper::protocol::StageViewMode::TopDown,
                     "left_to_right" => viz_helper::protocol::StageViewMode::LeftToRight,
@@ -797,6 +799,9 @@ pub(crate) struct Picture {
     exposure: f32,
     laser_brightness: f32,
     show_labels: bool,
+    floor_grid: bool,
+    /// The colour behind the rig, linear RGB.
+    background: [f32; 3],
     /// Which way the Stage is being looked at, as the web layer names it.
     mode: String,
     follow_preload: bool,

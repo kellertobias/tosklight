@@ -1,7 +1,7 @@
 import type { StageProjection2d } from "../../api/client/stageLayout";
 import type { PatchedFixture } from "../../api/types";
 import type { StagePosition3d } from "../../features/server/contracts";
-import type { StageMode, StageRenderQuality, StageView } from "../../types";
+import type { Stage2dSide, StageMode, StageView } from "../../types";
 import type { WindowProps } from "../windowTypes";
 
 export interface StageWindowProps extends WindowProps {
@@ -23,13 +23,14 @@ export interface StageOptionsModel {
 	setMode: (mode: StageMode) => void;
 	view: StageView;
 	setView: (view: StageView) => void;
+	/** Which side a 2D Stage is the plan from. */
+	side2d: Stage2dSide;
+	setSide2d: (side: Stage2dSide) => void;
 	followPreload: boolean;
 	toggleFollowPreload: () => void;
 	groupsVisible: boolean;
 	showSelection: boolean;
 	showFloorGrid: boolean;
-	showBeamGuides: boolean;
-	renderQuality: StageRenderQuality;
 	environmentBrightness: number;
 }
 
