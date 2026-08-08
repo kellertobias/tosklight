@@ -367,9 +367,11 @@ fn push_floor_grid(frame: &mut FrameInstances, scene: &Scene, style: &FrameStyle
     // Dark, and only just visible. The grid is a reference the eye can find when it looks for it
     // and ignore when it does not; a bright one draws attention away from the only thing on the
     // stage that is supposed to be bright.
-    let line = (style.faint_ink * 0.03).extend(1.0);
+    // These were chosen while every line was multiplied by the glow the lit views use. The glow now
+    // belongs to the views that simulate light, so the grid carries its own weight.
+    let line = (style.faint_ink * 0.09).extend(1.0);
     // The centre lines are the ones an operator counts from, so they are drawn a little stronger.
-    let centre = (style.faint_ink * 0.12).extend(1.0);
+    let centre = (style.faint_ink * 0.30).extend(1.0);
     let y = FLOOR_HEIGHT + 0.002;
 
     for step in x0..=x1 {
@@ -738,26 +740,37 @@ fn push_emitters(
                 .copied()
                 .unwrap_or((intensity, Vec3::from(value.colour)));
             let origin = pose.origin + pose.orientation * *offset;
-            push_aperture(
-                frame,
-                origin,
-                pose,
-                aperture,
-                emitter.optics.source.form,
-                cell_intensity,
-                cell_colour,
-            );
+            /*
+             * The lit face is a surface, so it belongs to the views that draw surfaces. An outline
+             * view has no lighting to reveal one and no models to hang one on: what it drew instead
+             * was an ambient-lit solid at every lamp, which is the brightest thing in a picture
+             * whose whole point is that the lines are the picture.
+             */
+            if style.fixture_models {
+                push_aperture(
+                    frame,
+                    origin,
+                    pose,
+                    aperture,
+                    emitter.optics.source.form,
+                    cell_intensity,
+                    cell_colour,
+                );
+            }
             if emitter.kind != EmitterKind::Beam {
                 continue;
             }
-            // The guideline is drawn for a directional emitter whether or not it is lit, because
-            // where a dark lamp is pointed is exactly what an operator aiming a rig needs to see.
-            // The lit line below is added over it rather than instead of it, so a fixture coming
-            // up does not appear to move.
-            if draw_guides {
+            /*
+             * The guideline is what a dark lamp has instead of a beam. Where the lamp is doing
+             * something, its own line says the same thing and says more, so the dashes go: two
+             * lines down one aim read as two aims, and a rig of them is a picture nobody can
+             * count. What an operator needs the dashes for is the lamp that is off.
+             */
+            let lit = cell_intensity > 0.002;
+            if draw_guides && !lit {
                 push_aim_guide(frame, origin, pose, style.faint_ink);
             }
-            if cell_intensity <= 0.002 {
+            if !lit {
                 continue;
             }
             let light_index = frame.lights.len() as u32;
@@ -1148,7 +1161,17 @@ fn push_aim_line(
 ) {
     let end =
         origin + pose.direction * beam_length(origin, pose.direction).min(BEAM_THROW_METRES * 0.55);
-    let near = colour.extend(intensity.clamp(0.15, 1.0));
+    /*
+     * How bright the line is drawn, from the level the fixture is at.
+     *
+     * Curved rather than proportional, and with almost no floor. Nothing in this view is
+     * tonemapped, so a line drawn at its literal level reads far brighter than the level is: half
+     * and full looked nearly the same, and a lamp at one percent looked like a lamp that was on.
+     * The curve puts the visible difference where an operator is working — half against full is a
+     * real step now — and lets one percent be the barely-there line it should be.
+     */
+    let level = intensity.clamp(0.0, 1.0).powf(1.9).max(0.02);
+    let near = colour.extend(level);
     let far = colour.extend(0.0);
     frame.lines.push(LineVertex {
         position: origin.to_array(),
@@ -1224,7 +1247,7 @@ fn push_aim_guide(frame: &mut FrameInstances, origin: Vec3, pose: EmitterPose, i
     if reach <= DASH {
         return;
     }
-    let colour = (ink * 0.55).extend(0.85);
+    let colour = (ink * 1.3).extend(0.85);
     // Fading out along the throw keeps the far end of a long guide from cluttering the picture,
     // and reads the way an aim does: certain at the lamp, less so where it lands.
     let mut travelled = 0.0;

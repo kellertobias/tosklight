@@ -144,7 +144,11 @@ impl ViewMode {
         match self {
             // Looking straight down.
             Self::TopDown => Some(Vec3::new(0.0, -1.0, 0.0)),
-            // Standing at stage left, looking towards stage right.
+            // Standing in house left, which is stage right, and looking across the stage.
+            //
+            // Stage left and right are the performer's, facing the audience, so they are the
+            // mirror of the operator's own left and right. The wire names are the axis rather
+            // than either convention, and the operator-facing labels say both.
             Self::LeftToRight => Some(Vec3::new(1.0, 0.0, 0.0)),
             Self::RightToLeft => Some(Vec3::new(-1.0, 0.0, 0.0)),
             // Standing in the audience, looking upstage.
@@ -408,8 +412,8 @@ impl Theme {
     /// which is the one thing an operator opened the view to look at.
     pub fn symbol_ink(self) -> [f32; 3] {
         match self {
-            Self::LightOnDark => [0.40, 0.44, 0.50],
-            Self::DarkOnLight => [0.45, 0.48, 0.53],
+            Self::LightOnDark => [0.16, 0.18, 0.21],
+            Self::DarkOnLight => [0.55, 0.58, 0.62],
         }
     }
 

@@ -9,7 +9,7 @@ struct Globals {
     params: vec4<f32>,            // exposure, fog density, near, far
     params2: vec4<f32>,           // light count, volumetric steps, ambient, tiles_x
     params3: vec4<f32>,           // plot flag, fog detail, time, laser brightness
-    params4: vec4<f32>,           // gobos flag, beam fall-off flag, spare, spare
+    params4: vec4<f32>,           // gobos flag, beam fall-off flag, flat-ink flag, spare
 };
 
 // What the quality tier has paid for. The tiers are a ladder of what is in the beam: Draft draws
@@ -21,6 +21,14 @@ fn gobos_enabled() -> bool {
 
 fn beam_falloff_enabled() -> bool {
     return globals.params4.y > 0.5;
+}
+
+/// Whether this view's colours are already the final ones.
+///
+/// True for a drawn plan and for the outline view: neither simulates light, so nothing in them
+/// should be brightened on the way to the screen.
+fn flat_ink() -> bool {
+    return globals.params4.z > 0.5;
 }
 
 struct Light {

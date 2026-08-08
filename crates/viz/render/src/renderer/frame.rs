@@ -298,7 +298,7 @@ impl Renderer {
             params4: [
                 f32::from(u8::from(view.quality.draws_gobos())),
                 f32::from(u8::from(view.quality.draws_beam_falloff())),
-                0.0,
+                f32::from(u8::from(plan.plot || !view.mode.simulates_light())),
                 0.0,
             ],
         };

@@ -764,10 +764,12 @@ mod lines_view {
         );
     }
 
-    /// Lit, the head gets its own coloured line over the guideline rather than instead of it, so
-    /// bringing a fixture up never looks like the fixture moving.
+    /// Lit, the head draws its own line and the dashes go.
+    ///
+    /// Two lines down one aim read as two aims, and a rig of them is a picture nobody can count.
+    /// The dashes are what a dark lamp has instead of a beam, not as well as one.
     #[test]
-    fn a_lit_head_adds_its_own_line_over_the_guideline() {
+    fn a_lit_head_replaces_its_guideline_with_its_own_line() {
         let mut scene = Scene::default();
         scene.fixtures.push(fixture());
         scene.emitters.push(emitter());
@@ -778,7 +780,44 @@ mod lines_view {
         values.emitters[0].intensity = 1.0;
         values.emitters[0].held_intensity = 1.0;
         let lit = build(&scene, &values, &lines_style()).lines.len();
-        assert_eq!(lit, dark + 2, "one more segment, and the guide still under it");
+        assert!(
+            lit < dark,
+            "the dashes give way to one line: {dark} vertices dark, {lit} lit"
+        );
+    }
+
+    /// Half and full have to look different, and one percent has to look like almost nothing.
+    ///
+    /// Nothing in this view is tonemapped, so a line drawn at its literal level reads far brighter
+    /// than the level is — half and full were nearly the same line.
+    #[test]
+    fn the_lit_line_spreads_the_level_across_the_visible_range() {
+        let mut scene = Scene::default();
+        scene.fixtures.push(fixture());
+        scene.emitters.push(emitter());
+
+        let brightness_at = |level: f32| {
+            let mut values = SceneValues::default();
+            values.resize(1);
+            values.emitters[0].intensity = level;
+            values.emitters[0].held_intensity = level;
+            let frame = build(&scene, &values, &lines_style());
+            // The lit line is drawn in the lamp's own colour, which is white here; the fixture's
+            // outline is drawn in the ink, which is nearly black. This measures the line.
+            frame
+                .lines
+                .iter()
+                .filter(|vertex| vertex.colour[0] > 0.5)
+                .map(|vertex| vertex.colour[3])
+                .fold(0.0_f32, f32::max)
+        };
+
+        let (one, half, full) = (brightness_at(0.01), brightness_at(0.5), brightness_at(1.0));
+        assert!(one < 0.06, "one percent is barely there, got {one}");
+        assert!(
+            full > half * 2.5,
+            "half to full is a real step: {half} to {full}"
+        );
     }
 
     /// A truss drawn as a box is a wall across the picture hiding the lamps hanging off it.
@@ -969,4 +1008,36 @@ mod selection {
             "no selection, no selection ink"
         );
     }
+}
+
+/// An outline view is lines. Nothing in it may reach the surface pipeline.
+///
+/// The lit faces used to be pushed here too — an ambient-lit solid at every lamp, which is the
+/// brightest thing in a picture whose whole point is that the lines *are* the picture. Guarding the
+/// ink is not enough on its own: a solid drawn by the shaded pass ignores it entirely.
+#[test]
+fn an_outline_view_pushes_no_shaded_geometry_at_all() {
+    let mut scene = Scene::default();
+    scene.fixtures.push(fixture());
+    scene.emitters.push(emitter());
+    let mut values = SceneValues::default();
+    values.resize(1);
+    values.emitters[0].intensity = 1.0;
+    values.emitters[0].held_intensity = 1.0;
+
+    let frame = build(
+        &scene,
+        &values,
+        &FrameStyle {
+            draw_beams: false,
+            draw_aim_lines: true,
+            aim_guides: true,
+            fixture_models: false,
+            floor_grid: false,
+            ..FrameStyle::default()
+        },
+    );
+    let meshes: usize = frame.meshes.iter().map(|(_, entries)| entries.len()).sum();
+    assert_eq!(meshes, 0, "no shaded geometry in an outline view");
+    assert!(!frame.lines.is_empty(), "and the lines are still drawn");
 }
