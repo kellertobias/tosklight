@@ -31,6 +31,13 @@ pub struct FixtureModel {
     /// shipped set is the *rigging point*. The beam then starts at the clamp, a lamp's length
     /// above the lens it should come out of. The model already knows; this is it saying so.
     pub emitter_anchor: Option<Vec3>,
+    /// How big the emitting face is, across the two directions the light does not travel in.
+    ///
+    /// Measured from the model's own lens geometry. Without it a fixture whose profile says nothing
+    /// about its optics gets a face sized by its class — a per-type guess that has no relation to
+    /// the model it is drawn on, so a 150 mm guess sat in the middle of a 260 mm lens and the lit
+    /// face looked a third of the size of the thing projecting the light.
+    pub emitter_size: Option<glam::Vec2>,
     /// Which way that surface looks, in model space, when the model says.
     ///
     /// A lantern's lens is in its bottom and it hangs pointing down, which is why `-Y` is the rest
@@ -228,6 +235,7 @@ pub fn read_glb(bytes: &[u8]) -> Result<FixtureModel, ModelError> {
     let face = emitter_face(&model, bounds_min, bounds_max);
     model.emitter_anchor = face.map(|face| face.anchor);
     model.emitter_axis = face.map(|face| face.axis);
+    model.emitter_size = face.map(|face| face.size);
     Ok(model)
 }
 
@@ -264,6 +272,8 @@ const EMITTER_MARKERS: [&str; 6] = ["lens", "source", "diffuser", "emitter", "ce
 /// The surface light leaves the model by: where it is, and which way it looks.
 #[derive(Clone, Copy)]
 struct EmitterFace {
+    /// Extent across the two axes the light does not travel along.
+    size: glam::Vec2,
     /// Centred across the face and taken at the **front** of it, because light leaves the front of
     /// a lens rather than the middle of the glass. On a PAR that is the difference between the
     /// mouth of the can and a point a third of the way down inside it.
@@ -305,9 +315,20 @@ fn emitter_face(model: &FixtureModel, bounds_min: Vec3, bounds_max: Vec3) -> Opt
     // the light goes, and the middle of it across the other two.
     let centre = (min + max) * 0.5;
     let front = if axis.max_element() > 0.0 { max } else { min };
+    // Across the aim, which is the two axes the light does not travel along.
+    let extent = max - min;
+    let across = Vec3::ONE - axis.abs();
+    let spans: Vec<f32> = (0..3)
+        .filter(|index| across[*index] > 0.5)
+        .map(|index| extent[index])
+        .collect();
     Some(EmitterFace {
-        anchor: centre * (Vec3::ONE - axis.abs()) + front * axis.abs(),
+        anchor: centre * across + front * axis.abs(),
         axis,
+        size: glam::Vec2::new(
+            spans.first().copied().unwrap_or(0.05).max(0.002),
+            spans.get(1).copied().unwrap_or(0.05).max(0.002),
+        ),
     })
 }
 

@@ -149,11 +149,14 @@ struct EmitterMount {
     pivot: Vec3,
     /// Which way the emitting face looks, in the same space.
     aim: Vec3,
+    /// How big the model's own emitting face is, where the model has one.
+    face: Option<glam::Vec2>,
 }
 
 impl Default for EmitterMount {
     fn default() -> Self {
         Self {
+            face: None,
             origin: Vec3::ZERO,
             pivot: Vec3::ZERO,
             aim: Vec3::NEG_Y,
@@ -169,6 +172,10 @@ impl EmitterMount {
         };
         let scale = model.scale_to(body_size);
         Self {
+            // The model is drawn at the fixture's size, so its lens scales with it.
+            face: model
+                .emitter_size
+                .map(|size| size * scale),
             origin: anchor * scale,
             // Only a model with something that tilts has trunnions worth turning about.
             pivot: if model.has_head {
@@ -332,6 +339,35 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             .and_then(|index| scene.models.get(index as usize))
             .map(|body| EmitterMount::from_model(body, body_size))
             .unwrap_or_default();
+        /*
+         * The lit face is the size of the lens it is drawn on.
+         *
+         * A profile that states its own light source is the authority and keeps it. Everything else
+         * — which is most of the library — was getting a size from its class: one number per kind of
+         * lantern, with no relation to the model it lands on. A 150 mm guess in the middle of a
+         * 260 mm lens is why the thing projecting the light looked several times bigger than the
+         * light leaving it.
+         *
+         * The model knows, because the lens is geometry in it. It already told us where that
+         * geometry is and which way it looks; this is the third thing it can answer.
+         */
+        if fixture.profile.optics.light_source.is_none()
+            && let Some(face) = mount.face
+        {
+            match optics.source.form {
+                // A round lens is one number, so a face measured a little off-square is taken at
+                // its mean rather than being drawn as an oval nobody built.
+                SourceForm::Round => {
+                    let diameter = (face.x + face.y) * 0.5;
+                    optics.source.width = diameter;
+                    optics.source.height = diameter;
+                }
+                SourceForm::Oval | SourceForm::Rectangular => {
+                    optics.source.width = face.x;
+                    optics.source.height = face.y;
+                }
+            }
+        }
         /*
          * Where this fixture is addressed, for the instances that carry no address themselves.
          *

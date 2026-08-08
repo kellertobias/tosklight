@@ -76,6 +76,7 @@ fn tilt_turns_the_head_about_its_trunnions_and_leaves_the_base_alone() {
         extent: Vec3::splat(0.25),
         head_pivot: Vec3::new(0.0, 0.4, 0.0),
         emitter_anchor: None,
+        emitter_size: None,
         emitter_axis: None,
         has_head: true,
         warnings: Vec::new(),
