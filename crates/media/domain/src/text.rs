@@ -99,7 +99,6 @@ enum Phase {
 #[derive(Debug, Clone, Default)]
 pub struct Countdown {
     phase: Phase,
-    was: Option<Visibility>,
 }
 
 impl Countdown {
@@ -109,8 +108,6 @@ impl Countdown {
 
     /// Advances the lifecycle. `now_millis` is a monotonic stamp supplied by the caller.
     pub fn observe(&mut self, visibility: Visibility, now_millis: u64) {
-        let previous = self.was.replace(visibility);
-
         // Leaving the screen resets, whatever the transport was doing.
         if !visibility.visible {
             self.phase = Phase::Idle;
@@ -150,7 +147,6 @@ impl Countdown {
                 Phase::Running { .. } => {}
             }
         }
-        let _ = previous;
     }
 
     /// How long the countdown has been running.
