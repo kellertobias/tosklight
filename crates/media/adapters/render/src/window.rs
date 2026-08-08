@@ -166,6 +166,7 @@ impl WindowedOutput {
         &mut self,
         layers: &[LayerDraw<'_>],
         master: &MasterState,
+        master_mask: Option<&crate::SourceTexture>,
         now: Timestamp,
     ) -> Result<(), SurfaceLost> {
         let frame = match self.surface.get_current_texture() {
@@ -188,7 +189,7 @@ impl WindowedOutput {
         let view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        self.compositor.render(layers, master, &view);
+        self.compositor.render(layers, master, master_mask, &view);
         self.window.pre_present_notify();
         self.gpu.queue.present(frame);
         self.clock.record_present(now);

@@ -39,7 +39,7 @@ pub use clock::{MeasuredCadence, RenderClock};
 pub use color::{FlipMirror, Tint};
 pub use command::{Command, CommandKind, CommandSource, ControlOwnership, Timestamp};
 pub use geometry::{LayerTransform, Point, Size};
-pub use layer::{LayerState, MaskState, ScalingMode, SourceFailure, SourceStatus};
+pub use layer::{LayerState, MaskSource, MaskState, ScalingMode, SourceFailure, SourceStatus};
 pub use master::MasterState;
 pub use output::{OutputId, OutputName, PresentationMode};
 pub use personality::{LayerPersonality, PersonalityVersion, SlotFootprint, StartAddressError};

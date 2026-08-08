@@ -11,9 +11,10 @@ use std::sync::Arc;
 
 use media_application::configuration::{MediaConfiguration, OutputConfiguration, OutputTarget};
 use media_domain::geometry::Size;
-use media_domain::{MasterState, MediaState, OutputState, Timestamp};
+use media_domain::{MasterState, MediaState, Timestamp};
 
 use crate::dmx::SharedState;
+use crate::layer_pipeline::LayerPipeline;
 use media_playback::{ClipLoader, PlaybackSession};
 use media_render::{LayerDraw, SourceTexture, SurfaceLost, WindowedOutput, select_monitor};
 use winit::application::ApplicationHandler;
@@ -38,6 +39,7 @@ pub fn needs_a_window(configuration: &MediaConfiguration) -> bool {
 pub fn run_event_loop(
     configuration: &MediaConfiguration,
     state: SharedState,
+    catalog: SharedCatalog,
     shutdown: Shutdown,
     diagnostics: Diagnostics,
     // The same reference point the network listeners stamp against, so a packet's arrival and a
@@ -50,6 +52,8 @@ pub fn run_event_loop(
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let mut host = PresentationHost {
+        configuration: Arc::new(configuration.clone()),
+        catalog,
         outputs: Vec::new(),
         pending: configuration
             .outputs
@@ -82,12 +86,17 @@ pub struct Diagnostics {
     pub test_pattern: bool,
 }
 
+/// The published library snapshot, shared with the services so both read one catalog.
+pub type SharedCatalog = Arc<arc_swap::ArcSwap<media_domain::catalog::CatalogSnapshot>>;
+
 struct HostedOutput {
     output: WindowedOutput,
     /// Kept alive for the surface's lifetime, and used to resolve resize events back to an output.
     window: Arc<Window>,
     test_pattern: Option<SourceTexture>,
     sources: crate::layer_sources::LayerSources,
+    /// This output's path from addresses to textures.
+    pipeline: LayerPipeline,
 }
 
 /// A clip loaded for the development `--play` affordance.
@@ -98,6 +107,8 @@ struct DirectClip {
 }
 
 struct PresentationHost {
+    configuration: Arc<MediaConfiguration>,
+    catalog: SharedCatalog,
     outputs: Vec<HostedOutput>,
     pending: Vec<OutputConfiguration>,
     state: SharedState,
@@ -230,11 +241,19 @@ impl PresentationHost {
                     .flatten();
                 let source_size = self.clip_size;
                 let sources = crate::layer_sources::LayerSources::new(output.gpu(), source_size);
+                let mut pipeline = LayerPipeline::new(
+                    output.gpu(),
+                    configuration.id,
+                    media_library::LibraryStorage::new(self.configuration.library.root.clone()),
+                    output.size(),
+                );
+                pipeline.validate_visualizers();
                 self.outputs.push(HostedOutput {
                     output,
                     window,
                     test_pattern,
                     sources,
+                    pipeline,
                 });
             }
             Err(error) => {
@@ -245,14 +264,25 @@ impl PresentationHost {
 
     fn present_all(&mut self) {
         let now = self.now();
+        let seconds = self.started.elapsed().as_secs_f32();
+        let state = self.state.load();
+        let catalog = self.catalog.load();
+        // Audio capture is product- and platform-owned and arrives with its own slice. Silence is
+        // a real analysis, not a placeholder: time-driven visualizers run, audio-driven ones rest.
+        let analysis = media_domain::audio::Analysis::default();
+        let mut reports = Vec::new();
+
         for hosted in &mut self.outputs {
             if !hosted.output.should_present(now) {
                 continue;
             }
-            let (_, master) = draw_list(&self.state.load(), hosted.output.id());
+            let Some(output_state) = state.output(hosted.output.id()) else {
+                continue;
+            };
+            let master = output_state.master;
 
-            // A clip named at launch plays on layer one. Everything below is the real path: a
-            // session resolves the frame, the cache holds it, and it uploads compressed.
+            // A clip named at launch plays on layer one. It is a development affordance and it
+            // takes precedence over the real path so a machine with no library still proves it.
             if let Some(direct) = self.direct.as_mut() {
                 let delivery =
                     direct
@@ -267,47 +297,114 @@ impl PresentationHost {
                     let draws = [LayerDraw {
                         state: &direct.layer,
                         source: texture,
+                        mask: None,
                     }];
-                    match hosted.output.present(&draws, &master, now) {
-                        Ok(()) | Err(SurfaceLost::Recovered | SurfaceLost::Timeout) => {}
-                        Err(error) => {
-                            tracing::error!(id = %hosted.output.id(), %error, "output stopped presenting");
-                        }
-                    }
+                    present(&mut hosted.output, &draws, &master, None, now);
                     hosted.window.request_redraw();
                     continue;
                 }
             }
-            // Until the catalog and playback slices land there are no textures for the real
-            // layers, so an output presents its master pass over an empty composite. That is the
-            // honest picture: black, not an error card. The diagnostic pattern is the one thing
-            // that can occupy a layer today, and it is clearly not a media source.
-            let diagnostic = hosted.test_pattern.as_ref().map(|pattern| LayerDraw {
-                state: &self.test_pattern_layer,
-                source: pattern,
-            });
-            let layer_draws: Vec<LayerDraw<'_>> = diagnostic.into_iter().collect();
 
-            match hosted.output.present(&layer_draws, &master, now) {
-                Ok(()) | Err(SurfaceLost::Recovered | SurfaceLost::Timeout) => {}
-                Err(error) => {
-                    tracing::error!(id = %hosted.output.id(), %error, "output stopped presenting");
-                }
+            // The real path: every layer's address becomes a texture, or reports why it did not.
+            let prepared = hosted.pipeline.prepare(
+                output_state,
+                crate::layer_pipeline::FrameContext {
+                    catalog: &catalog,
+                    configuration: &self.configuration,
+                    analysis: &analysis,
+                    seconds,
+                    now,
+                },
+                &mut self.loader,
+            );
+            reports.extend(
+                prepared
+                    .statuses
+                    .iter()
+                    .map(|(layer, status)| (output_state.id, *layer, *status)),
+            );
+
+            let mut draws = hosted.pipeline.draws(output_state, &prepared);
+            // The diagnostic pattern occupies layer one only while nothing else has been
+            // selected, so it can never hide a running show.
+            if draws.is_empty()
+                && let Some(pattern) = hosted.test_pattern.as_ref()
+            {
+                draws.push(LayerDraw {
+                    state: &self.test_pattern_layer,
+                    source: pattern,
+                    mask: None,
+                });
             }
+
+            let master_mask = prepared
+                .master_mask
+                .and_then(|slot| hosted.pipeline.texture(slot));
+            present(&mut hosted.output, &draws, &master, master_mask, now);
             hosted.window.request_redraw();
+        }
+
+        self.publish(reports, now);
+    }
+
+    /// Tells the reducer what each layer's source did, so the API, the UI, and CITP all report the
+    /// lifecycle the renderer actually saw rather than each guessing at it.
+    fn publish(
+        &self,
+        reports: Vec<(media_domain::OutputId, usize, media_domain::SourceStatus)>,
+        now: Timestamp,
+    ) {
+        if reports.is_empty() {
+            return;
+        }
+        if let Some(next) = with_reports(&self.state.load(), &reports, now) {
+            self.state.store(Arc::new(next));
         }
     }
 }
 
-/// The layers and master one output should draw, straight from the authoritative state.
-fn draw_list(
+/// Presents one frame, keeping a lost surface from becoming a lost output.
+fn present(
+    output: &mut WindowedOutput,
+    draws: &[LayerDraw<'_>],
+    master: &MasterState,
+    master_mask: Option<&SourceTexture>,
+    now: Timestamp,
+) {
+    match output.present(draws, master, master_mask, now) {
+        Ok(()) | Err(SurfaceLost::Recovered | SurfaceLost::Timeout) => {}
+        Err(error) => {
+            tracing::error!(id = %output.id(), %error, "output stopped presenting");
+        }
+    }
+}
+
+/// Applies the renderer's source reports to the authoritative state.
+///
+/// Returns the next state when anything changed, so a frame in which nothing loaded or failed
+/// publishes nothing at all rather than churning a snapshot every sixtieth of a second.
+fn with_reports(
     state: &MediaState,
-    id: media_domain::OutputId,
-) -> (Vec<media_domain::LayerState>, MasterState) {
-    state.output(id).map_or_else(
-        || (Vec::new(), MasterState::default()),
-        |output: &OutputState| (output.layers.clone(), output.master),
-    )
+    reports: &[(media_domain::OutputId, usize, media_domain::SourceStatus)],
+    now: Timestamp,
+) -> Option<MediaState> {
+    let mut next = MediaState::clone(state);
+    let mut changed = false;
+    for (output, layer, status) in reports {
+        let command = media_domain::Command::new(
+            media_domain::CommandKind::ReportSourceStatus {
+                output: *output,
+                layer: *layer,
+                status: *status,
+            },
+            media_domain::CommandSource::Internal,
+            now,
+        );
+        if media_domain::apply(&mut next, &command) == media_domain::Applied::Changed {
+            changed = true;
+        }
+    }
+    changed.then_some(next)
 }
 
 impl ApplicationHandler for PresentationHost {
@@ -342,9 +439,10 @@ impl ApplicationHandler for PresentationHost {
             WindowEvent::Resized(size) => {
                 // Only this output is rebuilt. Another output on another display keeps presenting
                 // at its own size and its own cadence.
-                hosted
-                    .output
-                    .resize(Size::new(size.width.max(1), size.height.max(1)));
+                let size = Size::new(size.width.max(1), size.height.max(1));
+                hosted.output.resize(size);
+                // Generated sources are output-sized by definition, so they follow the surface.
+                hosted.pipeline.resize(size);
             }
             WindowEvent::RedrawRequested => {}
             _ => {}
@@ -418,17 +516,37 @@ mod tests {
     }
 
     #[test]
-    fn the_draw_list_comes_from_the_authoritative_state() {
+    fn what_the_renderer_saw_reaches_the_authoritative_state() {
         let id = media_domain::OutputId::new();
-        let state = MediaState::with_outputs(vec![OutputState::new(
+        let state = MediaState::with_outputs(vec![media_domain::OutputState::new(
             id,
             media_domain::LayerPersonality::TwoLayers,
         )]);
-        let (layers, master) = draw_list(&state, id);
-        assert_eq!(layers.len(), 2);
-        assert_eq!(master, MasterState::default());
+        let failure = media_domain::SourceStatus::Failed {
+            failure: media_domain::SourceFailure::MissingFile,
+        };
 
-        let (layers, _) = draw_list(&state, media_domain::OutputId::new());
-        assert!(layers.is_empty(), "an unknown output draws nothing");
+        let next = with_reports(&state, &[(id, 0, failure)], Timestamp::from_millis(0))
+            .expect("a new status is a change");
+        assert_eq!(next.output(id).unwrap().layers[0].source_status, failure);
+        assert_eq!(
+            next.output(id).unwrap().layers[1].source_status,
+            media_domain::SourceStatus::Unselected,
+            "one layer's failure is not another's"
+        );
+
+        assert!(
+            with_reports(&next, &[(id, 0, failure)], Timestamp::from_millis(16)).is_none(),
+            "reporting the same status again publishes nothing"
+        );
+        assert!(
+            with_reports(
+                &state,
+                &[(media_domain::OutputId::new(), 0, failure)],
+                Timestamp::from_millis(0)
+            )
+            .is_none(),
+            "a report for an output that is not here changes nothing"
+        );
     }
 }

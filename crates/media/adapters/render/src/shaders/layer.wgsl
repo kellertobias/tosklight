@@ -16,13 +16,19 @@ struct Layer {
     output: vec2<f32>,
     // Layer tint in rgb; layer dimmer in a.
     tint: vec4<f32>,
-    // x: grayscale amount. y, z, w: reserved for the mask and effect slices.
+    // x: grayscale amount. y, z, w: reserved for the effect slice.
     controls: vec4<f32>,
+    // x, y: the mask's own scale about the layer centre. z: 1 when inverted. w: mask opacity,
+    // which is zero when the layer has no mask at all.
+    mask: vec4<f32>,
+    // x: 1 when the mask reads its strength from alpha rather than luminance.
+    mask_source: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> layer: Layer;
 @group(0) @binding(1) var source: texture_2d<f32>;
 @group(0) @binding(2) var source_sampler: sampler;
+@group(0) @binding(3) var mask: texture_2d<f32>;
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
@@ -68,6 +74,32 @@ fn vertex(@builtin(vertex_index) index: u32) -> VertexOutput {
 // The weights the legacy renderer used, kept so a migrated show's grayscale looks the same.
 const LUMINANCE = vec3<f32>(0.299, 0.587, 0.114);
 
+/// How much of the layer this pixel's mask lets through.
+///
+/// The mask carries its own scale about the layer centre rather than inheriting the layer's, so an
+/// operator can hold a mask still while the media moves behind it. Outside the mask's own extent
+/// there is nothing to read, and an unread mask hides rather than reveals — otherwise scaling a
+/// mask down would flood the output with unmasked layer.
+fn mask_strength(uv: vec2<f32>) -> f32 {
+    let opacity = layer.mask.w;
+    if opacity <= 0.0 {
+        return 1.0;
+    }
+
+    let scale = max(layer.mask.xy, vec2<f32>(0.0001));
+    let centred = (uv - vec2<f32>(0.5)) / scale + vec2<f32>(0.5);
+    var strength = 0.0;
+    if centred.x >= 0.0 && centred.x <= 1.0 && centred.y >= 0.0 && centred.y <= 1.0 {
+        let sampled = textureSample(mask, source_sampler, centred);
+        strength = select(dot(sampled.rgb, LUMINANCE), sampled.a, layer.mask_source.x > 0.5);
+    }
+    if layer.mask.z > 0.5 {
+        strength = 1.0 - strength;
+    }
+    // Opacity blends between the unmasked layer and the masked result, so a mask can be eased in.
+    return mix(1.0, clamp(strength, 0.0, 1.0), opacity);
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let sampled = textureSample(source, source_sampler, in.uv);
@@ -78,5 +110,5 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Layer dimmer becomes the alpha of the layer tint, so a dimmed layer reveals what is beneath
     // it rather than turning black.
-    return vec4<f32>(tinted, sampled.a * layer.tint.a);
+    return vec4<f32>(tinted, sampled.a * layer.tint.a * mask_strength(in.uv));
 }

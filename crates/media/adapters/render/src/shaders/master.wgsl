@@ -5,12 +5,15 @@ struct Master {
     tint: vec4<f32>,
     // Per-axis sign: -1 flips that axis, 1 leaves it alone.
     flip: vec2<f32>,
-    padding: vec2<f32>,
+    // x: master mask opacity, zero when there is none. y: 1 when it reads alpha rather than
+    // luminance.
+    mask: vec2<f32>,
 };
 
 @group(0) @binding(0) var<uniform> master: Master;
 @group(0) @binding(1) var program: texture_2d<f32>;
 @group(0) @binding(2) var program_sampler: sampler;
+@group(0) @binding(3) var mask: texture_2d<f32>;
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
@@ -42,10 +45,22 @@ fn vertex(@builtin(vertex_index) index: u32) -> VertexOutput {
     return out;
 }
 
+const LUMINANCE = vec3<f32>(0.299, 0.587, 0.114);
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let sampled = textureSample(program, program_sampler, in.uv);
+
+    // The output-level mask applies to the finished composite, after every layer has landed, so
+    // it shapes the whole image rather than one layer's contribution to it.
+    var strength = 1.0;
+    if master.mask.x > 0.0 {
+        let read = textureSample(mask, program_sampler, in.uv);
+        let value = select(dot(read.rgb, LUMINANCE), read.a, master.mask.y > 0.5);
+        strength = mix(1.0, clamp(value, 0.0, 1.0), master.mask.x);
+    }
+
     // Master dimmer is the final black overlay: scaling the composite is the same result with one
     // fewer pass.
-    return vec4<f32>(sampled.rgb * master.tint.rgb * master.tint.a, 1.0);
+    return vec4<f32>(sampled.rgb * master.tint.rgb * master.tint.a * strength, 1.0);
 }

@@ -23,6 +23,7 @@ pub use service::{
 pub use validate::ConfigurationError;
 
 use media_domain::OutputId;
+use media_domain::visualizer::GeneratedCatalog;
 use serde::{Deserialize, Serialize};
 
 /// Distinguishes two Media Server processes on one host in logs, CITP announcements, and
@@ -66,6 +67,12 @@ pub struct MediaConfiguration {
     pub audio: AudioConfiguration,
     #[serde(default)]
     pub playback: PlaybackConfiguration,
+    /// Which generated visualizer answers at which address.
+    ///
+    /// Configuration rather than a constant, because moving a visualizer is an operator decision
+    /// their show depends on — a new build must never renumber what a cue already points at.
+    #[serde(default)]
+    pub visualizers: GeneratedCatalog,
     /// One or more logical outputs. The first release ships one; the collection is never
     /// collapsed into singleton state.
     pub outputs: Vec<OutputConfiguration>,
@@ -79,6 +86,7 @@ impl Default for MediaConfiguration {
             library: LibraryConfiguration::default(),
             audio: AudioConfiguration::default(),
             playback: PlaybackConfiguration::default(),
+            visualizers: GeneratedCatalog::default(),
             outputs: vec![OutputConfiguration::new("Main")],
         }
     }

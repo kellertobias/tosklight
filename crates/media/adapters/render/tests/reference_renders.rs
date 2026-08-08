@@ -10,8 +10,8 @@
 
 use media_domain::geometry::Size;
 use media_domain::{
-    FlipMirror, LayerState, MasterState, MediaAddress, OutputId, PresentationMode, ScalingMode,
-    SourceStatus, Timestamp, Tint,
+    FlipMirror, LayerState, MaskSource, MaskState, MasterState, MediaAddress, OutputId,
+    PresentationMode, ScalingMode, SourceStatus, Timestamp, Tint,
 };
 use media_render::{Gpu, LayerDraw, OutputRenderer, SourceTexture};
 
@@ -58,8 +58,17 @@ impl Bench {
     }
 
     fn render(&mut self, layers: &[LayerDraw<'_>], master: &MasterState) -> Image {
+        self.render_masked(layers, master, None)
+    }
+
+    fn render_masked(
+        &mut self,
+        layers: &[LayerDraw<'_>],
+        master: &MasterState,
+        master_mask: Option<&SourceTexture>,
+    ) -> Image {
         self.renderer
-            .present(layers, master, Timestamp::from_micros(0));
+            .present(layers, master, master_mask, Timestamp::from_micros(0));
         Image {
             pixels: self.renderer.read_image(),
         }
@@ -104,6 +113,7 @@ fn a_stretched_layer_fills_the_whole_output() {
         &[LayerDraw {
             state: &state,
             source: &source,
+            mask: None,
         }],
         &MasterState::default(),
     );
@@ -126,6 +136,7 @@ fn a_layer_that_does_not_draw_contributes_nothing_rather_than_black() {
         &[LayerDraw {
             state: &dark,
             source: &source,
+            mask: None,
         }],
         &MasterState::default(),
     );
@@ -141,6 +152,7 @@ fn a_layer_that_does_not_draw_contributes_nothing_rather_than_black() {
         &[LayerDraw {
             state: &blank,
             source: &source,
+            mask: None,
         }],
         &MasterState::default(),
     );
@@ -157,6 +169,7 @@ fn a_layer_that_does_not_draw_contributes_nothing_rather_than_black() {
         &[LayerDraw {
             state: &failed,
             source: &source,
+            mask: None,
         }],
         &MasterState::default(),
     );
@@ -180,10 +193,12 @@ fn later_layers_draw_above_earlier_ones() {
             LayerDraw {
                 state: &bottom,
                 source: &red,
+                mask: None,
             },
             LayerDraw {
                 state: &top,
                 source: &green,
+                mask: None,
             },
         ],
         &MasterState::default(),
@@ -211,10 +226,12 @@ fn a_half_dimmed_layer_blends_with_what_is_beneath_it() {
             LayerDraw {
                 state: &bottom,
                 source: &red,
+                mask: None,
             },
             LayerDraw {
                 state: &top,
                 source: &blue,
+                mask: None,
             },
         ],
         &MasterState::default(),
@@ -244,6 +261,7 @@ fn a_layer_tint_multiplies_the_source() {
         &[LayerDraw {
             state: &state,
             source: &white,
+            mask: None,
         }],
         &MasterState::default(),
     );
@@ -263,6 +281,7 @@ fn grayscale_uses_the_documented_luminance_weights() {
         &[LayerDraw {
             state: &state,
             source: &red,
+            mask: None,
         }],
         &MasterState::default(),
     );
@@ -283,6 +302,7 @@ fn the_master_dimmer_darkens_the_finished_composite() {
         &[LayerDraw {
             state: &state,
             source: &red,
+            mask: None,
         }],
         &MasterState {
             dimmer: 0.5,
@@ -303,6 +323,7 @@ fn the_master_tint_multiplies_the_finished_composite() {
         &[LayerDraw {
             state: &state,
             source: &white,
+            mask: None,
         }],
         &MasterState {
             tint: Tint::new(0.0, 1.0, 0.0),
@@ -327,6 +348,7 @@ fn scaling_and_position_place_the_layer_where_the_geometry_says() {
         &[LayerDraw {
             state: &state,
             source: &red,
+            mask: None,
         }],
         &MasterState::default(),
     );
@@ -350,6 +372,7 @@ fn the_master_flip_mirrors_the_output() {
         &[LayerDraw {
             state: &state,
             source: &red,
+            mask: None,
         }],
         &MasterState::default(),
     );
@@ -360,6 +383,7 @@ fn the_master_flip_mirrors_the_output() {
         &[LayerDraw {
             state: &state,
             source: &red,
+            mask: None,
         }],
         &MasterState {
             flip_mirror: FlipMirror::Horizontal,
@@ -382,6 +406,7 @@ fn the_master_flip_mirrors_the_output() {
         &[LayerDraw {
             state: &vertical,
             source: &red,
+            mask: None,
         }],
         &MasterState {
             flip_mirror: FlipMirror::Vertical,
@@ -409,6 +434,7 @@ fn rotation_turns_the_layer_around_its_own_centre() {
         &[LayerDraw {
             state: &flat,
             source: &red,
+            mask: None,
         }],
         &MasterState::default(),
     );
@@ -425,6 +451,7 @@ fn rotation_turns_the_layer_around_its_own_centre() {
         &[LayerDraw {
             state: &turned,
             source: &red,
+            mask: None,
         }],
         &MasterState::default(),
     );
@@ -443,8 +470,18 @@ fn recreating_an_output_changes_its_resolution_and_forgets_its_cadence() {
     )
     .unwrap();
 
-    renderer.present(&[], &MasterState::default(), Timestamp::from_micros(0));
-    renderer.present(&[], &MasterState::default(), Timestamp::from_micros(16_667));
+    renderer.present(
+        &[],
+        &MasterState::default(),
+        None,
+        Timestamp::from_micros(0),
+    );
+    renderer.present(
+        &[],
+        &MasterState::default(),
+        None,
+        Timestamp::from_micros(16_667),
+    );
     assert_eq!(renderer.cadence().frames, 2);
 
     renderer.recreate(Size::new(32, 16));
@@ -455,7 +492,12 @@ fn recreating_an_output_changes_its_resolution_and_forgets_its_cadence() {
         "the cadence from before the change says nothing"
     );
 
-    renderer.present(&[], &MasterState::default(), Timestamp::from_micros(0));
+    renderer.present(
+        &[],
+        &MasterState::default(),
+        None,
+        Timestamp::from_micros(0),
+    );
     assert_eq!(renderer.read_image().len(), 32 * 16 * 4);
 }
 
@@ -480,11 +522,18 @@ fn two_outputs_on_one_device_render_independently() {
         &[LayerDraw {
             state: &state,
             source: &red,
+            mask: None,
         }],
         &MasterState::default(),
+        None,
         Timestamp::from_micros(0),
     );
-    second.present(&[], &MasterState::default(), Timestamp::from_micros(0));
+    second.present(
+        &[],
+        &MasterState::default(),
+        None,
+        Timestamp::from_micros(0),
+    );
 
     assert_ne!(first.id(), second.id());
     assert_eq!(first.read_image().len(), 64 * 64 * 4);
@@ -520,6 +569,7 @@ fn a_real_hap_frame_reaches_the_screen_through_the_compressed_path() {
         &[LayerDraw {
             state: &state,
             source: &source,
+            mask: None,
         }],
         &MasterState::default(),
     );
@@ -560,10 +610,12 @@ fn transparency_survives_all_the_way_to_the_composite() {
             LayerDraw {
                 state: &bottom,
                 source: &under,
+                mask: None,
             },
             LayerDraw {
                 state: &top,
                 source: &over,
+                mask: None,
             },
         ],
         &MasterState::default(),
@@ -578,5 +630,236 @@ fn transparency_survives_all_the_way_to_the_composite() {
     assert!(
         blue > 96 && blue < 160,
         "and the half-transparent blue sits over it: {blue}"
+    );
+}
+
+// Masks. A mask is a source like any other: what makes it a mask is how the layer pass reads it.
+
+/// A source whose left half is white and right half is black — a mask with a hard edge.
+fn half_and_half(gpu: &Gpu) -> SourceTexture {
+    let mut pixels = Vec::new();
+    for _ in 0..4 {
+        for x in 0..4 {
+            let value = if x < 2 { 255 } else { 0 };
+            pixels.extend_from_slice(&[value, value, value, 255]);
+        }
+    }
+    SourceTexture::from_rgba8(gpu, Size::new(4, 4), &pixels).expect("a mask uploads")
+}
+
+#[test]
+fn a_luminance_mask_keeps_what_is_bright_and_hides_what_is_dark() {
+    let mut bench = Bench::new();
+    let source = bench.solid(Size::new(4, 4), RED);
+    let mask = half_and_half(&bench.gpu);
+    let state = ready(LayerState {
+        mask: MaskState {
+            address: MediaAddress::new(1, 2),
+            opacity: 1.0,
+            source: MaskSource::Luminance,
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    let image = bench.render(
+        &[LayerDraw {
+            state: &state,
+            source: &source,
+            mask: Some(&mask),
+        }],
+        &MasterState::default(),
+    );
+
+    assert_eq!(image.at(8, 32), RED, "the bright half of the mask passes");
+    assert_eq!(image.at(56, 32), BLACK, "the dark half is held back");
+}
+
+#[test]
+fn inverting_a_mask_exchanges_what_it_keeps_for_what_it_hides() {
+    let mut bench = Bench::new();
+    let source = bench.solid(Size::new(4, 4), RED);
+    let mask = half_and_half(&bench.gpu);
+    let state = ready(LayerState {
+        mask: MaskState {
+            address: MediaAddress::new(1, 2),
+            opacity: 1.0,
+            invert: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    let image = bench.render(
+        &[LayerDraw {
+            state: &state,
+            source: &source,
+            mask: Some(&mask),
+        }],
+        &MasterState::default(),
+    );
+
+    assert_eq!(image.at(8, 32), BLACK);
+    assert_eq!(image.at(56, 32), RED);
+}
+
+#[test]
+fn an_alpha_mask_reads_transparency_rather_than_brightness() {
+    let mut bench = Bench::new();
+    let source = bench.solid(Size::new(4, 4), RED);
+    // Uniformly white, so a luminance mask would pass everything; the alpha is what varies.
+    let mut pixels = Vec::new();
+    for _ in 0..4 {
+        for x in 0..4 {
+            pixels.extend_from_slice(&[255, 255, 255, if x < 2 { 255 } else { 0 }]);
+        }
+    }
+    let mask =
+        SourceTexture::from_rgba8(&bench.gpu, Size::new(4, 4), &pixels).expect("a mask uploads");
+
+    let state = ready(LayerState {
+        mask: MaskState {
+            address: MediaAddress::new(1, 2),
+            opacity: 1.0,
+            source: MaskSource::Alpha,
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    let image = bench.render(
+        &[LayerDraw {
+            state: &state,
+            source: &source,
+            mask: Some(&mask),
+        }],
+        &MasterState::default(),
+    );
+
+    assert_eq!(image.at(8, 32), RED, "opaque mask pixels pass the layer");
+    assert_eq!(image.at(56, 32), BLACK, "transparent ones hide it");
+}
+
+#[test]
+fn a_mask_at_no_opacity_changes_nothing_and_a_missing_mask_is_no_mask() {
+    let mut bench = Bench::new();
+    let source = bench.solid(Size::new(4, 4), RED);
+    let mask = half_and_half(&bench.gpu);
+
+    // Selected, but faded out entirely.
+    let faded = ready(LayerState {
+        mask: MaskState {
+            address: MediaAddress::new(1, 2),
+            opacity: 0.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    let image = bench.render(
+        &[LayerDraw {
+            state: &faded,
+            source: &source,
+            mask: Some(&mask),
+        }],
+        &MasterState::default(),
+    );
+    assert_eq!(image.at(56, 32), RED, "an unapplied mask hides nothing");
+
+    // Selected and fully applied, but the mask has not loaded.
+    let unloaded = ready(LayerState {
+        mask: MaskState {
+            address: MediaAddress::new(1, 2),
+            opacity: 1.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    let image = bench.render(
+        &[LayerDraw {
+            state: &unloaded,
+            source: &source,
+            mask: None,
+        }],
+        &MasterState::default(),
+    );
+    assert_eq!(
+        image.at(56, 32),
+        RED,
+        "a mask that is on its way must not black the layer out while it loads"
+    );
+}
+
+#[test]
+fn a_mask_carries_its_own_scale_rather_than_the_layer_s() {
+    let mut bench = Bench::new();
+    let source = bench.solid(Size::new(4, 4), RED);
+    let mask = half_and_half(&bench.gpu);
+
+    // The mask is scaled to a quarter of the layer, centred. Outside its own extent there is
+    // nothing to read, and an unread mask hides.
+    let state = ready(LayerState {
+        mask: MaskState {
+            address: MediaAddress::new(1, 2),
+            opacity: 1.0,
+            scale_x: 0.25,
+            scale_y: 0.25,
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    let image = bench.render(
+        &[LayerDraw {
+            state: &state,
+            source: &source,
+            mask: Some(&mask),
+        }],
+        &MasterState::default(),
+    );
+
+    assert_eq!(image.at(2, 2), BLACK, "outside the mask's own extent");
+    assert_eq!(image.at(28, 32), RED, "inside it, the bright half passes");
+    assert_eq!(image.at(36, 32), BLACK, "and the dark half does not");
+}
+
+#[test]
+fn the_master_mask_shapes_the_whole_composite_after_every_layer_has_landed() {
+    let mut bench = Bench::new();
+    let lower = bench.solid(Size::new(4, 4), RED);
+    let upper = bench.solid(Size::new(4, 4), BLUE);
+    let mask = half_and_half(&bench.gpu);
+    let first = ready(LayerState::default());
+    let second = ready(LayerState::default());
+
+    let master = MasterState {
+        mask: MediaAddress::new(1, 3),
+        ..Default::default()
+    };
+    let image = bench.render_masked(
+        &[
+            LayerDraw {
+                state: &first,
+                source: &lower,
+                mask: None,
+            },
+            LayerDraw {
+                state: &second,
+                source: &upper,
+                mask: None,
+            },
+        ],
+        &master,
+        Some(&mask),
+    );
+
+    assert_eq!(
+        image.at(8, 32),
+        BLUE,
+        "the top layer survives where the master mask passes"
+    );
+    assert_eq!(
+        image.at(56, 32),
+        BLACK,
+        "and the whole composite is held back where it does not"
     );
 }

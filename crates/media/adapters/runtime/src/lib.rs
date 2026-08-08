@@ -8,6 +8,7 @@
 //! half a server up.
 
 mod dmx;
+mod layer_pipeline;
 mod layer_sources;
 mod logging;
 pub mod presentation;
@@ -79,13 +80,24 @@ pub fn run() -> anyhow::Result<()> {
     let state: dmx::SharedState = std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
         initial_state(&configuration),
     ));
+    // One catalog, read by the API and by the outputs. A second copy is a second truth, and the
+    // picker would eventually offer something the compositor could not resolve.
+    let catalog: presentation::SharedCatalog =
+        std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
+            media_library::discover(&configuration.library.root).unwrap_or_default(),
+        ));
 
     // The desk drives the outputs, so the listeners come up before anything presents.
     runtime
         .block_on(async { dmx::spawn(&configuration, state.clone(), shutdown.clone(), started) })?;
 
     if !presentation::needs_a_window(&configuration) {
-        return runtime.block_on(serve_with(configuration, shutdown, Some(state)));
+        return runtime.block_on(serve_with(
+            configuration,
+            shutdown,
+            Some(state),
+            Some(catalog),
+        ));
     }
 
     // The services run on the background runtime; the main thread hosts the outputs. Shutdown
@@ -94,12 +106,14 @@ pub fn run() -> anyhow::Result<()> {
         let configuration = configuration.clone();
         let shutdown = shutdown.clone();
         let state = state.clone();
-        async move { serve_with(configuration, shutdown, Some(state)).await }
+        let catalog = catalog.clone();
+        async move { serve_with(configuration, shutdown, Some(state), Some(catalog)).await }
     });
 
     let presented = presentation::run_event_loop(
         &configuration,
         state,
+        catalog,
         shutdown.clone(),
         diagnostics,
         started,
@@ -128,7 +142,7 @@ pub fn initial_state(configuration: &MediaConfiguration) -> MediaState {
 /// structured path rather than by dropping the process. The caller owns the [`Shutdown`] handle
 /// so an administrative request and an operating-system signal reach the same path.
 pub async fn serve(configuration: MediaConfiguration, shutdown: Shutdown) -> anyhow::Result<()> {
-    serve_with(configuration, shutdown, None).await
+    serve_with(configuration, shutdown, None, None).await
 }
 
 /// The same, sharing state with the outputs when there are any.
@@ -139,6 +153,7 @@ pub async fn serve_with(
     configuration: MediaConfiguration,
     shutdown: Shutdown,
     state: Option<dmx::SharedState>,
+    catalog: Option<presentation::SharedCatalog>,
 ) -> anyhow::Result<()> {
     let resolved = configuration.network.resolved();
     let outputs = configuration.outputs.len();
@@ -154,9 +169,11 @@ pub async fn serve_with(
             &configuration,
         )))
     });
-    let catalog = std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
-        media_library::discover(&configuration.library.root).unwrap_or_default(),
-    ));
+    let catalog = catalog.unwrap_or_else(|| {
+        std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
+            media_library::discover(&configuration.library.root).unwrap_or_default(),
+        ))
+    });
     tracing::info!(
         items = catalog.load().item_count(),
         root = %configuration.library.root.display(),

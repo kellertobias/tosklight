@@ -5,7 +5,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use media_domain::geometry::{Size, layer_transform};
-use media_domain::{LayerState, MasterState, geometry};
+use media_domain::{LayerState, MaskSource, MasterState, geometry};
 
 use crate::gpu::Gpu;
 use crate::texture::SourceTexture;
@@ -22,6 +22,9 @@ pub const PROGRAM_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 pub struct LayerDraw<'a> {
     pub state: &'a LayerState,
     pub source: &'a SourceTexture,
+    /// The layer's mask, when its address resolved to one. A mask that is selected but has not
+    /// loaded is `None`, and a missing mask means no mask — never a black layer.
+    pub mask: Option<&'a SourceTexture>,
 }
 
 #[repr(C)]
@@ -33,10 +36,12 @@ struct LayerUniform {
     output: [f32; 2],
     tint: [f32; 4],
     controls: [f32; 4],
+    mask: [f32; 4],
+    mask_source: [f32; 4],
 }
 
 impl LayerUniform {
-    fn new(layer: &LayerState, source: Size, output: Size) -> Self {
+    fn new(layer: &LayerState, source: Size, output: Size, has_mask: bool) -> Self {
         let transform = layer_transform(layer, source, output);
         let (sin, cos) = transform.rotation_degrees.to_radians().sin_cos();
         Self {
@@ -52,6 +57,24 @@ impl LayerUniform {
                 layer.dimmer,
             ],
             controls: [layer.grayscale, 0.0, 0.0, 0.0],
+            // A mask that is selected but not loaded reports no opacity, so the layer draws
+            // unmasked rather than vanishing while its mask is on its way.
+            mask: [
+                layer.mask.scale_x,
+                layer.mask.scale_y,
+                f32::from(u8::from(layer.mask.invert)),
+                if has_mask && layer.mask.is_active() {
+                    layer.mask.opacity
+                } else {
+                    0.0
+                },
+            ],
+            mask_source: [
+                f32::from(u8::from(layer.mask.source == MaskSource::Alpha)),
+                0.0,
+                0.0,
+                0.0,
+            ],
         }
     }
 }
@@ -61,11 +84,11 @@ impl LayerUniform {
 struct MasterUniform {
     tint: [f32; 4],
     flip: [f32; 2],
-    padding: [f32; 2],
+    mask: [f32; 2],
 }
 
 impl MasterUniform {
-    fn new(master: &MasterState) -> Self {
+    fn new(master: &MasterState, mask: Option<&SourceTexture>) -> Self {
         let (horizontal, vertical) = geometry::flip_signs(master.flip_mirror);
         Self {
             tint: [
@@ -75,7 +98,16 @@ impl MasterUniform {
                 master.dimmer,
             ],
             flip: [horizontal, vertical],
-            padding: [0.0; 2],
+            // The output-level mask is a library mask, so it reads luminance: an operator paints
+            // one in white on black and expects white to pass.
+            mask: [
+                if mask.is_some() && master.has_mask() {
+                    1.0
+                } else {
+                    0.0
+                },
+                0.0,
+            ],
         }
     }
 }
@@ -93,6 +125,9 @@ pub struct Compositor {
     master_pipeline: wgpu::RenderPipeline,
     master_layout: wgpu::BindGroupLayout,
     master_uniform: wgpu::Buffer,
+    /// Stands in wherever a mask is not selected. Opaque white: read as luminance or as alpha it
+    /// says "let everything through", so a shader needs no branch for the common case.
+    no_mask: SourceTexture,
 }
 
 impl Compositor {
@@ -138,6 +173,8 @@ impl Compositor {
         });
 
         let (program, program_view) = program_target(device, size);
+        let no_mask = SourceTexture::solid(gpu, Size::new(1, 1), [255, 255, 255, 255])
+            .expect("a one-pixel white texture is within every adapter's limits");
 
         Self {
             gpu: gpu.clone(),
@@ -159,6 +196,7 @@ impl Compositor {
             master_pipeline,
             master_layout,
             master_uniform,
+            no_mask,
         }
     }
 
@@ -189,6 +227,7 @@ impl Compositor {
         &mut self,
         layers: &[LayerDraw<'_>],
         master: &MasterState,
+        master_mask: Option<&SourceTexture>,
         target: &wgpu::TextureView,
     ) {
         let device = &self.gpu.device;
@@ -221,7 +260,12 @@ impl Compositor {
                 if !layer.state.draws() {
                     continue;
                 }
-                let uniform = LayerUniform::new(layer.state, layer.source.size(), self.size);
+                let uniform = LayerUniform::new(
+                    layer.state,
+                    layer.source.size(),
+                    self.size,
+                    layer.mask.is_some(),
+                );
                 self.gpu.queue.write_buffer(
                     &self.layer_uniforms[index],
                     0,
@@ -237,6 +281,7 @@ impl Compositor {
                     &self.layer_uniforms[index],
                     &layer.source.view,
                     &self.sampler,
+                    &layer.mask.unwrap_or(&self.no_mask).view,
                 );
                 pass.set_bind_group(0, &group, &[]);
                 pass.draw(0..6, 0..1);
@@ -246,7 +291,7 @@ impl Compositor {
         self.gpu.queue.write_buffer(
             &self.master_uniform,
             0,
-            bytemuck::bytes_of(&MasterUniform::new(master)),
+            bytemuck::bytes_of(&MasterUniform::new(master, master_mask)),
         );
         {
             let group = bind_group(
@@ -255,6 +300,7 @@ impl Compositor {
                 &self.master_uniform,
                 &self.program_view,
                 &self.sampler,
+                &master_mask.unwrap_or(&self.no_mask).view,
             );
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("media-master"),
@@ -332,6 +378,17 @@ fn uniform_and_texture_layout(device: &wgpu::Device, label: &str) -> wgpu::BindG
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
             },
+            // The mask. Always bound — a layer without one gets the white stand-in.
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
         ],
     })
 }
@@ -342,6 +399,7 @@ fn bind_group(
     uniform: &wgpu::Buffer,
     texture: &wgpu::TextureView,
     sampler: &wgpu::Sampler,
+    mask: &wgpu::TextureView,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: None,
@@ -358,6 +416,10 @@ fn bind_group(
             wgpu::BindGroupEntry {
                 binding: 2,
                 resource: wgpu::BindingResource::Sampler(sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: wgpu::BindingResource::TextureView(mask),
             },
         ],
     })
@@ -425,7 +487,7 @@ mod tests {
         };
         let source = Size::new(100, 50);
         let output = Size::new(1920, 1080);
-        let uniform = LayerUniform::new(&layer, source, output);
+        let uniform = LayerUniform::new(&layer, source, output, false);
         let transform = layer_transform(&layer, source, output);
 
         assert_eq!(uniform.center, [transform.center.x, transform.center.y]);
@@ -449,7 +511,7 @@ mod tests {
 
     #[test]
     fn the_uniforms_are_the_size_the_shaders_declare() {
-        assert_eq!(std::mem::size_of::<LayerUniform>(), 64);
+        assert_eq!(std::mem::size_of::<LayerUniform>(), 96);
         assert_eq!(std::mem::size_of::<MasterUniform>(), 32);
     }
 
@@ -460,7 +522,7 @@ mod tests {
             dimmer: 0.75,
             ..Default::default()
         };
-        let uniform = MasterUniform::new(&master);
+        let uniform = MasterUniform::new(&master, None);
         assert_eq!(uniform.flip, [-1.0, 1.0]);
         assert_eq!(uniform.tint[3], 0.75);
     }
