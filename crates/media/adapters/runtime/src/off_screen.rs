@@ -189,17 +189,17 @@ mod tests {
     use media_domain::PresentationMode;
 
     fn with(targets: Vec<OutputTarget>) -> MediaConfiguration {
-        let mut configuration = MediaConfiguration::default();
-        configuration.outputs = targets
-            .into_iter()
-            .enumerate()
-            .map(|(index, target)| {
-                let mut output = OutputConfiguration::new(format!("Output {index}"));
-                output.target = target;
-                output
-            })
-            .collect();
-        configuration
+        MediaConfiguration {
+            outputs: targets
+                .into_iter()
+                .enumerate()
+                .map(|(index, target)| OutputConfiguration {
+                    target,
+                    ..OutputConfiguration::new(format!("Output {index}"))
+                })
+                .collect(),
+            ..MediaConfiguration::default()
+        }
     }
 
     #[test]
