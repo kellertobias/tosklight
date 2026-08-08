@@ -35,6 +35,8 @@ enum FromChannel {
     /// Carried whole rather than field by field: the renderer applies every one of them together,
     /// and a message that grows should not need three places changed to reach the render loop.
     Picture(viz_helper::protocol::ToHelper),
+    /// What the operator has selected, which the renderer draws and never decides.
+    Selection(Vec<String>),
     /// The channel ended, with the reason to show.
     Finished(String),
 }
@@ -81,6 +83,8 @@ pub struct HelperSource {
     input: Vec<viz_helper::protocol::PaneInput>,
     /// The operator's picture settings, once the desk has said.
     picture: Option<viz_helper::protocol::ToHelper>,
+    /// What the operator has selected, as the desk last said.
+    selection: Option<Vec<String>>,
 }
 
 impl HelperSource {
@@ -121,6 +125,7 @@ impl HelperSource {
             embedding: None,
             input: Vec::new(),
             picture: None,
+            selection: None,
         })
     }
 
@@ -210,6 +215,12 @@ impl HelperSource {
         self.picture.as_ref()
     }
 
+    /// What the operator has selected, taken once so it is applied when it changes rather than
+    /// rebuilt into a set on every frame.
+    pub fn selection(&mut self) -> Option<Vec<String>> {
+        self.selection.take()
+    }
+
     /// Take the pane input that arrived since the last frame.
     pub fn take_input(&mut self) -> Vec<viz_helper::protocol::PaneInput> {
         std::mem::take(&mut self.input)
@@ -262,6 +273,7 @@ fn read_channel(mut from_desk: impl Read, outbox: &Sender<FromChannel>) {
             })),
             ToHelper::Input { input } => outbox.send(FromChannel::Input(input)),
             picture @ ToHelper::Picture { .. } => outbox.send(FromChannel::Picture(picture)),
+            ToHelper::Selection { fixtures } => outbox.send(FromChannel::Selection(fixtures)),
             // Handled by the channel loop, which turns it into `Finished`.
             ToHelper::Hello { .. } | ToHelper::Shutdown => Ok(()),
         };
@@ -315,6 +327,7 @@ impl SceneProvider for HelperSource {
                 }
                 Ok(FromChannel::Input(input)) => self.input.push(input),
                 Ok(FromChannel::Picture(picture)) => self.picture = Some(picture),
+                Ok(FromChannel::Selection(fixtures)) => self.selection = Some(fixtures),
                 Ok(FromChannel::Finished(reason)) => {
                     self.finished = true;
                     self.connection = ConnectionState::Failed {

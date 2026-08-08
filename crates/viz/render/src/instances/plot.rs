@@ -24,8 +24,14 @@ pub(super) fn push_plot(
         );
     }
 
-    // A drawn plan is read, not admired: a fixture that makes light is drawn in the page's ink,
-    // one that does not is drawn faint, and the light itself is the only thing with a colour.
+    // A drawn plan is read, not admired. The symbols are the quietest thing on it: they say where
+    // the lanterns are, and an operator looking at a plan is looking at where the light is going.
+    // Drawn in the page's full ink they compete with the beams for the eye and win, because there
+    // are far more of them.
+    //
+    // A selected fixture is the exception, and the only one. Selection is the question an operator
+    // asks the plan most often — which of these am I about to change — so it is the one thing
+    // allowed to stand out.
     let fallback = EmitterValues::default();
     let mut makes_light = vec![false; scene.fixtures.len()];
     for emitter in &scene.emitters {
@@ -38,8 +44,15 @@ pub(super) fn push_plot(
 
     for (index, fixture) in scene.fixtures.iter().enumerate() {
         let lights = makes_light.get(index).copied().unwrap_or(false);
-        let ink = if lights { style.ink } else { style.faint_ink };
-        push_symbol(frame, fixture, style, ink, if lights { 1.0 } else { 0.75 });
+        let selected = values.selected_fixtures.contains(&fixture.fixture_id);
+        let (ink, opacity) = if selected {
+            (style.selected_ink, 1.0)
+        } else if lights {
+            (style.symbol_ink, 0.9)
+        } else {
+            (style.faint_ink * 0.7, 0.7)
+        };
+        push_symbol(frame, fixture, style, ink, opacity);
     }
 
     for (index, emitter) in scene.emitters.iter().enumerate() {

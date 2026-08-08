@@ -267,6 +267,12 @@ pub struct FrameStyle {
     pub faint_ink: Vec3,
     /// The one colour every beam is drawn in on a plan.
     pub beam_ink: Vec3,
+    /// Ink for a fixture symbol or outline. Quieter than [`Self::ink`], which is for the things a
+    /// plan is read *for*: a rig has far more lanterns on it than anything else, and drawn at full
+    /// strength they are what the eye lands on instead of the light.
+    pub symbol_ink: Vec3,
+    /// Ink for a fixture the operator has selected — the one thing allowed to stand out.
+    pub selected_ink: Vec3,
     /// Draw each fixture's own model, rather than a box standing where it is.
     pub fixture_models: bool,
     /// Draw an aim guideline for every directional emitter, lit or not.
@@ -289,6 +295,8 @@ impl Default for FrameStyle {
             beam_ink: Vec3::new(1.0, 0.82, 0.25),
             ink: Vec3::splat(0.85),
             faint_ink: Vec3::splat(0.35),
+            symbol_ink: Vec3::splat(0.42),
+            selected_ink: Vec3::new(0.25, 0.6, 1.0),
             fixture_models: true,
             aim_guides: false,
             floor_grid: true,
@@ -309,7 +317,7 @@ pub fn build(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> FrameIn
         push_floor_grid(&mut frame, scene, style);
     }
     scenery::push_scenery(&mut frame, scene, style);
-    push_bodies(&mut frame, scene, &head_angles, style);
+    push_bodies(&mut frame, scene, &head_angles, style, &values.selected_fixtures);
     push_emitters(
         &mut frame,
         scene,
@@ -465,6 +473,7 @@ fn push_bodies(
     scene: &Scene,
     head_angles: &[(f32, f32)],
     style: &FrameStyle,
+    selection: &std::collections::HashSet<viz_scene::uuid::Uuid>,
 ) {
     for (fixture_index, fixture) in scene.fixtures.iter().enumerate() {
         let base = Mat4::from_rotation_translation(fixture.orientation(), fixture.position);
@@ -475,7 +484,13 @@ fn push_bodies(
         // room. It is the fixture's own footprint rather than a token, because an operator judging
         // whether two heads will foul each other needs the box to be the size of the thing.
         if !style.fixture_models {
-            push_box_outline(frame, base * Mat4::from_scale(size), style.ink, 0.9);
+            let selected = selection.contains(&fixture.fixture_id);
+            let (ink, opacity) = if selected {
+                (style.selected_ink, 1.0)
+            } else {
+                (style.symbol_ink, 0.75)
+            };
+            push_box_outline(frame, base * Mat4::from_scale(size), ink, opacity);
             continue;
         }
         // A fixture whose profile carries a model is drawn as that model. The proxy shapes below

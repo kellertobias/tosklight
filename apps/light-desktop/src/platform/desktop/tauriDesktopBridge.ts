@@ -126,6 +126,8 @@ export const tauriDesktopBridge: DesktopBridge = {
 	hideConsoleScreen: (screenId) => invoke("hide_console_screen", { screenId }),
 	closeConsoleScreen: (screenId) =>
 		invoke("close_console_screen", { screenId }),
+	setStagePaneSelection: (fixtures) =>
+		invoke("set_stage_pane_selection", { fixtures }),
 	stagePaneAvailable: async () => {
 		const api = await coreApi();
 		return api.invoke<boolean>("stage_pane_available");

@@ -102,6 +102,8 @@ export interface DesktopBridge {
 	sendStagePaneInput(gesture: StagePaneGesture, x: number, y: number): Promise<void>;
 	/** The picture settings, which belong to the renderer drawing the pane rather than the desk. */
 	setStagePanePicture(picture: StagePanePicture): Promise<void>;
+	/** What the operator has selected, which the renderer draws and never decides. */
+	setStagePaneSelection(fixtures: string[]): Promise<void>;
 	/** What is drawing the pane, and whatever last went wrong with it. */
 	stagePaneStatus(): Promise<[string | null, string | null]>;
 	/**

@@ -33,6 +33,7 @@ fn main() {
             stage_pane::close_stage_pane,
             stage_pane::stage_pane_input,
             stage_pane::set_stage_pane_picture,
+            stage_pane::set_stage_pane_selection,
             stage_pane::stage_pane_status,
             stage_pane::take_stage_pane_picks,
             stage_pane::stage_pane_camera,

@@ -401,6 +401,29 @@ impl Theme {
         }
     }
 
+    /// Ink for a fixture symbol or outline.
+    ///
+    /// Quieter than [`Self::ink`]. A rig has far more lanterns on it than anything else in the
+    /// picture, and drawn at full strength they are what the eye lands on instead of the light —
+    /// which is the one thing an operator opened the view to look at.
+    pub fn symbol_ink(self) -> [f32; 3] {
+        match self {
+            Self::LightOnDark => [0.40, 0.44, 0.50],
+            Self::DarkOnLight => [0.45, 0.48, 0.53],
+        }
+    }
+
+    /// Ink for a fixture the operator has selected — the one thing allowed to stand out.
+    ///
+    /// Blue rather than a brighter grey, because "which of these am I about to change" has to be
+    /// answerable at a glance and across a rig where every other symbol is the same shape.
+    pub fn selected_ink(self) -> [f32; 3] {
+        match self {
+            Self::LightOnDark => [0.25, 0.62, 1.0],
+            Self::DarkOnLight => [0.05, 0.35, 0.85],
+        }
+    }
+
     /// Ink for the fixture number and its patch address.
     pub fn label_ink(self) -> [f32; 3] {
         match self {

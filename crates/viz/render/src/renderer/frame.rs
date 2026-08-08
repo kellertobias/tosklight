@@ -147,6 +147,8 @@ impl Renderer {
             beam_ink: Vec3::from(view.theme.beam_ink()),
             ink: Vec3::from(view.theme.ink()),
             faint_ink: Vec3::from(view.theme.faint_ink()),
+            symbol_ink: Vec3::from(view.theme.symbol_ink()),
+            selected_ink: Vec3::from(view.theme.selected_ink()),
             fixture_models: view.mode.draws_fixture_models(),
             aim_guides: view.mode.always_draws_aim_guides(),
             // The grid is a ground reference for a picture with a ground in it. A plan already

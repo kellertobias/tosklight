@@ -901,3 +901,72 @@ mod floor_grid {
         );
     }
 }
+
+/// Selection is the question an operator asks a Stage most often — which of these am I about to
+/// change — so it is the one thing allowed to stand out, and it has to be told rather than guessed.
+mod selection {
+    use super::*;
+
+    fn outline_style() -> FrameStyle {
+        FrameStyle {
+            draw_beams: false,
+            fixture_models: false,
+            floor_grid: false,
+            ..FrameStyle::default()
+        }
+    }
+
+    #[test]
+    fn a_selected_fixture_is_drawn_in_the_selection_ink_and_the_rest_are_not() {
+        let mut scene = Scene::default();
+        let mut chosen = fixture();
+        chosen.fixture_id = viz_scene::uuid::Uuid::from_u128(7);
+        chosen.position = Vec3::ZERO;
+        let mut other = fixture();
+        other.fixture_id = viz_scene::uuid::Uuid::from_u128(8);
+        other.position = Vec3::new(5.0, 0.0, 0.0);
+        scene.fixtures.push(chosen);
+        scene.fixtures.push(other);
+
+        let mut values = SceneValues::default();
+        values.resize(0);
+        values
+            .selected_fixtures
+            .insert(viz_scene::uuid::Uuid::from_u128(7));
+
+        let style = outline_style();
+        let frame = build(&scene, &values, &style);
+        let inks: Vec<Vec3> = frame
+            .lines
+            .iter()
+            .map(|vertex| Vec3::from_slice(&vertex.colour[..3]))
+            .collect();
+        assert!(
+            inks.iter()
+                .any(|ink| (*ink - style.selected_ink).length() < 1e-5),
+            "the selected fixture is drawn in the selection ink"
+        );
+        assert!(
+            inks.iter()
+                .any(|ink| (*ink - style.symbol_ink).length() < 1e-5),
+            "and the unselected one is not"
+        );
+    }
+
+    /// Nothing selected means nothing stands out, rather than everything doing.
+    #[test]
+    fn with_nothing_selected_no_fixture_takes_the_selection_ink() {
+        let mut scene = Scene::default();
+        scene.fixtures.push(fixture());
+        let values = SceneValues::default();
+
+        let style = outline_style();
+        let frame = build(&scene, &values, &style);
+        assert!(
+            frame.lines.iter().all(|vertex| {
+                (Vec3::from_slice(&vertex.colour[..3]) - style.selected_ink).length() > 1e-4
+            }),
+            "no selection, no selection ink"
+        );
+    }
+}

@@ -78,6 +78,7 @@ export function controllableBrowserDesktopBridge(
 		closeStagePane: async () => undefined,
 		sendStagePaneInput: async () => undefined,
 		setStagePanePicture: async () => undefined,
+		setStagePaneSelection: async () => undefined,
 		stagePaneStatus: async () => [null, null],
 		takeStagePanePicks: async () => [],
 		stagePaneCamera: async () => null,

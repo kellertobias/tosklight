@@ -274,6 +274,15 @@ impl StagePane {
         Ok(())
     }
 
+    /// Tell the renderer what the operator has selected, so it can draw it.
+    pub(crate) fn send_selection(&self, fixtures: Vec<String>) -> Result<(), String> {
+        let mut guard = self.inner.lock().map_err(|_| "the Stage pane")?;
+        if let Some(running) = guard.as_mut() {
+            running.send(&ToHelper::Selection { fixtures });
+        }
+        Ok(())
+    }
+
     /// Send the operator's picture settings on to the renderer, which owns this picture.
     pub(crate) fn send_picture(&self, picture: Picture) -> Result<(), String> {
         let mut guard = self.inner.lock().map_err(|_| "the Stage pane")?;
@@ -805,6 +814,15 @@ pub(crate) struct Picture {
     /// Which way the Stage is being looked at, as the web layer names it.
     mode: String,
     follow_preload: bool,
+}
+
+/// What the operator has selected, for the renderer to draw.
+#[tauri::command]
+pub(crate) fn set_stage_pane_selection(
+    pane: tauri::State<'_, StagePane>,
+    fixtures: Vec<String>,
+) -> Result<(), String> {
+    pane.send_selection(fixtures)
 }
 
 #[tauri::command]

@@ -23,6 +23,14 @@ pub struct SceneValues {
     /// Receive timestamp of the newest input frame folded into these values, in monotonic
     /// microseconds since the renderer started. Used for packet-to-visible latency.
     pub newest_input_micros: u64,
+    /// Which fixtures the operator has selected.
+    ///
+    /// Live state rather than scene structure, which is why it sits here: a selection changes
+    /// several times a second while an operator works and the rig it refers to does not change at
+    /// all. The renderer draws it and never decides it — what is selected is the desk's, and a
+    /// renderer holding its own idea of it would be a second answer to the one question an
+    /// operator has to be able to trust.
+    pub selected_fixtures: std::collections::HashSet<uuid::Uuid>,
 }
 
 impl SceneValues {

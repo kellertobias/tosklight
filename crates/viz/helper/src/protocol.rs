@@ -157,6 +157,11 @@ pub enum ToHelper {
         /// Draw what the operator has preloaded, over what is currently lit.
         follow_preload: bool,
     },
+    /// Which fixtures the operator has selected, as the desk knows it.
+    ///
+    /// Sent rather than inferred. The renderer resolves what is under a pointer and reports it;
+    /// what that means for the selection is the desk's, so the answer comes back the same way.
+    Selection { fixtures: Vec<String> },
     /// Pointer and camera intent picked up by the web layer over the pane.
     ///
     /// A `WKWebView` on top of a native surface wins AppKit hit-testing whatever CSS says, so pane

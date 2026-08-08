@@ -2519,6 +2519,24 @@ textarea,
 }
 
 /*
+ * The hole has to go all the way down.
+ *
+ * The renderer's picture is composited *under* the whole webview, so it is visible only where
+ * every layer above it paints nothing — the pane, its content box and the Stage window itself,
+ * not just the canvas element. While the desk drew its own Stage this never showed, because the
+ * web canvas painted an opaque background of its own at the bottom of the stack and whatever sat
+ * behind it did not matter.
+ */
+.desk-pane:has(.stage-canvas-3d[data-stage-renderer="native"]),
+.desk-pane:has(.stage-canvas-3d[data-stage-renderer="native"]) .pane-content,
+.desk-pane:has(.stage-canvas-3d[data-stage-renderer="native"]) .stage-window,
+.screen-shell:has(.stage-canvas-3d[data-stage-renderer="native"]) .stage-window,
+.stage-window:has(.stage-canvas-3d[data-stage-renderer="native"]) {
+	background: transparent;
+	background-image: none;
+}
+
+/*
  * What a screen that cannot draw a Stage says.
  *
  * Stated rather than left blank, and stated in terms of what is unaffected: an operator who opens

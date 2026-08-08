@@ -1,6 +1,7 @@
 import { NativeStageSurface } from "./NativeStageSurface";
 import { useNativeStagePane } from "./useNativeStagePane";
 import { useStagePanePicks } from "./useStagePanePicks";
+import { useStagePaneSelection } from "./useStagePaneSelection";
 import { stageViewMode, useStagePanePicture } from "./useStagePanePicture";
 import type { StageOptionsModel } from "./types";
 import type { StageSelectionModel } from "./useStageSelection";
@@ -44,6 +45,8 @@ export function StageRendererView({
 	 * gesture applied to it is the same one every other selection surface applies.
 	 */
 	useStagePanePicks(pane, selection, interactive);
+	// And the answer goes back, so the renderer can draw what the desk decided was selected.
+	useStagePaneSelection(pane, selection);
 	// The picture settings cross when the renderer starts, not only when one is moved.
 	useStagePanePicture(
 		pane,
