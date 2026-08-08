@@ -143,3 +143,50 @@ mod tests {
         assert_eq!(MediaAddress::new(7, 12).to_string(), "007/012");
     }
 }
+
+/// Stable identity of one library asset.
+///
+/// Distinct from a [`MediaAddress`]: the address is where a desk points, and reindexing moves it.
+/// The identity follows the asset through renames, moves, and reindexing, which is what caches,
+/// playback sessions, and the catalog key on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct AssetId(uuid::Uuid);
+
+impl AssetId {
+    pub fn new() -> Self {
+        Self(uuid::Uuid::new_v4())
+    }
+
+    pub const fn from_uuid(value: uuid::Uuid) -> Self {
+        Self(value)
+    }
+
+    pub const fn as_uuid(&self) -> uuid::Uuid {
+        self.0
+    }
+}
+
+impl Default for AssetId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Display for AssetId {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.0)
+    }
+}
+
+#[cfg(test)]
+mod asset_identity_tests {
+    use super::*;
+
+    #[test]
+    fn an_asset_identity_is_independent_of_where_a_desk_points_at_it() {
+        let asset = AssetId::new();
+        assert_ne!(asset, AssetId::new());
+        assert_eq!(AssetId::from_uuid(asset.as_uuid()), asset);
+    }
+}

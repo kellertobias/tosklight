@@ -42,6 +42,34 @@ impl Default for LibraryConfiguration {
     }
 }
 
+/// Playback settings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PlaybackConfiguration {
+    /// How much memory resident clips may occupy.
+    ///
+    /// A show must not depend on how fast a disk feels tonight: once a clip is resident, playback
+    /// reads it from memory and never touches storage again. Frames stay Snappy-compressed in
+    /// memory, so this budget holds two to sixteen times more clip than its uncompressed size
+    /// suggests.
+    #[serde(default = "default_cache_budget")]
+    pub cache_budget_bytes: u64,
+}
+
+/// Two gibibytes. Enough for several minutes of 1080p at measured rates, and small enough not to
+/// crowd out a modest machine. Operators with more memory raise it; a Raspberry Pi lowers it.
+const fn default_cache_budget() -> u64 {
+    2 * 1024 * 1024 * 1024
+}
+
+impl Default for PlaybackConfiguration {
+    fn default() -> Self {
+        Self {
+            cache_budget_bytes: default_cache_budget(),
+        }
+    }
+}
+
 /// How the operator picked an audio input.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "by", content = "value")]
@@ -101,6 +129,14 @@ mod tests {
         let library = LibraryConfiguration::default();
         assert_eq!(library.root, PathBuf::from("media"));
         assert_eq!(library.target_codec, TargetCodec::H264);
+    }
+
+    #[test]
+    fn the_default_cache_budget_is_two_gibibytes() {
+        assert_eq!(
+            PlaybackConfiguration::default().cache_budget_bytes,
+            2 * 1024 * 1024 * 1024
+        );
     }
 
     #[test]

@@ -16,7 +16,10 @@ pub use network::{
     ART_NET_PORT, CITP_PORT, HTTP_PORT, LOOPBACK, NetworkConfiguration, ResolvedNetwork, SACN_PORT,
 };
 pub use output::{CitpIdentity, DmxProtocol, OutputConfiguration, OutputTarget, Resolution};
-pub use service::{AudioConfiguration, AudioDeviceSelector, LibraryConfiguration, TargetCodec};
+pub use service::{
+    AudioConfiguration, AudioDeviceSelector, LibraryConfiguration, PlaybackConfiguration,
+    TargetCodec,
+};
 pub use validate::ConfigurationError;
 
 use media_domain::OutputId;
@@ -61,6 +64,8 @@ pub struct MediaConfiguration {
     pub library: LibraryConfiguration,
     #[serde(default)]
     pub audio: AudioConfiguration,
+    #[serde(default)]
+    pub playback: PlaybackConfiguration,
     /// One or more logical outputs. The first release ships one; the collection is never
     /// collapsed into singleton state.
     pub outputs: Vec<OutputConfiguration>,
@@ -73,6 +78,7 @@ impl Default for MediaConfiguration {
             network: NetworkConfiguration::default(),
             library: LibraryConfiguration::default(),
             audio: AudioConfiguration::default(),
+            playback: PlaybackConfiguration::default(),
             outputs: vec![OutputConfiguration::new("Main")],
         }
     }

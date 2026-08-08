@@ -27,7 +27,7 @@ pub mod state;
 pub mod tempo;
 pub mod timeline;
 
-pub use address::{AddressClass, MediaAddress};
+pub use address::{AddressClass, AssetId, MediaAddress};
 pub use clock::{MeasuredCadence, RenderClock};
 pub use color::{FlipMirror, Tint};
 pub use command::{Command, CommandKind, CommandSource, ControlOwnership, Timestamp};
