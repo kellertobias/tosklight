@@ -60,22 +60,54 @@ pub fn apply(scene: &Scene, preload: &[PreloadValue], values: &mut SceneValues) 
 /// Put one named attribute onto one emitter. False for a name this renderer has no parameter for,
 /// which is not a fault: a preload can name anything a fixture has, and what it draws with is a
 /// smaller set than what a desk can control.
+///
+/// The names are the desk's own, from the attribute reference: `pan`, `tilt`, `zoom`, `iris`,
+/// `softness`, `gobo.1`. They are not spelled the way this renderer's own parameters are, and the
+/// difference is the whole reason a preload used to arrive and do nothing — every name but
+/// `intensity` and the three colour mixers fell through to `false`.
 fn set(emitter: &mut EmitterValues, attribute: &str, value: f32) -> bool {
     let value = value.clamp(0.0, 1.0);
     match attribute {
-        "intensity" => emitter.intensity = value,
+        // A preloaded level is what the fixture is about to be at, so the level an observer is
+        // still seeing comes with it. Left behind, the persistence-of-vision level holds the
+        // fixture at what it was last actually lit at and the preload never shows.
+        "intensity" => {
+            emitter.intensity = value;
+            emitter.held_intensity = value;
+        }
         "color.red" => emitter.colour[0] = value,
         "color.green" => emitter.colour[1] = value,
         "color.blue" => emitter.colour[2] = value,
-        "position.pan" => emitter.pan = value,
-        "position.tilt" => emitter.tilt = value,
-        "beam.zoom" => emitter.zoom = value,
-        "beam.iris" => emitter.iris = value,
-        "beam.frost" => emitter.frost = value,
-        "beam.focus" => emitter.focus = value,
-        "beam.gobo" => emitter.gobo = value,
-        "beam.gobo_rotation" => emitter.gobo_rotation = value.mul_add(2.0, -1.0),
-        "beam.prism" => emitter.prism = value,
+        // Additive emitters the renderer has no separate channel for still carry light, and a
+        // preload that names one is saying the fixture is about to be brighter in that direction.
+        "color.white" => {
+            emitter.colour = [
+                emitter.colour[0].max(value),
+                emitter.colour[1].max(value),
+                emitter.colour[2].max(value),
+            ];
+        }
+        "color.amber" | "color.warm_white" => {
+            emitter.colour[0] = emitter.colour[0].max(value);
+            emitter.colour[1] = emitter.colour[1].max(value * 0.75);
+        }
+        // Subtractive filtration is the complement of the mixer it sits in front of.
+        "color.cyan" => emitter.colour[0] = 1.0 - value,
+        "color.magenta" => emitter.colour[1] = 1.0 - value,
+        "color.yellow" => emitter.colour[2] = 1.0 - value,
+        "pan" => emitter.pan = value,
+        "tilt" => emitter.tilt = value,
+        "zoom" => emitter.zoom = value,
+        "iris" => emitter.iris = value,
+        // The desk calls the fixture's primary diffusion Softness, whichever mechanism the profile
+        // chose for it; this renderer draws all of them as frost.
+        "softness" | "frost" | "frost.1" | "beam.edge" => emitter.frost = value,
+        "focus" => emitter.focus = value,
+        "gobo.1" => emitter.gobo = value,
+        "gobo.1.rotation" => emitter.gobo_rotation = value.mul_add(2.0, -1.0),
+        "prism" | "prism.1" => emitter.prism = value,
+        "prism.1.rotation" => emitter.prism_rotation = value.mul_add(2.0, -1.0),
+        "shutter" => emitter.shutter = value,
         _ => return false,
     }
     true
@@ -186,10 +218,12 @@ mod tests {
         apply(
             &scene,
             &[
-                preload("position.pan", 0.8),
-                preload("position.tilt", 0.2),
-                preload("beam.zoom", 0.6),
-                preload("beam.gobo", 0.4),
+                preload("pan", 0.8),
+                preload("tilt", 0.2),
+                preload("zoom", 0.6),
+                preload("gobo.1", 0.4),
+                preload("iris", 0.3),
+                preload("softness", 0.7),
                 preload("color.red", 1.0),
             ],
             &mut values,
@@ -199,7 +233,68 @@ mod tests {
         assert!((lit.tilt - 0.2).abs() < 0.001);
         assert!((lit.zoom - 0.6).abs() < 0.001);
         assert!((lit.gobo - 0.4).abs() < 0.001, "and through what it will");
+        assert!((lit.iris - 0.3).abs() < 0.001);
+        assert!((lit.frost - 0.7).abs() < 0.001);
         assert!((lit.colour[0] - 1.0).abs() < 0.001);
+    }
+
+    /// The names have to be the desk's own, from the attribute reference, and nothing else.
+    ///
+    /// This is what the overlay got wrong: it matched names of its own invention, so a preload
+    /// arrived intact, matched nothing but `intensity`, and drew a rig that had not moved. A test
+    /// spelling the attributes the same wrong way agreed with it.
+    #[test]
+    fn the_desk_attribute_names_are_the_ones_that_land() {
+        let (scene, first, _) = scene_with_two_fixtures();
+        for attribute in [
+            "intensity",
+            "pan",
+            "tilt",
+            "zoom",
+            "iris",
+            "focus",
+            "softness",
+            "gobo.1",
+            "gobo.1.rotation",
+            "shutter",
+            "color.red",
+            "color.green",
+            "color.blue",
+            "color.white",
+            "color.cyan",
+        ] {
+            let mut values = values_for(&scene);
+            let changed = apply(
+                &scene,
+                &[PreloadValue {
+                    fixture_id: first,
+                    attribute: attribute.to_owned(),
+                    value: 0.5,
+                }],
+                &mut values,
+            );
+            assert_eq!(changed, 1, "`{attribute}` is one the renderer draws with");
+        }
+    }
+
+    /// A preloaded level has to survive persistence of vision, which otherwise holds the fixture
+    /// at whatever it was last actually lit at and hides the preload entirely.
+    #[test]
+    fn a_preloaded_level_comes_up_through_the_held_level() {
+        let (scene, first, _) = scene_with_two_fixtures();
+        let mut values = values_for(&scene);
+        values.emitters[0].intensity = 0.0;
+        values.emitters[0].held_intensity = 0.9;
+        apply(
+            &scene,
+            &[PreloadValue {
+                fixture_id: first,
+                attribute: "intensity".to_owned(),
+                value: 0.2,
+            }],
+            &mut values,
+        );
+        assert!((values.emitters[0].held_intensity - 0.2).abs() < 0.001);
     }
 
     /// A desk can control more than a renderer draws with. Naming one of those is not a fault, and
