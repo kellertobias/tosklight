@@ -65,7 +65,11 @@ export function StageRendererView({
 			 * nobody has measured — waiting for the renderer to mount it would be waiting for
 			 * something that could then never happen.
 			 */}
-			<NativeStageSurface pane={pane} interactive={interactive} />
+			<NativeStageSurface
+				pane={pane}
+				interactive={interactive}
+				plan={options.view === "2d"}
+			/>
 			{active && !pane.active && (
 				<div className="stage-unavailable" role="status">
 					<strong>No Stage on this screen</strong>

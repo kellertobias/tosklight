@@ -56,6 +56,7 @@ export type StagePaneGesture =
 	| "truck"
 	| "fly"
 	| "zoom"
+	| "frame"
 	| "pick"
 	| "pick-add";
 

@@ -313,6 +313,10 @@ impl PaneState {
          * orthographic camera is the size of the window onto the world rather than the distance to
          * it; moving the camera nearer changes nothing an orthographic projection can see.
          */
+        if let PaneInput::Frame = input {
+            self.frame_rig();
+            return None;
+        }
         if self.view.mode.is_plot() {
             return self.apply_to_plan(input);
         }
@@ -367,9 +371,9 @@ impl PaneState {
                 let scaled = (distance * (0.9_f32).powf(amount)).clamp(0.05, 5_000.0);
                 camera.position = camera.target + to_eye.normalize_or_zero() * scaled;
             }
-            // Answered above, before the camera is touched: pointing at a fixture must not move
-            // the view the operator is pointing with.
-            PaneInput::Pick { .. } => {}
+            // Both answered above, before the camera is touched: pointing at a fixture must not
+            // move the view the operator is pointing with, and framing is not a camera gesture.
+            PaneInput::Pick { .. } | PaneInput::Frame => {}
             PaneInput::Place {
                 x,
                 y,
@@ -430,6 +434,15 @@ impl PaneState {
         }
     }
 
+    /// Put the camera where the view says it belongs, framing the whole rig.
+    ///
+    /// This is what Reset view does, and it deliberately gives the camera back: an operator asking
+    /// to reset is asking to undo their own aiming, so the pane stops counting as locally aimed.
+    fn frame_rig(&mut self) {
+        self.camera_is_local = false;
+        self.view.camera = viz_scene::Camera::framed(self.view.mode, self.scene.bounds);
+    }
+
     /// Frame the rig, while the operator has not aimed this pane themselves.
     ///
     /// The picture settings and the rig arrive on separate channels and in no fixed order, so a
@@ -468,6 +481,7 @@ impl PaneState {
                 camera.orthographic_size =
                     (camera.orthographic_size * (0.9_f32).powf(amount)).clamp(0.2, 500.0);
             }
+            PaneInput::Frame => self.frame_rig(),
             // A plan is square on by construction. Nothing here may turn it.
             PaneInput::Orbit { .. } | PaneInput::Fly { .. } => {}
             PaneInput::Pick { .. } | PaneInput::Place { .. } => {}

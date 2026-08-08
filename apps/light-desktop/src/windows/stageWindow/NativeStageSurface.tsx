@@ -24,9 +24,12 @@ const FLY_STEP = 0.35;
 export function NativeStageSurface({
 	pane,
 	interactive = true,
+	plan = false,
 }: {
 	pane: NativeStagePane;
 	interactive?: boolean;
+	/** A plan view, which slides rather than orbits. */
+	plan?: boolean;
 }) {
 	const dragging = useRef<{ x: number; y: number; button: number } | null>(null);
 	/** How far the pointer travelled, so a drag to aim the camera is not read as a click to select. */
@@ -63,14 +66,21 @@ export function NativeStageSurface({
 				travelled.current += Math.abs(dx) + Math.abs(dy);
 				dragging.current = { ...drag, x: event.clientX, y: event.clientY };
 				/*
-				 * The primary button orbits, which is what the desk's own 3D Stage does, so an
-				 * operator moving between the two renderers does not have to learn the pane twice.
-				 * The middle and secondary buttons are what the pane adds: the middle walks the
-				 * camera across its own axes and leaves what it looks at alone, the secondary
-				 * slides both together so the picture translates without turning.
+				 * In a 3D view the primary button orbits, the middle walks the camera across its own
+				 * axes and leaves what it looks at alone, and the secondary slides both together so
+				 * the picture translates without turning.
+				 *
+				 * A plan has nothing to orbit, so the primary button slides it instead. Leaving
+				 * orbit on the primary there meant the button an operator reaches for first did
+				 * nothing at all, on the one view where sliding is the only thing to do.
 				 */
-				const gesture =
-					drag.button === 1 ? "truck" : drag.button === 2 ? "pan" : "orbit";
+				const gesture = plan
+					? "pan"
+					: drag.button === 1
+						? "truck"
+						: drag.button === 2
+							? "pan"
+							: "orbit";
 				pane.send(gesture, dx, dy);
 			}}
 			onPointerUp={(event) => {

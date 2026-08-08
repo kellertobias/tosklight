@@ -225,6 +225,12 @@ pub enum PaneInput {
     Truck { dx: f32, dy: f32 },
     /// Toward or away from the point being looked at, in wheel notches; positive moves in.
     Zoom { amount: f32 },
+    /// Put the camera back where the view itself says it belongs, framing the whole rig.
+    ///
+    /// The renderer does this rather than the desk sending coordinates, because only the renderer
+    /// knows how big the rig is — a desk naming a position would be guessing at the one number the
+    /// answer depends on.
+    Frame,
     /// Walk the camera and what it looks at together, along the view's own forward and right axes,
     /// in metres. What the keyboard drives, where a mouse drives the gestures above.
     Fly { forward: f32, right: f32 },

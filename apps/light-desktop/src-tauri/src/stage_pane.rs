@@ -791,6 +791,7 @@ pub(crate) fn stage_pane_input(
             right: x,
         },
         "zoom" => PaneInput::Zoom { amount: y },
+        "frame" => PaneInput::Frame,
         other => return Err(format!("no such pane gesture: {other}")),
     };
     pane.send_input(input)
