@@ -29,7 +29,7 @@ fixture evidence, any deliberate difference, the target commit, and who accepted
 | --- | --- | --- | --- | --- | --- | --- |
 | Phase 0 — freeze scope | — | [`docs/engineering/media-legacy-inventory.md`](media-legacy-inventory.md) | — | — | see branch history | pending review |
 | Phase 2 — skeleton and seams | `Config.h` | `media-domain`, `media-application`, `media-runtime`, `media-server` | `migration::tests` over the `media/.info` document | Configuration becomes a versioned document with an `outputs` collection; a migrated output keeps `V1Legacy` rather than being silently renumbered to the v2 personality | see branch history | pending review |
-| Slice 1 — pure domain | `StateStore.h`, `DmxMap.*`, `DmxConstants.h` | — | — | — | — | — |
+| Slice 1 — pure domain | `StateStore.h` (`LayerState`, `MasterState`, `AppState`), `DmxMap.*`, `DmxConstants.h` | `media_domain::{address, color, command, dmx, layer, master, personality, playback, speed, state, tempo}` | `personality::decode::tests` over synthesized 512-slot universes; boundary tests over all 256 values of every enumerated channel | v2 personality: 34-slot layers (was 32), Reverse added, Loop/Bounce/Once ranges renumbered, Once subdivided into Hold/Black/Transparent, both mask axes 16-bit, speed multiplier and Playback BPM channels added; `paused` and `black` removed; layer count explicit instead of `fullMode`; the reducer is the single writer with typed control-source ownership | see branch history | pending review |
 | Slice 2 — renderer and one output | `Renderer.*`, `ofApp.*` | — | — | — | — | — |
 | Slice 3 — video playback | video/image playback logic | — | — | — | — | — |
 | Slice 4 — catalog and ingestion | `MediaResolver.*`, `MediaIngester.*` | — | — | — | — | — |

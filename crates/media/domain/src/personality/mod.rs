@@ -7,6 +7,12 @@
 //! The full per-channel table lands with the domain slice; this module owns the sizes and the
 //! one-universe constraint that configuration validates at startup.
 
+pub mod channels;
+pub mod decode;
+
+pub use channels::{ChannelSpec, LAYER_CHANNELS, MASTER_CHANNELS, Resolution};
+pub use decode::{DecodedFrame, FrameError};
+
 use serde::{Deserialize, Serialize};
 
 /// Slots one layer occupies in the v2 personality.
