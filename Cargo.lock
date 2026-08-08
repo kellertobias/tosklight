@@ -3759,6 +3759,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "media-http"
+version = "0.1.0"
+dependencies = [
+ "arc-swap",
+ "axum",
+ "http-body-util",
+ "media-application",
+ "media-domain",
+ "serde",
+ "serde_ignored",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "media-library"
 version = "0.1.0"
 dependencies = [
