@@ -11,6 +11,7 @@ authors.workspace = true
 media-codec = { path = "../codec" }
 media-domain = { path = "../../domain" }
 thiserror.workspace = true
+uuid.workspace = true
 tracing.workspace = true
 
 [lints]

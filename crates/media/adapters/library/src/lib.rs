@@ -7,8 +7,12 @@
 //! for itself, so nothing can disagree about what the library contains.
 
 pub mod discovery;
+pub mod jobs;
 pub mod naming;
 pub mod storage;
+pub mod thumbnails;
 
 pub use discovery::{DiscoveryError, discover};
+pub use jobs::{ImportQueue, Job, JobId, JobState};
 pub use storage::{LibraryStorage, StorageError};
+pub use thumbnails::ThumbnailError;
