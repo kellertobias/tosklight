@@ -127,6 +127,7 @@ fn jpeg_size(jpeg: &[u8]) -> Option<(u16, u16)> {
 #[derive(Clone)]
 struct Service {
     name: String,
+    preview: crate::preview::SharedPreview,
     state: SharedState,
     catalog: SharedCatalog,
     storage: media_library::LibraryStorage,
@@ -194,10 +195,12 @@ pub fn spawn(
     configuration: &MediaConfiguration,
     state: SharedState,
     catalog: SharedCatalog,
+    preview: crate::preview::SharedPreview,
     shutdown: Shutdown,
 ) {
     let service = Service {
         name: format!("ToskLight Media — {}", configuration.instance_id.as_str()),
+        preview,
         state,
         catalog,
         storage: media_library::LibraryStorage::new(configuration.library.root.clone()),
@@ -296,6 +299,10 @@ async fn serve_console(
     }
 
     let mut status = tokio::time::interval(STATUS_INTERVAL);
+    // What this connection last told the outputs it wanted, so a change is reported once rather
+    // than every tick.
+    let mut subscribed = false;
+    let mut sent_sequence = 0u64;
     let mut watcher = shutdown.watcher();
     let mut stopping = Box::pin(watcher.wait());
 
@@ -339,9 +346,33 @@ async fn serve_console(
                 {
                     return;
                 }
+
+                let now = started.elapsed().as_millis() as u64;
+                let wanted = sessions.anyone_subscribed(now);
+                if wanted != subscribed {
+                    subscribed = wanted;
+                    service.preview.subscribed(wanted, sessions.requested_size(now));
+                }
+
+                // A frame is sent only when there is a new one: a console asked for ten a second,
+                // not for the same picture sixty times.
+                if let Some((sequence, frame)) = service.preview.latest()
+                    && sequence != sent_sequence
+                {
+                    sent_sequence = sequence;
+                    for message in sessions.frames_for(&frame, sequence, now) {
+                        if stream.write_all(&message).await.is_err() {
+                            return;
+                        }
+                    }
+                }
             }
             _ = &mut stopping => return,
         }
+    }
+    if subscribed {
+        // A console that closed without unsubscribing must not leave the outputs capturing.
+        service.preview.subscribed(false, None);
     }
     tracing::info!(%peer, "a console disconnected");
 }

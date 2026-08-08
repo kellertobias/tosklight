@@ -288,42 +288,71 @@ impl Compositor {
             }
         }
 
+        self.master_pass(&mut encoder, master, master_mask, target);
+        self.gpu.queue.submit([encoder.finish()]);
+    }
+
+    /// Runs the master pass again into a second target.
+    ///
+    /// This is how a CITP preview is taken: the composite is already on the GPU, so a smaller
+    /// target gives a filtered scale-down for free rather than costing a CPU resample of a
+    /// full-size readback. It happens only when a console is subscribed.
+    pub fn render_master_into(
+        &mut self,
+        master: &MasterState,
+        master_mask: Option<&SourceTexture>,
+        target: &wgpu::TextureView,
+    ) {
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("media-preview"),
+            });
+        self.master_pass(&mut encoder, master, master_mask, target);
+        self.gpu.queue.submit([encoder.finish()]);
+    }
+
+    fn master_pass(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        master: &MasterState,
+        master_mask: Option<&SourceTexture>,
+        target: &wgpu::TextureView,
+    ) {
+        let device = &self.gpu.device;
         self.gpu.queue.write_buffer(
             &self.master_uniform,
             0,
             bytemuck::bytes_of(&MasterUniform::new(master, master_mask)),
         );
-        {
-            let group = bind_group(
-                device,
-                &self.master_layout,
-                &self.master_uniform,
-                &self.program_view,
-                &self.sampler,
-                &master_mask.unwrap_or(&self.no_mask).view,
-            );
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("media-master"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(&self.master_pipeline);
-            pass.set_bind_group(0, &group, &[]);
-            pass.draw(0..6, 0..1);
-        }
-
-        self.gpu.queue.submit([encoder.finish()]);
+        let group = bind_group(
+            device,
+            &self.master_layout,
+            &self.master_uniform,
+            &self.program_view,
+            &self.sampler,
+            &master_mask.unwrap_or(&self.no_mask).view,
+        );
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("media-master"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&self.master_pipeline);
+        pass.set_bind_group(0, &group, &[]);
+        pass.draw(0..6, 0..1);
     }
 }
 

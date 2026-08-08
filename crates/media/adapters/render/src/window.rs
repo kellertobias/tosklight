@@ -66,6 +66,9 @@ pub struct WindowedOutput {
     configuration: wgpu::SurfaceConfiguration,
     compositor: Compositor,
     clock: RenderClock,
+    /// Built the first time a console subscribes to a preview, and only then: an output nobody is
+    /// watching must not pay for a second target.
+    preview: Option<crate::OffScreenOutput>,
 }
 
 impl WindowedOutput {
@@ -105,6 +108,7 @@ impl WindowedOutput {
             configuration,
             compositor,
             clock: RenderClock::new(presentation),
+            preview: None,
         })
     }
 
@@ -216,6 +220,48 @@ pub fn present_format(available: &[wgpu::TextureFormat]) -> Option<wgpu::Texture
         .copied()
         .find(|format| !format.is_srgb())
         .or_else(|| available.first().copied())
+}
+
+impl WindowedOutput {
+    /// Renders the finished composite into a preview-sized target and reads it back.
+    ///
+    /// The composite is already on the GPU, so a smaller target scales it down with the sampler
+    /// rather than costing a full-size readback and a resample on the thread that presents.
+    /// Called only while a console is subscribed.
+    pub fn capture_preview(
+        &mut self,
+        size: Size,
+        master: &MasterState,
+        master_mask: Option<&crate::SourceTexture>,
+    ) -> Vec<u8> {
+        // The master pipeline is built for this window's surface format, so the preview target
+        // has to be in that format too — a mismatch is a validation failure, not a wrong colour.
+        let format = self.configuration.format;
+        let target = self
+            .preview
+            .get_or_insert_with(|| crate::OffScreenOutput::with_format(&self.gpu, size, format));
+        // A console may ask for a different size later; the target follows it.
+        target.resize(size);
+        self.compositor
+            .render_master_into(master, master_mask, target.view());
+
+        let mut pixels = target.read_image();
+        if matches!(
+            format,
+            wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
+        ) {
+            // A surface may be BGRA; everything above this expects RGBA.
+            for pixel in pixels.chunks_exact_mut(4) {
+                pixel.swap(0, 2);
+            }
+        }
+        pixels
+    }
+
+    /// Lets go of the preview target once nothing is watching.
+    pub fn release_preview(&mut self) {
+        self.preview = None;
+    }
 }
 
 /// What went wrong presenting a frame.

@@ -38,15 +38,19 @@ pub fn needs_a_window(configuration: &MediaConfiguration) -> bool {
 /// throughout; nothing here waits on them, and they do not wait on this.
 pub fn run_event_loop(
     configuration: &MediaConfiguration,
-    state: SharedState,
-    catalog: SharedCatalog,
-    analysis: media_audio::SharedAnalysis,
+    shared: Shared,
     shutdown: Shutdown,
     diagnostics: Diagnostics,
     // The same reference point the network listeners stamp against, so a packet's arrival and a
     // frame's presentation sit on one timeline.
     started: std::time::Instant,
 ) -> anyhow::Result<()> {
+    let Shared {
+        state,
+        catalog,
+        analysis,
+        preview,
+    } = shared;
     let event_loop = EventLoop::new()?;
     // Outputs present continuously, so the loop should come back round rather than sleep until
     // the next input event.
@@ -56,6 +60,8 @@ pub fn run_event_loop(
         configuration: Arc::new(configuration.clone()),
         catalog,
         analysis,
+        preview,
+        last_preview_millis: None,
         outputs: Vec::new(),
         pending: configuration
             .outputs
@@ -88,6 +94,17 @@ pub struct Diagnostics {
     pub test_pattern: bool,
 }
 
+/// What the outputs share with the services.
+///
+/// One value rather than four arguments, because they always travel together: the outputs present
+/// exactly the state the API writes, from exactly the catalog it publishes.
+pub struct Shared {
+    pub state: SharedState,
+    pub catalog: SharedCatalog,
+    pub analysis: media_audio::SharedAnalysis,
+    pub preview: crate::preview::SharedPreview,
+}
+
 /// The published library snapshot, shared with the services so both read one catalog.
 pub type SharedCatalog = Arc<arc_swap::ArcSwap<media_domain::catalog::CatalogSnapshot>>;
 
@@ -113,6 +130,9 @@ struct PresentationHost {
     catalog: SharedCatalog,
     /// The newest audio analysis, which generated sources react to.
     analysis: media_audio::SharedAnalysis,
+    /// The output preview a subscribed console receives.
+    preview: crate::preview::SharedPreview,
+    last_preview_millis: Option<u64>,
     outputs: Vec<HostedOutput>,
     pending: Vec<OutputConfiguration>,
     state: SharedState,
@@ -352,7 +372,46 @@ impl PresentationHost {
             hosted.window.request_redraw();
         }
 
+        self.capture_preview(now);
         self.publish(reports, now);
+    }
+
+    /// Reads the first output back for a subscribed console.
+    ///
+    /// Only while something is subscribed, and at a fraction of the output's rate: a preview must
+    /// never cost the program the frame it is previewing.
+    fn capture_preview(&mut self, now: Timestamp) {
+        if !self.preview.wanted() {
+            if self.last_preview_millis.take().is_some() {
+                // Nothing is watching any more; give the target back.
+                for hosted in &mut self.outputs {
+                    hosted.output.release_preview();
+                }
+            }
+            return;
+        }
+        if !crate::preview::due(self.last_preview_millis, now.as_millis()) {
+            return;
+        }
+        let state = self.state.load();
+        let Some(hosted) = self.outputs.first_mut() else {
+            return;
+        };
+        let Some(output_state) = state.output(hosted.output.id()) else {
+            return;
+        };
+
+        self.last_preview_millis = Some(now.as_millis());
+        // The mask a preview needs is the one the last frame used; a preview that showed the
+        // program unmasked would be a lie about what is on the wall.
+        let size = self.preview.requested_size();
+        let captured = hosted
+            .output
+            .capture_preview(size, &output_state.master, None);
+        match crate::preview::encode(&captured, size, size) {
+            Ok(frame) => self.preview.publish(frame),
+            Err(error) => tracing::warn!(%error, "the output preview could not be encoded"),
+        }
     }
 
     /// Tells the reducer what each layer's source did, so the API, the UI, and CITP all report the

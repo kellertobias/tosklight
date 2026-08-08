@@ -16,17 +16,31 @@ pub struct OffScreenOutput {
     texture: wgpu::Texture,
     view: wgpu::TextureView,
     size: Size,
+    format: wgpu::TextureFormat,
 }
 
 impl OffScreenOutput {
     pub fn new(gpu: &Gpu, size: Size) -> Self {
-        let (texture, view) = target(&gpu.device, size);
+        Self::with_format(gpu, size, PROGRAM_FORMAT)
+    }
+
+    /// A target in a stated format.
+    ///
+    /// A pipeline is built for one attachment format, so a target that a windowed output's master
+    /// pass will draw into has to match that window's surface — not the program format.
+    pub fn with_format(gpu: &Gpu, size: Size, format: wgpu::TextureFormat) -> Self {
+        let (texture, view) = target(&gpu.device, size, format);
         Self {
             gpu: gpu.clone(),
             texture,
             view,
             size,
+            format,
         }
+    }
+
+    pub const fn format(&self) -> wgpu::TextureFormat {
+        self.format
     }
 
     pub const fn view(&self) -> &wgpu::TextureView {
@@ -41,7 +55,7 @@ impl OffScreenOutput {
         if size == self.size || size.is_empty() {
             return;
         }
-        let (texture, view) = target(&self.gpu.device, size);
+        let (texture, view) = target(&self.gpu.device, size, self.format);
         self.texture = texture;
         self.view = view;
         self.size = size;
@@ -130,7 +144,11 @@ pub fn read_rgba8(gpu: &Gpu, texture: &wgpu::Texture, size: Size) -> Vec<u8> {
     }
 }
 
-fn target(device: &wgpu::Device, size: Size) -> (wgpu::Texture, wgpu::TextureView) {
+fn target(
+    device: &wgpu::Device,
+    size: Size,
+    format: wgpu::TextureFormat,
+) -> (wgpu::Texture, wgpu::TextureView) {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("media-offscreen"),
         size: wgpu::Extent3d {
@@ -141,7 +159,7 @@ fn target(device: &wgpu::Device, size: Size) -> (wgpu::Texture, wgpu::TextureVie
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: PROGRAM_FORMAT,
+        format,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });

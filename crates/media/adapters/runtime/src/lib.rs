@@ -13,6 +13,7 @@ mod layer_pipeline;
 mod layer_sources;
 mod logging;
 pub mod presentation;
+pub mod preview;
 mod shutdown;
 mod startup;
 mod text_sources;
@@ -107,6 +108,10 @@ pub fn run() -> anyhow::Result<()> {
         media_audio::AudioService::analysis,
     );
 
+    // What a subscribed console sees. Shared between the outputs, which capture, and the CITP
+    // connections, which send.
+    let preview: preview::SharedPreview = std::sync::Arc::new(preview::Preview::new());
+
     // The desk drives the outputs, so the listeners come up before anything presents.
     runtime.block_on(async {
         dmx::spawn(&configuration, state.clone(), shutdown.clone(), started)?;
@@ -114,6 +119,7 @@ pub fn run() -> anyhow::Result<()> {
             &configuration,
             state.clone(),
             catalog.clone(),
+            preview.clone(),
             shutdown.clone(),
         );
         anyhow::Ok(())
@@ -140,9 +146,12 @@ pub fn run() -> anyhow::Result<()> {
 
     let presented = presentation::run_event_loop(
         &configuration,
-        state,
-        catalog,
-        analysis,
+        presentation::Shared {
+            state,
+            catalog,
+            analysis,
+            preview,
+        },
         shutdown.clone(),
         diagnostics,
         started,
