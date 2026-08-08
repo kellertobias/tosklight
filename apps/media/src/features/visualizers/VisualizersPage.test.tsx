@@ -30,6 +30,48 @@ describe("the visualizers page", () => {
 		);
 	});
 
+	it("tunes a visualizer through the edit path, with a request id", async () => {
+		const server = stubServer();
+		render(<VisualizersPage />);
+
+		await userEvent.click(await screen.findByRole("button", { name: "Tune" }));
+		const name = screen.getByLabelText("Name");
+		await userEvent.clear(name);
+		await userEvent.type(name, "House bars");
+		await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+		await waitFor(() => expect(server.visualizers[0].name).toBe("House bars"));
+		const edit = server.writes.find((path) => path.includes("/visualizers/"));
+		expect(edit).toBe("/visualizers/220/1/update");
+	});
+
+	it("only offers the controls the kind actually reads", async () => {
+		stubServer();
+		render(<VisualizersPage />);
+		await userEvent.click(await screen.findByRole("button", { name: "Tune" }));
+
+		// The stub publishes count, size, and primary — and nothing else should appear.
+		expect(screen.getByLabelText("Count")).toBeInTheDocument();
+		expect(screen.getByLabelText("Size")).toBeInTheDocument();
+		expect(screen.queryByLabelText("Iterations")).not.toBeInTheDocument();
+		expect(screen.queryByLabelText("Gravity")).not.toBeInTheDocument();
+	});
+
+	it("says why an edit that could not be stored was not applied", async () => {
+		const server = stubServer();
+		server.refuseWrites = {
+			code: "configuration-not-written",
+			message: "the change could not be saved; it has not been applied",
+			status: 500,
+		};
+		render(<VisualizersPage />);
+
+		await userEvent.click(await screen.findByRole("button", { name: "Tune" }));
+		await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+		expect(await screen.findByText(/could not be saved/iu)).toBeInTheDocument();
+	});
+
 	it("cannot select onto an output a desk is driving", async () => {
 		stubServer({
 			outputs: [anOutput({ dmxActive: true })],

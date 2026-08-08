@@ -8,6 +8,7 @@ import type {
 	Health,
 	OutputView,
 	UpdateLayer,
+	UpdateVisualizer,
 	VisualizerView,
 } from "./generated/media-wire";
 
@@ -86,6 +87,13 @@ export const api = {
 		request<OutputView>(`/outputs/${output}/layers/${layer}/update`, {
 			method: "POST",
 			body: JSON.stringify(update),
+		}),
+
+	/** An object-intent edit of stored configuration. Its request id makes a retry safe. */
+	updateVisualizer: (folder: number, file: number, edit: UpdateVisualizer) =>
+		request<VisualizerView>(`/visualizers/${folder}/${file}/update`, {
+			method: "POST",
+			body: JSON.stringify(edit),
 		}),
 
 	/** A live-control action with no payload, exactly as the API exposes it. */

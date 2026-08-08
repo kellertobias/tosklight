@@ -16,22 +16,34 @@ use axum::routing::{get, post};
 use media_application::MediaConfiguration;
 use media_domain::catalog::CatalogSnapshot;
 use media_domain::{
-    Applied, Command, CommandKind, CommandSource, MediaState, OutputId, Timestamp, apply,
+    Applied, Command, CommandKind, CommandSource, MediaAddress, MediaState, OutputId, Timestamp,
+    apply,
 };
 
 use crate::assets;
 use crate::error::ApiError;
 use crate::tolerant::TolerantJson;
-use crate::wire::{CatalogView, Health, OutputView, UpdateLayer, VisualizerView};
+use crate::wire::{CatalogView, Health, OutputView, UpdateLayer, UpdateVisualizer, VisualizerView};
+
+/// Writes an accepted configuration wherever it belongs.
+///
+/// A function rather than a path, because the API adapter does not touch the filesystem — and
+/// because a test needs to prove persistence without one.
+pub type PersistConfiguration =
+    Arc<dyn Fn(&MediaConfiguration) -> Result<(), String> + Send + Sync>;
 
 /// Everything the routes read and write.
 #[derive(Clone)]
 pub struct ApiState {
-    pub configuration: Arc<MediaConfiguration>,
+    /// The live configuration. Swapped when an edit is accepted, so a read after a write sees it.
+    pub configuration: Arc<ArcSwap<MediaConfiguration>>,
     pub state: Arc<ArcSwap<MediaState>>,
     pub catalog: Arc<ArcSwap<CatalogSnapshot>>,
     /// Stamps commands. Injected so the API's behaviour is testable without real time passing.
     pub now: Arc<dyn Fn() -> Timestamp + Send + Sync>,
+    pub persist: PersistConfiguration,
+    /// What recent edits produced, so a retry is answered rather than executed again.
+    pub replays: Arc<crate::replay::Replays>,
 }
 
 impl std::fmt::Debug for ApiState {
@@ -49,6 +61,10 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v2/health", get(health))
         .route("/api/v2/catalog", get(catalog))
         .route("/api/v2/visualizers", get(visualizers))
+        .route(
+            "/api/v2/visualizers/{folder}/{file}/update",
+            post(update_visualizer),
+        )
         .route("/api/v2/outputs", get(outputs))
         .route("/api/v2/outputs/{output}/state", get(output_state))
         .route(
@@ -69,7 +85,7 @@ async fn health(State(state): State<ApiState>) -> impl IntoResponse {
     let catalog = state.catalog.load();
     axum::Json(Health {
         status: "ok".to_owned(),
-        instance: state.configuration.instance_id.as_str().to_owned(),
+        instance: state.configuration.load().instance_id.as_str().to_owned(),
         outputs: state.state.load().outputs.len(),
         catalog_revision: catalog.revision.value(),
         catalog_items: catalog.item_count(),
@@ -85,7 +101,71 @@ async fn catalog(State(state): State<ApiState>) -> impl IntoResponse {
 /// Configuration rather than state: it changes when an operator reassigns an address, not from
 /// frame to frame, so it is read once and not polled.
 async fn visualizers(State(state): State<ApiState>) -> impl IntoResponse {
-    axum::Json(VisualizerView::all(&state.configuration.visualizers))
+    axum::Json(VisualizerView::all(&state.configuration.load().visualizers))
+}
+
+/// Edits one configured visualizer.
+///
+/// An object-intent update: only the fields being changed travel, and the request id makes a
+/// retry safe. Unlike a layer selection this is stored configuration, so it is written to disk
+/// before it is answered — an operator who tuned a look and restarted must find it there.
+async fn update_visualizer(
+    State(state): State<ApiState>,
+    Path((folder, file)): Path<(u8, u8)>,
+    TolerantJson(body): TolerantJson<UpdateVisualizer>,
+) -> Result<Response, ApiError> {
+    if body.request_id.trim().is_empty() {
+        return Err(ApiError::bad_request(
+            "missing-request-id",
+            "an edit must carry a request id so a retry cannot become a second edit",
+        ));
+    }
+    if let Some(stored) = state.replays.stored(&body.request_id) {
+        return Ok(([(header::CONTENT_TYPE, "application/json")], stored).into_response());
+    }
+
+    let address = MediaAddress::new(folder, file);
+    let mut configuration = MediaConfiguration::clone(&state.configuration.load());
+    let entry = configuration
+        .visualizers
+        .entries
+        .iter_mut()
+        .find(|entry| entry.address == address)
+        .ok_or_else(|| {
+            ApiError::not_found(
+                "unknown-visualizer",
+                format!("no visualizer answers at {address}"),
+            )
+        })?;
+
+    if let Some(name) = body.name {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            return Err(ApiError::bad_request(
+                "empty-name",
+                "a visualizer needs a name an operator can find it by",
+            ));
+        }
+        entry.configuration.name = trimmed.to_owned();
+    }
+    if let Some(parameters) = body.parameters {
+        entry.configuration.parameters = parameters.into_parameters();
+    }
+
+    let view = VisualizerView::of(address, &entry.configuration);
+    (state.persist)(&configuration).map_err(|detail| {
+        tracing::error!(%detail, "an accepted visualizer edit could not be stored");
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "configuration-not-written",
+            "the change could not be saved; it has not been applied",
+        )
+    })?;
+    state.configuration.store(Arc::new(configuration));
+
+    let serialized = serde_json::to_string(&view).unwrap_or_default();
+    state.replays.remember(&body.request_id, serialized.clone());
+    Ok(([(header::CONTENT_TYPE, "application/json")], serialized).into_response())
 }
 
 async fn outputs(State(state): State<ApiState>) -> impl IntoResponse {
@@ -216,8 +296,8 @@ fn submit(state: &ApiState, commands: Vec<CommandKind>, now: Timestamp) -> Resul
 }
 
 fn view_of(state: &ApiState, output: &media_domain::OutputState, now: Timestamp) -> OutputView {
-    let name = state
-        .configuration
+    let configuration = state.configuration.load();
+    let name = configuration
         .output(output.id)
         .map(|configured| configured.name.to_string())
         .unwrap_or_else(|| output.id.to_string());
@@ -237,6 +317,9 @@ fn unknown_output(id: OutputId) -> ApiError {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     use axum::body::Body;
     use axum::http::Request;
     use http_body_util::BodyExt as _;
@@ -247,6 +330,8 @@ mod tests {
     use super::*;
 
     struct Bench {
+        stored: Arc<Mutex<Vec<MediaConfiguration>>>,
+        refuse: Arc<AtomicBool>,
         router: Router,
         output: OutputId,
         state: Arc<ArcSwap<MediaState>>,
@@ -264,16 +349,32 @@ mod tests {
             OutputState::new(output, LayerPersonality::TwoLayers),
         ])));
 
+        // What was written, so a test can prove an edit reached storage without a filesystem.
+        let stored: Arc<Mutex<Vec<MediaConfiguration>>> = Arc::new(Mutex::new(Vec::new()));
+        let writes = Arc::clone(&stored);
+        let refuse = Arc::new(AtomicBool::new(false));
+        let refusing = Arc::clone(&refuse);
+
         let api = ApiState {
-            configuration: Arc::new(configuration),
+            configuration: Arc::new(ArcSwap::from_pointee(configuration)),
             state: state.clone(),
             catalog: Arc::new(ArcSwap::from_pointee(CatalogSnapshot::default())),
             now: Arc::new(|| Timestamp::from_millis(0)),
+            persist: Arc::new(move |configuration: &MediaConfiguration| {
+                if refusing.load(Ordering::SeqCst) {
+                    return Err("the disk said no".to_owned());
+                }
+                writes.lock().unwrap().push(configuration.clone());
+                Ok(())
+            }),
+            replays: Arc::new(crate::replay::Replays::new()),
         };
         Bench {
             router: router(api),
             output,
             state,
+            stored,
+            refuse,
         }
     }
 
@@ -502,6 +603,119 @@ mod tests {
             send(&bench.router, get("/api/v2/outputs/nonsense/state".into())).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["code"], "malformed-output-id");
+    }
+
+    #[tokio::test]
+    async fn an_edited_visualizer_is_stored_before_it_is_answered() {
+        let bench = bench();
+        let uri = "/api/v2/visualizers/220/1/update".to_owned();
+        let (status, body) = send(
+            &bench.router,
+            post(
+                uri,
+                r#"{"requestId":"a","name":"House bars","parameters":{"count":64,"size":0.1,"speed":1.0,"amount":1.0,"radius":0.3,"thickness":0.01,"reactivity":1.0,"decay":0.1,"zoom":1.0,"iterations":64,"threshold":0.5,"smoothing":0.5,"gravity":0.5,"lifetime":2.0,"curvature":0.2,"primaryRed":1.0,"primaryGreen":0.0,"primaryBlue":0.0,"secondaryRed":0.0,"secondaryGreen":0.0,"secondaryBlue":1.0,"mirror":true,"filled":false,"wireframe":false,"mode":0}}"#,
+            ),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["name"], "House bars");
+        assert_eq!(body["parameters"]["count"], 64);
+        assert_eq!(body["parameters"]["mirror"], true);
+
+        let stored = bench.stored.lock().unwrap();
+        assert_eq!(stored.len(), 1, "the edit was written, not just answered");
+        let saved = stored[0]
+            .visualizers
+            .resolve(media_domain::MediaAddress::new(220, 1))
+            .expect("still there");
+        assert_eq!(saved.name, "House bars");
+        assert_eq!(saved.parameters.count, 64);
+    }
+
+    #[tokio::test]
+    async fn resending_an_edit_answers_it_rather_than_doing_it_twice() {
+        let bench = bench();
+        let uri = "/api/v2/visualizers/220/1/update".to_owned();
+        let edit = r#"{"requestId":"same","name":"First"}"#;
+
+        let (_, first) = send(&bench.router, post(uri.clone(), edit)).await;
+        let (status, second) = send(&bench.router, post(uri, edit)).await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            first, second,
+            "a retry gets the outcome of the first attempt"
+        );
+        assert_eq!(
+            bench.stored.lock().unwrap().len(),
+            1,
+            "and the edit was executed once"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_edit_that_could_not_be_stored_is_not_applied() {
+        let bench = bench();
+        bench.refuse.store(true, Ordering::SeqCst);
+        let uri = "/api/v2/visualizers/220/1/update".to_owned();
+
+        let (status, body) = send(
+            &bench.router,
+            post(uri, r#"{"requestId":"b","name":"Never"}"#),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(body["code"], "configuration-not-written");
+
+        let (_, published) = send(&bench.router, get("/api/v2/visualizers".into())).await;
+        assert_eq!(
+            published[0]["name"], "Equalizer Bars",
+            "a change that was not saved must not be live either"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_edit_without_a_request_id_or_for_an_unknown_address_is_refused() {
+        let bench = bench();
+        let (status, body) = send(
+            &bench.router,
+            post(
+                "/api/v2/visualizers/220/1/update".into(),
+                r#"{"requestId":"  ","name":"No"}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "missing-request-id");
+
+        let (status, body) = send(
+            &bench.router,
+            post(
+                "/api/v2/visualizers/1/1/update".into(),
+                r#"{"requestId":"c","name":"No"}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(body["code"], "unknown-visualizer");
+        assert!(bench.stored.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_visualizer_cannot_be_left_nameless() {
+        let bench = bench();
+        let (status, body) = send(
+            &bench.router,
+            post(
+                "/api/v2/visualizers/220/1/update".into(),
+                r#"{"requestId":"d","name":"   "}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "empty-name");
     }
 
     #[tokio::test]

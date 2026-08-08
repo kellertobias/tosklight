@@ -190,13 +190,22 @@ pub async fn serve_with(
     );
 
     let started = std::time::Instant::now();
+    // Where an accepted edit is written. The API adapter never touches the filesystem itself; it
+    // is handed the one path this run was started from, so a saved edit lands where the next
+    // start will read it.
+    let configuration_path = ConfigurationSource::from_environment().path();
     let api = media_http::ApiState {
-        configuration: std::sync::Arc::new(configuration),
+        configuration: std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(configuration)),
         state,
         catalog,
         now: std::sync::Arc::new(move || {
             Timestamp::from_micros(started.elapsed().as_micros() as u64)
         }),
+        persist: std::sync::Arc::new(move |configuration| {
+            startup::write_configuration(&configuration_path, configuration)
+                .map_err(|error| error.to_string())
+        }),
+        replays: std::sync::Arc::new(media_http::Replays::new()),
     };
 
     let listener = tokio::net::TcpListener::bind(resolved.http_listen).await.map_err(|error| {

@@ -12,11 +12,13 @@
 pub mod assets;
 pub mod error;
 pub mod generation;
+pub mod replay;
 pub mod routes;
 pub mod tolerant;
 pub mod wire;
 
 pub use error::{ApiError, ApiErrorBody};
 pub use generation::{GeneratedArtifact, generated_artifacts, write_generated_artifacts};
+pub use replay::Replays;
 pub use routes::{ApiState, router};
 pub use tolerant::TolerantJson;

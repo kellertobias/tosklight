@@ -66,3 +66,8 @@ name: string,
  */
 uses: Array<string>, parameters: VisualizerParametersView, };
 export type UpdateLayer = { folder?: number | null, file?: number | null, dimmer?: number | null, };
+export type UpdateVisualizer = {
+/**
+ * Client-generated. A resend with the same id returns the first outcome.
+ */
+requestId: string, name?: string | null, parameters?: VisualizerParametersView | null, };

@@ -58,6 +58,22 @@ export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServe
 			if (path === "/outputs") return jsonResponse(server.outputs);
 			if (path.endsWith("/reset")) return new Response(null, { status: 204 });
 
+			const tuned = path.match(/^\/visualizers\/(\d+)\/(\d+)\/update$/u);
+			if (tuned) {
+				const body = JSON.parse(String(init?.body ?? "{}"));
+				const found = server.visualizers.find(
+					(candidate) =>
+						candidate.address.folder === Number(tuned[1]) &&
+						candidate.address.file === Number(tuned[2]),
+				);
+				if (!found) {
+					return jsonResponse({ code: "unknown-visualizer", message: "no" }, 404);
+				}
+				if (body.name !== undefined) found.name = body.name;
+				if (body.parameters !== undefined) found.parameters = body.parameters;
+				return jsonResponse(found);
+			}
+
 			const update = path.match(/^\/outputs\/([^/]+)\/layers\/(\d+)\/update$/u);
 			if (update) {
 				const body = JSON.parse(String(init?.body ?? "{}"));

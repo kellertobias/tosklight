@@ -13,7 +13,7 @@ use media_domain::catalog::{CatalogItem, CatalogSnapshot, ItemKind};
 use media_domain::visualizer::{GeneratedCatalog, VisualizerConfiguration, VisualizerParameters};
 use media_domain::{
     LayerState, MaskSource, MaskState, MasterState, MediaAddress, OutputState, SourceFailure,
-    SourceStatus,
+    SourceStatus, Tint,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -407,6 +407,55 @@ impl VisualizerView {
             .iter()
             .map(|entry| Self::of(entry.address, &entry.configuration))
             .collect()
+    }
+}
+
+/// An intent-shaped visualizer edit: only the fields being changed.
+///
+/// This edits stored configuration rather than live state, so it carries a request id: a dropped
+/// response must never become a second edit.
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateVisualizer {
+    /// Client-generated. A resend with the same id returns the first outcome.
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<VisualizerParametersView>,
+}
+
+impl VisualizerParametersView {
+    /// The domain parameters this view describes, clamped to what a renderer can use.
+    pub fn into_parameters(self) -> VisualizerParameters {
+        VisualizerParameters {
+            count: self.count,
+            size: self.size,
+            speed: self.speed,
+            amount: self.amount,
+            radius: self.radius,
+            thickness: self.thickness,
+            reactivity: self.reactivity,
+            decay: self.decay,
+            zoom: self.zoom,
+            iterations: self.iterations,
+            threshold: self.threshold,
+            smoothing: self.smoothing,
+            gravity: self.gravity,
+            lifetime: self.lifetime,
+            curvature: self.curvature,
+            primary: Tint::new(self.primary_red, self.primary_green, self.primary_blue),
+            secondary: Tint::new(
+                self.secondary_red,
+                self.secondary_green,
+                self.secondary_blue,
+            ),
+            mirror: self.mirror,
+            filled: self.filled,
+            wireframe: self.wireframe,
+            mode: self.mode,
+        }
+        .clamped()
     }
 }
 

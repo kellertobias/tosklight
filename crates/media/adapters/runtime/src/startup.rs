@@ -24,6 +24,17 @@ pub enum ConfigurationSource {
 }
 
 impl ConfigurationSource {
+    /// Where a change should be written back to.
+    ///
+    /// The defaults source has no file of its own, so an edit made in that mode is written to the
+    /// default location — which is what a first run then reads.
+    pub fn path(&self) -> PathBuf {
+        match self {
+            Self::File { path, .. } => path.clone(),
+            Self::Defaults => PathBuf::from(DEFAULT_CONFIGURATION_PATH),
+        }
+    }
+
     /// Honors an explicit `MEDIA_CONFIG` override and otherwise looks in the default location.
     pub fn from_environment() -> Self {
         match std::env::var(CONFIGURATION_PATH_VARIABLE) {
@@ -39,11 +50,51 @@ impl ConfigurationSource {
     }
 }
 
+/// Writes a configuration back where it was read from, atomically.
+///
+/// A show can be edited while it is running, so a half-written file is not an acceptable failure:
+/// the new document is written beside the old one and renamed over it, which either happens or
+/// does not. A crash mid-save leaves the previous configuration intact.
+pub fn write_configuration(
+    path: &Path,
+    configuration: &MediaConfiguration,
+) -> Result<(), StartupError> {
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent).map_err(|source| StartupError::Unwritable {
+            path: parent.to_path_buf(),
+            source,
+        })?;
+    }
+
+    let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
+    std::fs::write(&temporary, configuration::save(configuration)).map_err(|source| {
+        StartupError::Unwritable {
+            path: temporary.clone(),
+            source,
+        }
+    })?;
+    std::fs::rename(&temporary, path).map_err(|source| {
+        let _ = std::fs::remove_file(&temporary);
+        StartupError::Unwritable {
+            path: path.to_path_buf(),
+            source,
+        }
+    })
+}
+
 /// Why the server cannot start.
 #[derive(Debug, thiserror::Error)]
 pub enum StartupError {
     #[error("cannot read the configuration file {}: {source}", path.display())]
     Unreadable {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("cannot write the configuration to {}: {source}", path.display())]
+    Unwritable {
         path: PathBuf,
         #[source]
         source: std::io::Error,
@@ -119,6 +170,37 @@ mod tests {
             required: false,
         };
         assert!(load_configuration(&source).is_ok());
+    }
+
+    #[test]
+    fn a_written_configuration_reads_back_as_itself() {
+        let directory = std::env::temp_dir().join("media-configuration-write");
+        let _ = std::fs::remove_dir_all(&directory);
+        let path = directory.join("nested/media-server.json");
+
+        let mut configuration = MediaConfiguration::default();
+        configuration.outputs[0].name = media_domain::OutputName::new("Downstage");
+        write_configuration(&path, &configuration).expect("a new directory is created");
+
+        let source = ConfigurationSource::File {
+            path: path.clone(),
+            required: true,
+        };
+        let read_back = load_configuration(&source).expect("what we wrote is loadable");
+        assert_eq!(read_back.outputs[0].name.as_str(), "Downstage");
+
+        // Overwriting leaves nothing behind: a temporary file beside the real one would be read
+        // as a stray configuration by anyone looking in that directory.
+        configuration.outputs[0].name = media_domain::OutputName::new("Upstage");
+        write_configuration(&path, &configuration).expect("overwrites");
+        let entries: Vec<_> = std::fs::read_dir(path.parent().unwrap())
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.file_name())
+            .collect();
+        assert_eq!(entries.len(), 1, "{entries:?}");
+
+        let _ = std::fs::remove_dir_all(&directory);
     }
 
     #[test]

@@ -265,6 +265,37 @@ body {
 	font-size: 0.85rem;
 }
 
+.media-visualizer-editor {
+	display: grid;
+	/* Wide enough that a stepper does not squeeze its own value out of view. */
+	grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+	gap: 0.6rem;
+	align-items: end;
+}
+
+.media-visualizer-editor > .media-visualizer-actions {
+	grid-column: 1 / -1;
+}
+
+.media-visualizer-flag,
+.media-visualizer-colour {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-height: 44px;
+	color: var(--muted);
+	font-size: 0.9rem;
+}
+
+.media-visualizer-colour input[type="color"] {
+	width: 44px;
+	height: 32px;
+	padding: 0;
+	background: none;
+	border: 1px solid var(--line2);
+	border-radius: 4px;
+}
+
 .media-visualizer-actions {
 	display: flex;
 	flex-wrap: wrap;

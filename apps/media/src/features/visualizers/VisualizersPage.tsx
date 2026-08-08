@@ -5,10 +5,16 @@
 // looking the number up first.
 
 import { Button, SelectField } from "@tosklight/ui/controls";
+import { useVisualizerEditing } from "./editing";
+import { VisualizerEditor } from "./VisualizerEditor";
 import { useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
 import { addressLabel } from "../../entities/catalog";
-import type { OutputView, VisualizerView } from "../../shared/api/generated/media-wire";
+import type {
+	OutputView,
+	UpdateVisualizer,
+	VisualizerView,
+} from "../../shared/api/generated/media-wire";
 import { useVisualizers } from "../../shared/api/queries";
 import { useLayerControl, useOutputsForControl } from "../../shared/api/layerControl";
 
@@ -17,6 +23,7 @@ export function VisualizersPage() {
 	const outputs = useOutputsForControl();
 	const control = useLayerControl(outputs.data);
 	const [layer, setLayer] = useState(0);
+	const editing = useVisualizerEditing(visualizers.reload);
 
 	return (
 		<section className="media-page">
@@ -37,6 +44,15 @@ export function VisualizersPage() {
 				onChange={setLayer}
 			/>
 
+			{editing.failure && (
+				<p className="media-state is-error" role="alert">
+					{editing.failure.message}{" "}
+					<Button size="compact" onClick={editing.dismiss}>
+						Dismiss
+					</Button>
+				</p>
+			)}
+
 			<ResourceState
 				resource={visualizers}
 				subject="the visualizers"
@@ -50,6 +66,11 @@ export function VisualizersPage() {
 								key={`${visualizer.address.folder}/${visualizer.address.file}`}
 								visualizer={visualizer}
 								outputs={outputs.data ?? []}
+								editing={editing.editing === key(visualizer)}
+								busy={editing.busy}
+								onEdit={() => editing.begin(key(visualizer))}
+								onCancel={editing.cancel}
+								onSave={(edit) => void editing.save(visualizer, edit)}
 								onSelect={(output) =>
 									void control.update(output, layer, {
 										folder: visualizer.address.folder,
@@ -90,13 +111,28 @@ function LayerChoice({
 	);
 }
 
+/** One visualizer's identity in the editing state, which is its address. */
+export function key(visualizer: VisualizerView): string {
+	return `${visualizer.address.folder}/${visualizer.address.file}`;
+}
+
 function VisualizerCard({
 	visualizer,
 	outputs,
+	editing,
+	busy,
+	onEdit,
+	onCancel,
+	onSave,
 	onSelect,
 }: {
 	visualizer: VisualizerView;
 	outputs: OutputView[];
+	editing: boolean;
+	busy: boolean;
+	onEdit: () => void;
+	onCancel: () => void;
+	onSave: (edit: UpdateVisualizer) => void;
 	onSelect: (output: OutputView) => void;
 }) {
 	const address = addressLabel(visualizer.address.folder, visualizer.address.file);
@@ -109,10 +145,18 @@ function VisualizerCard({
 			<p>
 				{visualizer.kind} · type {visualizer.typeId}
 			</p>
-			<p className="media-visualizer-uses">
-				Controls: {visualizer.uses.join(", ")}
-			</p>
+			{editing ? (
+				<VisualizerEditor
+					visualizer={visualizer}
+					busy={busy}
+					onSave={onSave}
+					onCancel={onCancel}
+				/>
+			) : (
+				<p className="media-visualizer-uses">Controls: {visualizer.uses.join(", ")}</p>
+			)}
 			<div className="media-visualizer-actions">
+				{!editing && <Button onClick={onEdit}>Tune</Button>}
 				{outputs.map((output) => (
 					<Button
 						key={output.id}
