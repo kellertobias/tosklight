@@ -252,20 +252,12 @@ export class BrowserPresets {
 					`[data-pane-type="fixtures"] .ui-data-table-row[data-fixture-id="${fixtureId}"]`,
 				),
 			).toHaveClass(/(?:^|\s)selected(?:\s|$)/);
-			await expect(
-				this.page.locator(
-					`[data-pane-type="stage"] .stage-fixture[data-fixture-id="${fixtureId}"]`,
-				),
-			).toHaveClass(/(?:^|\s)selected(?:\s|$)/);
 		}
 	}
 
 	async expectVisibleSelectionCount(count: number) {
 		await expect(
 			this.page.locator('[data-pane-type="fixtures"] .ui-window-info b'),
-		).toHaveText(`${count} selected`);
-		await expect(
-			this.page.locator('[data-pane-type="stage"] .ui-window-info b'),
 		).toHaveText(`${count} selected`);
 	}
 

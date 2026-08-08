@@ -387,7 +387,6 @@ export class BrowserProductDemo {
 			const demo = page.getByTestId("product-demo");
 			const app = demo.locator(".product-demo-application");
 			const keypad = demo.locator(".demo-number-block");
-			const stage = demo.locator(".stage-3d-canvas");
 			await verifyDemoFrame(demo, app, stage);
 			const stageWindow = stage.locator(
 				"xpath=ancestor::*[contains(@class,'stage-window')][1]",

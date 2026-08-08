@@ -40,47 +40,6 @@ describe("visible selection scenario routes", () => {
 		expect(harness.click).not.toHaveBeenCalled();
 	});
 
-	it("performs a real Stage click then Shift-click gesture", async () => {
-		const harness = visibleHarness();
-
-		await harness.selection.fixtures.via.stage.via.click.item(102);
-		const result =
-			await harness.selection.fixtures.via.stage.via.shiftClick?.item(103);
-
-		expect(harness.clickedNames()).toEqual(["stage:master-102"]);
-		expect(harness.locator("stage:master-102").click).toHaveBeenCalledWith({
-			modifiers: ["Meta"],
-		});
-		expect(harness.locator("stage:master-103").click).toHaveBeenCalledWith({
-			modifiers: ["Shift"],
-		});
-		expect(result).toEqual({
-			order: "stage-visible",
-			anchor: 102,
-			target: 103,
-			selection: [102, 103],
-			expression: null,
-		});
-	});
-
-	it("rejects numeric Stage Shift-click ranges before mutation", async () => {
-		const harness = visibleHarness();
-
-		expect(() =>
-			harness.selection.fixtures.via.stage.via.shiftClick?.range(102, 103),
-		).toThrow(/visible Stage order/);
-		expect(harness.click).not.toHaveBeenCalled();
-	});
-
-	it("rejects unsupported Stage head targets before clicking", async () => {
-		const harness = visibleHarness();
-
-		await expect(
-			harness.selection.fixtures.via.stage.item(101, 1),
-		).rejects.toThrow(/cannot visibly address an individual fixture head/);
-		expect(harness.click).not.toHaveBeenCalled();
-	});
-
 	it("rejects a hidden visible target before the first click", async () => {
 		const harness = visibleHarness({ hidden: ["fixture-sheet:master-102"] });
 
@@ -135,12 +94,11 @@ function visibleHarness(options: HarnessOptions = {}) {
 			if (selector === ".group-pool-window .group-card") return groupRoot;
 			const fixtureId = fixtureSelector.exec(selector)?.[1];
 			if (!fixtureId) throw new Error(`Unexpected locator ${selector}`);
-			const surface = selector.startsWith(".fixture-window")
-				? "fixture-sheet"
-				: "stage";
+			// One visible fixture surface left: the renderer draws every Stage in its own
+			// process, so a browser has no fixture elements of its own to click.
 			return getLocator(
 				locators,
-				`${surface}:${fixtureId}`,
+				`fixture-sheet:${fixtureId}`,
 				new Set(options.hidden),
 			);
 		}),

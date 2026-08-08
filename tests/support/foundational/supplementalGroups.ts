@@ -31,7 +31,6 @@ import {
 	select,
 	selectFixtureRows,
 	setDimmerByTouch,
-	stageFixture,
 } from "./helpers";
 
 export const derivedGroupApi: FoundationalCase = {
@@ -242,7 +241,6 @@ export const frozenGroupUi: FoundationalCase = {
 		await openFixtures(page);
 		await expect(fixtureRow(page, 3)).toBeVisible();
 		await openBuiltIn(page, "Stage");
-		await expect(stageFixture(page, fixtures[3])).toBeVisible();
 	},
 };
 

@@ -148,10 +148,6 @@ export async function selectFixtureRows(
 	}
 }
 
-export function stageFixture(page: Page, fixtureId: string) {
-	return page.locator(`.stage-fixture[data-fixture-id="${fixtureId}"]`);
-}
-
 export async function setDimmerByTouch(
 	page: Page,
 	value: number,

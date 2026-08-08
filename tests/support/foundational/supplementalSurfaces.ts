@@ -17,7 +17,6 @@ import {
 	pressCommand,
 	putObject,
 	setDimmerByTouch,
-	stageFixture,
 } from "./helpers";
 
 export type FoundationalSurface = "api" | "ui";
@@ -41,32 +40,18 @@ export const supplementalSurfaceFactories = [
 					group_values: {},
 				});
 				await desk.open(api.baseUrl);
-				await openBuiltIn(page, "Stage");
-				await stageFixture(page, fixtures[1]).click();
-				await stageFixture(page, fixtures[2]).click();
+				/*
+				 * Selected from the Fixture Sheet rather than the Stage. The renderer draws every
+				 * Stage now, in its own process, so a browser has no fixture elements to click and
+				 * the marquee that used to extend this selection has no equivalent here. The
+				 * selection itself is authoritative wherever it is made, which is what this covers.
+				 */
+				await openFixtures(page);
+				await fixtureRow(page, 1).click();
+				await fixtureRow(page, 2).click();
 				await expectSelectedNumbers(api, [1, 2]);
-
-				const fixture3 = await stageFixture(page, fixtures[3]).boundingBox();
-				const fixture4 = await stageFixture(page, fixtures[4]).boundingBox();
-				expect(fixture3).toBeTruthy();
-				expect(fixture4).toBeTruthy();
-				await page.mouse.move(
-					Math.min(fixture3!.x, fixture4!.x) - 3,
-					Math.min(fixture3!.y, fixture4!.y) - 3,
-				);
-				await page.mouse.down();
-				await page.mouse.move(
-					Math.max(
-						fixture3!.x + fixture3!.width,
-						fixture4!.x + fixture4!.width,
-					) + 3,
-					Math.max(
-						fixture3!.y + fixture3!.height,
-						fixture4!.y + fixture4!.height,
-					) + 3,
-					{ steps: 5 },
-				);
-				await page.mouse.up();
+				await fixtureRow(page, 3).click();
+				await fixtureRow(page, 4).click();
 				await expectSelectedNumbers(api, [1, 2, 3, 4]);
 
 				await openFixtures(page);
@@ -101,9 +86,9 @@ export const supplementalSurfaceFactories = [
 				);
 				await setDimmerByTouch(page, 25);
 
-				await openBuiltIn(page, "Stage");
-				await stageFixture(page, fixtures[21]).click();
-				await stageFixture(page, fixtures[22]).click();
+				await openFixtures(page);
+				await fixtureRow(page, 21).click();
+				await fixtureRow(page, 22).click();
 				await expectSelectedNumbers(api, [21, 22]);
 				await openBuiltIn(page, "Presets");
 				// Preset 1.199 lives in the Intensity family pool; the window opens on Mixed.
@@ -125,12 +110,12 @@ export const supplementalSurfaceFactories = [
 				await setDimmerByTouch(page, 25);
 				await expectSelectedNumbers(api, [1, 2, 3, 4]);
 
-				await openBuiltIn(page, "Stage");
-				await stageFixture(page, fixtures[6]).click();
+				await openFixtures(page);
+				await fixtureRow(page, 6).click();
 				await expectSelectedNumbers(api, [6]);
 				await page.getByRole("button", { name: "CLR", exact: true }).click();
 				await expectSelectedNumbers(api, []);
-				await stageFixture(page, fixtures[7]).click();
+				await fixtureRow(page, 7).click();
 				await openGroups(page);
 				await groupCard(page, 3).click();
 				await expectSelectedNumbers(api, [7, 1, 2, 3, 4]);
