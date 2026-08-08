@@ -184,7 +184,7 @@ mod tests {
         let mut slots = neutral_layer();
         slots[layer::FOLDER] = 12;
         slots[layer::FILE] = 34;
-        slots[layer::PLAY_MODE] = 88;
+        slots[layer::PLAY_MODE] = 76;
         slots[layer::SCALING_MODE] = 200;
         slots[layer::GRAYSCALE] = 255;
         slots[layer::CYAN] = 255;

@@ -147,7 +147,10 @@ pub fn present(mode: PlayMode, timing: &MediaTiming, rate: f64, elapsed: Duratio
                 position: clamp_to_last(position, timing),
             }
         }
-        PlayMode::Once { end_state } | PlayMode::OnceSynced { end_state } => {
+        PlayMode::Once { end_state }
+        | PlayMode::ReverseOnce { end_state }
+        | PlayMode::OnceSynced { end_state }
+        | PlayMode::ReverseOnceSynced { end_state } => {
             if advanced >= duration {
                 return Presentation::Completed {
                     end_state,
@@ -173,10 +176,8 @@ pub fn present(mode: PlayMode, timing: &MediaTiming, rate: f64, elapsed: Duratio
 /// Hold state is the *first* frame. Black and Transparent behave identically whichever direction
 /// the pass ran.
 ///
-/// The v2 personality has no reverse Once band — the three Once sub-bands and the three Once
-/// Synced sub-bands are all forward — so the reverse branch is currently unreachable from the
-/// wire. The rule is implemented here rather than assumed away, because the product contract
-/// states it and a later personality that adds the band must not have to rediscover it.
+/// Both directions are selectable: `ReverseOnce` and `ReverseOnceSynced` reach the reverse
+/// branch from the wire.
 pub fn once_end_position(timing: &MediaTiming, reverse: bool) -> Duration {
     if reverse {
         Duration::ZERO
@@ -352,18 +353,46 @@ mod tests {
     }
 
     #[test]
-    fn no_v2_once_band_is_a_reverse_pass() {
-        // The product contract describes a reverse Once ending on the first frame, but the v2
-        // personality has no reverse Once band: all six Once sub-bands are forward. This records
-        // that gap rather than papering over it — see the note on `once_end_position`.
-        for mode in PlayMode::ALL {
-            if mode.once_end_state().is_some() {
-                assert!(
-                    !mode.is_reverse(),
-                    "{} is unexpectedly a reverse pass",
-                    mode.label()
-                );
-            }
+    fn a_reverse_once_runs_backward_and_completes_on_the_first_frame() {
+        let timing = ten_frames();
+        let mode = PlayMode::ReverseOnce {
+            end_state: OnceEndState::Hold,
+        };
+
+        assert_eq!(
+            present(mode, &timing, 1.0, Duration::from_millis(0)).position(),
+            Some(Duration::from_millis(900)),
+            "it starts on the last frame"
+        );
+        assert_eq!(
+            present(mode, &timing, 1.0, Duration::from_millis(250)).position(),
+            Some(Duration::from_millis(750)),
+            "and runs backward"
+        );
+        assert_eq!(
+            present(mode, &timing, 1.0, Duration::from_millis(1_000)),
+            Presentation::Completed {
+                end_state: OnceEndState::Hold,
+                position: Duration::ZERO
+            },
+            "resting on the first frame, not looping"
+        );
+    }
+
+    #[test]
+    fn a_reverse_once_never_becomes_a_reverse_loop() {
+        let timing = ten_frames();
+        let mode = PlayMode::ReverseOnceSynced {
+            end_state: OnceEndState::Transparent,
+        };
+        for elapsed in [1_000, 1_500, 10_000] {
+            assert!(
+                matches!(
+                    present(mode, &timing, 1.0, Duration::from_millis(elapsed)),
+                    Presentation::Completed { .. }
+                ),
+                "at {elapsed}ms"
+            );
         }
     }
 
