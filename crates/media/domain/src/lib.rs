@@ -39,5 +39,7 @@ pub use personality::{LayerPersonality, PersonalityVersion, SlotFootprint, Start
 pub use playback::{OnceEndState, PlayMode};
 pub use speed::SpeedMultiplier;
 pub use state::{Applied, MediaState, OutputState, apply};
-pub use tempo::{SpeedGroupId, TempoSource};
+pub use tempo::{
+    ResolvedTempo, SpeedGroupId, SpeedGroupSnapshot, TempoSource, effective_rate, resolve_tempo,
+};
 pub use timeline::{MediaTiming, Presentation};
