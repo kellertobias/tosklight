@@ -8,5 +8,7 @@
 
 pub mod discovery;
 pub mod naming;
+pub mod storage;
 
 pub use discovery::{DiscoveryError, discover};
+pub use storage::{LibraryStorage, StorageError};
