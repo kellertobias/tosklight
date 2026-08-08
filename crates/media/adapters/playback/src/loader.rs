@@ -148,7 +148,7 @@ mod tests {
         .unwrap();
         for index in 0..frames {
             writer
-                .write_frame(&vec![index as u8; 32], index as u64 * 100_000)
+                .write_frame(&[index as u8; 32], index as u64 * 100_000)
                 .unwrap();
         }
         writer.finish().unwrap().into_inner()
