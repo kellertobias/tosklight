@@ -33,7 +33,7 @@ fn ready(state: LayerState) -> LayerState {
 }
 
 struct Bench {
-    gpu: Gpu,
+    pub gpu: Gpu,
     renderer: OutputRenderer,
 }
 
@@ -493,5 +493,90 @@ fn two_outputs_on_one_device_render_independently() {
         &second.read_image()[0..4],
         &BLACK,
         "the second output drew none of the first's layers"
+    );
+}
+
+#[test]
+fn a_real_hap_frame_reaches_the_screen_through_the_compressed_path() {
+    let mut bench = Bench::new();
+    if !bench.gpu.samples_block_compression() {
+        // Honest skip rather than a silent pass: this machine expands blocks instead, which the
+        // RGBA path already covers.
+        eprintln!("skipped: this adapter does not sample BC textures");
+        return;
+    }
+
+    // A frame that goes through the whole codec: RGBA in, BC3 blocks out, straight to the GPU.
+    let (width, height) = (16u32, 16u32);
+    let payload = media_codec::encode(width, height, &RED.repeat((width * height) as usize))
+        .expect("encodes");
+    let blocks = media_codec::decode_blocks(width, height, &payload).expect("decodes");
+
+    let source = SourceTexture::from_bc3_blocks(&bench.gpu, Size::new(width, height), &blocks)
+        .expect("a BC3 upload on an adapter that samples BC");
+    let state = ready(LayerState::default());
+
+    let image = bench.render(
+        &[LayerDraw {
+            state: &state,
+            source: &source,
+        }],
+        &MasterState::default(),
+    );
+    let [red, green, blue, _] = image.center();
+    assert!(red > 240, "red survived the codec and the upload: {red}");
+    assert!(
+        green < 16 && blue < 16,
+        "and nothing else did: {green},{blue}"
+    );
+}
+
+#[test]
+fn transparency_survives_all_the_way_to_the_composite() {
+    let mut bench = Bench::new();
+    if !bench.gpu.samples_block_compression() {
+        eprintln!("skipped: this adapter does not sample BC textures");
+        return;
+    }
+
+    // The requirement that chose this codec, checked end to end: a half-transparent layer over an
+    // opaque one has to let the lower layer through.
+    let (width, height) = (16u32, 16u32);
+    let under = bench.solid(Size::new(4, 4), GREEN);
+    let payload = media_codec::encode(
+        width,
+        height,
+        &[0, 0, 255, 128].repeat((width * height) as usize),
+    )
+    .expect("encodes");
+    let blocks = media_codec::decode_blocks(width, height, &payload).expect("decodes");
+    let over = SourceTexture::from_bc3_blocks(&bench.gpu, Size::new(width, height), &blocks)
+        .expect("uploads");
+
+    let bottom = ready(LayerState::default());
+    let top = ready(LayerState::default());
+    let image = bench.render(
+        &[
+            LayerDraw {
+                state: &bottom,
+                source: &under,
+            },
+            LayerDraw {
+                state: &top,
+                source: &over,
+            },
+        ],
+        &MasterState::default(),
+    );
+
+    let [red, green, blue, _] = image.center();
+    assert!(red < 16, "no red anywhere: {red}");
+    assert!(
+        green > 96 && green < 160,
+        "the green underneath shows through: {green}"
+    );
+    assert!(
+        blue > 96 && blue < 160,
+        "and the half-transparent blue sits over it: {blue}"
     );
 }

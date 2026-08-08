@@ -12,6 +12,7 @@
 //! reducer only compares timestamps.
 
 pub mod address;
+pub mod authored_tempo;
 pub mod clock;
 pub mod color;
 pub mod command;

@@ -3763,6 +3763,7 @@ name = "media-render"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "media-codec",
  "media-domain",
  "pollster",
  "thiserror 2.0.18",

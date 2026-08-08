@@ -18,5 +18,10 @@ thiserror.workspace = true
 wgpu.workspace = true
 winit.workspace = true
 
+[dev-dependencies]
+# The reference renders encode a real HAP frame and put it on screen, so the compressed upload
+# path is proven rather than assumed.
+media-codec = { path = "../codec" }
+
 [lints]
 workspace = true

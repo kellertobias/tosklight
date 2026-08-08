@@ -87,7 +87,10 @@ impl Gpu {
         let limits = adapter.limits();
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("media-output"),
-            required_features: wgpu::Features::empty(),
+            // BC sampling is requested when the adapter has it, so HAP frames upload compressed
+            // rather than being expanded. An adapter without it still works; the frames are
+            // expanded on the way in.
+            required_features: adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC,
             required_limits: limits.clone(),
             ..Default::default()
         }))
@@ -106,6 +109,16 @@ impl Gpu {
             },
             adapter: Arc::new(adapter),
         })
+    }
+
+    /// Whether this adapter samples BC (DXT/S3TC) textures, which is what a HAP frame stores.
+    ///
+    /// Desktop GPUs all do; some ARM parts expose only ETC2 and ASTC. Where this is false the
+    /// blocks are expanded to RGBA on the way in rather than the format being unsupported.
+    pub fn samples_block_compression(&self) -> bool {
+        self.adapter
+            .features()
+            .contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
     }
 
     /// Whether this adapter can render an output of the requested size.
