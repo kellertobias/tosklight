@@ -3759,6 +3759,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "media-library"
+version = "0.1.0"
+dependencies = [
+ "media-codec",
+ "media-domain",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
 name = "media-playback"
 version = "0.1.0"
 dependencies = [

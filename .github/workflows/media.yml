@@ -64,16 +64,16 @@ jobs:
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
 
       - name: Format
-        run: cargo fmt --check -p media-domain -p media-application -p media-codec -p media-render -p media-runtime -p media-server
+        run: cargo fmt --check -p media-domain -p media-application -p media-codec -p media-library -p media-playback -p media-render -p media-runtime -p media-server
 
       - name: Lint
         run: >-
           cargo clippy --all-targets
-          -p media-domain -p media-application -p media-codec -p media-render -p media-runtime -p media-server
+          -p media-domain -p media-application -p media-codec -p media-library -p media-playback -p media-render -p media-runtime -p media-server
           -- -D warnings
 
       - name: Test
-        run: cargo test -p media-domain -p media-application -p media-codec -p media-render -p media-runtime -p media-server
+        run: cargo test -p media-domain -p media-application -p media-codec -p media-library -p media-playback -p media-render -p media-runtime -p media-server
 
       # A packaged smoke test exercises the real executable rather than a test harness, so a
       # platform cannot pass by compiling alone.

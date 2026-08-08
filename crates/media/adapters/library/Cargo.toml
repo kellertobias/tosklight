@@ -1,0 +1,17 @@
+[package]
+name = "media-library"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+
+# The library storage adapter: how the catalog is laid out on disk, discovered, and edited.
+# Filesystem names live here and nowhere else; the domain deals in identities and addresses.
+[dependencies]
+media-codec = { path = "../codec" }
+media-domain = { path = "../../domain" }
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

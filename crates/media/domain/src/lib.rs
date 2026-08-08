@@ -13,6 +13,7 @@
 
 pub mod address;
 pub mod authored_tempo;
+pub mod catalog;
 pub mod clock;
 pub mod color;
 pub mod command;
@@ -29,6 +30,7 @@ pub mod tempo;
 pub mod timeline;
 
 pub use address::{AddressClass, AssetId, MediaAddress};
+pub use catalog::{CatalogError, CatalogFolder, CatalogItem, CatalogSnapshot, ItemKind};
 pub use clock::{MeasuredCadence, RenderClock};
 pub use color::{FlipMirror, Tint};
 pub use command::{Command, CommandKind, CommandSource, ControlOwnership, Timestamp};
