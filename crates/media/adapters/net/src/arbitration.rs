@@ -130,7 +130,9 @@ impl SourceArbiter {
 /// a stale packet through after a wrap.
 fn is_newer(candidate: u8, previous: u8) -> bool {
     let difference = candidate.wrapping_sub(previous) as i8;
-    difference > 0 || difference < -20
+    // Anything inside -20..=0 is a repeat or a small reordering; everything else is newer,
+    // including the large negative difference a wrap past 255 produces.
+    !(-20..=0).contains(&difference)
 }
 
 #[cfg(test)]
