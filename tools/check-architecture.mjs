@@ -609,7 +609,7 @@ const MEDIA_ALLOWED_WORKSPACE_DEPENDENCIES = new Map([
   ["media-net", new Set(["media-domain"])],
   ["media-playback", new Set(["media-domain", "media-codec", "media-render"])],
   ["media-render", new Set(["media-domain", "media-codec"])],
-  ["media-runtime", new Set(["media-application", "media-codec", "media-domain", "media-playback", "media-render"])],
+  ["media-runtime", new Set(["media-application", "media-codec", "media-domain", "media-net", "media-playback", "media-render"])],
   ["media-server", new Set(["media-runtime"])],
 ]);
 

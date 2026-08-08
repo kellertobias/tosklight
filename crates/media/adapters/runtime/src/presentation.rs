@@ -12,6 +12,8 @@ use std::sync::Arc;
 use media_application::configuration::{MediaConfiguration, OutputConfiguration, OutputTarget};
 use media_domain::geometry::Size;
 use media_domain::{MasterState, MediaState, OutputState, Timestamp};
+
+use crate::dmx::SharedState;
 use media_playback::{ClipLoader, PlaybackSession};
 use media_render::{LayerDraw, SourceTexture, SurfaceLost, WindowedOutput, select_monitor};
 use winit::application::ApplicationHandler;
@@ -35,9 +37,12 @@ pub fn needs_a_window(configuration: &MediaConfiguration) -> bool {
 /// throughout; nothing here waits on them, and they do not wait on this.
 pub fn run_event_loop(
     configuration: &MediaConfiguration,
-    state: MediaState,
+    state: SharedState,
     shutdown: Shutdown,
     diagnostics: Diagnostics,
+    // The same reference point the network listeners stamp against, so a packet's arrival and a
+    // frame's presentation sit on one timeline.
+    started: std::time::Instant,
 ) -> anyhow::Result<()> {
     let event_loop = EventLoop::new()?;
     // Outputs present continuously, so the loop should come back round rather than sleep until
@@ -55,7 +60,7 @@ pub fn run_event_loop(
         state,
         shutdown,
         diagnostics,
-        started: std::time::Instant::now(),
+        started,
         test_pattern_layer: test_pattern_layer(),
         loader: ClipLoader::new(configuration.playback.cache_budget_bytes),
         direct: None,
@@ -95,7 +100,7 @@ struct DirectClip {
 struct PresentationHost {
     outputs: Vec<HostedOutput>,
     pending: Vec<OutputConfiguration>,
-    state: MediaState,
+    state: SharedState,
     shutdown: Shutdown,
     diagnostics: Diagnostics,
     started: std::time::Instant,
@@ -244,7 +249,7 @@ impl PresentationHost {
             if !hosted.output.should_present(now) {
                 continue;
             }
-            let (_, master) = draw_list(&self.state, hosted.output.id());
+            let (_, master) = draw_list(&self.state.load(), hosted.output.id());
 
             // A clip named at launch plays on layer one. Everything below is the real path: a
             // session resolves the frame, the cache holds it, and it uploads compressed.

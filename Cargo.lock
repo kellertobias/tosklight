@@ -3808,9 +3808,11 @@ name = "media-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arc-swap",
  "media-application",
  "media-codec",
  "media-domain",
+ "media-net",
  "media-playback",
  "media-render",
  "thiserror 2.0.18",

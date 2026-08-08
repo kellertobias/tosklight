@@ -11,7 +11,9 @@ authors.workspace = true
 anyhow.workspace = true
 media-application = { path = "../../application" }
 media-domain = { path = "../../domain" }
+arc-swap.workspace = true
 media-codec = { path = "../codec" }
+media-net = { path = "../net" }
 media-playback = { path = "../playback" }
 media-render = { path = "../render" }
 thiserror.workspace = true

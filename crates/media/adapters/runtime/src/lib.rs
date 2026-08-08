@@ -7,12 +7,14 @@
 //! so an unusable configuration stops the process with an actionable error instead of bringing
 //! half a server up.
 
+mod dmx;
 mod layer_sources;
 mod logging;
 pub mod presentation;
 mod shutdown;
 mod startup;
 
+pub use dmx::SharedState;
 pub use layer_sources::LayerSources;
 pub use logging::install_logging;
 pub use presentation::Diagnostics;
@@ -73,21 +75,34 @@ pub fn run() -> anyhow::Result<()> {
         .enable_all()
         .build()?;
 
+    let started = std::time::Instant::now();
+    let state: dmx::SharedState = std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
+        initial_state(&configuration),
+    ));
+
+    // The desk drives the outputs, so the listeners come up before anything presents.
+    runtime
+        .block_on(async { dmx::spawn(&configuration, state.clone(), shutdown.clone(), started) })?;
+
     if !presentation::needs_a_window(&configuration) {
         return runtime.block_on(serve(configuration, shutdown));
     }
 
     // The services run on the background runtime; the main thread hosts the outputs. Shutdown
     // reaches both through the same handle, whichever of them starts it.
-    let state = initial_state(&configuration);
     let services = runtime.spawn({
         let configuration = configuration.clone();
         let shutdown = shutdown.clone();
         async move { serve(configuration, shutdown).await }
     });
 
-    let presented =
-        presentation::run_event_loop(&configuration, state, shutdown.clone(), diagnostics);
+    let presented = presentation::run_event_loop(
+        &configuration,
+        state,
+        shutdown.clone(),
+        diagnostics,
+        started,
+    );
     shutdown.request(ShutdownReason::Requested);
     let _ = runtime.block_on(services);
     presented
