@@ -30,6 +30,7 @@ pub mod state;
 pub mod tempo;
 pub mod text;
 pub mod timeline;
+pub mod visualizer;
 
 pub use address::{AddressClass, AssetId, MediaAddress};
 pub use audio::{Analysis, BeatDetector, Tuning};
@@ -50,3 +51,7 @@ pub use tempo::{
 };
 pub use text::{Countdown, TextEntry, TextKind, Visibility};
 pub use timeline::{MediaTiming, Presentation};
+pub use visualizer::{
+    ALL_KINDS, GeneratedCatalog, GeneratedCatalogError, GeneratedEntry, Parameter,
+    VisualizerConfiguration, VisualizerKind, VisualizerParameters,
+};

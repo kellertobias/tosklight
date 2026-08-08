@@ -13,12 +13,14 @@ pub mod compositor;
 pub mod gpu;
 pub mod offscreen;
 pub mod texture;
+pub mod visualizer;
 pub mod window;
 
 pub use compositor::{Compositor, LayerDraw, MAX_LAYERS, PROGRAM_FORMAT};
 pub use gpu::{Capabilities, Gpu, GpuError, PresentationSurface};
 pub use offscreen::OffScreenOutput;
 pub use texture::{SourceTexture, TextureError, block_bytes};
+pub use visualizer::{VisualizerError, VisualizerFrame, VisualizerRenderer};
 pub use window::{SurfaceLost, WindowSurface, WindowedOutput, select_monitor};
 
 use media_domain::clock::{MeasuredCadence, RenderClock};

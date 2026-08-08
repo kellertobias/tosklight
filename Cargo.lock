@@ -3819,9 +3819,11 @@ dependencies = [
 name = "media-render"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bytemuck",
  "media-codec",
  "media-domain",
+ "png 0.18.1",
  "pollster",
  "thiserror 2.0.18",
  "wgpu",

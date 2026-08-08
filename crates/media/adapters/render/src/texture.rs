@@ -11,6 +11,11 @@ use crate::gpu::Gpu;
 /// One layer's visual input, already on the GPU.
 pub struct SourceTexture {
     pub(crate) view: wgpu::TextureView,
+    /// Kept so a generated source can be read back — for a reference render, and later for the
+    /// CITP preview, which asks for pixels only while a desk is subscribed.
+    texture: wgpu::Texture,
+    /// Whether this texture may be copied out of. Uploaded sources are write-only by design.
+    readable: bool,
     size: Size,
 }
 
@@ -61,6 +66,8 @@ impl SourceTexture {
 
         Ok(Self {
             view: texture.create_view(&wgpu::TextureViewDescriptor::default()),
+            texture,
+            readable: false,
             size,
         })
     }
@@ -116,8 +123,57 @@ impl SourceTexture {
 
         Ok(Self {
             view: texture.create_view(&wgpu::TextureViewDescriptor::default()),
+            texture,
+            readable: false,
             size,
         })
+    }
+
+    /// A texture a pass draws into, which then reads back as an ordinary source.
+    ///
+    /// This is how a generated visualizer reaches the compositor: it renders here, and everything
+    /// downstream treats the result exactly like a decoded frame.
+    pub fn render_target(gpu: &Gpu, size: Size) -> Result<Self, TextureError> {
+        if size.is_empty() {
+            return Err(TextureError::Empty);
+        }
+        if !gpu.supports_resolution(size.width, size.height) {
+            return Err(TextureError::TooLarge {
+                width: size.width,
+                height: size.height,
+                limit: gpu.capabilities.max_texture_dimension,
+            });
+        }
+        let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("media-generated-source"),
+            size: wgpu::Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: VISUALIZER_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        Ok(Self {
+            view: texture.create_view(&wgpu::TextureViewDescriptor::default()),
+            texture,
+            readable: true,
+            size,
+        })
+    }
+
+    /// Reads a generated source back as tightly packed 8-bit RGBA.
+    pub fn read_rgba8(&self, gpu: &Gpu) -> Result<Vec<u8>, TextureError> {
+        if !self.readable {
+            return Err(TextureError::NotReadable);
+        }
+        Ok(crate::offscreen::read_rgba8(gpu, &self.texture, self.size))
     }
 
     /// A single-colour texture, for tests and for the solid backgrounds a generated source needs
@@ -131,6 +187,10 @@ impl SourceTexture {
         self.size
     }
 }
+
+/// What a generated source renders into. Linear, matching every other source, so a reference
+/// render of a visualizer is byte-identical wherever it runs.
+pub const VISUALIZER_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 /// The bytes a BC3 image of this size occupies. Block formats cover whole 4x4 tiles, so a
 /// dimension that is not a multiple of four still pays for its partial tiles.
@@ -149,4 +209,6 @@ pub enum TextureError {
     TooLarge { width: u32, height: u32, limit: u32 },
     #[error("this adapter does not sample BC textures; expand the blocks to RGBA instead")]
     NoBlockCompression,
+    #[error("an uploaded source cannot be read back; only a generated one can")]
+    NotReadable,
 }

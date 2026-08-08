@@ -21,7 +21,10 @@ pub const WAVEFORM_POINTS: usize = 512;
 pub const BANDS: usize = 64;
 
 /// What one analysis pass found.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+///
+/// The default is silence, which is what a visualizer sees before any audio device is open — a
+/// real state, not a placeholder, so nothing has to branch on "no analysis yet".
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Analysis {
     /// The window, downsampled for display. Not for measurement.
