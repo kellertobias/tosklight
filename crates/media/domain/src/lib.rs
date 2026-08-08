@@ -12,9 +12,11 @@
 //! reducer only compares timestamps.
 
 pub mod address;
+pub mod clock;
 pub mod color;
 pub mod command;
 pub mod dmx;
+pub mod geometry;
 pub mod layer;
 pub mod master;
 pub mod output;
@@ -25,8 +27,10 @@ pub mod state;
 pub mod tempo;
 
 pub use address::{AddressClass, MediaAddress};
+pub use clock::{MeasuredCadence, RenderClock};
 pub use color::{FlipMirror, Tint};
 pub use command::{Command, CommandKind, CommandSource, ControlOwnership, Timestamp};
+pub use geometry::{LayerTransform, Point, Size};
 pub use layer::{LayerState, MaskState, ScalingMode, SourceFailure, SourceStatus};
 pub use master::MasterState;
 pub use output::{OutputId, OutputName, PresentationMode};

@@ -54,18 +54,34 @@ pub struct Timestamp(u64);
 impl Timestamp {
     pub const ZERO: Self = Self(0);
 
+    /// Microseconds, because a render clock reasons about frame intervals: at 60 Hz a whole
+    /// millisecond is six percent of the budget, and rounding it away would make measured cadence
+    /// meaningless.
+    pub const fn from_micros(micros: u64) -> Self {
+        Self(micros)
+    }
+
     pub const fn from_millis(millis: u64) -> Self {
-        Self(millis)
+        Self(millis * 1_000)
+    }
+
+    pub const fn as_micros(self) -> u64 {
+        self.0
     }
 
     pub const fn as_millis(self) -> u64 {
-        self.0
+        self.0 / 1_000
+    }
+
+    /// This instant advanced by a duration. Saturates at the end of the range.
+    pub const fn plus(self, duration: Duration) -> Self {
+        Self(self.0.saturating_add(duration.as_micros() as u64))
     }
 
     /// How long after `earlier` this instant is. Saturates rather than wrapping, so a clock that
     /// goes backwards cannot manufacture an enormous age.
     pub const fn since(self, earlier: Self) -> Duration {
-        Duration::from_millis(self.0.saturating_sub(earlier.0))
+        Duration::from_micros(self.0.saturating_sub(earlier.0))
     }
 }
 

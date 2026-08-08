@@ -3730,6 +3730,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "media-render"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "media-domain",
+ "pollster",
+ "thiserror 2.0.18",
+ "wgpu",
+]
+
+[[package]]
 name = "media-runtime"
 version = "0.1.0"
 dependencies = [

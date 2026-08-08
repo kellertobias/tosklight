@@ -1,0 +1,467 @@
+//! The layer compositor.
+//!
+//! Layers draw into a program target in order, lowest first, with normal alpha blending. The
+//! master pass then tints, dims, and flips that finished composite onto the output.
+
+use bytemuck::{Pod, Zeroable};
+use media_domain::geometry::{Size, layer_transform};
+use media_domain::{LayerState, MasterState, geometry};
+
+use crate::gpu::Gpu;
+use crate::texture::SourceTexture;
+
+/// The most layers one output composites. The eight-layer personality is the larger of the two
+/// supported products.
+pub const MAX_LAYERS: usize = 8;
+
+/// The program target's format. Linear rather than sRGB, so a reference render is byte-identical
+/// wherever it runs.
+pub const PROGRAM_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+
+/// One layer to draw this frame.
+pub struct LayerDraw<'a> {
+    pub state: &'a LayerState,
+    pub source: &'a SourceTexture,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct LayerUniform {
+    center: [f32; 2],
+    size: [f32; 2],
+    rotation: [f32; 2],
+    output: [f32; 2],
+    tint: [f32; 4],
+    controls: [f32; 4],
+}
+
+impl LayerUniform {
+    fn new(layer: &LayerState, source: Size, output: Size) -> Self {
+        let transform = layer_transform(layer, source, output);
+        let (sin, cos) = transform.rotation_degrees.to_radians().sin_cos();
+        Self {
+            center: [transform.center.x, transform.center.y],
+            size: [transform.size.0, transform.size.1],
+            rotation: [cos, sin],
+            output: [output.width as f32, output.height as f32],
+            // Layer dimmer becomes the alpha of the layer tint.
+            tint: [
+                layer.tint.red,
+                layer.tint.green,
+                layer.tint.blue,
+                layer.dimmer,
+            ],
+            controls: [layer.grayscale, 0.0, 0.0, 0.0],
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct MasterUniform {
+    tint: [f32; 4],
+    flip: [f32; 2],
+    padding: [f32; 2],
+}
+
+impl MasterUniform {
+    fn new(master: &MasterState) -> Self {
+        let (horizontal, vertical) = geometry::flip_signs(master.flip_mirror);
+        Self {
+            tint: [
+                master.tint.red,
+                master.tint.green,
+                master.tint.blue,
+                master.dimmer,
+            ],
+            flip: [horizontal, vertical],
+            padding: [0.0; 2],
+        }
+    }
+}
+
+/// One output's GPU pipelines and its program target.
+pub struct Compositor {
+    gpu: Gpu,
+    size: Size,
+    program: wgpu::Texture,
+    program_view: wgpu::TextureView,
+    sampler: wgpu::Sampler,
+    layer_pipeline: wgpu::RenderPipeline,
+    layer_layout: wgpu::BindGroupLayout,
+    layer_uniforms: Vec<wgpu::Buffer>,
+    master_pipeline: wgpu::RenderPipeline,
+    master_layout: wgpu::BindGroupLayout,
+    master_uniform: wgpu::Buffer,
+}
+
+impl Compositor {
+    pub fn new(gpu: &Gpu, size: Size, output_format: wgpu::TextureFormat) -> Self {
+        let device = &gpu.device;
+
+        let layer_layout = uniform_and_texture_layout(device, "media-layer");
+        let master_layout = uniform_and_texture_layout(device, "media-master");
+
+        let layer_pipeline = pipeline(
+            device,
+            "media-layer",
+            &layer_layout,
+            include_str!("shaders/layer.wgsl"),
+            PROGRAM_FORMAT,
+            Some(wgpu::BlendState::ALPHA_BLENDING),
+        );
+        let master_pipeline = pipeline(
+            device,
+            "media-master",
+            &master_layout,
+            include_str!("shaders/master.wgsl"),
+            output_format,
+            None,
+        );
+
+        let layer_uniforms = (0..MAX_LAYERS)
+            .map(|index| {
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some(&format!("media-layer-{index}")),
+                    size: std::mem::size_of::<LayerUniform>() as u64,
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                })
+            })
+            .collect();
+
+        let master_uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("media-master"),
+            size: std::mem::size_of::<MasterUniform>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let (program, program_view) = program_target(device, size);
+
+        Self {
+            gpu: gpu.clone(),
+            size,
+            program,
+            program_view,
+            sampler: device.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("media-source"),
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                ..Default::default()
+            }),
+            layer_pipeline,
+            layer_layout,
+            layer_uniforms,
+            master_pipeline,
+            master_layout,
+            master_uniform,
+        }
+    }
+
+    pub const fn size(&self) -> Size {
+        self.size
+    }
+
+    /// Rebuilds the program target for a new resolution.
+    ///
+    /// Only this output is affected. A monitor change, a refresh-rate change, sleep and wake, or
+    /// a lost surface recreate one output; the others keep presenting.
+    pub fn resize(&mut self, size: Size) {
+        if size == self.size || size.is_empty() {
+            return;
+        }
+        let (program, view) = program_target(&self.gpu.device, size);
+        self.program = program;
+        self.program_view = view;
+        self.size = size;
+    }
+
+    /// Composites one frame onto `target`.
+    ///
+    /// Layers draw lowest first, so layer 8 lands above layer 1 wherever it is opaque. A layer
+    /// that does not draw — dimmer at zero, nothing selected, or a source that failed to load —
+    /// contributes nothing rather than contributing black.
+    pub fn render(
+        &mut self,
+        layers: &[LayerDraw<'_>],
+        master: &MasterState,
+        target: &wgpu::TextureView,
+    ) {
+        let device = &self.gpu.device;
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("media-frame"),
+        });
+
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("media-layers"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.program_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        // Transparent black: an output with no layers shows nothing, and a
+                        // preview of it is honest rather than an error card.
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.layer_pipeline);
+
+            for (index, layer) in layers.iter().take(MAX_LAYERS).enumerate() {
+                if !layer.state.draws() {
+                    continue;
+                }
+                let uniform = LayerUniform::new(layer.state, layer.source.size(), self.size);
+                self.gpu.queue.write_buffer(
+                    &self.layer_uniforms[index],
+                    0,
+                    bytemuck::bytes_of(&uniform),
+                );
+
+                // The texture a layer samples changes whenever its source does, so the group is
+                // built per frame. Eight small groups is a rounding error next to the draw; the
+                // video slice can cache them per session if measurement says otherwise.
+                let group = bind_group(
+                    device,
+                    &self.layer_layout,
+                    &self.layer_uniforms[index],
+                    &layer.source.view,
+                    &self.sampler,
+                );
+                pass.set_bind_group(0, &group, &[]);
+                pass.draw(0..6, 0..1);
+            }
+        }
+
+        self.gpu.queue.write_buffer(
+            &self.master_uniform,
+            0,
+            bytemuck::bytes_of(&MasterUniform::new(master)),
+        );
+        {
+            let group = bind_group(
+                device,
+                &self.master_layout,
+                &self.master_uniform,
+                &self.program_view,
+                &self.sampler,
+            );
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("media-master"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.master_pipeline);
+            pass.set_bind_group(0, &group, &[]);
+            pass.draw(0..6, 0..1);
+        }
+
+        self.gpu.queue.submit([encoder.finish()]);
+    }
+}
+
+fn program_target(device: &wgpu::Device, size: Size) -> (wgpu::Texture, wgpu::TextureView) {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("media-program"),
+        size: wgpu::Extent3d {
+            width: size.width.max(1),
+            height: size.height.max(1),
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: PROGRAM_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    (texture, view)
+}
+
+fn uniform_and_texture_layout(device: &wgpu::Device, label: &str) -> wgpu::BindGroupLayout {
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some(label),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    })
+}
+
+fn bind_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    uniform: &wgpu::Buffer,
+    texture: &wgpu::TextureView,
+    sampler: &wgpu::Sampler,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(texture),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+        ],
+    })
+}
+
+fn pipeline(
+    device: &wgpu::Device,
+    label: &str,
+    layout: &wgpu::BindGroupLayout,
+    source: &str,
+    format: wgpu::TextureFormat,
+    blend: Option<wgpu::BlendState>,
+) -> wgpu::RenderPipeline {
+    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some(label),
+        source: wgpu::ShaderSource::Wgsl(source.into()),
+    });
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some(label),
+        bind_group_layouts: &[Some(layout)],
+        immediate_size: 0,
+    });
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(label),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &module,
+            entry_point: Some("vertex"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &module,
+            entry_point: Some("fragment"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use media_domain::{ScalingMode, Tint};
+
+    #[test]
+    fn the_layer_uniform_matches_the_geometry_the_domain_computed() {
+        let layer = LayerState {
+            scale_x: 2.0,
+            rotation: 90.0,
+            scaling_mode: ScalingMode::Original,
+            dimmer: 0.5,
+            tint: Tint::new(1.0, 0.0, 0.0),
+            grayscale: 0.25,
+            ..Default::default()
+        };
+        let source = Size::new(100, 50);
+        let output = Size::new(1920, 1080);
+        let uniform = LayerUniform::new(&layer, source, output);
+        let transform = layer_transform(&layer, source, output);
+
+        assert_eq!(uniform.center, [transform.center.x, transform.center.y]);
+        assert_eq!(uniform.size, [transform.size.0, transform.size.1]);
+        assert_eq!(uniform.output, [1920.0, 1080.0]);
+        assert!(
+            (uniform.rotation[0] - 0.0).abs() < 1e-6,
+            "cosine of a quarter turn"
+        );
+        assert!(
+            (uniform.rotation[1] - 1.0).abs() < 1e-6,
+            "sine of a quarter turn"
+        );
+        assert_eq!(
+            uniform.tint,
+            [1.0, 0.0, 0.0, 0.5],
+            "dimmer rides in the tint's alpha"
+        );
+        assert_eq!(uniform.controls[0], 0.25);
+    }
+
+    #[test]
+    fn the_uniforms_are_the_size_the_shaders_declare() {
+        assert_eq!(std::mem::size_of::<LayerUniform>(), 64);
+        assert_eq!(std::mem::size_of::<MasterUniform>(), 32);
+    }
+
+    #[test]
+    fn the_master_uniform_carries_the_flip_as_a_per_axis_sign() {
+        let master = MasterState {
+            flip_mirror: media_domain::FlipMirror::Horizontal,
+            dimmer: 0.75,
+            ..Default::default()
+        };
+        let uniform = MasterUniform::new(&master);
+        assert_eq!(uniform.flip, [-1.0, 1.0]);
+        assert_eq!(uniform.tint[3], 0.75);
+    }
+}

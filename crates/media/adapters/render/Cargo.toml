@@ -1,0 +1,21 @@
+[package]
+name = "media-render"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+
+# The Media render adapter. It owns GPU resources for one output and nothing else: it never
+# opens a socket, parses a packet, scans the filesystem, or decides who owns a control value.
+#
+# It deliberately does not depend on `viz-render`. That crate is a 3D lighting visualizer with a
+# single-surface, single-present-mode shape; see docs/engineering/media-renderer-reuse-decision.md.
+[dependencies]
+bytemuck.workspace = true
+media-domain = { path = "../../domain" }
+pollster.workspace = true
+thiserror.workspace = true
+wgpu.workspace = true
+
+[lints]
+workspace = true

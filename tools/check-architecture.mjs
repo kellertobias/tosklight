@@ -604,6 +604,7 @@ function capabilityStateOwnershipBoundaries() {
 const MEDIA_ALLOWED_WORKSPACE_DEPENDENCIES = new Map([
   ["media-domain", new Set()],
   ["media-application", new Set(["media-domain"])],
+  ["media-render", new Set(["media-domain"])],
   ["media-runtime", new Set(["media-application", "media-domain"])],
   ["media-server", new Set(["media-runtime"])],
 ]);
