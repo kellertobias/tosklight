@@ -7,6 +7,8 @@
 
 pub mod loader;
 pub mod session;
+pub mod sessions;
 
 pub use loader::{ClipLoader, LoadError, LoadProgress};
 pub use session::{Delivery, PlaybackSession};
+pub use sessions::{LayerSessions, LayerSource};

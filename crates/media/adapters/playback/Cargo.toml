@@ -10,6 +10,7 @@ authors.workspace = true
 [dependencies]
 media-codec = { path = "../codec" }
 media-domain = { path = "../../domain" }
+media-library = { path = "../library" }
 media-render = { path = "../render" }
 thiserror.workspace = true
 tracing.workspace = true
