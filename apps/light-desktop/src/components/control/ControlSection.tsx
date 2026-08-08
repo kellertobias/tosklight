@@ -19,22 +19,6 @@ import {
 	VisibleEncoderCountProvider,
 } from "./parameterControls/VisibleEncoderCount";
 
-/**
- * The main screen keeps its command line, keypad and programmer tools while the encoders
- * sit on an optional screen. Only the encoder pane itself moves, and it says where it went
- * rather than leaving the operator in front of an empty half-surface.
- */
-function EncodersOnAnotherScreen({ name }: { name: string }) {
-	return (
-		<div className="parameter-empty encoders-elsewhere" role="status">
-			<b>Encoders on {name}</b>
-			<small>
-				Move them back in Setup → Screens → Encoder placement to control them here.
-			</small>
-		</div>
-	);
-}
-
 export function ControlSection() {
 	const { state } = useApp();
 	const placement = useEncoderPlacement(null);
@@ -50,6 +34,18 @@ export function ControlSection() {
 		configuredEncoderCount,
 		hardware,
 	);
+	const playbacks = (
+		<PlaybackFaderBank
+			playbackLayout={session?.desk.playback_layout}
+			hardwareConnected={hardwareConnected}
+		/>
+	);
+	/*
+	 * With the encoders on another screen this surface has no programmer pane to show, so
+	 * the Programmer/Playback toggle only swaps the right pane between the keypad and the
+	 * Playback tools. The left pane stays on the Playbacks in both modes rather than
+	 * leaving the operator in front of an empty half-surface.
+	 */
 	return (
 		<VisibleEncoderCountProvider count={visibleEncoderCount}>
 			<CommandSection
@@ -60,17 +56,12 @@ export function ControlSection() {
 					state.builtIn === "patch" ? (
 						<PatchParameterControls hardwareConnected={hardware} />
 					) : encoderScreen ? (
-						<EncodersOnAnotherScreen name={encoderScreen.name} />
+						playbacks
 					) : (
 						<ParameterControls />
 					)
 				}
-				playbacks={
-					<PlaybackFaderBank
-						playbackLayout={session?.desk.playback_layout}
-						hardwareConnected={hardwareConnected}
-					/>
-				}
+				playbacks={playbacks}
 				programmerTools={<NumericPad />}
 				playbackTools={<PlaybackTools />}
 				hardwareTools={<HardwareControlSummary />}

@@ -62,7 +62,10 @@ export function ScreenPageControls({
 			<Button disabled={!writable || page <= 1} onClick={() => setPage(page - 1)}>
 				▲ PAGE UP
 			</Button>
-			<Button onClick={() => writable && setPicker(true)}>
+			<Button
+				className="screen-page-number"
+				onClick={() => writable && setPicker(true)}
+			>
 				<strong>{page}</strong>
 				<span>
 					{pages.find((item) => item.number === page)?.name ?? `Page ${page}`}

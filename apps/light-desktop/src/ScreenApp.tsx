@@ -15,6 +15,7 @@ import { LeftDock } from "./components/shell/LeftDock";
 import { NativeDragStrip } from "./components/shell/NativeDragStrip";
 import { WorkspaceView } from "./components/shell/WorkspaceView";
 import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
+import { screenShowsPlaybacks } from "./features/screens/encoderPlacement";
 import { FixedScreenPane } from "./features/screens/FixedScreenPane";
 import { ScreenControlRegion } from "./features/screens/ScreenControlRegion";
 import { useScreens } from "./features/screens/ScreensContext";
@@ -34,8 +35,7 @@ function DesktopScreenSurface({
 	const programmerOwner =
 		useScreens().screens?.programmer_control_surface?.owner_screen_id ===
 		screen.id;
-	const showScreenControls =
-		screen.show_playbacks || screen.show_page_controls;
+	const showScreenControls = screenShowsPlaybacks(screen);
 	const hydrated = useRef(false);
 	const [layoutReady, setLayoutReady] = useState(false);
 	const screenRef = useRef(screen);
@@ -92,7 +92,7 @@ function FixedScreenSurface({ screen }: { screen: ScreenConfiguration }) {
 		useScreens().screens?.programmer_control_surface?.owner_screen_id ===
 		screen.id;
 	if (screen.content.type !== "fixed_pane") return null;
-	const showScreenControls = screen.show_playbacks || screen.show_page_controls;
+	const showScreenControls = screenShowsPlaybacks(screen);
 	return (
 		<div
 			className={`screen-shell fixed-content ${showScreenControls ? "with-playbacks" : ""} ${programmerOwner ? "with-control" : ""}`}

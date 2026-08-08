@@ -8,6 +8,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScreenConfiguration, ScreenSnapshot } from "../../api/types";
 import type { ShowObject } from "../showObjects/contracts";
+import {
+	LowerSectionSwitch,
+	LowerSectionSwitchProvider,
+} from "./LowerSectionSwitch";
 import { ScreensProvider } from "./ScreensContext";
 import type { ScreensContextValue } from "./types";
 
@@ -360,7 +364,7 @@ describe("dormant secondary screen Playback authority", () => {
 		expect(mocks.bankPages).toEqual([]);
 	});
 
-	it("mounts Page Controls without a Playback bank when configured independently", () => {
+	it("mounts no Page Controls for a legacy screen that stored them without Playbacks", () => {
 		mount(
 			source({ screens: snapshot({ "screen-1": 2 }) }),
 			screenConfiguration({
@@ -368,9 +372,8 @@ describe("dormant secondary screen Playback authority", () => {
 				show_page_controls: true,
 			}),
 		);
-		expect(mocks.bankPages).toEqual([]);
-		expect(mocks.pagesViewMounted).toBe(1);
-		expect(document.querySelector(".screen-page-controls")).not.toBeNull();
+		expect(mocks.pagesViewMounted).toBe(0);
+		expect(document.querySelector(".screen-page-controls")).toBeNull();
 	});
 
 	it("mounts no page-control authority when page controls are hidden", () => {
@@ -381,6 +384,49 @@ describe("dormant secondary screen Playback authority", () => {
 		expect(bankPage()).toBe("2");
 		expect(mocks.pagesViewMounted).toBe(0);
 		expect(document.querySelector(".screen-page-controls")).toBeNull();
+	});
+});
+
+describe("Playback section width", () => {
+	it("gives the faders the whole section without page controls or the switch", () => {
+		mount(
+			source({ screens: snapshot({ "screen-1": 2 }) }),
+			screenConfiguration({ show_page_controls: false }),
+		);
+		expect(document.querySelector(".screen-playbacks")).toHaveClass(
+			"playbacks-only",
+		);
+		expect(document.querySelector(".screen-page-controls")).toBeNull();
+	});
+
+	it("keeps the side column for the switch when this screen also holds the encoders", () => {
+		render(
+			<ScreensProvider source={source({ screens: snapshot({ "screen-1": 2 }) })}>
+				<LowerSectionSwitchProvider
+					switchNode={<LowerSectionSwitch view="playbacks" onView={() => {}} />}
+				>
+					<ScreenPlaybackSection
+						screen={screenConfiguration({ show_page_controls: false })}
+					/>
+				</LowerSectionSwitchProvider>
+			</ScreensProvider>,
+		);
+		expect(document.querySelector(".screen-playbacks")).not.toHaveClass(
+			"playbacks-only",
+		);
+		expect(
+			document.querySelector(".screen-page-controls.switch-only"),
+		).not.toBeNull();
+	});
+
+	it("keeps the side column while page controls are visible", () => {
+		mount(
+			source({ screens: snapshot({ "screen-1": 2 }) }),
+			screenConfiguration(),
+		);
+		expect(document.querySelector(".screen-playbacks")).not.toHaveClass(
+			"playbacks-only",
+		);
 	});
 });
 

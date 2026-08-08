@@ -34,5 +34,13 @@ export function useEncoderPlacement(
 
 /** A secondary screen offers the Playback/Encoders switch only when it carries both. */
 export function screenShowsPlaybacks(screen: ScreenConfiguration) {
-	return Boolean(screen.show_playbacks || screen.show_page_controls);
+	return Boolean(screen.show_playbacks);
+}
+
+/**
+ * Page controls address the page of this screen's Playbacks, so they follow them. A
+ * legacy screen that stored page controls without Playbacks shows neither.
+ */
+export function screenShowsPageControls(screen: ScreenConfiguration) {
+	return Boolean(screen.show_playbacks && screen.show_page_controls);
 }

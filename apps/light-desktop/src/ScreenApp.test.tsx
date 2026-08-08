@@ -156,7 +156,7 @@ describe("ScreenApp", () => {
 		expect(screen.getByTestId("screen-playbacks")).toBeInTheDocument();
 	});
 
-	it("keeps Page Controls independently available when Playbacks are hidden", () => {
+	it("reserves no control region for stored Page Controls without Playbacks", () => {
 		mocks.screens = {
 			screens: [
 				configuredScreen({
@@ -168,7 +168,7 @@ describe("ScreenApp", () => {
 
 		render(<ScreenApp id="screen-1" />);
 
-		expect(screen.getByTestId("screen-playbacks")).toBeInTheDocument();
+		expect(screen.queryByTestId("screen-playbacks")).not.toBeInTheDocument();
 	});
 
 	it("gives a fixed side pane the full height beside the control region", () => {

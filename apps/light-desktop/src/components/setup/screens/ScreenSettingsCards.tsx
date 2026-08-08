@@ -415,11 +415,12 @@ function ScreenLayoutFields({
 	desks,
 	update,
 }: Pick<ScreenSettingsFieldsProps, "draft" | "desks" | "update">) {
-	const fixedPane =
+	const fixedContent =
 		draft.content.type === "fixed_pane" ||
 		draft.content.type === "fixed_side_pane"
-			? draft.content.pane
+			? draft.content
 			: null;
+	const fixedPane = fixedContent?.pane ?? null;
 	return (
 		<section>
 			<h3>Layout</h3>
@@ -464,6 +465,22 @@ function ScreenLayoutFields({
 						{ value: "fixed_side_pane_right", label: "Fixed right pane" },
 					]}
 				/>
+				{fixedPane && (
+					<SelectField
+						label="Pane"
+						value={fixedPane.type}
+						onChange={(type) => {
+							if (!fixedContent) return;
+							update({
+								content: { ...fixedContent, pane: defaultFixedPane(type) },
+							});
+						}}
+						options={Object.entries(fixedPaneLabels).map(([value, label]) => ({
+							value: value as FixedScreenPane["type"],
+							label,
+						}))}
+					/>
+				)}
 				{draft.content.type === "desktop" && (
 					<SelectField
 						label="Desktop"
@@ -499,17 +516,26 @@ function ScreenLayoutFields({
 					offLabel="Hidden"
 					onLabel="Visible"
 					checked={draft.show_playbacks}
-					onChange={(event) => update({ show_playbacks: event.target.checked })}
-				/>
-				<SwitchField
-					label="Page controls"
-					offLabel="Hidden"
-					onLabel="Visible"
-					checked={draft.show_page_controls}
 					onChange={(event) =>
-						update({ show_page_controls: event.target.checked })
+						update(
+							event.target.checked
+								? { show_playbacks: true }
+								: /* Without Playbacks there is no page to control. */
+									{ show_playbacks: false, show_page_controls: false },
+						)
 					}
 				/>
+				{draft.show_playbacks && (
+					<SwitchField
+						label="Page controls"
+						offLabel="Hidden"
+						onLabel="Visible"
+						checked={draft.show_page_controls}
+						onChange={(event) =>
+							update({ show_page_controls: event.target.checked })
+						}
+					/>
+				)}
 				<SwitchField
 					label="Command line"
 					offLabel="Hidden"
@@ -548,25 +574,6 @@ function ScreenPaneSettings({
 			<div className="screen-settings-fields">
 				{fixedPane ? (
 					<>
-						<SelectField
-							label="Pane"
-							value={fixedPane.type}
-							onChange={(type) => {
-								if (!fixedContent) return;
-								update({
-									content: {
-										...fixedContent,
-										pane: defaultFixedPane(type),
-									},
-								});
-							}}
-							options={Object.entries(fixedPaneLabels).map(
-								([value, label]) => ({
-									value: value as FixedScreenPane["type"],
-									label,
-								}),
-							)}
-						/>
 						<FixedPaneSettings
 							pane={fixedPane}
 							cueLists={cueLists}
@@ -642,7 +649,8 @@ function ScreenPlacementFields({
 					checked={draft.fullscreen}
 					onChange={(event) => update({ fullscreen: event.target.checked })}
 				/>
-				<FormLayout columns={2} minColumnWidth={90}>
+				{/* Stacked: the four labels do not fit beside each other at this width. */}
+				<FormLayout columns={1} minColumnWidth={90}>
 					<NumberField
 						label="Window X"
 						value={draft.bounds?.x ?? 0}
