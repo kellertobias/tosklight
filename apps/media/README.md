@@ -11,6 +11,17 @@ component library.
 ## Running
 
 ```sh
+npm run open:media
+```
+
+That builds the server, seeds a development configuration under the runtime data directory on
+first run — one windowed output on the primary display — and opens it. The seeded file is never
+overwritten afterwards. Pass arguments through, for example
+`npm run open:media -- --test-pattern`. `npm run build:media` builds without opening anything.
+
+Directly:
+
+```sh
 cargo run -p media-server
 ```
 

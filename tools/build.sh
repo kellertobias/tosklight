@@ -25,6 +25,8 @@ usage() {
   cat <<'EOF'
 tools/build.sh is invoked by the root package.json scripts:
   npm run open                 Build debug server and app, stop old instances, and open ToskLight
+  npm run open:media [ARGS...] Build the Media Server and open its outputs on their monitors
+  npm run build:media          Build the Media Server only
   npm run open:viz [ARGS...]   Build the visualizer and the Viz editor, and open the visualizer with it
   npm run build:viz            Build the standalone visualizer only
   npm run open:viz-editor      Build the Viz rig-planning editor and open it
@@ -49,7 +51,7 @@ tools/build.sh is invoked by the root package.json scripts:
                                Remove only stale Cargo incremental objects
   npm run artifact-path NAME   Print a resolved artifact path (for CI and tooling)
 
-Direct subcommands: open | open-viz [ARGS...] | build-viz | open-viz-editor [ARGS...] | build-viz-editor | demo-show | demo-capture | manual | icon-contact-sheets | models [verify|render|open] | safari | pages | pages-serve [PORT] | codesafari |
+Direct subcommands: open | open-media [ARGS...] | build-media | open-viz [ARGS...] | build-viz | open-viz-editor [ARGS...] | build-viz-editor | demo-show | demo-capture | manual | icon-contact-sheets | models [verify|render|open] | safari | pages | pages-serve [PORT] | codesafari |
   archive [install] | migrate-artifacts | clean-root | clean-cargo-incremental | clean-artifacts [runtime PATH] | path NAME
 EOF
 }
@@ -552,6 +554,65 @@ open_viz_editor() {
     "$TARGET_DIR/release/viz-editor" "$@"
 }
 
+# The Media Server is a separate product with its own build. Building or opening ToskLight never
+# builds it, and it never has to be present for the desk to run.
+build_media() {
+  require cargo
+  echo "Building the Media Server..."
+  cargo build --release --manifest-path "$ROOT/Cargo.toml" -p media-server
+  echo "Media Server built: $TARGET_DIR/release/media-server"
+}
+
+# Where a development Media Server keeps its configuration and library.
+media_data_dir() {
+  printf '%s\n' "$LIGHT_RUNTIME_DATA_DIR/media"
+}
+
+# A first run has no configuration, and the shipped defaults are off-screen — correct for a
+# server, useless for an operator who typed `open:media` expecting to see something. So a
+# development configuration is seeded once, bound to the primary display. It is never overwritten
+# afterwards: whatever the operator has changed is theirs.
+seed_media_configuration() {
+  local data_dir configuration
+  data_dir="$(media_data_dir)"
+  configuration="$data_dir/media-server.json"
+  [[ -f "$configuration" ]] && return 0
+
+  mkdir -p "$data_dir/library"
+  echo "Seeding a development Media configuration at $configuration"
+  cat >"$configuration" <<JSON
+{
+  "version": 1,
+  "configuration": {
+    "instanceId": "development",
+    "library": { "root": "$data_dir/library", "targetCodec": "h264" },
+    "outputs": [
+      {
+        "id": "6b1f0c2a-1111-4a2b-8c3d-000000000001",
+        "name": "Main",
+        "target": { "kind": "monitor", "monitor": { "by": "index", "value": 0 }, "fullscreen": false },
+        "resolution": { "width": 1280, "height": 720 },
+        "presentation": "display-synchronized",
+        "personality": "eight-layers"
+      }
+    ]
+  }
+}
+JSON
+}
+
+open_media() {
+  build_media
+  seed_media_configuration
+  local data_dir
+  data_dir="$(media_data_dir)"
+  echo "Opening the Media Server. Close its output window to stop it."
+  echo "Configuration: $data_dir/media-server.json"
+  MEDIA_CONFIG="$data_dir/media-server.json" \
+  MEDIA_LOG="${MEDIA_LOG:-info}" \
+    "$TARGET_DIR/release/media-server" "$@"
+}
+
 # The visualizer is a separate product with its own build. Building or opening ToskLight never
 # builds it, and it never has to be present for the desk to run.
 build_visualizer() {
@@ -644,6 +705,14 @@ open_visualizer() {
 }
 
 case "${1:-}" in
+  open-media)
+    shift
+    open_media "$@"
+    ;;
+  build-media)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    build_media
+    ;;
   open-viz)
     shift
     open_visualizer "$@"
