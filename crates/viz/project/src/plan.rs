@@ -332,12 +332,26 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             .and_then(|index| scene.models.get(index as usize))
             .map(|body| EmitterMount::from_model(body, body_size))
             .unwrap_or_default();
+        /*
+         * Where this fixture is addressed, for the instances that carry no address themselves.
+         *
+         * A multi-patch instance is the same logical fixture standing somewhere else: it has its
+         * own position, its own inversions and its own installed colour, and it shares the
+         * programming — which means it shares the DMX. The patch says so by giving it no address
+         * of its own.
+         *
+         * Read as an independent patch that happens to be unaddressed, such an instance decodes
+         * no channels and is drawn dark for ever, so a bank of four ACLs on one address lit one
+         * lamp and left three cold. It is not unpatched; it is patched to the same place.
+         */
+        let shared_addresses = fixture
+            .instances
+            .iter()
+            .map(address_map)
+            .find(|addresses| !addresses.is_empty())
+            .unwrap_or_default();
         for instance in &fixture.instances {
             let fixture_index = scene.fixtures.len() as u32;
-            let patched = instance
-                .split_patches
-                .iter()
-                .any(|(_, address)| address.is_some());
             let missing_optics = mode.geometry.emitters.is_empty();
             scene.fixtures.push(FixtureInstance {
                 instance_id: instance.instance_id,
@@ -359,11 +373,12 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
                     size: body_size,
                     kind: class.body_kind(moving),
                 },
-                patched,
+                patched: !shared_addresses.is_empty(),
                 address: instance
                     .split_patches
                     .iter()
-                    .find_map(|(_, address)| *address),
+                    .find_map(|(_, address)| *address)
+                    .or_else(|| shared_addresses.values().copied().min()),
                 model,
                 fallback: missing_optics.then(|| {
                     FallbackReason::new(
@@ -378,7 +393,14 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             if fixture.profile.patch_policy == PatchPolicy::VisualOnly {
                 continue;
             }
-            let addresses = address_map(instance);
+            // Its own address where it has one, the fixture's where it has not.
+            // Its own address where it has one, the fixture's where it has not.
+            let own = address_map(instance);
+            let addresses = if own.is_empty() {
+                shared_addresses.clone()
+            } else {
+                own
+            };
             let channels = compile_channels(mode, &primary_slots, &addresses);
             build_emitters(
                 &mut scene,
@@ -1021,6 +1043,82 @@ mod model_tests {
                 installed_appearance: InstalledFixtureAppearance::default(),
             }],
         }
+    }
+
+    /// A bank of lamps on one address is a bank of lamps, not one lamp and three dark ones.
+    ///
+    /// Multi-patch is how an operator says "the same fixture, standing over there as well". The
+    /// instance has its own position and its own inversions and shares the programming, which the
+    /// patch expresses by giving it no address of its own. Read as an independent patch that
+    /// happens to be unaddressed, it decodes nothing and is drawn dark for ever — so four ACLs on
+    /// one address lit one and left three cold.
+    #[test]
+    fn a_multipatch_instance_reads_the_fixture_it_shares_its_programming_with() {
+        let mut fixture = patched("par", ProfileOptics::default());
+        // A dimmer, so there is something to read. Without a channel every binding is empty and
+        // the question this test asks cannot be answered either way.
+        let profile = Arc::get_mut(&mut fixture.profile).expect("sole owner");
+        let mode = &mut profile.modes[0];
+        mode.splits[0].footprint = 1;
+        let head_id = mode.heads[0].id;
+        mode.channels = vec![FixtureChannel {
+            id: Uuid::new_v4(),
+            head_id,
+            split: 1,
+            fixture_attribute: AttributeKey("intensity".into()),
+            attribute: AttributeKey("intensity".into()),
+            canonical_transform: CanonicalTransform::Identity,
+            resolution: ChannelResolution::U8,
+            secondary_slots: Vec::new(),
+            default_raw: 0,
+            highlight_raw: 255,
+            physical_min: Some(0.0),
+            physical_max: Some(1.0),
+            unit: None,
+            invert: false,
+            snap: false,
+            reacts_to_virtual_intensity: false,
+            reacts_to_sequence_master: false,
+            reacts_to_group_master: false,
+            reacts_to_grand_master: false,
+            behavior: ChannelBehavior::Controlled,
+            functions: Vec::new(),
+        }];
+        let root_addresses = fixture.instances[0].split_patches.clone();
+        let mut standing_elsewhere = fixture.instances[0].clone();
+        standing_elsewhere.instance_id = Uuid::new_v4();
+        standing_elsewhere.name = "Second".into();
+        standing_elsewhere.position = Vec3::new(3.0, 5.0, 0.0);
+        // What the desk actually sends for a multi-patch instance: a split with no address in it.
+        standing_elsewhere.split_patches = vec![(1, None)];
+        fixture.instances.push(standing_elsewhere);
+
+        let plan = compile(&[fixture]);
+
+        assert_eq!(plan.scene.fixtures.len(), 2, "both instances are drawn");
+        assert!(
+            plan.scene.fixtures.iter().all(|fixture| fixture.patched),
+            "an instance sharing the fixture's address is patched, not unpatched"
+        );
+        assert_eq!(plan.bindings.len(), plan.scene.emitters.len());
+        assert!(
+            plan.bindings
+                .iter()
+                .all(|binding| binding.universes == vec![1]),
+            "every instance reads the universe the fixture is addressed in, got {:?}",
+            plan.bindings
+                .iter()
+                .map(|binding| binding.universes.clone())
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            plan.bindings
+                .iter()
+                .all(|binding| binding.intensity.is_some()),
+            "and decodes its dimmer"
+        );
+        // And the root's own address is untouched by any of this.
+        assert_eq!(root_addresses, vec![(1, Some((1, 1)))]);
     }
 
     /// The mechanical angles are patch facts, so the projection has to carry them into the scene.
