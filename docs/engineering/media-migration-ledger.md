@@ -28,7 +28,7 @@ fixture evidence, any deliberate difference, the target commit, and who accepted
 | Slice | Source symbols | Target symbols | Fixture evidence | Deliberate differences | Target commit | Accepted by |
 | --- | --- | --- | --- | --- | --- | --- |
 | Phase 0 — freeze scope | — | [`docs/engineering/media-legacy-inventory.md`](media-legacy-inventory.md) | — | — | see branch history | pending review |
-| Phase 2 — skeleton and seams | `Config.h` | `media-domain`, `media-application`, `media-runtime`, `media-server` | `migration::tests` over the `media/.info` document | Configuration becomes a versioned document with an `outputs` collection; a migrated output keeps `V1Legacy` rather than being silently renumbered to the v2 personality | see branch history | pending review |
+| Phase 2 — skeleton and seams | `Config.h` | `media-domain`, `media-application`, `media-runtime`, `media-server` | `migration::tests` over the `media/.info` document | Configuration becomes a versioned document with an `outputs` collection. A migrated output originally kept a `V1Legacy` marker; document version 2 drops it, because this product was never published and no desk was ever patched against the C++ application's layout | see branch history | pending review |
 | Slice 1 — pure domain | `StateStore.h` (`LayerState`, `MasterState`, `AppState`), `DmxMap.*`, `DmxConstants.h` | `media_domain::{address, color, command, dmx, layer, master, personality, playback, speed, state, tempo}` | `personality::decode::tests` over synthesized 512-slot universes; boundary tests over all 256 values of every enumerated channel | v2 personality: 34-slot layers (was 32), Reverse and Reverse Once added, the whole play-mode channel renumbered into unsynchronized / synchronized / transport blocks, each of the four Once families subdivided into Hold/Black/Transparent, both mask axes 16-bit, speed multiplier and Playback BPM channels added; `paused` and `black` removed; layer count explicit instead of `fullMode`; the reducer is the single writer with typed control-source ownership | see branch history | pending review |
 | Slice 2 — renderer and one output | `Renderer.*`, `ofApp.*` render lifecycle | `media_domain::{geometry, clock}`, `media_render::{gpu, compositor, offscreen, texture, OutputRenderer}` | 14 deterministic off-screen reference renders over exact pixels; a real window verified on macOS presenting 696 frames at a measured 60.02 fps against a 60 Hz display | [Separate render adapter](media-renderer-reuse-decision.md), not `viz-render`; per-output render clock replacing the fixed 60 fps request; presentation mode chosen from the surface's real capabilities; the target monitor is actually applied; a failed source draws transparent instead of contributing black; the swapchain takes a non-sRGB format so a window and a reference render agree | see branch history | pending review |
 | Slice 3 — video playback | video/image playback logic | `media_domain::{timeline, tempo}` | timeline tests over all twenty modes; tempo resolution and rate tests | [HAP Alpha replaces ProRes and H.264 as the playback format on every platform](media-playback-codec-decision.md); FFmpeg decodes out-of-process at import while this repository owns the HAP encoder | see branch history | pending review |
@@ -58,23 +58,20 @@ installation meets all of them at once:
 | GDTF attributes | standard names (`Gobo2` for Folder, `Shutter1` for Play mode, `Pan`/`Tilt` for position) | Media's own attributes, so a console cannot apply unrelated semantics (D13) |
 | Text addressing | folder `200`, file = slot − 200, so slot `200` was file `0` | file `0` is a blank sentinel; slot `200`'s content is moved and the move is reported |
 
-**The open question this raises.** The Phase 2 migration stores `personalityVersion: v1-legacy` on a
-migrated output, recording the layout the show was programmed against — but nothing reads it: the
-DMX decoder speaks v2 only. So a migrated installation's existing cues produce different looks, and
-until 2026-08-09 they did so in silence. A migrated output now says at startup that the desk must be
-repatched from the generated GDTF fixture.
+**Resolved, 2026-08-09 (maintainer).** The comparison first read as an open question: the Phase 2
+migration stored `personalityVersion: v1-legacy` on a migrated output, recording the layout the show
+had been programmed against, and nothing read it — the DMX decoder speaks v2 only — so a migrated
+installation's cues would have produced different looks, silently.
 
-That warning makes the behaviour honest; it does not decide the policy. Cutover needs one of:
+The question dissolved rather than being answered: **this product was never published**, so there is
+no installation whose desk is patched against the C++ application's 32-slot layer, and nothing to
+preserve. `PersonalityVersion` and the startup warning that briefly went with it are gone, and
+document version 2 drops the stored field. There is one personality, and it is the one this build
+speaks. A version 1 document still loads: the migration removes the field rather than refusing the
+document, so a development installation is not stranded on something it wrote itself.
 
-1. **Repatch on cutover.** v1 stays read-only metadata, an operator repatches from the generated
-   fixture, and the stored version exists only to trigger the warning. Cheapest, and it matches
-   "moving to v2 is a deliberate operator action".
-2. **Read v1 as v1.** The decoder honours the stored version — 32-slot layers, five play-mode bands
-   — so an untouched desk keeps working. A second decode path and a second GDTF fixture, and the
-   personality stops being one canonical table.
-
-A console's port also has to be moved from 4809 to 4811, or the port made configurable per output
-rather than per process.
+A console's CITP port still has to be moved from 4809 to 4811, or the port made configurable per
+output rather than per process.
 
 ## Acceptance rule
 

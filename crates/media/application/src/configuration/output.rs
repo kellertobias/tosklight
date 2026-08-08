@@ -4,9 +4,7 @@
 //! adding output two never means replacing singleton state.
 
 use media_domain::output::MonitorSelector;
-use media_domain::{
-    LayerPersonality, OutputId, OutputName, PersonalityVersion, PresentationMode, TempoSource,
-};
+use media_domain::{LayerPersonality, OutputId, OutputName, PresentationMode, TempoSource};
 use serde::{Deserialize, Serialize};
 
 /// Which DMX protocol feeds this output. Both translate into identical domain commands; the
@@ -82,8 +80,6 @@ pub struct OutputConfiguration {
     #[serde(default)]
     pub personality: LayerPersonality,
     #[serde(default)]
-    pub personality_version: PersonalityVersion,
-    #[serde(default)]
     pub protocol: DmxProtocol,
     #[serde(default)]
     pub universe: u16,
@@ -118,7 +114,6 @@ impl OutputConfiguration {
             resolution: Resolution::default(),
             presentation: PresentationMode::default(),
             personality: LayerPersonality::default(),
-            personality_version: PersonalityVersion::default(),
             protocol: DmxProtocol::default(),
             universe: 0,
             start_address: first_start_address(),
@@ -147,7 +142,6 @@ mod tests {
         );
         assert_eq!(output.presentation, PresentationMode::DisplaySynchronized);
         assert_eq!(output.personality, LayerPersonality::EightLayers);
-        assert_eq!(output.personality_version, PersonalityVersion::V2);
         assert_eq!(output.start_address, 1);
     }
 

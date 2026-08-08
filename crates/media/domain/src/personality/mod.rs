@@ -28,21 +28,6 @@ pub const MASTER_SLOTS: u16 = 7;
 /// Slots in one DMX universe.
 pub const UNIVERSE_SLOTS: u16 = 512;
 
-/// Which personality version a show, an export, or a test is speaking.
-///
-/// v2 renumbers the Loop/Bounce/Once play-mode ranges and adds Reverse. That is a deliberate
-/// versioned change, so every surface that reports a channel layout also reports which version
-/// produced it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum PersonalityVersion {
-    /// The C++ application's 32-slot layer personality. Read for migration; not emitted.
-    V1Legacy,
-    /// The 34-slot layer personality this product ships.
-    #[default]
-    V2,
-}
-
 /// How many layers a configured output exposes to the desk.
 ///
 /// Both personalities are supported products, not a migration step: two layers for a compact
@@ -209,7 +194,9 @@ mod tests {
     }
 
     #[test]
-    fn v2_is_the_emitted_personality_version() {
-        assert_eq!(PersonalityVersion::default(), PersonalityVersion::V2);
+    fn a_layer_is_thirty_four_slots() {
+        // The C++ application's layer was 32. There is one personality now — nothing stores or
+        // reads a version, because no installation was ever patched against the old one.
+        assert_eq!(LAYER_SLOTS, 34);
     }
 }

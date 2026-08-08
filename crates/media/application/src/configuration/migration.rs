@@ -6,10 +6,10 @@
 
 use serde_json::{Map, Value, json};
 
-use media_domain::{LayerPersonality, OutputId, OutputName, PersonalityVersion};
+use media_domain::{LayerPersonality, OutputId, OutputName};
 
 /// The version this build writes.
-pub const CURRENT_VERSION: u32 = 1;
+pub const CURRENT_VERSION: u32 = 2;
 
 /// Why a stored document cannot be brought forward.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -49,6 +49,7 @@ pub fn migrate_to_current(document: Value) -> Result<Value, MigrationError> {
     while version < CURRENT_VERSION {
         current = match version {
             0 => from_legacy_info(current.as_object().expect("checked above")),
+            1 => without_personality_version(current),
             other => unreachable!("no migration is registered for version {other}"),
         };
         version += 1;
@@ -88,8 +89,6 @@ fn from_legacy_info(legacy: &Map<String, Value>) -> Value {
         number(legacy, "artNetStartUniverse", 0)
     };
 
-    // A migrated show keeps the channel layout it was programmed against. Moving to v2 is a
-    // deliberate operator action, not something a migration does behind their back.
     let personality = if full_mode {
         LayerPersonality::EightLayers
     } else {
@@ -108,7 +107,6 @@ fn from_legacy_info(legacy: &Map<String, Value>) -> Value {
         "resolution": { "width": 1920, "height": 1080 },
         "presentation": "display-synchronized",
         "personality": personality,
-        "personalityVersion": PersonalityVersion::V1Legacy,
         "protocol": protocol,
         "universe": universe,
         "startAddress": number(legacy, "artNetStartAddress", 1),
@@ -134,6 +132,30 @@ fn from_legacy_info(legacy: &Map<String, Value>) -> Value {
             "outputs": [output],
         },
     })
+}
+
+/// Version 1 → 2: the `personalityVersion` field is dropped.
+///
+/// It recorded the channel layout a show had been programmed against, so a migrated installation
+/// could in principle be read the old way. Nothing ever read it, and it turned out there was
+/// nothing to read it for: this product was never published, so no desk was ever patched against
+/// the C++ application's 32-slot layer. There is one personality, and it is the one this build
+/// speaks.
+fn without_personality_version(document: Value) -> Value {
+    let mut document = document;
+    if let Some(outputs) = document
+        .get_mut("configuration")
+        .and_then(|configuration| configuration.get_mut("outputs"))
+        .and_then(Value::as_array_mut)
+    {
+        for output in outputs {
+            if let Some(output) = output.as_object_mut() {
+                output.remove("personalityVersion");
+            }
+        }
+    }
+    document["version"] = json!(2);
+    document
 }
 
 fn legacy_target(legacy: &Map<String, Value>) -> Value {
@@ -202,7 +224,6 @@ mod tests {
             LayerPersonality::TwoLayers,
             "fullMode false is two layers"
         );
-        assert_eq!(output.personality_version, PersonalityVersion::V1Legacy);
         assert_eq!(output.protocol, DmxProtocol::ArtNet);
         assert_eq!(output.universe, 3);
         assert_eq!(output.start_address, 45);
@@ -214,6 +235,52 @@ mod tests {
                 fullscreen: true
             }
         );
+    }
+
+    #[test]
+    fn a_document_that_still_carries_a_personality_version_is_brought_forward() {
+        // What version 1 wrote, including the field that no longer exists. Refusing to read it
+        // would strand a development installation on a document it wrote itself.
+        let stored = r#"{
+            "version": 1,
+            "configuration": {
+                "instanceId": "media",
+                "outputs": [{
+                    "id": "3f4b8e4e-1111-4111-8111-111111111111",
+                    "name": "Main",
+                    "enabled": true,
+                    "target": { "kind": "offScreen" },
+                    "resolution": { "width": 1920, "height": 1080 },
+                    "presentation": "display-synchronized",
+                    "personality": "eight-layers",
+                    "personalityVersion": "v1-legacy",
+                    "protocol": "art-net",
+                    "universe": 0,
+                    "startAddress": 1,
+                    "citp": { "layerBase": 0, "sourceName": null },
+                    "tempoSource": { "kind": "playback-bpm-channel" },
+                    "statusOverlay": true
+                }]
+            }
+        }"#;
+
+        let configuration = load(stored).expect("a version 1 document still loads");
+        assert_eq!(configuration.outputs.len(), 1);
+        assert_eq!(
+            configuration.outputs[0].personality,
+            LayerPersonality::EightLayers
+        );
+        assert_eq!(configuration.outputs[0].start_address, 1);
+    }
+
+    #[test]
+    fn what_this_build_writes_carries_no_personality_version() {
+        let written = super::super::save(&crate::MediaConfiguration::default());
+        assert!(
+            !written.contains("personalityVersion"),
+            "there is one personality, so nothing records which one"
+        );
+        assert!(written.contains("\"version\": 2"));
     }
 
     #[test]
@@ -257,7 +324,7 @@ mod tests {
 
     #[test]
     fn a_current_document_is_left_alone() {
-        let document = json!({ "version": 1, "configuration": { "outputs": [] } });
+        let document = json!({ "version": CURRENT_VERSION, "configuration": { "outputs": [] } });
         assert_eq!(migrate_to_current(document.clone()).unwrap(), document);
     }
 

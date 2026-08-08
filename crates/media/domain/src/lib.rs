@@ -43,7 +43,7 @@ pub use geometry::{LayerTransform, Point, Size};
 pub use layer::{LayerState, MaskSource, MaskState, ScalingMode, SourceFailure, SourceStatus};
 pub use master::MasterState;
 pub use output::{OutputId, OutputName, PresentationMode};
-pub use personality::{LayerPersonality, PersonalityVersion, SlotFootprint, StartAddressError};
+pub use personality::{LayerPersonality, SlotFootprint, StartAddressError};
 pub use playback::{OnceEndState, PlayMode};
 pub use speed::SpeedMultiplier;
 pub use state::{Applied, MediaState, OutputState, apply};
