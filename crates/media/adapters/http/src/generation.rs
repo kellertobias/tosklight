@@ -12,11 +12,11 @@ use ts_rs::{Config, TS};
 use crate::error::ApiErrorBody;
 use crate::wire::{
     AddressView, AudioBandsView, AudioPanelView, AudioSettingsView, AudioView, CatalogFolderView,
-    CatalogItemView, CatalogView, CreateText, DeleteText, Health, LayerView, LogRecordView,
-    LogsView, MaskView, MasterView, NetworkAddressesView, NetworkView, OutputView,
-    SourceStatusView, TelemetryFrame, TextSlotView, TextStyleView, UpdateAudio, UpdateLayer,
-    UpdateNetwork, UpdateText, UpdateVisualizer, VisualizerParametersView, VisualizerView,
-    WaveformView,
+    CatalogItemView, CatalogView, CreateText, DeleteText, Health, ImportJobView, ImportsView,
+    LayerView, LogRecordView, LogsView, MaskView, MasterView, NetworkAddressesView, NetworkView,
+    OutputView, PendingImportView, SourceStatusView, StartImport, TelemetryFrame, TextSlotView,
+    TextStyleView, UpdateAudio, UpdateLayer, UpdateNetwork, UpdateText, UpdateVisualizer,
+    VisualizerParametersView, VisualizerView, WaveformView,
 };
 
 const TYPESCRIPT_PATH: &str = "apps/media/src/shared/api/generated/media-wire.ts";
@@ -84,6 +84,9 @@ fn declarations(config: &Config) -> Vec<String> {
         AudioView::decl(config),
         AudioSettingsView::decl(config),
         AudioPanelView::decl(config),
+        PendingImportView::decl(config),
+        ImportJobView::decl(config),
+        ImportsView::decl(config),
         TelemetryFrame::decl(config),
         LogRecordView::decl(config),
         LogsView::decl(config),
@@ -94,6 +97,7 @@ fn declarations(config: &Config) -> Vec<String> {
         UpdateText::decl(config),
         DeleteText::decl(config),
         UpdateAudio::decl(config),
+        StartImport::decl(config),
     ]
 }
 

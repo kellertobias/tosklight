@@ -10,9 +10,11 @@ import type {
 	CreateText,
 	DeleteText,
 	Health,
+	ImportsView,
 	LogsView,
 	NetworkView,
 	OutputView,
+	StartImport,
 	TextSlotView,
 	UpdateAudio,
 	UpdateLayer,
@@ -109,6 +111,16 @@ export const api = {
 	/** A live-control action with no payload, exactly as the API exposes it. */
 	resetLayer: (output: string, layer: number) =>
 		request<void>(`/outputs/${output}/layers/${layer}/reset`),
+
+	imports: () => request<ImportsView>("/library/imports"),
+	/** Long-running work, so this answers with jobs rather than holding the connection open. */
+	startImport: (start: StartImport) =>
+		request<ImportsView>("/library/import", {
+			method: "POST",
+			body: JSON.stringify(start),
+		}),
+	/** A payload-free action, exactly as the API exposes it. */
+	cancelImport: (job: string) => request<void>(`/library/imports/${job}/cancel`),
 
 	network: () => request<NetworkView>("/network"),
 	updateNetwork: (edit: UpdateNetwork) =>

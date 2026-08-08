@@ -17,6 +17,7 @@ pub(crate) mod bench;
 mod edit;
 mod fixtures;
 mod health;
+mod library;
 mod logs;
 mod network;
 mod outputs;
@@ -87,6 +88,12 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v2/health", get(health::health))
         .route("/api/v2/catalog", get(health::catalog))
         .route("/api/v2/logs", get(logs::logs))
+        .route("/api/v2/library/imports", get(library::imports))
+        .route("/api/v2/library/import", post(library::start_import))
+        .route(
+            "/api/v2/library/imports/{job}/cancel",
+            get(library::cancel_import),
+        )
         .route("/api/v2/telemetry", get(telemetry::telemetry))
         .route("/api/v2/fixtures", get(fixtures::fixtures))
         .route("/api/v2/fixtures/{name}", get(fixtures::fixture))

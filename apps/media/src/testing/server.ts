@@ -8,6 +8,7 @@ import type {
 	AudioPanelView,
 	CatalogView,
 	Health,
+	ImportsView,
 	LogsView,
 	NetworkView,
 	OutputView,
@@ -25,6 +26,7 @@ export interface StubbedServer {
 	text: TextSlotView[];
 	audio: AudioPanelView;
 	logs: LogsView;
+	imports: ImportsView;
 	/** Set to make the next write fail with this code and status. */
 	refuseWrites: { code: string; message: string; status: number } | undefined;
 	/** Every path written to, in order. */
@@ -40,6 +42,7 @@ export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServe
 		text: [aClock(), aCountdown()],
 		audio: anAudioPanel(),
 		logs: aLog(),
+		imports: anImportState(),
 		health: {
 			status: "ok",
 			instance: "test-instance",
@@ -72,7 +75,9 @@ export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServe
 			if (path === "/text") return jsonResponse(server.text);
 			if (path === "/audio") return jsonResponse(server.audio);
 			if (path.startsWith("/logs")) return jsonResponse(server.logs);
-
+			if (path === "/library/imports") return jsonResponse(server.imports);
+			const imported = writeImport(server, path);
+			if (imported) return imported;
 			if (path === "/network/update") {
 				const body = JSON.parse(String(init?.body ?? "{}"));
 				for (const field of [
@@ -99,50 +104,9 @@ export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServe
 				return jsonResponse(server.audio.settings);
 			}
 
-			if (path === "/text/create") {
-				const body = JSON.parse(String(init?.body ?? "{}"));
-				const created: TextSlotView = {
-					address: {
-						folder: body.folder,
-						file: body.file,
-						class: "text-bank",
-					},
-					name: body.name,
-					enabled: true,
-					kind: body.kind,
-					text: body.text ?? null,
-					durationSeconds: body.durationSeconds ?? null,
-					targetUnixMillis: body.targetUnixMillis ?? null,
-					style: body.style ?? aClock().style,
-				};
-				server.text.push(created);
-				return jsonResponse(created);
-			}
+			const text = writeText(server, path, init);
+			if (text) return text;
 
-			const written = path.match(/^\/text\/(\d+)\/(\d+)\/(update|delete)$/u);
-			if (written) {
-				const body = JSON.parse(String(init?.body ?? "{}"));
-				const at = server.text.findIndex(
-					(candidate) =>
-						candidate.address.folder === Number(written[1]) &&
-						candidate.address.file === Number(written[2]),
-				);
-				if (at < 0) return jsonResponse({ code: "unknown-text", message: "no" }, 404);
-				if (written[3] === "delete") {
-					server.text.splice(at, 1);
-					return jsonResponse(server.text);
-				}
-				const slot = server.text[at];
-				if (body.name !== undefined) slot.name = body.name;
-				if (body.enabled !== undefined) slot.enabled = body.enabled;
-				if (body.kind !== undefined) slot.kind = body.kind;
-				if (body.text !== undefined) slot.text = body.text;
-				if (body.durationSeconds !== undefined) {
-					slot.durationSeconds = body.durationSeconds;
-				}
-				if (body.style !== undefined) slot.style = body.style;
-				return jsonResponse(slot);
-			}
 			if (path.endsWith("/reset")) return new Response(null, { status: 204 });
 
 			const tuned = path.match(/^\/visualizers\/(\d+)\/(\d+)\/update$/u);
@@ -176,6 +140,94 @@ export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServe
 		}),
 	);
 	return server;
+}
+
+
+/// Starting and stopping imports.
+function writeImport(server: StubbedServer, path: string): Response | undefined {
+
+	if (path === "/library/import") {
+		if (!server.imports.canImport) {
+			return jsonResponse(
+				{ code: "cannot-import", message: "FFmpeg is not installed" },
+				503,
+			);
+		}
+		server.imports.jobs = server.imports.pending.map((item, index) => ({
+			id: `job-${index}`,
+			address: item.address,
+			filename: item.filename,
+			state: "running",
+			fraction: 0.5,
+			framesDone: 50,
+			framesTotal: 100,
+			reason: null,
+		}));
+		server.imports.pending = [];
+		return jsonResponse(server.imports);
+	}
+
+	const cancelled = path.match(/^\/library\/imports\/([^/]+)\/cancel$/u);
+	if (cancelled) {
+		const job = server.imports.jobs.find((candidate) => candidate.id === cancelled[1]);
+		if (!job) return jsonResponse({ code: "unknown-import", message: "no" }, 404);
+		job.state = "cancelled";
+		return new Response(null, { status: 204 });
+	}
+	return undefined;
+}
+
+/// Writing text sources.
+function writeText(
+	server: StubbedServer,
+	path: string,
+	init?: RequestInit,
+): Response | undefined {
+	if (path === "/text/create") {
+		const body = JSON.parse(String(init?.body ?? "{}"));
+		const created: TextSlotView = {
+			address: {
+				folder: body.folder,
+				file: body.file,
+				class: "text-bank",
+			},
+			name: body.name,
+			enabled: true,
+			kind: body.kind,
+			text: body.text ?? null,
+			durationSeconds: body.durationSeconds ?? null,
+			targetUnixMillis: body.targetUnixMillis ?? null,
+			style: body.style ?? aClock().style,
+		};
+		server.text.push(created);
+		return jsonResponse(created);
+	}
+
+	const written = path.match(/^\/text\/(\d+)\/(\d+)\/(update|delete)$/u);
+	if (written) {
+		const body = JSON.parse(String(init?.body ?? "{}"));
+		const at = server.text.findIndex(
+			(candidate) =>
+				candidate.address.folder === Number(written[1]) &&
+				candidate.address.file === Number(written[2]),
+		);
+		if (at < 0) return jsonResponse({ code: "unknown-text", message: "no" }, 404);
+		if (written[3] === "delete") {
+			server.text.splice(at, 1);
+			return jsonResponse(server.text);
+		}
+		const slot = server.text[at];
+		if (body.name !== undefined) slot.name = body.name;
+		if (body.enabled !== undefined) slot.enabled = body.enabled;
+		if (body.kind !== undefined) slot.kind = body.kind;
+		if (body.text !== undefined) slot.text = body.text;
+		if (body.durationSeconds !== undefined) {
+			slot.durationSeconds = body.durationSeconds;
+		}
+		if (body.style !== undefined) slot.style = body.style;
+		return jsonResponse(slot);
+	}
+	return undefined;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -414,6 +466,21 @@ export function aLog(overrides: Partial<LogsView> = {}): LogsView {
 		newest: 2,
 		dropped: 0,
 		capacity: 2000,
+		...overrides,
+	};
+}
+
+export function anImportState(overrides: Partial<ImportsView> = {}): ImportsView {
+	return {
+		canImport: true,
+		pending: [
+			{
+				address: { folder: 1, file: 4, class: "library" },
+				name: "LoopTest",
+				filename: "004-LoopTest.mp4",
+			},
+		],
+		jobs: [],
 		...overrides,
 	};
 }

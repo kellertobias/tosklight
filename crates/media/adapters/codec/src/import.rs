@@ -129,6 +129,19 @@ pub fn probe(source: &Path) -> Result<SourceInfo, ImportError> {
     })
 }
 
+/// Whether this machine can transcode at all.
+///
+/// Import shells out to FFmpeg, so a machine without it can do everything else a Media Server does
+/// and none of this. Asked once and reported, rather than discovered one failed clip at a time.
+pub fn ffmpeg_available() -> bool {
+    Command::new("ffmpeg")
+        .arg("-version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
 /// Converts a source into a `.toskclip` at `destination`.
 ///
 /// The authored tempo comes from the source's filename if it carries the token; it is stored as

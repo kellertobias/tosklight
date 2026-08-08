@@ -34,6 +34,6 @@ describe("the media library page", () => {
 		stubServer({ catalog: { ...aCatalog(), itemCount: 0, folders: [] } });
 		render(<LibraryPage />);
 
-		expect(await screen.findByText(/the library folder is empty/iu)).toBeInTheDocument();
+		expect(await screen.findByText(/nothing in the library can be played yet/iu)).toBeInTheDocument();
 	});
 });

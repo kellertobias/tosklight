@@ -53,6 +53,74 @@ impl Default for AudioTelemetry {
     }
 }
 
+/// A file in the library that could be played once it has been imported.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingImport {
+    pub destination: media_domain::MediaAddress,
+    pub name: String,
+    pub filename: String,
+}
+
+/// Where one import has got to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ImportOutcome {
+    Queued,
+    Running,
+    Succeeded,
+    Failed { reason: String },
+    Cancelled,
+}
+
+/// One import, as the running process reports it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportJob {
+    pub id: String,
+    pub destination: media_domain::MediaAddress,
+    pub filename: String,
+    pub outcome: ImportOutcome,
+    /// Absent when the source did not report a frame count. Nothing invents one.
+    pub fraction: Option<f32>,
+    pub frames_done: Option<u32>,
+    pub frames_total: Option<u32>,
+}
+
+/// What the process can do about importing, and what it is doing.
+///
+/// Functions rather than the importer itself, for the same reason as the audio: the pool belongs
+/// to the process, and the API only ever asks it questions and gives it work.
+#[derive(Clone)]
+pub struct Imports {
+    /// What is waiting in the library, and every job this run has seen.
+    pub state: Arc<dyn Fn() -> (Vec<PendingImport>, Vec<ImportJob>) + Send + Sync>,
+    /// Queues everything waiting, or one address. Returns how many jobs were started.
+    pub start: Arc<dyn Fn(Option<media_domain::MediaAddress>) -> usize + Send + Sync>,
+    /// Stops one job. False when there was nothing to stop.
+    pub cancel: Arc<dyn Fn(&str) -> bool + Send + Sync>,
+    /// Whether this machine can transcode at all.
+    pub available: bool,
+}
+
+impl Default for Imports {
+    /// A process that imports nothing: it reports nothing waiting, and says it cannot import.
+    fn default() -> Self {
+        Self {
+            state: Arc::new(|| (Vec::new(), Vec::new())),
+            start: Arc::new(|_| 0),
+            cancel: Arc::new(|_| false),
+            available: false,
+        }
+    }
+}
+
+impl std::fmt::Debug for Imports {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Imports")
+            .field("available", &self.available)
+            .finish_non_exhaustive()
+    }
+}
+
 /// One emitted log record, held in memory.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LogEntry {
@@ -101,6 +169,7 @@ pub struct Diagnostics {
     pub audio: AudioSource,
     pub audio_devices: DeviceLister,
     pub logs: LogSource,
+    pub imports: Imports,
 }
 
 impl Default for Diagnostics {
@@ -113,6 +182,7 @@ impl Default for Diagnostics {
             audio: Arc::new(AudioTelemetry::default),
             audio_devices: Arc::new(Vec::new),
             logs: Arc::new(|_| LogPage::default()),
+            imports: Imports::default(),
         }
     }
 }
@@ -141,5 +211,10 @@ mod tests {
         );
         assert!((diagnostics.audio_devices)().is_empty());
         assert_eq!((diagnostics.logs)(&LogQuery::default()), LogPage::default());
+        assert!(
+            !diagnostics.imports.available,
+            "a process that cannot transcode says so before an operator queues a library"
+        );
+        assert_eq!((diagnostics.imports.state)(), (Vec::new(), Vec::new()));
     }
 }

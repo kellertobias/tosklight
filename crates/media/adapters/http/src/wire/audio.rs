@@ -85,6 +85,9 @@ impl AudioView {
 #[serde(rename_all = "camelCase")]
 pub struct TelemetryFrame {
     pub audio: AudioView,
+    /// Every import this run has seen. Pushed rather than polled for the same reason as the
+    /// meters: a progress bar that has to ask is a progress bar that stutters.
+    pub imports: Vec<crate::wire::ImportJobView>,
 }
 
 /// The audio settings, as the API reports them.

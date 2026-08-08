@@ -10,6 +10,7 @@ import { ResourceState } from "../../app/ResourceState";
 import { addressLabel, folderLabel, itemDetail } from "../../entities/catalog";
 import type { CatalogView } from "../../shared/api/generated/media-wire";
 import { useCatalog } from "../../shared/api/queries";
+import { ImportPanel } from "./ImportPanel";
 
 const CATALOG_POLL_MS = 15_000;
 
@@ -19,6 +20,8 @@ export function LibraryPage() {
 
 	return (
 		<section className="media-page">
+			<ImportPanel onImported={catalog.reload} />
+
 			<SearchBar
 				value={search}
 				onChange={setSearch}
@@ -29,7 +32,7 @@ export function LibraryPage() {
 				resource={catalog}
 				subject="the library"
 				isEmpty={(data) => data.itemCount === 0}
-				empty="The library folder is empty. Import media to fill it."
+				empty="Nothing in the library can be played yet."
 			>
 				{(data) => <Folders catalog={data} search={search} />}
 			</ResourceState>

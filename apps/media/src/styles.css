@@ -509,6 +509,83 @@ body {
 	background: var(--cyan);
 }
 
+.media-import-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+
+.media-import-header h2 {
+	margin: 0;
+	font-size: 1rem;
+}
+
+.media-import-jobs {
+	display: grid;
+	gap: 0.4rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.media-import-job {
+	display: grid;
+	grid-template-columns: minmax(10rem, 1fr) minmax(6rem, 2fr) auto;
+	align-items: center;
+	gap: 0.6rem;
+	font-size: 0.85rem;
+}
+
+.media-import-name {
+	font-variant-numeric: tabular-nums;
+	overflow-wrap: anywhere;
+}
+
+.media-import-reason {
+	grid-column: 1 / -1;
+	color: var(--red);
+}
+
+.media-import-progress {
+	height: 10px;
+	background: var(--line);
+	border-radius: 5px;
+	overflow: hidden;
+}
+
+.media-import-progress > span {
+	display: block;
+	height: 100%;
+	background: var(--cyan);
+}
+
+/* A source whose frame count is unknown gets a moving bar rather than a made-up percentage. */
+.media-import-progress > span.is-indeterminate {
+	width: 35%;
+	animation: media-import-sliding 1.4s ease-in-out infinite;
+}
+
+@keyframes media-import-sliding {
+	from {
+		transform: translateX(-100%);
+	}
+	to {
+		transform: translateX(300%);
+	}
+}
+
+@media (max-width: 720px) {
+	.media-import-job {
+		grid-template-columns: 1fr auto;
+	}
+
+	.media-import-progress {
+		grid-column: 1 / -1;
+	}
+}
+
 .media-logs-controls {
 	display: flex;
 	flex-wrap: wrap;

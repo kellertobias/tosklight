@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 use media_codec::container::ClipReader;
 use media_domain::catalog::{CatalogItem, CatalogSnapshot, ItemKind};
-use media_domain::{AssetId, authored_tempo};
+use media_domain::{AssetId, MediaAddress, authored_tempo};
 
 use crate::naming;
 
@@ -66,7 +66,7 @@ pub fn discover(root: &Path) -> Result<CatalogSnapshot, DiscoveryError> {
         // A library from the legacy application is full of `.mp4` and `.png` files, which are
         // import formats rather than playback ones. Finding none of them playable and saying
         // nothing would leave an operator looking at an empty library with no idea why.
-        let waiting = count_awaiting_import(&path);
+        let waiting = awaiting_import(&path, folder).len();
         if waiting > 0 {
             tracing::warn!(
                 %folder,
@@ -132,25 +132,113 @@ fn read_item(path: &Path, file: u8, name: &str) -> Option<CatalogItem> {
     })
 }
 
-/// How many files in a folder look like media this server could play once imported.
+/// A file sitting in the library that could be played once it is imported.
 ///
-/// Counted rather than listed, because the point is to tell an operator that their library needs
-/// importing — not to enumerate a venue's whole archive into a log.
-fn count_awaiting_import(path: &Path) -> usize {
-    let Ok(entries) = std::fs::read_dir(path) else {
-        return 0;
+/// This is what a legacy library is made of, and what an operator gets when they drop a clip into
+/// a folder by hand: media at an address, in a format that has to be normalised first.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pending {
+    pub source: PathBuf,
+    /// Where it will answer once imported, taken from the folder and the filename's own index.
+    pub destination: MediaAddress,
+    /// The name after the index, which the imported clip keeps.
+    pub name: String,
+}
+
+/// Everything in the library that is waiting to be imported, in address order.
+///
+/// A file whose name carries no index has no address to be imported to, so it is not offered: the
+/// operator names it `NNN-Whatever.mp4` and it appears.
+pub fn pending_imports(root: &Path) -> Vec<Pending> {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return Vec::new();
     };
+    let mut folders: Vec<(u8, PathBuf)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_str()?.to_owned();
+            let folder = naming::parse_folder_directory(&name)?;
+            entry.path().is_dir().then(|| (folder, entry.path()))
+        })
+        .collect();
+    folders.sort_by_key(|(folder, _)| *folder);
+
+    let mut pending: Vec<Pending> = folders
+        .into_iter()
+        .flat_map(|(folder, path)| awaiting_import(&path, folder))
+        .collect();
+    // By filename, so which of two files claiming one address wins is the same on every machine
+    // and on every run rather than whatever the directory happened to yield first.
+    pending.sort_by(|left, right| {
+        (left.destination.folder, left.destination.file, &left.source).cmp(&(
+            right.destination.folder,
+            right.destination.file,
+            &right.source,
+        ))
+    });
+
+    // Two sources can claim one address — a legacy library really does hold `001.png` beside
+    // `001-Unknown.png`. Importing both would put two items at one file, which the catalog then
+    // refuses to hold, so only the first is offered and the operator is told to rename the other.
+    let mut offered: Vec<Pending> = Vec::with_capacity(pending.len());
+    for item in pending {
+        match offered.last() {
+            Some(previous) if previous.destination == item.destination => {
+                tracing::warn!(
+                    address = %item.destination,
+                    kept = %previous.source.display(),
+                    skipped = %item.source.display(),
+                    "two files claim one address; rename one of them to import it"
+                );
+            }
+            _ => offered.push(item),
+        }
+    }
+    offered
+}
+
+/// The files in one folder that are waiting to be imported.
+///
+/// A source whose address already holds an imported clip is not waiting for anything: importing
+/// leaves the original where it was, and offering it again would invite an operator to overwrite
+/// what they just made.
+fn awaiting_import(path: &Path, folder: u8) -> Vec<Pending> {
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return Vec::new();
+    };
+    let imported: Vec<u8> = std::fs::read_dir(path)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let filename = entry.file_name().to_str()?.to_owned();
+            naming::parse_item_filename(&filename).map(|(file, _)| file)
+        })
+        .collect();
+
     entries
         .flatten()
         .filter(|entry| entry.path().is_file())
-        .filter_map(|entry| entry.file_name().to_str().map(str::to_owned))
-        .filter(|filename| {
+        .filter_map(|entry| {
+            let filename = entry.file_name().to_str()?.to_owned();
             // A dotted file is the library's own bookkeeping, never media.
-            !filename.starts_with('.')
-                && naming::parse_item_filename(filename).is_none()
-                && looks_like_media(filename)
+            if filename.starts_with('.') || naming::parse_item_filename(&filename).is_some() {
+                return None;
+            }
+            if !looks_like_media(&filename) {
+                return None;
+            }
+            let (file, name) = naming::parse_source_filename(&filename)?;
+            if imported.contains(&file) {
+                return None;
+            }
+            Some(Pending {
+                source: entry.path(),
+                destination: MediaAddress::new(folder, file),
+                name,
+            })
         })
-        .count()
+        .collect()
 }
 
 /// Whether a filename is one of the formats an import accepts.
@@ -188,10 +276,8 @@ fn read_folder_name(path: &Path) -> Option<String> {
 mod tests {
     use std::io::Cursor;
 
-    use media_codec::container::{ClipHeader, ClipWriter};
-    use media_domain::MediaAddress;
-
     use super::*;
+    use media_codec::container::{ClipHeader, ClipWriter};
 
     fn clip(frames: usize, bpm: Option<f64>) -> Vec<u8> {
         let mut writer = ClipWriter::new(
@@ -390,16 +476,64 @@ mod tests {
 
         let catalog = discover(&library.0).unwrap();
         assert_eq!(catalog.item_count(), 0, "none of it is playable yet");
+
+        let pending = pending_imports(&library.0);
         assert_eq!(
-            count_awaiting_import(&library.0.join("001")),
+            pending.len(),
+            3,
+            "the notes and the thumbnail are not media: {pending:?}"
+        );
+        assert_eq!(pending[0].destination, MediaAddress::new(1, 1));
+        assert_eq!(pending[1].destination, MediaAddress::new(1, 4));
+        assert_eq!(
+            pending[1].name, "LoopTest",
+            "the name in the filename is the name it keeps"
+        );
+        assert_eq!(pending[2].destination, MediaAddress::new(2, 1));
+    }
+
+    #[test]
+    fn two_files_claiming_one_address_offer_only_the_first() {
+        let library = Library::new("clashing");
+        library.put("002/001.png", b"one of two");
+        library.put("002/001-Unknown.png", b"the other");
+        library.put("002/002.png", b"its own address");
+
+        let pending = pending_imports(&library.0);
+        assert_eq!(
+            pending.len(),
             2,
-            "both clips are waiting"
+            "importing both would put two items at one file: {pending:?}"
         );
+        assert_eq!(pending[0].destination, MediaAddress::new(2, 1));
         assert_eq!(
-            count_awaiting_import(&library.0.join("002")),
-            1,
-            "the notes and the thumbnail are not media"
+            pending[0].name, "Unknown",
+            "the choice is by filename, so it is the same on every machine"
         );
+        assert_eq!(pending[1].destination, MediaAddress::new(2, 2));
+    }
+
+    #[test]
+    fn a_source_with_no_index_has_no_address_to_be_imported_to() {
+        let library = Library::new("unindexed");
+        library.put("001/holiday-video.mp4", b"no index in that name");
+        library.put("001/007-Named.mov", b"an index and a name");
+
+        let pending = pending_imports(&library.0);
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].destination, MediaAddress::new(1, 7));
+        assert_eq!(pending[0].name, "Named");
+    }
+
+    #[test]
+    fn a_file_that_is_already_imported_is_not_offered_again() {
+        let library = Library::new("already-imported");
+        library.put("001/001-Clip.toskclip", &clip(10, None));
+        library.put("001/002-Other.mp4", b"still waiting");
+
+        let pending = pending_imports(&library.0);
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].destination, MediaAddress::new(1, 2));
     }
 
     #[test]

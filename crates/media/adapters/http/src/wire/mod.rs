@@ -15,6 +15,7 @@
 mod audio;
 mod catalog;
 mod health;
+mod library;
 mod logs;
 mod network;
 mod output;
@@ -27,6 +28,7 @@ pub use audio::{
 };
 pub use catalog::{CatalogFolderView, CatalogItemView, CatalogView};
 pub use health::{AddressView, Health, SourceStatusView};
+pub use library::{ImportJobView, ImportsView, PendingImportView, StartImport};
 pub use logs::{LogRecordView, LogsView};
 pub use network::{NetworkAddressesView, NetworkEditError, NetworkView, UpdateNetwork};
 pub use output::{LayerView, MaskView, MasterView, OutputView, UpdateLayer};

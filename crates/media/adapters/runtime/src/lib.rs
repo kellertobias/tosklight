@@ -99,29 +99,14 @@ pub fn run() -> anyhow::Result<()> {
             media_library::discover(&configuration.library.root).unwrap_or_default(),
         ));
 
-    // Audio capture is a real capability of the machine: when there is no input device the
-    // server says so once and runs on silence, rather than refusing to start.
-    let audio = match media_audio::AudioService::start(&configuration.audio) {
-        Ok(service) => Some(service),
-        Err(error) => {
-            tracing::warn!(%error, "no audio input; generated sources will run on silence");
-            None
-        }
-    };
-    let analysis = audio.as_ref().map_or_else(
-        || {
-            std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
-                media_audio::AnalysisSnapshot::default(),
-            ))
-        },
-        media_audio::AudioService::analysis,
-    );
+    let importer = start_importer(&configuration, &catalog);
+    let (audio, analysis) = start_audio(&configuration);
 
     // One configuration document, read by the outputs and written by the API. A second copy is a
     // second truth: an operator would edit one and watch the other.
     let live: SharedConfiguration =
         std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(configuration.clone()));
-    let diagnostics = diagnostics_of(audio.as_ref(), &log);
+    let diagnostics = diagnostics_of(audio.as_ref(), &log, &importer, &configuration.library.root);
     let apply = applies_to(audio.as_ref());
 
     // What a subscribed console sees. Shared between the outputs, which capture, and the CITP
@@ -193,6 +178,7 @@ pub fn run() -> anyhow::Result<()> {
     if let Some(thread) = off_screen {
         let _ = thread.join();
     }
+    importer.stop();
     // Closing the device before the process ends keeps the operating system from logging a
     // stream that vanished.
     drop(audio);
@@ -229,6 +215,61 @@ fn unix_millis() -> i64 {
         .map(|since| since.as_millis() as i64)
         .unwrap_or_default()
 }
+
+/// Starts the import pool.
+///
+/// A finished import republishes the catalog, because the picker and the compositor read the same
+/// snapshot: a clip that has arrived has to appear in it without anyone restarting anything.
+fn start_importer(
+    configuration: &MediaConfiguration,
+    catalog: &presentation::SharedCatalog,
+) -> media_library::Importer {
+    let catalog = catalog.clone();
+    let root = configuration.library.root.clone();
+    media_library::Importer::start(
+        media_library::LibraryStorage::new(configuration.library.root.clone()),
+        IMPORT_CONCURRENCY,
+        std::sync::Arc::new(move || {
+            if let Ok(published) = media_library::discover(&root) {
+                catalog.store(std::sync::Arc::new(published));
+            }
+        }),
+    )
+}
+
+/// Opens the configured audio input, and the analysis whatever happened publishes into.
+///
+/// Audio capture is a real capability of the machine: when there is no input device the server
+/// says so once and runs on silence, rather than refusing to start.
+fn start_audio(
+    configuration: &MediaConfiguration,
+) -> (
+    Option<media_audio::AudioService>,
+    media_audio::SharedAnalysis,
+) {
+    let audio = match media_audio::AudioService::start(&configuration.audio) {
+        Ok(service) => Some(service),
+        Err(error) => {
+            tracing::warn!(%error, "no audio input; generated sources will run on silence");
+            None
+        }
+    };
+    let analysis = audio.as_ref().map_or_else(
+        || {
+            std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
+                media_audio::AnalysisSnapshot::default(),
+            ))
+        },
+        media_audio::AudioService::analysis,
+    );
+    (audio, analysis)
+}
+
+/// How many clips are converted at once.
+///
+/// Import is CPU-bound compression and a show may be running on the same machine, so this is
+/// deliberately small: a library still drains, and the outputs still get their frames.
+const IMPORT_CONCURRENCY: usize = 2;
 
 /// The diagnostics an operator asked for on the command line.
 fn diagnostics_asked_for(arguments: &[String]) -> Diagnostics {
@@ -272,6 +313,8 @@ fn applies_to(audio: Option<&media_audio::AudioService>) -> media_http::ApplyCon
 fn diagnostics_of(
     audio: Option<&media_audio::AudioService>,
     log: &LogBuffer,
+    importer: &media_library::Importer,
+    library_root: &std::path::Path,
 ) -> media_http::Diagnostics {
     let log = log.clone();
     media_http::Diagnostics {
@@ -304,6 +347,95 @@ fn diagnostics_of(
         },
         audio_devices: std::sync::Arc::new(media_audio::input_devices),
         logs: std::sync::Arc::new(move |query| log.page(query)),
+        imports: imports_of(importer, library_root),
+    }
+}
+
+/// What the API can ask and tell the import pool.
+fn imports_of(
+    importer: &media_library::Importer,
+    library_root: &std::path::Path,
+) -> media_http::Imports {
+    let reading = importer.clone();
+    let starting = importer.clone();
+    let cancelling = importer.clone();
+    let root = library_root.to_path_buf();
+    let start_root = root.clone();
+
+    media_http::Imports {
+        state: std::sync::Arc::new(move || {
+            let pending = media_library::pending_imports(&root)
+                .into_iter()
+                .map(|item| media_http::PendingImport {
+                    destination: item.destination,
+                    name: item.name,
+                    filename: filename_of(&item.source),
+                })
+                .collect();
+            let jobs = reading.jobs().iter().map(job_of).collect();
+            (pending, jobs)
+        }),
+        start: std::sync::Arc::new(move |address| {
+            media_library::pending_imports(&start_root)
+                .into_iter()
+                .filter(|item| address.is_none_or(|wanted| item.destination == wanted))
+                .map(|item| {
+                    starting.submit(item.source, item.destination, &item.name);
+                })
+                .count()
+        }),
+        cancel: std::sync::Arc::new(move |id| {
+            cancelling
+                .jobs()
+                .iter()
+                .find(|job| job.id.to_string() == id)
+                .is_some_and(|job| cancelling.cancel(job.id))
+        }),
+        // Import shells out to FFmpeg. A machine without it should say so before an operator
+        // queues a whole library that will fail one clip at a time.
+        available: media_codec::import::ffmpeg_available(),
+    }
+}
+
+fn filename_of(path: &std::path::Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_owned()
+}
+
+fn job_of(job: &media_library::Job) -> media_http::ImportJob {
+    use media_library::JobState;
+    let (outcome, frames_done, frames_total) = match &job.state {
+        JobState::Queued => (media_http::ImportOutcome::Queued, None, None),
+        JobState::Running {
+            frames_done,
+            frames_total,
+        } => (
+            media_http::ImportOutcome::Running,
+            Some(*frames_done),
+            *frames_total,
+        ),
+        JobState::Succeeded { frames } => {
+            (media_http::ImportOutcome::Succeeded, Some(*frames), None)
+        }
+        JobState::Failed { reason } => (
+            media_http::ImportOutcome::Failed {
+                reason: reason.clone(),
+            },
+            None,
+            None,
+        ),
+        JobState::Cancelled => (media_http::ImportOutcome::Cancelled, None, None),
+    };
+    media_http::ImportJob {
+        id: job.id.to_string(),
+        destination: job.destination,
+        filename: filename_of(&job.source),
+        outcome,
+        fraction: job.state.fraction(),
+        frames_done,
+        frames_total,
     }
 }
 

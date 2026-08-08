@@ -163,7 +163,40 @@ availableDevices: Array<string>,
  */
 deviceTakesEffectOnRestart: boolean, };
 export type AudioPanelView = { settings: AudioSettingsView, analysis: AudioView, };
-export type TelemetryFrame = { audio: AudioView, };
+export type PendingImportView = { address: AddressView,
+/**
+ * The name the imported clip will keep.
+ */
+name: string,
+/**
+ * The filename as it sits on disk, so an operator recognises what they are about to convert.
+ */
+filename: string, };
+export type ImportJobView = { id: string, address: AddressView, filename: string,
+/**
+ * `queued`, `running`, `succeeded`, `failed`, or `cancelled`.
+ */
+state: string,
+/**
+ * Absent while the total is unknown, rather than a made-up number.
+ */
+fraction: number | null, framesDone: number | null, framesTotal: number | null,
+/**
+ * Why it failed, when it did. Operator-facing text.
+ */
+reason: string | null, };
+export type ImportsView = { pending: Array<PendingImportView>, jobs: Array<ImportJobView>,
+/**
+ * Whether this machine can transcode at all. Import shells out to FFmpeg, and a machine
+ * without it should say so before an operator queues forty clips that will all fail.
+ */
+canImport: boolean, };
+export type TelemetryFrame = { audio: AudioView,
+/**
+ * Every import this run has seen. Pushed rather than polled for the same reason as the
+ * meters: a progress bar that has to ask is a progress bar that stutters.
+ */
+imports: Array<ImportJobView>, };
 export type LogRecordView = {
 /**
  * Monotonically increasing, so a viewer asks for everything after what it already holds.
@@ -212,3 +245,4 @@ export type UpdateAudio = { requestId: string,
  * the desk feed they asked for.
  */
 deviceBy?: string | null, deviceValue?: string | null, inputGain?: number | null, beatSensitivity?: number | null, eqBass?: number | null, eqMid?: number | null, eqTreble?: number | null, };
+export type StartImport = { requestId: string, folder?: number | null, file?: number | null, };

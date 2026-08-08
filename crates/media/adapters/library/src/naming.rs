@@ -73,6 +73,34 @@ pub fn parse_item_filename(filename: &str) -> Option<(u8, String)> {
     Some((file, name))
 }
 
+/// Reads an index and a name out of a *source* filename, whatever its extension.
+///
+/// The same `NNN[-Name]` convention as a library item, but for a file that has not been imported
+/// yet: `001-LoopTest.mp4` is file 1 called `LoopTest`, waiting to become `001-LoopTest.toskclip`.
+/// The extension is deliberately not checked here — which formats can be imported is the importer's
+/// business, not the naming convention's.
+pub fn parse_source_filename(filename: &str) -> Option<(u8, String)> {
+    let stem = filename.rsplit_once('.').map(|(stem, _)| stem)?;
+    if stem.len() < 3 {
+        return None;
+    }
+    let (index, rest) = stem.split_at(3);
+    if !index.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let file: u8 = index.parse().ok()?;
+    if !(FIRST_FILE..=LAST_FILE).contains(&file) {
+        return None;
+    }
+
+    let name = match rest.strip_prefix('-') {
+        Some(name) if !name.is_empty() => name.to_owned(),
+        None if rest.is_empty() => index.to_owned(),
+        _ => return None,
+    };
+    Some((file, name))
+}
+
 /// Strips anything that would make a filename unsafe or ambiguous.
 ///
 /// Path separators, leading dots, and control characters are removed rather than escaped, because
