@@ -16,6 +16,24 @@ import {
  * There is nothing in one to convert — a style said how much of a beam to draw, not where to
  * stand — so it is dropped and the Stage opens on the plan, which is what a 2D Stage was.
  */
+/** A saved render quality, or the current one for anything this build does not know. */
+function normalizeStageVizQuality(
+	value: unknown,
+	fallback: AppState["stageVizQuality"],
+): AppState["stageVizQuality"] {
+	return value === "draft" ||
+		value === "standard" ||
+		value === "high" ||
+		value === "ultra"
+		? value
+		: fallback;
+}
+
+/** A saved number, or the current one where the layout carries something else. */
+function numberOr(value: unknown, fallback: number): number {
+	return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
 function normalizeStage2dSide(value: unknown): AppState["stage2dSide"] {
 	return value === "top" ||
 		value === "front" ||
@@ -107,6 +125,26 @@ export function reduceHydration(
 					typeof action.windowSettings?.stageVizBackground === "string"
 						? action.windowSettings.stageVizBackground
 						: state.stageVizBackground,
+				stageVizQuality: normalizeStageVizQuality(
+					action.windowSettings?.stageVizQuality,
+					state.stageVizQuality,
+				),
+				stageVizAtmosphere: numberOr(
+					action.windowSettings?.stageVizAtmosphere,
+					state.stageVizAtmosphere,
+				),
+				stageVizExposure: numberOr(
+					action.windowSettings?.stageVizExposure,
+					state.stageVizExposure,
+				),
+				stageVizLaserBrightness: numberOr(
+					action.windowSettings?.stageVizLaserBrightness,
+					state.stageVizLaserBrightness,
+				),
+				stageVizShowLabels:
+					typeof action.windowSettings?.stageVizShowLabels === "boolean"
+						? action.windowSettings.stageVizShowLabels
+						: state.stageVizShowLabels,
 				builtIn:
 					action.windowSettings?.builtIn == null
 						? (action.windowSettings?.builtIn ?? state.builtIn)

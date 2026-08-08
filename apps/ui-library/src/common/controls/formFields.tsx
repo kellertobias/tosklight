@@ -96,33 +96,3 @@ export const LargeTextField = forwardRef<HTMLTextAreaElement, LargeTextFieldProp
     </FormField>;
   },
 );
-
-type ColorFieldProps = FieldDecoration & {
-  value: string;
-  onChange: (value: string) => void;
-  id?: string;
-  disabled?: boolean;
-  className?: string;
-};
-
-/**
- * A colour, chosen from the platform's own picker.
- *
- * The swatch is the control: an operator picking the colour behind a rendered stage is judging it
- * against what they can see, not typing a hex value, and every platform already has a picker they
- * know. The value crosses as `#rrggbb`, which is what the browser gives and what a stored setting
- * can be read back from.
- */
-export const ColorField = forwardRef<HTMLInputElement, ColorFieldProps>(function ColorField(
-  { label, description, error, id, labelPlacement, value, onChange, disabled, className = "" },
-  ref,
-) {
-  const fieldId = useFieldId(id);
-  return <FormField label={label} description={description} error={error}
-    htmlFor={fieldId} labelPlacement={labelPlacement}>
-    <input type="color" ref={ref} id={fieldId} value={value} disabled={disabled}
-      aria-invalid={Boolean(error) || undefined}
-      className={`ui-color-input ${className}`.trim()}
-      onChange={(event) => onChange(event.target.value)}/>
-  </FormField>;
-});

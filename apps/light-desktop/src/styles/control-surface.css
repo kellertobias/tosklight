@@ -2566,11 +2566,3 @@ textarea,
 	line-height: 1.45;
 }
 
-.ui-color-input {
-	inline-size: 3rem;
-	block-size: 1.9rem;
-	padding: 0;
-	border: 1px solid var(--border-subtle, #2a3038);
-	border-radius: 4px;
-	background: none;
-}

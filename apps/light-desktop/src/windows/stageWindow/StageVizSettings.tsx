@@ -1,5 +1,6 @@
 import {
-	ColorField,
+	Button,
+	ColorPickerField,
 	HorizontalFaderField,
 	MultiValueToggleField,
 	SwitchField,
@@ -53,6 +54,9 @@ export function StageVizSettings() {
 	 */
 	return (
 		<>
+			<Button onClick={() => void bridge.sendStagePaneInput("frame", 0, 0)}>
+				Reset view
+			</Button>
 			{/*
 			 * No beam guidelines here. This view draws the beams themselves, and a dotted line
 			 * down the middle of a beam that is already on screen says nothing the beam did not.
@@ -125,10 +129,11 @@ export function StageVizSettings() {
 			 * by default: a stage seen from the house is never black and never grey. It applies to
 			 * every renderer-drawn Stage, because it is one room.
 			 */}
-			<ColorField
+			<ColorPickerField
 				label="Background"
 				description="The colour behind the rig, in every Stage view."
 				value={state.stageVizBackground}
+				colors={STAGE_BACKGROUNDS}
 				onChange={(vizBackground) =>
 					dispatch({ type: "SET_STAGE_OPTIONS", vizBackground })
 				}
@@ -153,3 +158,18 @@ export function StageVizSettings() {
 		</>
 	);
 }
+
+/*
+ * The colours a room behind a rig is worth being.
+ *
+ * The picker's usual palette is for gels and pool buttons — saturated, and the wrong question
+ * entirely here. What this chooses is how dark the room is and which way it leans, so the swatches
+ * run from black through the dark blues and greys a stage is actually seen against. Nothing bright:
+ * a light background does not make a rig easier to read, it makes the beams impossible.
+ */
+const STAGE_BACKGROUNDS = [
+	"#000000", "#020304", "#04060a", "#070a12",
+	"#0a0e18", "#0d1220", "#101728", "#141c30",
+	"#050505", "#0a0a0a", "#101010", "#161616",
+	"#040706", "#061012", "#0a1416", "#12100a",
+] as const;

@@ -6,6 +6,7 @@ import {
 } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useState } from "react";
+import { useDesktopBridge } from "../../platform/desktop";
 import { useApp } from "../../state/AppContext";
 import type { Stage2dSide } from "../../types";
 import { StageVizSettings } from "./StageVizSettings";
@@ -134,21 +135,17 @@ function Stage2dSettings({ options }: { options: StageOptionsModel }) {
  */
 function Stage3dSettings() {
 	const { state, dispatch } = useApp();
+	const bridge = useDesktopBridge();
 	return (
 		<>
-			<Button
-				onClick={() =>
-					dispatch({
-						type: "SET_STAGE_NAVIGATION",
-						zoom: 1,
-						panX: 0,
-						panY: 0,
-						orbitX: 0,
-						orbitY: 0,
-					})
-				}
-			>
-				Reset 3D view
+			{/*
+			 * Framing is asked of the renderer rather than described to it. Only the renderer knows
+			 * how big the rig is, so a desk naming a camera position would be guessing at the one
+			 * number the answer depends on — which is why this used to set a zoom and an orbit that
+			 * nothing had read since the renderer took over the picture, and so did nothing at all.
+			 */}
+			<Button onClick={() => void bridge.sendStagePaneInput("frame", 0, 0)}>
+				Reset view
 			</Button>
 			<SwitchField
 				label="Floor grid"

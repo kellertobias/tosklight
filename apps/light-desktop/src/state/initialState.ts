@@ -64,7 +64,9 @@ export const initialState: AppState = {
 	stageVizBackground: "#020304",
 	// Enough haze to see a beam without the rig disappearing into it.
 	stageVizAtmosphere: 0.12,
-	stageVizQuality: "high",
+	// Draft: the cones and nothing in them. The cheapest tier that still shows an operator where
+	// the light is going, which is what a Stage is opened for.
+	stageVizQuality: "draft",
 	stageVizExposure: 1,
 	stageVizLaserBrightness: 1,
 	stageVizShowLabels: false,
