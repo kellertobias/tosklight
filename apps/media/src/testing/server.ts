@@ -4,13 +4,19 @@
 // a test proving a rollback is proving the code an operator runs, not a mock of it.
 
 import { vi } from "vitest";
-import type { CatalogView, Health, OutputView } from "../shared/api/generated/media-wire";
+import type {
+	CatalogView,
+	Health,
+	OutputView,
+	VisualizerView,
+} from "../shared/api/generated/media-wire";
 import { resetResources } from "../shared/api/resource";
 
 export interface StubbedServer {
 	outputs: OutputView[];
 	catalog: CatalogView;
 	health: Health;
+	visualizers: VisualizerView[];
 	/** Set to make the next write fail with this code and status. */
 	refuseWrites: { code: string; message: string; status: number } | undefined;
 	/** Every path written to, in order. */
@@ -21,6 +27,7 @@ export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServe
 	const server: StubbedServer = {
 		outputs: [anOutput()],
 		catalog: aCatalog(),
+		visualizers: [aVisualizer()],
 		health: {
 			status: "ok",
 			instance: "test-instance",
@@ -47,6 +54,7 @@ export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServe
 			}
 			if (path === "/health") return jsonResponse(server.health);
 			if (path === "/catalog") return jsonResponse(server.catalog);
+			if (path === "/visualizers") return jsonResponse(server.visualizers);
 			if (path === "/outputs") return jsonResponse(server.outputs);
 			if (path.endsWith("/reset")) return new Response(null, { status: 204 });
 
@@ -107,7 +115,54 @@ export function aLayer(index: number): OutputView["layers"][number] {
 		rotation: 0,
 		grayscale: 0,
 		sourceStatus: { state: "ready", failure: null },
+		mask: {
+			address: { folder: 0, file: 0, class: "blank" },
+			scaleX: 1,
+			scaleY: 1,
+			invert: false,
+			opacity: 0,
+			source: "luminance",
+			active: false,
+		},
 		drawing: true,
+	};
+}
+
+export function aVisualizer(overrides: Partial<VisualizerView> = {}): VisualizerView {
+	return {
+		address: { folder: 220, file: 1, class: "generated-visualizer" },
+		typeId: 0,
+		kind: "Equalizer Bars",
+		name: "Equalizer Bars",
+		uses: ["count", "size", "primary"],
+		parameters: {
+			count: 32,
+			size: 0.05,
+			speed: 1,
+			amount: 1,
+			radius: 0.3,
+			thickness: 0.01,
+			reactivity: 1,
+			decay: 0.1,
+			zoom: 1,
+			iterations: 64,
+			threshold: 0.5,
+			smoothing: 0.5,
+			gravity: 0.5,
+			lifetime: 2,
+			curvature: 0.2,
+			primaryRed: 0.1,
+			primaryGreen: 0.84,
+			primaryBlue: 0.93,
+			secondaryRed: 1,
+			secondaryGreen: 0.7,
+			secondaryBlue: 0.06,
+			mirror: false,
+			filled: false,
+			wireframe: false,
+			mode: 0,
+		},
+		...overrides,
 	};
 }
 

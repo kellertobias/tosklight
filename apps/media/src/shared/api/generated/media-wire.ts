@@ -19,7 +19,16 @@ export type AddressView = { folder: number, file: number,
  */
 class: string, };
 export type SourceStatusView = { state: string, failure: string | null, };
-export type LayerView = { index: number, address: AddressView, playMode: string, dimmer: number, scaleX: number, scaleY: number, positionX: number, positionY: number, rotation: number, grayscale: number, sourceStatus: SourceStatusView,
+export type MaskView = { address: AddressView, scaleX: number, scaleY: number, invert: boolean, opacity: number,
+/**
+ * `alpha` or `luminance`.
+ */
+source: string,
+/**
+ * Whether it is currently shaping the layer at all.
+ */
+active: boolean, };
+export type LayerView = { index: number, address: AddressView, playMode: string, dimmer: number, scaleX: number, scaleY: number, positionX: number, positionY: number, rotation: number, grayscale: number, sourceStatus: SourceStatusView, mask: MaskView,
 /**
  * Whether this layer contributes pixels right now.
  */
@@ -37,4 +46,23 @@ export type CatalogItemView = {
 id: string, file: number, name: string, kind: string, width: number, height: number, frames: number | null, intrinsicBpm: number | null, };
 export type CatalogFolderView = { folder: number, name: string | null, items: Array<CatalogItemView>, };
 export type CatalogView = { revision: number, itemCount: number, folders: Array<CatalogFolderView>, };
+export type VisualizerParametersView = { count: number, size: number, speed: number, amount: number, radius: number, thickness: number, reactivity: number, decay: number, zoom: number, iterations: number, threshold: number, smoothing: number, gravity: number, lifetime: number, curvature: number, primaryRed: number, primaryGreen: number, primaryBlue: number, secondaryRed: number, secondaryGreen: number, secondaryBlue: number, mirror: boolean, filled: boolean, wireframe: boolean, mode: number, };
+export type VisualizerView = { address: AddressView,
+/**
+ * Stable across releases and across a reassignment of the address.
+ */
+typeId: number,
+/**
+ * The kind's own name, which is what documentation and a cue sheet call it.
+ */
+kind: string,
+/**
+ * What this configuration is called, which an operator may change.
+ */
+name: string,
+/**
+ * Which of the shared parameters this kind reads. The rest are present and ignored, so an
+ * editor can show only the controls that do something.
+ */
+uses: Array<string>, parameters: VisualizerParametersView, };
 export type UpdateLayer = { folder?: number | null, file?: number | null, dimmer?: number | null, };

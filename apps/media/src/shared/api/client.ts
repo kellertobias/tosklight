@@ -2,7 +2,14 @@
 // failure, so no feature ever branches on a status code or reads `error.message` to decide what
 // happened.
 
-import type { ApiErrorBody, CatalogView, Health, OutputView, UpdateLayer } from "./generated/media-wire";
+import type {
+	ApiErrorBody,
+	CatalogView,
+	Health,
+	OutputView,
+	UpdateLayer,
+	VisualizerView,
+} from "./generated/media-wire";
 
 /// Every failure a call site can see, including the ones that never reached the server.
 export class ApiFailure extends Error {
@@ -70,6 +77,7 @@ async function failureOf(response: Response): Promise<ApiFailure> {
 export const api = {
 	health: () => request<Health>("/health"),
 	catalog: () => request<CatalogView>("/catalog"),
+	visualizers: () => request<VisualizerView[]>("/visualizers"),
 	outputs: () => request<OutputView[]>("/outputs"),
 	outputState: (output: string) => request<OutputView>(`/outputs/${output}/state`),
 

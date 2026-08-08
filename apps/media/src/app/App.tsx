@@ -7,6 +7,7 @@ import { DmxPage } from "../features/dmx/DmxPage";
 import { LayersPage } from "../features/layers/LayersPage";
 import { LibraryPage } from "../features/media-library/LibraryPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { VisualizersPage } from "../features/visualizers/VisualizersPage";
 import { useHealth } from "../shared/api/queries";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ROUTES, type RoutePath } from "./routes";
@@ -19,6 +20,7 @@ const PAGES: Record<RoutePath, () => React.ReactElement> = {
 	"/": DashboardPage,
 	"/layers": LayersPage,
 	"/library": LibraryPage,
+	"/visualizers": VisualizersPage,
 	"/dmx": DmxPage,
 	"/settings": SettingsPage,
 };

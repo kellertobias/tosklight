@@ -11,8 +11,9 @@ use ts_rs::{Config, TS};
 
 use crate::error::ApiErrorBody;
 use crate::wire::{
-    AddressView, CatalogFolderView, CatalogItemView, CatalogView, Health, LayerView, MasterView,
-    OutputView, SourceStatusView, UpdateLayer,
+    AddressView, CatalogFolderView, CatalogItemView, CatalogView, Health, LayerView, MaskView,
+    MasterView, OutputView, SourceStatusView, UpdateLayer, VisualizerParametersView,
+    VisualizerView,
 };
 
 const TYPESCRIPT_PATH: &str = "apps/media/src/shared/api/generated/media-wire.ts";
@@ -62,12 +63,15 @@ fn declarations(config: &Config) -> Vec<String> {
         Health::decl(config),
         AddressView::decl(config),
         SourceStatusView::decl(config),
+        MaskView::decl(config),
         LayerView::decl(config),
         MasterView::decl(config),
         OutputView::decl(config),
         CatalogItemView::decl(config),
         CatalogFolderView::decl(config),
         CatalogView::decl(config),
+        VisualizerParametersView::decl(config),
+        VisualizerView::decl(config),
         UpdateLayer::decl(config),
     ]
 }

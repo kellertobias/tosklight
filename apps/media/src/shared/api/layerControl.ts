@@ -1,20 +1,24 @@
 // Layer control: the writes, their optimistic effect, and their rollback.
 //
+// This lives in the shared API layer rather than inside the layers feature because two features
+// write to layers — the layer page and the visualizer picker — and a feature must never reach
+// into another feature's internals to do it.
+//
 // An optimistic change here is not a guess about what the server will do — the projection the
 // server returns replaces it either way. It exists so a fader feels attached to the value. The
 // rollback matters more than the optimism: when a desk takes an output, the write is refused and
 // the control must snap back to what the desk says, not to what the operator dragged.
 
 import { useCallback, useState } from "react";
-import { ApiFailure, api } from "../../shared/api/client";
-import type { OutputView, UpdateLayer } from "../../shared/api/generated/media-wire";
-import { KEYS } from "../../shared/api/queries";
-import { useResource, writeResource } from "../../shared/api/resource";
+import { ApiFailure, api } from "./client";
+import type { OutputView, UpdateLayer } from "./generated/media-wire";
+import { KEYS } from "./queries";
+import { type Resource, useResource, writeResource } from "./resource";
 
 /** Outputs change continuously while a desk is driving them. */
 export const OUTPUT_POLL_MS = 1_000;
 
-export function useOutputsForControl() {
+export function useOutputsForControl(): Resource<OutputView[]> {
 	return useResource<OutputView[]>(KEYS.outputs, api.outputs, { pollMs: OUTPUT_POLL_MS });
 }
 

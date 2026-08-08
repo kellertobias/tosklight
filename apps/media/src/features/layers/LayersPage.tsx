@@ -6,7 +6,7 @@ import { readOnlyReason } from "../../entities/output";
 import { useCatalog } from "../../shared/api/queries";
 import type { OutputView } from "../../shared/api/generated/media-wire";
 import { LayerCard } from "./LayerCard";
-import { useLayerControl, useOutputsForControl } from "./service";
+import { useLayerControl, useOutputsForControl } from "../../shared/api/layerControl";
 
 /** The library changes when someone imports, which is rare compared with layer state. */
 const CATALOG_POLL_MS = 15_000;

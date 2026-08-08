@@ -22,7 +22,7 @@ use media_domain::{
 use crate::assets;
 use crate::error::ApiError;
 use crate::tolerant::TolerantJson;
-use crate::wire::{CatalogView, Health, OutputView, UpdateLayer};
+use crate::wire::{CatalogView, Health, OutputView, UpdateLayer, VisualizerView};
 
 /// Everything the routes read and write.
 #[derive(Clone)]
@@ -48,6 +48,7 @@ pub fn router(state: ApiState) -> Router {
     Router::new()
         .route("/api/v2/health", get(health))
         .route("/api/v2/catalog", get(catalog))
+        .route("/api/v2/visualizers", get(visualizers))
         .route("/api/v2/outputs", get(outputs))
         .route("/api/v2/outputs/{output}/state", get(output_state))
         .route(
@@ -77,6 +78,14 @@ async fn health(State(state): State<ApiState>) -> impl IntoResponse {
 
 async fn catalog(State(state): State<ApiState>) -> impl IntoResponse {
     axum::Json(CatalogView::of(&state.catalog.load()))
+}
+
+/// Which generated visualizer answers at which address.
+///
+/// Configuration rather than state: it changes when an operator reassigns an address, not from
+/// frame to frame, so it is read once and not polled.
+async fn visualizers(State(state): State<ApiState>) -> impl IntoResponse {
+    axum::Json(VisualizerView::all(&state.configuration.visualizers))
 }
 
 async fn outputs(State(state): State<ApiState>) -> impl IntoResponse {
@@ -493,6 +502,50 @@ mod tests {
             send(&bench.router, get("/api/v2/outputs/nonsense/state".into())).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["code"], "malformed-output-id");
+    }
+
+    #[tokio::test]
+    async fn every_shipped_visualizer_is_published_with_its_address_and_its_controls() {
+        let bench = bench();
+        let (status, body) = send(&bench.router, get("/api/v2/visualizers".into())).await;
+
+        assert_eq!(status, StatusCode::OK);
+        let entries = body.as_array().expect("a list");
+        assert_eq!(entries.len(), 20);
+
+        let first = &entries[0];
+        assert_eq!(first["address"]["folder"], 220);
+        assert_eq!(first["address"]["file"], 1);
+        assert_eq!(first["address"]["class"], "generated-visualizer");
+        assert_eq!(first["typeId"], 0);
+        assert_eq!(first["kind"], "Equalizer Bars");
+        assert!(
+            first["uses"]
+                .as_array()
+                .expect("a list")
+                .contains(&serde_json::json!("count")),
+            "an editor is told which controls do something"
+        );
+        assert_eq!(first["parameters"]["count"], 32);
+    }
+
+    #[tokio::test]
+    async fn a_layer_reports_its_mask_even_when_the_mask_is_doing_nothing() {
+        let bench = bench();
+        let (_, body) = send(
+            &bench.router,
+            get(format!("/api/v2/outputs/{}/state", bench.output)),
+        )
+        .await;
+
+        let mask = &body["layers"][0]["mask"];
+        assert_eq!(mask["address"]["class"], "blank");
+        assert_eq!(mask["opacity"], 0.0);
+        assert_eq!(mask["source"], "luminance");
+        assert_eq!(
+            mask["active"], false,
+            "selected-but-faded and not-selected must be tellable apart"
+        );
     }
 
     #[tokio::test]

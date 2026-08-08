@@ -7,6 +7,7 @@ export const ROUTES = [
 	{ path: "/", label: "Dashboard" },
 	{ path: "/layers", label: "Layers" },
 	{ path: "/library", label: "Media library" },
+	{ path: "/visualizers", label: "Visualizers" },
 	{ path: "/dmx", label: "DMX" },
 	{ path: "/settings", label: "Settings" },
 ] as const;

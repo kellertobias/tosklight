@@ -5,13 +5,14 @@
 // argument.
 
 import { api } from "./client";
-import type { CatalogView, Health, OutputView } from "./generated/media-wire";
+import type { CatalogView, Health, OutputView, VisualizerView } from "./generated/media-wire";
 import { type Resource, useResource } from "./resource";
 
 export const KEYS = {
 	health: "health",
 	catalog: "catalog",
 	outputs: "outputs",
+	visualizers: "visualizers",
 } as const;
 
 export function useHealth(pollMs?: number): Resource<Health> {
@@ -24,4 +25,9 @@ export function useCatalog(pollMs?: number): Resource<CatalogView> {
 
 export function useOutputs(pollMs?: number): Resource<OutputView[]> {
 	return useResource(KEYS.outputs, api.outputs, { pollMs });
+}
+
+/// Configuration, not state: it changes when an operator reassigns an address, so it is not polled.
+export function useVisualizers(): Resource<VisualizerView[]> {
+	return useResource(KEYS.visualizers, api.visualizers);
 }

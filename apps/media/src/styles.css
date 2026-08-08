@@ -61,6 +61,27 @@ body {
 	box-shadow: inset 0 -2px 0 var(--cyan);
 }
 
+/* Narrow enough that the header cannot be one row: the brand and the connection state share a
+   line, and the sections get a row of their own rather than one link per line. */
+@media (max-width: 640px) {
+	.media-shell-header {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		gap: 0.5rem 1rem;
+	}
+
+	.media-shell-header nav {
+		grid-column: 1 / -1;
+		order: 2;
+		overflow-x: auto;
+		flex-wrap: nowrap;
+	}
+
+	.media-connection {
+		text-align: right;
+	}
+}
+
 .media-connection {
 	margin: 0;
 	color: var(--muted);
@@ -236,6 +257,18 @@ body {
 	margin: 0;
 	font-variant-numeric: tabular-nums;
 	color: var(--muted);
+}
+
+.media-visualizer-uses {
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.media-visualizer-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
 }
 
 .media-table {

@@ -10,8 +10,10 @@
 //! by `cargo run -p media-http --example generate-contracts`.
 
 use media_domain::catalog::{CatalogItem, CatalogSnapshot, ItemKind};
+use media_domain::visualizer::{GeneratedCatalog, VisualizerConfiguration, VisualizerParameters};
 use media_domain::{
-    LayerState, MasterState, MediaAddress, OutputState, SourceFailure, SourceStatus,
+    LayerState, MaskSource, MaskState, MasterState, MediaAddress, OutputState, SourceFailure,
+    SourceStatus,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -84,6 +86,42 @@ impl SourceStatusView {
     }
 }
 
+/// A layer's mask, as the API reports it.
+///
+/// Reported even when it is doing nothing, because "a mask is selected but faded out" and "no mask
+/// is selected" are different situations an operator needs to tell apart.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct MaskView {
+    pub address: AddressView,
+    pub scale_x: f32,
+    pub scale_y: f32,
+    pub invert: bool,
+    pub opacity: f32,
+    /// `alpha` or `luminance`.
+    pub source: String,
+    /// Whether it is currently shaping the layer at all.
+    pub active: bool,
+}
+
+impl MaskView {
+    pub fn of(mask: &MaskState) -> Self {
+        Self {
+            address: AddressView::of(mask.address),
+            scale_x: mask.scale_x,
+            scale_y: mask.scale_y,
+            invert: mask.invert,
+            opacity: mask.opacity,
+            source: match mask.source {
+                MaskSource::Alpha => "alpha",
+                MaskSource::Luminance => "luminance",
+            }
+            .to_owned(),
+            active: mask.is_active(),
+        }
+    }
+}
+
 /// One layer, as the API reports it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
@@ -99,6 +137,7 @@ pub struct LayerView {
     pub rotation: f32,
     pub grayscale: f32,
     pub source_status: SourceStatusView,
+    pub mask: MaskView,
     /// Whether this layer contributes pixels right now.
     pub drawing: bool,
 }
@@ -117,6 +156,7 @@ impl LayerView {
             rotation: layer.rotation,
             grayscale: layer.grayscale,
             source_status: SourceStatusView::of(layer.source_status),
+            mask: MaskView::of(&layer.mask),
             drawing: layer.draws(),
         }
     }
@@ -255,6 +295,118 @@ impl CatalogView {
                 })
                 .collect(),
         }
+    }
+}
+
+/// One configured generated visualizer at the address a desk reaches it by.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct VisualizerView {
+    pub address: AddressView,
+    /// Stable across releases and across a reassignment of the address.
+    pub type_id: u16,
+    /// The kind's own name, which is what documentation and a cue sheet call it.
+    pub kind: String,
+    /// What this configuration is called, which an operator may change.
+    pub name: String,
+    /// Which of the shared parameters this kind reads. The rest are present and ignored, so an
+    /// editor can show only the controls that do something.
+    pub uses: Vec<String>,
+    pub parameters: VisualizerParametersView,
+}
+
+/// The shared parameter block, as the API reports it.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct VisualizerParametersView {
+    pub count: u32,
+    pub size: f32,
+    pub speed: f32,
+    pub amount: f32,
+    pub radius: f32,
+    pub thickness: f32,
+    pub reactivity: f32,
+    pub decay: f32,
+    pub zoom: f32,
+    pub iterations: u32,
+    pub threshold: f32,
+    pub smoothing: f32,
+    pub gravity: f32,
+    pub lifetime: f32,
+    pub curvature: f32,
+    pub primary_red: f32,
+    pub primary_green: f32,
+    pub primary_blue: f32,
+    pub secondary_red: f32,
+    pub secondary_green: f32,
+    pub secondary_blue: f32,
+    pub mirror: bool,
+    pub filled: bool,
+    pub wireframe: bool,
+    pub mode: u8,
+}
+
+impl VisualizerParametersView {
+    pub fn of(parameters: &VisualizerParameters) -> Self {
+        Self {
+            count: parameters.count,
+            size: parameters.size,
+            speed: parameters.speed,
+            amount: parameters.amount,
+            radius: parameters.radius,
+            thickness: parameters.thickness,
+            reactivity: parameters.reactivity,
+            decay: parameters.decay,
+            zoom: parameters.zoom,
+            iterations: parameters.iterations,
+            threshold: parameters.threshold,
+            smoothing: parameters.smoothing,
+            gravity: parameters.gravity,
+            lifetime: parameters.lifetime,
+            curvature: parameters.curvature,
+            primary_red: parameters.primary.red,
+            primary_green: parameters.primary.green,
+            primary_blue: parameters.primary.blue,
+            secondary_red: parameters.secondary.red,
+            secondary_green: parameters.secondary.green,
+            secondary_blue: parameters.secondary.blue,
+            mirror: parameters.mirror,
+            filled: parameters.filled,
+            wireframe: parameters.wireframe,
+            mode: parameters.mode,
+        }
+    }
+}
+
+impl VisualizerView {
+    pub fn of(address: MediaAddress, configuration: &VisualizerConfiguration) -> Self {
+        Self {
+            address: AddressView::of(address),
+            type_id: configuration.kind.type_id(),
+            kind: configuration.kind.label().to_owned(),
+            name: configuration.name.clone(),
+            uses: configuration
+                .kind
+                .parameters()
+                .iter()
+                .map(|parameter| {
+                    serde_json::to_value(parameter)
+                        .ok()
+                        .and_then(|value| value.as_str().map(str::to_owned))
+                        .unwrap_or_default()
+                })
+                .collect(),
+            parameters: VisualizerParametersView::of(&configuration.parameters),
+        }
+    }
+
+    /// Every assignment, in address order.
+    pub fn all(catalog: &GeneratedCatalog) -> Vec<Self> {
+        catalog
+            .entries
+            .iter()
+            .map(|entry| Self::of(entry.address, &entry.configuration))
+            .collect()
     }
 }
 
