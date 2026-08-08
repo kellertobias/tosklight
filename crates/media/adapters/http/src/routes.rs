@@ -19,9 +19,10 @@ use media_domain::{
     Applied, Command, CommandKind, CommandSource, MediaState, OutputId, Timestamp, apply,
 };
 
+use crate::assets;
 use crate::error::ApiError;
 use crate::tolerant::TolerantJson;
-use crate::wire::{CatalogView, Health, LayerView, OutputView, UpdateLayer};
+use crate::wire::{CatalogView, Health, OutputView, UpdateLayer};
 
 /// Everything the routes read and write.
 #[derive(Clone)]
@@ -58,12 +59,15 @@ pub fn router(state: ApiState) -> Router {
             get(reset_layer),
         )
         .with_state(state)
+        // Anything the API did not claim is the administration frontend: its shell, its assets,
+        // and its client-side routes.
+        .fallback(assets::serve)
 }
 
 async fn health(State(state): State<ApiState>) -> impl IntoResponse {
     let catalog = state.catalog.load();
     axum::Json(Health {
-        status: "ok",
+        status: "ok".to_owned(),
         instance: state.configuration.instance_id.as_str().to_owned(),
         outputs: state.state.load().outputs.len(),
         catalog_revision: catalog.revision.value(),
@@ -72,11 +76,7 @@ async fn health(State(state): State<ApiState>) -> impl IntoResponse {
 }
 
 async fn catalog(State(state): State<ApiState>) -> impl IntoResponse {
-    let snapshot = state.catalog.load();
-    axum::Json(CatalogView {
-        revision: snapshot.revision.value(),
-        snapshot: CatalogSnapshot::clone(&snapshot),
-    })
+    axum::Json(CatalogView::of(&state.catalog.load()))
 }
 
 async fn outputs(State(state): State<ApiState>) -> impl IntoResponse {
@@ -213,19 +213,7 @@ fn view_of(state: &ApiState, output: &media_domain::OutputState, now: Timestamp)
         .map(|configured| configured.name.to_string())
         .unwrap_or_else(|| output.id.to_string());
 
-    OutputView {
-        id: output.id,
-        name,
-        personality: format!("{} layers", output.personality.layer_count()),
-        layers: output
-            .layers
-            .iter()
-            .enumerate()
-            .map(|(index, layer)| LayerView::of(index, layer))
-            .collect(),
-        master: output.master,
-        dmx_active: output.ownership.dmx_is_active(now),
-    }
+    OutputView::of(output, name, output.ownership.dmx_is_active(now))
 }
 
 fn parse_output(raw: &str) -> Result<OutputId, ApiError> {
@@ -338,15 +326,18 @@ mod tests {
         let (status, body) =
             send(&bench.router, post(uri.clone(), r#"{"folder":3,"file":7}"#)).await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["layers"][0]["folder"], 3);
-        assert_eq!(body["layers"][0]["file"], 7);
+        assert_eq!(body["layers"][0]["address"]["folder"], 3);
+        assert_eq!(body["layers"][0]["address"]["file"], 7);
         assert_eq!(body["layers"][0]["dimmer"], 1.0);
 
         // A dimmer change must not disturb the selection.
         let (_, body) = send(&bench.router, post(uri, r#"{"dimmer":0.25}"#)).await;
         assert_eq!(body["layers"][0]["dimmer"], 0.25);
-        assert_eq!(body["layers"][0]["folder"], 3, "the selection survived");
-        assert_eq!(body["layers"][0]["file"], 7);
+        assert_eq!(
+            body["layers"][0]["address"]["folder"], 3,
+            "the selection survived"
+        );
+        assert_eq!(body["layers"][0]["address"]["file"], 7);
     }
 
     #[tokio::test]
@@ -510,7 +501,8 @@ mod tests {
         let (status, body) = send(&bench.router, get("/api/v2/catalog".into())).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["revision"], 0);
-        assert!(body["snapshot"]["folders"].as_array().unwrap().is_empty());
+        assert_eq!(body["itemCount"], 0);
+        assert!(body["folders"].as_array().unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -521,7 +513,7 @@ mod tests {
 
         let (status, body) = send(&bench.router, post(uri, r#"{"file":0}"#)).await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["layers"][0]["file"], 0);
+        assert_eq!(body["layers"][0]["address"]["file"], 0);
         assert_eq!(
             bench.state.load().output(bench.output).unwrap().layers[0].address,
             MediaAddress::new(1, 0)

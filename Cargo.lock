@@ -3767,6 +3767,8 @@ dependencies = [
  "http-body-util",
  "media-application",
  "media-domain",
+ "mime_guess",
+ "rust-embed",
  "serde",
  "serde_ignored",
  "serde_json",
@@ -3775,6 +3777,7 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+ "ts-rs",
  "uuid",
 ]
 

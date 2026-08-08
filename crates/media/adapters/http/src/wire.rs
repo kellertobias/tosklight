@@ -3,29 +3,93 @@
 //! Request types are tolerant of unknown fields; response types are explicit. Nothing here is a
 //! hand-built JSON string, and nothing re-derives a domain rule — the API projects state, it does
 //! not decide it.
+//!
+//! Every type here is a *projection*, owned by this adapter. Domain types are deliberately not
+//! serialized straight onto the wire: a domain refactor must not silently become a breaking API
+//! change, and the TypeScript the frontend consumes is generated from exactly these declarations
+//! by `cargo run -p media-http --example generate-contracts`.
 
-use media_domain::catalog::CatalogSnapshot;
-use media_domain::{LayerState, MasterState, MediaAddress, OutputId, SourceStatus};
+use media_domain::catalog::{CatalogItem, CatalogSnapshot, ItemKind};
+use media_domain::{
+    LayerState, MasterState, MediaAddress, OutputState, SourceFailure, SourceStatus,
+};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// Whether the process is up and what it is running.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Health {
-    pub status: &'static str,
+    pub status: String,
     pub instance: String,
     pub outputs: usize,
+    /// A revision counter, not an identifier. It stays inside the range a browser can hold in a
+    /// number, so the client is not forced into `bigint` arithmetic to compare two snapshots.
+    #[ts(type = "number")]
     pub catalog_revision: u64,
     pub catalog_items: usize,
 }
 
+/// A `(folder, file)` selection.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AddressView {
+    pub folder: u8,
+    pub file: u8,
+    /// Which address space the pair falls in, so the UI can label a selection without
+    /// re-implementing the ranges.
+    pub class: String,
+}
+
+impl AddressView {
+    pub fn of(address: MediaAddress) -> Self {
+        Self {
+            folder: address.folder,
+            file: address.file,
+            class: match address.classify() {
+                media_domain::AddressClass::Blank => "blank",
+                media_domain::AddressClass::Library => "library",
+                media_domain::AddressClass::TextBank => "text-bank",
+                media_domain::AddressClass::GeneratedVisualizer => "generated-visualizer",
+            }
+            .to_owned(),
+        }
+    }
+}
+
+/// A layer's source lifecycle, flattened for a client that only wants to render a badge.
+///
+/// `failure` carries operator-safe text only. Absolute paths and decoder internals stay in the
+/// log, which is where someone diagnosing a machine looks.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceStatusView {
+    pub state: String,
+    pub failure: Option<String>,
+}
+
+impl SourceStatusView {
+    pub fn of(status: SourceStatus) -> Self {
+        let (state, failure) = match status {
+            SourceStatus::Unselected => ("unselected", None),
+            SourceStatus::Loading => ("loading", None),
+            SourceStatus::Ready => ("ready", None),
+            SourceStatus::Completed => ("completed", None),
+            SourceStatus::Failed { failure } => ("failed", Some(describe(failure))),
+        };
+        Self {
+            state: state.to_owned(),
+            failure,
+        }
+    }
+}
+
 /// One layer, as the API reports it.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerView {
     pub index: usize,
-    pub folder: u8,
-    pub file: u8,
+    pub address: AddressView,
     pub play_mode: String,
     pub dimmer: f32,
     pub scale_x: f32,
@@ -34,7 +98,7 @@ pub struct LayerView {
     pub position_y: f32,
     pub rotation: f32,
     pub grayscale: f32,
-    pub source_status: SourceStatus,
+    pub source_status: SourceStatusView,
     /// Whether this layer contributes pixels right now.
     pub drawing: bool,
 }
@@ -43,8 +107,7 @@ impl LayerView {
     pub fn of(index: usize, layer: &LayerState) -> Self {
         Self {
             index,
-            folder: layer.address.folder,
-            file: layer.address.file,
+            address: AddressView::of(layer.address),
             play_mode: layer.play_mode.label().to_owned(),
             dimmer: layer.dimmer,
             scale_x: layer.scale_x,
@@ -53,42 +116,160 @@ impl LayerView {
             position_y: layer.position_y,
             rotation: layer.rotation,
             grayscale: layer.grayscale,
-            source_status: layer.source_status,
+            source_status: SourceStatusView::of(layer.source_status),
             drawing: layer.draws(),
         }
     }
 }
 
+/// The section that applies to the finished composite.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct MasterView {
+    pub dimmer: f32,
+    pub volume: f32,
+    pub tint_red: f32,
+    pub tint_green: f32,
+    pub tint_blue: f32,
+    pub flip_mirror: String,
+    pub mask: AddressView,
+}
+
+impl MasterView {
+    pub fn of(master: MasterState) -> Self {
+        Self {
+            dimmer: master.dimmer,
+            volume: master.volume,
+            tint_red: master.tint.red,
+            tint_green: master.tint.green,
+            tint_blue: master.tint.blue,
+            flip_mirror: match master.flip_mirror {
+                media_domain::FlipMirror::None => "none",
+                media_domain::FlipMirror::Horizontal => "horizontal",
+                media_domain::FlipMirror::Vertical => "vertical",
+                media_domain::FlipMirror::Both => "both",
+            }
+            .to_owned(),
+            mask: AddressView::of(master.mask),
+        }
+    }
+}
+
 /// One output's whole state.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct OutputView {
-    pub id: OutputId,
+    pub id: String,
     pub name: String,
-    pub personality: String,
+    pub layer_count: usize,
     pub layers: Vec<LayerView>,
-    pub master: MasterState,
+    pub master: MasterView,
     /// Whether an external desk currently owns this output's continuously controlled values.
     pub dmx_active: bool,
 }
 
-/// The library, as the API reports it. The same immutable snapshot the renderer reads.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+impl OutputView {
+    pub fn of(output: &OutputState, name: String, dmx_active: bool) -> Self {
+        Self {
+            id: output.id.to_string(),
+            name,
+            layer_count: usize::from(output.personality.layer_count()),
+            layers: output
+                .layers
+                .iter()
+                .enumerate()
+                .map(|(index, layer)| LayerView::of(index, layer))
+                .collect(),
+            master: MasterView::of(output.master),
+            dmx_active,
+        }
+    }
+}
+
+/// One addressable library item.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogItemView {
+    /// Stable across renames, moves, and reindexing — the identity a UI keys a row on.
+    pub id: String,
+    pub file: u8,
+    pub name: String,
+    pub kind: String,
+    pub width: u32,
+    pub height: u32,
+    pub frames: Option<u32>,
+    pub intrinsic_bpm: Option<f64>,
+}
+
+impl CatalogItemView {
+    pub fn of(item: &CatalogItem) -> Self {
+        Self {
+            id: item.id.to_string(),
+            file: item.file,
+            name: item.name.clone(),
+            kind: match item.kind {
+                ItemKind::Image => "image",
+                ItemKind::Video => "video",
+            }
+            .to_owned(),
+            width: item.width,
+            height: item.height,
+            frames: item.frames,
+            intrinsic_bpm: item.intrinsic_bpm,
+        }
+    }
+}
+
+/// One library folder and everything addressable in it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogFolderView {
+    pub folder: u8,
+    pub name: Option<String>,
+    pub items: Vec<CatalogItemView>,
+}
+
+/// The library, as the API reports it. Projected from the same immutable snapshot the renderer
+/// reads, so the picker can never show something the compositor cannot resolve.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogView {
+    #[ts(type = "number")]
     pub revision: u64,
-    pub snapshot: CatalogSnapshot,
+    pub item_count: usize,
+    pub folders: Vec<CatalogFolderView>,
+}
+
+impl CatalogView {
+    pub fn of(snapshot: &CatalogSnapshot) -> Self {
+        Self {
+            revision: snapshot.revision.value(),
+            item_count: snapshot.item_count(),
+            folders: snapshot
+                .folders
+                .iter()
+                .map(|folder| CatalogFolderView {
+                    folder: folder.folder,
+                    name: folder.name.clone(),
+                    items: folder.items.iter().map(CatalogItemView::of).collect(),
+                })
+                .collect(),
+        }
+    }
 }
 
 /// An intent-shaped layer update: only the fields being changed.
 ///
 /// Absent means "leave alone", which is why every field is optional. Sending a dimmer must never
 /// rewrite the layer's media selection.
-#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateLayer {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dimmer: Option<f32>,
 }
 
@@ -113,6 +294,20 @@ impl UpdateLayer {
     pub const fn changes_address(&self) -> bool {
         self.folder.is_some() || self.file.is_some()
     }
+}
+
+/// Operator-safe text for a source failure.
+///
+/// The domain names the failure; wording it for a person is this adapter's job, and the wording
+/// says what to do about it rather than what the decoder saw.
+fn describe(failure: SourceFailure) -> String {
+    match failure {
+        SourceFailure::MissingFile => "the file is not in the library folder",
+        SourceFailure::UnsupportedCodec => "this file is not in a playable format; import it",
+        SourceFailure::DecodeFailed => "the file could not be decoded; it may be damaged",
+        SourceFailure::GpuUploadFailed => "the graphics device rejected this frame",
+    }
+    .to_owned()
 }
 
 #[cfg(test)]
@@ -150,6 +345,36 @@ mod tests {
         assert_eq!(
             body.address(MediaAddress::new(4, 4)),
             MediaAddress::new(4, 4)
+        );
+    }
+
+    #[test]
+    fn an_address_carries_the_space_it_falls_in() {
+        assert_eq!(AddressView::of(MediaAddress::BLANK).class, "blank");
+        assert_eq!(AddressView::of(MediaAddress::new(1, 1)).class, "library");
+        assert_eq!(
+            AddressView::of(MediaAddress::new(200, 1)).class,
+            "text-bank"
+        );
+        assert_eq!(
+            AddressView::of(MediaAddress::new(220, 1)).class,
+            "generated-visualizer"
+        );
+    }
+
+    #[test]
+    fn a_failed_source_reports_operator_safe_text_and_nothing_else() {
+        let ready = SourceStatusView::of(SourceStatus::Ready);
+        assert_eq!(ready.state, "ready");
+        assert_eq!(ready.failure, None);
+
+        let failed = SourceStatusView::of(SourceStatus::Failed {
+            failure: SourceFailure::MissingFile,
+        });
+        assert_eq!(failed.state, "failed");
+        assert!(
+            failed.failure.is_some_and(|text| !text.is_empty()),
+            "a failed layer must say something an operator can act on"
         );
     }
 }

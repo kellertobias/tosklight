@@ -14,6 +14,7 @@
   "workspaces": [
     "apps/light-desktop",
     "apps/light-hardware-controls",
+    "apps/media",
     "apps/patch-library",
     "apps/ui-library",
     "apps/viz-editor"
@@ -71,6 +72,7 @@
     "test:ui-package": "npm run typecheck --workspace @tosklight/ui && npm run test --workspace @tosklight/ui",
     "test:patch-package": "npm run typecheck --workspace @tosklight/patch && npm run test --workspace @tosklight/patch",
     "test:viz-editor": "npm run typecheck --workspace @tosklight/viz-editor && npm run test --workspace @tosklight/viz-editor",
+    "test:media-app": "npm run typecheck --workspace @tosklight/media && npm run test --workspace @tosklight/media",
     "storybook": "npm run storybook --workspace @tosklight/ui",
     "storybook:build": "npm run storybook:build --workspace @tosklight/ui",
     "screenshots:marketing": "bash tools/test.sh marketing-screenshots",

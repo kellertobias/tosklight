@@ -12,6 +12,8 @@ arc-swap.workspace = true
 axum.workspace = true
 media-application = { path = "../../application" }
 media-domain = { path = "../../domain" }
+mime_guess = "2"
+rust-embed.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_ignored = "0.1"
@@ -19,6 +21,7 @@ thiserror.workspace = true
 tokio.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
+ts-rs = { workspace = true, features = ["no-serde-warnings"] }
 uuid.workspace = true
 
 [dev-dependencies]

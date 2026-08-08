@@ -558,6 +558,10 @@ open_viz_editor() {
 # builds it, and it never has to be present for the desk to run.
 build_media() {
   require cargo
+  require npm
+  # The administration interface is compiled into the executable, so it is built first. The
+  # helper skips the build when nothing that feeds it has changed.
+  node "$ROOT/tools/ensure-media-frontend.mjs"
   echo "Building the Media Server..."
   cargo build --release --manifest-path "$ROOT/Cargo.toml" -p media-server
   echo "Media Server built: $TARGET_DIR/release/media-server"

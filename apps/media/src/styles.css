@@ -1,0 +1,276 @@
+/*
+ * Media's own layout. Colour, type, controls, and focus come from the shared package's tokens —
+ * nothing here restates a design decision, it only arranges what the package already styles.
+ */
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.media-shell {
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+}
+
+.media-shell-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 1rem;
+	padding: 0.75rem 1rem;
+	border-bottom: 1px solid var(--line);
+	background: var(--panel);
+}
+
+.media-brand {
+	font-weight: 600;
+	letter-spacing: 0.02em;
+}
+
+.media-shell-header nav {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	flex: 1;
+}
+
+.media-shell-header nav a {
+	/* Deliberately generous: this runs on a touch panel at the back of a room. */
+	padding: 0.6rem 0.9rem;
+	min-height: 44px;
+	display: inline-flex;
+	align-items: center;
+	border-radius: 6px;
+	color: var(--muted);
+	text-decoration: none;
+}
+
+.media-shell-header nav a:hover,
+.media-shell-header nav a:focus-visible {
+	color: var(--text);
+	background: var(--panel2);
+}
+
+.media-shell-header nav a[aria-current="page"] {
+	color: var(--text);
+	background: var(--panel2);
+	box-shadow: inset 0 -2px 0 var(--cyan);
+}
+
+.media-connection {
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.media-connection.is-connected span {
+	color: var(--green);
+}
+
+.media-connection.is-disconnected span {
+	color: var(--red);
+}
+
+.media-shell-main {
+	padding: 1rem;
+	flex: 1;
+}
+
+.media-shell-main > h1 {
+	margin-top: 0;
+	font-size: 1.4rem;
+}
+
+.media-shell-main > h1:focus-visible {
+	outline: 2px solid var(--cyan);
+	outline-offset: 4px;
+}
+
+.media-page {
+	display: flex;
+	flex-direction: column;
+	gap: 1.25rem;
+}
+
+.media-state {
+	margin: 0;
+	padding: 0.75rem 1rem;
+	border-radius: 8px;
+	background: var(--panel);
+	border: 1px solid var(--line);
+	color: var(--muted);
+}
+
+.media-state.is-error {
+	border-color: var(--red);
+	color: var(--text);
+}
+
+.media-state.is-notice {
+	border-color: var(--amber);
+}
+
+.media-badge {
+	display: inline-block;
+	padding: 0.15rem 0.5rem;
+	border-radius: 999px;
+	font-size: 0.8rem;
+	border: 1px solid var(--line2);
+	color: var(--muted);
+}
+
+.media-badge.is-good {
+	border-color: var(--green);
+	color: var(--green);
+}
+
+.media-badge.is-busy {
+	border-color: var(--amber);
+	color: var(--amber);
+}
+
+.media-badge.is-bad {
+	border-color: var(--red);
+	color: var(--red);
+}
+
+.media-output-grid,
+.media-layer-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+	gap: 1rem;
+}
+
+.media-output-card,
+.media-layer-card {
+	display: flex;
+	flex-direction: column;
+	gap: 0.6rem;
+	padding: 1rem;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: var(--panel);
+}
+
+.media-output-card header,
+.media-layer-card header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+
+.media-output-card h2,
+.media-layer-card h3 {
+	margin: 0;
+	font-size: 1rem;
+}
+
+.media-layer-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+.media-layer-list li {
+	display: grid;
+	grid-template-columns: 1fr auto auto;
+	gap: 0.5rem;
+	align-items: center;
+	font-size: 0.9rem;
+}
+
+.media-layer-dimmer {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	gap: 0.5rem;
+	align-items: center;
+}
+
+.media-layer-dimmer input[type="range"] {
+	width: 100%;
+	min-height: 44px;
+}
+
+.media-facts,
+.media-layer-facts {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 0.25rem 1rem;
+	margin: 0;
+	font-size: 0.9rem;
+}
+
+.media-facts dt,
+.media-layer-facts dt {
+	color: var(--muted);
+}
+
+.media-facts dd,
+.media-layer-facts dd {
+	margin: 0;
+}
+
+.media-picker {
+	display: grid;
+	/* Two equal columns, never three: a squeezed folder list is unreadable on a touch panel. */
+	grid-template-columns: 1fr 1fr;
+	gap: 0.5rem;
+	align-items: end;
+}
+
+.media-picker .ui-select-trigger,
+.media-picker button {
+	width: 100%;
+}
+
+.media-address {
+	grid-column: 1 / -1;
+	margin: 0;
+	font-variant-numeric: tabular-nums;
+	color: var(--muted);
+}
+
+.media-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.9rem;
+}
+
+.media-table th,
+.media-table td {
+	text-align: left;
+	padding: 0.5rem 0.6rem;
+	border-bottom: 1px solid var(--line);
+}
+
+.media-table th {
+	color: var(--muted);
+	font-weight: 500;
+}
+
+.media-visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}

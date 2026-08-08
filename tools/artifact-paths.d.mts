@@ -5,6 +5,8 @@ export const artifactPaths: Readonly<{
   cargo: string;
   controlFrontend: string;
   hardwareFrontend: string;
+  vizEditorFrontend: string;
+  mediaFrontend: string;
   storybook: string;
   viteCache: string;
   pythonCache: string;

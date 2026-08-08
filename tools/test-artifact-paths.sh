@@ -22,6 +22,7 @@ cp "$ROOT/tools/artifact-layout.conf" "$TEST_ROOT/repository/tools/artifact-layo
 
 LIGHT_ARTIFACTS_DIR="$TEST_ROOT/artifacts with spaces"
 unset LIGHT_DATA_DIR CARGO_TARGET_DIR LIGHT_CONTROL_FRONTEND_DIR LIGHT_HARDWARE_FRONTEND_DIR
+unset LIGHT_VIZ_EDITOR_FRONTEND_DIR LIGHT_MEDIA_FRONTEND_DIR
 unset LIGHT_STORYBOOK_UI_DIR LIGHT_PNPM_STORE_DIR LIGHT_VITE_CACHE_DIR LIGHT_PYTHON_CACHE_DIR
 unset LIGHT_MANUAL_ROOT LIGHT_ICON_CONTACT_SHEETS_DIR LIGHT_RELEASE_DIR LIGHT_PERFORMANCE_DIR LIGHT_RUNTIME_DATA_DIR
 unset LIGHT_TEST_COVERAGE_DIR LIGHT_PLAYWRIGHT_REPORT_DIR LIGHT_TEST_RESULTS_DIR
@@ -30,6 +31,7 @@ light_init_artifact_paths "$TEST_ROOT/repository"
 [[ "$CARGO_TARGET_DIR" == "$TEST_ROOT/artifacts with spaces/build/cargo" ]]
 [[ "$LIGHT_CONTROL_FRONTEND_DIR" == "$TEST_ROOT/artifacts with spaces/build/frontend/light-desktop" ]]
 [[ "$LIGHT_HARDWARE_FRONTEND_DIR" == "$TEST_ROOT/artifacts with spaces/build/frontend/light-hardware-controls" ]]
+[[ "$LIGHT_MEDIA_FRONTEND_DIR" == "$TEST_ROOT/artifacts with spaces/build/frontend/media" ]]
 [[ "$LIGHT_STORYBOOK_UI_DIR" == "$TEST_ROOT/artifacts with spaces/build/storybook/ui" ]]
 [[ "$LIGHT_VITE_CACHE_DIR" == "$TEST_ROOT/artifacts with spaces/cache/vite" ]]
 [[ "$LIGHT_PYTHON_CACHE_DIR" == "$TEST_ROOT/artifacts with spaces/cache/python" ]]
@@ -179,6 +181,8 @@ grep -Fq 'target-dir = ".artifacts/build/cargo"' "$ROOT/.cargo/config.toml"
 grep -Fq 'outputDir: artifactPaths.results' "$ROOT/playwright.config.ts"
 grep -Fq 'outDir: artifactPaths.controlFrontend' "$ROOT/apps/light-desktop/vite.config.ts"
 grep -Fq 'cacheDir: `${artifactPaths.viteCache}/light-desktop`' "$ROOT/apps/light-desktop/vite.config.ts"
+grep -Fq 'outDir: artifactPaths.mediaFrontend' "$ROOT/apps/media/vite.config.ts"
+grep -Fq 'cacheDir: `${artifactPaths.viteCache}/media`' "$ROOT/apps/media/vite.config.ts"
 grep -Fq 'outDir: artifactPaths.hardwareFrontend' "$ROOT/apps/light-hardware-controls/vite.config.ts"
 grep -Fq 'cacheDir: `${artifactPaths.viteCache}/light-hardware-controls`' "$ROOT/apps/light-hardware-controls/vite.config.ts"
 grep -Fq 'cacheDir: `${artifactPaths.viteCache}/ui-library-vitest`' "$ROOT/apps/ui-library/vitest.config.ts"

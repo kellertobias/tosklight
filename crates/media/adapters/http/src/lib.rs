@@ -9,11 +9,14 @@
 //! This is a trusted-LAN service, as the settled decision records. It binds where configuration
 //! says and carries no authentication of its own.
 
+pub mod assets;
 pub mod error;
+pub mod generation;
 pub mod routes;
 pub mod tolerant;
 pub mod wire;
 
 pub use error::{ApiError, ApiErrorBody};
+pub use generation::{GeneratedArtifact, generated_artifacts, write_generated_artifacts};
 pub use routes::{ApiState, router};
 pub use tolerant::TolerantJson;
