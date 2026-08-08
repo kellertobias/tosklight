@@ -268,7 +268,9 @@ fn head_pivot(model: &FixtureModel) -> Vec3 {
 /// milky pane, and `aperture` a laser window or a hazer nozzle. Nothing else in the shipped set
 /// contains any of them, so a body, a yoke and a colour frame stay out of it.
 /// Names that read as what *carries* the glass rather than the glass itself.
-const HOUSING_MARKERS: [&str; 5] = ["ring", "bezel", "housing", "frame", "holder"];
+const HOUSING_MARKERS: [&str; 9] = [
+    "ring", "bezel", "housing", "frame", "holder", "barrel", "surround", "cups", "plate",
+];
 
 const EMITTER_MARKERS: [&str; 6] = ["lens", "source", "diffuser", "emitter", "cell", "aperture"];
 
