@@ -104,7 +104,7 @@ pub fn parse(datagram: &[u8]) -> Result<DataPacket<'_>, ParseError> {
     if start_code != 0x00 {
         return Err(ParseError::NotNullStartCode { code: start_code });
     }
-    if universe == 0 || universe > 63_999 {
+    if !(1..=63_999).contains(&universe) {
         return Err(ParseError::ReservedUniverse);
     }
 
