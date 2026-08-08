@@ -8,6 +8,7 @@ authors.workspace = true
 # Use cases, commands, state transitions, control-source ownership, and the versioned
 # configuration document. Adapters depend on this crate; it never depends on them.
 [dependencies]
+light-fixture = { path = "../../shared/fixture" }
 media-domain = { path = "../domain" }
 serde.workspace = true
 serde_json.workspace = true
