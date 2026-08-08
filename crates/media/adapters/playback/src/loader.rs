@@ -53,13 +53,37 @@ pub struct ClipLoader {
     streaming: std::collections::HashMap<AssetId, StreamingClip>,
 }
 
+/// How many recently read frames a streaming clip keeps.
+///
+/// Bounded on purpose. A streaming clip is one the cache could not hold, so an unbounded queue
+/// here would defeat the budget that sent it down this path in the first place. Four is enough for
+/// a hold, a pause, and the turn of a bounce, where the same few frames are asked for repeatedly.
+const STREAMING_QUEUE: usize = 4;
+
 /// A clip that did not fit the cache and is read from storage as it plays.
 #[derive(Debug)]
 struct StreamingClip {
     reader: ClipReader<std::fs::File>,
-    /// The last frame handed out, kept so repeating a frame — a pause, a hold, a completed Once —
-    /// costs nothing.
-    last: Option<(usize, Arc<[u8]>)>,
+    /// The frames most recently handed out, newest last. Repeating one — a pause, a hold, a
+    /// completed Once, the turn of a bounce — costs no read; anything older is dropped, because a
+    /// compositor only ever wants the frame it is about to draw.
+    recent: std::collections::VecDeque<(usize, Arc<[u8]>)>,
+}
+
+impl StreamingClip {
+    fn held(&self, index: usize) -> Option<Arc<[u8]>> {
+        self.recent
+            .iter()
+            .find(|(held, _)| *held == index)
+            .map(|(_, frame)| Arc::clone(frame))
+    }
+
+    fn hold(&mut self, index: usize, frame: &Arc<[u8]>) {
+        self.recent.push_back((index, Arc::clone(frame)));
+        while self.recent.len() > STREAMING_QUEUE {
+            self.recent.pop_front();
+        }
+    }
 }
 
 impl ClipLoader {
@@ -80,15 +104,28 @@ impl ClipLoader {
             return Some(frame);
         }
         let streaming = self.streaming.get_mut(&asset)?;
-        if let Some((held, frame)) = &streaming.last
-            && *held == index
-        {
-            return Some(frame.clone());
+        if let Some(frame) = streaming.held(index) {
+            return Some(frame);
         }
         let payload = streaming.reader.frame(index).ok().flatten()?;
         let frame: Arc<[u8]> = Arc::from(payload.into_boxed_slice());
-        streaming.last = Some((index, frame.clone()));
+        streaming.hold(index, &frame);
         Some(frame)
+    }
+
+    /// How many frames a streaming clip is holding. `None` when it is not streaming.
+    ///
+    /// Exposed so a test can prove the queue stays bounded; a clip the cache could not hold must
+    /// not grow an unbounded one here instead.
+    pub fn streaming_frames_held(&self, asset: AssetId) -> Option<usize> {
+        self.streaming.get(&asset).map(|clip| clip.recent.len())
+    }
+
+    /// Whether a streaming clip is still holding one particular frame.
+    pub fn streaming_holds(&self, asset: AssetId, index: usize) -> bool {
+        self.streaming
+            .get(&asset)
+            .is_some_and(|clip| clip.held(index).is_some())
     }
 
     /// Forgets a clip entirely, resident or streaming.
@@ -163,7 +200,7 @@ impl ClipLoader {
                     asset,
                     StreamingClip {
                         reader: ClipReader::open(handle)?,
-                        last: None,
+                        recent: std::collections::VecDeque::with_capacity(STREAMING_QUEUE),
                     },
                 );
             }
@@ -288,6 +325,61 @@ mod tests {
             assert!(loader.frame(asset, index).is_some(), "frame {index}");
         }
         assert!(loader.frame(asset, 10).is_none(), "past the end");
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn a_streaming_clip_holds_a_bounded_number_of_recent_frames() {
+        let path = write_temp("bounded-queue.toskclip", &clip_bytes(32));
+        let mut loader = ClipLoader::new(8);
+        let asset = AssetId::new();
+        loader.load(asset, &path, &mut |_| {}).unwrap();
+
+        // Play well past the queue's length, then ask for the frames around where playback is.
+        for index in 0..20 {
+            assert!(loader.frame(asset, index).is_some(), "frame {index}");
+        }
+        let held = loader
+            .streaming_frames_held(asset)
+            .expect("it is streaming");
+        assert_eq!(
+            held, STREAMING_QUEUE,
+            "a clip too large to cache must not grow an unbounded queue instead"
+        );
+
+        // The turn of a bounce asks for the frames just played, which are the ones kept.
+        for index in (16..20).rev() {
+            assert!(
+                loader.frame(asset, index).is_some(),
+                "frame {index} on the way back"
+            );
+        }
+        assert_eq!(
+            loader.streaming_frames_held(asset),
+            Some(STREAMING_QUEUE),
+            "and it is still bounded after a reversal"
+        );
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn an_obsolete_streamed_frame_is_dropped_rather_than_kept_forever() {
+        let path = write_temp("obsolete-frame.toskclip", &clip_bytes(32));
+        let mut loader = ClipLoader::new(8);
+        let asset = AssetId::new();
+        loader.load(asset, &path, &mut |_| {}).unwrap();
+
+        loader.frame(asset, 0);
+        for index in 1..=STREAMING_QUEUE {
+            loader.frame(asset, index);
+        }
+        assert!(
+            !loader.streaming_holds(asset, 0),
+            "the frame playback has left behind is gone, not held for the rest of the show"
+        );
+        assert!(loader.streaming_holds(asset, STREAMING_QUEUE));
+
         let _ = std::fs::remove_file(path);
     }
 
