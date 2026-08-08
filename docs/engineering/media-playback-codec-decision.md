@@ -84,10 +84,43 @@ Pi needs one.
 
 ## Storage bandwidth
 
-HAP Alpha at 1080p60 is roughly 124 MB/s per layer, so two layers need about 250 MB/s sustained.
-That requires NVMe on a Pi; an SD card cannot feed it. Plain HAP without alpha halves the figure,
-1080p30 halves it again, and an ASTC 8×8 variant would quarter it. Worth measuring on the target
-before fixing a resolution and frame-rate ceiling for that class of machine.
+BC3 is fixed-rate — one byte per pixel, so 2.07 MB per 1080p frame — and Snappy then compresses
+that. The fixed rate is the hard upper bound; real content lands well under it.
+
+Measured over eleven clips spanning eleven categories of a real royalty-free content library
+(1080p H.264 sources), with `cargo run --release -p media-codec --example import_clip`:
+
+| | Per frame | One layer at 60 fps | Two layers at 60 fps |
+| --- | ---: | ---: | ---: |
+| Uncompressed BC3 (hard ceiling) | 2.07 MB | 124 MB/s | 249 MB/s |
+| Busiest clip measured | 1.05 MB | 63 MB/s | 126 MB/s |
+| Typical | 0.4–0.9 MB | 24–54 MB/s | 48–108 MB/s |
+| Quietest clip measured | 0.12 MB | 7 MB/s | 14 MB/s |
+
+Snappy took the BC3 blocks to between 6% and 50% of their fixed size depending on content, so two
+1080p60 layers need a SATA SSD at worst and comfortably fit NVMe. At 30 fps the busiest case halves
+to about 63 MB/s for two layers, which even an SD card can approach.
+
+An earlier estimate in this document put a layer at a flat 124 MB/s. That was the uncompressed
+ceiling, not the delivered rate; it is roughly twice what real content costs.
+
+## Measured conversion on real content
+
+The same eleven clips, end to end — FFmpeg decoding out of process plus HAP Alpha encoding here, on
+an Apple M5 Max:
+
+| | 1080p |
+| --- | --- |
+| End-to-end import | 131–152 fps |
+| Against 60 fps playback | 2.2–2.5× realtime |
+| Against 30 fps playback | 4.4–5× realtime |
+
+That is the condition this decision was granted on, met on real footage rather than a synthetic
+pattern.
+
+Worth noting for the library that was tested: none of it carries alpha, because it is all H.264,
+which cannot. Content that genuinely needs transparency has to arrive as ProRes 4444, PNG
+sequences, or similar — and that is exactly the case HAP Alpha exists to serve.
 
 ## To verify on real hardware
 
