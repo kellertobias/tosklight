@@ -81,6 +81,7 @@ function preview(
 		draft,
 		source_order: ["fixture-1"],
 		ordered_fixture_ids: ["fixture-1"],
+		projected_positions: [{ fixture_id: "fixture-1", u: 0, v: 0 }],
 		ranks: [{ fixture_id: "fixture-1", rank: 0 }],
 		rank_count: 1,
 		warnings: [],
@@ -121,19 +122,23 @@ describe("DynamicProjectionView", () => {
 
 		fireEvent.click(kindOption("Cylindrical"));
 
-		// A cylinder is placed and oriented by the same two, and has no view to preset.
+		// A cylinder is placed by a point, aimed by two turns, and rolled about the result. It
+		// has no view to preset, and no direction components to set by hand.
 		expect(await screen.findByLabelText("Position X")).toBeTruthy();
-		expect(screen.getByLabelText("Direction X")).toBeTruthy();
+		expect(screen.getByLabelText("Azimuth")).toBeTruthy();
+		expect(screen.getByLabelText("Elevation")).toBeTruthy();
 		expect(screen.getByLabelText("Rotation")).toBeTruthy();
+		expect(screen.queryByLabelText("Direction X")).toBeNull();
 		expect(
 			screen.queryByRole("radiogroup", { name: "View preset" }),
 		).toBeNull();
 
 		fireEvent.click(kindOption("Spherical"));
-		// A roll about the centre of a spherical spread does not move it, so it has none.
-		expect(await screen.findByLabelText("Direction X")).toBeTruthy();
+		// A sphere is oriented the same way, so the two placed kinds read alike.
+		expect(await screen.findByLabelText("Azimuth")).toBeTruthy();
+		expect(screen.getByLabelText("Elevation")).toBeTruthy();
 		expect(screen.getByLabelText("Position X")).toBeTruthy();
-		expect(screen.queryByLabelText("Rotation")).toBeNull();
+		expect(screen.getByLabelText("Rotation")).toBeTruthy();
 
 		const frozen = dynamic(
 			{ type: "frozen_targets", targets: ["fixture-1"] },

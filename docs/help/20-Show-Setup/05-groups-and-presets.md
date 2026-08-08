@@ -22,9 +22,11 @@ position is not read, and the named Top/Front/Back/Left/Right presets remain. **
 its axis along the direction through the position, and Rotation is where the spread starts around
 that axis; the spread leaves that angle in both directions and the two sides meet 180° away on the
 far side. **Spherical** points the direction from the position to the centre of the spread, which
-reaches its opposite 180° away; a roll about that centre does not move it, so a sphere has no
-Rotation. With the direction along Stage +Z and no Rotation, a cylinder stands upright and starts
-its spread at Stage +X. Both tabs show what they set: **Projection** draws the shape in the Stage,
+reaches its opposite 180° away, and Rotation turns the meridian that spread is measured around.
+With the direction along Stage +Z and no Rotation, a cylinder stands upright and starts its spread
+at Stage +X. Cylindrical and Spherical are aimed by **Azimuth** and **Elevation** rather than by
+direction components: Azimuth swings the direction about Stage +Z and Elevation lifts it off the
+horizon. Both tabs show what they set: **Projection** draws the shape in the Stage,
 drag to orbit it, and **Phase** plots the fixtures on the plane the projection ranks them in, shaded
 from black for the first rank to white for the last.
 

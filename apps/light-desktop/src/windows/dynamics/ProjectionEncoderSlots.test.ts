@@ -45,19 +45,19 @@ describe("projection encoder slots", () => {
 	it("places the projection on page one and orients it on page two", () => {
 		expect(pages(cylindrical)).toEqual([
 			["Projection", "Position X", "Position Y", "Position Z"],
-			["Direction X", "Direction Y", "Direction Z", "Rotation"],
+			["Azimuth", "Elevation", "Rotation"],
 		]);
 	});
 
 	it("keeps the two pages meaningful at a wider encoder layout", () => {
-		// Without padding the direction would climb onto page one at width 10.
+		// Without padding the orientation would climb onto page one at width 10.
 		expect(pages(cylindrical, 10)).toEqual([
 			["Projection", "Position X", "Position Y", "Position Z"],
-			["Direction X", "Direction Y", "Direction Z", "Rotation"],
+			["Azimuth", "Elevation", "Rotation"],
 		]);
 	});
 
-	it("gives a spherical projection a direction and no rotation", () => {
+	it("orients a spherical projection the same way a cylindrical one is oriented", () => {
 		const spherical = dynamic({
 			projection: {
 				type: "replace",
@@ -72,8 +72,22 @@ describe("projection encoder slots", () => {
 		});
 		expect(pages(spherical)).toEqual([
 			["Projection", "Position X", "Position Y", "Position Z"],
-			["Direction X", "Direction Y", "Direction Z"],
+			["Azimuth", "Elevation", "Rotation"],
 		]);
+	});
+
+	it("sets an angle in whole degrees, whatever the encoder ramp produced", async () => {
+		const onMutate =
+			vi.fn<
+				(intent: DynamicUpdateIntent, group?: string) => Promise<undefined>
+			>(async () => undefined);
+		const slots = projectionEncoderSlots(cylindrical, 6, onMutate);
+		await slots.find((slot) => slot.label === "Rotation")?.apply(37.4, "group");
+		expect(onMutate.mock.calls[0]?.[0]).toMatchObject({
+			spatial_mapping: {
+				projection: { type: "replace", value: { rotation_degrees: 37 } },
+			},
+		});
 	});
 
 	it("fits a planar projection on one page", () => {

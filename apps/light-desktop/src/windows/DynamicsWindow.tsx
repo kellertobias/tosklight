@@ -53,7 +53,9 @@ export function DynamicsWindow({
 	useShowObjectView("dynamic", active);
 	const showId = useActiveShowId();
 	const registry = useAttributeRegistry() ?? [];
-	const dynamics = useDynamics(active);
+	// The pool is drawn whether or not this pane is the active one, so it stays subscribed. Gating
+	// the subscription froze it on whatever it last read, which showed as a pool of empty tiles.
+	const dynamics = useDynamics();
 	const presets = usePresets(active);
 	const isolatedApi = useMemo(() => createLightApi(), []);
 	const api = useDynamicsActions() ?? isolatedApi;

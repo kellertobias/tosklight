@@ -1366,6 +1366,17 @@
 	fill: #f2b134;
 }
 
+/* Lamp positions only: no beams, because this view places a shape rather than lighting it. */
+.projection-stage-fixture {
+	fill: rgb(160 178 190 / 65%);
+}
+
+.projection-stage-fixture.selected {
+	fill: #eaf6ff;
+	stroke: var(--cyan, #4fd1e0);
+	stroke-width: 1;
+}
+
 .dynamic-projection-fields label {
 	display: grid;
 	gap: 0.2rem;

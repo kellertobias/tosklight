@@ -104,7 +104,12 @@ export type DynamicSpatialShapeStageProjection = { "type": "inherit", } | { "typ
 export type DynamicSpatialMappingOverrideProjection = { projection: DynamicSpatialProjectionStageProjection, shape: DynamicSpatialShapeStageProjection, };
 export type DynamicSpatialPreviewBaseProjection = { "type": "live_group", group_id: string, mapping_provenance: GroupMappingProvenanceProjection, } | { "type": "frozen_targets", } | { "type": "targetless", };
 export type DynamicSpatialPreviewRequest = { expected_dynamic_revision: number, expected_show_revision: number, spatial_mapping: DynamicSpatialMappingOverrideProjection, };
-export type DynamicSpatialPreviewResponse = { show_id: string, show_revision: number, dynamic_id: string, dynamic_revision: number, target_binding: DynamicTargetBindingProjection, base: DynamicSpatialPreviewBaseProjection, inherited_mapping?: GroupSpatialSelectionMapping | null, draft: DynamicSpatialMappingOverrideProjection, source_order: Array<string>, ordered_fixture_ids: Array<string>, ranks: Array<GroupSpatialRankProjection>, rank_count: number, warnings: Array<GroupSpatialWarningProjection>, };
+export type DynamicSpatialPreviewResponse = { show_id: string, show_revision: number, dynamic_id: string, dynamic_revision: number, target_binding: DynamicTargetBindingProjection, base: DynamicSpatialPreviewBaseProjection, inherited_mapping?: GroupSpatialSelectionMapping | null, draft: DynamicSpatialMappingOverrideProjection, source_order: Array<string>, ordered_fixture_ids: Array<string>,
+/**
+ * Where the effective projection puts each target on the plane it ranks in. Empty when
+ * nothing is projecting, which is the same case that ranks by source order.
+ */
+projected_positions: Array<GroupProjectedPositionProjection>, ranks: Array<GroupSpatialRankProjection>, rank_count: number, warnings: Array<GroupSpatialWarningProjection>, };
 export type DynamicTargetBindingProjection = { "type": "live_group", group_id: string, } | { "type": "frozen_targets", targets: Array<string>, } | { "type": "targetless" };
 export type DynamicLaneProjection = { id: string, attribute: string, mode: DynamicLaneModeProjection, keyframes: DynamicKeyframeConfigurationProjection, max_min: DynamicMaxMinConfigurationProjection, middle_amplitude: DynamicMiddleAmplitudeConfigurationProjection, speed_multiplier: DynamicRationalProjection, width: number, random_group_id?: string | null, phase?: DynamicPhaseDistributionProjection | null, };
 export type DynamicLaneModeProjection = "keyframes" | "max_min" | "middle_amplitude" | "random";

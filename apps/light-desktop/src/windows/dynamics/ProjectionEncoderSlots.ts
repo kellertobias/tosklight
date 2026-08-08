@@ -29,6 +29,15 @@ const ANGLE = {
 	coarseStep: 15,
 };
 
+/** Past the poles the aim flips round to the other side, so elevation stops there. */
+const ELEVATION = {
+	minimum: -90,
+	maximum: 90,
+	inputScale: 1,
+	fineStep: 1,
+	coarseStep: 15,
+};
+
 const DISTANCE = {
 	minimum: -1000,
 	maximum: 1000,
@@ -114,15 +123,26 @@ export function projectionEncoderSlots(
 		},
 	};
 
-	const fields = projectionFields(projection).map((field) => ({
-		id: `projection-${field.key}`,
-		label: field.label,
-		display: `${Math.round(field.value * 100) / 100}${field.unit ?? ""}`,
-		value: field.value,
-		...(field.unit === "°" ? ANGLE : DISTANCE),
-		apply: async (value: number, group: string) =>
-			write(field.apply(value), group),
-	}));
+	const fields = projectionFields(projection).map((field) => {
+		// The deck ramps its step with drag speed, so a raw turn lands on fractions of a degree.
+		// Angles are set in whole degrees, which is the only resolution the numbers are read at.
+		const angle = field.unit === "°";
+		const range = !angle
+			? DISTANCE
+			: field.key === "elevation"
+				? ELEVATION
+				: ANGLE;
+		const quantize = angle ? Math.round : (value: number) => value;
+		return {
+			id: `projection-${field.key}`,
+			label: field.label,
+			display: `${quantize(Math.round(field.value * 100) / 100)}${field.unit ?? ""}`,
+			value: quantize(field.value),
+			...range,
+			apply: async (value: number, group: string) =>
+				write(field.apply(quantize(value)), group),
+		};
+	});
 
 	// Page one places the projection; page two orients it. Planar reads no position, so it has
 	// nothing to place and keeps everything on page one.

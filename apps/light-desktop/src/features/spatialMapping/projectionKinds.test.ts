@@ -25,7 +25,8 @@ describe("projection kinds", () => {
 	});
 
 	it("offers a position and a direction, and nothing else", () => {
-		// Planar reads no position, so it is not offered one.
+		// Planar reads no position, so it is not offered one. It keeps components because a view
+		// preset names one and the numbers are how a preset reads back.
 		expect(labels(planar)).toEqual([
 			"Direction X",
 			"Direction Y",
@@ -33,27 +34,37 @@ describe("projection kinds", () => {
 			"Rotation",
 		]);
 
-		const cylindrical = withProjectionKind(planar, "cylindrical");
-		expect(labels(cylindrical)).toEqual([
-			"Position X",
-			"Position Y",
-			"Position Z",
-			"Direction X",
-			"Direction Y",
-			"Direction Z",
+		// The placed kinds are aimed by the two turns that aim them, then rolled about the result.
+		const placed = ["Position X", "Position Y", "Position Z"];
+		expect(labels(withProjectionKind(planar, "cylindrical"))).toEqual([
+			...placed,
+			"Azimuth",
+			"Elevation",
 			"Rotation",
 		]);
-
-		// A roll about the centre of a spherical spread does not move it, so there is none.
-		const spherical = withProjectionKind(planar, "spherical");
-		expect(labels(spherical)).toEqual([
-			"Position X",
-			"Position Y",
-			"Position Z",
-			"Direction X",
-			"Direction Y",
-			"Direction Z",
+		expect(labels(withProjectionKind(planar, "spherical"))).toEqual([
+			...placed,
+			"Azimuth",
+			"Elevation",
+			"Rotation",
 		]);
+	});
+
+	it("aims a direction by azimuth and elevation", () => {
+		const cylindrical = withProjectionKind(planar, "cylindrical");
+		const fields = projectionFields(cylindrical);
+		// Straight down is the bottom pole, whatever the azimuth reads there.
+		expect(
+			fields.find((field) => field.label === "Elevation")?.value,
+		).toBeCloseTo(-90);
+
+		const level = fields.find((field) => field.label === "Elevation")?.apply(0);
+		expect(level?.view_direction.z).toBeCloseTo(0);
+		const swung = projectionFields(level as SpatialProjection)
+			.find((field) => field.label === "Azimuth")
+			?.apply(90);
+		expect(swung?.view_direction.x).toBeCloseTo(0);
+		expect(swung?.view_direction.y).toBeCloseTo(1);
 	});
 
 	it("carries the position and direction across a kind change and drops the preset", () => {
@@ -83,11 +94,7 @@ describe("projection kinds", () => {
 		const fields = projectionFields(cylindrical);
 		const rotation = fields.find((field) => field.label === "Rotation");
 		expect(rotation?.apply(45).rotation_degrees).toBe(45);
-		const directionY = fields.find((field) => field.label === "Direction Y");
-		expect(directionY?.apply(0.5).view_direction).toEqual({
-			x: 0,
-			y: 0.5,
-			z: -1,
-		});
+		const positionY = fields.find((field) => field.label === "Position Y");
+		expect(positionY?.apply(9).anchor).toEqual({ x: 1, y: 9, z: 3 });
 	});
 });

@@ -1,6 +1,12 @@
 import { Button } from "@tosklight/ui";
 import { ModalFrame } from "@tosklight/ui/modals";
-import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
+import {
+	type Dispatch,
+	type SetStateAction,
+	useEffect,
+	useMemo,
+	useState,
+} from "react";
 import type {
 	DynamicDefinitionProjection,
 	DynamicDefinitionStatusProjection,
@@ -17,6 +23,7 @@ import type {
 } from "../../api/types";
 import { useDynamicEditorSession } from "../../features/dynamics/DynamicEditorSessionContext";
 import type { ShowObject } from "../../features/showObjects/contracts";
+import { stageFixtureDots } from "../../features/spatialMapping/stageFixtureDots";
 import { useApp } from "../../state/AppContext";
 import { useStageLayout } from "../stageWindow/useStageLayout";
 import { DynamicEditorSurface } from "./DynamicEditorSurface";
@@ -146,6 +153,7 @@ export function DynamicEditor({
 		selection,
 		onMutate,
 	);
+	const projectedPlane = useProjectedPlane(dynamic, onLoadSpatialPreview);
 	const { contentSidebar, contentFooter } = editorSupplementalContent({
 		dynamic,
 		view,
@@ -153,6 +161,7 @@ export function DynamicEditor({
 		selection,
 		positions: stageLayout.positions,
 		positions3d: stageLayout.positions3d,
+		projected: projectedPlane,
 		running,
 		takeSelection,
 		clearSelection,
@@ -202,6 +211,8 @@ export function DynamicEditor({
 				<DynamicProjectionContent
 					dynamic={dynamic}
 					busy={busy}
+					selection={selection}
+					stageLayout={stageLayout}
 					loadPreview={onLoadSpatialPreview}
 					apply={onApplySpatialMapping}
 				/>
@@ -273,18 +284,29 @@ function useEditorSynchronization({
 function DynamicProjectionContent({
 	dynamic,
 	busy,
+	selection,
+	stageLayout,
 	loadPreview,
 	apply,
 }: {
 	dynamic: DynamicObject;
 	busy: boolean;
+	selection: readonly string[];
+	stageLayout: ReturnType<typeof useStageLayout>;
 	loadPreview: DynamicEditorProps["onLoadSpatialPreview"];
 	apply: DynamicEditorProps["onApplySpatialMapping"];
 }) {
+	// A selection is what the operator is placing the shape around; with none, the whole rig
+	// shows where it could go.
+	const fixtures = useMemo(
+		() => stageFixtureDots(selection, stageLayout),
+		[selection, stageLayout],
+	);
 	return loadPreview && apply ? (
 		<DynamicProjectionView
 			dynamic={dynamic}
 			busy={busy}
+			fixtures={fixtures}
 			loadPreview={loadPreview}
 			apply={apply}
 		/>
@@ -298,6 +320,7 @@ function editorSupplementalContent({
 	selection,
 	positions,
 	positions3d,
+	projected,
 	running,
 	takeSelection,
 	clearSelection,
@@ -309,6 +332,7 @@ function editorSupplementalContent({
 	selection: readonly string[];
 	positions: ReturnType<typeof useStageLayout>["positions"];
 	positions3d: ReturnType<typeof useStageLayout>["positions3d"];
+	projected: ProjectedPlanePositions | undefined;
 	running: boolean;
 	takeSelection(): unknown;
 	clearSelection(): unknown;
@@ -321,6 +345,7 @@ function editorSupplementalContent({
 			selection={selection}
 			positions={positions}
 			positions3d={positions3d}
+			projected={projected}
 		/>
 	);
 	const contentFooter =
@@ -528,8 +553,10 @@ import {
 	DynamicPhaseQuickControls,
 	DynamicSelectionPreview,
 	dynamicPreviewCycleMillis,
+	type ProjectedPlanePositions,
 	periodicPreviewValue,
 } from "./DynamicPreview";
+import { useProjectedPlane } from "./useProjectedPlane";
 
 export { DynamicEncoderDeck } from "./DynamicEncoderDeck";
 export function LaneAttributeModal({

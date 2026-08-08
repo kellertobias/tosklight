@@ -54,7 +54,8 @@ pub enum ProjectionKind {
     /// `u` is the angular distance from the start angle around the anchored axis, `v` the
     /// distance along that axis.
     Cylindrical,
-    /// `u` is the angular distance from the centre direction, `v` the distance from the anchor.
+    /// `u` is the angular distance from the centre direction, `v` the turn around it from the
+    /// start angle.
     Spherical,
 }
 
@@ -73,8 +74,8 @@ impl ProjectionKind {
 /// `view_direction` is what the projection is oriented along: the viewing direction for planar,
 /// the central axis for cylindrical, the direction to the centre of the spread for spherical.
 /// `rotation_degrees` is the one remaining degree of freedom, the roll about that direction: the
-/// turn of the viewing plane for planar, the start angle around the axis for cylindrical. A
-/// spherical projection ranks by unsigned angle from its centre, so roll does not move it.
+/// turn of the viewing plane for planar, the start angle around the axis for cylindrical, and the
+/// prime meridian a spherical spread measures its turn from.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SpatialProjection {
     pub anchor: Position3d,
@@ -753,10 +754,11 @@ fn axis_reference(axis: Vector3) -> Result<(Vector3, Vector3), SpatialMappingErr
     Ok((start, cross(axis, start)))
 }
 
-/// The cylinder axis and the two perpendicular directions that place the start angle.
+/// The axis and the two perpendicular directions that place the start angle around it.
 ///
 /// The axis is the projection's direction and the start angle is its roll about that axis, so an
-/// axis of world +Z with no roll starts at world +X.
+/// axis of world +Z with no roll starts at world +X. A cylinder rolls its seam this way and a
+/// sphere its prime meridian, which is the same construction on the same two numbers.
 fn cylinder_frame(
     projection: &SpatialProjection,
 ) -> Result<(Vector3, Vector3, Vector3), SpatialMappingError> {
@@ -820,16 +822,25 @@ fn projected_coordinates(
             }
             Err(_) => (0.0, 0.0),
         },
-        // No axis: `u` is the great-circle distance from the centre direction, reaching 180
-        // at the antipode, and `v` is the distance from the centre point.
-        ProjectionKind::Spherical => {
-            let radius = length(relative);
-            let angle = match normalize(relative) {
-                Ok(direction) => angle_between(direction, spherical_center(projection)),
-                Err(_) => 0.0,
-            };
-            (angle, radius)
-        }
+        // `u` is the great-circle distance from the centre direction, reaching 180 at the
+        // antipode. `v` is the turn around that centre, measured from the rotation angle, so
+        // the roll is what decides which side of the spread a fixture falls on.
+        ProjectionKind::Spherical => match cylinder_frame(projection) {
+            Ok((center, start, side)) => {
+                let angle = match normalize(relative) {
+                    Ok(direction) => angle_between(direction, center),
+                    Err(_) => 0.0,
+                };
+                let around = reject(relative, center);
+                let meridian = if length(around) <= MIN_DIRECTION_LENGTH {
+                    0.0
+                } else {
+                    dot(around, side).atan2(dot(around, start)).to_degrees()
+                };
+                (angle, meridian)
+            }
+            Err(_) => (0.0, 0.0),
+        },
     };
     (canonical_zero(u), canonical_zero(v))
 }
@@ -1182,8 +1193,31 @@ mod tests {
         }
         // 180 degrees at the antipode.
         assert!((coordinates(&projection, -3.0, 0.0, 0.0).0 - 180.0).abs() < 1.0e-9);
-        // `v` is the distance from the anchor, so the angle ignores it.
-        assert!((coordinates(&projection, 50.0, 0.0, 0.0).1 - 50.0).abs() < 1.0e-9);
+        // `u` is the angle alone, so distance along the centre direction does not move it.
+        assert!(coordinates(&projection, 50.0, 0.0, 0.0).0.abs() < 1.0e-9);
+    }
+
+    #[test]
+    fn a_spherical_rotation_turns_the_meridian_the_spread_is_measured_from() {
+        // Centre on +X puts the start meridian on +Z, the same reference the cylinder uses.
+        let projection = centered(ProjectionKind::Spherical, Position3d::default());
+        assert!(coordinates(&projection, 0.0, 0.0, 3.0).1.abs() < 1.0e-9);
+        assert!((coordinates(&projection, 0.0, -3.0, 0.0).1 - 90.0).abs() < 1.0e-9);
+        assert!((coordinates(&projection, 0.0, 3.0, 0.0).1 + 90.0).abs() < 1.0e-9);
+
+        // Rolling the start carries every meridian with it, by the whole roll.
+        let rolled = SpatialProjection {
+            rotation_degrees: 90.0,
+            ..projection
+        };
+        assert!((coordinates(&rolled, 0.0, 0.0, 3.0).1 + 90.0).abs() < 1.0e-9);
+        assert!((coordinates(&rolled, 0.0, -3.0, 0.0).1).abs() < 1.0e-9);
+
+        // The angle from the centre is a roll invariant, so it stays put.
+        assert_eq!(
+            coordinates(&projection, 0.0, 3.0, 0.0).0,
+            coordinates(&rolled, 0.0, 3.0, 0.0).0
+        );
     }
 
     #[test]

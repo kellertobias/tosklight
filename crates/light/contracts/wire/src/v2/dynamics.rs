@@ -3,7 +3,8 @@
 use super::group_management::{
     GroupMappingProjectionKind, GroupMappingProjectionPreset, GroupMappingProvenanceProjection,
     GroupMappingRadarSweep, GroupMappingRadialDirection, GroupMappingRankDirection,
-    GroupSpatialRankProjection, GroupSpatialSelectionMapping, GroupSpatialWarningProjection,
+    GroupProjectedPositionProjection, GroupSpatialRankProjection, GroupSpatialSelectionMapping,
+    GroupSpatialWarningProjection,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -154,6 +155,9 @@ pub struct DynamicSpatialPreviewResponse {
     pub draft: DynamicSpatialMappingOverrideProjection,
     pub source_order: Vec<Uuid>,
     pub ordered_fixture_ids: Vec<Uuid>,
+    /// Where the effective projection puts each target on the plane it ranks in. Empty when
+    /// nothing is projecting, which is the same case that ranks by source order.
+    pub projected_positions: Vec<GroupProjectedPositionProjection>,
     pub ranks: Vec<GroupSpatialRankProjection>,
     pub rank_count: usize,
     pub warnings: Vec<GroupSpatialWarningProjection>,

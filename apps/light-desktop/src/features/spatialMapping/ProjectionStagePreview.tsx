@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { Position3d, SpatialProjection } from "./contracts";
 import { projectionKind } from "./projectionKinds";
+import type { StageFixtureDot } from "./stageFixtureDots";
 
 /**
  * A simplified 3D view of the Stage showing the projection as the shape it actually is: a
@@ -14,17 +15,20 @@ import { projectionKind } from "./projectionKinds";
  * whether the operator is above or below the shape is exactly what this view is for. What the
  * projection ranks by is unaffected: this is the picture, not the maths.
  *
- * The Stage box is a fixed reference cube rather than the real Stage extents. It exists to
- * make orientation legible, not to measure it.
+ * The Stage box is a reference cube, not the real Stage extents. It sizes itself to hold
+ * everything drawn so nothing leaves the frame, and it exists to make orientation legible
+ * rather than to measure it.
  */
 
-const HALF = 5;
-const TOP = HALF * 1.2;
+/** Half the drawn cube. Everything is scaled into this so the camera constants stay fixed. */
+const DRAWN_HALF = 5;
+/** Below this the picture would zoom into an empty Stage, so it is the smallest world shown. */
+const MIN_EXTENT = 5;
+const TOP_RATIO = 1.2;
 const SIZE = { width: 320, height: 260 };
 const DEFAULT_VIEW = { yaw: -35, pitch: 22 };
 
 /** The camera orbits the middle of the reference cube at a fixed distance. */
-const ORBIT_TARGET: Position3d = { x: 0, y: 0, z: TOP / 2 };
 const CAMERA_DISTANCE = 26;
 /** Chosen so the cube fills about as much of the frame as it did without perspective. */
 const FOCAL_LENGTH = 442;
@@ -32,26 +36,52 @@ const FOCAL_LENGTH = 442;
 const MIN_DEPTH = 1;
 
 type View = { yaw: number; pitch: number };
+/** A view plus the world half-extent it is drawn at, which is all projection needs. */
+type Frame = View & { extent: number };
 
 function radians(value: number) {
 	return (value * Math.PI) / 180;
 }
 
 /**
+ * How much world the picture has to hold: everything drawn, so a rig larger than the default
+ * cube shrinks to fit instead of running off the frame.
+ */
+function worldExtent(
+	projection: SpatialProjection,
+	fixtures: readonly StageFixtureDot[],
+) {
+	let extent = MIN_EXTENT;
+	const consider = (point: Position3d) => {
+		extent = Math.max(
+			extent,
+			Math.abs(point.x),
+			Math.abs(point.y),
+			Math.abs(point.z) / TOP_RATIO,
+		);
+	};
+	consider(projection.anchor);
+	for (const fixture of fixtures) consider(fixture.position);
+	return extent;
+}
+
+/**
  * World is Z-up: `Top` looks down -Z and `Front` looks +Y.
  *
  * Yaw turns the camera about world Z, pitch lifts it above the horizon, and the perspective
- * divide is what makes the near face of the cube read as the near one.
+ * divide is what makes the near face of the cube read as the near one. World units are scaled
+ * into the drawn cube first, so the camera sees the same size box whatever the Stage measures.
  */
-function project(point: Position3d, view: View) {
-	const yaw = radians(view.yaw);
-	const pitch = radians(view.pitch);
+function project(point: Position3d, frame: Frame) {
+	const yaw = radians(frame.yaw);
+	const pitch = radians(frame.pitch);
 	const [sinYaw, cosYaw] = [Math.sin(yaw), Math.cos(yaw)];
 	const [sinPitch, cosPitch] = [Math.sin(pitch), Math.cos(pitch)];
+	const unit = DRAWN_HALF / frame.extent;
 	const relative = {
-		x: point.x - ORBIT_TARGET.x,
-		y: point.y - ORBIT_TARGET.y,
-		z: point.z - ORBIT_TARGET.z,
+		x: point.x * unit,
+		y: point.y * unit,
+		z: (point.z - frame.extent * (TOP_RATIO / 2)) * unit,
 	};
 	const x = relative.x * cosYaw - relative.y * sinYaw;
 	const y = relative.x * sinYaw + relative.y * cosYaw;
@@ -91,9 +121,9 @@ function scaled(vector: Position3d, by: number): Position3d {
 	return { x: vector.x * by, y: vector.y * by, z: vector.z * by };
 }
 
-function polyline(points: Position3d[], view: View) {
+function polyline(points: Position3d[], frame: Frame) {
 	return points.map((point) => {
-		const flat = project(point, view);
+		const flat = project(point, frame);
 		return `${flat.x.toFixed(1)},${flat.y.toFixed(1)}`;
 	});
 }
@@ -126,7 +156,7 @@ function ring(
 	centre: Position3d,
 	axis: Position3d,
 	radius: number,
-	view: View,
+	frame: Frame,
 	steps = 48,
 ) {
 	const [u, v] = basis(axis);
@@ -139,35 +169,34 @@ function ring(
 				scaled(v, Math.sin(angle) * radius),
 			);
 		}),
-		view,
+		frame,
 	).join(" ");
 }
 
-const CUBE_EDGES: ReadonlyArray<[Position3d, Position3d]> = (() => {
+function cubeEdges(extent: number): ReadonlyArray<[Position3d, Position3d]> {
+	const top = extent * TOP_RATIO;
 	const corners: Position3d[] = [];
-	for (const x of [-HALF, HALF])
-		for (const y of [-HALF, HALF]) for (const z of [0, TOP]) corners.push({ x, y, z });
+	for (const x of [-extent, extent])
+		for (const y of [-extent, extent]) for (const z of [0, top]) corners.push({ x, y, z });
 	const edges: [Position3d, Position3d][] = [];
 	for (const a of corners)
 		for (const b of corners) {
-			const shared =
-				Number(a.x === b.x) + Number(a.y === b.y) + Number(a.z === b.z);
-			if (shared === 2 && (a.x < b.x || a.y < b.y || a.z < b.z))
-				edges.push([a, b]);
+			const shared = Number(a.x === b.x) + Number(a.y === b.y) + Number(a.z === b.z);
+			if (shared === 2 && (a.x < b.x || a.y < b.y || a.z < b.z)) edges.push([a, b]);
 		}
 	return edges;
-})();
+}
 
 function ProjectionBody({
 	projection,
-	view,
+	frame,
 }: {
 	projection: SpatialProjection;
-	view: View;
+	frame: Frame;
 }) {
 	const kind = projectionKind(projection);
 	const centre = projection.anchor;
-	const radius = HALF * 0.8;
+	const radius = frame.extent * 0.8;
 
 	if (kind === "planar") {
 		// The plane the projection ranks across, drawn perpendicular to the view direction.
@@ -183,13 +212,13 @@ function ProjectionBody({
 			<>
 				<polygon
 					className="projection-stage-surface"
-					points={polyline(corners, view).join(" ")}
+					points={polyline(corners, frame).join(" ")}
 				/>
 				<polyline
 					className="projection-stage-start"
 					points={polyline(
 						[centre, add(centre, scaled(normal, radius))],
-						view,
+						frame,
 					).join(" ")}
 					markerEnd="url(#projection-arrow)"
 				/>
@@ -202,8 +231,8 @@ function ProjectionBody({
 		// the engine reads them.
 		const axis = normalize(projection.view_direction);
 		const [u, v] = basis(axis);
-		const top = add(centre, scaled(axis, HALF));
-		const bottom = add(centre, scaled(axis, -HALF));
+		const top = add(centre, scaled(axis, frame.extent));
+		const bottom = add(centre, scaled(axis, -frame.extent));
 		const [seed, side] = axisReference(axis);
 		const start = radians(projection.rotation_degrees);
 		const startDirection = normalize(
@@ -213,11 +242,11 @@ function ProjectionBody({
 			<>
 				<polyline
 					className="projection-stage-surface-line"
-					points={ring(top, axis, radius, view)}
+					points={ring(top, axis, radius, frame)}
 				/>
 				<polyline
 					className="projection-stage-surface-line"
-					points={ring(bottom, axis, radius, view)}
+					points={ring(bottom, axis, radius, frame)}
 				/>
 				{[u, scaled(u, -1), v, scaled(v, -1)].map((direction, index) => (
 					<polyline
@@ -228,19 +257,19 @@ function ProjectionBody({
 								add(top, scaled(direction, radius)),
 								add(bottom, scaled(direction, radius)),
 							],
-							view,
+							frame,
 						).join(" ")}
 					/>
 				))}
 				<polyline
 					className="projection-stage-axis"
-					points={polyline([bottom, top], view).join(" ")}
+					points={polyline([bottom, top], frame).join(" ")}
 				/>
 				<polyline
 					className="projection-stage-start"
 					points={polyline(
 						[centre, add(centre, scaled(startDirection, radius))],
-						view,
+						frame,
 					).join(" ")}
 					markerEnd="url(#projection-arrow)"
 				/>
@@ -261,14 +290,14 @@ function ProjectionBody({
 				<polyline
 					key={index}
 					className="projection-stage-surface-line"
-					points={ring(centre, axis, radius, view)}
+					points={ring(centre, axis, radius, frame)}
 				/>
 			))}
 			<polyline
 				className="projection-stage-start"
 				points={polyline(
 					[centre, add(centre, scaled(direction, radius))],
-					view,
+					frame,
 				).join(" ")}
 				markerEnd="url(#projection-arrow)"
 			/>
@@ -276,14 +305,24 @@ function ProjectionBody({
 	);
 }
 
+const NO_FIXTURES: readonly StageFixtureDot[] = [];
+
 export function ProjectionStagePreview({
 	projection,
+	fixtures = NO_FIXTURES,
 }: {
 	projection: SpatialProjection;
+	/** Lamp positions drawn as plain dots. No beams: this places the shape, it does not light. */
+	fixtures?: readonly StageFixtureDot[];
 }) {
 	const [view, setView] = useState<View>(DEFAULT_VIEW);
 	const drag = useRef<{ x: number; y: number } | null>(null);
 	const kind = projectionKind(projection);
+	const extent = useMemo(
+		() => worldExtent(projection, fixtures),
+		[projection, fixtures],
+	);
+	const frame: Frame = { ...view, extent };
 
 	const orbit = useCallback((dx: number, dy: number) => {
 		setView((current) => ({
@@ -293,13 +332,16 @@ export function ProjectionStagePreview({
 		}));
 	}, []);
 
-	const centre = project(projection.anchor, view);
+	const centre = project(projection.anchor, frame);
+	const label = fixtures.length
+		? `${kind} projection over ${fixtures.length} ${fixtures.length === 1 ? "lamp" : "lamps"} in the Stage, drag to orbit`
+		: `${kind} projection in the Stage, drag to orbit`;
 	return (
 		<svg
 			className="projection-stage-preview"
 			viewBox={`0 0 ${SIZE.width} ${SIZE.height}`}
 			role="img"
-			aria-label={`${kind} projection in the Stage, drag to orbit`}
+			aria-label={label}
 			tabIndex={0}
 			onPointerDown={(event) => {
 				drag.current = { x: event.clientX, y: event.clientY };
@@ -307,8 +349,10 @@ export function ProjectionStagePreview({
 			}}
 			onPointerMove={(event) => {
 				if (!drag.current) return;
+				// The pointer drags the camera, not the scene, so yaw follows the hand and pitch
+				// lifts the way a hand lifts a lid.
 				orbit(
-					(event.clientX - drag.current.x) * 0.6,
+					(drag.current.x - event.clientX) * 0.6,
 					(event.clientY - drag.current.y) * 0.6,
 				);
 				drag.current = { x: event.clientX, y: event.clientY };
@@ -328,7 +372,7 @@ export function ProjectionStagePreview({
 				event.preventDefault();
 			}}
 		>
-			<title>{`${kind} projection in the Stage, drag to orbit`}</title>
+			<title>{label}</title>
 			<defs>
 				<marker
 					id="projection-arrow"
@@ -343,9 +387,9 @@ export function ProjectionStagePreview({
 				</marker>
 			</defs>
 			<g className="projection-stage-box">
-				{CUBE_EDGES.map(([from, to]) => {
-					const a = project(from, view);
-					const b = project(to, view);
+				{cubeEdges(extent).map(([from, to]) => {
+					const a = project(from, frame);
+					const b = project(to, frame);
 					return (
 						<line
 							key={`${JSON.stringify(from)}-${JSON.stringify(to)}`}
@@ -357,7 +401,25 @@ export function ProjectionStagePreview({
 					);
 				})}
 			</g>
-			<ProjectionBody projection={projection} view={view} />
+			<ProjectionBody projection={projection} frame={frame} />
+			<g className="projection-stage-fixtures">
+				{fixtures.map((fixture) => {
+					const dot = project(fixture.position, frame);
+					return (
+						<circle
+							key={fixture.id}
+							className={
+								fixture.selected
+									? "projection-stage-fixture selected"
+									: "projection-stage-fixture"
+							}
+							cx={dot.x}
+							cy={dot.y}
+							r={fixture.selected ? 3 : 2}
+						/>
+					);
+				})}
+			</g>
 			<circle
 				className="projection-stage-centre"
 				cx={centre.x}

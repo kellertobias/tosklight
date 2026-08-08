@@ -11,26 +11,44 @@ import type { ShowObject } from "../../features/showObjects/contracts";
 
 type DynamicObject = ShowObject<"dynamic">;
 
+/** Where the effective projection puts a fixture on the plane it ranks in. */
+export type ProjectedPlanePositions = ReadonlyMap<
+	string,
+	{ u: number; v: number }
+>;
+
 export function DynamicSelectionPreview({
 	dynamic,
 	previewPhase,
 	selection,
 	positions,
 	positions3d,
+	projected,
 }: {
 	dynamic: DynamicObject;
 	previewPhase: number;
 	selection: readonly string[];
 	positions: Record<string, { x: number; y: number; rotation: number }>;
 	positions3d: Record<string, { x: number; z: number }>;
+	/**
+	 * The Projection tab's plane. When it is known the fixtures are laid out on it, so the
+	 * picture and the Phase ordering agree with what actually ranks instead of with a top-down
+	 * view that only matches when the projection happens to look down.
+	 */
+	projected?: ProjectedPlanePositions;
 }) {
 	const selected = selection.length > 0;
 	const previewPositions = useMemo(
 		() =>
 			selected
-				? normalizeSelectedPreviewPositions(selection, positions, positions3d)
+				? normalizeSelectedPreviewPositions(
+						selection,
+						positions,
+						positions3d,
+						projected,
+					)
 				: virtualFixturePreviewPositions(),
-		[selected, selection, positions, positions3d],
+		[selected, selection, positions, positions3d, projected],
 	);
 	const phaseOffsets = useMemo(
 		() => dynamicPreviewPhaseOffsets(dynamic.body.phase, previewPositions),
@@ -94,9 +112,14 @@ function normalizeSelectedPreviewPositions(
 	selection: readonly string[],
 	positions: Record<string, { x: number; y: number }>,
 	positions3d: Record<string, { x: number; z: number }>,
+	projected?: ProjectedPlanePositions,
 ) {
 	const fallback = gridFixturePreviewPositions(selection.length);
 	const resolved = selection.map((id, index) => {
+		// `v` grows upward on the ranking plane and the field grows downward, so it is negated
+		// rather than used raw.
+		const plane = projected?.get(id);
+		if (plane) return { id, x: plane.u, z: -plane.v, fallback: false };
 		const position3d = positions3d[id];
 		if (position3d)
 			return { id, x: position3d.x, z: position3d.z, fallback: false };

@@ -26,7 +26,7 @@ export const PROJECTION_KINDS: ReadonlyArray<{
 		value: "spherical",
 		label: "Spherical",
 		detail:
-			"The direction points from the position to the centre of the spread, which reaches its opposite 180° away.",
+			"The direction points from the position to the centre of the spread, which reaches its opposite 180° away. Rotation turns the meridian the spread is measured around.",
 	},
 ];
 
@@ -43,6 +43,41 @@ export const PROJECTION_PRESETS: ReadonlyArray<{
 
 /** What a direction of nothing becomes, so a projection is never left unorientable. */
 const FALLBACK_DIRECTION: Position3d = { x: 0, y: 0, z: -1 };
+
+function clamp(value: number, minimum: number, maximum: number) {
+	return Math.max(minimum, Math.min(maximum, value));
+}
+
+/**
+ * A direction read as the two turns that aim it: azimuth swings it about world Z, elevation
+ * lifts it off the horizon.
+ *
+ * Three independent components can aim a direction, but no operator turns an encoder thinking
+ * in components. Angles are what the hand does — swing, then tilt — and they are what the
+ * cylinder's axis and the sphere's centre are actually set by.
+ */
+export function directionAngles(direction: Position3d) {
+	const length = Math.hypot(direction.x, direction.y, direction.z);
+	if (length <= 1e-12) return { azimuth: 0, elevation: -90 };
+	return {
+		azimuth: (Math.atan2(direction.y, direction.x) * 180) / Math.PI,
+		elevation: (Math.asin(clamp(direction.z / length, -1, 1)) * 180) / Math.PI,
+	};
+}
+
+/** The inverse, matching the engine's own spherical frame. */
+export function directionFromAngles(
+	azimuth: number,
+	elevation: number,
+): Position3d {
+	const swing = (azimuth * Math.PI) / 180;
+	const lift = (elevation * Math.PI) / 180;
+	return {
+		x: Math.cos(lift) * Math.cos(swing),
+		y: Math.cos(lift) * Math.sin(swing),
+		z: Math.sin(lift),
+	};
+}
 
 /** Absent means planar, so old Shows read as the kind they were stored as. */
 export function projectionKind(projection: SpatialProjection): ProjectionKind {
@@ -78,9 +113,12 @@ export function withProjectionKind(
  * orientation after it.
  *
  * Planar keeps its position in the data because the Radial and Radar shapes measure their
- * centres from it, but the projection itself does not read it, so it is not offered. A spherical
- * projection ranks by unsigned angle from its centre, which a roll about that centre does not
- * move, so it has no rotation to set.
+ * centres from it, but the projection itself does not read it, so it is not offered.
+ *
+ * The two placed kinds are aimed by angle rather than by direction components: azimuth swings
+ * the axis, elevation pivots it, and Rotation is the last turn about it — where the spread
+ * starts. Planar keeps its components, because a view preset names one and the numbers are how
+ * a preset reads back.
  */
 export function projectionFields(projection: SpatialProjection): ReadonlyArray<{
 	key: string;
@@ -125,15 +163,29 @@ export function projectionFields(projection: SpatialProjection): ReadonlyArray<{
 	if (kind === "planar")
 		return [direction("x"), direction("y"), direction("z"), rotation];
 
-	const placed = [
+	const angles = directionAngles(projection.view_direction);
+	const aim = (which: "azimuth" | "elevation") => ({
+		key: which,
+		label: which === "azimuth" ? "Azimuth" : "Elevation",
+		value: angles[which],
+		unit: "°",
+		apply: (next: number) => ({
+			...projection,
+			view_direction: directionFromAngles(
+				which === "azimuth" ? next : angles.azimuth,
+				which === "elevation" ? next : angles.elevation,
+			),
+			preset: null,
+		}),
+	});
+	return [
 		position("x"),
 		position("y"),
 		position("z"),
-		direction("x"),
-		direction("y"),
-		direction("z"),
+		aim("azimuth"),
+		aim("elevation"),
+		rotation,
 	];
-	return kind === "cylindrical" ? [...placed, rotation] : placed;
 }
 
 /** Only a planar projection looks along a direction, so only it can carry a view preset. */

@@ -209,7 +209,11 @@
 }
 
 .ui-window-settings {
-  width: min(720px, calc(100vw - 30px));
+  /* Grows to whatever the widest tab needs — a two-column tab does not fit 720px — and never
+     past the viewport, so a wide panel scrolls its own content instead of being clipped. */
+  width: fit-content;
+  min-width: min(720px, calc(100vw - 30px));
+  max-width: calc(100vw - 30px);
   max-height: min(760px, calc(100vh - 30px));
   display: flex;
   flex-direction: column;

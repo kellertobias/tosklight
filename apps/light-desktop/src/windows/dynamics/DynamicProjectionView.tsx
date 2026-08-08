@@ -13,6 +13,7 @@ import {
 } from "../../features/dynamics/dynamicSpatialDraft";
 import type { ShowObject } from "../../features/showObjects/contracts";
 import { ProjectionStagePreview } from "../../features/spatialMapping/ProjectionStagePreview";
+import type { StageFixtureDot } from "../../features/spatialMapping/stageFixtureDots";
 import type {
 	ProjectionKind,
 	ProjectionPreset,
@@ -36,6 +37,8 @@ export type DynamicSpatialApplyResult = "applied" | "conflict";
 interface DynamicProjectionViewProps {
 	dynamic: DynamicObject;
 	busy: boolean;
+	/** Lamp positions drawn under the shape, so it can be placed against the real rig. */
+	fixtures?: readonly StageFixtureDot[];
 	loadPreview(
 		draft: DynamicSpatialMappingOverrideProjection,
 	): Promise<DynamicSpatialPreviewResponse>;
@@ -49,6 +52,7 @@ const TOP_PROJECTION = projectionForPreset("top");
 export function DynamicProjectionView({
 	dynamic,
 	busy,
+	fixtures,
 	loadPreview,
 	apply,
 }: DynamicProjectionViewProps) {
@@ -65,11 +69,23 @@ export function DynamicProjectionView({
 	const [message, setMessage] = useState<string | null>(null);
 	const request = useRef(0);
 	const previousSource = useRef<string | null>(null);
+	const lastSaved = useRef(saved);
 
 	useEffect(() => {
 		setDraft(saved);
+		lastSaved.current = saved;
 		setMessage(null);
 	}, [dynamic.id]);
+
+	// Encoders write the same projection through the Dynamic itself, so authority can move while
+	// this view is open. Without adopting it the draft stays on the old numbers, the picture stops
+	// following the encoders, and the auto-apply below writes the stale draft straight back over
+	// them.
+	useEffect(() => {
+		if (sameDynamicSpatialDraft(lastSaved.current, saved)) return;
+		lastSaved.current = saved;
+		setDraft(saved);
+	}, [saved]);
 
 	useEffect(() => {
 		const sequence = ++request.current;
@@ -160,7 +176,7 @@ export function DynamicProjectionView({
 				<div className="dynamic-projection-visual">
 					{shown ? (
 						<>
-							<ProjectionStagePreview projection={shown} />
+							<ProjectionStagePreview projection={shown} fixtures={fixtures} />
 							<small>Drag to orbit</small>
 						</>
 					) : (

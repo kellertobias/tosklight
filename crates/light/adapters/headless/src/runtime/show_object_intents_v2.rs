@@ -342,6 +342,28 @@ async fn dynamic_spatial_preview(
             },
         )
         .collect();
+    // The plane the ranking actually happens on, so the Phase view plots what ranks rather than
+    // a top-down picture that agrees with it only when the projection happens to look down.
+    let projected_positions =
+        effective_spatial_projection(&draft, context.inherited_mapping.as_ref())
+            .map(|projection| {
+                light_dynamics::project_spatial_positions(&projection, &context.targets)
+                    .map(|positions| {
+                        positions
+                            .into_iter()
+                            .map(|position| {
+                                light_wire::v2::group_management::GroupProjectedPositionProjection {
+                                    fixture_id: position.fixture_id.0,
+                                    u: position.u,
+                                    v: position.v,
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .map_err(|error| ApiError::bad_request(error.to_string()))
+            })
+            .transpose()?
+            .unwrap_or_default();
     Ok(Json(
         light_wire::v2::dynamics::DynamicSpatialPreviewResponse {
             show_id: show_id.0,
@@ -365,6 +387,7 @@ async fn dynamic_spatial_preview(
                 .iter()
                 .map(|fixture_id| fixture_id.0)
                 .collect(),
+            projected_positions,
             ranks,
             rank_count: ranked.rank_count,
             warnings: ranked
@@ -934,6 +957,20 @@ struct DynamicSpatialContext {
     targets: Vec<light_dynamics::SpatialTarget>,
     inherited_mapping: Option<light_dynamics::SpatialSelectionMapping>,
     base: light_wire::v2::dynamics::DynamicSpatialPreviewBaseProjection,
+}
+
+/// The projection the draft actually ranks by: its own override, or the Group's while inheriting.
+/// Mirrors `evaluate_dynamic_spatial_mapping`, which resolves the same two stages.
+fn effective_spatial_projection(
+    draft: &light_dynamics::DynamicSpatialMappingOverride,
+    inherited: Option<&light_dynamics::SpatialSelectionMapping>,
+) -> Option<light_dynamics::SpatialProjection> {
+    match &draft.projection {
+        light_dynamics::OverrideStage::Inherit => {
+            inherited.map(|mapping| mapping.projection.clone())
+        }
+        light_dynamics::OverrideStage::Replace(projection) => Some(projection.clone()),
+    }
 }
 
 fn dynamic_spatial_context(

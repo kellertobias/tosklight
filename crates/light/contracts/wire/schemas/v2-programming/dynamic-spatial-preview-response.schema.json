@@ -35,6 +35,13 @@
         "format": "uuid"
       }
     },
+    "projected_positions": {
+      "description": "Where the effective projection puts each target on the plane it ranks in. Empty when\nnothing is projecting, which is the same case that ranks by source order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/GroupProjectedPositionProjection"
+      }
+    },
     "rank_count": {
       "type": "integer",
       "format": "uint",
@@ -84,6 +91,7 @@
     "draft",
     "source_order",
     "ordered_fixture_ids",
+    "projected_positions",
     "ranks",
     "rank_count",
     "warnings"
@@ -730,6 +738,35 @@
         "x",
         "y",
         "z"
+      ]
+    },
+    "GroupProjectedPositionProjection": {
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "u": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "v": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "fixture_id",
+        "u",
+        "v"
       ]
     },
     "GroupSpatialRankProjection": {
