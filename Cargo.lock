@@ -3847,6 +3847,7 @@ dependencies = [
  "arc-swap",
  "axum",
  "media-application",
+ "media-citp",
  "media-codec",
  "media-domain",
  "media-http",

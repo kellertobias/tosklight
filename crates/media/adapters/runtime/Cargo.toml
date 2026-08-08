@@ -15,6 +15,7 @@ media-domain = { path = "../../domain" }
 media-http = { path = "../http" }
 media-library = { path = "../library" }
 arc-swap.workspace = true
+media-citp = { path = "../citp" }
 media-codec = { path = "../codec" }
 media-net = { path = "../net" }
 media-playback = { path = "../playback" }

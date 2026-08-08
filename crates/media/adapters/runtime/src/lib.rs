@@ -7,6 +7,7 @@
 //! so an unusable configuration stops the process with an actionable error instead of bringing
 //! half a server up.
 
+mod citp;
 mod dmx;
 mod layer_pipeline;
 mod layer_sources;
@@ -88,8 +89,16 @@ pub fn run() -> anyhow::Result<()> {
         ));
 
     // The desk drives the outputs, so the listeners come up before anything presents.
-    runtime
-        .block_on(async { dmx::spawn(&configuration, state.clone(), shutdown.clone(), started) })?;
+    runtime.block_on(async {
+        dmx::spawn(&configuration, state.clone(), shutdown.clone(), started)?;
+        citp::spawn(
+            &configuration,
+            state.clone(),
+            catalog.clone(),
+            shutdown.clone(),
+        );
+        anyhow::Ok(())
+    })?;
 
     if !presentation::needs_a_window(&configuration) {
         return runtime.block_on(serve_with(
