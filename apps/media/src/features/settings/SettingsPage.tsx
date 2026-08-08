@@ -1,22 +1,51 @@
-// What this server is, and what it is configured to expose.
+// What this server is, what it listens on, and what it sends to.
 //
-// Editing configuration is a later slice; until the API carries it, this page reports the parts
-// the server already publishes rather than pretending to own settings it cannot write.
+// The network settings are editable here; the outputs are not, because what an output *is* — its
+// monitor, its size, its presentation mode — is settled when its surface opens, and pretending
+// otherwise would show an operator a change that never happened.
 
+import { Button } from "@tosklight/ui/controls";
 import { ResourceState } from "../../app/ResourceState";
-import type { Health, OutputView } from "../../shared/api/generated/media-wire";
-import { useHealth, useOutputs } from "../../shared/api/queries";
+import type { Health, NetworkView, OutputView } from "../../shared/api/generated/media-wire";
+import { api } from "../../shared/api/client";
+import { useEditing } from "../../shared/api/editing";
+import { useHealth, useNetwork, useOutputs } from "../../shared/api/queries";
+import { BoundAddresses, NetworkEditor } from "./NetworkEditor";
 
 const HEALTH_POLL_MS = 15_000;
 
 export function SettingsPage() {
 	const health = useHealth(HEALTH_POLL_MS);
 	const outputs = useOutputs(HEALTH_POLL_MS);
+	const network = useNetwork();
+	const editing = useEditing(network.reload);
 
 	return (
 		<section className="media-page">
 			<ResourceState resource={health} subject="server settings">
 				{(data) => <ServerSettings health={data} />}
+			</ResourceState>
+
+			{editing.failure && (
+				<p className="media-state is-error" role="alert">
+					{editing.failure.message}{" "}
+					<Button size="compact" onClick={editing.dismiss}>
+						Dismiss
+					</Button>
+				</p>
+			)}
+
+			<ResourceState resource={network} subject="the network settings">
+				{(data) => (
+					<Network
+						network={data}
+						editing={editing.editing === "network"}
+						busy={editing.busy}
+						onEdit={() => editing.begin("network")}
+						onCancel={editing.cancel}
+						onSave={(edit) => void editing.save(() => api.updateNetwork(edit))}
+					/>
+				)}
 			</ResourceState>
 
 			<ResourceState
@@ -51,10 +80,51 @@ export function SettingsPage() {
 			</ResourceState>
 
 			<p className="media-state is-notice">
-				Outputs, network addresses, and the library folder are set in the server's
-				configuration file. Editing them from here arrives with the configuration API.
+				Outputs and the library folder are set in the server's configuration file.
 			</p>
 		</section>
+	);
+}
+
+function Network({
+	network,
+	editing,
+	busy,
+	onEdit,
+	onCancel,
+	onSave,
+}: {
+	network: NetworkView;
+	editing: boolean;
+	busy: boolean;
+	onEdit: () => void;
+	onCancel: () => void;
+	onSave: (edit: Parameters<typeof api.updateNetwork>[0]) => void;
+}) {
+	return (
+		<article className="media-settings-section" aria-label="Network">
+			{editing ? (
+				<NetworkEditor
+					network={network}
+					busy={busy}
+					onSave={onSave}
+					onCancel={onCancel}
+				/>
+			) : (
+				<>
+					<BoundAddresses network={network} />
+					<div className="media-settings-actions">
+						<Button onClick={onEdit}>Change network settings</Button>
+					</div>
+				</>
+			)}
+			{network.takesEffectOnRestart && (
+				<p className="media-state is-notice">
+					A saved change to these addresses is used the next time this server starts. The
+					sockets it is using now stay as they are.
+				</p>
+			)}
+		</article>
 	);
 }
 

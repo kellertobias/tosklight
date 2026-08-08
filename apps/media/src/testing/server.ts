@@ -5,9 +5,13 @@
 
 import { vi } from "vitest";
 import type {
+	AudioPanelView,
 	CatalogView,
 	Health,
+	LogsView,
+	NetworkView,
 	OutputView,
+	TextSlotView,
 	VisualizerView,
 } from "../shared/api/generated/media-wire";
 import { resetResources } from "../shared/api/resource";
@@ -17,6 +21,10 @@ export interface StubbedServer {
 	catalog: CatalogView;
 	health: Health;
 	visualizers: VisualizerView[];
+	network: NetworkView;
+	text: TextSlotView[];
+	audio: AudioPanelView;
+	logs: LogsView;
 	/** Set to make the next write fail with this code and status. */
 	refuseWrites: { code: string; message: string; status: number } | undefined;
 	/** Every path written to, in order. */
@@ -28,6 +36,10 @@ export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServe
 		outputs: [anOutput()],
 		catalog: aCatalog(),
 		visualizers: [aVisualizer()],
+		network: aNetwork(),
+		text: [aClock(), aCountdown()],
+		audio: anAudioPanel(),
+		logs: aLog(),
 		health: {
 			status: "ok",
 			instance: "test-instance",
@@ -56,6 +68,81 @@ export function stubServer(overrides: Partial<StubbedServer> = {}): StubbedServe
 			if (path === "/catalog") return jsonResponse(server.catalog);
 			if (path === "/visualizers") return jsonResponse(server.visualizers);
 			if (path === "/outputs") return jsonResponse(server.outputs);
+			if (path === "/network") return jsonResponse(server.network);
+			if (path === "/text") return jsonResponse(server.text);
+			if (path === "/audio") return jsonResponse(server.audio);
+			if (path.startsWith("/logs")) return jsonResponse(server.logs);
+
+			if (path === "/network/update") {
+				const body = JSON.parse(String(init?.body ?? "{}"));
+				for (const field of [
+					"artNetListen",
+					"sacnListen",
+					"citpListen",
+					"httpListen",
+				] as const) {
+					if (body[field] !== undefined) server.network.stored[field] = body[field];
+				}
+				if (body.sameComputerPreset !== undefined) {
+					server.network.sameComputerPreset = body.sameComputerPreset;
+				}
+				if (body.speedGroupEndpoint !== undefined) {
+					server.network.stored.speedGroupEndpoint = body.speedGroupEndpoint;
+				}
+				server.network.resolved = { ...server.network.stored };
+				return jsonResponse(server.network);
+			}
+
+			if (path === "/audio/update") {
+				const body = JSON.parse(String(init?.body ?? "{}"));
+				server.audio.settings = { ...server.audio.settings, ...body };
+				return jsonResponse(server.audio.settings);
+			}
+
+			if (path === "/text/create") {
+				const body = JSON.parse(String(init?.body ?? "{}"));
+				const created: TextSlotView = {
+					address: {
+						folder: body.folder,
+						file: body.file,
+						class: "text-bank",
+					},
+					name: body.name,
+					enabled: true,
+					kind: body.kind,
+					text: body.text ?? null,
+					durationSeconds: body.durationSeconds ?? null,
+					targetUnixMillis: body.targetUnixMillis ?? null,
+					style: body.style ?? aClock().style,
+				};
+				server.text.push(created);
+				return jsonResponse(created);
+			}
+
+			const written = path.match(/^\/text\/(\d+)\/(\d+)\/(update|delete)$/u);
+			if (written) {
+				const body = JSON.parse(String(init?.body ?? "{}"));
+				const at = server.text.findIndex(
+					(candidate) =>
+						candidate.address.folder === Number(written[1]) &&
+						candidate.address.file === Number(written[2]),
+				);
+				if (at < 0) return jsonResponse({ code: "unknown-text", message: "no" }, 404);
+				if (written[3] === "delete") {
+					server.text.splice(at, 1);
+					return jsonResponse(server.text);
+				}
+				const slot = server.text[at];
+				if (body.name !== undefined) slot.name = body.name;
+				if (body.enabled !== undefined) slot.enabled = body.enabled;
+				if (body.kind !== undefined) slot.kind = body.kind;
+				if (body.text !== undefined) slot.text = body.text;
+				if (body.durationSeconds !== undefined) {
+					slot.durationSeconds = body.durationSeconds;
+				}
+				if (body.style !== undefined) slot.style = body.style;
+				return jsonResponse(slot);
+			}
 			if (path.endsWith("/reset")) return new Response(null, { status: 204 });
 
 			const tuned = path.match(/^\/visualizers\/(\d+)\/(\d+)\/update$/u);
@@ -214,5 +301,119 @@ export function aCatalog(): CatalogView {
 				],
 			},
 		],
+	};
+}
+
+export function aNetwork(overrides: Partial<NetworkView> = {}): NetworkView {
+	const stored = {
+		artNetListen: "0.0.0.0:6454",
+		sacnListen: "0.0.0.0:5568",
+		citpListen: "0.0.0.0:4811",
+		httpListen: "127.0.0.1:8080",
+		speedGroupEndpoint: null,
+	};
+	return {
+		sameComputerPreset: false,
+		stored,
+		resolved: { ...stored },
+		citpAdvertisedPort: 4811,
+		takesEffectOnRestart: true,
+		...overrides,
+	};
+}
+
+export function aTextStyle(): TextSlotView["style"] {
+	return {
+		family: "sans-serif",
+		size: 0.2,
+		bold: false,
+		italic: false,
+		alignment: "center",
+		red: 1,
+		green: 1,
+		blue: 1,
+	};
+}
+
+export function aClock(overrides: Partial<TextSlotView> = {}): TextSlotView {
+	return {
+		address: { folder: 200, file: 1, class: "text-bank" },
+		name: "Clock",
+		enabled: true,
+		kind: "clock",
+		text: null,
+		durationSeconds: null,
+		targetUnixMillis: null,
+		style: aTextStyle(),
+		...overrides,
+	};
+}
+
+export function aCountdown(overrides: Partial<TextSlotView> = {}): TextSlotView {
+	return {
+		address: { folder: 200, file: 2, class: "text-bank" },
+		name: "Ten minutes",
+		enabled: true,
+		kind: "countdown-duration",
+		text: null,
+		durationSeconds: 600,
+		targetUnixMillis: null,
+		style: aTextStyle(),
+		...overrides,
+	};
+}
+
+export function anAudioPanel(overrides: Partial<AudioPanelView> = {}): AudioPanelView {
+	return {
+		settings: {
+			deviceBy: "system-default",
+			deviceValue: null,
+			inputGain: 1,
+			beatSensitivity: 1,
+			eqBass: 1,
+			eqMid: 1,
+			eqTreble: 1,
+			availableDevices: ["Built-in Microphone", "Desk feed"],
+			deviceTakesEffectOnRestart: true,
+		},
+		analysis: {
+			capturing: true,
+			device: "Desk feed",
+			detail: null,
+			waveform: { points: [0, 0.5, -0.5, 0.25] },
+			spectrum: [0.2, 0.5, 0.1],
+			bands: { bass: 0.6, mid: 0.3, treble: 0.1 },
+			energy: 0.4,
+			peak: 0.8,
+			beat: 0.9,
+			bpm: 128,
+			beatPhase: 0.25,
+		},
+		...overrides,
+	};
+}
+
+export function aLog(overrides: Partial<LogsView> = {}): LogsView {
+	return {
+		records: [
+			{
+				sequence: 1,
+				millisSinceStart: 120,
+				level: "info",
+				target: "media_runtime",
+				message: "media server starting",
+			},
+			{
+				sequence: 2,
+				millisSinceStart: 340,
+				level: "warn",
+				target: "media_runtime",
+				message: "no audio input; generated sources will run on silence",
+			},
+		],
+		newest: 2,
+		dropped: 0,
+		capacity: 2000,
+		...overrides,
 	};
 }

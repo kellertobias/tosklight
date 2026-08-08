@@ -8,8 +8,11 @@ export const ROUTES = [
 	{ path: "/layers", label: "Layers" },
 	{ path: "/library", label: "Media library" },
 	{ path: "/visualizers", label: "Visualizers" },
+	{ path: "/text", label: "Text" },
+	{ path: "/audio", label: "Audio" },
 	{ path: "/dmx", label: "DMX" },
 	{ path: "/settings", label: "Settings" },
+	{ path: "/logs", label: "Log" },
 ] as const;
 
 export type RoutePath = (typeof ROUTES)[number]["path"];

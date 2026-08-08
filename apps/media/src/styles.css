@@ -320,6 +320,255 @@ body {
 	font-weight: 500;
 }
 
+/* Settings, text, audio, and the log. Every editor gets the same two-column form and the same
+   action row, so an operator who has changed one has already learnt the others. */
+
+.media-settings-section {
+	display: grid;
+	gap: 0.75rem;
+	padding: 0.9rem 1rem;
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+}
+
+.media-settings-form {
+	display: grid;
+	gap: 0.9rem;
+}
+
+.media-settings-form fieldset {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: 0.7rem;
+	margin: 0;
+	padding: 0.8rem 1rem 1rem;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+}
+
+.media-settings-form legend {
+	padding: 0 0.4rem;
+	color: var(--muted);
+	font-size: 0.85rem;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+
+.media-settings-form fieldset > .media-settings-note {
+	grid-column: 1 / -1;
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.media-settings-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
+.media-text-editor {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 0.7rem;
+	align-items: end;
+}
+
+.media-text-editor > fieldset,
+.media-text-editor > .media-settings-actions,
+.media-text-editor > .media-text-address {
+	grid-column: 1 / -1;
+}
+
+.media-text-editor > fieldset {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 0.7rem;
+	align-items: end;
+	margin: 0;
+	padding: 0.8rem 1rem 1rem;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+}
+
+.media-text-address {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 0.7rem;
+}
+
+.media-text-colour,
+.media-text-moment {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-height: 44px;
+	color: var(--muted);
+	font-size: 0.9rem;
+}
+
+.media-text-colour input[type="color"] {
+	width: 44px;
+	height: 32px;
+	padding: 0;
+	background: none;
+	border: 1px solid var(--line2);
+	border-radius: 4px;
+}
+
+.media-audio-monitor {
+	display: grid;
+	gap: 0.8rem;
+	padding: 0.9rem 1rem;
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+}
+
+.media-audio-monitor header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+
+.media-audio-monitor h2 {
+	margin: 0;
+	font-size: 1rem;
+}
+
+.media-audio-bands {
+	display: grid;
+	gap: 0.35rem;
+}
+
+.media-audio-bar {
+	display: grid;
+	grid-template-columns: 5rem 1fr 3rem;
+	align-items: center;
+	gap: 0.6rem;
+	font-size: 0.85rem;
+	color: var(--muted);
+}
+
+.media-audio-bar-track {
+	height: 10px;
+	background: var(--line);
+	border-radius: 5px;
+	overflow: hidden;
+}
+
+.media-audio-bar-track > span {
+	display: block;
+	height: 100%;
+	background: var(--cyan);
+}
+
+/* Clipping is the one state a meter has to shout about. */
+.media-audio-bar-track.is-hot > span {
+	background: var(--red);
+}
+
+.media-audio-bar-value {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.media-audio-waveform,
+.media-audio-spectrum {
+	width: 100%;
+	height: 90px;
+	background: var(--panel2);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+}
+
+.media-audio-waveform path {
+	fill: none;
+	stroke: var(--cyan);
+	stroke-width: 1.5;
+}
+
+.media-audio-spectrum rect {
+	fill: var(--cyan);
+}
+
+.media-audio-empty {
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.media-audio-beat {
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	background: var(--cyan);
+}
+
+.media-logs-controls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	gap: 0.8rem;
+}
+
+.media-log {
+	display: grid;
+	gap: 1px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	max-height: 70vh;
+	overflow: auto;
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	/* A log is read as text, so it keeps a monospaced grid and its own alignment. */
+	font-family: ui-monospace, "SF Mono", Menlo, monospace;
+	font-size: 0.8rem;
+}
+
+.media-log li {
+	display: grid;
+	grid-template-columns: 4.5rem 4rem 1fr auto;
+	gap: 0.6rem;
+	padding: 0.3rem 0.6rem;
+	border-bottom: 1px solid var(--line);
+}
+
+.media-log-at,
+.media-log-level,
+.media-log-target {
+	color: var(--muted);
+}
+
+.media-log-message {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.media-log-warn .media-log-level {
+	color: var(--amber);
+}
+
+.media-log-error .media-log-level {
+	color: var(--red);
+}
+
+@media (max-width: 720px) {
+	.media-log li {
+		grid-template-columns: 4.5rem 1fr;
+	}
+
+	.media-log-target {
+		grid-column: 2;
+	}
+}
+
 .media-visually-hidden {
 	position: absolute;
 	width: 1px;

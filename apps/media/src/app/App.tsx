@@ -2,11 +2,14 @@
 //
 // Pages compose features. Nothing here converts a protocol or holds a state machine.
 
+import { AudioPage } from "../features/audio/AudioPage";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { DmxPage } from "../features/dmx/DmxPage";
 import { LayersPage } from "../features/layers/LayersPage";
 import { LibraryPage } from "../features/media-library/LibraryPage";
+import { LogsPage } from "../features/logs/LogsPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { TextSourcesPage } from "../features/text-sources/TextSourcesPage";
 import { VisualizersPage } from "../features/visualizers/VisualizersPage";
 import { useHealth } from "../shared/api/queries";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -21,8 +24,11 @@ const PAGES: Record<RoutePath, () => React.ReactElement> = {
 	"/layers": LayersPage,
 	"/library": LibraryPage,
 	"/visualizers": VisualizersPage,
+	"/text": TextSourcesPage,
+	"/audio": AudioPage,
 	"/dmx": DmxPage,
 	"/settings": SettingsPage,
+	"/logs": LogsPage,
 };
 
 export function App() {

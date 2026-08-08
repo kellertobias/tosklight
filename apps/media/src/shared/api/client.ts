@@ -4,10 +4,20 @@
 
 import type {
 	ApiErrorBody,
+	AudioPanelView,
+	AudioSettingsView,
 	CatalogView,
+	CreateText,
+	DeleteText,
 	Health,
+	LogsView,
+	NetworkView,
 	OutputView,
+	TextSlotView,
+	UpdateAudio,
 	UpdateLayer,
+	UpdateNetwork,
+	UpdateText,
 	UpdateVisualizer,
 	VisualizerView,
 } from "./generated/media-wire";
@@ -99,6 +109,62 @@ export const api = {
 	/** A live-control action with no payload, exactly as the API exposes it. */
 	resetLayer: (output: string, layer: number) =>
 		request<void>(`/outputs/${output}/layers/${layer}/reset`),
+
+	network: () => request<NetworkView>("/network"),
+	updateNetwork: (edit: UpdateNetwork) =>
+		request<NetworkView>("/network/update", {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
+
+	audio: () => request<AudioPanelView>("/audio"),
+	updateAudio: (edit: UpdateAudio) =>
+		request<AudioSettingsView>("/audio/update", {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
+
+	text: () => request<TextSlotView[]>("/text"),
+	createText: (create: CreateText) =>
+		request<TextSlotView>("/text/create", {
+			method: "POST",
+			body: JSON.stringify(create),
+		}),
+	updateText: (folder: number, file: number, edit: UpdateText) =>
+		request<TextSlotView>(`/text/${folder}/${file}/update`, {
+			method: "POST",
+			body: JSON.stringify(edit),
+		}),
+	deleteText: (folder: number, file: number, remove: DeleteText) =>
+		request<TextSlotView[]>(`/text/${folder}/${file}/delete`, {
+			method: "POST",
+			body: JSON.stringify(remove),
+		}),
+
+	/**
+	 * A window of the log. The cursor is the newest record the viewer already holds, so a refresh
+	 * cannot show one twice or step over one.
+	 */
+	logs: (query: { after?: number; level?: string; limit?: number } = {}) => {
+		const parameters = new URLSearchParams();
+		if (query.after !== undefined) parameters.set("after", String(query.after));
+		if (query.level) parameters.set("level", query.level);
+		if (query.limit !== undefined) parameters.set("limit", String(query.limit));
+		const search = parameters.toString();
+		return request<LogsView>(`/logs${search ? `?${search}` : ""}`);
+	},
 };
+
+/**
+ * Where pushed telemetry arrives.
+ *
+ * Derived from the page's own origin, because the interface is served by the same process: an
+ * operator who reached this server on a LAN address must not have a socket opened to a different
+ * one. `https` pages get `wss`, so a reverse proxy in front of the server still works.
+ */
+export function telemetryUrl(): string {
+	const { protocol, host } = window.location;
+	return `${protocol === "https:" ? "wss" : "ws"}://${host}${BASE}/telemetry`;
+}
 
 export type MediaApi = typeof api;

@@ -5,7 +5,15 @@
 // argument.
 
 import { api } from "./client";
-import type { CatalogView, Health, OutputView, VisualizerView } from "./generated/media-wire";
+import type {
+	AudioPanelView,
+	CatalogView,
+	Health,
+	NetworkView,
+	OutputView,
+	TextSlotView,
+	VisualizerView,
+} from "./generated/media-wire";
 import { type Resource, useResource } from "./resource";
 
 export const KEYS = {
@@ -13,6 +21,9 @@ export const KEYS = {
 	catalog: "catalog",
 	outputs: "outputs",
 	visualizers: "visualizers",
+	network: "network",
+	audio: "audio",
+	text: "text",
 } as const;
 
 export function useHealth(pollMs?: number): Resource<Health> {
@@ -30,4 +41,23 @@ export function useOutputs(pollMs?: number): Resource<OutputView[]> {
 /// Configuration, not state: it changes when an operator reassigns an address, so it is not polled.
 export function useVisualizers(): Resource<VisualizerView[]> {
 	return useResource(KEYS.visualizers, api.visualizers);
+}
+
+/// Configuration. It changes when an operator saves it, so it is read once.
+export function useNetwork(): Resource<NetworkView> {
+	return useResource(KEYS.network, api.network);
+}
+
+export function useText(): Resource<TextSlotView[]> {
+	return useResource(KEYS.text, api.text);
+}
+
+/**
+ * The audio settings, with one analysis for a panel to draw before its socket is up.
+ *
+ * The analysis in this snapshot is deliberately not polled — the telemetry socket carries it after
+ * the first paint, and polling a meter would spend a show's worth of requests on it.
+ */
+export function useAudio(): Resource<AudioPanelView> {
+	return useResource(KEYS.audio, api.audio);
 }
