@@ -1,0 +1,18 @@
+[package]
+name = "media-net"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+
+# Art-Net and sACN ingress. Parsing and source arbitration live here; neither protocol holds a
+# copy of the DMX mapping, which is domain data, so identical payloads produce identical state.
+[dependencies]
+media-domain = { path = "../../domain" }
+socket2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

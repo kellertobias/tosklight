@@ -18,6 +18,7 @@ members = [
   "crates/light/domain/programmer",
   "crates/media/adapters/codec",
   "crates/media/adapters/library",
+  "crates/media/adapters/net",
   "crates/media/adapters/playback",
   "crates/media/adapters/render",
   "crates/media/adapters/runtime",

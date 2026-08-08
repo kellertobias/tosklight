@@ -3769,6 +3769,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "media-net"
+version = "0.1.0"
+dependencies = [
+ "media-domain",
+ "socket2 0.6.4",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "media-playback"
 version = "0.1.0"
 dependencies = [
