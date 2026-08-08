@@ -8,14 +8,17 @@
 //! half a server up.
 
 mod logging;
+pub mod presentation;
 mod shutdown;
 mod startup;
 
 pub use logging::install_logging;
+pub use presentation::Diagnostics;
 pub use shutdown::{Shutdown, ShutdownReason};
 pub use startup::{ConfigurationSource, StartupError, load_configuration};
 
 use media_application::MediaConfiguration;
+use media_domain::{MediaState, OutputState};
 
 /// The argument that reads, migrates, and validates configuration, then exits.
 ///
@@ -23,13 +26,25 @@ use media_application::MediaConfiguration;
 /// valid configuration, without needing a display, a network, or an audio device.
 pub const CHECK_CONFIGURATION_ARGUMENT: &str = "--check-configuration";
 
+/// The argument that fills each output with a flat diagnostic colour, so an operator can confirm
+/// an output is on the monitor they meant, at the size they meant, the right way up.
+pub const TEST_PATTERN_ARGUMENT: &str = "--test-pattern";
+
 /// Runs the Media Server until it is asked to stop.
-pub async fn run() -> anyhow::Result<()> {
+///
+/// This is synchronous, and deliberately so. Windowed outputs need the platform event loop on the
+/// main thread, so the asynchronous services get a background runtime and the main thread belongs
+/// to the outputs. A process whose outputs are all off-screen never builds an event loop and
+/// simply blocks on the services.
+pub fn run() -> anyhow::Result<()> {
     install_logging();
-    let check_only = std::env::args().any(|argument| argument == CHECK_CONFIGURATION_ARGUMENT);
+    let arguments: Vec<String> = std::env::args().collect();
     let configuration = load_configuration(&ConfigurationSource::from_environment())?;
 
-    if check_only {
+    if arguments
+        .iter()
+        .any(|argument| argument == CHECK_CONFIGURATION_ARGUMENT)
+    {
         tracing::info!(
             outputs = configuration.outputs.len(),
             "configuration is valid"
@@ -37,7 +52,46 @@ pub async fn run() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    serve(configuration, Shutdown::new()).await
+    let diagnostics = Diagnostics {
+        test_pattern: arguments
+            .iter()
+            .any(|argument| argument == TEST_PATTERN_ARGUMENT),
+    };
+    let shutdown = Shutdown::new();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+
+    if !presentation::needs_a_window(&configuration) {
+        return runtime.block_on(serve(configuration, shutdown));
+    }
+
+    // The services run on the background runtime; the main thread hosts the outputs. Shutdown
+    // reaches both through the same handle, whichever of them starts it.
+    let state = initial_state(&configuration);
+    let services = runtime.spawn({
+        let configuration = configuration.clone();
+        let shutdown = shutdown.clone();
+        async move { serve(configuration, shutdown).await }
+    });
+
+    let presented =
+        presentation::run_event_loop(&configuration, state, shutdown.clone(), diagnostics);
+    shutdown.request(ShutdownReason::Requested);
+    let _ = runtime.block_on(services);
+    presented
+}
+
+/// The authoritative state one configuration describes, before anything has driven it.
+pub fn initial_state(configuration: &MediaConfiguration) -> MediaState {
+    MediaState::with_outputs(
+        configuration
+            .outputs
+            .iter()
+            .filter(|output| output.enabled)
+            .map(|output| OutputState::new(output.id, output.personality))
+            .collect(),
+    )
 }
 
 /// Brings the configured subsystems up, waits for shutdown, and takes them back down in order.
@@ -75,5 +129,23 @@ mod tests {
 
         serve(configuration, shutdown.clone()).await.unwrap();
         assert_eq!(shutdown.reason(), Some(ShutdownReason::Requested));
+    }
+
+    #[test]
+    fn the_initial_state_mirrors_the_enabled_outputs() {
+        let mut configuration = MediaConfiguration::default();
+        let personality = configuration.outputs[0].personality;
+        let state = initial_state(&configuration);
+        assert_eq!(state.outputs.len(), 1);
+        assert_eq!(
+            state.outputs[0].layers.len(),
+            usize::from(personality.layer_count())
+        );
+
+        configuration.outputs[0].enabled = false;
+        assert!(
+            initial_state(&configuration).outputs.is_empty(),
+            "a disabled output holds no state"
+        );
     }
 }

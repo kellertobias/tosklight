@@ -74,9 +74,9 @@ impl RenderClock {
     /// no target of their own: the surface paces one and nothing paces the other.
     pub const fn target_interval(&self) -> Option<Duration> {
         match self.mode {
-            PresentationMode::FixedFps { frames_per_second } if frames_per_second > 0 => {
-                Some(Duration::from_nanos(1_000_000_000 / frames_per_second as u64))
-            }
+            PresentationMode::FixedFps { frames_per_second } if frames_per_second > 0 => Some(
+                Duration::from_nanos(1_000_000_000 / frames_per_second as u64),
+            ),
             _ => None,
         }
     }
@@ -124,7 +124,11 @@ impl RenderClock {
         let mean = if self.intervals.is_empty() {
             None
         } else {
-            let total: u64 = self.intervals.iter().map(|interval| interval.as_micros() as u64).sum();
+            let total: u64 = self
+                .intervals
+                .iter()
+                .map(|interval| interval.as_micros() as u64)
+                .sum();
             Some(Duration::from_micros(total / self.intervals.len() as u64))
         };
         MeasuredCadence {
@@ -150,7 +154,9 @@ impl RenderClock {
 mod tests {
     use super::*;
 
-    const SIXTY: PresentationMode = PresentationMode::FixedFps { frames_per_second: 60 };
+    const SIXTY: PresentationMode = PresentationMode::FixedFps {
+        frames_per_second: 60,
+    };
 
     fn micros(value: u64) -> Timestamp {
         Timestamp::from_micros(value)
@@ -179,16 +185,27 @@ mod tests {
     #[test]
     fn a_fixed_rate_output_targets_its_own_interval() {
         let clock = RenderClock::new(SIXTY);
-        assert_eq!(clock.target_interval(), Some(Duration::from_nanos(16_666_666)));
+        assert_eq!(
+            clock.target_interval(),
+            Some(Duration::from_nanos(16_666_666))
+        );
 
-        let thirty = RenderClock::new(PresentationMode::FixedFps { frames_per_second: 30 });
-        assert_eq!(thirty.target_interval(), Some(Duration::from_nanos(33_333_333)));
+        let thirty = RenderClock::new(PresentationMode::FixedFps {
+            frames_per_second: 30,
+        });
+        assert_eq!(
+            thirty.target_interval(),
+            Some(Duration::from_nanos(33_333_333))
+        );
     }
 
     #[test]
     fn a_fixed_rate_output_withholds_a_frame_until_its_deadline() {
         let mut clock = RenderClock::new(SIXTY);
-        assert!(clock.should_present(micros(0)), "the first frame has no deadline to wait for");
+        assert!(
+            clock.should_present(micros(0)),
+            "the first frame has no deadline to wait for"
+        );
         clock.record_present(micros(0));
 
         assert!(!clock.should_present(micros(16_000)));
@@ -212,14 +229,21 @@ mod tests {
         clock.record_present(micros(0));
         // A long stall: a whole second passes before the next frame.
         clock.record_present(micros(1_000_000));
-        assert!(!clock.should_present(micros(1_000_100)), "no catch-up burst");
+        assert!(
+            !clock.should_present(micros(1_000_100)),
+            "no catch-up burst"
+        );
         assert!(clock.should_present(micros(1_016_667)));
     }
 
     #[test]
     fn measured_cadence_reports_what_actually_happened() {
         let mut clock = RenderClock::new(PresentationMode::DisplaySynchronized);
-        assert_eq!(clock.measured().mean_interval, None, "one frame measures nothing");
+        assert_eq!(
+            clock.measured().mean_interval,
+            None,
+            "one frame measures nothing"
+        );
 
         for frame in 0..=10u64 {
             clock.record_present(micros(frame * 10_000));
@@ -242,7 +266,10 @@ mod tests {
             now += 10_000;
             clock.record_present(micros(now));
         }
-        assert_eq!(clock.measured().mean_interval, Some(Duration::from_micros(10_000)));
+        assert_eq!(
+            clock.measured().mean_interval,
+            Some(Duration::from_micros(10_000))
+        );
     }
 
     #[test]
@@ -254,12 +281,17 @@ mod tests {
 
         assert_eq!(clock.measured(), MeasuredCadence::default());
         assert_eq!(clock.mode(), SIXTY);
-        assert!(clock.should_present(micros(20_000)), "the deadline grid restarts too");
+        assert!(
+            clock.should_present(micros(20_000)),
+            "the deadline grid restarts too"
+        );
     }
 
     #[test]
     fn a_zero_frame_rate_has_no_target_rather_than_dividing_by_zero() {
-        let clock = RenderClock::new(PresentationMode::FixedFps { frames_per_second: 0 });
+        let clock = RenderClock::new(PresentationMode::FixedFps {
+            frames_per_second: 0,
+        });
         assert_eq!(clock.target_interval(), None);
         assert!(clock.should_present(Timestamp::ZERO));
     }

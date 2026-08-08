@@ -3738,6 +3738,7 @@ dependencies = [
  "pollster",
  "thiserror 2.0.18",
  "wgpu",
+ "winit",
 ]
 
 [[package]]
@@ -3747,10 +3748,12 @@ dependencies = [
  "anyhow",
  "media-application",
  "media-domain",
+ "media-render",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "winit",
 ]
 
 [[package]]
@@ -3759,7 +3762,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "media-runtime",
- "tokio",
 ]
 
 [[package]]

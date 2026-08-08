@@ -3,6 +3,7 @@
 //! The first release ships one output, but the collection model is here from the start so
 //! adding output two never means replacing singleton state.
 
+use media_domain::output::MonitorSelector;
 use media_domain::{
     LayerPersonality, OutputId, OutputName, PersonalityVersion, PresentationMode, TempoSource,
 };
@@ -16,17 +17,6 @@ pub enum DmxProtocol {
     #[default]
     ArtNet,
     Sacn,
-}
-
-/// How the operator picked a monitor.
-///
-/// The legacy application stored a plain index. A name survives replugging and reordering, so
-/// new configuration prefers it while migrated configuration keeps the index it had.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", tag = "by", content = "value")]
-pub enum MonitorSelector {
-    Index(u32),
-    Name(String),
 }
 
 /// Where an output presents.

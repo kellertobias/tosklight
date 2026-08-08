@@ -605,7 +605,7 @@ const MEDIA_ALLOWED_WORKSPACE_DEPENDENCIES = new Map([
   ["media-domain", new Set()],
   ["media-application", new Set(["media-domain"])],
   ["media-render", new Set(["media-domain"])],
-  ["media-runtime", new Set(["media-application", "media-domain"])],
+  ["media-runtime", new Set(["media-application", "media-domain", "media-render"])],
   ["media-server", new Set(["media-runtime"])],
 ]);
 
@@ -689,7 +689,7 @@ function mediaEntrypointIsThin() {
   if (nonEmptyLines > 10) fail("apps/media/src/main.rs must remain a thin lifecycle entry point");
   for (const forbidden of ["Router", "TcpListener", "tokio::spawn", "EnvFilter"])
     if (source.includes(forbidden)) fail(`Media entry point must not own ${forbidden}`);
-  if (!source.includes("media_runtime::run().await"))
+  if (!source.includes("media_runtime::run()"))
     fail("Media entry point must delegate lifecycle ownership to the runtime adapter");
 }
 

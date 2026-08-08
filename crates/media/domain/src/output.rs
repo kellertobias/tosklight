@@ -71,6 +71,38 @@ impl std::fmt::Display for OutputName {
     }
 }
 
+/// How the operator picked a monitor.
+///
+/// The legacy application stored a plain index. A name survives replugging and reordering, so new
+/// configuration prefers it while migrated configuration keeps the index it had.
+///
+/// This is a value type rather than a platform handle, which is why it lives here: the
+/// configuration writes it and the render adapter resolves it, and neither needs the other.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "by", content = "value")]
+pub enum MonitorSelector {
+    Index(u32),
+    Name(String),
+}
+
+impl MonitorSelector {
+    /// Picks this selector's monitor out of the list the platform reports, in the platform's own
+    /// order.
+    ///
+    /// A name that no longer matches, or an index past the end, resolves to nothing rather than
+    /// silently landing on a different display: an output that opened on the wrong monitor is
+    /// worse than one that reports it cannot find its own.
+    pub fn resolve<'a, T>(&self, monitors: &'a [(u32, String, T)]) -> Option<&'a T> {
+        monitors
+            .iter()
+            .find(|(index, name, _)| match self {
+                Self::Index(wanted) => index == wanted,
+                Self::Name(wanted) => name == wanted,
+            })
+            .map(|(_, _, monitor)| monitor)
+    }
+}
+
 /// How an output paces its render clock.
 ///
 /// The legacy application requested a fixed 60 fps. That is legacy behavior, not the timing
@@ -108,6 +140,30 @@ mod tests {
         let second = OutputId::new();
         assert_ne!(first, second);
         assert_eq!(OutputId::from_uuid(first.as_uuid()), first);
+    }
+
+    #[test]
+    fn a_monitor_selector_matches_by_index_or_by_name() {
+        let monitors = vec![
+            (0, "Built-in".to_owned(), "a"),
+            (1, "Stage Left".to_owned(), "b"),
+        ];
+        assert_eq!(MonitorSelector::Index(1).resolve(&monitors), Some(&"b"));
+        assert_eq!(
+            MonitorSelector::Name("Built-in".to_owned()).resolve(&monitors),
+            Some(&"a")
+        );
+    }
+
+    #[test]
+    fn an_unmatched_selector_resolves_to_nothing_rather_than_another_display() {
+        let monitors = vec![(0, "Built-in".to_owned(), "a")];
+        assert_eq!(MonitorSelector::Index(3).resolve(&monitors), None);
+        assert_eq!(
+            MonitorSelector::Name("Unplugged".to_owned()).resolve(&monitors),
+            None
+        );
+        assert_eq!(MonitorSelector::Index(0).resolve::<&str>(&[]), None);
     }
 
     #[test]

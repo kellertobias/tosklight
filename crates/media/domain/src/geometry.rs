@@ -207,33 +207,62 @@ mod tests {
 
     #[test]
     fn the_user_scale_multiplies_the_scaling_mode() {
-        let scaled = LayerState { scale_x: 0.5, scale_y: 2.0, ..layer() };
+        let scaled = LayerState {
+            scale_x: 0.5,
+            scale_y: 2.0,
+            ..layer()
+        };
         let transform = layer_transform(&scaled, Size::new(1920, 1080), OUTPUT);
         assert_eq!(transform.size, (960.0, 2160.0));
     }
 
     #[test]
     fn each_axis_scales_independently() {
-        let wide = LayerState { scale_x: 3.0, ..layer() };
+        let wide = LayerState {
+            scale_x: 3.0,
+            ..layer()
+        };
         let transform = layer_transform(&wide, Size::new(100, 100), Size::new(100, 100));
         assert_eq!(transform.size, (300.0, 100.0));
     }
 
     #[test]
     fn position_one_puts_the_layer_center_on_an_edge() {
-        let right = LayerState { position_x: 1.0, ..layer() };
-        assert_eq!(layer_transform(&right, OUTPUT, OUTPUT).center, Point::new(1920.0, 540.0));
+        let right = LayerState {
+            position_x: 1.0,
+            ..layer()
+        };
+        assert_eq!(
+            layer_transform(&right, OUTPUT, OUTPUT).center,
+            Point::new(1920.0, 540.0)
+        );
 
-        let left = LayerState { position_x: -1.0, ..layer() };
-        assert_eq!(layer_transform(&left, OUTPUT, OUTPUT).center, Point::new(0.0, 540.0));
+        let left = LayerState {
+            position_x: -1.0,
+            ..layer()
+        };
+        assert_eq!(
+            layer_transform(&left, OUTPUT, OUTPUT).center,
+            Point::new(0.0, 540.0)
+        );
 
-        let down = LayerState { position_y: 1.0, ..layer() };
-        assert_eq!(layer_transform(&down, OUTPUT, OUTPUT).center, Point::new(960.0, 1080.0));
+        let down = LayerState {
+            position_y: 1.0,
+            ..layer()
+        };
+        assert_eq!(
+            layer_transform(&down, OUTPUT, OUTPUT).center,
+            Point::new(960.0, 1080.0)
+        );
     }
 
     #[test]
     fn position_two_moves_a_further_half_screen_outside() {
-        let far = LayerState { position_x: 2.0, position_y: -2.0, ..layer() };
+        let far = LayerState {
+            position_x: 2.0,
+            position_y: -2.0,
+            ..layer()
+        };
         let transform = layer_transform(&far, OUTPUT, OUTPUT);
         assert_eq!(transform.center, Point::new(2880.0, -540.0));
     }
@@ -252,7 +281,10 @@ mod tests {
     fn rotation_turns_the_quad_around_its_own_center() {
         let square = Size::new(100, 100);
         let output = Size::new(100, 100);
-        let turned = LayerState { rotation: 90.0, ..layer() };
+        let turned = LayerState {
+            rotation: 90.0,
+            ..layer()
+        };
         let corners = layer_transform(&turned, square, output).corners();
 
         // A quarter turn sends the top-left corner to the top-right position.
@@ -267,23 +299,45 @@ mod tests {
         let square = Size::new(100, 100);
         let rest = layer_transform(&layer(), square, square).corners();
         for rotation in [-360.0, 360.0] {
-            let turned = LayerState { rotation, ..layer() };
-            for (actual, expected) in
-                layer_transform(&turned, square, square).corners().iter().zip(&rest)
+            let turned = LayerState {
+                rotation,
+                ..layer()
+            };
+            for (actual, expected) in layer_transform(&turned, square, square)
+                .corners()
+                .iter()
+                .zip(&rest)
             {
-                assert!(close(actual.x, expected.x) && close(actual.y, expected.y), "{rotation}");
+                assert!(
+                    close(actual.x, expected.x) && close(actual.y, expected.y),
+                    "{rotation}"
+                );
             }
         }
     }
 
     #[test]
     fn rotation_happens_after_positioning_so_it_never_moves_the_center() {
-        let moved = LayerState { position_x: 0.5, rotation: 37.0, ..layer() };
+        let moved = LayerState {
+            position_x: 0.5,
+            rotation: 37.0,
+            ..layer()
+        };
         let transform = layer_transform(&moved, OUTPUT, OUTPUT);
         assert_eq!(transform.center, Point::new(1440.0, 540.0));
 
-        let average_x = transform.corners().iter().map(|corner| corner.x).sum::<f32>() / 4.0;
-        let average_y = transform.corners().iter().map(|corner| corner.y).sum::<f32>() / 4.0;
+        let average_x = transform
+            .corners()
+            .iter()
+            .map(|corner| corner.x)
+            .sum::<f32>()
+            / 4.0;
+        let average_y = transform
+            .corners()
+            .iter()
+            .map(|corner| corner.y)
+            .sum::<f32>()
+            / 4.0;
         assert!(close(average_x, 1440.0) && close(average_y, 540.0));
     }
 
