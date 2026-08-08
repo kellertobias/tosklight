@@ -9,8 +9,11 @@ authors.workspace = true
 # structured shutdown. `apps/media` is a thin process entry point over this crate.
 [dependencies]
 anyhow.workspace = true
+axum.workspace = true
 media-application = { path = "../../application" }
 media-domain = { path = "../../domain" }
+media-http = { path = "../http" }
+media-library = { path = "../library" }
 arc-swap.workspace = true
 media-codec = { path = "../codec" }
 media-net = { path = "../net" }

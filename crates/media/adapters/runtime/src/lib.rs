@@ -22,7 +22,7 @@ pub use shutdown::{Shutdown, ShutdownReason};
 pub use startup::{ConfigurationSource, StartupError, load_configuration};
 
 use media_application::MediaConfiguration;
-use media_domain::{MediaState, OutputState};
+use media_domain::{MediaState, OutputState, Timestamp};
 
 /// The argument that reads, migrates, and validates configuration, then exits.
 ///
@@ -85,7 +85,7 @@ pub fn run() -> anyhow::Result<()> {
         .block_on(async { dmx::spawn(&configuration, state.clone(), shutdown.clone(), started) })?;
 
     if !presentation::needs_a_window(&configuration) {
-        return runtime.block_on(serve(configuration, shutdown));
+        return runtime.block_on(serve_with(configuration, shutdown, Some(state)));
     }
 
     // The services run on the background runtime; the main thread hosts the outputs. Shutdown
@@ -93,7 +93,8 @@ pub fn run() -> anyhow::Result<()> {
     let services = runtime.spawn({
         let configuration = configuration.clone();
         let shutdown = shutdown.clone();
-        async move { serve(configuration, shutdown).await }
+        let state = state.clone();
+        async move { serve_with(configuration, shutdown, Some(state)).await }
     });
 
     let presented = presentation::run_event_loop(
@@ -127,15 +128,67 @@ pub fn initial_state(configuration: &MediaConfiguration) -> MediaState {
 /// structured path rather than by dropping the process. The caller owns the [`Shutdown`] handle
 /// so an administrative request and an operating-system signal reach the same path.
 pub async fn serve(configuration: MediaConfiguration, shutdown: Shutdown) -> anyhow::Result<()> {
+    serve_with(configuration, shutdown, None).await
+}
+
+/// The same, sharing state with the outputs when there are any.
+///
+/// The API reads and writes exactly the state the renderer presents; there is no second copy for
+/// the web to diverge from.
+pub async fn serve_with(
+    configuration: MediaConfiguration,
+    shutdown: Shutdown,
+    state: Option<dmx::SharedState>,
+) -> anyhow::Result<()> {
+    let resolved = configuration.network.resolved();
     let outputs = configuration.outputs.len();
     tracing::info!(
         instance = configuration.instance_id.as_str(),
         outputs,
-        http = %configuration.network.resolved().http_listen,
+        http = %resolved.http_listen,
         "media server starting"
     );
 
-    let reason = shutdown.wait_for_signal().await;
+    let state = state.unwrap_or_else(|| {
+        std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(initial_state(
+            &configuration,
+        )))
+    });
+    let catalog = std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
+        media_library::discover(&configuration.library.root).unwrap_or_default(),
+    ));
+    tracing::info!(
+        items = catalog.load().item_count(),
+        root = %configuration.library.root.display(),
+        "library discovered"
+    );
+
+    let started = std::time::Instant::now();
+    let api = media_http::ApiState {
+        configuration: std::sync::Arc::new(configuration),
+        state,
+        catalog,
+        now: std::sync::Arc::new(move || {
+            Timestamp::from_micros(started.elapsed().as_micros() as u64)
+        }),
+    };
+
+    let listener = tokio::net::TcpListener::bind(resolved.http_listen).await.map_err(|error| {
+        anyhow::anyhow!(
+            "cannot bind the administration interface to {}: {error}. Another process already              holds it.",
+            resolved.http_listen
+        )
+    })?;
+    tracing::info!(address = %resolved.http_listen, "administration interface listening");
+
+    let serving = shutdown.clone();
+    axum::serve(listener, media_http::router(api))
+        .with_graceful_shutdown(async move {
+            let _ = serving.watcher().wait().await;
+        })
+        .await?;
+
+    let reason = shutdown.reason().unwrap_or(ShutdownReason::Requested);
 
     tracing::info!(reason = reason.as_str(), "media server stopping");
     Ok(())
