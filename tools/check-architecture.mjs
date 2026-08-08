@@ -604,6 +604,7 @@ function capabilityStateOwnershipBoundaries() {
 const MEDIA_ALLOWED_WORKSPACE_DEPENDENCIES = new Map([
   ["media-domain", new Set()],
   ["media-application", new Set(["media-domain"])],
+  ["media-audio", new Set(["media-application", "media-domain"])],
   ["media-citp", new Set(["media-domain"])],
   ["media-codec", new Set(["media-domain"])],
   ["media-http", new Set(["media-domain", "media-application"])],
@@ -611,7 +612,7 @@ const MEDIA_ALLOWED_WORKSPACE_DEPENDENCIES = new Map([
   ["media-net", new Set(["media-domain"])],
   ["media-playback", new Set(["media-domain", "media-codec", "media-library", "media-render"])],
   ["media-render", new Set(["media-domain", "media-codec"])],
-  ["media-runtime", new Set(["media-application", "media-citp", "media-codec", "media-domain", "media-http", "media-library", "media-net", "media-playback", "media-render"])],
+  ["media-runtime", new Set(["media-application", "media-audio", "media-citp", "media-codec", "media-domain", "media-http", "media-library", "media-net", "media-playback", "media-render"])],
   ["media-server", new Set(["media-runtime"])],
 ]);
 

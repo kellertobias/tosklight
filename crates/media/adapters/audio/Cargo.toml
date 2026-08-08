@@ -1,0 +1,21 @@
+[package]
+name = "media-audio"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+
+# Audio capture. The analysis itself is platform-independent and lives in the domain; this is the
+# part that is genuinely a platform adapter — opening a device and getting samples off its
+# real-time callback without doing anything on that thread that could block it.
+[dependencies]
+arc-swap.workspace = true
+cpal = "0.16"
+crossbeam-queue = "0.3"
+media-application = { path = "../../application" }
+media-domain = { path = "../../domain" }
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

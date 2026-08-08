@@ -50,6 +50,10 @@ pub struct FrameContext<'a> {
     pub catalog: &'a CatalogSnapshot,
     pub configuration: &'a MediaConfiguration,
     pub analysis: &'a Analysis,
+    /// `1.0` on the frame a beat landed, fading afterwards.
+    pub beat: f32,
+    pub bpm: f32,
+    pub beat_phase: f32,
     /// Seconds since the process started, for time-driven generated sources.
     pub seconds: f32,
     pub now: Timestamp,
@@ -215,12 +219,9 @@ impl LayerPipeline {
         let frame = VisualizerFrame {
             seconds: context.seconds,
             analysis: context.analysis,
-            // Audio capture is product- and platform-owned and arrives with its own slice. Until
-            // it does, the analysis is silence: time-driven visualizers still run, and the
-            // audio-driven ones sit still rather than inventing movement.
-            beat: 0.0,
-            bpm: 0.0,
-            beat_phase: 0.0,
+            beat: context.beat,
+            bpm: context.bpm,
+            beat_phase: context.beat_phase,
         };
         match self
             .visualizers

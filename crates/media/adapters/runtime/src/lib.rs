@@ -88,6 +88,24 @@ pub fn run() -> anyhow::Result<()> {
             media_library::discover(&configuration.library.root).unwrap_or_default(),
         ));
 
+    // Audio capture is a real capability of the machine: when there is no input device the
+    // server says so once and runs on silence, rather than refusing to start.
+    let audio = match media_audio::AudioService::start(&configuration.audio) {
+        Ok(service) => Some(service),
+        Err(error) => {
+            tracing::warn!(%error, "no audio input; generated sources will run on silence");
+            None
+        }
+    };
+    let analysis = audio.as_ref().map_or_else(
+        || {
+            std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
+                media_audio::AnalysisSnapshot::default(),
+            ))
+        },
+        media_audio::AudioService::analysis,
+    );
+
     // The desk drives the outputs, so the listeners come up before anything presents.
     runtime.block_on(async {
         dmx::spawn(&configuration, state.clone(), shutdown.clone(), started)?;
@@ -123,12 +141,16 @@ pub fn run() -> anyhow::Result<()> {
         &configuration,
         state,
         catalog,
+        analysis,
         shutdown.clone(),
         diagnostics,
         started,
     );
     shutdown.request(ShutdownReason::Requested);
     let _ = runtime.block_on(services);
+    // Closing the device before the process ends keeps the operating system from logging a
+    // stream that vanished.
+    drop(audio);
     presented
 }
 

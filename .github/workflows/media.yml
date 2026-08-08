@@ -54,26 +54,26 @@ jobs:
         with:
           key: media-${{ matrix.os }}
 
-      # The reference renders run off-screen and accept a software adapter, but a bare Linux
-      # runner has no Vulkan driver at all. Install Mesa's so the renders actually run there
-      # rather than being quietly skipped.
-      - name: Install a software Vulkan driver
+      # The reference renders need a driver, and audio capture needs ALSA's headers to build at
+      # all. Both are the machine genuinely lacking something rather than an unwritten adapter,
+      # so the runner is given them rather than the tests being skipped.
+      - name: Install a software Vulkan driver and the ALSA headers
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools libasound2-dev
 
       - name: Format
-        run: cargo fmt --check -p media-domain -p media-application -p media-codec -p media-http -p media-library -p media-net -p media-playback -p media-render -p media-runtime -p media-server
+        run: cargo fmt --check -p media-domain -p media-application -p media-audio -p media-citp -p media-codec -p media-http -p media-library -p media-net -p media-playback -p media-render -p media-runtime -p media-server
 
       - name: Lint
         run: >-
           cargo clippy --all-targets
-          -p media-domain -p media-application -p media-codec -p media-http -p media-library -p media-net -p media-playback -p media-render -p media-runtime -p media-server
+          -p media-domain -p media-application -p media-audio -p media-citp -p media-codec -p media-http -p media-library -p media-net -p media-playback -p media-render -p media-runtime -p media-server
           -- -D warnings
 
       - name: Test
-        run: cargo test -p media-domain -p media-application -p media-codec -p media-http -p media-library -p media-net -p media-playback -p media-render -p media-runtime -p media-server
+        run: cargo test -p media-domain -p media-application -p media-audio -p media-citp -p media-codec -p media-http -p media-library -p media-net -p media-playback -p media-render -p media-runtime -p media-server
 
       # A packaged smoke test exercises the real executable rather than a test harness, so a
       # platform cannot pass by compiling alone.

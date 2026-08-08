@@ -40,6 +40,7 @@ pub fn run_event_loop(
     configuration: &MediaConfiguration,
     state: SharedState,
     catalog: SharedCatalog,
+    analysis: media_audio::SharedAnalysis,
     shutdown: Shutdown,
     diagnostics: Diagnostics,
     // The same reference point the network listeners stamp against, so a packet's arrival and a
@@ -54,6 +55,7 @@ pub fn run_event_loop(
     let mut host = PresentationHost {
         configuration: Arc::new(configuration.clone()),
         catalog,
+        analysis,
         outputs: Vec::new(),
         pending: configuration
             .outputs
@@ -109,6 +111,8 @@ struct DirectClip {
 struct PresentationHost {
     configuration: Arc<MediaConfiguration>,
     catalog: SharedCatalog,
+    /// The newest audio analysis, which generated sources react to.
+    analysis: media_audio::SharedAnalysis,
     outputs: Vec<HostedOutput>,
     pending: Vec<OutputConfiguration>,
     state: SharedState,
@@ -267,9 +271,9 @@ impl PresentationHost {
         let seconds = self.started.elapsed().as_secs_f32();
         let state = self.state.load();
         let catalog = self.catalog.load();
-        // Audio capture is product- and platform-owned and arrives with its own slice. Silence is
-        // a real analysis, not a placeholder: time-driven visualizers run, audio-driven ones rest.
-        let analysis = media_domain::audio::Analysis::default();
+        // Silence when no input device is open, which is a real analysis rather than a
+        // placeholder: time-driven visualizers run and audio-driven ones rest.
+        let heard = self.analysis.load();
         let mut reports = Vec::new();
 
         for hosted in &mut self.outputs {
@@ -311,7 +315,10 @@ impl PresentationHost {
                 crate::layer_pipeline::FrameContext {
                     catalog: &catalog,
                     configuration: &self.configuration,
-                    analysis: &analysis,
+                    analysis: &heard.analysis,
+                    beat: heard.beat,
+                    bpm: heard.bpm,
+                    beat_phase: heard.beat_phase,
                     seconds,
                     now,
                 },

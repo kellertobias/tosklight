@@ -16,6 +16,7 @@ members = [
   "crates/light/domain/output",
   "crates/light/domain/playback",
   "crates/light/domain/programmer",
+  "crates/media/adapters/audio",
   "crates/media/adapters/citp",
   "crates/media/adapters/codec",
   "crates/media/adapters/http",
