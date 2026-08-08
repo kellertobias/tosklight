@@ -48,6 +48,7 @@ pub fn run_event_loop(
     let Shared {
         state,
         catalog,
+        configuration: live,
         analysis,
         preview,
     } = shared;
@@ -57,7 +58,7 @@ pub fn run_event_loop(
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let mut host = PresentationHost {
-        configuration: Arc::new(configuration.clone()),
+        configuration: live,
         catalog,
         analysis,
         preview,
@@ -101,12 +102,22 @@ pub struct Diagnostics {
 pub struct Shared {
     pub state: SharedState,
     pub catalog: SharedCatalog,
+    /// The live configuration, shared with the API. An accepted edit to a text source or a
+    /// visualizer is on the next frame rather than on the next start: an operator typing the words
+    /// a countdown will show has to see them.
+    pub configuration: SharedConfiguration,
     pub analysis: media_audio::SharedAnalysis,
     pub preview: crate::preview::SharedPreview,
 }
 
 /// The published library snapshot, shared with the services so both read one catalog.
 pub type SharedCatalog = Arc<arc_swap::ArcSwap<media_domain::catalog::CatalogSnapshot>>;
+
+/// The live configuration, shared with the API so both read one document.
+///
+/// What an output *is* — its monitor, its resolution, its presentation mode — is settled when the
+/// surface opens, so changing those still needs a restart. What it *shows* is read every frame.
+pub type SharedConfiguration = Arc<arc_swap::ArcSwap<MediaConfiguration>>;
 
 struct HostedOutput {
     output: WindowedOutput,
@@ -126,7 +137,7 @@ struct DirectClip {
 }
 
 struct PresentationHost {
-    configuration: Arc<MediaConfiguration>,
+    configuration: SharedConfiguration,
     catalog: SharedCatalog,
     /// The newest audio analysis, which generated sources react to.
     analysis: media_audio::SharedAnalysis,
@@ -268,7 +279,9 @@ impl PresentationHost {
                 let mut pipeline = LayerPipeline::new(
                     output.gpu(),
                     configuration.id,
-                    media_library::LibraryStorage::new(self.configuration.library.root.clone()),
+                    media_library::LibraryStorage::new(
+                        self.configuration.load().library.root.clone(),
+                    ),
                     output.size(),
                 );
                 pipeline.validate_visualizers();
@@ -291,6 +304,9 @@ impl PresentationHost {
         let seconds = self.started.elapsed().as_secs_f32();
         let state = self.state.load();
         let catalog = self.catalog.load();
+        // Read once per pass rather than once per output, so every output on this frame composites
+        // from the same document even if an edit lands between two of them.
+        let configuration = self.configuration.load();
         // Silence when no input device is open, which is a real analysis rather than a
         // placeholder: time-driven visualizers run and audio-driven ones rest.
         let heard = self.analysis.load();
@@ -334,7 +350,7 @@ impl PresentationHost {
                 output_state,
                 crate::layer_pipeline::FrameContext {
                     catalog: &catalog,
-                    configuration: &self.configuration,
+                    configuration: &configuration,
                     analysis: &heard.analysis,
                     now_unix_millis: unix_millis(),
                     beat: heard.beat,

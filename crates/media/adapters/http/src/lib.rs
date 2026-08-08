@@ -10,6 +10,7 @@
 //! says and carries no authentication of its own.
 
 pub mod assets;
+pub mod diagnostics;
 pub mod error;
 pub mod generation;
 pub mod replay;
@@ -17,8 +18,11 @@ pub mod routes;
 pub mod tolerant;
 pub mod wire;
 
+pub use diagnostics::{
+    AudioSource, AudioTelemetry, DeviceLister, Diagnostics, LogEntry, LogPage, LogQuery, LogSource,
+};
 pub use error::{ApiError, ApiErrorBody};
 pub use generation::{GeneratedArtifact, generated_artifacts, write_generated_artifacts};
 pub use replay::Replays;
-pub use routes::{ApiState, router};
+pub use routes::{ApiState, ApplyConfiguration, applies_nothing, router};
 pub use tolerant::TolerantJson;

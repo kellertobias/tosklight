@@ -69,6 +69,8 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
         let now = Timestamp::from_micros(started.elapsed().as_micros() as u64);
         let state = shared.state.load();
         let catalog = shared.catalog.load();
+        // Read once per pass, so an accepted edit reaches every output on the same frame.
+        let live = shared.configuration.load();
         let heard = shared.analysis.load();
         let mut reports = Vec::new();
 
@@ -86,7 +88,7 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
                 state,
                 FrameContext {
                     catalog: &catalog,
-                    configuration,
+                    configuration: &live,
                     analysis: &heard.analysis,
                     now_unix_millis: unix_millis(),
                     beat: heard.beat,

@@ -11,9 +11,12 @@ use ts_rs::{Config, TS};
 
 use crate::error::ApiErrorBody;
 use crate::wire::{
-    AddressView, CatalogFolderView, CatalogItemView, CatalogView, Health, LayerView, MaskView,
-    MasterView, OutputView, SourceStatusView, UpdateLayer, UpdateVisualizer,
-    VisualizerParametersView, VisualizerView,
+    AddressView, AudioBandsView, AudioPanelView, AudioSettingsView, AudioView, CatalogFolderView,
+    CatalogItemView, CatalogView, CreateText, DeleteText, Health, LayerView, LogRecordView,
+    LogsView, MaskView, MasterView, NetworkAddressesView, NetworkView, OutputView,
+    SourceStatusView, TelemetryFrame, TextSlotView, TextStyleView, UpdateAudio, UpdateLayer,
+    UpdateNetwork, UpdateText, UpdateVisualizer, VisualizerParametersView, VisualizerView,
+    WaveformView,
 };
 
 const TYPESCRIPT_PATH: &str = "apps/media/src/shared/api/generated/media-wire.ts";
@@ -72,8 +75,25 @@ fn declarations(config: &Config) -> Vec<String> {
         CatalogView::decl(config),
         VisualizerParametersView::decl(config),
         VisualizerView::decl(config),
+        NetworkAddressesView::decl(config),
+        NetworkView::decl(config),
+        TextStyleView::decl(config),
+        TextSlotView::decl(config),
+        AudioBandsView::decl(config),
+        WaveformView::decl(config),
+        AudioView::decl(config),
+        AudioSettingsView::decl(config),
+        AudioPanelView::decl(config),
+        TelemetryFrame::decl(config),
+        LogRecordView::decl(config),
+        LogsView::decl(config),
         UpdateLayer::decl(config),
         UpdateVisualizer::decl(config),
+        UpdateNetwork::decl(config),
+        CreateText::decl(config),
+        UpdateText::decl(config),
+        DeleteText::decl(config),
+        UpdateAudio::decl(config),
     ]
 }
 

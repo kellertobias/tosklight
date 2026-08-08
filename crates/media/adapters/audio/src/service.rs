@@ -27,9 +27,19 @@ pub enum AudioError {
     NotOpened { detail: String },
 }
 
+/// The tuning the analysis worker is using, swapped when an operator changes it.
+///
+/// Shared rather than passed at construction because gain, the bands, and beat sensitivity are
+/// things an operator turns *while listening*. Waiting for a restart to hear a gain change would
+/// make them unusable.
+pub type SharedTuning = Arc<arc_swap::ArcSwap<Tuning>>;
+
 /// A running capture: the device, the queue it fills, and the worker that drains it.
 pub struct AudioService {
     published: SharedAnalysis,
+    tuning: SharedTuning,
+    /// The device that is open, as the machine names it.
+    device: String,
     running: Arc<AtomicBool>,
     /// Held for as long as capture should continue. Dropping it closes the device.
     _stream: cpal::Stream,
@@ -81,16 +91,26 @@ impl AudioService {
         })?;
 
         let running = Arc::new(AtomicBool::new(true));
+        let tuning: SharedTuning =
+            Arc::new(arc_swap::ArcSwap::from_pointee(tuning_of(configuration)));
         let worker = std::thread::Builder::new()
             .name("media-audio-analysis".into())
             .spawn({
                 let running = Arc::clone(&running);
                 let published = Arc::clone(&published);
-                let tuning = tuning_of(configuration);
+                let tuning = Arc::clone(&tuning);
                 let started = std::time::Instant::now();
                 move || {
-                    let mut worker = Worker::new(tuning, sample_rate, published);
+                    let mut worker = Worker::new(**tuning.load(), sample_rate, published);
+                    let mut current = **tuning.load();
                     while running.load(Ordering::Relaxed) {
+                        // Retuning keeps the beat history, so a gain change does not make the
+                        // detector relearn what loud means in this room.
+                        let wanted = **tuning.load();
+                        if wanted != current {
+                            worker.retune(wanted);
+                            current = wanted;
+                        }
                         let now = started.elapsed().as_millis() as u64;
                         if worker.drain(&queue, now) == 0 {
                             // Nothing completed a window; wait rather than spin a core.
@@ -106,6 +126,8 @@ impl AudioService {
         tracing::info!(device = %name, sample_rate, channels, "capturing audio");
         Ok(Self {
             published,
+            tuning,
+            device: name,
             running,
             _stream: stream,
             worker: Some(worker),
@@ -116,6 +138,43 @@ impl AudioService {
     pub fn analysis(&self) -> SharedAnalysis {
         Arc::clone(&self.published)
     }
+
+    /// The device this capture is reading, as the machine names it.
+    pub fn device(&self) -> &str {
+        &self.device
+    }
+
+    /// The tuning the worker reads, for whoever accepts an operator's edit.
+    ///
+    /// Handed out rather than reached through this service, because the service owns a platform
+    /// stream that belongs to one thread while an edit arrives on another.
+    pub fn tuning(&self) -> SharedTuning {
+        Arc::clone(&self.tuning)
+    }
+
+    /// Applies an operator's tuning to the running analysis.
+    ///
+    /// The device is not reopened: choosing a different input is a different stream, and the
+    /// platform event loop owns the one that is open. What changes here is what the worker does
+    /// with the samples it is already receiving.
+    pub fn retune(&self, configuration: &AudioConfiguration) {
+        self.tuning.store(Arc::new(tuning_of(configuration)));
+    }
+}
+
+/// This machine's audio inputs, by name.
+///
+/// A platform capability, so it is read here rather than guessed at anywhere else. A host that
+/// cannot be asked reports no inputs, which is what a settings panel then shows.
+pub fn input_devices() -> Vec<String> {
+    let host = cpal::default_host();
+    let Ok(devices) = host.input_devices() else {
+        return Vec::new();
+    };
+    devices
+        .filter_map(|device| device.name().ok())
+        .filter(|name| !name.trim().is_empty())
+        .collect()
 }
 
 impl Drop for AudioService {

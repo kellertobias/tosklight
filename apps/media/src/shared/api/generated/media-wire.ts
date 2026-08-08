@@ -65,9 +65,150 @@ name: string,
  * editor can show only the controls that do something.
  */
 uses: Array<string>, parameters: VisualizerParametersView, };
+export type NetworkAddressesView = { artNetListen: string, sacnListen: string, citpListen: string, httpListen: string,
+/**
+ * Where the Light desk publishes its Speed Group stream. A destination, not a listen
+ * address; absent means Media is not consuming one.
+ */
+speedGroupEndpoint: string | null, };
+export type NetworkView = {
+/**
+ * When set, every protocol listens on IPv4 loopback without touching the stored addresses.
+ */
+sameComputerPreset: boolean,
+/**
+ * What the operator configured.
+ */
+stored: NetworkAddressesView,
+/**
+ * What this run bound, after the preset was applied.
+ */
+resolved: NetworkAddressesView,
+/**
+ * The port CITP discovery announces. Always the port CITP actually listens on.
+ */
+citpAdvertisedPort: number,
+/**
+ * Sockets are bound once, at startup. An accepted change is stored and used by the next
+ * start; the API says so rather than letting a panel imply the change is already live.
+ */
+takesEffectOnRestart: boolean, };
+export type TextStyleView = {
+/**
+ * A family name this machine is asked for. An absent family falls back rather than failing.
+ */
+family: string,
+/**
+ * Height as a fraction of the output's height, so a look survives a change of resolution.
+ */
+size: number, bold: boolean, italic: boolean,
+/**
+ * `left`, `center`, or `right`.
+ */
+alignment: string, red: number, green: number, blue: number, };
+export type TextSlotView = { address: AddressView, name: string,
+/**
+ * A disabled slot produces nothing, which is how an operator parks one without deleting it.
+ */
+enabled: boolean,
+/**
+ * `static`, `clock`, `countdown-duration`, or `countdown-target`.
+ */
+kind: string, text: string | null, durationSeconds: number | null,
+/**
+ * Rendered as a number rather than a `bigint`: a Unix millisecond stamp is well inside what a
+ * browser holds exactly, and a client should not need big-integer arithmetic to set a deadline.
+ */
+targetUnixMillis: number | null, style: TextStyleView, };
+export type AudioBandsView = { bass: number, mid: number, treble: number, };
+export type WaveformView = { points: Array<number>, };
+export type AudioView = {
+/**
+ * Whether an input device is open at all. A flat meter on a capturing device means a quiet
+ * room; a flat meter on a closed one means something to fix.
+ */
+capturing: boolean, device: string, detail: string | null, waveform: WaveformView, spectrum: Array<number>, bands: AudioBandsView,
+/**
+ * Root-mean-square of the window.
+ */
+energy: number,
+/**
+ * The largest absolute sample in the window, which is what tells an operator they are clipping.
+ */
+peak: number,
+/**
+ * `1.0` on the pass a beat landed, falling afterwards.
+ */
+beat: number,
+/**
+ * Zero until enough beats have been seen to mean anything.
+ */
+bpm: number, beatPhase: number, };
+export type AudioSettingsView = {
+/**
+ * `system-default`, `name`, or `index`.
+ */
+deviceBy: string,
+/**
+ * The name or index the operator chose, when they chose one.
+ */
+deviceValue: string | null, inputGain: number, beatSensitivity: number, eqBass: number, eqMid: number, eqTreble: number,
+/**
+ * This machine's inputs, so an operator picks from what exists rather than typing a name.
+ */
+availableDevices: Array<string>,
+/**
+ * Gain, sensitivity, and the bands reach the running analysis immediately. Choosing a
+ * different device reopens a stream, which happens on the next start.
+ */
+deviceTakesEffectOnRestart: boolean, };
+export type AudioPanelView = { settings: AudioSettingsView, analysis: AudioView, };
+export type TelemetryFrame = { audio: AudioView, };
+export type LogRecordView = {
+/**
+ * Monotonically increasing, so a viewer asks for everything after what it already holds.
+ */
+sequence: number, millisSinceStart: number,
+/**
+ * `error`, `warn`, `info`, `debug`, or `trace`.
+ */
+level: string, target: string, message: string, };
+export type LogsView = { records: Array<LogRecordView>,
+/**
+ * The newest sequence the process holds, whether or not this window reached it.
+ */
+newest: number,
+/**
+ * How many records have been discarded since the process started.
+ */
+dropped: number, capacity: number, };
 export type UpdateLayer = { folder?: number | null, file?: number | null, dimmer?: number | null, };
 export type UpdateVisualizer = {
 /**
  * Client-generated. A resend with the same id returns the first outcome.
  */
 requestId: string, name?: string | null, parameters?: VisualizerParametersView | null, };
+export type UpdateNetwork = { requestId: string, sameComputerPreset?: boolean | null, artNetListen?: string | null, sacnListen?: string | null, citpListen?: string | null, httpListen?: string | null,
+/**
+ * A destination rather than a listener. `null` clears it; leaving the field out keeps it,
+ * which is why an absent field and an explicit null have to be different things here.
+ */
+speedGroupEndpoint?: string | null, };
+export type CreateText = { requestId: string, folder: number, file: number, name: string, kind: string, text?: string | null, durationSeconds?: number | null, targetUnixMillis?: number | null,
+/**
+ * Absent means the shipped default appearance, which is what a new slot should look like.
+ */
+style?: TextStyleView | null, };
+export type UpdateText = { requestId: string, name?: string | null, enabled?: boolean | null,
+/**
+ * Changing the kind carries that kind's payload with it.
+ */
+kind?: string | null, text?: string | null, durationSeconds?: number | null, targetUnixMillis?: number | null, style?: TextStyleView | null, };
+export type DeleteText = { requestId: string, };
+export type UpdateAudio = { requestId: string,
+/**
+ * `system-default`, `name`, or `index`. Naming a device without a value is refused, because
+ * falling back to the default input would give an operator the laptop microphone instead of
+ * the desk feed they asked for.
+ */
+deviceBy?: string | null, deviceValue?: string | null, inputGain?: number | null, beatSensitivity?: number | null, eqBass?: number | null, eqMid?: number | null, eqTreble?: number | null, };
