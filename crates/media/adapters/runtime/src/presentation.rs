@@ -12,6 +12,7 @@ use std::sync::Arc;
 use media_application::configuration::{MediaConfiguration, OutputConfiguration, OutputTarget};
 use media_domain::geometry::Size;
 use media_domain::{MasterState, MediaState, OutputState, Timestamp};
+use media_playback::{ClipLoader, PlaybackSession};
 use media_render::{LayerDraw, SourceTexture, SurfaceLost, WindowedOutput, select_monitor};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -56,14 +57,20 @@ pub fn run_event_loop(
         diagnostics,
         started: std::time::Instant::now(),
         test_pattern_layer: test_pattern_layer(),
+        loader: ClipLoader::new(configuration.playback.cache_budget_bytes),
+        direct: None,
+        clip_size: Size::new(2, 2),
     };
     event_loop.run_app(&mut host)?;
     Ok(())
 }
 
 /// Diagnostics an operator can ask for at launch.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Diagnostics {
+    /// A clip to play on layer one of every output, for trying the whole path without a desk or a
+    /// catalog. A development affordance, not a product feature.
+    pub play: Option<std::path::PathBuf>,
     /// Fill layer one with a flat colour so an operator can confirm the output really is on the
     /// monitor, at the size, and the right way up. A diagnostic, not a media source: it draws
     /// only while nothing else has been selected.
@@ -75,6 +82,14 @@ struct HostedOutput {
     /// Kept alive for the surface's lifetime, and used to resolve resize events back to an output.
     window: Arc<Window>,
     test_pattern: Option<SourceTexture>,
+    sources: crate::layer_sources::LayerSources,
+}
+
+/// A clip loaded for the development `--play` affordance.
+struct DirectClip {
+    asset: media_domain::AssetId,
+    session: PlaybackSession,
+    layer: media_domain::LayerState,
 }
 
 struct PresentationHost {
@@ -85,6 +100,9 @@ struct PresentationHost {
     diagnostics: Diagnostics,
     started: std::time::Instant,
     test_pattern_layer: media_domain::LayerState,
+    loader: ClipLoader,
+    direct: Option<DirectClip>,
+    clip_size: Size,
 }
 
 /// The diagnostic pattern's colour: unmistakably not black and unmistakably not media.
@@ -101,6 +119,51 @@ fn test_pattern_layer() -> media_domain::LayerState {
 }
 
 impl PresentationHost {
+    /// Loads the clip named at launch, reporting as it goes.
+    fn load_direct_clip(&mut self) {
+        let Some(path) = self.diagnostics.play.clone() else {
+            return;
+        };
+        let asset = media_domain::AssetId::new();
+        let loaded = match self.loader.load(asset, &path, &mut |progress| {
+            tracing::info!(?progress, "loading clip");
+        }) {
+            Ok(loaded) => loaded,
+            Err(error) => {
+                tracing::error!(path = %path.display(), %error, "cannot play that clip");
+                return;
+            }
+        };
+
+        self.clip_size = Size::new(loaded.width, loaded.height);
+        // A clip an operator asked to see is in use, so it is pinned and never evicted.
+        self.loader.cache_mut().pin(asset);
+        tracing::info!(
+            path = %path.display(),
+            frames = loaded.presentation_micros.len(),
+            width = loaded.width,
+            height = loaded.height,
+            tempo = loaded.timing.intrinsic_bpm,
+            "playing"
+        );
+        self.direct = Some(DirectClip {
+            asset,
+            session: PlaybackSession::new(
+                asset,
+                loaded.timing,
+                loaded.presentation_micros,
+                Timestamp::ZERO,
+                media_domain::PlayMode::Loop,
+            ),
+            layer: media_domain::LayerState {
+                address: media_domain::MediaAddress::new(1, 1),
+                source_status: media_domain::SourceStatus::Ready,
+                scaling_mode: media_domain::ScalingMode::Fit,
+                ..Default::default()
+            },
+        });
+    }
+
     fn now(&self) -> Timestamp {
         Timestamp::from_micros(self.started.elapsed().as_micros() as u64)
     }
@@ -160,10 +223,13 @@ impl PresentationHost {
                     .test_pattern
                     .then(|| SourceTexture::solid(output.gpu(), Size::new(2, 2), TEST_PATTERN).ok())
                     .flatten();
+                let source_size = self.clip_size;
+                let sources = crate::layer_sources::LayerSources::new(output.gpu(), source_size);
                 self.outputs.push(HostedOutput {
                     output,
                     window,
                     test_pattern,
+                    sources,
                 });
             }
             Err(error) => {
@@ -179,6 +245,34 @@ impl PresentationHost {
                 continue;
             }
             let (_, master) = draw_list(&self.state, hosted.output.id());
+
+            // A clip named at launch plays on layer one. Everything below is the real path: a
+            // session resolves the frame, the cache holds it, and it uploads compressed.
+            if let Some(direct) = self.direct.as_mut() {
+                let delivery =
+                    direct
+                        .session
+                        .deliver(&direct.layer, media_domain::ResolvedTempo::None, now);
+                if let Some(frame) = delivery.frame
+                    && hosted
+                        .sources
+                        .prepare(0, direct.asset, frame, self.loader.cache_mut())
+                    && let Some(texture) = hosted.sources.texture(0)
+                {
+                    let draws = [LayerDraw {
+                        state: &direct.layer,
+                        source: texture,
+                    }];
+                    match hosted.output.present(&draws, &master, now) {
+                        Ok(()) | Err(SurfaceLost::Recovered | SurfaceLost::Timeout) => {}
+                        Err(error) => {
+                            tracing::error!(id = %hosted.output.id(), %error, "output stopped presenting");
+                        }
+                    }
+                    hosted.window.request_redraw();
+                    continue;
+                }
+            }
             // Until the catalog and playback slices land there are no textures for the real
             // layers, so an output presents its master pass over an empty composite. That is the
             // honest picture: black, not an error card. The diagnostic pattern is the one thing
@@ -216,6 +310,7 @@ impl ApplicationHandler for PresentationHost {
         if !self.outputs.is_empty() {
             return; // Already open; this is a wake, not a first start.
         }
+        self.load_direct_clip();
         for configuration in std::mem::take(&mut self.pending) {
             self.open(event_loop, &configuration);
             self.pending.push(configuration);

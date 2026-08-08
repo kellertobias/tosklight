@@ -3788,7 +3788,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "media-application",
+ "media-codec",
  "media-domain",
+ "media-playback",
  "media-render",
  "thiserror 2.0.18",
  "tokio",

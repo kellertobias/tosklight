@@ -7,11 +7,13 @@
 //! so an unusable configuration stops the process with an actionable error instead of bringing
 //! half a server up.
 
+mod layer_sources;
 mod logging;
 pub mod presentation;
 mod shutdown;
 mod startup;
 
+pub use layer_sources::LayerSources;
 pub use logging::install_logging;
 pub use presentation::Diagnostics;
 pub use shutdown::{Shutdown, ShutdownReason};
@@ -29,6 +31,10 @@ pub const CHECK_CONFIGURATION_ARGUMENT: &str = "--check-configuration";
 /// The argument that fills each output with a flat diagnostic colour, so an operator can confirm
 /// an output is on the monitor they meant, at the size they meant, the right way up.
 pub const TEST_PATTERN_ARGUMENT: &str = "--test-pattern";
+
+/// Plays one `.toskclip` on layer one of every output. A development affordance for exercising
+/// the whole path — import, residency, session, upload, composite — without a desk or a catalog.
+pub const PLAY_ARGUMENT: &str = "--play";
 
 /// Runs the Media Server until it is asked to stop.
 ///
@@ -56,6 +62,11 @@ pub fn run() -> anyhow::Result<()> {
         test_pattern: arguments
             .iter()
             .any(|argument| argument == TEST_PATTERN_ARGUMENT),
+        play: arguments
+            .iter()
+            .position(|argument| argument == PLAY_ARGUMENT)
+            .and_then(|at| arguments.get(at + 1))
+            .map(std::path::PathBuf::from),
     };
     let shutdown = Shutdown::new();
     let runtime = tokio::runtime::Builder::new_multi_thread()
