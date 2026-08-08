@@ -207,6 +207,8 @@ export function WindowSettings({
 	title = "Settings",
 	tabs,
 	initialTab,
+	activeTab,
+	onTabChange,
 	onClose,
 	modal = true,
 	anchor,
@@ -214,14 +216,30 @@ export function WindowSettings({
 	title?: string;
 	tabs: WindowSettingsTab[];
 	initialTab?: string;
+	/**
+	 * Which tab is open, when the caller owns that rather than the panel.
+	 *
+	 * A panel that keeps its own tab state is right while the tabs are only pages of settings. It
+	 * is wrong as soon as a tab *is* a setting — where opening a tab changes what the window is
+	 * showing, the window already knows which one is open and two answers would drift apart.
+	 */
+	activeTab?: string;
+	onTabChange?: (id: string) => void;
 	onClose: () => void;
 	modal?: boolean;
 	anchor?: DOMRect | null;
 }) {
-	const [active, setActive] = useState(initialTab ?? tabs[0]?.id);
+	const [internal, setInternal] = useState(initialTab ?? tabs[0]?.id);
+	const controlled = activeTab !== undefined;
+	const active = controlled ? activeTab : internal;
+	const setActive = (id: string) => {
+		if (!controlled) setInternal(id);
+		onTabChange?.(id);
+	};
 	useEffect(() => {
-		if (!tabs.some((tab) => tab.id === active)) setActive(tabs[0]?.id);
-	}, [tabs, active]);
+		if (!controlled && !tabs.some((tab) => tab.id === internal))
+			setInternal(tabs[0]?.id);
+	}, [controlled, tabs, internal]);
 	const content = (
 		<>
 			<ModalTitleBar

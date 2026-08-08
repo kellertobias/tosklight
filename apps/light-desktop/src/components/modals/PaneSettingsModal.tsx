@@ -332,8 +332,8 @@ function StagePaneSettings({ pane }: { pane: PaneModel }) {
 						{ value: "top", label: "Above · plan" },
 						{ value: "front", label: "Front · from the house" },
 						{ value: "back", label: "Back · from upstage" },
-						{ value: "left", label: "Left · from stage left" },
-						{ value: "right", label: "Right · from stage right" },
+						{ value: "left", label: "House left · stage right" },
+						{ value: "right", label: "House right · stage left" },
 					]}
 				/>
 			)}

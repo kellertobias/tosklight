@@ -1,7 +1,6 @@
 import {
 	Button,
 	FormLayout,
-	MultiValueToggleField,
 	SelectField,
 	SwitchField,
 } from "@tosklight/ui";
@@ -12,6 +11,14 @@ import type { Stage2dSide } from "../../types";
 import { StageVizSettings } from "./StageVizSettings";
 import type { StageOptionsModel } from "./types";
 
+/**
+ * The Stage's settings, with one tab per view.
+ *
+ * The tab *is* the view. An operator opening the 3D Viz tab is asking to look at the 3D Viz
+ * picture, not to read its settings while looking at something else — the old arrangement had them
+ * pick a view on one tab and then find its settings on another, which is two gestures for one
+ * decision and leaves the panel able to describe a view that is not on screen.
+ */
 function StageSettings({
 	anchor,
 	options,
@@ -21,73 +28,42 @@ function StageSettings({
 	options: StageOptionsModel;
 	onClose: () => void;
 }) {
-	const { state, dispatch } = useApp();
 	return (
 		<WindowSettings
 			modal={false}
 			anchor={anchor}
 			title="Stage Settings"
 			onClose={onClose}
+			activeTab={options.view}
+			onTabChange={(view) => options.setView(view as StageOptionsModel["view"])}
 			tabs={[
 				{
-					id: "stage",
-					label: "Stage",
+					id: "2d",
+					label: "2D",
 					content: (
 						<FormLayout labelPlacement="side">
-							<SwitchField
-								label="Group shortcuts"
-								offLabel="Hidden"
-								onLabel="Visible"
-								checked={options.groupsVisible}
-								onChange={(event) =>
-									dispatch({
-										type: "SET_STAGE_OPTIONS",
-										groupsVisible: event.target.checked,
-									})
-								}
-							/>
-							<SwitchField
-								label="Show selection"
-								offLabel="Hidden"
-								onLabel="Visible"
-								checked={state.stageShowSelection}
-								onChange={(event) =>
-									dispatch({
-										type: "SET_STAGE_OPTIONS",
-										showSelection: event.target.checked,
-									})
-								}
-							/>
-							{/*
-							 * None of the three is disabled where the renderer is missing. All
-							 * three are its picture now, so disabling would mean disabling the
-							 * Stage entirely — and an operator setting up a show on a machine
-							 * that cannot draw one still has a view to choose for the machine it
-							 * will run on. The pane says what it cannot do instead.
-							 */}
-							<MultiValueToggleField
-								label="View"
-								value={options.view}
-								onChange={options.setView}
-								options={[
-									{ value: "2d", label: "2D" },
-									{ value: "3d", label: "3D" },
-									{ value: "3d-viz", label: "3D Viz" },
-								]}
-							/>
+							<Stage2dSettings options={options} />
+							<StageCommonSettings options={options} />
 						</FormLayout>
 					),
 				},
 				{
-					id: "detail",
-					// Named for what it holds rather than "Advanced": the operator switched the view
-					// on the first tab, and this is that view's own settings.
-					label: DETAIL_LABELS[options.view],
+					id: "3d",
+					label: "3D",
 					content: (
 						<FormLayout labelPlacement="side">
-							{options.view === "2d" && <Stage2dSettings options={options} />}
-							{options.view === "3d" && <Stage3dSettings />}
-							{options.view === "3d-viz" && <StageVizSettings />}
+							<Stage3dSettings />
+							<StageCommonSettings options={options} />
+						</FormLayout>
+					),
+				},
+				{
+					id: "3d-viz",
+					label: "3D Viz",
+					content: (
+						<FormLayout labelPlacement="side">
+							<StageVizSettings />
+							<StageCommonSettings options={options} />
 						</FormLayout>
 					),
 				},
@@ -96,11 +72,38 @@ function StageSettings({
 	);
 }
 
-const DETAIL_LABELS: Record<StageOptionsModel["view"], string> = {
-	"2d": "2D",
-	"3d": "3D",
-	"3d-viz": "3D Viz",
-};
+/** What every view has, whichever one is on screen. */
+function StageCommonSettings({ options }: { options: StageOptionsModel }) {
+	const { state, dispatch } = useApp();
+	return (
+		<>
+			<SwitchField
+				label="Group shortcuts"
+				offLabel="Hidden"
+				onLabel="Visible"
+				checked={options.groupsVisible}
+				onChange={(event) =>
+					dispatch({
+						type: "SET_STAGE_OPTIONS",
+						groupsVisible: event.target.checked,
+					})
+				}
+			/>
+			<SwitchField
+				label="Show selection"
+				offLabel="Hidden"
+				onLabel="Visible"
+				checked={state.stageShowSelection}
+				onChange={(event) =>
+					dispatch({
+						type: "SET_STAGE_OPTIONS",
+						showSelection: event.target.checked,
+					})
+				}
+			/>
+		</>
+	);
+}
 
 /**
  * The 2D Stage, which is the renderer's plan of the rig seen from one side.
@@ -226,6 +229,6 @@ const SIDE_OPTIONS: Array<{ value: Stage2dSide; label: string }> = [
 	{ value: "top", label: "Above · plan" },
 	{ value: "front", label: "Front · from the house" },
 	{ value: "back", label: "Back · from upstage" },
-	{ value: "left", label: "Left · from stage left" },
-	{ value: "right", label: "Right · from stage right" },
+	{ value: "left", label: "House left · stage right" },
+	{ value: "right", label: "House right · stage left" },
 ];

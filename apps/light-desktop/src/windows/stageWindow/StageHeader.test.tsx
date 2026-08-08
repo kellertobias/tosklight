@@ -50,13 +50,6 @@ function openSettings(stageOptions: StageOptionsModel = options) {
 	return view;
 }
 
-function detailTab() {
-	const tabs = screen.getAllByRole("tab");
-	const detail = tabs[tabs.length - 1];
-	fireEvent.click(detail);
-	return detail;
-}
-
 afterEach(() => {
 	cleanup();
 	vi.restoreAllMocks();
@@ -73,7 +66,6 @@ afterEach(() => {
 describe("Stage settings are split between the views", () => {
 	it("asks a 2D Stage only which side it is seen from", () => {
 		openSettings();
-		detailTab();
 		expect(screen.getByText(/viewed from/i)).toBeTruthy();
 		expect(screen.queryByText(/render style/i)).toBeNull();
 		expect(screen.queryByText(/environment brightness/i)).toBeNull();
@@ -86,7 +78,6 @@ describe("Stage settings are split between the views", () => {
 	 */
 	it("offers a 3D Stage no render style, no brightness and no guideline switch", () => {
 		openSettings({ ...options, view: "3d" });
-		detailTab();
 		expect(screen.getByText(/floor grid/i)).toBeTruthy();
 		expect(screen.queryByText(/render style/i)).toBeNull();
 		expect(screen.queryByText(/environment brightness/i)).toBeNull();
@@ -99,7 +90,6 @@ describe("Stage settings are split between the views", () => {
 	 */
 	it("offers the Viz Stage its light settings but no beam guidelines", () => {
 		openSettings({ ...options, view: "3d-viz" });
-		detailTab();
 		expect(screen.getByText(/environment brightness/i)).toBeTruthy();
 		expect(screen.getByText(/render quality/i)).toBeTruthy();
 		expect(screen.getByText(/^Background$/)).toBeTruthy();
@@ -112,20 +102,34 @@ describe("Stage settings are split between the views", () => {
 	 */
 	it("does not name the renderer or its transport", () => {
 		openSettings({ ...options, view: "3d-viz" });
-		detailTab();
 		expect(screen.queryByText(/shared surface/i)).toBeNull();
 		expect(screen.queryByText(/^Renderer$/)).toBeNull();
 	});
 
 	/*
-	 * All three are the renderer's picture, so disabling the ones it cannot draw would mean
-	 * disabling the Stage. The pane says what it cannot do instead.
+	 * The tab is the view. Opening the 3D Viz tab is asking to look at the 3D Viz picture, not to
+	 * read its settings while looking at something else.
 	 */
-	it("leaves every view selectable", () => {
+	it("offers one tab per view", () => {
 		openSettings();
 		for (const label of ["2D", "3D", "3D Viz"]) {
-			const option = screen.getByRole("radio", { name: label });
-			expect(option.hasAttribute("disabled")).toBe(false);
+			expect(screen.getByRole("tab", { name: label })).toBeTruthy();
 		}
+	});
+
+	it("switches the view when its tab is opened", () => {
+		const setView = vi.fn();
+		openSettings({ ...options, setView });
+		fireEvent.click(screen.getByRole("tab", { name: "3D Viz" }));
+		expect(setView).toHaveBeenCalledWith("3d-viz");
+	});
+
+	/*
+	 * All three are the renderer's picture, so hiding the ones it cannot draw would mean hiding the
+	 * Stage. The pane says what it cannot do instead.
+	 */
+	it("keeps every view's tab present whether or not the renderer can draw it", () => {
+		openSettings();
+		expect(screen.getAllByRole("tab")).toHaveLength(3);
 	});
 });
