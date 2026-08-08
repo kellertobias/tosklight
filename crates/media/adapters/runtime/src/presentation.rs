@@ -457,7 +457,7 @@ fn present(
 ///
 /// Returns the next state when anything changed, so a frame in which nothing loaded or failed
 /// publishes nothing at all rather than churning a snapshot every sixtieth of a second.
-fn with_reports(
+pub(crate) fn with_reports(
     state: &MediaState,
     reports: &[(media_domain::OutputId, usize, media_domain::SourceStatus)],
     now: Timestamp,

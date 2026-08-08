@@ -12,6 +12,7 @@ mod dmx;
 mod layer_pipeline;
 mod layer_sources;
 mod logging;
+pub mod off_screen;
 pub mod presentation;
 pub mod preview;
 mod shutdown;
@@ -125,6 +126,23 @@ pub fn run() -> anyhow::Result<()> {
         anyhow::Ok(())
     })?;
 
+    // Off-screen outputs render on their own thread with their own device, so they run whether or
+    // not this process also hosts a window. A rack server with no display is still a media server.
+    let off_screen = {
+        let configuration = configuration.clone();
+        let shared = presentation::Shared {
+            state: state.clone(),
+            catalog: catalog.clone(),
+            analysis: analysis.clone(),
+            preview: preview.clone(),
+        };
+        let shutdown = shutdown.clone();
+        std::thread::Builder::new()
+            .name("media-off-screen".into())
+            .spawn(move || off_screen::run(&configuration, shared, shutdown))
+            .ok()
+    };
+
     if !presentation::needs_a_window(&configuration) {
         return runtime.block_on(serve_with(
             configuration,
@@ -158,6 +176,9 @@ pub fn run() -> anyhow::Result<()> {
     );
     shutdown.request(ShutdownReason::Requested);
     let _ = runtime.block_on(services);
+    if let Some(thread) = off_screen {
+        let _ = thread.join();
+    }
     // Closing the device before the process ends keeps the operating system from logging a
     // stream that vanished.
     drop(audio);
