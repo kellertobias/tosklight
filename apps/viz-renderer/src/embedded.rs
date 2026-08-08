@@ -95,6 +95,13 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
         if moved {
             source.send_camera(&state.view.camera);
         }
+        // What the operator has selected, which the renderer draws and never decides.
+        if let Some(fixtures) = source.selection() {
+            state.values.selected_fixtures = fixtures
+                .iter()
+                .filter_map(|id| uuid::Uuid::parse_str(id).ok())
+                .collect();
+        }
         // The picture settings are the renderer's own, and the desk sends them rather than
         // applying them: it is not the one drawing this.
         if let Some(viz_helper::protocol::ToHelper::Picture {
@@ -129,6 +136,7 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
                     rig.follow_preload(*follow_preload);
                 }
             }
+            let was = state.view.mode;
             state.view.mode = match mode {
                 viz_helper::protocol::StageViewMode::TopDown => viz_scene::ViewMode::TopDown,
                 viz_helper::protocol::StageViewMode::LeftToRight => {
@@ -147,6 +155,20 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
                 viz_helper::protocol::StageViewMode::Simple3d => viz_scene::ViewMode::Simple3d,
                 viz_helper::protocol::StageViewMode::Full3d => viz_scene::ViewMode::Full3d,
             };
+            /*
+             * Choosing a view frames the rig in it. This is the whole of what "viewed from" means:
+             * an operator asking for the plan from stage left is asking to stand at stage left, not
+             * to have the same picture relabelled — and the camera they had was aimed for the view
+             * they were looking at, which this no longer is.
+             *
+             * It overrides a camera the operator moved by hand, deliberately. That camera belonged
+             * to the view they have just left. Within a view their own aim is theirs and nothing
+             * takes it back.
+             */
+            if state.view.mode != was {
+                state.view.camera = viz_scene::Camera::framed(state.view.mode, state.scene.bounds);
+                state.camera_is_local = false;
+            }
             state.view.quality = match quality {
                 viz_helper::protocol::RenderQuality::Draft => viz_scene::RenderQuality::Draft,
                 viz_helper::protocol::RenderQuality::Standard => viz_scene::RenderQuality::Standard,
@@ -192,20 +214,16 @@ fn drain(events: Vec<ProviderEvent>, state: &mut PaneState) -> bool {
             ProviderEvent::Snapshot { scene, view } => {
                 state.scene = *scene;
                 if let Some(view) = view {
-                    state.view = view;
+                    state.adopt_desk_view(view);
                 }
+                state.frame_rig_if_unaimed();
             }
-            ProviderEvent::SceneDelta(scene) => state.scene = *scene,
+            ProviderEvent::SceneDelta(scene) => {
+                state.scene = *scene;
+                state.frame_rig_if_unaimed();
+            }
             ProviderEvent::Values(values) => state.values = *values,
-            ProviderEvent::View(view) => {
-                // The desk's view is adopted until the operator aims this pane themselves; after
-                // that only what it does not decide — quality, theme — keeps coming from the desk.
-                let camera = state.view.camera;
-                state.view = view;
-                if state.camera_is_local {
-                    state.view.camera = camera;
-                }
-            }
+            ProviderEvent::View(view) => state.adopt_desk_view(view),
             ProviderEvent::Connection(connection) => {
                 finished |= matches!(connection, viz_scene::ConnectionState::Failed { .. });
             }
@@ -284,6 +302,19 @@ impl PaneState {
         use glam::Vec3;
         if let PaneInput::Pick { x, y, additive } = input {
             return Some((self.pick_at(x, y), additive));
+        }
+        /*
+         * A plan is a drawing seen square on, so the gestures that would turn it out of plan are
+         * not offered at all. An operator who could orbit a 2D Stage would be one keystroke away
+         * from a 2D Stage that is not 2D, with no way back to square except by eye — and the whole
+         * point of choosing a side is that the answer is exact.
+         *
+         * What is left is what a plan can honestly do: slide it about, and zoom it. Zoom on an
+         * orthographic camera is the size of the window onto the world rather than the distance to
+         * it; moving the camera nearer changes nothing an orthographic projection can see.
+         */
+        if self.view.mode.is_plot() {
+            return self.apply_to_plan(input);
         }
         self.camera_is_local = true;
         let camera = &mut self.view.camera;
@@ -372,6 +403,74 @@ impl PaneState {
                     camera.target = camera.position + direction * reach;
                 }
             }
+        }
+        None
+    }
+
+    /// Take what the desk's Visualizer view says, without letting it take the pane's own picture.
+    ///
+    /// That view addresses the standalone Visualizers a desk is driving. This pane is inside the
+    /// desk's own window and is told what to draw through its own channel, so the two would
+    /// otherwise fight over the same fields — the pane switching to the view an operator chose in
+    /// its settings and being switched back a frame later by an instruction meant for a screen at
+    /// the back of the room.
+    fn adopt_desk_view(&mut self, view: ViewConfiguration) {
+        let (mode, camera, background, floor_grid) = (
+            self.view.mode,
+            self.view.camera,
+            self.view.background,
+            self.view.floor_grid,
+        );
+        self.view = view;
+        self.view.mode = mode;
+        self.view.background = background;
+        self.view.floor_grid = floor_grid;
+        if self.camera_is_local {
+            self.view.camera = camera;
+        }
+    }
+
+    /// Frame the rig, while the operator has not aimed this pane themselves.
+    ///
+    /// The picture settings and the rig arrive on separate channels and in no fixed order, so a
+    /// view chosen before the show loaded was framed against an empty stage. This puts the rig in
+    /// frame as soon as there is one, and stops the moment the operator takes the camera.
+    fn frame_rig_if_unaimed(&mut self) {
+        if self.camera_is_local || self.scene.bounds.is_empty() {
+            return;
+        }
+        self.view.camera = viz_scene::Camera::framed(self.view.mode, self.scene.bounds);
+    }
+
+    /// The gestures a plan view has, which are sliding it about and zooming it.
+    ///
+    /// Orbit, truck and fly are dropped rather than reinterpreted: there is no sensible plan-view
+    /// meaning for turning the camera, and quietly turning one gesture into another is worse than
+    /// the gesture doing nothing. A pick still answers, because pointing at a fixture on a plan is
+    /// exactly what a plan is for.
+    fn apply_to_plan(&mut self, input: PaneInput) -> Option<(Option<String>, bool)> {
+        let camera = &mut self.view.camera;
+        // How much of the world one point of drag covers, from the size of the window onto it.
+        // A drag moves the picture by the same amount on screen however far the plan is zoomed.
+        let metres_per_point = camera.orthographic_size.max(0.1) * 0.0035;
+        let (right, up) = viz_render::CameraControl::from_camera(camera).page_axes(self.view.mode);
+        match input {
+            PaneInput::Pan { dx, dy } | PaneInput::Truck { dx, dy } => {
+                self.camera_is_local = true;
+                let shift = right * (-dx * metres_per_point) + up * (dy * metres_per_point);
+                camera.position += shift;
+                camera.target += shift;
+            }
+            PaneInput::Zoom { amount } => {
+                self.camera_is_local = true;
+                // The half-height of what is on screen, in metres. Bounded so a plan can neither
+                // be zoomed into a single fixture's paint nor out until the rig is one pixel.
+                camera.orthographic_size =
+                    (camera.orthographic_size * (0.9_f32).powf(amount)).clamp(0.2, 500.0);
+            }
+            // A plan is square on by construction. Nothing here may turn it.
+            PaneInput::Orbit { .. } | PaneInput::Fly { .. } => {}
+            PaneInput::Pick { .. } | PaneInput::Place { .. } => {}
         }
         None
     }
