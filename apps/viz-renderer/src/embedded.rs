@@ -166,7 +166,8 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
              * takes it back.
              */
             if state.view.mode != was {
-                state.view.camera = viz_scene::Camera::framed(state.view.mode, state.scene.bounds);
+                state.view.camera =
+                    viz_scene::Camera::framed(state.view.mode, state.frame_bounds());
                 state.camera_is_local = false;
             }
             state.view.quality = match quality {
@@ -434,13 +435,25 @@ impl PaneState {
         }
     }
 
+    /// What a camera is framed against.
+    ///
+    /// The rig for the house view, which is placed relative to the front of the stage, and the whole
+    /// scene for the plans, which have to get the room in frame.
+    fn frame_bounds(&self) -> viz_scene::Aabb {
+        if self.view.mode.is_orthographic() {
+            self.scene.bounds
+        } else {
+            self.scene.rig_bounds()
+        }
+    }
+
     /// Put the camera where the view says it belongs, framing the whole rig.
     ///
     /// This is what Reset view does, and it deliberately gives the camera back: an operator asking
     /// to reset is asking to undo their own aiming, so the pane stops counting as locally aimed.
     fn frame_rig(&mut self) {
         self.camera_is_local = false;
-        self.view.camera = viz_scene::Camera::framed(self.view.mode, self.scene.bounds);
+        self.view.camera = viz_scene::Camera::framed(self.view.mode, self.frame_bounds());
     }
 
     /// Frame the rig, while the operator has not aimed this pane themselves.
@@ -452,7 +465,7 @@ impl PaneState {
         if self.camera_is_local || self.scene.bounds.is_empty() {
             return;
         }
-        self.view.camera = viz_scene::Camera::framed(self.view.mode, self.scene.bounds);
+        self.view.camera = viz_scene::Camera::framed(self.view.mode, self.frame_bounds());
     }
 
     /// The gestures a plan view has, which are sliding it about and zooming it.

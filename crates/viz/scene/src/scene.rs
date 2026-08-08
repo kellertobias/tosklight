@@ -37,6 +37,20 @@ pub struct Scene {
 
 impl Scene {
     /// Recompute the scene bounds from fixture and scenery placement.
+    /// The rig's own extent: the fixtures, without the room invented around them.
+    ///
+    /// [`Self::bounds`] includes the scenery, and the stage floor is a slab sized to the rig plus an
+    /// apron — so the downstage edge of the bounds is metres in front of the downstage edge of the
+    /// rig. Anything placing a camera relative to "the front of the stage" has to mean the rig, or
+    /// it stands that much further back and fills the frame with floor.
+    pub fn rig_bounds(&self) -> Aabb {
+        let mut bounds = Aabb::empty();
+        for fixture in &self.fixtures {
+            bounds.expand(fixture.position);
+        }
+        if bounds.is_empty() { self.bounds } else { bounds }
+    }
+
     pub fn recompute_bounds(&mut self) {
         let mut bounds = Aabb::empty();
         for fixture in &self.fixtures {

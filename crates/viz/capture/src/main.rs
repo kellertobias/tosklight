@@ -100,7 +100,16 @@ fn run(options: &Options) -> Result<u32, String> {
     view.mode = options.view;
     // The camera is framed from the rig rather than left wherever a previous session put it, so
     // the same show always yields the same shot.
-    view.camera = viz_scene::Camera::framed(options.view, scene.bounds);
+    // The rig for the house view and the whole room for a plan, exactly as the desk's pane frames
+    // them, so a capture is the picture an operator gets rather than a differently framed one.
+    view.camera = viz_scene::Camera::framed(
+        options.view,
+        if options.view.is_orthographic() {
+            scene.bounds
+        } else {
+            scene.rig_bounds()
+        },
+    );
     let overlay = viz_render::Overlay::default();
     let mut values = SceneValues::default();
     values.resize(scene.emitters.len());

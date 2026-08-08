@@ -297,7 +297,61 @@ impl Default for Camera {
     }
 }
 
+/// Where an audience's eyes are: standing height, centred, and seven metres into the room.
+///
+/// Stated rather than derived. A camera placed by framing maths is placed wherever the rig happens
+/// to make it land, which is nowhere anybody sits — and a designer looking at a rig is asking what
+/// it looks like from the seats, not from a bounding box.
+const AUDIENCE_EYE_METRES: f32 = 1.65;
+const AUDIENCE_DISTANCE_METRES: f32 = 7.0;
+
+/// How much of the frame the floor in front of the stage may take, from the bottom.
+///
+/// This is what "looking slightly up" means as a number. An audience does not stare at the carpet;
+/// the ground between them and the stage is a strip along the bottom of what they see, and the rig
+/// has the rest.
+const AUDIENCE_FLOOR_SHARE: f32 = 0.15;
+
 impl Camera {
+    /// The house view: standing in the audience, looking at the stage.
+    pub fn audience(bounds: Aabb) -> Self {
+        let centre = bounds.centre();
+        let fov_degrees = 45.0_f32;
+        // Seven metres in front of the downstage edge, at standing eye height, on the centre line.
+        let front = if bounds.is_empty() { 0.0 } else { bounds.max.z };
+        let floor = if bounds.is_empty() { 0.0 } else { bounds.min.y };
+        let position = Vec3::new(
+            centre.x,
+            floor + AUDIENCE_EYE_METRES,
+            front + AUDIENCE_DISTANCE_METRES,
+        );
+
+        /*
+         * The pitch that puts the stage edge exactly where the floor share says it should be.
+         *
+         * The edge of the stage sits `AUDIENCE_EYE_METRES` below the eye and
+         * `AUDIENCE_DISTANCE_METRES` away, so the angle down to it is fixed. Asking for it to land
+         * a given fraction up the frame fixes the angle it must sit below the centre of the frame.
+         * The difference between the two is how far the camera looks up — a few degrees, which is
+         * what an audience does without noticing.
+         */
+        let down_to_edge = (AUDIENCE_EYE_METRES / AUDIENCE_DISTANCE_METRES).atan();
+        let half_fov = (fov_degrees * 0.5).to_radians();
+        let below_centre = ((1.0 - 2.0 * AUDIENCE_FLOOR_SHARE) * half_fov.tan()).atan();
+        let pitch = down_to_edge - below_centre;
+
+        // Far enough along the aim to be well past the rig, so the target is a direction rather
+        // than a distance: nothing here orbits about it.
+        let reach = (bounds.radius() * 2.0).max(AUDIENCE_DISTANCE_METRES * 2.0);
+        Self {
+            position,
+            target: position + Vec3::new(0.0, -pitch.sin(), -pitch.cos()) * reach,
+            up: Vec3::Y,
+            fov_degrees,
+            orthographic_size: bounds.radius().max(1.0),
+        }
+    }
+
     /// Deterministic framing of `bounds` for one orthographic preset.
     pub fn framed(mode: ViewMode, bounds: Aabb) -> Self {
         let centre = bounds.centre();
@@ -317,20 +371,7 @@ impl Camera {
                     orthographic_size: radius * 1.15,
                 }
             }
-            None => {
-                // Stand in the audience: centred, a little above head height, and far enough back
-                // that the widest of the rig's width and depth fits the frame.
-                let extent = bounds.extent();
-                let span = extent.x.max(extent.z);
-                let eye = (bounds.min.y + extent.y * 0.45).max(1.8);
-                Self {
-                    position: Vec3::new(centre.x, eye, bounds.max.z + span * 0.75 + 4.0),
-                    target: Vec3::new(centre.x, bounds.min.y + extent.y * 0.42, centre.z),
-                    up: Vec3::Y,
-                    fov_degrees: 45.0,
-                    orthographic_size: radius,
-                }
-            }
+            None => Self::audience(bounds),
         }
     }
 }
@@ -523,6 +564,66 @@ mod tests {
             Some(Vec3::new(1.0, 0.0, 0.0))
         );
         assert!(ViewMode::Full3d.orthographic_direction().is_none());
+    }
+
+    /// The house view is where an audience actually sits, and looks where they actually look.
+    ///
+    /// Both halves matter. A camera at the right height staring at the carpet shows a rig from the
+    /// seats and still shows the wrong thing.
+    #[test]
+    fn the_audience_view_stands_in_the_house_and_looks_slightly_up() {
+        let bounds = Aabb {
+            min: Vec3::new(-5.0, 0.0, -5.0),
+            max: Vec3::new(5.0, 6.0, 0.0),
+        };
+        let camera = Camera::audience(bounds);
+
+        assert!(
+            (camera.position.y - 1.65).abs() < 1e-4,
+            "standing eye height, got {}",
+            camera.position.y
+        );
+        assert!(
+            (camera.position.x - bounds.centre().x).abs() < 1e-4,
+            "on the centre line"
+        );
+        assert!(
+            (camera.position.z - (bounds.max.z + 7.0)).abs() < 1e-4,
+            "seven metres in front of the downstage edge, got {}",
+            camera.position.z
+        );
+
+        let aim = (camera.target - camera.position).normalize();
+        assert!(aim.z < 0.0, "looking upstage");
+        assert!(
+            aim.y > 0.0,
+            "and slightly up rather than down at the floor, got {}",
+            aim.y
+        );
+    }
+
+    /// The floor between the audience and the stage is a strip along the bottom, not the subject.
+    #[test]
+    fn the_floor_in_front_of_the_stage_keeps_to_its_share_of_the_frame() {
+        let bounds = Aabb {
+            min: Vec3::new(-5.0, 0.0, -5.0),
+            max: Vec3::new(5.0, 6.0, 0.0),
+        };
+        let camera = Camera::audience(bounds);
+
+        // Where the downstage edge lands up the frame, as a fraction from the bottom.
+        let edge = Vec3::new(camera.position.x, bounds.min.y, bounds.max.z);
+        let aim = (camera.target - camera.position).normalize();
+        let to_edge = (edge - camera.position).normalize();
+        // Signed angle of the edge below the aim, in the vertical plane.
+        let below = aim.y.asin() - to_edge.y.asin();
+        let half_fov = (camera.fov_degrees * 0.5).to_radians();
+        let share = (1.0 - below.tan() / half_fov.tan()) * 0.5;
+
+        assert!(
+            (share - 0.15).abs() < 0.02,
+            "the ground in front of the stage takes {share:.3} of the frame, not the 0.15 asked for"
+        );
     }
 
     #[test]
