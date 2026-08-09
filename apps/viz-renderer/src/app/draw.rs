@@ -21,12 +21,22 @@ impl Application {
         let Some((now, delta, width, height)) = self.begin_frame(event_loop) else {
             return;
         };
-
-        // Copied out before the session is borrowed for the rest of the frame.
-        let selected = self.selected;
-        let Some(session) = self.session.as_mut() else {
+        let Some(mut session) = self.session.take() else {
             return;
         };
+        self.draw_session(&mut session, event_loop, now, delta, width, height);
+        self.session = Some(session);
+    }
+
+    fn draw_session(
+        &mut self,
+        session: &mut Session,
+        event_loop: &ActiveEventLoop,
+        now: Instant,
+        delta: f32,
+        width: f32,
+        height: f32,
+    ) {
         session.pump(now);
         let preserve_external_override =
             is_external_camera_target(self.options.embed, session.source_view.mode)
@@ -41,8 +51,6 @@ impl Application {
             self.options.zoom,
             preserve_external_override,
         );
-        // A patched camera targets this dedicated external presentation only. Orthographic views
-        // keep their own local navigation, and an embedded Stage helper never enters this branch.
         let external_camera_target =
             is_external_camera_target(self.options.embed, session.source_view.mode);
         if external_camera_target {
@@ -55,10 +63,6 @@ impl Application {
                 self.camera.adopt(&camera);
             }
             if self.external_camera.has_pose() {
-                // `camera_is_local` means the CameraControl projection is active rather than the
-                // source view. Keep it active even when `adopt_view` just received a source-view
-                // revision: a latched local override must not visibly jump back to the source.
-                // Its ownership is reported separately by `external_camera`.
                 self.camera_is_local = true;
             }
         }
@@ -71,25 +75,18 @@ impl Application {
         if self.camera_is_local {
             view.camera = self.camera.camera(&view.camera, view.mode);
         }
-        // With no rig on stage there is no picture, only a reason. The page goes dark whatever
-        // appearance is selected, because a splash is its own thing rather than a stage plot with
-        // nothing on it.
         let splash = splash_state(&session.connection, session.scene.fixtures.is_empty());
         if splash.is_some() {
             view.theme = viz_scene::Theme::LightOnDark;
         }
-        // Drain the provider once more immediately before the values are taken. Everything above
-        // this point — camera framing, view resolution — is per-frame work that would otherwise
-        // sit between a packet arriving and the frame that shows it.
+
         session.pump(Instant::now());
         let atmosphere = self.preferences.atmosphere.resolve();
         let waiting_for_dmx = session.waiting_for_dmx();
         let live_beams = live_beam_count(session);
-        let selection = Self::selection_summary(session, selected);
+        let selection = Self::selection_summary(session, self.selected);
         let mut values = std::mem::take(&mut session.values);
         values.atmosphere = atmosphere;
-        // Persistence advances on the display's clock, not the desk's: a strobe that stopped
-        // sending and a universe that went quiet both still have to fade out in real time.
         let since_last_frame = now
             .saturating_duration_since(self.last_persistence)
             .as_secs_f32()
@@ -101,13 +98,8 @@ impl Application {
         self.overlay.clear();
         self.hotspots.clear();
         let time = now.duration_since(self.epoch).as_secs_f32();
-        // Every laser's scan engine, once per displayed frame. It runs after persistence because
-        // the two are independent: the script decides the figure, persistence decides how much of
-        // the last few frames of it an observer still has.
         self.lasers.run(&session.scene, &mut values, time);
         let laser_fault = self.lasers.fault(&values);
-        // Read before the renderer is borrowed: what the status line has to say about this frame
-        // comes from the application rather than from the picture.
         let notice = self
             .snapshots
             .notice()
@@ -117,81 +109,30 @@ impl Application {
                     .as_ref()
                     .map(|failure| (failure.clone(), true))
             })
-            // A laser that has stopped projecting is invisible by definition, so the only way an
-            // operator learns a script broke is if it is said here.
-            .or_else(|| laser_fault.clone().map(|fault| (fault, true)));
-        let result = {
-            let Some(renderer) = self.renderer.as_mut() else {
-                session.values = values;
-                return;
-            };
-            let model = status_model(
-                session,
-                &self.preferences,
-                &self.stats,
-                &view,
-                live_beams,
-                atmosphere,
-                &selection,
-                waiting_for_dmx,
-                renderer,
-                self.frames_per_second,
-                notice,
-                camera_control,
-            );
-            build_overlay(
-                &mut self.overlay,
-                &mut self.hotspots,
-                &self.quick_settings,
-                &self.preferences,
-                &model,
-                session,
-                &values,
-                &view,
-                splash.clone(),
-                self.preferences.overlays_hidden,
-                width,
-                height,
-            );
-            let redraw_state = crate::redraw::RedrawState::new(
-                session.scene.revision,
-                &values,
-                &view,
-                (width as u32, height as u32),
-                &self.overlay.quads,
-            );
-            let time_driven =
-                crate::redraw::is_time_driven(&values, &view, &self.preferences.persistence);
-            let forced = self.options.capture.is_some()
-                || self.options.verify_only
-                || self.options.benchmark_seconds.is_some();
-            if !forced && !self.redraw_gate.should_draw(redraw_state, time_driven) {
-                session.values = values;
-                // Providers and input are still polled regularly, but an idle picture does not
-                // acquire a drawable or submit GPU work.
-                self.next_frame = now + Duration::from_millis(50);
-                return;
-            }
-            renderer.observe_frame_interval(view.quality, (delta * 1_000_000.0) as u64);
-            if let Some(path) = self.options.capture.clone()
-                && self.presented_frames + 1 >= u64::from(self.options.capture_frames)
-            {
-                write_capture(
-                    renderer,
-                    session,
-                    &values,
-                    &view,
-                    &self.overlay,
-                    time,
-                    &path,
-                );
-                session.values = values;
-                event_loop.exit();
-                return;
-            }
-            renderer.render(&session.scene, &values, &view, &self.overlay, time)
-        };
+            .or_else(|| laser_fault.map(|fault| (fault, true)));
+
+        let result = self.render_frame(
+            session,
+            event_loop,
+            now,
+            delta,
+            width,
+            height,
+            &values,
+            &view,
+            splash,
+            atmosphere,
+            waiting_for_dmx,
+            live_beams,
+            &selection,
+            notice,
+            camera_control,
+            time,
+        );
         session.values = values;
+        let Some(result) = result else {
+            return;
+        };
         record_frame(
             result,
             session,
@@ -206,7 +147,6 @@ impl Application {
         if self.options.benchmark_seconds.is_none() {
             return;
         }
-        // Read everything the benchmark needs before the session borrow ends.
         let measured = Measured {
             latency: session.latency_percentiles(),
             dmx_hz: session.input_rate_hz(),
@@ -217,6 +157,82 @@ impl Application {
             scene_ready: !session.scene.emitters.is_empty(),
         };
         self.record_benchmark_frame(&measured, delta, now, event_loop);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_frame(
+        &mut self,
+        session: &Session,
+        event_loop: &ActiveEventLoop,
+        now: Instant,
+        delta: f32,
+        width: f32,
+        height: f32,
+        values: &viz_scene::SceneValues,
+        view: &viz_scene::ViewConfiguration,
+        splash: Option<ui::SplashState>,
+        atmosphere: viz_scene::Atmosphere,
+        waiting_for_dmx: bool,
+        live_beams: u32,
+        selection: &Option<String>,
+        notice: Option<(String, bool)>,
+        camera_control: ui::DmxCameraControlStatus,
+        time: f32,
+    ) -> Option<Result<viz_render::FrameStats, RenderError>> {
+        let renderer = self.renderer.as_mut()?;
+        let model = status_model(
+            session,
+            &self.preferences,
+            &self.stats,
+            view,
+            live_beams,
+            atmosphere,
+            selection,
+            waiting_for_dmx,
+            renderer,
+            self.frames_per_second,
+            notice,
+            camera_control,
+        );
+        build_overlay(
+            &mut self.overlay,
+            &mut self.hotspots,
+            &self.quick_settings,
+            &self.preferences,
+            &model,
+            session,
+            values,
+            view,
+            splash,
+            self.preferences.overlays_hidden,
+            width,
+            height,
+        );
+        let redraw_state = crate::redraw::RedrawState::new(
+            session.scene.revision,
+            values,
+            view,
+            (width as u32, height as u32),
+            &self.overlay.quads,
+        );
+        let time_driven =
+            crate::redraw::is_time_driven(values, view, &self.preferences.persistence);
+        let forced = self.options.capture.is_some()
+            || self.options.verify_only
+            || self.options.benchmark_seconds.is_some();
+        if !forced && !self.redraw_gate.should_draw(redraw_state, time_driven) {
+            self.next_frame = now + Duration::from_millis(50);
+            return None;
+        }
+        renderer.observe_frame_interval(view.quality, (delta * 1_000_000.0) as u64);
+        if let Some(path) = self.options.capture.clone()
+            && self.presented_frames + 1 >= u64::from(self.options.capture_frames)
+        {
+            write_capture(renderer, session, values, view, &self.overlay, time, &path);
+            event_loop.exit();
+            return None;
+        }
+        Some(renderer.render(&session.scene, values, view, &self.overlay, time))
     }
 }
 

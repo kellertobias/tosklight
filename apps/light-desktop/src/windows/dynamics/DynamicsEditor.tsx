@@ -155,10 +155,7 @@ export function DynamicEditor({
 		dynamic.body,
 		speedGroupBpms,
 	);
-	const changeView = (next: DynamicEditorView) => {
-		onViewChange?.(next);
-		updateEditor({ task: next, encoderPage: 1 });
-	};
+	const changeView = createViewChangeHandler(onViewChange, updateEditor);
 	const addLane = createAddLaneAction(dynamic, setAddingLane, onMutate);
 	const { takeSelection, clearSelection } = useTargetBindingActions(
 		dynamic,
@@ -248,6 +245,16 @@ export function DynamicEditor({
 			onSpeedGroupTap={onSpeedGroupTap}
 		/>
 	);
+}
+
+function createViewChangeHandler(
+	onViewChange: DynamicEditorProps["onViewChange"],
+	updateEditor: ReturnType<typeof useDynamicEditorSession>["update"],
+) {
+	return (next: DynamicEditorView) => {
+		onViewChange?.(next);
+		updateEditor({ task: next, encoderPage: 1 });
+	};
 }
 
 function useEditorSynchronization({

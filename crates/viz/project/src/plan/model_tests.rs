@@ -1,8 +1,8 @@
 use super::*;
 use light_core::AttributeKey;
 use light_fixture::{
-    CanonicalTransform, ChannelBehavior, ChannelResolution, FixtureChannel, GelAssignment,
-    ProfileLightSource,
+    CanonicalTransform, ChannelBehavior, ChannelResolution, FixtureChannel, FixtureHead,
+    GelAssignment, ProfileLightSource,
 };
 
 /// One patched fixture of a named type, for the optics questions below.
@@ -32,6 +32,81 @@ fn patched(fixture_type: &str, optics: ProfileOptics) -> PatchedFixture {
             installed_appearance: InstalledFixtureAppearance::default(),
         }],
     }
+}
+
+fn camera_fixture(name: &str, address: u16) -> PatchedFixture {
+    let mut fixture = patched("camera", ProfileOptics::default());
+    fixture.name = name.into();
+    fixture.instances[0].name = name.into();
+    fixture.instances[0].split_patches = vec![(1, Some((1, address)))];
+    let profile = Arc::get_mut(&mut fixture.profile).expect("sole profile owner");
+    profile.name = "Virtual Camera".into();
+    let mode = &mut profile.modes[0];
+    mode.splits[0].footprint = 17;
+    let head_id = mode.heads[0].id;
+    let definitions = [
+        ("camera.position.x", ChannelResolution::U24, 1, vec![2, 3]),
+        ("camera.position.y", ChannelResolution::U24, 4, vec![5, 6]),
+        ("camera.position.z", ChannelResolution::U24, 7, vec![8, 9]),
+        ("camera.yaw", ChannelResolution::U16, 10, vec![11]),
+        ("camera.pitch", ChannelResolution::U16, 12, vec![13]),
+        ("camera.roll", ChannelResolution::U16, 14, vec![15]),
+        ("camera.zoom", ChannelResolution::U16, 16, vec![17]),
+    ];
+    mode.channels = definitions
+        .into_iter()
+        .map(
+            |(identity, resolution, _primary, secondary_slots)| FixtureChannel {
+                id: Uuid::new_v4(),
+                head_id,
+                split: 1,
+                fixture_attribute: AttributeKey(identity.into()),
+                attribute: AttributeKey(identity.into()),
+                canonical_transform: CanonicalTransform::Identity,
+                resolution,
+                secondary_slots,
+                default_raw: 0,
+                highlight_raw: 0,
+                physical_min: None,
+                physical_max: None,
+                unit: None,
+                invert: false,
+                snap: false,
+                reacts_to_virtual_intensity: false,
+                reacts_to_sequence_master: false,
+                reacts_to_group_master: false,
+                reacts_to_grand_master: false,
+                behavior: ChannelBehavior::Controlled,
+                functions: Vec::new(),
+            },
+        )
+        .collect();
+    fixture
+}
+
+#[test]
+fn one_complete_camera_binds_all_seventeen_slots_and_a_second_disables_routing() {
+    let first = camera_fixture("Camera 1", 1);
+    let single = compile(std::slice::from_ref(&first));
+    let camera = single.external_camera.expect("one camera is routable");
+    assert_eq!(camera.x.slots, vec![1, 2, 3]);
+    assert_eq!(camera.y.slots, vec![4, 5, 6]);
+    assert_eq!(camera.z.slots, vec![7, 8, 9]);
+    assert_eq!(camera.yaw.slots, vec![10, 11]);
+    assert_eq!(camera.pitch.slots, vec![12, 13]);
+    assert_eq!(camera.roll.slots, vec![14, 15]);
+    assert_eq!(camera.zoom.slots, vec![16, 17]);
+
+    let multiple = compile(&[first, camera_fixture("Camera 2", 20)]);
+    assert!(
+        multiple.external_camera.is_none(),
+        "ambiguous DMX is never routed"
+    );
+    let issue = multiple
+        .external_camera_issue
+        .expect("actionable unsupported state");
+    assert!(issue.contains("Camera 1") && issue.contains("Camera 2"));
+    assert!(issue.contains("only one is supported"));
 }
 
 /// A bank of lamps on one address is a bank of lamps, not one lamp and three dark ones.
@@ -324,4 +399,38 @@ fn an_invented_lens_stays_inside_the_body_and_a_declared_one_is_taken_as_read() 
         height_millimetres: 300.0,
     });
     assert!((optics_of(small).source.width - 0.3).abs() < 1e-6);
+}
+
+/// A Sunstrip-style profile has one shared control head followed by ten physical lamps. The
+/// control head must not become an eleventh glowing face, and the real row must stay inside
+/// the one-metre extrusion even when the model exposes one merged `source-array` part.
+#[test]
+fn fallback_strip_cells_fit_inside_their_body() {
+    let mut mode = FixtureProfile::blank().modes.remove(0);
+    mode.heads = std::iter::once(FixtureHead {
+        id: Uuid::new_v4(),
+        name: "Main".into(),
+        master_shared: true,
+    })
+    .chain((1..=10).map(|number| FixtureHead {
+        id: Uuid::new_v4(),
+        name: format!("Lamp {number}"),
+        master_shared: false,
+    }))
+    .collect();
+
+    let physical = physical_head_indices(&mode);
+    assert_eq!(physical, (1..=10).collect::<Vec<_>>());
+
+    let mut optics = EmitterOptics::default();
+    optics.source.width = 1.0; // the merged model part, not one cell
+    optics.source.height = 0.16;
+    let fitted = fitted_to_head_pitch(&optics, physical.len(), 1.0);
+    let first = head_offset(0, physical.len(), fitted.source.width, 1.0).x;
+    let last = head_offset(physical.len() - 1, physical.len(), fitted.source.width, 1.0).x;
+    let half_face = fitted.source.width * 0.5;
+
+    assert!(first - half_face >= -0.5 - 1e-6);
+    assert!(last + half_face <= 0.5 + 1e-6);
+    assert!(fitted.source.width <= 0.09 + 1e-6);
 }

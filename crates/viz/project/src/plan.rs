@@ -225,8 +225,6 @@ pub struct ScenePlan {
     pub warnings: Vec<String>,
 }
 
-/// Compile the patch into a scene. Fixtures with `VisualOnly` policy become scenery elsewhere and
-/// are skipped here.
 /// The model a profile is drawn with, read once however many instances are patched from it.
 ///
 /// A model that cannot be read leaves the fixture on its procedural proxy and says why, rather
@@ -286,6 +284,8 @@ fn resolve_model(
     }
 }
 
+/// Compile the patch into a scene. Fixtures with `VisualOnly` policy become scenery elsewhere and
+/// are skipped here.
 pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
     let mut scene = Scene::default();
     let mut bindings = Vec::new();
@@ -390,117 +390,24 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
                 }
             }
         }
-        /*
-         * Where this fixture is addressed, for the instances that carry no address themselves.
-         *
-         * A multi-patch instance is the same logical fixture standing somewhere else: it has its
-         * own position, its own inversions and its own installed colour, and it shares the
-         * programming — which means it shares the DMX. The patch says so by giving it no address
-         * of its own.
-         *
-         * Read as an independent patch that happens to be unaddressed, such an instance decodes
-         * no channels and is drawn dark for ever, so a bank of four ACLs on one address lit one
-         * lamp and left three cold. It is not unpatched; it is patched to the same place.
-         */
-        let shared_addresses = fixture
-            .instances
-            .iter()
-            .map(address_map)
-            .find(|addresses| !addresses.is_empty())
-            .unwrap_or_default();
-        for instance in &fixture.instances {
-            let fixture_index = scene.fixtures.len() as u32;
-            let missing_optics = mode.geometry.emitters.is_empty();
-            scene.fixtures.push(FixtureInstance {
-                instance_id: instance.instance_id,
-                fixture_id: fixture.fixture_id,
-                name: instance.name.clone(),
-                number: fixture.number,
-                position: instance.position,
-                rotation_degrees: instance.rotation_degrees,
-                bracket_degrees: instance.bracket_angle,
-                shaper_degrees: instance.shaper_angle,
-                installed_colour: crate::installed_appearance_linear_rgb(
-                    &fixture.profile,
-                    &instance.installed_appearance,
-                ),
-                installed_shaper_angles_degrees: instance
-                    .installed_appearance
-                    .shaper_angles_degrees,
-                body: FixtureBody {
-                    size: body_size,
-                    kind: class.body_kind(moving),
-                },
-                patched: !shared_addresses.is_empty(),
-                address: instance
-                    .split_patches
-                    .iter()
-                    .find_map(|(_, address)| *address)
-                    .or_else(|| shared_addresses.values().copied().min()),
-                model,
-                fallback: missing_optics.then(|| {
-                    FallbackReason::new(
-                        "fixture optics",
-                        format!(
-                            "{} {} has no emitter geometry; using the generic {:?} projector",
-                            fixture.profile.manufacturer, fixture.profile.name, class
-                        ),
-                    )
-                }),
-            });
-            if fixture.profile.patch_policy == PatchPolicy::VisualOnly {
-                continue;
-            }
-            // Its own address where it has one, the fixture's where it has not.
-            // Its own address where it has one, the fixture's where it has not.
-            let own = address_map(instance);
-            let addresses = if own.is_empty() {
-                shared_addresses.clone()
-            } else {
-                own
-            };
-            let channels = compile_channels(mode, &primary_slots, &addresses);
-            match external_camera_binding(fixture, instance, mode, &channels) {
-                Ok(Some(candidate))
-                    if external_camera.is_none() && external_camera_issue.is_none() =>
-                {
-                    external_camera = Some(candidate);
-                }
-                Ok(Some(candidate)) => {
-                    let first = external_camera
-                        .as_ref()
-                        .map(|binding: &ExternalCameraBinding| binding.label.as_str())
-                        .unwrap_or("another camera fixture");
-                    let detail = format!(
-                        "{} and {} both request the dedicated external 3D Visualizer camera; only one is supported, so DMX camera routing is disabled",
-                        first, candidate.label
-                    );
-                    external_camera = None;
-                    external_camera_issue = Some(detail.clone());
-                    warnings.push(detail);
-                }
-                Ok(None) => {}
-                Err(detail) => {
-                    external_camera = None;
-                    external_camera_issue = Some(detail.clone());
-                    warnings.push(detail);
-                }
-            }
-            build_emitters(
-                &mut scene,
-                &mut bindings,
-                fixture,
-                mode,
-                class,
-                &motion,
-                instance,
-                fixture_index,
-                &channels,
-                optics.clone(),
-                mount,
-                laser.clone(),
-            );
-        }
+        compile_instances(
+            &mut scene,
+            &mut bindings,
+            &mut external_camera,
+            &mut external_camera_issue,
+            &mut warnings,
+            fixture,
+            mode,
+            &primary_slots,
+            class,
+            &motion,
+            body_size,
+            moving,
+            model,
+            optics,
+            mount,
+            laser,
+        );
     }
     scene.recompute_bounds();
     ScenePlan {
@@ -664,7 +571,6 @@ struct MotionAxes {
     tilt_node: Option<Uuid>,
 }
 
-/// Read pan and tilt travel from the geometry graph rather than assuming it.
 /// What a mode has channels for, as the default-model rules want it.
 fn traits(mode: &FixtureMode) -> FixtureTraits {
     let mut traits = FixtureTraits::default();
@@ -677,6 +583,7 @@ fn traits(mode: &FixtureMode) -> FixtureTraits {
     traits
 }
 
+/// Read pan and tilt travel from the geometry graph rather than assuming it.
 fn motion_axes(mode: &FixtureMode) -> MotionAxes {
     let mut axes = MotionAxes::default();
     for node in &mode.geometry.nodes {
@@ -1187,447 +1094,12 @@ fn tilt_axis(motion: &MotionAxes, binding: &EmitterBinding) -> Option<MotionAxis
 
 mod assets;
 mod bindings;
+mod compile_instances;
 
 pub use assets::{GOBO_ARTWORK_EDGE, decode_gobo_artwork};
 use assets::{decode_script, gobo_wheel, read_model_asset, script_key};
 use bindings::{build_binding, cell_bindings, group_by_head, layout_cells};
+use compile_instances::compile_instances;
 
 #[cfg(test)]
-mod model_tests {
-    use super::*;
-    use light_core::AttributeKey;
-    use light_fixture::{
-        CanonicalTransform, ChannelBehavior, ChannelResolution, FixtureChannel, FixtureHead,
-        GelAssignment, ProfileLightSource,
-    };
-
-    /// One patched fixture of a named type, for the optics questions below.
-    fn patched(fixture_type: &str, optics: ProfileOptics) -> PatchedFixture {
-        let mut profile = FixtureProfile::blank();
-        profile.manufacturer = "Generic".into();
-        profile.name = "Test".into();
-        profile.fixture_type = fixture_type.into();
-        profile.optics = optics;
-        let mode_id = profile.modes[0].id;
-        PatchedFixture {
-            fixture_id: Uuid::new_v4(),
-            name: "Test".into(),
-            number: Some(1),
-            profile: Arc::new(profile),
-            mode_id,
-            instances: vec![PhysicalInstance {
-                instance_id: Uuid::new_v4(),
-                name: "Test".into(),
-                split_patches: vec![(1, Some((1, 1)))],
-                position: Vec3::new(0.0, 5.0, 0.0),
-                rotation_degrees: Vec3::ZERO,
-                invert_pan: false,
-                invert_tilt: false,
-                bracket_angle: 0.0,
-                shaper_angle: None,
-                installed_appearance: InstalledFixtureAppearance::default(),
-            }],
-        }
-    }
-
-    fn camera_fixture(name: &str, address: u16) -> PatchedFixture {
-        let mut fixture = patched("camera", ProfileOptics::default());
-        fixture.name = name.into();
-        fixture.instances[0].name = name.into();
-        fixture.instances[0].split_patches = vec![(1, Some((1, address)))];
-        let profile = Arc::get_mut(&mut fixture.profile).expect("sole profile owner");
-        profile.name = "Virtual Camera".into();
-        let mode = &mut profile.modes[0];
-        mode.splits[0].footprint = 17;
-        let head_id = mode.heads[0].id;
-        let definitions = [
-            ("camera.position.x", ChannelResolution::U24, 1, vec![2, 3]),
-            ("camera.position.y", ChannelResolution::U24, 4, vec![5, 6]),
-            ("camera.position.z", ChannelResolution::U24, 7, vec![8, 9]),
-            ("camera.yaw", ChannelResolution::U16, 10, vec![11]),
-            ("camera.pitch", ChannelResolution::U16, 12, vec![13]),
-            ("camera.roll", ChannelResolution::U16, 14, vec![15]),
-            ("camera.zoom", ChannelResolution::U16, 16, vec![17]),
-        ];
-        mode.channels = definitions
-            .into_iter()
-            .map(
-                |(identity, resolution, _primary, secondary_slots)| FixtureChannel {
-                    id: Uuid::new_v4(),
-                    head_id,
-                    split: 1,
-                    fixture_attribute: AttributeKey(identity.into()),
-                    attribute: AttributeKey(identity.into()),
-                    canonical_transform: CanonicalTransform::Identity,
-                    resolution,
-                    secondary_slots,
-                    default_raw: 0,
-                    highlight_raw: 0,
-                    physical_min: None,
-                    physical_max: None,
-                    unit: None,
-                    invert: false,
-                    snap: false,
-                    reacts_to_virtual_intensity: false,
-                    reacts_to_sequence_master: false,
-                    reacts_to_group_master: false,
-                    reacts_to_grand_master: false,
-                    behavior: ChannelBehavior::Controlled,
-                    functions: Vec::new(),
-                },
-            )
-            .collect();
-        fixture
-    }
-
-    #[test]
-    fn one_complete_camera_binds_all_seventeen_slots_and_a_second_disables_routing() {
-        let first = camera_fixture("Camera 1", 1);
-        let single = compile(std::slice::from_ref(&first));
-        let camera = single.external_camera.expect("one camera is routable");
-        assert_eq!(camera.x.slots, vec![1, 2, 3]);
-        assert_eq!(camera.y.slots, vec![4, 5, 6]);
-        assert_eq!(camera.z.slots, vec![7, 8, 9]);
-        assert_eq!(camera.yaw.slots, vec![10, 11]);
-        assert_eq!(camera.pitch.slots, vec![12, 13]);
-        assert_eq!(camera.roll.slots, vec![14, 15]);
-        assert_eq!(camera.zoom.slots, vec![16, 17]);
-
-        let multiple = compile(&[first, camera_fixture("Camera 2", 20)]);
-        assert!(
-            multiple.external_camera.is_none(),
-            "ambiguous DMX is never routed"
-        );
-        let issue = multiple
-            .external_camera_issue
-            .expect("actionable unsupported state");
-        assert!(issue.contains("Camera 1") && issue.contains("Camera 2"));
-        assert!(issue.contains("only one is supported"));
-    }
-
-    /// A bank of lamps on one address is a bank of lamps, not one lamp and three dark ones.
-    ///
-    /// Multi-patch is how an operator says "the same fixture, standing over there as well". The
-    /// instance has its own position and its own inversions and shares the programming, which the
-    /// patch expresses by giving it no address of its own. Read as an independent patch that
-    /// happens to be unaddressed, it decodes nothing and is drawn dark for ever — so four ACLs on
-    /// one address lit one and left three cold.
-    #[test]
-    fn a_multipatch_instance_reads_the_fixture_it_shares_its_programming_with() {
-        let mut fixture = patched("par", ProfileOptics::default());
-        // A dimmer, so there is something to read. Without a channel every binding is empty and
-        // the question this test asks cannot be answered either way.
-        let profile = Arc::get_mut(&mut fixture.profile).expect("sole owner");
-        let mode = &mut profile.modes[0];
-        mode.splits[0].footprint = 1;
-        let head_id = mode.heads[0].id;
-        mode.channels = vec![FixtureChannel {
-            id: Uuid::new_v4(),
-            head_id,
-            split: 1,
-            fixture_attribute: AttributeKey("intensity".into()),
-            attribute: AttributeKey("intensity".into()),
-            canonical_transform: CanonicalTransform::Identity,
-            resolution: ChannelResolution::U8,
-            secondary_slots: Vec::new(),
-            default_raw: 0,
-            highlight_raw: 255,
-            physical_min: Some(0.0),
-            physical_max: Some(1.0),
-            unit: None,
-            invert: false,
-            snap: false,
-            reacts_to_virtual_intensity: false,
-            reacts_to_sequence_master: false,
-            reacts_to_group_master: false,
-            reacts_to_grand_master: false,
-            behavior: ChannelBehavior::Controlled,
-            functions: Vec::new(),
-        }];
-        let root_addresses = fixture.instances[0].split_patches.clone();
-        let mut standing_elsewhere = fixture.instances[0].clone();
-        standing_elsewhere.instance_id = Uuid::new_v4();
-        standing_elsewhere.name = "Second".into();
-        standing_elsewhere.position = Vec3::new(3.0, 5.0, 0.0);
-        // What the desk actually sends for a multi-patch instance: a split with no address in it.
-        standing_elsewhere.split_patches = vec![(1, None)];
-        fixture.instances.push(standing_elsewhere);
-
-        let plan = compile(&[fixture]);
-
-        assert_eq!(plan.scene.fixtures.len(), 2, "both instances are drawn");
-        assert!(
-            plan.scene.fixtures.iter().all(|fixture| fixture.patched),
-            "an instance sharing the fixture's address is patched, not unpatched"
-        );
-        assert_eq!(plan.bindings.len(), plan.scene.emitters.len());
-        assert!(
-            plan.bindings
-                .iter()
-                .all(|binding| binding.universes == vec![1]),
-            "every instance reads the universe the fixture is addressed in, got {:?}",
-            plan.bindings
-                .iter()
-                .map(|binding| binding.universes.clone())
-                .collect::<Vec<_>>()
-        );
-        assert!(
-            plan.bindings
-                .iter()
-                .all(|binding| binding.intensity.is_some()),
-            "and decodes its dimmer"
-        );
-        // And the root's own address is untouched by any of this.
-        assert_eq!(root_addresses, vec![(1, Some((1, 1)))]);
-    }
-
-    /// The mechanical angles are patch facts, so the projection has to carry them into the scene.
-    ///
-    /// A rig where every clamp is set at 35 degrees and half the lanterns wear barn doors is drawn
-    /// hanging straight and square if this seam drops them.
-    #[test]
-    fn root_and_multipatch_keep_independent_bracket_and_installed_shaper_angles() {
-        let mut fixture = patched("profile", ProfileOptics::default());
-        fixture.instances[0].bracket_angle = -35.0;
-        fixture.instances[0].shaper_angle = Some(22.5);
-        fixture.instances[0]
-            .installed_appearance
-            .shaper_angles_degrees = [10.0, 20.0, 30.0, 40.0];
-        let mut copy = fixture.instances[0].clone();
-        copy.instance_id = Uuid::new_v4();
-        copy.bracket_angle = 17.0;
-        copy.shaper_angle = Some(-12.5);
-        copy.installed_appearance.shaper_angles_degrees = [-11.0, -22.0, -33.0, -44.0];
-        fixture.instances.push(copy);
-        let plan = compile(&[fixture]);
-        assert_eq!(plan.scene.fixtures.len(), 2);
-        assert_eq!(plan.scene.fixtures[0].bracket_degrees, -35.0);
-        assert_eq!(plan.scene.fixtures[0].shaper_degrees, Some(22.5));
-        assert_eq!(
-            plan.scene.fixtures[0].installed_shaper_angles_degrees,
-            [10.0, 20.0, 30.0, 40.0]
-        );
-        assert_eq!(plan.scene.fixtures[1].bracket_degrees, 17.0);
-        assert_eq!(plan.scene.fixtures[1].shaper_degrees, Some(-12.5));
-        assert_eq!(
-            plan.scene.fixtures[1].installed_shaper_angles_degrees,
-            [-11.0, -22.0, -33.0, -44.0]
-        );
-    }
-
-    #[test]
-    fn root_and_multipatch_keep_independent_installed_colours() {
-        let mut fixture = patched("profile", ProfileOptics::default());
-        fixture.instances[0]
-            .installed_appearance
-            .color_temperature_kelvin = Some(3_200);
-        let mut copy = fixture.instances[0].clone();
-        copy.instance_id = Uuid::new_v4();
-        copy.installed_appearance.color_temperature_kelvin = Some(10_000);
-        copy.installed_appearance.gel = GelAssignment::Custom {
-            name: "Red".into(),
-            color_srgb: "#FF0000".into(),
-            note: None,
-        };
-        fixture.instances.push(copy);
-
-        let plan = compile(&[fixture]);
-        assert_eq!(plan.scene.fixtures.len(), 2);
-        assert_ne!(
-            plan.scene.fixtures[0].installed_colour,
-            plan.scene.fixtures[1].installed_colour
-        );
-        assert_eq!(plan.scene.fixtures[1].installed_colour[1], 0.0);
-        assert_eq!(plan.scene.fixtures[1].installed_colour[2], 0.0);
-    }
-
-    #[test]
-    fn canonical_cct_identity_aliases_bind_each_physical_channel_once() {
-        let mut fixture = patched("wash", ProfileOptics::default());
-        let profile = Arc::get_mut(&mut fixture.profile).expect("sole owner");
-        let mode = &mut profile.modes[0];
-        mode.splits[0].footprint = 2;
-        let head_id = mode.heads[0].id;
-        mode.channels = [
-            ("color.cold_white", "color.white"),
-            ("color.warm_white", "color.amber"),
-        ]
-        .into_iter()
-        .map(|(fixture_attribute, attribute)| FixtureChannel {
-            id: Uuid::new_v4(),
-            head_id,
-            split: 1,
-            fixture_attribute: AttributeKey(fixture_attribute.into()),
-            attribute: AttributeKey(attribute.into()),
-            canonical_transform: CanonicalTransform::Identity,
-            resolution: ChannelResolution::U8,
-            secondary_slots: Vec::new(),
-            default_raw: 0,
-            highlight_raw: 255,
-            physical_min: Some(0.0),
-            physical_max: Some(1.0),
-            unit: None,
-            invert: false,
-            snap: false,
-            reacts_to_virtual_intensity: false,
-            reacts_to_sequence_master: false,
-            reacts_to_group_master: false,
-            reacts_to_grand_master: false,
-            behavior: ChannelBehavior::Controlled,
-            functions: Vec::new(),
-        })
-        .collect();
-
-        let plan = compile(&[fixture]);
-        let colour = &plan.bindings[0].colour;
-        assert!(colour.white.is_some());
-        assert!(colour.amber.is_some());
-        assert!(colour.cold_white.is_none());
-        assert!(colour.warm_white.is_none());
-    }
-
-    #[test]
-    fn canonical_softness_alias_binds_the_physical_frost_channel_once() {
-        let mut fixture = patched("profile", ProfileOptics::default());
-        let profile = Arc::get_mut(&mut fixture.profile).expect("sole owner");
-        let mode = &mut profile.modes[0];
-        mode.splits[0].footprint = 1;
-        let head_id = mode.heads[0].id;
-        mode.channels = vec![FixtureChannel {
-            id: Uuid::new_v4(),
-            head_id,
-            split: 1,
-            fixture_attribute: AttributeKey("frost".into()),
-            attribute: AttributeKey("softness".into()),
-            canonical_transform: CanonicalTransform::Identity,
-            resolution: ChannelResolution::U8,
-            secondary_slots: Vec::new(),
-            default_raw: 0,
-            highlight_raw: 0,
-            physical_min: Some(0.0),
-            physical_max: Some(1.0),
-            unit: None,
-            invert: false,
-            snap: false,
-            reacts_to_virtual_intensity: false,
-            reacts_to_sequence_master: false,
-            reacts_to_group_master: false,
-            reacts_to_grand_master: false,
-            behavior: ChannelBehavior::Controlled,
-            functions: Vec::new(),
-        }];
-
-        let plan = compile(&[fixture]);
-        assert!(plan.bindings[0].frost.is_some());
-    }
-
-    fn optics_of(fixture: PatchedFixture) -> viz_scene::EmitterOptics {
-        let plan = compile(&[fixture]);
-        plan.scene
-            .emitters
-            .first()
-            .expect("one emitter")
-            .optics
-            .clone()
-    }
-
-    /// A library that says nothing about its optics still has to render as the right sort of
-    /// lantern: the declared fixture type decides, and a profile and a flood differ.
-    #[test]
-    fn a_profile_that_declares_no_optics_falls_back_to_its_type() {
-        let spot = optics_of(patched("profile", ProfileOptics::default()));
-        let flood = optics_of(patched("cyc flood", ProfileOptics::default()));
-        assert!(
-            spot.sharpness > flood.sharpness + 0.4,
-            "a profile cuts and a flood does not: {} against {}",
-            spot.sharpness,
-            flood.sharpness
-        );
-        assert!(spot.uniformity > 0.5 && flood.source.form == SourceForm::Rectangular);
-    }
-
-    /// And what a profile does declare wins. This is the point of the block: the library is the
-    /// authority on the fixture, not the renderer's guess from a type name.
-    #[test]
-    fn declared_optics_replace_the_fallback_for_that_fixture() {
-        let optics = optics_of(patched(
-            // A wash by name, deliberately declared as something else.
-            "wash",
-            ProfileOptics {
-                output: Some(2.5),
-                sharpness: Some(0.95),
-                uniformity: Some(0.1),
-                light_source: Some(ProfileLightSource {
-                    form: LightSourceForm::Rectangular,
-                    width_millimetres: 240.0,
-                    height_millimetres: 60.0,
-                }),
-            },
-        ));
-        assert_eq!(optics.output, 2.5);
-        assert_eq!(optics.sharpness, 0.95);
-        assert_eq!(optics.uniformity, 0.1);
-        assert_eq!(optics.source.form, SourceForm::Rectangular);
-        assert!((optics.source.width - 0.24).abs() < 1e-6);
-        assert!((optics.source.height - 0.06).abs() < 1e-6);
-    }
-
-    /// A declared lens is stated, not guessed, so it is not second-guessed against the body — but
-    /// a lens the renderer had to invent is kept inside the lantern that carries it.
-    #[test]
-    fn an_invented_lens_stays_inside_the_body_and_a_declared_one_is_taken_as_read() {
-        let mut small = patched("wash", ProfileOptics::default());
-        let profile = Arc::get_mut(&mut small.profile).expect("sole owner");
-        profile.physical.width_millimetres = Some(90.0);
-        profile.physical.height_millimetres = Some(90.0);
-        profile.physical.depth_millimetres = Some(90.0);
-        let invented = optics_of(small.clone());
-        assert!(
-            invented.source.width <= 0.09,
-            "an invented lens cannot be wider than the lantern: {}",
-            invented.source.width
-        );
-
-        let profile = Arc::get_mut(&mut small.profile).expect("sole owner");
-        profile.optics.light_source = Some(ProfileLightSource {
-            form: LightSourceForm::Round,
-            width_millimetres: 300.0,
-            height_millimetres: 300.0,
-        });
-        assert!((optics_of(small).source.width - 0.3).abs() < 1e-6);
-    }
-
-    /// A Sunstrip-style profile has one shared control head followed by ten physical lamps. The
-    /// control head must not become an eleventh glowing face, and the real row must stay inside
-    /// the one-metre extrusion even when the model exposes one merged `source-array` part.
-    #[test]
-    fn fallback_strip_cells_fit_inside_their_body() {
-        let mut mode = FixtureProfile::blank().modes.remove(0);
-        mode.heads = std::iter::once(FixtureHead {
-            id: Uuid::new_v4(),
-            name: "Main".into(),
-            master_shared: true,
-        })
-        .chain((1..=10).map(|number| FixtureHead {
-            id: Uuid::new_v4(),
-            name: format!("Lamp {number}"),
-            master_shared: false,
-        }))
-        .collect();
-
-        let physical = physical_head_indices(&mode);
-        assert_eq!(physical, (1..=10).collect::<Vec<_>>());
-
-        let mut optics = EmitterOptics::default();
-        optics.source.width = 1.0; // the merged model part, not one cell
-        optics.source.height = 0.16;
-        let fitted = fitted_to_head_pitch(&optics, physical.len(), 1.0);
-        let first = head_offset(0, physical.len(), fitted.source.width, 1.0).x;
-        let last = head_offset(physical.len() - 1, physical.len(), fitted.source.width, 1.0).x;
-        let half_face = fitted.source.width * 0.5;
-
-        assert!(first - half_face >= -0.5 - 1e-6);
-        assert!(last + half_face <= 0.5 + 1e-6);
-        assert!(fitted.source.width <= 0.09 + 1e-6);
-    }
-}
+mod model_tests;
